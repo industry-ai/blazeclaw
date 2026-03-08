@@ -1,0 +1,1 @@
+{"type":"res","id":"req-7","ok":true,"payload":{"events":["gateway.agent.update","gateway.channels.accounts.update","gateway.channels.update","gateway.health","gateway.session.reset","gateway.shutdown","gateway.tick","gateway.tools.catalog.update"]}}

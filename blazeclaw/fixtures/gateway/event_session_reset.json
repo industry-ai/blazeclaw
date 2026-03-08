@@ -1,0 +1,1 @@
+{"type":"event","event":"gateway.session.reset","payload":{"sessionId":"main"},"seq":5,"stateVersion":5}

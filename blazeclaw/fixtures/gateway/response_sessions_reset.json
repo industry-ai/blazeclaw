@@ -1,0 +1,1 @@
+{"type":"res","id":"req-15","ok":true,"payload":{"session":{"id":"main","scope":"default","active":true},"event":"gateway.session.reset"}}

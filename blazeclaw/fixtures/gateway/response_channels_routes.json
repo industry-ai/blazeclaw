@@ -1,0 +1,1 @@
+{"type":"res","id":"req-13","ok":true,"payload":{"routes":[{"channel":"telegram","accountId":"telegram.default","agentId":"default","sessionId":"main"},{"channel":"discord","accountId":"discord.default","agentId":"default","sessionId":"main"}]}}

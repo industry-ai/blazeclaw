@@ -1,0 +1,1 @@
+{"type":"event","event":"gateway.health","payload":{"status":"ok","running":true},"seq":2,"stateVersion":2}

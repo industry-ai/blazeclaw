@@ -1,0 +1,1 @@
+{"type":"event","event":"gateway.shutdown","payload":{"reason":"maintenance"},"seq":3,"stateVersion":3}

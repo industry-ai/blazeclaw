@@ -1,0 +1,1 @@
+{"type":"res","id":"req-4","ok":false,"error":{"code":"schema_invalid_params","message":"Method `gateway.protocol.version` does not accept `params`.","details":{"method":"gateway.protocol.version"},"retryable":false}}

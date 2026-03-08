@@ -1,0 +1,1 @@
+{"type":"res","id":"req-19","ok":true,"payload":{"accounts":[{"channel":"telegram","accountId":"telegram.default","label":"Telegram Default","active":true,"connected":false},{"channel":"discord","accountId":"discord.default","label":"Discord Default","active":true,"connected":false}]}}
