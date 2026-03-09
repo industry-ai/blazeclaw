@@ -180,6 +180,34 @@ namespace {
 		return json.compare(valuePos, 4, "true") == 0 || json.compare(valuePos, 5, "false") == 0;
 	}
 
+	bool ValidateOptionalActiveParam(
+		const RequestFrame& request,
+		SchemaValidationIssue& issue,
+		const std::string& methodName) {
+		if (!request.paramsJson.has_value()) {
+			return true;
+		}
+
+		const std::string params = Trim(request.paramsJson.value());
+		if (!IsJsonObjectShape(params)) {
+			SetIssue(
+				issue,
+				"schema_invalid_params",
+				"Method `" + methodName + "` expects `params` to be a JSON object when provided.");
+			return false;
+		}
+
+		if (params.find("\"active\"") != std::string::npos && !IsFieldBoolean(params, "active")) {
+			SetIssue(
+				issue,
+				"schema_invalid_params",
+				"Method `" + methodName + "` requires `params.active` to be boolean.");
+			return false;
+		}
+
+		return true;
+	}
+
 	bool ValidateSessionMutationParams(
 		const RequestFrame& request,
 		SchemaValidationIssue& issue,
@@ -429,7 +457,6 @@ bool GatewayProtocolSchemaValidator::ValidateRequest(const RequestFrame& request
 	if (request.method == "gateway.protocol.version" ||
 		request.method == "gateway.features.list" ||
 		request.method == "gateway.config.get" ||
-		request.method == "gateway.agents.list" ||
 		request.method == "gateway.tools.catalog" ||
 		request.method == "gateway.health" ||
 		request.method == "gateway.transport.status" ||
@@ -442,6 +469,10 @@ bool GatewayProtocolSchemaValidator::ValidateRequest(const RequestFrame& request
 		request.method == "gateway.channels.routes" ||
 		request.method == "gateway.channels.accounts") {
 		return ValidateOptionalChannelParam(request, issue, request.method);
+	}
+
+	if (request.method == "gateway.agents.list") {
+		return ValidateOptionalActiveParam(request, issue, request.method);
 	}
 
 	return true;
@@ -611,8 +642,10 @@ bool GatewayProtocolSchemaValidator::ValidateResponseForMethod(
 	}
 
 	if (method == "gateway.agents.list") {
-     if (!IsFieldValueType(payload, "agents", '[')) {
-			SetIssue(issue, "schema_invalid_response", "`gateway.agents.list` requires array field `agents`.");
+       if (!IsFieldValueType(payload, "agents", '[') ||
+			!IsFieldNumber(payload, "count") ||
+			!IsFieldValueType(payload, "activeAgentId", '"')) {
+         SetIssue(issue, "schema_invalid_response", "`gateway.agents.list` requires `agents` array, `count` number, and `activeAgentId` string fields.");
 			return false;
 		}
 
@@ -648,9 +681,11 @@ bool GatewayProtocolSchemaValidator::ValidateResponseForMethod(
 
 	if (method == "gateway.tools.call.preview") {
 		return IsFieldValueType(payload, "tool", '"') && IsFieldBoolean(payload, "allowed") &&
-			IsFieldValueType(payload, "reason", '"')
+            IsFieldValueType(payload, "reason", '"') &&
+			IsFieldBoolean(payload, "argsProvided") &&
+			IsFieldValueType(payload, "policy", '"')
 			? true
-			: (SetIssue(issue, "schema_invalid_response", "`gateway.tools.call.preview` requires `tool`, `allowed`, and `reason` fields."), false);
+         : (SetIssue(issue, "schema_invalid_response", "`gateway.tools.call.preview` requires `tool`, `allowed`, `reason`, `argsProvided`, and `policy` fields."), false);
 	}
 
 	if (method == "gateway.features.list") {

@@ -124,7 +124,7 @@ bool GatewayProtocolContract::ValidateFixtureParity(const std::string& fixtureRo
   const ResponseFrame agentsListResponse{
       .id = "req-16",
       .ok = true,
-      .payloadJson = "{\"agents\":[{\"id\":\"default\",\"name\":\"Default Agent\",\"active\":true}]}",
+     .payloadJson = "{\"agents\":[{\"id\":\"default\",\"name\":\"Default Agent\",\"active\":true}],\"count\":1,\"activeAgentId\":\"default\"}",
       .error = std::nullopt,
   };
 

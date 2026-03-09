@@ -602,17 +602,31 @@ void GatewayHost::RegisterDefaultHandlers() {
   });
 
   m_dispatcher.Register("gateway.agents.list", [this](const protocol::RequestFrame& request) {
+    const std::optional<bool> activeFilter = ExtractBooleanParam(request.paramsJson, "active");
     const auto agents = m_agentRegistry.List();
     std::string payload = "{\"agents\":[";
+    bool first = true;
+    std::string activeAgentId = "none";
+    std::size_t count = 0;
     for (std::size_t i = 0; i < agents.size(); ++i) {
-      if (i > 0) {
+      if (activeFilter.has_value() && agents[i].active != activeFilter.value()) {
+        continue;
+      }
+
+      if (!first) {
         payload += ",";
       }
 
       payload += SerializeAgent(agents[i]);
+      if (activeAgentId == "none" && agents[i].active) {
+        activeAgentId = agents[i].id;
+      }
+
+      first = false;
+      ++count;
     }
 
-    payload += "]}";
+    payload += "],\"count\":" + std::to_string(count) + ",\"activeAgentId\":\"" + EscapeJson(activeAgentId) + "\"}";
 
     return protocol::ResponseFrame{
         .id = request.id,
