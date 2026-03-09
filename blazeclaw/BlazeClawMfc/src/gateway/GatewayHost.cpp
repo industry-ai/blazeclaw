@@ -582,6 +582,54 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.agents.create", [this](const protocol::RequestFrame& request) {
+			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
+			const std::string requestedName = ExtractStringParam(request.paramsJson, "name");
+			const std::optional<bool> requestedActive = ExtractBooleanParam(request.paramsJson, "active");
+			const AgentEntry created = m_agentRegistry.Create(
+				requestedId,
+				requestedName.empty() ? std::nullopt : std::optional<std::string>(requestedName),
+				requestedActive);
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"agent\":" + SerializeAgent(created) + ",\"created\":true}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.sessions.patch", [this](const protocol::RequestFrame& request) {
+			const std::string requestedId = ExtractStringParam(request.paramsJson, "sessionId");
+			const std::string requestedScope = ExtractStringParam(request.paramsJson, "scope");
+			const std::optional<bool> requestedActive = ExtractBooleanParam(request.paramsJson, "active");
+			const SessionEntry patched = m_sessionRegistry.Patch(
+				requestedId,
+				requestedScope.empty() ? std::nullopt : std::optional<std::string>(requestedScope),
+				requestedActive);
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"session\":" + SerializeSession(patched) + ",\"patched\":true}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.sessions.preview", [this](const protocol::RequestFrame& request) {
+			const std::string requestedId = ExtractStringParam(request.paramsJson, "sessionId");
+			const SessionEntry session = m_sessionRegistry.Resolve(requestedId);
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"session\":" + SerializeSession(session) +
+					",\"title\":\"Session " + EscapeJson(session.id) +
+					"\",\"hasMessages\":true,\"unread\":0}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.sessions.compact", [this](const protocol::RequestFrame& request) {
 			const bool dryRun = ExtractBooleanParam(request.paramsJson, "dryRun").value_or(false);
 			const std::size_t compacted = dryRun ? m_sessionRegistry.CountCompactCandidates() : m_sessionRegistry.CompactInactive();

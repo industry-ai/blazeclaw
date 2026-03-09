@@ -1,0 +1,15 @@
+{
+  "type": "res",
+  "id": "req-26",
+  "ok": true,
+  "payload": {
+    "session": {
+      "id": "main",
+      "scope": "default",
+      "active": true
+    },
+    "title": "Session main",
+    "hasMessages": true,
+    "unread": 0
+  }
+}

@@ -117,7 +117,7 @@ namespace blazeclaw::gateway::protocol {
 		const ResponseFrame featuresListResponse{
 			.id = "req-3",
 			.ok = true,
-			.payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.channels.accounts\",\"gateway.channels.route.resolve\",\"gateway.channels.routes\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.compact\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
+	  .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.create\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.channels.accounts\",\"gateway.channels.route.resolve\",\"gateway.channels.routes\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.compact\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
 			.error = std::nullopt,
 		};
 
@@ -237,6 +237,27 @@ namespace blazeclaw::gateway::protocol {
 			.id = "req-25",
 			.ok = true,
 			.payloadJson = "{\"compacted\":1,\"remaining\":1,\"dryRun\":false}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame sessionsPreviewResponse{
+			.id = "req-26",
+			.ok = true,
+			.payloadJson = "{\"session\":{\"id\":\"main\",\"scope\":\"default\",\"active\":true},\"title\":\"Session main\",\"hasMessages\":true,\"unread\":0}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame sessionsPatchResponse{
+			.id = "req-27",
+			.ok = true,
+			.payloadJson = "{\"session\":{\"id\":\"main\",\"scope\":\"default\",\"active\":true},\"patched\":true}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame agentsCreateResponse{
+			.id = "req-28",
+			.ok = true,
+			.payloadJson = "{\"agent\":{\"id\":\"builder\",\"name\":\"Agent builder\",\"active\":false},\"created\":true}",
 			.error = std::nullopt,
 		};
 
@@ -500,6 +521,30 @@ namespace blazeclaw::gateway::protocol {
 			return false;
 		}
 
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.sessions.preview",
+			sessionsPreviewResponse,
+			responseIssue)) {
+			error = "Sessions preview response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.sessions.patch",
+			sessionsPatchResponse,
+			responseIssue)) {
+			error = "Sessions patch response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.agents.create",
+			agentsCreateResponse,
+			responseIssue)) {
+			error = "Agents create response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
 		SchemaValidationIssue eventIssue;
 		if (!GatewayProtocolSchemaValidator::ValidateEvent(event, eventIssue)) {
 			error = "Tick event schema validation failed: " + eventIssue.message;
@@ -615,6 +660,48 @@ namespace blazeclaw::gateway::protocol {
 			sessionsCompactResponseNegative,
 			responseIssue)) {
 			error = "Schema response negative case unexpectedly passed for gateway.sessions.compact missing `dryRun`.";
+			return false;
+		}
+
+		const ResponseFrame sessionsPreviewResponseNegative{
+			.id = "req-schema-16",
+			.ok = true,
+			.payloadJson = "{\"session\":{\"id\":\"main\",\"scope\":\"default\",\"active\":true},\"title\":\"Session main\",\"hasMessages\":true}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.sessions.preview",
+			sessionsPreviewResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.sessions.preview missing `unread`.";
+			return false;
+		}
+
+		const ResponseFrame sessionsPatchResponseNegative{
+			.id = "req-schema-17",
+			.ok = true,
+			.payloadJson = "{\"session\":{\"id\":\"main\",\"scope\":\"default\",\"active\":true}}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.sessions.patch",
+			sessionsPatchResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.sessions.patch missing `patched`.";
+			return false;
+		}
+
+		const ResponseFrame agentsCreateResponseNegative{
+			.id = "req-schema-18",
+			.ok = true,
+			.payloadJson = "{\"agent\":{\"id\":\"builder\",\"name\":\"Agent builder\",\"active\":false}}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.agents.create",
+			agentsCreateResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.agents.create missing `created`.";
 			return false;
 		}
 
@@ -784,6 +871,27 @@ namespace blazeclaw::gateway::protocol {
 		if (!CompareFixture(
 			root / "response_sessions_compact.json",
 			SerializeResponseFrame(sessionsCompactResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_sessions_preview.json",
+			SerializeResponseFrame(sessionsPreviewResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_sessions_patch.json",
+			SerializeResponseFrame(sessionsPatchResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_agents_create.json",
+			SerializeResponseFrame(agentsCreateResponse),
 			error)) {
 			return false;
 		}

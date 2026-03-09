@@ -820,6 +820,82 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool ValidateSessionsPreviewParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.sessions.preview", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"sessionId",
+				JsonFieldKind::String,
+				issue,
+				"gateway.sessions.preview",
+				"a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "sessionId") {
+					continue;
+				}
+
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `gateway.sessions.preview` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateAgentsCreateParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.agents.create", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"agentId",
+				JsonFieldKind::String,
+				issue,
+				"gateway.agents.create",
+				"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"name",
+					JsonFieldKind::String,
+					issue,
+					"gateway.agents.create",
+					"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"active",
+					JsonFieldKind::Boolean,
+					issue,
+					"gateway.agents.create",
+					"boolean")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "agentId" || field == "name" || field == "active") {
+					continue;
+				}
+
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `gateway.agents.create` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		bool ValidatePingParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 			ParsedObjectFieldKinds fieldKinds;
 			if (!TryParseRequestParamsObject(request, issue, "gateway.ping", fieldKinds)) {
@@ -881,6 +957,10 @@ namespace blazeclaw::gateway::protocol {
 			return ValidateSessionsCompactParams(request, issue);
 		}
 
+		if (request.method == "gateway.sessions.preview") {
+			return ValidateSessionsPreviewParams(request, issue);
+		}
+
 		if (request.method == "gateway.channels.route.resolve") {
 			return ValidateChannelsRouteResolveParams(request, issue);
 		}
@@ -901,12 +981,20 @@ namespace blazeclaw::gateway::protocol {
 			return ValidateStringIdParam(request, issue, request.method, "sessionId");
 		}
 
+		if (request.method == "gateway.sessions.patch") {
+			return ValidateSessionMutationParams(request, issue, request.method);
+		}
+
 		if (request.method == "gateway.sessions.create" || request.method == "gateway.sessions.reset") {
 			return ValidateSessionMutationParams(request, issue, request.method);
 		}
 
 		if (request.method == "gateway.agents.get" || request.method == "gateway.agents.activate") {
 			return ValidateStringIdParam(request, issue, request.method, "agentId");
+		}
+
+		if (request.method == "gateway.agents.create") {
+			return ValidateAgentsCreateParams(request, issue);
 		}
 
 		if (request.method == "gateway.protocol.version" ||
@@ -994,6 +1082,48 @@ namespace blazeclaw::gateway::protocol {
 				!IsFieldNumber(payload, "remaining") ||
 				!IsFieldBoolean(payload, "dryRun")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.sessions.compact` requires numeric `compacted`/`remaining` and boolean `dryRun` fields.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.sessions.preview") {
+			const bool hasRoot = IsFieldValueType(payload, "session", '{') &&
+				IsFieldValueType(payload, "title", '"') &&
+				IsFieldBoolean(payload, "hasMessages") &&
+				IsFieldNumber(payload, "unread");
+
+			if (!hasRoot || !PayloadContainsAllFieldTokens(payload, { "id", "scope", "active" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.sessions.preview` requires `session` with `id/scope/active`, `title`, `hasMessages`, and `unread` fields.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.sessions.patch") {
+			if (!IsFieldValueType(payload, "session", '{') || !IsFieldBoolean(payload, "patched")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.sessions.patch` requires `session` object and `patched` boolean.");
+				return false;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "id", "scope", "active" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.sessions.patch` requires `session` fields `id`, `scope`, and `active`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.agents.create") {
+			if (!IsFieldValueType(payload, "agent", '{') || !IsFieldBoolean(payload, "created")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.agents.create` requires `agent` object and `created` boolean.");
+				return false;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "id", "name", "active" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.agents.create` requires `agent` fields `id`, `name`, and `active`.");
 				return false;
 			}
 
@@ -1200,8 +1330,11 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.ping",
 				"gateway.transport.status",
 				"gateway.events.catalog",
+		  "gateway.agents.create",
 				"gateway.sessions.delete",
 			   "gateway.sessions.compact",
+		  "gateway.sessions.patch",
+		   "gateway.sessions.preview",
 				"gateway.sessions.usage",
 				"gateway.channels.accounts",
 				"gateway.tools.call.preview",

@@ -4,25 +4,29 @@
 
 namespace blazeclaw::gateway {
 
-struct AgentEntry {
-  std::string id;
-  std::string name;
-  bool active = false;
-};
+	struct AgentEntry {
+		std::string id;
+		std::string name;
+		bool active = false;
+	};
 
-class GatewayAgentRegistry {
-public:
-  GatewayAgentRegistry();
+	class GatewayAgentRegistry {
+	public:
+		GatewayAgentRegistry();
 
-  std::vector<AgentEntry> List() const;
-  AgentEntry Get(const std::string& requestedId) const;
-  AgentEntry Activate(const std::string& requestedId);
+		std::vector<AgentEntry> List() const;
+		AgentEntry Get(const std::string& requestedId) const;
+		AgentEntry Activate(const std::string& requestedId);
+		AgentEntry Create(
+			const std::string& requestedId,
+			const std::optional<std::string>& requestedName = std::nullopt,
+			std::optional<bool> requestedActive = std::nullopt);
 
-private:
-  static std::string NormalizeAgentId(const std::string& value);
-  static AgentEntry BuildDefaultAgent();
+	private:
+		static std::string NormalizeAgentId(const std::string& value);
+		static AgentEntry BuildDefaultAgent();
 
-  std::unordered_map<std::string, AgentEntry> m_agents;
-};
+		std::unordered_map<std::string, AgentEntry> m_agents;
+	};
 
 } // namespace blazeclaw::gateway

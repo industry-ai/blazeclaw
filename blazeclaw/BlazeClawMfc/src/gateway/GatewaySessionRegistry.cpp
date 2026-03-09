@@ -115,6 +115,26 @@ namespace blazeclaw::gateway {
 		return compacted;
 	}
 
+	SessionEntry GatewaySessionRegistry::Patch(
+		const std::string& requestedId,
+		const std::optional<std::string>& requestedScope,
+		std::optional<bool> requestedActive) {
+		const std::string id = NormalizeSessionId(requestedId);
+		SessionEntry patched = Resolve(id);
+
+		patched.id = id;
+		if (requestedScope.has_value() && !requestedScope.value().empty()) {
+			patched.scope = requestedScope.value();
+		}
+
+		if (requestedActive.has_value()) {
+			patched.active = requestedActive.value();
+		}
+
+		m_sessions.insert_or_assign(id, patched);
+		return patched;
+	}
+
 	std::string GatewaySessionRegistry::ResolveScope(
 		const std::string& sessionId,
 		const std::optional<std::string>& requestedScope) {

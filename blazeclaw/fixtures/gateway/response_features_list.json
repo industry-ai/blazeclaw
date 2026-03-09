@@ -3,7 +3,7 @@
   "id": "req-3",
   "ok": true,
   "payload": {
-    "methods": [ "gateway.agents.activate", "gateway.agents.get", "gateway.agents.list", "gateway.channels.accounts", "gateway.channels.route.resolve", "gateway.channels.routes", "gateway.channels.status", "gateway.config.get", "gateway.events.catalog", "gateway.features.list", "gateway.health", "gateway.logs.tail", "gateway.ping", "gateway.protocol.version", "gateway.session.list", "gateway.sessions.compact", "gateway.sessions.create", "gateway.sessions.delete", "gateway.sessions.reset", "gateway.sessions.resolve", "gateway.sessions.usage", "gateway.tools.call.preview", "gateway.tools.catalog", "gateway.transport.status" ],
+    "methods": [ "gateway.agents.activate", "gateway.agents.create", "gateway.agents.get", "gateway.agents.list", "gateway.channels.accounts", "gateway.channels.route.resolve", "gateway.channels.routes", "gateway.channels.status", "gateway.config.get", "gateway.events.catalog", "gateway.features.list", "gateway.health", "gateway.logs.tail", "gateway.ping", "gateway.protocol.version", "gateway.session.list", "gateway.sessions.compact", "gateway.sessions.create", "gateway.sessions.delete", "gateway.sessions.patch", "gateway.sessions.preview", "gateway.sessions.reset", "gateway.sessions.resolve", "gateway.sessions.usage", "gateway.tools.call.preview", "gateway.tools.catalog", "gateway.transport.status" ],
     "events": [ "gateway.agent.update", "gateway.channels.accounts.update", "gateway.channels.update", "gateway.health", "gateway.session.reset", "gateway.shutdown", "gateway.tick", "gateway.tools.catalog.update" ]
   }
 }

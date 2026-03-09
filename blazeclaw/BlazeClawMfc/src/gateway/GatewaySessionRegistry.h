@@ -27,6 +27,10 @@ namespace blazeclaw::gateway {
 		bool Delete(const std::string& requestedId, SessionEntry& removedSession);
 		std::size_t CountCompactCandidates() const;
 		std::size_t CompactInactive();
+		SessionEntry Patch(
+			const std::string& requestedId,
+			const std::optional<std::string>& requestedScope = std::nullopt,
+			std::optional<bool> requestedActive = std::nullopt);
 
 	private:
 		static std::string NormalizeSessionId(const std::string& value);
