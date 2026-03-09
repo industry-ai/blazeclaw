@@ -1,1 +1,10 @@
-{"type":"res","id":"req-25","ok":true,"payload":{"compacted":1,"remaining":1,"dryRun":false}}
+{
+  "type": "res",
+  "id": "req-25",
+  "ok": true,
+  "payload": {
+    "compacted": 1,
+    "remaining": 1,
+    "dryRun": false
+  }
+}
