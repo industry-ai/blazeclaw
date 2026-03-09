@@ -586,14 +586,21 @@ void GatewayHost::RegisterDefaultHandlers() {
   });
 
   m_dispatcher.Register("gateway.channels.accounts", [this](const protocol::RequestFrame& request) {
+    const std::string channelFilter = ExtractStringParam(request.paramsJson, "channel");
     const auto accounts = m_channelRegistry.ListAccounts();
     std::string accountsJson = "[";
+    bool first = true;
     for (std::size_t i = 0; i < accounts.size(); ++i) {
-      if (i > 0) {
+      if (!channelFilter.empty() && accounts[i].channel != channelFilter) {
+        continue;
+      }
+
+      if (!first) {
         accountsJson += ",";
       }
 
       accountsJson += SerializeChannelAccount(accounts[i]);
+      first = false;
     }
 
     accountsJson += "]";
@@ -686,14 +693,21 @@ void GatewayHost::RegisterDefaultHandlers() {
   });
 
   m_dispatcher.Register("gateway.channels.routes", [this](const protocol::RequestFrame& request) {
+    const std::string channelFilter = ExtractStringParam(request.paramsJson, "channel");
     const auto routes = m_channelRegistry.ListRoutes();
     std::string routesJson = "[";
+    bool first = true;
     for (std::size_t i = 0; i < routes.size(); ++i) {
-      if (i > 0) {
+      if (!channelFilter.empty() && routes[i].channel != channelFilter) {
+        continue;
+      }
+
+      if (!first) {
         routesJson += ",";
       }
 
       routesJson += SerializeChannelRoute(routes[i]);
+      first = false;
     }
 
     routesJson += "]";
@@ -707,14 +721,21 @@ void GatewayHost::RegisterDefaultHandlers() {
   });
 
   m_dispatcher.Register("gateway.channels.status", [this](const protocol::RequestFrame& request) {
+    const std::string channelFilter = ExtractStringParam(request.paramsJson, "channel");
     const auto channels = m_channelRegistry.ListStatus();
     std::string channelsJson = "[";
+    bool first = true;
     for (std::size_t i = 0; i < channels.size(); ++i) {
-      if (i > 0) {
+      if (!channelFilter.empty() && channels[i].id != channelFilter) {
+        continue;
+      }
+
+      if (!first) {
         channelsJson += ",";
       }
 
       channelsJson += SerializeChannelStatus(channels[i]);
+      first = false;
     }
 
     channelsJson += "]";

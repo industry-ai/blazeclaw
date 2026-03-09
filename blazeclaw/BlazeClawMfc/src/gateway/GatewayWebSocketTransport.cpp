@@ -17,6 +17,7 @@ namespace blazeclaw::gateway {
 		constexpr std::size_t kMaxOutboundNetworkFramesPerConnection = 256;
         constexpr std::uint64_t kHandshakeTimeoutMs = 10'000;
 		constexpr std::uint64_t kIdleConnectionTimeoutMs = 120'000;
+     constexpr char kSupportedGatewaySubprotocol[] = "blazeclaw.gateway.v1";
 		constexpr std::uint16_t kCloseCodeGoingAway = 1001;
 		constexpr std::uint16_t kCloseCodeInvalidPayloadData = 1007;
 		constexpr std::uint16_t kCloseCodeMessageTooBig = 1009;
@@ -1266,18 +1267,34 @@ namespace blazeclaw::gateway {
 			return false;
 		}
 
+		std::string selectedSubprotocol;
+		std::string requestedSubprotocols;
+		if (TryExtractHttpHeader(request, "Sec-WebSocket-Protocol", requestedSubprotocols)) {
+			if (!HeaderContainsToken(requestedSubprotocols, kSupportedGatewaySubprotocol)) {
+				error = "Requested websocket subprotocol is not supported.";
+				return false;
+			}
+
+			selectedSubprotocol = kSupportedGatewaySubprotocol;
+		}
+
 		std::string acceptValue;
 		if (!BuildWebSocketAcceptValue(websocketKey, acceptValue)) {
 			error = "Failed to compute Sec-WebSocket-Accept value.";
 			return false;
 		}
 
-		const std::string response =
+        std::string response =
 			"HTTP/1.1 101 Switching Protocols\r\n"
 			"Upgrade: websocket\r\n"
 			"Connection: Upgrade\r\n"
-			"Sec-WebSocket-Accept: " +
-			acceptValue + "\r\n\r\n";
+          "Sec-WebSocket-Accept: " + acceptValue + "\r\n";
+
+		if (!selectedSubprotocol.empty()) {
+			response += "Sec-WebSocket-Protocol: " + selectedSubprotocol + "\r\n";
+		}
+
+		response += "\r\n";
 
 		const int sent = send(session.socket, response.data(), static_cast<int>(response.size()), 0);
 		if (sent == SOCKET_ERROR) {

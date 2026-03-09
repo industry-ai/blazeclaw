@@ -63,6 +63,28 @@ namespace {
 			return true;
 		}
 
+		const std::string params = Trim(request.paramsJson.value());
+		if (!IsJsonObjectShape(params)) {
+			SetIssue(
+				issue,
+				"schema_invalid_params",
+				"Method `gateway.channels.route.resolve` expects `params` to be a JSON object when provided.");
+			return false;
+		}
+
+		if (params.find("\"channel\"") != std::string::npos && !IsFieldValueType(params, "channel", '"')) {
+			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.resolve` requires `params.channel` to be a string.");
+			return false;
+		}
+
+		if (params.find("\"accountId\"") != std::string::npos && !IsFieldValueType(params, "accountId", '"')) {
+			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.resolve` requires `params.accountId` to be a string.");
+			return false;
+		}
+
+		return true;
+	}
+
 	bool ValidateOptionalChannelParam(
 		const RequestFrame& request,
 		SchemaValidationIssue& issue,
@@ -85,28 +107,6 @@ namespace {
 				issue,
 				"schema_invalid_params",
 				"Method `" + methodName + "` requires `params.channel` to be a string.");
-			return false;
-		}
-
-		return true;
-	}
-
-		const std::string params = Trim(request.paramsJson.value());
-		if (!IsJsonObjectShape(params)) {
-			SetIssue(
-				issue,
-				"schema_invalid_params",
-				"Method `gateway.channels.route.resolve` expects `params` to be a JSON object when provided.");
-			return false;
-		}
-
-		if (params.find("\"channel\"") != std::string::npos && !IsFieldValueType(params, "channel", '"')) {
-			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.resolve` requires `params.channel` to be a string.");
-			return false;
-		}
-
-		if (params.find("\"accountId\"") != std::string::npos && !IsFieldValueType(params, "accountId", '"')) {
-			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.resolve` requires `params.accountId` to be a string.");
 			return false;
 		}
 
