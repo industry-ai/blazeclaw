@@ -194,7 +194,7 @@ bool GatewayProtocolContract::ValidateFixtureParity(const std::string& fixtureRo
   const ResponseFrame toolsCallPreviewResponse{
       .id = "req-22",
       .ok = true,
-      .payloadJson = "{\"tool\":\"none\",\"allowed\":false,\"reason\":\"missing_tool\"}",
+      .payloadJson = "{\"tool\":\"none\",\"allowed\":false,\"reason\":\"missing_tool\",\"argsProvided\":false,\"policy\":\"seeded_preview_v1\"}",
       .error = std::nullopt,
   };
 
@@ -249,21 +249,21 @@ bool GatewayProtocolContract::ValidateFixtureParity(const std::string& fixtureRo
 
   const EventFrame event{
       .eventName = "gateway.tick",
-      .payloadJson = "{\"ts\":1735689600000}",
+      .payloadJson = "{\"ts\":1735689600000,\"running\":true,\"connections\":0}",
       .seq = 1,
       .stateVersion = 1,
   };
 
   const EventFrame healthEvent{
       .eventName = "gateway.health",
-      .payloadJson = "{\"status\":\"ok\",\"running\":true}",
+      .payloadJson = "{\"status\":\"ok\",\"running\":true,\"endpoint\":\"ws://127.0.0.1:18789\",\"connections\":0,\"timeouts\":{\"handshake\":0,\"idle\":0},\"closes\":{\"invalidUtf8\":0,\"messageTooBig\":0,\"extensionRejected\":0}}",
       .seq = 2,
       .stateVersion = 2,
   };
 
   const EventFrame shutdownEvent{
       .eventName = "gateway.shutdown",
-      .payloadJson = "{\"reason\":\"maintenance\"}",
+      .payloadJson = "{\"reason\":\"maintenance\",\"graceful\":true,\"seq\":3}",
       .seq = 3,
       .stateVersion = 3,
   };

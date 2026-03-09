@@ -1,1 +1,1 @@
-{"type":"event","event":"gateway.tick","payload":{"ts":1735689600000},"seq":1,"stateVersion":1}
+{"type":"event","event":"gateway.tick","payload":{"ts":1735689600000,"running":true,"connections":0},"seq":1,"stateVersion":1}

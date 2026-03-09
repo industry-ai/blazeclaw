@@ -295,7 +295,9 @@ bool GatewayHost::PumpNetworkOnce(std::string& error) {
 std::string GatewayHost::BuildTickEventFrame(std::uint64_t timestampMs, std::uint64_t seq) const {
   protocol::EventFrame frame{
       .eventName = "gateway.tick",
-      .payloadJson = "{\"ts\":" + std::to_string(timestampMs) + "}",
+      .payloadJson = "{\"ts\":" + std::to_string(timestampMs) +
+          ",\"running\":" + std::string(IsRunning() ? "true" : "false") +
+          ",\"connections\":" + std::to_string(m_transport.ConnectionCount()) + "}",
       .seq = seq,
       .stateVersion = seq,
   };
@@ -482,7 +484,7 @@ std::string GatewayHost::BuildHealthEventFrame(std::uint64_t seq) const {
 std::string GatewayHost::BuildShutdownEventFrame(const std::string& reason, std::uint64_t seq) const {
   protocol::EventFrame frame{
       .eventName = "gateway.shutdown",
-      .payloadJson = "{\"reason\":\"" + reason + "\"}",
+      .payloadJson = "{\"reason\":\"" + reason + "\",\"graceful\":true,\"seq\":" + std::to_string(seq) + "}",
       .seq = seq,
       .stateVersion = seq,
   };
@@ -706,13 +708,17 @@ void GatewayHost::RegisterDefaultHandlers() {
   m_dispatcher.Register("gateway.tools.call.preview", [this](const protocol::RequestFrame& request) {
     const std::string requestedTool = ExtractStringParam(request.paramsJson, "tool");
     const ToolPreviewResult preview = m_toolRegistry.Preview(requestedTool);
+    const bool argsProvided = request.paramsJson.has_value() &&
+        request.paramsJson.value().find("\"args\"") != std::string::npos;
 
     return protocol::ResponseFrame{
         .id = request.id,
         .ok = true,
         .payloadJson = "{\"tool\":\"" + EscapeJson(preview.tool) + "\",\"allowed\":" +
             std::string(preview.allowed ? "true" : "false") + ",\"reason\":\"" +
-            EscapeJson(preview.reason) + "\"}",
+            EscapeJson(preview.reason) + "\",\"argsProvided\":" +
+            std::string(argsProvided ? "true" : "false") +
+            ",\"policy\":\"seeded_preview_v1\"}",
         .error = std::nullopt,
     };
   });

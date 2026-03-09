@@ -476,9 +476,20 @@ bool GatewayProtocolSchemaValidator::ValidateResponseForMethod(
 	}
 
 	if (method == "gateway.config.get") {
-		return IsFieldValueType(payload, "gateway", '{') && IsFieldValueType(payload, "agent", '{')
-			? true
-			: (SetIssue(issue, "schema_invalid_response", "`gateway.config.get` requires object fields `gateway` and `agent`."), false);
+     if (!IsFieldValueType(payload, "gateway", '{') || !IsFieldValueType(payload, "agent", '{')) {
+			SetIssue(issue, "schema_invalid_response", "`gateway.config.get` requires object fields `gateway` and `agent`.");
+			return false;
+		}
+
+		if (!IsFieldValueType(payload, "bind", '"') ||
+			!IsFieldNumber(payload, "port") ||
+			!IsFieldValueType(payload, "model", '"') ||
+			!IsFieldBoolean(payload, "streaming")) {
+			SetIssue(issue, "schema_invalid_response", "`gateway.config.get` requires `gateway.bind` string, `gateway.port` number, `agent.model` string, and `agent.streaming` boolean fields.");
+			return false;
+		}
+
+		return true;
 	}
 
 	if (method == "gateway.channels.status") {
@@ -754,21 +765,48 @@ bool GatewayProtocolSchemaValidator::ValidateEvent(const EventFrame& event, Sche
 	const std::string payload = event.payloadJson.value();
 
 	if (event.eventName == "gateway.tick") {
-		return IsFieldNumber(payload, "ts")
-			? true
-			: (SetIssue(issue, "schema_invalid_event", "`gateway.tick` requires numeric field `ts`."), false);
+     if (!IsFieldNumber(payload, "ts") ||
+			!IsFieldBoolean(payload, "running") ||
+			!IsFieldNumber(payload, "connections")) {
+			SetIssue(issue, "schema_invalid_event", "`gateway.tick` requires `ts` number, `running` boolean, and `connections` number fields.");
+			return false;
+		}
+
+		return true;
 	}
 
 	if (event.eventName == "gateway.health") {
-		return IsFieldValueType(payload, "status", '"') && IsFieldBoolean(payload, "running")
-			? true
-			: (SetIssue(issue, "schema_invalid_event", "`gateway.health` requires `status` string and `running` boolean."), false);
+       if (!IsFieldValueType(payload, "status", '"') ||
+			!IsFieldBoolean(payload, "running") ||
+			!IsFieldValueType(payload, "endpoint", '"') ||
+			!IsFieldNumber(payload, "connections")) {
+			SetIssue(issue, "schema_invalid_event", "`gateway.health` requires `status` string, `running` boolean, `endpoint` string, and `connections` number fields.");
+			return false;
+		}
+
+		if (!IsFieldValueType(payload, "timeouts", '{') ||
+			!IsFieldNumber(payload, "handshake") ||
+			!IsFieldNumber(payload, "idle") ||
+			!IsFieldValueType(payload, "closes", '{') ||
+			!IsFieldNumber(payload, "invalidUtf8") ||
+			!IsFieldNumber(payload, "messageTooBig") ||
+			!IsFieldNumber(payload, "extensionRejected")) {
+			SetIssue(issue, "schema_invalid_event", "`gateway.health` requires diagnostics objects `timeouts` and `closes` with numeric counters.");
+			return false;
+		}
+
+		return true;
 	}
 
 	if (event.eventName == "gateway.shutdown") {
-		return IsFieldValueType(payload, "reason", '"')
-			? true
-			: (SetIssue(issue, "schema_invalid_event", "`gateway.shutdown` requires string field `reason`."), false);
+     if (!IsFieldValueType(payload, "reason", '"') ||
+			!IsFieldBoolean(payload, "graceful") ||
+			!IsFieldNumber(payload, "seq")) {
+			SetIssue(issue, "schema_invalid_event", "`gateway.shutdown` requires `reason` string, `graceful` boolean, and `seq` number fields.");
+			return false;
+		}
+
+		return true;
 	}
 
 	if (event.eventName == "gateway.channels.update") {

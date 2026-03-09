@@ -1,1 +1,1 @@
-{"type":"res","id":"req-22","ok":true,"payload":{"tool":"none","allowed":false,"reason":"missing_tool"}}
+{"type":"res","id":"req-22","ok":true,"payload":{"tool":"none","allowed":false,"reason":"missing_tool","argsProvided":false,"policy":"seeded_preview_v1"}}
