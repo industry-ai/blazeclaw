@@ -58,13 +58,465 @@ namespace {
 		return json[valuePos] == expectedFirstChar;
 	}
 
+	enum class JsonFieldKind {
+		String,
+		Number,
+		Boolean,
+		Object,
+		Array,
+		Null,
+	};
+
+	using ParsedObjectFieldKinds = std::unordered_map<std::string, JsonFieldKind>;
+
+	std::size_t SkipWhitespace(const std::string& json, std::size_t position) {
+		while (position < json.size() && std::isspace(static_cast<unsigned char>(json[position])) != 0) {
+			++position;
+		}
+
+		return position;
+	}
+
+	bool TryConsumeJsonString(const std::string& json, std::size_t& position, std::string& value) {
+		if (position >= json.size() || json[position] != '"') {
+			return false;
+		}
+
+		++position;
+		value.clear();
+		while (position < json.size()) {
+			const char ch = json[position++];
+			if (ch == '\\') {
+				if (position >= json.size()) {
+					return false;
+				}
+
+				value.push_back(json[position++]);
+				continue;
+			}
+
+			if (ch == '"') {
+				return true;
+			}
+
+			value.push_back(ch);
+		}
+
+		return false;
+	}
+
+	bool TryConsumeBalancedComposite(
+		const std::string& json,
+		std::size_t& position,
+		char openChar,
+		char closeChar) {
+		if (position >= json.size() || json[position] != openChar) {
+			return false;
+		}
+
+		int depth = 0;
+		bool inString = false;
+		bool escaped = false;
+		while (position < json.size()) {
+			const char ch = json[position++];
+			if (inString) {
+				if (escaped) {
+					escaped = false;
+				}
+				else if (ch == '\\') {
+					escaped = true;
+				}
+				else if (ch == '"') {
+					inString = false;
+				}
+
+				continue;
+			}
+
+			if (ch == '"') {
+				inString = true;
+				continue;
+			}
+
+			if (ch == openChar) {
+				++depth;
+			}
+			else if (ch == closeChar) {
+				--depth;
+				if (depth == 0) {
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	//bool TryParseTopLevelObjectFieldKinds(const std::string& json, ParsedObjectFieldKinds& kinds);
+
+	//bool TryParseRequestParamsObject(
+	//	const RequestFrame& request,
+	//	SchemaValidationIssue& issue,
+	//	const std::string& methodName,
+	//	ParsedObjectFieldKinds& fieldKinds) {
+	//	if (!request.paramsJson.has_value()) {
+	//		fieldKinds.clear();
+	//		return true;
+	//	}
+
+	//	if (!TryParseTopLevelObjectFieldKinds(request.paramsJson.value(), fieldKinds)) {
+	//		SetIssue(
+	//			issue,
+	//			"schema_invalid_params",
+	//			"Method `" + methodName + "` expects `params` to be a JSON object when provided.");
+	//		return false;
+	//	}
+
+	//	return true;
+	//}
+
+	//bool RequireFieldKindIfPresent(
+	//	const ParsedObjectFieldKinds& fieldKinds,
+	//	const std::string& fieldName,
+	//	JsonFieldKind kind,
+	//	SchemaValidationIssue& issue,
+	//	const std::string& methodName,
+	//	const std::string& typeLabel) {
+	//	const auto it = fieldKinds.find(fieldName);
+	//	if (it == fieldKinds.end()) {
+	//		return true;
+	//	}
+
+	//	if (it->second == kind) {
+	//		return true;
+	//	}
+
+	//	SetIssue(
+	//		issue,
+	//		"schema_invalid_params",
+	//		"Method `" + methodName + "` requires `params." + fieldName + "` to be " + typeLabel + ".");
+	//	return false;
+	//}
+	//	}
+
+	//	return false;
+	//}
+
+	bool TryConsumePrimitive(const std::string& json, std::size_t& position, const std::string& token) {
+		if (json.compare(position, token.size(), token) != 0) {
+			return false;
+		}
+
+		position += token.size();
+		return true;
+	}
+
+	bool TryConsumeJsonValue(const std::string& json, std::size_t& position, JsonFieldKind& kind) {
+		position = SkipWhitespace(json, position);
+		if (position >= json.size()) {
+			return false;
+		}
+
+		const char ch = json[position];
+		if (ch == '"') {
+			std::string ignored;
+			if (!TryConsumeJsonString(json, position, ignored)) {
+				return false;
+			}
+
+			kind = JsonFieldKind::String;
+			return true;
+		}
+
+		if (ch == '{') {
+			if (!TryConsumeBalancedComposite(json, position, '{', '}')) {
+				return false;
+			}
+
+			kind = JsonFieldKind::Object;
+			return true;
+		}
+
+		if (ch == '[') {
+			if (!TryConsumeBalancedComposite(json, position, '[', ']')) {
+				return false;
+			}
+
+			kind = JsonFieldKind::Array;
+			return true;
+		}
+
+		if (TryConsumePrimitive(json, position, "true") || TryConsumePrimitive(json, position, "false")) {
+			kind = JsonFieldKind::Boolean;
+			return true;
+		}
+
+		if (TryConsumePrimitive(json, position, "null")) {
+			kind = JsonFieldKind::Null;
+			return true;
+		}
+
+		if (ch == '-' || std::isdigit(static_cast<unsigned char>(ch)) != 0) {
+			++position;
+			while (position < json.size()) {
+				const char numberCh = json[position];
+				const bool isNumberChar =
+					std::isdigit(static_cast<unsigned char>(numberCh)) != 0 ||
+					numberCh == '.' || numberCh == 'e' || numberCh == 'E' || numberCh == '+' || numberCh == '-';
+				if (!isNumberChar) {
+					break;
+				}
+
+				++position;
+			}
+
+			kind = JsonFieldKind::Number;
+			return true;
+		}
+
+		return false;
+	}
+
+	bool TryParseTopLevelObjectFieldKinds(const std::string& json, ParsedObjectFieldKinds& kinds) {
+		kinds.clear();
+		const std::string trimmed = Trim(json);
+		if (!IsJsonObjectShape(trimmed)) {
+			return false;
+		}
+
+		std::size_t position = 1;
+		while (true) {
+			position = SkipWhitespace(trimmed, position);
+			if (position >= trimmed.size()) {
+				return false;
+			}
+
+			if (trimmed[position] == '}') {
+				return true;
+			}
+
+			std::string key;
+			if (!TryConsumeJsonString(trimmed, position, key)) {
+				return false;
+			}
+
+			position = SkipWhitespace(trimmed, position);
+			if (position >= trimmed.size() || trimmed[position] != ':') {
+				return false;
+			}
+
+			++position;
+			JsonFieldKind kind{};
+			if (!TryConsumeJsonValue(trimmed, position, kind)) {
+				return false;
+			}
+
+			kinds.insert_or_assign(key, kind);
+			position = SkipWhitespace(trimmed, position);
+			if (position >= trimmed.size()) {
+				return false;
+			}
+
+			if (trimmed[position] == ',') {
+				++position;
+				continue;
+			}
+
+			if (trimmed[position] == '}') {
+				return true;
+			}
+
+			return false;
+		}
+	}
+
+	bool IsFieldBoolean(const std::string& json, const std::string& fieldName);
+	bool IsFieldNumber(const std::string& json, const std::string& fieldName);
+
+	bool TryParseRequestParamsObject(
+		const RequestFrame& request,
+		SchemaValidationIssue& issue,
+		const std::string& methodName,
+		ParsedObjectFieldKinds& fieldKinds) {
+		if (!request.paramsJson.has_value()) {
+			fieldKinds.clear();
+			return true;
+		}
+
+		if (!TryParseTopLevelObjectFieldKinds(request.paramsJson.value(), fieldKinds)) {
+			SetIssue(
+				issue,
+				"schema_invalid_params",
+				"Method `" + methodName + "` expects `params` to be a JSON object when provided.");
+			return false;
+		}
+
+		return true;
+	}
+
+	bool RequireFieldKindIfPresent(
+		const ParsedObjectFieldKinds& fieldKinds,
+		const std::string& fieldName,
+		JsonFieldKind kind,
+		SchemaValidationIssue& issue,
+		const std::string& methodName,
+		const std::string& typeLabel) {
+		const auto it = fieldKinds.find(fieldName);
+		if (it == fieldKinds.end()) {
+			return true;
+		}
+
+		if (it->second == kind) {
+			return true;
+		}
+
+		SetIssue(
+			issue,
+			"schema_invalid_params",
+			"Method `" + methodName + "` requires `params." + fieldName + "` to be " + typeLabel + ".");
+		return false;
+	}
+
+	bool ContainsFieldName(std::initializer_list<const char*> allowedFieldNames, const std::string& fieldName) {
+		for (const char* allowed : allowedFieldNames) {
+			if (fieldName == allowed) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	bool TryFindUnexpectedObjectField(
+		const std::string& json,
+		std::initializer_list<const char*> allowedFieldNames,
+		std::string& unexpectedField) {
+		for (std::size_t i = 0; i < json.size(); ++i) {
+			if (json[i] != '"') {
+				continue;
+			}
+
+			std::size_t end = i + 1;
+			while (end < json.size()) {
+				if (json[end] == '\\') {
+					end += 2;
+					continue;
+				}
+
+				if (json[end] == '"') {
+					break;
+				}
+
+				++end;
+			}
+
+			if (end >= json.size()) {
+				break;
+			}
+
+			std::size_t colonPos = end + 1;
+			while (colonPos < json.size() && std::isspace(static_cast<unsigned char>(json[colonPos])) != 0) {
+				++colonPos;
+			}
+
+			if (colonPos < json.size() && json[colonPos] == ':') {
+				const std::string fieldName = json.substr(i + 1, end - i - 1);
+				if (!ContainsFieldName(allowedFieldNames, fieldName)) {
+					unexpectedField = fieldName;
+					return true;
+				}
+			}
+
+			i = end;
+		}
+
+		return false;
+	}
+
+	bool ValidateOptionalSessionListParams(
+		const RequestFrame& request,
+		SchemaValidationIssue& issue,
+		const std::string& methodName) {
+		if (!request.paramsJson.has_value()) {
+			return true;
+		}
+
+        ParsedObjectFieldKinds fieldKinds;
+		if (!TryParseTopLevelObjectFieldKinds(request.paramsJson.value(), fieldKinds)) {
+			SetIssue(
+				issue,
+				"schema_invalid_params",
+				"Method `" + methodName + "` expects `params` to be a JSON object when provided.");
+			return false;
+		}
+
+      auto requireFieldKind = [&](const std::string& field, JsonFieldKind kind, const char* typeLabel) {
+			const auto it = fieldKinds.find(field);
+			if (it == fieldKinds.end()) {
+				return true;
+			}
+
+			if (it->second == kind) {
+				return true;
+			}
+
+			SetIssue(
+				issue,
+				"schema_invalid_params",
+				"Method `" + methodName + "` requires `params." + field + "` to be " + typeLabel + ".");
+			return false;
+		};
+
+		if (!requireFieldKind("active", JsonFieldKind::Boolean, "boolean") ||
+			!requireFieldKind("scope", JsonFieldKind::String, "a string") ||
+			!requireFieldKind("limit", JsonFieldKind::Number, "numeric") ||
+			!requireFieldKind("activeMinutes", JsonFieldKind::Number, "numeric") ||
+			!requireFieldKind("includeGlobal", JsonFieldKind::Boolean, "boolean") ||
+			!requireFieldKind("includeUnknown", JsonFieldKind::Boolean, "boolean") ||
+			!requireFieldKind("includeDerivedTitles", JsonFieldKind::Boolean, "boolean") ||
+			!requireFieldKind("includeLastMessage", JsonFieldKind::Boolean, "boolean") ||
+			!requireFieldKind("label", JsonFieldKind::String, "a string") ||
+			!requireFieldKind("spawnedBy", JsonFieldKind::String, "a string") ||
+			!requireFieldKind("agentId", JsonFieldKind::String, "a string") ||
+			!requireFieldKind("search", JsonFieldKind::String, "a string")) {
+			return false;
+		}
+
+		for (const auto& [field, _] : fieldKinds) {
+			if (ContainsFieldName(
+					{"active",
+					 "scope",
+					 "limit",
+					 "activeMinutes",
+					 "includeGlobal",
+					 "includeUnknown",
+					 "includeDerivedTitles",
+					 "includeLastMessage",
+					 "label",
+					 "spawnedBy",
+					 "agentId",
+					 "search"},
+					field)) {
+				continue;
+			}
+
+			SetIssue(
+				issue,
+				"schema_invalid_params",
+             "Method `" + methodName + "` does not allow `params." + field + "`.");
+			return false;
+		}
+
+		return true;
+	}
+
 	bool ValidateChannelsRouteResolveParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 		if (!request.paramsJson.has_value()) {
 			return true;
 		}
 
-		const std::string params = Trim(request.paramsJson.value());
-		if (!IsJsonObjectShape(params)) {
+        ParsedObjectFieldKinds fieldKinds;
+		if (!TryParseTopLevelObjectFieldKinds(request.paramsJson.value(), fieldKinds)) {
 			SetIssue(
 				issue,
 				"schema_invalid_params",
@@ -72,23 +524,36 @@ namespace {
 			return false;
 		}
 
-		if (params.find("\"channel\"") != std::string::npos && !IsFieldValueType(params, "channel", '"')) {
-			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.resolve` requires `params.channel` to be a string.");
+     auto requireFieldKind = [&](const char* field, JsonFieldKind kind, const char* typeLabel) {
+			const auto it = fieldKinds.find(field);
+			if (it == fieldKinds.end()) {
+				return true;
+			}
+
+			if (it->second == kind) {
+				return true;
+			}
+
+			SetIssue(
+				issue,
+				"schema_invalid_params",
+				std::string("Method `gateway.channels.route.resolve` requires `params.") + field + "` to be " + typeLabel + ".");
+			return false;
+		};
+
+		if (!requireFieldKind("channel", JsonFieldKind::String, "a string") ||
+			!requireFieldKind("accountId", JsonFieldKind::String, "a string") ||
+			!requireFieldKind("sessionId", JsonFieldKind::String, "a string") ||
+			!requireFieldKind("agentId", JsonFieldKind::String, "a string")) {
 			return false;
 		}
 
-		if (params.find("\"accountId\"") != std::string::npos && !IsFieldValueType(params, "accountId", '"')) {
-			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.resolve` requires `params.accountId` to be a string.");
-			return false;
-		}
+		for (const auto& [field, _] : fieldKinds) {
+			if (ContainsFieldName({"channel", "accountId", "sessionId", "agentId"}, field)) {
+				continue;
+			}
 
-		if (params.find("\"sessionId\"") != std::string::npos && !IsFieldValueType(params, "sessionId", '"')) {
-			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.resolve` requires `params.sessionId` to be a string.");
-			return false;
-		}
-
-		if (params.find("\"agentId\"") != std::string::npos && !IsFieldValueType(params, "agentId", '"')) {
-			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.resolve` requires `params.agentId` to be a string.");
+          SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.resolve` does not allow `params." + field + "`.");
 			return false;
 		}
 
@@ -99,28 +564,18 @@ namespace {
 		const RequestFrame& request,
 		SchemaValidationIssue& issue,
 		const std::string& methodName) {
-		if (!request.paramsJson.has_value()) {
-			return true;
-		}
-
-		const std::string params = Trim(request.paramsJson.value());
-		if (!IsJsonObjectShape(params)) {
-			SetIssue(
-				issue,
-				"schema_invalid_params",
-				"Method `" + methodName + "` expects `params` to be a JSON object when provided.");
+      ParsedObjectFieldKinds fieldKinds;
+		if (!TryParseRequestParamsObject(request, issue, methodName, fieldKinds)) {
 			return false;
 		}
 
-		if (params.find("\"channel\"") != std::string::npos && !IsFieldValueType(params, "channel", '"')) {
-			SetIssue(
-				issue,
-				"schema_invalid_params",
-				"Method `" + methodName + "` requires `params.channel` to be a string.");
-			return false;
-		}
-
-		return true;
+		return RequireFieldKindIfPresent(
+			fieldKinds,
+			"channel",
+			JsonFieldKind::String,
+			issue,
+			methodName,
+			"a string");
 	}
 
 	bool PayloadContainsAllStringValues(const std::string& json, std::initializer_list<const char*> values) {
@@ -135,30 +590,25 @@ namespace {
 	}
 
 	bool ValidateToolsCallPreviewParams(const RequestFrame& request, SchemaValidationIssue& issue) {
-		if (!request.paramsJson.has_value()) {
-			return true;
+      ParsedObjectFieldKinds fieldKinds;
+		if (!TryParseRequestParamsObject(request, issue, "gateway.tools.call.preview", fieldKinds)) {
+			return false;
 		}
 
-		const std::string params = Trim(request.paramsJson.value());
-		if (!IsJsonObjectShape(params)) {
-			SetIssue(
+		return RequireFieldKindIfPresent(
+			fieldKinds,
+			"tool",
+			JsonFieldKind::String,
+			issue,
+			"gateway.tools.call.preview",
+			"a string") &&
+			RequireFieldKindIfPresent(
+				fieldKinds,
+				"args",
+				JsonFieldKind::Object,
 				issue,
-				"schema_invalid_params",
-				"Method `gateway.tools.call.preview` expects `params` to be a JSON object when provided.");
-			return false;
-		}
-
-		if (params.find("\"tool\"") != std::string::npos && !IsFieldValueType(params, "tool", '"')) {
-			SetIssue(issue, "schema_invalid_params", "Method `gateway.tools.call.preview` requires `params.tool` to be a string.");
-			return false;
-		}
-
-		if (params.find("\"args\"") != std::string::npos && !IsFieldValueType(params, "args", '{')) {
-			SetIssue(issue, "schema_invalid_params", "Method `gateway.tools.call.preview` requires `params.args` to be an object.");
-			return false;
-		}
-
-		return true;
+				"gateway.tools.call.preview",
+				"an object");
 	}
 
 	bool IsFieldBoolean(const std::string& json, const std::string& fieldName) {
@@ -184,63 +634,50 @@ namespace {
 		const RequestFrame& request,
 		SchemaValidationIssue& issue,
 		const std::string& methodName) {
-		if (!request.paramsJson.has_value()) {
-			return true;
-		}
-
-		const std::string params = Trim(request.paramsJson.value());
-		if (!IsJsonObjectShape(params)) {
-			SetIssue(
-				issue,
-				"schema_invalid_params",
-				"Method `" + methodName + "` expects `params` to be a JSON object when provided.");
+      ParsedObjectFieldKinds fieldKinds;
+		if (!TryParseRequestParamsObject(request, issue, methodName, fieldKinds)) {
 			return false;
 		}
 
-		if (params.find("\"active\"") != std::string::npos && !IsFieldBoolean(params, "active")) {
-			SetIssue(
-				issue,
-				"schema_invalid_params",
-				"Method `" + methodName + "` requires `params.active` to be boolean.");
-			return false;
-		}
-
-		return true;
+		return RequireFieldKindIfPresent(
+			fieldKinds,
+			"active",
+			JsonFieldKind::Boolean,
+			issue,
+			methodName,
+			"boolean");
 	}
 
 	bool ValidateSessionMutationParams(
 		const RequestFrame& request,
 		SchemaValidationIssue& issue,
 		const std::string& methodName) {
-		if (!request.paramsJson.has_value()) {
-			return true;
+      ParsedObjectFieldKinds fieldKinds;
+		if (!TryParseRequestParamsObject(request, issue, methodName, fieldKinds)) {
+			return false;
 		}
 
-		const std::string params = Trim(request.paramsJson.value());
-		if (!IsJsonObjectShape(params)) {
-			SetIssue(
+		return RequireFieldKindIfPresent(
+			fieldKinds,
+			"sessionId",
+			JsonFieldKind::String,
+			issue,
+			methodName,
+			"a string") &&
+			RequireFieldKindIfPresent(
+				fieldKinds,
+				"scope",
+				JsonFieldKind::String,
 				issue,
-				"schema_invalid_params",
-				"Method `" + methodName + "` expects `params` to be a JSON object when provided.");
-			return false;
-		}
-
-		if (params.find("\"sessionId\"") != std::string::npos && !IsFieldValueType(params, "sessionId", '"')) {
-			SetIssue(issue, "schema_invalid_params", "Method `" + methodName + "` requires `params.sessionId` to be a string.");
-			return false;
-		}
-
-		if (params.find("\"scope\"") != std::string::npos && !IsFieldValueType(params, "scope", '"')) {
-			SetIssue(issue, "schema_invalid_params", "Method `" + methodName + "` requires `params.scope` to be a string.");
-			return false;
-		}
-
-		if (params.find("\"active\"") != std::string::npos && !IsFieldBoolean(params, "active")) {
-			SetIssue(issue, "schema_invalid_params", "Method `" + methodName + "` requires `params.active` to be boolean.");
-			return false;
-		}
-
-		return true;
+				methodName,
+				"a string") &&
+			RequireFieldKindIfPresent(
+				fieldKinds,
+				"active",
+				JsonFieldKind::Boolean,
+				issue,
+				methodName,
+				"boolean");
 	}
 
 	bool IsFieldNumber(const std::string& json, const std::string& fieldName) {
@@ -323,73 +760,48 @@ namespace {
 		SchemaValidationIssue& issue,
 		const std::string& methodName,
 		const std::string& fieldName) {
-		if (!request.paramsJson.has_value()) {
-			return true;
-		}
-
-		const std::string params = Trim(request.paramsJson.value());
-		if (!IsJsonObjectShape(params)) {
-			SetIssue(
-				issue,
-				"schema_invalid_params",
-				"Method `" + methodName + "` expects `params` to be a JSON object when provided.");
+      ParsedObjectFieldKinds fieldKinds;
+		if (!TryParseRequestParamsObject(request, issue, methodName, fieldKinds)) {
 			return false;
 		}
 
-		if (params.find("\"" + fieldName + "\"") != std::string::npos &&
-			!IsFieldValueType(params, fieldName, '"')) {
-			SetIssue(
-				issue,
-				"schema_invalid_params",
-				"Method `" + methodName + "` requires `params." + fieldName + "` to be a string.");
-			return false;
-		}
-
-		return true;
+		return RequireFieldKindIfPresent(
+			fieldKinds,
+			fieldName,
+			JsonFieldKind::String,
+			issue,
+			methodName,
+			"a string");
 	}
 
 	bool ValidateLogsTailParams(const RequestFrame& request, SchemaValidationIssue& issue) {
-		if (!request.paramsJson.has_value()) {
-			return true;
-		}
-
-		const std::string params = Trim(request.paramsJson.value());
-		if (!IsJsonObjectShape(params)) {
-			SetIssue(
-				issue,
-				"schema_invalid_params",
-				"Method `gateway.logs.tail` expects `params` to be a JSON object when provided.");
+      ParsedObjectFieldKinds fieldKinds;
+		if (!TryParseRequestParamsObject(request, issue, "gateway.logs.tail", fieldKinds)) {
 			return false;
 		}
 
-		if (params.find("\"limit\"") != std::string::npos && !IsFieldNumber(params, "limit")) {
-			SetIssue(issue, "schema_invalid_params", "Method `gateway.logs.tail` requires `params.limit` to be numeric.");
-			return false;
-		}
-
-		return true;
+		return RequireFieldKindIfPresent(
+			fieldKinds,
+			"limit",
+			JsonFieldKind::Number,
+			issue,
+			"gateway.logs.tail",
+			"numeric");
 	}
 
 	bool ValidatePingParams(const RequestFrame& request, SchemaValidationIssue& issue) {
-		if (!request.paramsJson.has_value()) {
-			return true;
-		}
-
-		const std::string params = Trim(request.paramsJson.value());
-		if (!IsJsonObjectShape(params)) {
-			SetIssue(
-				issue,
-				"schema_invalid_params",
-				"Method `gateway.ping` expects `params` to be a JSON object when provided.");
+      ParsedObjectFieldKinds fieldKinds;
+		if (!TryParseRequestParamsObject(request, issue, "gateway.ping", fieldKinds)) {
 			return false;
 		}
 
-		if (params.find("\"echo\"") != std::string::npos && !IsFieldValueType(params, "echo", '"')) {
-			SetIssue(issue, "schema_invalid_params", "Method `gateway.ping` requires `params.echo` to be a string.");
-			return false;
-		}
-
-		return true;
+		return RequireFieldKindIfPresent(
+			fieldKinds,
+			"echo",
+			JsonFieldKind::String,
+			issue,
+			"gateway.ping",
+			"a string");
 	}
 
 	bool ValidateResponseEnvelope(const ResponseFrame& response, SchemaValidationIssue& issue) {
@@ -460,7 +872,6 @@ bool GatewayProtocolSchemaValidator::ValidateRequest(const RequestFrame& request
 		request.method == "gateway.tools.catalog" ||
 		request.method == "gateway.health" ||
 		request.method == "gateway.transport.status" ||
-		request.method == "gateway.session.list" ||
 		request.method == "gateway.events.catalog") {
 		return ValidateNoParamsAllowed(request, issue, request.method);
 	}
@@ -473,6 +884,10 @@ bool GatewayProtocolSchemaValidator::ValidateRequest(const RequestFrame& request
 
 	if (request.method == "gateway.agents.list") {
 		return ValidateOptionalActiveParam(request, issue, request.method);
+	}
+
+	if (request.method == "gateway.session.list") {
+		return ValidateOptionalSessionListParams(request, issue, request.method);
 	}
 
 	return true;
@@ -741,8 +1156,10 @@ bool GatewayProtocolSchemaValidator::ValidateResponseForMethod(
 	}
 
 	if (method == "gateway.session.list") {
-       if (!IsFieldValueType(payload, "sessions", '[')) {
-			SetIssue(issue, "schema_invalid_response", "`gateway.session.list` requires array field `sessions`.");
+       if (!IsFieldValueType(payload, "sessions", '[') ||
+			!IsFieldNumber(payload, "count") ||
+			!IsFieldValueType(payload, "activeSessionId", '"')) {
+          SetIssue(issue, "schema_invalid_response", "`gateway.session.list` requires `sessions` array, `count` number, and `activeSessionId` string fields.");
 			return false;
 		}
 

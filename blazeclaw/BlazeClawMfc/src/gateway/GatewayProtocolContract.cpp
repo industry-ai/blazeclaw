@@ -229,7 +229,7 @@ bool GatewayProtocolContract::ValidateFixtureParity(const std::string& fixtureRo
   const ResponseFrame sessionListResponse{
       .id = "req-6",
       .ok = true,
-      .payloadJson = "{\"sessions\":[{\"id\":\"main\",\"scope\":\"default\",\"active\":true}]}",
+      .payloadJson = "{\"sessions\":[{\"id\":\"main\",\"scope\":\"default\",\"active\":true}],\"count\":1,\"activeSessionId\":\"main\"}",
       .error = std::nullopt,
   };
 

@@ -916,14 +916,33 @@ void GatewayHost::RegisterDefaultHandlers() {
   });
 
   m_dispatcher.Register("gateway.session.list", [this](const protocol::RequestFrame& request) {
+    const std::optional<bool> activeFilter = ExtractBooleanParam(request.paramsJson, "active");
+    const std::string scopeFilter = ExtractStringParam(request.paramsJson, "scope");
     const auto sessions = m_sessionRegistry.List();
     std::string sessionArray = "[";
+    bool first = true;
+    std::size_t count = 0;
+    std::string activeSessionId = "none";
     for (std::size_t i = 0; i < sessions.size(); ++i) {
-      if (i > 0) {
+      if (activeFilter.has_value() && sessions[i].active != activeFilter.value()) {
+        continue;
+      }
+
+      if (!scopeFilter.empty() && sessions[i].scope != scopeFilter) {
+        continue;
+      }
+
+      if (!first) {
         sessionArray += ",";
       }
 
       sessionArray += SerializeSession(sessions[i]);
+      if (activeSessionId == "none" && sessions[i].active) {
+        activeSessionId = sessions[i].id;
+      }
+
+      first = false;
+      ++count;
     }
 
     sessionArray += "]";
@@ -931,7 +950,8 @@ void GatewayHost::RegisterDefaultHandlers() {
     return protocol::ResponseFrame{
         .id = request.id,
         .ok = true,
-        .payloadJson = "{\"sessions\":" + sessionArray + "}",
+        .payloadJson = "{\"sessions\":" + sessionArray + ",\"count\":" + std::to_string(count) +
+            ",\"activeSessionId\":\"" + EscapeJson(activeSessionId) + "\"}",
         .error = std::nullopt,
     };
   });
