@@ -52,41 +52,67 @@ std::vector<SessionEntry> GatewaySessionRegistry::List() const {
 }
 
 SessionEntry GatewaySessionRegistry::Reset(
-    const std::string& requestedId,
-    const std::optional<std::string>& requestedScope,
-    std::optional<bool> requestedActive) {
-  const std::string id = NormalizeSessionId(requestedId);
-  SessionEntry reset{
-      .id = id,
-      .scope = ResolveScope(id, requestedScope),
-      .active = requestedActive.value_or(true),
-  };
+	const std::string& requestedId,
+	const std::optional<std::string>& requestedScope,
+	std::optional<bool> requestedActive) {
+	const std::string id = NormalizeSessionId(requestedId);
+	SessionEntry reset{
+		.id = id,
+		.scope = ResolveScope(id, requestedScope),
+		.active = requestedActive.value_or(true),
+	};
 
-  m_sessions.insert_or_assign(id, reset);
-  return reset;
+	m_sessions.insert_or_assign(id, reset);
+	return reset;
 }
 
 bool GatewaySessionRegistry::Delete(const std::string& requestedId, SessionEntry& removedSession) {
-  const std::string id = NormalizeSessionId(requestedId);
-  if (id == "main") {
-    removedSession = Resolve(id);
-    return false;
+	const std::string id = NormalizeSessionId(requestedId);
+	if (id == "main") {
+		removedSession = Resolve(id);
+		return false;
+	}
+
+	const auto it = m_sessions.find(id);
+	if (it == m_sessions.end()) {
+		removedSession = SessionEntry{
+			.id = id,
+			.scope = ResolveScope(id, std::nullopt),
+			.active = false,
+		};
+		return false;
+	}
+
+	removedSession = it->second;
+	removedSession.active = false;
+	m_sessions.erase(it);
+	return true;
+}
+
+std::size_t GatewaySessionRegistry::CountCompactCandidates() const {
+  std::size_t count = 0;
+  for (const auto& [id, session] : m_sessions) {
+    if (id != "main" && !session.active) {
+      ++count;
+    }
   }
 
-  const auto it = m_sessions.find(id);
-  if (it == m_sessions.end()) {
-    removedSession = SessionEntry{
-        .id = id,
-        .scope = ResolveScope(id, std::nullopt),
-        .active = false,
-    };
-    return false;
+  return count;
+}
+
+std::size_t GatewaySessionRegistry::CompactInactive() {
+  std::size_t compacted = 0;
+  for (auto it = m_sessions.begin(); it != m_sessions.end();) {
+    if (it->first != "main" && !it->second.active) {
+      it = m_sessions.erase(it);
+      ++compacted;
+      continue;
+    }
+
+    ++it;
   }
 
-  removedSession = it->second;
-  removedSession.active = false;
-  m_sessions.erase(it);
-  return true;
+  return compacted;
 }
 
 std::string GatewaySessionRegistry::ResolveScope(

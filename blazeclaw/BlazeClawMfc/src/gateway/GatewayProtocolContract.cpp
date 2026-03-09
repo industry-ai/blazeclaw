@@ -117,7 +117,7 @@ bool GatewayProtocolContract::ValidateFixtureParity(const std::string& fixtureRo
   const ResponseFrame featuresListResponse{
       .id = "req-3",
       .ok = true,
-      .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.channels.accounts\",\"gateway.channels.route.resolve\",\"gateway.channels.routes\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
+      .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.channels.accounts\",\"gateway.channels.route.resolve\",\"gateway.channels.routes\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.compact\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
       .error = std::nullopt,
   };
 
@@ -223,6 +223,20 @@ bool GatewayProtocolContract::ValidateFixtureParity(const std::string& fixtureRo
       .id = "req-23",
       .ok = true,
       .payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true,\"remaining\":1}",
+      .error = std::nullopt,
+  };
+
+  const ResponseFrame sessionsUsageResponse{
+      .id = "req-24",
+      .ok = true,
+      .payloadJson = "{\"sessionId\":\"main\",\"messages\":42,\"tokens\":{\"input\":1024,\"output\":512,\"total\":1536},\"lastActiveMs\":1735689600200}",
+      .error = std::nullopt,
+  };
+
+  const ResponseFrame sessionsCompactResponse{
+      .id = "req-25",
+      .ok = true,
+      .payloadJson = "{\"compacted\":1,\"remaining\":1,\"dryRun\":false}",
       .error = std::nullopt,
   };
 
@@ -470,6 +484,22 @@ bool GatewayProtocolContract::ValidateFixtureParity(const std::string& fixtureRo
     return false;
   }
 
+  if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+          "gateway.sessions.usage",
+          sessionsUsageResponse,
+          responseIssue)) {
+    error = "Sessions usage response schema validation failed: " + responseIssue.message;
+    return false;
+  }
+
+  if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+          "gateway.sessions.compact",
+          sessionsCompactResponse,
+          responseIssue)) {
+    error = "Sessions compact response schema validation failed: " + responseIssue.message;
+    return false;
+  }
+
   SchemaValidationIssue eventIssue;
   if (!GatewayProtocolSchemaValidator::ValidateEvent(event, eventIssue)) {
     error = "Tick event schema validation failed: " + eventIssue.message;
@@ -557,6 +587,34 @@ bool GatewayProtocolContract::ValidateFixtureParity(const std::string& fixtureRo
           sessionsDeleteResponseNegative,
           responseIssue)) {
     error = "Schema response negative case unexpectedly passed for gateway.sessions.delete missing `remaining`.";
+    return false;
+  }
+
+  const ResponseFrame sessionsUsageResponseNegative{
+      .id = "req-schema-14",
+      .ok = true,
+      .payloadJson = "{\"sessionId\":\"main\",\"messages\":42,\"tokens\":{\"input\":1024,\"output\":512},\"lastActiveMs\":1735689600200}",
+      .error = std::nullopt,
+  };
+  if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+          "gateway.sessions.usage",
+          sessionsUsageResponseNegative,
+          responseIssue)) {
+    error = "Schema response negative case unexpectedly passed for gateway.sessions.usage missing `tokens.total`.";
+    return false;
+  }
+
+  const ResponseFrame sessionsCompactResponseNegative{
+      .id = "req-schema-15",
+      .ok = true,
+      .payloadJson = "{\"compacted\":1,\"remaining\":1}",
+      .error = std::nullopt,
+  };
+  if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+          "gateway.sessions.compact",
+          sessionsCompactResponseNegative,
+          responseIssue)) {
+    error = "Schema response negative case unexpectedly passed for gateway.sessions.compact missing `dryRun`.";
     return false;
   }
 
@@ -712,6 +770,20 @@ bool GatewayProtocolContract::ValidateFixtureParity(const std::string& fixtureRo
   if (!CompareFixture(
           root / "response_sessions_delete.json",
           SerializeResponseFrame(sessionsDeleteResponse),
+          error)) {
+    return false;
+  }
+
+  if (!CompareFixture(
+          root / "response_sessions_usage.json",
+          SerializeResponseFrame(sessionsUsageResponse),
+          error)) {
+    return false;
+  }
+
+  if (!CompareFixture(
+          root / "response_sessions_compact.json",
+          SerializeResponseFrame(sessionsCompactResponse),
           error)) {
     return false;
   }

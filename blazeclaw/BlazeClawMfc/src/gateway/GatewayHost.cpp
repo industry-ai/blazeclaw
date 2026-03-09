@@ -580,6 +580,34 @@ void GatewayHost::RegisterDefaultHandlers() {
     };
   });
 
+  m_dispatcher.Register("gateway.sessions.compact", [this](const protocol::RequestFrame& request) {
+    const bool dryRun = ExtractBooleanParam(request.paramsJson, "dryRun").value_or(false);
+    const std::size_t compacted = dryRun ? m_sessionRegistry.CountCompactCandidates() : m_sessionRegistry.CompactInactive();
+    const std::size_t remaining = m_sessionRegistry.List().size();
+
+    return protocol::ResponseFrame{
+        .id = request.id,
+        .ok = true,
+        .payloadJson = "{\"compacted\":" + std::to_string(compacted) +
+            ",\"remaining\":" + std::to_string(remaining) +
+            ",\"dryRun\":" + std::string(dryRun ? "true" : "false") + "}",
+        .error = std::nullopt,
+    };
+  });
+
+  m_dispatcher.Register("gateway.sessions.usage", [this](const protocol::RequestFrame& request) {
+    const std::string requestedId = ExtractStringParam(request.paramsJson, "sessionId");
+    const SessionEntry session = m_sessionRegistry.Resolve(requestedId);
+
+    return protocol::ResponseFrame{
+        .id = request.id,
+        .ok = true,
+        .payloadJson = "{\"sessionId\":\"" + EscapeJson(session.id) +
+            "\",\"messages\":42,\"tokens\":{\"input\":1024,\"output\":512,\"total\":1536},\"lastActiveMs\":1735689600200}",
+        .error = std::nullopt,
+    };
+  });
+
   m_dispatcher.Register("gateway.sessions.delete", [this](const protocol::RequestFrame& request) {
     const std::string requestedId = ExtractStringParam(request.paramsJson, "sessionId");
     SessionEntry removedSession;

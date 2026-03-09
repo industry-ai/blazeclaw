@@ -789,6 +789,37 @@ namespace {
 			"numeric");
 	}
 
+	bool ValidateSessionsCompactParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+		ParsedObjectFieldKinds fieldKinds;
+		if (!TryParseRequestParamsObject(request, issue, "gateway.sessions.compact", fieldKinds)) {
+			return false;
+		}
+
+		if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"dryRun",
+				JsonFieldKind::Boolean,
+				issue,
+				"gateway.sessions.compact",
+				"boolean")) {
+			return false;
+		}
+
+		for (const auto& [field, _] : fieldKinds) {
+			if (field == "dryRun") {
+				continue;
+			}
+
+			SetIssue(
+				issue,
+				"schema_invalid_params",
+				"Method `gateway.sessions.compact` does not allow `params." + field + "`.");
+			return false;
+		}
+
+		return true;
+	}
+
 	bool ValidatePingParams(const RequestFrame& request, SchemaValidationIssue& issue) {
       ParsedObjectFieldKinds fieldKinds;
 		if (!TryParseRequestParamsObject(request, issue, "gateway.ping", fieldKinds)) {
@@ -846,6 +877,10 @@ bool GatewayProtocolSchemaValidator::ValidateRequest(const RequestFrame& request
 		return ValidateLogsTailParams(request, issue);
 	}
 
+	if (request.method == "gateway.sessions.compact") {
+		return ValidateSessionsCompactParams(request, issue);
+	}
+
 	if (request.method == "gateway.channels.route.resolve") {
 		return ValidateChannelsRouteResolveParams(request, issue);
 	}
@@ -859,6 +894,10 @@ bool GatewayProtocolSchemaValidator::ValidateRequest(const RequestFrame& request
 	}
 
 	if (request.method == "gateway.sessions.delete") {
+		return ValidateStringIdParam(request, issue, request.method, "sessionId");
+	}
+
+	if (request.method == "gateway.sessions.usage") {
 		return ValidateStringIdParam(request, issue, request.method, "sessionId");
 	}
 
@@ -927,6 +966,34 @@ bool GatewayProtocolSchemaValidator::ValidateResponseForMethod(
 
 		if (!PayloadContainsAllFieldTokens(payload, {"id", "scope", "active"})) {
 			SetIssue(issue, "schema_invalid_response", "`gateway.sessions.delete` requires `session` fields `id`, `scope`, and `active`.");
+			return false;
+		}
+
+		return true;
+	}
+
+	if (method == "gateway.sessions.usage") {
+		const bool hasRoot = IsFieldValueType(payload, "sessionId", '"') &&
+			IsFieldNumber(payload, "messages") &&
+			IsFieldValueType(payload, "tokens", '{') &&
+			IsFieldNumber(payload, "lastActiveMs");
+		const bool hasTokens = IsFieldNumber(payload, "input") &&
+			IsFieldNumber(payload, "output") &&
+			IsFieldNumber(payload, "total");
+
+		if (!(hasRoot && hasTokens)) {
+			SetIssue(issue, "schema_invalid_response", "`gateway.sessions.usage` requires `sessionId`, `messages`, `tokens.{input,output,total}`, and `lastActiveMs` fields.");
+			return false;
+		}
+
+		return true;
+	}
+
+	if (method == "gateway.sessions.compact") {
+		if (!IsFieldNumber(payload, "compacted") ||
+			!IsFieldNumber(payload, "remaining") ||
+			!IsFieldBoolean(payload, "dryRun")) {
+			SetIssue(issue, "schema_invalid_response", "`gateway.sessions.compact` requires numeric `compacted`/`remaining` and boolean `dryRun` fields.");
 			return false;
 		}
 
@@ -1134,6 +1201,8 @@ bool GatewayProtocolSchemaValidator::ValidateResponseForMethod(
 			"gateway.transport.status",
 			"gateway.events.catalog",
             "gateway.sessions.delete",
+           "gateway.sessions.compact",
+            "gateway.sessions.usage",
 			"gateway.channels.accounts",
 			"gateway.tools.call.preview",
 			"gateway.tick",
