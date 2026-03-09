@@ -82,6 +82,16 @@ namespace {
 			return false;
 		}
 
+		if (params.find("\"sessionId\"") != std::string::npos && !IsFieldValueType(params, "sessionId", '"')) {
+			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.resolve` requires `params.sessionId` to be a string.");
+			return false;
+		}
+
+		if (params.find("\"agentId\"") != std::string::npos && !IsFieldValueType(params, "agentId", '"')) {
+			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.resolve` requires `params.agentId` to be a string.");
+			return false;
+		}
+
 		return true;
 	}
 

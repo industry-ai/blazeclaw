@@ -616,12 +616,22 @@ void GatewayHost::RegisterDefaultHandlers() {
   m_dispatcher.Register("gateway.channels.route.resolve", [this](const protocol::RequestFrame& request) {
     const std::string channel = ExtractStringParam(request.paramsJson, "channel");
     const std::string account = ExtractStringParam(request.paramsJson, "accountId");
+    const std::string sessionId = ExtractStringParam(request.paramsJson, "sessionId");
+    const std::string agentId = ExtractStringParam(request.paramsJson, "agentId");
     const ChannelRouteEntry route = m_channelRegistry.ResolveRoute(channel, account);
+    const SessionEntry session = m_sessionRegistry.Resolve(sessionId.empty() ? route.sessionId : sessionId);
+    const AgentEntry agent = m_agentRegistry.Get(agentId.empty() ? route.agentId : agentId);
+    const ChannelRouteEntry resolvedRoute{
+        .channel = route.channel,
+        .accountId = route.accountId,
+        .agentId = agent.id,
+        .sessionId = session.id,
+    };
 
     return protocol::ResponseFrame{
         .id = request.id,
         .ok = true,
-        .payloadJson = "{\"route\":" + SerializeChannelRoute(route) + "}",
+        .payloadJson = "{\"route\":" + SerializeChannelRoute(resolvedRoute) + "}",
         .error = std::nullopt,
     };
   });
