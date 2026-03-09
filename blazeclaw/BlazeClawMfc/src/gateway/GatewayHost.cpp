@@ -580,6 +580,22 @@ void GatewayHost::RegisterDefaultHandlers() {
     };
   });
 
+  m_dispatcher.Register("gateway.sessions.delete", [this](const protocol::RequestFrame& request) {
+    const std::string requestedId = ExtractStringParam(request.paramsJson, "sessionId");
+    SessionEntry removedSession;
+    const bool deleted = m_sessionRegistry.Delete(requestedId, removedSession);
+    const std::size_t remaining = m_sessionRegistry.List().size();
+
+    return protocol::ResponseFrame{
+        .id = request.id,
+        .ok = true,
+        .payloadJson = "{\"session\":" + SerializeSession(removedSession) +
+            ",\"deleted\":" + std::string(deleted ? "true" : "false") +
+            ",\"remaining\":" + std::to_string(remaining) + "}",
+        .error = std::nullopt,
+    };
+  });
+
   m_dispatcher.Register("gateway.protocol.version", [](const protocol::RequestFrame& request) {
     return protocol::ResponseFrame{
         .id = request.id,

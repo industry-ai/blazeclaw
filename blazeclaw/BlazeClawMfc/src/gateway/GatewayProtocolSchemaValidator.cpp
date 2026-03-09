@@ -858,6 +858,10 @@ bool GatewayProtocolSchemaValidator::ValidateRequest(const RequestFrame& request
 		return ValidateStringIdParam(request, issue, request.method, "sessionId");
 	}
 
+	if (request.method == "gateway.sessions.delete") {
+		return ValidateStringIdParam(request, issue, request.method, "sessionId");
+	}
+
     if (request.method == "gateway.sessions.create" || request.method == "gateway.sessions.reset") {
 		return ValidateSessionMutationParams(request, issue, request.method);
 	}
@@ -910,6 +914,22 @@ bool GatewayProtocolSchemaValidator::ValidateResponseForMethod(
 			SetIssue(issue, "schema_invalid_response", "`gateway.ping` response requires boolean field `pong`.");
 			return false;
 		}
+		return true;
+	}
+
+	if (method == "gateway.sessions.delete") {
+		if (!IsFieldValueType(payload, "session", '{') ||
+			!IsFieldBoolean(payload, "deleted") ||
+			!IsFieldNumber(payload, "remaining")) {
+			SetIssue(issue, "schema_invalid_response", "`gateway.sessions.delete` requires `session` object, `deleted` boolean, and `remaining` number fields.");
+			return false;
+		}
+
+		if (!PayloadContainsAllFieldTokens(payload, {"id", "scope", "active"})) {
+			SetIssue(issue, "schema_invalid_response", "`gateway.sessions.delete` requires `session` fields `id`, `scope`, and `active`.");
+			return false;
+		}
+
 		return true;
 	}
 
@@ -1113,6 +1133,7 @@ bool GatewayProtocolSchemaValidator::ValidateResponseForMethod(
 			"gateway.ping",
 			"gateway.transport.status",
 			"gateway.events.catalog",
+            "gateway.sessions.delete",
 			"gateway.channels.accounts",
 			"gateway.tools.call.preview",
 			"gateway.tick",

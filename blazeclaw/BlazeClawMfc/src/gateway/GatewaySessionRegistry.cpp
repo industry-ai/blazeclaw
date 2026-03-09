@@ -66,6 +66,29 @@ SessionEntry GatewaySessionRegistry::Reset(
   return reset;
 }
 
+bool GatewaySessionRegistry::Delete(const std::string& requestedId, SessionEntry& removedSession) {
+  const std::string id = NormalizeSessionId(requestedId);
+  if (id == "main") {
+    removedSession = Resolve(id);
+    return false;
+  }
+
+  const auto it = m_sessions.find(id);
+  if (it == m_sessions.end()) {
+    removedSession = SessionEntry{
+        .id = id,
+        .scope = ResolveScope(id, std::nullopt),
+        .active = false,
+    };
+    return false;
+  }
+
+  removedSession = it->second;
+  removedSession.active = false;
+  m_sessions.erase(it);
+  return true;
+}
+
 std::string GatewaySessionRegistry::ResolveScope(
     const std::string& sessionId,
     const std::optional<std::string>& requestedScope) {

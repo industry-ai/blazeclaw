@@ -24,6 +24,7 @@ public:
       const std::string& requestedId,
       const std::optional<std::string>& requestedScope = std::nullopt,
       std::optional<bool> requestedActive = std::nullopt);
+  bool Delete(const std::string& requestedId, SessionEntry& removedSession);
 
 private:
   static std::string NormalizeSessionId(const std::string& value);

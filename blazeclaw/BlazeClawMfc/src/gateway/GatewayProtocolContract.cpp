@@ -117,7 +117,7 @@ bool GatewayProtocolContract::ValidateFixtureParity(const std::string& fixtureRo
   const ResponseFrame featuresListResponse{
       .id = "req-3",
       .ok = true,
-      .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.channels.accounts\",\"gateway.channels.route.resolve\",\"gateway.channels.routes\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.create\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
+      .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.channels.accounts\",\"gateway.channels.route.resolve\",\"gateway.channels.routes\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
       .error = std::nullopt,
   };
 
@@ -216,6 +216,13 @@ bool GatewayProtocolContract::ValidateFixtureParity(const std::string& fixtureRo
       .id = "req-15",
       .ok = true,
       .payloadJson = "{\"session\":{\"id\":\"main\",\"scope\":\"default\",\"active\":true},\"event\":\"gateway.session.reset\"}",
+      .error = std::nullopt,
+  };
+
+  const ResponseFrame sessionsDeleteResponse{
+      .id = "req-23",
+      .ok = true,
+      .payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true,\"remaining\":1}",
       .error = std::nullopt,
   };
 
@@ -455,6 +462,14 @@ bool GatewayProtocolContract::ValidateFixtureParity(const std::string& fixtureRo
     return false;
   }
 
+  if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+          "gateway.sessions.delete",
+          sessionsDeleteResponse,
+          responseIssue)) {
+    error = "Sessions delete response schema validation failed: " + responseIssue.message;
+    return false;
+  }
+
   SchemaValidationIssue eventIssue;
   if (!GatewayProtocolSchemaValidator::ValidateEvent(event, eventIssue)) {
     error = "Tick event schema validation failed: " + eventIssue.message;
@@ -528,6 +543,20 @@ bool GatewayProtocolContract::ValidateFixtureParity(const std::string& fixtureRo
           channelsAccountsResponseNegative,
           responseIssue)) {
     error = "Schema response negative case unexpectedly passed for gateway.channels.accounts missing `connected`.";
+    return false;
+  }
+
+  const ResponseFrame sessionsDeleteResponseNegative{
+      .id = "req-schema-13",
+      .ok = true,
+      .payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true}",
+      .error = std::nullopt,
+  };
+  if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+          "gateway.sessions.delete",
+          sessionsDeleteResponseNegative,
+          responseIssue)) {
+    error = "Schema response negative case unexpectedly passed for gateway.sessions.delete missing `remaining`.";
     return false;
   }
 
@@ -676,6 +705,13 @@ bool GatewayProtocolContract::ValidateFixtureParity(const std::string& fixtureRo
   if (!CompareFixture(
           root / "response_sessions_reset.json",
           SerializeResponseFrame(sessionsResetResponse),
+          error)) {
+    return false;
+  }
+
+  if (!CompareFixture(
+          root / "response_sessions_delete.json",
+          SerializeResponseFrame(sessionsDeleteResponse),
           error)) {
     return false;
   }
