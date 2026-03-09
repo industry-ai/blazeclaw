@@ -1,1 +1,1 @@
-{"type":"res","id":"req-11","ok":true,"payload":{"entries":[]}}
+{"type":"res","id":"req-11","ok":true,"payload":{"entries":[{"ts":1735689600000,"level":"info","source":"gateway","message":"Gateway host started"},{"ts":1735689600100,"level":"info","source":"transport","message":"WebSocket listener active"},{"ts":1735689600200,"level":"debug","source":"dispatcher","message":"Method handlers registered"}]}}

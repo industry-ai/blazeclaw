@@ -180,7 +180,7 @@ bool GatewayProtocolContract::ValidateFixtureParity(const std::string& fixtureRo
   const ResponseFrame logsTailResponse{
       .id = "req-11",
       .ok = true,
-      .payloadJson = "{\"entries\":[]}",
+      .payloadJson = "{\"entries\":[{\"ts\":1735689600000,\"level\":\"info\",\"source\":\"gateway\",\"message\":\"Gateway host started\"},{\"ts\":1735689600100,\"level\":\"info\",\"source\":\"transport\",\"message\":\"WebSocket listener active\"},{\"ts\":1735689600200,\"level\":\"debug\",\"source\":\"dispatcher\",\"message\":\"Method handlers registered\"}]}",
       .error = std::nullopt,
   };
 
@@ -243,7 +243,7 @@ bool GatewayProtocolContract::ValidateFixtureParity(const std::string& fixtureRo
   const ResponseFrame transportStatusResponse{
       .id = "req-8",
       .ok = true,
-      .payloadJson = "{\"running\":true,\"endpoint\":\"ws://127.0.0.1:18789\",\"connections\":0}",
+      .payloadJson = "{\"running\":true,\"endpoint\":\"ws://127.0.0.1:18789\",\"connections\":0,\"timeouts\":{\"handshake\":0,\"idle\":0},\"closes\":{\"invalidUtf8\":0,\"messageTooBig\":0,\"extensionRejected\":0}}",
       .error = std::nullopt,
   };
 
@@ -270,35 +270,35 @@ bool GatewayProtocolContract::ValidateFixtureParity(const std::string& fixtureRo
 
   const EventFrame channelsUpdateEvent{
       .eventName = "gateway.channels.update",
-      .payloadJson = "{\"channels\":[]}",
+      .payloadJson = "{\"channels\":[{\"id\":\"telegram\",\"label\":\"Telegram\",\"connected\":false,\"accounts\":1},{\"id\":\"discord\",\"label\":\"Discord\",\"connected\":false,\"accounts\":1}]}",
       .seq = 4,
       .stateVersion = 4,
   };
 
   const EventFrame sessionResetEvent{
       .eventName = "gateway.session.reset",
-      .payloadJson = "{\"sessionId\":\"main\"}",
+      .payloadJson = "{\"sessionId\":\"main\",\"session\":{\"id\":\"main\",\"scope\":\"default\",\"active\":true}}",
       .seq = 5,
       .stateVersion = 5,
   };
 
   const EventFrame agentUpdateEvent{
       .eventName = "gateway.agent.update",
-      .payloadJson = "{\"agentId\":\"default\"}",
+      .payloadJson = "{\"agentId\":\"default\",\"agent\":{\"id\":\"default\",\"name\":\"Default Agent\",\"active\":true}}",
       .seq = 6,
       .stateVersion = 6,
   };
 
   const EventFrame channelsAccountsUpdateEvent{
       .eventName = "gateway.channels.accounts.update",
-      .payloadJson = "{\"accounts\":[]}",
+      .payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":false},{\"channel\":\"discord\",\"accountId\":\"discord.default\",\"label\":\"Discord Default\",\"active\":true,\"connected\":false}]}",
       .seq = 7,
       .stateVersion = 7,
   };
 
   const EventFrame toolsCatalogUpdateEvent{
       .eventName = "gateway.tools.catalog.update",
-      .payloadJson = "{\"tools\":[]}",
+      .payloadJson = "{\"tools\":[{\"id\":\"chat.send\",\"label\":\"Chat Send\",\"category\":\"messaging\",\"enabled\":true},{\"id\":\"memory.search\",\"label\":\"Memory Search\",\"category\":\"knowledge\",\"enabled\":true}]}",
       .seq = 8,
       .stateVersion = 8,
   };
@@ -493,6 +493,85 @@ bool GatewayProtocolContract::ValidateFixtureParity(const std::string& fixtureRo
 
   if (!GatewayProtocolSchemaValidator::ValidateEvent(toolsCatalogUpdateEvent, eventIssue)) {
     error = "Tools catalog update event schema validation failed: " + eventIssue.message;
+    return false;
+  }
+
+  const RequestFrame toolsPreviewRequestPositive{
+      .id = "req-schema-1",
+      .method = "gateway.tools.call.preview",
+      .paramsJson = "{\"tool\":\"chat.send\",\"args\":{}}",
+  };
+  SchemaValidationIssue requestIssue;
+  if (!GatewayProtocolSchemaValidator::ValidateRequest(toolsPreviewRequestPositive, requestIssue)) {
+    error = "Schema request positive case failed for gateway.tools.call.preview: " + requestIssue.message;
+    return false;
+  }
+
+  const RequestFrame toolsPreviewRequestNegative{
+      .id = "req-schema-2",
+      .method = "gateway.tools.call.preview",
+      .paramsJson = "{\"tool\":\"chat.send\",\"args\":[]}",
+  };
+  if (GatewayProtocolSchemaValidator::ValidateRequest(toolsPreviewRequestNegative, requestIssue)) {
+    error = "Schema request negative case unexpectedly passed for gateway.tools.call.preview args type.";
+    return false;
+  }
+
+  const ResponseFrame channelsAccountsResponseNegative{
+      .id = "req-schema-3",
+      .ok = true,
+      .payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true}]}",
+      .error = std::nullopt,
+  };
+  if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+          "gateway.channels.accounts",
+          channelsAccountsResponseNegative,
+          responseIssue)) {
+    error = "Schema response negative case unexpectedly passed for gateway.channels.accounts missing `connected`.";
+    return false;
+  }
+
+  const EventFrame channelsAccountsUpdateEventPositive{
+      .eventName = "gateway.channels.accounts.update",
+      .payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":false}]}",
+      .seq = 9,
+      .stateVersion = 9,
+  };
+  if (!GatewayProtocolSchemaValidator::ValidateEvent(channelsAccountsUpdateEventPositive, eventIssue)) {
+    error = "Schema event positive case failed for gateway.channels.accounts.update: " + eventIssue.message;
+    return false;
+  }
+
+  const EventFrame channelsAccountsUpdateEventNegative{
+      .eventName = "gateway.channels.accounts.update",
+      .payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":false}]}",
+      .seq = 10,
+      .stateVersion = 10,
+  };
+  if (GatewayProtocolSchemaValidator::ValidateEvent(channelsAccountsUpdateEventNegative, eventIssue)) {
+    error = "Schema event negative case unexpectedly passed for gateway.channels.accounts.update missing `accountId`.";
+    return false;
+  }
+
+  const EventFrame toolsCatalogUpdateEventPositive{
+      .eventName = "gateway.tools.catalog.update",
+      .payloadJson = "{\"tools\":[{\"id\":\"chat.send\",\"label\":\"Chat Send\",\"category\":\"messaging\",\"enabled\":true}]}",
+      .seq = 11,
+      .stateVersion = 11,
+  };
+  if (!GatewayProtocolSchemaValidator::ValidateEvent(toolsCatalogUpdateEventPositive, eventIssue)) {
+    error = "Schema event positive case failed for gateway.tools.catalog.update: " + eventIssue.message;
+    return false;
+  }
+
+  const EventFrame toolsCatalogUpdateEventNegative{
+      .eventName = "gateway.tools.catalog.update",
+      .payloadJson = "{\"tools\":[{\"id\":\"chat.send\",\"label\":\"Chat Send\",\"enabled\":true}]}",
+      .seq = 12,
+      .stateVersion = 12,
+  };
+  if (GatewayProtocolSchemaValidator::ValidateEvent(toolsCatalogUpdateEventNegative, eventIssue)) {
+    error = "Schema event negative case unexpectedly passed for gateway.tools.catalog.update missing `category`.";
     return false;
   }
 

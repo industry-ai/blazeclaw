@@ -23,6 +23,11 @@ public:
   [[nodiscard]] bool IsRunning() const noexcept;
   [[nodiscard]] std::string Endpoint() const;
   [[nodiscard]] std::size_t ConnectionCount() const noexcept;
+  [[nodiscard]] std::uint64_t HandshakeTimeoutCount() const noexcept;
+  [[nodiscard]] std::uint64_t IdleTimeoutCloseCount() const noexcept;
+  [[nodiscard]] std::uint64_t InvalidUtf8CloseCount() const noexcept;
+  [[nodiscard]] std::uint64_t MessageTooBigCloseCount() const noexcept;
+  [[nodiscard]] std::uint64_t ExtensionRejectCount() const noexcept;
 
 private:
   struct NetworkFrame {
@@ -41,9 +46,14 @@ private:
     bool handshakeComplete = false;
     bool awaitingContinuation = false;
     bool closeAfterFlush = false;
+    bool timeoutCloseQueued = false;
+    std::uint8_t continuationOpcode = 0;
+    std::uint64_t acceptedAtMs = 0;
+    std::uint64_t lastActivityAtMs = 0;
     SOCKET socket = INVALID_SOCKET;
     std::string readBuffer;
     std::string fragmentedTextBuffer;
+    std::string fragmentedBinaryBuffer;
     std::deque<std::string> outboundFrames;
     std::deque<PendingNetworkFrame> outboundNetworkFrames;
   };
@@ -62,6 +72,12 @@ private:
   bool PumpNetworkConnection(ConnectionSession& session, std::string& error);
   bool TryCompleteNetworkHandshake(ConnectionSession& session, std::string& error);
   bool FlushNetworkOutbound(ConnectionSession& session, std::string& error);
+  bool TryQueueNetworkFrame(ConnectionSession& session, const std::string& bytes, std::string& error);
+  bool TryQueueApplicationOutbound(
+      ConnectionSession& session,
+      const std::string& outbound,
+      std::uint8_t opcode,
+      std::string& error);
 
   bool m_running = false;
   std::string m_bindAddress;
@@ -69,6 +85,11 @@ private:
   SOCKET m_listenSocket = INVALID_SOCKET;
   bool m_wsaStarted = false;
   std::uint64_t m_nextConnectionId = 1;
+  std::uint64_t m_handshakeTimeoutCount = 0;
+  std::uint64_t m_idleTimeoutCloseCount = 0;
+  std::uint64_t m_invalidUtf8CloseCount = 0;
+  std::uint64_t m_messageTooBigCloseCount = 0;
+  std::uint64_t m_extensionRejectCount = 0;
   InboundFrameHandler m_inboundFrameHandler;
   std::unordered_map<std::string, ConnectionSession> m_connections;
 };

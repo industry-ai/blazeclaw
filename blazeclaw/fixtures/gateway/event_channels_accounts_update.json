@@ -1,1 +1,1 @@
-{"type":"event","event":"gateway.channels.accounts.update","payload":{"accounts":[]},"seq":7,"stateVersion":7}
+{"type":"event","event":"gateway.channels.accounts.update","payload":{"accounts":[{"channel":"telegram","accountId":"telegram.default","label":"Telegram Default","active":true,"connected":false},{"channel":"discord","accountId":"discord.default","label":"Discord Default","active":true,"connected":false}]},"seq":7,"stateVersion":7}

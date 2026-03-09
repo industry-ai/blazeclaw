@@ -113,6 +113,46 @@ std::string ExtractStringParam(const std::optional<std::string>& paramsJson, con
   return params.substr(valuePos + 1, endQuote - valuePos - 1);
 }
 
+std::optional<std::size_t> ExtractNumericParam(
+    const std::optional<std::string>& paramsJson,
+    const std::string& fieldName) {
+  if (!paramsJson.has_value()) {
+    return std::nullopt;
+  }
+
+  const std::string token = "\"" + fieldName + "\"";
+  const std::string& params = paramsJson.value();
+  const std::size_t keyPos = params.find(token);
+  if (keyPos == std::string::npos) {
+    return std::nullopt;
+  }
+
+  std::size_t valuePos = params.find(':', keyPos + token.size());
+  if (valuePos == std::string::npos) {
+    return std::nullopt;
+  }
+
+  ++valuePos;
+  while (valuePos < params.size() && std::isspace(static_cast<unsigned char>(params[valuePos])) != 0) {
+    ++valuePos;
+  }
+
+  if (valuePos >= params.size() || std::isdigit(static_cast<unsigned char>(params[valuePos])) == 0) {
+    return std::nullopt;
+  }
+
+  std::size_t endPos = valuePos;
+  while (endPos < params.size() && std::isdigit(static_cast<unsigned char>(params[endPos])) != 0) {
+    ++endPos;
+  }
+
+  try {
+    return static_cast<std::size_t>(std::stoull(params.substr(valuePos, endPos - valuePos)));
+  } catch (...) {
+    return std::nullopt;
+  }
+}
+
 } // namespace
 
 bool GatewayHost::Start(const blazeclaw::config::GatewayConfig& config) {
@@ -210,9 +250,21 @@ std::string GatewayHost::BuildTickEventFrame(std::uint64_t timestampMs, std::uin
 }
 
 std::string GatewayHost::BuildChannelsAccountsUpdateEventFrame(std::uint64_t seq) const {
+  const auto accounts = m_channelRegistry.ListAccounts();
+  std::string accountsJson = "[";
+  for (std::size_t i = 0; i < accounts.size(); ++i) {
+    if (i > 0) {
+      accountsJson += ",";
+    }
+
+    accountsJson += SerializeChannelAccount(accounts[i]);
+  }
+
+  accountsJson += "]";
+
   protocol::EventFrame frame{
       .eventName = "gateway.channels.accounts.update",
-      .payloadJson = "{\"accounts\":[]}",
+      .payloadJson = "{\"accounts\":" + accountsJson + "}",
       .seq = seq,
       .stateVersion = seq,
   };
@@ -231,9 +283,11 @@ std::string GatewayHost::BuildChannelsAccountsUpdateEventFrame(std::uint64_t seq
 }
 
 std::string GatewayHost::BuildAgentUpdateEventFrame(const std::string& agentId, std::uint64_t seq) const {
+  const AgentEntry agent = m_agentRegistry.Get(agentId);
+
   protocol::EventFrame frame{
       .eventName = "gateway.agent.update",
-      .payloadJson = "{\"agentId\":\"" + agentId + "\"}",
+      .payloadJson = "{\"agentId\":\"" + agent.id + "\",\"agent\":" + SerializeAgent(agent) + "}",
       .seq = seq,
       .stateVersion = seq,
   };
@@ -252,9 +306,21 @@ std::string GatewayHost::BuildAgentUpdateEventFrame(const std::string& agentId, 
 }
 
 std::string GatewayHost::BuildToolsCatalogUpdateEventFrame(std::uint64_t seq) const {
+  const auto tools = m_toolRegistry.List();
+  std::string toolsJson = "[";
+  for (std::size_t i = 0; i < tools.size(); ++i) {
+    if (i > 0) {
+      toolsJson += ",";
+    }
+
+    toolsJson += SerializeTool(tools[i]);
+  }
+
+  toolsJson += "]";
+
   protocol::EventFrame frame{
       .eventName = "gateway.tools.catalog.update",
-      .payloadJson = "{\"tools\":[]}",
+      .payloadJson = "{\"tools\":" + toolsJson + "}",
       .seq = seq,
       .stateVersion = seq,
   };
@@ -273,9 +339,21 @@ std::string GatewayHost::BuildToolsCatalogUpdateEventFrame(std::uint64_t seq) co
 }
 
 std::string GatewayHost::BuildChannelsUpdateEventFrame(std::uint64_t seq) const {
+  const auto channels = m_channelRegistry.ListStatus();
+  std::string channelsJson = "[";
+  for (std::size_t i = 0; i < channels.size(); ++i) {
+    if (i > 0) {
+      channelsJson += ",";
+    }
+
+    channelsJson += SerializeChannelStatus(channels[i]);
+  }
+
+  channelsJson += "]";
+
   protocol::EventFrame frame{
       .eventName = "gateway.channels.update",
-      .payloadJson = "{\"channels\":[]}",
+      .payloadJson = "{\"channels\":" + channelsJson + "}",
       .seq = seq,
       .stateVersion = seq,
   };
@@ -294,9 +372,11 @@ std::string GatewayHost::BuildChannelsUpdateEventFrame(std::uint64_t seq) const 
 }
 
 std::string GatewayHost::BuildSessionResetEventFrame(const std::string& sessionId, std::uint64_t seq) const {
+  const SessionEntry session = m_sessionRegistry.Resolve(sessionId);
+
   protocol::EventFrame frame{
       .eventName = "gateway.session.reset",
-      .payloadJson = "{\"sessionId\":\"" + sessionId + "\"}",
+      .payloadJson = "{\"sessionId\":\"" + session.id + "\",\"session\":" + SerializeSession(session) + "}",
       .seq = seq,
       .stateVersion = seq,
   };
@@ -616,10 +696,32 @@ void GatewayHost::RegisterDefaultHandlers() {
   });
 
   m_dispatcher.Register("gateway.logs.tail", [](const protocol::RequestFrame& request) {
+    const std::vector<std::string> seededEntries = {
+        "{\"ts\":1735689600000,\"level\":\"info\",\"source\":\"gateway\",\"message\":\"Gateway host started\"}",
+        "{\"ts\":1735689600100,\"level\":\"info\",\"source\":\"transport\",\"message\":\"WebSocket listener active\"}",
+        "{\"ts\":1735689600200,\"level\":\"debug\",\"source\":\"dispatcher\",\"message\":\"Method handlers registered\"}",
+    };
+
+    const std::size_t requestedLimit = ExtractNumericParam(request.paramsJson, "limit").value_or(50);
+    const std::size_t cappedLimit = std::max<std::size_t>(1, std::min<std::size_t>(requestedLimit, 200));
+    const std::size_t emitCount = std::min<std::size_t>(cappedLimit, seededEntries.size());
+    const std::size_t begin = seededEntries.size() - emitCount;
+
+    std::string entriesJson = "[";
+    for (std::size_t i = begin; i < seededEntries.size(); ++i) {
+      if (i > begin) {
+        entriesJson += ",";
+      }
+
+      entriesJson += seededEntries[i];
+    }
+
+    entriesJson += "]";
+
     return protocol::ResponseFrame{
         .id = request.id,
         .ok = true,
-        .payloadJson = "{\"entries\":[]}",
+        .payloadJson = "{\"entries\":" + entriesJson + "}",
         .error = std::nullopt,
     };
   });
@@ -673,7 +775,14 @@ void GatewayHost::RegisterDefaultHandlers() {
     return protocol::ResponseFrame{
         .id = request.id,
         .ok = true,
-        .payloadJson = "{\"running\":" + std::string(m_transport.IsRunning() ? "true" : "false") + ",\"endpoint\":\"" + m_transport.Endpoint() + "\",\"connections\":" + std::to_string(m_transport.ConnectionCount()) + "}",
+        .payloadJson = "{\"running\":" + std::string(m_transport.IsRunning() ? "true" : "false") +
+            ",\"endpoint\":\"" + m_transport.Endpoint() + "\",\"connections\":" +
+            std::to_string(m_transport.ConnectionCount()) +
+            ",\"timeouts\":{\"handshake\":" + std::to_string(m_transport.HandshakeTimeoutCount()) +
+            ",\"idle\":" + std::to_string(m_transport.IdleTimeoutCloseCount()) +
+            "},\"closes\":{\"invalidUtf8\":" + std::to_string(m_transport.InvalidUtf8CloseCount()) +
+            ",\"messageTooBig\":" + std::to_string(m_transport.MessageTooBigCloseCount()) +
+            ",\"extensionRejected\":" + std::to_string(m_transport.ExtensionRejectCount()) + "}}",
         .error = std::nullopt,
     };
   });

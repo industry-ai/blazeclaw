@@ -1,1 +1,1 @@
-{"type":"event","event":"gateway.channels.update","payload":{"channels":[]},"seq":4,"stateVersion":4}
+{"type":"event","event":"gateway.channels.update","payload":{"channels":[{"id":"telegram","label":"Telegram","connected":false,"accounts":1},{"id":"discord","label":"Discord","connected":false,"accounts":1}]},"seq":4,"stateVersion":4}

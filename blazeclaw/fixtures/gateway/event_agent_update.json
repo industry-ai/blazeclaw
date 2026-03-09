@@ -1,1 +1,1 @@
-{"type":"event","event":"gateway.agent.update","payload":{"agentId":"default"},"seq":6,"stateVersion":6}
+{"type":"event","event":"gateway.agent.update","payload":{"agentId":"default","agent":{"id":"default","name":"Default Agent","active":true}},"seq":6,"stateVersion":6}

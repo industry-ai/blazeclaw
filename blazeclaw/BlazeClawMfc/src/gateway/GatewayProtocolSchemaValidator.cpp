@@ -463,9 +463,25 @@ bool GatewayProtocolSchemaValidator::ValidateResponseForMethod(
 	}
 
 	if (method == "gateway.logs.tail") {
-		return IsFieldValueType(payload, "entries", '[')
-			? true
-			: (SetIssue(issue, "schema_invalid_response", "`gateway.logs.tail` requires array field `entries`."), false);
+        if (!IsFieldValueType(payload, "entries", '[')) {
+			SetIssue(issue, "schema_invalid_response", "`gateway.logs.tail` requires array field `entries`.");
+			return false;
+		}
+
+		if (IsArrayFieldExplicitlyEmpty(payload, "entries")) {
+			return true;
+		}
+
+		if (!PayloadContainsAllFieldTokens(payload, {"ts", "level", "source", "message"}) ||
+			!IsFieldNumber(payload, "ts") ||
+			!IsFieldValueType(payload, "level", '"') ||
+			!IsFieldValueType(payload, "source", '"') ||
+			!IsFieldValueType(payload, "message", '"')) {
+			SetIssue(issue, "schema_invalid_response", "`gateway.logs.tail` requires log entries with `ts`, `level`, `source`, and `message` fields.");
+			return false;
+		}
+
+		return true;
 	}
 
 	if (method == "gateway.sessions.resolve" || method == "gateway.sessions.create" || method == "gateway.sessions.reset") {
@@ -552,9 +568,26 @@ bool GatewayProtocolSchemaValidator::ValidateResponseForMethod(
 	}
 
 	if (method == "gateway.transport.status") {
-		return IsFieldBoolean(payload, "running") && IsFieldValueType(payload, "endpoint", '"') && IsFieldNumber(payload, "connections")
-			? true
-			: (SetIssue(issue, "schema_invalid_response", "`gateway.transport.status` requires `running`, `endpoint`, and `connections`."), false);
+        const bool hasCoreFields = IsFieldBoolean(payload, "running") &&
+			IsFieldValueType(payload, "endpoint", '"') &&
+			IsFieldNumber(payload, "connections");
+		const bool hasTimeoutFields = IsFieldValueType(payload, "timeouts", '{') &&
+			IsFieldNumber(payload, "handshake") &&
+			IsFieldNumber(payload, "idle");
+		const bool hasCloseFields = IsFieldValueType(payload, "closes", '{') &&
+			IsFieldNumber(payload, "invalidUtf8") &&
+			IsFieldNumber(payload, "messageTooBig") &&
+			IsFieldNumber(payload, "extensionRejected");
+
+		if (!(hasCoreFields && hasTimeoutFields && hasCloseFields)) {
+			SetIssue(
+				issue,
+				"schema_invalid_response",
+				"`gateway.transport.status` requires `running`, `endpoint`, `connections`, `timeouts.{handshake,idle}`, and `closes.{invalidUtf8,messageTooBig,extensionRejected}`.");
+			return false;
+		}
+
+		return true;
 	}
 
 	if (method == "gateway.session.list") {
@@ -618,33 +651,91 @@ bool GatewayProtocolSchemaValidator::ValidateEvent(const EventFrame& event, Sche
 	}
 
 	if (event.eventName == "gateway.channels.update") {
-		return IsFieldValueType(payload, "channels", '[')
-			? true
-			: (SetIssue(issue, "schema_invalid_event", "`gateway.channels.update` requires array field `channels`."), false);
+       if (!IsFieldValueType(payload, "channels", '[')) {
+			SetIssue(issue, "schema_invalid_event", "`gateway.channels.update` requires array field `channels`.");
+			return false;
+		}
+
+		if (IsArrayFieldExplicitlyEmpty(payload, "channels")) {
+			return true;
+		}
+
+		if (!PayloadContainsAllFieldTokens(payload, {"id", "label", "connected", "accounts"})) {
+			SetIssue(issue, "schema_invalid_event", "`gateway.channels.update` requires channel entries with `id`, `label`, `connected`, and `accounts` fields.");
+			return false;
+		}
+
+		return true;
 	}
 
 	if (event.eventName == "gateway.channels.accounts.update") {
-		return IsFieldValueType(payload, "accounts", '[')
-			? true
-			: (SetIssue(issue, "schema_invalid_event", "`gateway.channels.accounts.update` requires array field `accounts`."), false);
+       if (!IsFieldValueType(payload, "accounts", '[')) {
+			SetIssue(issue, "schema_invalid_event", "`gateway.channels.accounts.update` requires array field `accounts`.");
+			return false;
+		}
+
+		if (IsArrayFieldExplicitlyEmpty(payload, "accounts")) {
+			return true;
+		}
+
+		if (!PayloadContainsAllFieldTokens(payload, {"channel", "accountId", "label", "active", "connected"})) {
+			SetIssue(issue, "schema_invalid_event", "`gateway.channels.accounts.update` requires account entries with `channel`, `accountId`, `label`, `active`, and `connected` fields.");
+			return false;
+		}
+
+		return true;
 	}
 
 	if (event.eventName == "gateway.session.reset") {
-		return IsFieldValueType(payload, "sessionId", '"')
-			? true
-			: (SetIssue(issue, "schema_invalid_event", "`gateway.session.reset` requires string field `sessionId`."), false);
+      if (!IsFieldValueType(payload, "sessionId", '"')) {
+			SetIssue(issue, "schema_invalid_event", "`gateway.session.reset` requires string field `sessionId`.");
+			return false;
+		}
+
+		if (payload.find("\"session\"") != std::string::npos) {
+			if (!IsFieldValueType(payload, "session", '{') ||
+				!PayloadContainsAllFieldTokens(payload, {"id", "scope", "active"})) {
+				SetIssue(issue, "schema_invalid_event", "`gateway.session.reset` optional `session` object requires `id`, `scope`, and `active` fields.");
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	if (event.eventName == "gateway.agent.update") {
-		return IsFieldValueType(payload, "agentId", '"')
-			? true
-			: (SetIssue(issue, "schema_invalid_event", "`gateway.agent.update` requires string field `agentId`."), false);
+        if (!IsFieldValueType(payload, "agentId", '"')) {
+			SetIssue(issue, "schema_invalid_event", "`gateway.agent.update` requires string field `agentId`.");
+			return false;
+		}
+
+		if (payload.find("\"agent\"") != std::string::npos) {
+			if (!IsFieldValueType(payload, "agent", '{') ||
+				!PayloadContainsAllFieldTokens(payload, {"id", "name", "active"})) {
+				SetIssue(issue, "schema_invalid_event", "`gateway.agent.update` optional `agent` object requires `id`, `name`, and `active` fields.");
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	if (event.eventName == "gateway.tools.catalog.update") {
-		return IsFieldValueType(payload, "tools", '[')
-			? true
-			: (SetIssue(issue, "schema_invalid_event", "`gateway.tools.catalog.update` requires array field `tools`."), false);
+      if (!IsFieldValueType(payload, "tools", '[')) {
+			SetIssue(issue, "schema_invalid_event", "`gateway.tools.catalog.update` requires array field `tools`.");
+			return false;
+		}
+
+		if (IsArrayFieldExplicitlyEmpty(payload, "tools")) {
+			return true;
+		}
+
+		if (!PayloadContainsAllFieldTokens(payload, {"id", "label", "category", "enabled"})) {
+			SetIssue(issue, "schema_invalid_event", "`gateway.tools.catalog.update` requires tool entries with `id`, `label`, `category`, and `enabled` fields.");
+			return false;
+		}
+
+		return true;
 	}
 
 	return true;

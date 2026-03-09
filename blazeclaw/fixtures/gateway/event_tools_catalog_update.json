@@ -1,1 +1,1 @@
-{"type":"event","event":"gateway.tools.catalog.update","payload":{"tools":[]},"seq":8,"stateVersion":8}
+{"type":"event","event":"gateway.tools.catalog.update","payload":{"tools":[{"id":"chat.send","label":"Chat Send","category":"messaging","enabled":true},{"id":"memory.search","label":"Memory Search","category":"knowledge","enabled":true}]},"seq":8,"stateVersion":8}
