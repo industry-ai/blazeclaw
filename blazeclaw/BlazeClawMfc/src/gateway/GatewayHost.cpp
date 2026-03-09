@@ -83,6 +83,35 @@ std::string SerializeTool(const ToolCatalogEntry& tool) {
          std::string(tool.enabled ? "true" : "false") + "}";
 }
 
+std::string SerializeStringArray(const std::vector<std::string>& values) {
+  std::string json = "[";
+  for (std::size_t i = 0; i < values.size(); ++i) {
+    if (i > 0) {
+      json += ",";
+    }
+
+    json += "\"" + EscapeJson(values[i]) + "\"";
+  }
+
+  json += "]";
+  return json;
+}
+
+const std::vector<std::string>& EventCatalogNames() {
+  static const std::vector<std::string> events = {
+      "gateway.agent.update",
+      "gateway.channels.accounts.update",
+      "gateway.channels.update",
+      "gateway.health",
+      "gateway.session.reset",
+      "gateway.shutdown",
+      "gateway.tick",
+      "gateway.tools.catalog.update",
+  };
+
+  return events;
+}
+
 std::string ExtractStringParam(const std::optional<std::string>& paramsJson, const std::string& fieldName) {
   if (!paramsJson.has_value()) {
     return {};
@@ -523,11 +552,14 @@ void GatewayHost::RegisterDefaultHandlers() {
     };
   });
 
-  m_dispatcher.Register("gateway.features.list", [](const protocol::RequestFrame& request) {
+  m_dispatcher.Register("gateway.features.list", [this](const protocol::RequestFrame& request) {
+    const std::string methodsJson = SerializeStringArray(m_dispatcher.RegisteredMethods());
+    const std::string eventsJson = SerializeStringArray(EventCatalogNames());
+
     return protocol::ResponseFrame{
         .id = request.id,
         .ok = true,
-        .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.channels.accounts\",\"gateway.channels.route.resolve\",\"gateway.channels.routes\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.create\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
+        .payloadJson = "{\"methods\":" + methodsJson + ",\"events\":" + eventsJson + "}",
         .error = std::nullopt,
     };
   });
@@ -812,7 +844,7 @@ void GatewayHost::RegisterDefaultHandlers() {
     return protocol::ResponseFrame{
         .id = request.id,
         .ok = true,
-        .payloadJson = "{\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
+        .payloadJson = "{\"events\":" + SerializeStringArray(EventCatalogNames()) + "}",
         .error = std::nullopt,
     };
   });

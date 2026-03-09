@@ -63,6 +63,34 @@ namespace {
 			return true;
 		}
 
+	bool ValidateOptionalChannelParam(
+		const RequestFrame& request,
+		SchemaValidationIssue& issue,
+		const std::string& methodName) {
+		if (!request.paramsJson.has_value()) {
+			return true;
+		}
+
+		const std::string params = Trim(request.paramsJson.value());
+		if (!IsJsonObjectShape(params)) {
+			SetIssue(
+				issue,
+				"schema_invalid_params",
+				"Method `" + methodName + "` expects `params` to be a JSON object when provided.");
+			return false;
+		}
+
+		if (params.find("\"channel\"") != std::string::npos && !IsFieldValueType(params, "channel", '"')) {
+			SetIssue(
+				issue,
+				"schema_invalid_params",
+				"Method `" + methodName + "` requires `params.channel` to be a string.");
+			return false;
+		}
+
+		return true;
+	}
+
 		const std::string params = Trim(request.paramsJson.value());
 		if (!IsJsonObjectShape(params)) {
 			SetIssue(
@@ -80,6 +108,17 @@ namespace {
 		if (params.find("\"accountId\"") != std::string::npos && !IsFieldValueType(params, "accountId", '"')) {
 			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.resolve` requires `params.accountId` to be a string.");
 			return false;
+		}
+
+		return true;
+	}
+
+	bool PayloadContainsAllStringValues(const std::string& json, std::initializer_list<const char*> values) {
+		for (const char* value : values) {
+			const std::string token = "\"" + std::string(value) + "\"";
+			if (json.find(token) == std::string::npos) {
+				return false;
+			}
 		}
 
 		return true;
@@ -345,9 +384,6 @@ bool GatewayProtocolSchemaValidator::ValidateRequest(const RequestFrame& request
 	if (request.method == "gateway.protocol.version" ||
 		request.method == "gateway.features.list" ||
 		request.method == "gateway.config.get" ||
-		request.method == "gateway.channels.status" ||
-		request.method == "gateway.channels.routes" ||
-		request.method == "gateway.channels.accounts" ||
 		request.method == "gateway.agents.list" ||
 		request.method == "gateway.tools.catalog" ||
 		request.method == "gateway.health" ||
@@ -355,6 +391,12 @@ bool GatewayProtocolSchemaValidator::ValidateRequest(const RequestFrame& request
 		request.method == "gateway.session.list" ||
 		request.method == "gateway.events.catalog") {
 		return ValidateNoParamsAllowed(request, issue, request.method);
+	}
+
+	if (request.method == "gateway.channels.status" ||
+		request.method == "gateway.channels.routes" ||
+		request.method == "gateway.channels.accounts") {
+		return ValidateOptionalChannelParam(request, issue, request.method);
 	}
 
 	return true;
@@ -556,9 +598,26 @@ bool GatewayProtocolSchemaValidator::ValidateResponseForMethod(
 	}
 
 	if (method == "gateway.features.list") {
-		return IsFieldValueType(payload, "methods", '[') && IsFieldValueType(payload, "events", '[')
-			? true
-			: (SetIssue(issue, "schema_invalid_response", "`gateway.features.list` requires array fields `methods` and `events`."), false);
+        if (!IsFieldValueType(payload, "methods", '[') || !IsFieldValueType(payload, "events", '[')) {
+			SetIssue(issue, "schema_invalid_response", "`gateway.features.list` requires array fields `methods` and `events`.");
+			return false;
+		}
+
+		if (!PayloadContainsAllStringValues(payload, {
+			"gateway.ping",
+			"gateway.transport.status",
+			"gateway.events.catalog",
+			"gateway.channels.accounts",
+			"gateway.tools.call.preview",
+			"gateway.tick",
+			"gateway.health",
+			"gateway.shutdown",
+		})) {
+			SetIssue(issue, "schema_invalid_response", "`gateway.features.list` catalog is missing required method/event members.");
+			return false;
+		}
+
+		return true;
 	}
 
 	if (method == "gateway.health") {
@@ -609,9 +668,26 @@ bool GatewayProtocolSchemaValidator::ValidateResponseForMethod(
 	}
 
 	if (method == "gateway.events.catalog") {
-		return IsFieldValueType(payload, "events", '[')
-			? true
-			: (SetIssue(issue, "schema_invalid_response", "`gateway.events.catalog` requires array field `events`."), false);
+     if (!IsFieldValueType(payload, "events", '[')) {
+			SetIssue(issue, "schema_invalid_response", "`gateway.events.catalog` requires array field `events`.");
+			return false;
+		}
+
+		if (!PayloadContainsAllStringValues(payload, {
+			"gateway.tick",
+			"gateway.health",
+			"gateway.shutdown",
+			"gateway.channels.update",
+			"gateway.channels.accounts.update",
+			"gateway.session.reset",
+			"gateway.agent.update",
+			"gateway.tools.catalog.update",
+		})) {
+			SetIssue(issue, "schema_invalid_response", "`gateway.events.catalog` is missing required event members.");
+			return false;
+		}
+
+		return true;
 	}
 
 	return true;

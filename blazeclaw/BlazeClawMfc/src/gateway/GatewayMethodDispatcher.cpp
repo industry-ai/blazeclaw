@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "GatewayMethodDispatcher.h"
 
+#include <algorithm>
+
 namespace blazeclaw::gateway {
 
 void GatewayMethodDispatcher::Register(std::string method, MethodHandler handler) {
@@ -33,6 +35,18 @@ protocol::ResponseFrame GatewayMethodDispatcher::Dispatch(const protocol::Reques
 
 std::size_t GatewayMethodDispatcher::RegisteredMethodCount() const noexcept {
   return m_handlers.size();
+}
+
+std::vector<std::string> GatewayMethodDispatcher::RegisteredMethods() const {
+  std::vector<std::string> methods;
+  methods.reserve(m_handlers.size());
+
+  for (const auto& [method, _] : m_handlers) {
+    methods.push_back(method);
+  }
+
+  std::sort(methods.begin(), methods.end());
+  return methods;
 }
 
 } // namespace blazeclaw::gateway
