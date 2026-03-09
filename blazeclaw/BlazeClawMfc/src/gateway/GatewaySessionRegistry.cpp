@@ -2,12 +2,16 @@
 #include "GatewaySessionRegistry.h"
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 
 namespace blazeclaw::gateway {
 
 	GatewaySessionRegistry::GatewaySessionRegistry() {
 		const SessionEntry mainSession = BuildDefaultSession();
 		m_sessions.insert_or_assign(mainSession.id, mainSession);
+  LoadPersistedSessions();
 	}
 
 	SessionEntry GatewaySessionRegistry::Create(
@@ -23,6 +27,7 @@ namespace blazeclaw::gateway {
 		};
 
 		m_sessions.insert_or_assign(id, created);
+  PersistSessions();
 		return created;
 	}
 
@@ -63,6 +68,7 @@ namespace blazeclaw::gateway {
 		};
 
 		m_sessions.insert_or_assign(id, reset);
+  PersistSessions();
 		return reset;
 	}
 
@@ -86,6 +92,7 @@ namespace blazeclaw::gateway {
 		removedSession = it->second;
 		removedSession.active = false;
 		m_sessions.erase(it);
+  PersistSessions();
 		return true;
 	}
 
@@ -112,6 +119,10 @@ namespace blazeclaw::gateway {
 			++it;
 		}
 
+  if (compacted > 0) {
+	PersistSessions();
+  }
+
 		return compacted;
 	}
 
@@ -132,6 +143,7 @@ namespace blazeclaw::gateway {
 		}
 
 		m_sessions.insert_or_assign(id, patched);
+  PersistSessions();
 		return patched;
 	}
 
@@ -160,5 +172,72 @@ namespace blazeclaw::gateway {
 			.active = true,
 		};
 	}
+
+std::filesystem::path GatewaySessionRegistry::PersistencePath() {
+  return std::filesystem::path("blazeclaw") / "state" / "sessions.state";
+}
+
+void GatewaySessionRegistry::LoadPersistedSessions() {
+  const std::filesystem::path path = PersistencePath();
+  std::ifstream input(path);
+  if (!input.is_open()) {
+	return;
+  }
+
+  std::string line;
+  while (std::getline(input, line)) {
+	if (line.empty()) {
+	  continue;
+	}
+
+	std::istringstream row(line);
+	std::string id;
+	std::string scope;
+	std::string active;
+	if (!std::getline(row, id, '|') ||
+		!std::getline(row, scope, '|') ||
+		!std::getline(row, active)) {
+	  continue;
+	}
+
+	SessionEntry loaded{
+		.id = NormalizeSessionId(id),
+		.scope = scope.empty() ? ResolveScope(id, std::nullopt) : scope,
+		.active = active == "1" || active == "true",
+	};
+
+	m_sessions.insert_or_assign(loaded.id, loaded);
+  }
+
+  if (m_sessions.empty()) {
+	const SessionEntry mainSession = BuildDefaultSession();
+	m_sessions.insert_or_assign(mainSession.id, mainSession);
+  }
+}
+
+void GatewaySessionRegistry::PersistSessions() const {
+  const std::filesystem::path path = PersistencePath();
+  std::error_code ec;
+  std::filesystem::create_directories(path.parent_path(), ec);
+
+  std::ofstream output(path, std::ios::out | std::ios::trunc);
+  if (!output.is_open()) {
+	return;
+  }
+
+  std::vector<SessionEntry> sessions;
+  sessions.reserve(m_sessions.size());
+  for (const auto& [_, session] : m_sessions) {
+	sessions.push_back(session);
+  }
+
+  std::sort(sessions.begin(), sessions.end(), [](const SessionEntry& left, const SessionEntry& right) {
+	return left.id < right.id;
+  });
+
+  for (const auto& session : sessions) {
+	output << session.id << "|" << session.scope << "|" << (session.active ? "1" : "0") << "\n";
+  }
+}
 
 } // namespace blazeclaw::gateway

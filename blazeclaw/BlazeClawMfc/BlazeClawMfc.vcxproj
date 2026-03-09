@@ -119,8 +119,8 @@
     <ClCompile Include="src\gateway\GatewayChannelRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.cpp" />
     <ClCompile Include="src\gateway\GatewayMethodDispatcher.cpp" />
-    <ClCompile Include="src\gateway\GatewayProtocolContract.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolCodec.cpp" />
+    <ClCompile Include="src\gateway\GatewayProtocolContract.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolJson.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.cpp" />
     <ClCompile Include="src\gateway\GatewaySessionRegistry.cpp" />
