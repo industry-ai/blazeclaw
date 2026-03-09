@@ -10,13 +10,16 @@ GatewaySessionRegistry::GatewaySessionRegistry() {
   m_sessions.insert_or_assign(mainSession.id, mainSession);
 }
 
-SessionEntry GatewaySessionRegistry::Create(const std::string& requestedId) {
+SessionEntry GatewaySessionRegistry::Create(
+    const std::string& requestedId,
+    const std::optional<std::string>& requestedScope,
+    std::optional<bool> requestedActive) {
   const std::string id = NormalizeSessionId(requestedId);
 
   SessionEntry created{
       .id = id,
-      .scope = id == "main" ? "default" : "thread",
-      .active = true,
+      .scope = ResolveScope(id, requestedScope),
+      .active = requestedActive.value_or(true),
   };
 
   m_sessions.insert_or_assign(id, created);
@@ -48,16 +51,29 @@ std::vector<SessionEntry> GatewaySessionRegistry::List() const {
   return output;
 }
 
-SessionEntry GatewaySessionRegistry::Reset(const std::string& requestedId) {
+SessionEntry GatewaySessionRegistry::Reset(
+    const std::string& requestedId,
+    const std::optional<std::string>& requestedScope,
+    std::optional<bool> requestedActive) {
   const std::string id = NormalizeSessionId(requestedId);
   SessionEntry reset{
       .id = id,
-      .scope = id == "main" ? "default" : "thread",
-      .active = true,
+      .scope = ResolveScope(id, requestedScope),
+      .active = requestedActive.value_or(true),
   };
 
   m_sessions.insert_or_assign(id, reset);
   return reset;
+}
+
+std::string GatewaySessionRegistry::ResolveScope(
+    const std::string& sessionId,
+    const std::optional<std::string>& requestedScope) {
+  if (requestedScope.has_value() && !requestedScope.value().empty()) {
+    return requestedScope.value();
+  }
+
+  return sessionId == "main" ? "default" : "thread";
 }
 
 std::string GatewaySessionRegistry::NormalizeSessionId(const std::string& value) {

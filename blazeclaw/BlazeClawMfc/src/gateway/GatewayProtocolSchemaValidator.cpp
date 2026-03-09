@@ -180,6 +180,41 @@ namespace {
 		return json.compare(valuePos, 4, "true") == 0 || json.compare(valuePos, 5, "false") == 0;
 	}
 
+	bool ValidateSessionMutationParams(
+		const RequestFrame& request,
+		SchemaValidationIssue& issue,
+		const std::string& methodName) {
+		if (!request.paramsJson.has_value()) {
+			return true;
+		}
+
+		const std::string params = Trim(request.paramsJson.value());
+		if (!IsJsonObjectShape(params)) {
+			SetIssue(
+				issue,
+				"schema_invalid_params",
+				"Method `" + methodName + "` expects `params` to be a JSON object when provided.");
+			return false;
+		}
+
+		if (params.find("\"sessionId\"") != std::string::npos && !IsFieldValueType(params, "sessionId", '"')) {
+			SetIssue(issue, "schema_invalid_params", "Method `" + methodName + "` requires `params.sessionId` to be a string.");
+			return false;
+		}
+
+		if (params.find("\"scope\"") != std::string::npos && !IsFieldValueType(params, "scope", '"')) {
+			SetIssue(issue, "schema_invalid_params", "Method `" + methodName + "` requires `params.scope` to be a string.");
+			return false;
+		}
+
+		if (params.find("\"active\"") != std::string::npos && !IsFieldBoolean(params, "active")) {
+			SetIssue(issue, "schema_invalid_params", "Method `" + methodName + "` requires `params.active` to be boolean.");
+			return false;
+		}
+
+		return true;
+	}
+
 	bool IsFieldNumber(const std::string& json, const std::string& fieldName) {
 		std::size_t tokenPos = 0;
 		if (!ContainsFieldToken(json, fieldName, tokenPos)) {
@@ -383,8 +418,8 @@ bool GatewayProtocolSchemaValidator::ValidateRequest(const RequestFrame& request
 		return ValidateStringIdParam(request, issue, request.method, "sessionId");
 	}
 
-	if (request.method == "gateway.sessions.create" || request.method == "gateway.sessions.reset") {
-		return ValidateStringIdParam(request, issue, request.method, "sessionId");
+    if (request.method == "gateway.sessions.create" || request.method == "gateway.sessions.reset") {
+		return ValidateSessionMutationParams(request, issue, request.method);
 	}
 
 	if (request.method == "gateway.agents.get" || request.method == "gateway.agents.activate") {

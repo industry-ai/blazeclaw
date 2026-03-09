@@ -48,6 +48,41 @@ std::string EscapeJson(const std::string& value) {
   return escaped;
 }
 
+std::optional<bool> ExtractBooleanParam(
+    const std::optional<std::string>& paramsJson,
+    const std::string& fieldName) {
+  if (!paramsJson.has_value()) {
+    return std::nullopt;
+  }
+
+  const std::string token = "\"" + fieldName + "\"";
+  const std::string& params = paramsJson.value();
+  const std::size_t keyPos = params.find(token);
+  if (keyPos == std::string::npos) {
+    return std::nullopt;
+  }
+
+  std::size_t valuePos = params.find(':', keyPos + token.size());
+  if (valuePos == std::string::npos) {
+    return std::nullopt;
+  }
+
+  ++valuePos;
+  while (valuePos < params.size() && std::isspace(static_cast<unsigned char>(params[valuePos])) != 0) {
+    ++valuePos;
+  }
+
+  if (params.compare(valuePos, 4, "true") == 0) {
+    return true;
+  }
+
+  if (params.compare(valuePos, 5, "false") == 0) {
+    return false;
+  }
+
+  return std::nullopt;
+}
+
 std::string SerializeSession(const SessionEntry& session) {
   return "{\"id\":\"" + EscapeJson(session.id) + "\",\"scope\":\"" + EscapeJson(session.scope) +
          "\",\"active\":" + std::string(session.active ? "true" : "false") + "}";
@@ -803,8 +838,13 @@ void GatewayHost::RegisterDefaultHandlers() {
 
   m_dispatcher.Register("gateway.sessions.create", [this](const protocol::RequestFrame& request) {
     const std::string requestedId = ExtractStringParam(request.paramsJson, "sessionId");
+    const std::string requestedScope = ExtractStringParam(request.paramsJson, "scope");
+    const std::optional<bool> requestedActive = ExtractBooleanParam(request.paramsJson, "active");
 
-    const SessionEntry created = m_sessionRegistry.Create(requestedId);
+    const SessionEntry created = m_sessionRegistry.Create(
+        requestedId,
+        requestedScope.empty() ? std::nullopt : std::optional<std::string>(requestedScope),
+        requestedActive);
     return protocol::ResponseFrame{
         .id = request.id,
         .ok = true,
@@ -815,8 +855,13 @@ void GatewayHost::RegisterDefaultHandlers() {
 
   m_dispatcher.Register("gateway.sessions.reset", [this](const protocol::RequestFrame& request) {
     const std::string requestedId = ExtractStringParam(request.paramsJson, "sessionId");
+    const std::string requestedScope = ExtractStringParam(request.paramsJson, "scope");
+    const std::optional<bool> requestedActive = ExtractBooleanParam(request.paramsJson, "active");
 
-    const SessionEntry reset = m_sessionRegistry.Reset(requestedId);
+    const SessionEntry reset = m_sessionRegistry.Reset(
+        requestedId,
+        requestedScope.empty() ? std::nullopt : std::optional<std::string>(requestedScope),
+        requestedActive);
     return protocol::ResponseFrame{
         .id = request.id,
         .ok = true,
