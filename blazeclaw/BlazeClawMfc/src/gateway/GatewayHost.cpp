@@ -582,6 +582,39 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.agents.update", [this](const protocol::RequestFrame& request) {
+			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
+			const std::string requestedName = ExtractStringParam(request.paramsJson, "name");
+			const std::optional<bool> requestedActive = ExtractBooleanParam(request.paramsJson, "active");
+			const AgentEntry updated = m_agentRegistry.Update(
+				requestedId,
+				requestedName.empty() ? std::nullopt : std::optional<std::string>(requestedName),
+				requestedActive);
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"agent\":" + SerializeAgent(updated) + ",\"updated\":true}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.agents.delete", [this](const protocol::RequestFrame& request) {
+			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
+			AgentEntry removedAgent;
+			const bool deleted = m_agentRegistry.Delete(requestedId, removedAgent);
+			const std::size_t remaining = m_agentRegistry.List().size();
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"agent\":" + SerializeAgent(removedAgent) +
+					",\"deleted\":" + std::string(deleted ? "true" : "false") +
+					",\"remaining\":" + std::to_string(remaining) + "}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.agents.create", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
 			const std::string requestedName = ExtractStringParam(request.paramsJson, "name");

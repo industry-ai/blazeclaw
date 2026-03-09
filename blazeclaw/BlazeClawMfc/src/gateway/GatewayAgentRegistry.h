@@ -21,6 +21,11 @@ namespace blazeclaw::gateway {
 			const std::string& requestedId,
 			const std::optional<std::string>& requestedName = std::nullopt,
 			std::optional<bool> requestedActive = std::nullopt);
+		bool Delete(const std::string& requestedId, AgentEntry& removedAgent);
+		AgentEntry Update(
+			const std::string& requestedId,
+			const std::optional<std::string>& requestedName = std::nullopt,
+			std::optional<bool> requestedActive = std::nullopt);
 
 	private:
 		static std::string NormalizeAgentId(const std::string& value);

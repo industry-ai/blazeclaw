@@ -73,6 +73,61 @@ namespace blazeclaw::gateway {
 		return created;
 	}
 
+	bool GatewayAgentRegistry::Delete(const std::string& requestedId, AgentEntry& removedAgent) {
+		const std::string id = NormalizeAgentId(requestedId);
+		if (id == "default") {
+			removedAgent = Get(id);
+			return false;
+		}
+
+		const auto it = m_agents.find(id);
+		if (it == m_agents.end()) {
+			removedAgent = AgentEntry{
+				.id = id,
+				.name = "Agent " + id,
+				.active = false,
+			};
+			return false;
+		}
+
+		const bool wasActive = it->second.active;
+		removedAgent = it->second;
+		removedAgent.active = false;
+		m_agents.erase(it);
+
+		if (wasActive) {
+			Activate("default");
+		}
+
+		return true;
+	}
+
+	AgentEntry GatewayAgentRegistry::Update(
+		const std::string& requestedId,
+		const std::optional<std::string>& requestedName,
+		std::optional<bool> requestedActive) {
+		const std::string id = NormalizeAgentId(requestedId);
+		AgentEntry updated = Get(id);
+		updated.id = id;
+
+		if (requestedName.has_value() && !requestedName.value().empty()) {
+			updated.name = requestedName.value();
+		}
+
+		if (requestedActive.has_value()) {
+			if (requestedActive.value()) {
+				for (auto& [_, agent] : m_agents) {
+					agent.active = false;
+				}
+			}
+
+			updated.active = requestedActive.value();
+		}
+
+		m_agents.insert_or_assign(updated.id, updated);
+		return updated;
+	}
+
 	std::string GatewayAgentRegistry::NormalizeAgentId(const std::string& value) {
 		if (value.empty()) {
 			return "default";

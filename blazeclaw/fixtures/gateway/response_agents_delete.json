@@ -1,0 +1,14 @@
+{
+  "type": "res",
+  "id": "req-29",
+  "ok": true,
+  "payload": {
+    "agent": {
+      "id": "builder",
+      "name": "Agent builder",
+      "active": false
+    },
+    "deleted": true,
+    "remaining": 1
+  }
+}

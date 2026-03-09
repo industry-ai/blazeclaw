@@ -117,7 +117,7 @@ namespace blazeclaw::gateway::protocol {
 		const ResponseFrame featuresListResponse{
 			.id = "req-3",
 			.ok = true,
-	  .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.create\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.channels.accounts\",\"gateway.channels.route.resolve\",\"gateway.channels.routes\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.compact\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
+	  .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.create\",\"gateway.agents.delete\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.agents.update\",\"gateway.channels.accounts\",\"gateway.channels.route.resolve\",\"gateway.channels.routes\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.compact\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
 			.error = std::nullopt,
 		};
 
@@ -258,6 +258,20 @@ namespace blazeclaw::gateway::protocol {
 			.id = "req-28",
 			.ok = true,
 			.payloadJson = "{\"agent\":{\"id\":\"builder\",\"name\":\"Agent builder\",\"active\":false},\"created\":true}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame agentsDeleteResponse{
+			.id = "req-29",
+			.ok = true,
+			.payloadJson = "{\"agent\":{\"id\":\"builder\",\"name\":\"Agent builder\",\"active\":false},\"deleted\":true,\"remaining\":1}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame agentsUpdateResponse{
+			.id = "req-30",
+			.ok = true,
+			.payloadJson = "{\"agent\":{\"id\":\"builder\",\"name\":\"Builder Prime\",\"active\":true},\"updated\":true}",
 			.error = std::nullopt,
 		};
 
@@ -545,6 +559,22 @@ namespace blazeclaw::gateway::protocol {
 			return false;
 		}
 
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.agents.delete",
+			agentsDeleteResponse,
+			responseIssue)) {
+			error = "Agents delete response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.agents.update",
+			agentsUpdateResponse,
+			responseIssue)) {
+			error = "Agents update response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
 		SchemaValidationIssue eventIssue;
 		if (!GatewayProtocolSchemaValidator::ValidateEvent(event, eventIssue)) {
 			error = "Tick event schema validation failed: " + eventIssue.message;
@@ -702,6 +732,34 @@ namespace blazeclaw::gateway::protocol {
 			agentsCreateResponseNegative,
 			responseIssue)) {
 			error = "Schema response negative case unexpectedly passed for gateway.agents.create missing `created`.";
+			return false;
+		}
+
+		const ResponseFrame agentsDeleteResponseNegative{
+			.id = "req-schema-19",
+			.ok = true,
+			.payloadJson = "{\"agent\":{\"id\":\"builder\",\"name\":\"Agent builder\",\"active\":false},\"deleted\":true}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.agents.delete",
+			agentsDeleteResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.agents.delete missing `remaining`.";
+			return false;
+		}
+
+		const ResponseFrame agentsUpdateResponseNegative{
+			.id = "req-schema-20",
+			.ok = true,
+			.payloadJson = "{\"agent\":{\"id\":\"builder\",\"name\":\"Builder Prime\",\"active\":true}}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.agents.update",
+			agentsUpdateResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.agents.update missing `updated`.";
 			return false;
 		}
 
@@ -892,6 +950,20 @@ namespace blazeclaw::gateway::protocol {
 		if (!CompareFixture(
 			root / "response_agents_create.json",
 			SerializeResponseFrame(agentsCreateResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_agents_delete.json",
+			SerializeResponseFrame(agentsDeleteResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_agents_update.json",
+			SerializeResponseFrame(agentsUpdateResponse),
 			error)) {
 			return false;
 		}

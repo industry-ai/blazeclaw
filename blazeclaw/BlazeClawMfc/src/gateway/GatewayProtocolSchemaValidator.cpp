@@ -989,11 +989,15 @@ namespace blazeclaw::gateway::protocol {
 			return ValidateSessionMutationParams(request, issue, request.method);
 		}
 
-		if (request.method == "gateway.agents.get" || request.method == "gateway.agents.activate") {
+		if (request.method == "gateway.agents.get" || request.method == "gateway.agents.activate" || request.method == "gateway.agents.delete") {
 			return ValidateStringIdParam(request, issue, request.method, "agentId");
 		}
 
 		if (request.method == "gateway.agents.create") {
+			return ValidateAgentsCreateParams(request, issue);
+		}
+
+		if (request.method == "gateway.agents.update") {
 			return ValidateAgentsCreateParams(request, issue);
 		}
 
@@ -1124,6 +1128,36 @@ namespace blazeclaw::gateway::protocol {
 
 			if (!PayloadContainsAllFieldTokens(payload, { "id", "name", "active" })) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.agents.create` requires `agent` fields `id`, `name`, and `active`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.agents.delete") {
+			if (!IsFieldValueType(payload, "agent", '{') ||
+				!IsFieldBoolean(payload, "deleted") ||
+				!IsFieldNumber(payload, "remaining")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.agents.delete` requires `agent` object, `deleted` boolean, and `remaining` number.");
+				return false;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "id", "name", "active" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.agents.delete` requires `agent` fields `id`, `name`, and `active`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.agents.update") {
+			if (!IsFieldValueType(payload, "agent", '{') || !IsFieldBoolean(payload, "updated")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.agents.update` requires `agent` object and `updated` boolean.");
+				return false;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "id", "name", "active" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.agents.update` requires `agent` fields `id`, `name`, and `active`.");
 				return false;
 			}
 

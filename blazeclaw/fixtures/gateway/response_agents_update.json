@@ -1,0 +1,13 @@
+{
+  "type": "res",
+  "id": "req-30",
+  "ok": true,
+  "payload": {
+    "agent": {
+      "id": "builder",
+      "name": "Builder Prime",
+      "active": true
+    },
+    "updated": true
+  }
+}
