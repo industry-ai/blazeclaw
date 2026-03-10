@@ -120,4 +120,24 @@ namespace blazeclaw::gateway {
 		return route;
 	}
 
+	bool GatewayChannelRegistry::DeleteRoute(
+		const std::string& channel,
+		const std::string& accountId,
+		ChannelRouteEntry& removedRoute) {
+		const auto it = std::find_if(m_routes.begin(), m_routes.end(), [&](const ChannelRouteEntry& entry) {
+			const bool channelMatches = channel.empty() || entry.channel == channel;
+			const bool accountMatches = accountId.empty() || entry.accountId == accountId;
+			return channelMatches && accountMatches;
+			});
+
+		if (it == m_routes.end()) {
+			removedRoute = ResolveRoute(channel, accountId);
+			return false;
+		}
+
+		removedRoute = *it;
+		m_routes.erase(it);
+		return true;
+	}
+
 } // namespace blazeclaw::gateway

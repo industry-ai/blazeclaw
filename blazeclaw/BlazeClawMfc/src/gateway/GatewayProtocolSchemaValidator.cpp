@@ -609,6 +609,41 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool ValidateChannelsRouteDeleteParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.channels.route.delete", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"channel",
+				JsonFieldKind::String,
+				issue,
+				"gateway.channels.route.delete",
+				"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"accountId",
+					JsonFieldKind::String,
+					issue,
+					"gateway.channels.route.delete",
+					"a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "channel" || field == "accountId") {
+					continue;
+				}
+
+				SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.delete` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		bool ValidateOptionalChannelParam(
 			const RequestFrame& request,
 			SchemaValidationIssue& issue,
@@ -1320,6 +1355,10 @@ namespace blazeclaw::gateway::protocol {
 			return ValidateChannelsRouteSetParams(request, issue);
 		}
 
+		if (request.method == "gateway.channels.route.delete") {
+			return ValidateChannelsRouteDeleteParams(request, issue);
+		}
+
 		if (request.method == "gateway.tools.call.preview") {
 			return ValidateToolsCallPreviewParams(request, issue);
 		}
@@ -1768,6 +1807,20 @@ namespace blazeclaw::gateway::protocol {
 
 			if (!PayloadContainsAllFieldTokens(payload, { "channel", "accountId", "agentId", "sessionId" })) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.channels.route.set` requires route fields `channel`, `accountId`, `agentId`, and `sessionId`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.channels.route.delete") {
+			if (!IsFieldValueType(payload, "route", '{') || !IsFieldBoolean(payload, "deleted")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.route.delete` requires `route` object and `deleted` boolean.");
+				return false;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "channel", "accountId", "agentId", "sessionId" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.route.delete` requires route fields `channel`, `accountId`, `agentId`, and `sessionId`.");
 				return false;
 			}
 

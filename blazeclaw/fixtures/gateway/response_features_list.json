@@ -17,6 +17,7 @@
       "gateway.agents.update",
       "gateway.channels.accounts",
       "gateway.channels.logout",
+      "gateway.channels.route.delete",
       "gateway.channels.route.resolve",
       "gateway.channels.route.set",
       "gateway.channels.routes",

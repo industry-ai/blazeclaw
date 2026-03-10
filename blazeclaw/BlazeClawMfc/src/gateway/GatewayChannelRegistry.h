@@ -45,6 +45,10 @@ namespace blazeclaw::gateway {
 			const std::string& accountId,
 			const std::string& agentId,
 			const std::string& sessionId);
+		bool DeleteRoute(
+			const std::string& channel,
+			const std::string& accountId,
+			ChannelRouteEntry& removedRoute);
 
 	private:
 		std::vector<ChannelStatusEntry> m_status;

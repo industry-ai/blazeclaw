@@ -595,6 +595,21 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.channels.route.delete", [this](const protocol::RequestFrame& request) {
+			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
+			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
+			ChannelRouteEntry removedRoute;
+			const bool deleted = m_channelRegistry.DeleteRoute(channel, accountId, removedRoute);
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"route\":" + SerializeChannelRoute(removedRoute) +
+					",\"deleted\":" + std::string(deleted ? "true" : "false") + "}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.channels.route.set", [this](const protocol::RequestFrame& request) {
 			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
 			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
