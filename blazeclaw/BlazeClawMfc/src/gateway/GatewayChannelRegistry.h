@@ -46,9 +46,10 @@ namespace blazeclaw::gateway {
 			std::optional<bool> connected,
 			bool& created);
 		ChannelAccountEntry DeleteAccount(const std::string& channel, const std::string& accountId, bool& deleted);
+		std::size_t ClearAccounts(const std::string& channel);
 		std::vector<ChannelRouteEntry> ListRoutes() const;
 		ChannelRouteEntry ResolveRoute(const std::string& channel, const std::string& accountId) const;
-       ChannelRouteEntry GetRoute(const std::string& channel, const std::string& accountId) const;
+		ChannelRouteEntry GetRoute(const std::string& channel, const std::string& accountId) const;
 		ChannelLogoutResult Logout(const std::string& channel, const std::string& accountId);
 		ChannelAccountEntry ActivateAccount(const std::string& channel, const std::string& accountId, bool& activated);
 		ChannelAccountEntry DeactivateAccount(const std::string& channel, const std::string& accountId, bool& deactivated);
@@ -69,7 +70,7 @@ namespace blazeclaw::gateway {
 			const std::string& channel,
 			const std::string& accountId,
 			ChannelRouteEntry& removedRoute);
-        ChannelRouteEntry RestoreRoute(const std::string& channel, const std::string& accountId, bool& restored);
+		ChannelRouteEntry RestoreRoute(const std::string& channel, const std::string& accountId, bool& restored);
 		std::size_t ClearRoutes(const std::string& channel);
 		std::size_t RestoreRoutes(const std::string& channel);
 		bool RouteExists(const std::string& channel, const std::string& accountId) const;

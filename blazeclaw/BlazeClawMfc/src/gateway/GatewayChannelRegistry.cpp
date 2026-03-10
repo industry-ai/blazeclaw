@@ -341,6 +341,30 @@ namespace blazeclaw::gateway {
 		return selected;
 	}
 
+	std::size_t GatewayChannelRegistry::ClearAccounts(const std::string& channel) {
+		const std::size_t originalSize = m_accounts.size();
+		m_accounts.erase(
+			std::remove_if(m_accounts.begin(), m_accounts.end(), [&](const ChannelAccountEntry& account) {
+				return channel.empty() || account.channel == channel;
+			}),
+			m_accounts.end());
+
+		for (auto& status : m_status) {
+			if (!channel.empty() && status.id != channel) {
+				continue;
+			}
+
+			status.accountCount = std::count_if(m_accounts.begin(), m_accounts.end(), [&](const ChannelAccountEntry& account) {
+				return account.channel == status.id;
+			});
+			status.connected = std::any_of(m_accounts.begin(), m_accounts.end(), [&](const ChannelAccountEntry& account) {
+				return account.channel == status.id && account.connected;
+			});
+		}
+
+		return originalSize - m_accounts.size();
+	}
+
 	ChannelRouteEntry GatewayChannelRegistry::SetRoute(
 		const std::string& channel,
 		const std::string& accountId,
