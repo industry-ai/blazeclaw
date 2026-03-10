@@ -896,6 +896,44 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool ValidateChannelsLogoutParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.channels.logout", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"channel",
+				JsonFieldKind::String,
+				issue,
+				"gateway.channels.logout",
+				"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"accountId",
+					JsonFieldKind::String,
+					issue,
+					"gateway.channels.logout",
+					"a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "channel" || field == "accountId") {
+					continue;
+				}
+
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `gateway.channels.logout` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		bool ValidatePingParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 			ParsedObjectFieldKinds fieldKinds;
 			if (!TryParseRequestParamsObject(request, issue, "gateway.ping", fieldKinds)) {
@@ -1015,6 +1053,10 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.channels.routes" ||
 			request.method == "gateway.channels.accounts") {
 			return ValidateOptionalChannelParam(request, issue, request.method);
+		}
+
+		if (request.method == "gateway.channels.logout") {
+			return ValidateChannelsLogoutParams(request, issue);
 		}
 
 		if (request.method == "gateway.agents.list") {
@@ -1237,6 +1279,15 @@ namespace blazeclaw::gateway::protocol {
 
 			if (!PayloadContainsAllFieldTokens(payload, { "channel", "accountId", "label", "active", "connected" })) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.channels.accounts` requires account entries with `channel`, `accountId`, `label`, `active`, and `connected` fields.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.channels.logout") {
+			if (!IsFieldBoolean(payload, "loggedOut") || !IsFieldNumber(payload, "affected")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.logout` requires `loggedOut` boolean and `affected` number fields.");
 				return false;
 			}
 

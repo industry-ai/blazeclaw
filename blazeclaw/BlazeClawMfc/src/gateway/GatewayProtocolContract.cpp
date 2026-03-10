@@ -117,7 +117,7 @@ namespace blazeclaw::gateway::protocol {
 		const ResponseFrame featuresListResponse{
 			.id = "req-3",
 			.ok = true,
-	  .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.create\",\"gateway.agents.delete\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.agents.update\",\"gateway.channels.accounts\",\"gateway.channels.route.resolve\",\"gateway.channels.routes\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.compact\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
+	  .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.create\",\"gateway.agents.delete\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.agents.update\",\"gateway.channels.accounts\",\"gateway.channels.logout\",\"gateway.channels.route.resolve\",\"gateway.channels.routes\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.compact\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
 			.error = std::nullopt,
 		};
 
@@ -272,6 +272,13 @@ namespace blazeclaw::gateway::protocol {
 			.id = "req-30",
 			.ok = true,
 			.payloadJson = "{\"agent\":{\"id\":\"builder\",\"name\":\"Builder Prime\",\"active\":true},\"updated\":true}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame channelsLogoutResponse{
+			.id = "req-31",
+			.ok = true,
+			.payloadJson = "{\"loggedOut\":true,\"affected\":1}",
 			.error = std::nullopt,
 		};
 
@@ -575,6 +582,14 @@ namespace blazeclaw::gateway::protocol {
 			return false;
 		}
 
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.logout",
+			channelsLogoutResponse,
+			responseIssue)) {
+			error = "Channels logout response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
 		SchemaValidationIssue eventIssue;
 		if (!GatewayProtocolSchemaValidator::ValidateEvent(event, eventIssue)) {
 			error = "Tick event schema validation failed: " + eventIssue.message;
@@ -760,6 +775,20 @@ namespace blazeclaw::gateway::protocol {
 			agentsUpdateResponseNegative,
 			responseIssue)) {
 			error = "Schema response negative case unexpectedly passed for gateway.agents.update missing `updated`.";
+			return false;
+		}
+
+		const ResponseFrame channelsLogoutResponseNegative{
+			.id = "req-schema-21",
+			.ok = true,
+			.payloadJson = "{\"loggedOut\":true}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.logout",
+			channelsLogoutResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.channels.logout missing `affected`.";
 			return false;
 		}
 
@@ -964,6 +993,13 @@ namespace blazeclaw::gateway::protocol {
 		if (!CompareFixture(
 			root / "response_agents_update.json",
 			SerializeResponseFrame(agentsUpdateResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_channels_logout.json",
+			SerializeResponseFrame(channelsLogoutResponse),
 			error)) {
 			return false;
 		}

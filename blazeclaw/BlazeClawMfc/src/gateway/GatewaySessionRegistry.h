@@ -38,10 +38,10 @@ namespace blazeclaw::gateway {
 		static std::string NormalizeSessionId(const std::string& value);
 		static std::string ResolveScope(const std::string& sessionId, const std::optional<std::string>& requestedScope);
 		static SessionEntry BuildDefaultSession();
-  static std::filesystem::path PersistencePath();
+		static std::filesystem::path PersistencePath();
 
-  void LoadPersistedSessions();
-  void PersistSessions() const;
+		void LoadPersistedSessions();
+		void PersistSessions() const;
 
 		std::unordered_map<std::string, SessionEntry> m_sessions;
 	};

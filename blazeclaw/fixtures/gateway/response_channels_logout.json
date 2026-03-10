@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-31",
+  "ok": true,
+  "payload": {
+    "loggedOut": true,
+    "affected": 1
+  }
+}
