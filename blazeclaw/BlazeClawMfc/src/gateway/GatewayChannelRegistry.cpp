@@ -89,6 +89,40 @@ namespace blazeclaw::gateway {
 		return result;
 	}
 
+	ChannelAccountEntry GatewayChannelRegistry::ActivateAccount(const std::string& channel, const std::string& accountId, bool& activated) {
+		activated = false;
+		ChannelAccountEntry selected{};
+
+		for (auto& account : m_accounts) {
+			const bool channelMatches = channel.empty() || account.channel == channel;
+			const bool accountMatches = accountId.empty() || account.accountId == accountId;
+			if (!(channelMatches && accountMatches)) {
+				continue;
+			}
+
+			account.active = true;
+			account.connected = true;
+			selected = account;
+			activated = true;
+			break;
+		}
+
+		if (!activated) {
+			if (!m_accounts.empty()) {
+				selected = m_accounts.front();
+			}
+			return selected;
+		}
+
+		for (auto& status : m_status) {
+			if (status.id == selected.channel) {
+				status.connected = true;
+			}
+		}
+
+		return selected;
+	}
+
 	ChannelRouteEntry GatewayChannelRegistry::SetRoute(
 		const std::string& channel,
 		const std::string& accountId,
