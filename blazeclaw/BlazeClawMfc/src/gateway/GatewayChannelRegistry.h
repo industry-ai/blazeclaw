@@ -49,6 +49,7 @@ namespace blazeclaw::gateway {
 			const std::string& channel,
 			const std::string& accountId,
 			ChannelRouteEntry& removedRoute);
+		bool RouteExists(const std::string& channel, const std::string& accountId) const;
 
 	private:
 		std::vector<ChannelStatusEntry> m_status;

@@ -140,4 +140,14 @@ namespace blazeclaw::gateway {
 		return true;
 	}
 
+	bool GatewayChannelRegistry::RouteExists(const std::string& channel, const std::string& accountId) const {
+		const auto it = std::find_if(m_routes.begin(), m_routes.end(), [&](const ChannelRouteEntry& entry) {
+			const bool channelMatches = channel.empty() || entry.channel == channel;
+			const bool accountMatches = accountId.empty() || entry.accountId == accountId;
+			return channelMatches && accountMatches;
+			});
+
+		return it != m_routes.end();
+	}
+
 } // namespace blazeclaw::gateway

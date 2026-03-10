@@ -644,6 +644,41 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool ValidateChannelsRouteExistsParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.channels.route.exists", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"channel",
+				JsonFieldKind::String,
+				issue,
+				"gateway.channels.route.exists",
+				"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"accountId",
+					JsonFieldKind::String,
+					issue,
+					"gateway.channels.route.exists",
+					"a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "channel" || field == "accountId") {
+					continue;
+				}
+
+				SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.exists` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		bool ValidateOptionalChannelParam(
 			const RequestFrame& request,
 			SchemaValidationIssue& issue,
@@ -1359,6 +1394,10 @@ namespace blazeclaw::gateway::protocol {
 			return ValidateChannelsRouteDeleteParams(request, issue);
 		}
 
+		if (request.method == "gateway.channels.route.exists") {
+			return ValidateChannelsRouteExistsParams(request, issue);
+		}
+
 		if (request.method == "gateway.tools.call.preview") {
 			return ValidateToolsCallPreviewParams(request, issue);
 		}
@@ -1827,6 +1866,17 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.channels.route.exists") {
+			if (!IsFieldValueType(payload, "channel", '"') ||
+				!IsFieldValueType(payload, "accountId", '"') ||
+				!IsFieldBoolean(payload, "exists")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.route.exists` requires `channel` string, `accountId` string, and `exists` boolean.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.logs.tail") {
 			if (!IsFieldValueType(payload, "entries", '[')) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.logs.tail` requires array field `entries`.");
@@ -1951,6 +2001,7 @@ namespace blazeclaw::gateway::protocol {
 		   "gateway.sessions.preview",
 				"gateway.sessions.usage",
 				"gateway.channels.accounts",
+		   "gateway.channels.route.exists",
 				"gateway.tools.call.preview",
 				"gateway.tick",
 				"gateway.health",
