@@ -35,7 +35,7 @@ namespace blazeclaw::gateway {
 			const bool channelMatches = channel.empty() || account.channel == channel;
 			const bool accountMatches = accountId.empty() || account.accountId == accountId;
 			return channelMatches && accountMatches;
-		});
+			});
 
 		if (it != m_accounts.end()) {
 			return *it;
@@ -77,7 +77,7 @@ namespace blazeclaw::gateway {
 
 		const auto it = std::find_if(m_accounts.begin(), m_accounts.end(), [&](const ChannelAccountEntry& account) {
 			return account.channel == resolvedChannel && account.accountId == resolvedAccountId;
-		});
+			});
 
 		created = it == m_accounts.end();
 		if (created) {
@@ -89,15 +89,15 @@ namespace blazeclaw::gateway {
 
 		const auto statusIt = std::find_if(m_status.begin(), m_status.end(), [&](const ChannelStatusEntry& status) {
 			return status.id == resolvedChannel;
-		});
+			});
 
 		if (statusIt != m_status.end()) {
 			statusIt->accountCount = std::count_if(m_accounts.begin(), m_accounts.end(), [&](const ChannelAccountEntry& account) {
 				return account.channel == resolvedChannel;
-			});
+				});
 			statusIt->connected = std::any_of(m_accounts.begin(), m_accounts.end(), [&](const ChannelAccountEntry& account) {
 				return account.channel == resolvedChannel && account.connected;
-			});
+				});
 		}
 
 		return entry;
@@ -241,7 +241,7 @@ namespace blazeclaw::gateway {
 			const bool channelMatches = channel.empty() || account.channel == channel;
 			const bool accountMatches = accountId.empty() || account.accountId == accountId;
 			return channelMatches && accountMatches;
-		});
+			});
 
 		return it != m_accounts.end();
 	}
@@ -308,7 +308,7 @@ namespace blazeclaw::gateway {
 			const bool channelMatches = channel.empty() || account.channel == channel;
 			const bool accountMatches = accountId.empty() || account.accountId == accountId;
 			return channelMatches && accountMatches;
-		});
+			});
 
 		if (it == m_accounts.end()) {
 			if (!m_accounts.empty()) {
@@ -324,14 +324,14 @@ namespace blazeclaw::gateway {
 
 		const auto statusIt = std::find_if(m_status.begin(), m_status.end(), [&](const ChannelStatusEntry& status) {
 			return status.id == removedChannel;
-		});
+			});
 		if (statusIt != m_status.end()) {
 			statusIt->accountCount = std::count_if(m_accounts.begin(), m_accounts.end(), [&](const ChannelAccountEntry& account) {
 				return account.channel == removedChannel;
-			});
+				});
 			statusIt->connected = std::any_of(m_accounts.begin(), m_accounts.end(), [&](const ChannelAccountEntry& account) {
 				return account.channel == removedChannel && account.connected;
-			});
+				});
 		}
 
 		return selected;
@@ -386,6 +386,16 @@ namespace blazeclaw::gateway {
 		removedRoute = *it;
 		m_routes.erase(it);
 		return true;
+	}
+
+	std::size_t GatewayChannelRegistry::ClearRoutes(const std::string& channel) {
+		const std::size_t originalSize = m_routes.size();
+		m_routes.erase(
+			std::remove_if(m_routes.begin(), m_routes.end(), [&](const ChannelRouteEntry& route) {
+				return channel.empty() || route.channel == channel;
+				}),
+			m_routes.end());
+		return originalSize - m_routes.size();
 	}
 
 	bool GatewayChannelRegistry::RouteExists(const std::string& channel, const std::string& accountId) const {

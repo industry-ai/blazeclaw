@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-50",
+  "ok": true,
+  "payload": {
+    "cleared": 1,
+    "remaining": 1
+  }
+}

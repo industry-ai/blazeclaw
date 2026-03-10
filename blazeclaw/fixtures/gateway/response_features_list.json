@@ -29,6 +29,7 @@
       "gateway.channels.route.resolve",
       "gateway.channels.route.set",
       "gateway.channels.routes",
+      "gateway.channels.routes.clear",
       "gateway.channels.status",
       "gateway.config.get",
       "gateway.config.set",
