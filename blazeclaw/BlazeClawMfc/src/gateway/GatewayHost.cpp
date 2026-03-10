@@ -93,6 +93,11 @@ namespace blazeclaw::gateway {
 				"\",\"active\":" + std::string(agent.active ? "true" : "false") + "}";
 		}
 
+		std::string SerializeAgentFile(const AgentFileEntry& file) {
+			return "{\"path\":\"" + EscapeJson(file.path) + "\",\"size\":" + std::to_string(file.size) +
+				",\"updatedMs\":" + std::to_string(file.updatedMs) + "}";
+		}
+
 		std::string SerializeChannelStatus(const ChannelStatusEntry& channel) {
 			return "{\"id\":\"" + EscapeJson(channel.id) + "\",\"label\":\"" + EscapeJson(channel.label) +
 				"\",\"connected\":" + std::string(channel.connected ? "true" : "false") +
@@ -580,6 +585,28 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"pong\":true}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.agents.files.list", [this](const protocol::RequestFrame& request) {
+			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
+			const auto files = m_agentRegistry.ListFiles(requestedId);
+			std::string filesJson = "[";
+			for (std::size_t i = 0; i < files.size(); ++i) {
+				if (i > 0) {
+					filesJson += ",";
+				}
+
+				filesJson += SerializeAgentFile(files[i]);
+			}
+
+			filesJson += "]";
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"files\":" + filesJson + ",\"count\":" + std::to_string(files.size()) + "}",
 				.error = std::nullopt,
 			};
 			});

@@ -128,6 +128,16 @@ namespace blazeclaw::gateway {
 		return updated;
 	}
 
+	std::vector<AgentFileEntry> GatewayAgentRegistry::ListFiles(const std::string& requestedId) const {
+		const AgentEntry agent = Get(requestedId);
+		const std::string prefix = agent.id;
+
+		return {
+			AgentFileEntry{.path = "agents/" + prefix + "/profile.json", .size = 512, .updatedMs = 1735689600000},
+			AgentFileEntry{.path = "agents/" + prefix + "/memory.txt", .size = 2048, .updatedMs = 1735689605000},
+		};
+	}
+
 	std::string GatewayAgentRegistry::NormalizeAgentId(const std::string& value) {
 		if (value.empty()) {
 			return "default";

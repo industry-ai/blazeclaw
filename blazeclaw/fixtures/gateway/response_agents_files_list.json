@@ -1,0 +1,20 @@
+{
+  "type": "res",
+  "id": "req-35",
+  "ok": true,
+  "payload": {
+    "files": [
+      {
+        "path": "agents/default/profile.json",
+        "size": 512,
+        "updatedMs": 1735689600000
+      },
+      {
+        "path": "agents/default/memory.txt",
+        "size": 2048,
+        "updatedMs": 1735689605000
+      }
+    ],
+    "count": 2
+  }
+}

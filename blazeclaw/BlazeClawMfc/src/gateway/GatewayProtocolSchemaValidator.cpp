@@ -1008,6 +1008,37 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool ValidateAgentsFilesListParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.agents.files.list", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"agentId",
+				JsonFieldKind::String,
+				issue,
+				"gateway.agents.files.list",
+				"a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "agentId") {
+					continue;
+				}
+
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `gateway.agents.files.list` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		bool ValidatePingParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 			ParsedObjectFieldKinds fieldKinds;
 			if (!TryParseRequestParamsObject(request, issue, "gateway.ping", fieldKinds)) {
@@ -1111,6 +1142,10 @@ namespace blazeclaw::gateway::protocol {
 
 		if (request.method == "gateway.agents.create") {
 			return ValidateAgentsCreateParams(request, issue);
+		}
+
+		if (request.method == "gateway.agents.files.list") {
+			return ValidateAgentsFilesListParams(request, issue);
 		}
 
 		if (request.method == "gateway.agents.update") {
@@ -1283,6 +1318,24 @@ namespace blazeclaw::gateway::protocol {
 
 			if (!PayloadContainsAllFieldTokens(payload, { "id", "name", "active" })) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.agents.update` requires `agent` fields `id`, `name`, and `active`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.agents.files.list") {
+			if (!IsFieldValueType(payload, "files", '[') || !IsFieldNumber(payload, "count")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.agents.files.list` requires `files` array and `count` number fields.");
+				return false;
+			}
+
+			if (IsArrayFieldExplicitlyEmpty(payload, "files")) {
+				return true;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "path", "size", "updatedMs" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.agents.files.list` requires file entries with `path`, `size`, and `updatedMs` fields.");
 				return false;
 			}
 

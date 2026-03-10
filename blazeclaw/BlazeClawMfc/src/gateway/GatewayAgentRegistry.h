@@ -10,6 +10,12 @@ namespace blazeclaw::gateway {
 		bool active = false;
 	};
 
+	struct AgentFileEntry {
+		std::string path;
+		std::size_t size = 0;
+		std::uint64_t updatedMs = 0;
+	};
+
 	class GatewayAgentRegistry {
 	public:
 		GatewayAgentRegistry();
@@ -26,6 +32,7 @@ namespace blazeclaw::gateway {
 			const std::string& requestedId,
 			const std::optional<std::string>& requestedName = std::nullopt,
 			std::optional<bool> requestedActive = std::nullopt);
+		std::vector<AgentFileEntry> ListFiles(const std::string& requestedId) const;
 
 	private:
 		static std::string NormalizeAgentId(const std::string& value);
