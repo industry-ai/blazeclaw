@@ -123,6 +123,46 @@ namespace blazeclaw::gateway {
 		return selected;
 	}
 
+	ChannelAccountEntry GatewayChannelRegistry::DeactivateAccount(const std::string& channel, const std::string& accountId, bool& deactivated) {
+		deactivated = false;
+		ChannelAccountEntry selected{};
+
+		for (auto& account : m_accounts) {
+			const bool channelMatches = channel.empty() || account.channel == channel;
+			const bool accountMatches = accountId.empty() || account.accountId == accountId;
+			if (!(channelMatches && accountMatches)) {
+				continue;
+			}
+
+			account.active = false;
+			account.connected = false;
+			selected = account;
+			deactivated = true;
+			break;
+		}
+
+		if (!deactivated) {
+			if (!m_accounts.empty()) {
+				selected = m_accounts.front();
+			}
+			return selected;
+		}
+
+		for (auto& status : m_status) {
+			if (status.id == selected.channel) {
+				const bool hasConnectedAccount = std::any_of(
+					m_accounts.begin(),
+					m_accounts.end(),
+					[&](const ChannelAccountEntry& account) {
+						return account.channel == selected.channel && account.connected;
+					});
+				status.connected = hasConnectedAccount;
+			}
+		}
+
+		return selected;
+	}
+
 	ChannelRouteEntry GatewayChannelRegistry::SetRoute(
 		const std::string& channel,
 		const std::string& accountId,

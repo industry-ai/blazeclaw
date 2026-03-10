@@ -41,6 +41,7 @@ namespace blazeclaw::gateway {
 		ChannelRouteEntry ResolveRoute(const std::string& channel, const std::string& accountId) const;
 		ChannelLogoutResult Logout(const std::string& channel, const std::string& accountId);
 		ChannelAccountEntry ActivateAccount(const std::string& channel, const std::string& accountId, bool& activated);
+		ChannelAccountEntry DeactivateAccount(const std::string& channel, const std::string& accountId, bool& deactivated);
 		ChannelRouteEntry SetRoute(
 			const std::string& channel,
 			const std::string& accountId,

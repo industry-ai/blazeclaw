@@ -595,6 +595,21 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.channels.accounts.deactivate", [this](const protocol::RequestFrame& request) {
+			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
+			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
+			bool deactivated = false;
+			const ChannelAccountEntry account = m_channelRegistry.DeactivateAccount(channel, accountId, deactivated);
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"account\":" + SerializeChannelAccount(account) +
+					",\"deactivated\":" + std::string(deactivated ? "true" : "false") + "}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.channels.accounts.activate", [this](const protocol::RequestFrame& request) {
 			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
 			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");

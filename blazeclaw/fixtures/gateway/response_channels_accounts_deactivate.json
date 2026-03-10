@@ -1,0 +1,15 @@
+{
+  "type": "res",
+  "id": "req-44",
+  "ok": true,
+  "payload": {
+    "account": {
+      "channel": "telegram",
+      "accountId": "telegram.default",
+      "label": "Telegram Default",
+      "active": false,
+      "connected": false
+    },
+    "deactivated": true
+  }
+}

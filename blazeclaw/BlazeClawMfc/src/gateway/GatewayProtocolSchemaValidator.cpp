@@ -714,6 +714,41 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool ValidateChannelsAccountsDeactivateParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.channels.accounts.deactivate", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"channel",
+				JsonFieldKind::String,
+				issue,
+				"gateway.channels.accounts.deactivate",
+				"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"accountId",
+					JsonFieldKind::String,
+					issue,
+					"gateway.channels.accounts.deactivate",
+					"a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "channel" || field == "accountId") {
+					continue;
+				}
+
+				SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.accounts.deactivate` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		bool ValidateOptionalChannelParam(
 			const RequestFrame& request,
 			SchemaValidationIssue& issue,
@@ -1437,6 +1472,10 @@ namespace blazeclaw::gateway::protocol {
 			return ValidateChannelsAccountsActivateParams(request, issue);
 		}
 
+		if (request.method == "gateway.channels.accounts.deactivate") {
+			return ValidateChannelsAccountsDeactivateParams(request, issue);
+		}
+
 		if (request.method == "gateway.tools.call.preview") {
 			return ValidateToolsCallPreviewParams(request, issue);
 		}
@@ -2055,6 +2094,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.sessions.usage",
 				"gateway.channels.accounts",
 		 "gateway.channels.accounts.activate",
+		 "gateway.channels.accounts.deactivate",
 		   "gateway.channels.route.exists",
 				"gateway.tools.call.preview",
 				"gateway.tick",
