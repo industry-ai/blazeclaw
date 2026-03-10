@@ -117,7 +117,7 @@ namespace blazeclaw::gateway::protocol {
 		const ResponseFrame featuresListResponse{
 			.id = "req-3",
 			.ok = true,
-    .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.create\",\"gateway.agents.delete\",\"gateway.agents.files.delete\",\"gateway.agents.files.exists\",\"gateway.agents.files.get\",\"gateway.agents.files.list\",\"gateway.agents.files.set\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.agents.update\",\"gateway.channels.accounts\",\"gateway.channels.accounts.activate\",\"gateway.channels.accounts.clear\",\"gateway.channels.accounts.create\",\"gateway.channels.accounts.deactivate\",\"gateway.channels.accounts.delete\",\"gateway.channels.accounts.exists\",\"gateway.channels.accounts.get\",\"gateway.channels.accounts.update\",\"gateway.channels.logout\",\"gateway.channels.route.delete\",\"gateway.channels.route.exists\",\"gateway.channels.route.get\",\"gateway.channels.route.resolve\",\"gateway.channels.route.restore\",\"gateway.channels.route.set\",\"gateway.channels.routes\",\"gateway.channels.routes.clear\",\"gateway.channels.routes.restore\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.config.set\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.models.list\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.compact\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.execute\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
+   .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.create\",\"gateway.agents.delete\",\"gateway.agents.files.delete\",\"gateway.agents.files.exists\",\"gateway.agents.files.get\",\"gateway.agents.files.list\",\"gateway.agents.files.set\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.agents.update\",\"gateway.channels.accounts\",\"gateway.channels.accounts.activate\",\"gateway.channels.accounts.clear\",\"gateway.channels.accounts.count\",\"gateway.channels.accounts.create\",\"gateway.channels.accounts.deactivate\",\"gateway.channels.accounts.delete\",\"gateway.channels.accounts.exists\",\"gateway.channels.accounts.get\",\"gateway.channels.accounts.restore\",\"gateway.channels.accounts.update\",\"gateway.channels.logout\",\"gateway.channels.route.delete\",\"gateway.channels.route.exists\",\"gateway.channels.route.get\",\"gateway.channels.route.patch\",\"gateway.channels.route.resolve\",\"gateway.channels.route.restore\",\"gateway.channels.route.set\",\"gateway.channels.routes\",\"gateway.channels.routes.clear\",\"gateway.channels.routes.count\",\"gateway.channels.routes.reset\",\"gateway.channels.routes.restore\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.config.set\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.models.list\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.compact\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.execute\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
 			.error = std::nullopt,
 		};
 
@@ -440,6 +440,41 @@ namespace blazeclaw::gateway::protocol {
 			.id = "req-54",
 			.ok = true,
 			.payloadJson = "{\"cleared\":1,\"remaining\":1}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame channelsAccountsRestoreResponse{
+			.id = "req-55",
+			.ok = true,
+			.payloadJson = "{\"restored\":1,\"total\":2}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame channelsAccountsCountResponse{
+			.id = "req-56",
+			.ok = true,
+			.payloadJson = "{\"channel\":\"telegram\",\"count\":1}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame channelsRoutesCountResponse{
+			.id = "req-57",
+			.ok = true,
+			.payloadJson = "{\"channel\":\"telegram\",\"count\":1}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame channelsRoutePatchResponse{
+			.id = "req-58",
+			.ok = true,
+			.payloadJson = "{\"route\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"agentId\":\"assistant\",\"sessionId\":\"main\"},\"updated\":true}",
+           .error = std::nullopt,
+		};
+
+		const ResponseFrame channelsRoutesResetResponse{
+			.id = "req-59",
+			.ok = true,
+			.payloadJson = "{\"cleared\":1,\"restored\":1,\"total\":2}",
 			.error = std::nullopt,
 		};
 
@@ -932,6 +967,46 @@ namespace blazeclaw::gateway::protocol {
 			channelsAccountsClearResponse,
 			responseIssue)) {
 			error = "Channels accounts clear response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.accounts.restore",
+			channelsAccountsRestoreResponse,
+			responseIssue)) {
+			error = "Channels accounts restore response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.accounts.count",
+			channelsAccountsCountResponse,
+			responseIssue)) {
+			error = "Channels accounts count response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.routes.count",
+			channelsRoutesCountResponse,
+			responseIssue)) {
+			error = "Channels routes count response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.route.patch",
+			channelsRoutePatchResponse,
+			responseIssue)) {
+			error = "Channels route patch response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.routes.reset",
+			channelsRoutesResetResponse,
+			responseIssue)) {
+			error = "Channels routes reset response schema validation failed: " + responseIssue.message;
 			return false;
 		}
 
@@ -1459,6 +1534,76 @@ namespace blazeclaw::gateway::protocol {
 			return false;
 		}
 
+		const ResponseFrame channelsAccountsRestoreResponseNegative{
+			.id = "req-schema-45",
+			.ok = true,
+			.payloadJson = "{\"restored\":1}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.accounts.restore",
+			channelsAccountsRestoreResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.channels.accounts.restore missing `total`.";
+			return false;
+		}
+
+		const ResponseFrame channelsAccountsCountResponseNegative{
+			.id = "req-schema-46",
+			.ok = true,
+			.payloadJson = "{\"channel\":\"telegram\"}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.accounts.count",
+			channelsAccountsCountResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.channels.accounts.count missing `count`.";
+			return false;
+		}
+
+		const ResponseFrame channelsRoutesCountResponseNegative{
+			.id = "req-schema-47",
+			.ok = true,
+			.payloadJson = "{\"channel\":\"telegram\"}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.routes.count",
+			channelsRoutesCountResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.channels.routes.count missing `count`.";
+			return false;
+		}
+
+		const ResponseFrame channelsRoutePatchResponseNegative{
+			.id = "req-schema-48",
+			.ok = true,
+			.payloadJson = "{\"route\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"agentId\":\"assistant\",\"sessionId\":\"main\"}}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.route.patch",
+			channelsRoutePatchResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.channels.route.patch missing `updated`.";
+			return false;
+		}
+
+		const ResponseFrame channelsRoutesResetResponseNegative{
+			.id = "req-schema-49",
+			.ok = true,
+			.payloadJson = "{\"cleared\":1,\"restored\":1}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.routes.reset",
+			channelsRoutesResetResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.channels.routes.reset missing `total`.";
+			return false;
+		}
+
 		const EventFrame channelsAccountsUpdateEventPositive{
 			.eventName = "gateway.channels.accounts.update",
 			.payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":false}]}",
@@ -1828,6 +1973,41 @@ namespace blazeclaw::gateway::protocol {
 		if (!CompareFixture(
 			root / "response_channels_accounts_clear.json",
 			SerializeResponseFrame(channelsAccountsClearResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_channels_accounts_restore.json",
+			SerializeResponseFrame(channelsAccountsRestoreResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_channels_accounts_count.json",
+			SerializeResponseFrame(channelsAccountsCountResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_channels_routes_count.json",
+			SerializeResponseFrame(channelsRoutesCountResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_channels_route_patch.json",
+			SerializeResponseFrame(channelsRoutePatchResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_channels_routes_reset.json",
+			SerializeResponseFrame(channelsRoutesResetResponse),
 			error)) {
 			return false;
 		}

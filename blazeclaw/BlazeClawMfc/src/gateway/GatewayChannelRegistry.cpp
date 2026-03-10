@@ -365,6 +365,45 @@ namespace blazeclaw::gateway {
 		return originalSize - m_accounts.size();
 	}
 
+	std::size_t GatewayChannelRegistry::RestoreAccounts(const std::string& channel) {
+		const std::vector<ChannelAccountEntry> seededAccounts = {
+			ChannelAccountEntry{.channel = "telegram", .accountId = "telegram.default", .label = "Telegram Default", .active = true, .connected = false},
+			ChannelAccountEntry{.channel = "discord", .accountId = "discord.default", .label = "Discord Default", .active = true, .connected = false},
+		};
+
+		std::size_t restored = 0;
+		for (const auto& seed : seededAccounts) {
+			if (!channel.empty() && seed.channel != channel) {
+				continue;
+			}
+
+			const bool exists = std::any_of(m_accounts.begin(), m_accounts.end(), [&](const ChannelAccountEntry& account) {
+				return account.channel == seed.channel && account.accountId == seed.accountId;
+			});
+			if (exists) {
+				continue;
+			}
+
+			m_accounts.push_back(seed);
+			++restored;
+		}
+
+		for (auto& status : m_status) {
+			if (!channel.empty() && status.id != channel) {
+				continue;
+			}
+
+			status.accountCount = std::count_if(m_accounts.begin(), m_accounts.end(), [&](const ChannelAccountEntry& account) {
+				return account.channel == status.id;
+			});
+			status.connected = std::any_of(m_accounts.begin(), m_accounts.end(), [&](const ChannelAccountEntry& account) {
+				return account.channel == status.id && account.connected;
+			});
+		}
+
+		return restored;
+	}
+
 	ChannelRouteEntry GatewayChannelRegistry::SetRoute(
 		const std::string& channel,
 		const std::string& accountId,
@@ -394,6 +433,41 @@ namespace blazeclaw::gateway {
 		}
 
 		return route;
+	}
+
+	ChannelRouteEntry GatewayChannelRegistry::PatchRoute(
+		const std::string& channel,
+		const std::string& accountId,
+		const std::optional<std::string>& agentId,
+		const std::optional<std::string>& sessionId,
+		bool& updated) {
+		updated = false;
+		ChannelRouteEntry selected{};
+
+		for (auto& route : m_routes) {
+			const bool channelMatches = channel.empty() || route.channel == channel;
+			const bool accountMatches = accountId.empty() || route.accountId == accountId;
+			if (!(channelMatches && accountMatches)) {
+				continue;
+			}
+
+			if (agentId.has_value() && !agentId->empty()) {
+				route.agentId = agentId.value();
+			}
+			if (sessionId.has_value() && !sessionId->empty()) {
+				route.sessionId = sessionId.value();
+			}
+
+			selected = route;
+			updated = true;
+			break;
+		}
+
+		if (!updated) {
+			return ResolveRoute(channel, accountId);
+		}
+
+		return selected;
 	}
 
 	bool GatewayChannelRegistry::DeleteRoute(
@@ -482,6 +556,14 @@ namespace blazeclaw::gateway {
 		}
 
 		return restored;
+	}
+
+	RouteResetResult GatewayChannelRegistry::ResetRoutes(const std::string& channel) {
+		RouteResetResult result{};
+		result.cleared = ClearRoutes(channel);
+		result.restored = RestoreRoutes(channel);
+		result.total = m_routes.size();
+		return result;
 	}
 
 	bool GatewayChannelRegistry::RouteExists(const std::string& channel, const std::string& accountId) const {

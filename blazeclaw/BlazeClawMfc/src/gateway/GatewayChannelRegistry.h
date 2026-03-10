@@ -31,6 +31,12 @@ namespace blazeclaw::gateway {
 		std::size_t affected = 0;
 	};
 
+	struct RouteResetResult {
+		std::size_t cleared = 0;
+		std::size_t restored = 0;
+		std::size_t total = 0;
+	};
+
 	class GatewayChannelRegistry {
 	public:
 		GatewayChannelRegistry();
@@ -47,6 +53,7 @@ namespace blazeclaw::gateway {
 			bool& created);
 		ChannelAccountEntry DeleteAccount(const std::string& channel, const std::string& accountId, bool& deleted);
 		std::size_t ClearAccounts(const std::string& channel);
+      std::size_t RestoreAccounts(const std::string& channel);
 		std::vector<ChannelRouteEntry> ListRoutes() const;
 		ChannelRouteEntry ResolveRoute(const std::string& channel, const std::string& accountId) const;
 		ChannelRouteEntry GetRoute(const std::string& channel, const std::string& accountId) const;
@@ -66,6 +73,12 @@ namespace blazeclaw::gateway {
 			const std::string& accountId,
 			const std::string& agentId,
 			const std::string& sessionId);
+       ChannelRouteEntry PatchRoute(
+			const std::string& channel,
+			const std::string& accountId,
+			const std::optional<std::string>& agentId,
+			const std::optional<std::string>& sessionId,
+			bool& updated);
 		bool DeleteRoute(
 			const std::string& channel,
 			const std::string& accountId,
@@ -73,6 +86,7 @@ namespace blazeclaw::gateway {
 		ChannelRouteEntry RestoreRoute(const std::string& channel, const std::string& accountId, bool& restored);
 		std::size_t ClearRoutes(const std::string& channel);
 		std::size_t RestoreRoutes(const std::string& channel);
+       RouteResetResult ResetRoutes(const std::string& channel);
 		bool RouteExists(const std::string& channel, const std::string& accountId) const;
 
 	private:

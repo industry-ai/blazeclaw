@@ -595,6 +595,39 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.channels.accounts.restore", [this](const protocol::RequestFrame& request) {
+			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
+			const std::size_t restored = m_channelRegistry.RestoreAccounts(channel);
+			const std::size_t total = m_channelRegistry.ListAccounts().size();
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"restored\":" + std::to_string(restored) +
+					",\"total\":" + std::to_string(total) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.channels.accounts.count", [this](const protocol::RequestFrame& request) {
+			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
+			const auto accounts = m_channelRegistry.ListAccounts();
+			const std::size_t count = static_cast<std::size_t>(std::count_if(
+				accounts.begin(),
+				accounts.end(),
+				[&](const ChannelAccountEntry& account) {
+					return channel.empty() || account.channel == channel;
+				}));
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"channel\":\"" + EscapeJson(channel.empty() ? "*" : channel) +
+					"\",\"count\":" + std::to_string(count) + "}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.channels.accounts.clear", [this](const protocol::RequestFrame& request) {
 			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
 			const std::size_t cleared = m_channelRegistry.ClearAccounts(channel);
@@ -605,6 +638,39 @@ namespace blazeclaw::gateway {
 				.ok = true,
 				.payloadJson = "{\"cleared\":" + std::to_string(cleared) +
 					",\"remaining\":" + std::to_string(remaining) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.channels.routes.reset", [this](const protocol::RequestFrame& request) {
+			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
+			const RouteResetResult result = m_channelRegistry.ResetRoutes(channel);
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"cleared\":" + std::to_string(result.cleared) +
+					",\"restored\":" + std::to_string(result.restored) +
+					",\"total\":" + std::to_string(result.total) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.channels.routes.count", [this](const protocol::RequestFrame& request) {
+			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
+			const auto routes = m_channelRegistry.ListRoutes();
+			const std::size_t count = static_cast<std::size_t>(std::count_if(
+				routes.begin(),
+				routes.end(),
+				[&](const ChannelRouteEntry& route) {
+					return channel.empty() || route.channel == channel;
+				}));
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"channel\":\"" + EscapeJson(channel.empty() ? "*" : channel) +
+					"\",\"count\":" + std::to_string(count) + "}",
 				.error = std::nullopt,
 			};
 			});
@@ -620,6 +686,31 @@ namespace blazeclaw::gateway {
 				.ok = true,
 				.payloadJson = "{\"route\":" + SerializeChannelRoute(route) +
 					",\"restored\":" + std::string(restored ? "true" : "false") + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.channels.route.patch", [this](const protocol::RequestFrame& request) {
+			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
+			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
+			const bool hasAgentId = request.paramsJson.has_value() &&
+				request.paramsJson.value().find("\"agentId\"") != std::string::npos;
+			const bool hasSessionId = request.paramsJson.has_value() &&
+				request.paramsJson.value().find("\"sessionId\"") != std::string::npos;
+			const std::optional<std::string> agentId = hasAgentId
+				? std::optional<std::string>(ExtractStringParam(request.paramsJson, "agentId"))
+				: std::nullopt;
+			const std::optional<std::string> sessionId = hasSessionId
+				? std::optional<std::string>(ExtractStringParam(request.paramsJson, "sessionId"))
+				: std::nullopt;
+			bool updated = false;
+			const ChannelRouteEntry route = m_channelRegistry.PatchRoute(channel, accountId, agentId, sessionId, updated);
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"route\":" + SerializeChannelRoute(route) +
+					",\"updated\":" + std::string(updated ? "true" : "false") + "}",
 				.error = std::nullopt,
 			};
 			});

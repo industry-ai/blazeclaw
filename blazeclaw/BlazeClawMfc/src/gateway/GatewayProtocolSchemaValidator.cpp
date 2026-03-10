@@ -77,7 +77,7 @@ namespace blazeclaw::gateway::protocol {
 			return position;
 		}
 
-		bool TryConsumeJsonString(const std::string& json, std::size_t& position, std::string& value) {
+     bool TryConsumeJsonString(const std::string& json, std::size_t& position, std::string& value) {
 			if (position >= json.size() || json[position] != '"') {
 				return false;
 			}
@@ -146,6 +146,7 @@ namespace blazeclaw::gateway::protocol {
 					if (depth == 0) {
 						return true;
 					}
+
 				}
 			}
 
@@ -805,6 +806,75 @@ namespace blazeclaw::gateway::protocol {
 		return true;
 	}
 
+	bool ValidateChannelsRoutesResetParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+		ParsedObjectFieldKinds fieldKinds;
+		if (!TryParseRequestParamsObject(request, issue, "gateway.channels.routes.reset", fieldKinds)) {
+			return false;
+		}
+
+		if (!RequireFieldKindIfPresent(fieldKinds, "channel", JsonFieldKind::String, issue, "gateway.channels.routes.reset", "a string")) {
+			return false;
+		}
+
+		for (const auto& [field, _] : fieldKinds) {
+			if (field == "channel") {
+				continue;
+			}
+
+			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.routes.reset` does not allow `params." + field + "`.");
+			return false;
+		}
+
+		return true;
+	}
+
+	bool ValidateChannelsRoutesCountParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+		ParsedObjectFieldKinds fieldKinds;
+		if (!TryParseRequestParamsObject(request, issue, "gateway.channels.routes.count", fieldKinds)) {
+			return false;
+		}
+
+		if (!RequireFieldKindIfPresent(fieldKinds, "channel", JsonFieldKind::String, issue, "gateway.channels.routes.count", "a string")) {
+			return false;
+		}
+
+		for (const auto& [field, _] : fieldKinds) {
+			if (field == "channel") {
+				continue;
+			}
+
+			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.routes.count` does not allow `params." + field + "`.");
+			return false;
+		}
+
+		return true;
+	}
+
+	bool ValidateChannelsRoutePatchParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+		ParsedObjectFieldKinds fieldKinds;
+		if (!TryParseRequestParamsObject(request, issue, "gateway.channels.route.patch", fieldKinds)) {
+			return false;
+		}
+
+		if (!RequireFieldKindIfPresent(fieldKinds, "channel", JsonFieldKind::String, issue, "gateway.channels.route.patch", "a string") ||
+			!RequireFieldKindIfPresent(fieldKinds, "accountId", JsonFieldKind::String, issue, "gateway.channels.route.patch", "a string") ||
+			!RequireFieldKindIfPresent(fieldKinds, "agentId", JsonFieldKind::String, issue, "gateway.channels.route.patch", "a string") ||
+			!RequireFieldKindIfPresent(fieldKinds, "sessionId", JsonFieldKind::String, issue, "gateway.channels.route.patch", "a string")) {
+			return false;
+		}
+
+		for (const auto& [field, _] : fieldKinds) {
+			if (field == "channel" || field == "accountId" || field == "agentId" || field == "sessionId") {
+				continue;
+			}
+
+			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.patch` does not allow `params." + field + "`.");
+			return false;
+		}
+
+		return true;
+	}
+
 		bool ValidateChannelsAccountsActivateParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 			ParsedObjectFieldKinds fieldKinds;
 			if (!TryParseRequestParamsObject(request, issue, "gateway.channels.accounts.activate", fieldKinds)) {
@@ -897,6 +967,50 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.accounts.clear` does not allow `params." + field + "`.");
+			return false;
+		}
+
+		return true;
+	}
+
+	bool ValidateChannelsAccountsRestoreParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+		ParsedObjectFieldKinds fieldKinds;
+		if (!TryParseRequestParamsObject(request, issue, "gateway.channels.accounts.restore", fieldKinds)) {
+			return false;
+		}
+
+		if (!RequireFieldKindIfPresent(fieldKinds, "channel", JsonFieldKind::String, issue, "gateway.channels.accounts.restore", "a string")) {
+			return false;
+		}
+
+		for (const auto& [field, _] : fieldKinds) {
+			if (field == "channel") {
+				continue;
+			}
+
+			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.accounts.restore` does not allow `params." + field + "`.");
+			return false;
+		}
+
+		return true;
+	}
+
+	bool ValidateChannelsAccountsCountParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+		ParsedObjectFieldKinds fieldKinds;
+		if (!TryParseRequestParamsObject(request, issue, "gateway.channels.accounts.count", fieldKinds)) {
+			return false;
+		}
+
+		if (!RequireFieldKindIfPresent(fieldKinds, "channel", JsonFieldKind::String, issue, "gateway.channels.accounts.count", "a string")) {
+			return false;
+		}
+
+		for (const auto& [field, _] : fieldKinds) {
+			if (field == "channel") {
+				continue;
+			}
+
+			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.accounts.count` does not allow `params." + field + "`.");
 			return false;
 		}
 
@@ -1847,12 +1961,24 @@ namespace blazeclaw::gateway::protocol {
 			return ValidateChannelsRouteRestoreParams(request, issue);
 		}
 
+		if (request.method == "gateway.channels.route.patch") {
+			return ValidateChannelsRoutePatchParams(request, issue);
+		}
+
 		if (request.method == "gateway.channels.routes.clear") {
 			return ValidateChannelsRoutesClearParams(request, issue);
 		}
 
 		if (request.method == "gateway.channels.routes.restore") {
 			return ValidateChannelsRoutesRestoreParams(request, issue);
+		}
+
+		if (request.method == "gateway.channels.routes.reset") {
+			return ValidateChannelsRoutesResetParams(request, issue);
+		}
+
+		if (request.method == "gateway.channels.routes.count") {
+			return ValidateChannelsRoutesCountParams(request, issue);
 		}
 
 		if (request.method == "gateway.channels.accounts.activate") {
@@ -1885,6 +2011,14 @@ namespace blazeclaw::gateway::protocol {
 
 		if (request.method == "gateway.channels.accounts.clear") {
 			return ValidateChannelsAccountsClearParams(request, issue);
+		}
+
+		if (request.method == "gateway.channels.accounts.restore") {
+			return ValidateChannelsAccountsRestoreParams(request, issue);
+		}
+
+		if (request.method == "gateway.channels.accounts.count") {
+			return ValidateChannelsAccountsCountParams(request, issue);
 		}
 
 		if (request.method == "gateway.tools.call.preview") {
@@ -2408,9 +2542,41 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.channels.accounts.restore") {
+			if (!IsFieldNumber(payload, "restored") || !IsFieldNumber(payload, "total")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.accounts.restore` requires numeric fields `restored` and `total`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.channels.accounts.count") {
+			if (!IsFieldValueType(payload, "channel", '"') || !IsFieldNumber(payload, "count")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.accounts.count` requires `channel` string and `count` number.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.channels.logout") {
 			if (!IsFieldBoolean(payload, "loggedOut") || !IsFieldNumber(payload, "affected")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.channels.logout` requires `loggedOut` boolean and `affected` number fields.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.channels.route.patch") {
+			if (!IsFieldValueType(payload, "route", '{') || !IsFieldBoolean(payload, "updated")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.route.patch` requires `route` object and `updated` boolean.");
+				return false;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "channel", "accountId", "agentId", "sessionId" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.route.patch` requires route fields `channel`, `accountId`, `agentId`, and `sessionId`.");
 				return false;
 			}
 
@@ -2510,6 +2676,24 @@ namespace blazeclaw::gateway::protocol {
 		if (method == "gateway.channels.routes.restore") {
 			if (!IsFieldNumber(payload, "restored") || !IsFieldNumber(payload, "total")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.channels.routes.restore` requires numeric fields `restored` and `total`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.channels.routes.reset") {
+			if (!IsFieldNumber(payload, "cleared") || !IsFieldNumber(payload, "restored") || !IsFieldNumber(payload, "total")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.routes.reset` requires numeric fields `cleared`, `restored`, and `total`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.channels.routes.count") {
+			if (!IsFieldValueType(payload, "channel", '"') || !IsFieldNumber(payload, "count")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.routes.count` requires `channel` string and `count` number.");
 				return false;
 			}
 
@@ -2648,11 +2832,16 @@ namespace blazeclaw::gateway::protocol {
 		 "gateway.channels.accounts.create",
 		 "gateway.channels.accounts.delete",
          "gateway.channels.accounts.clear",
+      "gateway.channels.accounts.restore",
+		 "gateway.channels.accounts.count",
 		   "gateway.channels.route.exists",
          "gateway.channels.route.get",
          "gateway.channels.route.restore",
+        "gateway.channels.route.patch",
 		   "gateway.channels.routes.clear",
            "gateway.channels.routes.restore",
+          "gateway.channels.routes.reset",
+		   "gateway.channels.routes.count",
 				"gateway.tools.call.preview",
 				"gateway.tick",
 				"gateway.health",
