@@ -28,6 +28,7 @@
       "gateway.channels.route.exists",
       "gateway.channels.route.get",
       "gateway.channels.route.resolve",
+      "gateway.channels.route.restore",
       "gateway.channels.route.set",
       "gateway.channels.routes",
       "gateway.channels.routes.clear",
