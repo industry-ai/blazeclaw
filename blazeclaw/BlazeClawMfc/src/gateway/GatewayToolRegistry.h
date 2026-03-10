@@ -4,28 +4,36 @@
 
 namespace blazeclaw::gateway {
 
-struct ToolCatalogEntry {
-  std::string id;
-  std::string label;
-  std::string category;
-  bool enabled = true;
-};
+	struct ToolCatalogEntry {
+		std::string id;
+		std::string label;
+		std::string category;
+		bool enabled = true;
+	};
 
-struct ToolPreviewResult {
-  std::string tool;
-  bool allowed = false;
-  std::string reason;
-};
+	struct ToolPreviewResult {
+		std::string tool;
+		bool allowed = false;
+		std::string reason;
+	};
 
-class GatewayToolRegistry {
-public:
-  GatewayToolRegistry();
+	struct ToolExecuteResult {
+		std::string tool;
+		bool executed = false;
+		std::string status;
+		std::string output;
+	};
 
-  std::vector<ToolCatalogEntry> List() const;
-  ToolPreviewResult Preview(const std::string& requestedTool) const;
+	class GatewayToolRegistry {
+	public:
+		GatewayToolRegistry();
 
-private:
-  std::unordered_map<std::string, ToolCatalogEntry> m_tools;
-};
+		std::vector<ToolCatalogEntry> List() const;
+		ToolPreviewResult Preview(const std::string& requestedTool) const;
+		ToolExecuteResult Execute(const std::string& requestedTool) const;
+
+	private:
+		std::unordered_map<std::string, ToolCatalogEntry> m_tools;
+	};
 
 } // namespace blazeclaw::gateway

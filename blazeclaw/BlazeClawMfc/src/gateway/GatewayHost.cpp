@@ -582,6 +582,24 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.tools.call.execute", [this](const protocol::RequestFrame& request) {
+			const std::string requestedTool = ExtractStringParam(request.paramsJson, "tool");
+			const ToolExecuteResult execution = m_toolRegistry.Execute(requestedTool);
+			const bool argsProvided = request.paramsJson.has_value() &&
+				request.paramsJson.value().find("\"args\"") != std::string::npos;
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"tool\":\"" + EscapeJson(execution.tool) +
+					"\",\"executed\":" + std::string(execution.executed ? "true" : "false") +
+					",\"status\":\"" + EscapeJson(execution.status) +
+					"\",\"output\":\"" + EscapeJson(execution.output) +
+					"\",\"argsProvided\":" + std::string(argsProvided ? "true" : "false") + "}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.channels.logout", [this](const protocol::RequestFrame& request) {
 			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
 			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");

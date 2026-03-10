@@ -611,6 +611,28 @@ namespace blazeclaw::gateway::protocol {
 					"an object");
 		}
 
+		bool ValidateToolsCallExecuteParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.tools.call.execute", fieldKinds)) {
+				return false;
+			}
+
+			return RequireFieldKindIfPresent(
+				fieldKinds,
+				"tool",
+				JsonFieldKind::String,
+				issue,
+				"gateway.tools.call.execute",
+				"a string") &&
+				RequireFieldKindIfPresent(
+					fieldKinds,
+					"args",
+					JsonFieldKind::Object,
+					issue,
+					"gateway.tools.call.execute",
+					"an object");
+		}
+
 		bool IsFieldBoolean(const std::string& json, const std::string& fieldName) {
 			std::size_t tokenPos = 0;
 			if (!ContainsFieldToken(json, fieldName, tokenPos)) {
@@ -1005,6 +1027,10 @@ namespace blazeclaw::gateway::protocol {
 
 		if (request.method == "gateway.tools.call.preview") {
 			return ValidateToolsCallPreviewParams(request, issue);
+		}
+
+		if (request.method == "gateway.tools.call.execute") {
+			return ValidateToolsCallExecuteParams(request, issue);
 		}
 
 		if (request.method == "gateway.sessions.resolve") {
@@ -1403,6 +1429,16 @@ namespace blazeclaw::gateway::protocol {
 				IsFieldValueType(payload, "policy", '"')
 				? true
 				: (SetIssue(issue, "schema_invalid_response", "`gateway.tools.call.preview` requires `tool`, `allowed`, `reason`, `argsProvided`, and `policy` fields."), false);
+		}
+
+		if (method == "gateway.tools.call.execute") {
+			return IsFieldValueType(payload, "tool", '"') &&
+				IsFieldBoolean(payload, "executed") &&
+				IsFieldValueType(payload, "status", '"') &&
+				IsFieldValueType(payload, "output", '"') &&
+				IsFieldBoolean(payload, "argsProvided")
+				? true
+				: (SetIssue(issue, "schema_invalid_response", "`gateway.tools.call.execute` requires `tool`, `executed`, `status`, `output`, and `argsProvided` fields."), false);
 		}
 
 		if (method == "gateway.features.list") {

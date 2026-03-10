@@ -1,0 +1,12 @@
+{
+  "type": "res",
+  "id": "req-32",
+  "ok": true,
+  "payload": {
+    "tool": "chat.send",
+    "executed": true,
+    "status": "ok",
+    "output": "seeded_execution_v1",
+    "argsProvided": false
+  }
+}

@@ -117,7 +117,7 @@ namespace blazeclaw::gateway::protocol {
 		const ResponseFrame featuresListResponse{
 			.id = "req-3",
 			.ok = true,
-	  .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.create\",\"gateway.agents.delete\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.agents.update\",\"gateway.channels.accounts\",\"gateway.channels.logout\",\"gateway.channels.route.resolve\",\"gateway.channels.routes\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.compact\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
+	  .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.create\",\"gateway.agents.delete\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.agents.update\",\"gateway.channels.accounts\",\"gateway.channels.logout\",\"gateway.channels.route.resolve\",\"gateway.channels.routes\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.compact\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.execute\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
 			.error = std::nullopt,
 		};
 
@@ -279,6 +279,13 @@ namespace blazeclaw::gateway::protocol {
 			.id = "req-31",
 			.ok = true,
 			.payloadJson = "{\"loggedOut\":true,\"affected\":1}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame toolsCallExecuteResponse{
+			.id = "req-32",
+			.ok = true,
+			.payloadJson = "{\"tool\":\"chat.send\",\"executed\":true,\"status\":\"ok\",\"output\":\"seeded_execution_v1\",\"argsProvided\":false}",
 			.error = std::nullopt,
 		};
 
@@ -590,6 +597,14 @@ namespace blazeclaw::gateway::protocol {
 			return false;
 		}
 
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.tools.call.execute",
+			toolsCallExecuteResponse,
+			responseIssue)) {
+			error = "Tools call execute response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
 		SchemaValidationIssue eventIssue;
 		if (!GatewayProtocolSchemaValidator::ValidateEvent(event, eventIssue)) {
 			error = "Tick event schema validation failed: " + eventIssue.message;
@@ -789,6 +804,20 @@ namespace blazeclaw::gateway::protocol {
 			channelsLogoutResponseNegative,
 			responseIssue)) {
 			error = "Schema response negative case unexpectedly passed for gateway.channels.logout missing `affected`.";
+			return false;
+		}
+
+		const ResponseFrame toolsCallExecuteResponseNegative{
+			.id = "req-schema-22",
+			.ok = true,
+			.payloadJson = "{\"tool\":\"chat.send\",\"executed\":true,\"status\":\"ok\",\"argsProvided\":false}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.tools.call.execute",
+			toolsCallExecuteResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.tools.call.execute missing `output`.";
 			return false;
 		}
 
@@ -1000,6 +1029,13 @@ namespace blazeclaw::gateway::protocol {
 		if (!CompareFixture(
 			root / "response_channels_logout.json",
 			SerializeResponseFrame(channelsLogoutResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_tools_call_execute.json",
+			SerializeResponseFrame(toolsCallExecuteResponse),
 			error)) {
 			return false;
 		}
