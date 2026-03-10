@@ -232,6 +232,8 @@ namespace blazeclaw::gateway {
 
 		m_bindAddress = ToNarrow(config.bindAddress);
 		m_port = config.port;
+		m_runtimeGatewayBind = m_bindAddress;
+		m_runtimeGatewayPort = m_port;
 		RegisterDefaultHandlers();
 
 		std::string fixtureError;
@@ -907,11 +909,48 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-		m_dispatcher.Register("gateway.config.get", [](const protocol::RequestFrame& request) {
+		m_dispatcher.Register("gateway.config.get", [this](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-				.payloadJson = "{\"gateway\":{\"bind\":\"127.0.0.1\",\"port\":18789},\"agent\":{\"model\":\"default\",\"streaming\":true}}",
+		.payloadJson = "{\"gateway\":{\"bind\":\"" + EscapeJson(m_runtimeGatewayBind) +
+			"\",\"port\":" + std::to_string(m_runtimeGatewayPort) +
+			"},\"agent\":{\"model\":\"" + EscapeJson(m_runtimeAgentModel) +
+			"\",\"streaming\":" + std::string(m_runtimeAgentStreaming ? "true" : "false") + "}}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.config.set", [this](const protocol::RequestFrame& request) {
+			const std::string bind = ExtractStringParam(request.paramsJson, "bind");
+			const std::optional<std::size_t> port = ExtractNumericParam(request.paramsJson, "port");
+			const std::string model = ExtractStringParam(request.paramsJson, "model");
+			const std::optional<bool> streaming = ExtractBooleanParam(request.paramsJson, "streaming");
+
+			if (!bind.empty()) {
+				m_runtimeGatewayBind = bind;
+			}
+
+			if (port.has_value() && port.value() > 0 && port.value() <= 65535) {
+				m_runtimeGatewayPort = static_cast<std::uint16_t>(port.value());
+			}
+
+			if (!model.empty()) {
+				m_runtimeAgentModel = model;
+			}
+
+			if (streaming.has_value()) {
+				m_runtimeAgentStreaming = streaming.value();
+			}
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"gateway\":{\"bind\":\"" + EscapeJson(m_runtimeGatewayBind) +
+					"\",\"port\":" + std::to_string(m_runtimeGatewayPort) +
+					"},\"agent\":{\"model\":\"" + EscapeJson(m_runtimeAgentModel) +
+					"\",\"streaming\":" + std::string(m_runtimeAgentStreaming ? "true" : "false") +
+					"},\"updated\":true}",
 				.error = std::nullopt,
 			};
 			});

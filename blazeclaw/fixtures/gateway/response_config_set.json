@@ -1,0 +1,16 @@
+{
+  "type": "res",
+  "id": "req-33",
+  "ok": true,
+  "payload": {
+    "gateway": {
+      "bind": "127.0.0.1",
+      "port": 18789
+    },
+    "agent": {
+      "model": "default",
+      "streaming": true
+    },
+    "updated": true
+  }
+}

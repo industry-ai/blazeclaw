@@ -956,6 +956,58 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool ValidateConfigSetParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.config.set", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"bind",
+				JsonFieldKind::String,
+				issue,
+				"gateway.config.set",
+				"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"port",
+					JsonFieldKind::Number,
+					issue,
+					"gateway.config.set",
+					"numeric") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"model",
+					JsonFieldKind::String,
+					issue,
+					"gateway.config.set",
+					"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"streaming",
+					JsonFieldKind::Boolean,
+					issue,
+					"gateway.config.set",
+					"boolean")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "bind" || field == "port" || field == "model" || field == "streaming") {
+					continue;
+				}
+
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `gateway.config.set` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		bool ValidatePingParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 			ParsedObjectFieldKinds fieldKinds;
 			if (!TryParseRequestParamsObject(request, issue, "gateway.ping", fieldKinds)) {
@@ -1063,6 +1115,10 @@ namespace blazeclaw::gateway::protocol {
 
 		if (request.method == "gateway.agents.update") {
 			return ValidateAgentsCreateParams(request, issue);
+		}
+
+		if (request.method == "gateway.config.set") {
+			return ValidateConfigSetParams(request, issue);
 		}
 
 		if (request.method == "gateway.protocol.version" ||
@@ -1251,6 +1307,25 @@ namespace blazeclaw::gateway::protocol {
 				!IsFieldValueType(payload, "model", '"') ||
 				!IsFieldBoolean(payload, "streaming")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.config.get` requires `gateway.bind` string, `gateway.port` number, `agent.model` string, and `agent.streaming` boolean fields.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.config.set") {
+			if (!IsFieldValueType(payload, "gateway", '{') ||
+				!IsFieldValueType(payload, "agent", '{') ||
+				!IsFieldBoolean(payload, "updated")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.config.set` requires `gateway`, `agent`, and `updated` fields.");
+				return false;
+			}
+
+			if (!IsFieldValueType(payload, "bind", '"') ||
+				!IsFieldNumber(payload, "port") ||
+				!IsFieldValueType(payload, "model", '"') ||
+				!IsFieldBoolean(payload, "streaming")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.config.set` requires `gateway.bind`, `gateway.port`, `agent.model`, and `agent.streaming` fields.");
 				return false;
 			}
 
