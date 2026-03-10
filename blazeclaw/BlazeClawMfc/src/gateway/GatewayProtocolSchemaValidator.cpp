@@ -749,6 +749,41 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+	bool ValidateChannelsAccountsExistsParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+		ParsedObjectFieldKinds fieldKinds;
+		if (!TryParseRequestParamsObject(request, issue, "gateway.channels.accounts.exists", fieldKinds)) {
+			return false;
+		}
+
+		if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"channel",
+				JsonFieldKind::String,
+				issue,
+				"gateway.channels.accounts.exists",
+				"a string") ||
+			!RequireFieldKindIfPresent(
+				fieldKinds,
+				"accountId",
+				JsonFieldKind::String,
+				issue,
+				"gateway.channels.accounts.exists",
+				"a string")) {
+			return false;
+		}
+
+		for (const auto& [field, _] : fieldKinds) {
+			if (field == "channel" || field == "accountId") {
+				continue;
+			}
+
+			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.accounts.exists` does not allow `params." + field + "`.");
+			return false;
+		}
+
+		return true;
+	}
+
 		bool ValidateOptionalChannelParam(
 			const RequestFrame& request,
 			SchemaValidationIssue& issue,
@@ -1476,6 +1511,10 @@ namespace blazeclaw::gateway::protocol {
 			return ValidateChannelsAccountsDeactivateParams(request, issue);
 		}
 
+		if (request.method == "gateway.channels.accounts.exists") {
+			return ValidateChannelsAccountsExistsParams(request, issue);
+		}
+
 		if (request.method == "gateway.tools.call.preview") {
 			return ValidateToolsCallPreviewParams(request, issue);
 		}
@@ -1907,6 +1946,17 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.channels.accounts.exists") {
+			if (!IsFieldValueType(payload, "channel", '"') ||
+				!IsFieldValueType(payload, "accountId", '"') ||
+				!IsFieldBoolean(payload, "exists")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.accounts.exists` requires `channel` string, `accountId` string, and `exists` boolean.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.channels.logout") {
 			if (!IsFieldBoolean(payload, "loggedOut") || !IsFieldNumber(payload, "affected")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.channels.logout` requires `loggedOut` boolean and `affected` number fields.");
@@ -2095,6 +2145,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.channels.accounts",
 		 "gateway.channels.accounts.activate",
 		 "gateway.channels.accounts.deactivate",
+         "gateway.channels.accounts.exists",
 		   "gateway.channels.route.exists",
 				"gateway.tools.call.preview",
 				"gateway.tick",

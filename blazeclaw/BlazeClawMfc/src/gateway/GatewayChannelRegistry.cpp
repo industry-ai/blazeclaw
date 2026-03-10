@@ -163,6 +163,16 @@ namespace blazeclaw::gateway {
 		return selected;
 	}
 
+	bool GatewayChannelRegistry::AccountExists(const std::string& channel, const std::string& accountId) const {
+		const auto it = std::find_if(m_accounts.begin(), m_accounts.end(), [&](const ChannelAccountEntry& account) {
+			const bool channelMatches = channel.empty() || account.channel == channel;
+			const bool accountMatches = accountId.empty() || account.accountId == accountId;
+			return channelMatches && accountMatches;
+		});
+
+		return it != m_accounts.end();
+	}
+
 	ChannelRouteEntry GatewayChannelRegistry::SetRoute(
 		const std::string& channel,
 		const std::string& accountId,
