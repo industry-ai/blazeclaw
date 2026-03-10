@@ -300,6 +300,43 @@ namespace blazeclaw::gateway {
 		return selected;
 	}
 
+	ChannelAccountEntry GatewayChannelRegistry::DeleteAccount(const std::string& channel, const std::string& accountId, bool& deleted) {
+		deleted = false;
+		ChannelAccountEntry selected{};
+
+		const auto it = std::find_if(m_accounts.begin(), m_accounts.end(), [&](const ChannelAccountEntry& account) {
+			const bool channelMatches = channel.empty() || account.channel == channel;
+			const bool accountMatches = accountId.empty() || account.accountId == accountId;
+			return channelMatches && accountMatches;
+		});
+
+		if (it == m_accounts.end()) {
+			if (!m_accounts.empty()) {
+				selected = m_accounts.front();
+			}
+			return selected;
+		}
+
+		selected = *it;
+		const std::string removedChannel = selected.channel;
+		m_accounts.erase(it);
+		deleted = true;
+
+		const auto statusIt = std::find_if(m_status.begin(), m_status.end(), [&](const ChannelStatusEntry& status) {
+			return status.id == removedChannel;
+		});
+		if (statusIt != m_status.end()) {
+			statusIt->accountCount = std::count_if(m_accounts.begin(), m_accounts.end(), [&](const ChannelAccountEntry& account) {
+				return account.channel == removedChannel;
+			});
+			statusIt->connected = std::any_of(m_accounts.begin(), m_accounts.end(), [&](const ChannelAccountEntry& account) {
+				return account.channel == removedChannel && account.connected;
+			});
+		}
+
+		return selected;
+	}
+
 	ChannelRouteEntry GatewayChannelRegistry::SetRoute(
 		const std::string& channel,
 		const std::string& accountId,

@@ -931,6 +931,41 @@ namespace blazeclaw::gateway::protocol {
 		return true;
 	}
 
+	bool ValidateChannelsAccountsDeleteParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+		ParsedObjectFieldKinds fieldKinds;
+		if (!TryParseRequestParamsObject(request, issue, "gateway.channels.accounts.delete", fieldKinds)) {
+			return false;
+		}
+
+		if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"channel",
+				JsonFieldKind::String,
+				issue,
+				"gateway.channels.accounts.delete",
+				"a string") ||
+			!RequireFieldKindIfPresent(
+				fieldKinds,
+				"accountId",
+				JsonFieldKind::String,
+				issue,
+				"gateway.channels.accounts.delete",
+				"a string")) {
+			return false;
+		}
+
+		for (const auto& [field, _] : fieldKinds) {
+			if (field == "channel" || field == "accountId") {
+				continue;
+			}
+
+			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.accounts.delete` does not allow `params." + field + "`.");
+			return false;
+		}
+
+		return true;
+	}
+
 		bool ValidateOptionalChannelParam(
 			const RequestFrame& request,
 			SchemaValidationIssue& issue,
@@ -1674,6 +1709,10 @@ namespace blazeclaw::gateway::protocol {
 			return ValidateChannelsAccountsCreateParams(request, issue);
 		}
 
+		if (request.method == "gateway.channels.accounts.delete") {
+			return ValidateChannelsAccountsDeleteParams(request, issue);
+		}
+
 		if (request.method == "gateway.tools.call.preview") {
 			return ValidateToolsCallPreviewParams(request, issue);
 		}
@@ -2172,6 +2211,20 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.channels.accounts.delete") {
+			if (!IsFieldValueType(payload, "account", '{') || !IsFieldBoolean(payload, "deleted")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.accounts.delete` requires `account` object and `deleted` boolean.");
+				return false;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "channel", "accountId", "label", "active", "connected" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.accounts.delete` requires account fields `channel`, `accountId`, `label`, `active`, and `connected`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.channels.logout") {
 			if (!IsFieldBoolean(payload, "loggedOut") || !IsFieldNumber(payload, "affected")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.channels.logout` requires `loggedOut` boolean and `affected` number fields.");
@@ -2364,6 +2417,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.channels.accounts.update",
          "gateway.channels.accounts.get",
          "gateway.channels.accounts.create",
+         "gateway.channels.accounts.delete",
 		   "gateway.channels.route.exists",
 				"gateway.tools.call.preview",
 				"gateway.tick",

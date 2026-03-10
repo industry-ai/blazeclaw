@@ -117,7 +117,7 @@ namespace blazeclaw::gateway::protocol {
 		const ResponseFrame featuresListResponse{
 			.id = "req-3",
 			.ok = true,
-    .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.create\",\"gateway.agents.delete\",\"gateway.agents.files.delete\",\"gateway.agents.files.exists\",\"gateway.agents.files.get\",\"gateway.agents.files.list\",\"gateway.agents.files.set\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.agents.update\",\"gateway.channels.accounts\",\"gateway.channels.accounts.activate\",\"gateway.channels.accounts.create\",\"gateway.channels.accounts.deactivate\",\"gateway.channels.accounts.exists\",\"gateway.channels.accounts.get\",\"gateway.channels.accounts.update\",\"gateway.channels.logout\",\"gateway.channels.route.delete\",\"gateway.channels.route.exists\",\"gateway.channels.route.resolve\",\"gateway.channels.route.set\",\"gateway.channels.routes\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.config.set\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.models.list\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.compact\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.execute\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
+    .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.create\",\"gateway.agents.delete\",\"gateway.agents.files.delete\",\"gateway.agents.files.exists\",\"gateway.agents.files.get\",\"gateway.agents.files.list\",\"gateway.agents.files.set\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.agents.update\",\"gateway.channels.accounts\",\"gateway.channels.accounts.activate\",\"gateway.channels.accounts.create\",\"gateway.channels.accounts.deactivate\",\"gateway.channels.accounts.delete\",\"gateway.channels.accounts.exists\",\"gateway.channels.accounts.get\",\"gateway.channels.accounts.update\",\"gateway.channels.logout\",\"gateway.channels.route.delete\",\"gateway.channels.route.exists\",\"gateway.channels.route.resolve\",\"gateway.channels.route.set\",\"gateway.channels.routes\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.config.set\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.models.list\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.compact\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.execute\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
 			.error = std::nullopt,
 		};
 
@@ -398,6 +398,13 @@ namespace blazeclaw::gateway::protocol {
 			.id = "req-48",
 			.ok = true,
 			.payloadJson = "{\"account\":{\"channel\":\"telegram\",\"accountId\":\"telegram.new\",\"label\":\"Telegram Account\",\"active\":true,\"connected\":false},\"created\":true}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame channelsAccountsDeleteResponse{
+			.id = "req-49",
+			.ok = true,
+			.payloadJson = "{\"account\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":false},\"deleted\":true}",
 			.error = std::nullopt,
 		};
 
@@ -845,6 +852,14 @@ namespace blazeclaw::gateway::protocol {
 			return false;
 		}
 
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.accounts.delete",
+			channelsAccountsDeleteResponse,
+			responseIssue)) {
+			error = "Channels accounts delete response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
 		SchemaValidationIssue eventIssue;
 		if (!GatewayProtocolSchemaValidator::ValidateEvent(event, eventIssue)) {
 			error = "Tick event schema validation failed: " + eventIssue.message;
@@ -1285,6 +1300,20 @@ namespace blazeclaw::gateway::protocol {
 			return false;
 		}
 
+		const ResponseFrame channelsAccountsDeleteResponseNegative{
+			.id = "req-schema-39",
+			.ok = true,
+			.payloadJson = "{\"account\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":false}}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.accounts.delete",
+			channelsAccountsDeleteResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.channels.accounts.delete missing `deleted`.";
+			return false;
+		}
+
 		const EventFrame channelsAccountsUpdateEventPositive{
 			.eventName = "gateway.channels.accounts.update",
 			.payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":false}]}",
@@ -1612,6 +1641,13 @@ namespace blazeclaw::gateway::protocol {
 		if (!CompareFixture(
 			root / "response_channels_accounts_create.json",
 			SerializeResponseFrame(channelsAccountsCreateResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_channels_accounts_delete.json",
+			SerializeResponseFrame(channelsAccountsDeleteResponse),
 			error)) {
 			return false;
 		}
