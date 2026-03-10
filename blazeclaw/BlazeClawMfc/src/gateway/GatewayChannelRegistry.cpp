@@ -54,6 +54,55 @@ namespace blazeclaw::gateway {
 		};
 	}
 
+	ChannelAccountEntry GatewayChannelRegistry::CreateAccount(
+		const std::string& channel,
+		const std::string& accountId,
+		const std::optional<std::string>& label,
+		std::optional<bool> active,
+		std::optional<bool> connected,
+		bool& created) {
+		const std::string resolvedChannel = channel.empty() ? "telegram" : channel;
+		const std::string resolvedAccountId = accountId.empty() ? (resolvedChannel + ".new") : accountId;
+		const std::string resolvedLabel = label.has_value() && !label.value().empty()
+			? label.value()
+			: (resolvedChannel + " Account");
+
+		ChannelAccountEntry entry{
+			.channel = resolvedChannel,
+			.accountId = resolvedAccountId,
+			.label = resolvedLabel,
+			.active = active.value_or(true),
+			.connected = connected.value_or(false),
+		};
+
+		const auto it = std::find_if(m_accounts.begin(), m_accounts.end(), [&](const ChannelAccountEntry& account) {
+			return account.channel == resolvedChannel && account.accountId == resolvedAccountId;
+		});
+
+		created = it == m_accounts.end();
+		if (created) {
+			m_accounts.push_back(entry);
+		}
+		else {
+			*it = entry;
+		}
+
+		const auto statusIt = std::find_if(m_status.begin(), m_status.end(), [&](const ChannelStatusEntry& status) {
+			return status.id == resolvedChannel;
+		});
+
+		if (statusIt != m_status.end()) {
+			statusIt->accountCount = std::count_if(m_accounts.begin(), m_accounts.end(), [&](const ChannelAccountEntry& account) {
+				return account.channel == resolvedChannel;
+			});
+			statusIt->connected = std::any_of(m_accounts.begin(), m_accounts.end(), [&](const ChannelAccountEntry& account) {
+				return account.channel == resolvedChannel && account.connected;
+			});
+		}
+
+		return entry;
+	}
+
 	std::vector<ChannelRouteEntry> GatewayChannelRegistry::ListRoutes() const {
 		return m_routes;
 	}
