@@ -69,6 +69,7 @@ namespace blazeclaw::gateway {
 			const std::string& accountId,
 			ChannelRouteEntry& removedRoute);
 		std::size_t ClearRoutes(const std::string& channel);
+		std::size_t RestoreRoutes(const std::string& channel);
 		bool RouteExists(const std::string& channel, const std::string& accountId) const;
 
 	private:

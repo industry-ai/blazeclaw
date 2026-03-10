@@ -398,6 +398,33 @@ namespace blazeclaw::gateway {
 		return originalSize - m_routes.size();
 	}
 
+	std::size_t GatewayChannelRegistry::RestoreRoutes(const std::string& channel) {
+		const std::vector<ChannelRouteEntry> seededRoutes = {
+			ChannelRouteEntry{.channel = "telegram", .accountId = "telegram.default", .agentId = "default", .sessionId = "main"},
+			ChannelRouteEntry{.channel = "discord", .accountId = "discord.default", .agentId = "default", .sessionId = "main"},
+		};
+
+		std::size_t restored = 0;
+		for (const auto& seed : seededRoutes) {
+			if (!channel.empty() && seed.channel != channel) {
+				continue;
+			}
+
+			const bool exists = std::any_of(m_routes.begin(), m_routes.end(), [&](const ChannelRouteEntry& route) {
+				return route.channel == seed.channel && route.accountId == seed.accountId;
+			});
+
+			if (exists) {
+				continue;
+			}
+
+			m_routes.push_back(seed);
+			++restored;
+		}
+
+		return restored;
+	}
+
 	bool GatewayChannelRegistry::RouteExists(const std::string& channel, const std::string& accountId) const {
 		const auto it = std::find_if(m_routes.begin(), m_routes.end(), [&](const ChannelRouteEntry& entry) {
 			const bool channelMatches = channel.empty() || entry.channel == channel;

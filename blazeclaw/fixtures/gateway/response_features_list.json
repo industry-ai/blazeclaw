@@ -30,6 +30,7 @@
       "gateway.channels.route.set",
       "gateway.channels.routes",
       "gateway.channels.routes.clear",
+      "gateway.channels.routes.restore",
       "gateway.channels.status",
       "gateway.config.get",
       "gateway.config.set",
