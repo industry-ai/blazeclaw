@@ -1077,6 +1077,51 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool ValidateAgentsFilesSetParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.agents.files.set", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"agentId",
+				JsonFieldKind::String,
+				issue,
+				"gateway.agents.files.set",
+				"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"path",
+					JsonFieldKind::String,
+					issue,
+					"gateway.agents.files.set",
+					"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"content",
+					JsonFieldKind::String,
+					issue,
+					"gateway.agents.files.set",
+					"a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "agentId" || field == "path" || field == "content") {
+					continue;
+				}
+
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `gateway.agents.files.set` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		bool ValidatePingParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 			ParsedObjectFieldKinds fieldKinds;
 			if (!TryParseRequestParamsObject(request, issue, "gateway.ping", fieldKinds)) {
@@ -1188,6 +1233,10 @@ namespace blazeclaw::gateway::protocol {
 
 		if (request.method == "gateway.agents.files.get") {
 			return ValidateAgentsFilesGetParams(request, issue);
+		}
+
+		if (request.method == "gateway.agents.files.set") {
+			return ValidateAgentsFilesSetParams(request, issue);
 		}
 
 		if (request.method == "gateway.agents.update") {
@@ -1392,6 +1441,20 @@ namespace blazeclaw::gateway::protocol {
 
 			if (!PayloadContainsAllFieldTokens(payload, { "path", "size", "updatedMs", "content" })) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.agents.files.get` requires `file` fields `path`, `size`, `updatedMs`, and `content`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.agents.files.set") {
+			if (!IsFieldValueType(payload, "file", '{') || !IsFieldBoolean(payload, "saved")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.agents.files.set` requires `file` object and `saved` boolean.");
+				return false;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "path", "size", "updatedMs", "content" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.agents.files.set` requires `file` fields `path`, `size`, `updatedMs`, and `content`.");
 				return false;
 			}
 

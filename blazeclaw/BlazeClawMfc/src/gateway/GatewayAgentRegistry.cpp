@@ -157,11 +157,45 @@ namespace blazeclaw::gateway {
 			}
 		}
 
+		const AgentEntry agent = Get(requestedId);
+		const std::string overrideKey = agent.id + "::" + chosen.path;
+		const auto overrideIt = m_fileOverrides.find(overrideKey);
+		if (overrideIt != m_fileOverrides.end()) {
+			return AgentFileContentEntry{
+				.path = chosen.path,
+				.size = overrideIt->second.content.size(),
+				.updatedMs = overrideIt->second.updatedMs,
+				.content = overrideIt->second.content,
+			};
+		}
+
 		return AgentFileContentEntry{
 			.path = chosen.path,
 			.size = chosen.size,
 			.updatedMs = chosen.updatedMs,
 			.content = chosen.path.empty() ? "" : "seeded_content_for_" + chosen.path,
+		};
+	}
+
+	AgentFileContentEntry GatewayAgentRegistry::SetFile(
+		const std::string& requestedId,
+		const std::string& path,
+		const std::string& content) {
+		const AgentEntry agent = Get(requestedId);
+		const auto files = ListFiles(agent.id);
+		const std::string resolvedPath = path.empty()
+			? (files.empty() ? ("agents/" + agent.id + "/note.txt") : files.front().path)
+			: path;
+
+		const std::string key = agent.id + "::" + resolvedPath;
+		const std::uint64_t updatedMs = 1735689620000 + static_cast<std::uint64_t>(m_fileOverrides.size());
+		m_fileOverrides.insert_or_assign(key, FileOverride{ .content = content, .updatedMs = updatedMs });
+
+		return AgentFileContentEntry{
+			.path = resolvedPath,
+			.size = content.size(),
+			.updatedMs = updatedMs,
+			.content = content,
 		};
 	}
 

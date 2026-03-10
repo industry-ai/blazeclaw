@@ -595,6 +595,20 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.agents.files.set", [this](const protocol::RequestFrame& request) {
+			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
+			const std::string requestedPath = ExtractStringParam(request.paramsJson, "path");
+			const std::string content = ExtractStringParam(request.paramsJson, "content");
+			const AgentFileContentEntry file = m_agentRegistry.SetFile(requestedId, requestedPath, content);
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"file\":" + SerializeAgentFileContent(file) + ",\"saved\":true}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.agents.files.get", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
 			const std::string requestedPath = ExtractStringParam(request.paramsJson, "path");

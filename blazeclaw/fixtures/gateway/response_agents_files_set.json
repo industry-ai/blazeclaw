@@ -1,0 +1,14 @@
+{
+  "type": "res",
+  "id": "req-37",
+  "ok": true,
+  "payload": {
+    "file": {
+      "path": "agents/default/profile.json",
+      "size": 5,
+      "updatedMs": 1735689620000,
+      "content": "hello"
+    },
+    "saved": true
+  }
+}

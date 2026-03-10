@@ -41,12 +41,22 @@ namespace blazeclaw::gateway {
 			std::optional<bool> requestedActive = std::nullopt);
 		std::vector<AgentFileEntry> ListFiles(const std::string& requestedId) const;
 		AgentFileContentEntry GetFile(const std::string& requestedId, const std::string& path) const;
+		AgentFileContentEntry SetFile(
+			const std::string& requestedId,
+			const std::string& path,
+			const std::string& content);
 
 	private:
+		struct FileOverride {
+			std::string content;
+			std::uint64_t updatedMs = 0;
+		};
+
 		static std::string NormalizeAgentId(const std::string& value);
 		static AgentEntry BuildDefaultAgent();
 
 		std::unordered_map<std::string, AgentEntry> m_agents;
+		std::unordered_map<std::string, FileOverride> m_fileOverrides;
 	};
 
 } // namespace blazeclaw::gateway
