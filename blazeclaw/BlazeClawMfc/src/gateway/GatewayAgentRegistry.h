@@ -23,6 +23,11 @@ namespace blazeclaw::gateway {
 		std::string content;
 	};
 
+	struct AgentFileDeleteResult {
+		AgentFileContentEntry file;
+		bool deleted = false;
+	};
+
 	class GatewayAgentRegistry {
 	public:
 		GatewayAgentRegistry();
@@ -45,6 +50,7 @@ namespace blazeclaw::gateway {
 			const std::string& requestedId,
 			const std::string& path,
 			const std::string& content);
+		AgentFileDeleteResult DeleteFile(const std::string& requestedId, const std::string& path);
 
 	private:
 		struct FileOverride {

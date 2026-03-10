@@ -199,6 +199,33 @@ namespace blazeclaw::gateway {
 		};
 	}
 
+	AgentFileDeleteResult GatewayAgentRegistry::DeleteFile(const std::string& requestedId, const std::string& path) {
+		const AgentEntry agent = Get(requestedId);
+		const auto files = ListFiles(agent.id);
+		const std::string resolvedPath = path.empty()
+			? (files.empty() ? ("agents/" + agent.id + "/note.txt") : files.front().path)
+			: path;
+
+		const std::string key = agent.id + "::" + resolvedPath;
+		const auto erased = m_fileOverrides.erase(key);
+		if (erased > 0) {
+			return AgentFileDeleteResult{
+				.file = AgentFileContentEntry{
+					.path = resolvedPath,
+					.size = 0,
+					.updatedMs = 1735689630000 + static_cast<std::uint64_t>(m_fileOverrides.size()),
+					.content = "",
+				},
+				.deleted = true,
+			};
+		}
+
+		return AgentFileDeleteResult{
+			.file = GetFile(agent.id, resolvedPath),
+			.deleted = false,
+		};
+	}
+
 	std::string GatewayAgentRegistry::NormalizeAgentId(const std::string& value) {
 		if (value.empty()) {
 			return "default";

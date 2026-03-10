@@ -1122,6 +1122,44 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool ValidateAgentsFilesDeleteParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.agents.files.delete", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"agentId",
+				JsonFieldKind::String,
+				issue,
+				"gateway.agents.files.delete",
+				"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"path",
+					JsonFieldKind::String,
+					issue,
+					"gateway.agents.files.delete",
+					"a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "agentId" || field == "path") {
+					continue;
+				}
+
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `gateway.agents.files.delete` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		bool ValidatePingParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 			ParsedObjectFieldKinds fieldKinds;
 			if (!TryParseRequestParamsObject(request, issue, "gateway.ping", fieldKinds)) {
@@ -1237,6 +1275,10 @@ namespace blazeclaw::gateway::protocol {
 
 		if (request.method == "gateway.agents.files.set") {
 			return ValidateAgentsFilesSetParams(request, issue);
+		}
+
+		if (request.method == "gateway.agents.files.delete") {
+			return ValidateAgentsFilesDeleteParams(request, issue);
 		}
 
 		if (request.method == "gateway.agents.update") {
@@ -1455,6 +1497,20 @@ namespace blazeclaw::gateway::protocol {
 
 			if (!PayloadContainsAllFieldTokens(payload, { "path", "size", "updatedMs", "content" })) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.agents.files.set` requires `file` fields `path`, `size`, `updatedMs`, and `content`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.agents.files.delete") {
+			if (!IsFieldValueType(payload, "file", '{') || !IsFieldBoolean(payload, "deleted")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.agents.files.delete` requires `file` object and `deleted` boolean.");
+				return false;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "path", "size", "updatedMs", "content" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.agents.files.delete` requires `file` fields `path`, `size`, `updatedMs`, and `content`.");
 				return false;
 			}
 
