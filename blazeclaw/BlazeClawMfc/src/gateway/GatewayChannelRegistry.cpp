@@ -132,6 +132,10 @@ namespace blazeclaw::gateway {
 		};
 	}
 
+	ChannelRouteEntry GatewayChannelRegistry::GetRoute(const std::string& channel, const std::string& accountId) const {
+		return ResolveRoute(channel, accountId);
+	}
+
 	ChannelLogoutResult GatewayChannelRegistry::Logout(const std::string& channel, const std::string& accountId) {
 		ChannelLogoutResult result{};
 

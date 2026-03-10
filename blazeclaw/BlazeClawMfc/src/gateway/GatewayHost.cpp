@@ -595,6 +595,19 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.channels.route.get", [this](const protocol::RequestFrame& request) {
+			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
+			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
+			const ChannelRouteEntry route = m_channelRegistry.GetRoute(channel, accountId);
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"route\":" + SerializeChannelRoute(route) + "}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.channels.routes.restore", [this](const protocol::RequestFrame& request) {
 			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
 			const std::size_t restored = m_channelRegistry.RestoreRoutes(channel);

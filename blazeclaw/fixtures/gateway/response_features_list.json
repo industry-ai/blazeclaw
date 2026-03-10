@@ -26,6 +26,7 @@
       "gateway.channels.logout",
       "gateway.channels.route.delete",
       "gateway.channels.route.exists",
+      "gateway.channels.route.get",
       "gateway.channels.route.resolve",
       "gateway.channels.route.set",
       "gateway.channels.routes",

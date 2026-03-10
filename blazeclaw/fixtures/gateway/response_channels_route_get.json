@@ -1,0 +1,13 @@
+{
+  "type": "res",
+  "id": "req-52",
+  "ok": true,
+  "payload": {
+    "route": {
+      "channel": "telegram",
+      "accountId": "telegram.default",
+      "agentId": "default",
+      "sessionId": "main"
+    }
+  }
+}

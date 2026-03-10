@@ -679,6 +679,41 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+	bool ValidateChannelsRouteGetParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+		ParsedObjectFieldKinds fieldKinds;
+		if (!TryParseRequestParamsObject(request, issue, "gateway.channels.route.get", fieldKinds)) {
+			return false;
+		}
+
+		if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"channel",
+				JsonFieldKind::String,
+				issue,
+				"gateway.channels.route.get",
+				"a string") ||
+			!RequireFieldKindIfPresent(
+				fieldKinds,
+				"accountId",
+				JsonFieldKind::String,
+				issue,
+				"gateway.channels.route.get",
+				"a string")) {
+			return false;
+		}
+
+		for (const auto& [field, _] : fieldKinds) {
+			if (field == "channel" || field == "accountId") {
+				continue;
+			}
+
+			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.get` does not allow `params." + field + "`.");
+			return false;
+		}
+
+		return true;
+	}
+
 		bool ValidateChannelsRoutesClearParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 			ParsedObjectFieldKinds fieldKinds;
 			if (!TryParseRequestParamsObject(request, issue, "gateway.channels.routes.clear", fieldKinds)) {
@@ -1741,6 +1776,10 @@ namespace blazeclaw::gateway::protocol {
 			return ValidateChannelsRouteExistsParams(request, issue);
 		}
 
+		if (request.method == "gateway.channels.route.get") {
+			return ValidateChannelsRouteGetParams(request, issue);
+		}
+
 		if (request.method == "gateway.channels.routes.clear") {
 			return ValidateChannelsRoutesClearParams(request, issue);
 		}
@@ -2351,6 +2390,20 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.channels.route.get") {
+			if (!IsFieldValueType(payload, "route", '{')) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.route.get` requires object field `route`.");
+				return false;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "channel", "accountId", "agentId", "sessionId" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.route.get` requires route fields `channel`, `accountId`, `agentId`, and `sessionId`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.channels.routes.clear") {
 			if (!IsFieldNumber(payload, "cleared") || !IsFieldNumber(payload, "remaining")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.channels.routes.clear` requires numeric fields `cleared` and `remaining`.");
@@ -2501,6 +2554,7 @@ namespace blazeclaw::gateway::protocol {
 		 "gateway.channels.accounts.create",
 		 "gateway.channels.accounts.delete",
 		   "gateway.channels.route.exists",
+         "gateway.channels.route.get",
 		   "gateway.channels.routes.clear",
            "gateway.channels.routes.restore",
 				"gateway.tools.call.preview",
