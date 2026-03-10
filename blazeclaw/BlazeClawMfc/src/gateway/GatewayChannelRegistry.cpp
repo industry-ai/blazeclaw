@@ -89,4 +89,35 @@ namespace blazeclaw::gateway {
 		return result;
 	}
 
+	ChannelRouteEntry GatewayChannelRegistry::SetRoute(
+		const std::string& channel,
+		const std::string& accountId,
+		const std::string& agentId,
+		const std::string& sessionId) {
+		const std::string resolvedChannel = channel.empty() ? "telegram" : channel;
+		const std::string resolvedAccountId = accountId.empty() ? (resolvedChannel + ".default") : accountId;
+		const std::string resolvedAgentId = agentId.empty() ? "default" : agentId;
+		const std::string resolvedSessionId = sessionId.empty() ? "main" : sessionId;
+
+		ChannelRouteEntry route{
+			.channel = resolvedChannel,
+			.accountId = resolvedAccountId,
+			.agentId = resolvedAgentId,
+			.sessionId = resolvedSessionId,
+		};
+
+		const auto it = std::find_if(m_routes.begin(), m_routes.end(), [&](const ChannelRouteEntry& entry) {
+			return entry.channel == resolvedChannel && entry.accountId == resolvedAccountId;
+			});
+
+		if (it != m_routes.end()) {
+			*it = route;
+		}
+		else {
+			m_routes.push_back(route);
+		}
+
+		return route;
+	}
+
 } // namespace blazeclaw::gateway

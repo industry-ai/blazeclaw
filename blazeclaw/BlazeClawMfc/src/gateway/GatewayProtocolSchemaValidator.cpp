@@ -560,6 +560,55 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool ValidateChannelsRouteSetParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.channels.route.set", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"channel",
+				JsonFieldKind::String,
+				issue,
+				"gateway.channels.route.set",
+				"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"accountId",
+					JsonFieldKind::String,
+					issue,
+					"gateway.channels.route.set",
+					"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"agentId",
+					JsonFieldKind::String,
+					issue,
+					"gateway.channels.route.set",
+					"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"sessionId",
+					JsonFieldKind::String,
+					issue,
+					"gateway.channels.route.set",
+					"a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "channel" || field == "accountId" || field == "agentId" || field == "sessionId") {
+					continue;
+				}
+
+				SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.set` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		bool ValidateOptionalChannelParam(
 			const RequestFrame& request,
 			SchemaValidationIssue& issue,
@@ -1267,6 +1316,10 @@ namespace blazeclaw::gateway::protocol {
 			return ValidateChannelsRouteResolveParams(request, issue);
 		}
 
+		if (request.method == "gateway.channels.route.set") {
+			return ValidateChannelsRouteSetParams(request, issue);
+		}
+
 		if (request.method == "gateway.tools.call.preview") {
 			return ValidateToolsCallPreviewParams(request, issue);
 		}
@@ -1701,6 +1754,20 @@ namespace blazeclaw::gateway::protocol {
 
 			if (!PayloadContainsAllFieldTokens(payload, { "channel", "accountId", "agentId", "sessionId" })) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.channels.route.resolve` requires route object fields `channel`, `accountId`, `agentId`, and `sessionId`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.channels.route.set") {
+			if (!IsFieldValueType(payload, "route", '{') || !IsFieldBoolean(payload, "saved")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.route.set` requires `route` object and `saved` boolean.");
+				return false;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "channel", "accountId", "agentId", "sessionId" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.route.set` requires route fields `channel`, `accountId`, `agentId`, and `sessionId`.");
 				return false;
 			}
 
