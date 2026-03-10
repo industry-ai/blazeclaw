@@ -584,6 +584,15 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.models.list", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"models\":[{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true},{\"id\":\"reasoner\",\"provider\":\"seed\",\"displayName\":\"Reasoner Model\",\"streaming\":false}]}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.tools.call.execute", [this](const protocol::RequestFrame& request) {
 			const std::string requestedTool = ExtractStringParam(request.paramsJson, "tool");
 			const ToolExecuteResult execution = m_toolRegistry.Execute(requestedTool);

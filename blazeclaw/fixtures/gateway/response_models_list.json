@@ -1,0 +1,21 @@
+{
+  "type": "res",
+  "id": "req-34",
+  "ok": true,
+  "payload": {
+    "models": [
+      {
+        "id": "default",
+        "provider": "seed",
+        "displayName": "Default Model",
+        "streaming": true
+      },
+      {
+        "id": "reasoner",
+        "provider": "seed",
+        "displayName": "Reasoner Model",
+        "streaming": false
+      }
+    ]
+  }
+}

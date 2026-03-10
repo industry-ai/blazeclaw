@@ -1124,6 +1124,7 @@ namespace blazeclaw::gateway::protocol {
 		if (request.method == "gateway.protocol.version" ||
 			request.method == "gateway.features.list" ||
 			request.method == "gateway.config.get" ||
+			request.method == "gateway.models.list" ||
 			request.method == "gateway.tools.catalog" ||
 			request.method == "gateway.health" ||
 			request.method == "gateway.transport.status" ||
@@ -1326,6 +1327,24 @@ namespace blazeclaw::gateway::protocol {
 				!IsFieldValueType(payload, "model", '"') ||
 				!IsFieldBoolean(payload, "streaming")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.config.set` requires `gateway.bind`, `gateway.port`, `agent.model`, and `agent.streaming` fields.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.models.list") {
+			if (!IsFieldValueType(payload, "models", '[')) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.models.list` requires array field `models`.");
+				return false;
+			}
+
+			if (IsArrayFieldExplicitlyEmpty(payload, "models")) {
+				return true;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "id", "provider", "displayName", "streaming" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.models.list` requires model entries with `id`, `provider`, `displayName`, and `streaming` fields.");
 				return false;
 			}
 

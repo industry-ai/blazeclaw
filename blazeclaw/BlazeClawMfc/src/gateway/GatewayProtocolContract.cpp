@@ -117,7 +117,7 @@ namespace blazeclaw::gateway::protocol {
 		const ResponseFrame featuresListResponse{
 			.id = "req-3",
 			.ok = true,
-	  .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.create\",\"gateway.agents.delete\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.agents.update\",\"gateway.channels.accounts\",\"gateway.channels.logout\",\"gateway.channels.route.resolve\",\"gateway.channels.routes\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.config.set\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.compact\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.execute\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
+	  .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.create\",\"gateway.agents.delete\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.agents.update\",\"gateway.channels.accounts\",\"gateway.channels.logout\",\"gateway.channels.route.resolve\",\"gateway.channels.routes\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.config.set\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.models.list\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.compact\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.execute\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
 			.error = std::nullopt,
 		};
 
@@ -293,6 +293,13 @@ namespace blazeclaw::gateway::protocol {
 			.id = "req-33",
 			.ok = true,
 			.payloadJson = "{\"gateway\":{\"bind\":\"127.0.0.1\",\"port\":18789},\"agent\":{\"model\":\"default\",\"streaming\":true},\"updated\":true}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame modelsListResponse{
+			.id = "req-34",
+			.ok = true,
+			.payloadJson = "{\"models\":[{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true},{\"id\":\"reasoner\",\"provider\":\"seed\",\"displayName\":\"Reasoner Model\",\"streaming\":false}]}",
 			.error = std::nullopt,
 		};
 
@@ -620,6 +627,14 @@ namespace blazeclaw::gateway::protocol {
 			return false;
 		}
 
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.models.list",
+			modelsListResponse,
+			responseIssue)) {
+			error = "Models list response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
 		SchemaValidationIssue eventIssue;
 		if (!GatewayProtocolSchemaValidator::ValidateEvent(event, eventIssue)) {
 			error = "Tick event schema validation failed: " + eventIssue.message;
@@ -850,6 +865,20 @@ namespace blazeclaw::gateway::protocol {
 			return false;
 		}
 
+		const ResponseFrame modelsListResponseNegative{
+			.id = "req-schema-24",
+			.ok = true,
+			.payloadJson = "{\"models\":[{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\"}]}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.models.list",
+			modelsListResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.models.list missing `streaming`.";
+			return false;
+		}
+
 		const EventFrame channelsAccountsUpdateEventPositive{
 			.eventName = "gateway.channels.accounts.update",
 			.payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":false}]}",
@@ -1072,6 +1101,13 @@ namespace blazeclaw::gateway::protocol {
 		if (!CompareFixture(
 			root / "response_config_set.json",
 			SerializeResponseFrame(configSetResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_models_list.json",
+			SerializeResponseFrame(modelsListResponse),
 			error)) {
 			return false;
 		}
