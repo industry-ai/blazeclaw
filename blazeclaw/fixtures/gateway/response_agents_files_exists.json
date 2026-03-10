@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-39",
+  "ok": true,
+  "payload": {
+    "path": "agents/default/profile.json",
+    "exists": true
+  }
+}

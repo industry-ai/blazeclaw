@@ -226,6 +226,26 @@ namespace blazeclaw::gateway {
 		};
 	}
 
+	AgentFileExistsResult GatewayAgentRegistry::ExistsFile(const std::string& requestedId, const std::string& path) const {
+		const AgentEntry agent = Get(requestedId);
+		const auto files = ListFiles(agent.id);
+		const std::string resolvedPath = path.empty()
+			? (files.empty() ? ("agents/" + agent.id + "/note.txt") : files.front().path)
+			: path;
+
+		const bool inSeed = std::find_if(files.begin(), files.end(), [&](const AgentFileEntry& file) {
+			return file.path == resolvedPath;
+			}) != files.end();
+
+		const std::string key = agent.id + "::" + resolvedPath;
+		const bool inOverrides = m_fileOverrides.find(key) != m_fileOverrides.end();
+
+		return AgentFileExistsResult{
+			.path = resolvedPath,
+			.exists = inSeed || inOverrides,
+		};
+	}
+
 	std::string GatewayAgentRegistry::NormalizeAgentId(const std::string& value) {
 		if (value.empty()) {
 			return "default";

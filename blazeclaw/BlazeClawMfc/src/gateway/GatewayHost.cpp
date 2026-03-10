@@ -595,6 +595,20 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.agents.files.exists", [this](const protocol::RequestFrame& request) {
+			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
+			const std::string requestedPath = ExtractStringParam(request.paramsJson, "path");
+			const AgentFileExistsResult result = m_agentRegistry.ExistsFile(requestedId, requestedPath);
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"path\":\"" + EscapeJson(result.path) +
+					"\",\"exists\":" + std::string(result.exists ? "true" : "false") + "}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.agents.files.delete", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
 			const std::string requestedPath = ExtractStringParam(request.paramsJson, "path");
