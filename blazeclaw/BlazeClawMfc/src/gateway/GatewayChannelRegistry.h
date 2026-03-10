@@ -37,6 +37,7 @@ namespace blazeclaw::gateway {
 
 		std::vector<ChannelStatusEntry> ListStatus() const;
 		std::vector<ChannelAccountEntry> ListAccounts() const;
+      ChannelAccountEntry GetAccount(const std::string& channel, const std::string& accountId) const;
 		std::vector<ChannelRouteEntry> ListRoutes() const;
 		ChannelRouteEntry ResolveRoute(const std::string& channel, const std::string& accountId) const;
 		ChannelLogoutResult Logout(const std::string& channel, const std::string& accountId);

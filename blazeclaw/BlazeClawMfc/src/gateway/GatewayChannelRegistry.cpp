@@ -30,6 +30,30 @@ namespace blazeclaw::gateway {
 		return m_accounts;
 	}
 
+	ChannelAccountEntry GatewayChannelRegistry::GetAccount(const std::string& channel, const std::string& accountId) const {
+		const auto it = std::find_if(m_accounts.begin(), m_accounts.end(), [&](const ChannelAccountEntry& account) {
+			const bool channelMatches = channel.empty() || account.channel == channel;
+			const bool accountMatches = accountId.empty() || account.accountId == accountId;
+			return channelMatches && accountMatches;
+		});
+
+		if (it != m_accounts.end()) {
+			return *it;
+		}
+
+		if (!m_accounts.empty()) {
+			return m_accounts.front();
+		}
+
+		return ChannelAccountEntry{
+			.channel = channel.empty() ? "unknown" : channel,
+			.accountId = accountId.empty() ? "unknown.default" : accountId,
+			.label = "Unknown Account",
+			.active = false,
+			.connected = false,
+		};
+	}
+
 	std::vector<ChannelRouteEntry> GatewayChannelRegistry::ListRoutes() const {
 		return m_routes;
 	}
