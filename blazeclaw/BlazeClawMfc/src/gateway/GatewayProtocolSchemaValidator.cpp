@@ -784,6 +784,62 @@ namespace blazeclaw::gateway::protocol {
 		return true;
 	}
 
+	bool ValidateChannelsAccountsUpdateParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+		ParsedObjectFieldKinds fieldKinds;
+		if (!TryParseRequestParamsObject(request, issue, "gateway.channels.accounts.update", fieldKinds)) {
+			return false;
+		}
+
+		if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"channel",
+				JsonFieldKind::String,
+				issue,
+				"gateway.channels.accounts.update",
+				"a string") ||
+			!RequireFieldKindIfPresent(
+				fieldKinds,
+				"accountId",
+				JsonFieldKind::String,
+				issue,
+				"gateway.channels.accounts.update",
+				"a string") ||
+			!RequireFieldKindIfPresent(
+				fieldKinds,
+				"label",
+				JsonFieldKind::String,
+				issue,
+				"gateway.channels.accounts.update",
+				"a string") ||
+			!RequireFieldKindIfPresent(
+				fieldKinds,
+				"active",
+				JsonFieldKind::Boolean,
+				issue,
+				"gateway.channels.accounts.update",
+				"boolean") ||
+			!RequireFieldKindIfPresent(
+				fieldKinds,
+				"connected",
+				JsonFieldKind::Boolean,
+				issue,
+				"gateway.channels.accounts.update",
+				"boolean")) {
+			return false;
+		}
+
+		for (const auto& [field, _] : fieldKinds) {
+			if (field == "channel" || field == "accountId" || field == "label" || field == "active" || field == "connected") {
+				continue;
+			}
+
+			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.accounts.update` does not allow `params." + field + "`.");
+			return false;
+		}
+
+		return true;
+	}
+
 		bool ValidateOptionalChannelParam(
 			const RequestFrame& request,
 			SchemaValidationIssue& issue,
@@ -1515,6 +1571,10 @@ namespace blazeclaw::gateway::protocol {
 			return ValidateChannelsAccountsExistsParams(request, issue);
 		}
 
+		if (request.method == "gateway.channels.accounts.update") {
+			return ValidateChannelsAccountsUpdateParams(request, issue);
+		}
+
 		if (request.method == "gateway.tools.call.preview") {
 			return ValidateToolsCallPreviewParams(request, issue);
 		}
@@ -1946,6 +2006,34 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.channels.accounts.deactivate") {
+			if (!IsFieldValueType(payload, "account", '{') || !IsFieldBoolean(payload, "deactivated")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.accounts.deactivate` requires `account` object and `deactivated` boolean.");
+				return false;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "channel", "accountId", "label", "active", "connected" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.accounts.deactivate` requires account fields `channel`, `accountId`, `label`, `active`, and `connected`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.channels.accounts.update") {
+			if (!IsFieldValueType(payload, "account", '{') || !IsFieldBoolean(payload, "updated")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.accounts.update` requires `account` object and `updated` boolean.");
+				return false;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "channel", "accountId", "label", "active", "connected" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.accounts.update` requires account fields `channel`, `accountId`, `label`, `active`, and `connected`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.channels.accounts.exists") {
 			if (!IsFieldValueType(payload, "channel", '"') ||
 				!IsFieldValueType(payload, "accountId", '"') ||
@@ -2146,6 +2234,7 @@ namespace blazeclaw::gateway::protocol {
 		 "gateway.channels.accounts.activate",
 		 "gateway.channels.accounts.deactivate",
          "gateway.channels.accounts.exists",
+         "gateway.channels.accounts.update",
 		   "gateway.channels.route.exists",
 				"gateway.tools.call.preview",
 				"gateway.tick",

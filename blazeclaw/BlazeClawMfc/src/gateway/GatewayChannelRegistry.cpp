@@ -173,6 +173,60 @@ namespace blazeclaw::gateway {
 		return it != m_accounts.end();
 	}
 
+	ChannelAccountEntry GatewayChannelRegistry::UpdateAccount(
+		const std::string& channel,
+		const std::string& accountId,
+		const std::optional<std::string>& label,
+		std::optional<bool> active,
+		std::optional<bool> connected,
+		bool& updated) {
+		updated = false;
+		ChannelAccountEntry selected{};
+
+		for (auto& account : m_accounts) {
+			const bool channelMatches = channel.empty() || account.channel == channel;
+			const bool accountMatches = accountId.empty() || account.accountId == accountId;
+			if (!(channelMatches && accountMatches)) {
+				continue;
+			}
+
+			if (label.has_value()) {
+				account.label = label.value();
+			}
+			if (active.has_value()) {
+				account.active = active.value();
+			}
+			if (connected.has_value()) {
+				account.connected = connected.value();
+			}
+
+			selected = account;
+			updated = true;
+			break;
+		}
+
+		if (!updated) {
+			if (!m_accounts.empty()) {
+				selected = m_accounts.front();
+			}
+			return selected;
+		}
+
+		for (auto& status : m_status) {
+			if (status.id == selected.channel) {
+				const bool hasConnectedAccount = std::any_of(
+					m_accounts.begin(),
+					m_accounts.end(),
+					[&](const ChannelAccountEntry& account) {
+						return account.channel == selected.channel && account.connected;
+					});
+				status.connected = hasConnectedAccount;
+			}
+		}
+
+		return selected;
+	}
+
 	ChannelRouteEntry GatewayChannelRegistry::SetRoute(
 		const std::string& channel,
 		const std::string& accountId,

@@ -595,6 +595,34 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.channels.accounts.update", [this](const protocol::RequestFrame& request) {
+			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
+			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
+			const bool hasLabel = request.paramsJson.has_value() &&
+				request.paramsJson.value().find("\"label\"") != std::string::npos;
+			const std::optional<std::string> label = hasLabel
+				? std::optional<std::string>(ExtractStringParam(request.paramsJson, "label"))
+				: std::nullopt;
+			const std::optional<bool> active = ExtractBooleanParam(request.paramsJson, "active");
+			const std::optional<bool> connected = ExtractBooleanParam(request.paramsJson, "connected");
+			bool updated = false;
+			const ChannelAccountEntry account = m_channelRegistry.UpdateAccount(
+				channel,
+				accountId,
+				label,
+				active,
+				connected,
+				updated);
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"account\":" + SerializeChannelAccount(account) +
+					",\"updated\":" + std::string(updated ? "true" : "false") + "}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.channels.accounts.exists", [this](const protocol::RequestFrame& request) {
 			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
 			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
