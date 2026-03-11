@@ -595,6 +595,15 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.events.types", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"types\":[\"lifecycle\",\"update\"],\"count\":2}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.events.summary", [](const protocol::RequestFrame& request) {
 			const auto& events = EventCatalogNames();
 			const std::size_t lifecycle = static_cast<std::size_t>(std::count_if(events.begin(), events.end(), [](const std::string& item) {
@@ -606,6 +615,21 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"total\":" + std::to_string(events.size()) + ",\"lifecycle\":" + std::to_string(lifecycle) + ",\"updates\":" + std::to_string(updates) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.health", [this](const protocol::RequestFrame& request) {
+			const auto tools = m_toolRegistry.List();
+			const std::size_t enabled = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {
+				return item.enabled;
+				}));
+			const bool healthy = enabled == tools.size();
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"healthy\":" + std::string(healthy ? "true" : "false") + ",\"enabled\":" + std::to_string(enabled) + ",\"total\":" + std::to_string(tools.size()) + "}",
 				.error = std::nullopt,
 			};
 			});
@@ -635,6 +659,15 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.models.compatibility", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"default\":\"full\",\"reasoner\":\"partial\",\"count\":2}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.tools.stats", [this](const protocol::RequestFrame& request) {
 			const auto tools = m_toolRegistry.List();
 			const std::size_t enabled = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {
@@ -647,6 +680,15 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"enabled\":" + std::to_string(enabled) + ",\"disabled\":" + std::to_string(disabled) + ",\"total\":" + std::to_string(total) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.config.validate", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"valid\":true,\"errors\":[],\"count\":0}",
 				.error = std::nullopt,
 			};
 			});
@@ -2277,6 +2319,15 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"exclusiveAddrUse\":true,\"keepAlive\":true,\"noDelay\":true,\"idleTimeoutMs\":120000,\"handshakeTimeoutMs\":5000}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.transport.policy.set", [this](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+			   .payloadJson = "{\"applied\":false,\"reason\":\"runtime_immutable\"}",
 				.error = std::nullopt,
 			};
 			});

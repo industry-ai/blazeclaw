@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-109",
+  "ok": true,
+  "payload": {
+    "applied": false,
+    "reason": "runtime_immutable"
+  }
+}

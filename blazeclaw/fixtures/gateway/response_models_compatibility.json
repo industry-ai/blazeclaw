@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-107",
+  "ok": true,
+  "payload": {
+    "default": "full",
+    "reasoner": "partial",
+    "count": 2
+  }
+}

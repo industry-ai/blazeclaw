@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-105",
+  "ok": true,
+  "payload": {
+    "types": [ "lifecycle", "update" ],
+    "count": 2
+  }
+}
