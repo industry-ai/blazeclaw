@@ -2156,11 +2156,13 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.features.list" ||
 			request.method == "gateway.config.get" ||
 			request.method == "gateway.config.keys" ||
+			request.method == "gateway.config.sections" ||
 			request.method == "gateway.transport.endpoint.get" ||
 			request.method == "gateway.transport.connections.count" ||
 			request.method == "gateway.logs.levels" ||
 			request.method == "gateway.events.catalog" ||
 			request.method == "gateway.events.list" ||
+			request.method == "gateway.events.last" ||
 			request.method == "gateway.models.list" ||
 			request.method == "gateway.tools.catalog" ||
 			request.method == "gateway.health" ||
@@ -2197,6 +2199,10 @@ namespace blazeclaw::gateway::protocol {
 			return ValidateStringIdParam(request, issue, request.method, "tool");
 		}
 
+		if (request.method == "gateway.tools.list") {
+			return ValidateStringIdParam(request, issue, request.method, "category");
+		}
+
 		if (request.method == "gateway.tools.count") {
 			return ValidateOptionalActiveParam(request, issue, request.method);
 		}
@@ -2209,11 +2215,19 @@ namespace blazeclaw::gateway::protocol {
 			return ValidateStringIdParam(request, issue, request.method, "modelId");
 		}
 
+		if (request.method == "gateway.models.listByProvider") {
+			return ValidateStringIdParam(request, issue, request.method, "provider");
+		}
+
 		if (request.method == "gateway.config.getKey") {
 			return ValidateStringIdParam(request, issue, request.method, "key");
 		}
 
 		if (request.method == "gateway.transport.endpoint.exists") {
+			return ValidateStringIdParam(request, issue, request.method, "endpoint");
+		}
+
+		if (request.method == "gateway.transport.endpoint.set") {
 			return ValidateStringIdParam(request, issue, request.method, "endpoint");
 		}
 
@@ -3008,12 +3022,18 @@ namespace blazeclaw::gateway::protocol {
 			  "gateway.config.exists",
 				"gateway.config.keys",
 			  "gateway.config.count",
+			  "gateway.config.sections",
 				"gateway.transport.connections.count",
 			   "gateway.transport.endpoint.get",
+			   "gateway.transport.endpoint.set",
+			   "gateway.config.sections",
+				"gateway.transport.endpoint.set",
 				"gateway.health.details",
 				"gateway.logs.count",
 			  "gateway.logs.levels",
-				"gateway.events.get",
+			   "gateway.events.get",
+			  "gateway.events.last",
+				"gateway.events.last",
 		  "gateway.agents.create",
 				"gateway.sessions.delete",
 			   "gateway.sessions.compact",
@@ -3055,9 +3075,11 @@ namespace blazeclaw::gateway::protocol {
 				 "gateway.tools.exists",
 				"gateway.tools.count",
 				"gateway.tools.get",
+				"gateway.tools.list",
 				"gateway.models.exists",
 				"gateway.models.count",
 				"gateway.models.get",
+				"gateway.models.listByProvider",
 				"gateway.config.getKey",
 				"gateway.transport.endpoint.exists",
 				"gateway.tick",
@@ -3065,6 +3087,15 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.shutdown",
 				})) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.features.list` catalog is missing required method/event members.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.events.last") {
+			if (!IsFieldValueType(payload, "event", '"')) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.events.last` requires `event` string.");
 				return false;
 			}
 
@@ -3094,9 +3125,45 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.models.listByProvider") {
+			if (!IsFieldValueType(payload, "provider", '"') || !IsFieldValueType(payload, "models", '[') || !IsFieldNumber(payload, "count")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.models.listByProvider` requires `provider` string, `models` array, and `count` number.");
+				return false;
+			}
+
+			if (IsArrayFieldExplicitlyEmpty(payload, "models")) {
+				return true;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "id", "provider", "displayName", "streaming" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.models.listByProvider` requires model entries with `id`, `provider`, `displayName`, and `streaming` fields.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.events.get") {
 			if (!IsFieldValueType(payload, "event", '"')) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.events.get` requires `event` string.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.tools.list") {
+			if (!IsFieldValueType(payload, "tools", '[') || !IsFieldNumber(payload, "count")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.tools.list` requires `tools` array and `count` number.");
+				return false;
+			}
+
+			if (IsArrayFieldExplicitlyEmpty(payload, "tools")) {
+				return true;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "id", "label", "category", "enabled" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.tools.list` requires tool entries with `id`, `label`, `category`, and `enabled` fields.");
 				return false;
 			}
 
@@ -3116,6 +3183,29 @@ namespace blazeclaw::gateway::protocol {
 				!IsFieldValueType(payload, "endpoint", '"') ||
 				!IsFieldNumber(payload, "connections")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.health.details` requires `status`, `running`, and `transport.{endpoint,connections}` fields.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.transport.endpoint.set") {
+			if (!IsFieldValueType(payload, "endpoint", '"') || !IsFieldBoolean(payload, "updated")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.transport.endpoint.set` requires `endpoint` string and `updated` boolean.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.config.sections") {
+			if (!IsFieldValueType(payload, "sections", '[') || !IsFieldNumber(payload, "count")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.config.sections` requires `sections` array and `count` number.");
+				return false;
+			}
+
+			if (!PayloadContainsAllStringValues(payload, { "gateway", "agent" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.config.sections` is missing required section members.");
 				return false;
 			}
 

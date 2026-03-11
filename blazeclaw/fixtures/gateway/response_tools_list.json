@@ -1,0 +1,22 @@
+{
+  "type": "res",
+  "id": "req-91",
+  "ok": true,
+  "payload": {
+    "tools": [
+      {
+        "id": "chat.send",
+        "label": "Chat Send",
+        "category": "messaging",
+        "enabled": true
+      },
+      {
+        "id": "memory.search",
+        "label": "Memory Search",
+        "category": "knowledge",
+        "enabled": true
+      }
+    ],
+    "count": 2
+  }
+}

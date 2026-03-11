@@ -595,6 +595,17 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.events.last", [](const protocol::RequestFrame& request) {
+			const auto& events = EventCatalogNames();
+			const std::string last = events.empty() ? "none" : events.back();
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"event\":\"" + EscapeJson(last) + "\"}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.events.list", [](const protocol::RequestFrame& request) {
 			const auto& events = EventCatalogNames();
 			return protocol::ResponseFrame{
@@ -2070,6 +2081,67 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"levels\":[\"info\",\"debug\"],\"count\":2}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.list", [this](const protocol::RequestFrame& request) {
+			const std::string category = ExtractStringParam(request.paramsJson, "category");
+			const auto tools = m_toolRegistry.List();
+			std::string toolsJson = "[";
+			std::size_t count = 0;
+			for (std::size_t i = 0; i < tools.size(); ++i) {
+				if (!category.empty() && tools[i].category != category) {
+					continue;
+				}
+				if (count > 0) {
+					toolsJson += ",";
+				}
+				toolsJson += SerializeTool(tools[i]);
+				++count;
+			}
+			toolsJson += "]";
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"tools\":" + toolsJson + ",\"count\":" + std::to_string(count) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.models.listByProvider", [](const protocol::RequestFrame& request) {
+			const std::string provider = ExtractStringParam(request.paramsJson, "provider");
+			const bool includeAll = provider.empty() || provider == "seed";
+			const std::string modelsJson = includeAll
+				? "[{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true},{\"id\":\"reasoner\",\"provider\":\"seed\",\"displayName\":\"Reasoner Model\",\"streaming\":false}]"
+				: "[]";
+			const std::size_t count = includeAll ? 2 : 0;
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"provider\":\"" + EscapeJson(provider.empty() ? "*" : provider) + "\",\"models\":" + modelsJson + ",\"count\":" + std::to_string(count) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.config.sections", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"sections\":[\"gateway\",\"agent\"],\"count\":2}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.transport.endpoint.set", [this](const protocol::RequestFrame& request) {
+			const std::string endpoint = ExtractStringParam(request.paramsJson, "endpoint");
+			const std::string resolved = endpoint.empty() ? m_transport.Endpoint() : endpoint;
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"endpoint\":\"" + EscapeJson(resolved) + "\",\"updated\":false}",
 				.error = std::nullopt,
 			};
 			});

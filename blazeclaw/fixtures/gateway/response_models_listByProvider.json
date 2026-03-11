@@ -1,0 +1,23 @@
+{
+  "type": "res",
+  "id": "req-92",
+  "ok": true,
+  "payload": {
+    "provider": "seed",
+    "models": [
+      {
+        "id": "default",
+        "provider": "seed",
+        "displayName": "Default Model",
+        "streaming": true
+      },
+      {
+        "id": "reasoner",
+        "provider": "seed",
+        "displayName": "Reasoner Model",
+        "streaming": false
+      }
+    ],
+    "count": 2
+  }
+}
