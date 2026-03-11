@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-74",
+  "ok": true,
+  "payload": {
+    "modelId": "default",
+    "exists": true
+  }
+}

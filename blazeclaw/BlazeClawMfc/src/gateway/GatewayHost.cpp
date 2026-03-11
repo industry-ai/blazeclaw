@@ -1779,6 +1779,84 @@ namespace blazeclaw::gateway {
 				.error = std::nullopt,
 			};
 			});
+
+		m_dispatcher.Register("gateway.events.exists", [](const protocol::RequestFrame& request) {
+			const std::string eventName = ExtractStringParam(request.paramsJson, "event");
+			const auto& events = EventCatalogNames();
+			const bool exists = std::any_of(events.begin(), events.end(), [&](const std::string& item) {
+				return eventName.empty() || item == eventName;
+			});
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"event\":\"" + EscapeJson(eventName.empty() ? "*" : eventName) +
+					"\",\"exists\":" + std::string(exists ? "true" : "false") + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.events.count", [](const protocol::RequestFrame& request) {
+			const std::string eventName = ExtractStringParam(request.paramsJson, "event");
+			const auto& events = EventCatalogNames();
+			const std::size_t count = static_cast<std::size_t>(std::count_if(events.begin(), events.end(), [&](const std::string& item) {
+				return eventName.empty() || item == eventName;
+			}));
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"event\":\"" + EscapeJson(eventName.empty() ? "*" : eventName) +
+					"\",\"count\":" + std::to_string(count) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.exists", [this](const protocol::RequestFrame& request) {
+			const std::string requestedTool = ExtractStringParam(request.paramsJson, "tool");
+			const auto tools = m_toolRegistry.List();
+			const bool exists = std::any_of(tools.begin(), tools.end(), [&](const ToolCatalogEntry& tool) {
+				return requestedTool.empty() || tool.id == requestedTool;
+			});
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"tool\":\"" + EscapeJson(requestedTool.empty() ? "*" : requestedTool) +
+					"\",\"exists\":" + std::string(exists ? "true" : "false") + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.count", [this](const protocol::RequestFrame& request) {
+			const std::optional<bool> activeFilter = ExtractBooleanParam(request.paramsJson, "active");
+			const auto tools = m_toolRegistry.List();
+			const std::size_t count = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [&](const ToolCatalogEntry& tool) {
+				return !activeFilter.has_value() || tool.enabled == activeFilter.value();
+			}));
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"active\":" + std::string(activeFilter.value_or(false) ? "true" : "false") +
+					",\"activeFilterApplied\":" + std::string(activeFilter.has_value() ? "true" : "false") +
+					",\"count\":" + std::to_string(count) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.models.exists", [](const protocol::RequestFrame& request) {
+			const std::string modelId = ExtractStringParam(request.paramsJson, "modelId");
+			const bool exists = modelId.empty() || modelId == "default" || modelId == "reasoner";
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"modelId\":\"" + EscapeJson(modelId.empty() ? "*" : modelId) +
+					"\",\"exists\":" + std::string(exists ? "true" : "false") + "}",
+				.error = std::nullopt,
+			};
+			});
 	}
 
 } // namespace blazeclaw::gateway

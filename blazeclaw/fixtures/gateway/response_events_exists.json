@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-70",
+  "ok": true,
+  "payload": {
+    "event": "gateway.tick",
+    "exists": true
+  }
+}

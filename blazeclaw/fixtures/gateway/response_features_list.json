@@ -50,9 +50,12 @@
       "gateway.config.get",
       "gateway.config.set",
       "gateway.events.catalog",
+      "gateway.events.count",
+      "gateway.events.exists",
       "gateway.features.list",
       "gateway.health",
       "gateway.logs.tail",
+      "gateway.models.exists",
       "gateway.models.list",
       "gateway.ping",
       "gateway.protocol.version",
@@ -71,6 +74,8 @@
       "gateway.tools.call.execute",
       "gateway.tools.call.preview",
       "gateway.tools.catalog",
+      "gateway.tools.count",
+      "gateway.tools.exists",
       "gateway.transport.status"
     ],
     "events": [

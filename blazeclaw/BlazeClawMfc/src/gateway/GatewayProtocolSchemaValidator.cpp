@@ -2141,6 +2141,22 @@ namespace blazeclaw::gateway::protocol {
 			return ValidateNoParamsAllowed(request, issue, request.method);
 		}
 
+		if (request.method == "gateway.events.exists" || request.method == "gateway.events.count") {
+			return ValidateStringIdParam(request, issue, request.method, "event");
+		}
+
+		if (request.method == "gateway.tools.exists") {
+			return ValidateStringIdParam(request, issue, request.method, "tool");
+		}
+
+		if (request.method == "gateway.tools.count") {
+			return ValidateOptionalActiveParam(request, issue, request.method);
+		}
+
+		if (request.method == "gateway.models.exists") {
+			return ValidateStringIdParam(request, issue, request.method, "modelId");
+		}
+
 		if (request.method == "gateway.channels.status" ||
 			request.method == "gateway.channels.routes" ||
 			request.method == "gateway.channels.accounts") {
@@ -2934,6 +2950,8 @@ namespace blazeclaw::gateway::protocol {
                 "gateway.sessions.exists",
 				"gateway.sessions.count",
 				"gateway.sessions.activate",
+                "gateway.events.exists",
+				"gateway.events.count",
 				"gateway.channels.accounts",
 		 "gateway.channels.accounts.activate",
 		 "gateway.channels.accounts.deactivate",
@@ -2959,6 +2977,9 @@ namespace blazeclaw::gateway::protocol {
 		  "gateway.channels.routes.reset",
 		   "gateway.channels.routes.count",
 				"gateway.tools.call.preview",
+             "gateway.tools.exists",
+				"gateway.tools.count",
+				"gateway.models.exists",
 				"gateway.tick",
 				"gateway.health",
 				"gateway.shutdown",
