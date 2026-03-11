@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-149",
+  "ok": true,
+  "payload": {
+    "digest": "sha256:seed-policy-v1",
+    "version": 1
+  }
+}

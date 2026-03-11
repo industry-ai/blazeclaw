@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-145",
+  "ok": true,
+  "payload": {
+    "cursor": "evt-2",
+    "event": "gateway.session.reset"
+  }
+}

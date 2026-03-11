@@ -2166,6 +2166,7 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.config.snapshot" ||
 			request.method == "gateway.config.revision" ||
 			request.method == "gateway.config.history" ||
+           request.method == "gateway.config.profile" ||
 			request.method == "gateway.transport.endpoint.get" ||
 			request.method == "gateway.transport.connections.count" ||
 			request.method == "gateway.transport.endpoints.list" ||
@@ -2178,6 +2179,7 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.transport.policy.metrics" ||
 			request.method == "gateway.transport.policy.export" ||
 			request.method == "gateway.transport.policy.import" ||
+          request.method == "gateway.transport.policy.digest" ||
 			request.method == "gateway.logs.levels" ||
 			request.method == "gateway.events.catalog" ||
 			request.method == "gateway.events.list" ||
@@ -2190,6 +2192,7 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.events.window" ||
 			request.method == "gateway.events.recent" ||
 			request.method == "gateway.events.batch" ||
+          request.method == "gateway.events.cursor" ||
 			request.method == "gateway.models.list" ||
 			request.method == "gateway.models.providers" ||
 			request.method == "gateway.models.default.get" ||
@@ -2201,6 +2204,7 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.models.preference" ||
 			request.method == "gateway.models.priority" ||
 			request.method == "gateway.models.affinity" ||
+         request.method == "gateway.models.pool" ||
 			request.method == "gateway.tools.health" ||
 			request.method == "gateway.tools.stats" ||
 			request.method == "gateway.tools.failures" ||
@@ -2209,6 +2213,7 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.tools.errors" ||
 			request.method == "gateway.tools.throughput" ||
 			request.method == "gateway.tools.capacity" ||
+            request.method == "gateway.tools.queue" ||
 			request.method == "gateway.tools.metrics" ||
 			request.method == "gateway.tools.categories" ||
 			request.method == "gateway.tools.catalog" ||
@@ -3092,6 +3097,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.config.snapshot",
 				"gateway.config.revision",
 				"gateway.config.history",
+				"gateway.config.profile",
 				"gateway.transport.connections.count",
 				"gateway.transport.endpoint.get",
 				"gateway.transport.endpoint.set",
@@ -3105,6 +3111,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.transport.policy.metrics",
 				"gateway.transport.policy.export",
 				"gateway.transport.policy.import",
+				"gateway.transport.policy.digest",
 				"gateway.config.sections",
 				"gateway.transport.endpoint.set",
 				"gateway.health.details",
@@ -3122,6 +3129,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.events.window",
 				"gateway.events.recent",
 				"gateway.events.batch",
+				"gateway.events.cursor",
 				"gateway.events.last",
 				"gateway.agents.create",
 				"gateway.sessions.delete",
@@ -3175,6 +3183,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.tools.errors",
 				"gateway.tools.throughput",
 				"gateway.tools.capacity",
+                "gateway.tools.queue",
 				"gateway.models.exists",
 				"gateway.models.count",
 				"gateway.models.get",
@@ -3189,6 +3198,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.models.preference",
 				"gateway.models.priority",
 				"gateway.models.affinity",
+                "gateway.models.pool",
 				"gateway.config.getKey",
 				"gateway.transport.endpoint.exists",
 				"gateway.tick",
@@ -3196,6 +3206,15 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.shutdown",
 				})) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.features.list` catalog is missing required method/event members.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.events.cursor") {
+			if (!IsFieldValueType(payload, "cursor", '"') || !IsFieldValueType(payload, "event", '"')) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.events.cursor` requires `cursor` string and `event` string.");
 				return false;
 			}
 
@@ -3216,9 +3235,27 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.models.pool") {
+			if (!IsFieldValueType(payload, "models", '[') || !IsFieldNumber(payload, "count")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.models.pool` requires `models` array and `count` number.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.events.recent") {
 			if (!IsFieldValueType(payload, "events", '[') || !IsFieldNumber(payload, "count")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.events.recent` requires `events` array and `count` number.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.tools.queue") {
+			if (!IsFieldNumber(payload, "queued") || !IsFieldNumber(payload, "running") || !IsFieldNumber(payload, "tools")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.tools.queue` requires numeric fields `queued`, `running`, and `tools`.");
 				return false;
 			}
 
@@ -3234,9 +3271,27 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.transport.policy.digest") {
+			if (!IsFieldValueType(payload, "digest", '"') || !IsFieldNumber(payload, "version")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.transport.policy.digest` requires `digest` string and `version` number.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.events.window") {
 			if (!IsFieldValueType(payload, "events", '[') || !IsFieldNumber(payload, "count")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.events.window` requires `events` array and `count` number.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.config.profile") {
+			if (!IsFieldValueType(payload, "name", '"') || !IsFieldValueType(payload, "source", '"')) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.config.profile` requires `name` string and `source` string.");
 				return false;
 			}
 
