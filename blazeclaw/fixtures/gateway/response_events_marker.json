@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-160",
+  "ok": true,
+  "payload": {
+    "marker": "evt-marker-1",
+    "event": "gateway.shutdown"
+  }
+}
