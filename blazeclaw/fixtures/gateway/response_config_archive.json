@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-168",
+  "ok": true,
+  "payload": {
+    "archive": "runtime",
+    "sections": [ "gateway", "agent" ],
+    "count": 2
+  }
+}
