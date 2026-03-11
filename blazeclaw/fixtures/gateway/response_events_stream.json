@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-180",
+  "ok": true,
+  "payload": {
+    "stream": "evt-stream-1",
+    "event": "gateway.tools.catalog.update"
+  }
+}

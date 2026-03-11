@@ -2166,13 +2166,14 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.config.snapshot" ||
 			request.method == "gateway.config.revision" ||
 			request.method == "gateway.config.history" ||
-           request.method == "gateway.config.profile" ||
-           request.method == "gateway.config.template" ||
-           request.method == "gateway.config.bundle" ||
-           request.method == "gateway.config.package" ||
-           request.method == "gateway.config.archive" ||
-           request.method == "gateway.config.manifest" ||
-           request.method == "gateway.config.index" ||
+			request.method == "gateway.config.profile" ||
+			request.method == "gateway.config.template" ||
+			request.method == "gateway.config.bundle" ||
+			request.method == "gateway.config.package" ||
+			request.method == "gateway.config.archive" ||
+			request.method == "gateway.config.manifest" ||
+			request.method == "gateway.config.index" ||
+			request.method == "gateway.config.state" ||
 			request.method == "gateway.transport.endpoint.get" ||
 			request.method == "gateway.transport.connections.count" ||
 			request.method == "gateway.transport.endpoints.list" ||
@@ -2185,13 +2186,14 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.transport.policy.metrics" ||
 			request.method == "gateway.transport.policy.export" ||
 			request.method == "gateway.transport.policy.import" ||
-          request.method == "gateway.transport.policy.digest" ||
-          request.method == "gateway.transport.policy.preview" ||
-          request.method == "gateway.transport.policy.commit" ||
-          request.method == "gateway.transport.policy.apply" ||
-          request.method == "gateway.transport.policy.stage" ||
-          request.method == "gateway.transport.policy.reconcile" ||
-          request.method == "gateway.transport.policy.sync" ||
+			request.method == "gateway.transport.policy.digest" ||
+			request.method == "gateway.transport.policy.preview" ||
+			request.method == "gateway.transport.policy.commit" ||
+			request.method == "gateway.transport.policy.apply" ||
+			request.method == "gateway.transport.policy.stage" ||
+			request.method == "gateway.transport.policy.reconcile" ||
+			request.method == "gateway.transport.policy.sync" ||
+			request.method == "gateway.transport.policy.refresh" ||
 			request.method == "gateway.logs.levels" ||
 			request.method == "gateway.events.catalog" ||
 			request.method == "gateway.events.list" ||
@@ -2204,13 +2206,14 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.events.window" ||
 			request.method == "gateway.events.recent" ||
 			request.method == "gateway.events.batch" ||
-          request.method == "gateway.events.cursor" ||
-          request.method == "gateway.events.anchor" ||
-          request.method == "gateway.events.offset" ||
-          request.method == "gateway.events.marker" ||
-          request.method == "gateway.events.sequence" ||
-          request.method == "gateway.events.pointer" ||
-          request.method == "gateway.events.token" ||
+			request.method == "gateway.events.cursor" ||
+			request.method == "gateway.events.anchor" ||
+			request.method == "gateway.events.offset" ||
+			request.method == "gateway.events.marker" ||
+			request.method == "gateway.events.sequence" ||
+			request.method == "gateway.events.pointer" ||
+			request.method == "gateway.events.token" ||
+			request.method == "gateway.events.stream" ||
 			request.method == "gateway.models.list" ||
 			request.method == "gateway.models.providers" ||
 			request.method == "gateway.models.default.get" ||
@@ -2222,13 +2225,14 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.models.preference" ||
 			request.method == "gateway.models.priority" ||
 			request.method == "gateway.models.affinity" ||
-         request.method == "gateway.models.pool" ||
-         request.method == "gateway.models.manifest" ||
-         request.method == "gateway.models.catalog" ||
-         request.method == "gateway.models.inventory" ||
-         request.method == "gateway.models.snapshot" ||
-         request.method == "gateway.models.registry" ||
-         request.method == "gateway.models.index" ||
+			request.method == "gateway.models.pool" ||
+			request.method == "gateway.models.manifest" ||
+			request.method == "gateway.models.catalog" ||
+			request.method == "gateway.models.inventory" ||
+			request.method == "gateway.models.snapshot" ||
+			request.method == "gateway.models.registry" ||
+			request.method == "gateway.models.index" ||
+			request.method == "gateway.models.state" ||
 			request.method == "gateway.tools.health" ||
 			request.method == "gateway.tools.stats" ||
 			request.method == "gateway.tools.failures" ||
@@ -2237,13 +2241,14 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.tools.errors" ||
 			request.method == "gateway.tools.throughput" ||
 			request.method == "gateway.tools.capacity" ||
-            request.method == "gateway.tools.queue" ||
-            request.method == "gateway.tools.scheduler" ||
-            request.method == "gateway.tools.backlog" ||
-            request.method == "gateway.tools.window" ||
-            request.method == "gateway.tools.pipeline" ||
-            request.method == "gateway.tools.dispatch" ||
-            request.method == "gateway.tools.router" ||
+			request.method == "gateway.tools.queue" ||
+			request.method == "gateway.tools.scheduler" ||
+			request.method == "gateway.tools.backlog" ||
+			request.method == "gateway.tools.window" ||
+			request.method == "gateway.tools.pipeline" ||
+			request.method == "gateway.tools.dispatch" ||
+			request.method == "gateway.tools.router" ||
+			request.method == "gateway.tools.selector" ||
 			request.method == "gateway.tools.metrics" ||
 			request.method == "gateway.tools.categories" ||
 			request.method == "gateway.tools.catalog" ||
@@ -3134,6 +3139,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.config.archive",
 				"gateway.config.manifest",
 				"gateway.config.index",
+			  "gateway.config.state",
 				"gateway.transport.connections.count",
 				"gateway.transport.endpoint.get",
 				"gateway.transport.endpoint.set",
@@ -3154,6 +3160,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.transport.policy.stage",
 				"gateway.transport.policy.reconcile",
 				"gateway.transport.policy.sync",
+			  "gateway.transport.policy.refresh",
 				"gateway.config.sections",
 				"gateway.transport.endpoint.set",
 				"gateway.health.details",
@@ -3178,6 +3185,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.events.sequence",
 				"gateway.events.pointer",
 				"gateway.events.token",
+			  "gateway.events.stream",
 				"gateway.events.last",
 				"gateway.agents.create",
 				"gateway.sessions.delete",
@@ -3231,13 +3239,14 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.tools.errors",
 				"gateway.tools.throughput",
 				"gateway.tools.capacity",
-                "gateway.tools.queue",
-                "gateway.tools.scheduler",
-                "gateway.tools.backlog",
-                "gateway.tools.window",
-                "gateway.tools.pipeline",
-                "gateway.tools.dispatch",
-                "gateway.tools.router",
+				"gateway.tools.queue",
+				"gateway.tools.scheduler",
+				"gateway.tools.backlog",
+				"gateway.tools.window",
+				"gateway.tools.pipeline",
+				"gateway.tools.dispatch",
+				"gateway.tools.router",
+				"gateway.tools.selector",
 				"gateway.models.exists",
 				"gateway.models.count",
 				"gateway.models.get",
@@ -3252,13 +3261,14 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.models.preference",
 				"gateway.models.priority",
 				"gateway.models.affinity",
-                "gateway.models.pool",
-                "gateway.models.manifest",
-                "gateway.models.catalog",
-                "gateway.models.inventory",
-                "gateway.models.snapshot",
-                "gateway.models.registry",
-                "gateway.models.index",
+				"gateway.models.pool",
+				"gateway.models.manifest",
+				"gateway.models.catalog",
+				"gateway.models.inventory",
+				"gateway.models.snapshot",
+				"gateway.models.registry",
+				"gateway.models.index",
+				"gateway.models.state",
 				"gateway.config.getKey",
 				"gateway.transport.endpoint.exists",
 				"gateway.tick",
@@ -3266,6 +3276,15 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.shutdown",
 				})) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.features.list` catalog is missing required method/event members.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.events.stream") {
+			if (!IsFieldValueType(payload, "stream", '"') || !IsFieldValueType(payload, "event", '"')) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.events.stream` requires `stream` string and `event` string.");
 				return false;
 			}
 
@@ -3281,9 +3300,27 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.models.state") {
+			if (!IsFieldValueType(payload, "models", '[') || !IsFieldNumber(payload, "count")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.models.state` requires `models` array and `count` number.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.events.pointer") {
 			if (!IsFieldValueType(payload, "pointer", '"') || !IsFieldValueType(payload, "event", '"')) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.events.pointer` requires `pointer` string and `event` string.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.tools.selector") {
+			if (!IsFieldNumber(payload, "selected") || !IsFieldNumber(payload, "fallback") || !IsFieldNumber(payload, "tools")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.tools.selector` requires numeric fields `selected`, `fallback`, and `tools`.");
 				return false;
 			}
 
@@ -3299,9 +3336,27 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.transport.policy.refresh") {
+			if (!IsFieldBoolean(payload, "refreshed") || !IsFieldNumber(payload, "version") || !IsFieldBoolean(payload, "applied")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.transport.policy.refresh` requires `refreshed` boolean, `version` number, and `applied` boolean.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.events.sequence") {
 			if (!IsFieldNumber(payload, "sequence") || !IsFieldValueType(payload, "event", '"')) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.events.sequence` requires `sequence` number and `event` string.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.config.state") {
+			if (!IsFieldValueType(payload, "sections", '[') || !IsFieldNumber(payload, "count")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.config.state` requires `sections` array and `count` number.");
 				return false;
 			}
 

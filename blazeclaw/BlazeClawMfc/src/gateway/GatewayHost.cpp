@@ -667,6 +667,15 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.events.stream", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"stream\":\"evt-stream-1\",\"event\":\"gateway.tools.catalog.update\"}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.events.recent", [](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
@@ -758,6 +767,16 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"routed\":0,\"fallback\":0,\"tools\":" + std::to_string(tools.size()) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.selector", [this](const protocol::RequestFrame& request) {
+			const auto tools = m_toolRegistry.List();
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"selected\":0,\"fallback\":0,\"tools\":" + std::to_string(tools.size()) + "}",
 				.error = std::nullopt,
 			};
 			});
