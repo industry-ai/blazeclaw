@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-118",
+  "ok": true,
+  "payload": {
+    "rolledBack": false,
+    "version": 1
+  }
+}

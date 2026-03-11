@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-117",
+  "ok": true,
+  "payload": {
+    "preferred": "default",
+    "fallback": "reasoner",
+    "configured": true
+  }
+}

@@ -604,11 +604,30 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.events.timeline", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"events\":[\"gateway.shutdown\",\"gateway.session.reset\",\"gateway.agent.update\",\"gateway.tools.catalog.update\"],\"count\":4}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.events.types", [](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"types\":[\"lifecycle\",\"update\"],\"count\":2}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.failures", [this](const protocol::RequestFrame& request) {
+			const auto tools = m_toolRegistry.List();
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"failed\":0,\"total\":" + std::to_string(tools.size()) + ",\"rate\":0}",
 				.error = std::nullopt,
 			};
 			});
@@ -629,6 +648,15 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.models.fallback", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"preferred\":\"default\",\"fallback\":\"reasoner\",\"configured\":true}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.events.summary", [](const protocol::RequestFrame& request) {
 			const auto& events = EventCatalogNames();
 			const std::size_t lifecycle = static_cast<std::size_t>(std::count_if(events.begin(), events.end(), [](const std::string& item) {
@@ -640,6 +668,15 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"total\":" + std::to_string(events.size()) + ",\"lifecycle\":" + std::to_string(lifecycle) + ",\"updates\":" + std::to_string(updates) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.config.rollback", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"rolledBack\":false,\"version\":1}",
 				.error = std::nullopt,
 			};
 			});
@@ -2380,6 +2417,15 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"reset\":true,\"applied\":false}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.transport.policy.status", [this](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"mutable\":false,\"lastApplied\":\"runtime_immutable\",\"policyVersion\":1}",
 				.error = std::nullopt,
 			};
 			});

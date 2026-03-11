@@ -2160,12 +2160,14 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.config.schema" ||
 			request.method == "gateway.config.validate" ||
 			request.method == "gateway.config.audit" ||
+			request.method == "gateway.config.rollback" ||
 			request.method == "gateway.transport.endpoint.get" ||
 			request.method == "gateway.transport.connections.count" ||
 			request.method == "gateway.transport.endpoints.list" ||
 			request.method == "gateway.transport.policy.get" ||
 			request.method == "gateway.transport.policy.set" ||
 			request.method == "gateway.transport.policy.reset" ||
+			request.method == "gateway.transport.policy.status" ||
 			request.method == "gateway.logs.levels" ||
 			request.method == "gateway.events.catalog" ||
 			request.method == "gateway.events.list" ||
@@ -2173,13 +2175,16 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.events.summary" ||
 			request.method == "gateway.events.types" ||
 			request.method == "gateway.events.channels" ||
+			request.method == "gateway.events.timeline" ||
 			request.method == "gateway.models.list" ||
 			request.method == "gateway.models.providers" ||
 			request.method == "gateway.models.default.get" ||
 			request.method == "gateway.models.compatibility" ||
 			request.method == "gateway.models.recommended" ||
+			request.method == "gateway.models.fallback" ||
 			request.method == "gateway.tools.health" ||
 			request.method == "gateway.tools.stats" ||
+			request.method == "gateway.tools.failures" ||
 			request.method == "gateway.tools.metrics" ||
 			request.method == "gateway.tools.categories" ||
 			request.method == "gateway.tools.catalog" ||
@@ -3053,6 +3058,7 @@ namespace blazeclaw::gateway::protocol {
 			  "gateway.config.schema",
 			  "gateway.config.validate",
 			  "gateway.config.audit",
+			  "gateway.config.rollback",
 				"gateway.transport.connections.count",
 			   "gateway.transport.endpoint.get",
 			   "gateway.transport.endpoint.set",
@@ -3060,6 +3066,7 @@ namespace blazeclaw::gateway::protocol {
 			   "gateway.transport.policy.get",
 			   "gateway.transport.policy.set",
 			   "gateway.transport.policy.reset",
+			   "gateway.transport.policy.status",
 			   "gateway.config.sections",
 				"gateway.transport.endpoint.set",
 				"gateway.health.details",
@@ -3071,6 +3078,7 @@ namespace blazeclaw::gateway::protocol {
 			  "gateway.events.summary",
 			  "gateway.events.types",
 			  "gateway.events.channels",
+			  "gateway.events.timeline",
 				"gateway.events.last",
 		  "gateway.agents.create",
 				"gateway.sessions.delete",
@@ -3118,6 +3126,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.tools.stats",
 				"gateway.tools.health",
 				"gateway.tools.metrics",
+				"gateway.tools.failures",
 				"gateway.models.exists",
 				"gateway.models.count",
 				"gateway.models.get",
@@ -3126,6 +3135,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.models.default.get",
 				"gateway.models.compatibility",
 				"gateway.models.recommended",
+				"gateway.models.fallback",
 				"gateway.config.getKey",
 				"gateway.transport.endpoint.exists",
 				"gateway.tick",
@@ -3139,9 +3149,27 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.events.timeline") {
+			if (!IsFieldValueType(payload, "events", '[') || !IsFieldNumber(payload, "count")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.events.timeline` requires `events` array and `count` number.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.events.channels") {
 			if (!IsFieldNumber(payload, "channelEvents") || !IsFieldNumber(payload, "accountEvents") || !IsFieldNumber(payload, "count")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.events.channels` requires numeric fields `channelEvents`, `accountEvents`, and `count`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.models.fallback") {
+			if (!IsFieldValueType(payload, "preferred", '"') || !IsFieldValueType(payload, "fallback", '"') || !IsFieldBoolean(payload, "configured")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.models.fallback` requires `preferred` string, `fallback` string, and `configured` boolean.");
 				return false;
 			}
 
@@ -3162,6 +3190,15 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.tools.failures") {
+			if (!IsFieldNumber(payload, "failed") || !IsFieldNumber(payload, "total") || !IsFieldNumber(payload, "rate")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.tools.failures` requires numeric fields `failed`, `total`, and `rate`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.models.recommended") {
 			if (!IsFieldValueType(payload, "model", '{') || !IsFieldValueType(payload, "reason", '"')) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.models.recommended` requires `model` object and `reason` string.");
@@ -3176,9 +3213,27 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.transport.policy.status") {
+			if (!IsFieldBoolean(payload, "mutable") || !IsFieldValueType(payload, "lastApplied", '"') || !IsFieldNumber(payload, "policyVersion")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.transport.policy.status` requires `mutable` boolean, `lastApplied` string, and `policyVersion` number.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.events.summary") {
 			if (!IsFieldNumber(payload, "total") || !IsFieldNumber(payload, "lifecycle") || !IsFieldNumber(payload, "updates")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.events.summary` requires numeric fields `total`, `lifecycle`, and `updates`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.config.rollback") {
+			if (!IsFieldBoolean(payload, "rolledBack") || !IsFieldNumber(payload, "version")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.config.rollback` requires `rolledBack` boolean and `version` number.");
 				return false;
 			}
 
