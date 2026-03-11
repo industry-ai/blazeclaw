@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-159",
+  "ok": true,
+  "payload": {
+    "committed": false,
+    "version": 1,
+    "applied": false
+  }
+}

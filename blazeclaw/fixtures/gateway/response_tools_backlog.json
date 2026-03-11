@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-156",
+  "ok": true,
+  "payload": {
+    "pending": 0,
+    "capacity": 2,
+    "tools": 2
+  }
+}
