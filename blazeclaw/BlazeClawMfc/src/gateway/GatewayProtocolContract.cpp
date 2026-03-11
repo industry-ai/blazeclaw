@@ -117,7 +117,7 @@ namespace blazeclaw::gateway::protocol {
 		const ResponseFrame featuresListResponse{
 			.id = "req-3",
 			.ok = true,
-	  .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.count\",\"gateway.agents.create\",\"gateway.agents.delete\",\"gateway.agents.exists\",\"gateway.agents.files.delete\",\"gateway.agents.files.exists\",\"gateway.agents.files.get\",\"gateway.agents.files.list\",\"gateway.agents.files.set\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.agents.update\",\"gateway.channels.accounts\",\"gateway.channels.accounts.activate\",\"gateway.channels.accounts.clear\",\"gateway.channels.accounts.count\",\"gateway.channels.accounts.create\",\"gateway.channels.accounts.deactivate\",\"gateway.channels.accounts.delete\",\"gateway.channels.accounts.exists\",\"gateway.channels.accounts.get\",\"gateway.channels.accounts.reset\",\"gateway.channels.accounts.restore\",\"gateway.channels.accounts.update\",\"gateway.channels.logout\",\"gateway.channels.route.delete\",\"gateway.channels.route.exists\",\"gateway.channels.route.get\",\"gateway.channels.route.patch\",\"gateway.channels.route.resolve\",\"gateway.channels.route.reset\",\"gateway.channels.route.restore\",\"gateway.channels.route.set\",\"gateway.channels.routes\",\"gateway.channels.routes.clear\",\"gateway.channels.routes.count\",\"gateway.channels.routes.reset\",\"gateway.channels.routes.restore\",\"gateway.channels.status\",\"gateway.channels.status.count\",\"gateway.channels.status.exists\",\"gateway.channels.status.get\",\"gateway.config.count\",\"gateway.config.exists\",\"gateway.config.get\",\"gateway.config.getKey\",\"gateway.config.getSection\",\"gateway.config.keys\",\"gateway.config.schema\",\"gateway.config.sections\",\"gateway.config.set\",\"gateway.config.validate\",\"gateway.events.catalog\",\"gateway.events.count\",\"gateway.events.exists\",\"gateway.events.get\",\"gateway.events.last\",\"gateway.events.list\",\"gateway.events.search\",\"gateway.events.summary\",\"gateway.events.types\",\"gateway.features.list\",\"gateway.health\",\"gateway.health.details\",\"gateway.logs.count\",\"gateway.logs.levels\",\"gateway.logs.tail\",\"gateway.models.compatibility\",\"gateway.models.count\",\"gateway.models.default.get\",\"gateway.models.exists\",\"gateway.models.get\",\"gateway.models.list\",\"gateway.models.listByProvider\",\"gateway.models.providers\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.activate\",\"gateway.sessions.compact\",\"gateway.sessions.count\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.exists\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.execute\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.tools.categories\",\"gateway.tools.count\",\"gateway.tools.exists\",\"gateway.tools.get\",\"gateway.tools.health\",\"gateway.tools.list\",\"gateway.tools.stats\",\"gateway.transport.connections.count\",\"gateway.transport.endpoint.exists\",\"gateway.transport.endpoint.get\",\"gateway.transport.endpoint.set\",\"gateway.transport.endpoints.list\",\"gateway.transport.policy.get\",\"gateway.transport.policy.set\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
+	  .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.count\",\"gateway.agents.create\",\"gateway.agents.delete\",\"gateway.agents.exists\",\"gateway.agents.files.delete\",\"gateway.agents.files.exists\",\"gateway.agents.files.get\",\"gateway.agents.files.list\",\"gateway.agents.files.set\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.agents.update\",\"gateway.channels.accounts\",\"gateway.channels.accounts.activate\",\"gateway.channels.accounts.clear\",\"gateway.channels.accounts.count\",\"gateway.channels.accounts.create\",\"gateway.channels.accounts.deactivate\",\"gateway.channels.accounts.delete\",\"gateway.channels.accounts.exists\",\"gateway.channels.accounts.get\",\"gateway.channels.accounts.reset\",\"gateway.channels.accounts.restore\",\"gateway.channels.accounts.update\",\"gateway.channels.logout\",\"gateway.channels.route.delete\",\"gateway.channels.route.exists\",\"gateway.channels.route.get\",\"gateway.channels.route.patch\",\"gateway.channels.route.resolve\",\"gateway.channels.route.reset\",\"gateway.channels.route.restore\",\"gateway.channels.route.set\",\"gateway.channels.routes\",\"gateway.channels.routes.clear\",\"gateway.channels.routes.count\",\"gateway.channels.routes.reset\",\"gateway.channels.routes.restore\",\"gateway.channels.status\",\"gateway.channels.status.count\",\"gateway.channels.status.exists\",\"gateway.channels.status.get\",\"gateway.config.audit\",\"gateway.config.count\",\"gateway.config.exists\",\"gateway.config.get\",\"gateway.config.getKey\",\"gateway.config.getSection\",\"gateway.config.keys\",\"gateway.config.schema\",\"gateway.config.sections\",\"gateway.config.set\",\"gateway.config.validate\",\"gateway.events.catalog\",\"gateway.events.channels\",\"gateway.events.count\",\"gateway.events.exists\",\"gateway.events.get\",\"gateway.events.last\",\"gateway.events.list\",\"gateway.events.search\",\"gateway.events.summary\",\"gateway.events.types\",\"gateway.features.list\",\"gateway.health\",\"gateway.health.details\",\"gateway.logs.count\",\"gateway.logs.levels\",\"gateway.logs.tail\",\"gateway.models.compatibility\",\"gateway.models.count\",\"gateway.models.default.get\",\"gateway.models.exists\",\"gateway.models.get\",\"gateway.models.list\",\"gateway.models.listByProvider\",\"gateway.models.providers\",\"gateway.models.recommended\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.activate\",\"gateway.sessions.compact\",\"gateway.sessions.count\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.exists\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.execute\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.tools.categories\",\"gateway.tools.count\",\"gateway.tools.exists\",\"gateway.tools.get\",\"gateway.tools.health\",\"gateway.tools.list\",\"gateway.tools.metrics\",\"gateway.tools.stats\",\"gateway.transport.connections.count\",\"gateway.transport.endpoint.exists\",\"gateway.transport.endpoint.get\",\"gateway.transport.endpoint.set\",\"gateway.transport.endpoints.list\",\"gateway.transport.policy.get\",\"gateway.transport.policy.reset\",\"gateway.transport.policy.set\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
 			.error = std::nullopt,
 		};
 
@@ -825,6 +825,41 @@ namespace blazeclaw::gateway::protocol {
 			.id = "req-109",
 			.ok = true,
 			.payloadJson = "{\"applied\":false,\"reason\":\"runtime_immutable\"}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame eventsChannelsResponse{
+			.id = "req-110",
+			.ok = true,
+			.payloadJson = "{\"channelEvents\":3,\"accountEvents\":1,\"count\":4}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame toolsMetricsResponse{
+			.id = "req-111",
+			.ok = true,
+			.payloadJson = "{\"invocations\":0,\"enabled\":2,\"disabled\":0,\"total\":2}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame modelsRecommendedResponse{
+			.id = "req-112",
+			.ok = true,
+			.payloadJson = "{\"model\":{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true},\"reason\":\"seed_default\"}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame configAuditResponse{
+			.id = "req-113",
+			.ok = true,
+			.payloadJson = "{\"enabled\":true,\"source\":\"runtime\",\"lastUpdatedMs\":1735689600000}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame transportPolicyResetResponse{
+			.id = "req-114",
+			.ok = true,
+			.payloadJson = "{\"reset\":true,\"applied\":false}",
 			.error = std::nullopt,
 		};
 
@@ -1757,6 +1792,46 @@ namespace blazeclaw::gateway::protocol {
 			transportPolicySetResponse,
 			responseIssue)) {
 			error = "Transport policy set response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.events.channels",
+			eventsChannelsResponse,
+			responseIssue)) {
+			error = "Events channels response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.tools.metrics",
+			toolsMetricsResponse,
+			responseIssue)) {
+			error = "Tools metrics response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.models.recommended",
+			modelsRecommendedResponse,
+			responseIssue)) {
+			error = "Models recommended response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.config.audit",
+			configAuditResponse,
+			responseIssue)) {
+			error = "Config audit response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.transport.policy.reset",
+			transportPolicyResetResponse,
+			responseIssue)) {
+			error = "Transport policy reset response schema validation failed: " + responseIssue.message;
 			return false;
 		}
 
@@ -3054,6 +3129,76 @@ namespace blazeclaw::gateway::protocol {
 			return false;
 		}
 
+		const ResponseFrame eventsChannelsResponseNegative{
+			.id = "req-schema-100",
+			.ok = true,
+			.payloadJson = "{\"channelEvents\":3,\"accountEvents\":1}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.events.channels",
+			eventsChannelsResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.events.channels missing `count`.";
+			return false;
+		}
+
+		const ResponseFrame toolsMetricsResponseNegative{
+			.id = "req-schema-101",
+			.ok = true,
+			.payloadJson = "{\"invocations\":0,\"enabled\":2,\"disabled\":0}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.tools.metrics",
+			toolsMetricsResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.tools.metrics missing `total`.";
+			return false;
+		}
+
+		const ResponseFrame modelsRecommendedResponseNegative{
+			.id = "req-schema-102",
+			.ok = true,
+			.payloadJson = "{\"reason\":\"seed_default\"}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.models.recommended",
+			modelsRecommendedResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.models.recommended missing `model`.";
+			return false;
+		}
+
+		const ResponseFrame configAuditResponseNegative{
+			.id = "req-schema-103",
+			.ok = true,
+			.payloadJson = "{\"enabled\":true,\"source\":\"runtime\"}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.config.audit",
+			configAuditResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.config.audit missing `lastUpdatedMs`.";
+			return false;
+		}
+
+		const ResponseFrame transportPolicyResetResponseNegative{
+			.id = "req-schema-104",
+			.ok = true,
+			.payloadJson = "{\"reset\":true}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.transport.policy.reset",
+			transportPolicyResetResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.transport.policy.reset missing `applied`.";
+			return false;
+		}
+
 		const EventFrame channelsAccountsUpdateEventPositive{
 			.eventName = "gateway.channels.accounts.update",
 			.payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":false}]}",
@@ -3808,6 +3953,41 @@ namespace blazeclaw::gateway::protocol {
 		if (!CompareFixture(
 			root / "response_transport_policy_set.json",
 			SerializeResponseFrame(transportPolicySetResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_events_channels.json",
+			SerializeResponseFrame(eventsChannelsResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_tools_metrics.json",
+			SerializeResponseFrame(toolsMetricsResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_models_recommended.json",
+			SerializeResponseFrame(modelsRecommendedResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_config_audit.json",
+			SerializeResponseFrame(configAuditResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_transport_policy_reset.json",
+			SerializeResponseFrame(transportPolicyResetResponse),
 			error)) {
 			return false;
 		}

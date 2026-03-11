@@ -595,11 +595,36 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.events.channels", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"channelEvents\":3,\"accountEvents\":1,\"count\":4}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.events.types", [](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"types\":[\"lifecycle\",\"update\"],\"count\":2}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.metrics", [this](const protocol::RequestFrame& request) {
+			const auto tools = m_toolRegistry.List();
+			const std::size_t enabled = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {
+				return item.enabled;
+				}));
+			const std::size_t total = tools.size();
+			const std::size_t disabled = total >= enabled ? total - enabled : 0;
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"invocations\":0,\"enabled\":" + std::to_string(enabled) + ",\"disabled\":" + std::to_string(disabled) + ",\"total\":" + std::to_string(total) + "}",
 				.error = std::nullopt,
 			};
 			});
@@ -619,6 +644,15 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.models.recommended", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"model\":{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true},\"reason\":\"seed_default\"}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.tools.health", [this](const protocol::RequestFrame& request) {
 			const auto tools = m_toolRegistry.List();
 			const std::size_t enabled = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {
@@ -630,6 +664,15 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"healthy\":" + std::string(healthy ? "true" : "false") + ",\"enabled\":" + std::to_string(enabled) + ",\"total\":" + std::to_string(tools.size()) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.config.audit", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"enabled\":true,\"source\":\"runtime\",\"lastUpdatedMs\":1735689600000}",
 				.error = std::nullopt,
 			};
 			});
@@ -2328,6 +2371,15 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 			   .payloadJson = "{\"applied\":false,\"reason\":\"runtime_immutable\"}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.transport.policy.reset", [this](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"reset\":true,\"applied\":false}",
 				.error = std::nullopt,
 			};
 			});

@@ -2159,23 +2159,28 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.config.sections" ||
 			request.method == "gateway.config.schema" ||
 			request.method == "gateway.config.validate" ||
+			request.method == "gateway.config.audit" ||
 			request.method == "gateway.transport.endpoint.get" ||
 			request.method == "gateway.transport.connections.count" ||
 			request.method == "gateway.transport.endpoints.list" ||
 			request.method == "gateway.transport.policy.get" ||
 			request.method == "gateway.transport.policy.set" ||
+			request.method == "gateway.transport.policy.reset" ||
 			request.method == "gateway.logs.levels" ||
 			request.method == "gateway.events.catalog" ||
 			request.method == "gateway.events.list" ||
 			request.method == "gateway.events.last" ||
 			request.method == "gateway.events.summary" ||
 			request.method == "gateway.events.types" ||
+			request.method == "gateway.events.channels" ||
 			request.method == "gateway.models.list" ||
 			request.method == "gateway.models.providers" ||
 			request.method == "gateway.models.default.get" ||
 			request.method == "gateway.models.compatibility" ||
+			request.method == "gateway.models.recommended" ||
 			request.method == "gateway.tools.health" ||
 			request.method == "gateway.tools.stats" ||
+			request.method == "gateway.tools.metrics" ||
 			request.method == "gateway.tools.categories" ||
 			request.method == "gateway.tools.catalog" ||
 			request.method == "gateway.health" ||
@@ -3047,12 +3052,14 @@ namespace blazeclaw::gateway::protocol {
 			  "gateway.config.getSection",
 			  "gateway.config.schema",
 			  "gateway.config.validate",
+			  "gateway.config.audit",
 				"gateway.transport.connections.count",
 			   "gateway.transport.endpoint.get",
 			   "gateway.transport.endpoint.set",
 			   "gateway.transport.endpoints.list",
 			   "gateway.transport.policy.get",
 			   "gateway.transport.policy.set",
+			   "gateway.transport.policy.reset",
 			   "gateway.config.sections",
 				"gateway.transport.endpoint.set",
 				"gateway.health.details",
@@ -3063,6 +3070,7 @@ namespace blazeclaw::gateway::protocol {
 			  "gateway.events.search",
 			  "gateway.events.summary",
 			  "gateway.events.types",
+			  "gateway.events.channels",
 				"gateway.events.last",
 		  "gateway.agents.create",
 				"gateway.sessions.delete",
@@ -3109,6 +3117,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.tools.categories",
 				"gateway.tools.stats",
 				"gateway.tools.health",
+				"gateway.tools.metrics",
 				"gateway.models.exists",
 				"gateway.models.count",
 				"gateway.models.get",
@@ -3116,6 +3125,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.models.providers",
 				"gateway.models.default.get",
 				"gateway.models.compatibility",
+				"gateway.models.recommended",
 				"gateway.config.getKey",
 				"gateway.transport.endpoint.exists",
 				"gateway.tick",
@@ -3123,6 +3133,15 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.shutdown",
 				})) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.features.list` catalog is missing required method/event members.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.events.channels") {
+			if (!IsFieldNumber(payload, "channelEvents") || !IsFieldNumber(payload, "accountEvents") || !IsFieldNumber(payload, "count")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.events.channels` requires numeric fields `channelEvents`, `accountEvents`, and `count`.");
 				return false;
 			}
 
@@ -3143,9 +3162,32 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.models.recommended") {
+			if (!IsFieldValueType(payload, "model", '{') || !IsFieldValueType(payload, "reason", '"')) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.models.recommended` requires `model` object and `reason` string.");
+				return false;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "id", "provider", "displayName", "streaming" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.models.recommended` requires model fields `id`, `provider`, `displayName`, and `streaming`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.events.summary") {
 			if (!IsFieldNumber(payload, "total") || !IsFieldNumber(payload, "lifecycle") || !IsFieldNumber(payload, "updates")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.events.summary` requires numeric fields `total`, `lifecycle`, and `updates`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.tools.metrics") {
+			if (!IsFieldNumber(payload, "invocations") || !IsFieldNumber(payload, "enabled") || !IsFieldNumber(payload, "disabled") || !IsFieldNumber(payload, "total")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.tools.metrics` requires numeric fields `invocations`, `enabled`, `disabled`, and `total`.");
 				return false;
 			}
 
@@ -3161,9 +3203,27 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.transport.policy.reset") {
+			if (!IsFieldBoolean(payload, "reset") || !IsFieldBoolean(payload, "applied")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.transport.policy.reset` requires `reset` boolean and `applied` boolean.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.events.search") {
 			if (!IsFieldValueType(payload, "term", '"') || !IsFieldValueType(payload, "events", '[') || !IsFieldNumber(payload, "count")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.events.search` requires `term` string, `events` array, and `count` number.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.config.audit") {
+			if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "source", '"') || !IsFieldNumber(payload, "lastUpdatedMs")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.config.audit` requires `enabled` boolean, `source` string, and `lastUpdatedMs` number.");
 				return false;
 			}
 
