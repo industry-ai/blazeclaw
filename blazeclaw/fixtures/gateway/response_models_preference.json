@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-132",
+  "ok": true,
+  "payload": {
+    "model": "default",
+    "provider": "seed",
+    "source": "runtime"
+  }
+}

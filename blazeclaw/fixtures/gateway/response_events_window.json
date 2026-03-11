@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-130",
+  "ok": true,
+  "payload": {
+    "events": [ "gateway.session.reset", "gateway.agent.update", "gateway.tools.catalog.update" ],
+    "count": 3
+  }
+}

@@ -2163,6 +2163,7 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.config.rollback" ||
 			request.method == "gateway.config.backup" ||
 			request.method == "gateway.config.diff" ||
+			request.method == "gateway.config.snapshot" ||
 			request.method == "gateway.transport.endpoint.get" ||
 			request.method == "gateway.transport.connections.count" ||
 			request.method == "gateway.transport.endpoints.list" ||
@@ -2172,6 +2173,7 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.transport.policy.status" ||
 			request.method == "gateway.transport.policy.validate" ||
 			request.method == "gateway.transport.policy.history" ||
+			request.method == "gateway.transport.policy.metrics" ||
 			request.method == "gateway.logs.levels" ||
 			request.method == "gateway.events.catalog" ||
 			request.method == "gateway.events.list" ||
@@ -2181,6 +2183,7 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.events.channels" ||
 			request.method == "gateway.events.timeline" ||
 			request.method == "gateway.events.sample" ||
+			request.method == "gateway.events.window" ||
 			request.method == "gateway.models.list" ||
 			request.method == "gateway.models.providers" ||
 			request.method == "gateway.models.default.get" ||
@@ -2189,11 +2192,13 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.models.fallback" ||
 			request.method == "gateway.models.selection" ||
 			request.method == "gateway.models.routing" ||
+			request.method == "gateway.models.preference" ||
 			request.method == "gateway.tools.health" ||
 			request.method == "gateway.tools.stats" ||
 			request.method == "gateway.tools.failures" ||
 			request.method == "gateway.tools.usage" ||
 			request.method == "gateway.tools.latency" ||
+			request.method == "gateway.tools.errors" ||
 			request.method == "gateway.tools.metrics" ||
 			request.method == "gateway.tools.categories" ||
 			request.method == "gateway.tools.catalog" ||
@@ -3074,6 +3079,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.config.rollback",
 				"gateway.config.backup",
 				"gateway.config.diff",
+				"gateway.config.snapshot",
 				"gateway.transport.connections.count",
 				"gateway.transport.endpoint.get",
 				"gateway.transport.endpoint.set",
@@ -3084,6 +3090,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.transport.policy.status",
 				"gateway.transport.policy.validate",
 				"gateway.transport.policy.history",
+				"gateway.transport.policy.metrics",
 				"gateway.config.sections",
 				"gateway.transport.endpoint.set",
 				"gateway.health.details",
@@ -3098,6 +3105,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.events.timeline",
 				"gateway.events.latestByType",
 				"gateway.events.sample",
+				"gateway.events.window",
 				"gateway.events.last",
 				"gateway.agents.create",
 				"gateway.sessions.delete",
@@ -3148,6 +3156,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.tools.failures",
 				"gateway.tools.usage",
 				"gateway.tools.latency",
+				"gateway.tools.errors",
 				"gateway.models.exists",
 				"gateway.models.count",
 				"gateway.models.get",
@@ -3159,6 +3168,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.models.fallback",
 				"gateway.models.selection",
 				"gateway.models.routing",
+				"gateway.models.preference",
 				"gateway.config.getKey",
 				"gateway.transport.endpoint.exists",
 				"gateway.tick",
@@ -3166,6 +3176,15 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.shutdown",
 				})) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.features.list` catalog is missing required method/event members.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.events.window") {
+			if (!IsFieldValueType(payload, "events", '[') || !IsFieldNumber(payload, "count")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.events.window` requires `events` array and `count` number.");
 				return false;
 			}
 
@@ -3181,9 +3200,27 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.models.preference") {
+			if (!IsFieldValueType(payload, "model", '"') || !IsFieldValueType(payload, "provider", '"') || !IsFieldValueType(payload, "source", '"')) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.models.preference` requires `model` string, `provider` string, and `source` string.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.events.latestByType") {
 			if (!IsFieldValueType(payload, "type", '"') || !IsFieldValueType(payload, "event", '"')) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.events.latestByType` requires `type` string and `event` string.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.tools.errors") {
+			if (!IsFieldNumber(payload, "errors") || !IsFieldNumber(payload, "tools") || !IsFieldNumber(payload, "rate")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.tools.errors` requires numeric fields `errors`, `tools`, and `rate`.");
 				return false;
 			}
 
@@ -3199,9 +3236,32 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.transport.policy.metrics") {
+			if (!IsFieldNumber(payload, "validations") || !IsFieldNumber(payload, "resets") || !IsFieldNumber(payload, "sets")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.transport.policy.metrics` requires numeric fields `validations`, `resets`, and `sets`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.events.timeline") {
 			if (!IsFieldValueType(payload, "events", '[') || !IsFieldNumber(payload, "count")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.events.timeline` requires `events` array and `count` number.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.config.snapshot") {
+			if (!IsFieldValueType(payload, "gateway", '{') || !IsFieldValueType(payload, "agent", '{')) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.config.snapshot` requires `gateway` and `agent` object fields.");
+				return false;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "bind", "port", "model", "streaming" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.config.snapshot` requires `bind`, `port`, `model`, and `streaming` fields.");
 				return false;
 			}
 
