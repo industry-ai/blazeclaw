@@ -1,0 +1,15 @@
+{
+  "type": "res",
+  "id": "req-103",
+  "ok": true,
+  "payload": {
+    "gateway": {
+      "bind": "string",
+      "port": "number"
+    },
+    "agent": {
+      "model": "string",
+      "streaming": "boolean"
+    }
+  }
+}

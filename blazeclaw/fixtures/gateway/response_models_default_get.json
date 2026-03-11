@@ -1,0 +1,13 @@
+{
+  "type": "res",
+  "id": "req-102",
+  "ok": true,
+  "payload": {
+    "model": {
+      "id": "default",
+      "provider": "seed",
+      "displayName": "Default Model",
+      "streaming": true
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-100",
+  "ok": true,
+  "payload": {
+    "total": 8,
+    "lifecycle": 3,
+    "updates": 5
+  }
+}

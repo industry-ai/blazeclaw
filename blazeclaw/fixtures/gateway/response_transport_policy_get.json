@@ -1,0 +1,12 @@
+{
+  "type": "res",
+  "id": "req-104",
+  "ok": true,
+  "payload": {
+    "exclusiveAddrUse": true,
+    "keepAlive": true,
+    "noDelay": true,
+    "idleTimeoutMs": 120000,
+    "handshakeTimeoutMs": 5000
+  }
+}
