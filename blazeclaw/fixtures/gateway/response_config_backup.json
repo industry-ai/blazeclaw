@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-123",
+  "ok": true,
+  "payload": {
+    "saved": true,
+    "version": 1,
+    "path": "config/runtime.backup.json"
+  }
+}

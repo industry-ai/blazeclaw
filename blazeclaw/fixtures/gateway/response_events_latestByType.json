@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-120",
+  "ok": true,
+  "payload": {
+    "type": "update",
+    "event": "gateway.tools.catalog.update"
+  }
+}

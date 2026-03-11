@@ -595,11 +595,33 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.events.latestByType", [](const protocol::RequestFrame& request) {
+			const std::string type = ExtractStringParam(request.paramsJson, "type");
+			const bool lifecycle = type == "lifecycle";
+			const std::string event = lifecycle ? "gateway.shutdown" : "gateway.tools.catalog.update";
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"type\":\"" + EscapeJson(type.empty() ? "update" : type) + "\",\"event\":\"" + EscapeJson(event) + "\"}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.events.channels", [](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"channelEvents\":3,\"accountEvents\":1,\"count\":4}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.usage", [this](const protocol::RequestFrame& request) {
+			const auto tools = m_toolRegistry.List();
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"calls\":0,\"tools\":" + std::to_string(tools.size()) + ",\"avgMs\":0}",
 				.error = std::nullopt,
 			};
 			});
@@ -613,11 +635,29 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.models.selection", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"selected\":\"default\",\"strategy\":\"seed_priority\"}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.events.types", [](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"types\":[\"lifecycle\",\"update\"],\"count\":2}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.config.backup", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"saved\":true,\"version\":1,\"path\":\"config/runtime.backup.json\"}",
 				.error = std::nullopt,
 			};
 			});
@@ -2426,6 +2466,15 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"mutable\":false,\"lastApplied\":\"runtime_immutable\",\"policyVersion\":1}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.transport.policy.validate", [this](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"valid\":true,\"errors\":[],\"count\":0}",
 				.error = std::nullopt,
 			};
 			});

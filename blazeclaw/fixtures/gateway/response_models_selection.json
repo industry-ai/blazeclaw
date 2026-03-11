@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-122",
+  "ok": true,
+  "payload": {
+    "selected": "default",
+    "strategy": "seed_priority"
+  }
+}

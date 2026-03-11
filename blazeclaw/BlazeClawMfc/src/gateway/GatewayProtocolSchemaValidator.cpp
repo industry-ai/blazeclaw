@@ -2161,6 +2161,7 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.config.validate" ||
 			request.method == "gateway.config.audit" ||
 			request.method == "gateway.config.rollback" ||
+			request.method == "gateway.config.backup" ||
 			request.method == "gateway.transport.endpoint.get" ||
 			request.method == "gateway.transport.connections.count" ||
 			request.method == "gateway.transport.endpoints.list" ||
@@ -2168,6 +2169,7 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.transport.policy.set" ||
 			request.method == "gateway.transport.policy.reset" ||
 			request.method == "gateway.transport.policy.status" ||
+			request.method == "gateway.transport.policy.validate" ||
 			request.method == "gateway.logs.levels" ||
 			request.method == "gateway.events.catalog" ||
 			request.method == "gateway.events.list" ||
@@ -2182,9 +2184,11 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.models.compatibility" ||
 			request.method == "gateway.models.recommended" ||
 			request.method == "gateway.models.fallback" ||
+			request.method == "gateway.models.selection" ||
 			request.method == "gateway.tools.health" ||
 			request.method == "gateway.tools.stats" ||
 			request.method == "gateway.tools.failures" ||
+			request.method == "gateway.tools.usage" ||
 			request.method == "gateway.tools.metrics" ||
 			request.method == "gateway.tools.categories" ||
 			request.method == "gateway.tools.catalog" ||
@@ -2208,6 +2212,10 @@ namespace blazeclaw::gateway::protocol {
 
 		if (request.method == "gateway.events.search") {
 			return ValidateStringIdParam(request, issue, request.method, "term");
+		}
+
+		if (request.method == "gateway.events.latestByType") {
+			return ValidateStringIdParam(request, issue, request.method, "type");
 		}
 
 		if (request.method == "gateway.config.count") {
@@ -3050,41 +3058,44 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.ping",
 				"gateway.transport.status",
 				"gateway.events.catalog",
-			  "gateway.config.exists",
+				"gateway.config.exists",
 				"gateway.config.keys",
-			  "gateway.config.count",
-			  "gateway.config.sections",
-			  "gateway.config.getSection",
-			  "gateway.config.schema",
-			  "gateway.config.validate",
-			  "gateway.config.audit",
-			  "gateway.config.rollback",
+				"gateway.config.count",
+				"gateway.config.sections",
+				"gateway.config.getSection",
+				"gateway.config.schema",
+				"gateway.config.validate",
+				"gateway.config.audit",
+				"gateway.config.rollback",
+				"gateway.config.backup",
 				"gateway.transport.connections.count",
-			   "gateway.transport.endpoint.get",
-			   "gateway.transport.endpoint.set",
-			   "gateway.transport.endpoints.list",
-			   "gateway.transport.policy.get",
-			   "gateway.transport.policy.set",
-			   "gateway.transport.policy.reset",
-			   "gateway.transport.policy.status",
-			   "gateway.config.sections",
+				"gateway.transport.endpoint.get",
+				"gateway.transport.endpoint.set",
+				"gateway.transport.endpoints.list",
+				"gateway.transport.policy.get",
+				"gateway.transport.policy.set",
+				"gateway.transport.policy.reset",
+				"gateway.transport.policy.status",
+				"gateway.transport.policy.validate",
+				"gateway.config.sections",
 				"gateway.transport.endpoint.set",
 				"gateway.health.details",
 				"gateway.logs.count",
-			  "gateway.logs.levels",
-			   "gateway.events.get",
-			  "gateway.events.last",
-			  "gateway.events.search",
-			  "gateway.events.summary",
-			  "gateway.events.types",
-			  "gateway.events.channels",
-			  "gateway.events.timeline",
+				"gateway.logs.levels",
+				"gateway.events.get",
 				"gateway.events.last",
-		  "gateway.agents.create",
+				"gateway.events.search",
+				"gateway.events.summary",
+				"gateway.events.types",
+				"gateway.events.channels",
+				"gateway.events.timeline",
+				"gateway.events.latestByType",
+				"gateway.events.last",
+				"gateway.agents.create",
 				"gateway.sessions.delete",
-			   "gateway.sessions.compact",
-		  "gateway.sessions.patch",
-		   "gateway.sessions.preview",
+				"gateway.sessions.compact",
+				"gateway.sessions.patch",
+				"gateway.sessions.preview",
 				"gateway.sessions.usage",
 				"gateway.sessions.exists",
 				"gateway.sessions.count",
@@ -3094,29 +3105,29 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.events.list",
 				"gateway.events.get",
 				"gateway.channels.accounts",
-		 "gateway.channels.accounts.activate",
-		 "gateway.channels.accounts.deactivate",
-		 "gateway.channels.accounts.exists",
-		 "gateway.channels.accounts.update",
-		 "gateway.channels.accounts.get",
-		 "gateway.channels.accounts.create",
-		 "gateway.channels.accounts.delete",
-		 "gateway.channels.accounts.clear",
-	  "gateway.channels.accounts.restore",
-		 "gateway.channels.accounts.count",
-	  "gateway.channels.accounts.reset",
-		 "gateway.channels.status.get",
-		 "gateway.channels.status.exists",
-		 "gateway.channels.status.count",
-		   "gateway.channels.route.exists",
-		 "gateway.channels.route.get",
-		 "gateway.channels.route.restore",
-		"gateway.channels.route.reset",
-		"gateway.channels.route.patch",
-		   "gateway.channels.routes.clear",
-		   "gateway.channels.routes.restore",
-		  "gateway.channels.routes.reset",
-		   "gateway.channels.routes.count",
+				"gateway.channels.accounts.activate",
+				"gateway.channels.accounts.deactivate",
+				"gateway.channels.accounts.exists",
+				"gateway.channels.accounts.update",
+				"gateway.channels.accounts.get",
+				"gateway.channels.accounts.create",
+				"gateway.channels.accounts.delete",
+				"gateway.channels.accounts.clear",
+				"gateway.channels.accounts.restore",
+				"gateway.channels.accounts.count",
+				"gateway.channels.accounts.reset",
+				"gateway.channels.status.get",
+				"gateway.channels.status.exists",
+				"gateway.channels.status.count",
+				"gateway.channels.route.exists",
+				"gateway.channels.route.get",
+				"gateway.channels.route.restore",
+				"gateway.channels.route.reset",
+				"gateway.channels.route.patch",
+				"gateway.channels.routes.clear",
+				"gateway.channels.routes.restore",
+				"gateway.channels.routes.reset",
+				"gateway.channels.routes.count",
 				"gateway.tools.call.preview",
 				 "gateway.tools.exists",
 				"gateway.tools.count",
@@ -3127,6 +3138,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.tools.health",
 				"gateway.tools.metrics",
 				"gateway.tools.failures",
+				"gateway.tools.usage",
 				"gateway.models.exists",
 				"gateway.models.count",
 				"gateway.models.get",
@@ -3136,6 +3148,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.models.compatibility",
 				"gateway.models.recommended",
 				"gateway.models.fallback",
+				"gateway.models.selection",
 				"gateway.config.getKey",
 				"gateway.transport.endpoint.exists",
 				"gateway.tick",
@@ -3143,6 +3156,15 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.shutdown",
 				})) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.features.list` catalog is missing required method/event members.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.events.latestByType") {
+			if (!IsFieldValueType(payload, "type", '"') || !IsFieldValueType(payload, "event", '"')) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.events.latestByType` requires `type` string and `event` string.");
 				return false;
 			}
 
@@ -3158,9 +3180,27 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.models.selection") {
+			if (!IsFieldValueType(payload, "selected", '"') || !IsFieldValueType(payload, "strategy", '"')) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.models.selection` requires `selected` string and `strategy` string.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.events.channels") {
 			if (!IsFieldNumber(payload, "channelEvents") || !IsFieldNumber(payload, "accountEvents") || !IsFieldNumber(payload, "count")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.events.channels` requires numeric fields `channelEvents`, `accountEvents`, and `count`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.tools.usage") {
+			if (!IsFieldNumber(payload, "calls") || !IsFieldNumber(payload, "tools") || !IsFieldNumber(payload, "avgMs")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.tools.usage` requires numeric fields `calls`, `tools`, and `avgMs`.");
 				return false;
 			}
 
@@ -3176,6 +3216,15 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.transport.policy.validate") {
+			if (!IsFieldBoolean(payload, "valid") || !IsFieldValueType(payload, "errors", '[') || !IsFieldNumber(payload, "count")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.transport.policy.validate` requires `valid` boolean, `errors` array, and `count` number.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.events.types") {
 			if (!IsFieldValueType(payload, "types", '[') || !IsFieldNumber(payload, "count")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.events.types` requires `types` array and `count` number.");
@@ -3184,6 +3233,15 @@ namespace blazeclaw::gateway::protocol {
 
 			if (!PayloadContainsAllStringValues(payload, { "lifecycle", "update" })) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.events.types` is missing required type members.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.config.backup") {
+			if (!IsFieldBoolean(payload, "saved") || !IsFieldNumber(payload, "version") || !IsFieldValueType(payload, "path", '"')) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.config.backup` requires `saved` boolean, `version` number, and `path` string.");
 				return false;
 			}
 
