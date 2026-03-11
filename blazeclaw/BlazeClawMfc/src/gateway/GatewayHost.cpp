@@ -595,6 +595,16 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.events.list", [](const protocol::RequestFrame& request) {
+			const auto& events = EventCatalogNames();
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"events\":" + SerializeStringArray(events) + ",\"count\":" + std::to_string(events.size()) + "}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.agents.exists", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
 			const auto agents = m_agentRegistry.List();
@@ -607,6 +617,29 @@ namespace blazeclaw::gateway {
 				.ok = true,
 				.payloadJson = "{\"agentId\":\"" + EscapeJson(requestedId.empty() ? "*" : requestedId) +
 					"\",\"exists\":" + std::string(exists ? "true" : "false") + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.get", [this](const protocol::RequestFrame& request) {
+			const std::string requestedTool = ExtractStringParam(request.paramsJson, "tool");
+			const auto tools = m_toolRegistry.List();
+			ToolCatalogEntry selected{};
+			if (!tools.empty()) {
+				selected = tools.front();
+			}
+			for (const auto& tool : tools) {
+				if (!requestedTool.empty() && tool.id != requestedTool) {
+					continue;
+				}
+				selected = tool;
+				break;
+			}
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"tool\":" + SerializeTool(selected) + "}",
 				.error = std::nullopt,
 			};
 			});
@@ -628,6 +661,21 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.models.get", [](const protocol::RequestFrame& request) {
+			const std::string modelId = ExtractStringParam(request.paramsJson, "modelId");
+			const bool reasoner = modelId == "reasoner";
+			const std::string resolvedId = modelId.empty() ? "default" : modelId;
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"model\":{\"id\":\"" + EscapeJson(resolvedId) +
+					"\",\"provider\":\"seed\",\"displayName\":\"" + EscapeJson(reasoner ? "Reasoner Model" : "Default Model") +
+					"\",\"streaming\":" + std::string(reasoner ? "false" : "true") + "}}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.sessions.exists", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "sessionId");
 			const auto sessions = m_sessionRegistry.List();
@@ -640,6 +688,31 @@ namespace blazeclaw::gateway {
 				.ok = true,
 				.payloadJson = "{\"sessionId\":\"" + EscapeJson(requestedId.empty() ? "*" : requestedId) +
 					"\",\"exists\":" + std::string(exists ? "true" : "false") + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.config.getKey", [this](const protocol::RequestFrame& request) {
+			const std::string key = ExtractStringParam(request.paramsJson, "key");
+			std::string value;
+			if (key == "gateway.bind") {
+				value = m_runtimeGatewayBind;
+			}
+			else if (key == "gateway.port") {
+				value = std::to_string(m_runtimeGatewayPort);
+			}
+			else if (key == "agent.model") {
+				value = m_runtimeAgentModel;
+			}
+			else if (key == "agent.streaming") {
+				value = m_runtimeAgentStreaming ? "true" : "false";
+			}
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"key\":\"" + EscapeJson(key.empty() ? "gateway.bind" : key) +
+					"\",\"value\":\"" + EscapeJson(value.empty() ? m_runtimeGatewayBind : value) + "\"}",
 				.error = std::nullopt,
 			};
 			});
@@ -663,6 +736,20 @@ namespace blazeclaw::gateway {
 				.ok = true,
 				.payloadJson = "{\"scope\":\"" + EscapeJson(scope.empty() ? "*" : scope) +
 					"\",\"count\":" + std::to_string(count) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.transport.endpoint.exists", [this](const protocol::RequestFrame& request) {
+			const std::string endpoint = ExtractStringParam(request.paramsJson, "endpoint");
+			const std::string current = m_transport.Endpoint();
+			const bool exists = endpoint.empty() || endpoint == current;
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"endpoint\":\"" + EscapeJson(endpoint.empty() ? current : endpoint) +
+					"\",\"exists\":" + std::string(exists ? "true" : "false") + "}",
 				.error = std::nullopt,
 			};
 			});

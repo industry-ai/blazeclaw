@@ -1,0 +1,13 @@
+{
+  "type": "res",
+  "id": "req-86",
+  "ok": true,
+  "payload": {
+    "tool": {
+      "id": "chat.send",
+      "label": "Chat Send",
+      "category": "messaging",
+      "enabled": true
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-88",
+  "ok": true,
+  "payload": {
+    "key": "gateway.bind",
+    "value": "127.0.0.1"
+  }
+}
