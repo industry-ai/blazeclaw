@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-173",
+  "ok": true,
+  "payload": {
+    "manifest": "runtime",
+    "sections": [ "gateway", "agent" ],
+    "count": 2
+  }
+}

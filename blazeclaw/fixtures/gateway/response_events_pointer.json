@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-170",
+  "ok": true,
+  "payload": {
+    "pointer": "evt-pointer-1",
+    "event": "gateway.shutdown"
+  }
+}
