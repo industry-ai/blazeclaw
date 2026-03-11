@@ -2167,6 +2167,7 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.config.revision" ||
 			request.method == "gateway.config.history" ||
            request.method == "gateway.config.profile" ||
+           request.method == "gateway.config.template" ||
 			request.method == "gateway.transport.endpoint.get" ||
 			request.method == "gateway.transport.connections.count" ||
 			request.method == "gateway.transport.endpoints.list" ||
@@ -2180,6 +2181,7 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.transport.policy.export" ||
 			request.method == "gateway.transport.policy.import" ||
           request.method == "gateway.transport.policy.digest" ||
+          request.method == "gateway.transport.policy.preview" ||
 			request.method == "gateway.logs.levels" ||
 			request.method == "gateway.events.catalog" ||
 			request.method == "gateway.events.list" ||
@@ -2193,6 +2195,7 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.events.recent" ||
 			request.method == "gateway.events.batch" ||
           request.method == "gateway.events.cursor" ||
+          request.method == "gateway.events.anchor" ||
 			request.method == "gateway.models.list" ||
 			request.method == "gateway.models.providers" ||
 			request.method == "gateway.models.default.get" ||
@@ -2205,6 +2208,7 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.models.priority" ||
 			request.method == "gateway.models.affinity" ||
          request.method == "gateway.models.pool" ||
+         request.method == "gateway.models.manifest" ||
 			request.method == "gateway.tools.health" ||
 			request.method == "gateway.tools.stats" ||
 			request.method == "gateway.tools.failures" ||
@@ -2214,6 +2218,7 @@ namespace blazeclaw::gateway::protocol {
 			request.method == "gateway.tools.throughput" ||
 			request.method == "gateway.tools.capacity" ||
             request.method == "gateway.tools.queue" ||
+            request.method == "gateway.tools.scheduler" ||
 			request.method == "gateway.tools.metrics" ||
 			request.method == "gateway.tools.categories" ||
 			request.method == "gateway.tools.catalog" ||
@@ -3098,6 +3103,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.config.revision",
 				"gateway.config.history",
 				"gateway.config.profile",
+				"gateway.config.template",
 				"gateway.transport.connections.count",
 				"gateway.transport.endpoint.get",
 				"gateway.transport.endpoint.set",
@@ -3112,6 +3118,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.transport.policy.export",
 				"gateway.transport.policy.import",
 				"gateway.transport.policy.digest",
+				"gateway.transport.policy.preview",
 				"gateway.config.sections",
 				"gateway.transport.endpoint.set",
 				"gateway.health.details",
@@ -3130,6 +3137,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.events.recent",
 				"gateway.events.batch",
 				"gateway.events.cursor",
+				"gateway.events.anchor",
 				"gateway.events.last",
 				"gateway.agents.create",
 				"gateway.sessions.delete",
@@ -3184,6 +3192,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.tools.throughput",
 				"gateway.tools.capacity",
                 "gateway.tools.queue",
+                "gateway.tools.scheduler",
 				"gateway.models.exists",
 				"gateway.models.count",
 				"gateway.models.get",
@@ -3199,6 +3208,7 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.models.priority",
 				"gateway.models.affinity",
                 "gateway.models.pool",
+                "gateway.models.manifest",
 				"gateway.config.getKey",
 				"gateway.transport.endpoint.exists",
 				"gateway.tick",
@@ -3212,9 +3222,27 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.events.anchor") {
+			if (!IsFieldValueType(payload, "anchor", '"') || !IsFieldValueType(payload, "event", '"')) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.events.anchor` requires `anchor` string and `event` string.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.events.cursor") {
 			if (!IsFieldValueType(payload, "cursor", '"') || !IsFieldValueType(payload, "event", '"')) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.events.cursor` requires `cursor` string and `event` string.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.models.manifest") {
+			if (!IsFieldValueType(payload, "models", '[') || !IsFieldNumber(payload, "manifestVersion")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.models.manifest` requires `models` array and `manifestVersion` number.");
 				return false;
 			}
 
@@ -3235,6 +3263,15 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.tools.scheduler") {
+			if (!IsFieldNumber(payload, "ticks") || !IsFieldNumber(payload, "queued") || !IsFieldNumber(payload, "tools")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.tools.scheduler` requires numeric fields `ticks`, `queued`, and `tools`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.models.pool") {
 			if (!IsFieldValueType(payload, "models", '[') || !IsFieldNumber(payload, "count")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.models.pool` requires `models` array and `count` number.");
@@ -3244,9 +3281,27 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.transport.policy.preview") {
+			if (!IsFieldValueType(payload, "path", '"') || !IsFieldBoolean(payload, "applied") || !IsFieldValueType(payload, "notes", '"')) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.transport.policy.preview` requires `path` string, `applied` boolean, and `notes` string.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.events.recent") {
 			if (!IsFieldValueType(payload, "events", '[') || !IsFieldNumber(payload, "count")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.events.recent` requires `events` array and `count` number.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.config.template") {
+			if (!IsFieldValueType(payload, "template", '"') || !IsFieldValueType(payload, "keys", '[') || !IsFieldNumber(payload, "count")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.config.template` requires `template` string, `keys` array, and `count` number.");
 				return false;
 			}
 

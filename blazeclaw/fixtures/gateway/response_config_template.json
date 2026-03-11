@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-153",
+  "ok": true,
+  "payload": {
+    "template": "default",
+    "keys": [ "gateway.bind", "gateway.port" ],
+    "count": 2
+  }
+}

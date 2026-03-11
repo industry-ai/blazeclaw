@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-152",
+  "ok": true,
+  "payload": {
+    "models": [ "default", "reasoner" ],
+    "manifestVersion": 1
+  }
+}

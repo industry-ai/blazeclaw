@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-154",
+  "ok": true,
+  "payload": {
+    "path": "transport/policy-preview.json",
+    "applied": false,
+    "notes": "runtime_immutable"
+  }
+}
