@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-66",
+  "ok": true,
+  "payload": {
+    "scope": "default",
+    "count": 1
+  }
+}

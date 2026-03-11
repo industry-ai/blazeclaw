@@ -1,0 +1,13 @@
+{
+  "type": "res",
+  "id": "req-67",
+  "ok": true,
+  "payload": {
+    "session": {
+      "id": "main",
+      "scope": "default",
+      "active": true
+    },
+    "activated": true
+  }
+}

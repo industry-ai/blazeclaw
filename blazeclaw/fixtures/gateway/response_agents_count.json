@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-69",
+  "ok": true,
+  "payload": {
+    "active": true,
+    "activeFilterApplied": true,
+    "count": 1
+  }
+}

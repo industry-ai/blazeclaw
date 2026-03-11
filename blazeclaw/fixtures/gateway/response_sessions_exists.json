@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-65",
+  "ok": true,
+  "payload": {
+    "sessionId": "main",
+    "exists": true
+  }
+}

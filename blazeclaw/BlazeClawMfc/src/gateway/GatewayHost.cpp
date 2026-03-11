@@ -595,6 +595,95 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.agents.exists", [this](const protocol::RequestFrame& request) {
+			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
+			const auto agents = m_agentRegistry.List();
+			const bool exists = std::any_of(agents.begin(), agents.end(), [&](const AgentEntry& agent) {
+				return requestedId.empty() || agent.id == requestedId;
+			});
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"agentId\":\"" + EscapeJson(requestedId.empty() ? "*" : requestedId) +
+					"\",\"exists\":" + std::string(exists ? "true" : "false") + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.agents.count", [this](const protocol::RequestFrame& request) {
+			const std::optional<bool> activeFilter = ExtractBooleanParam(request.paramsJson, "active");
+			const auto agents = m_agentRegistry.List();
+			const std::size_t count = static_cast<std::size_t>(std::count_if(agents.begin(), agents.end(), [&](const AgentEntry& agent) {
+				return !activeFilter.has_value() || agent.active == activeFilter.value();
+			}));
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"active\":" + std::string(activeFilter.value_or(false) ? "true" : "false") +
+					",\"activeFilterApplied\":" + std::string(activeFilter.has_value() ? "true" : "false") +
+					",\"count\":" + std::to_string(count) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.sessions.exists", [this](const protocol::RequestFrame& request) {
+			const std::string requestedId = ExtractStringParam(request.paramsJson, "sessionId");
+			const auto sessions = m_sessionRegistry.List();
+			const bool exists = std::any_of(sessions.begin(), sessions.end(), [&](const SessionEntry& session) {
+				return requestedId.empty() || session.id == requestedId;
+			});
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"sessionId\":\"" + EscapeJson(requestedId.empty() ? "*" : requestedId) +
+					"\",\"exists\":" + std::string(exists ? "true" : "false") + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.sessions.count", [this](const protocol::RequestFrame& request) {
+			const std::string scope = ExtractStringParam(request.paramsJson, "scope");
+			const std::optional<bool> active = ExtractBooleanParam(request.paramsJson, "active");
+			const auto sessions = m_sessionRegistry.List();
+			const std::size_t count = static_cast<std::size_t>(std::count_if(sessions.begin(), sessions.end(), [&](const SessionEntry& session) {
+				if (!scope.empty() && session.scope != scope) {
+					return false;
+				}
+				if (active.has_value() && session.active != active.value()) {
+					return false;
+				}
+				return true;
+			}));
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"scope\":\"" + EscapeJson(scope.empty() ? "*" : scope) +
+					"\",\"count\":" + std::to_string(count) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.sessions.activate", [this](const protocol::RequestFrame& request) {
+			const std::string requestedId = ExtractStringParam(request.paramsJson, "sessionId");
+			const auto sessions = m_sessionRegistry.List();
+			const bool exists = std::any_of(sessions.begin(), sessions.end(), [&](const SessionEntry& session) {
+				return requestedId.empty() || session.id == requestedId;
+			});
+			const SessionEntry activated = m_sessionRegistry.Patch(requestedId, std::nullopt, true);
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"session\":" + SerializeSession(activated) +
+					",\"activated\":" + std::string(exists ? "true" : "false") + "}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.channels.accounts.reset", [this](const protocol::RequestFrame& request) {
 			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
 			const std::size_t cleared = m_channelRegistry.ClearAccounts(channel);

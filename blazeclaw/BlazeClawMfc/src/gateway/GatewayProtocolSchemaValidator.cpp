@@ -1344,6 +1344,29 @@ namespace blazeclaw::gateway::protocol {
 				"boolean");
 		}
 
+		bool ValidateSessionsCountParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.sessions.count", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(fieldKinds, "scope", JsonFieldKind::String, issue, "gateway.sessions.count", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "active", JsonFieldKind::Boolean, issue, "gateway.sessions.count", "boolean")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "scope" || field == "active") {
+					continue;
+				}
+
+				SetIssue(issue, "schema_invalid_params", "Method `gateway.sessions.count` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		bool ValidateSessionMutationParams(
 			const RequestFrame& request,
 			SchemaValidationIssue& issue,
@@ -2047,6 +2070,14 @@ namespace blazeclaw::gateway::protocol {
 			return ValidateStringIdParam(request, issue, request.method, "sessionId");
 		}
 
+		if (request.method == "gateway.sessions.exists" || request.method == "gateway.sessions.activate") {
+			return ValidateStringIdParam(request, issue, request.method, "sessionId");
+		}
+
+		if (request.method == "gateway.sessions.count") {
+			return ValidateSessionsCountParams(request, issue);
+		}
+
 		if (request.method == "gateway.sessions.delete") {
 			return ValidateStringIdParam(request, issue, request.method, "sessionId");
 		}
@@ -2121,6 +2152,14 @@ namespace blazeclaw::gateway::protocol {
 		}
 
 		if (request.method == "gateway.agents.list") {
+			return ValidateOptionalActiveParam(request, issue, request.method);
+		}
+
+		if (request.method == "gateway.agents.exists") {
+			return ValidateStringIdParam(request, issue, request.method, "agentId");
+		}
+
+		if (request.method == "gateway.agents.count") {
 			return ValidateOptionalActiveParam(request, issue, request.method);
 		}
 
@@ -2892,6 +2931,9 @@ namespace blazeclaw::gateway::protocol {
 		  "gateway.sessions.patch",
 		   "gateway.sessions.preview",
 				"gateway.sessions.usage",
+                "gateway.sessions.exists",
+				"gateway.sessions.count",
+				"gateway.sessions.activate",
 				"gateway.channels.accounts",
 		 "gateway.channels.accounts.activate",
 		 "gateway.channels.accounts.deactivate",

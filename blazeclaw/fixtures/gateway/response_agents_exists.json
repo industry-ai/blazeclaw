@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-68",
+  "ok": true,
+  "payload": {
+    "agentId": "default",
+    "exists": true
+  }
+}

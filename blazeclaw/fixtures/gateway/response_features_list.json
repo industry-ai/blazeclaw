@@ -5,8 +5,10 @@
   "payload": {
     "methods": [
       "gateway.agents.activate",
+      "gateway.agents.count",
       "gateway.agents.create",
       "gateway.agents.delete",
+      "gateway.agents.exists",
       "gateway.agents.files.delete",
       "gateway.agents.files.exists",
       "gateway.agents.files.get",
@@ -55,9 +57,12 @@
       "gateway.ping",
       "gateway.protocol.version",
       "gateway.session.list",
+      "gateway.sessions.activate",
       "gateway.sessions.compact",
+      "gateway.sessions.count",
       "gateway.sessions.create",
       "gateway.sessions.delete",
+      "gateway.sessions.exists",
       "gateway.sessions.patch",
       "gateway.sessions.preview",
       "gateway.sessions.reset",

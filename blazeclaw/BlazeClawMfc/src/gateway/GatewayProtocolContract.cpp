@@ -117,7 +117,7 @@ namespace blazeclaw::gateway::protocol {
 		const ResponseFrame featuresListResponse{
 			.id = "req-3",
 			.ok = true,
-	 .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.create\",\"gateway.agents.delete\",\"gateway.agents.files.delete\",\"gateway.agents.files.exists\",\"gateway.agents.files.get\",\"gateway.agents.files.list\",\"gateway.agents.files.set\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.agents.update\",\"gateway.channels.accounts\",\"gateway.channels.accounts.activate\",\"gateway.channels.accounts.clear\",\"gateway.channels.accounts.count\",\"gateway.channels.accounts.create\",\"gateway.channels.accounts.deactivate\",\"gateway.channels.accounts.delete\",\"gateway.channels.accounts.exists\",\"gateway.channels.accounts.get\",\"gateway.channels.accounts.reset\",\"gateway.channels.accounts.restore\",\"gateway.channels.accounts.update\",\"gateway.channels.logout\",\"gateway.channels.route.delete\",\"gateway.channels.route.exists\",\"gateway.channels.route.get\",\"gateway.channels.route.patch\",\"gateway.channels.route.resolve\",\"gateway.channels.route.reset\",\"gateway.channels.route.restore\",\"gateway.channels.route.set\",\"gateway.channels.routes\",\"gateway.channels.routes.clear\",\"gateway.channels.routes.count\",\"gateway.channels.routes.reset\",\"gateway.channels.routes.restore\",\"gateway.channels.status\",\"gateway.channels.status.count\",\"gateway.channels.status.exists\",\"gateway.channels.status.get\",\"gateway.config.get\",\"gateway.config.set\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.models.list\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.compact\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.execute\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
+     .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.count\",\"gateway.agents.create\",\"gateway.agents.delete\",\"gateway.agents.exists\",\"gateway.agents.files.delete\",\"gateway.agents.files.exists\",\"gateway.agents.files.get\",\"gateway.agents.files.list\",\"gateway.agents.files.set\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.agents.update\",\"gateway.channels.accounts\",\"gateway.channels.accounts.activate\",\"gateway.channels.accounts.clear\",\"gateway.channels.accounts.count\",\"gateway.channels.accounts.create\",\"gateway.channels.accounts.deactivate\",\"gateway.channels.accounts.delete\",\"gateway.channels.accounts.exists\",\"gateway.channels.accounts.get\",\"gateway.channels.accounts.reset\",\"gateway.channels.accounts.restore\",\"gateway.channels.accounts.update\",\"gateway.channels.logout\",\"gateway.channels.route.delete\",\"gateway.channels.route.exists\",\"gateway.channels.route.get\",\"gateway.channels.route.patch\",\"gateway.channels.route.resolve\",\"gateway.channels.route.reset\",\"gateway.channels.route.restore\",\"gateway.channels.route.set\",\"gateway.channels.routes\",\"gateway.channels.routes.clear\",\"gateway.channels.routes.count\",\"gateway.channels.routes.reset\",\"gateway.channels.routes.restore\",\"gateway.channels.status\",\"gateway.channels.status.count\",\"gateway.channels.status.exists\",\"gateway.channels.status.get\",\"gateway.config.get\",\"gateway.config.set\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.models.list\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.activate\",\"gateway.sessions.compact\",\"gateway.sessions.count\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.exists\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.execute\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
 			.error = std::nullopt,
 		};
 
@@ -510,6 +510,41 @@ namespace blazeclaw::gateway::protocol {
 			.id = "req-64",
 			.ok = true,
 			.payloadJson = "{\"channel\":\"telegram\",\"count\":1}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame sessionsExistsResponse{
+			.id = "req-65",
+			.ok = true,
+			.payloadJson = "{\"sessionId\":\"main\",\"exists\":true}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame sessionsCountResponse{
+			.id = "req-66",
+			.ok = true,
+			.payloadJson = "{\"scope\":\"default\",\"count\":1}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame sessionsActivateResponse{
+			.id = "req-67",
+			.ok = true,
+			.payloadJson = "{\"session\":{\"id\":\"main\",\"scope\":\"default\",\"active\":true},\"activated\":true}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame agentsExistsResponse{
+			.id = "req-68",
+			.ok = true,
+			.payloadJson = "{\"agentId\":\"default\",\"exists\":true}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame agentsCountResponse{
+			.id = "req-69",
+			.ok = true,
+			.payloadJson = "{\"active\":true,\"activeFilterApplied\":true,\"count\":1}",
 			.error = std::nullopt,
 		};
 
@@ -1082,6 +1117,46 @@ namespace blazeclaw::gateway::protocol {
 			channelsStatusCountResponse,
 			responseIssue)) {
 			error = "Channels status count response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.sessions.exists",
+			sessionsExistsResponse,
+			responseIssue)) {
+			error = "Sessions exists response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.sessions.count",
+			sessionsCountResponse,
+			responseIssue)) {
+			error = "Sessions count response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.sessions.activate",
+			sessionsActivateResponse,
+			responseIssue)) {
+			error = "Sessions activate response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.agents.exists",
+			agentsExistsResponse,
+			responseIssue)) {
+			error = "Agents exists response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.agents.count",
+			agentsCountResponse,
+			responseIssue)) {
+			error = "Agents count response schema validation failed: " + responseIssue.message;
 			return false;
 		}
 
@@ -1749,6 +1824,76 @@ namespace blazeclaw::gateway::protocol {
 			return false;
 		}
 
+		const ResponseFrame sessionsExistsResponseNegative{
+			.id = "req-schema-55",
+			.ok = true,
+			.payloadJson = "{\"sessionId\":\"main\"}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.sessions.exists",
+			sessionsExistsResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.sessions.exists missing `exists`.";
+			return false;
+		}
+
+		const ResponseFrame sessionsCountResponseNegative{
+			.id = "req-schema-56",
+			.ok = true,
+			.payloadJson = "{\"scope\":\"default\"}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.sessions.count",
+			sessionsCountResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.sessions.count missing `count`.";
+			return false;
+		}
+
+		const ResponseFrame sessionsActivateResponseNegative{
+			.id = "req-schema-57",
+			.ok = true,
+			.payloadJson = "{\"session\":{\"id\":\"main\",\"scope\":\"default\",\"active\":true}}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.sessions.activate",
+			sessionsActivateResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.sessions.activate missing `activated`.";
+			return false;
+		}
+
+		const ResponseFrame agentsExistsResponseNegative{
+			.id = "req-schema-58",
+			.ok = true,
+			.payloadJson = "{\"agentId\":\"default\"}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.agents.exists",
+			agentsExistsResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.agents.exists missing `exists`.";
+			return false;
+		}
+
+		const ResponseFrame agentsCountResponseNegative{
+			.id = "req-schema-59",
+			.ok = true,
+			.payloadJson = "{\"active\":true,\"activeFilterApplied\":true}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.agents.count",
+			agentsCountResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.agents.count missing `count`.";
+			return false;
+		}
+
 		const EventFrame channelsAccountsUpdateEventPositive{
 			.eventName = "gateway.channels.accounts.update",
 			.payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":false}]}",
@@ -2188,6 +2333,41 @@ namespace blazeclaw::gateway::protocol {
 		if (!CompareFixture(
 			root / "response_channels_status_count.json",
 			SerializeResponseFrame(channelsStatusCountResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_sessions_exists.json",
+			SerializeResponseFrame(sessionsExistsResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_sessions_count.json",
+			SerializeResponseFrame(sessionsCountResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_sessions_activate.json",
+			SerializeResponseFrame(sessionsActivateResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_agents_exists.json",
+			SerializeResponseFrame(agentsExistsResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_agents_count.json",
+			SerializeResponseFrame(agentsCountResponse),
 			error)) {
 			return false;
 		}
