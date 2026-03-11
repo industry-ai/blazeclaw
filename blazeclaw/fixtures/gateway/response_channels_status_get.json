@@ -1,0 +1,13 @@
+{
+  "type": "res",
+  "id": "req-62",
+  "ok": true,
+  "payload": {
+    "channel": {
+      "id": "telegram",
+      "label": "Telegram",
+      "connected": false,
+      "accounts": 1
+    }
+  }
+}

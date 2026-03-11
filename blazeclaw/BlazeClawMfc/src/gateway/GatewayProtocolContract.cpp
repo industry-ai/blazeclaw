@@ -117,7 +117,7 @@ namespace blazeclaw::gateway::protocol {
 		const ResponseFrame featuresListResponse{
 			.id = "req-3",
 			.ok = true,
-   .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.create\",\"gateway.agents.delete\",\"gateway.agents.files.delete\",\"gateway.agents.files.exists\",\"gateway.agents.files.get\",\"gateway.agents.files.list\",\"gateway.agents.files.set\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.agents.update\",\"gateway.channels.accounts\",\"gateway.channels.accounts.activate\",\"gateway.channels.accounts.clear\",\"gateway.channels.accounts.count\",\"gateway.channels.accounts.create\",\"gateway.channels.accounts.deactivate\",\"gateway.channels.accounts.delete\",\"gateway.channels.accounts.exists\",\"gateway.channels.accounts.get\",\"gateway.channels.accounts.restore\",\"gateway.channels.accounts.update\",\"gateway.channels.logout\",\"gateway.channels.route.delete\",\"gateway.channels.route.exists\",\"gateway.channels.route.get\",\"gateway.channels.route.patch\",\"gateway.channels.route.resolve\",\"gateway.channels.route.restore\",\"gateway.channels.route.set\",\"gateway.channels.routes\",\"gateway.channels.routes.clear\",\"gateway.channels.routes.count\",\"gateway.channels.routes.reset\",\"gateway.channels.routes.restore\",\"gateway.channels.status\",\"gateway.config.get\",\"gateway.config.set\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.models.list\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.compact\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.execute\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
+	 .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.create\",\"gateway.agents.delete\",\"gateway.agents.files.delete\",\"gateway.agents.files.exists\",\"gateway.agents.files.get\",\"gateway.agents.files.list\",\"gateway.agents.files.set\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.agents.update\",\"gateway.channels.accounts\",\"gateway.channels.accounts.activate\",\"gateway.channels.accounts.clear\",\"gateway.channels.accounts.count\",\"gateway.channels.accounts.create\",\"gateway.channels.accounts.deactivate\",\"gateway.channels.accounts.delete\",\"gateway.channels.accounts.exists\",\"gateway.channels.accounts.get\",\"gateway.channels.accounts.reset\",\"gateway.channels.accounts.restore\",\"gateway.channels.accounts.update\",\"gateway.channels.logout\",\"gateway.channels.route.delete\",\"gateway.channels.route.exists\",\"gateway.channels.route.get\",\"gateway.channels.route.patch\",\"gateway.channels.route.resolve\",\"gateway.channels.route.reset\",\"gateway.channels.route.restore\",\"gateway.channels.route.set\",\"gateway.channels.routes\",\"gateway.channels.routes.clear\",\"gateway.channels.routes.count\",\"gateway.channels.routes.reset\",\"gateway.channels.routes.restore\",\"gateway.channels.status\",\"gateway.channels.status.count\",\"gateway.channels.status.exists\",\"gateway.channels.status.get\",\"gateway.config.get\",\"gateway.config.set\",\"gateway.events.catalog\",\"gateway.features.list\",\"gateway.health\",\"gateway.logs.tail\",\"gateway.models.list\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.compact\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.call.execute\",\"gateway.tools.call.preview\",\"gateway.tools.catalog\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
 			.error = std::nullopt,
 		};
 
@@ -468,13 +468,48 @@ namespace blazeclaw::gateway::protocol {
 			.id = "req-58",
 			.ok = true,
 			.payloadJson = "{\"route\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"agentId\":\"assistant\",\"sessionId\":\"main\"},\"updated\":true}",
-           .error = std::nullopt,
+		   .error = std::nullopt,
 		};
 
 		const ResponseFrame channelsRoutesResetResponse{
 			.id = "req-59",
 			.ok = true,
 			.payloadJson = "{\"cleared\":1,\"restored\":1,\"total\":2}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame channelsAccountsResetResponse{
+			.id = "req-60",
+			.ok = true,
+			.payloadJson = "{\"cleared\":1,\"restored\":1,\"total\":2}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame channelsRouteResetResponse{
+			.id = "req-61",
+			.ok = true,
+			.payloadJson = "{\"route\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"agentId\":\"default\",\"sessionId\":\"main\"},\"deleted\":true,\"restored\":true}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame channelsStatusGetResponse{
+			.id = "req-62",
+			.ok = true,
+			.payloadJson = "{\"channel\":{\"id\":\"telegram\",\"label\":\"Telegram\",\"connected\":false,\"accounts\":1}}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame channelsStatusExistsResponse{
+			.id = "req-63",
+			.ok = true,
+			.payloadJson = "{\"channel\":\"telegram\",\"exists\":true}",
+			.error = std::nullopt,
+		};
+
+		const ResponseFrame channelsStatusCountResponse{
+			.id = "req-64",
+			.ok = true,
+			.payloadJson = "{\"channel\":\"telegram\",\"count\":1}",
 			.error = std::nullopt,
 		};
 
@@ -1007,6 +1042,46 @@ namespace blazeclaw::gateway::protocol {
 			channelsRoutesResetResponse,
 			responseIssue)) {
 			error = "Channels routes reset response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.accounts.reset",
+			channelsAccountsResetResponse,
+			responseIssue)) {
+			error = "Channels accounts reset response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.route.reset",
+			channelsRouteResetResponse,
+			responseIssue)) {
+			error = "Channels route reset response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.status.get",
+			channelsStatusGetResponse,
+			responseIssue)) {
+			error = "Channels status get response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.status.exists",
+			channelsStatusExistsResponse,
+			responseIssue)) {
+			error = "Channels status exists response schema validation failed: " + responseIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.status.count",
+			channelsStatusCountResponse,
+			responseIssue)) {
+			error = "Channels status count response schema validation failed: " + responseIssue.message;
 			return false;
 		}
 
@@ -1604,6 +1679,76 @@ namespace blazeclaw::gateway::protocol {
 			return false;
 		}
 
+		const ResponseFrame channelsAccountsResetResponseNegative{
+			.id = "req-schema-50",
+			.ok = true,
+			.payloadJson = "{\"cleared\":1,\"restored\":1}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.accounts.reset",
+			channelsAccountsResetResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.channels.accounts.reset missing `total`.";
+			return false;
+		}
+
+		const ResponseFrame channelsRouteResetResponseNegative{
+			.id = "req-schema-51",
+			.ok = true,
+			.payloadJson = "{\"route\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"agentId\":\"default\",\"sessionId\":\"main\"},\"deleted\":true}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.route.reset",
+			channelsRouteResetResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.channels.route.reset missing `restored`.";
+			return false;
+		}
+
+		const ResponseFrame channelsStatusGetResponseNegative{
+			.id = "req-schema-52",
+			.ok = true,
+			.payloadJson = "{\"channel\":{\"id\":\"telegram\",\"label\":\"Telegram\",\"connected\":false}}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.status.get",
+			channelsStatusGetResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.channels.status.get missing `accounts`.";
+			return false;
+		}
+
+		const ResponseFrame channelsStatusExistsResponseNegative{
+			.id = "req-schema-53",
+			.ok = true,
+			.payloadJson = "{\"channel\":\"telegram\"}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.status.exists",
+			channelsStatusExistsResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.channels.status.exists missing `exists`.";
+			return false;
+		}
+
+		const ResponseFrame channelsStatusCountResponseNegative{
+			.id = "req-schema-54",
+			.ok = true,
+			.payloadJson = "{\"channel\":\"telegram\"}",
+			.error = std::nullopt,
+		};
+		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.channels.status.count",
+			channelsStatusCountResponseNegative,
+			responseIssue)) {
+			error = "Schema response negative case unexpectedly passed for gateway.channels.status.count missing `count`.";
+			return false;
+		}
+
 		const EventFrame channelsAccountsUpdateEventPositive{
 			.eventName = "gateway.channels.accounts.update",
 			.payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":false}]}",
@@ -2008,6 +2153,41 @@ namespace blazeclaw::gateway::protocol {
 		if (!CompareFixture(
 			root / "response_channels_routes_reset.json",
 			SerializeResponseFrame(channelsRoutesResetResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_channels_accounts_reset.json",
+			SerializeResponseFrame(channelsAccountsResetResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_channels_route_reset.json",
+			SerializeResponseFrame(channelsRouteResetResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_channels_status_get.json",
+			SerializeResponseFrame(channelsStatusGetResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_channels_status_exists.json",
+			SerializeResponseFrame(channelsStatusExistsResponse),
+			error)) {
+			return false;
+		}
+
+		if (!CompareFixture(
+			root / "response_channels_status_count.json",
+			SerializeResponseFrame(channelsStatusCountResponse),
 			error)) {
 			return false;
 		}

@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-63",
+  "ok": true,
+  "payload": {
+    "channel": "telegram",
+    "exists": true
+  }
+}

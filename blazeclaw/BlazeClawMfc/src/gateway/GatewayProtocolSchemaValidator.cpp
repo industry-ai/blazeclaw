@@ -77,7 +77,7 @@ namespace blazeclaw::gateway::protocol {
 			return position;
 		}
 
-     bool TryConsumeJsonString(const std::string& json, std::size_t& position, std::string& value) {
+		bool TryConsumeJsonString(const std::string& json, std::size_t& position, std::string& value) {
 			if (position >= json.size() || json[position] != '"') {
 				return false;
 			}
@@ -680,75 +680,75 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
-	bool ValidateChannelsRouteGetParams(const RequestFrame& request, SchemaValidationIssue& issue) {
-		ParsedObjectFieldKinds fieldKinds;
-		if (!TryParseRequestParamsObject(request, issue, "gateway.channels.route.get", fieldKinds)) {
-			return false;
-		}
+		bool ValidateChannelsRouteGetParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.channels.route.get", fieldKinds)) {
+				return false;
+			}
 
-		if (!RequireFieldKindIfPresent(
+			if (!RequireFieldKindIfPresent(
 				fieldKinds,
 				"channel",
 				JsonFieldKind::String,
 				issue,
 				"gateway.channels.route.get",
 				"a string") ||
-			!RequireFieldKindIfPresent(
-				fieldKinds,
-				"accountId",
-				JsonFieldKind::String,
-				issue,
-				"gateway.channels.route.get",
-				"a string")) {
-			return false;
-		}
-
-		for (const auto& [field, _] : fieldKinds) {
-			if (field == "channel" || field == "accountId") {
-				continue;
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"accountId",
+					JsonFieldKind::String,
+					issue,
+					"gateway.channels.route.get",
+					"a string")) {
+				return false;
 			}
 
-			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.get` does not allow `params." + field + "`.");
-			return false;
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "channel" || field == "accountId") {
+					continue;
+				}
+
+				SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.get` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
 		}
 
-		return true;
-	}
+		bool ValidateChannelsRouteRestoreParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.channels.route.restore", fieldKinds)) {
+				return false;
+			}
 
-	bool ValidateChannelsRouteRestoreParams(const RequestFrame& request, SchemaValidationIssue& issue) {
-		ParsedObjectFieldKinds fieldKinds;
-		if (!TryParseRequestParamsObject(request, issue, "gateway.channels.route.restore", fieldKinds)) {
-			return false;
-		}
-
-		if (!RequireFieldKindIfPresent(
+			if (!RequireFieldKindIfPresent(
 				fieldKinds,
 				"channel",
 				JsonFieldKind::String,
 				issue,
 				"gateway.channels.route.restore",
 				"a string") ||
-			!RequireFieldKindIfPresent(
-				fieldKinds,
-				"accountId",
-				JsonFieldKind::String,
-				issue,
-				"gateway.channels.route.restore",
-				"a string")) {
-			return false;
-		}
-
-		for (const auto& [field, _] : fieldKinds) {
-			if (field == "channel" || field == "accountId") {
-				continue;
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"accountId",
+					JsonFieldKind::String,
+					issue,
+					"gateway.channels.route.restore",
+					"a string")) {
+				return false;
 			}
 
-			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.restore` does not allow `params." + field + "`.");
-			return false;
-		}
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "channel" || field == "accountId") {
+					continue;
+				}
 
-		return true;
-	}
+				SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.restore` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
 
 		bool ValidateChannelsRoutesClearParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 			ParsedObjectFieldKinds fieldKinds;
@@ -778,102 +778,102 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
-	bool ValidateChannelsRoutesRestoreParams(const RequestFrame& request, SchemaValidationIssue& issue) {
-		ParsedObjectFieldKinds fieldKinds;
-		if (!TryParseRequestParamsObject(request, issue, "gateway.channels.routes.restore", fieldKinds)) {
-			return false;
-		}
+		bool ValidateChannelsRoutesRestoreParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.channels.routes.restore", fieldKinds)) {
+				return false;
+			}
 
-		if (!RequireFieldKindIfPresent(
+			if (!RequireFieldKindIfPresent(
 				fieldKinds,
 				"channel",
 				JsonFieldKind::String,
 				issue,
 				"gateway.channels.routes.restore",
 				"a string")) {
-			return false;
-		}
-
-		for (const auto& [field, _] : fieldKinds) {
-			if (field == "channel") {
-				continue;
+				return false;
 			}
 
-			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.routes.restore` does not allow `params." + field + "`.");
-			return false;
-		}
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "channel") {
+					continue;
+				}
 
-		return true;
-	}
-
-	bool ValidateChannelsRoutesResetParams(const RequestFrame& request, SchemaValidationIssue& issue) {
-		ParsedObjectFieldKinds fieldKinds;
-		if (!TryParseRequestParamsObject(request, issue, "gateway.channels.routes.reset", fieldKinds)) {
-			return false;
-		}
-
-		if (!RequireFieldKindIfPresent(fieldKinds, "channel", JsonFieldKind::String, issue, "gateway.channels.routes.reset", "a string")) {
-			return false;
-		}
-
-		for (const auto& [field, _] : fieldKinds) {
-			if (field == "channel") {
-				continue;
+				SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.routes.restore` does not allow `params." + field + "`.");
+				return false;
 			}
 
-			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.routes.reset` does not allow `params." + field + "`.");
-			return false;
+			return true;
 		}
 
-		return true;
-	}
-
-	bool ValidateChannelsRoutesCountParams(const RequestFrame& request, SchemaValidationIssue& issue) {
-		ParsedObjectFieldKinds fieldKinds;
-		if (!TryParseRequestParamsObject(request, issue, "gateway.channels.routes.count", fieldKinds)) {
-			return false;
-		}
-
-		if (!RequireFieldKindIfPresent(fieldKinds, "channel", JsonFieldKind::String, issue, "gateway.channels.routes.count", "a string")) {
-			return false;
-		}
-
-		for (const auto& [field, _] : fieldKinds) {
-			if (field == "channel") {
-				continue;
+		bool ValidateChannelsRoutesResetParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.channels.routes.reset", fieldKinds)) {
+				return false;
 			}
 
-			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.routes.count` does not allow `params." + field + "`.");
-			return false;
-		}
-
-		return true;
-	}
-
-	bool ValidateChannelsRoutePatchParams(const RequestFrame& request, SchemaValidationIssue& issue) {
-		ParsedObjectFieldKinds fieldKinds;
-		if (!TryParseRequestParamsObject(request, issue, "gateway.channels.route.patch", fieldKinds)) {
-			return false;
-		}
-
-		if (!RequireFieldKindIfPresent(fieldKinds, "channel", JsonFieldKind::String, issue, "gateway.channels.route.patch", "a string") ||
-			!RequireFieldKindIfPresent(fieldKinds, "accountId", JsonFieldKind::String, issue, "gateway.channels.route.patch", "a string") ||
-			!RequireFieldKindIfPresent(fieldKinds, "agentId", JsonFieldKind::String, issue, "gateway.channels.route.patch", "a string") ||
-			!RequireFieldKindIfPresent(fieldKinds, "sessionId", JsonFieldKind::String, issue, "gateway.channels.route.patch", "a string")) {
-			return false;
-		}
-
-		for (const auto& [field, _] : fieldKinds) {
-			if (field == "channel" || field == "accountId" || field == "agentId" || field == "sessionId") {
-				continue;
+			if (!RequireFieldKindIfPresent(fieldKinds, "channel", JsonFieldKind::String, issue, "gateway.channels.routes.reset", "a string")) {
+				return false;
 			}
 
-			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.patch` does not allow `params." + field + "`.");
-			return false;
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "channel") {
+					continue;
+				}
+
+				SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.routes.reset` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
 		}
 
-		return true;
-	}
+		bool ValidateChannelsRoutesCountParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.channels.routes.count", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(fieldKinds, "channel", JsonFieldKind::String, issue, "gateway.channels.routes.count", "a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "channel") {
+					continue;
+				}
+
+				SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.routes.count` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateChannelsRoutePatchParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.channels.route.patch", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(fieldKinds, "channel", JsonFieldKind::String, issue, "gateway.channels.route.patch", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "accountId", JsonFieldKind::String, issue, "gateway.channels.route.patch", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "agentId", JsonFieldKind::String, issue, "gateway.channels.route.patch", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "sessionId", JsonFieldKind::String, issue, "gateway.channels.route.patch", "a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "channel" || field == "accountId" || field == "agentId" || field == "sessionId") {
+					continue;
+				}
+
+				SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.route.patch` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
 
 		bool ValidateChannelsAccountsActivateParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 			ParsedObjectFieldKinds fieldKinds;
@@ -945,77 +945,77 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
-	bool ValidateChannelsAccountsClearParams(const RequestFrame& request, SchemaValidationIssue& issue) {
-		ParsedObjectFieldKinds fieldKinds;
-		if (!TryParseRequestParamsObject(request, issue, "gateway.channels.accounts.clear", fieldKinds)) {
-			return false;
-		}
+		bool ValidateChannelsAccountsClearParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.channels.accounts.clear", fieldKinds)) {
+				return false;
+			}
 
-		if (!RequireFieldKindIfPresent(
+			if (!RequireFieldKindIfPresent(
 				fieldKinds,
 				"channel",
 				JsonFieldKind::String,
 				issue,
 				"gateway.channels.accounts.clear",
 				"a string")) {
-			return false;
-		}
-
-		for (const auto& [field, _] : fieldKinds) {
-			if (field == "channel") {
-				continue;
+				return false;
 			}
 
-			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.accounts.clear` does not allow `params." + field + "`.");
-			return false;
-		}
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "channel") {
+					continue;
+				}
 
-		return true;
-	}
-
-	bool ValidateChannelsAccountsRestoreParams(const RequestFrame& request, SchemaValidationIssue& issue) {
-		ParsedObjectFieldKinds fieldKinds;
-		if (!TryParseRequestParamsObject(request, issue, "gateway.channels.accounts.restore", fieldKinds)) {
-			return false;
-		}
-
-		if (!RequireFieldKindIfPresent(fieldKinds, "channel", JsonFieldKind::String, issue, "gateway.channels.accounts.restore", "a string")) {
-			return false;
-		}
-
-		for (const auto& [field, _] : fieldKinds) {
-			if (field == "channel") {
-				continue;
+				SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.accounts.clear` does not allow `params." + field + "`.");
+				return false;
 			}
 
-			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.accounts.restore` does not allow `params." + field + "`.");
-			return false;
+			return true;
 		}
 
-		return true;
-	}
-
-	bool ValidateChannelsAccountsCountParams(const RequestFrame& request, SchemaValidationIssue& issue) {
-		ParsedObjectFieldKinds fieldKinds;
-		if (!TryParseRequestParamsObject(request, issue, "gateway.channels.accounts.count", fieldKinds)) {
-			return false;
-		}
-
-		if (!RequireFieldKindIfPresent(fieldKinds, "channel", JsonFieldKind::String, issue, "gateway.channels.accounts.count", "a string")) {
-			return false;
-		}
-
-		for (const auto& [field, _] : fieldKinds) {
-			if (field == "channel") {
-				continue;
+		bool ValidateChannelsAccountsRestoreParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.channels.accounts.restore", fieldKinds)) {
+				return false;
 			}
 
-			SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.accounts.count` does not allow `params." + field + "`.");
-			return false;
+			if (!RequireFieldKindIfPresent(fieldKinds, "channel", JsonFieldKind::String, issue, "gateway.channels.accounts.restore", "a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "channel") {
+					continue;
+				}
+
+				SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.accounts.restore` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
 		}
 
-		return true;
-	}
+		bool ValidateChannelsAccountsCountParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.channels.accounts.count", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(fieldKinds, "channel", JsonFieldKind::String, issue, "gateway.channels.accounts.count", "a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "channel") {
+					continue;
+				}
+
+				SetIssue(issue, "schema_invalid_params", "Method `gateway.channels.accounts.count` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
 
 		bool ValidateChannelsAccountsExistsParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 			ParsedObjectFieldKinds fieldKinds;
@@ -1961,6 +1961,10 @@ namespace blazeclaw::gateway::protocol {
 			return ValidateChannelsRouteRestoreParams(request, issue);
 		}
 
+		if (request.method == "gateway.channels.route.reset") {
+			return ValidateChannelsRouteRestoreParams(request, issue);
+		}
+
 		if (request.method == "gateway.channels.route.patch") {
 			return ValidateChannelsRoutePatchParams(request, issue);
 		}
@@ -2019,6 +2023,16 @@ namespace blazeclaw::gateway::protocol {
 
 		if (request.method == "gateway.channels.accounts.count") {
 			return ValidateChannelsAccountsCountParams(request, issue);
+		}
+
+		if (request.method == "gateway.channels.accounts.reset") {
+			return ValidateOptionalChannelParam(request, issue, request.method);
+		}
+
+		if (request.method == "gateway.channels.status.get" ||
+			request.method == "gateway.channels.status.exists" ||
+			request.method == "gateway.channels.status.count") {
+			return ValidateOptionalChannelParam(request, issue, request.method);
 		}
 
 		if (request.method == "gateway.tools.call.preview") {
@@ -2560,9 +2574,64 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		if (method == "gateway.channels.accounts.reset") {
+			if (!IsFieldNumber(payload, "cleared") || !IsFieldNumber(payload, "restored") || !IsFieldNumber(payload, "total")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.accounts.reset` requires numeric fields `cleared`, `restored`, and `total`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.channels.status.get") {
+			if (!IsFieldValueType(payload, "channel", '{')) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.status.get` requires object field `channel`.");
+				return false;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "id", "label", "connected", "accounts" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.status.get` requires channel fields `id`, `label`, `connected`, and `accounts`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.channels.status.exists") {
+			if (!IsFieldValueType(payload, "channel", '"') || !IsFieldBoolean(payload, "exists")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.status.exists` requires `channel` string and `exists` boolean.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.channels.status.count") {
+			if (!IsFieldValueType(payload, "channel", '"') || !IsFieldNumber(payload, "count")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.status.count` requires `channel` string and `count` number.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.channels.logout") {
 			if (!IsFieldBoolean(payload, "loggedOut") || !IsFieldNumber(payload, "affected")) {
 				SetIssue(issue, "schema_invalid_response", "`gateway.channels.logout` requires `loggedOut` boolean and `affected` number fields.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.channels.route.reset") {
+			if (!IsFieldValueType(payload, "route", '{') || !IsFieldBoolean(payload, "deleted") || !IsFieldBoolean(payload, "restored")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.route.reset` requires `route` object, `deleted` boolean, and `restored` boolean.");
+				return false;
+			}
+
+			if (!PayloadContainsAllFieldTokens(payload, { "channel", "accountId", "agentId", "sessionId" })) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.channels.route.reset` requires route fields `channel`, `accountId`, `agentId`, and `sessionId`.");
 				return false;
 			}
 
@@ -2831,16 +2900,21 @@ namespace blazeclaw::gateway::protocol {
 		 "gateway.channels.accounts.get",
 		 "gateway.channels.accounts.create",
 		 "gateway.channels.accounts.delete",
-         "gateway.channels.accounts.clear",
-      "gateway.channels.accounts.restore",
+		 "gateway.channels.accounts.clear",
+	  "gateway.channels.accounts.restore",
 		 "gateway.channels.accounts.count",
+	  "gateway.channels.accounts.reset",
+		 "gateway.channels.status.get",
+		 "gateway.channels.status.exists",
+		 "gateway.channels.status.count",
 		   "gateway.channels.route.exists",
-         "gateway.channels.route.get",
-         "gateway.channels.route.restore",
-        "gateway.channels.route.patch",
+		 "gateway.channels.route.get",
+		 "gateway.channels.route.restore",
+		"gateway.channels.route.reset",
+		"gateway.channels.route.patch",
 		   "gateway.channels.routes.clear",
-           "gateway.channels.routes.restore",
-          "gateway.channels.routes.reset",
+		   "gateway.channels.routes.restore",
+		  "gateway.channels.routes.reset",
 		   "gateway.channels.routes.count",
 				"gateway.tools.call.preview",
 				"gateway.tick",

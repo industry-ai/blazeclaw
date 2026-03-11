@@ -595,6 +595,22 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.channels.accounts.reset", [this](const protocol::RequestFrame& request) {
+			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
+			const std::size_t cleared = m_channelRegistry.ClearAccounts(channel);
+			const std::size_t restored = m_channelRegistry.RestoreAccounts(channel);
+			const std::size_t total = m_channelRegistry.ListAccounts().size();
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"cleared\":" + std::to_string(cleared) +
+					",\"restored\":" + std::to_string(restored) +
+					",\"total\":" + std::to_string(total) + "}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.channels.accounts.restore", [this](const protocol::RequestFrame& request) {
 			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
 			const std::size_t restored = m_channelRegistry.RestoreAccounts(channel);
@@ -605,6 +621,24 @@ namespace blazeclaw::gateway {
 				.ok = true,
 				.payloadJson = "{\"restored\":" + std::to_string(restored) +
 					",\"total\":" + std::to_string(total) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.channels.route.reset", [this](const protocol::RequestFrame& request) {
+			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
+			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
+			ChannelRouteEntry removedRoute;
+			const bool deleted = m_channelRegistry.DeleteRoute(channel, accountId, removedRoute);
+			bool restored = false;
+			const ChannelRouteEntry route = m_channelRegistry.RestoreRoute(channel, accountId, restored);
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"route\":" + SerializeChannelRoute(route) +
+					",\"deleted\":" + std::string(deleted ? "true" : "false") +
+					",\"restored\":" + std::string(restored ? "true" : "false") + "}",
 				.error = std::nullopt,
 			};
 			});
@@ -1253,6 +1287,68 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"accounts\":" + accountsJson + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.channels.status.get", [this](const protocol::RequestFrame& request) {
+			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
+			const auto statuses = m_channelRegistry.ListStatus();
+			ChannelStatusEntry selected{};
+			bool found = false;
+			for (const auto& status : statuses) {
+				if (!channel.empty() && status.id != channel) {
+					continue;
+				}
+				selected = status;
+				found = true;
+				break;
+			}
+			if (!found) {
+				if (!statuses.empty()) {
+					selected = statuses.front();
+				}
+				else {
+					selected = ChannelStatusEntry{ .id = channel.empty() ? "unknown" : channel, .label = "Unknown", .connected = false, .accountCount = 0 };
+				}
+			}
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"channel\":" + SerializeChannelStatus(selected) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.channels.status.exists", [this](const protocol::RequestFrame& request) {
+			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
+			const auto statuses = m_channelRegistry.ListStatus();
+			const bool exists = std::any_of(statuses.begin(), statuses.end(), [&](const ChannelStatusEntry& status) {
+				return channel.empty() || status.id == channel;
+				});
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"channel\":\"" + EscapeJson(channel.empty() ? "*" : channel) +
+					"\",\"exists\":" + std::string(exists ? "true" : "false") + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.channels.status.count", [this](const protocol::RequestFrame& request) {
+			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
+			const auto statuses = m_channelRegistry.ListStatus();
+			const std::size_t count = static_cast<std::size_t>(std::count_if(statuses.begin(), statuses.end(), [&](const ChannelStatusEntry& status) {
+				return channel.empty() || status.id == channel;
+				}));
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"channel\":\"" + EscapeJson(channel.empty() ? "*" : channel) +
+					"\",\"count\":" + std::to_string(count) + "}",
 				.error = std::nullopt,
 			};
 			});
