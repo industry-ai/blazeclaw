@@ -595,11 +595,33 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.events.batch", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"batches\":[\"lifecycle\",\"updates\"],\"count\":2}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.events.recent", [](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"events\":[\"gateway.shutdown\",\"gateway.session.reset\"],\"count\":2}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.capacity", [this](const protocol::RequestFrame& request) {
+			const auto tools = m_toolRegistry.List();
+			const std::size_t total = tools.size();
+			const std::size_t used = 0;
+			const std::size_t free = total >= used ? total - used : 0;
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"total\":" + std::to_string(total) + ",\"used\":" + std::to_string(used) + ",\"free\":" + std::to_string(free) + "}",
 				.error = std::nullopt,
 			};
 			});
@@ -613,6 +635,15 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.models.affinity", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"models\":[\"default\",\"reasoner\"],\"affinity\":\"balanced\"}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.tools.throughput", [this](const protocol::RequestFrame& request) {
 			const auto tools = m_toolRegistry.List();
 			const std::size_t calls = 0;
@@ -622,6 +653,15 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"calls\":" + std::to_string(calls) + ",\"windowSec\":" + std::to_string(windowSec) + ",\"perMinute\":" + std::to_string(perMinute) + ",\"tools\":" + std::to_string(tools.size()) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.config.history", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"revisions\":[1],\"count\":1}",
 				.error = std::nullopt,
 			};
 			});
@@ -2617,6 +2657,15 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"path\":\"transport/policy-export.json\",\"version\":1,\"exported\":true}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.transport.policy.import", [this](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"imported\":true,\"version\":1,\"applied\":false}",
 				.error = std::nullopt,
 			};
 			});
