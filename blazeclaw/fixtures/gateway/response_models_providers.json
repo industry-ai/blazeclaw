@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-97",
+  "ok": true,
+  "payload": {
+    "providers": [ "seed" ],
+    "count": 1
+  }
+}

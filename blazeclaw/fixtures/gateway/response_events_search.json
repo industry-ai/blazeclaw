@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-95",
+  "ok": true,
+  "payload": {
+    "term": "gateway",
+    "events": [ "gateway.agent.update", "gateway.channels.accounts.update", "gateway.channels.update", "gateway.health", "gateway.session.reset", "gateway.shutdown", "gateway.tick", "gateway.tools.catalog.update" ],
+    "count": 8
+  }
+}

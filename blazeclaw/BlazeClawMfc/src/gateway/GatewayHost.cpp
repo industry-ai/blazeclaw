@@ -595,6 +595,31 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.events.search", [](const protocol::RequestFrame& request) {
+			const std::string term = ExtractStringParam(request.paramsJson, "term");
+			const auto& events = EventCatalogNames();
+			std::string eventsJson = "[";
+			std::size_t count = 0;
+			for (std::size_t i = 0; i < events.size(); ++i) {
+				if (!term.empty() && events[i].find(term) == std::string::npos) {
+					continue;
+				}
+				if (count > 0) {
+					eventsJson += ",";
+				}
+				eventsJson += "\"" + EscapeJson(events[i]) + "\"";
+				++count;
+			}
+			eventsJson += "]";
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"term\":\"" + EscapeJson(term.empty() ? "*" : term) + "\",\"events\":" + eventsJson + ",\"count\":" + std::to_string(count) + "}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.events.last", [](const protocol::RequestFrame& request) {
 			const auto& events = EventCatalogNames();
 			const std::string last = events.empty() ? "none" : events.back();
@@ -606,12 +631,38 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.tools.categories", [this](const protocol::RequestFrame& request) {
+			const auto tools = m_toolRegistry.List();
+			std::vector<std::string> categories;
+			for (std::size_t i = 0; i < tools.size(); ++i) {
+				if (std::find(categories.begin(), categories.end(), tools[i].category) == categories.end()) {
+					categories.push_back(tools[i].category);
+				}
+			}
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"categories\":" + SerializeStringArray(categories) + ",\"count\":" + std::to_string(categories.size()) + "}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.events.list", [](const protocol::RequestFrame& request) {
 			const auto& events = EventCatalogNames();
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"events\":" + SerializeStringArray(events) + ",\"count\":" + std::to_string(events.size()) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.models.providers", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"providers\":[\"seed\"],\"count\":1}",
 				.error = std::nullopt,
 			};
 			});
@@ -628,6 +679,22 @@ namespace blazeclaw::gateway {
 				.ok = true,
 				.payloadJson = "{\"agentId\":\"" + EscapeJson(requestedId.empty() ? "*" : requestedId) +
 					"\",\"exists\":" + std::string(exists ? "true" : "false") + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.config.getSection", [this](const protocol::RequestFrame& request) {
+			const std::string section = ExtractStringParam(request.paramsJson, "section");
+			const std::string resolved = section.empty() ? "gateway" : section;
+			std::string sectionJson = "{\"bind\":\"" + EscapeJson(m_runtimeGatewayBind) + "\",\"port\":" + std::to_string(m_runtimeGatewayPort) + "}";
+			if (resolved == "agent") {
+				sectionJson = "{\"model\":\"" + EscapeJson(m_runtimeAgentModel) + "\",\"streaming\":" + std::string(m_runtimeAgentStreaming ? "true" : "false") + "}";
+			}
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"section\":\"" + EscapeJson(resolved) + "\",\"config\":" + sectionJson + "}",
 				.error = std::nullopt,
 			};
 			});
@@ -2142,6 +2209,16 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"endpoint\":\"" + EscapeJson(resolved) + "\",\"updated\":false}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.transport.endpoints.list", [this](const protocol::RequestFrame& request) {
+			const std::string endpoint = m_transport.Endpoint();
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"endpoints\":[\"" + EscapeJson(endpoint) + "\"],\"count\":1}",
 				.error = std::nullopt,
 			};
 			});

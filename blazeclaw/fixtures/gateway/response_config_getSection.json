@@ -1,0 +1,12 @@
+{
+  "type": "res",
+  "id": "req-98",
+  "ok": true,
+  "payload": {
+    "section": "gateway",
+    "config": {
+      "bind": "127.0.0.1",
+      "port": 18789
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-96",
+  "ok": true,
+  "payload": {
+    "categories": [ "messaging", "knowledge" ],
+    "count": 2
+  }
+}
