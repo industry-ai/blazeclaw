@@ -1857,6 +1857,69 @@ namespace blazeclaw::gateway {
 				.error = std::nullopt,
 			};
 			});
+
+		m_dispatcher.Register("gateway.config.exists", [this](const protocol::RequestFrame& request) {
+			const std::string key = ExtractStringParam(request.paramsJson, "key");
+			const bool exists = key.empty() ||
+				key == "gateway.bind" ||
+				key == "gateway.port" ||
+				key == "agent.model" ||
+				key == "agent.streaming";
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"key\":\"" + EscapeJson(key.empty() ? "*" : key) +
+					"\",\"exists\":" + std::string(exists ? "true" : "false") + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.config.keys", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"keys\":[\"gateway.bind\",\"gateway.port\",\"agent.model\",\"agent.streaming\"],\"count\":4}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.transport.connections.count", [this](const protocol::RequestFrame& request) {
+			const std::size_t count = m_transport.ConnectionCount();
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"count\":" + std::to_string(count) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.health.details", [this](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"status\":\"ok\",\"running\":" + std::string(IsRunning() ? "true" : "false") +
+					",\"transport\":{\"running\":" + std::string(m_transport.IsRunning() ? "true" : "false") +
+					",\"endpoint\":\"" + EscapeJson(m_transport.Endpoint()) + "\",\"connections\":" + std::to_string(m_transport.ConnectionCount()) + "}}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.logs.count", [](const protocol::RequestFrame& request) {
+			const std::string level = ExtractStringParam(request.paramsJson, "level");
+			const std::vector<std::string> levels = { "info", "info", "debug" };
+			const std::size_t count = static_cast<std::size_t>(std::count_if(levels.begin(), levels.end(), [&](const std::string& item) {
+				return level.empty() || item == level;
+			}));
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"level\":\"" + EscapeJson(level.empty() ? "*" : level) +
+					"\",\"count\":" + std::to_string(count) + "}",
+				.error = std::nullopt,
+			};
+			});
 	}
 
 } // namespace blazeclaw::gateway

@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-75",
+  "ok": true,
+  "payload": {
+    "key": "gateway.bind",
+    "exists": true
+  }
+}

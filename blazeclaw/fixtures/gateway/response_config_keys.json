@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-76",
+  "ok": true,
+  "payload": {
+    "keys": [ "gateway.bind", "gateway.port", "agent.model", "agent.streaming" ],
+    "count": 4
+  }
+}

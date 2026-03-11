@@ -1508,6 +1508,28 @@ namespace blazeclaw::gateway::protocol {
 				"numeric");
 		}
 
+		bool ValidateLogsCountParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "gateway.logs.count", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(fieldKinds, "level", JsonFieldKind::String, issue, "gateway.logs.count", "a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "level") {
+					continue;
+				}
+
+				SetIssue(issue, "schema_invalid_params", "Method `gateway.logs.count` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		bool ValidateSessionsCompactParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 			ParsedObjectFieldKinds fieldKinds;
 			if (!TryParseRequestParamsObject(request, issue, "gateway.sessions.compact", fieldKinds)) {
@@ -2133,12 +2155,19 @@ namespace blazeclaw::gateway::protocol {
 		if (request.method == "gateway.protocol.version" ||
 			request.method == "gateway.features.list" ||
 			request.method == "gateway.config.get" ||
+          request.method == "gateway.config.keys" ||
 			request.method == "gateway.models.list" ||
 			request.method == "gateway.tools.catalog" ||
 			request.method == "gateway.health" ||
+         request.method == "gateway.health.details" ||
 			request.method == "gateway.transport.status" ||
+           request.method == "gateway.transport.connections.count" ||
 			request.method == "gateway.events.catalog") {
 			return ValidateNoParamsAllowed(request, issue, request.method);
+		}
+
+		if (request.method == "gateway.config.exists") {
+			return ValidateStringIdParam(request, issue, request.method, "key");
 		}
 
 		if (request.method == "gateway.events.exists" || request.method == "gateway.events.count") {
@@ -2165,6 +2194,10 @@ namespace blazeclaw::gateway::protocol {
 
 		if (request.method == "gateway.channels.logout") {
 			return ValidateChannelsLogoutParams(request, issue);
+		}
+
+		if (request.method == "gateway.logs.count") {
+			return ValidateLogsCountParams(request, issue);
 		}
 
 		if (request.method == "gateway.agents.list") {
@@ -2941,6 +2974,11 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.ping",
 				"gateway.transport.status",
 				"gateway.events.catalog",
+              "gateway.config.exists",
+				"gateway.config.keys",
+				"gateway.transport.connections.count",
+				"gateway.health.details",
+				"gateway.logs.count",
 		  "gateway.agents.create",
 				"gateway.sessions.delete",
 			   "gateway.sessions.compact",
@@ -2997,6 +3035,19 @@ namespace blazeclaw::gateway::protocol {
 				: (SetIssue(issue, "schema_invalid_response", "`gateway.health` requires `status` string and `running` boolean."), false);
 		}
 
+		if (method == "gateway.health.details") {
+			if (!IsFieldValueType(payload, "status", '"') ||
+				!IsFieldBoolean(payload, "running") ||
+				!IsFieldValueType(payload, "transport", '{') ||
+				!IsFieldValueType(payload, "endpoint", '"') ||
+				!IsFieldNumber(payload, "connections")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.health.details` requires `status`, `running`, and `transport.{endpoint,connections}` fields.");
+				return false;
+			}
+
+			return true;
+		}
+
 		if (method == "gateway.transport.status") {
 			const bool hasCoreFields = IsFieldBoolean(payload, "running") &&
 				IsFieldValueType(payload, "endpoint", '"') &&
@@ -3014,6 +3065,15 @@ namespace blazeclaw::gateway::protocol {
 					issue,
 					"schema_invalid_response",
 					"`gateway.transport.status` requires `running`, `endpoint`, `connections`, `timeouts.{handshake,idle}`, and `closes.{invalidUtf8,messageTooBig,extensionRejected}`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		if (method == "gateway.transport.connections.count") {
+			if (!IsFieldNumber(payload, "count")) {
+				SetIssue(issue, "schema_invalid_response", "`gateway.transport.connections.count` requires numeric field `count`.");
 				return false;
 			}
 
