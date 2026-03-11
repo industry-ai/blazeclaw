@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-80",
+  "ok": true,
+  "payload": {
+    "section": "gateway",
+    "count": 2
+  }
+}

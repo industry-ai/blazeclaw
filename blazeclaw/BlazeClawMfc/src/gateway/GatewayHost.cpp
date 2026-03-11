@@ -600,7 +600,7 @@ namespace blazeclaw::gateway {
 			const auto agents = m_agentRegistry.List();
 			const bool exists = std::any_of(agents.begin(), agents.end(), [&](const AgentEntry& agent) {
 				return requestedId.empty() || agent.id == requestedId;
-			});
+				});
 
 			return protocol::ResponseFrame{
 				.id = request.id,
@@ -616,7 +616,7 @@ namespace blazeclaw::gateway {
 			const auto agents = m_agentRegistry.List();
 			const std::size_t count = static_cast<std::size_t>(std::count_if(agents.begin(), agents.end(), [&](const AgentEntry& agent) {
 				return !activeFilter.has_value() || agent.active == activeFilter.value();
-			}));
+				}));
 
 			return protocol::ResponseFrame{
 				.id = request.id,
@@ -633,7 +633,7 @@ namespace blazeclaw::gateway {
 			const auto sessions = m_sessionRegistry.List();
 			const bool exists = std::any_of(sessions.begin(), sessions.end(), [&](const SessionEntry& session) {
 				return requestedId.empty() || session.id == requestedId;
-			});
+				});
 
 			return protocol::ResponseFrame{
 				.id = request.id,
@@ -656,7 +656,7 @@ namespace blazeclaw::gateway {
 					return false;
 				}
 				return true;
-			}));
+				}));
 
 			return protocol::ResponseFrame{
 				.id = request.id,
@@ -672,7 +672,7 @@ namespace blazeclaw::gateway {
 			const auto sessions = m_sessionRegistry.List();
 			const bool exists = std::any_of(sessions.begin(), sessions.end(), [&](const SessionEntry& session) {
 				return requestedId.empty() || session.id == requestedId;
-			});
+				});
 			const SessionEntry activated = m_sessionRegistry.Patch(requestedId, std::nullopt, true);
 
 			return protocol::ResponseFrame{
@@ -1785,7 +1785,7 @@ namespace blazeclaw::gateway {
 			const auto& events = EventCatalogNames();
 			const bool exists = std::any_of(events.begin(), events.end(), [&](const std::string& item) {
 				return eventName.empty() || item == eventName;
-			});
+				});
 
 			return protocol::ResponseFrame{
 				.id = request.id,
@@ -1801,7 +1801,7 @@ namespace blazeclaw::gateway {
 			const auto& events = EventCatalogNames();
 			const std::size_t count = static_cast<std::size_t>(std::count_if(events.begin(), events.end(), [&](const std::string& item) {
 				return eventName.empty() || item == eventName;
-			}));
+				}));
 
 			return protocol::ResponseFrame{
 				.id = request.id,
@@ -1817,7 +1817,7 @@ namespace blazeclaw::gateway {
 			const auto tools = m_toolRegistry.List();
 			const bool exists = std::any_of(tools.begin(), tools.end(), [&](const ToolCatalogEntry& tool) {
 				return requestedTool.empty() || tool.id == requestedTool;
-			});
+				});
 
 			return protocol::ResponseFrame{
 				.id = request.id,
@@ -1833,7 +1833,7 @@ namespace blazeclaw::gateway {
 			const auto tools = m_toolRegistry.List();
 			const std::size_t count = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [&](const ToolCatalogEntry& tool) {
 				return !activeFilter.has_value() || tool.enabled == activeFilter.value();
-			}));
+				}));
 
 			return protocol::ResponseFrame{
 				.id = request.id,
@@ -1910,13 +1910,79 @@ namespace blazeclaw::gateway {
 			const std::vector<std::string> levels = { "info", "info", "debug" };
 			const std::size_t count = static_cast<std::size_t>(std::count_if(levels.begin(), levels.end(), [&](const std::string& item) {
 				return level.empty() || item == level;
-			}));
+				}));
 
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"level\":\"" + EscapeJson(level.empty() ? "*" : level) +
 					"\",\"count\":" + std::to_string(count) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.config.count", [](const protocol::RequestFrame& request) {
+			const std::string section = ExtractStringParam(request.paramsJson, "section");
+			const std::size_t count = section == "gateway" || section == "agent"
+				? 2
+				: 4;
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"section\":\"" + EscapeJson(section.empty() ? "*" : section) +
+					"\",\"count\":" + std::to_string(count) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.models.count", [](const protocol::RequestFrame& request) {
+			const std::string provider = ExtractStringParam(request.paramsJson, "provider");
+			const std::size_t count = provider.empty() || provider == "seed" ? 2 : 0;
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"provider\":\"" + EscapeJson(provider.empty() ? "*" : provider) +
+					"\",\"count\":" + std::to_string(count) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.events.get", [](const protocol::RequestFrame& request) {
+			const std::string eventName = ExtractStringParam(request.paramsJson, "event");
+			const auto& events = EventCatalogNames();
+			std::string selected = events.empty() ? "unknown" : events.front();
+			for (const auto& item : events) {
+				if (!eventName.empty() && item != eventName) {
+					continue;
+				}
+				selected = item;
+				break;
+			}
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"event\":\"" + EscapeJson(selected) + "\"}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.transport.endpoint.get", [this](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"endpoint\":\"" + EscapeJson(m_transport.Endpoint()) + "\"}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.logs.levels", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"levels\":[\"info\",\"debug\"],\"count\":2}",
 				.error = std::nullopt,
 			};
 			});

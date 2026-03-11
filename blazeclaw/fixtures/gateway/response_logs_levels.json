@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-84",
+  "ok": true,
+  "payload": {
+    "levels": [ "info", "debug" ],
+    "count": 2
+  }
+}

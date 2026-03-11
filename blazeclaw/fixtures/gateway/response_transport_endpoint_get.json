@@ -1,0 +1,6 @@
+{
+  "type": "res",
+  "id": "req-83",
+  "ok": true,
+  "payload": { "endpoint": "ws://127.0.0.1:18789" }
+}

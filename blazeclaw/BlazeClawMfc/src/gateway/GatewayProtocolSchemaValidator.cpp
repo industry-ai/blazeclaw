@@ -2155,19 +2155,23 @@ namespace blazeclaw::gateway::protocol {
 		if (request.method == "gateway.protocol.version" ||
 			request.method == "gateway.features.list" ||
 			request.method == "gateway.config.get" ||
-          request.method == "gateway.config.keys" ||
+			request.method == "gateway.config.keys" ||
 			request.method == "gateway.models.list" ||
 			request.method == "gateway.tools.catalog" ||
 			request.method == "gateway.health" ||
-         request.method == "gateway.health.details" ||
+			request.method == "gateway.health.details" ||
 			request.method == "gateway.transport.status" ||
-           request.method == "gateway.transport.connections.count" ||
+			request.method == "gateway.transport.connections.count" ||
 			request.method == "gateway.events.catalog") {
 			return ValidateNoParamsAllowed(request, issue, request.method);
 		}
 
 		if (request.method == "gateway.config.exists") {
 			return ValidateStringIdParam(request, issue, request.method, "key");
+		}
+
+		if (request.method == "gateway.events.get") {
+			return ValidateStringIdParam(request, issue, request.method, "event");
 		}
 
 		if (request.method == "gateway.events.exists" || request.method == "gateway.events.count") {
@@ -2974,21 +2978,25 @@ namespace blazeclaw::gateway::protocol {
 				"gateway.ping",
 				"gateway.transport.status",
 				"gateway.events.catalog",
-              "gateway.config.exists",
+			  "gateway.config.exists",
 				"gateway.config.keys",
+			  "gateway.config.count",
 				"gateway.transport.connections.count",
+			   "gateway.transport.endpoint.get",
 				"gateway.health.details",
 				"gateway.logs.count",
+			  "gateway.logs.levels",
+				"gateway.events.get",
 		  "gateway.agents.create",
 				"gateway.sessions.delete",
 			   "gateway.sessions.compact",
 		  "gateway.sessions.patch",
 		   "gateway.sessions.preview",
 				"gateway.sessions.usage",
-                "gateway.sessions.exists",
+				"gateway.sessions.exists",
 				"gateway.sessions.count",
 				"gateway.sessions.activate",
-                "gateway.events.exists",
+				"gateway.events.exists",
 				"gateway.events.count",
 				"gateway.channels.accounts",
 		 "gateway.channels.accounts.activate",
@@ -3015,7 +3023,7 @@ namespace blazeclaw::gateway::protocol {
 		  "gateway.channels.routes.reset",
 		   "gateway.channels.routes.count",
 				"gateway.tools.call.preview",
-             "gateway.tools.exists",
+			 "gateway.tools.exists",
 				"gateway.tools.count",
 				"gateway.models.exists",
 				"gateway.tick",
