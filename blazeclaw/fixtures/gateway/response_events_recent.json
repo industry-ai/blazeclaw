@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-135",
+  "ok": true,
+  "payload": {
+    "events": [ "gateway.shutdown", "gateway.session.reset" ],
+    "count": 2
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "type": "res",
+  "id": "req-136",
+  "ok": true,
+  "payload": {
+    "calls": 0,
+    "windowSec": 60,
+    "perMinute": 0,
+    "tools": 2
+  }
+}
