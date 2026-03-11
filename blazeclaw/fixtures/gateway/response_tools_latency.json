@@ -1,0 +1,11 @@
+{
+  "type": "res",
+  "id": "req-126",
+  "ok": true,
+  "payload": {
+    "minMs": 0,
+    "maxMs": 0,
+    "avgMs": 0,
+    "samples": 2
+  }
+}

@@ -595,6 +595,15 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.events.sample", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"events\":[\"gateway.health\",\"gateway.tools.catalog.update\"],\"count\":2}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.events.latestByType", [](const protocol::RequestFrame& request) {
 			const std::string type = ExtractStringParam(request.paramsJson, "type");
 			const bool lifecycle = type == "lifecycle";
@@ -603,6 +612,17 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"type\":\"" + EscapeJson(type.empty() ? "update" : type) + "\",\"event\":\"" + EscapeJson(event) + "\"}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.latency", [this](const protocol::RequestFrame& request) {
+			const auto tools = m_toolRegistry.List();
+			const std::size_t count = tools.size();
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"minMs\":0,\"maxMs\":0,\"avgMs\":0,\"samples\":" + std::to_string(count) + "}",
 				.error = std::nullopt,
 			};
 			});
@@ -616,12 +636,30 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.models.routing", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"primary\":\"default\",\"fallback\":\"reasoner\",\"strategy\":\"seed_priority\"}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.tools.usage", [this](const protocol::RequestFrame& request) {
 			const auto tools = m_toolRegistry.List();
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"calls\":0,\"tools\":" + std::to_string(tools.size()) + ",\"avgMs\":0}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.config.diff", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"changed\":[],\"count\":0}",
 				.error = std::nullopt,
 			};
 			});
@@ -2475,6 +2513,15 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"valid\":true,\"errors\":[],\"count\":0}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.transport.policy.history", [this](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"entries\":[{\"version\":1,\"applied\":false,\"reason\":\"runtime_immutable\"}],\"count\":1}",
 				.error = std::nullopt,
 			};
 			});

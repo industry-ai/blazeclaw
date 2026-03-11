@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-127",
+  "ok": true,
+  "payload": {
+    "primary": "default",
+    "fallback": "reasoner",
+    "strategy": "seed_priority"
+  }
+}

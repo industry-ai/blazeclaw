@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-125",
+  "ok": true,
+  "payload": {
+    "events": [ "gateway.health", "gateway.tools.catalog.update" ],
+    "count": 2
+  }
+}
