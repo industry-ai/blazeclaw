@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-186",
+  "ok": true,
+  "payload": {
+    "resolved": 0,
+    "fallback": 0,
+    "tools": 2
+  }
+}
