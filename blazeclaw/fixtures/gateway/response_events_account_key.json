@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-215",
+  "ok": true,
+  "payload": {
+    "accountKey": "account-key-1",
+    "event": "gateway.session.reset"
+  }
+}
