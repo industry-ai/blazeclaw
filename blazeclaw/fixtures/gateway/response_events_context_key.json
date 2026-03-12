@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-200",
+  "ok": true,
+  "payload": {
+    "contextKey": "context-key-1",
+    "event": "gateway.session.reset"
+  }
+}
