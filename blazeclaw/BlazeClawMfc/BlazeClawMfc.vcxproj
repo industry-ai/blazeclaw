@@ -103,6 +103,7 @@
     <ClInclude Include="src\gateway\GatewayProtocolJson.h" />
     <ClInclude Include="src\gateway\GatewayProtocolModels.h" />
     <ClInclude Include="src\gateway\GatewayProtocolSchemaValidator.h" />
+    <ClInclude Include="src\gateway\GatewayProtocolSchemaValidator.Internal.h" />
     <ClInclude Include="src\gateway\GatewaySessionRegistry.h" />
     <ClInclude Include="src\gateway\GatewayToolRegistry.h" />
     <ClInclude Include="src\gateway\GatewayWebSocketTransport.h" />
@@ -122,6 +123,10 @@
     <ClCompile Include="src\gateway\GatewayProtocolCodec.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolContract.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolJson.cpp" />
+    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Request.cpp" />
+    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Event.cpp" />
+    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Response.cpp" />
+    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Shared.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.cpp" />
     <ClCompile Include="src\gateway\GatewaySessionRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayToolRegistry.cpp" />
