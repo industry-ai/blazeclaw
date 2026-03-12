@@ -129,6 +129,7 @@
       "gateway.models.channel",
       "gateway.models.config",
       "gateway.models.compatibility",
+      "gateway.models.policy",
       "gateway.models.count",
       "gateway.models.context",
       "gateway.models.default.get",
