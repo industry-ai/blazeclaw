@@ -55,6 +55,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.config.session",
 			"gateway.config.scope",
 			"gateway.config.context",
+			"gateway.config.channel",
 			"gateway.transport.connections.count",
 			"gateway.transport.endpoint.get",
 			"gateway.transport.endpoint.set",
@@ -79,6 +80,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.transport.policy.session",
 			"gateway.transport.policy.scope",
 			"gateway.transport.policy.context",
+			"gateway.transport.policy.channel",
 			"gateway.health.details",
 			"gateway.logs.count",
 			"gateway.logs.levels",
@@ -105,6 +107,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.events.sessionKey",
             "gateway.events.scopeKey",
             "gateway.events.contextKey",
+            "gateway.events.channelKey",
 			"gateway.agents.create",
 			"gateway.sessions.delete",
 			"gateway.sessions.compact",
@@ -167,6 +170,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.tools.mapper",
             "gateway.tools.binding",
             "gateway.tools.profile",
+            "gateway.tools.channel",
 			"gateway.models.exists",
 			"gateway.models.count",
 			"gateway.models.get",
@@ -192,6 +196,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.session",
             "gateway.models.scope",
             "gateway.models.context",
+            "gateway.models.channel",
 			"gateway.config.getKey",
 			"gateway.transport.endpoint.exists",
 			"gateway.tick",
@@ -631,6 +636,9 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.events.contextKey", [&]() {
 				return ValidateTwoStringFields(payload, "contextKey", "event", issue, "`gateway.events.contextKey` requires `contextKey` string and `event` string.");
 			} },
+			{ "gateway.events.channelKey", [&]() {
+				return ValidateTwoStringFields(payload, "channelKey", "event", issue, "`gateway.events.channelKey` requires `channelKey` string and `event` string.");
+			} },
 			{ "gateway.events.token", [&]() {
 				return ValidateTwoStringFields(payload, "token", "event", issue, "`gateway.events.token` requires `token` string and `event` string.");
 			} },
@@ -658,6 +666,9 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.transport.policy.context", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "contextual", "version", "applied", issue, "`gateway.transport.policy.context` requires `contextual` boolean, `version` number, and `applied` boolean.");
 			} },
+			{ "gateway.transport.policy.channel", [&]() {
+				return ValidateBooleanNumberBoolean(payload, "channelScoped", "version", "applied", issue, "`gateway.transport.policy.channel` requires `channelScoped` boolean, `version` number, and `applied` boolean.");
+			} },
 			{ "gateway.transport.policy.sync", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "synced", "version", "applied", issue, "`gateway.transport.policy.sync` requires `synced` boolean, `version` number, and `applied` boolean.");
 			} },
@@ -684,6 +695,9 @@ namespace blazeclaw::gateway::protocol {
 			} },
 			{ "gateway.models.context", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.context` requires `models` array and `count` number.");
+			} },
+			{ "gateway.models.channel", [&]() {
+				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.channel` requires `models` array and `count` number.");
 			} },
 			{ "gateway.models.index", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.index` requires `models` array and `count` number.");
@@ -724,6 +738,9 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.config.context", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.context` requires `sections` array and `count` number.");
 			} },
+			{ "gateway.config.channel", [&]() {
+				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.channel` requires `sections` array and `count` number.");
+			} },
 			{ "gateway.config.index", [&]() {
 				return ValidateArrayAndCount(payload, "keys", issue, "`gateway.config.index` requires `keys` array and `count` number.");
 			} },
@@ -738,6 +755,9 @@ namespace blazeclaw::gateway::protocol {
 			} },
 			{ "gateway.tools.profile", [&]() {
 				return ValidateNumericFields(payload, { "profiled", "fallback", "tools" }, issue, "`gateway.tools.profile` requires numeric fields `profiled`, `fallback`, and `tools`.");
+			} },
+			{ "gateway.tools.channel", [&]() {
+				return ValidateNumericFields(payload, { "channelled", "fallback", "tools" }, issue, "`gateway.tools.channel` requires numeric fields `channelled`, `fallback`, and `tools`.");
 			} },
 			{ "gateway.tools.router", [&]() {
 				return ValidateNumericFields(payload, { "routed", "fallback", "tools" }, issue, "`gateway.tools.router` requires numeric fields `routed`, `fallback`, and `tools`.");
