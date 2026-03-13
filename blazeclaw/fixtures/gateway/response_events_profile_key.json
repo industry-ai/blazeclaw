@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-365",
+  "ok": true,
+  "payload": {
+    "profileKey": "profile-key-1",
+    "event": "gateway.session.reset"
+  }
+}
