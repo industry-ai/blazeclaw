@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-364",
+  "ok": true,
+  "payload": {
+    "manifestScoped": false,
+    "version": 1,
+    "applied": false
+  }
+}
