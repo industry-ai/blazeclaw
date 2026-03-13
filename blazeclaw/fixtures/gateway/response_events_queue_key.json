@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-295",
+  "ok": true,
+  "payload": {
+    "queueKey": "queue-key-1",
+    "event": "gateway.session.reset"
+  }
+}
