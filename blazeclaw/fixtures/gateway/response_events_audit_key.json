@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-280",
+  "ok": true,
+  "payload": {
+    "auditKey": "audit-key-1",
+    "event": "gateway.session.reset"
+  }
+}
