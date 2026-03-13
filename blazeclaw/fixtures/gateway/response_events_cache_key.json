@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-290",
+  "ok": true,
+  "payload": {
+    "cacheKey": "cache-key-1",
+    "event": "gateway.session.reset"
+  }
+}
