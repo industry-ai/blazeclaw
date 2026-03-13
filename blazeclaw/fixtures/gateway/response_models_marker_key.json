@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-322",
+  "ok": true,
+  "payload": {
+    "models": [ "default", "reasoner" ],
+    "count": 2
+  }
+}
