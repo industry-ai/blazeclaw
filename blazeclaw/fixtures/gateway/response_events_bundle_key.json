@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-345",
+  "ok": true,
+  "payload": {
+    "bundleKey": "bundle-key-1",
+    "event": "gateway.session.reset"
+  }
+}
