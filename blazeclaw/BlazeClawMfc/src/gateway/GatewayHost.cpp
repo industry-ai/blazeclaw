@@ -1027,6 +1027,15 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.events.historyKey", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"historyKey\":\"history-key-1\",\"event\":\"gateway.session.reset\"}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.events.recent", [](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
@@ -1518,6 +1527,43 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"revisionedKey\":0,\"fallback\":0,\"tools\":" + std::to_string(tools.size()) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.historyKey", [this](const protocol::RequestFrame& request) {
+			const auto tools = m_toolRegistry.List();
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"historiedKey\":0,\"fallback\":0,\"tools\":" + std::to_string(tools.size()) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.models.historyKey", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"models\":[\"default\",\"reasoner\"],\"count\":2}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.config.historyKey", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"sections\":[\"gateway\",\"agent\"],\"count\":2}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.transport.policy.historyKey", [this](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"historyScoped\":false,\"version\":1,\"applied\":false}",
 				.error = std::nullopt,
 			};
 			});
