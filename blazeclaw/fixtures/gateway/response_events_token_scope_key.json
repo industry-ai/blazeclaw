@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-425",
+  "ok": true,
+  "payload": {
+    "tokenScopeKey": "token-scope-key-1",
+    "event": "gateway.session.reset"
+  }
+}

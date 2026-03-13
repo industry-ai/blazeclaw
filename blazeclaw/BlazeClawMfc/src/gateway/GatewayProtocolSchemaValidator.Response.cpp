@@ -99,6 +99,7 @@ namespace blazeclaw::gateway::protocol {
           "gateway.config.offsetScopeKey",
           "gateway.config.pointerScopeKey",
           "gateway.config.markerScopeKey",
+          "gateway.config.tokenScopeKey",
 			"gateway.transport.connections.count",
 			"gateway.transport.endpoint.get",
 			"gateway.transport.endpoint.set",
@@ -167,6 +168,7 @@ namespace blazeclaw::gateway::protocol {
            "gateway.transport.policy.offsetScopeKey",
            "gateway.transport.policy.pointerScopeKey",
            "gateway.transport.policy.markerScopeKey",
+           "gateway.transport.policy.tokenScopeKey",
 			"gateway.health.details",
 			"gateway.logs.count",
 			"gateway.logs.levels",
@@ -237,6 +239,7 @@ namespace blazeclaw::gateway::protocol {
             "gateway.events.offsetScopeKey",
             "gateway.events.pointerScopeKey",
             "gateway.events.markerScopeKey",
+            "gateway.events.tokenScopeKey",
 			"gateway.agents.create",
 			"gateway.sessions.delete",
 			"gateway.sessions.compact",
@@ -343,6 +346,7 @@ namespace blazeclaw::gateway::protocol {
             "gateway.tools.offsetScopeKey",
             "gateway.tools.pointerScopeKey",
             "gateway.tools.markerScopeKey",
+            "gateway.tools.tokenScopeKey",
 			"gateway.models.exists",
 			"gateway.models.count",
 			"gateway.models.get",
@@ -412,6 +416,7 @@ namespace blazeclaw::gateway::protocol {
             "gateway.models.offsetScopeKey",
             "gateway.models.pointerScopeKey",
             "gateway.models.markerScopeKey",
+            "gateway.models.tokenScopeKey",
 			"gateway.config.getKey",
 			"gateway.transport.endpoint.exists",
 			"gateway.tick",
@@ -983,6 +988,9 @@ namespace blazeclaw::gateway::protocol {
            { "gateway.events.markerScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "markerScopeKey", "event", issue, "`gateway.events.markerScopeKey` requires `markerScopeKey` string and `event` string.");
 			} },
+           { "gateway.events.tokenScopeKey", [&]() {
+				return ValidateTwoStringFields(payload, "tokenScopeKey", "event", issue, "`gateway.events.tokenScopeKey` requires `tokenScopeKey` string and `event` string.");
+			} },
 			{ "gateway.events.token", [&]() {
 				return ValidateTwoStringFields(payload, "token", "event", issue, "`gateway.events.token` requires `token` string and `event` string.");
 			} },
@@ -1142,6 +1150,9 @@ namespace blazeclaw::gateway::protocol {
           { "gateway.transport.policy.markerScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "markerScopeScoped", "version", "applied", issue, "`gateway.transport.policy.markerScopeKey` requires `markerScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
+          { "gateway.transport.policy.tokenScopeKey", [&]() {
+				return ValidateBooleanNumberBoolean(payload, "tokenScopeScoped", "version", "applied", issue, "`gateway.transport.policy.tokenScopeKey` requires `tokenScopeScoped` boolean, `version` number, and `applied` boolean.");
+			} },
 			{ "gateway.transport.policy.sync", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "synced", "version", "applied", issue, "`gateway.transport.policy.sync` requires `synced` boolean, `version` number, and `applied` boolean.");
 			} },
@@ -1300,6 +1311,9 @@ namespace blazeclaw::gateway::protocol {
 			} },
            { "gateway.models.markerScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.markerScopeKey` requires `models` array and `count` number.");
+			} },
+           { "gateway.models.tokenScopeKey", [&]() {
+				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.tokenScopeKey` requires `models` array and `count` number.");
 			} },
 			{ "gateway.models.index", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.index` requires `models` array and `count` number.");
@@ -1472,6 +1486,9 @@ namespace blazeclaw::gateway::protocol {
            { "gateway.config.markerScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.markerScopeKey` requires `sections` array and `count` number.");
 			} },
+           { "gateway.config.tokenScopeKey", [&]() {
+				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.tokenScopeKey` requires `sections` array and `count` number.");
+			} },
 			{ "gateway.config.index", [&]() {
 				return ValidateArrayAndCount(payload, "keys", issue, "`gateway.config.index` requires `keys` array and `count` number.");
 			} },
@@ -1618,6 +1635,9 @@ namespace blazeclaw::gateway::protocol {
 			} },
            { "gateway.tools.markerScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "markerScopedKey", "fallback", "tools" }, issue, "`gateway.tools.markerScopeKey` requires numeric fields `markerScopedKey`, `fallback`, and `tools`.");
+			} },
+           { "gateway.tools.tokenScopeKey", [&]() {
+				return ValidateNumericFields(payload, { "tokenScopedKey", "fallback", "tools" }, issue, "`gateway.tools.tokenScopeKey` requires numeric fields `tokenScopedKey`, `fallback`, and `tools`.");
 			} },
 			{ "gateway.tools.router", [&]() {
 				return ValidateNumericFields(payload, { "routed", "fallback", "tools" }, issue, "`gateway.tools.router` requires numeric fields `routed`, `fallback`, and `tools`.");
