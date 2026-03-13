@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-395",
+  "ok": true,
+  "payload": {
+    "windowScopeKey": "window-scope-key-1",
+    "event": "gateway.session.reset"
+  }
+}
