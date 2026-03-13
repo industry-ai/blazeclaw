@@ -1,9 +1,9 @@
 {
   "type": "res",
-  "id": "req-403",
+  "id": "req-407",
   "ok": true,
   "payload": {
-    "sections": [ "gateway", "agent" ],
+    "models": [ "default", "reasoner" ],
     "count": 2
   }
 }

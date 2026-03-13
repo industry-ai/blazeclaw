@@ -1,9 +1,9 @@
 {
   "type": "res",
-  "id": "req-404",
+  "id": "req-409",
   "ok": true,
   "payload": {
-    "cursorScopeScoped": false,
+    "anchorScopeScoped": false,
     "version": 1,
     "applied": false
   }
