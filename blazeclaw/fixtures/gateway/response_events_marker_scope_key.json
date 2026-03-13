@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-415",
+  "ok": true,
+  "payload": {
+    "markerScopeKey": "marker-scope-key-1",
+    "event": "gateway.session.reset"
+  }
+}
