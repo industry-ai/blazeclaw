@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-269",
+  "ok": true,
+  "payload": {
+    "logScoped": false,
+    "version": 1,
+    "applied": false
+  }
+}
