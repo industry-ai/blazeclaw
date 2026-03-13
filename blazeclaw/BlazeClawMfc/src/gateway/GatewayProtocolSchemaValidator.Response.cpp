@@ -68,6 +68,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.config.stateKey",
 			"gateway.config.healthKey",
 			"gateway.config.log",
+			"gateway.config.metric",
 			"gateway.transport.connections.count",
 			"gateway.transport.endpoint.get",
 			"gateway.transport.endpoint.set",
@@ -105,6 +106,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.transport.policy.stateKey",
 			"gateway.transport.policy.healthKey",
 			"gateway.transport.policy.log",
+			"gateway.transport.policy.metric",
 			"gateway.health.details",
 			"gateway.logs.count",
 			"gateway.logs.levels",
@@ -144,6 +146,7 @@ namespace blazeclaw::gateway::protocol {
             "gateway.events.stateKey",
             "gateway.events.healthKey",
             "gateway.events.logKey",
+            "gateway.events.metricKey",
 			"gateway.agents.create",
 			"gateway.sessions.delete",
 			"gateway.sessions.compact",
@@ -219,6 +222,7 @@ namespace blazeclaw::gateway::protocol {
             "gateway.tools.state",
             "gateway.tools.healthKey",
             "gateway.tools.log",
+            "gateway.tools.metric",
 			"gateway.models.exists",
 			"gateway.models.count",
 			"gateway.models.get",
@@ -257,6 +261,7 @@ namespace blazeclaw::gateway::protocol {
             "gateway.models.stateKey",
             "gateway.models.healthKey",
             "gateway.models.log",
+            "gateway.models.metric",
 			"gateway.config.getKey",
 			"gateway.transport.endpoint.exists",
 			"gateway.tick",
@@ -735,6 +740,9 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.events.logKey", [&]() {
 				return ValidateTwoStringFields(payload, "logKey", "event", issue, "`gateway.events.logKey` requires `logKey` string and `event` string.");
 			} },
+			{ "gateway.events.metricKey", [&]() {
+				return ValidateTwoStringFields(payload, "metricKey", "event", issue, "`gateway.events.metricKey` requires `metricKey` string and `event` string.");
+			} },
 			{ "gateway.events.token", [&]() {
 				return ValidateTwoStringFields(payload, "token", "event", issue, "`gateway.events.token` requires `token` string and `event` string.");
 			} },
@@ -801,6 +809,9 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.transport.policy.log", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "logScoped", "version", "applied", issue, "`gateway.transport.policy.log` requires `logScoped` boolean, `version` number, and `applied` boolean.");
 			} },
+			{ "gateway.transport.policy.metric", [&]() {
+				return ValidateBooleanNumberBoolean(payload, "metricScoped", "version", "applied", issue, "`gateway.transport.policy.metric` requires `metricScoped` boolean, `version` number, and `applied` boolean.");
+			} },
 			{ "gateway.transport.policy.sync", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "synced", "version", "applied", issue, "`gateway.transport.policy.sync` requires `synced` boolean, `version` number, and `applied` boolean.");
 			} },
@@ -866,6 +877,9 @@ namespace blazeclaw::gateway::protocol {
 			} },
 			{ "gateway.models.log", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.log` requires `models` array and `count` number.");
+			} },
+			{ "gateway.models.metric", [&]() {
+				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.metric` requires `models` array and `count` number.");
 			} },
 			{ "gateway.models.index", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.index` requires `models` array and `count` number.");
@@ -945,6 +959,9 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.config.log", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.log` requires `sections` array and `count` number.");
 			} },
+			{ "gateway.config.metric", [&]() {
+				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.metric` requires `sections` array and `count` number.");
+			} },
 			{ "gateway.config.index", [&]() {
 				return ValidateArrayAndCount(payload, "keys", issue, "`gateway.config.index` requires `keys` array and `count` number.");
 			} },
@@ -998,6 +1015,9 @@ namespace blazeclaw::gateway::protocol {
 			} },
 			{ "gateway.tools.log", [&]() {
 				return ValidateNumericFields(payload, { "logged", "fallback", "tools" }, issue, "`gateway.tools.log` requires numeric fields `logged`, `fallback`, and `tools`.");
+			} },
+			{ "gateway.tools.metric", [&]() {
+				return ValidateNumericFields(payload, { "metered", "fallback", "tools" }, issue, "`gateway.tools.metric` requires numeric fields `metered`, `fallback`, and `tools`.");
 			} },
 			{ "gateway.tools.router", [&]() {
 				return ValidateNumericFields(payload, { "routed", "fallback", "tools" }, issue, "`gateway.tools.router` requires numeric fields `routed`, `fallback`, and `tools`.");

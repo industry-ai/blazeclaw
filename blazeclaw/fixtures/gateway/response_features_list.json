@@ -244,6 +244,7 @@
       "gateway.transport.policy.healthKey",
       "gateway.transport.policy.import",
       "gateway.transport.policy.log",
+      "gateway.transport.policy.metric",
       "gateway.transport.policy.metrics",
       "gateway.transport.policy.policy",
       "gateway.transport.policy.preview",

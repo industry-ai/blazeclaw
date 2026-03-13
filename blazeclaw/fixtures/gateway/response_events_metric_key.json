@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-270",
+  "ok": true,
+  "payload": {
+    "metricKey": "metric-key-1",
+    "event": "gateway.session.reset"
+  }
+}
