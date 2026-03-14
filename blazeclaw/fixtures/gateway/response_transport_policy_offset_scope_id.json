@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-509",
+  "ok": true,
+  "payload": {
+    "offsetScopeScopedId": false,
+    "version": 1,
+    "applied": false
+  }
+}

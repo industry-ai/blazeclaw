@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-505",
+  "ok": true,
+  "payload": {
+    "offsetScopeId": "offset-scope-id-1",
+    "event": "gateway.session.reset"
+  }
+}

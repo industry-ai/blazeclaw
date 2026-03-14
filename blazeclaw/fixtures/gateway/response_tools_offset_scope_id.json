@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-506",
+  "ok": true,
+  "payload": {
+    "offsetScopedId": 0,
+    "fallback": 0,
+    "tools": 2
+  }
+}
