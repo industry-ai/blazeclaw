@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-491",
+  "ok": true,
+  "payload": {
+    "windowScopedId": 0,
+    "fallback": 0,
+    "tools": 2
+  }
+}
