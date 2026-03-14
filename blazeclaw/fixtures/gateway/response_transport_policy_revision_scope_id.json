@@ -1,0 +1,9 @@
+{
+  "id": "fixture-transport-policy-revision-scope-id",
+  "ok": true,
+  "result": {
+    "revisionScopeScopedId": false,
+    "version": 1,
+    "applied": false
+  }
+}
