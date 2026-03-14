@@ -123,6 +123,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.config.bundleScopeId",
           "gateway.config.packageScopeId",
           "gateway.config.archiveScopeId",
+          "gateway.config.manifestScopeId",
 			"gateway.transport.connections.count",
 			"gateway.transport.endpoint.get",
 			"gateway.transport.endpoint.set",
@@ -215,6 +216,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.transport.policy.bundleScopeId",
            "gateway.transport.policy.packageScopeId",
            "gateway.transport.policy.archiveScopeId",
+           "gateway.transport.policy.manifestScopeId",
 			"gateway.health.details",
 			"gateway.logs.count",
 			"gateway.logs.levels",
@@ -309,6 +311,7 @@ namespace blazeclaw::gateway::protocol {
             "gateway.events.bundleScopeId",
             "gateway.events.packageScopeId",
             "gateway.events.archiveScopeId",
+            "gateway.events.manifestScopeId",
 			"gateway.agents.create",
 			"gateway.sessions.delete",
 			"gateway.sessions.compact",
@@ -439,6 +442,7 @@ namespace blazeclaw::gateway::protocol {
             "gateway.tools.bundleScopeId",
             "gateway.tools.packageScopeId",
             "gateway.tools.archiveScopeId",
+            "gateway.tools.manifestScopeId",
 			"gateway.models.exists",
 			"gateway.models.count",
 			"gateway.models.get",
@@ -532,6 +536,7 @@ namespace blazeclaw::gateway::protocol {
             "gateway.models.bundleScopeId",
             "gateway.models.packageScopeId",
             "gateway.models.archiveScopeId",
+            "gateway.models.manifestScopeId",
 			"gateway.config.getKey",
 			"gateway.transport.endpoint.exists",
 			"gateway.tick",
@@ -1175,6 +1180,9 @@ namespace blazeclaw::gateway::protocol {
            { "gateway.events.archiveScopeId", [&]() {
 				return ValidateTwoStringFields(payload, "archiveScopeId", "event", issue, "`gateway.events.archiveScopeId` requires `archiveScopeId` string and `event` string.");
 			} },
+           { "gateway.events.manifestScopeId", [&]() {
+				return ValidateTwoStringFields(payload, "manifestScopeId", "event", issue, "`gateway.events.manifestScopeId` requires `manifestScopeId` string and `event` string.");
+			} },
 			{ "gateway.events.token", [&]() {
 				return ValidateTwoStringFields(payload, "token", "event", issue, "`gateway.events.token` requires `token` string and `event` string.");
 			} },
@@ -1406,6 +1414,9 @@ namespace blazeclaw::gateway::protocol {
            { "gateway.transport.policy.archiveScopeId", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "archiveScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.archiveScopeId` requires `archiveScopeScopedId` boolean, `version` number, and `applied` boolean.");
 			} },
+           { "gateway.transport.policy.manifestScopeId", [&]() {
+				return ValidateBooleanNumberBoolean(payload, "manifestScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.manifestScopeId` requires `manifestScopeScopedId` boolean, `version` number, and `applied` boolean.");
+			} },
 			{ "gateway.transport.policy.sync", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "synced", "version", "applied", issue, "`gateway.transport.policy.sync` requires `synced` boolean, `version` number, and `applied` boolean.");
 			} },
@@ -1636,6 +1647,9 @@ namespace blazeclaw::gateway::protocol {
 			} },
            { "gateway.models.archiveScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.archiveScopeId` requires `models` array and `count` number.");
+			} },
+           { "gateway.models.manifestScopeId", [&]() {
+				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.manifestScopeId` requires `models` array and `count` number.");
 			} },
 			{ "gateway.models.index", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.index` requires `models` array and `count` number.");
@@ -1880,6 +1894,9 @@ namespace blazeclaw::gateway::protocol {
            { "gateway.config.archiveScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.archiveScopeId` requires `sections` array and `count` number.");
 			} },
+           { "gateway.config.manifestScopeId", [&]() {
+				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.manifestScopeId` requires `sections` array and `count` number.");
+			} },
 			{ "gateway.config.index", [&]() {
 				return ValidateArrayAndCount(payload, "keys", issue, "`gateway.config.index` requires `keys` array and `count` number.");
 			} },
@@ -2098,6 +2115,9 @@ namespace blazeclaw::gateway::protocol {
 			} },
            { "gateway.tools.archiveScopeId", [&]() {
 				return ValidateNumericFields(payload, { "archiveScopedId", "fallback", "tools" }, issue, "`gateway.tools.archiveScopeId` requires numeric fields `archiveScopedId`, `fallback`, and `tools`.");
+			} },
+           { "gateway.tools.manifestScopeId", [&]() {
+				return ValidateNumericFields(payload, { "manifestScopedId", "fallback", "tools" }, issue, "`gateway.tools.manifestScopeId` requires numeric fields `manifestScopedId`, `fallback`, and `tools`.");
 			} },
 			{ "gateway.tools.router", [&]() {
 				return ValidateNumericFields(payload, { "routed", "fallback", "tools" }, issue, "`gateway.tools.router` requires numeric fields `routed`, `fallback`, and `tools`.");

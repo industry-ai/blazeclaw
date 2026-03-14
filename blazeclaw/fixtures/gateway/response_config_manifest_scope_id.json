@@ -1,0 +1,11 @@
+{
+  "id": "fixture-config-manifest-scope-id",
+  "ok": true,
+  "result": {
+    "sections": [
+      "gateway",
+      "agent"
+    ],
+    "count": 2
+  }
+}
