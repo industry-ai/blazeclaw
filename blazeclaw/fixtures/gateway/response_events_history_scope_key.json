@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-475",
+  "ok": true,
+  "payload": {
+    "historyScopeKey": "history-scope-key-1",
+    "event": "gateway.session.reset"
+  }
+}
