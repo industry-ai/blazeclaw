@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-470",
+  "ok": true,
+  "payload": {
+    "revisionScopeKey": "revision-scope-key-1",
+    "event": "gateway.session.reset"
+  }
+}
