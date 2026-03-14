@@ -117,8 +117,10 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.config.anchorScopeId",
 			"gateway.config.offsetScopeId",
 			"gateway.config.pointerScopeId",
-          "gateway.config.tokenScopeId",
-          "gateway.config.sequenceScopeId",
+			"gateway.config.tokenScopeId",
+			"gateway.config.sequenceScopeId",
+			"gateway.config.streamScopeId",
+			"gateway.config.bundleScopeId",
 			"gateway.transport.connections.count",
 			"gateway.transport.endpoint.get",
 			"gateway.transport.endpoint.set",
@@ -175,38 +177,40 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.transport.policy.packageKey",
 			"gateway.transport.policy.archiveKey",
 			"gateway.transport.policy.manifestKey",
-           "gateway.transport.policy.profileKey",
-           "gateway.transport.policy.templateKey",
-           "gateway.transport.policy.revisionKey",
-           "gateway.transport.policy.historyKey",
-           "gateway.transport.policy.snapshotKey",
-           "gateway.transport.policy.indexKey",
-           "gateway.transport.policy.windowScopeKey",
-           "gateway.transport.policy.cursorScopeKey",
-           "gateway.transport.policy.anchorScopeKey",
-           "gateway.transport.policy.offsetScopeKey",
-           "gateway.transport.policy.pointerScopeKey",
-           "gateway.transport.policy.markerScopeKey",
-           "gateway.transport.policy.tokenScopeKey",
-           "gateway.transport.policy.streamScopeKey",
-           "gateway.transport.policy.sequenceScopeKey",
-           "gateway.transport.policy.bundleScopeKey",
-           "gateway.transport.policy.packageScopeKey",
-           "gateway.transport.policy.archiveScopeKey",
-           "gateway.transport.policy.manifestScopeKey",
-           "gateway.transport.policy.profileScopeKey",
-           "gateway.transport.policy.templateScopeKey",
-           "gateway.transport.policy.revisionScopeKey",
-           "gateway.transport.policy.historyScopeKey",
-           "gateway.transport.policy.snapshotScopeKey",
-           "gateway.transport.policy.indexScopeKey",
-           "gateway.transport.policy.windowScopeId",
-           "gateway.transport.policy.cursorScopeId",
-           "gateway.transport.policy.anchorScopeId",
-           "gateway.transport.policy.offsetScopeId",
-           "gateway.transport.policy.pointerScopeId",
-           "gateway.transport.policy.tokenScopeId",
-           "gateway.transport.policy.sequenceScopeId",
+			"gateway.transport.policy.profileKey",
+			"gateway.transport.policy.templateKey",
+			"gateway.transport.policy.revisionKey",
+			"gateway.transport.policy.historyKey",
+			"gateway.transport.policy.snapshotKey",
+			"gateway.transport.policy.indexKey",
+			"gateway.transport.policy.windowScopeKey",
+			"gateway.transport.policy.cursorScopeKey",
+			"gateway.transport.policy.anchorScopeKey",
+			"gateway.transport.policy.offsetScopeKey",
+			"gateway.transport.policy.pointerScopeKey",
+			"gateway.transport.policy.markerScopeKey",
+			"gateway.transport.policy.tokenScopeKey",
+			"gateway.transport.policy.streamScopeKey",
+			"gateway.transport.policy.sequenceScopeKey",
+			"gateway.transport.policy.bundleScopeKey",
+			"gateway.transport.policy.packageScopeKey",
+			"gateway.transport.policy.archiveScopeKey",
+			"gateway.transport.policy.manifestScopeKey",
+			"gateway.transport.policy.profileScopeKey",
+			"gateway.transport.policy.templateScopeKey",
+			"gateway.transport.policy.revisionScopeKey",
+			"gateway.transport.policy.historyScopeKey",
+			"gateway.transport.policy.snapshotScopeKey",
+			"gateway.transport.policy.indexScopeKey",
+			"gateway.transport.policy.windowScopeId",
+			"gateway.transport.policy.cursorScopeId",
+			"gateway.transport.policy.anchorScopeId",
+			"gateway.transport.policy.offsetScopeId",
+			"gateway.transport.policy.pointerScopeId",
+			"gateway.transport.policy.tokenScopeId",
+			"gateway.transport.policy.sequenceScopeId",
+			"gateway.transport.policy.streamScopeId",
+			"gateway.transport.policy.bundleScopeId",
 			"gateway.health.details",
 			"gateway.logs.count",
 			"gateway.logs.levels",
@@ -297,6 +301,8 @@ namespace blazeclaw::gateway::protocol {
             "gateway.events.pointerScopeId",
             "gateway.events.tokenScopeId",
             "gateway.events.sequenceScopeId",
+            "gateway.events.streamScopeId",
+            "gateway.events.bundleScopeId",
 			"gateway.agents.create",
 			"gateway.sessions.delete",
 			"gateway.sessions.compact",
@@ -423,6 +429,8 @@ namespace blazeclaw::gateway::protocol {
             "gateway.tools.pointerScopeId",
             "gateway.tools.tokenScopeId",
             "gateway.tools.sequenceScopeId",
+            "gateway.tools.streamScopeId",
+            "gateway.tools.bundleScopeId",
 			"gateway.models.exists",
 			"gateway.models.count",
 			"gateway.models.get",
@@ -512,6 +520,8 @@ namespace blazeclaw::gateway::protocol {
             "gateway.models.pointerScopeId",
             "gateway.models.tokenScopeId",
             "gateway.models.sequenceScopeId",
+            "gateway.models.streamScopeId",
+            "gateway.models.bundleScopeId",
 			"gateway.config.getKey",
 			"gateway.transport.endpoint.exists",
 			"gateway.tick",
@@ -1047,101 +1057,107 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.events.manifestKey", [&]() {
 				return ValidateTwoStringFields(payload, "manifestKey", "event", issue, "`gateway.events.manifestKey` requires `manifestKey` string and `event` string.");
 			} },
-           { "gateway.events.profileKey", [&]() {
+			{ "gateway.events.profileKey", [&]() {
 				return ValidateTwoStringFields(payload, "profileKey", "event", issue, "`gateway.events.profileKey` requires `profileKey` string and `event` string.");
 			} },
-           { "gateway.events.templateKey", [&]() {
+			{ "gateway.events.templateKey", [&]() {
 				return ValidateTwoStringFields(payload, "templateKey", "event", issue, "`gateway.events.templateKey` requires `templateKey` string and `event` string.");
 			} },
-           { "gateway.events.revisionKey", [&]() {
+			{ "gateway.events.revisionKey", [&]() {
 				return ValidateTwoStringFields(payload, "revisionKey", "event", issue, "`gateway.events.revisionKey` requires `revisionKey` string and `event` string.");
 			} },
-           { "gateway.events.historyKey", [&]() {
+			{ "gateway.events.historyKey", [&]() {
 				return ValidateTwoStringFields(payload, "historyKey", "event", issue, "`gateway.events.historyKey` requires `historyKey` string and `event` string.");
 			} },
-           { "gateway.events.snapshotKey", [&]() {
+			{ "gateway.events.snapshotKey", [&]() {
 				return ValidateTwoStringFields(payload, "snapshotKey", "event", issue, "`gateway.events.snapshotKey` requires `snapshotKey` string and `event` string.");
 			} },
-           { "gateway.events.indexKey", [&]() {
+			{ "gateway.events.indexKey", [&]() {
 				return ValidateTwoStringFields(payload, "indexKey", "event", issue, "`gateway.events.indexKey` requires `indexKey` string and `event` string.");
 			} },
-           { "gateway.events.windowScopeKey", [&]() {
+			{ "gateway.events.windowScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "windowScopeKey", "event", issue, "`gateway.events.windowScopeKey` requires `windowScopeKey` string and `event` string.");
 			} },
-           { "gateway.events.cursorScopeKey", [&]() {
+			{ "gateway.events.cursorScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "cursorScopeKey", "event", issue, "`gateway.events.cursorScopeKey` requires `cursorScopeKey` string and `event` string.");
 			} },
-           { "gateway.events.anchorScopeKey", [&]() {
+			{ "gateway.events.anchorScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "anchorScopeKey", "event", issue, "`gateway.events.anchorScopeKey` requires `anchorScopeKey` string and `event` string.");
 			} },
-           { "gateway.events.offsetScopeKey", [&]() {
+			{ "gateway.events.offsetScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "offsetScopeKey", "event", issue, "`gateway.events.offsetScopeKey` requires `offsetScopeKey` string and `event` string.");
 			} },
-           { "gateway.events.pointerScopeKey", [&]() {
+			{ "gateway.events.pointerScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "pointerScopeKey", "event", issue, "`gateway.events.pointerScopeKey` requires `pointerScopeKey` string and `event` string.");
 			} },
-           { "gateway.events.markerScopeKey", [&]() {
+			{ "gateway.events.markerScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "markerScopeKey", "event", issue, "`gateway.events.markerScopeKey` requires `markerScopeKey` string and `event` string.");
 			} },
-           { "gateway.events.tokenScopeKey", [&]() {
+			{ "gateway.events.tokenScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "tokenScopeKey", "event", issue, "`gateway.events.tokenScopeKey` requires `tokenScopeKey` string and `event` string.");
 			} },
-         { "gateway.events.streamScopeKey", [&]() {
+			{ "gateway.events.streamScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "streamScopeKey", "event", issue, "`gateway.events.streamScopeKey` requires `streamScopeKey` string and `event` string.");
 			} },
-           { "gateway.events.sequenceScopeKey", [&]() {
+			{ "gateway.events.sequenceScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "sequenceScopeKey", "event", issue, "`gateway.events.sequenceScopeKey` requires `sequenceScopeKey` string and `event` string.");
 			} },
-           { "gateway.events.bundleScopeKey", [&]() {
+			{ "gateway.events.bundleScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "bundleScopeKey", "event", issue, "`gateway.events.bundleScopeKey` requires `bundleScopeKey` string and `event` string.");
 			} },
-           { "gateway.events.packageScopeKey", [&]() {
+			{ "gateway.events.packageScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "packageScopeKey", "event", issue, "`gateway.events.packageScopeKey` requires `packageScopeKey` string and `event` string.");
 			} },
-           { "gateway.events.archiveScopeKey", [&]() {
+			{ "gateway.events.archiveScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "archiveScopeKey", "event", issue, "`gateway.events.archiveScopeKey` requires `archiveScopeKey` string and `event` string.");
 			} },
-           { "gateway.events.manifestScopeKey", [&]() {
+			{ "gateway.events.manifestScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "manifestScopeKey", "event", issue, "`gateway.events.manifestScopeKey` requires `manifestScopeKey` string and `event` string.");
 			} },
-           { "gateway.events.profileScopeKey", [&]() {
+			{ "gateway.events.profileScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "profileScopeKey", "event", issue, "`gateway.events.profileScopeKey` requires `profileScopeKey` string and `event` string.");
 			} },
-           { "gateway.events.templateScopeKey", [&]() {
+			{ "gateway.events.templateScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "templateScopeKey", "event", issue, "`gateway.events.templateScopeKey` requires `templateScopeKey` string and `event` string.");
 			} },
-           { "gateway.events.revisionScopeKey", [&]() {
+			{ "gateway.events.revisionScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "revisionScopeKey", "event", issue, "`gateway.events.revisionScopeKey` requires `revisionScopeKey` string and `event` string.");
 			} },
-           { "gateway.events.historyScopeKey", [&]() {
+			{ "gateway.events.historyScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "historyScopeKey", "event", issue, "`gateway.events.historyScopeKey` requires `historyScopeKey` string and `event` string.");
 			} },
-           { "gateway.events.snapshotScopeKey", [&]() {
+			{ "gateway.events.snapshotScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "snapshotScopeKey", "event", issue, "`gateway.events.snapshotScopeKey` requires `snapshotScopeKey` string and `event` string.");
 			} },
-           { "gateway.events.indexScopeKey", [&]() {
+			{ "gateway.events.indexScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "indexScopeKey", "event", issue, "`gateway.events.indexScopeKey` requires `indexScopeKey` string and `event` string.");
 			} },
-           { "gateway.events.windowScopeId", [&]() {
+			{ "gateway.events.windowScopeId", [&]() {
 				return ValidateTwoStringFields(payload, "windowScopeId", "event", issue, "`gateway.events.windowScopeId` requires `windowScopeId` string and `event` string.");
 			} },
-           { "gateway.events.cursorScopeId", [&]() {
+			{ "gateway.events.cursorScopeId", [&]() {
 				return ValidateTwoStringFields(payload, "cursorScopeId", "event", issue, "`gateway.events.cursorScopeId` requires `cursorScopeId` string and `event` string.");
 			} },
-           { "gateway.events.anchorScopeId", [&]() {
+			{ "gateway.events.anchorScopeId", [&]() {
 				return ValidateTwoStringFields(payload, "anchorScopeId", "event", issue, "`gateway.events.anchorScopeId` requires `anchorScopeId` string and `event` string.");
 			} },
-           { "gateway.events.offsetScopeId", [&]() {
+			{ "gateway.events.offsetScopeId", [&]() {
 				return ValidateTwoStringFields(payload, "offsetScopeId", "event", issue, "`gateway.events.offsetScopeId` requires `offsetScopeId` string and `event` string.");
 			} },
-           { "gateway.events.pointerScopeId", [&]() {
+			{ "gateway.events.pointerScopeId", [&]() {
 				return ValidateTwoStringFields(payload, "pointerScopeId", "event", issue, "`gateway.events.pointerScopeId` requires `pointerScopeId` string and `event` string.");
 			} },
-           { "gateway.events.tokenScopeId", [&]() {
+			{ "gateway.events.tokenScopeId", [&]() {
 				return ValidateTwoStringFields(payload, "tokenScopeId", "event", issue, "`gateway.events.tokenScopeId` requires `tokenScopeId` string and `event` string.");
 			} },
-           { "gateway.events.sequenceScopeId", [&]() {
+			{ "gateway.events.sequenceScopeId", [&]() {
 				return ValidateTwoStringFields(payload, "sequenceScopeId", "event", issue, "`gateway.events.sequenceScopeId` requires `sequenceScopeId` string and `event` string.");
+			} },
+			{ "gateway.events.streamScopeId", [&]() {
+				return ValidateTwoStringFields(payload, "streamScopeId", "event", issue, "`gateway.events.streamScopeId` requires `streamScopeId` string and `event` string.");
+			} },
+			{ "gateway.events.bundleScopeId", [&]() {
+				return ValidateTwoStringFields(payload, "bundleScopeId", "event", issue, "`gateway.events.bundleScopeId` requires `bundleScopeId` string and `event` string.");
 			} },
 			{ "gateway.events.token", [&]() {
 				return ValidateTwoStringFields(payload, "token", "event", issue, "`gateway.events.token` requires `token` string and `event` string.");
@@ -1266,101 +1282,107 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.transport.policy.manifestKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "manifestScoped", "version", "applied", issue, "`gateway.transport.policy.manifestKey` requires `manifestScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.profileKey", [&]() {
+			{ "gateway.transport.policy.profileKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "profileScoped", "version", "applied", issue, "`gateway.transport.policy.profileKey` requires `profileScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.templateKey", [&]() {
+			{ "gateway.transport.policy.templateKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "templateScoped", "version", "applied", issue, "`gateway.transport.policy.templateKey` requires `templateScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.revisionKey", [&]() {
+			{ "gateway.transport.policy.revisionKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "revisionScoped", "version", "applied", issue, "`gateway.transport.policy.revisionKey` requires `revisionScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.historyKey", [&]() {
+			{ "gateway.transport.policy.historyKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "historyScoped", "version", "applied", issue, "`gateway.transport.policy.historyKey` requires `historyScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.snapshotKey", [&]() {
+			{ "gateway.transport.policy.snapshotKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "snapshotScoped", "version", "applied", issue, "`gateway.transport.policy.snapshotKey` requires `snapshotScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.indexKey", [&]() {
+			{ "gateway.transport.policy.indexKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "indexScoped", "version", "applied", issue, "`gateway.transport.policy.indexKey` requires `indexScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.windowScopeKey", [&]() {
+			{ "gateway.transport.policy.windowScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "windowScopeScoped", "version", "applied", issue, "`gateway.transport.policy.windowScopeKey` requires `windowScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.cursorScopeKey", [&]() {
+			{ "gateway.transport.policy.cursorScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "cursorScopeScoped", "version", "applied", issue, "`gateway.transport.policy.cursorScopeKey` requires `cursorScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.anchorScopeKey", [&]() {
+			{ "gateway.transport.policy.anchorScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "anchorScopeScoped", "version", "applied", issue, "`gateway.transport.policy.anchorScopeKey` requires `anchorScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.offsetScopeKey", [&]() {
+			{ "gateway.transport.policy.offsetScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "offsetScopeScoped", "version", "applied", issue, "`gateway.transport.policy.offsetScopeKey` requires `offsetScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.pointerScopeKey", [&]() {
+			{ "gateway.transport.policy.pointerScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "pointerScopeScoped", "version", "applied", issue, "`gateway.transport.policy.pointerScopeKey` requires `pointerScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.markerScopeKey", [&]() {
+			{ "gateway.transport.policy.markerScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "markerScopeScoped", "version", "applied", issue, "`gateway.transport.policy.markerScopeKey` requires `markerScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.tokenScopeKey", [&]() {
+			{ "gateway.transport.policy.tokenScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "tokenScopeScoped", "version", "applied", issue, "`gateway.transport.policy.tokenScopeKey` requires `tokenScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
             { "gateway.transport.policy.streamScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "streamScopeScoped", "version", "applied", issue, "`gateway.transport.policy.streamScopeKey` requires `streamScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.sequenceScopeKey", [&]() {
+			{ "gateway.transport.policy.sequenceScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "sequenceScopeScoped", "version", "applied", issue, "`gateway.transport.policy.sequenceScopeKey` requires `sequenceScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.bundleScopeKey", [&]() {
+			{ "gateway.transport.policy.bundleScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "bundleScopeScoped", "version", "applied", issue, "`gateway.transport.policy.bundleScopeKey` requires `bundleScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.packageScopeKey", [&]() {
+			{ "gateway.transport.policy.packageScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "packageScopeScoped", "version", "applied", issue, "`gateway.transport.policy.packageScopeKey` requires `packageScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.archiveScopeKey", [&]() {
+			{ "gateway.transport.policy.archiveScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "archiveScopeScoped", "version", "applied", issue, "`gateway.transport.policy.archiveScopeKey` requires `archiveScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.manifestScopeKey", [&]() {
+			{ "gateway.transport.policy.manifestScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "manifestScopeScoped", "version", "applied", issue, "`gateway.transport.policy.manifestScopeKey` requires `manifestScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.profileScopeKey", [&]() {
+			{ "gateway.transport.policy.profileScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "profileScopeScoped", "version", "applied", issue, "`gateway.transport.policy.profileScopeKey` requires `profileScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.templateScopeKey", [&]() {
+			{ "gateway.transport.policy.templateScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "templateScopeScoped", "version", "applied", issue, "`gateway.transport.policy.templateScopeKey` requires `templateScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.revisionScopeKey", [&]() {
+			{ "gateway.transport.policy.revisionScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "revisionScopeScoped", "version", "applied", issue, "`gateway.transport.policy.revisionScopeKey` requires `revisionScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.historyScopeKey", [&]() {
+			{ "gateway.transport.policy.historyScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "historyScopeScoped", "version", "applied", issue, "`gateway.transport.policy.historyScopeKey` requires `historyScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.snapshotScopeKey", [&]() {
+			{ "gateway.transport.policy.snapshotScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "snapshotScopeScoped", "version", "applied", issue, "`gateway.transport.policy.snapshotScopeKey` requires `snapshotScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.indexScopeKey", [&]() {
+			{ "gateway.transport.policy.indexScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "indexScopeScoped", "version", "applied", issue, "`gateway.transport.policy.indexScopeKey` requires `indexScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.windowScopeId", [&]() {
+			{ "gateway.transport.policy.windowScopeId", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "windowScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.windowScopeId` requires `windowScopeScopedId` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.cursorScopeId", [&]() {
+			{ "gateway.transport.policy.cursorScopeId", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "cursorScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.cursorScopeId` requires `cursorScopeScopedId` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.anchorScopeId", [&]() {
+			{ "gateway.transport.policy.anchorScopeId", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "anchorScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.anchorScopeId` requires `anchorScopeScopedId` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.offsetScopeId", [&]() {
+			{ "gateway.transport.policy.offsetScopeId", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "offsetScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.offsetScopeId` requires `offsetScopeScopedId` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.pointerScopeId", [&]() {
+			{ "gateway.transport.policy.pointerScopeId", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "pointerScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.pointerScopeId` requires `pointerScopeScopedId` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.tokenScopeId", [&]() {
+			{ "gateway.transport.policy.tokenScopeId", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "tokenScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.tokenScopeId` requires `tokenScopeScopedId` boolean, `version` number, and `applied` boolean.");
 			} },
-          { "gateway.transport.policy.sequenceScopeId", [&]() {
+			{ "gateway.transport.policy.sequenceScopeId", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "sequenceScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.sequenceScopeId` requires `sequenceScopeScopedId` boolean, `version` number, and `applied` boolean.");
+			} },
+			{ "gateway.transport.policy.streamScopeId", [&]() {
+				return ValidateBooleanNumberBoolean(payload, "streamScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.streamScopeId` requires `streamScopeScopedId` boolean, `version` number, and `applied` boolean.");
+			} },
+			{ "gateway.transport.policy.bundleScopeId", [&]() {
+				return ValidateBooleanNumberBoolean(payload, "bundleScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.bundleScopeId` requires `bundleScopeScopedId` boolean, `version` number, and `applied` boolean.");
 			} },
 			{ "gateway.transport.policy.sync", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "synced", "version", "applied", issue, "`gateway.transport.policy.sync` requires `synced` boolean, `version` number, and `applied` boolean.");
@@ -1485,101 +1507,107 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.manifestKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.manifestKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.profileKey", [&]() {
+			{ "gateway.models.profileKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.profileKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.templateKey", [&]() {
+			{ "gateway.models.templateKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.templateKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.revisionKey", [&]() {
+			{ "gateway.models.revisionKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.revisionKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.historyKey", [&]() {
+			{ "gateway.models.historyKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.historyKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.snapshotKey", [&]() {
+			{ "gateway.models.snapshotKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.snapshotKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.indexKey", [&]() {
+			{ "gateway.models.indexKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.indexKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.windowScopeKey", [&]() {
+			{ "gateway.models.windowScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.windowScopeKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.cursorScopeKey", [&]() {
+			{ "gateway.models.cursorScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.cursorScopeKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.anchorScopeKey", [&]() {
+			{ "gateway.models.anchorScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.anchorScopeKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.offsetScopeKey", [&]() {
+			{ "gateway.models.offsetScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.offsetScopeKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.pointerScopeKey", [&]() {
+			{ "gateway.models.pointerScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.pointerScopeKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.markerScopeKey", [&]() {
+			{ "gateway.models.markerScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.markerScopeKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.tokenScopeKey", [&]() {
+			{ "gateway.models.tokenScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.tokenScopeKey` requires `models` array and `count` number.");
 			} },
-         { "gateway.models.streamScopeKey", [&]() {
+			{ "gateway.models.streamScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.streamScopeKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.sequenceScopeKey", [&]() {
+			{ "gateway.models.sequenceScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.sequenceScopeKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.bundleScopeKey", [&]() {
+			{ "gateway.models.bundleScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.bundleScopeKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.packageScopeKey", [&]() {
+			{ "gateway.models.packageScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.packageScopeKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.archiveScopeKey", [&]() {
+			{ "gateway.models.archiveScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.archiveScopeKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.manifestScopeKey", [&]() {
+			{ "gateway.models.manifestScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.manifestScopeKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.profileScopeKey", [&]() {
+			{ "gateway.models.profileScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.profileScopeKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.templateScopeKey", [&]() {
+			{ "gateway.models.templateScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.templateScopeKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.revisionScopeKey", [&]() {
+			{ "gateway.models.revisionScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.revisionScopeKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.historyScopeKey", [&]() {
+			{ "gateway.models.historyScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.historyScopeKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.snapshotScopeKey", [&]() {
+			{ "gateway.models.snapshotScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.snapshotScopeKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.indexScopeKey", [&]() {
+			{ "gateway.models.indexScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.indexScopeKey` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.windowScopeId", [&]() {
+			{ "gateway.models.windowScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.windowScopeId` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.cursorScopeId", [&]() {
+			{ "gateway.models.cursorScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.cursorScopeId` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.anchorScopeId", [&]() {
+			{ "gateway.models.anchorScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.anchorScopeId` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.offsetScopeId", [&]() {
+			{ "gateway.models.offsetScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.offsetScopeId` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.pointerScopeId", [&]() {
+			{ "gateway.models.pointerScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.pointerScopeId` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.tokenScopeId", [&]() {
+			{ "gateway.models.tokenScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.tokenScopeId` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.sequenceScopeId", [&]() {
+			{ "gateway.models.sequenceScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.sequenceScopeId` requires `models` array and `count` number.");
+			} },
+			{ "gateway.models.streamScopeId", [&]() {
+				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.streamScopeId` requires `models` array and `count` number.");
+			} },
+			{ "gateway.models.bundleScopeId", [&]() {
+				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.bundleScopeId` requires `models` array and `count` number.");
 			} },
 			{ "gateway.models.index", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.index` requires `models` array and `count` number.");
@@ -1716,101 +1744,107 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.config.manifestKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.manifestKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.profileKey", [&]() {
+			{ "gateway.config.profileKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.profileKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.templateKey", [&]() {
+			{ "gateway.config.templateKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.templateKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.revisionKey", [&]() {
+			{ "gateway.config.revisionKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.revisionKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.historyKey", [&]() {
+			{ "gateway.config.historyKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.historyKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.snapshotKey", [&]() {
+			{ "gateway.config.snapshotKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.snapshotKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.indexKey", [&]() {
+			{ "gateway.config.indexKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.indexKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.windowScopeKey", [&]() {
+			{ "gateway.config.windowScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.windowScopeKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.cursorScopeKey", [&]() {
+			{ "gateway.config.cursorScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.cursorScopeKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.anchorScopeKey", [&]() {
+			{ "gateway.config.anchorScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.anchorScopeKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.offsetScopeKey", [&]() {
+			{ "gateway.config.offsetScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.offsetScopeKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.pointerScopeKey", [&]() {
+			{ "gateway.config.pointerScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.pointerScopeKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.markerScopeKey", [&]() {
+			{ "gateway.config.markerScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.markerScopeKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.tokenScopeKey", [&]() {
+			{ "gateway.config.tokenScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.tokenScopeKey` requires `sections` array and `count` number.");
 			} },
-         { "gateway.config.streamScopeKey", [&]() {
+			{ "gateway.config.streamScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.streamScopeKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.sequenceScopeKey", [&]() {
+			{ "gateway.config.sequenceScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.sequenceScopeKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.bundleScopeKey", [&]() {
+			{ "gateway.config.bundleScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.bundleScopeKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.packageScopeKey", [&]() {
+			{ "gateway.config.packageScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.packageScopeKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.archiveScopeKey", [&]() {
+			{ "gateway.config.archiveScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.archiveScopeKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.manifestScopeKey", [&]() {
+			{ "gateway.config.manifestScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.manifestScopeKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.profileScopeKey", [&]() {
+			{ "gateway.config.profileScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.profileScopeKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.templateScopeKey", [&]() {
+			{ "gateway.config.templateScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.templateScopeKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.revisionScopeKey", [&]() {
+			{ "gateway.config.revisionScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.revisionScopeKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.historyScopeKey", [&]() {
+			{ "gateway.config.historyScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.historyScopeKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.snapshotScopeKey", [&]() {
+			{ "gateway.config.snapshotScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.snapshotScopeKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.indexScopeKey", [&]() {
+			{ "gateway.config.indexScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.indexScopeKey` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.windowScopeId", [&]() {
+			{ "gateway.config.windowScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.windowScopeId` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.cursorScopeId", [&]() {
+			{ "gateway.config.cursorScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.cursorScopeId` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.anchorScopeId", [&]() {
+			{ "gateway.config.anchorScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.anchorScopeId` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.offsetScopeId", [&]() {
+			{ "gateway.config.offsetScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.offsetScopeId` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.pointerScopeId", [&]() {
+			{ "gateway.config.pointerScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.pointerScopeId` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.tokenScopeId", [&]() {
+			{ "gateway.config.tokenScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.tokenScopeId` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.sequenceScopeId", [&]() {
+			{ "gateway.config.sequenceScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.sequenceScopeId` requires `sections` array and `count` number.");
+			} },
+			{ "gateway.config.streamScopeId", [&]() {
+				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.streamScopeId` requires `sections` array and `count` number.");
+			} },
+			{ "gateway.config.bundleScopeId", [&]() {
+				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.bundleScopeId` requires `sections` array and `count` number.");
 			} },
 			{ "gateway.config.index", [&]() {
 				return ValidateArrayAndCount(payload, "keys", issue, "`gateway.config.index` requires `keys` array and `count` number.");
@@ -1923,101 +1957,107 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.tools.manifestKey", [&]() {
 				return ValidateNumericFields(payload, { "manifestedKey", "fallback", "tools" }, issue, "`gateway.tools.manifestKey` requires numeric fields `manifestedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.profileKey", [&]() {
+			{ "gateway.tools.profileKey", [&]() {
 				return ValidateNumericFields(payload, { "profiledKey", "fallback", "tools" }, issue, "`gateway.tools.profileKey` requires numeric fields `profiledKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.templateKey", [&]() {
+			{ "gateway.tools.templateKey", [&]() {
 				return ValidateNumericFields(payload, { "templatedKey", "fallback", "tools" }, issue, "`gateway.tools.templateKey` requires numeric fields `templatedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.revisionKey", [&]() {
+			{ "gateway.tools.revisionKey", [&]() {
 				return ValidateNumericFields(payload, { "revisionedKey", "fallback", "tools" }, issue, "`gateway.tools.revisionKey` requires numeric fields `revisionedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.historyKey", [&]() {
+			{ "gateway.tools.historyKey", [&]() {
 				return ValidateNumericFields(payload, { "historiedKey", "fallback", "tools" }, issue, "`gateway.tools.historyKey` requires numeric fields `historiedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.snapshotKey", [&]() {
+			{ "gateway.tools.snapshotKey", [&]() {
 				return ValidateNumericFields(payload, { "snapshottedKey", "fallback", "tools" }, issue, "`gateway.tools.snapshotKey` requires numeric fields `snapshottedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.indexKey", [&]() {
+			{ "gateway.tools.indexKey", [&]() {
 				return ValidateNumericFields(payload, { "indexedKey", "fallback", "tools" }, issue, "`gateway.tools.indexKey` requires numeric fields `indexedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.windowScopeKey", [&]() {
+			{ "gateway.tools.windowScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "windowScopedKey", "fallback", "tools" }, issue, "`gateway.tools.windowScopeKey` requires numeric fields `windowScopedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.cursorScopeKey", [&]() {
+			{ "gateway.tools.cursorScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "cursorScopedKey", "fallback", "tools" }, issue, "`gateway.tools.cursorScopeKey` requires numeric fields `cursorScopedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.anchorScopeKey", [&]() {
+			{ "gateway.tools.anchorScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "anchorScopedKey", "fallback", "tools" }, issue, "`gateway.tools.anchorScopeKey` requires numeric fields `anchorScopedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.offsetScopeKey", [&]() {
+			{ "gateway.tools.offsetScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "offsetScopedKey", "fallback", "tools" }, issue, "`gateway.tools.offsetScopeKey` requires numeric fields `offsetScopedKey`, `fallback`, and `tools`.");
 			} },
-            { "gateway.tools.pointerScopeKey", [&]() {
+			{ "gateway.tools.pointerScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "pointerScopedKey", "fallback", "tools" }, issue, "`gateway.tools.pointerScopeKey` requires numeric fields `pointerScopedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.markerScopeKey", [&]() {
+			{ "gateway.tools.markerScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "markerScopedKey", "fallback", "tools" }, issue, "`gateway.tools.markerScopeKey` requires numeric fields `markerScopedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.tokenScopeKey", [&]() {
+			{ "gateway.tools.tokenScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "tokenScopedKey", "fallback", "tools" }, issue, "`gateway.tools.tokenScopeKey` requires numeric fields `tokenScopedKey`, `fallback`, and `tools`.");
 			} },
-          { "gateway.tools.streamScopeKey", [&]() {
+			{ "gateway.tools.streamScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "streamScopedKey", "fallback", "tools" }, issue, "`gateway.tools.streamScopeKey` requires numeric fields `streamScopedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.sequenceScopeKey", [&]() {
+			{ "gateway.tools.sequenceScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "sequenceScopedKey", "fallback", "tools" }, issue, "`gateway.tools.sequenceScopeKey` requires numeric fields `sequenceScopedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.bundleScopeKey", [&]() {
+			{ "gateway.tools.bundleScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "bundleScopedKey", "fallback", "tools" }, issue, "`gateway.tools.bundleScopeKey` requires numeric fields `bundleScopedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.packageScopeKey", [&]() {
+			{ "gateway.tools.packageScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "packageScopedKey", "fallback", "tools" }, issue, "`gateway.tools.packageScopeKey` requires numeric fields `packageScopedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.archiveScopeKey", [&]() {
+			{ "gateway.tools.archiveScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "archiveScopedKey", "fallback", "tools" }, issue, "`gateway.tools.archiveScopeKey` requires numeric fields `archiveScopedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.manifestScopeKey", [&]() {
+			{ "gateway.tools.manifestScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "manifestScopedKey", "fallback", "tools" }, issue, "`gateway.tools.manifestScopeKey` requires numeric fields `manifestScopedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.profileScopeKey", [&]() {
+			{ "gateway.tools.profileScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "profileScopedKey", "fallback", "tools" }, issue, "`gateway.tools.profileScopeKey` requires numeric fields `profileScopedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.templateScopeKey", [&]() {
+			{ "gateway.tools.templateScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "templateScopedKey", "fallback", "tools" }, issue, "`gateway.tools.templateScopeKey` requires numeric fields `templateScopedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.revisionScopeKey", [&]() {
+			{ "gateway.tools.revisionScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "revisionScopedKey", "fallback", "tools" }, issue, "`gateway.tools.revisionScopeKey` requires numeric fields `revisionScopedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.historyScopeKey", [&]() {
+			{ "gateway.tools.historyScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "historyScopedKey", "fallback", "tools" }, issue, "`gateway.tools.historyScopeKey` requires numeric fields `historyScopedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.snapshotScopeKey", [&]() {
+			{ "gateway.tools.snapshotScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "snapshotScopedKey", "fallback", "tools" }, issue, "`gateway.tools.snapshotScopeKey` requires numeric fields `snapshotScopedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.indexScopeKey", [&]() {
+			{ "gateway.tools.indexScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "indexScopedKey", "fallback", "tools" }, issue, "`gateway.tools.indexScopeKey` requires numeric fields `indexScopedKey`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.windowScopeId", [&]() {
+			{ "gateway.tools.windowScopeId", [&]() {
 				return ValidateNumericFields(payload, { "windowScopedId", "fallback", "tools" }, issue, "`gateway.tools.windowScopeId` requires numeric fields `windowScopedId`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.cursorScopeId", [&]() {
+			{ "gateway.tools.cursorScopeId", [&]() {
 				return ValidateNumericFields(payload, { "cursorScopedId", "fallback", "tools" }, issue, "`gateway.tools.cursorScopeId` requires numeric fields `cursorScopedId`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.anchorScopeId", [&]() {
+			{ "gateway.tools.anchorScopeId", [&]() {
 				return ValidateNumericFields(payload, { "anchorScopedId", "fallback", "tools" }, issue, "`gateway.tools.anchorScopeId` requires numeric fields `anchorScopedId`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.offsetScopeId", [&]() {
+			{ "gateway.tools.offsetScopeId", [&]() {
 				return ValidateNumericFields(payload, { "offsetScopedId", "fallback", "tools" }, issue, "`gateway.tools.offsetScopeId` requires numeric fields `offsetScopedId`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.pointerScopeId", [&]() {
+			{ "gateway.tools.pointerScopeId", [&]() {
 				return ValidateNumericFields(payload, { "pointerScopedId", "fallback", "tools" }, issue, "`gateway.tools.pointerScopeId` requires numeric fields `pointerScopedId`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.tokenScopeId", [&]() {
+			{ "gateway.tools.tokenScopeId", [&]() {
 				return ValidateNumericFields(payload, { "tokenScopedId", "fallback", "tools" }, issue, "`gateway.tools.tokenScopeId` requires numeric fields `tokenScopedId`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.sequenceScopeId", [&]() {
+			{ "gateway.tools.sequenceScopeId", [&]() {
 				return ValidateNumericFields(payload, { "sequenceScopedId", "fallback", "tools" }, issue, "`gateway.tools.sequenceScopeId` requires numeric fields `sequenceScopedId`, `fallback`, and `tools`.");
+			} },
+			{ "gateway.tools.streamScopeId", [&]() {
+				return ValidateNumericFields(payload, { "streamScopedId", "fallback", "tools" }, issue, "`gateway.tools.streamScopeId` requires numeric fields `streamScopedId`, `fallback`, and `tools`.");
+			} },
+			{ "gateway.tools.bundleScopeId", [&]() {
+				return ValidateNumericFields(payload, { "bundleScopedId", "fallback", "tools" }, issue, "`gateway.tools.bundleScopeId` requires numeric fields `bundleScopedId`, `fallback`, and `tools`.");
 			} },
 			{ "gateway.tools.router", [&]() {
 				return ValidateNumericFields(payload, { "routed", "fallback", "tools" }, issue, "`gateway.tools.router` requires numeric fields `routed`, `fallback`, and `tools`.");
@@ -2460,7 +2500,7 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
-		  { "gateway.agents.create", [&]() {
+			{ "gateway.agents.create", [&]() {
 				if (!IsFieldValueType(payload, "agent", '{') || !IsFieldBoolean(payload, "created")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.agents.create` requires `agent` object and `created` boolean.");
 					return false;

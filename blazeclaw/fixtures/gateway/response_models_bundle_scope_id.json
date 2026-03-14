@@ -1,0 +1,11 @@
+{
+  "id": "fixture-models-bundle-scope-id",
+  "ok": true,
+  "result": {
+    "models": [
+      "default",
+      "reasoner"
+    ],
+    "count": 2
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "id": "fixture-events-bundle-scope-id",
+  "ok": true,
+  "result": {
+    "bundleScopeId": "bundle-scope-id-1",
+    "event": "gateway.session.reset"
+  }
+}
