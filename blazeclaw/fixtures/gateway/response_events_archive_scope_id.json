@@ -1,0 +1,8 @@
+{
+  "id": "fixture-events-archive-scope-id",
+  "ok": true,
+  "result": {
+    "archiveScopeId": "archive-scope-id-1",
+    "event": "gateway.session.reset"
+  }
+}
