@@ -1,0 +1,8 @@
+{
+  "id": "fixture-events-template-scope-id",
+  "ok": true,
+  "result": {
+    "templateScopeId": "template-scope-id-1",
+    "event": "gateway.session.reset"
+  }
+}

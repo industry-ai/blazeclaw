@@ -1333,6 +1333,15 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.events.templateScopeId", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"templateScopeId\":\"template-scope-id-1\",\"event\":\"gateway.session.reset\"}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.events.markerScopeKey", [](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
@@ -2848,6 +2857,43 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"profileScopeScopedId\":false,\"version\":1,\"applied\":false}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.templateScopeId", [this](const protocol::RequestFrame& request) {
+			const auto tools = m_toolRegistry.List();
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"templateScopedId\":0,\"fallback\":0,\"tools\":" + std::to_string(tools.size()) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.models.templateScopeId", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"models\":[\"default\",\"reasoner\"],\"count\":2}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.config.templateScopeId", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"sections\":[\"gateway\",\"agent\"],\"count\":2}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.transport.policy.templateScopeId", [this](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"templateScopeScopedId\":false,\"version\":1,\"applied\":false}",
 				.error = std::nullopt,
 			};
 			});
