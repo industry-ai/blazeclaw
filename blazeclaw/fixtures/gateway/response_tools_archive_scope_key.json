@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-451",
+  "ok": true,
+  "payload": {
+    "archiveScopedKey": 0,
+    "fallback": 0,
+    "tools": 2
+  }
+}

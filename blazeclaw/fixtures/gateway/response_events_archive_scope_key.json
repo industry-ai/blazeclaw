@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-450",
+  "ok": true,
+  "payload": {
+    "archiveScopeKey": "archive-scope-key-1",
+    "event": "gateway.session.reset"
+  }
+}
