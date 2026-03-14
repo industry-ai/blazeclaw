@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-465",
+  "ok": true,
+  "payload": {
+    "templateScopeKey": "template-scope-key-1",
+    "event": "gateway.session.reset"
+  }
+}
