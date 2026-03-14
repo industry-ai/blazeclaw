@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-495",
+  "ok": true,
+  "payload": {
+    "cursorScopeId": "cursor-scope-id-1",
+    "event": "gateway.session.reset"
+  }
+}
