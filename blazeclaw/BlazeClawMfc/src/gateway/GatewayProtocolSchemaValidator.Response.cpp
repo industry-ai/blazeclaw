@@ -110,6 +110,7 @@ namespace blazeclaw::gateway::protocol {
           "gateway.config.templateScopeKey",
           "gateway.config.revisionScopeKey",
           "gateway.config.historyScopeKey",
+          "gateway.config.snapshotScopeKey",
 			"gateway.transport.connections.count",
 			"gateway.transport.endpoint.get",
 			"gateway.transport.endpoint.set",
@@ -189,6 +190,7 @@ namespace blazeclaw::gateway::protocol {
            "gateway.transport.policy.templateScopeKey",
            "gateway.transport.policy.revisionScopeKey",
            "gateway.transport.policy.historyScopeKey",
+           "gateway.transport.policy.snapshotScopeKey",
 			"gateway.health.details",
 			"gateway.logs.count",
 			"gateway.logs.levels",
@@ -270,6 +272,7 @@ namespace blazeclaw::gateway::protocol {
             "gateway.events.templateScopeKey",
             "gateway.events.revisionScopeKey",
             "gateway.events.historyScopeKey",
+            "gateway.events.snapshotScopeKey",
 			"gateway.agents.create",
 			"gateway.sessions.delete",
 			"gateway.sessions.compact",
@@ -387,6 +390,7 @@ namespace blazeclaw::gateway::protocol {
             "gateway.tools.templateScopeKey",
             "gateway.tools.revisionScopeKey",
             "gateway.tools.historyScopeKey",
+            "gateway.tools.snapshotScopeKey",
 			"gateway.models.exists",
 			"gateway.models.count",
 			"gateway.models.get",
@@ -467,6 +471,7 @@ namespace blazeclaw::gateway::protocol {
             "gateway.models.templateScopeKey",
             "gateway.models.revisionScopeKey",
             "gateway.models.historyScopeKey",
+            "gateway.models.snapshotScopeKey",
 			"gateway.config.getKey",
 			"gateway.transport.endpoint.exists",
 			"gateway.tick",
@@ -1071,6 +1076,9 @@ namespace blazeclaw::gateway::protocol {
            { "gateway.events.historyScopeKey", [&]() {
 				return ValidateTwoStringFields(payload, "historyScopeKey", "event", issue, "`gateway.events.historyScopeKey` requires `historyScopeKey` string and `event` string.");
 			} },
+           { "gateway.events.snapshotScopeKey", [&]() {
+				return ValidateTwoStringFields(payload, "snapshotScopeKey", "event", issue, "`gateway.events.snapshotScopeKey` requires `snapshotScopeKey` string and `event` string.");
+			} },
 			{ "gateway.events.token", [&]() {
 				return ValidateTwoStringFields(payload, "token", "event", issue, "`gateway.events.token` requires `token` string and `event` string.");
 			} },
@@ -1263,6 +1271,9 @@ namespace blazeclaw::gateway::protocol {
           { "gateway.transport.policy.historyScopeKey", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "historyScopeScoped", "version", "applied", issue, "`gateway.transport.policy.historyScopeKey` requires `historyScopeScoped` boolean, `version` number, and `applied` boolean.");
 			} },
+          { "gateway.transport.policy.snapshotScopeKey", [&]() {
+				return ValidateBooleanNumberBoolean(payload, "snapshotScopeScoped", "version", "applied", issue, "`gateway.transport.policy.snapshotScopeKey` requires `snapshotScopeScoped` boolean, `version` number, and `applied` boolean.");
+			} },
 			{ "gateway.transport.policy.sync", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "synced", "version", "applied", issue, "`gateway.transport.policy.sync` requires `synced` boolean, `version` number, and `applied` boolean.");
 			} },
@@ -1454,6 +1465,9 @@ namespace blazeclaw::gateway::protocol {
 			} },
            { "gateway.models.historyScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.historyScopeKey` requires `models` array and `count` number.");
+			} },
+           { "gateway.models.snapshotScopeKey", [&]() {
+				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.snapshotScopeKey` requires `models` array and `count` number.");
 			} },
 			{ "gateway.models.index", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.index` requires `models` array and `count` number.");
@@ -1659,6 +1673,9 @@ namespace blazeclaw::gateway::protocol {
            { "gateway.config.historyScopeKey", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.historyScopeKey` requires `sections` array and `count` number.");
 			} },
+           { "gateway.config.snapshotScopeKey", [&]() {
+				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.snapshotScopeKey` requires `sections` array and `count` number.");
+			} },
 			{ "gateway.config.index", [&]() {
 				return ValidateArrayAndCount(payload, "keys", issue, "`gateway.config.index` requires `keys` array and `count` number.");
 			} },
@@ -1838,6 +1855,9 @@ namespace blazeclaw::gateway::protocol {
 			} },
            { "gateway.tools.historyScopeKey", [&]() {
 				return ValidateNumericFields(payload, { "historyScopedKey", "fallback", "tools" }, issue, "`gateway.tools.historyScopeKey` requires numeric fields `historyScopedKey`, `fallback`, and `tools`.");
+			} },
+           { "gateway.tools.snapshotScopeKey", [&]() {
+				return ValidateNumericFields(payload, { "snapshotScopedKey", "fallback", "tools" }, issue, "`gateway.tools.snapshotScopeKey` requires numeric fields `snapshotScopedKey`, `fallback`, and `tools`.");
 			} },
 			{ "gateway.tools.router", [&]() {
 				return ValidateNumericFields(payload, { "routed", "fallback", "tools" }, issue, "`gateway.tools.router` requires numeric fields `routed`, `fallback`, and `tools`.");
