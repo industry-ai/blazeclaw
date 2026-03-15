@@ -48,6 +48,46 @@ namespace blazeclaw::gateway {
 			return escaped;
 		}
 
+		std::optional<std::string> ExtractObjectParam(
+			const std::optional<std::string>& paramsJson,
+			const std::string& fieldName) {
+			if (!paramsJson.has_value()) {
+				return std::nullopt;
+			}
+
+			const std::string token = "\"" + fieldName + "\"";
+			const std::string& params = paramsJson.value();
+			const std::size_t keyPos = params.find(token);
+			if (keyPos == std::string::npos) {
+				return std::nullopt;
+			}
+
+			std::size_t valuePos = params.find(':', keyPos + token.size());
+			if (valuePos == std::string::npos) {
+				return std::nullopt;
+			}
+
+			valuePos = params.find('{', valuePos);
+			if (valuePos == std::string::npos) {
+				return std::nullopt;
+			}
+
+			int depth = 0;
+			for (std::size_t i = valuePos; i < params.size(); ++i) {
+				if (params[i] == '{') {
+					++depth;
+				}
+				else if (params[i] == '}') {
+					--depth;
+					if (depth == 0) {
+						return params.substr(valuePos, i - valuePos + 1);
+					}
+				}
+			}
+
+			return std::nullopt;
+		}
+
 		std::optional<bool> ExtractBooleanParam(
 			const std::optional<std::string>& paramsJson,
 			const std::string& fieldName) {
@@ -4481,7 +4521,8 @@ namespace blazeclaw::gateway {
 
 		m_dispatcher.Register("gateway.tools.call.execute", [this](const protocol::RequestFrame& request) {
 			const std::string requestedTool = ExtractStringParam(request.paramsJson, "tool");
-			const ToolExecuteResult execution = m_toolRegistry.Execute(requestedTool);
+          const std::optional<std::string> argsJson = ExtractObjectParam(request.paramsJson, "args");
+			const ToolExecuteResult execution = m_toolRegistry.Execute(requestedTool, argsJson);
 			const bool argsProvided = request.paramsJson.has_value() &&
 				request.paramsJson.value().find("\"args\"") != std::string::npos;
 

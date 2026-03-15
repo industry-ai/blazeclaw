@@ -2,6 +2,8 @@
 
 #include "pch.h"
 
+#include <filesystem>
+
 namespace blazeclaw::gateway {
 
 	struct ChannelStatusEntry {
@@ -31,6 +33,12 @@ namespace blazeclaw::gateway {
 		std::size_t affected = 0;
 	};
 
+	struct ChannelAdapterDescriptor {
+		std::string id;
+		std::string label;
+		std::string defaultAccountId;
+	};
+
 	struct RouteResetResult {
 		std::size_t cleared = 0;
 		std::size_t restored = 0;
@@ -40,6 +48,7 @@ namespace blazeclaw::gateway {
 	class GatewayChannelRegistry {
 	public:
 		GatewayChannelRegistry();
+		std::vector<ChannelAdapterDescriptor> ListAdapters() const;
 
 		std::vector<ChannelStatusEntry> ListStatus() const;
 		std::vector<ChannelAccountEntry> ListAccounts() const;
@@ -90,6 +99,12 @@ namespace blazeclaw::gateway {
 		bool RouteExists(const std::string& channel, const std::string& accountId) const;
 
 	private:
+       static std::filesystem::path PersistencePath();
+		void LoadPersistedState();
+		void PersistState() const;
+		void RecomputeStatus();
+
+		std::vector<ChannelAdapterDescriptor> m_adapters;
 		std::vector<ChannelStatusEntry> m_status;
 		std::vector<ChannelAccountEntry> m_accounts;
 		std::vector<ChannelRouteEntry> m_routes;

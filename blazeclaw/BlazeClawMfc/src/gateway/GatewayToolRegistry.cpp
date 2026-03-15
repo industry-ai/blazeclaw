@@ -4,6 +4,39 @@
 #include <algorithm>
 
 namespace blazeclaw::gateway {
+	namespace {
+		std::string ExtractStringField(
+			const std::optional<std::string>& json,
+			const std::string& fieldName) {
+			if (!json.has_value()) {
+				return {};
+			}
+
+			const std::string& text = json.value();
+			const std::string token = "\"" + fieldName + "\"";
+			const std::size_t keyPos = text.find(token);
+			if (keyPos == std::string::npos) {
+				return {};
+			}
+
+			std::size_t valuePos = text.find(':', keyPos + token.size());
+			if (valuePos == std::string::npos) {
+				return {};
+			}
+
+			valuePos = text.find('"', valuePos);
+			if (valuePos == std::string::npos) {
+				return {};
+			}
+
+			const std::size_t endQuote = text.find('"', valuePos + 1);
+			if (endQuote == std::string::npos) {
+				return {};
+			}
+
+			return text.substr(valuePos + 1, endQuote - valuePos - 1);
+		}
+	}
 
 	GatewayToolRegistry::GatewayToolRegistry() {
 		m_tools.insert_or_assign(
@@ -65,7 +98,9 @@ namespace blazeclaw::gateway {
 		};
 	}
 
-	ToolExecuteResult GatewayToolRegistry::Execute(const std::string& requestedTool) const {
+    ToolExecuteResult GatewayToolRegistry::Execute(
+		const std::string& requestedTool,
+		const std::optional<std::string>& argsJson) const {
 		const ToolPreviewResult preview = Preview(requestedTool);
 		if (!preview.allowed) {
 			return ToolExecuteResult{
@@ -73,6 +108,35 @@ namespace blazeclaw::gateway {
 				.executed = false,
 				.status = "blocked",
 				.output = preview.reason,
+			};
+		}
+
+		if (preview.tool == "chat.send") {
+			const std::string message = ExtractStringField(argsJson, "message");
+			if (message.empty()) {
+				return ToolExecuteResult{
+					.tool = preview.tool,
+					.executed = false,
+					.status = "invalid_args",
+					.output = "missing_message",
+				};
+			}
+
+			return ToolExecuteResult{
+				.tool = preview.tool,
+				.executed = true,
+				.status = "ok",
+				.output = "sent:" + message,
+			};
+		}
+
+		if (preview.tool == "memory.search") {
+			const std::string query = ExtractStringField(argsJson, "query");
+			return ToolExecuteResult{
+				.tool = preview.tool,
+				.executed = true,
+				.status = "ok",
+				.output = query.empty() ? "results:seeded" : "results:seeded:" + query,
 			};
 		}
 
