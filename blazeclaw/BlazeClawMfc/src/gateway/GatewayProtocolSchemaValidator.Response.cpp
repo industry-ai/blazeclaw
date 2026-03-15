@@ -123,16 +123,16 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.config.sequenceScopeId",
 			"gateway.config.streamScopeId",
 			"gateway.config.bundleScopeId",
-          "gateway.config.packageScopeId",
-          "gateway.config.archiveScopeId",
-          "gateway.config.manifestScopeId",
-          "gateway.config.profileScopeId",
-          "gateway.config.templateScopeId",
-          "gateway.config.revisionScopeId",
-          "gateway.config.historyScopeId",
-          "gateway.config.snapshotScopeId",
-          "gateway.config.indexScopeId",
-          "gateway.config.markerScopeId",
+			"gateway.config.packageScopeId",
+			"gateway.config.archiveScopeId",
+			"gateway.config.manifestScopeId",
+			"gateway.config.profileScopeId",
+			"gateway.config.templateScopeId",
+			"gateway.config.revisionScopeId",
+			"gateway.config.historyScopeId",
+			"gateway.config.snapshotScopeId",
+			"gateway.config.indexScopeId",
+			"gateway.config.markerScopeId",
 			"gateway.transport.connections.count",
 			"gateway.transport.endpoint.get",
 			"gateway.transport.endpoint.set",
@@ -223,16 +223,16 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.transport.policy.sequenceScopeId",
 			"gateway.transport.policy.streamScopeId",
 			"gateway.transport.policy.bundleScopeId",
-           "gateway.transport.policy.packageScopeId",
-           "gateway.transport.policy.archiveScopeId",
-           "gateway.transport.policy.manifestScopeId",
-           "gateway.transport.policy.profileScopeId",
-           "gateway.transport.policy.templateScopeId",
-           "gateway.transport.policy.revisionScopeId",
-           "gateway.transport.policy.historyScopeId",
-           "gateway.transport.policy.snapshotScopeId",
-           "gateway.transport.policy.indexScopeId",
-           "gateway.transport.policy.markerScopeId",
+			"gateway.transport.policy.packageScopeId",
+			"gateway.transport.policy.archiveScopeId",
+			"gateway.transport.policy.manifestScopeId",
+			"gateway.transport.policy.profileScopeId",
+			"gateway.transport.policy.templateScopeId",
+			"gateway.transport.policy.revisionScopeId",
+			"gateway.transport.policy.historyScopeId",
+			"gateway.transport.policy.snapshotScopeId",
+			"gateway.transport.policy.indexScopeId",
+			"gateway.transport.policy.markerScopeId",
 			"gateway.health.details",
 			"gateway.logs.count",
 			"gateway.logs.levels",
@@ -291,50 +291,50 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.events.packageKey",
 			"gateway.events.archiveKey",
 			"gateway.events.manifestKey",
-            "gateway.events.profileKey",
-            "gateway.events.templateKey",
-            "gateway.events.revisionKey",
-            "gateway.events.historyKey",
-            "gateway.events.snapshotKey",
-            "gateway.events.indexKey",
-            "gateway.events.windowScopeKey",
-            "gateway.events.cursorScopeKey",
-            "gateway.events.anchorScopeKey",
-            "gateway.events.offsetScopeKey",
-            "gateway.events.pointerScopeKey",
-            "gateway.events.markerScopeKey",
-            "gateway.events.tokenScopeKey",
-            "gateway.events.streamScopeKey",
-            "gateway.events.sequenceScopeKey",
-            "gateway.events.bundleScopeKey",
-            "gateway.events.packageScopeKey",
-            "gateway.events.archiveScopeKey",
-            "gateway.events.manifestScopeKey",
-            "gateway.events.profileScopeKey",
-            "gateway.events.templateScopeKey",
-            "gateway.events.revisionScopeKey",
-            "gateway.events.historyScopeKey",
-            "gateway.events.snapshotScopeKey",
-            "gateway.events.indexScopeKey",
-            "gateway.events.windowScopeId",
-            "gateway.events.cursorScopeId",
-            "gateway.events.anchorScopeId",
-            "gateway.events.offsetScopeId",
-            "gateway.events.pointerScopeId",
-            "gateway.events.tokenScopeId",
-            "gateway.events.sequenceScopeId",
-            "gateway.events.streamScopeId",
-            "gateway.events.bundleScopeId",
-            "gateway.events.packageScopeId",
-            "gateway.events.archiveScopeId",
-            "gateway.events.manifestScopeId",
-            "gateway.events.profileScopeId",
-            "gateway.events.templateScopeId",
-            "gateway.events.revisionScopeId",
-            "gateway.events.historyScopeId",
-            "gateway.events.snapshotScopeId",
-            "gateway.events.indexScopeId",
-            "gateway.events.markerScopeId",
+			"gateway.events.profileKey",
+			"gateway.events.templateKey",
+			"gateway.events.revisionKey",
+			"gateway.events.historyKey",
+			"gateway.events.snapshotKey",
+			"gateway.events.indexKey",
+			"gateway.events.windowScopeKey",
+			"gateway.events.cursorScopeKey",
+			"gateway.events.anchorScopeKey",
+			"gateway.events.offsetScopeKey",
+			"gateway.events.pointerScopeKey",
+			"gateway.events.markerScopeKey",
+			"gateway.events.tokenScopeKey",
+			"gateway.events.streamScopeKey",
+			"gateway.events.sequenceScopeKey",
+			"gateway.events.bundleScopeKey",
+			"gateway.events.packageScopeKey",
+			"gateway.events.archiveScopeKey",
+			"gateway.events.manifestScopeKey",
+			"gateway.events.profileScopeKey",
+			"gateway.events.templateScopeKey",
+			"gateway.events.revisionScopeKey",
+			"gateway.events.historyScopeKey",
+			"gateway.events.snapshotScopeKey",
+			"gateway.events.indexScopeKey",
+			"gateway.events.windowScopeId",
+			"gateway.events.cursorScopeId",
+			"gateway.events.anchorScopeId",
+			"gateway.events.offsetScopeId",
+			"gateway.events.pointerScopeId",
+			"gateway.events.tokenScopeId",
+			"gateway.events.sequenceScopeId",
+			"gateway.events.streamScopeId",
+			"gateway.events.bundleScopeId",
+			"gateway.events.packageScopeId",
+			"gateway.events.archiveScopeId",
+			"gateway.events.manifestScopeId",
+			"gateway.events.profileScopeId",
+			"gateway.events.templateScopeId",
+			"gateway.events.revisionScopeId",
+			"gateway.events.historyScopeId",
+			"gateway.events.snapshotScopeId",
+			"gateway.events.indexScopeId",
+			"gateway.events.markerScopeId",
 			"gateway.agents.create",
 			"gateway.sessions.delete",
 			"gateway.sessions.compact",
@@ -362,7 +362,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.channels.status.get",
 			"gateway.channels.status.exists",
 			"gateway.channels.status.count",
-            "gateway.channels.adapters.list",
+			"gateway.channels.adapters.list",
 			"gateway.channels.route.exists",
 			"gateway.channels.route.get",
 			"gateway.channels.route.restore",
@@ -377,7 +377,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.tools.count",
 			"gateway.tools.get",
 			"gateway.tools.list",
-         "gateway.tools.executions.list",
+			"gateway.tools.executions.list",
 			"gateway.tools.categories",
 			"gateway.tools.stats",
 			"gateway.tools.health",
@@ -431,50 +431,50 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.tools.packageKey",
 			"gateway.tools.archiveKey",
 			"gateway.tools.manifestKey",
-            "gateway.tools.profileKey",
-            "gateway.tools.templateKey",
-            "gateway.tools.revisionKey",
-            "gateway.tools.historyKey",
-            "gateway.tools.snapshotKey",
-            "gateway.tools.indexKey",
-            "gateway.tools.windowScopeKey",
-            "gateway.tools.cursorScopeKey",
-            "gateway.tools.anchorScopeKey",
-            "gateway.tools.offsetScopeKey",
-            "gateway.tools.pointerScopeKey",
-            "gateway.tools.markerScopeKey",
-            "gateway.tools.tokenScopeKey",
-            "gateway.tools.streamScopeKey",
-            "gateway.tools.sequenceScopeKey",
-            "gateway.tools.bundleScopeKey",
-            "gateway.tools.packageScopeKey",
-            "gateway.tools.archiveScopeKey",
-            "gateway.tools.manifestScopeKey",
-            "gateway.tools.profileScopeKey",
-            "gateway.tools.templateScopeKey",
-            "gateway.tools.revisionScopeKey",
-            "gateway.tools.historyScopeKey",
-            "gateway.tools.snapshotScopeKey",
-            "gateway.tools.indexScopeKey",
-            "gateway.tools.windowScopeId",
-            "gateway.tools.cursorScopeId",
-            "gateway.tools.anchorScopeId",
-            "gateway.tools.offsetScopeId",
-            "gateway.tools.pointerScopeId",
-            "gateway.tools.tokenScopeId",
-            "gateway.tools.sequenceScopeId",
-            "gateway.tools.streamScopeId",
-            "gateway.tools.bundleScopeId",
-            "gateway.tools.packageScopeId",
-            "gateway.tools.archiveScopeId",
-            "gateway.tools.manifestScopeId",
-            "gateway.tools.profileScopeId",
-            "gateway.tools.templateScopeId",
-            "gateway.tools.revisionScopeId",
-            "gateway.tools.historyScopeId",
-            "gateway.tools.snapshotScopeId",
-            "gateway.tools.indexScopeId",
-            "gateway.tools.markerScopeId",
+			"gateway.tools.profileKey",
+			"gateway.tools.templateKey",
+			"gateway.tools.revisionKey",
+			"gateway.tools.historyKey",
+			"gateway.tools.snapshotKey",
+			"gateway.tools.indexKey",
+			"gateway.tools.windowScopeKey",
+			"gateway.tools.cursorScopeKey",
+			"gateway.tools.anchorScopeKey",
+			"gateway.tools.offsetScopeKey",
+			"gateway.tools.pointerScopeKey",
+			"gateway.tools.markerScopeKey",
+			"gateway.tools.tokenScopeKey",
+			"gateway.tools.streamScopeKey",
+			"gateway.tools.sequenceScopeKey",
+			"gateway.tools.bundleScopeKey",
+			"gateway.tools.packageScopeKey",
+			"gateway.tools.archiveScopeKey",
+			"gateway.tools.manifestScopeKey",
+			"gateway.tools.profileScopeKey",
+			"gateway.tools.templateScopeKey",
+			"gateway.tools.revisionScopeKey",
+			"gateway.tools.historyScopeKey",
+			"gateway.tools.snapshotScopeKey",
+			"gateway.tools.indexScopeKey",
+			"gateway.tools.windowScopeId",
+			"gateway.tools.cursorScopeId",
+			"gateway.tools.anchorScopeId",
+			"gateway.tools.offsetScopeId",
+			"gateway.tools.pointerScopeId",
+			"gateway.tools.tokenScopeId",
+			"gateway.tools.sequenceScopeId",
+			"gateway.tools.streamScopeId",
+			"gateway.tools.bundleScopeId",
+			"gateway.tools.packageScopeId",
+			"gateway.tools.archiveScopeId",
+			"gateway.tools.manifestScopeId",
+			"gateway.tools.profileScopeId",
+			"gateway.tools.templateScopeId",
+			"gateway.tools.revisionScopeId",
+			"gateway.tools.historyScopeId",
+			"gateway.tools.snapshotScopeId",
+			"gateway.tools.indexScopeId",
+			"gateway.tools.markerScopeId",
 			"gateway.models.exists",
 			"gateway.models.count",
 			"gateway.models.get",
@@ -532,60 +532,72 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.packageKey",
 			"gateway.models.archiveKey",
 			"gateway.models.manifestKey",
-            "gateway.models.profileKey",
-            "gateway.models.templateKey",
-            "gateway.models.revisionKey",
-            "gateway.models.historyKey",
-            "gateway.models.snapshotKey",
-            "gateway.models.indexKey",
-            "gateway.models.windowScopeKey",
-            "gateway.models.cursorScopeKey",
-            "gateway.models.anchorScopeKey",
-            "gateway.models.offsetScopeKey",
-            "gateway.models.pointerScopeKey",
-            "gateway.models.markerScopeKey",
-            "gateway.models.tokenScopeKey",
-            "gateway.models.streamScopeKey",
-            "gateway.models.sequenceScopeKey",
-            "gateway.models.bundleScopeKey",
-            "gateway.models.packageScopeKey",
-            "gateway.models.archiveScopeKey",
-            "gateway.models.manifestScopeKey",
-            "gateway.models.profileScopeKey",
-            "gateway.models.templateScopeKey",
-            "gateway.models.revisionScopeKey",
-            "gateway.models.historyScopeKey",
-            "gateway.models.snapshotScopeKey",
-            "gateway.models.indexScopeKey",
-            "gateway.models.windowScopeId",
-            "gateway.models.cursorScopeId",
-            "gateway.models.anchorScopeId",
-            "gateway.models.offsetScopeId",
-            "gateway.models.pointerScopeId",
-            "gateway.models.tokenScopeId",
-            "gateway.models.sequenceScopeId",
-            "gateway.models.streamScopeId",
-            "gateway.models.bundleScopeId",
-            "gateway.models.packageScopeId",
-            "gateway.models.archiveScopeId",
-            "gateway.models.manifestScopeId",
-            "gateway.models.profileScopeId",
-            "gateway.models.templateScopeId",
-            "gateway.models.revisionScopeId",
-            "gateway.models.historyScopeId",
-            "gateway.models.snapshotScopeId",
-            "gateway.models.indexScopeId",
-            "gateway.models.markerScopeId",
-            "gateway.models.failover.status",
+			"gateway.models.profileKey",
+			"gateway.models.templateKey",
+			"gateway.models.revisionKey",
+			"gateway.models.historyKey",
+			"gateway.models.snapshotKey",
+			"gateway.models.indexKey",
+			"gateway.models.windowScopeKey",
+			"gateway.models.cursorScopeKey",
+			"gateway.models.anchorScopeKey",
+			"gateway.models.offsetScopeKey",
+			"gateway.models.pointerScopeKey",
+			"gateway.models.markerScopeKey",
+			"gateway.models.tokenScopeKey",
+			"gateway.models.streamScopeKey",
+			"gateway.models.sequenceScopeKey",
+			"gateway.models.bundleScopeKey",
+			"gateway.models.packageScopeKey",
+			"gateway.models.archiveScopeKey",
+			"gateway.models.manifestScopeKey",
+			"gateway.models.profileScopeKey",
+			"gateway.models.templateScopeKey",
+			"gateway.models.revisionScopeKey",
+			"gateway.models.historyScopeKey",
+			"gateway.models.snapshotScopeKey",
+			"gateway.models.indexScopeKey",
+			"gateway.models.windowScopeId",
+			"gateway.models.cursorScopeId",
+			"gateway.models.anchorScopeId",
+			"gateway.models.offsetScopeId",
+			"gateway.models.pointerScopeId",
+			"gateway.models.tokenScopeId",
+			"gateway.models.sequenceScopeId",
+			"gateway.models.streamScopeId",
+			"gateway.models.bundleScopeId",
+			"gateway.models.packageScopeId",
+			"gateway.models.archiveScopeId",
+			"gateway.models.manifestScopeId",
+			"gateway.models.profileScopeId",
+			"gateway.models.templateScopeId",
+			"gateway.models.revisionScopeId",
+			"gateway.models.historyScopeId",
+			"gateway.models.snapshotScopeId",
+			"gateway.models.indexScopeId",
+			"gateway.models.markerScopeId",
+			"gateway.models.failover.status",
+			"gateway.models.failover.preview",
+         "gateway.models.failover.metrics",
 			"gateway.runtime.orchestration.status",
+			"gateway.runtime.orchestration.queue",
+         "gateway.runtime.orchestration.assign",
 			"gateway.runtime.streaming.status",
+			"gateway.runtime.streaming.sample",
+            "gateway.runtime.streaming.window",
 			"gateway.config.getKey",
 			"gateway.transport.endpoint.exists",
 			"gateway.tick",
 			"gateway.health",
-         "gateway.runtime.orchestration.status",
+			"gateway.runtime.orchestration.status",
+			"gateway.runtime.orchestration.queue",
+         "gateway.runtime.orchestration.assign",
 			"gateway.runtime.streaming.status",
+			"gateway.runtime.streaming.sample",
+           "gateway.runtime.streaming.window",
 			"gateway.models.failover.status",
+			"gateway.models.failover.preview",
+         "gateway.models.failover.metrics",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -870,7 +882,7 @@ namespace blazeclaw::gateway::protocol {
 					issue,
 					"`gateway.channels.accounts` requires account entries with `channel`, `accountId`, `label`, `active`, and `connected` fields.");
 			} },
-          { "gateway.channels.adapters.list", [&]() {
+			{ "gateway.channels.adapters.list", [&]() {
 				return ValidateArrayWithOptionalEntryTokens(
 					payload,
 					"adapters",
@@ -1235,34 +1247,34 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.events.bundleScopeId", [&]() {
 				return ValidateTwoStringFields(payload, "bundleScopeId", "event", issue, "`gateway.events.bundleScopeId` requires `bundleScopeId` string and `event` string.");
 			} },
-           { "gateway.events.packageScopeId", [&]() {
+			{ "gateway.events.packageScopeId", [&]() {
 				return ValidateTwoStringFields(payload, "packageScopeId", "event", issue, "`gateway.events.packageScopeId` requires `packageScopeId` string and `event` string.");
 			} },
-           { "gateway.events.archiveScopeId", [&]() {
+			{ "gateway.events.archiveScopeId", [&]() {
 				return ValidateTwoStringFields(payload, "archiveScopeId", "event", issue, "`gateway.events.archiveScopeId` requires `archiveScopeId` string and `event` string.");
 			} },
-           { "gateway.events.manifestScopeId", [&]() {
+			{ "gateway.events.manifestScopeId", [&]() {
 				return ValidateTwoStringFields(payload, "manifestScopeId", "event", issue, "`gateway.events.manifestScopeId` requires `manifestScopeId` string and `event` string.");
 			} },
-           { "gateway.events.profileScopeId", [&]() {
+			{ "gateway.events.profileScopeId", [&]() {
 				return ValidateTwoStringFields(payload, "profileScopeId", "event", issue, "`gateway.events.profileScopeId` requires `profileScopeId` string and `event` string.");
 			} },
-           { "gateway.events.templateScopeId", [&]() {
+			{ "gateway.events.templateScopeId", [&]() {
 				return ValidateTwoStringFields(payload, "templateScopeId", "event", issue, "`gateway.events.templateScopeId` requires `templateScopeId` string and `event` string.");
 			} },
-           { "gateway.events.revisionScopeId", [&]() {
+			{ "gateway.events.revisionScopeId", [&]() {
 				return ValidateTwoStringFields(payload, "revisionScopeId", "event", issue, "`gateway.events.revisionScopeId` requires `revisionScopeId` string and `event` string.");
 			} },
-           { "gateway.events.historyScopeId", [&]() {
+			{ "gateway.events.historyScopeId", [&]() {
 				return ValidateTwoStringFields(payload, "historyScopeId", "event", issue, "`gateway.events.historyScopeId` requires `historyScopeId` string and `event` string.");
 			} },
-           { "gateway.events.snapshotScopeId", [&]() {
+			{ "gateway.events.snapshotScopeId", [&]() {
 				return ValidateTwoStringFields(payload, "snapshotScopeId", "event", issue, "`gateway.events.snapshotScopeId` requires `snapshotScopeId` string and `event` string.");
 			} },
-           { "gateway.events.indexScopeId", [&]() {
+			{ "gateway.events.indexScopeId", [&]() {
 				return ValidateTwoStringFields(payload, "indexScopeId", "event", issue, "`gateway.events.indexScopeId` requires `indexScopeId` string and `event` string.");
 			} },
-           { "gateway.events.markerScopeId", [&]() {
+			{ "gateway.events.markerScopeId", [&]() {
 				return ValidateTwoStringFields(payload, "markerScopeId", "event", issue, "`gateway.events.markerScopeId` requires `markerScopeId` string and `event` string.");
 			} },
 			{ "gateway.events.token", [&]() {
@@ -1490,34 +1502,34 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.transport.policy.bundleScopeId", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "bundleScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.bundleScopeId` requires `bundleScopeScopedId` boolean, `version` number, and `applied` boolean.");
 			} },
-           { "gateway.transport.policy.packageScopeId", [&]() {
+			{ "gateway.transport.policy.packageScopeId", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "packageScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.packageScopeId` requires `packageScopeScopedId` boolean, `version` number, and `applied` boolean.");
 			} },
-           { "gateway.transport.policy.archiveScopeId", [&]() {
+			{ "gateway.transport.policy.archiveScopeId", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "archiveScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.archiveScopeId` requires `archiveScopeScopedId` boolean, `version` number, and `applied` boolean.");
 			} },
-           { "gateway.transport.policy.manifestScopeId", [&]() {
+			{ "gateway.transport.policy.manifestScopeId", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "manifestScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.manifestScopeId` requires `manifestScopeScopedId` boolean, `version` number, and `applied` boolean.");
 			} },
-           { "gateway.transport.policy.profileScopeId", [&]() {
+			{ "gateway.transport.policy.profileScopeId", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "profileScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.profileScopeId` requires `profileScopeScopedId` boolean, `version` number, and `applied` boolean.");
 			} },
-           { "gateway.transport.policy.templateScopeId", [&]() {
+			{ "gateway.transport.policy.templateScopeId", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "templateScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.templateScopeId` requires `templateScopeScopedId` boolean, `version` number, and `applied` boolean.");
 			} },
-           { "gateway.transport.policy.revisionScopeId", [&]() {
+			{ "gateway.transport.policy.revisionScopeId", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "revisionScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.revisionScopeId` requires `revisionScopeScopedId` boolean, `version` number, and `applied` boolean.");
 			} },
-           { "gateway.transport.policy.historyScopeId", [&]() {
+			{ "gateway.transport.policy.historyScopeId", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "historyScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.historyScopeId` requires `historyScopeScopedId` boolean, `version` number, and `applied` boolean.");
 			} },
-           { "gateway.transport.policy.snapshotScopeId", [&]() {
+			{ "gateway.transport.policy.snapshotScopeId", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "snapshotScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.snapshotScopeId` requires `snapshotScopeScopedId` boolean, `version` number, and `applied` boolean.");
 			} },
-           { "gateway.transport.policy.indexScopeId", [&]() {
+			{ "gateway.transport.policy.indexScopeId", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "indexScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.indexScopeId` requires `indexScopeScopedId` boolean, `version` number, and `applied` boolean.");
 			} },
-           { "gateway.transport.policy.markerScopeId", [&]() {
+			{ "gateway.transport.policy.markerScopeId", [&]() {
 				return ValidateBooleanNumberBoolean(payload, "markerScopeScopedId", "version", "applied", issue, "`gateway.transport.policy.markerScopeId` requires `markerScopeScopedId` boolean, `version` number, and `applied` boolean.");
 			} },
 			{ "gateway.transport.policy.sync", [&]() {
@@ -1745,34 +1757,34 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.bundleScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.bundleScopeId` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.packageScopeId", [&]() {
+			{ "gateway.models.packageScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.packageScopeId` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.archiveScopeId", [&]() {
+			{ "gateway.models.archiveScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.archiveScopeId` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.manifestScopeId", [&]() {
+			{ "gateway.models.manifestScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.manifestScopeId` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.profileScopeId", [&]() {
+			{ "gateway.models.profileScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.profileScopeId` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.templateScopeId", [&]() {
+			{ "gateway.models.templateScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.templateScopeId` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.revisionScopeId", [&]() {
+			{ "gateway.models.revisionScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.revisionScopeId` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.historyScopeId", [&]() {
+			{ "gateway.models.historyScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.historyScopeId` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.snapshotScopeId", [&]() {
+			{ "gateway.models.snapshotScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.snapshotScopeId` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.indexScopeId", [&]() {
+			{ "gateway.models.indexScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.indexScopeId` requires `models` array and `count` number.");
 			} },
-           { "gateway.models.markerScopeId", [&]() {
+			{ "gateway.models.markerScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "models", issue, "`gateway.models.markerScopeId` requires `models` array and `count` number.");
 			} },
 			{ "gateway.models.index", [&]() {
@@ -2012,34 +2024,34 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.config.bundleScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.bundleScopeId` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.packageScopeId", [&]() {
+			{ "gateway.config.packageScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.packageScopeId` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.archiveScopeId", [&]() {
+			{ "gateway.config.archiveScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.archiveScopeId` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.manifestScopeId", [&]() {
+			{ "gateway.config.manifestScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.manifestScopeId` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.profileScopeId", [&]() {
+			{ "gateway.config.profileScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.profileScopeId` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.templateScopeId", [&]() {
+			{ "gateway.config.templateScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.templateScopeId` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.revisionScopeId", [&]() {
+			{ "gateway.config.revisionScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.revisionScopeId` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.historyScopeId", [&]() {
+			{ "gateway.config.historyScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.historyScopeId` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.snapshotScopeId", [&]() {
+			{ "gateway.config.snapshotScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.snapshotScopeId` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.indexScopeId", [&]() {
+			{ "gateway.config.indexScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.indexScopeId` requires `sections` array and `count` number.");
 			} },
-           { "gateway.config.markerScopeId", [&]() {
+			{ "gateway.config.markerScopeId", [&]() {
 				return ValidateArrayAndCount(payload, "sections", issue, "`gateway.config.markerScopeId` requires `sections` array and `count` number.");
 			} },
 			{ "gateway.config.index", [&]() {
@@ -2255,34 +2267,34 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.tools.bundleScopeId", [&]() {
 				return ValidateNumericFields(payload, { "bundleScopedId", "fallback", "tools" }, issue, "`gateway.tools.bundleScopeId` requires numeric fields `bundleScopedId`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.packageScopeId", [&]() {
+			{ "gateway.tools.packageScopeId", [&]() {
 				return ValidateNumericFields(payload, { "packageScopedId", "fallback", "tools" }, issue, "`gateway.tools.packageScopeId` requires numeric fields `packageScopedId`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.archiveScopeId", [&]() {
+			{ "gateway.tools.archiveScopeId", [&]() {
 				return ValidateNumericFields(payload, { "archiveScopedId", "fallback", "tools" }, issue, "`gateway.tools.archiveScopeId` requires numeric fields `archiveScopedId`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.manifestScopeId", [&]() {
+			{ "gateway.tools.manifestScopeId", [&]() {
 				return ValidateNumericFields(payload, { "manifestScopedId", "fallback", "tools" }, issue, "`gateway.tools.manifestScopeId` requires numeric fields `manifestScopedId`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.profileScopeId", [&]() {
+			{ "gateway.tools.profileScopeId", [&]() {
 				return ValidateNumericFields(payload, { "profileScopedId", "fallback", "tools" }, issue, "`gateway.tools.profileScopeId` requires numeric fields `profileScopedId`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.templateScopeId", [&]() {
+			{ "gateway.tools.templateScopeId", [&]() {
 				return ValidateNumericFields(payload, { "templateScopedId", "fallback", "tools" }, issue, "`gateway.tools.templateScopeId` requires numeric fields `templateScopedId`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.revisionScopeId", [&]() {
+			{ "gateway.tools.revisionScopeId", [&]() {
 				return ValidateNumericFields(payload, { "revisionScopedId", "fallback", "tools" }, issue, "`gateway.tools.revisionScopeId` requires numeric fields `revisionScopedId`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.historyScopeId", [&]() {
+			{ "gateway.tools.historyScopeId", [&]() {
 				return ValidateNumericFields(payload, { "historyScopedId", "fallback", "tools" }, issue, "`gateway.tools.historyScopeId` requires numeric fields `historyScopedId`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.snapshotScopeId", [&]() {
+			{ "gateway.tools.snapshotScopeId", [&]() {
 				return ValidateNumericFields(payload, { "snapshotScopedId", "fallback", "tools" }, issue, "`gateway.tools.snapshotScopeId` requires numeric fields `snapshotScopedId`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.indexScopeId", [&]() {
+			{ "gateway.tools.indexScopeId", [&]() {
 				return ValidateNumericFields(payload, { "indexScopedId", "fallback", "tools" }, issue, "`gateway.tools.indexScopeId` requires numeric fields `indexScopedId`, `fallback`, and `tools`.");
 			} },
-           { "gateway.tools.markerScopeId", [&]() {
+			{ "gateway.tools.markerScopeId", [&]() {
 				return ValidateNumericFields(payload, { "markerScopedId", "fallback", "tools" }, issue, "`gateway.tools.markerScopeId` requires numeric fields `markerScopedId`, `fallback`, and `tools`.");
 			} },
 			{ "gateway.tools.router", [&]() {
@@ -3015,9 +3027,23 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
-          { "gateway.runtime.orchestration.status", [&]() {
+			{ "gateway.runtime.orchestration.status", [&]() {
 				if (!IsFieldValueType(payload, "state", '"') || !IsFieldValueType(payload, "activeSession", '"') || !IsFieldValueType(payload, "activeAgent", '"') || !IsFieldNumber(payload, "queueDepth")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.status` requires `state`, `activeSession`, `activeAgent`, and `queueDepth` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.queue", [&]() {
+				if (!IsFieldNumber(payload, "queued") || !IsFieldNumber(payload, "running") || !IsFieldNumber(payload, "capacity")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.queue` requires `queued`, `running`, and `capacity` fields.");
+					return false;
+				}
+				return true;
+			} },
+           { "gateway.runtime.orchestration.assign", [&]() {
+				if (!IsFieldValueType(payload, "agentId", '"') || !IsFieldValueType(payload, "sessionId", '"') || !IsFieldBoolean(payload, "assigned")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.assign` requires `agentId`, `sessionId`, and `assigned` fields.");
 					return false;
 				}
 				return true;
@@ -3029,9 +3055,37 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+			{ "gateway.runtime.streaming.sample", [&]() {
+				if (!IsFieldValueType(payload, "chunks", '[') || !IsFieldNumber(payload, "count") || !IsFieldBoolean(payload, "final")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.sample` requires `chunks`, `count`, and `final` fields.");
+					return false;
+				}
+				return true;
+			} },
+         { "gateway.runtime.streaming.window", [&]() {
+				if (!IsFieldNumber(payload, "windowMs") || !IsFieldNumber(payload, "frames") || !IsFieldNumber(payload, "dropped")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.window` requires `windowMs`, `frames`, and `dropped` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.models.failover.status", [&]() {
 				if (!IsFieldValueType(payload, "primary", '"') || !IsFieldValueType(payload, "fallbacks", '[') || !IsFieldNumber(payload, "maxRetries") || !IsFieldValueType(payload, "strategy", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.status` requires `primary`, `fallbacks`, `maxRetries`, and `strategy` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.models.failover.preview", [&]() {
+				if (!IsFieldValueType(payload, "model", '"') || !IsFieldValueType(payload, "attempts", '[') || !IsFieldValueType(payload, "selected", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.preview` requires `model`, `attempts`, and `selected` fields.");
+					return false;
+				}
+				return true;
+			} },
+          { "gateway.models.failover.metrics", [&]() {
+				if (!IsFieldNumber(payload, "attempts") || !IsFieldNumber(payload, "fallbackHits") || !IsFieldNumber(payload, "successRate")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.metrics` requires `attempts`, `fallbackHits`, and `successRate` fields.");
 					return false;
 				}
 				return true;

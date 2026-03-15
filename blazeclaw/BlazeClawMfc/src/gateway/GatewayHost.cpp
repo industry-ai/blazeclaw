@@ -5183,6 +5183,60 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.runtime.orchestration.queue", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"queued\":0,\"running\":0,\"capacity\":8}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.runtime.streaming.sample", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"chunks\":[\"hello\",\"world\"],\"count\":2,\"final\":true}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.models.failover.preview", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"model\":\"default\",\"attempts\":[\"default\",\"reasoner\"],\"selected\":\"default\"}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.runtime.orchestration.assign", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"agentId\":\"default\",\"sessionId\":\"main\",\"assigned\":true}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.runtime.streaming.window", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"windowMs\":5000,\"frames\":2,\"dropped\":0}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.models.failover.metrics", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"attempts\":2,\"fallbackHits\":1,\"successRate\":1.0}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.transport.status", [this](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,

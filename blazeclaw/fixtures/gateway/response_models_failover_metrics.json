@@ -1,0 +1,9 @@
+{
+  "id": "fixture-models-failover-metrics",
+  "ok": true,
+  "result": {
+    "attempts": 2,
+    "fallbackHits": 1,
+    "successRate": 1.0
+  }
+}
