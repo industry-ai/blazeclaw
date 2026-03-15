@@ -38,6 +38,27 @@
         "label": "Microsoft Teams Default",
         "active": true,
         "connected": false
+      },
+      {
+        "channel": "googlechat",
+        "accountId": "googlechat.default",
+        "label": "Google Chat Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "matrix",
+        "accountId": "matrix.default",
+        "label": "Matrix Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "line",
+        "accountId": "line.default",
+        "label": "LINE Default",
+        "active": true,
+        "connected": false
       }
     ]
   }

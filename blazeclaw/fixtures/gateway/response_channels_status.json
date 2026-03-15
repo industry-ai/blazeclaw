@@ -33,6 +33,24 @@
         "label": "Microsoft Teams",
         "connected": false,
         "accounts": 1
+      },
+      {
+        "id": "googlechat",
+        "label": "Google Chat",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "matrix",
+        "label": "Matrix",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "line",
+        "label": "LINE",
+        "connected": false,
+        "accounts": 1
       }
     ]
   }

@@ -27,8 +27,23 @@
         "id": "msteams",
         "label": "Microsoft Teams",
         "defaultAccountId": "msteams.default"
+      },
+      {
+        "id": "googlechat",
+        "label": "Google Chat",
+        "defaultAccountId": "googlechat.default"
+      },
+      {
+        "id": "matrix",
+        "label": "Matrix",
+        "defaultAccountId": "matrix.default"
+      },
+      {
+        "id": "line",
+        "label": "LINE",
+        "defaultAccountId": "line.default"
       }
     ],
-    "count": 5
+    "count": 8
   }
 }

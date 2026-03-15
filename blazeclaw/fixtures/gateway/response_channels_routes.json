@@ -33,6 +33,24 @@
         "accountId": "msteams.default",
         "agentId": "default",
         "sessionId": "main"
+      },
+      {
+        "channel": "googlechat",
+        "accountId": "googlechat.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "matrix",
+        "accountId": "matrix.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "line",
+        "accountId": "line.default",
+        "agentId": "default",
+        "sessionId": "main"
       }
     ]
   }

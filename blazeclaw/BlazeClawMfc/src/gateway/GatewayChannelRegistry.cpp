@@ -10,11 +10,34 @@ namespace blazeclaw::gateway {
 	namespace {
 		std::vector<ChannelAdapterDescriptor> BuildSeedAdapters() {
 			return {
-                ChannelAdapterDescriptor{.id = "whatsapp", .label = "WhatsApp", .defaultAccountId = "whatsapp.default"},
+                ChannelAdapterDescriptor{
+					.id = "whatsapp",
+					.label = "WhatsApp",
+					.defaultAccountId = "whatsapp.default",
+				},
 				ChannelAdapterDescriptor{.id = "telegram", .label = "Telegram", .defaultAccountId = "telegram.default"},
-               ChannelAdapterDescriptor{.id = "slack", .label = "Slack", .defaultAccountId = "slack.default"},
+              ChannelAdapterDescriptor{.id = "slack", .label = "Slack", .defaultAccountId = "slack.default"},
 				ChannelAdapterDescriptor{.id = "discord", .label = "Discord", .defaultAccountId = "discord.default"},
-              ChannelAdapterDescriptor{.id = "msteams", .label = "Microsoft Teams", .defaultAccountId = "msteams.default"},
+             ChannelAdapterDescriptor{
+					.id = "msteams",
+					.label = "Microsoft Teams",
+					.defaultAccountId = "msteams.default",
+				},
+				ChannelAdapterDescriptor{
+					.id = "googlechat",
+					.label = "Google Chat",
+					.defaultAccountId = "googlechat.default",
+				},
+				ChannelAdapterDescriptor{
+					.id = "matrix",
+					.label = "Matrix",
+					.defaultAccountId = "matrix.default",
+				},
+				ChannelAdapterDescriptor{
+					.id = "line",
+					.label = "LINE",
+					.defaultAccountId = "line.default",
+				},
 			};
 		}
 	}
