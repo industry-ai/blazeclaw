@@ -576,10 +576,16 @@ namespace blazeclaw::gateway::protocol {
             "gateway.models.snapshotScopeId",
             "gateway.models.indexScopeId",
             "gateway.models.markerScopeId",
+            "gateway.models.failover.status",
+			"gateway.runtime.orchestration.status",
+			"gateway.runtime.streaming.status",
 			"gateway.config.getKey",
 			"gateway.transport.endpoint.exists",
 			"gateway.tick",
 			"gateway.health",
+         "gateway.runtime.orchestration.status",
+			"gateway.runtime.streaming.status",
+			"gateway.models.failover.status",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3005,6 +3011,27 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.health.details", [&]() {
 				if (!IsFieldValueType(payload, "status", '"') || !IsFieldBoolean(payload, "running") || !IsFieldValueType(payload, "transport", '{') || !IsFieldValueType(payload, "endpoint", '"') || !IsFieldNumber(payload, "connections")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.health.details` requires `status`, `running`, and `transport.{endpoint,connections}` fields.");
+					return false;
+				}
+				return true;
+			} },
+          { "gateway.runtime.orchestration.status", [&]() {
+				if (!IsFieldValueType(payload, "state", '"') || !IsFieldValueType(payload, "activeSession", '"') || !IsFieldValueType(payload, "activeAgent", '"') || !IsFieldNumber(payload, "queueDepth")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.status` requires `state`, `activeSession`, `activeAgent`, and `queueDepth` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.status", [&]() {
+				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.status` requires `enabled`, `mode`, and `heartbeatMs` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.models.failover.status", [&]() {
+				if (!IsFieldValueType(payload, "primary", '"') || !IsFieldValueType(payload, "fallbacks", '[') || !IsFieldNumber(payload, "maxRetries") || !IsFieldValueType(payload, "strategy", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.status` requires `primary`, `fallbacks`, `maxRetries`, and `strategy` fields.");
 					return false;
 				}
 				return true;

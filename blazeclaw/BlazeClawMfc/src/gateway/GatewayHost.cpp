@@ -5147,6 +5147,42 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.runtime.orchestration.status", [this](const protocol::RequestFrame& request) {
+			const auto sessions = m_sessionRegistry.List();
+			const auto agents = m_agentRegistry.List();
+			const std::string activeSession = sessions.empty() ? "main" : sessions.front().id;
+			const std::string activeAgent = agents.empty() ? "default" : agents.front().id;
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"state\":\"idle\",\"activeSession\":\"" +
+					EscapeJson(activeSession) + "\",\"activeAgent\":\"" +
+					EscapeJson(activeAgent) + "\",\"queueDepth\":0}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.runtime.streaming.status", [this](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"enabled\":" +
+					std::string(m_runtimeAgentStreaming ? "true" : "false") +
+					",\"mode\":\"chunked\",\"heartbeatMs\":1500}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.models.failover.status", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"primary\":\"default\",\"fallbacks\":[\"reasoner\"],\"maxRetries\":2,\"strategy\":\"ordered\"}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.transport.status", [this](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
