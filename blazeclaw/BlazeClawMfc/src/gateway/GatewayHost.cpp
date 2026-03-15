@@ -5187,12 +5187,42 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.security.dmPairing.status", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson =
+					"{\"enabled\":false,\"policy\":\"manual\",\"pending\":0}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.security.allowlists.entries", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson =
+					"{\"entries\":[],\"count\":0,\"source\":\"runtime\"}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.security.logging.status", [](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
 				.payloadJson =
 					"{\"enabled\":true,\"level\":\"info\",\"diagnostics\":\"seeded\"}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.security.diagnostics.status", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson =
+					"{\"enabled\":true,\"sinks\":[\"memory\"],\"count\":1}",
 				.error = std::nullopt,
 			};
 			});
