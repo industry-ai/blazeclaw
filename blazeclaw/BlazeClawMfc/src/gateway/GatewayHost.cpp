@@ -5177,6 +5177,36 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.security.access.status", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson =
+					"{\"mode\":\"allowlist\",\"enabled\":false,\"entries\":0}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.security.logging.status", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson =
+					"{\"enabled\":true,\"level\":\"info\",\"diagnostics\":\"seeded\"}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.ops.doctor.status", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson =
+					"{\"healthy\":true,\"checks\":3,\"doctorAvailable\":true}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.runtime.orchestration.status", [this](const protocol::RequestFrame& request) {
 			const auto sessions = m_sessionRegistry.List();
 			const auto agents = m_agentRegistry.List();
