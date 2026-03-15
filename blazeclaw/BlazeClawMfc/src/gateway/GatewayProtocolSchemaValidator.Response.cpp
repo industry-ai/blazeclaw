@@ -580,14 +580,17 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.preview",
          "gateway.models.failover.metrics",
          "gateway.models.failover.simulate",
+         "gateway.models.failover.audit",
 			"gateway.runtime.orchestration.status",
 			"gateway.runtime.orchestration.queue",
          "gateway.runtime.orchestration.assign",
          "gateway.runtime.orchestration.rebalance",
+         "gateway.runtime.orchestration.drain",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
             "gateway.runtime.streaming.window",
             "gateway.runtime.streaming.backpressure",
+            "gateway.runtime.streaming.replay",
 			"gateway.config.getKey",
 			"gateway.transport.endpoint.exists",
 			"gateway.tick",
@@ -596,14 +599,17 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.queue",
          "gateway.runtime.orchestration.assign",
          "gateway.runtime.orchestration.rebalance",
+         "gateway.runtime.orchestration.drain",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
            "gateway.runtime.streaming.window",
            "gateway.runtime.streaming.backpressure",
+           "gateway.runtime.streaming.replay",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
          "gateway.models.failover.metrics",
          "gateway.models.failover.simulate",
+         "gateway.models.failover.audit",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3061,6 +3067,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+           { "gateway.runtime.orchestration.drain", [&]() {
+				if (!IsFieldNumber(payload, "drained") || !IsFieldNumber(payload, "remaining") || !IsFieldValueType(payload, "reason", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.drain` requires `drained`, `remaining`, and `reason` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.status` requires `enabled`, `mode`, and `heartbeatMs` fields.");
@@ -3089,6 +3102,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+         { "gateway.runtime.streaming.replay", [&]() {
+				if (!IsFieldNumber(payload, "replayed") || !IsFieldValueType(payload, "cursor", '"') || !IsFieldBoolean(payload, "complete")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.replay` requires `replayed`, `cursor`, and `complete` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.models.failover.status", [&]() {
 				if (!IsFieldValueType(payload, "primary", '"') || !IsFieldValueType(payload, "fallbacks", '[') || !IsFieldNumber(payload, "maxRetries") || !IsFieldValueType(payload, "strategy", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.status` requires `primary`, `fallbacks`, `maxRetries`, and `strategy` fields.");
@@ -3113,6 +3133,13 @@ namespace blazeclaw::gateway::protocol {
           { "gateway.models.failover.simulate", [&]() {
 				if (!IsFieldValueType(payload, "requested", '"') || !IsFieldValueType(payload, "resolved", '"') || !IsFieldBoolean(payload, "usedFallback")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.simulate` requires `requested`, `resolved`, and `usedFallback` fields.");
+					return false;
+				}
+				return true;
+			} },
+          { "gateway.models.failover.audit", [&]() {
+				if (!IsFieldNumber(payload, "entries") || !IsFieldValueType(payload, "lastModel", '"') || !IsFieldValueType(payload, "lastOutcome", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.audit` requires `entries`, `lastModel`, and `lastOutcome` fields.");
 					return false;
 				}
 				return true;

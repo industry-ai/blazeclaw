@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-orchestration-drain",
+  "ok": true,
+  "result": {
+    "drained": 0,
+    "remaining": 0,
+    "reason": "idle"
+  }
+}

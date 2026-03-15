@@ -1976,6 +1976,8 @@ namespace blazeclaw::gateway::protocol {
           "gateway.runtime.orchestration.assign", "gateway.runtime.streaming.window", "gateway.models.failover.metrics",
           "gateway.runtime.orchestration.rebalance", "gateway.runtime.streaming.backpressure",
 			"gateway.models.failover.simulate",
+          "gateway.runtime.orchestration.drain", "gateway.runtime.streaming.replay",
+			"gateway.models.failover.audit",
 			"gateway.channels.adapters.list", "gateway.tools.executions.list",
 			"gateway.config.sections", "gateway.config.schema", "gateway.config.validate", "gateway.config.audit",
 			"gateway.config.rollback", "gateway.config.backup", "gateway.config.diff", "gateway.config.snapshot",

@@ -1,0 +1,9 @@
+{
+  "id": "fixture-models-failover-audit",
+  "ok": true,
+  "result": {
+    "entries": 2,
+    "lastModel": "default",
+    "lastOutcome": "primary"
+  }
+}
