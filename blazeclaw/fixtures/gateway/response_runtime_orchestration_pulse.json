@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-orchestration-pulse",
+  "ok": true,
+  "result": {
+    "pulse": 1,
+    "driftMs": 0,
+    "state": "steady"
+  }
+}

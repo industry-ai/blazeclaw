@@ -584,6 +584,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.models.failover.policy",
          "gateway.models.failover.history",
          "gateway.models.failover.recent",
+         "gateway.models.failover.window",
 			"gateway.runtime.orchestration.status",
 			"gateway.runtime.orchestration.queue",
          "gateway.runtime.orchestration.assign",
@@ -592,6 +593,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.runtime.orchestration.snapshot",
          "gateway.runtime.orchestration.timeline",
          "gateway.runtime.orchestration.heartbeat",
+         "gateway.runtime.orchestration.pulse",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
             "gateway.runtime.streaming.window",
@@ -600,6 +602,7 @@ namespace blazeclaw::gateway::protocol {
             "gateway.runtime.streaming.cursor",
             "gateway.runtime.streaming.metrics",
             "gateway.runtime.streaming.health",
+            "gateway.runtime.streaming.snapshot",
 			"gateway.config.getKey",
 			"gateway.transport.endpoint.exists",
 			"gateway.tick",
@@ -612,6 +615,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.runtime.orchestration.snapshot",
          "gateway.runtime.orchestration.timeline",
          "gateway.runtime.orchestration.heartbeat",
+         "gateway.runtime.orchestration.pulse",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
            "gateway.runtime.streaming.window",
@@ -620,6 +624,7 @@ namespace blazeclaw::gateway::protocol {
            "gateway.runtime.streaming.cursor",
            "gateway.runtime.streaming.metrics",
            "gateway.runtime.streaming.health",
+           "gateway.runtime.streaming.snapshot",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
          "gateway.models.failover.metrics",
@@ -628,6 +633,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.models.failover.policy",
          "gateway.models.failover.history",
          "gateway.models.failover.recent",
+         "gateway.models.failover.window",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3113,6 +3119,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+           { "gateway.runtime.orchestration.pulse", [&]() {
+				if (!IsFieldNumber(payload, "pulse") || !IsFieldNumber(payload, "driftMs") || !IsFieldValueType(payload, "state", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.pulse` requires `pulse`, `driftMs`, and `state` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.status` requires `enabled`, `mode`, and `heartbeatMs` fields.");
@@ -3169,6 +3182,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+         { "gateway.runtime.streaming.snapshot", [&]() {
+				if (!IsFieldNumber(payload, "frames") || !IsFieldValueType(payload, "cursor", '"') || !IsFieldBoolean(payload, "sealed")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.snapshot` requires `frames`, `cursor`, and `sealed` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.models.failover.status", [&]() {
 				if (!IsFieldValueType(payload, "primary", '"') || !IsFieldValueType(payload, "fallbacks", '[') || !IsFieldNumber(payload, "maxRetries") || !IsFieldValueType(payload, "strategy", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.status` requires `primary`, `fallbacks`, `maxRetries`, and `strategy` fields.");
@@ -3221,6 +3241,13 @@ namespace blazeclaw::gateway::protocol {
           { "gateway.models.failover.recent", [&]() {
 				if (!IsFieldValueType(payload, "models", '[') || !IsFieldNumber(payload, "count") || !IsFieldValueType(payload, "active", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.recent` requires `models`, `count`, and `active` fields.");
+					return false;
+				}
+				return true;
+			} },
+          { "gateway.models.failover.window", [&]() {
+				if (!IsFieldNumber(payload, "windowSec") || !IsFieldNumber(payload, "attempts") || !IsFieldNumber(payload, "fallbacks")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.window` requires `windowSec`, `attempts`, and `fallbacks` fields.");
 					return false;
 				}
 				return true;
