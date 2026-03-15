@@ -14,6 +14,8 @@ namespace blazeclaw::gateway::protocol {
 		constexpr const char* kAccountFieldTokens[] = { "channel", "accountId", "label", "active", "connected" };
 		constexpr const char* kChannelFieldTokens[] = { "id", "label", "connected", "accounts" };
 		constexpr const char* kToolFieldTokens[] = { "id", "label", "category", "enabled" };
+      constexpr const char* kToolExecutionFieldTokens[] = { "tool", "executed", "status", "output", "argsProvided" };
+		constexpr const char* kChannelAdapterFieldTokens[] = { "id", "label", "defaultAccountId" };
 		constexpr const char* kFileFieldTokens[] = { "path", "size", "updatedMs", "content" };
 		constexpr const char* kFileListFieldTokens[] = { "path", "size", "updatedMs" };
 		constexpr const char* kCatalogEventNames[] = {
@@ -360,6 +362,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.channels.status.get",
 			"gateway.channels.status.exists",
 			"gateway.channels.status.count",
+            "gateway.channels.adapters.list",
 			"gateway.channels.route.exists",
 			"gateway.channels.route.get",
 			"gateway.channels.route.restore",
@@ -374,6 +377,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.tools.count",
 			"gateway.tools.get",
 			"gateway.tools.list",
+         "gateway.tools.executions.list",
 			"gateway.tools.categories",
 			"gateway.tools.stats",
 			"gateway.tools.health",
@@ -860,6 +864,14 @@ namespace blazeclaw::gateway::protocol {
 					issue,
 					"`gateway.channels.accounts` requires account entries with `channel`, `accountId`, `label`, `active`, and `connected` fields.");
 			} },
+          { "gateway.channels.adapters.list", [&]() {
+				return ValidateArrayWithOptionalEntryTokens(
+					payload,
+					"adapters",
+					kChannelAdapterFieldTokens,
+					issue,
+					"`gateway.channels.adapters.list` requires adapter entries with `id`, `label`, and `defaultAccountId` fields.");
+			} },
 			{ "gateway.channels.accounts.get", [&]() {
 				return ValidateObjectWithTokens(
 					payload,
@@ -867,6 +879,14 @@ namespace blazeclaw::gateway::protocol {
 					kAccountFieldTokens,
 					issue,
 					"`gateway.channels.accounts.get` requires account fields `channel`, `accountId`, `label`, `active`, and `connected`.");
+			} },
+            { "gateway.tools.executions.list", [&]() {
+				return ValidateArrayWithOptionalEntryTokens(
+					payload,
+					"executions",
+					kToolExecutionFieldTokens,
+					issue,
+					"`gateway.tools.executions.list` requires execution entries with `tool`, `executed`, `status`, `output`, and `argsProvided` fields.");
 			} },
 			{ "gateway.channels.status.get", [&]() {
 				return ValidateObjectWithTokens(

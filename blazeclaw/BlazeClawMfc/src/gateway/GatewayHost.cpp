@@ -169,6 +169,20 @@ namespace blazeclaw::gateway {
 				std::string(tool.enabled ? "true" : "false") + "}";
 		}
 
+		std::string SerializeToolExecution(const ToolExecutionEntry& execution) {
+			return "{\"tool\":\"" + EscapeJson(execution.tool) + "\",\"executed\":" +
+				std::string(execution.executed ? "true" : "false") +
+				",\"status\":\"" + EscapeJson(execution.status) + "\",\"output\":\"" +
+				EscapeJson(execution.output) + "\",\"argsProvided\":" +
+				std::string(execution.argsProvided ? "true" : "false") + "}";
+		}
+
+		std::string SerializeChannelAdapter(const ChannelAdapterDescriptor& adapter) {
+			return "{\"id\":\"" + EscapeJson(adapter.id) + "\",\"label\":\"" +
+				EscapeJson(adapter.label) + "\",\"defaultAccountId\":\"" +
+				EscapeJson(adapter.defaultAccountId) + "\"}";
+		}
+
 		std::string SerializeStringArray(const std::vector<std::string>& values) {
 			std::string json = "[";
 			for (std::size_t i = 0; i < values.size(); ++i) {
@@ -635,11 +649,49 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.channels.adapters.list", [this](const protocol::RequestFrame& request) {
+			const auto adapters = m_channelRegistry.ListAdapters();
+			std::string adaptersJson = "[";
+			for (std::size_t i = 0; i < adapters.size(); ++i) {
+				if (i > 0) {
+					adaptersJson += ",";
+				}
+				adaptersJson += SerializeChannelAdapter(adapters[i]);
+			}
+			adaptersJson += "]";
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"adapters\":" + adaptersJson + ",\"count\":" + std::to_string(adapters.size()) + "}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.events.batch", [](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"batches\":[\"lifecycle\",\"updates\"],\"count\":2}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.executions.list", [this](const protocol::RequestFrame& request) {
+			const auto executions = m_toolRegistry.ListExecutions(20);
+			std::string executionsJson = "[";
+			for (std::size_t i = 0; i < executions.size(); ++i) {
+				if (i > 0) {
+					executionsJson += ",";
+				}
+				executionsJson += SerializeToolExecution(executions[i]);
+			}
+			executionsJson += "]";
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"executions\":" + executionsJson + ",\"count\":" + std::to_string(executions.size()) + "}",
 				.error = std::nullopt,
 			};
 			});

@@ -1,0 +1,19 @@
+{
+  "id": "fixture-channels-adapters-list",
+  "ok": true,
+  "result": {
+    "adapters": [
+      {
+        "id": "telegram",
+        "label": "Telegram",
+        "defaultAccountId": "telegram.default"
+      },
+      {
+        "id": "discord",
+        "label": "Discord",
+        "defaultAccountId": "discord.default"
+      }
+    ],
+    "count": 2
+  }
+}

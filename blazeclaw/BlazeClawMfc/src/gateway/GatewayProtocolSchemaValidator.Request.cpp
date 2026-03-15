@@ -1971,6 +1971,7 @@ namespace blazeclaw::gateway::protocol {
 
 		static const std::unordered_set<std::string> noParamsMethods = {
 			"gateway.protocol.version", "gateway.features.list", "gateway.config.get", "gateway.config.keys",
+          "gateway.channels.adapters.list", "gateway.tools.executions.list",
 			"gateway.config.sections", "gateway.config.schema", "gateway.config.validate", "gateway.config.audit",
 			"gateway.config.rollback", "gateway.config.backup", "gateway.config.diff", "gateway.config.snapshot",
 			"gateway.config.revision", "gateway.config.history", "gateway.config.profile", "gateway.config.template",

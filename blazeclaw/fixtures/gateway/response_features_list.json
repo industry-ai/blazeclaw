@@ -393,6 +393,7 @@
       "gateway.tools.health",
       "gateway.tools.latency",
       "gateway.tools.list",
+      "gateway.tools.executions.list",
       "gateway.tools.binding",
       "gateway.tools.mapper",
       "gateway.tools.metrics",

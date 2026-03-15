@@ -24,6 +24,14 @@ namespace blazeclaw::gateway {
 		std::string output;
 	};
 
+	struct ToolExecutionEntry {
+		std::string tool;
+		bool executed = false;
+		std::string status;
+		std::string output;
+		bool argsProvided = false;
+	};
+
 	class GatewayToolRegistry {
 	public:
 		GatewayToolRegistry();
@@ -32,10 +40,12 @@ namespace blazeclaw::gateway {
 		ToolPreviewResult Preview(const std::string& requestedTool) const;
       ToolExecuteResult Execute(
 			const std::string& requestedTool,
-			const std::optional<std::string>& argsJson = std::nullopt) const;
+           const std::optional<std::string>& argsJson = std::nullopt);
+		std::vector<ToolExecutionEntry> ListExecutions(std::size_t limit = 20) const;
 
 	private:
 		std::unordered_map<std::string, ToolCatalogEntry> m_tools;
+      std::vector<ToolExecutionEntry> m_executionHistory;
 	};
 
 } // namespace blazeclaw::gateway
