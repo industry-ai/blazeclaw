@@ -87,8 +87,23 @@
         "id": "webchat",
         "label": "WebChat",
         "defaultAccountId": "webchat.default"
+      },
+      {
+        "id": "tlon",
+        "label": "Tlon",
+        "defaultAccountId": "tlon.default"
+      },
+      {
+        "id": "twitch",
+        "label": "Twitch",
+        "defaultAccountId": "twitch.default"
+      },
+      {
+        "id": "zalo",
+        "label": "Zalo / Zalo Personal",
+        "defaultAccountId": "zalo.default"
       }
     ],
-    "count": 17
+    "count": 20
   }
 }

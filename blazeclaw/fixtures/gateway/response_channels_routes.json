@@ -105,6 +105,24 @@
         "accountId": "webchat.default",
         "agentId": "default",
         "sessionId": "main"
+      },
+      {
+        "channel": "tlon",
+        "accountId": "tlon.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "twitch",
+        "accountId": "twitch.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "zalo",
+        "accountId": "zalo.default",
+        "agentId": "default",
+        "sessionId": "main"
       }
     ]
   }

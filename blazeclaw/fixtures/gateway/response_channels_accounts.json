@@ -122,6 +122,27 @@
         "label": "WebChat Default",
         "active": true,
         "connected": false
+      },
+      {
+        "channel": "tlon",
+        "accountId": "tlon.default",
+        "label": "Tlon Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "twitch",
+        "accountId": "twitch.default",
+        "label": "Twitch Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "zalo",
+        "accountId": "zalo.default",
+        "label": "Zalo / Zalo Personal Default",
+        "active": true,
+        "connected": false
       }
     ]
   }

@@ -105,6 +105,24 @@
         "label": "WebChat",
         "connected": false,
         "accounts": 1
+      },
+      {
+        "id": "tlon",
+        "label": "Tlon",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "twitch",
+        "label": "Twitch",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "zalo",
+        "label": "Zalo / Zalo Personal",
+        "connected": false,
+        "accounts": 1
       }
     ]
   }

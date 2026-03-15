@@ -83,6 +83,21 @@ namespace blazeclaw::gateway {
 					.label = "WebChat",
 					.defaultAccountId = "webchat.default",
 				},
+              ChannelAdapterDescriptor{
+					.id = "tlon",
+					.label = "Tlon",
+					.defaultAccountId = "tlon.default",
+				},
+				ChannelAdapterDescriptor{
+					.id = "twitch",
+					.label = "Twitch",
+					.defaultAccountId = "twitch.default",
+				},
+				ChannelAdapterDescriptor{
+					.id = "zalo",
+					.label = "Zalo / Zalo Personal",
+					.defaultAccountId = "zalo.default",
+				},
 			};
 		}
 	}
