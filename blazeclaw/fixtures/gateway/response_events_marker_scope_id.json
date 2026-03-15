@@ -1,0 +1,8 @@
+{
+  "id": "fixture-events-marker-scope-id",
+  "ok": true,
+  "result": {
+    "markerScopeId": "marker-scope-id-1",
+    "event": "gateway.session.reset"
+  }
+}

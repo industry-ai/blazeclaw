@@ -1,0 +1,9 @@
+{
+  "id": "fixture-tools-marker-scope-id",
+  "ok": true,
+  "result": {
+    "markerScopedId": 0,
+    "fallback": 0,
+    "tools": 2
+  }
+}
