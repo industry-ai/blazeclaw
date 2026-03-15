@@ -5065,7 +5065,8 @@ namespace blazeclaw::gateway {
 					",\"idle\":" + std::to_string(m_transport.IdleTimeoutCloseCount()) +
 					"},\"closes\":{\"invalidUtf8\":" + std::to_string(m_transport.InvalidUtf8CloseCount()) +
 					",\"messageTooBig\":" + std::to_string(m_transport.MessageTooBigCloseCount()) +
-					",\"extensionRejected\":" + std::to_string(m_transport.ExtensionRejectCount()) + "}}",
+                  ",\"extensionRejected\":" + std::to_string(m_transport.ExtensionRejectCount()) +
+					"},\"compression\":{\"policy\":\"reject\",\"perMessageDeflate\":false}}",
 				.error = std::nullopt,
 			};
 			});

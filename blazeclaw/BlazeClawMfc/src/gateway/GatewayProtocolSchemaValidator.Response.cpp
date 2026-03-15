@@ -2877,8 +2877,12 @@ namespace blazeclaw::gateway::protocol {
 				const bool hasCoreFields = IsFieldBoolean(payload, "running") && IsFieldValueType(payload, "endpoint", '"') && IsFieldNumber(payload, "connections");
 				const bool hasTimeoutFields = IsFieldValueType(payload, "timeouts", '{') && IsFieldNumber(payload, "handshake") && IsFieldNumber(payload, "idle");
 				const bool hasCloseFields = IsFieldValueType(payload, "closes", '{') && IsFieldNumber(payload, "invalidUtf8") && IsFieldNumber(payload, "messageTooBig") && IsFieldNumber(payload, "extensionRejected");
-				if (!(hasCoreFields && hasTimeoutFields && hasCloseFields)) {
-					SetIssue(issue, "schema_invalid_response", "`gateway.transport.status` requires `running`, `endpoint`, `connections`, `timeouts.{handshake,idle}`, and `closes.{invalidUtf8,messageTooBig,extensionRejected}`.");
+               const bool hasCompressionFields =
+					IsFieldValueType(payload, "compression", '{') &&
+					IsFieldValueType(payload, "policy", '"') &&
+					IsFieldBoolean(payload, "perMessageDeflate");
+				if (!(hasCoreFields && hasTimeoutFields && hasCloseFields && hasCompressionFields)) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.transport.status` requires `running`, `endpoint`, `connections`, `timeouts.{handshake,idle}`, `closes.{invalidUtf8,messageTooBig,extensionRejected}`, and `compression.{policy,perMessageDeflate}`.");
 					return false;
 				}
 				return true;
