@@ -1,0 +1,12 @@
+{
+  "id": "fixture-models-failover-profile",
+  "ok": true,
+  "result": {
+    "profile": "balanced",
+    "weights": [
+      70,
+      30
+    ],
+    "version": 1
+  }
+}

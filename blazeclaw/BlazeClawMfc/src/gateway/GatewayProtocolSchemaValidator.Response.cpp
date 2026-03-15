@@ -578,26 +578,28 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.markerScopeId",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
-         "gateway.models.failover.metrics",
-         "gateway.models.failover.simulate",
-         "gateway.models.failover.audit",
-         "gateway.models.failover.policy",
-         "gateway.models.failover.history",
-         "gateway.models.failover.recent",
-         "gateway.models.failover.window",
-         "gateway.models.failover.digest",
-         "gateway.models.failover.ledger",
+			"gateway.models.failover.metrics",
+			"gateway.models.failover.simulate",
+			"gateway.models.failover.audit",
+			"gateway.models.failover.policy",
+			"gateway.models.failover.history",
+			"gateway.models.failover.recent",
+			"gateway.models.failover.window",
+			"gateway.models.failover.digest",
+			"gateway.models.failover.ledger",
+			"gateway.models.failover.profile",
 			"gateway.runtime.orchestration.status",
 			"gateway.runtime.orchestration.queue",
-         "gateway.runtime.orchestration.assign",
-         "gateway.runtime.orchestration.rebalance",
-         "gateway.runtime.orchestration.drain",
-         "gateway.runtime.orchestration.snapshot",
-         "gateway.runtime.orchestration.timeline",
-         "gateway.runtime.orchestration.heartbeat",
-         "gateway.runtime.orchestration.pulse",
-         "gateway.runtime.orchestration.cadence",
-         "gateway.runtime.orchestration.beacon",
+			"gateway.runtime.orchestration.assign",
+			"gateway.runtime.orchestration.rebalance",
+			"gateway.runtime.orchestration.drain",
+			"gateway.runtime.orchestration.snapshot",
+			"gateway.runtime.orchestration.timeline",
+			"gateway.runtime.orchestration.heartbeat",
+			"gateway.runtime.orchestration.pulse",
+			"gateway.runtime.orchestration.cadence",
+			"gateway.runtime.orchestration.beacon",
+			"gateway.runtime.orchestration.epoch",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
             "gateway.runtime.streaming.window",
@@ -609,43 +611,47 @@ namespace blazeclaw::gateway::protocol {
             "gateway.runtime.streaming.snapshot",
             "gateway.runtime.streaming.watermark",
             "gateway.runtime.streaming.checkpoint",
+            "gateway.runtime.streaming.resume",
 			"gateway.config.getKey",
 			"gateway.transport.endpoint.exists",
 			"gateway.tick",
 			"gateway.health",
 			"gateway.runtime.orchestration.status",
 			"gateway.runtime.orchestration.queue",
-         "gateway.runtime.orchestration.assign",
-         "gateway.runtime.orchestration.rebalance",
-         "gateway.runtime.orchestration.drain",
-         "gateway.runtime.orchestration.snapshot",
-         "gateway.runtime.orchestration.timeline",
-         "gateway.runtime.orchestration.heartbeat",
-         "gateway.runtime.orchestration.pulse",
-         "gateway.runtime.orchestration.cadence",
-         "gateway.runtime.orchestration.beacon",
+			"gateway.runtime.orchestration.assign",
+			"gateway.runtime.orchestration.rebalance",
+			"gateway.runtime.orchestration.drain",
+			"gateway.runtime.orchestration.snapshot",
+			"gateway.runtime.orchestration.timeline",
+			"gateway.runtime.orchestration.heartbeat",
+			"gateway.runtime.orchestration.pulse",
+			"gateway.runtime.orchestration.cadence",
+			"gateway.runtime.orchestration.beacon",
+			"gateway.runtime.orchestration.epoch",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
-           "gateway.runtime.streaming.window",
-           "gateway.runtime.streaming.backpressure",
-           "gateway.runtime.streaming.replay",
-           "gateway.runtime.streaming.cursor",
-           "gateway.runtime.streaming.metrics",
-           "gateway.runtime.streaming.health",
-           "gateway.runtime.streaming.snapshot",
-           "gateway.runtime.streaming.watermark",
-           "gateway.runtime.streaming.checkpoint",
+			"gateway.runtime.streaming.window",
+			"gateway.runtime.streaming.backpressure",
+			"gateway.runtime.streaming.replay",
+			"gateway.runtime.streaming.cursor",
+			"gateway.runtime.streaming.metrics",
+			"gateway.runtime.streaming.health",
+			"gateway.runtime.streaming.snapshot",
+			"gateway.runtime.streaming.watermark",
+			"gateway.runtime.streaming.checkpoint",
+			"gateway.runtime.streaming.resume",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
-         "gateway.models.failover.metrics",
-         "gateway.models.failover.simulate",
-         "gateway.models.failover.audit",
-         "gateway.models.failover.policy",
-         "gateway.models.failover.history",
-         "gateway.models.failover.recent",
-         "gateway.models.failover.window",
-         "gateway.models.failover.digest",
-         "gateway.models.failover.ledger",
+			"gateway.models.failover.metrics",
+			"gateway.models.failover.simulate",
+			"gateway.models.failover.audit",
+			"gateway.models.failover.policy",
+			"gateway.models.failover.history",
+			"gateway.models.failover.recent",
+			"gateway.models.failover.window",
+			"gateway.models.failover.digest",
+			"gateway.models.failover.ledger",
+			"gateway.models.failover.profile",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3089,65 +3095,72 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
-           { "gateway.runtime.orchestration.assign", [&]() {
+			{ "gateway.runtime.orchestration.assign", [&]() {
 				if (!IsFieldValueType(payload, "agentId", '"') || !IsFieldValueType(payload, "sessionId", '"') || !IsFieldBoolean(payload, "assigned")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.assign` requires `agentId`, `sessionId`, and `assigned` fields.");
 					return false;
 				}
 				return true;
 			} },
-           { "gateway.runtime.orchestration.rebalance", [&]() {
+			{ "gateway.runtime.orchestration.rebalance", [&]() {
 				if (!IsFieldNumber(payload, "moved") || !IsFieldNumber(payload, "remaining") || !IsFieldValueType(payload, "strategy", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.rebalance` requires `moved`, `remaining`, and `strategy` fields.");
 					return false;
 				}
 				return true;
 			} },
-           { "gateway.runtime.orchestration.drain", [&]() {
+			{ "gateway.runtime.orchestration.drain", [&]() {
 				if (!IsFieldNumber(payload, "drained") || !IsFieldNumber(payload, "remaining") || !IsFieldValueType(payload, "reason", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.drain` requires `drained`, `remaining`, and `reason` fields.");
 					return false;
 				}
 				return true;
 			} },
-           { "gateway.runtime.orchestration.snapshot", [&]() {
+			{ "gateway.runtime.orchestration.snapshot", [&]() {
 				if (!IsFieldNumber(payload, "sessions") || !IsFieldNumber(payload, "agents") || !IsFieldValueType(payload, "active", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.snapshot` requires `sessions`, `agents`, and `active` fields.");
 					return false;
 				}
 				return true;
 			} },
-           { "gateway.runtime.orchestration.timeline", [&]() {
+			{ "gateway.runtime.orchestration.timeline", [&]() {
 				if (!IsFieldValueType(payload, "ticks", '[') || !IsFieldNumber(payload, "count") || !IsFieldValueType(payload, "source", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.timeline` requires `ticks`, `count`, and `source` fields.");
 					return false;
 				}
 				return true;
 			} },
-           { "gateway.runtime.orchestration.heartbeat", [&]() {
+			{ "gateway.runtime.orchestration.heartbeat", [&]() {
 				if (!IsFieldBoolean(payload, "alive") || !IsFieldNumber(payload, "intervalMs") || !IsFieldNumber(payload, "jitterMs")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.heartbeat` requires `alive`, `intervalMs`, and `jitterMs` fields.");
 					return false;
 				}
 				return true;
 			} },
-           { "gateway.runtime.orchestration.pulse", [&]() {
+			{ "gateway.runtime.orchestration.pulse", [&]() {
 				if (!IsFieldNumber(payload, "pulse") || !IsFieldNumber(payload, "driftMs") || !IsFieldValueType(payload, "state", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.pulse` requires `pulse`, `driftMs`, and `state` fields.");
 					return false;
 				}
 				return true;
 			} },
-           { "gateway.runtime.orchestration.cadence", [&]() {
+			{ "gateway.runtime.orchestration.cadence", [&]() {
 				if (!IsFieldNumber(payload, "periodMs") || !IsFieldNumber(payload, "varianceMs") || !IsFieldBoolean(payload, "aligned")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.cadence` requires `periodMs`, `varianceMs`, and `aligned` fields.");
 					return false;
 				}
 				return true;
 			} },
-           { "gateway.runtime.orchestration.beacon", [&]() {
+			{ "gateway.runtime.orchestration.beacon", [&]() {
 				if (!IsFieldValueType(payload, "beacon", '"') || !IsFieldNumber(payload, "seq") || !IsFieldBoolean(payload, "stable")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.beacon` requires `beacon`, `seq`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.epoch", [&]() {
+				if (!IsFieldNumber(payload, "epoch") || !IsFieldNumber(payload, "startedMs") || !IsFieldBoolean(payload, "active")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.epoch` requires `epoch`, `startedMs`, and `active` fields.");
 					return false;
 				}
 				return true;
@@ -3166,65 +3179,72 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
-         { "gateway.runtime.streaming.window", [&]() {
+			{ "gateway.runtime.streaming.window", [&]() {
 				if (!IsFieldNumber(payload, "windowMs") || !IsFieldNumber(payload, "frames") || !IsFieldNumber(payload, "dropped")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.window` requires `windowMs`, `frames`, and `dropped` fields.");
 					return false;
 				}
 				return true;
 			} },
-         { "gateway.runtime.streaming.backpressure", [&]() {
+			{ "gateway.runtime.streaming.backpressure", [&]() {
 				if (!IsFieldNumber(payload, "pressure") || !IsFieldBoolean(payload, "throttled") || !IsFieldNumber(payload, "bufferedFrames")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.backpressure` requires `pressure`, `throttled`, and `bufferedFrames` fields.");
 					return false;
 				}
 				return true;
 			} },
-         { "gateway.runtime.streaming.replay", [&]() {
+			{ "gateway.runtime.streaming.replay", [&]() {
 				if (!IsFieldNumber(payload, "replayed") || !IsFieldValueType(payload, "cursor", '"') || !IsFieldBoolean(payload, "complete")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.replay` requires `replayed`, `cursor`, and `complete` fields.");
 					return false;
 				}
 				return true;
 			} },
-         { "gateway.runtime.streaming.cursor", [&]() {
+			{ "gateway.runtime.streaming.cursor", [&]() {
 				if (!IsFieldValueType(payload, "cursor", '"') || !IsFieldNumber(payload, "lagMs") || !IsFieldBoolean(payload, "hasMore")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.cursor` requires `cursor`, `lagMs`, and `hasMore` fields.");
 					return false;
 				}
 				return true;
 			} },
-         { "gateway.runtime.streaming.metrics", [&]() {
+			{ "gateway.runtime.streaming.metrics", [&]() {
 				if (!IsFieldNumber(payload, "frames") || !IsFieldNumber(payload, "bytes") || !IsFieldNumber(payload, "avgChunkMs")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.metrics` requires `frames`, `bytes`, and `avgChunkMs` fields.");
 					return false;
 				}
 				return true;
 			} },
-         { "gateway.runtime.streaming.health", [&]() {
+			{ "gateway.runtime.streaming.health", [&]() {
 				if (!IsFieldBoolean(payload, "healthy") || !IsFieldNumber(payload, "stalls") || !IsFieldNumber(payload, "recoveries")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.health` requires `healthy`, `stalls`, and `recoveries` fields.");
 					return false;
 				}
 				return true;
 			} },
-         { "gateway.runtime.streaming.snapshot", [&]() {
+			{ "gateway.runtime.streaming.snapshot", [&]() {
 				if (!IsFieldNumber(payload, "frames") || !IsFieldValueType(payload, "cursor", '"') || !IsFieldBoolean(payload, "sealed")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.snapshot` requires `frames`, `cursor`, and `sealed` fields.");
 					return false;
 				}
 				return true;
 			} },
-         { "gateway.runtime.streaming.watermark", [&]() {
+			{ "gateway.runtime.streaming.watermark", [&]() {
 				if (!IsFieldNumber(payload, "high") || !IsFieldNumber(payload, "low") || !IsFieldNumber(payload, "current")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.watermark` requires `high`, `low`, and `current` fields.");
 					return false;
 				}
 				return true;
 			} },
-         { "gateway.runtime.streaming.checkpoint", [&]() {
+			{ "gateway.runtime.streaming.checkpoint", [&]() {
 				if (!IsFieldValueType(payload, "checkpoint", '"') || !IsFieldNumber(payload, "frames") || !IsFieldBoolean(payload, "persisted")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.checkpoint` requires `checkpoint`, `frames`, and `persisted` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.resume", [&]() {
+				if (!IsFieldBoolean(payload, "resumed") || !IsFieldValueType(payload, "cursor", '"') || !IsFieldNumber(payload, "replayed")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.resume` requires `resumed`, `cursor`, and `replayed` fields.");
 					return false;
 				}
 				return true;
@@ -3243,65 +3263,72 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
-          { "gateway.models.failover.metrics", [&]() {
+			{ "gateway.models.failover.metrics", [&]() {
 				if (!IsFieldNumber(payload, "attempts") || !IsFieldNumber(payload, "fallbackHits") || !IsFieldNumber(payload, "successRate")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.metrics` requires `attempts`, `fallbackHits`, and `successRate` fields.");
 					return false;
 				}
 				return true;
 			} },
-          { "gateway.models.failover.simulate", [&]() {
+			{ "gateway.models.failover.simulate", [&]() {
 				if (!IsFieldValueType(payload, "requested", '"') || !IsFieldValueType(payload, "resolved", '"') || !IsFieldBoolean(payload, "usedFallback")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.simulate` requires `requested`, `resolved`, and `usedFallback` fields.");
 					return false;
 				}
 				return true;
 			} },
-          { "gateway.models.failover.audit", [&]() {
+			{ "gateway.models.failover.audit", [&]() {
 				if (!IsFieldNumber(payload, "entries") || !IsFieldValueType(payload, "lastModel", '"') || !IsFieldValueType(payload, "lastOutcome", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.audit` requires `entries`, `lastModel`, and `lastOutcome` fields.");
 					return false;
 				}
 				return true;
 			} },
-          { "gateway.models.failover.policy", [&]() {
+			{ "gateway.models.failover.policy", [&]() {
 				if (!IsFieldValueType(payload, "policy", '"') || !IsFieldNumber(payload, "maxRetries") || !IsFieldBoolean(payload, "stickyPrimary")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.policy` requires `policy`, `maxRetries`, and `stickyPrimary` fields.");
 					return false;
 				}
 				return true;
 			} },
-          { "gateway.models.failover.history", [&]() {
+			{ "gateway.models.failover.history", [&]() {
 				if (!IsFieldValueType(payload, "events", '[') || !IsFieldNumber(payload, "count") || !IsFieldValueType(payload, "last", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.history` requires `events`, `count`, and `last` fields.");
 					return false;
 				}
 				return true;
 			} },
-          { "gateway.models.failover.recent", [&]() {
+			{ "gateway.models.failover.recent", [&]() {
 				if (!IsFieldValueType(payload, "models", '[') || !IsFieldNumber(payload, "count") || !IsFieldValueType(payload, "active", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.recent` requires `models`, `count`, and `active` fields.");
 					return false;
 				}
 				return true;
 			} },
-          { "gateway.models.failover.window", [&]() {
+			{ "gateway.models.failover.window", [&]() {
 				if (!IsFieldNumber(payload, "windowSec") || !IsFieldNumber(payload, "attempts") || !IsFieldNumber(payload, "fallbacks")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.window` requires `windowSec`, `attempts`, and `fallbacks` fields.");
 					return false;
 				}
 				return true;
 			} },
-          { "gateway.models.failover.digest", [&]() {
+			{ "gateway.models.failover.digest", [&]() {
 				if (!IsFieldValueType(payload, "digest", '"') || !IsFieldNumber(payload, "entries") || !IsFieldBoolean(payload, "fresh")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.digest` requires `digest`, `entries`, and `fresh` fields.");
 					return false;
 				}
 				return true;
 			} },
-          { "gateway.models.failover.ledger", [&]() {
+			{ "gateway.models.failover.ledger", [&]() {
 				if (!IsFieldNumber(payload, "entries") || !IsFieldNumber(payload, "primaryHits") || !IsFieldNumber(payload, "fallbackHits")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.ledger` requires `entries`, `primaryHits`, and `fallbackHits` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.models.failover.profile", [&]() {
+				if (!IsFieldValueType(payload, "profile", '"') || !IsFieldValueType(payload, "weights", '[') || !IsFieldNumber(payload, "version")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.profile` requires `profile`, `weights`, and `version` fields.");
 					return false;
 				}
 				return true;
