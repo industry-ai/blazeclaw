@@ -579,12 +579,15 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
          "gateway.models.failover.metrics",
+         "gateway.models.failover.simulate",
 			"gateway.runtime.orchestration.status",
 			"gateway.runtime.orchestration.queue",
          "gateway.runtime.orchestration.assign",
+         "gateway.runtime.orchestration.rebalance",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
             "gateway.runtime.streaming.window",
+            "gateway.runtime.streaming.backpressure",
 			"gateway.config.getKey",
 			"gateway.transport.endpoint.exists",
 			"gateway.tick",
@@ -592,12 +595,15 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.status",
 			"gateway.runtime.orchestration.queue",
          "gateway.runtime.orchestration.assign",
+         "gateway.runtime.orchestration.rebalance",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
            "gateway.runtime.streaming.window",
+           "gateway.runtime.streaming.backpressure",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
          "gateway.models.failover.metrics",
+         "gateway.models.failover.simulate",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3048,6 +3054,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+           { "gateway.runtime.orchestration.rebalance", [&]() {
+				if (!IsFieldNumber(payload, "moved") || !IsFieldNumber(payload, "remaining") || !IsFieldValueType(payload, "strategy", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.rebalance` requires `moved`, `remaining`, and `strategy` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.status` requires `enabled`, `mode`, and `heartbeatMs` fields.");
@@ -3069,6 +3082,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+         { "gateway.runtime.streaming.backpressure", [&]() {
+				if (!IsFieldNumber(payload, "pressure") || !IsFieldBoolean(payload, "throttled") || !IsFieldNumber(payload, "bufferedFrames")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.backpressure` requires `pressure`, `throttled`, and `bufferedFrames` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.models.failover.status", [&]() {
 				if (!IsFieldValueType(payload, "primary", '"') || !IsFieldValueType(payload, "fallbacks", '[') || !IsFieldNumber(payload, "maxRetries") || !IsFieldValueType(payload, "strategy", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.status` requires `primary`, `fallbacks`, `maxRetries`, and `strategy` fields.");
@@ -3086,6 +3106,13 @@ namespace blazeclaw::gateway::protocol {
           { "gateway.models.failover.metrics", [&]() {
 				if (!IsFieldNumber(payload, "attempts") || !IsFieldNumber(payload, "fallbackHits") || !IsFieldNumber(payload, "successRate")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.metrics` requires `attempts`, `fallbackHits`, and `successRate` fields.");
+					return false;
+				}
+				return true;
+			} },
+          { "gateway.models.failover.simulate", [&]() {
+				if (!IsFieldValueType(payload, "requested", '"') || !IsFieldValueType(payload, "resolved", '"') || !IsFieldBoolean(payload, "usedFallback")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.simulate` requires `requested`, `resolved`, and `usedFallback` fields.");
 					return false;
 				}
 				return true;

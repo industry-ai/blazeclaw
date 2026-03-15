@@ -1,0 +1,9 @@
+{
+  "id": "fixture-models-failover-simulate",
+  "ok": true,
+  "result": {
+    "requested": "default",
+    "resolved": "default",
+    "usedFallback": false
+  }
+}
