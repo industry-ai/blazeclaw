@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-orchestration-cadence",
+  "ok": true,
+  "result": {
+    "periodMs": 1000,
+    "varianceMs": 5,
+    "aligned": true
+  }
+}

@@ -5435,6 +5435,42 @@ namespace blazeclaw::gateway {
 				};
 			});
 
+		m_dispatcher.Register(
+			"gateway.runtime.orchestration.cadence",
+			[](const protocol::RequestFrame& request) {
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = true,
+					.payloadJson =
+						"{\"periodMs\":1000,\"varianceMs\":5,\"aligned\":true}",
+					.error = std::nullopt,
+				};
+			});
+
+		m_dispatcher.Register(
+			"gateway.runtime.streaming.watermark",
+			[](const protocol::RequestFrame& request) {
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = true,
+					.payloadJson =
+						"{\"high\":16,\"low\":4,\"current\":0}",
+					.error = std::nullopt,
+				};
+			});
+
+		m_dispatcher.Register(
+			"gateway.models.failover.digest",
+			[](const protocol::RequestFrame& request) {
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = true,
+					.payloadJson =
+						"{\"digest\":\"sha256:failover-v1\",\"entries\":2,\"fresh\":true}",
+					.error = std::nullopt,
+				};
+			});
+
 		m_dispatcher.Register("gateway.transport.status", [this](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
