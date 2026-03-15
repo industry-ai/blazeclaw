@@ -59,6 +59,27 @@
         "label": "LINE Default",
         "active": true,
         "connected": false
+      },
+      {
+        "channel": "feishu",
+        "accountId": "feishu.default",
+        "label": "Feishu Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "mattermost",
+        "accountId": "mattermost.default",
+        "label": "Mattermost Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "nextcloudtalk",
+        "accountId": "nextcloudtalk.default",
+        "label": "Nextcloud Talk Default",
+        "active": true,
+        "connected": false
       }
     ]
   }

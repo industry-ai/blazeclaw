@@ -51,6 +51,24 @@
         "label": "LINE",
         "connected": false,
         "accounts": 1
+      },
+      {
+        "id": "feishu",
+        "label": "Feishu",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "mattermost",
+        "label": "Mattermost",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "nextcloudtalk",
+        "label": "Nextcloud Talk",
+        "connected": false,
+        "accounts": 1
       }
     ]
   }

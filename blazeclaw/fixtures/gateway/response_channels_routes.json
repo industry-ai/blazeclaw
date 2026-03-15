@@ -51,6 +51,24 @@
         "accountId": "line.default",
         "agentId": "default",
         "sessionId": "main"
+      },
+      {
+        "channel": "feishu",
+        "accountId": "feishu.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "mattermost",
+        "accountId": "mattermost.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "nextcloudtalk",
+        "accountId": "nextcloudtalk.default",
+        "agentId": "default",
+        "sessionId": "main"
       }
     ]
   }

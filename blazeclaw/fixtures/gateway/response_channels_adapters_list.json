@@ -42,8 +42,23 @@
         "id": "line",
         "label": "LINE",
         "defaultAccountId": "line.default"
+      },
+      {
+        "id": "feishu",
+        "label": "Feishu",
+        "defaultAccountId": "feishu.default"
+      },
+      {
+        "id": "mattermost",
+        "label": "Mattermost",
+        "defaultAccountId": "mattermost.default"
+      },
+      {
+        "id": "nextcloudtalk",
+        "label": "Nextcloud Talk",
+        "defaultAccountId": "nextcloudtalk.default"
       }
     ],
-    "count": 8
+    "count": 11
   }
 }

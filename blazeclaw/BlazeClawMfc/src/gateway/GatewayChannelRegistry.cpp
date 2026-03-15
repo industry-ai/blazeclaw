@@ -38,6 +38,21 @@ namespace blazeclaw::gateway {
 					.label = "LINE",
 					.defaultAccountId = "line.default",
 				},
+              ChannelAdapterDescriptor{
+					.id = "feishu",
+					.label = "Feishu",
+					.defaultAccountId = "feishu.default",
+				},
+				ChannelAdapterDescriptor{
+					.id = "mattermost",
+					.label = "Mattermost",
+					.defaultAccountId = "mattermost.default",
+				},
+				ChannelAdapterDescriptor{
+					.id = "nextcloudtalk",
+					.label = "Nextcloud Talk",
+					.defaultAccountId = "nextcloudtalk.default",
+				},
 			};
 		}
 	}
