@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-orchestration-vector",
+  "ok": true,
+  "result": {
+    "axis": "primary",
+    "magnitude": 1,
+    "normalized": true
+  }
+}

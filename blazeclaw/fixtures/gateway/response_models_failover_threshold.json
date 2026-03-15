@@ -1,0 +1,9 @@
+{
+  "id": "fixture-models-failover-threshold",
+  "ok": true,
+  "result": {
+    "minSuccessRate": 90,
+    "maxFallbacks": 2,
+    "active": true
+  }
+}

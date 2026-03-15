@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-streaming-stability",
+  "ok": true,
+  "result": {
+    "stable": true,
+    "variance": 0,
+    "samples": 2
+  }
+}
