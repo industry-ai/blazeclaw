@@ -586,6 +586,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.models.failover.recent",
          "gateway.models.failover.window",
          "gateway.models.failover.digest",
+         "gateway.models.failover.ledger",
 			"gateway.runtime.orchestration.status",
 			"gateway.runtime.orchestration.queue",
          "gateway.runtime.orchestration.assign",
@@ -596,6 +597,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.runtime.orchestration.heartbeat",
          "gateway.runtime.orchestration.pulse",
          "gateway.runtime.orchestration.cadence",
+         "gateway.runtime.orchestration.beacon",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
             "gateway.runtime.streaming.window",
@@ -606,6 +608,7 @@ namespace blazeclaw::gateway::protocol {
             "gateway.runtime.streaming.health",
             "gateway.runtime.streaming.snapshot",
             "gateway.runtime.streaming.watermark",
+            "gateway.runtime.streaming.checkpoint",
 			"gateway.config.getKey",
 			"gateway.transport.endpoint.exists",
 			"gateway.tick",
@@ -620,6 +623,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.runtime.orchestration.heartbeat",
          "gateway.runtime.orchestration.pulse",
          "gateway.runtime.orchestration.cadence",
+         "gateway.runtime.orchestration.beacon",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
            "gateway.runtime.streaming.window",
@@ -630,6 +634,7 @@ namespace blazeclaw::gateway::protocol {
            "gateway.runtime.streaming.health",
            "gateway.runtime.streaming.snapshot",
            "gateway.runtime.streaming.watermark",
+           "gateway.runtime.streaming.checkpoint",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
          "gateway.models.failover.metrics",
@@ -640,6 +645,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.models.failover.recent",
          "gateway.models.failover.window",
          "gateway.models.failover.digest",
+         "gateway.models.failover.ledger",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3139,6 +3145,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+           { "gateway.runtime.orchestration.beacon", [&]() {
+				if (!IsFieldValueType(payload, "beacon", '"') || !IsFieldNumber(payload, "seq") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.beacon` requires `beacon`, `seq`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.status` requires `enabled`, `mode`, and `heartbeatMs` fields.");
@@ -3209,6 +3222,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+         { "gateway.runtime.streaming.checkpoint", [&]() {
+				if (!IsFieldValueType(payload, "checkpoint", '"') || !IsFieldNumber(payload, "frames") || !IsFieldBoolean(payload, "persisted")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.checkpoint` requires `checkpoint`, `frames`, and `persisted` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.models.failover.status", [&]() {
 				if (!IsFieldValueType(payload, "primary", '"') || !IsFieldValueType(payload, "fallbacks", '[') || !IsFieldNumber(payload, "maxRetries") || !IsFieldValueType(payload, "strategy", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.status` requires `primary`, `fallbacks`, `maxRetries`, and `strategy` fields.");
@@ -3275,6 +3295,13 @@ namespace blazeclaw::gateway::protocol {
           { "gateway.models.failover.digest", [&]() {
 				if (!IsFieldValueType(payload, "digest", '"') || !IsFieldNumber(payload, "entries") || !IsFieldBoolean(payload, "fresh")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.digest` requires `digest`, `entries`, and `fresh` fields.");
+					return false;
+				}
+				return true;
+			} },
+          { "gateway.models.failover.ledger", [&]() {
+				if (!IsFieldNumber(payload, "entries") || !IsFieldNumber(payload, "primaryHits") || !IsFieldNumber(payload, "fallbackHits")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.ledger` requires `entries`, `primaryHits`, and `fallbackHits` fields.");
 					return false;
 				}
 				return true;

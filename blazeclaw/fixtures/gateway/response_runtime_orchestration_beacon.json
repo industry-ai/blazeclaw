@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-orchestration-beacon",
+  "ok": true,
+  "result": {
+    "beacon": "orch-1",
+    "seq": 1,
+    "stable": true
+  }
+}

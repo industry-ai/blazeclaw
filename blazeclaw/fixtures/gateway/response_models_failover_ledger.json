@@ -1,0 +1,9 @@
+{
+  "id": "fixture-models-failover-ledger",
+  "ok": true,
+  "result": {
+    "entries": 2,
+    "primaryHits": 1,
+    "fallbackHits": 1
+  }
+}
