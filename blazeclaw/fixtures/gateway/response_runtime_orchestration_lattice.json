@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-orchestration-lattice",
+  "ok": true,
+  "result": {
+    "layers": 2,
+    "nodes": 4,
+    "stable": true
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "id": "fixture-models-failover-envelope",
+  "ok": true,
+  "result": {
+    "windowSec": 60,
+    "floor": 90,
+    "ceiling": 100
+  }
+}
