@@ -69,6 +69,24 @@
         "label": "Nextcloud Talk",
         "connected": false,
         "accounts": 1
+      },
+      {
+        "id": "signal",
+        "label": "Signal",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "irc",
+        "label": "IRC",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "nostr",
+        "label": "Nostr",
+        "connected": false,
+        "accounts": 1
       }
     ]
   }

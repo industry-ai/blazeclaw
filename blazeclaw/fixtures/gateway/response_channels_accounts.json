@@ -80,6 +80,27 @@
         "label": "Nextcloud Talk Default",
         "active": true,
         "connected": false
+      },
+      {
+        "channel": "signal",
+        "accountId": "signal.default",
+        "label": "Signal Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "irc",
+        "accountId": "irc.default",
+        "label": "IRC Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "nostr",
+        "accountId": "nostr.default",
+        "label": "Nostr Default",
+        "active": true,
+        "connected": false
       }
     ]
   }

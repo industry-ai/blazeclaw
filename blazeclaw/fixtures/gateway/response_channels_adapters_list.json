@@ -57,8 +57,23 @@
         "id": "nextcloudtalk",
         "label": "Nextcloud Talk",
         "defaultAccountId": "nextcloudtalk.default"
+      },
+      {
+        "id": "signal",
+        "label": "Signal",
+        "defaultAccountId": "signal.default"
+      },
+      {
+        "id": "irc",
+        "label": "IRC",
+        "defaultAccountId": "irc.default"
+      },
+      {
+        "id": "nostr",
+        "label": "Nostr",
+        "defaultAccountId": "nostr.default"
       }
     ],
-    "count": 11
+    "count": 14
   }
 }

@@ -53,6 +53,21 @@ namespace blazeclaw::gateway {
 					.label = "Nextcloud Talk",
 					.defaultAccountId = "nextcloudtalk.default",
 				},
+              ChannelAdapterDescriptor{
+					.id = "signal",
+					.label = "Signal",
+					.defaultAccountId = "signal.default",
+				},
+				ChannelAdapterDescriptor{
+					.id = "irc",
+					.label = "IRC",
+					.defaultAccountId = "irc.default",
+				},
+				ChannelAdapterDescriptor{
+					.id = "nostr",
+					.label = "Nostr",
+					.defaultAccountId = "nostr.default",
+				},
 			};
 		}
 	}

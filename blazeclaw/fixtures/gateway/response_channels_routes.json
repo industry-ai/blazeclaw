@@ -69,6 +69,24 @@
         "accountId": "nextcloudtalk.default",
         "agentId": "default",
         "sessionId": "main"
+      },
+      {
+        "channel": "signal",
+        "accountId": "signal.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "irc",
+        "accountId": "irc.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "nostr",
+        "accountId": "nostr.default",
+        "agentId": "default",
+        "sessionId": "main"
       }
     ]
   }
