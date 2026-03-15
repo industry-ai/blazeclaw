@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-streaming-fidelity",
+  "ok": true,
+  "result": {
+    "fidelity": 100,
+    "drops": 0,
+    "verified": true
+  }
+}

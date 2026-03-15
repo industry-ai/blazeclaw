@@ -1989,6 +1989,7 @@ namespace blazeclaw::gateway::protocol {
           "gateway.runtime.orchestration.vector", "gateway.runtime.streaming.stability", "gateway.models.failover.threshold",
           "gateway.runtime.orchestration.matrix", "gateway.runtime.streaming.integrity", "gateway.models.failover.guardrail",
           "gateway.runtime.orchestration.lattice", "gateway.runtime.streaming.coherence", "gateway.models.failover.envelope",
+          "gateway.runtime.orchestration.mesh", "gateway.runtime.streaming.fidelity", "gateway.models.failover.margin",
 			"gateway.config.sections", "gateway.config.schema", "gateway.config.validate", "gateway.config.audit",
 			"gateway.config.rollback", "gateway.config.backup", "gateway.config.diff", "gateway.config.snapshot",
 			"gateway.config.revision", "gateway.config.history", "gateway.config.profile", "gateway.config.template",
