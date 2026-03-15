@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-orchestration-signal",
+  "ok": true,
+  "result": {
+    "signal": "ok",
+    "priority": 1,
+    "latched": true
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-streaming-continuity",
+  "ok": true,
+  "result": {
+    "continuous": true,
+    "gaps": 0,
+    "lastSeq": 2
+  }
+}

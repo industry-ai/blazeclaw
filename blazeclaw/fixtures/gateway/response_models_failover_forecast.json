@@ -1,0 +1,9 @@
+{
+  "id": "fixture-models-failover-forecast",
+  "ok": true,
+  "result": {
+    "windowSec": 60,
+    "projectedFallbacks": 1,
+    "risk": "low"
+  }
+}
