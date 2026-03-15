@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "runtime-orchestration-fabric",
+  "ok": true,
+  "payload": {
+    "threads": 6,
+    "links": 8,
+    "resilient": true
+  }
+}

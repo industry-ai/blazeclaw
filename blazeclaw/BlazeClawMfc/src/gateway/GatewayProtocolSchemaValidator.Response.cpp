@@ -594,6 +594,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.models.failover.guardrail",
          "gateway.models.failover.envelope",
          "gateway.models.failover.margin",
+         "gateway.models.failover.reserve",
 			"gateway.runtime.orchestration.status",
 			"gateway.runtime.orchestration.queue",
 			"gateway.runtime.orchestration.assign",
@@ -612,6 +613,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.runtime.orchestration.matrix",
          "gateway.runtime.orchestration.lattice",
          "gateway.runtime.orchestration.mesh",
+         "gateway.runtime.orchestration.fabric",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
             "gateway.runtime.streaming.window",
@@ -630,6 +632,7 @@ namespace blazeclaw::gateway::protocol {
             "gateway.runtime.streaming.integrity",
             "gateway.runtime.streaming.coherence",
             "gateway.runtime.streaming.fidelity",
+            "gateway.runtime.streaming.accuracy",
 			"gateway.config.getKey",
 			"gateway.transport.endpoint.exists",
 			"gateway.tick",
@@ -652,6 +655,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.runtime.orchestration.matrix",
          "gateway.runtime.orchestration.lattice",
          "gateway.runtime.orchestration.mesh",
+         "gateway.runtime.orchestration.fabric",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -670,6 +674,7 @@ namespace blazeclaw::gateway::protocol {
            "gateway.runtime.streaming.integrity",
            "gateway.runtime.streaming.coherence",
            "gateway.runtime.streaming.fidelity",
+           "gateway.runtime.streaming.accuracy",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -688,6 +693,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.models.failover.guardrail",
          "gateway.models.failover.envelope",
          "gateway.models.failover.margin",
+         "gateway.models.failover.reserve",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3243,6 +3249,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+           { "gateway.runtime.orchestration.fabric", [&]() {
+				if (!IsFieldNumber(payload, "threads") || !IsFieldNumber(payload, "links") || !IsFieldBoolean(payload, "resilient")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.fabric` requires `threads`, `links`, and `resilient` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.status` requires `enabled`, `mode`, and `heartbeatMs` fields.");
@@ -3369,6 +3382,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+         { "gateway.runtime.streaming.accuracy", [&]() {
+				if (!IsFieldNumber(payload, "accuracy") || !IsFieldNumber(payload, "mismatches") || !IsFieldBoolean(payload, "calibrated")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.accuracy` requires `accuracy`, `mismatches`, and `calibrated` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.models.failover.status", [&]() {
 				if (!IsFieldValueType(payload, "primary", '"') || !IsFieldValueType(payload, "fallbacks", '[') || !IsFieldNumber(payload, "maxRetries") || !IsFieldValueType(payload, "strategy", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.status` requires `primary`, `fallbacks`, `maxRetries`, and `strategy` fields.");
@@ -3491,6 +3511,13 @@ namespace blazeclaw::gateway::protocol {
           { "gateway.models.failover.margin", [&]() {
 				if (!IsFieldNumber(payload, "headroom") || !IsFieldNumber(payload, "buffer") || !IsFieldBoolean(payload, "safe")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.margin` requires `headroom`, `buffer`, and `safe` fields.");
+					return false;
+				}
+				return true;
+			} },
+          { "gateway.models.failover.reserve", [&]() {
+				if (!IsFieldNumber(payload, "reserve") || !IsFieldBoolean(payload, "available") || !IsFieldNumber(payload, "priority")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.reserve` requires `reserve`, `available`, and `priority` fields.");
 					return false;
 				}
 				return true;
