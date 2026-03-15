@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-streaming-health",
+  "ok": true,
+  "result": {
+    "healthy": true,
+    "stalls": 0,
+    "recoveries": 0
+  }
+}
