@@ -5207,6 +5207,36 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.nodes.canvas.status", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson =
+					"{\"host\":\"a2ui\",\"available\":false,\"session\":\"none\"}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.platform.cli.status", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson =
+					"{\"desktopActions\":true,\"commandSurface\":\"seeded\",\"coverage\":0}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.platform.web.status", [](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson =
+					"{\"hosting\":false,\"endpoint\":\"\",\"surface\":\"control\"}",
+				.error = std::nullopt,
+			};
+			});
+
 		m_dispatcher.Register("gateway.runtime.orchestration.status", [this](const protocol::RequestFrame& request) {
 			const auto sessions = m_sessionRegistry.List();
 			const auto agents = m_agentRegistry.List();
