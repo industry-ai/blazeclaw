@@ -68,6 +68,21 @@ namespace blazeclaw::gateway {
 					.label = "Nostr",
 					.defaultAccountId = "nostr.default",
 				},
+              ChannelAdapterDescriptor{
+					.id = "bluebubbles",
+					.label = "iMessage / BlueBubbles",
+					.defaultAccountId = "bluebubbles.default",
+				},
+				ChannelAdapterDescriptor{
+					.id = "synologychat",
+					.label = "Synology Chat",
+					.defaultAccountId = "synologychat.default",
+				},
+				ChannelAdapterDescriptor{
+					.id = "webchat",
+					.label = "WebChat",
+					.defaultAccountId = "webchat.default",
+				},
 			};
 		}
 	}

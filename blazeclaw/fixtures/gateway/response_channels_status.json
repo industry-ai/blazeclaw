@@ -87,6 +87,24 @@
         "label": "Nostr",
         "connected": false,
         "accounts": 1
+      },
+      {
+        "id": "bluebubbles",
+        "label": "iMessage / BlueBubbles",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "synologychat",
+        "label": "Synology Chat",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "webchat",
+        "label": "WebChat",
+        "connected": false,
+        "accounts": 1
       }
     ]
   }

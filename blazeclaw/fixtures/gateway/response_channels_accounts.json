@@ -101,6 +101,27 @@
         "label": "Nostr Default",
         "active": true,
         "connected": false
+      },
+      {
+        "channel": "bluebubbles",
+        "accountId": "bluebubbles.default",
+        "label": "iMessage / BlueBubbles Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "synologychat",
+        "accountId": "synologychat.default",
+        "label": "Synology Chat Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "webchat",
+        "accountId": "webchat.default",
+        "label": "WebChat Default",
+        "active": true,
+        "connected": false
       }
     ]
   }

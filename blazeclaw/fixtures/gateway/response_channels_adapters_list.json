@@ -72,8 +72,23 @@
         "id": "nostr",
         "label": "Nostr",
         "defaultAccountId": "nostr.default"
+      },
+      {
+        "id": "bluebubbles",
+        "label": "iMessage / BlueBubbles",
+        "defaultAccountId": "bluebubbles.default"
+      },
+      {
+        "id": "synologychat",
+        "label": "Synology Chat",
+        "defaultAccountId": "synologychat.default"
+      },
+      {
+        "id": "webchat",
+        "label": "WebChat",
+        "defaultAccountId": "webchat.default"
       }
     ],
-    "count": 14
+    "count": 17
   }
 }

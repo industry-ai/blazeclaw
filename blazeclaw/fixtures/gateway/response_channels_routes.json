@@ -87,6 +87,24 @@
         "accountId": "nostr.default",
         "agentId": "default",
         "sessionId": "main"
+      },
+      {
+        "channel": "bluebubbles",
+        "accountId": "bluebubbles.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "synologychat",
+        "accountId": "synologychat.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "webchat",
+        "accountId": "webchat.default",
+        "agentId": "default",
+        "sessionId": "main"
       }
     ]
   }
