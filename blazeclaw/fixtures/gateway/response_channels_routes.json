@@ -1,1 +1,39 @@
-{"type":"res","id":"req-13","ok":true,"payload":{"routes":[{"channel":"telegram","accountId":"telegram.default","agentId":"default","sessionId":"main"},{"channel":"discord","accountId":"discord.default","agentId":"default","sessionId":"main"}]}}
+{
+  "type": "res",
+  "id": "req-13",
+  "ok": true,
+  "payload": {
+    "routes": [
+      {
+        "channel": "whatsapp",
+        "accountId": "whatsapp.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "telegram",
+        "accountId": "telegram.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "slack",
+        "accountId": "slack.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "discord",
+        "accountId": "discord.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "msteams",
+        "accountId": "msteams.default",
+        "agentId": "default",
+        "sessionId": "main"
+      }
+    ]
+  }
+}

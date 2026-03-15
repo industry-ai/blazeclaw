@@ -4,16 +4,31 @@
   "result": {
     "adapters": [
       {
+        "id": "whatsapp",
+        "label": "WhatsApp",
+        "defaultAccountId": "whatsapp.default"
+      },
+      {
         "id": "telegram",
         "label": "Telegram",
         "defaultAccountId": "telegram.default"
       },
       {
+        "id": "slack",
+        "label": "Slack",
+        "defaultAccountId": "slack.default"
+      },
+      {
         "id": "discord",
         "label": "Discord",
         "defaultAccountId": "discord.default"
+      },
+      {
+        "id": "msteams",
+        "label": "Microsoft Teams",
+        "defaultAccountId": "msteams.default"
       }
     ],
-    "count": 2
+    "count": 5
   }
 }

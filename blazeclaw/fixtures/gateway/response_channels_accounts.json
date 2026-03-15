@@ -1,1 +1,44 @@
-{"type":"res","id":"req-19","ok":true,"payload":{"accounts":[{"channel":"telegram","accountId":"telegram.default","label":"Telegram Default","active":true,"connected":false},{"channel":"discord","accountId":"discord.default","label":"Discord Default","active":true,"connected":false}]}}
+{
+  "type": "res",
+  "id": "req-19",
+  "ok": true,
+  "payload": {
+    "accounts": [
+      {
+        "channel": "whatsapp",
+        "accountId": "whatsapp.default",
+        "label": "WhatsApp Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "telegram",
+        "accountId": "telegram.default",
+        "label": "Telegram Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "slack",
+        "accountId": "slack.default",
+        "label": "Slack Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "discord",
+        "accountId": "discord.default",
+        "label": "Discord Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "msteams",
+        "accountId": "msteams.default",
+        "label": "Microsoft Teams Default",
+        "active": true,
+        "connected": false
+      }
+    ]
+  }
+}

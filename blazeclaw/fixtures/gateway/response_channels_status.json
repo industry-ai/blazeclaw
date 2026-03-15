@@ -1,1 +1,39 @@
-{"type":"res","id":"req-10","ok":true,"payload":{"channels":[{"id":"telegram","label":"Telegram","connected":false,"accounts":1},{"id":"discord","label":"Discord","connected":false,"accounts":1}]}}
+{
+  "type": "res",
+  "id": "req-10",
+  "ok": true,
+  "payload": {
+    "channels": [
+      {
+        "id": "whatsapp",
+        "label": "WhatsApp",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "telegram",
+        "label": "Telegram",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "slack",
+        "label": "Slack",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "discord",
+        "label": "Discord",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "msteams",
+        "label": "Microsoft Teams",
+        "connected": false,
+        "accounts": 1
+      }
+    ]
+  }
+}
