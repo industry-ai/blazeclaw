@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-orchestration-snapshot",
+  "ok": true,
+  "result": {
+    "sessions": 2,
+    "agents": 2,
+    "active": "main"
+  }
+}

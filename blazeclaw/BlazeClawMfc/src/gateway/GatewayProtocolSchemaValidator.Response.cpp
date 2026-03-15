@@ -581,16 +581,19 @@ namespace blazeclaw::gateway::protocol {
          "gateway.models.failover.metrics",
          "gateway.models.failover.simulate",
          "gateway.models.failover.audit",
+         "gateway.models.failover.policy",
 			"gateway.runtime.orchestration.status",
 			"gateway.runtime.orchestration.queue",
          "gateway.runtime.orchestration.assign",
          "gateway.runtime.orchestration.rebalance",
          "gateway.runtime.orchestration.drain",
+         "gateway.runtime.orchestration.snapshot",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
             "gateway.runtime.streaming.window",
             "gateway.runtime.streaming.backpressure",
             "gateway.runtime.streaming.replay",
+            "gateway.runtime.streaming.cursor",
 			"gateway.config.getKey",
 			"gateway.transport.endpoint.exists",
 			"gateway.tick",
@@ -600,16 +603,19 @@ namespace blazeclaw::gateway::protocol {
          "gateway.runtime.orchestration.assign",
          "gateway.runtime.orchestration.rebalance",
          "gateway.runtime.orchestration.drain",
+         "gateway.runtime.orchestration.snapshot",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
            "gateway.runtime.streaming.window",
            "gateway.runtime.streaming.backpressure",
            "gateway.runtime.streaming.replay",
+           "gateway.runtime.streaming.cursor",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
          "gateway.models.failover.metrics",
          "gateway.models.failover.simulate",
          "gateway.models.failover.audit",
+         "gateway.models.failover.policy",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3074,6 +3080,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+           { "gateway.runtime.orchestration.snapshot", [&]() {
+				if (!IsFieldNumber(payload, "sessions") || !IsFieldNumber(payload, "agents") || !IsFieldValueType(payload, "active", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.snapshot` requires `sessions`, `agents`, and `active` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.status` requires `enabled`, `mode`, and `heartbeatMs` fields.");
@@ -3109,6 +3122,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+         { "gateway.runtime.streaming.cursor", [&]() {
+				if (!IsFieldValueType(payload, "cursor", '"') || !IsFieldNumber(payload, "lagMs") || !IsFieldBoolean(payload, "hasMore")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.cursor` requires `cursor`, `lagMs`, and `hasMore` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.models.failover.status", [&]() {
 				if (!IsFieldValueType(payload, "primary", '"') || !IsFieldValueType(payload, "fallbacks", '[') || !IsFieldNumber(payload, "maxRetries") || !IsFieldValueType(payload, "strategy", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.status` requires `primary`, `fallbacks`, `maxRetries`, and `strategy` fields.");
@@ -3140,6 +3160,13 @@ namespace blazeclaw::gateway::protocol {
           { "gateway.models.failover.audit", [&]() {
 				if (!IsFieldNumber(payload, "entries") || !IsFieldValueType(payload, "lastModel", '"') || !IsFieldValueType(payload, "lastOutcome", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.audit` requires `entries`, `lastModel`, and `lastOutcome` fields.");
+					return false;
+				}
+				return true;
+			} },
+          { "gateway.models.failover.policy", [&]() {
+				if (!IsFieldValueType(payload, "policy", '"') || !IsFieldNumber(payload, "maxRetries") || !IsFieldBoolean(payload, "stickyPrimary")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.policy` requires `policy`, `maxRetries`, and `stickyPrimary` fields.");
 					return false;
 				}
 				return true;

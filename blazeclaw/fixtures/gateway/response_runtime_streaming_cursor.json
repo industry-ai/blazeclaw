@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-streaming-cursor",
+  "ok": true,
+  "result": {
+    "cursor": "stream-cursor-1",
+    "lagMs": 0,
+    "hasMore": false
+  }
+}
