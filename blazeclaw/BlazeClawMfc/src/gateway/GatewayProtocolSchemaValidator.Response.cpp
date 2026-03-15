@@ -582,18 +582,21 @@ namespace blazeclaw::gateway::protocol {
          "gateway.models.failover.simulate",
          "gateway.models.failover.audit",
          "gateway.models.failover.policy",
+         "gateway.models.failover.history",
 			"gateway.runtime.orchestration.status",
 			"gateway.runtime.orchestration.queue",
          "gateway.runtime.orchestration.assign",
          "gateway.runtime.orchestration.rebalance",
          "gateway.runtime.orchestration.drain",
          "gateway.runtime.orchestration.snapshot",
+         "gateway.runtime.orchestration.timeline",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
             "gateway.runtime.streaming.window",
             "gateway.runtime.streaming.backpressure",
             "gateway.runtime.streaming.replay",
             "gateway.runtime.streaming.cursor",
+            "gateway.runtime.streaming.metrics",
 			"gateway.config.getKey",
 			"gateway.transport.endpoint.exists",
 			"gateway.tick",
@@ -604,18 +607,21 @@ namespace blazeclaw::gateway::protocol {
          "gateway.runtime.orchestration.rebalance",
          "gateway.runtime.orchestration.drain",
          "gateway.runtime.orchestration.snapshot",
+         "gateway.runtime.orchestration.timeline",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
            "gateway.runtime.streaming.window",
            "gateway.runtime.streaming.backpressure",
            "gateway.runtime.streaming.replay",
            "gateway.runtime.streaming.cursor",
+           "gateway.runtime.streaming.metrics",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
          "gateway.models.failover.metrics",
          "gateway.models.failover.simulate",
          "gateway.models.failover.audit",
          "gateway.models.failover.policy",
+         "gateway.models.failover.history",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3087,6 +3093,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+           { "gateway.runtime.orchestration.timeline", [&]() {
+				if (!IsFieldValueType(payload, "ticks", '[') || !IsFieldNumber(payload, "count") || !IsFieldValueType(payload, "source", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.timeline` requires `ticks`, `count`, and `source` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.status` requires `enabled`, `mode`, and `heartbeatMs` fields.");
@@ -3129,6 +3142,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+         { "gateway.runtime.streaming.metrics", [&]() {
+				if (!IsFieldNumber(payload, "frames") || !IsFieldNumber(payload, "bytes") || !IsFieldNumber(payload, "avgChunkMs")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.metrics` requires `frames`, `bytes`, and `avgChunkMs` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.models.failover.status", [&]() {
 				if (!IsFieldValueType(payload, "primary", '"') || !IsFieldValueType(payload, "fallbacks", '[') || !IsFieldNumber(payload, "maxRetries") || !IsFieldValueType(payload, "strategy", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.status` requires `primary`, `fallbacks`, `maxRetries`, and `strategy` fields.");
@@ -3167,6 +3187,13 @@ namespace blazeclaw::gateway::protocol {
           { "gateway.models.failover.policy", [&]() {
 				if (!IsFieldValueType(payload, "policy", '"') || !IsFieldNumber(payload, "maxRetries") || !IsFieldBoolean(payload, "stickyPrimary")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.policy` requires `policy`, `maxRetries`, and `stickyPrimary` fields.");
+					return false;
+				}
+				return true;
+			} },
+          { "gateway.models.failover.history", [&]() {
+				if (!IsFieldValueType(payload, "events", '[') || !IsFieldNumber(payload, "count") || !IsFieldValueType(payload, "last", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.history` requires `events`, `count`, and `last` fields.");
 					return false;
 				}
 				return true;

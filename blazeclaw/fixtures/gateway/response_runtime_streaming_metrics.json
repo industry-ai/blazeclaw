@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-streaming-metrics",
+  "ok": true,
+  "result": {
+    "frames": 2,
+    "bytes": 10,
+    "avgChunkMs": 5
+  }
+}

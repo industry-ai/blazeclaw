@@ -1,0 +1,12 @@
+{
+  "id": "fixture-models-failover-history",
+  "ok": true,
+  "result": {
+    "events": [
+      "primary",
+      "fallback"
+    ],
+    "count": 2,
+    "last": "primary"
+  }
+}
