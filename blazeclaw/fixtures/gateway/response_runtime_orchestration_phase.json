@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-orchestration-phase",
+  "ok": true,
+  "result": {
+    "phase": "steady",
+    "step": 1,
+    "locked": true
+  }
+}

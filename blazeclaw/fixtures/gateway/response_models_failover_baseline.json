@@ -1,0 +1,9 @@
+{
+  "id": "fixture-models-failover-baseline",
+  "ok": true,
+  "result": {
+    "primary": "default",
+    "secondary": "reasoner",
+    "confidence": 100
+  }
+}
