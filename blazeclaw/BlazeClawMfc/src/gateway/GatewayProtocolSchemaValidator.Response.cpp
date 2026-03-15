@@ -591,6 +591,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.models.failover.baseline",
          "gateway.models.failover.forecast",
          "gateway.models.failover.threshold",
+         "gateway.models.failover.guardrail",
 			"gateway.runtime.orchestration.status",
 			"gateway.runtime.orchestration.queue",
 			"gateway.runtime.orchestration.assign",
@@ -606,6 +607,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.runtime.orchestration.phase",
          "gateway.runtime.orchestration.signal",
          "gateway.runtime.orchestration.vector",
+         "gateway.runtime.orchestration.matrix",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
             "gateway.runtime.streaming.window",
@@ -621,6 +623,7 @@ namespace blazeclaw::gateway::protocol {
             "gateway.runtime.streaming.recovery",
             "gateway.runtime.streaming.continuity",
             "gateway.runtime.streaming.stability",
+            "gateway.runtime.streaming.integrity",
 			"gateway.config.getKey",
 			"gateway.transport.endpoint.exists",
 			"gateway.tick",
@@ -640,6 +643,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.runtime.orchestration.phase",
          "gateway.runtime.orchestration.signal",
          "gateway.runtime.orchestration.vector",
+         "gateway.runtime.orchestration.matrix",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -655,6 +659,7 @@ namespace blazeclaw::gateway::protocol {
            "gateway.runtime.streaming.recovery",
            "gateway.runtime.streaming.continuity",
            "gateway.runtime.streaming.stability",
+           "gateway.runtime.streaming.integrity",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -670,6 +675,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.models.failover.baseline",
          "gateway.models.failover.forecast",
          "gateway.models.failover.threshold",
+         "gateway.models.failover.guardrail",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3204,6 +3210,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+           { "gateway.runtime.orchestration.matrix", [&]() {
+				if (!IsFieldNumber(payload, "rows") || !IsFieldNumber(payload, "cols") || !IsFieldBoolean(payload, "balanced")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.matrix` requires `rows`, `cols`, and `balanced` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.status` requires `enabled`, `mode`, and `heartbeatMs` fields.");
@@ -3309,6 +3322,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+         { "gateway.runtime.streaming.integrity", [&]() {
+				if (!IsFieldBoolean(payload, "valid") || !IsFieldNumber(payload, "violations") || !IsFieldNumber(payload, "checked")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.integrity` requires `valid`, `violations`, and `checked` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.models.failover.status", [&]() {
 				if (!IsFieldValueType(payload, "primary", '"') || !IsFieldValueType(payload, "fallbacks", '[') || !IsFieldNumber(payload, "maxRetries") || !IsFieldValueType(payload, "strategy", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.status` requires `primary`, `fallbacks`, `maxRetries`, and `strategy` fields.");
@@ -3410,6 +3430,13 @@ namespace blazeclaw::gateway::protocol {
           { "gateway.models.failover.threshold", [&]() {
 				if (!IsFieldNumber(payload, "minSuccessRate") || !IsFieldNumber(payload, "maxFallbacks") || !IsFieldBoolean(payload, "active")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.threshold` requires `minSuccessRate`, `maxFallbacks`, and `active` fields.");
+					return false;
+				}
+				return true;
+			} },
+          { "gateway.models.failover.guardrail", [&]() {
+				if (!IsFieldValueType(payload, "rule", '"') || !IsFieldNumber(payload, "limit") || !IsFieldBoolean(payload, "enforced")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.guardrail` requires `rule`, `limit`, and `enforced` fields.");
 					return false;
 				}
 				return true;

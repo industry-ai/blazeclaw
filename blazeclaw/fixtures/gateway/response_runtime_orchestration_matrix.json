@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-orchestration-matrix",
+  "ok": true,
+  "result": {
+    "rows": 2,
+    "cols": 2,
+    "balanced": true
+  }
+}

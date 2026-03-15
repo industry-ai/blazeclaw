@@ -1,0 +1,9 @@
+{
+  "id": "fixture-models-failover-guardrail",
+  "ok": true,
+  "result": {
+    "rule": "max_fallbacks",
+    "limit": 2,
+    "enforced": true
+  }
+}
