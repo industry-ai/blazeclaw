@@ -3,6 +3,70 @@
 
 namespace blazeclaw::gateway {
 
+    namespace {
+        std::string EscapeJsonLocal(const std::string& value) {
+            std::string escaped;
+            escaped.reserve(value.size() + 8);
+
+            for (const char ch : value) {
+                switch (ch) {
+                case '"':
+                    escaped += "\\\"";
+                    break;
+                case '\\':
+                    escaped += "\\\\";
+                    break;
+                case '\n':
+                    escaped += "\\n";
+                    break;
+                case '\r':
+                    escaped += "\\r";
+                    break;
+                case '\t':
+                    escaped += "\\t";
+                    break;
+                default:
+                    escaped.push_back(ch);
+                    break;
+                }
+            }
+
+            return escaped;
+        }
+
+        std::string ExtractStringParamLocal(
+            const std::optional<std::string>& paramsJson,
+            const std::string& fieldName) {
+            if (!paramsJson.has_value()) {
+                return {};
+            }
+
+            const std::string token = "\"" + fieldName + "\"";
+            const std::string& params = paramsJson.value();
+            const std::size_t keyPos = params.find(token);
+            if (keyPos == std::string::npos) {
+                return {};
+            }
+
+            std::size_t valuePos = params.find(':', keyPos + token.size());
+            if (valuePos == std::string::npos) {
+                return {};
+            }
+
+            valuePos = params.find('"', valuePos);
+            if (valuePos == std::string::npos) {
+                return {};
+            }
+
+            const std::size_t endQuote = params.find('"', valuePos + 1);
+            if (endQuote == std::string::npos) {
+                return {};
+            }
+
+            return params.substr(valuePos + 1, endQuote - valuePos - 1);
+        }
+    }
+
     void GatewayHost::RegisterTransportHandlers() {
         m_dispatcher.Register("gateway.transport.status", [this](const protocol::RequestFrame& request) {
             return protocol::ResponseFrame{
@@ -36,24 +100,32 @@ namespace blazeclaw::gateway {
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
-                .payloadJson = "{\"endpoint\":\"" + EscapeJson(m_transport.Endpoint()) + "\"}",
+                .payloadJson =
+                    "{\"endpoint\":\"" +
+                    EscapeJsonLocal(m_transport.Endpoint()) +
+                    "\"}",
                 .error = std::nullopt,
             };
             });
 
         m_dispatcher.Register("gateway.transport.endpoint.set", [this](const protocol::RequestFrame& request) {
-            const std::string endpoint = ExtractStringParam(request.paramsJson, "endpoint");
+            const std::string endpoint =
+                ExtractStringParamLocal(request.paramsJson, "endpoint");
             const std::string resolved = endpoint.empty() ? m_transport.Endpoint() : endpoint;
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
-                .payloadJson = "{\"endpoint\":\"" + EscapeJson(resolved) + "\",\"updated\":false}",
+                .payloadJson =
+                    "{\"endpoint\":\"" +
+                    EscapeJsonLocal(resolved) +
+                    "\",\"updated\":false}",
                 .error = std::nullopt,
             };
             });
 
         m_dispatcher.Register("gateway.transport.endpoint.exists", [this](const protocol::RequestFrame& request) {
-            const std::string endpoint = ExtractStringParam(request.paramsJson, "endpoint");
+            const std::string endpoint =
+                ExtractStringParamLocal(request.paramsJson, "endpoint");
             const std::string current = m_transport.Endpoint();
             const bool exists = endpoint.empty() || endpoint == current;
 
@@ -61,7 +133,8 @@ namespace blazeclaw::gateway {
                 .id = request.id,
                 .ok = true,
                 .payloadJson =
-                    "{\"endpoint\":\"" + EscapeJson(endpoint.empty() ? current : endpoint) +
+                    "{\"endpoint\":\"" +
+                    EscapeJsonLocal(endpoint.empty() ? current : endpoint) +
                     "\",\"exists\":" + std::string(exists ? "true" : "false") + "}",
                 .error = std::nullopt,
             };
@@ -73,7 +146,9 @@ namespace blazeclaw::gateway {
                 .id = request.id,
                 .ok = true,
                 .payloadJson =
-                    "{\"endpoints\":[\"" + EscapeJson(endpoint) + "\"],\"count\":1}",
+                    "{\"endpoints\":[\"" +
+                    EscapeJsonLocal(endpoint) +
+                    "\"],\"count\":1}",
                 .error = std::nullopt,
             };
             });

@@ -15,7 +15,7 @@ function Resolve-RepoPath {
 function Convert-ToCppStringLiteral {
     param([string]$Value)
 
-    $escaped = $Value.Replace('\\', '\\\\').Replace('"', '\\"')
+    $escaped = $Value.Replace('\', '\\').Replace('"', '\"')
     return '"' + $escaped + '"'
 }
 

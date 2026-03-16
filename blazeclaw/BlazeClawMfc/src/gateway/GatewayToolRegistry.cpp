@@ -189,4 +189,34 @@ namespace blazeclaw::gateway {
 		return output;
 	}
 
+	std::optional<ToolExecutionEntry> GatewayToolRegistry::LatestExecution() const {
+		if (m_executionHistory.empty()) {
+			return std::nullopt;
+		}
+
+		return m_executionHistory.back();
+	}
+
+	ToolExecutionStats GatewayToolRegistry::GetExecutionStats() const {
+		ToolExecutionStats stats{};
+		stats.count = m_executionHistory.size();
+
+		for (const auto& execution : m_executionHistory) {
+			if (execution.executed) {
+				++stats.succeeded;
+			}
+			else {
+				++stats.failed;
+			}
+		}
+
+		return stats;
+	}
+
+	std::size_t GatewayToolRegistry::ClearExecutions() {
+		const std::size_t cleared = m_executionHistory.size();
+		m_executionHistory.clear();
+		return cleared;
+	}
+
 } // namespace blazeclaw::gateway

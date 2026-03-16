@@ -695,8 +695,8 @@ namespace blazeclaw::gateway {
             const ChannelRouteEntry resolvedRoute{
                 .channel = route.channel,
                 .accountId = route.accountId,
-                agentId = agent.id,
-                sessionId = session.id,
+                .agentId = agent.id,
+                .sessionId = session.id,
             };
 
             return protocol::ResponseFrame{

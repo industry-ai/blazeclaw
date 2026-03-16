@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-503",
+  "ok": true,
+  "payload": {
+    "active": false,
+    "model": "default",
+    "reason": "none"
+  }
+}

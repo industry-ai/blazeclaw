@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-401",
+  "ok": true,
+  "payload": {
+    "count": 2,
+    "succeeded": 2,
+    "failed": 0
+  }
+}

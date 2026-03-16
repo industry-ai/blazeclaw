@@ -664,6 +664,55 @@ namespace blazeclaw::gateway {
 			};
 			});
 
+		m_dispatcher.Register("gateway.tools.executions.count", [this](const protocol::RequestFrame& request) {
+			const ToolExecutionStats stats = m_toolRegistry.GetExecutionStats();
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson =
+					"{\"count\":" + std::to_string(stats.count) +
+					",\"succeeded\":" + std::to_string(stats.succeeded) +
+					",\"failed\":" + std::to_string(stats.failed) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.executions.latest", [this](const protocol::RequestFrame& request) {
+			const std::optional<ToolExecutionEntry> latest = m_toolRegistry.LatestExecution();
+			const ToolExecutionEntry fallback = ToolExecutionEntry{
+				.tool = "none",
+				.executed = false,
+				.status = "empty",
+				.output = "no_history",
+				.argsProvided = false,
+			};
+
+			const ToolExecutionEntry& selected = latest.has_value() ? latest.value() : fallback;
+			const ToolExecutionStats stats = m_toolRegistry.GetExecutionStats();
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson =
+					"{\"found\":" + std::string(latest.has_value() ? "true" : "false") +
+					",\"execution\":" + SerializeToolExecution(selected) +
+					",\"count\":" + std::to_string(stats.count) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.executions.clear", [this](const protocol::RequestFrame& request) {
+			const std::size_t cleared = m_toolRegistry.ClearExecutions();
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson =
+					"{\"cleared\":" + std::to_string(cleared) +
+					",\"remaining\":0}",
+				.error = std::nullopt,
+			};
+			});
+
 
 
 		RegisterToolsHandlers();

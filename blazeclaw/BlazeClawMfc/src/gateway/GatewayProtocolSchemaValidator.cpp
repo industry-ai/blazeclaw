@@ -8,6 +8,12 @@ namespace blazeclaw::gateway::protocol {
         "gateway.transport.policy.session",
         "gateway.events.sessionKey",
         "gateway.models.session",
-        "gateway.tools.mapper"
+        "gateway.tools.mapper",
+        "gateway.tools.executions.count",
+        "gateway.tools.executions.latest",
+        "gateway.tools.executions.clear",
+        "gateway.runtime.orchestration.load",
+        "gateway.runtime.streaming.buffer",
+        "gateway.models.failover.override"
     };
 } // namespace blazeclaw::gateway::protocol

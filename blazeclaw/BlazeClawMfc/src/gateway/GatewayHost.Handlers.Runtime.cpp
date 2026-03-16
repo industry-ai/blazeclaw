@@ -3,6 +3,38 @@
 
 namespace blazeclaw::gateway {
 
+    namespace {
+        std::string EscapeJsonLocal(const std::string& value) {
+            std::string escaped;
+            escaped.reserve(value.size() + 8);
+
+            for (const char ch : value) {
+                switch (ch) {
+                case '"':
+                    escaped += "\\\"";
+                    break;
+                case '\\':
+                    escaped += "\\\\";
+                    break;
+                case '\n':
+                    escaped += "\\n";
+                    break;
+                case '\r':
+                    escaped += "\\r";
+                    break;
+                case '\t':
+                    escaped += "\\t";
+                    break;
+                default:
+                    escaped.push_back(ch);
+                    break;
+                }
+            }
+
+            return escaped;
+        }
+    }
+
     void GatewayHost::RegisterRuntimeHandlers() {
         m_dispatcher.Register("gateway.runtime.orchestration.status", [this](const protocol::RequestFrame& request) {
             const auto sessions = m_sessionRegistry.List();
@@ -15,8 +47,8 @@ namespace blazeclaw::gateway {
                 .ok = true,
                 .payloadJson =
                     "{\"state\":\"idle\",\"activeSession\":\"" +
-                    EscapeJson(activeSession) + "\",\"activeAgent\":\"" +
-                    EscapeJson(activeAgent) + "\",\"queueDepth\":0}",
+                    EscapeJsonLocal(activeSession) + "\",\"activeAgent\":\"" +
+                    EscapeJsonLocal(activeAgent) + "\",\"queueDepth\":0}",
                 .error = std::nullopt,
             };
             });
@@ -659,6 +691,42 @@ namespace blazeclaw::gateway {
                     .ok = true,
                     .payloadJson =
                         "{\"reserve\":1,\"available\":true,\"priority\":2}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.orchestration.load",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"queueLoad\":0,\"agentLoad\":0,\"state\":\"steady\"}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.streaming.buffer",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"bufferedFrames\":0,\"bufferedBytes\":0,\"highWatermark\":16}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.models.failover.override",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"active\":false,\"model\":\"default\",\"reason\":\"none\"}",
                     .error = std::nullopt,
                 };
             });
