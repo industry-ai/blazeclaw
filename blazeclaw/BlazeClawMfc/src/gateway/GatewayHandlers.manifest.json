@@ -224,6 +224,12 @@
       "domain": "tools"
     },
     {
+      "name": "gateway.tools.health",
+      "kind": "toolsMetric",
+      "template": "{\"healthy\":{healthyBool},\"enabled\":{enabledCount},\"total\":{toolsCount}}",
+      "domain": "tools"
+    },
+    {
       "name": "gateway.tools.call.execute",
       "kind": "custom",
       "handlerRef": "RegisterGatewayToolsCallExecute",

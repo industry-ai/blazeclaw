@@ -7,7 +7,7 @@
 
 namespace blazeclaw::gateway {
     namespace {
-        constexpr std::array<std::string_view, 195> kGeneratedMethodCatalog = {
+        constexpr std::array<std::string_view, 196> kGeneratedMethodCatalog = {
 		"gateway.agents.list",
 		"gateway.config.anchorScopeId",
 		"gateway.config.anchorScopeKey",
@@ -131,6 +131,7 @@ namespace blazeclaw::gateway {
 		"gateway.tools.cursorScopeId",
 		"gateway.tools.errors",
 		"gateway.tools.failures",
+		"gateway.tools.health",
 		"gateway.tools.historyScopeId",
 		"gateway.tools.historyScopeKey",
 		"gateway.tools.indexScopeId",
@@ -487,6 +488,7 @@ namespace blazeclaw::gateway {
 				return item.enabled;
 			}));
 			const std::size_t disabledCount = toolsCount >= enabledCount ? toolsCount - enabledCount : 0;
+			const bool healthy = enabledCount == toolsCount;
 			std::string payload = templateJson;
 			auto ReplaceToken = [&](const std::string& token, const std::string& value) {
 				std::size_t pos = 0;
@@ -498,6 +500,7 @@ namespace blazeclaw::gateway {
 			ReplaceToken("{toolsCount}", std::to_string(toolsCount));
 			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
 			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
+			ReplaceToken("{healthyBool}", healthy ? "true" : "false" );
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
@@ -513,6 +516,7 @@ namespace blazeclaw::gateway {
 				return item.enabled;
 			}));
 			const std::size_t disabledCount = toolsCount >= enabledCount ? toolsCount - enabledCount : 0;
+			const bool healthy = enabledCount == toolsCount;
 			std::string payload = templateJson;
 			auto ReplaceToken = [&](const std::string& token, const std::string& value) {
 				std::size_t pos = 0;
@@ -524,6 +528,7 @@ namespace blazeclaw::gateway {
 			ReplaceToken("{toolsCount}", std::to_string(toolsCount));
 			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
 			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
+			ReplaceToken("{healthyBool}", healthy ? "true" : "false" );
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
@@ -539,6 +544,7 @@ namespace blazeclaw::gateway {
 				return item.enabled;
 			}));
 			const std::size_t disabledCount = toolsCount >= enabledCount ? toolsCount - enabledCount : 0;
+			const bool healthy = enabledCount == toolsCount;
 			std::string payload = templateJson;
 			auto ReplaceToken = [&](const std::string& token, const std::string& value) {
 				std::size_t pos = 0;
@@ -550,6 +556,7 @@ namespace blazeclaw::gateway {
 			ReplaceToken("{toolsCount}", std::to_string(toolsCount));
 			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
 			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
+			ReplaceToken("{healthyBool}", healthy ? "true" : "false" );
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
@@ -565,6 +572,7 @@ namespace blazeclaw::gateway {
 				return item.enabled;
 			}));
 			const std::size_t disabledCount = toolsCount >= enabledCount ? toolsCount - enabledCount : 0;
+			const bool healthy = enabledCount == toolsCount;
 			std::string payload = templateJson;
 			auto ReplaceToken = [&](const std::string& token, const std::string& value) {
 				std::size_t pos = 0;
@@ -576,6 +584,7 @@ namespace blazeclaw::gateway {
 			ReplaceToken("{toolsCount}", std::to_string(toolsCount));
 			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
 			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
+			ReplaceToken("{healthyBool}", healthy ? "true" : "false" );
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
@@ -591,6 +600,7 @@ namespace blazeclaw::gateway {
 				return item.enabled;
 			}));
 			const std::size_t disabledCount = toolsCount >= enabledCount ? toolsCount - enabledCount : 0;
+			const bool healthy = enabledCount == toolsCount;
 			std::string payload = templateJson;
 			auto ReplaceToken = [&](const std::string& token, const std::string& value) {
 				std::size_t pos = 0;
@@ -602,6 +612,7 @@ namespace blazeclaw::gateway {
 			ReplaceToken("{toolsCount}", std::to_string(toolsCount));
 			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
 			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
+			ReplaceToken("{healthyBool}", healthy ? "true" : "false" );
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
@@ -617,6 +628,7 @@ namespace blazeclaw::gateway {
 				return item.enabled;
 			}));
 			const std::size_t disabledCount = toolsCount >= enabledCount ? toolsCount - enabledCount : 0;
+			const bool healthy = enabledCount == toolsCount;
 			std::string payload = templateJson;
 			auto ReplaceToken = [&](const std::string& token, const std::string& value) {
 				std::size_t pos = 0;
@@ -628,6 +640,7 @@ namespace blazeclaw::gateway {
 			ReplaceToken("{toolsCount}", std::to_string(toolsCount));
 			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
 			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
+			ReplaceToken("{healthyBool}", healthy ? "true" : "false" );
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
@@ -643,6 +656,7 @@ namespace blazeclaw::gateway {
 				return item.enabled;
 			}));
 			const std::size_t disabledCount = toolsCount >= enabledCount ? toolsCount - enabledCount : 0;
+			const bool healthy = enabledCount == toolsCount;
 			std::string payload = templateJson;
 			auto ReplaceToken = [&](const std::string& token, const std::string& value) {
 				std::size_t pos = 0;
@@ -654,6 +668,35 @@ namespace blazeclaw::gateway {
 			ReplaceToken("{toolsCount}", std::to_string(toolsCount));
 			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
 			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
+			ReplaceToken("{healthyBool}", healthy ? "true" : "false" );
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = payload,
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.health", [this, templateJson = std::string("{\\"healthy\\":{healthyBool},\\"enabled\\":{enabledCount},\\"total\\":{toolsCount}}")](const protocol::RequestFrame& request) {
+			const auto tools = m_toolRegistry.List();
+			const std::size_t toolsCount = tools.size();
+			const std::size_t enabledCount = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {
+				return item.enabled;
+			}));
+			const std::size_t disabledCount = toolsCount >= enabledCount ? toolsCount - enabledCount : 0;
+			const bool healthy = enabledCount == toolsCount;
+			std::string payload = templateJson;
+			auto ReplaceToken = [&](const std::string& token, const std::string& value) {
+				std::size_t pos = 0;
+				while ((pos = payload.find(token, pos)) != std::string::npos) {
+					payload.replace(pos, token.size(), value);
+					pos += value.size();
+				}
+			};
+			ReplaceToken("{toolsCount}", std::to_string(toolsCount));
+			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
+			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
+			ReplaceToken("{healthyBool}", healthy ? "true" : "false" );
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,

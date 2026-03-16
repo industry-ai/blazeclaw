@@ -706,20 +706,7 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-		m_dispatcher.Register("gateway.tools.health", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			const std::size_t enabled = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {
-				return item.enabled;
-				}));
-			const bool healthy = enabled == tools.size();
 
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"healthy\":" + std::string(healthy ? "true" : "false") + ",\"enabled\":" + std::to_string(enabled) + ",\"total\":" + std::to_string(tools.size()) + "}",
-				.error = std::nullopt,
-			};
-			});
 
 		m_dispatcher.Register("gateway.events.search", [](const protocol::RequestFrame& request) {
 			const std::string term = ExtractStringParam(request.paramsJson, "term");
