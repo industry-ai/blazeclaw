@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-701",
+  "ok": true,
+  "payload": {
+    "pressure": 0,
+    "threshold": 80,
+    "state": "normal"
+  }
+}

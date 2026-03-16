@@ -17,6 +17,9 @@ namespace blazeclaw::gateway::protocol {
         "gateway.models.failover.override",
         "gateway.runtime.orchestration.saturation",
         "gateway.runtime.streaming.throttle",
-        "gateway.models.failover.override.clear"
+        "gateway.models.failover.override.clear",
+        "gateway.runtime.orchestration.pressure",
+        "gateway.runtime.streaming.pacing",
+        "gateway.models.failover.override.status"
     };
 } // namespace blazeclaw::gateway::protocol
