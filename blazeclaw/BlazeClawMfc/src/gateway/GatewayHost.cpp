@@ -641,15 +641,6 @@ namespace blazeclaw::gateway {
 	}
 
 	void GatewayHost::RegisterDefaultHandlers() {
-		m_dispatcher.Register("gateway.ping", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"pong\":true}",
-				.error = std::nullopt,
-			};
-			});
-
 		RegisterChannelsHandlers();
 
 		RegisterEventHandlers();
@@ -677,45 +668,7 @@ namespace blazeclaw::gateway {
 
 		RegisterToolsHandlers();
 
-     RegisterGeneratedScopeClusterHandlers();
-
-		m_dispatcher.Register("gateway.models.affinity", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"models\":[\"default\",\"reasoner\"],\"affinity\":\"balanced\"}",
-				.error = std::nullopt,
-			};
-			});
-
-
-
-		m_dispatcher.Register("gateway.tools.throughput", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			const std::size_t calls = 0;
-			const std::size_t windowSec = 60;
-			const std::size_t perMinute = calls;
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"calls\":" + std::to_string(calls) + ",\"windowSec\":" + std::to_string(windowSec) + ",\"perMinute\":" + std::to_string(perMinute) + ",\"tools\":" + std::to_string(tools.size()) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-
-
-		m_dispatcher.Register("gateway.tools.errors", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"errors\":0,\"tools\":" + std::to_string(tools.size()) + ",\"rate\":0}",
-				.error = std::nullopt,
-			};
-			});
-
-
+		RegisterGeneratedScopeClusterHandlers();
 
 		m_dispatcher.Register("gateway.events.latestByType", [](const protocol::RequestFrame& request) {
 			const std::string type = ExtractStringParam(request.paramsJson, "type");
@@ -729,19 +682,6 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-
-
-		m_dispatcher.Register("gateway.tools.latency", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			const std::size_t count = tools.size();
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"minMs\":0,\"maxMs\":0,\"avgMs\":0,\"samples\":" + std::to_string(count) + "}",
-				.error = std::nullopt,
-			};
-			});
-
 		m_dispatcher.Register("gateway.config.snapshot", [this](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
@@ -750,48 +690,6 @@ namespace blazeclaw::gateway {
 				.error = std::nullopt,
 			};
 			});
-
-
-
-		m_dispatcher.Register("gateway.tools.usage", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"calls\":0,\"tools\":" + std::to_string(tools.size()) + ",\"avgMs\":0}",
-				.error = std::nullopt,
-			};
-			});
-
-
-
-		m_dispatcher.Register("gateway.tools.failures", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"failed\":0,\"total\":" + std::to_string(tools.size()) + ",\"rate\":0}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.tools.metrics", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			const std::size_t enabled = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {
-				return item.enabled;
-				}));
-			const std::size_t total = tools.size();
-			const std::size_t disabled = total >= enabled ? total - enabled : 0;
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"invocations\":0,\"enabled\":" + std::to_string(enabled) + ",\"disabled\":" + std::to_string(disabled) + ",\"total\":" + std::to_string(total) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-
 
 		m_dispatcher.Register("gateway.events.summary", [](const protocol::RequestFrame& request) {
 			const auto& events = EventCatalogNames();
@@ -808,8 +706,6 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-
-
 		m_dispatcher.Register("gateway.tools.health", [this](const protocol::RequestFrame& request) {
 			const auto tools = m_toolRegistry.List();
 			const std::size_t enabled = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {
@@ -824,8 +720,6 @@ namespace blazeclaw::gateway {
 				.error = std::nullopt,
 			};
 			});
-
-
 
 		m_dispatcher.Register("gateway.events.search", [](const protocol::RequestFrame& request) {
 			const std::string term = ExtractStringParam(request.paramsJson, "term");
@@ -852,26 +746,6 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-
-
-		m_dispatcher.Register("gateway.tools.stats", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			const std::size_t enabled = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {
-				return item.enabled;
-				}));
-			const std::size_t total = tools.size();
-			const std::size_t disabled = total >= enabled ? total - enabled : 0;
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"enabled\":" + std::to_string(enabled) + ",\"disabled\":" + std::to_string(disabled) + ",\"total\":" + std::to_string(total) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-
-
 		m_dispatcher.Register("gateway.events.last", [](const protocol::RequestFrame& request) {
 			const auto& events = EventCatalogNames();
 			const std::string last = events.empty() ? "none" : events.back();
@@ -882,8 +756,6 @@ namespace blazeclaw::gateway {
 				.error = std::nullopt,
 			};
 			});
-
-
 
 		m_dispatcher.Register("gateway.tools.categories", [this](const protocol::RequestFrame& request) {
 			const auto tools = m_toolRegistry.List();
@@ -902,8 +774,6 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-
-
 		m_dispatcher.Register("gateway.events.list", [](const protocol::RequestFrame& request) {
 			const auto& events = EventCatalogNames();
 			return protocol::ResponseFrame{
@@ -913,8 +783,6 @@ namespace blazeclaw::gateway {
 				.error = std::nullopt,
 			};
 			});
-
-
 
 		m_dispatcher.Register("gateway.agents.exists", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
@@ -1326,15 +1194,6 @@ namespace blazeclaw::gateway {
 				.payloadJson = "{\"session\":" + SerializeSession(removedSession) +
 					",\"deleted\":" + std::string(deleted ? "true" : "false") +
 					",\"remaining\":" + std::to_string(remaining) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.protocol.version", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"minProtocol\":1,\"maxProtocol\":1}",
 				.error = std::nullopt,
 			};
 			});
@@ -1844,16 +1703,6 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-		m_dispatcher.Register("gateway.config.keys", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"keys\":[\"gateway.bind\",\"gateway.port\",\"agent.model\",\"agent.streaming\"],\"count\":4}",
-				.error = std::nullopt,
-			};
-			});
-
-
 		m_dispatcher.Register("gateway.health.details", [this](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
@@ -1979,8 +1828,6 @@ namespace blazeclaw::gateway {
 				.error = std::nullopt,
 			};
 			});
-
-
 	}
 
 } // namespace blazeclaw::gateway

@@ -182,9 +182,45 @@
       "domain": "config"
     },
     {
+      "name": "gateway.tools.throughput",
+      "kind": "toolsMetric",
+      "template": "{\"calls\":0,\"windowSec\":60,\"perMinute\":0,\"tools\":{toolsCount}}",
+      "domain": "tools"
+    },
+    {
+      "name": "gateway.tools.errors",
+      "kind": "toolsMetric",
+      "template": "{\"errors\":0,\"tools\":{toolsCount},\"rate\":0}",
+      "domain": "tools"
+    },
+    {
+      "name": "gateway.tools.latency",
+      "kind": "toolsMetric",
+      "template": "{\"minMs\":0,\"maxMs\":0,\"avgMs\":0,\"samples\":{toolsCount}}",
+      "domain": "tools"
+    },
+    {
+      "name": "gateway.tools.usage",
+      "kind": "toolsMetric",
+      "template": "{\"calls\":0,\"tools\":{toolsCount},\"avgMs\":0}",
+      "domain": "tools"
+    },
+    {
+      "name": "gateway.tools.failures",
+      "kind": "toolsMetric",
+      "template": "{\"failed\":0,\"total\":{toolsCount},\"rate\":0}",
+      "domain": "tools"
+    },
+    {
       "name": "gateway.tools.metrics",
-      "kind": "custom",
-      "handlerRef": "RegisterGatewayToolsMetrics",
+      "kind": "toolsMetric",
+      "template": "{\"invocations\":0,\"enabled\":{enabledCount},\"disabled\":{disabledCount},\"total\":{toolsCount}}",
+      "domain": "tools"
+    },
+    {
+      "name": "gateway.tools.stats",
+      "kind": "toolsMetric",
+      "template": "{\"enabled\":{enabledCount},\"disabled\":{disabledCount},\"total\":{toolsCount}}",
       "domain": "tools"
     },
     {

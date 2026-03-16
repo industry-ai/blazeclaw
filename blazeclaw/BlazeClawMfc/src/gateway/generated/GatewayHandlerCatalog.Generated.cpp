@@ -2,11 +2,12 @@
 #include "../GatewayHost.h"
 
 #include <array>
+#include <algorithm>
 #include <string_view>
 
 namespace blazeclaw::gateway {
     namespace {
-        constexpr std::array<std::string_view, 189> kGeneratedMethodCatalog = {
+        constexpr std::array<std::string_view, 195> kGeneratedMethodCatalog = {
 		"gateway.agents.list",
 		"gateway.config.anchorScopeId",
 		"gateway.config.anchorScopeKey",
@@ -128,10 +129,13 @@ namespace blazeclaw::gateway {
 		"gateway.tools.bundleScopeKey",
 		"gateway.tools.call.execute",
 		"gateway.tools.cursorScopeId",
+		"gateway.tools.errors",
+		"gateway.tools.failures",
 		"gateway.tools.historyScopeId",
 		"gateway.tools.historyScopeKey",
 		"gateway.tools.indexScopeId",
 		"gateway.tools.indexScopeKey",
+		"gateway.tools.latency",
 		"gateway.tools.manifestScopeId",
 		"gateway.tools.manifestScopeKey",
 		"gateway.tools.markerScopeId",
@@ -149,11 +153,14 @@ namespace blazeclaw::gateway {
 		"gateway.tools.sequenceScopeKey",
 		"gateway.tools.snapshotScopeId",
 		"gateway.tools.snapshotScopeKey",
+		"gateway.tools.stats",
 		"gateway.tools.streamScopeId",
 		"gateway.tools.streamScopeKey",
 		"gateway.tools.templateScopeId",
 		"gateway.tools.templateScopeKey",
+		"gateway.tools.throughput",
 		"gateway.tools.tokenScopeId",
+		"gateway.tools.usage",
 		"gateway.tools.windowScopeId",
 		"gateway.transport.policy.anchorScopeId",
 		"gateway.transport.policy.anchorScopeKey",
@@ -464,6 +471,189 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.config.sections", [payload = std::string("{\\"sections\\":[\\"gateway\\",\\"agent\\"],\\"count\\":2}")](const protocol::RequestFrame& request) {
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = payload,
+				.error = std::nullopt,
+			};
+			});
+
+
+		m_dispatcher.Register("gateway.tools.throughput", [this, templateJson = std::string("{\\"calls\\":0,\\"windowSec\\":60,\\"perMinute\\":0,\\"tools\\":{toolsCount}}")](const protocol::RequestFrame& request) {
+			const auto tools = m_toolRegistry.List();
+			const std::size_t toolsCount = tools.size();
+			const std::size_t enabledCount = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {
+				return item.enabled;
+			}));
+			const std::size_t disabledCount = toolsCount >= enabledCount ? toolsCount - enabledCount : 0;
+			std::string payload = templateJson;
+			auto ReplaceToken = [&](const std::string& token, const std::string& value) {
+				std::size_t pos = 0;
+				while ((pos = payload.find(token, pos)) != std::string::npos) {
+					payload.replace(pos, token.size(), value);
+					pos += value.size();
+				}
+			};
+			ReplaceToken("{toolsCount}", std::to_string(toolsCount));
+			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
+			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = payload,
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.errors", [this, templateJson = std::string("{\\"errors\\":0,\\"tools\\":{toolsCount},\\"rate\\":0}")](const protocol::RequestFrame& request) {
+			const auto tools = m_toolRegistry.List();
+			const std::size_t toolsCount = tools.size();
+			const std::size_t enabledCount = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {
+				return item.enabled;
+			}));
+			const std::size_t disabledCount = toolsCount >= enabledCount ? toolsCount - enabledCount : 0;
+			std::string payload = templateJson;
+			auto ReplaceToken = [&](const std::string& token, const std::string& value) {
+				std::size_t pos = 0;
+				while ((pos = payload.find(token, pos)) != std::string::npos) {
+					payload.replace(pos, token.size(), value);
+					pos += value.size();
+				}
+			};
+			ReplaceToken("{toolsCount}", std::to_string(toolsCount));
+			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
+			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = payload,
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.latency", [this, templateJson = std::string("{\\"minMs\\":0,\\"maxMs\\":0,\\"avgMs\\":0,\\"samples\\":{toolsCount}}")](const protocol::RequestFrame& request) {
+			const auto tools = m_toolRegistry.List();
+			const std::size_t toolsCount = tools.size();
+			const std::size_t enabledCount = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {
+				return item.enabled;
+			}));
+			const std::size_t disabledCount = toolsCount >= enabledCount ? toolsCount - enabledCount : 0;
+			std::string payload = templateJson;
+			auto ReplaceToken = [&](const std::string& token, const std::string& value) {
+				std::size_t pos = 0;
+				while ((pos = payload.find(token, pos)) != std::string::npos) {
+					payload.replace(pos, token.size(), value);
+					pos += value.size();
+				}
+			};
+			ReplaceToken("{toolsCount}", std::to_string(toolsCount));
+			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
+			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = payload,
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.usage", [this, templateJson = std::string("{\\"calls\\":0,\\"tools\\":{toolsCount},\\"avgMs\\":0}")](const protocol::RequestFrame& request) {
+			const auto tools = m_toolRegistry.List();
+			const std::size_t toolsCount = tools.size();
+			const std::size_t enabledCount = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {
+				return item.enabled;
+			}));
+			const std::size_t disabledCount = toolsCount >= enabledCount ? toolsCount - enabledCount : 0;
+			std::string payload = templateJson;
+			auto ReplaceToken = [&](const std::string& token, const std::string& value) {
+				std::size_t pos = 0;
+				while ((pos = payload.find(token, pos)) != std::string::npos) {
+					payload.replace(pos, token.size(), value);
+					pos += value.size();
+				}
+			};
+			ReplaceToken("{toolsCount}", std::to_string(toolsCount));
+			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
+			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = payload,
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.failures", [this, templateJson = std::string("{\\"failed\\":0,\\"total\\":{toolsCount},\\"rate\\":0}")](const protocol::RequestFrame& request) {
+			const auto tools = m_toolRegistry.List();
+			const std::size_t toolsCount = tools.size();
+			const std::size_t enabledCount = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {
+				return item.enabled;
+			}));
+			const std::size_t disabledCount = toolsCount >= enabledCount ? toolsCount - enabledCount : 0;
+			std::string payload = templateJson;
+			auto ReplaceToken = [&](const std::string& token, const std::string& value) {
+				std::size_t pos = 0;
+				while ((pos = payload.find(token, pos)) != std::string::npos) {
+					payload.replace(pos, token.size(), value);
+					pos += value.size();
+				}
+			};
+			ReplaceToken("{toolsCount}", std::to_string(toolsCount));
+			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
+			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = payload,
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.metrics", [this, templateJson = std::string("{\\"invocations\\":0,\\"enabled\\":{enabledCount},\\"disabled\\":{disabledCount},\\"total\\":{toolsCount}}")](const protocol::RequestFrame& request) {
+			const auto tools = m_toolRegistry.List();
+			const std::size_t toolsCount = tools.size();
+			const std::size_t enabledCount = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {
+				return item.enabled;
+			}));
+			const std::size_t disabledCount = toolsCount >= enabledCount ? toolsCount - enabledCount : 0;
+			std::string payload = templateJson;
+			auto ReplaceToken = [&](const std::string& token, const std::string& value) {
+				std::size_t pos = 0;
+				while ((pos = payload.find(token, pos)) != std::string::npos) {
+					payload.replace(pos, token.size(), value);
+					pos += value.size();
+				}
+			};
+			ReplaceToken("{toolsCount}", std::to_string(toolsCount));
+			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
+			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = payload,
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.tools.stats", [this, templateJson = std::string("{\\"enabled\\":{enabledCount},\\"disabled\\":{disabledCount},\\"total\\":{toolsCount}}")](const protocol::RequestFrame& request) {
+			const auto tools = m_toolRegistry.List();
+			const std::size_t toolsCount = tools.size();
+			const std::size_t enabledCount = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {
+				return item.enabled;
+			}));
+			const std::size_t disabledCount = toolsCount >= enabledCount ? toolsCount - enabledCount : 0;
+			std::string payload = templateJson;
+			auto ReplaceToken = [&](const std::string& token, const std::string& value) {
+				std::size_t pos = 0;
+				while ((pos = payload.find(token, pos)) != std::string::npos) {
+					payload.replace(pos, token.size(), value);
+					pos += value.size();
+				}
+			};
+			ReplaceToken("{toolsCount}", std::to_string(toolsCount));
+			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
+			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,

@@ -134,6 +134,46 @@ foreach ($method in $staticMethods) {
 
 $staticRegistrationBody = $staticLines -join "`r`n"
 
+$toolsMetricMethods = @($manifest.methods | Where-Object { $_.kind -eq "toolsMetric" })
+$toolsMetricLines = @()
+foreach ($method in $toolsMetricMethods) {
+    if ([string]::IsNullOrWhiteSpace($method.template)) {
+        throw "toolsMetric method '$($method.name)' must define template."
+    }
+
+    $methodLiteral = Convert-ToCppStringLiteral -Value $method.name
+    $templateLiteral = Convert-ToCppStringLiteral -Value $method.template
+
+    $toolsMetricLines += "`t`tm_dispatcher.Register($methodLiteral, [this, templateJson = std::string($templateLiteral)](const protocol::RequestFrame& request) {"
+    $toolsMetricLines += "`t`t`tconst auto tools = m_toolRegistry.List();"
+    $toolsMetricLines += "`t`t`tconst std::size_t toolsCount = tools.size();"
+    $toolsMetricLines += "`t`t`tconst std::size_t enabledCount = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {"
+    $toolsMetricLines += "`t`t`t`treturn item.enabled;"
+    $toolsMetricLines += "`t`t`t}));"
+    $toolsMetricLines += "`t`t`tconst std::size_t disabledCount = toolsCount >= enabledCount ? toolsCount - enabledCount : 0;"
+    $toolsMetricLines += "`t`t`tstd::string payload = templateJson;"
+    $toolsMetricLines += "`t`t	auto ReplaceToken = [&](const std::string& token, const std::string& value) {"
+    $toolsMetricLines += "`t`t`t`tstd::size_t pos = 0;"
+    $toolsMetricLines += "`t`t`t`twhile ((pos = payload.find(token, pos)) != std::string::npos) {"
+    $toolsMetricLines += "`t`t`t`t	payload.replace(pos, token.size(), value);"
+    $toolsMetricLines += "`t`t`t`t	pos += value.size();"
+    $toolsMetricLines += "`t`t`t`t}"
+    $toolsMetricLines += "`t`t	};"
+    $toolsMetricLines += "`t`t`tReplaceToken(`"{toolsCount}`", std::to_string(toolsCount));"
+    $toolsMetricLines += "`t`t`tReplaceToken(`"{enabledCount}`", std::to_string(enabledCount));"
+    $toolsMetricLines += "`t`t`tReplaceToken(`"{disabledCount}`", std::to_string(disabledCount));"
+    $toolsMetricLines += "`t`t	return protocol::ResponseFrame{"
+    $toolsMetricLines += "`t`t`t	.id = request.id,"
+    $toolsMetricLines += "`t`t`t	.ok = true,"
+    $toolsMetricLines += "`t`t`t	.payloadJson = payload,"
+    $toolsMetricLines += "`t`t`t	.error = std::nullopt,"
+    $toolsMetricLines += "`t`t	};"
+    $toolsMetricLines += "`t`t	});"
+    $toolsMetricLines += ""
+}
+
+$toolsMetricRegistrationBody = $toolsMetricLines -join "`r`n"
+
 function Write-FileWithRetry {
     param(
         [string]$Path,
@@ -172,6 +212,7 @@ $sourceContent = @"
 #include "../GatewayHost.h"
 
 #include <array>
+#include <algorithm>
 #include <string_view>
 
 namespace blazeclaw::gateway {
@@ -185,6 +226,8 @@ $methodArrayLiteral
         (void)kGeneratedMethodCatalog;
 
 $staticRegistrationBody
+
+$toolsMetricRegistrationBody
 
         RegisterScopeClusterHandlers();
     }
