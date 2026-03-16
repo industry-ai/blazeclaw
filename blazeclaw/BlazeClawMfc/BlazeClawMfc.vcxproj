@@ -109,6 +109,7 @@
     <ClInclude Include="src\gateway\GatewaySessionRegistry.h" />
     <ClInclude Include="src\gateway\GatewayToolRegistry.h" />
     <ClInclude Include="src\gateway\GatewayWebSocketTransport.h" />
+    <ClInclude Include="src\gateway\generated\GatewayHandlerCatalog.Generated.h" />
     <ClInclude Include="src\framework.h" />
     <ClInclude Include="src\pch.h" />
   </ItemGroup>
@@ -125,6 +126,7 @@
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Channels.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.SecurityOps.cpp" />
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.ScopeCluster.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Transport.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Tools.cpp" />
     <ClCompile Include="src\gateway\GatewayMethodDispatcher.cpp" />
@@ -136,6 +138,7 @@
     <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Response.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Shared.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.cpp" />
+    <ClCompile Include="src\gateway\generated\GatewayHandlerCatalog.Generated.cpp" />
     <ClCompile Include="src\gateway\GatewaySessionRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayToolRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayWebSocketTransport.cpp" />
@@ -143,6 +146,9 @@
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
   </ItemGroup>
+  <Target Name="GenerateGatewayHandlerCatalog" BeforeTargets="ClCompile">
+    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewayHandlerCatalogGenerator\Generate-GatewayHandlerCatalog.ps1&quot;" />
+  </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
 </Project>

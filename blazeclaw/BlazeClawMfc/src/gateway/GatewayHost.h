@@ -39,6 +39,8 @@ namespace blazeclaw::gateway {
       void RegisterChannelsHandlers();
      void RegisterEventHandlers();
      void RegisterToolsHandlers();
+     void RegisterScopeClusterHandlers();
+     void RegisterGeneratedScopeClusterHandlers();
 		void RegisterSecurityOpsHandlers();
 		void RegisterRuntimeHandlers();
 		void RegisterTransportHandlers();

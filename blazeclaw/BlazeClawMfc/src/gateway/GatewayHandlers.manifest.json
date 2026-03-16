@@ -1,0 +1,280 @@
+{
+  "version": 1,
+  "methods": [
+    {
+      "name": "gateway.ping",
+      "kind": "static",
+      "payload": "{\"pong\":true}",
+      "domain": "core"
+    },
+    {
+      "name": "gateway.protocol.version",
+      "kind": "static",
+      "payload": "{\"minProtocol\":1,\"maxProtocol\":1}",
+      "domain": "protocol"
+    },
+    {
+      "name": "gateway.config.keys",
+      "kind": "static",
+      "payload": "{\"keys\":[\"gateway.bind\",\"gateway.port\",\"agent.model\",\"agent.streaming\"],\"count\":4}",
+      "domain": "config"
+    },
+    {
+      "name": "gateway.models.providers",
+      "kind": "static",
+      "payload": "{\"providers\":[\"seed\"],\"count\":1}",
+      "domain": "models"
+    },
+    {
+      "name": "gateway.events.window",
+      "kind": "static",
+      "payload": "{\"events\":[\"gateway.session.reset\",\"gateway.agent.update\",\"gateway.tools.catalog.update\"],\"count\":3}",
+      "domain": "events"
+    },
+    {
+      "name": "gateway.models.affinity",
+      "kind": "static",
+      "payload": "{\"models\":[\"default\",\"reasoner\"],\"affinity\":\"balanced\"}",
+      "domain": "models"
+    },
+    {
+      "name": "gateway.models.pool",
+      "kind": "static",
+      "payload": "{\"models\":[\"default\",\"reasoner\"],\"count\":2}",
+      "domain": "models"
+    },
+    {
+      "name": "gateway.models.manifest",
+      "kind": "static",
+      "payload": "{\"models\":[\"default\",\"reasoner\"],\"manifestVersion\":1}",
+      "domain": "models"
+    },
+    {
+      "name": "gateway.models.catalog",
+      "kind": "static",
+      "payload": "{\"models\":[\"default\",\"reasoner\"],\"count\":2}",
+      "domain": "models"
+    },
+    {
+      "name": "gateway.config.history",
+      "kind": "static",
+      "payload": "{\"revisions\":[1],\"count\":1}",
+      "domain": "config"
+    },
+    {
+      "name": "gateway.events.sample",
+      "kind": "static",
+      "payload": "{\"events\":[\"gateway.health\",\"gateway.tools.catalog.update\"],\"count\":2}",
+      "domain": "events"
+    },
+    {
+      "name": "gateway.models.priority",
+      "kind": "static",
+      "payload": "{\"models\":[\"default\",\"reasoner\"],\"count\":2}",
+      "domain": "models"
+    },
+    {
+      "name": "gateway.config.revision",
+      "kind": "static",
+      "payload": "{\"revision\":1,\"source\":\"runtime\"}",
+      "domain": "config"
+    },
+    {
+      "name": "gateway.models.preference",
+      "kind": "static",
+      "payload": "{\"model\":\"default\",\"provider\":\"seed\",\"source\":\"runtime\"}",
+      "domain": "models"
+    },
+    {
+      "name": "gateway.events.channels",
+      "kind": "static",
+      "payload": "{\"channelEvents\":3,\"accountEvents\":1,\"count\":4}",
+      "domain": "events"
+    },
+    {
+      "name": "gateway.models.routing",
+      "kind": "static",
+      "payload": "{\"primary\":\"default\",\"fallback\":\"reasoner\",\"strategy\":\"seed_priority\"}",
+      "domain": "models"
+    },
+    {
+      "name": "gateway.config.diff",
+      "kind": "static",
+      "payload": "{\"changed\":[],\"count\":0}",
+      "domain": "config"
+    },
+    {
+      "name": "gateway.events.timeline",
+      "kind": "static",
+      "payload": "{\"events\":[\"gateway.shutdown\",\"gateway.session.reset\",\"gateway.agent.update\",\"gateway.tools.catalog.update\"],\"count\":4}",
+      "domain": "events"
+    },
+    {
+      "name": "gateway.models.selection",
+      "kind": "static",
+      "payload": "{\"selected\":\"default\",\"strategy\":\"seed_priority\"}",
+      "domain": "models"
+    },
+    {
+      "name": "gateway.events.types",
+      "kind": "static",
+      "payload": "{\"types\":[\"lifecycle\",\"update\"],\"count\":2}",
+      "domain": "events"
+    },
+    {
+      "name": "gateway.config.backup",
+      "kind": "static",
+      "payload": "{\"saved\":true,\"version\":1,\"path\":\"config/runtime.backup.json\"}",
+      "domain": "config"
+    },
+    {
+      "name": "gateway.models.fallback",
+      "kind": "static",
+      "payload": "{\"preferred\":\"default\",\"fallback\":\"reasoner\",\"configured\":true}",
+      "domain": "models"
+    },
+    {
+      "name": "gateway.config.rollback",
+      "kind": "static",
+      "payload": "{\"rolledBack\":false,\"version\":1}",
+      "domain": "config"
+    },
+    {
+      "name": "gateway.models.recommended",
+      "kind": "static",
+      "payload": "{\"model\":{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true},\"reason\":\"seed_default\"}",
+      "domain": "models"
+    },
+    {
+      "name": "gateway.config.audit",
+      "kind": "static",
+      "payload": "{\"enabled\":true,\"source\":\"runtime\",\"lastUpdatedMs\":1735689600000}",
+      "domain": "config"
+    },
+    {
+      "name": "gateway.models.compatibility",
+      "kind": "static",
+      "payload": "{\"default\":\"full\",\"reasoner\":\"partial\",\"count\":2}",
+      "domain": "models"
+    },
+    {
+      "name": "gateway.config.validate",
+      "kind": "static",
+      "payload": "{\"valid\":true,\"errors\":[],\"count\":0}",
+      "domain": "config"
+    },
+    {
+      "name": "gateway.models.default.get",
+      "kind": "static",
+      "payload": "{\"model\":{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true}}",
+      "domain": "models"
+    },
+    {
+      "name": "gateway.config.schema",
+      "kind": "static",
+      "payload": "{\"gateway\":{\"bind\":\"string\",\"port\":\"number\"},\"agent\":{\"model\":\"string\",\"streaming\":\"boolean\"}}",
+      "domain": "config"
+    },
+    {
+      "name": "gateway.config.sections",
+      "kind": "static",
+      "payload": "{\"sections\":[\"gateway\",\"agent\"],\"count\":2}",
+      "domain": "config"
+    },
+    {
+      "name": "gateway.tools.metrics",
+      "kind": "custom",
+      "handlerRef": "RegisterGatewayToolsMetrics",
+      "domain": "tools"
+    },
+    {
+      "name": "gateway.tools.call.execute",
+      "kind": "custom",
+      "handlerRef": "RegisterGatewayToolsCallExecute",
+      "domain": "tools"
+    },
+    {
+      "name": "gateway.sessions.count",
+      "kind": "custom",
+      "handlerRef": "RegisterGatewaySessionsCount",
+      "domain": "sessions"
+    },
+    {
+      "name": "gateway.agents.list",
+      "kind": "custom",
+      "handlerRef": "RegisterGatewayAgentsList",
+      "domain": "agents"
+    }
+  ],
+  "families": [
+    {
+      "kind": "trioFamily",
+      "mode": "scopeKey",
+      "suffixes": [
+        "stream",
+        "sequence",
+        "bundle",
+        "package",
+        "archive",
+        "manifest",
+        "profile",
+        "template",
+        "revision",
+        "history",
+        "snapshot",
+        "index",
+        "marker"
+      ],
+      "includeTools": true
+    },
+    {
+      "kind": "trioFamily",
+      "mode": "scopeId",
+      "suffixes": [
+        "window",
+        "cursor",
+        "anchor",
+        "offset",
+        "pointer",
+        "token",
+        "sequence",
+        "stream",
+        "bundle",
+        "package",
+        "archive",
+        "manifest",
+        "profile",
+        "template",
+        "revision",
+        "history",
+        "snapshot",
+        "index",
+        "marker"
+      ],
+      "includeTools": true
+    },
+    {
+      "kind": "trioFamily",
+      "mode": "scopeKey",
+      "suffixes": [
+        "token",
+        "pointer",
+        "offset",
+        "anchor",
+        "cursor",
+        "window"
+      ],
+      "includeTools": false
+    },
+    {
+      "kind": "trioFamily",
+      "mode": "plainKey",
+      "suffixes": [
+        "index",
+        "snapshot",
+        "history"
+      ],
+      "includeTools": false
+    }
+  ]
+}

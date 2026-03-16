@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blazeclaw.local/schemas/GatewayHandlers.manifest.schema.json",
+  "title": "Gateway Handlers Manifest",
+  "type": "object",
+  "required": ["version", "methods", "families"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "methods": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/method"
+      }
+    },
+    "families": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/family"
+      }
+    }
+  },
+  "definitions": {
+    "method": {
+      "type": "object",
+      "required": ["name", "kind"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["static", "toolsCount", "custom"]
+        },
+        "payload": {
+          "type": "string"
+        },
+        "fieldName": {
+          "type": "string"
+        },
+        "handlerRef": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "static"
+              }
+            }
+          },
+          "then": {
+            "required": ["payload"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "toolsCount"
+              }
+            }
+          },
+          "then": {
+            "required": ["fieldName"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "custom"
+              }
+            }
+          },
+          "then": {
+            "required": ["handlerRef"]
+          }
+        }
+      ]
+    },
+    "family": {
+      "type": "object",
+      "required": ["kind", "mode", "suffixes"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "trioFamily"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["scopeKey", "scopeId", "plainKey"]
+        },
+        "suffixes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "includeTools": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}
