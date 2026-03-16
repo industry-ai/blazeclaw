@@ -81,6 +81,11 @@ namespace blazeclaw::gateway::protocol {
         "gateway.runtime.orchestration.gradient",
         "gateway.runtime.streaming.vectorClock",
         "gateway.runtime.streaming.trend",
-        "gateway.models.failover.override.ledger"
+        "gateway.models.failover.override.ledger",
+        "gateway.runtime.orchestration.harmonicity",
+        "gateway.runtime.orchestration.inertia",
+        "gateway.runtime.streaming.coordination",
+        "gateway.runtime.streaming.latencyBand",
+        "gateway.models.failover.override.snapshotIndex"
     };
 } // namespace blazeclaw::gateway::protocol

@@ -642,6 +642,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.phaseLock",
          "gateway.runtime.orchestration.symmetry",
 			"gateway.runtime.orchestration.gradient",
+         "gateway.runtime.orchestration.harmonicity",
+			"gateway.runtime.orchestration.inertia",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -728,6 +730,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.horizon",
            "gateway.runtime.streaming.vectorClock",
 			"gateway.runtime.streaming.trend",
+           "gateway.runtime.streaming.coordination",
+			"gateway.runtime.streaming.latencyBand",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -767,6 +771,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.models.failover.override.baseline",
          "gateway.models.failover.override.manifest",
          "gateway.models.failover.override.ledger",
+         "gateway.models.failover.override.snapshotIndex",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3537,6 +3542,20 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+           { "gateway.runtime.orchestration.harmonicity", [&]() {
+				if (!IsFieldNumber(payload, "harmonicity") || !IsFieldNumber(payload, "detune") || !IsFieldValueType(payload, "state", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.harmonicity` requires `harmonicity`, `detune`, and `state` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.inertia", [&]() {
+				if (!IsFieldNumber(payload, "inertia") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.inertia` requires `inertia`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.status` requires `enabled`, `mode`, and `heartbeatMs` fields.");
@@ -3845,6 +3864,20 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+         { "gateway.runtime.streaming.coordination", [&]() {
+				if (!IsFieldBoolean(payload, "coordinated") || !IsFieldNumber(payload, "lag") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.coordination` requires `coordinated`, `lag`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.latencyBand", [&]() {
+				if (!IsFieldNumber(payload, "minMs") || !IsFieldNumber(payload, "maxMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.latencyBand` requires `minMs`, `maxMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.models.failover.status", [&]() {
 				if (!IsFieldValueType(payload, "primary", '"') || !IsFieldValueType(payload, "fallbacks", '[') || !IsFieldNumber(payload, "maxRetries") || !IsFieldValueType(payload, "strategy", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.status` requires `primary`, `fallbacks`, `maxRetries`, and `strategy` fields.");
@@ -4114,6 +4147,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.ledger", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "entries") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.ledger` requires `active`, `entries`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.snapshotIndex", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "index") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.snapshotIndex` requires `active`, `index`, and `model` fields.");
 					return false;
 				}
 				return true;
