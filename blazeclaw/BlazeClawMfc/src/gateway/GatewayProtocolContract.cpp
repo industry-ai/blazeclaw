@@ -566,7 +566,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 		}
 
-        const std::array<ResponseFrame, 9> negativeResponses = {
+        const std::array<ResponseFrame, 12> negativeResponses = {
 			ResponseFrame{.id = "neg-1", .ok = true, .payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true}]}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-2", .ok = true, .payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-3", .ok = true, .payloadJson = "{\"tool\":\"chat.send\",\"executed\":true,\"status\":\"ok\",\"argsProvided\":false}", .error = std::nullopt },
@@ -576,6 +576,9 @@ namespace blazeclaw::gateway::protocol {
           ResponseFrame{.id = "neg-7", .ok = true, .payloadJson = "{\"queueLoad\":0,\"agentLoad\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-8", .ok = true, .payloadJson = "{\"bufferedFrames\":0,\"highWatermark\":16}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-9", .ok = true, .payloadJson = "{\"active\":false,\"model\":\"default\"}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-10", .ok = true, .payloadJson = "{\"saturation\":0,\"capacity\":8}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-11", .ok = true, .payloadJson = "{\"limitPerSec\":120,\"currentPerSec\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-12", .ok = true, .payloadJson = "{\"cleared\":true,\"active\":false}", .error = std::nullopt },
 		};
 
 		if (!ValidateNegativeResponseCase("gateway.channels.accounts", negativeResponses[0], "gateway.channels.accounts missing `connected`", error) ||
@@ -586,7 +589,10 @@ namespace blazeclaw::gateway::protocol {
            !ValidateNegativeResponseCase("gateway.tools.executions.clear", negativeResponses[5], "gateway.tools.executions.clear missing `remaining`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.load", negativeResponses[6], "gateway.runtime.orchestration.load missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.buffer", negativeResponses[7], "gateway.runtime.streaming.buffer missing `bufferedBytes`", error) ||
-			!ValidateNegativeResponseCase("gateway.models.failover.override", negativeResponses[8], "gateway.models.failover.override missing `reason`", error)) {
+          !ValidateNegativeResponseCase("gateway.models.failover.override", negativeResponses[8], "gateway.models.failover.override missing `reason`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.saturation", negativeResponses[9], "gateway.runtime.orchestration.saturation missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.throttle", negativeResponses[10], "gateway.runtime.streaming.throttle missing `throttled`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.clear", negativeResponses[11], "gateway.models.failover.override.clear missing `model`", error)) {
 			return false;
 		}
 

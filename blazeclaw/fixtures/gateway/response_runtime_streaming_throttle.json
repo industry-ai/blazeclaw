@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-602",
+  "ok": true,
+  "payload": {
+    "throttled": false,
+    "limitPerSec": 120,
+    "currentPerSec": 0
+  }
+}
