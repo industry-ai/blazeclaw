@@ -802,6 +802,42 @@ namespace blazeclaw::gateway {
                     .error = std::nullopt,
                 };
             });
+
+        m_dispatcher.Register(
+            "gateway.runtime.orchestration.headroom",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"headroom\":8,\"used\":0,\"state\":\"ready\"}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.streaming.jitter",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"jitterMs\":0,\"windowMs\":1000,\"stable\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.models.failover.override.history",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"entries\":0,\"lastModel\":\"default\",\"active\":false}",
+                    .error = std::nullopt,
+                };
+            });
     }
 
 } // namespace blazeclaw::gateway

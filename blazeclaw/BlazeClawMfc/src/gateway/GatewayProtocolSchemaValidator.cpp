@@ -20,6 +20,9 @@ namespace blazeclaw::gateway::protocol {
         "gateway.models.failover.override.clear",
         "gateway.runtime.orchestration.pressure",
         "gateway.runtime.streaming.pacing",
-        "gateway.models.failover.override.status"
+        "gateway.models.failover.override.status",
+        "gateway.runtime.orchestration.headroom",
+        "gateway.runtime.streaming.jitter",
+        "gateway.models.failover.override.history"
     };
 } // namespace blazeclaw::gateway::protocol
