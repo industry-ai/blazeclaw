@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-1703",
+  "ok": true,
+  "payload": {
+    "active": false,
+    "pointer": "default",
+    "model": "default"
+  }
+}

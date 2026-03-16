@@ -566,7 +566,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 		}
 
-        const std::array<ResponseFrame, 42> negativeResponses = {
+       const std::array<ResponseFrame, 45> negativeResponses = {
 			ResponseFrame{.id = "neg-1", .ok = true, .payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true}]}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-2", .ok = true, .payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-3", .ok = true, .payloadJson = "{\"tool\":\"chat.send\",\"executed\":true,\"status\":\"ok\",\"argsProvided\":false}", .error = std::nullopt },
@@ -609,6 +609,9 @@ namespace blazeclaw::gateway::protocol {
           ResponseFrame{.id = "neg-40", .ok = true, .payloadJson = "{\"resilience\":100,\"faults\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-41", .ok = true, .payloadJson = "{\"smoothness\":100,\"jitterMs\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-42", .ok = true, .payloadJson = "{\"active\":false,\"revision\":1}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-43", .ok = true, .payloadJson = "{\"ready\":true,\"queueDepth\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-44", .ok = true, .payloadJson = "{\"harmonics\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-45", .ok = true, .payloadJson = "{\"active\":false,\"pointer\":\"default\"}", .error = std::nullopt },
 		};
 
 		if (!ValidateNegativeResponseCase("gateway.channels.accounts", negativeResponses[0], "gateway.channels.accounts missing `connected`", error) ||
@@ -652,7 +655,10 @@ namespace blazeclaw::gateway::protocol {
             !ValidateNegativeResponseCase("gateway.models.failover.override.matrix", negativeResponses[38], "gateway.models.failover.override.matrix missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.resilience", negativeResponses[39], "gateway.runtime.orchestration.resilience missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.smoothness", negativeResponses[40], "gateway.runtime.streaming.smoothness missing `stable`", error) ||
-			!ValidateNegativeResponseCase("gateway.models.failover.override.snapshot", negativeResponses[41], "gateway.models.failover.override.snapshot missing `model`", error)) {
+            !ValidateNegativeResponseCase("gateway.models.failover.override.snapshot", negativeResponses[41], "gateway.models.failover.override.snapshot missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.readiness", negativeResponses[42], "gateway.runtime.orchestration.readiness missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.harmonics", negativeResponses[43], "gateway.runtime.streaming.harmonics missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.pointer", negativeResponses[44], "gateway.models.failover.override.pointer missing `model`", error)) {
 			return false;
 		}
 
