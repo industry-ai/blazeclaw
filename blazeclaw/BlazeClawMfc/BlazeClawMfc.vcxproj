@@ -122,6 +122,7 @@
     <ClCompile Include="src\gateway\GatewayChannelRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Events.cpp" />
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Channels.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.SecurityOps.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Transport.cpp" />
