@@ -66,6 +66,11 @@ namespace blazeclaw::gateway::protocol {
         "gateway.runtime.orchestration.stabilityIndex",
         "gateway.runtime.streaming.spectral",
         "gateway.runtime.streaming.envelope",
-        "gateway.models.failover.override.checkpoint"
+        "gateway.models.failover.override.checkpoint",
+        "gateway.runtime.orchestration.convergence",
+        "gateway.runtime.orchestration.hysteresis",
+        "gateway.runtime.streaming.resonance",
+        "gateway.runtime.streaming.vectorField",
+        "gateway.models.failover.override.baseline"
     };
 } // namespace blazeclaw::gateway::protocol
