@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2601",
+  "ok": true,
+  "payload": {
+    "cadenceIndex": 100,
+    "jitter": 0,
+    "state": "steady"
+  }
+}

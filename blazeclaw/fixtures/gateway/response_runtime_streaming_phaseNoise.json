@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2603",
+  "ok": true,
+  "payload": {
+    "phaseNoise": 0,
+    "samples": 2,
+    "bounded": true
+  }
+}

@@ -622,28 +622,30 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.pressure",
 			"gateway.runtime.orchestration.headroom",
 			"gateway.runtime.orchestration.balance",
-         "gateway.runtime.orchestration.efficiency",
-         "gateway.runtime.orchestration.utilization",
-         "gateway.runtime.orchestration.capacity",
-         "gateway.runtime.orchestration.occupancy",
-         "gateway.runtime.orchestration.elasticity",
-         "gateway.runtime.orchestration.cohesion",
-         "gateway.runtime.orchestration.resilience",
-         "gateway.runtime.orchestration.readiness",
-         "gateway.runtime.orchestration.contention",
-         "gateway.runtime.orchestration.fairness",
-         "gateway.runtime.orchestration.equilibrium",
+			"gateway.runtime.orchestration.efficiency",
+			"gateway.runtime.orchestration.utilization",
+			"gateway.runtime.orchestration.capacity",
+			"gateway.runtime.orchestration.occupancy",
+			"gateway.runtime.orchestration.elasticity",
+			"gateway.runtime.orchestration.cohesion",
+			"gateway.runtime.orchestration.resilience",
+			"gateway.runtime.orchestration.readiness",
+			"gateway.runtime.orchestration.contention",
+			"gateway.runtime.orchestration.fairness",
+			"gateway.runtime.orchestration.equilibrium",
 			"gateway.runtime.orchestration.steadiness",
-         "gateway.runtime.orchestration.parity",
+			"gateway.runtime.orchestration.parity",
 			"gateway.runtime.orchestration.stabilityIndex",
-         "gateway.runtime.orchestration.convergence",
+			"gateway.runtime.orchestration.convergence",
 			"gateway.runtime.orchestration.hysteresis",
-         "gateway.runtime.orchestration.balanceIndex",
+			"gateway.runtime.orchestration.balanceIndex",
 			"gateway.runtime.orchestration.phaseLock",
-         "gateway.runtime.orchestration.symmetry",
+			"gateway.runtime.orchestration.symmetry",
 			"gateway.runtime.orchestration.gradient",
-         "gateway.runtime.orchestration.harmonicity",
+			"gateway.runtime.orchestration.harmonicity",
 			"gateway.runtime.orchestration.inertia",
+			"gateway.runtime.orchestration.cadenceIndex",
+			"gateway.runtime.orchestration.damping",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -710,28 +712,30 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.pacing",
 			"gateway.runtime.streaming.jitter",
 			"gateway.runtime.streaming.drift",
-           "gateway.runtime.streaming.variance",
-           "gateway.runtime.streaming.deviation",
-           "gateway.runtime.streaming.alignment",
-           "gateway.runtime.streaming.skew",
-           "gateway.runtime.streaming.dispersion",
-           "gateway.runtime.streaming.curvature",
-           "gateway.runtime.streaming.smoothness",
-           "gateway.runtime.streaming.harmonics",
-           "gateway.runtime.streaming.phase",
-           "gateway.runtime.streaming.tempo",
-           "gateway.runtime.streaming.temporal",
+			"gateway.runtime.streaming.variance",
+			"gateway.runtime.streaming.deviation",
+			"gateway.runtime.streaming.alignment",
+			"gateway.runtime.streaming.skew",
+			"gateway.runtime.streaming.dispersion",
+			"gateway.runtime.streaming.curvature",
+			"gateway.runtime.streaming.smoothness",
+			"gateway.runtime.streaming.harmonics",
+			"gateway.runtime.streaming.phase",
+			"gateway.runtime.streaming.tempo",
+			"gateway.runtime.streaming.temporal",
 			"gateway.runtime.streaming.consistency",
-           "gateway.runtime.streaming.spectral",
+			"gateway.runtime.streaming.spectral",
 			"gateway.runtime.streaming.envelope",
-           "gateway.runtime.streaming.resonance",
+			"gateway.runtime.streaming.resonance",
 			"gateway.runtime.streaming.vectorField",
-           "gateway.runtime.streaming.waveform",
+			"gateway.runtime.streaming.waveform",
 			"gateway.runtime.streaming.horizon",
-           "gateway.runtime.streaming.vectorClock",
+			"gateway.runtime.streaming.vectorClock",
 			"gateway.runtime.streaming.trend",
-           "gateway.runtime.streaming.coordination",
+			"gateway.runtime.streaming.coordination",
 			"gateway.runtime.streaming.latencyBand",
+			"gateway.runtime.streaming.phaseNoise",
+			"gateway.runtime.streaming.beat",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -756,22 +760,23 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.status",
 			"gateway.models.failover.override.history",
 			"gateway.models.failover.override.metrics",
-         "gateway.models.failover.override.window",
-         "gateway.models.failover.override.digest",
-         "gateway.models.failover.override.timeline",
-         "gateway.models.failover.override.catalog",
-         "gateway.models.failover.override.registry",
-         "gateway.models.failover.override.matrix",
-         "gateway.models.failover.override.snapshot",
-         "gateway.models.failover.override.pointer",
-         "gateway.models.failover.override.state",
-         "gateway.models.failover.override.profile",
-         "gateway.models.failover.override.audit",
-         "gateway.models.failover.override.checkpoint",
-         "gateway.models.failover.override.baseline",
-         "gateway.models.failover.override.manifest",
-         "gateway.models.failover.override.ledger",
-         "gateway.models.failover.override.snapshotIndex",
+			"gateway.models.failover.override.window",
+			"gateway.models.failover.override.digest",
+			"gateway.models.failover.override.timeline",
+			"gateway.models.failover.override.catalog",
+			"gateway.models.failover.override.registry",
+			"gateway.models.failover.override.matrix",
+			"gateway.models.failover.override.snapshot",
+			"gateway.models.failover.override.pointer",
+			"gateway.models.failover.override.state",
+			"gateway.models.failover.override.profile",
+			"gateway.models.failover.override.audit",
+			"gateway.models.failover.override.checkpoint",
+			"gateway.models.failover.override.baseline",
+			"gateway.models.failover.override.manifest",
+			"gateway.models.failover.override.ledger",
+			"gateway.models.failover.override.snapshotIndex",
+			"gateway.models.failover.override.digestIndex",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3556,6 +3561,20 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+           { "gateway.runtime.orchestration.cadenceIndex", [&]() {
+				if (!IsFieldNumber(payload, "cadenceIndex") || !IsFieldNumber(payload, "jitter") || !IsFieldValueType(payload, "state", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.cadenceIndex` requires `cadenceIndex`, `jitter`, and `state` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.damping", [&]() {
+				if (!IsFieldNumber(payload, "damping") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.damping` requires `damping`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.status` requires `enabled`, `mode`, and `heartbeatMs` fields.");
@@ -3878,6 +3897,20 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+         { "gateway.runtime.streaming.phaseNoise", [&]() {
+				if (!IsFieldNumber(payload, "phaseNoise") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "bounded")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.phaseNoise` requires `phaseNoise`, `samples`, and `bounded` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.beat", [&]() {
+				if (!IsFieldNumber(payload, "beatHz") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.beat` requires `beatHz`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.models.failover.status", [&]() {
 				if (!IsFieldValueType(payload, "primary", '"') || !IsFieldValueType(payload, "fallbacks", '[') || !IsFieldNumber(payload, "maxRetries") || !IsFieldValueType(payload, "strategy", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.status` requires `primary`, `fallbacks`, `maxRetries`, and `strategy` fields.");
@@ -4154,6 +4187,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.snapshotIndex", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "index") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.snapshotIndex` requires `active`, `index`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.digestIndex", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "digestIndex") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.digestIndex` requires `active`, `digestIndex`, and `model` fields.");
 					return false;
 				}
 				return true;
