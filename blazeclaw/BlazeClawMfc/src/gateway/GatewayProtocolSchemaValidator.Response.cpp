@@ -591,13 +591,13 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.digest",
 			"gateway.models.failover.ledger",
 			"gateway.models.failover.profile",
-         "gateway.models.failover.baseline",
-         "gateway.models.failover.forecast",
-         "gateway.models.failover.threshold",
-         "gateway.models.failover.guardrail",
-         "gateway.models.failover.envelope",
-         "gateway.models.failover.margin",
-         "gateway.models.failover.reserve",
+			"gateway.models.failover.baseline",
+			"gateway.models.failover.forecast",
+			"gateway.models.failover.threshold",
+			"gateway.models.failover.guardrail",
+			"gateway.models.failover.envelope",
+			"gateway.models.failover.margin",
+			"gateway.models.failover.reserve",
 			"gateway.runtime.orchestration.status",
 			"gateway.runtime.orchestration.queue",
 			"gateway.runtime.orchestration.assign",
@@ -610,36 +610,37 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.cadence",
 			"gateway.runtime.orchestration.beacon",
 			"gateway.runtime.orchestration.epoch",
-         "gateway.runtime.orchestration.phase",
-         "gateway.runtime.orchestration.signal",
-         "gateway.runtime.orchestration.vector",
-         "gateway.runtime.orchestration.matrix",
-         "gateway.runtime.orchestration.lattice",
-         "gateway.runtime.orchestration.mesh",
-         "gateway.runtime.orchestration.fabric",
-         "gateway.runtime.orchestration.load",
-         "gateway.runtime.orchestration.saturation",
-         "gateway.runtime.orchestration.pressure",
-         "gateway.runtime.orchestration.headroom",
+			"gateway.runtime.orchestration.phase",
+			"gateway.runtime.orchestration.signal",
+			"gateway.runtime.orchestration.vector",
+			"gateway.runtime.orchestration.matrix",
+			"gateway.runtime.orchestration.lattice",
+			"gateway.runtime.orchestration.mesh",
+			"gateway.runtime.orchestration.fabric",
+			"gateway.runtime.orchestration.load",
+			"gateway.runtime.orchestration.saturation",
+			"gateway.runtime.orchestration.pressure",
+			"gateway.runtime.orchestration.headroom",
+			"gateway.runtime.orchestration.balance",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
-            "gateway.runtime.streaming.window",
-            "gateway.runtime.streaming.backpressure",
-            "gateway.runtime.streaming.replay",
-            "gateway.runtime.streaming.cursor",
-            "gateway.runtime.streaming.metrics",
-            "gateway.runtime.streaming.health",
-            "gateway.runtime.streaming.snapshot",
-            "gateway.runtime.streaming.watermark",
-            "gateway.runtime.streaming.checkpoint",
-            "gateway.runtime.streaming.resume",
-            "gateway.runtime.streaming.recovery",
-            "gateway.runtime.streaming.continuity",
-            "gateway.runtime.streaming.stability",
-            "gateway.runtime.streaming.integrity",
-            "gateway.runtime.streaming.coherence",
-            "gateway.runtime.streaming.fidelity",
-            "gateway.runtime.streaming.accuracy",
+			"gateway.runtime.streaming.window",
+			"gateway.runtime.streaming.backpressure",
+			"gateway.runtime.streaming.replay",
+			"gateway.runtime.streaming.cursor",
+			"gateway.runtime.streaming.metrics",
+			"gateway.runtime.streaming.health",
+			"gateway.runtime.streaming.snapshot",
+			"gateway.runtime.streaming.watermark",
+			"gateway.runtime.streaming.checkpoint",
+			"gateway.runtime.streaming.resume",
+			"gateway.runtime.streaming.recovery",
+			"gateway.runtime.streaming.continuity",
+			"gateway.runtime.streaming.stability",
+			"gateway.runtime.streaming.integrity",
+			"gateway.runtime.streaming.coherence",
+			"gateway.runtime.streaming.fidelity",
+			"gateway.runtime.streaming.accuracy",
 			"gateway.config.getKey",
 			"gateway.transport.endpoint.exists",
 			"gateway.tick",
@@ -656,13 +657,13 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.cadence",
 			"gateway.runtime.orchestration.beacon",
 			"gateway.runtime.orchestration.epoch",
-         "gateway.runtime.orchestration.phase",
-         "gateway.runtime.orchestration.signal",
-         "gateway.runtime.orchestration.vector",
-         "gateway.runtime.orchestration.matrix",
-         "gateway.runtime.orchestration.lattice",
-         "gateway.runtime.orchestration.mesh",
-         "gateway.runtime.orchestration.fabric",
+			"gateway.runtime.orchestration.phase",
+			"gateway.runtime.orchestration.signal",
+			"gateway.runtime.orchestration.vector",
+			"gateway.runtime.orchestration.matrix",
+			"gateway.runtime.orchestration.lattice",
+			"gateway.runtime.orchestration.mesh",
+			"gateway.runtime.orchestration.fabric",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -675,17 +676,18 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.watermark",
 			"gateway.runtime.streaming.checkpoint",
 			"gateway.runtime.streaming.resume",
-           "gateway.runtime.streaming.recovery",
-           "gateway.runtime.streaming.continuity",
-           "gateway.runtime.streaming.stability",
-           "gateway.runtime.streaming.integrity",
-           "gateway.runtime.streaming.coherence",
-           "gateway.runtime.streaming.fidelity",
-           "gateway.runtime.streaming.accuracy",
-           "gateway.runtime.streaming.buffer",
-           "gateway.runtime.streaming.throttle",
-           "gateway.runtime.streaming.pacing",
-           "gateway.runtime.streaming.jitter",
+			"gateway.runtime.streaming.recovery",
+			"gateway.runtime.streaming.continuity",
+			"gateway.runtime.streaming.stability",
+			"gateway.runtime.streaming.integrity",
+			"gateway.runtime.streaming.coherence",
+			"gateway.runtime.streaming.fidelity",
+			"gateway.runtime.streaming.accuracy",
+			"gateway.runtime.streaming.buffer",
+			"gateway.runtime.streaming.throttle",
+			"gateway.runtime.streaming.pacing",
+			"gateway.runtime.streaming.jitter",
+			"gateway.runtime.streaming.drift",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -698,17 +700,18 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.digest",
 			"gateway.models.failover.ledger",
 			"gateway.models.failover.profile",
-         "gateway.models.failover.baseline",
-         "gateway.models.failover.forecast",
-         "gateway.models.failover.threshold",
-         "gateway.models.failover.guardrail",
-         "gateway.models.failover.envelope",
-         "gateway.models.failover.margin",
-         "gateway.models.failover.reserve",
-         "gateway.models.failover.override",
-         "gateway.models.failover.override.clear",
-         "gateway.models.failover.override.status",
-         "gateway.models.failover.override.history",
+			"gateway.models.failover.baseline",
+			"gateway.models.failover.forecast",
+			"gateway.models.failover.threshold",
+			"gateway.models.failover.guardrail",
+			"gateway.models.failover.envelope",
+			"gateway.models.failover.margin",
+			"gateway.models.failover.reserve",
+			"gateway.models.failover.override",
+			"gateway.models.failover.override.clear",
+			"gateway.models.failover.override.status",
+			"gateway.models.failover.override.history",
+			"gateway.models.failover.override.metrics",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3332,6 +3335,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+           { "gateway.runtime.orchestration.balance", [&]() {
+				if (!IsFieldBoolean(payload, "balanced") || !IsFieldNumber(payload, "skew") || !IsFieldValueType(payload, "state", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.balance` requires `balanced`, `skew`, and `state` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.status` requires `enabled`, `mode`, and `heartbeatMs` fields.");
@@ -3493,6 +3503,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+         { "gateway.runtime.streaming.drift", [&]() {
+				if (!IsFieldNumber(payload, "driftMs") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "corrected")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.drift` requires `driftMs`, `windowMs`, and `corrected` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.models.failover.status", [&]() {
 				if (!IsFieldValueType(payload, "primary", '"') || !IsFieldValueType(payload, "fallbacks", '[') || !IsFieldNumber(payload, "maxRetries") || !IsFieldValueType(payload, "strategy", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.status` requires `primary`, `fallbacks`, `maxRetries`, and `strategy` fields.");
@@ -3650,6 +3667,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.history", [&]() {
 				if (!IsFieldNumber(payload, "entries") || !IsFieldValueType(payload, "lastModel", '"') || !IsFieldBoolean(payload, "active")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.history` requires `entries`, `lastModel`, and `active` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.metrics", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "switches") || !IsFieldValueType(payload, "lastModel", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.metrics` requires `active`, `switches`, and `lastModel` fields.");
 					return false;
 				}
 				return true;

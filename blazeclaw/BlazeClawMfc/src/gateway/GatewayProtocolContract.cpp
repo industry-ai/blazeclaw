@@ -566,45 +566,51 @@ namespace blazeclaw::gateway::protocol {
 			}
 		}
 
-        const std::array<ResponseFrame, 18> negativeResponses = {
+       const std::array<ResponseFrame, 21> negativeResponses = {
 			ResponseFrame{.id = "neg-1", .ok = true, .payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true}]}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-2", .ok = true, .payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-3", .ok = true, .payloadJson = "{\"tool\":\"chat.send\",\"executed\":true,\"status\":\"ok\",\"argsProvided\":false}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-4", .ok = true, .payloadJson = "{\"count\":2,\"succeeded\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-4", .ok = true, .payloadJson = "{\"count\":2,\"succeeded\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-5", .ok = true, .payloadJson = "{\"found\":true,\"count\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-6", .ok = true, .payloadJson = "{\"cleared\":2}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-7", .ok = true, .payloadJson = "{\"queueLoad\":0,\"agentLoad\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-7", .ok = true, .payloadJson = "{\"queueLoad\":0,\"agentLoad\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-8", .ok = true, .payloadJson = "{\"bufferedFrames\":0,\"highWatermark\":16}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-9", .ok = true, .payloadJson = "{\"active\":false,\"model\":\"default\"}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-10", .ok = true, .payloadJson = "{\"saturation\":0,\"capacity\":8}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-10", .ok = true, .payloadJson = "{\"saturation\":0,\"capacity\":8}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-11", .ok = true, .payloadJson = "{\"limitPerSec\":120,\"currentPerSec\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-12", .ok = true, .payloadJson = "{\"cleared\":true,\"active\":false}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-13", .ok = true, .payloadJson = "{\"pressure\":0,\"threshold\":80}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-13", .ok = true, .payloadJson = "{\"pressure\":0,\"threshold\":80}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-14", .ok = true, .payloadJson = "{\"paceMs\":50,\"burst\":1}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-15", .ok = true, .payloadJson = "{\"active\":false,\"model\":\"default\"}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-16", .ok = true, .payloadJson = "{\"headroom\":8,\"used\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-16", .ok = true, .payloadJson = "{\"headroom\":8,\"used\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-17", .ok = true, .payloadJson = "{\"jitterMs\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-18", .ok = true, .payloadJson = "{\"entries\":0,\"lastModel\":\"default\"}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-19", .ok = true, .payloadJson = "{\"balanced\":true,\"skew\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-20", .ok = true, .payloadJson = "{\"driftMs\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-21", .ok = true, .payloadJson = "{\"active\":false,\"switches\":0}", .error = std::nullopt },
 		};
 
 		if (!ValidateNegativeResponseCase("gateway.channels.accounts", negativeResponses[0], "gateway.channels.accounts missing `connected`", error) ||
 			!ValidateNegativeResponseCase("gateway.sessions.delete", negativeResponses[1], "gateway.sessions.delete missing `remaining`", error) ||
-          !ValidateNegativeResponseCase("gateway.tools.call.execute", negativeResponses[2], "gateway.tools.call.execute missing `output`", error) ||
+			!ValidateNegativeResponseCase("gateway.tools.call.execute", negativeResponses[2], "gateway.tools.call.execute missing `output`", error) ||
 			!ValidateNegativeResponseCase("gateway.tools.executions.count", negativeResponses[3], "gateway.tools.executions.count missing `failed`", error) ||
 			!ValidateNegativeResponseCase("gateway.tools.executions.latest", negativeResponses[4], "gateway.tools.executions.latest missing `execution`", error) ||
-           !ValidateNegativeResponseCase("gateway.tools.executions.clear", negativeResponses[5], "gateway.tools.executions.clear missing `remaining`", error) ||
+			!ValidateNegativeResponseCase("gateway.tools.executions.clear", negativeResponses[5], "gateway.tools.executions.clear missing `remaining`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.load", negativeResponses[6], "gateway.runtime.orchestration.load missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.buffer", negativeResponses[7], "gateway.runtime.streaming.buffer missing `bufferedBytes`", error) ||
-          !ValidateNegativeResponseCase("gateway.models.failover.override", negativeResponses[8], "gateway.models.failover.override missing `reason`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override", negativeResponses[8], "gateway.models.failover.override missing `reason`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.saturation", negativeResponses[9], "gateway.runtime.orchestration.saturation missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.throttle", negativeResponses[10], "gateway.runtime.streaming.throttle missing `throttled`", error) ||
-          !ValidateNegativeResponseCase("gateway.models.failover.override.clear", negativeResponses[11], "gateway.models.failover.override.clear missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.clear", negativeResponses[11], "gateway.models.failover.override.clear missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.pressure", negativeResponses[12], "gateway.runtime.orchestration.pressure missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.pacing", negativeResponses[13], "gateway.runtime.streaming.pacing missing `adaptive`", error) ||
-           !ValidateNegativeResponseCase("gateway.models.failover.override.status", negativeResponses[14], "gateway.models.failover.override.status missing `source`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.status", negativeResponses[14], "gateway.models.failover.override.status missing `source`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.headroom", negativeResponses[15], "gateway.runtime.orchestration.headroom missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.jitter", negativeResponses[16], "gateway.runtime.streaming.jitter missing `stable`", error) ||
-			!ValidateNegativeResponseCase("gateway.models.failover.override.history", negativeResponses[17], "gateway.models.failover.override.history missing `active`", error)) {
+			!ValidateNegativeResponseCase("gateway.models.failover.override.history", negativeResponses[17], "gateway.models.failover.override.history missing `active`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.balance", negativeResponses[18], "gateway.runtime.orchestration.balance missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.drift", negativeResponses[19], "gateway.runtime.streaming.drift missing `corrected`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.metrics", negativeResponses[20], "gateway.models.failover.override.metrics missing `lastModel`", error)) {
 			return false;
 		}
 
