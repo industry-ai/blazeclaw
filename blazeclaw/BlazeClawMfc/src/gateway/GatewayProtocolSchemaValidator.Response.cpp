@@ -652,6 +652,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.phaseEnvelope",
          "gateway.runtime.orchestration.vectorDrift",
 			"gateway.runtime.orchestration.phaseBias",
+         "gateway.runtime.orchestration.phaseVector",
+			"gateway.runtime.orchestration.biasEnvelope",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -748,6 +750,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.waveIndex",
            "gateway.runtime.streaming.syncBand",
 			"gateway.runtime.streaming.waveDrift",
+           "gateway.runtime.streaming.syncEnvelope",
+			"gateway.runtime.streaming.bandDrift",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -793,6 +797,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.models.failover.override.vector",
          "gateway.models.failover.override.vectorDrift",
          "gateway.models.failover.override.phaseBias",
+         "gateway.models.failover.override.biasEnvelope",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3647,6 +3652,20 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+           { "gateway.runtime.orchestration.phaseVector", [&]() {
+				if (!IsFieldNumber(payload, "phaseVector") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseVector` requires `phaseVector`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.biasEnvelope", [&]() {
+				if (!IsFieldNumber(payload, "biasEnvelope") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.biasEnvelope` requires `biasEnvelope`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.status` requires `enabled`, `mode`, and `heartbeatMs` fields.");
@@ -4025,6 +4044,20 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+            { "gateway.runtime.streaming.syncEnvelope", [&]() {
+				if (!IsFieldNumber(payload, "syncEnvelope") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncEnvelope` requires `syncEnvelope`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandDrift", [&]() {
+				if (!IsFieldNumber(payload, "bandDrift") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandDrift` requires `bandDrift`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
          { "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncBand` requires `syncBand`, `samples`, and `stable` fields.");
@@ -4350,6 +4383,13 @@ namespace blazeclaw::gateway::protocol {
           { "gateway.models.failover.override.phaseBias", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "phaseBias") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.phaseBias` requires `active`, `phaseBias`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.biasEnvelope", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "biasEnvelope") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.biasEnvelope` requires `active`, `biasEnvelope`, and `model` fields.");
 					return false;
 				}
 				return true;

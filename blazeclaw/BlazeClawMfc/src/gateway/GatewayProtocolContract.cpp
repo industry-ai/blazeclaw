@@ -566,7 +566,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 		}
 
-       const std::array<ResponseFrame, 106> negativeResponses = {
+       const std::array<ResponseFrame, 111> negativeResponses = {
 			ResponseFrame{.id = "neg-1", .ok = true, .payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true}]}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-2", .ok = true, .payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-3", .ok = true, .payloadJson = "{\"tool\":\"chat.send\",\"executed\":true,\"status\":\"ok\",\"argsProvided\":false}", .error = std::nullopt },
@@ -673,6 +673,11 @@ namespace blazeclaw::gateway::protocol {
 			ResponseFrame{.id = "neg-104", .ok = true, .payloadJson = "{\"syncDrift\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-105", .ok = true, .payloadJson = "{\"bandStability\":100,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-106", .ok = true, .payloadJson = "{\"active\":false,\"phaseBias\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-107", .ok = true, .payloadJson = "{\"phaseVector\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-108", .ok = true, .payloadJson = "{\"biasEnvelope\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-109", .ok = true, .payloadJson = "{\"syncEnvelope\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-110", .ok = true, .payloadJson = "{\"bandDrift\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-111", .ok = true, .payloadJson = "{\"active\":false,\"biasEnvelope\":0}", .error = std::nullopt },
 		};
 
 		if (!ValidateNegativeResponseCase("gateway.channels.accounts", negativeResponses[0], "gateway.channels.accounts missing `connected`", error) ||
@@ -780,7 +785,12 @@ namespace blazeclaw::gateway::protocol {
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.biasDrift", negativeResponses[102], "gateway.runtime.orchestration.biasDrift missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncDrift", negativeResponses[103], "gateway.runtime.streaming.syncDrift missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandStability", negativeResponses[104], "gateway.runtime.streaming.bandStability missing `stable`", error) ||
-			!ValidateNegativeResponseCase("gateway.models.failover.override.phaseBias", negativeResponses[105], "gateway.models.failover.override.phaseBias missing `model`", error)) {
+         !ValidateNegativeResponseCase("gateway.models.failover.override.phaseBias", negativeResponses[105], "gateway.models.failover.override.phaseBias missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseVector", negativeResponses[106], "gateway.runtime.orchestration.phaseVector missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.biasEnvelope", negativeResponses[107], "gateway.runtime.orchestration.biasEnvelope missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncEnvelope", negativeResponses[108], "gateway.runtime.streaming.syncEnvelope missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandDrift", negativeResponses[109], "gateway.runtime.streaming.bandDrift missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.biasEnvelope", negativeResponses[110], "gateway.models.failover.override.biasEnvelope missing `model`", error)) {
 			return false;
 		}
 
