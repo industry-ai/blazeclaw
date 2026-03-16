@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-1001",
+  "ok": true,
+  "payload": {
+    "efficiency": 100,
+    "waste": 0,
+    "state": "optimized"
+  }
+}

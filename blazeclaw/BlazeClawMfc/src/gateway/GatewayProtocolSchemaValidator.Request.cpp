@@ -1997,6 +1997,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.pressure", "gateway.runtime.streaming.pacing", "gateway.models.failover.override.status",
 			"gateway.runtime.orchestration.headroom", "gateway.runtime.streaming.jitter", "gateway.models.failover.override.history",
 			"gateway.runtime.orchestration.balance", "gateway.runtime.streaming.drift", "gateway.models.failover.override.metrics",
+          "gateway.runtime.orchestration.efficiency", "gateway.runtime.streaming.variance", "gateway.models.failover.override.window",
 			"gateway.config.sections", "gateway.config.schema", "gateway.config.validate", "gateway.config.audit",
 			"gateway.config.rollback", "gateway.config.backup", "gateway.config.diff", "gateway.config.snapshot",
 			"gateway.config.revision", "gateway.config.history", "gateway.config.profile", "gateway.config.template",

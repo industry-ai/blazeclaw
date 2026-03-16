@@ -566,7 +566,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 		}
 
-       const std::array<ResponseFrame, 21> negativeResponses = {
+        const std::array<ResponseFrame, 24> negativeResponses = {
 			ResponseFrame{.id = "neg-1", .ok = true, .payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true}]}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-2", .ok = true, .payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-3", .ok = true, .payloadJson = "{\"tool\":\"chat.send\",\"executed\":true,\"status\":\"ok\",\"argsProvided\":false}", .error = std::nullopt },
@@ -588,6 +588,9 @@ namespace blazeclaw::gateway::protocol {
 			ResponseFrame{.id = "neg-19", .ok = true, .payloadJson = "{\"balanced\":true,\"skew\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-20", .ok = true, .payloadJson = "{\"driftMs\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-21", .ok = true, .payloadJson = "{\"active\":false,\"switches\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-22", .ok = true, .payloadJson = "{\"efficiency\":100,\"waste\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-23", .ok = true, .payloadJson = "{\"variance\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-24", .ok = true, .payloadJson = "{\"active\":false,\"windowSec\":60}", .error = std::nullopt },
 		};
 
 		if (!ValidateNegativeResponseCase("gateway.channels.accounts", negativeResponses[0], "gateway.channels.accounts missing `connected`", error) ||
@@ -610,7 +613,10 @@ namespace blazeclaw::gateway::protocol {
 			!ValidateNegativeResponseCase("gateway.models.failover.override.history", negativeResponses[17], "gateway.models.failover.override.history missing `active`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.balance", negativeResponses[18], "gateway.runtime.orchestration.balance missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.drift", negativeResponses[19], "gateway.runtime.streaming.drift missing `corrected`", error) ||
-			!ValidateNegativeResponseCase("gateway.models.failover.override.metrics", negativeResponses[20], "gateway.models.failover.override.metrics missing `lastModel`", error)) {
+          !ValidateNegativeResponseCase("gateway.models.failover.override.metrics", negativeResponses[20], "gateway.models.failover.override.metrics missing `lastModel`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.efficiency", negativeResponses[21], "gateway.runtime.orchestration.efficiency missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.variance", negativeResponses[22], "gateway.runtime.streaming.variance missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.window", negativeResponses[23], "gateway.models.failover.override.window missing `model`", error)) {
 			return false;
 		}
 
