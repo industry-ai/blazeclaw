@@ -36,6 +36,9 @@ namespace blazeclaw::gateway {
 
 	private:
 		void RegisterDefaultHandlers();
+		void RegisterSecurityOpsHandlers();
+		void RegisterRuntimeHandlers();
+		void RegisterTransportHandlers();
 
 		bool m_running = false;
 		std::string m_bindAddress;
