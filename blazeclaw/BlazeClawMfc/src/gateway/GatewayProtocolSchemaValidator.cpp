@@ -91,6 +91,11 @@ namespace blazeclaw::gateway::protocol {
         "gateway.runtime.orchestration.damping",
         "gateway.runtime.streaming.phaseNoise",
         "gateway.runtime.streaming.beat",
-        "gateway.models.failover.override.digestIndex"
+        "gateway.models.failover.override.digestIndex",
+        "gateway.runtime.orchestration.waveLock",
+        "gateway.runtime.orchestration.flux",
+        "gateway.runtime.streaming.modulation",
+        "gateway.runtime.streaming.pulseTrain",
+        "gateway.models.failover.override.cursor"
     };
 } // namespace blazeclaw::gateway::protocol
