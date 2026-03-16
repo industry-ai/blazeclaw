@@ -566,7 +566,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 		}
 
-        const std::array<ResponseFrame, 56> negativeResponses = {
+       const std::array<ResponseFrame, 61> negativeResponses = {
 			ResponseFrame{.id = "neg-1", .ok = true, .payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true}]}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-2", .ok = true, .payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-3", .ok = true, .payloadJson = "{\"tool\":\"chat.send\",\"executed\":true,\"status\":\"ok\",\"argsProvided\":false}", .error = std::nullopt },
@@ -623,6 +623,11 @@ namespace blazeclaw::gateway::protocol {
 			ResponseFrame{.id = "neg-54", .ok = true, .payloadJson = "{\"temporal\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-55", .ok = true, .payloadJson = "{\"consistent\":true,\"deviation\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-56", .ok = true, .payloadJson = "{\"active\":false,\"entries\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-57", .ok = true, .payloadJson = "{\"parity\":100,\"gap\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-58", .ok = true, .payloadJson = "{\"stabilityIndex\":100,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-59", .ok = true, .payloadJson = "{\"spectral\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-60", .ok = true, .payloadJson = "{\"floor\":0,\"ceiling\":100}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-61", .ok = true, .payloadJson = "{\"active\":false,\"checkpoint\":\"cp-override-1\"}", .error = std::nullopt },
 		};
 
 		if (!ValidateNegativeResponseCase("gateway.channels.accounts", negativeResponses[0], "gateway.channels.accounts missing `connected`", error) ||
@@ -680,7 +685,12 @@ namespace blazeclaw::gateway::protocol {
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.steadiness", negativeResponses[52], "gateway.runtime.orchestration.steadiness missing `windowMs`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.temporal", negativeResponses[53], "gateway.runtime.streaming.temporal missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.consistency", negativeResponses[54], "gateway.runtime.streaming.consistency missing `samples`", error) ||
-			!ValidateNegativeResponseCase("gateway.models.failover.override.audit", negativeResponses[55], "gateway.models.failover.override.audit missing `model`", error)) {
+          !ValidateNegativeResponseCase("gateway.models.failover.override.audit", negativeResponses[55], "gateway.models.failover.override.audit missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.parity", negativeResponses[56], "gateway.runtime.orchestration.parity missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.stabilityIndex", negativeResponses[57], "gateway.runtime.orchestration.stabilityIndex missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.spectral", negativeResponses[58], "gateway.runtime.streaming.spectral missing `bounded`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.envelope", negativeResponses[59], "gateway.runtime.streaming.envelope missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.checkpoint", negativeResponses[60], "gateway.models.failover.override.checkpoint missing `model`", error)) {
 			return false;
 		}
 
