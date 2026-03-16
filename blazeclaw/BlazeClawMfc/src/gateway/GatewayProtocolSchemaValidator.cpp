@@ -94,8 +94,13 @@ namespace blazeclaw::gateway::protocol {
         "gateway.models.failover.override.digestIndex",
         "gateway.runtime.orchestration.waveLock",
         "gateway.runtime.orchestration.flux",
+        "gateway.runtime.orchestration.vectorField",
+        "gateway.runtime.orchestration.phaseEnvelope",
         "gateway.runtime.streaming.modulation",
         "gateway.runtime.streaming.pulseTrain",
-        "gateway.models.failover.override.cursor"
+        "gateway.runtime.streaming.cohesion",
+        "gateway.runtime.streaming.waveIndex",
+        "gateway.models.failover.override.cursor",
+        "gateway.models.failover.override.vector"
     };
 } // namespace blazeclaw::gateway::protocol

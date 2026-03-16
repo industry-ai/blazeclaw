@@ -648,6 +648,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.damping",
          "gateway.runtime.orchestration.waveLock",
 			"gateway.runtime.orchestration.flux",
+         "gateway.runtime.orchestration.vectorField",
+			"gateway.runtime.orchestration.phaseEnvelope",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -740,6 +742,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.beat",
            "gateway.runtime.streaming.modulation",
 			"gateway.runtime.streaming.pulseTrain",
+           "gateway.runtime.streaming.cohesion",
+			"gateway.runtime.streaming.waveIndex",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -782,6 +786,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.snapshotIndex",
 			"gateway.models.failover.override.digestIndex",
          "gateway.models.failover.override.cursor",
+         "gateway.models.failover.override.vector",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3594,6 +3599,20 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+           { "gateway.runtime.orchestration.vectorField", [&]() {
+				if (!IsFieldNumber(payload, "vectors") || !IsFieldNumber(payload, "magnitude") || !IsFieldValueType(payload, "state", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorField` requires `vectors`, `magnitude`, and `state` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.phaseEnvelope", [&]() {
+				if (!IsFieldValueType(payload, "phase", '"') || !IsFieldNumber(payload, "amplitude") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseEnvelope` requires `phase`, `amplitude`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.status` requires `enabled`, `mode`, and `heartbeatMs` fields.");
@@ -3944,6 +3963,20 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+         { "gateway.runtime.streaming.cohesion", [&]() {
+				if (!IsFieldBoolean(payload, "cohesive") || !IsFieldNumber(payload, "delta") || !IsFieldNumber(payload, "samples")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.cohesion` requires `cohesive`, `delta`, and `samples` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.waveIndex", [&]() {
+				if (!IsFieldNumber(payload, "waveIndex") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.waveIndex` requires `waveIndex`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.models.failover.status", [&]() {
 				if (!IsFieldValueType(payload, "primary", '"') || !IsFieldValueType(payload, "fallbacks", '[') || !IsFieldNumber(payload, "maxRetries") || !IsFieldValueType(payload, "strategy", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.status` requires `primary`, `fallbacks`, `maxRetries`, and `strategy` fields.");
@@ -4234,6 +4267,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.cursor", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldValueType(payload, "cursor", '"') || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.cursor` requires `active`, `cursor`, and `model` fields.");
+					return false;
+				}
+				return true;
+			} },
+          { "gateway.models.failover.override.vector", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldValueType(payload, "vector", '"') || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vector` requires `active`, `vector`, and `model` fields.");
 					return false;
 				}
 				return true;

@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2706",
+  "ok": true,
+  "payload": {
+    "vectors": 2,
+    "magnitude": 0,
+    "state": "steady"
+  }
+}
