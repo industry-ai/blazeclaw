@@ -96,11 +96,16 @@ namespace blazeclaw::gateway::protocol {
         "gateway.runtime.orchestration.flux",
         "gateway.runtime.orchestration.vectorField",
         "gateway.runtime.orchestration.phaseEnvelope",
+        "gateway.runtime.orchestration.vectorDrift",
+        "gateway.runtime.orchestration.phaseBias",
         "gateway.runtime.streaming.modulation",
         "gateway.runtime.streaming.pulseTrain",
         "gateway.runtime.streaming.cohesion",
         "gateway.runtime.streaming.waveIndex",
+        "gateway.runtime.streaming.syncBand",
+        "gateway.runtime.streaming.waveDrift",
         "gateway.models.failover.override.cursor",
-        "gateway.models.failover.override.vector"
+        "gateway.models.failover.override.vector",
+        "gateway.models.failover.override.vectorDrift"
     };
 } // namespace blazeclaw::gateway::protocol

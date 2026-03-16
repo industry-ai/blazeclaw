@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2711",
+  "ok": true,
+  "payload": {
+    "vectorDrift": 0,
+    "windowMs": 1000,
+    "stable": true
+  }
+}
