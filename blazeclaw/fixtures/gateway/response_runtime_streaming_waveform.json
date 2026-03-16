@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2303",
+  "ok": true,
+  "payload": {
+    "waveform": "flat",
+    "samples": 2,
+    "stable": true
+  }
+}

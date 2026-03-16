@@ -71,6 +71,11 @@ namespace blazeclaw::gateway::protocol {
         "gateway.runtime.orchestration.hysteresis",
         "gateway.runtime.streaming.resonance",
         "gateway.runtime.streaming.vectorField",
-        "gateway.models.failover.override.baseline"
+        "gateway.models.failover.override.baseline",
+        "gateway.runtime.orchestration.balanceIndex",
+        "gateway.runtime.orchestration.phaseLock",
+        "gateway.runtime.streaming.waveform",
+        "gateway.runtime.streaming.horizon",
+        "gateway.models.failover.override.manifest"
     };
 } // namespace blazeclaw::gateway::protocol

@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2301",
+  "ok": true,
+  "payload": {
+    "balanceIndex": 100,
+    "skew": 0,
+    "state": "balanced"
+  }
+}
