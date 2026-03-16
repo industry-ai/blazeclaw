@@ -98,14 +98,19 @@ namespace blazeclaw::gateway::protocol {
         "gateway.runtime.orchestration.phaseEnvelope",
         "gateway.runtime.orchestration.vectorDrift",
         "gateway.runtime.orchestration.phaseBias",
+        "gateway.runtime.orchestration.vectorPhase",
+        "gateway.runtime.orchestration.biasDrift",
         "gateway.runtime.streaming.modulation",
         "gateway.runtime.streaming.pulseTrain",
         "gateway.runtime.streaming.cohesion",
         "gateway.runtime.streaming.waveIndex",
         "gateway.runtime.streaming.syncBand",
         "gateway.runtime.streaming.waveDrift",
+        "gateway.runtime.streaming.syncDrift",
+        "gateway.runtime.streaming.bandStability",
         "gateway.models.failover.override.cursor",
         "gateway.models.failover.override.vector",
-        "gateway.models.failover.override.vectorDrift"
+        "gateway.models.failover.override.vectorDrift",
+        "gateway.models.failover.override.phaseBias"
     };
 } // namespace blazeclaw::gateway::protocol
