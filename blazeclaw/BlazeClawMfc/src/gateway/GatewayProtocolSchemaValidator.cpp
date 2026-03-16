@@ -76,6 +76,11 @@ namespace blazeclaw::gateway::protocol {
         "gateway.runtime.orchestration.phaseLock",
         "gateway.runtime.streaming.waveform",
         "gateway.runtime.streaming.horizon",
-        "gateway.models.failover.override.manifest"
+        "gateway.models.failover.override.manifest",
+        "gateway.runtime.orchestration.symmetry",
+        "gateway.runtime.orchestration.gradient",
+        "gateway.runtime.streaming.vectorClock",
+        "gateway.runtime.streaming.trend",
+        "gateway.models.failover.override.ledger"
     };
 } // namespace blazeclaw::gateway::protocol

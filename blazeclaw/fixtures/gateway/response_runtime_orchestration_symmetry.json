@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2401",
+  "ok": true,
+  "payload": {
+    "symmetry": 100,
+    "offset": 0,
+    "state": "aligned"
+  }
+}
