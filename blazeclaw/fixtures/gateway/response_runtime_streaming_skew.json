@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-1302",
+  "ok": true,
+  "payload": {
+    "skewMs": 0,
+    "samples": 2,
+    "bounded": true
+  }
+}

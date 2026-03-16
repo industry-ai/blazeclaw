@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-1301",
+  "ok": true,
+  "payload": {
+    "occupancy": 0,
+    "slots": 8,
+    "state": "idle"
+  }
+}
