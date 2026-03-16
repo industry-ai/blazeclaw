@@ -1234,6 +1234,66 @@ namespace blazeclaw::gateway {
                     .error = std::nullopt,
                 };
             });
+
+        m_dispatcher.Register(
+            "gateway.runtime.orchestration.equilibrium",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"equilibrium\":100,\"delta\":0,\"state\":\"balanced\"}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.orchestration.steadiness",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"steady\":true,\"variance\":0,\"windowMs\":1000}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.streaming.temporal",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"temporal\":0,\"samples\":2,\"stable\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.streaming.consistency",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"consistent\":true,\"deviation\":0,\"samples\":2}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.models.failover.override.audit",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"active\":false,\"entries\":0,\"model\":\"default\"}",
+                    .error = std::nullopt,
+                };
+            });
     }
 
 } // namespace blazeclaw::gateway

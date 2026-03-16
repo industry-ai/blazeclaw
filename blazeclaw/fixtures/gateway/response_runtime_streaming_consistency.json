@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2004",
+  "ok": true,
+  "payload": {
+    "consistent": true,
+    "deviation": 0,
+    "samples": 2
+  }
+}

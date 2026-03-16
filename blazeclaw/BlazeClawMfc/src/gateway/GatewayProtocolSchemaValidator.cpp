@@ -56,6 +56,11 @@ namespace blazeclaw::gateway::protocol {
         "gateway.models.failover.override.state",
         "gateway.runtime.orchestration.fairness",
         "gateway.runtime.streaming.tempo",
-        "gateway.models.failover.override.profile"
+        "gateway.models.failover.override.profile",
+        "gateway.runtime.orchestration.equilibrium",
+        "gateway.runtime.orchestration.steadiness",
+        "gateway.runtime.streaming.temporal",
+        "gateway.runtime.streaming.consistency",
+        "gateway.models.failover.override.audit"
     };
 } // namespace blazeclaw::gateway::protocol
