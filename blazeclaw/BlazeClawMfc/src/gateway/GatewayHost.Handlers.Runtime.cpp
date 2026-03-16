@@ -1054,6 +1054,42 @@ namespace blazeclaw::gateway {
                     .error = std::nullopt,
                 };
             });
+
+        m_dispatcher.Register(
+            "gateway.runtime.orchestration.cohesion",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"cohesion\":100,\"groups\":1,\"state\":\"coherent\"}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.streaming.curvature",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"curvature\":0,\"samples\":2,\"bounded\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.models.failover.override.matrix",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"active\":false,\"rows\":1,\"model\":\"default\"}",
+                    .error = std::nullopt,
+                };
+            });
     }
 
 } // namespace blazeclaw::gateway

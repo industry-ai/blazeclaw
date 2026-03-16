@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-1502",
+  "ok": true,
+  "payload": {
+    "curvature": 0,
+    "samples": 2,
+    "bounded": true
+  }
+}

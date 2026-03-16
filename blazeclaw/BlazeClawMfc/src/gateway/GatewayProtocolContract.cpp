@@ -566,7 +566,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 		}
 
-        const std::array<ResponseFrame, 36> negativeResponses = {
+       const std::array<ResponseFrame, 39> negativeResponses = {
 			ResponseFrame{.id = "neg-1", .ok = true, .payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true}]}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-2", .ok = true, .payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-3", .ok = true, .payloadJson = "{\"tool\":\"chat.send\",\"executed\":true,\"status\":\"ok\",\"argsProvided\":false}", .error = std::nullopt },
@@ -603,6 +603,9 @@ namespace blazeclaw::gateway::protocol {
           ResponseFrame{.id = "neg-34", .ok = true, .payloadJson = "{\"elasticity\":100,\"headroom\":8}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-35", .ok = true, .payloadJson = "{\"dispersion\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-36", .ok = true, .payloadJson = "{\"active\":false,\"entries\":1}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-37", .ok = true, .payloadJson = "{\"cohesion\":100,\"groups\":1}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-38", .ok = true, .payloadJson = "{\"curvature\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-39", .ok = true, .payloadJson = "{\"active\":false,\"rows\":1}", .error = std::nullopt },
 		};
 
 		if (!ValidateNegativeResponseCase("gateway.channels.accounts", negativeResponses[0], "gateway.channels.accounts missing `connected`", error) ||
@@ -640,7 +643,10 @@ namespace blazeclaw::gateway::protocol {
           !ValidateNegativeResponseCase("gateway.models.failover.override.catalog", negativeResponses[32], "gateway.models.failover.override.catalog missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.elasticity", negativeResponses[33], "gateway.runtime.orchestration.elasticity missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.dispersion", negativeResponses[34], "gateway.runtime.streaming.dispersion missing `bounded`", error) ||
-			!ValidateNegativeResponseCase("gateway.models.failover.override.registry", negativeResponses[35], "gateway.models.failover.override.registry missing `model`", error)) {
+            !ValidateNegativeResponseCase("gateway.models.failover.override.registry", negativeResponses[35], "gateway.models.failover.override.registry missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.cohesion", negativeResponses[36], "gateway.runtime.orchestration.cohesion missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.curvature", negativeResponses[37], "gateway.runtime.streaming.curvature missing `bounded`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.matrix", negativeResponses[38], "gateway.models.failover.override.matrix missing `model`", error)) {
 			return false;
 		}
 

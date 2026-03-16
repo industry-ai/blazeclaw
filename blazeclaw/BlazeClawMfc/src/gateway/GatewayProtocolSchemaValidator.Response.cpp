@@ -627,6 +627,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.runtime.orchestration.capacity",
          "gateway.runtime.orchestration.occupancy",
          "gateway.runtime.orchestration.elasticity",
+         "gateway.runtime.orchestration.cohesion",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -698,6 +699,7 @@ namespace blazeclaw::gateway::protocol {
            "gateway.runtime.streaming.alignment",
            "gateway.runtime.streaming.skew",
            "gateway.runtime.streaming.dispersion",
+           "gateway.runtime.streaming.curvature",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -727,6 +729,7 @@ namespace blazeclaw::gateway::protocol {
          "gateway.models.failover.override.timeline",
          "gateway.models.failover.override.catalog",
          "gateway.models.failover.override.registry",
+         "gateway.models.failover.override.matrix",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3392,6 +3395,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+           { "gateway.runtime.orchestration.cohesion", [&]() {
+				if (!IsFieldNumber(payload, "cohesion") || !IsFieldNumber(payload, "groups") || !IsFieldValueType(payload, "state", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.cohesion` requires `cohesion`, `groups`, and `state` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.status` requires `enabled`, `mode`, and `heartbeatMs` fields.");
@@ -3595,6 +3605,13 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+         { "gateway.runtime.streaming.curvature", [&]() {
+				if (!IsFieldNumber(payload, "curvature") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "bounded")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.curvature` requires `curvature`, `samples`, and `bounded` fields.");
+					return false;
+				}
+				return true;
+			} },
 			{ "gateway.models.failover.status", [&]() {
 				if (!IsFieldValueType(payload, "primary", '"') || !IsFieldValueType(payload, "fallbacks", '[') || !IsFieldNumber(payload, "maxRetries") || !IsFieldValueType(payload, "strategy", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.status` requires `primary`, `fallbacks`, `maxRetries`, and `strategy` fields.");
@@ -3794,6 +3811,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.registry", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "entries") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.registry` requires `active`, `entries`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.matrix", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "rows") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.matrix` requires `active`, `rows`, and `model` fields.");
 					return false;
 				}
 				return true;

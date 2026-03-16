@@ -41,6 +41,9 @@ namespace blazeclaw::gateway::protocol {
         "gateway.models.failover.override.catalog",
         "gateway.runtime.orchestration.elasticity",
         "gateway.runtime.streaming.dispersion",
-        "gateway.models.failover.override.registry"
+        "gateway.models.failover.override.registry",
+        "gateway.runtime.orchestration.cohesion",
+        "gateway.runtime.streaming.curvature",
+        "gateway.models.failover.override.matrix"
     };
 } // namespace blazeclaw::gateway::protocol
