@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-1203",
+  "ok": true,
+  "payload": {
+    "entries": 0,
+    "active": false,
+    "lastModel": "default"
+  }
+}

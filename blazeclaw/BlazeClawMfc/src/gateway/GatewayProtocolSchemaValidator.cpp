@@ -32,6 +32,9 @@ namespace blazeclaw::gateway::protocol {
         "gateway.models.failover.override.window",
         "gateway.runtime.orchestration.utilization",
         "gateway.runtime.streaming.deviation",
-        "gateway.models.failover.override.digest"
+        "gateway.models.failover.override.digest",
+        "gateway.runtime.orchestration.capacity",
+        "gateway.runtime.streaming.alignment",
+        "gateway.models.failover.override.timeline"
     };
 } // namespace blazeclaw::gateway::protocol
