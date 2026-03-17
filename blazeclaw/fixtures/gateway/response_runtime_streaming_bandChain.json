@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2819",
+  "ok": true,
+  "payload": {
+    "bandChain": 0,
+    "samples": 2,
+    "stable": true
+  }
+}
