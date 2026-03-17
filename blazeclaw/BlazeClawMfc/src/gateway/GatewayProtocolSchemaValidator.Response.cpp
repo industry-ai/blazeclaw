@@ -694,6 +694,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorChain",
 			"gateway.runtime.orchestration.phaseThread",
 			"gateway.runtime.orchestration.vectorThread",
+			"gateway.runtime.orchestration.phaseLink",
+			"gateway.runtime.orchestration.vectorLink",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -832,6 +834,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandChain",
 			"gateway.runtime.streaming.syncThread",
 			"gateway.runtime.streaming.bandThread",
+			"gateway.runtime.streaming.syncLink",
+			"gateway.runtime.streaming.bandLink",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -898,6 +902,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorSpline",
 			"gateway.models.failover.override.vectorChain",
 			"gateway.models.failover.override.vectorThread",
+			"gateway.models.failover.override.vectorLink",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -4045,6 +4050,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseLink", [&]() {
+				if (!IsFieldNumber(payload, "phaseLink") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseLink` requires `phaseLink`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorLink", [&]() {
+				if (!IsFieldNumber(payload, "vectorLink") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorLink` requires `vectorLink`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -4717,6 +4736,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncLink", [&]() {
+				if (!IsFieldNumber(payload, "syncLink") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncLink` requires `syncLink`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandLink", [&]() {
+				if (!IsFieldNumber(payload, "bandLink") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandLink` requires `bandLink`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -5190,6 +5223,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorThread", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorThread") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorThread` requires `active`, `vectorThread`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorLink", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorLink") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorLink` requires `active`, `vectorLink`, and `model` fields.");
 					return false;
 				}
 				return true;
