@@ -716,6 +716,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorLink2",
 			"gateway.runtime.orchestration.phaseMesh2",
 			"gateway.runtime.orchestration.vectorMesh2",
+			"gateway.runtime.orchestration.phaseArc2",
+			"gateway.runtime.orchestration.vectorArc2",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -876,6 +878,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandLink2",
 			"gateway.runtime.streaming.syncMesh2",
 			"gateway.runtime.streaming.bandMesh2",
+			"gateway.runtime.streaming.syncArc2",
+			"gateway.runtime.streaming.bandArc2",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -953,6 +957,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorNode3",
 			"gateway.models.failover.override.vectorLink2",
 			"gateway.models.failover.override.vectorMesh2",
+			"gateway.models.failover.override.vectorArc2",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -4254,6 +4259,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseArc2", [&]() {
+				if (!IsFieldNumber(payload, "phaseArc2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseArc2` requires `phaseArc2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorArc2", [&]() {
+				if (!IsFieldNumber(payload, "vectorArc2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorArc2` requires `vectorArc2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -5080,6 +5099,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncArc2", [&]() {
+				if (!IsFieldNumber(payload, "syncArc2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncArc2` requires `syncArc2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandArc2", [&]() {
+				if (!IsFieldNumber(payload, "bandArc2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandArc2` requires `bandArc2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -5630,6 +5663,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorMesh2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorMesh2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorMesh2` requires `active`, `vectorMesh2`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorArc2", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorArc2") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorArc2` requires `active`, `vectorArc2`, and `model` fields.");
 					return false;
 				}
 				return true;
