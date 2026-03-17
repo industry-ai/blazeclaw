@@ -698,6 +698,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorLink",
 			"gateway.runtime.orchestration.phaseNode",
 			"gateway.runtime.orchestration.vectorNode2",
+			"gateway.runtime.orchestration.phaseBridge",
+			"gateway.runtime.orchestration.vectorBridge",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -840,6 +842,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandLink",
 			"gateway.runtime.streaming.syncNode2",
 			"gateway.runtime.streaming.bandNode2",
+			"gateway.runtime.streaming.syncBridge",
+			"gateway.runtime.streaming.bandBridge",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -908,6 +912,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorThread",
 			"gateway.models.failover.override.vectorLink",
 			"gateway.models.failover.override.vectorNode2",
+			"gateway.models.failover.override.vectorBridge",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -4083,6 +4088,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseBridge", [&]() {
+				if (!IsFieldNumber(payload, "phaseBridge") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseBridge` requires `phaseBridge`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorBridge", [&]() {
+				if (!IsFieldNumber(payload, "vectorBridge") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorBridge` requires `vectorBridge`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -4783,6 +4802,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncBridge", [&]() {
+				if (!IsFieldNumber(payload, "syncBridge") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncBridge` requires `syncBridge`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandBridge", [&]() {
+				if (!IsFieldNumber(payload, "bandBridge") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandBridge` requires `bandBridge`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -5270,6 +5303,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorNode2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorNode2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorNode2` requires `active`, `vectorNode2`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorBridge", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorBridge") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorBridge` requires `active`, `vectorBridge`, and `model` fields.");
 					return false;
 				}
 				return true;
