@@ -752,6 +752,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorHub3",
 			"gateway.runtime.orchestration.phaseNode5",
 			"gateway.runtime.orchestration.vectorNode5",
+         "gateway.runtime.orchestration.phaseLink4",
+			"gateway.runtime.orchestration.vectorLink4",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -948,6 +950,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandHub3",
 			"gateway.runtime.streaming.syncNode5",
 			"gateway.runtime.streaming.bandNode5",
+           "gateway.runtime.streaming.syncLink4",
+			"gateway.runtime.streaming.bandLink4",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -1043,6 +1047,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorGate3",
 			"gateway.models.failover.override.vectorHub3",
 			"gateway.models.failover.override.vectorNode5",
+         "gateway.models.failover.override.vectorLink4",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -4596,6 +4601,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseLink4", [&]() {
+				if (!IsFieldNumber(payload, "phaseLink4") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseLink4` requires `phaseLink4`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorLink4", [&]() {
+				if (!IsFieldNumber(payload, "vectorLink4") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorLink4` requires `vectorLink4`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -5674,6 +5693,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncLink4", [&]() {
+				if (!IsFieldNumber(payload, "syncLink4") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncLink4` requires `syncLink4`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandLink4", [&]() {
+				if (!IsFieldNumber(payload, "bandLink4") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandLink4` requires `bandLink4`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -6350,6 +6383,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorNode5", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorNode5") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorNode5` requires `active`, `vectorNode5`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorLink4", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorLink4") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorLink4` requires `active`, `vectorLink4`, and `model` fields.");
 					return false;
 				}
 				return true;

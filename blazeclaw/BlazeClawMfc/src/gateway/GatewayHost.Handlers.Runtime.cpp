@@ -54,6 +54,30 @@ namespace blazeclaw::gateway {
             });
 
         m_dispatcher.Register(
+            "gateway.runtime.orchestration.phaseLink4",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"phaseLink4\":0,\"windowMs\":1000,\"stable\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.orchestration.vectorLink4",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"vectorLink4\":0,\"windowMs\":1000,\"stable\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
             "gateway.runtime.orchestration.phaseNode5",
             [](const protocol::RequestFrame& request) {
                 return protocol::ResponseFrame{
@@ -61,6 +85,30 @@ namespace blazeclaw::gateway {
                     .ok = true,
                     .payloadJson =
                         "{\"phaseNode5\":0,\"windowMs\":1000,\"stable\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.streaming.syncLink4",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"syncLink4\":1,\"samples\":2,\"stable\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.streaming.bandLink4",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"bandLink4\":0,\"samples\":2,\"stable\":true}",
                     .error = std::nullopt,
                 };
             });
@@ -4891,6 +4939,18 @@ namespace blazeclaw::gateway {
                     .ok = true,
                     .payloadJson =
                         "{\"active\":false,\"vectorNode5\":0,\"model\":\"default\"}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.models.failover.override.vectorLink4",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"active\":false,\"vectorLink4\":0,\"model\":\"default\"}",
                     .error = std::nullopt,
                 };
             });
