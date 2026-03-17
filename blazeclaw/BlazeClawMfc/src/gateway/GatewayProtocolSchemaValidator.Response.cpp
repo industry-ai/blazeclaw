@@ -724,6 +724,10 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorGrid2",
 			"gateway.runtime.orchestration.phaseLane2",
 			"gateway.runtime.orchestration.vectorLane2",
+			"gateway.runtime.orchestration.phaseTrack2",
+			"gateway.runtime.orchestration.vectorTrack2",
+			"gateway.runtime.orchestration.phaseRail2",
+			"gateway.runtime.orchestration.vectorRail2",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -892,6 +896,10 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandGrid2",
 			"gateway.runtime.streaming.syncLane2",
 			"gateway.runtime.streaming.bandLane2",
+			"gateway.runtime.streaming.syncTrack2",
+			"gateway.runtime.streaming.bandTrack2",
+			"gateway.runtime.streaming.syncRail2",
+			"gateway.runtime.streaming.bandRail2",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -973,6 +981,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorBand2",
 			"gateway.models.failover.override.vectorGrid2",
 			"gateway.models.failover.override.vectorLane2",
+			"gateway.models.failover.override.vectorTrack2",
+			"gateway.models.failover.override.vectorRail2",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -4330,6 +4340,34 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseTrack2", [&]() {
+				if (!IsFieldNumber(payload, "phaseTrack2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseTrack2` requires `phaseTrack2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorTrack2", [&]() {
+				if (!IsFieldNumber(payload, "vectorTrack2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorTrack2` requires `vectorTrack2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseRail2", [&]() {
+				if (!IsFieldNumber(payload, "phaseRail2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseRail2` requires `phaseRail2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorRail2", [&]() {
+				if (!IsFieldNumber(payload, "vectorRail2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorRail2` requires `vectorRail2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -5212,6 +5250,34 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncTrack2", [&]() {
+				if (!IsFieldNumber(payload, "syncTrack2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncTrack2` requires `syncTrack2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandTrack2", [&]() {
+				if (!IsFieldNumber(payload, "bandTrack2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandTrack2` requires `bandTrack2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.runtime.streaming.syncRail2", [&]() {
+				if (!IsFieldNumber(payload, "syncRail2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncRail2` requires `syncRail2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandRail2", [&]() {
+				if (!IsFieldNumber(payload, "bandRail2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandRail2` requires `bandRail2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -5790,6 +5856,20 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorLane2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorLane2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorLane2` requires `active`, `vectorLane2`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorTrack2", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorTrack2") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorTrack2` requires `active`, `vectorTrack2`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorRail2", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorRail2") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorRail2` requires `active`, `vectorRail2`, and `model` fields.");
 					return false;
 				}
 				return true;

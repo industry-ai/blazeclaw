@@ -566,7 +566,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 		}
 
-       const std::array<ResponseFrame, 266> negativeResponses = {
+       const std::array<ResponseFrame, 276> negativeResponses = {
 			ResponseFrame{.id = "neg-1", .ok = true, .payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true}]}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-2", .ok = true, .payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-3", .ok = true, .payloadJson = "{\"tool\":\"chat.send\",\"executed\":true,\"status\":\"ok\",\"argsProvided\":false}", .error = std::nullopt },
@@ -833,6 +833,16 @@ namespace blazeclaw::gateway::protocol {
 			ResponseFrame{.id = "neg-264", .ok = true, .payloadJson = "{\"syncLane2\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-265", .ok = true, .payloadJson = "{\"bandLane2\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-266", .ok = true, .payloadJson = "{\"active\":false,\"vectorLane2\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-267", .ok = true, .payloadJson = "{\"phaseTrack2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-268", .ok = true, .payloadJson = "{\"vectorTrack2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-269", .ok = true, .payloadJson = "{\"syncTrack2\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-270", .ok = true, .payloadJson = "{\"bandTrack2\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-271", .ok = true, .payloadJson = "{\"active\":false,\"vectorTrack2\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-272", .ok = true, .payloadJson = "{\"phaseRail2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-273", .ok = true, .payloadJson = "{\"vectorRail2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-274", .ok = true, .payloadJson = "{\"syncRail2\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-275", .ok = true, .payloadJson = "{\"bandRail2\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-276", .ok = true, .payloadJson = "{\"active\":false,\"vectorRail2\":0}", .error = std::nullopt },
 		};
 
 		if (!ValidateNegativeResponseCase("gateway.channels.accounts", negativeResponses[0], "gateway.channels.accounts missing `connected`", error) ||
@@ -1100,7 +1110,17 @@ namespace blazeclaw::gateway::protocol {
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorLane2", negativeResponses[262], "gateway.runtime.orchestration.vectorLane2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncLane2", negativeResponses[263], "gateway.runtime.streaming.syncLane2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandLane2", negativeResponses[264], "gateway.runtime.streaming.bandLane2 missing `stable`", error) ||
-			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorLane2", negativeResponses[265], "gateway.models.failover.override.vectorLane2 missing `model`", error)) {
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorLane2", negativeResponses[265], "gateway.models.failover.override.vectorLane2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseTrack2", negativeResponses[266], "gateway.runtime.orchestration.phaseTrack2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorTrack2", negativeResponses[267], "gateway.runtime.orchestration.vectorTrack2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncTrack2", negativeResponses[268], "gateway.runtime.streaming.syncTrack2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandTrack2", negativeResponses[269], "gateway.runtime.streaming.bandTrack2 missing `stable`", error) ||
+           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorTrack2", negativeResponses[270], "gateway.models.failover.override.vectorTrack2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseRail2", negativeResponses[271], "gateway.runtime.orchestration.phaseRail2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorRail2", negativeResponses[272], "gateway.runtime.orchestration.vectorRail2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncRail2", negativeResponses[273], "gateway.runtime.streaming.syncRail2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandRail2", negativeResponses[274], "gateway.runtime.streaming.bandRail2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorRail2", negativeResponses[275], "gateway.models.failover.override.vectorRail2 missing `model`", error)) {
 			return false;
 		}
 

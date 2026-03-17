@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2901",
+  "ok": true,
+  "payload": {
+    "phaseRail2": 0,
+    "windowMs": 1000,
+    "stable": true
+  }
+}
