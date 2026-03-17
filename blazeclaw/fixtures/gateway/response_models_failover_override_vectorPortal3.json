@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2945",
+  "ok": true,
+  "payload": {
+    "active": false,
+    "vectorPortal3": 0,
+    "model": "default"
+  }
+}
