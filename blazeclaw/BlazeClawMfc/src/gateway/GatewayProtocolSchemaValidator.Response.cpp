@@ -668,10 +668,12 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorRibbon",
 			"gateway.runtime.orchestration.phaseArc",
 			"gateway.runtime.orchestration.vectorSpiral",
-         "gateway.runtime.orchestration.phaseMesh",
+			"gateway.runtime.orchestration.phaseMesh",
 			"gateway.runtime.orchestration.vectorArc",
-         "gateway.runtime.orchestration.phaseFabric",
+			"gateway.runtime.orchestration.phaseFabric",
 			"gateway.runtime.orchestration.vectorMesh",
+			"gateway.runtime.orchestration.phaseNet",
+			"gateway.runtime.orchestration.vectorNode",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -784,10 +786,12 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandHelix",
 			"gateway.runtime.streaming.syncArc",
 			"gateway.runtime.streaming.bandSpiral",
-           "gateway.runtime.streaming.syncMesh",
+			"gateway.runtime.streaming.syncMesh",
 			"gateway.runtime.streaming.bandLattice",
-           "gateway.runtime.streaming.syncFabric",
+			"gateway.runtime.streaming.syncFabric",
 			"gateway.runtime.streaming.bandArc",
+			"gateway.runtime.streaming.syncNet",
+			"gateway.runtime.streaming.bandNode",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -841,8 +845,9 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorContour",
 			"gateway.models.failover.override.vectorRibbon",
 			"gateway.models.failover.override.vectorSpiral",
-         "gateway.models.failover.override.vectorArc",
-         "gateway.models.failover.override.vectorMesh",
+			"gateway.models.failover.override.vectorArc",
+			"gateway.models.failover.override.vectorMesh",
+			"gateway.models.failover.override.vectorNode",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3836,6 +3841,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseNet", [&]() {
+				if (!IsFieldNumber(payload, "phaseNet") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseNet` requires `phaseNet`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorNode", [&]() {
+				if (!IsFieldNumber(payload, "vectorNode") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorNode` requires `vectorNode`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -4354,6 +4373,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncNet", [&]() {
+				if (!IsFieldNumber(payload, "syncNet") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncNet` requires `syncNet`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandNode", [&]() {
+				if (!IsFieldNumber(payload, "bandNode") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandNode` requires `bandNode`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -4750,6 +4783,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorMesh", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorMesh") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorMesh` requires `active`, `vectorMesh`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorNode", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorNode") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorNode` requires `active`, `vectorNode`, and `model` fields.");
 					return false;
 				}
 				return true;
