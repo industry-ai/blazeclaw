@@ -700,6 +700,10 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorNode2",
 			"gateway.runtime.orchestration.phaseBridge",
 			"gateway.runtime.orchestration.vectorBridge",
+			"gateway.runtime.orchestration.phaseAnchor2",
+			"gateway.runtime.orchestration.vectorAnchor2",
+			"gateway.runtime.orchestration.phasePortal",
+			"gateway.runtime.orchestration.vectorPortal",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -844,6 +848,10 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandNode2",
 			"gateway.runtime.streaming.syncBridge",
 			"gateway.runtime.streaming.bandBridge",
+			"gateway.runtime.streaming.syncAnchor2",
+			"gateway.runtime.streaming.bandAnchor2",
+			"gateway.runtime.streaming.syncPortal",
+			"gateway.runtime.streaming.bandPortal",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -913,6 +921,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorLink",
 			"gateway.models.failover.override.vectorNode2",
 			"gateway.models.failover.override.vectorBridge",
+			"gateway.models.failover.override.vectorAnchor2",
+			"gateway.models.failover.override.vectorPortal",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -4102,6 +4112,34 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseAnchor2", [&]() {
+				if (!IsFieldNumber(payload, "phaseAnchor2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseAnchor2` requires `phaseAnchor2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorAnchor2", [&]() {
+				if (!IsFieldNumber(payload, "vectorAnchor2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorAnchor2` requires `vectorAnchor2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.runtime.orchestration.phasePortal", [&]() {
+				if (!IsFieldNumber(payload, "phasePortal") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phasePortal` requires `phasePortal`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorPortal", [&]() {
+				if (!IsFieldNumber(payload, "vectorPortal") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorPortal` requires `vectorPortal`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -4816,6 +4854,34 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncAnchor2", [&]() {
+				if (!IsFieldNumber(payload, "syncAnchor2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncAnchor2` requires `syncAnchor2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandAnchor2", [&]() {
+				if (!IsFieldNumber(payload, "bandAnchor2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandAnchor2` requires `bandAnchor2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.runtime.streaming.syncPortal", [&]() {
+				if (!IsFieldNumber(payload, "syncPortal") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncPortal` requires `syncPortal`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandPortal", [&]() {
+				if (!IsFieldNumber(payload, "bandPortal") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandPortal` requires `bandPortal`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -5310,6 +5376,20 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorBridge", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorBridge") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorBridge` requires `active`, `vectorBridge`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorAnchor2", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorAnchor2") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorAnchor2` requires `active`, `vectorAnchor2`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorPortal", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorPortal") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorPortal` requires `active`, `vectorPortal`, and `model` fields.");
 					return false;
 				}
 				return true;

@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2841",
+  "ok": true,
+  "payload": {
+    "phasePortal": 0,
+    "windowMs": 1000,
+    "stable": true
+  }
+}
