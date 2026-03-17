@@ -566,7 +566,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 		}
 
-       const std::array<ResponseFrame, 126> negativeResponses = {
+		const std::array<ResponseFrame, 131> negativeResponses = {
 			ResponseFrame{.id = "neg-1", .ok = true, .payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true}]}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-2", .ok = true, .payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-3", .ok = true, .payloadJson = "{\"tool\":\"chat.send\",\"executed\":true,\"status\":\"ok\",\"argsProvided\":false}", .error = std::nullopt },
@@ -693,6 +693,11 @@ namespace blazeclaw::gateway::protocol {
 			ResponseFrame{.id = "neg-124", .ok = true, .payloadJson = "{\"syncRibbon\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-125", .ok = true, .payloadJson = "{\"bandContour\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-126", .ok = true, .payloadJson = "{\"active\":false,\"vectorEnvelope\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-127", .ok = true, .payloadJson = "{\"phaseSpiral\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-128", .ok = true, .payloadJson = "{\"vectorRibbon\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-129", .ok = true, .payloadJson = "{\"syncSpiral\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-130", .ok = true, .payloadJson = "{\"bandHelix\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-131", .ok = true, .payloadJson = "{\"active\":false,\"vectorRibbon\":0}", .error = std::nullopt },
 		};
 
 		if (!ValidateNegativeResponseCase("gateway.channels.accounts", negativeResponses[0], "gateway.channels.accounts missing `connected`", error) ||
@@ -820,7 +825,12 @@ namespace blazeclaw::gateway::protocol {
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorEnvelope", negativeResponses[122], "gateway.runtime.orchestration.vectorEnvelope missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncRibbon", negativeResponses[123], "gateway.runtime.streaming.syncRibbon missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandContour", negativeResponses[124], "gateway.runtime.streaming.bandContour missing `stable`", error) ||
-			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorEnvelope", negativeResponses[125], "gateway.models.failover.override.vectorEnvelope missing `model`", error)) {
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorEnvelope", negativeResponses[125], "gateway.models.failover.override.vectorEnvelope missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseSpiral", negativeResponses[126], "gateway.runtime.orchestration.phaseSpiral missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorRibbon", negativeResponses[127], "gateway.runtime.orchestration.vectorRibbon missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncSpiral", negativeResponses[128], "gateway.runtime.streaming.syncSpiral missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandHelix", negativeResponses[129], "gateway.runtime.streaming.bandHelix missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorRibbon", negativeResponses[130], "gateway.models.failover.override.vectorRibbon missing `model`", error)) {
 			return false;
 		}
 
