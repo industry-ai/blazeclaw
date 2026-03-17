@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2925",
+  "ok": true,
+  "payload": {
+    "active": false,
+    "vectorLink3": 0,
+    "model": "default"
+  }
+}
