@@ -662,6 +662,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.driftVector",
 			"gateway.runtime.orchestration.phaseRibbon",
 			"gateway.runtime.orchestration.vectorEnvelope",
+         "gateway.runtime.orchestration.phaseHelix",
+			"gateway.runtime.orchestration.vectorContour",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -768,6 +770,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandMatrix",
 			"gateway.runtime.streaming.syncRibbon",
 			"gateway.runtime.streaming.bandContour",
+           "gateway.runtime.streaming.syncHelix",
+			"gateway.runtime.streaming.bandRibbon",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -818,6 +822,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.envelopeDrift",
 			"gateway.models.failover.override.driftVector",
 			"gateway.models.failover.override.vectorEnvelope",
+         "gateway.models.failover.override.vectorContour",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3741,6 +3746,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseHelix", [&]() {
+				if (!IsFieldNumber(payload, "phaseHelix") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseHelix` requires `phaseHelix`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorContour", [&]() {
+				if (!IsFieldNumber(payload, "vectorContour") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorContour` requires `vectorContour`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -4189,6 +4208,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncHelix", [&]() {
+				if (!IsFieldNumber(payload, "syncHelix") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncHelix` requires `syncHelix`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandRibbon", [&]() {
+				if (!IsFieldNumber(payload, "bandRibbon") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandRibbon` requires `bandRibbon`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -4550,6 +4583,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorEnvelope", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorEnvelope") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorEnvelope` requires `active`, `vectorEnvelope`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorContour", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorContour") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorContour` requires `active`, `vectorContour`, and `model` fields.");
 					return false;
 				}
 				return true;
