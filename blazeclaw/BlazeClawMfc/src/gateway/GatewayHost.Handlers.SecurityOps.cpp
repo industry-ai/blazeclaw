@@ -104,12 +104,32 @@ namespace blazeclaw::gateway {
             };
             });
 
+        m_dispatcher.Register("gateway.security.dmPairing.entries", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"entries\":[],\"count\":0,\"policy\":\"manual\"}",
+                .error = std::nullopt,
+            };
+            });
+
         m_dispatcher.Register("gateway.security.allowlists.entries", [](const protocol::RequestFrame& request) {
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
                 .payloadJson =
                     "{\"entries\":[],\"count\":0,\"source\":\"runtime\"}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.allowlists.count", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"count\":0,\"mode\":\"allowlist\"}",
                 .error = std::nullopt,
             };
             });
@@ -144,6 +164,16 @@ namespace blazeclaw::gateway {
             };
             });
 
+        m_dispatcher.Register("gateway.ops.doctor.run.status", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"running\":false,\"lastRunId\":\"doctor-preview-1\",\"lastStatus\":\"ok\"}",
+                .error = std::nullopt,
+            };
+            });
+
         m_dispatcher.Register("gateway.nodes.canvas.status", [](const protocol::RequestFrame& request) {
             return protocol::ResponseFrame{
                 .id = request.id,
@@ -164,12 +194,32 @@ namespace blazeclaw::gateway {
             };
             });
 
+        m_dispatcher.Register("gateway.platform.cli.commands", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"commands\":[\"gateway.ping\",\"gateway.health\"],\"count\":2}",
+                .error = std::nullopt,
+            };
+            });
+
         m_dispatcher.Register("gateway.platform.web.status", [](const protocol::RequestFrame& request) {
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
                 .payloadJson =
                     "{\"hosting\":false,\"endpoint\":\"\",\"surface\":\"control\"}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.platform.web.endpoint", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"enabled\":false,\"url\":\"\",\"surface\":\"control\"}",
                 .error = std::nullopt,
             };
             });
