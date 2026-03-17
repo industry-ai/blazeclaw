@@ -710,6 +710,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorGate2",
 			"gateway.runtime.orchestration.phaseHub2",
 			"gateway.runtime.orchestration.vectorHub2",
+			"gateway.runtime.orchestration.phaseNode3",
+			"gateway.runtime.orchestration.vectorNode3",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -864,6 +866,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandGate2",
 			"gateway.runtime.streaming.syncHub2",
 			"gateway.runtime.streaming.bandHub2",
+			"gateway.runtime.streaming.syncNode3",
+			"gateway.runtime.streaming.bandNode3",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -938,6 +942,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorRelay2",
 			"gateway.models.failover.override.vectorGate2",
 			"gateway.models.failover.override.vectorHub2",
+			"gateway.models.failover.override.vectorNode3",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -4197,6 +4202,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseNode3", [&]() {
+				if (!IsFieldNumber(payload, "phaseNode3") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseNode3` requires `phaseNode3`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorNode3", [&]() {
+				if (!IsFieldNumber(payload, "vectorNode3") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorNode3` requires `vectorNode3`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -4981,6 +5000,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncNode3", [&]() {
+				if (!IsFieldNumber(payload, "syncNode3") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncNode3` requires `syncNode3`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandNode3", [&]() {
+				if (!IsFieldNumber(payload, "bandNode3") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandNode3` requires `bandNode3`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -5510,6 +5543,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorHub2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorHub2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorHub2` requires `active`, `vectorHub2`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorNode3", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorNode3") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorNode3` requires `active`, `vectorNode3`, and `model` fields.");
 					return false;
 				}
 				return true;
