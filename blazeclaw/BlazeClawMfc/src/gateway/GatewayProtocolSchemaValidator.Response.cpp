@@ -680,6 +680,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorFrame",
 			"gateway.runtime.orchestration.phaseSpan",
 			"gateway.runtime.orchestration.vectorSpan",
+			"gateway.runtime.orchestration.phaseGrid",
+			"gateway.runtime.orchestration.vectorGrid",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -804,6 +806,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandFrame",
 			"gateway.runtime.streaming.syncSpan",
 			"gateway.runtime.streaming.bandSpan",
+			"gateway.runtime.streaming.syncGrid",
+			"gateway.runtime.streaming.bandGrid",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -863,6 +867,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorCore",
 			"gateway.models.failover.override.vectorFrame",
 			"gateway.models.failover.override.vectorSpan",
+			"gateway.models.failover.override.vectorGrid",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3912,6 +3917,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseGrid", [&]() {
+				if (!IsFieldNumber(payload, "phaseGrid") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseGrid` requires `phaseGrid`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorGrid", [&]() {
+				if (!IsFieldNumber(payload, "vectorGrid") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorGrid` requires `vectorGrid`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -4486,6 +4505,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncGrid", [&]() {
+				if (!IsFieldNumber(payload, "syncGrid") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncGrid` requires `syncGrid`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandGrid", [&]() {
+				if (!IsFieldNumber(payload, "bandGrid") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandGrid` requires `bandGrid`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -4910,6 +4943,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorSpan", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorSpan") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorSpan` requires `active`, `vectorSpan`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorGrid", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorGrid") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorGrid` requires `active`, `vectorGrid`, and `model` fields.");
 					return false;
 				}
 				return true;
