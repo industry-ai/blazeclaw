@@ -720,6 +720,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorArc2",
 			"gateway.runtime.orchestration.phaseBand2",
 			"gateway.runtime.orchestration.vectorBand2",
+			"gateway.runtime.orchestration.phaseGrid2",
+			"gateway.runtime.orchestration.vectorGrid2",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -884,6 +886,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandArc2",
 			"gateway.runtime.streaming.syncBand2",
 			"gateway.runtime.streaming.bandBand2",
+			"gateway.runtime.streaming.syncGrid2",
+			"gateway.runtime.streaming.bandGrid2",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -963,6 +967,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorMesh2",
 			"gateway.models.failover.override.vectorArc2",
 			"gateway.models.failover.override.vectorBand2",
+			"gateway.models.failover.override.vectorGrid2",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -4292,6 +4297,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseGrid2", [&]() {
+				if (!IsFieldNumber(payload, "phaseGrid2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseGrid2` requires `phaseGrid2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorGrid2", [&]() {
+				if (!IsFieldNumber(payload, "vectorGrid2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorGrid2` requires `vectorGrid2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -5146,6 +5165,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncGrid2", [&]() {
+				if (!IsFieldNumber(payload, "syncGrid2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncGrid2` requires `syncGrid2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandGrid2", [&]() {
+				if (!IsFieldNumber(payload, "bandGrid2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandGrid2` requires `bandGrid2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -5710,6 +5743,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorBand2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorBand2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorBand2` requires `active`, `vectorBand2`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorGrid2", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorGrid2") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorGrid2` requires `active`, `vectorGrid2`, and `model` fields.");
 					return false;
 				}
 				return true;
