@@ -754,6 +754,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorNode5",
          "gateway.runtime.orchestration.phaseLink4",
 			"gateway.runtime.orchestration.vectorLink4",
+         "gateway.runtime.orchestration.phaseBridge4",
+			"gateway.runtime.orchestration.vectorBridge4",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -952,6 +954,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandNode5",
            "gateway.runtime.streaming.syncLink4",
 			"gateway.runtime.streaming.bandLink4",
+           "gateway.runtime.streaming.syncBridge4",
+			"gateway.runtime.streaming.bandBridge4",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -1048,6 +1052,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorHub3",
 			"gateway.models.failover.override.vectorNode5",
          "gateway.models.failover.override.vectorLink4",
+         "gateway.models.failover.override.vectorBridge4",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -4615,6 +4620,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseBridge4", [&]() {
+				if (!IsFieldNumber(payload, "phaseBridge4") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseBridge4` requires `phaseBridge4`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorBridge4", [&]() {
+				if (!IsFieldNumber(payload, "vectorBridge4") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorBridge4` requires `vectorBridge4`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -5707,6 +5726,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncBridge4", [&]() {
+				if (!IsFieldNumber(payload, "syncBridge4") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncBridge4` requires `syncBridge4`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandBridge4", [&]() {
+				if (!IsFieldNumber(payload, "bandBridge4") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandBridge4` requires `bandBridge4`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -6390,6 +6423,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorLink4", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorLink4") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorLink4` requires `active`, `vectorLink4`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorBridge4", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorBridge4") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorBridge4` requires `active`, `vectorBridge4`, and `model` fields.");
 					return false;
 				}
 				return true;
