@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2955",
+  "ok": true,
+  "payload": {
+    "active": false,
+    "vectorGate3": 0,
+    "model": "default"
+  }
+}
