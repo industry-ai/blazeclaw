@@ -730,6 +730,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorRail2",
 			"gateway.runtime.orchestration.phaseSpline2",
 			"gateway.runtime.orchestration.vectorSpline2",
+			"gateway.runtime.orchestration.phaseChain2",
+			"gateway.runtime.orchestration.vectorChain2",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -904,6 +906,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandRail2",
 			"gateway.runtime.streaming.syncSpline2",
 			"gateway.runtime.streaming.bandSpline2",
+			"gateway.runtime.streaming.syncChain2",
+			"gateway.runtime.streaming.bandChain2",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -988,6 +992,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorTrack2",
 			"gateway.models.failover.override.vectorRail2",
 			"gateway.models.failover.override.vectorSpline2",
+			"gateway.models.failover.override.vectorChain2",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -4387,6 +4392,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseChain2", [&]() {
+				if (!IsFieldNumber(payload, "phaseChain2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseChain2` requires `phaseChain2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorChain2", [&]() {
+				if (!IsFieldNumber(payload, "vectorChain2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorChain2` requires `vectorChain2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -5311,6 +5330,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncChain2", [&]() {
+				if (!IsFieldNumber(payload, "syncChain2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncChain2` requires `syncChain2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandChain2", [&]() {
+				if (!IsFieldNumber(payload, "bandChain2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandChain2` requires `bandChain2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -5910,6 +5943,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorSpline2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorSpline2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorSpline2` requires `active`, `vectorSpline2`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorChain2", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorChain2") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorChain2` requires `active`, `vectorChain2`, and `model` fields.");
 					return false;
 				}
 				return true;
