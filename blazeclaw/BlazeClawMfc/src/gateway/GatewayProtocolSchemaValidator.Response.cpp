@@ -708,6 +708,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorRelay2",
 			"gateway.runtime.orchestration.phaseGate2",
 			"gateway.runtime.orchestration.vectorGate2",
+			"gateway.runtime.orchestration.phaseHub2",
+			"gateway.runtime.orchestration.vectorHub2",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -860,6 +862,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandRelay2",
 			"gateway.runtime.streaming.syncGate2",
 			"gateway.runtime.streaming.bandGate2",
+			"gateway.runtime.streaming.syncHub2",
+			"gateway.runtime.streaming.bandHub2",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -933,6 +937,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorPortal",
 			"gateway.models.failover.override.vectorRelay2",
 			"gateway.models.failover.override.vectorGate2",
+			"gateway.models.failover.override.vectorHub2",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -4178,6 +4183,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseHub2", [&]() {
+				if (!IsFieldNumber(payload, "phaseHub2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseHub2` requires `phaseHub2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorHub2", [&]() {
+				if (!IsFieldNumber(payload, "vectorHub2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorHub2` requires `vectorHub2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -4948,6 +4967,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncHub2", [&]() {
+				if (!IsFieldNumber(payload, "syncHub2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncHub2` requires `syncHub2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandHub2", [&]() {
+				if (!IsFieldNumber(payload, "bandHub2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandHub2` requires `bandHub2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -5470,6 +5503,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorGate2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorGate2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorGate2` requires `active`, `vectorGate2`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorHub2", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorHub2") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorHub2` requires `active`, `vectorHub2`, and `model` fields.");
 					return false;
 				}
 				return true;
