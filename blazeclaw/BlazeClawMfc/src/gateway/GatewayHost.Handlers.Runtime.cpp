@@ -1872,6 +1872,30 @@ namespace blazeclaw::gateway {
             });
 
         m_dispatcher.Register(
+            "gateway.runtime.orchestration.phaseMatrix",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"phaseMatrix\":0,\"windowMs\":1000,\"stable\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.orchestration.driftEnvelope",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"driftEnvelope\":0,\"windowMs\":1000,\"stable\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
             "gateway.runtime.streaming.modulation",
             [](const protocol::RequestFrame& request) {
                 return protocol::ResponseFrame{
@@ -1879,6 +1903,30 @@ namespace blazeclaw::gateway {
                     .ok = true,
                     .payloadJson =
                         "{\"modulation\":0,\"samples\":2,\"bounded\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.streaming.syncVector",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"syncVector\":1,\"samples\":2,\"stable\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.streaming.bandEnvelope",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"bandEnvelope\":0,\"samples\":2,\"stable\":true}",
                     .error = std::nullopt,
                 };
             });
@@ -1951,6 +1999,18 @@ namespace blazeclaw::gateway {
                     .ok = true,
                     .payloadJson =
                         "{\"active\":false,\"biasEnvelope\":0,\"model\":\"default\"}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.models.failover.override.driftEnvelope",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"active\":false,\"driftEnvelope\":0,\"model\":\"default\"}",
                     .error = std::nullopt,
                 };
             });
