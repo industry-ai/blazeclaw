@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2805",
+  "ok": true,
+  "payload": {
+    "active": false,
+    "vectorTrack": 0,
+    "model": "default"
+  }
+}
