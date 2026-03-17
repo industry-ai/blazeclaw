@@ -722,6 +722,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorBand2",
 			"gateway.runtime.orchestration.phaseGrid2",
 			"gateway.runtime.orchestration.vectorGrid2",
+			"gateway.runtime.orchestration.phaseLane2",
+			"gateway.runtime.orchestration.vectorLane2",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -888,6 +890,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandBand2",
 			"gateway.runtime.streaming.syncGrid2",
 			"gateway.runtime.streaming.bandGrid2",
+			"gateway.runtime.streaming.syncLane2",
+			"gateway.runtime.streaming.bandLane2",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -968,6 +972,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorArc2",
 			"gateway.models.failover.override.vectorBand2",
 			"gateway.models.failover.override.vectorGrid2",
+			"gateway.models.failover.override.vectorLane2",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -4311,6 +4316,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseLane2", [&]() {
+				if (!IsFieldNumber(payload, "phaseLane2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseLane2` requires `phaseLane2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorLane2", [&]() {
+				if (!IsFieldNumber(payload, "vectorLane2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorLane2` requires `vectorLane2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -5179,6 +5198,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncLane2", [&]() {
+				if (!IsFieldNumber(payload, "syncLane2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncLane2` requires `syncLane2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandLane2", [&]() {
+				if (!IsFieldNumber(payload, "bandLane2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandLane2` requires `bandLane2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -5750,6 +5783,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorGrid2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorGrid2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorGrid2` requires `active`, `vectorGrid2`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorLane2", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorLane2") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorLane2` requires `active`, `vectorLane2`, and `model` fields.");
 					return false;
 				}
 				return true;
