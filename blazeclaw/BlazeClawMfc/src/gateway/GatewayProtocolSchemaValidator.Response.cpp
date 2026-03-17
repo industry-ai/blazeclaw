@@ -744,6 +744,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorBridge3",
          "gateway.runtime.orchestration.phasePortal3",
 			"gateway.runtime.orchestration.vectorPortal3",
+         "gateway.runtime.orchestration.phaseRelay3",
+			"gateway.runtime.orchestration.vectorRelay3",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -932,6 +934,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandBridge3",
            "gateway.runtime.streaming.syncPortal3",
 			"gateway.runtime.streaming.bandPortal3",
+           "gateway.runtime.streaming.syncRelay3",
+			"gateway.runtime.streaming.bandRelay3",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -1023,6 +1027,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorMesh3",
          "gateway.models.failover.override.vectorBridge3",
          "gateway.models.failover.override.vectorPortal3",
+         "gateway.models.failover.override.vectorRelay3",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -4520,6 +4525,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseRelay3", [&]() {
+				if (!IsFieldNumber(payload, "phaseRelay3") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseRelay3` requires `phaseRelay3`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorRelay3", [&]() {
+				if (!IsFieldNumber(payload, "vectorRelay3") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorRelay3` requires `vectorRelay3`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -5542,6 +5561,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncRelay3", [&]() {
+				if (!IsFieldNumber(payload, "syncRelay3") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncRelay3` requires `syncRelay3`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandRelay3", [&]() {
+				if (!IsFieldNumber(payload, "bandRelay3") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandRelay3` requires `bandRelay3`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -6190,6 +6223,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorPortal3", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorPortal3") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorPortal3` requires `active`, `vectorPortal3`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorRelay3", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorRelay3") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorRelay3` requires `active`, `vectorRelay3`, and `model` fields.");
 					return false;
 				}
 				return true;
