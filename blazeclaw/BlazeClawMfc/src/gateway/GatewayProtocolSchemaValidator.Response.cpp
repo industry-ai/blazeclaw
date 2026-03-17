@@ -740,16 +740,18 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorNode4",
 			"gateway.runtime.orchestration.phaseMesh3",
 			"gateway.runtime.orchestration.vectorMesh3",
-         "gateway.runtime.orchestration.phaseBridge3",
+			"gateway.runtime.orchestration.phaseBridge3",
 			"gateway.runtime.orchestration.vectorBridge3",
-         "gateway.runtime.orchestration.phasePortal3",
+			"gateway.runtime.orchestration.phasePortal3",
 			"gateway.runtime.orchestration.vectorPortal3",
-         "gateway.runtime.orchestration.phaseRelay3",
+			"gateway.runtime.orchestration.phaseRelay3",
 			"gateway.runtime.orchestration.vectorRelay3",
-         "gateway.runtime.orchestration.phaseGate3",
+			"gateway.runtime.orchestration.phaseGate3",
 			"gateway.runtime.orchestration.vectorGate3",
-         "gateway.runtime.orchestration.phaseHub3",
+			"gateway.runtime.orchestration.phaseHub3",
 			"gateway.runtime.orchestration.vectorHub3",
+			"gateway.runtime.orchestration.phaseNode5",
+			"gateway.runtime.orchestration.vectorNode5",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -934,16 +936,18 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandNode4",
 			"gateway.runtime.streaming.syncMesh3",
 			"gateway.runtime.streaming.bandMesh3",
-           "gateway.runtime.streaming.syncBridge3",
+			"gateway.runtime.streaming.syncBridge3",
 			"gateway.runtime.streaming.bandBridge3",
-           "gateway.runtime.streaming.syncPortal3",
+			"gateway.runtime.streaming.syncPortal3",
 			"gateway.runtime.streaming.bandPortal3",
-           "gateway.runtime.streaming.syncRelay3",
+			"gateway.runtime.streaming.syncRelay3",
 			"gateway.runtime.streaming.bandRelay3",
-           "gateway.runtime.streaming.syncGate3",
+			"gateway.runtime.streaming.syncGate3",
 			"gateway.runtime.streaming.bandGate3",
-           "gateway.runtime.streaming.syncHub3",
+			"gateway.runtime.streaming.syncHub3",
 			"gateway.runtime.streaming.bandHub3",
+			"gateway.runtime.streaming.syncNode5",
+			"gateway.runtime.streaming.bandNode5",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -1033,11 +1037,12 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorLink3",
 			"gateway.models.failover.override.vectorNode4",
 			"gateway.models.failover.override.vectorMesh3",
-         "gateway.models.failover.override.vectorBridge3",
-         "gateway.models.failover.override.vectorPortal3",
-         "gateway.models.failover.override.vectorRelay3",
-         "gateway.models.failover.override.vectorGate3",
-         "gateway.models.failover.override.vectorHub3",
+			"gateway.models.failover.override.vectorBridge3",
+			"gateway.models.failover.override.vectorPortal3",
+			"gateway.models.failover.override.vectorRelay3",
+			"gateway.models.failover.override.vectorGate3",
+			"gateway.models.failover.override.vectorHub3",
+			"gateway.models.failover.override.vectorNode5",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -4577,6 +4582,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseNode5", [&]() {
+				if (!IsFieldNumber(payload, "phaseNode5") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseNode5` requires `phaseNode5`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorNode5", [&]() {
+				if (!IsFieldNumber(payload, "vectorNode5") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorNode5` requires `vectorNode5`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -5641,6 +5660,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncNode5", [&]() {
+				if (!IsFieldNumber(payload, "syncNode5") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncNode5` requires `syncNode5`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandNode5", [&]() {
+				if (!IsFieldNumber(payload, "bandNode5") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandNode5` requires `bandNode5`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -6310,6 +6343,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorHub3", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorHub3") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorHub3` requires `active`, `vectorHub3`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorNode5", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorNode5") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorNode5` requires `active`, `vectorNode5`, and `model` fields.");
 					return false;
 				}
 				return true;
