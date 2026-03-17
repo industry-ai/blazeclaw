@@ -54,6 +54,30 @@ namespace blazeclaw::gateway {
             });
 
         m_dispatcher.Register(
+            "gateway.runtime.orchestration.phaseLane",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"phaseLane\":0,\"windowMs\":1000,\"stable\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.orchestration.vectorLane",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"vectorLane\":0,\"windowMs\":1000,\"stable\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
             "gateway.runtime.orchestration.phaseGrid",
             [](const protocol::RequestFrame& request) {
                 return protocol::ResponseFrame{
@@ -61,6 +85,30 @@ namespace blazeclaw::gateway {
                     .ok = true,
                     .payloadJson =
                         "{\"phaseGrid\":0,\"windowMs\":1000,\"stable\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.streaming.syncLane",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"syncLane\":1,\"samples\":2,\"stable\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.streaming.bandLane",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"bandLane\":0,\"samples\":2,\"stable\":true}",
                     .error = std::nullopt,
                 };
             });
@@ -2791,6 +2839,18 @@ namespace blazeclaw::gateway {
                     .ok = true,
                     .payloadJson =
                         "{\"active\":false,\"vectorGrid\":0,\"model\":\"default\"}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.models.failover.override.vectorLane",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"active\":false,\"vectorLane\":0,\"model\":\"default\"}",
                     .error = std::nullopt,
                 };
             });
