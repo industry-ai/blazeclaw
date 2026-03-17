@@ -4,6 +4,16 @@
 namespace blazeclaw::gateway::protocol {
     // Request no-params validation entries
     const std::vector<std::string> noParamsMethods = {
+        "gateway.security.logging.pipeline",
+        "gateway.security.logging.schemaVersion",
+        "gateway.security.diagnostics.pipeline",
+        "gateway.security.diagnostics.schemaVersion",
+        "gateway.nodes.voice.routing",
+        "gateway.nodes.camera.routing",
+        "gateway.nodes.notifications.routing",
+        "gateway.nodes.canvas.routing",
+        "gateway.platform.cli.context",
+        "gateway.platform.web.csrf",
         "gateway.security.logging.filters",
         "gateway.security.logging.format",
         "gateway.security.diagnostics.retention",
