@@ -674,6 +674,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorMesh",
 			"gateway.runtime.orchestration.phaseNet",
 			"gateway.runtime.orchestration.vectorNode",
+         "gateway.runtime.orchestration.phaseCore",
+			"gateway.runtime.orchestration.vectorCore",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -792,6 +794,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandArc",
 			"gateway.runtime.streaming.syncNet",
 			"gateway.runtime.streaming.bandNode",
+           "gateway.runtime.streaming.syncCore",
+			"gateway.runtime.streaming.bandCore",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -848,6 +852,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorArc",
 			"gateway.models.failover.override.vectorMesh",
 			"gateway.models.failover.override.vectorNode",
+         "gateway.models.failover.override.vectorCore",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3855,6 +3860,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseCore", [&]() {
+				if (!IsFieldNumber(payload, "phaseCore") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseCore` requires `phaseCore`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorCore", [&]() {
+				if (!IsFieldNumber(payload, "vectorCore") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorCore` requires `vectorCore`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -4387,6 +4406,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncCore", [&]() {
+				if (!IsFieldNumber(payload, "syncCore") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncCore` requires `syncCore`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandCore", [&]() {
+				if (!IsFieldNumber(payload, "bandCore") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandCore` requires `bandCore`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -4790,6 +4823,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorNode", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorNode") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorNode` requires `active`, `vectorNode`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorCore", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorCore") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorCore` requires `active`, `vectorCore`, and `model` fields.");
 					return false;
 				}
 				return true;
