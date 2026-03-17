@@ -4,6 +4,56 @@
 namespace blazeclaw::gateway {
 
     void GatewayHost::RegisterSecurityOpsHandlers() {
+        m_dispatcher.Register("gateway.nodes.voice.capabilities", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"wakeWord\":true,\"pushToTalk\":true,\"handsFree\":false,\"languages\":[\"en-US\"],\"count\":1}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.nodes.camera.capabilities", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"still\":true,\"video\":false,\"maxWidth\":1920,\"maxHeight\":1080}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.nodes.notifications.channels", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"channels\":[\"desktop\"],\"locationAware\":false,\"count\":1}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.access.entries", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"entries\":[],\"count\":0,\"mode\":\"allowlist\",\"source\":\"runtime\"}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.ops.doctor.run.preview", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"runId\":\"doctor-preview-1\",\"checks\":[\"transport\",\"session\",\"routing\"],\"count\":3,\"preview\":true}",
+                .error = std::nullopt,
+            };
+            });
+
         m_dispatcher.Register("gateway.nodes.voice.status", [](const protocol::RequestFrame& request) {
             return protocol::ResponseFrame{
                 .id = request.id,
