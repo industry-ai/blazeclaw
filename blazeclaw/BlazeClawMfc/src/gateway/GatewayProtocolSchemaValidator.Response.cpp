@@ -732,6 +732,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorSpline2",
 			"gateway.runtime.orchestration.phaseChain2",
 			"gateway.runtime.orchestration.vectorChain2",
+			"gateway.runtime.orchestration.phaseThread2",
+			"gateway.runtime.orchestration.vectorThread2",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -908,6 +910,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandSpline2",
 			"gateway.runtime.streaming.syncChain2",
 			"gateway.runtime.streaming.bandChain2",
+			"gateway.runtime.streaming.syncThread2",
+			"gateway.runtime.streaming.bandThread2",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -993,6 +997,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorRail2",
 			"gateway.models.failover.override.vectorSpline2",
 			"gateway.models.failover.override.vectorChain2",
+			"gateway.models.failover.override.vectorThread2",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -4406,6 +4411,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseThread2", [&]() {
+				if (!IsFieldNumber(payload, "phaseThread2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseThread2` requires `phaseThread2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorThread2", [&]() {
+				if (!IsFieldNumber(payload, "vectorThread2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorThread2` requires `vectorThread2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -5344,6 +5363,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncThread2", [&]() {
+				if (!IsFieldNumber(payload, "syncThread2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncThread2` requires `syncThread2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandThread2", [&]() {
+				if (!IsFieldNumber(payload, "bandThread2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandThread2` requires `bandThread2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -5950,6 +5983,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorChain2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorChain2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorChain2` requires `active`, `vectorChain2`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorThread2", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorThread2") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorThread2` requires `active`, `vectorThread2`, and `model` fields.");
 					return false;
 				}
 				return true;
