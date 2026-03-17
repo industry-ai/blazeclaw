@@ -566,7 +566,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 		}
 
-       const std::array<ResponseFrame, 351> negativeResponses = {
+      const std::array<ResponseFrame, 356> negativeResponses = {
 			ResponseFrame{.id = "neg-1", .ok = true, .payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true}]}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-2", .ok = true, .payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-3", .ok = true, .payloadJson = "{\"tool\":\"chat.send\",\"executed\":true,\"status\":\"ok\",\"argsProvided\":false}", .error = std::nullopt },
@@ -918,6 +918,11 @@ namespace blazeclaw::gateway::protocol {
 			ResponseFrame{.id = "neg-349", .ok = true, .payloadJson = "{\"syncPortal4\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-350", .ok = true, .payloadJson = "{\"bandPortal4\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-351", .ok = true, .payloadJson = "{\"active\":false,\"vectorPortal4\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-352", .ok = true, .payloadJson = "{\"phaseGate4\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-353", .ok = true, .payloadJson = "{\"vectorGate4\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-354", .ok = true, .payloadJson = "{\"syncGate4\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-355", .ok = true, .payloadJson = "{\"bandGate4\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-356", .ok = true, .payloadJson = "{\"active\":false,\"vectorGate4\":0}", .error = std::nullopt },
 		};
 
 		if (!ValidateNegativeResponseCase("gateway.channels.accounts", negativeResponses[0], "gateway.channels.accounts missing `connected`", error) ||
@@ -1270,7 +1275,12 @@ namespace blazeclaw::gateway::protocol {
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorPortal4", negativeResponses[347], "gateway.runtime.orchestration.vectorPortal4 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncPortal4", negativeResponses[348], "gateway.runtime.streaming.syncPortal4 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandPortal4", negativeResponses[349], "gateway.runtime.streaming.bandPortal4 missing `stable`", error) ||
-			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorPortal4", negativeResponses[350], "gateway.models.failover.override.vectorPortal4 missing `model`", error)) {
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorPortal4", negativeResponses[350], "gateway.models.failover.override.vectorPortal4 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseGate4", negativeResponses[351], "gateway.runtime.orchestration.phaseGate4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorGate4", negativeResponses[352], "gateway.runtime.orchestration.vectorGate4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncGate4", negativeResponses[353], "gateway.runtime.streaming.syncGate4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandGate4", negativeResponses[354], "gateway.runtime.streaming.bandGate4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorGate4", negativeResponses[355], "gateway.models.failover.override.vectorGate4 missing `model`", error)) {
 			return false;
 		}
 

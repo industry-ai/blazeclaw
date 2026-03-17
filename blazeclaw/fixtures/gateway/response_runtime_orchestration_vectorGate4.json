@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2982",
+  "ok": true,
+  "payload": {
+    "vectorGate4": 0,
+    "windowMs": 1000,
+    "stable": true
+  }
+}
