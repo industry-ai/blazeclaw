@@ -728,6 +728,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorTrack2",
 			"gateway.runtime.orchestration.phaseRail2",
 			"gateway.runtime.orchestration.vectorRail2",
+			"gateway.runtime.orchestration.phaseSpline2",
+			"gateway.runtime.orchestration.vectorSpline2",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -900,6 +902,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandTrack2",
 			"gateway.runtime.streaming.syncRail2",
 			"gateway.runtime.streaming.bandRail2",
+			"gateway.runtime.streaming.syncSpline2",
+			"gateway.runtime.streaming.bandSpline2",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -983,6 +987,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorLane2",
 			"gateway.models.failover.override.vectorTrack2",
 			"gateway.models.failover.override.vectorRail2",
+			"gateway.models.failover.override.vectorSpline2",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -4368,6 +4373,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseSpline2", [&]() {
+				if (!IsFieldNumber(payload, "phaseSpline2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseSpline2` requires `phaseSpline2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorSpline2", [&]() {
+				if (!IsFieldNumber(payload, "vectorSpline2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorSpline2` requires `vectorSpline2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -5278,6 +5297,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncSpline2", [&]() {
+				if (!IsFieldNumber(payload, "syncSpline2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncSpline2` requires `syncSpline2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandSpline2", [&]() {
+				if (!IsFieldNumber(payload, "bandSpline2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandSpline2` requires `bandSpline2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -5870,6 +5903,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorRail2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorRail2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorRail2` requires `active`, `vectorRail2`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorSpline2", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorSpline2") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorSpline2` requires `active`, `vectorSpline2`, and `model` fields.");
 					return false;
 				}
 				return true;
