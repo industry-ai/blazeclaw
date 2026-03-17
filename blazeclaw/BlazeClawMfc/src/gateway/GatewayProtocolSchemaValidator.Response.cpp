@@ -670,6 +670,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorSpiral",
          "gateway.runtime.orchestration.phaseMesh",
 			"gateway.runtime.orchestration.vectorArc",
+         "gateway.runtime.orchestration.phaseFabric",
+			"gateway.runtime.orchestration.vectorMesh",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -784,6 +786,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandSpiral",
            "gateway.runtime.streaming.syncMesh",
 			"gateway.runtime.streaming.bandLattice",
+           "gateway.runtime.streaming.syncFabric",
+			"gateway.runtime.streaming.bandArc",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -838,6 +842,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorRibbon",
 			"gateway.models.failover.override.vectorSpiral",
          "gateway.models.failover.override.vectorArc",
+         "gateway.models.failover.override.vectorMesh",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -3817,6 +3822,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseFabric", [&]() {
+				if (!IsFieldNumber(payload, "phaseFabric") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseFabric` requires `phaseFabric`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorMesh", [&]() {
+				if (!IsFieldNumber(payload, "vectorMesh") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorMesh` requires `vectorMesh`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -4321,6 +4340,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncFabric", [&]() {
+				if (!IsFieldNumber(payload, "syncFabric") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncFabric` requires `syncFabric`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandArc", [&]() {
+				if (!IsFieldNumber(payload, "bandArc") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandArc` requires `bandArc`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -4710,6 +4743,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorArc", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorArc") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorArc` requires `active`, `vectorArc`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorMesh", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorMesh") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorMesh` requires `active`, `vectorMesh`, and `model` fields.");
 					return false;
 				}
 				return true;

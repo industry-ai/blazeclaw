@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2770",
+  "ok": true,
+  "payload": {
+    "active": false,
+    "vectorMesh": 0,
+    "model": "default"
+  }
+}
