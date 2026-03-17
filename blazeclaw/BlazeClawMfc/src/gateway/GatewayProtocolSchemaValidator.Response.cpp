@@ -704,6 +704,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorAnchor2",
 			"gateway.runtime.orchestration.phasePortal",
 			"gateway.runtime.orchestration.vectorPortal",
+			"gateway.runtime.orchestration.phaseRelay2",
+			"gateway.runtime.orchestration.vectorRelay2",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -852,6 +854,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandAnchor2",
 			"gateway.runtime.streaming.syncPortal",
 			"gateway.runtime.streaming.bandPortal",
+			"gateway.runtime.streaming.syncRelay2",
+			"gateway.runtime.streaming.bandRelay2",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -923,6 +927,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorBridge",
 			"gateway.models.failover.override.vectorAnchor2",
 			"gateway.models.failover.override.vectorPortal",
+			"gateway.models.failover.override.vectorRelay2",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -4140,6 +4145,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseRelay2", [&]() {
+				if (!IsFieldNumber(payload, "phaseRelay2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseRelay2` requires `phaseRelay2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorRelay2", [&]() {
+				if (!IsFieldNumber(payload, "vectorRelay2") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorRelay2` requires `vectorRelay2`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -4882,6 +4901,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncRelay2", [&]() {
+				if (!IsFieldNumber(payload, "syncRelay2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncRelay2` requires `syncRelay2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandRelay2", [&]() {
+				if (!IsFieldNumber(payload, "bandRelay2") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandRelay2` requires `bandRelay2`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -5390,6 +5423,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorPortal", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorPortal") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorPortal` requires `active`, `vectorPortal`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorRelay2", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorRelay2") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorRelay2` requires `active`, `vectorRelay2`, and `model` fields.");
 					return false;
 				}
 				return true;
