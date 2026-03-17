@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2810",
+  "ok": true,
+  "payload": {
+    "active": false,
+    "vectorRail": 0,
+    "model": "default"
+  }
+}
