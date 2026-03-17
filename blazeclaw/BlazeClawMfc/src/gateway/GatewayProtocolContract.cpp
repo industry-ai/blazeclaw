@@ -566,7 +566,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 		}
 
-       const std::array<ResponseFrame, 121> negativeResponses = {
+       const std::array<ResponseFrame, 126> negativeResponses = {
 			ResponseFrame{.id = "neg-1", .ok = true, .payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true}]}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-2", .ok = true, .payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-3", .ok = true, .payloadJson = "{\"tool\":\"chat.send\",\"executed\":true,\"status\":\"ok\",\"argsProvided\":false}", .error = std::nullopt },
@@ -588,106 +588,111 @@ namespace blazeclaw::gateway::protocol {
 			ResponseFrame{.id = "neg-19", .ok = true, .payloadJson = "{\"balanced\":true,\"skew\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-20", .ok = true, .payloadJson = "{\"driftMs\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-21", .ok = true, .payloadJson = "{\"active\":false,\"switches\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-22", .ok = true, .payloadJson = "{\"efficiency\":100,\"waste\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-22", .ok = true, .payloadJson = "{\"efficiency\":100,\"waste\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-23", .ok = true, .payloadJson = "{\"variance\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-24", .ok = true, .payloadJson = "{\"active\":false,\"windowSec\":60}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-25", .ok = true, .payloadJson = "{\"utilization\":0,\"capacity\":8}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-25", .ok = true, .payloadJson = "{\"utilization\":0,\"capacity\":8}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-26", .ok = true, .payloadJson = "{\"deviation\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-27", .ok = true, .payloadJson = "{\"active\":false,\"digest\":\"sha256:override-v1\"}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-28", .ok = true, .payloadJson = "{\"capacity\":8,\"used\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-28", .ok = true, .payloadJson = "{\"capacity\":8,\"used\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-29", .ok = true, .payloadJson = "{\"aligned\":true,\"offsetMs\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-30", .ok = true, .payloadJson = "{\"entries\":0,\"active\":false}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-31", .ok = true, .payloadJson = "{\"occupancy\":0,\"slots\":8}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-31", .ok = true, .payloadJson = "{\"occupancy\":0,\"slots\":8}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-32", .ok = true, .payloadJson = "{\"skewMs\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-33", .ok = true, .payloadJson = "{\"active\":false,\"count\":1}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-34", .ok = true, .payloadJson = "{\"elasticity\":100,\"headroom\":8}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-34", .ok = true, .payloadJson = "{\"elasticity\":100,\"headroom\":8}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-35", .ok = true, .payloadJson = "{\"dispersion\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-36", .ok = true, .payloadJson = "{\"active\":false,\"entries\":1}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-37", .ok = true, .payloadJson = "{\"cohesion\":100,\"groups\":1}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-37", .ok = true, .payloadJson = "{\"cohesion\":100,\"groups\":1}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-38", .ok = true, .payloadJson = "{\"curvature\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-39", .ok = true, .payloadJson = "{\"active\":false,\"rows\":1}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-40", .ok = true, .payloadJson = "{\"resilience\":100,\"faults\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-40", .ok = true, .payloadJson = "{\"resilience\":100,\"faults\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-41", .ok = true, .payloadJson = "{\"smoothness\":100,\"jitterMs\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-42", .ok = true, .payloadJson = "{\"active\":false,\"revision\":1}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-43", .ok = true, .payloadJson = "{\"ready\":true,\"queueDepth\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-43", .ok = true, .payloadJson = "{\"ready\":true,\"queueDepth\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-44", .ok = true, .payloadJson = "{\"harmonics\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-45", .ok = true, .payloadJson = "{\"active\":false,\"pointer\":\"default\"}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-46", .ok = true, .payloadJson = "{\"contention\":0,\"waiters\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-46", .ok = true, .payloadJson = "{\"contention\":0,\"waiters\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-47", .ok = true, .payloadJson = "{\"phase\":\"steady\",\"step\":1}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-48", .ok = true, .payloadJson = "{\"active\":false,\"state\":\"none\"}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-49", .ok = true, .payloadJson = "{\"fairness\":100,\"skew\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-49", .ok = true, .payloadJson = "{\"fairness\":100,\"skew\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-50", .ok = true, .payloadJson = "{\"tempo\":1,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-51", .ok = true, .payloadJson = "{\"active\":false,\"profile\":\"default\"}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-52", .ok = true, .payloadJson = "{\"equilibrium\":100,\"delta\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-52", .ok = true, .payloadJson = "{\"equilibrium\":100,\"delta\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-53", .ok = true, .payloadJson = "{\"steady\":true,\"variance\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-54", .ok = true, .payloadJson = "{\"temporal\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-55", .ok = true, .payloadJson = "{\"consistent\":true,\"deviation\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-56", .ok = true, .payloadJson = "{\"active\":false,\"entries\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-57", .ok = true, .payloadJson = "{\"parity\":100,\"gap\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-57", .ok = true, .payloadJson = "{\"parity\":100,\"gap\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-58", .ok = true, .payloadJson = "{\"stabilityIndex\":100,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-59", .ok = true, .payloadJson = "{\"spectral\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-60", .ok = true, .payloadJson = "{\"floor\":0,\"ceiling\":100}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-61", .ok = true, .payloadJson = "{\"active\":false,\"checkpoint\":\"cp-override-1\"}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-62", .ok = true, .payloadJson = "{\"convergence\":100,\"drift\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-62", .ok = true, .payloadJson = "{\"convergence\":100,\"drift\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-63", .ok = true, .payloadJson = "{\"hysteresis\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-64", .ok = true, .payloadJson = "{\"resonance\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-65", .ok = true, .payloadJson = "{\"vectors\":2,\"magnitude\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-66", .ok = true, .payloadJson = "{\"active\":false,\"baseline\":\"default\"}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-67", .ok = true, .payloadJson = "{\"balanceIndex\":100,\"skew\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-67", .ok = true, .payloadJson = "{\"balanceIndex\":100,\"skew\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-68", .ok = true, .payloadJson = "{\"locked\":true,\"phase\":\"steady\"}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-69", .ok = true, .payloadJson = "{\"waveform\":\"flat\",\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-70", .ok = true, .payloadJson = "{\"horizonMs\":1000,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-71", .ok = true, .payloadJson = "{\"active\":false,\"manifest\":\"default\"}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-72", .ok = true, .payloadJson = "{\"symmetry\":100,\"offset\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-72", .ok = true, .payloadJson = "{\"symmetry\":100,\"offset\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-73", .ok = true, .payloadJson = "{\"gradient\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-74", .ok = true, .payloadJson = "{\"clock\":1,\"lag\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-75", .ok = true, .payloadJson = "{\"trend\":\"flat\",\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-76", .ok = true, .payloadJson = "{\"active\":false,\"entries\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-77", .ok = true, .payloadJson = "{\"harmonicity\":100,\"detune\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-77", .ok = true, .payloadJson = "{\"harmonicity\":100,\"detune\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-78", .ok = true, .payloadJson = "{\"inertia\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-79", .ok = true, .payloadJson = "{\"coordinated\":true,\"lag\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-80", .ok = true, .payloadJson = "{\"minMs\":0,\"maxMs\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-81", .ok = true, .payloadJson = "{\"active\":false,\"index\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-82", .ok = true, .payloadJson = "{\"cadenceIndex\":100,\"jitter\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-82", .ok = true, .payloadJson = "{\"cadenceIndex\":100,\"jitter\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-83", .ok = true, .payloadJson = "{\"damping\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-84", .ok = true, .payloadJson = "{\"phaseNoise\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-85", .ok = true, .payloadJson = "{\"beatHz\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-86", .ok = true, .payloadJson = "{\"active\":false,\"digestIndex\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-87", .ok = true, .payloadJson = "{\"locked\":true,\"phase\":\"steady\"}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-87", .ok = true, .payloadJson = "{\"locked\":true,\"phase\":\"steady\"}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-88", .ok = true, .payloadJson = "{\"flux\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-89", .ok = true, .payloadJson = "{\"modulation\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-90", .ok = true, .payloadJson = "{\"pulseHz\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-91", .ok = true, .payloadJson = "{\"active\":false,\"cursor\":\"default\"}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-92", .ok = true, .payloadJson = "{\"vectors\":2,\"magnitude\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-92", .ok = true, .payloadJson = "{\"vectors\":2,\"magnitude\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-93", .ok = true, .payloadJson = "{\"phase\":\"steady\",\"amplitude\":1}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-94", .ok = true, .payloadJson = "{\"cohesive\":true,\"delta\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-95", .ok = true, .payloadJson = "{\"waveIndex\":1,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-96", .ok = true, .payloadJson = "{\"active\":false,\"vector\":\"default\"}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-97", .ok = true, .payloadJson = "{\"vectorDrift\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-97", .ok = true, .payloadJson = "{\"vectorDrift\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-98", .ok = true, .payloadJson = "{\"phase\":\"steady\",\"bias\":0}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-99", .ok = true, .payloadJson = "{\"syncBand\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-100", .ok = true, .payloadJson = "{\"waveDrift\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-101", .ok = true, .payloadJson = "{\"active\":false,\"vectorDrift\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-102", .ok = true, .payloadJson = "{\"vectorPhase\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-102", .ok = true, .payloadJson = "{\"vectorPhase\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-103", .ok = true, .payloadJson = "{\"biasDrift\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-104", .ok = true, .payloadJson = "{\"syncDrift\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-105", .ok = true, .payloadJson = "{\"bandStability\":100,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-106", .ok = true, .payloadJson = "{\"active\":false,\"phaseBias\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-107", .ok = true, .payloadJson = "{\"phaseVector\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-107", .ok = true, .payloadJson = "{\"phaseVector\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-108", .ok = true, .payloadJson = "{\"biasEnvelope\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-109", .ok = true, .payloadJson = "{\"syncEnvelope\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-110", .ok = true, .payloadJson = "{\"bandDrift\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-111", .ok = true, .payloadJson = "{\"active\":false,\"biasEnvelope\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-112", .ok = true, .payloadJson = "{\"phaseLattice\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-112", .ok = true, .payloadJson = "{\"phaseLattice\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-113", .ok = true, .payloadJson = "{\"envelopeDrift\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-114", .ok = true, .payloadJson = "{\"syncMatrix\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-115", .ok = true, .payloadJson = "{\"bandVector\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-116", .ok = true, .payloadJson = "{\"active\":false,\"envelopeDrift\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-117", .ok = true, .payloadJson = "{\"phaseContour\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-117", .ok = true, .payloadJson = "{\"phaseContour\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-118", .ok = true, .payloadJson = "{\"driftVector\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-119", .ok = true, .payloadJson = "{\"syncContour\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-120", .ok = true, .payloadJson = "{\"bandMatrix\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-121", .ok = true, .payloadJson = "{\"active\":false,\"driftVector\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-122", .ok = true, .payloadJson = "{\"phaseRibbon\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-123", .ok = true, .payloadJson = "{\"vectorEnvelope\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-124", .ok = true, .payloadJson = "{\"syncRibbon\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-125", .ok = true, .payloadJson = "{\"bandContour\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-126", .ok = true, .payloadJson = "{\"active\":false,\"vectorEnvelope\":0}", .error = std::nullopt },
 		};
 
 		if (!ValidateNegativeResponseCase("gateway.channels.accounts", negativeResponses[0], "gateway.channels.accounts missing `connected`", error) ||
@@ -710,107 +715,112 @@ namespace blazeclaw::gateway::protocol {
 			!ValidateNegativeResponseCase("gateway.models.failover.override.history", negativeResponses[17], "gateway.models.failover.override.history missing `active`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.balance", negativeResponses[18], "gateway.runtime.orchestration.balance missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.drift", negativeResponses[19], "gateway.runtime.streaming.drift missing `corrected`", error) ||
-          !ValidateNegativeResponseCase("gateway.models.failover.override.metrics", negativeResponses[20], "gateway.models.failover.override.metrics missing `lastModel`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.metrics", negativeResponses[20], "gateway.models.failover.override.metrics missing `lastModel`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.efficiency", negativeResponses[21], "gateway.runtime.orchestration.efficiency missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.variance", negativeResponses[22], "gateway.runtime.streaming.variance missing `stable`", error) ||
-            !ValidateNegativeResponseCase("gateway.models.failover.override.window", negativeResponses[23], "gateway.models.failover.override.window missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.window", negativeResponses[23], "gateway.models.failover.override.window missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.utilization", negativeResponses[24], "gateway.runtime.orchestration.utilization missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.deviation", negativeResponses[25], "gateway.runtime.streaming.deviation missing `withinBudget`", error) ||
-            !ValidateNegativeResponseCase("gateway.models.failover.override.digest", negativeResponses[26], "gateway.models.failover.override.digest missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.digest", negativeResponses[26], "gateway.models.failover.override.digest missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.capacity", negativeResponses[27], "gateway.runtime.orchestration.capacity missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.alignment", negativeResponses[28], "gateway.runtime.streaming.alignment missing `windowMs`", error) ||
-            !ValidateNegativeResponseCase("gateway.models.failover.override.timeline", negativeResponses[29], "gateway.models.failover.override.timeline missing `lastModel`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.timeline", negativeResponses[29], "gateway.models.failover.override.timeline missing `lastModel`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.occupancy", negativeResponses[30], "gateway.runtime.orchestration.occupancy missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.skew", negativeResponses[31], "gateway.runtime.streaming.skew missing `bounded`", error) ||
-          !ValidateNegativeResponseCase("gateway.models.failover.override.catalog", negativeResponses[32], "gateway.models.failover.override.catalog missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.catalog", negativeResponses[32], "gateway.models.failover.override.catalog missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.elasticity", negativeResponses[33], "gateway.runtime.orchestration.elasticity missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.dispersion", negativeResponses[34], "gateway.runtime.streaming.dispersion missing `bounded`", error) ||
-            !ValidateNegativeResponseCase("gateway.models.failover.override.registry", negativeResponses[35], "gateway.models.failover.override.registry missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.registry", negativeResponses[35], "gateway.models.failover.override.registry missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.cohesion", negativeResponses[36], "gateway.runtime.orchestration.cohesion missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.curvature", negativeResponses[37], "gateway.runtime.streaming.curvature missing `bounded`", error) ||
-            !ValidateNegativeResponseCase("gateway.models.failover.override.matrix", negativeResponses[38], "gateway.models.failover.override.matrix missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.matrix", negativeResponses[38], "gateway.models.failover.override.matrix missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.resilience", negativeResponses[39], "gateway.runtime.orchestration.resilience missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.smoothness", negativeResponses[40], "gateway.runtime.streaming.smoothness missing `stable`", error) ||
-            !ValidateNegativeResponseCase("gateway.models.failover.override.snapshot", negativeResponses[41], "gateway.models.failover.override.snapshot missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.snapshot", negativeResponses[41], "gateway.models.failover.override.snapshot missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.readiness", negativeResponses[42], "gateway.runtime.orchestration.readiness missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.harmonics", negativeResponses[43], "gateway.runtime.streaming.harmonics missing `stable`", error) ||
-          !ValidateNegativeResponseCase("gateway.models.failover.override.pointer", negativeResponses[44], "gateway.models.failover.override.pointer missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.pointer", negativeResponses[44], "gateway.models.failover.override.pointer missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.contention", negativeResponses[45], "gateway.runtime.orchestration.contention missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.phase", negativeResponses[46], "gateway.runtime.streaming.phase missing `stable`", error) ||
-          !ValidateNegativeResponseCase("gateway.models.failover.override.state", negativeResponses[47], "gateway.models.failover.override.state missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.state", negativeResponses[47], "gateway.models.failover.override.state missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.fairness", negativeResponses[48], "gateway.runtime.orchestration.fairness missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.tempo", negativeResponses[49], "gateway.runtime.streaming.tempo missing `stable`", error) ||
-          !ValidateNegativeResponseCase("gateway.models.failover.override.profile", negativeResponses[50], "gateway.models.failover.override.profile missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.profile", negativeResponses[50], "gateway.models.failover.override.profile missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.equilibrium", negativeResponses[51], "gateway.runtime.orchestration.equilibrium missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.steadiness", negativeResponses[52], "gateway.runtime.orchestration.steadiness missing `windowMs`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.temporal", negativeResponses[53], "gateway.runtime.streaming.temporal missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.consistency", negativeResponses[54], "gateway.runtime.streaming.consistency missing `samples`", error) ||
-          !ValidateNegativeResponseCase("gateway.models.failover.override.audit", negativeResponses[55], "gateway.models.failover.override.audit missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.audit", negativeResponses[55], "gateway.models.failover.override.audit missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.parity", negativeResponses[56], "gateway.runtime.orchestration.parity missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.stabilityIndex", negativeResponses[57], "gateway.runtime.orchestration.stabilityIndex missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.spectral", negativeResponses[58], "gateway.runtime.streaming.spectral missing `bounded`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.envelope", negativeResponses[59], "gateway.runtime.streaming.envelope missing `stable`", error) ||
-            !ValidateNegativeResponseCase("gateway.models.failover.override.checkpoint", negativeResponses[60], "gateway.models.failover.override.checkpoint missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.checkpoint", negativeResponses[60], "gateway.models.failover.override.checkpoint missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.convergence", negativeResponses[61], "gateway.runtime.orchestration.convergence missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.hysteresis", negativeResponses[62], "gateway.runtime.orchestration.hysteresis missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.resonance", negativeResponses[63], "gateway.runtime.streaming.resonance missing `bounded`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.vectorField", negativeResponses[64], "gateway.runtime.streaming.vectorField missing `stable`", error) ||
-            !ValidateNegativeResponseCase("gateway.models.failover.override.baseline", negativeResponses[65], "gateway.models.failover.override.baseline missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.baseline", negativeResponses[65], "gateway.models.failover.override.baseline missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.balanceIndex", negativeResponses[66], "gateway.runtime.orchestration.balanceIndex missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseLock", negativeResponses[67], "gateway.runtime.orchestration.phaseLock missing `drift`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.waveform", negativeResponses[68], "gateway.runtime.streaming.waveform missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.horizon", negativeResponses[69], "gateway.runtime.streaming.horizon missing `stable`", error) ||
-            !ValidateNegativeResponseCase("gateway.models.failover.override.manifest", negativeResponses[70], "gateway.models.failover.override.manifest missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.manifest", negativeResponses[70], "gateway.models.failover.override.manifest missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.symmetry", negativeResponses[71], "gateway.runtime.orchestration.symmetry missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.gradient", negativeResponses[72], "gateway.runtime.orchestration.gradient missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.vectorClock", negativeResponses[73], "gateway.runtime.streaming.vectorClock missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.trend", negativeResponses[74], "gateway.runtime.streaming.trend missing `stable`", error) ||
-            !ValidateNegativeResponseCase("gateway.models.failover.override.ledger", negativeResponses[75], "gateway.models.failover.override.ledger missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.ledger", negativeResponses[75], "gateway.models.failover.override.ledger missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.harmonicity", negativeResponses[76], "gateway.runtime.orchestration.harmonicity missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.inertia", negativeResponses[77], "gateway.runtime.orchestration.inertia missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.coordination", negativeResponses[78], "gateway.runtime.streaming.coordination missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.latencyBand", negativeResponses[79], "gateway.runtime.streaming.latencyBand missing `stable`", error) ||
-          !ValidateNegativeResponseCase("gateway.models.failover.override.snapshotIndex", negativeResponses[80], "gateway.models.failover.override.snapshotIndex missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.snapshotIndex", negativeResponses[80], "gateway.models.failover.override.snapshotIndex missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.cadenceIndex", negativeResponses[81], "gateway.runtime.orchestration.cadenceIndex missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.damping", negativeResponses[82], "gateway.runtime.orchestration.damping missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.phaseNoise", negativeResponses[83], "gateway.runtime.streaming.phaseNoise missing `bounded`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.beat", negativeResponses[84], "gateway.runtime.streaming.beat missing `stable`", error) ||
-          !ValidateNegativeResponseCase("gateway.models.failover.override.digestIndex", negativeResponses[85], "gateway.models.failover.override.digestIndex missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.digestIndex", negativeResponses[85], "gateway.models.failover.override.digestIndex missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.waveLock", negativeResponses[86], "gateway.runtime.orchestration.waveLock missing `slip`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.flux", negativeResponses[87], "gateway.runtime.orchestration.flux missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.modulation", negativeResponses[88], "gateway.runtime.streaming.modulation missing `bounded`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.pulseTrain", negativeResponses[89], "gateway.runtime.streaming.pulseTrain missing `stable`", error) ||
-            !ValidateNegativeResponseCase("gateway.models.failover.override.cursor", negativeResponses[90], "gateway.models.failover.override.cursor missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.cursor", negativeResponses[90], "gateway.models.failover.override.cursor missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorField", negativeResponses[91], "gateway.runtime.orchestration.vectorField missing `state`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseEnvelope", negativeResponses[92], "gateway.runtime.orchestration.phaseEnvelope missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.cohesion", negativeResponses[93], "gateway.runtime.streaming.cohesion missing `samples`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.waveIndex", negativeResponses[94], "gateway.runtime.streaming.waveIndex missing `stable`", error) ||
-            !ValidateNegativeResponseCase("gateway.models.failover.override.vector", negativeResponses[95], "gateway.models.failover.override.vector missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vector", negativeResponses[95], "gateway.models.failover.override.vector missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorDrift", negativeResponses[96], "gateway.runtime.orchestration.vectorDrift missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseBias", negativeResponses[97], "gateway.runtime.orchestration.phaseBias missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncBand", negativeResponses[98], "gateway.runtime.streaming.syncBand missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.waveDrift", negativeResponses[99], "gateway.runtime.streaming.waveDrift missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorDrift", negativeResponses[100], "gateway.models.failover.override.vectorDrift missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorDrift", negativeResponses[100], "gateway.models.failover.override.vectorDrift missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorPhase", negativeResponses[101], "gateway.runtime.orchestration.vectorPhase missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.biasDrift", negativeResponses[102], "gateway.runtime.orchestration.biasDrift missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncDrift", negativeResponses[103], "gateway.runtime.streaming.syncDrift missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandStability", negativeResponses[104], "gateway.runtime.streaming.bandStability missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.phaseBias", negativeResponses[105], "gateway.models.failover.override.phaseBias missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.phaseBias", negativeResponses[105], "gateway.models.failover.override.phaseBias missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseVector", negativeResponses[106], "gateway.runtime.orchestration.phaseVector missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.biasEnvelope", negativeResponses[107], "gateway.runtime.orchestration.biasEnvelope missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncEnvelope", negativeResponses[108], "gateway.runtime.streaming.syncEnvelope missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandDrift", negativeResponses[109], "gateway.runtime.streaming.bandDrift missing `stable`", error) ||
-           !ValidateNegativeResponseCase("gateway.models.failover.override.biasEnvelope", negativeResponses[110], "gateway.models.failover.override.biasEnvelope missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.biasEnvelope", negativeResponses[110], "gateway.models.failover.override.biasEnvelope missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseLattice", negativeResponses[111], "gateway.runtime.orchestration.phaseLattice missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.envelopeDrift", negativeResponses[112], "gateway.runtime.orchestration.envelopeDrift missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncMatrix", negativeResponses[113], "gateway.runtime.streaming.syncMatrix missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandVector", negativeResponses[114], "gateway.runtime.streaming.bandVector missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.envelopeDrift", negativeResponses[115], "gateway.models.failover.override.envelopeDrift missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.envelopeDrift", negativeResponses[115], "gateway.models.failover.override.envelopeDrift missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseContour", negativeResponses[116], "gateway.runtime.orchestration.phaseContour missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.driftVector", negativeResponses[117], "gateway.runtime.orchestration.driftVector missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncContour", negativeResponses[118], "gateway.runtime.streaming.syncContour missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandMatrix", negativeResponses[119], "gateway.runtime.streaming.bandMatrix missing `stable`", error) ||
-			!ValidateNegativeResponseCase("gateway.models.failover.override.driftVector", negativeResponses[120], "gateway.models.failover.override.driftVector missing `model`", error)) {
+			!ValidateNegativeResponseCase("gateway.models.failover.override.driftVector", negativeResponses[120], "gateway.models.failover.override.driftVector missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseRibbon", negativeResponses[121], "gateway.runtime.orchestration.phaseRibbon missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorEnvelope", negativeResponses[122], "gateway.runtime.orchestration.vectorEnvelope missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncRibbon", negativeResponses[123], "gateway.runtime.streaming.syncRibbon missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandContour", negativeResponses[124], "gateway.runtime.streaming.bandContour missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorEnvelope", negativeResponses[125], "gateway.models.failover.override.vectorEnvelope missing `model`", error)) {
 			return false;
 		}
 
