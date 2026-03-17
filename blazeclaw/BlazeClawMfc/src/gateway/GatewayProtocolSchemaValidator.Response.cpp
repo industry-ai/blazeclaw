@@ -738,6 +738,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.orchestration.vectorLink3",
 			"gateway.runtime.orchestration.phaseNode4",
 			"gateway.runtime.orchestration.vectorNode4",
+			"gateway.runtime.orchestration.phaseMesh3",
+			"gateway.runtime.orchestration.vectorMesh3",
 			"gateway.runtime.streaming.status",
 			"gateway.runtime.streaming.sample",
 			"gateway.runtime.streaming.window",
@@ -920,6 +922,8 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.runtime.streaming.bandLink3",
 			"gateway.runtime.streaming.syncNode4",
 			"gateway.runtime.streaming.bandNode4",
+			"gateway.runtime.streaming.syncMesh3",
+			"gateway.runtime.streaming.bandMesh3",
 			"gateway.models.failover.status",
 			"gateway.models.failover.preview",
 			"gateway.models.failover.metrics",
@@ -1008,6 +1012,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorThread2",
 			"gateway.models.failover.override.vectorLink3",
 			"gateway.models.failover.override.vectorNode4",
+			"gateway.models.failover.override.vectorMesh3",
 			"gateway.shutdown",
 		};
 		constexpr const char* kFeatureRequiredConfigCluster[] = {
@@ -4463,6 +4468,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.orchestration.phaseMesh3", [&]() {
+				if (!IsFieldNumber(payload, "phaseMesh3") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.phaseMesh3` requires `phaseMesh3`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.vectorMesh3", [&]() {
+				if (!IsFieldNumber(payload, "vectorMesh3") || !IsFieldNumber(payload, "windowMs") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.orchestration.vectorMesh3` requires `vectorMesh3`, `windowMs`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.status", [&]() {
 				if (!IsFieldBoolean(payload, "enabled") || !IsFieldValueType(payload, "mode", '"') || !IsFieldNumber(payload, "heartbeatMs")) {
@@ -5443,6 +5462,20 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
+            } },
+			{ "gateway.runtime.streaming.syncMesh3", [&]() {
+				if (!IsFieldNumber(payload, "syncMesh3") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.syncMesh3` requires `syncMesh3`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.runtime.streaming.bandMesh3", [&]() {
+				if (!IsFieldNumber(payload, "bandMesh3") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.runtime.streaming.bandMesh3` requires `bandMesh3`, `samples`, and `stable` fields.");
+					return false;
+				}
+				return true;
 			} },
 			{ "gateway.runtime.streaming.syncBand", [&]() {
 				if (!IsFieldNumber(payload, "syncBand") || !IsFieldNumber(payload, "samples") || !IsFieldBoolean(payload, "stable")) {
@@ -6070,6 +6103,13 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.models.failover.override.vectorNode4", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorNode4") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorNode4` requires `active`, `vectorNode4`, and `model` fields.");
+					return false;
+				}
+				return true;
+            } },
+			{ "gateway.models.failover.override.vectorMesh3", [&]() {
+				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorMesh3") || !IsFieldValueType(payload, "model", '"')) {
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorMesh3` requires `active`, `vectorMesh3`, and `model` fields.");
 					return false;
 				}
 				return true;

@@ -566,7 +566,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 		}
 
-       const std::array<ResponseFrame, 301> negativeResponses = {
+       const std::array<ResponseFrame, 306> negativeResponses = {
 			ResponseFrame{.id = "neg-1", .ok = true, .payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true}]}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-2", .ok = true, .payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-3", .ok = true, .payloadJson = "{\"tool\":\"chat.send\",\"executed\":true,\"status\":\"ok\",\"argsProvided\":false}", .error = std::nullopt },
@@ -868,6 +868,11 @@ namespace blazeclaw::gateway::protocol {
 			ResponseFrame{.id = "neg-299", .ok = true, .payloadJson = "{\"syncNode4\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-300", .ok = true, .payloadJson = "{\"bandNode4\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-301", .ok = true, .payloadJson = "{\"active\":false,\"vectorNode4\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-302", .ok = true, .payloadJson = "{\"phaseMesh3\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-303", .ok = true, .payloadJson = "{\"vectorMesh3\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-304", .ok = true, .payloadJson = "{\"syncMesh3\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-305", .ok = true, .payloadJson = "{\"bandMesh3\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-306", .ok = true, .payloadJson = "{\"active\":false,\"vectorMesh3\":0}", .error = std::nullopt },
 		};
 
 		if (!ValidateNegativeResponseCase("gateway.channels.accounts", negativeResponses[0], "gateway.channels.accounts missing `connected`", error) ||
@@ -1170,7 +1175,12 @@ namespace blazeclaw::gateway::protocol {
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorNode4", negativeResponses[297], "gateway.runtime.orchestration.vectorNode4 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncNode4", negativeResponses[298], "gateway.runtime.streaming.syncNode4 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandNode4", negativeResponses[299], "gateway.runtime.streaming.bandNode4 missing `stable`", error) ||
-			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorNode4", negativeResponses[300], "gateway.models.failover.override.vectorNode4 missing `model`", error)) {
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorNode4", negativeResponses[300], "gateway.models.failover.override.vectorNode4 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseMesh3", negativeResponses[301], "gateway.runtime.orchestration.phaseMesh3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorMesh3", negativeResponses[302], "gateway.runtime.orchestration.vectorMesh3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncMesh3", negativeResponses[303], "gateway.runtime.streaming.syncMesh3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandMesh3", negativeResponses[304], "gateway.runtime.streaming.bandMesh3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorMesh3", negativeResponses[305], "gateway.models.failover.override.vectorMesh3 missing `model`", error)) {
 			return false;
 		}
 
