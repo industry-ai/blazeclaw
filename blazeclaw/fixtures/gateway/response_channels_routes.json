@@ -5,6 +5,12 @@
   "payload": {
     "routes": [
       {
+        "channel": "internal",
+        "accountId": "internal.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
         "channel": "whatsapp",
         "accountId": "whatsapp.default",
         "agentId": "default",

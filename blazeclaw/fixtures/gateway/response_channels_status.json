@@ -5,6 +5,12 @@
   "payload": {
     "channels": [
       {
+        "id": "internal",
+        "label": "Internal Mock",
+        "connected": false,
+        "accounts": 1
+      },
+      {
         "id": "whatsapp",
         "label": "WhatsApp",
         "connected": false,

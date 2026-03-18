@@ -5,6 +5,13 @@
   "payload": {
     "accounts": [
       {
+        "channel": "internal",
+        "accountId": "internal.default",
+        "label": "Internal Mock Default",
+        "active": true,
+        "connected": false
+      },
+      {
         "channel": "whatsapp",
         "accountId": "whatsapp.default",
         "label": "WhatsApp Default",
