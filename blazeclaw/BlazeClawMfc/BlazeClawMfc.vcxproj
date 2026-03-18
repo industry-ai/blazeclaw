@@ -140,7 +140,6 @@
     <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Event.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Response.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Shared.cpp" />
-    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.cpp" />
     <ClCompile Include="src\gateway\generated\GatewayHandlerCatalog.Generated.cpp" />
     <ClCompile Include="src\gateway\generated\GatewaySchemaCatalog.Generated.cpp" />
     <ClCompile Include="src\gateway\GatewaySessionRegistry.cpp" />
@@ -155,6 +154,9 @@
   </Target>
   <Target Name="GenerateGatewaySchemaCatalog" BeforeTargets="ClCompile">
     <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewaySchemaCatalogGenerator\Generate-GatewaySchemaCatalog.ps1&quot;" />
+  </Target>
+  <Target Name="VerifyGatewaySchemaCatalogGenerated" BeforeTargets="ClCompile">
+    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewaySchemaCatalogGenerator\Generate-GatewaySchemaCatalog.ps1&quot; -VerifyOnly" />
   </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

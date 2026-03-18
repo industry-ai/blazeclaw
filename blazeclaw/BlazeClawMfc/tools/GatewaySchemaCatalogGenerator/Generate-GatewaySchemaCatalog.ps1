@@ -1,7 +1,8 @@
 param(
     [string]$ManifestPath = "src/gateway/GatewaySchemaCatalog.manifest.json",
     [string]$OutputHeaderPath = "src/gateway/generated/GatewaySchemaCatalog.Generated.h",
-    [string]$OutputSourcePath = "src/gateway/generated/GatewaySchemaCatalog.Generated.cpp"
+    [string]$OutputSourcePath = "src/gateway/generated/GatewaySchemaCatalog.Generated.cpp",
+    [switch]$VerifyOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,6 +11,16 @@ function Resolve-RepoPath {
     param([string]$RelativePath)
 
     return Join-Path -Path $PSScriptRoot -ChildPath "../../$RelativePath"
+}
+
+function Normalize-Text {
+    param([string]$Value)
+
+    if ($null -eq $Value) {
+        return ""
+    }
+
+    return $Value.Replace("`r`n", "`n").TrimEnd()
 }
 
 function Convert-ToCppStringLiteral {
@@ -221,6 +232,23 @@ const std::array<const char*, $($manifest.requiredEvents.Count)>& GetSchemaRequi
 
 } // namespace blazeclaw::gateway::generated
 "@
+
+if ($VerifyOnly) {
+    if (-not (Test-Path $outputHeaderFullPath) -or -not (Test-Path $outputSourceFullPath)) {
+        throw "Generated schema catalog files are missing. Run generator without -VerifyOnly."
+    }
+
+    $existingHeader = Get-Content -Path $outputHeaderFullPath -Raw
+    $existingSource = Get-Content -Path $outputSourceFullPath -Raw
+
+    if ((Normalize-Text $existingHeader) -ne (Normalize-Text $headerContent) -or
+        (Normalize-Text $existingSource) -ne (Normalize-Text $sourceContent)) {
+        throw "Generated schema catalog files are stale. Re-run Generate-GatewaySchemaCatalog.ps1."
+    }
+
+    Write-Host "Schema catalog generated files are up to date."
+    return
+}
 
 $headerDir = Split-Path -Path $outputHeaderFullPath -Parent
 $sourceDir = Split-Path -Path $outputSourceFullPath -Parent
