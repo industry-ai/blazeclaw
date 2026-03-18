@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blazeclaw.local/schemas/GatewaySchemaCatalog.manifest.schema.json",
+  "title": "Gateway Schema Catalog Manifest",
+  "type": "object",
+  "required": ["version", "defaults", "methods"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "seed": {
+      "type": "object",
+      "required": ["mode", "sources"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "defaults": {
+      "$ref": "#/definitions/defaults"
+    },
+    "methods": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/methodRule"
+      }
+    },
+    "methodPatterns": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/methodPatternRule"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "defaults": {
+      "type": "object",
+      "required": ["requestPolicy", "responseShape"],
+      "properties": {
+        "requestPolicy": {
+          "$ref": "#/definitions/requestPolicy"
+        },
+        "responseShape": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "requestPolicy": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["none", "object", "objectOptional", "rawOptional"]
+        },
+        "allowedFields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "requiredFields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "fieldKinds": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "boolean",
+              "object",
+              "array",
+              "null"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "methodRule": {
+      "type": "object",
+      "required": ["name", "requestPolicy", "responseShape"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^gateway\\..+"
+        },
+        "requestPolicy": {
+          "$ref": "#/definitions/requestPolicy"
+        },
+        "responseShape": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "methodPatternRule": {
+      "type": "object",
+      "required": ["pattern", "requestPolicy", "responseShape"],
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "pattern": "^gateway\\..+"
+        },
+        "requestPolicy": {
+          "$ref": "#/definitions/requestPolicy"
+        },
+        "responseShape": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
