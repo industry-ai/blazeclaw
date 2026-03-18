@@ -2,6 +2,7 @@
 #include "GatewayProtocolContract.h"
 
 #include "GatewayProtocolCodec.h"
+#include "GatewayJsonUtils.h"
 #include "GatewayProtocolSchemaValidator.h"
 
 #include <algorithm>
@@ -25,226 +26,36 @@ namespace blazeclaw::gateway::protocol {
 			return buffer.str();
 		}
 
-		std::string TrimBoundaryWhitespace(const std::string& value) {
-			std::size_t start = 0;
-			std::size_t end = value.size();
-
-			while (start < end && std::isspace(static_cast<unsigned char>(value[start])) != 0) {
-				++start;
-			}
-
-			while (end > start && std::isspace(static_cast<unsigned char>(value[end - 1])) != 0) {
-				--end;
-			}
-
-			return value.substr(start, end - start);
+      std::string TrimBoundaryWhitespace(const std::string& value) {
+			return json::Trim(value);
 		}
 
-		std::size_t SkipWhitespace(const std::string& text, std::size_t index) {
-			while (index < text.size() && std::isspace(static_cast<unsigned char>(text[index])) != 0) {
-				++index;
-			}
-
-			return index;
+		bool FindStringField(
+			const std::string& text,
+			const std::string& fieldName,
+			std::string& outValue) {
+			return json::FindStringField(text, fieldName, outValue);
 		}
 
-		bool ParseJsonStringAt(const std::string& text, std::size_t& index, std::string& outValue) {
-			if (index >= text.size() || text[index] != '"') {
-				return false;
-			}
-
-			++index;
-			outValue.clear();
-
-			while (index < text.size()) {
-				const char ch = text[index++];
-				if (ch == '"') {
-					return true;
-				}
-
-				if (ch == '\\') {
-					if (index >= text.size()) {
-						return false;
-					}
-
-					const char escaped = text[index++];
-					switch (escaped) {
-					case '"':
-					case '\\':
-					case '/':
-						outValue.push_back(escaped);
-						break;
-					case 'b':
-						outValue.push_back('\b');
-						break;
-					case 'f':
-						outValue.push_back('\f');
-						break;
-					case 'n':
-						outValue.push_back('\n');
-						break;
-					case 'r':
-						outValue.push_back('\r');
-						break;
-					case 't':
-						outValue.push_back('\t');
-						break;
-					default:
-						return false;
-					}
-
-					continue;
-				}
-
-				outValue.push_back(ch);
-			}
-
-			return false;
+		bool FindRawField(
+			const std::string& text,
+			const std::string& fieldName,
+			std::string& outValue) {
+			return json::FindRawField(text, fieldName, outValue);
 		}
 
-		bool FindStringField(const std::string& text, const std::string& fieldName, std::string& outValue) {
-			const std::string token = "\"" + fieldName + "\"";
-			const std::size_t keyPos = text.find(token);
-			if (keyPos == std::string::npos) {
-				return false;
-			}
-
-			std::size_t index = keyPos + token.size();
-			index = SkipWhitespace(text, index);
-			if (index >= text.size() || text[index] != ':') {
-				return false;
-			}
-
-			++index;
-			index = SkipWhitespace(text, index);
-
-			return ParseJsonStringAt(text, index, outValue);
+		bool FindBoolField(
+			const std::string& text,
+			const std::string& fieldName,
+			bool& outValue) {
+			return json::FindBoolField(text, fieldName, outValue);
 		}
 
-		bool FindRawField(const std::string& text, const std::string& fieldName, std::string& outValue) {
-			const std::string token = "\"" + fieldName + "\"";
-			const std::size_t keyPos = text.find(token);
-			if (keyPos == std::string::npos) {
-				return false;
-			}
-
-			std::size_t index = keyPos + token.size();
-			index = SkipWhitespace(text, index);
-			if (index >= text.size() || text[index] != ':') {
-				return false;
-			}
-
-			++index;
-			index = SkipWhitespace(text, index);
-			if (index >= text.size()) {
-				return false;
-			}
-
-			const std::size_t start = index;
-			const char opener = text[index];
-
-			if (opener == '{' || opener == '[') {
-				const char closer = opener == '{' ? '}' : ']';
-				int depth = 0;
-				bool inString = false;
-
-				for (; index < text.size(); ++index) {
-					const char ch = text[index];
-					if (inString) {
-						if (ch == '\\') {
-							++index;
-							continue;
-						}
-
-						if (ch == '"') {
-							inString = false;
-						}
-
-						continue;
-					}
-
-					if (ch == '"') {
-						inString = true;
-						continue;
-					}
-
-					if (ch == opener) {
-						++depth;
-					}
-					else if (ch == closer) {
-						--depth;
-						if (depth == 0) {
-							outValue = text.substr(start, (index - start) + 1);
-							return true;
-						}
-					}
-				}
-
-				return false;
-			}
-
-			if (opener == '"') {
-				std::string parsed;
-				if (!ParseJsonStringAt(text, index, parsed)) {
-					return false;
-				}
-
-				outValue = "\"" + parsed + "\"";
-				return true;
-			}
-
-			while (index < text.size() && text[index] != ',' && text[index] != '}') {
-				++index;
-			}
-
-			outValue = text.substr(start, index - start);
-			return true;
-		}
-
-		bool FindBoolField(const std::string& text, const std::string& fieldName, bool& outValue) {
-			std::string raw;
-			if (!FindRawField(text, fieldName, raw)) {
-				return false;
-			}
-
-			raw = TrimBoundaryWhitespace(raw);
-			if (raw == "true") {
-				outValue = true;
-				return true;
-			}
-
-			if (raw == "false") {
-				outValue = false;
-				return true;
-			}
-
-			return false;
-		}
-
-		bool FindUInt64Field(const std::string& text, const std::string& fieldName, std::uint64_t& outValue) {
-			std::string raw;
-			if (!FindRawField(text, fieldName, raw)) {
-				return false;
-			}
-
-			raw = TrimBoundaryWhitespace(raw);
-			if (raw.empty()) {
-				return false;
-			}
-
-			try {
-				std::size_t consumed = 0;
-				const std::uint64_t parsed = std::stoull(raw, &consumed);
-				if (consumed != raw.size()) {
-					return false;
-				}
-
-				outValue = parsed;
-				return true;
-			}
-			catch (...) {
-				return false;
-			}
+		bool FindUInt64Field(
+			const std::string& text,
+			const std::string& fieldName,
+			std::uint64_t& outValue) {
+			return json::FindUInt64Field(text, fieldName, outValue);
 		}
 
 		bool TryDecodeResponseFrame(

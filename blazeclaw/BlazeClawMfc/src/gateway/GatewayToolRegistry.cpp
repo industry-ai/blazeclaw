@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "GatewayToolRegistry.h"
+#include "GatewayJsonUtils.h"
 
 #include <algorithm>
 
@@ -12,29 +13,12 @@ namespace blazeclaw::gateway {
 				return {};
 			}
 
-			const std::string& text = json.value();
-			const std::string token = "\"" + fieldName + "\"";
-			const std::size_t keyPos = text.find(token);
-			if (keyPos == std::string::npos) {
+			std::string value;
+			if (!json::FindStringField(json.value(), fieldName, value)) {
 				return {};
 			}
 
-			std::size_t valuePos = text.find(':', keyPos + token.size());
-			if (valuePos == std::string::npos) {
-				return {};
-			}
-
-			valuePos = text.find('"', valuePos);
-			if (valuePos == std::string::npos) {
-				return {};
-			}
-
-			const std::size_t endQuote = text.find('"', valuePos + 1);
-			if (endQuote == std::string::npos) {
-				return {};
-			}
-
-			return text.substr(valuePos + 1, endQuote - valuePos - 1);
+			return value;
 		}
 	}
 

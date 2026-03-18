@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "GatewayHost.h"
 
+#include "GatewayJsonUtils.h"
 #include "GatewayProtocolCodec.h"
 #include "GatewayProtocolSchemaValidator.h"
 #include "generated/GatewayHandlerCatalog.Generated.h"
@@ -56,37 +57,16 @@ namespace blazeclaw::gateway {
 				return std::nullopt;
 			}
 
-			const std::string token = "\"" + fieldName + "\"";
-			const std::string& params = paramsJson.value();
-			const std::size_t keyPos = params.find(token);
-			if (keyPos == std::string::npos) {
+			std::string raw;
+			if (!json::FindRawField(paramsJson.value(), fieldName, raw)) {
 				return std::nullopt;
 			}
 
-			std::size_t valuePos = params.find(':', keyPos + token.size());
-			if (valuePos == std::string::npos) {
+			if (!json::IsJsonObjectShape(raw)) {
 				return std::nullopt;
 			}
 
-			valuePos = params.find('{', valuePos);
-			if (valuePos == std::string::npos) {
-				return std::nullopt;
-			}
-
-			int depth = 0;
-			for (std::size_t i = valuePos; i < params.size(); ++i) {
-				if (params[i] == '{') {
-					++depth;
-				}
-				else if (params[i] == '}') {
-					--depth;
-					if (depth == 0) {
-						return params.substr(valuePos, i - valuePos + 1);
-					}
-				}
-			}
-
-			return std::nullopt;
+			return raw;
 		}
 
 		std::optional<bool> ExtractBooleanParam(
@@ -96,32 +76,12 @@ namespace blazeclaw::gateway {
 				return std::nullopt;
 			}
 
-			const std::string token = "\"" + fieldName + "\"";
-			const std::string& params = paramsJson.value();
-			const std::size_t keyPos = params.find(token);
-			if (keyPos == std::string::npos) {
+			bool value = false;
+			if (!json::FindBoolField(paramsJson.value(), fieldName, value)) {
 				return std::nullopt;
 			}
 
-			std::size_t valuePos = params.find(':', keyPos + token.size());
-			if (valuePos == std::string::npos) {
-				return std::nullopt;
-			}
-
-			++valuePos;
-			while (valuePos < params.size() && std::isspace(static_cast<unsigned char>(params[valuePos])) != 0) {
-				++valuePos;
-			}
-
-			if (params.compare(valuePos, 4, "true") == 0) {
-				return true;
-			}
-
-			if (params.compare(valuePos, 5, "false") == 0) {
-				return false;
-			}
-
-			return std::nullopt;
+			return value;
 		}
 
 		std::string SerializeSession(const SessionEntry& session) {
@@ -218,29 +178,12 @@ namespace blazeclaw::gateway {
 				return {};
 			}
 
-			const std::string token = "\"" + fieldName + "\"";
-			const std::string& params = paramsJson.value();
-			const std::size_t keyPos = params.find(token);
-			if (keyPos == std::string::npos) {
+			std::string value;
+			if (!json::FindStringField(paramsJson.value(), fieldName, value)) {
 				return {};
 			}
 
-			std::size_t valuePos = params.find(':', keyPos + token.size());
-			if (valuePos == std::string::npos) {
-				return {};
-			}
-
-			valuePos = params.find('"', valuePos);
-			if (valuePos == std::string::npos) {
-				return {};
-			}
-
-			const std::size_t endQuote = params.find('"', valuePos + 1);
-			if (endQuote == std::string::npos) {
-				return {};
-			}
-
-			return params.substr(valuePos + 1, endQuote - valuePos - 1);
+			return value;
 		}
 
 		std::optional<std::size_t> ExtractNumericParam(
@@ -250,38 +193,12 @@ namespace blazeclaw::gateway {
 				return std::nullopt;
 			}
 
-			const std::string token = "\"" + fieldName + "\"";
-			const std::string& params = paramsJson.value();
-			const std::size_t keyPos = params.find(token);
-			if (keyPos == std::string::npos) {
+			std::uint64_t value = 0;
+			if (!json::FindUInt64Field(paramsJson.value(), fieldName, value)) {
 				return std::nullopt;
 			}
 
-			std::size_t valuePos = params.find(':', keyPos + token.size());
-			if (valuePos == std::string::npos) {
-				return std::nullopt;
-			}
-
-			++valuePos;
-			while (valuePos < params.size() && std::isspace(static_cast<unsigned char>(params[valuePos])) != 0) {
-				++valuePos;
-			}
-
-			if (valuePos >= params.size() || std::isdigit(static_cast<unsigned char>(params[valuePos])) == 0) {
-				return std::nullopt;
-			}
-
-			std::size_t endPos = valuePos;
-			while (endPos < params.size() && std::isdigit(static_cast<unsigned char>(params[endPos])) != 0) {
-				++endPos;
-			}
-
-			try {
-				return static_cast<std::size_t>(std::stoull(params.substr(valuePos, endPos - valuePos)));
-			}
-			catch (...) {
-				return std::nullopt;
-			}
+			return static_cast<std::size_t>(value);
 		}
 
 	} // namespace
