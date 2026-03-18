@@ -6,11 +6,41 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <unordered_set>
 
 namespace blazeclaw::gateway {
 	namespace {
+     std::vector<ChannelAdapterDescriptor> BuildCompliantAdapters(
+			const std::vector<ChannelAdapterDescriptor>& source) {
+			std::vector<ChannelAdapterDescriptor> compliant;
+			compliant.reserve(source.size());
+			std::unordered_set<std::string> ids;
+
+			for (const auto& adapter : source) {
+				if (adapter.id.empty() ||
+					adapter.label.empty() ||
+					adapter.defaultAccountId.empty()) {
+					continue;
+				}
+
+				const auto [_, inserted] = ids.insert(adapter.id);
+				if (!inserted) {
+					continue;
+				}
+
+				compliant.push_back(adapter);
+			}
+
+			return compliant;
+		}
+
 		std::vector<ChannelAdapterDescriptor> BuildSeedAdapters() {
 			return {
+                ChannelAdapterDescriptor{
+					.id = "internal",
+					.label = "Internal Mock",
+					.defaultAccountId = "internal.default",
+				},
                 ChannelAdapterDescriptor{
 					.id = "whatsapp",
 					.label = "WhatsApp",
@@ -104,7 +134,7 @@ namespace blazeclaw::gateway {
 	}
 
 	GatewayChannelRegistry::GatewayChannelRegistry() {
-        m_adapters = BuildSeedAdapters();
+       m_adapters = BuildCompliantAdapters(BuildSeedAdapters());
 
 		for (const auto& adapter : m_adapters) {
 			m_status.push_back(ChannelStatusEntry{
@@ -130,7 +160,9 @@ namespace blazeclaw::gateway {
 			});
 		}
 
-		LoadPersistedState();
+       LoadPersistedState();
+        RestoreAccounts(std::string{});
+		RestoreRoutes(std::string{});
 		RecomputeStatus();
 	}
 
