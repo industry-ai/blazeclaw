@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "GatewayHost.h"
+#include "GatewayJsonUtils.h"
 
 namespace blazeclaw::gateway {
 
@@ -33,22 +34,98 @@ namespace blazeclaw::gateway {
 
             return escaped;
         }
+
+        std::string ExtractStringParam(
+            const std::optional<std::string>& paramsJson,
+            const std::string& fieldName) {
+            if (!paramsJson.has_value()) {
+                return {};
+            }
+
+            std::string value;
+            if (!json::FindStringField(paramsJson.value(), fieldName, value)) {
+                return {};
+            }
+
+            return value;
+        }
+
+        std::optional<std::size_t> ExtractSizeParam(
+            const std::optional<std::string>& paramsJson,
+            const std::string& fieldName) {
+            if (!paramsJson.has_value()) {
+                return std::nullopt;
+            }
+
+            std::uint64_t value = 0;
+            if (!json::FindUInt64Field(paramsJson.value(), fieldName, value)) {
+                return std::nullopt;
+            }
+
+            return static_cast<std::size_t>(value);
+        }
+
+        bool HasAgentId(
+            const GatewayAgentRegistry& registry,
+            const std::string& agentId) {
+            if (agentId.empty()) {
+                return false;
+            }
+
+            const auto agents = registry.List();
+            return std::any_of(
+                agents.begin(),
+                agents.end(),
+                [&](const AgentEntry& entry) {
+                    return entry.id == agentId;
+                });
+        }
+
+        bool HasSessionId(
+            const GatewaySessionRegistry& registry,
+            const std::string& sessionId) {
+            if (sessionId.empty()) {
+                return false;
+            }
+
+            const auto sessions = registry.List();
+            return std::any_of(
+                sessions.begin(),
+                sessions.end(),
+                [&](const SessionEntry& entry) {
+                    return entry.id == sessionId;
+                });
+        }
     }
 
     void GatewayHost::RegisterRuntimeHandlers() {
         m_dispatcher.Register("gateway.runtime.orchestration.status", [this](const protocol::RequestFrame& request) {
             const auto sessions = m_sessionRegistry.List();
             const auto agents = m_agentRegistry.List();
-            const std::string activeSession = sessions.empty() ? "main" : sessions.front().id;
-            const std::string activeAgent = agents.empty() ? "default" : agents.front().id;
+            const std::string activeSession =
+                HasSessionId(m_sessionRegistry, m_runtimeAssignedSessionId)
+                    ? m_runtimeAssignedSessionId
+                    : (sessions.empty() ? "main" : sessions.front().id);
+            const std::string activeAgent =
+                HasAgentId(m_agentRegistry, m_runtimeAssignedAgentId)
+                    ? m_runtimeAssignedAgentId
+                    : (agents.empty() ? "default" : agents.front().id);
+            const bool busy =
+                m_runtimeQueueDepth > 0 || m_runtimeRunningCount > 0;
 
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
                 .payloadJson =
-                    "{\"state\":\"idle\",\"activeSession\":\"" +
+                    "{\"state\":\"" + std::string(busy ? "busy" : "idle") +
+                    "\",\"activeSession\":\"" +
                     EscapeJsonLocal(activeSession) + "\",\"activeAgent\":\"" +
-                    EscapeJsonLocal(activeAgent) + "\",\"queueDepth\":0}",
+                    EscapeJsonLocal(activeAgent) + "\",\"queueDepth\":" +
+                    std::to_string(m_runtimeQueueDepth) +
+                    ",\"running\":" +
+                    std::to_string(m_runtimeRunningCount) +
+                    ",\"capacity\":" +
+                    std::to_string(m_runtimeQueueCapacity) + "}",
                 .error = std::nullopt,
             };
             });
@@ -2763,11 +2840,35 @@ namespace blazeclaw::gateway {
             };
             });
 
-        m_dispatcher.Register("gateway.runtime.orchestration.queue", [](const protocol::RequestFrame& request) {
+        m_dispatcher.Register("gateway.runtime.orchestration.queue", [this](const protocol::RequestFrame& request) {
+            const auto queued = ExtractSizeParam(request.paramsJson, "queued");
+            const auto running = ExtractSizeParam(request.paramsJson, "running");
+            const auto capacity = ExtractSizeParam(request.paramsJson, "capacity");
+
+            if (queued.has_value()) {
+                m_runtimeQueueDepth = queued.value();
+            }
+
+            if (running.has_value()) {
+                m_runtimeRunningCount = running.value();
+            }
+
+            if (capacity.has_value() && capacity.value() > 0) {
+                m_runtimeQueueCapacity = capacity.value();
+            }
+
+            if (m_runtimeRunningCount > m_runtimeQueueCapacity) {
+                m_runtimeRunningCount = m_runtimeQueueCapacity;
+            }
+
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
-                .payloadJson = "{\"queued\":0,\"running\":0,\"capacity\":8}",
+                .payloadJson =
+                    "{\"queued\":" + std::to_string(m_runtimeQueueDepth) +
+                    ",\"running\":" + std::to_string(m_runtimeRunningCount) +
+                    ",\"capacity\":" + std::to_string(m_runtimeQueueCapacity) +
+                    ",\"updated\":true}",
                 .error = std::nullopt,
             };
             });
@@ -2792,12 +2893,44 @@ namespace blazeclaw::gateway {
             };
             });
 
-        m_dispatcher.Register("gateway.runtime.orchestration.assign", [](const protocol::RequestFrame& request) {
+        m_dispatcher.Register("gateway.runtime.orchestration.assign", [this](const protocol::RequestFrame& request) {
+            std::string agentId = ExtractStringParam(request.paramsJson, "agentId");
+            std::string sessionId = ExtractStringParam(request.paramsJson, "sessionId");
+
+            if (agentId.empty()) {
+                agentId = m_runtimeAssignedAgentId;
+            }
+
+            if (sessionId.empty()) {
+                sessionId = m_runtimeAssignedSessionId;
+            }
+
+            const bool agentExists = HasAgentId(m_agentRegistry, agentId);
+            const bool sessionExists = HasSessionId(m_sessionRegistry, sessionId);
+            const bool assigned = agentExists && sessionExists;
+
+            if (assigned) {
+                m_runtimeAssignedAgentId = agentId;
+                m_runtimeAssignedSessionId = sessionId;
+                ++m_runtimeAssignmentCount;
+
+                if (m_runtimeQueueDepth > 0 &&
+                    m_runtimeRunningCount < m_runtimeQueueCapacity) {
+                    --m_runtimeQueueDepth;
+                    ++m_runtimeRunningCount;
+                }
+            }
+
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
                 .payloadJson =
-                    "{\"agentId\":\"default\",\"sessionId\":\"main\",\"assigned\":true}",
+                    "{\"agentId\":\"" + EscapeJsonLocal(agentId) +
+                    "\",\"sessionId\":\"" + EscapeJsonLocal(sessionId) +
+                    "\",\"assigned\":" +
+                    std::string(assigned ? "true" : "false") +
+                    ",\"assignments\":" +
+                    std::to_string(m_runtimeAssignmentCount) + "}",
                 .error = std::nullopt,
             };
             });
@@ -2820,11 +2953,32 @@ namespace blazeclaw::gateway {
             };
             });
 
-        m_dispatcher.Register("gateway.runtime.orchestration.rebalance", [](const protocol::RequestFrame& request) {
+        m_dispatcher.Register("gateway.runtime.orchestration.rebalance", [this](const protocol::RequestFrame& request) {
+            std::string strategy = ExtractStringParam(request.paramsJson, "strategy");
+            if (strategy.empty()) {
+                strategy = "sticky";
+            }
+
+            std::size_t moved = 0;
+            if (m_runtimeQueueDepth > 0 &&
+                m_runtimeRunningCount < m_runtimeQueueCapacity) {
+                moved = 1;
+                --m_runtimeQueueDepth;
+                ++m_runtimeRunningCount;
+            }
+
+            ++m_runtimeRebalanceCount;
+
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
-                .payloadJson = "{\"moved\":0,\"remaining\":2,\"strategy\":\"sticky\"}",
+                .payloadJson =
+                    "{\"moved\":" + std::to_string(moved) +
+                    ",\"remaining\":" +
+                    std::to_string(m_runtimeQueueDepth + m_runtimeRunningCount) +
+                    ",\"strategy\":\"" + EscapeJsonLocal(strategy) +
+                    "\",\"rebalances\":" +
+                    std::to_string(m_runtimeRebalanceCount) + "}",
                 .error = std::nullopt,
             };
             });
@@ -2849,12 +3003,27 @@ namespace blazeclaw::gateway {
             };
             });
 
-        m_dispatcher.Register("gateway.runtime.orchestration.drain", [](const protocol::RequestFrame& request) {
+        m_dispatcher.Register("gateway.runtime.orchestration.drain", [this](const protocol::RequestFrame& request) {
+            std::string reason = ExtractStringParam(request.paramsJson, "reason");
+            if (reason.empty()) {
+                reason = "idle";
+            }
+
+            const std::size_t drained =
+                m_runtimeQueueDepth + m_runtimeRunningCount;
+            m_runtimeQueueDepth = 0;
+            m_runtimeRunningCount = 0;
+            ++m_runtimeDrainCount;
+
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
                 .payloadJson =
-                    "{\"drained\":0,\"remaining\":0,\"reason\":\"idle\"}",
+                    "{\"drained\":" + std::to_string(drained) +
+                    ",\"remaining\":0,\"reason\":\"" +
+                    EscapeJsonLocal(reason) +
+                    "\",\"drains\":" +
+                    std::to_string(m_runtimeDrainCount) + "}",
                 .error = std::nullopt,
             };
             });
@@ -2881,12 +3050,23 @@ namespace blazeclaw::gateway {
 
         m_dispatcher.Register(
             "gateway.runtime.orchestration.snapshot",
-            [](const protocol::RequestFrame& request) {
+            [this](const protocol::RequestFrame& request) {
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
                     .payloadJson =
-                        "{\"sessions\":2,\"agents\":2,\"active\":\"main\"}",
+                        "{\"sessions\":" +
+                        std::to_string(m_sessionRegistry.List().size()) +
+                        ",\"agents\":" +
+                        std::to_string(m_agentRegistry.List().size()) +
+                        ",\"active\":\"" +
+                        EscapeJsonLocal(m_runtimeAssignedSessionId) +
+                        "\",\"activeAgent\":\"" +
+                        EscapeJsonLocal(m_runtimeAssignedAgentId) +
+                        "\",\"queue\":" +
+                        std::to_string(m_runtimeQueueDepth) +
+                        ",\"running\":" +
+                        std::to_string(m_runtimeRunningCount) + "}",
                     .error = std::nullopt,
                 };
             });
@@ -2917,12 +3097,16 @@ namespace blazeclaw::gateway {
 
         m_dispatcher.Register(
             "gateway.runtime.orchestration.timeline",
-            [](const protocol::RequestFrame& request) {
+            [this](const protocol::RequestFrame& request) {
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
                     .payloadJson =
-                        "{\"ticks\":[0,1],\"count\":2,\"source\":\"scheduler\"}",
+                        "{\"ticks\":[" +
+                        std::to_string(m_runtimeAssignmentCount) + "," +
+                        std::to_string(m_runtimeRebalanceCount) + "," +
+                        std::to_string(m_runtimeDrainCount) +
+                        "],\"count\":3,\"source\":\"runtime-orchestrator\"}",
                     .error = std::nullopt,
                 };
             });
@@ -2953,12 +3137,15 @@ namespace blazeclaw::gateway {
 
         m_dispatcher.Register(
             "gateway.runtime.orchestration.heartbeat",
-            [](const protocol::RequestFrame& request) {
+            [this](const protocol::RequestFrame& request) {
+                const std::size_t backlog =
+                    m_runtimeQueueDepth + m_runtimeRunningCount;
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
                     .payloadJson =
-                        "{\"alive\":true,\"intervalMs\":1000,\"jitterMs\":25}",
+                        "{\"alive\":true,\"intervalMs\":1000,\"jitterMs\":" +
+                        std::to_string(25 + (backlog > 0 ? 5 : 0)) + "}",
                     .error = std::nullopt,
                 };
             });
@@ -2989,12 +3176,20 @@ namespace blazeclaw::gateway {
 
         m_dispatcher.Register(
             "gateway.runtime.orchestration.pulse",
-            [](const protocol::RequestFrame& request) {
+            [this](const protocol::RequestFrame& request) {
+                const std::size_t pulse =
+                    m_runtimeAssignmentCount +
+                    m_runtimeRebalanceCount +
+                    m_runtimeDrainCount;
+                const bool busy =
+                    m_runtimeQueueDepth > 0 || m_runtimeRunningCount > 0;
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
                     .payloadJson =
-                        "{\"pulse\":1,\"driftMs\":0,\"state\":\"steady\"}",
+                        "{\"pulse\":" + std::to_string(pulse) +
+                        ",\"driftMs\":0,\"state\":\"" +
+                        std::string(busy ? "active" : "steady") + "\"}",
                     .error = std::nullopt,
                 };
             });

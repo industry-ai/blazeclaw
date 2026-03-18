@@ -21,8 +21,9 @@ namespace blazeclaw::gateway {
 
         m_dispatcher.Register("gateway.tools.capacity", [this](const protocol::RequestFrame& request) {
             const auto tools = m_toolRegistry.List();
+            const auto stats = m_toolRegistry.GetExecutionStats();
             const std::size_t total = tools.size();
-            const std::size_t used = 0;
+            const std::size_t used = total == 0 ? 0 : (stats.succeeded % total);
             const std::size_t free = total >= used ? total - used : 0;
             return protocol::ResponseFrame{
                 .id = request.id,
@@ -37,7 +38,8 @@ namespace blazeclaw::gateway {
 
         m_dispatcher.Register("gateway.tools.queue", [this](const protocol::RequestFrame& request) {
             const auto tools = m_toolRegistry.List();
-            const std::size_t queued = 0;
+            const auto stats = m_toolRegistry.GetExecutionStats();
+            const std::size_t queued = stats.failed;
             const std::size_t running = 0;
             return protocol::ResponseFrame{
                 .id = request.id,
@@ -52,11 +54,14 @@ namespace blazeclaw::gateway {
 
         m_dispatcher.Register("gateway.tools.scheduler", [this](const protocol::RequestFrame& request) {
             const auto tools = m_toolRegistry.List();
+            const auto stats = m_toolRegistry.GetExecutionStats();
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
                 .payloadJson =
-                    "{\"ticks\":0,\"queued\":0,\"tools\":" +
+                    "{\"ticks\":" + std::to_string(stats.count) +
+                    ",\"queued\":" + std::to_string(stats.failed) +
+                    ",\"tools\":" +
                     std::to_string(tools.size()) + "}",
                 .error = std::nullopt,
             };
@@ -64,7 +69,8 @@ namespace blazeclaw::gateway {
 
         m_dispatcher.Register("gateway.tools.backlog", [this](const protocol::RequestFrame& request) {
             const auto tools = m_toolRegistry.List();
-            const std::size_t pending = 0;
+            const auto stats = m_toolRegistry.GetExecutionStats();
+            const std::size_t pending = stats.failed;
             const std::string toolCount = std::to_string(tools.size());
             return protocol::ResponseFrame{
                 .id = request.id,
@@ -79,11 +85,14 @@ namespace blazeclaw::gateway {
 
         m_dispatcher.Register("gateway.tools.window", [this](const protocol::RequestFrame& request) {
             const auto tools = m_toolRegistry.List();
+            const auto stats = m_toolRegistry.GetExecutionStats();
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
                 .payloadJson =
-                    "{\"windowSec\":60,\"calls\":0,\"tools\":" +
+                    "{\"windowSec\":60,\"calls\":" +
+                    std::to_string(stats.count) +
+                    ",\"tools\":" +
                     std::to_string(tools.size()) + "}",
                 .error = std::nullopt,
             };
@@ -91,11 +100,17 @@ namespace blazeclaw::gateway {
 
         m_dispatcher.Register("gateway.tools.pipeline", [this](const protocol::RequestFrame& request) {
             const auto tools = m_toolRegistry.List();
+            const auto stats = m_toolRegistry.GetExecutionStats();
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
                 .payloadJson =
-                    "{\"queued\":0,\"running\":0,\"failed\":0,\"tools\":" +
+                    "{\"queued\":" + std::to_string(stats.failed) +
+                    ",\"running\":0,\"failed\":" +
+                    std::to_string(stats.failed) +
+                    ",\"succeeded\":" +
+                    std::to_string(stats.succeeded) +
+                    ",\"tools\":" +
                     std::to_string(tools.size()) + "}",
                 .error = std::nullopt,
             };
@@ -103,11 +118,15 @@ namespace blazeclaw::gateway {
 
         m_dispatcher.Register("gateway.tools.dispatch", [this](const protocol::RequestFrame& request) {
             const auto tools = m_toolRegistry.List();
+            const auto stats = m_toolRegistry.GetExecutionStats();
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
                 .payloadJson =
-                    "{\"queued\":0,\"dispatched\":0,\"tools\":" +
+                    "{\"queued\":" + std::to_string(stats.failed) +
+                    ",\"dispatched\":" +
+                    std::to_string(stats.succeeded) +
+                    ",\"tools\":" +
                     std::to_string(tools.size()) + "}",
                 .error = std::nullopt,
             };
