@@ -15,6 +15,18 @@ namespace blazeclaw::gateway {
             });
 
         m_dispatcher.Register(
+            "gateway.nodes.voice.streamScopeId",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"streamScopeId\":\"voice.streamScopeId.default\",\"active\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
             "gateway.nodes.voice.sequenceScopeId",
             [](const protocol::RequestFrame& request) {
                 return protocol::ResponseFrame{
@@ -22,6 +34,18 @@ namespace blazeclaw::gateway {
                     .ok = true,
                     .payloadJson =
                         "{\"sequenceScopeId\":\"voice.sequenceScopeId.default\",\"active\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.nodes.camera.streamScopeId",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"streamScopeId\":\"camera.streamScopeId.default\",\"active\":true}",
                     .error = std::nullopt,
                 };
             });
@@ -39,6 +63,18 @@ namespace blazeclaw::gateway {
             });
 
         m_dispatcher.Register(
+            "gateway.nodes.notifications.streamScopeId",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"streamScopeId\":\"notifications.streamScopeId.default\",\"active\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
             "gateway.nodes.camera.sequenceScopeId",
             [](const protocol::RequestFrame& request) {
                 return protocol::ResponseFrame{
@@ -46,6 +82,78 @@ namespace blazeclaw::gateway {
                     .ok = true,
                     .payloadJson =
                         "{\"sequenceScopeId\":\"camera.sequenceScopeId.default\",\"active\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.security.logging.templateScopeId2",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"templateScopeId2\":\"logging.templateScopeId2.default\",\"active\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.security.logging.revisionScopeId2",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"revisionScopeId2\":\"logging.revisionScopeId2.default\",\"active\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.security.logging.historyScopeId2",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"historyScopeId2\":\"logging.historyScopeId2.default\",\"active\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.security.logging.snapshotScopeId2",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"snapshotScopeId2\":\"logging.snapshotScopeId2.default\",\"active\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.security.logging.indexScopeId2",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"indexScopeId2\":\"logging.indexScopeId2.default\",\"active\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.security.logging.windowScopeId2",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"windowScopeId2\":\"logging.windowScopeId2.default\",\"active\":true}",
                     .error = std::nullopt,
                 };
             });
@@ -61,6 +169,78 @@ namespace blazeclaw::gateway {
             });
 
         m_dispatcher.Register(
+            "gateway.security.diagnostics.templateScopeId2",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"templateScopeId2\":\"diagnostics.templateScopeId2.default\",\"active\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.security.diagnostics.revisionScopeId2",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"revisionScopeId2\":\"diagnostics.revisionScopeId2.default\",\"active\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.security.diagnostics.historyScopeId2",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"historyScopeId2\":\"diagnostics.historyScopeId2.default\",\"active\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.security.diagnostics.snapshotScopeId2",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"snapshotScopeId2\":\"diagnostics.snapshotScopeId2.default\",\"active\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.security.diagnostics.indexScopeId2",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"indexScopeId2\":\"diagnostics.indexScopeId2.default\",\"active\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.security.diagnostics.windowScopeId2",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"windowScopeId2\":\"diagnostics.windowScopeId2.default\",\"active\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
             "gateway.nodes.notifications.sequenceScopeId",
             [](const protocol::RequestFrame& request) {
                 return protocol::ResponseFrame{
@@ -68,6 +248,18 @@ namespace blazeclaw::gateway {
                     .ok = true,
                     .payloadJson =
                         "{\"sequenceScopeId\":\"notifications.sequenceScopeId.default\",\"active\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.nodes.canvas.streamScopeId",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"streamScopeId\":\"canvas.streamScopeId.default\",\"active\":true}",
                     .error = std::nullopt,
                 };
             });
@@ -85,6 +277,18 @@ namespace blazeclaw::gateway {
             });
 
         m_dispatcher.Register(
+            "gateway.platform.cli.streamScopeId",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"streamScopeId\":\"cli.streamScopeId.default\",\"active\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
             "gateway.security.logging.sequenceScopeId3",
             [](const protocol::RequestFrame& request) {
                 return protocol::ResponseFrame{
@@ -92,6 +296,18 @@ namespace blazeclaw::gateway {
                     .ok = true,
                     .payloadJson =
                         "{\"sequenceScopeId3\":\"logging.sequenceScopeId3.default\",\"active\":true}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.platform.web.streamScopeId",
+            [](const protocol::RequestFrame& request) {
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"streamScopeId\":\"web.streamScopeId.default\",\"active\":true}",
                     .error = std::nullopt,
                 };
             });
