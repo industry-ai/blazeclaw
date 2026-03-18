@@ -2008,8 +2008,15 @@ namespace blazeclaw::gateway::protocol {
 			return ValidateStringIdParam(request, issue, request.method, it->second);
 		}
 
-		if (ResolveGeneratedRequestPolicyType(request.method) == "none") {
-			return ValidateNoParamsAllowed(request, issue, request.method);
+
+		const std::string_view generatedPolicyType =
+			ResolveGeneratedRequestPolicyType(request.method);
+		if (!generatedPolicyType.empty()) {
+			if (generatedPolicyType == "none") {
+				return ValidateNoParamsAllowed(request, issue, request.method);
+			}
+
+			return true;
 		}
 
 		static const std::unordered_set<std::string> noParamsMethods = {
