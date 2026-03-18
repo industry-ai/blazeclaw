@@ -1,8 +1,10 @@
 #include "pch.h"
 #include "GatewayProtocolSchemaValidator.h"
 #include "GatewayProtocolSchemaValidator.Internal.h"
+#include "generated/GatewaySchemaCatalog.Generated.h"
 
 #include <functional>
+#include <string_view>
 #include <unordered_map>
 
 namespace blazeclaw::gateway::protocol {
@@ -28,6 +30,64 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.agent.update",
 			"gateway.tools.catalog.update",
 		};
+
+		bool PayloadContainsGeneratedMethodRules(const std::string& payload) {
+			for (const auto& rule : generated::GetSchemaMethodRules()) {
+				if (rule.name == nullptr) {
+					continue;
+				}
+
+				const std::string token = "\"" + std::string(rule.name) + "\"";
+				if (payload.find(token) == std::string::npos) {
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		bool PayloadContainsGeneratedPatternCoverage(
+			const std::string& payload,
+			std::initializer_list<const char*> requiredPatterns) {
+			for (const char* requiredPattern : requiredPatterns) {
+				if (requiredPattern == nullptr) {
+					continue;
+				}
+
+				bool matchedPatternRule = false;
+				for (const auto& patternRule : generated::GetSchemaMethodPatternRules()) {
+					if (patternRule.pattern == nullptr ||
+						std::string_view(patternRule.pattern) != requiredPattern) {
+						continue;
+					}
+
+					matchedPatternRule = true;
+					const std::string_view patternView(patternRule.pattern);
+					std::string prefix;
+					if (patternView.size() >= 2 &&
+						patternView.substr(patternView.size() - 2) == ".*") {
+						prefix = std::string(patternView.substr(0, patternView.size() - 1));
+					}
+					else {
+						prefix = std::string(patternView);
+					}
+
+					const std::string token = "\"" + prefix;
+					if (payload.find(token) == std::string::npos) {
+						return false;
+					}
+
+					break;
+				}
+
+				if (!matchedPatternRule) {
+					return false;
+				}
+			}
+
+			return true;
+		}
+
 		constexpr const char* kFeatureRequiredCatalogAll[] = {
 			"gateway.ping",
 			"gateway.transport.status",
@@ -1065,30 +1125,7 @@ namespace blazeclaw::gateway::protocol {
 			"gateway.models.failover.override.vectorGate4",
 			"gateway.shutdown",
 		};
-		constexpr const char* kFeatureRequiredConfigCluster[] = {
-			"gateway.config.validate",
-			"gateway.config.audit",
-			"gateway.config.snapshot",
-			"gateway.config.schema",
-		};
-		constexpr const char* kFeatureRequiredTransportCluster[] = {
-			"gateway.transport.status",
-			"gateway.transport.policy.get",
-			"gateway.transport.policy.history",
-			"gateway.transport.policy.validate",
-		};
-		constexpr const char* kFeatureRequiredEventCluster[] = {
-			"gateway.events.catalog",
-			"gateway.events.list",
-			"gateway.events.types",
-			"gateway.events.summary",
-		};
-		constexpr const char* kFeatureRequiredModelToolCluster[] = {
-			"gateway.models.get",
-			"gateway.models.listByProvider",
-			"gateway.tools.get",
-			"gateway.tools.list",
-		};
+
 
 		bool ValidateObjectWithTokens(
 			const std::string& payload,
@@ -3439,11 +3476,16 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 
-				if (!PayloadContainsAllStringValues(payload, kFeatureRequiredCatalogAll) ||
-					!PayloadContainsAllStringValues(payload, kFeatureRequiredConfigCluster) ||
-					!PayloadContainsAllStringValues(payload, kFeatureRequiredTransportCluster) ||
-					!PayloadContainsAllStringValues(payload, kFeatureRequiredEventCluster) ||
-					!PayloadContainsAllStringValues(payload, kFeatureRequiredModelToolCluster)) {
+               if (!PayloadContainsGeneratedMethodRules(payload) ||
+					!PayloadContainsGeneratedPatternCoverage(
+						payload,
+						{
+							"gateway.config.*",
+							"gateway.transport.*",
+							"gateway.events.*",
+							"gateway.models.*",
+							"gateway.tools.*",
+						})) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.features.list` catalog is missing required method/event members.");
 					return false;
 				}

@@ -1,7 +1,9 @@
 #include "pch.h"
 #include "GatewayProtocolSchemaValidator.h"
+#include "generated/GatewaySchemaCatalog.Generated.h"
 
 #include <functional>
+#include <string_view>
 #include <unordered_set>
 
 namespace blazeclaw::gateway::protocol {
@@ -1858,6 +1860,43 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool MethodMatchesPattern(
+			const std::string& method,
+			const char* pattern) {
+			if (pattern == nullptr) {
+				return false;
+			}
+
+			const std::string_view patternView(pattern);
+			if (patternView.size() >= 2 &&
+				patternView.substr(patternView.size() - 2) == ".*") {
+				const std::string_view prefix =
+					patternView.substr(0, patternView.size() - 1);
+				const std::string_view methodView(method);
+				return methodView.size() >= prefix.size() &&
+					methodView.compare(0, prefix.size(), prefix) == 0;
+			}
+
+			return method == pattern;
+		}
+
+		std::string_view ResolveGeneratedRequestPolicyType(
+			const std::string& method) {
+			for (const auto& rule : generated::GetSchemaMethodRules()) {
+				if (method == rule.name) {
+					return rule.requestPolicyType;
+				}
+			}
+
+			for (const auto& patternRule : generated::GetSchemaMethodPatternRules()) {
+				if (MethodMatchesPattern(method, patternRule.pattern)) {
+					return patternRule.requestPolicyType;
+				}
+			}
+
+			return {};
+		}
+
 	} // namespace
 
 	bool GatewayProtocolSchemaValidator::ValidateRequest(const RequestFrame& request, SchemaValidationIssue& issue) {
@@ -1967,6 +2006,10 @@ namespace blazeclaw::gateway::protocol {
 
 		if (const auto it = stringIdFields.find(request.method); it != stringIdFields.end()) {
 			return ValidateStringIdParam(request, issue, request.method, it->second);
+		}
+
+		if (ResolveGeneratedRequestPolicyType(request.method) == "none") {
+			return ValidateNoParamsAllowed(request, issue, request.method);
 		}
 
 		static const std::unordered_set<std::string> noParamsMethods = {
