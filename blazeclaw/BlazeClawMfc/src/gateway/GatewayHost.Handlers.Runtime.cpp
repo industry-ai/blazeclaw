@@ -65,6 +65,21 @@ namespace blazeclaw::gateway {
             return static_cast<std::size_t>(value);
         }
 
+        std::optional<bool> ExtractBoolParam(
+            const std::optional<std::string>& paramsJson,
+            const std::string& fieldName) {
+            if (!paramsJson.has_value()) {
+                return std::nullopt;
+            }
+
+            bool value = false;
+            if (!json::FindBoolField(paramsJson.value(), fieldName, value)) {
+                return std::nullopt;
+            }
+
+            return value;
+        }
+
         bool HasAgentId(
             const GatewayAgentRegistry& registry,
             const std::string& agentId) {
@@ -2777,7 +2792,10 @@ namespace blazeclaw::gateway {
                 .payloadJson =
                     "{\"enabled\":" +
                     std::string(m_runtimeAgentStreaming ? "true" : "false") +
-                    ",\"mode\":\"chunked\",\"heartbeatMs\":1500}",
+                    ",\"mode\":\"chunked\",\"heartbeatMs\":1500" +
+                    std::string(m_streamingThrottled ? ",\"throttled\":true" : ",\"throttled\":false") +
+                    ",\"bufferedFrames\":" + std::to_string(m_streamingBufferedFrames) +
+                    ",\"bufferedBytes\":" + std::to_string(m_streamingBufferedBytes) + "}",
                 .error = std::nullopt,
             };
             });
@@ -2830,12 +2848,18 @@ namespace blazeclaw::gateway {
                 };
             });
 
-        m_dispatcher.Register("gateway.models.failover.status", [](const protocol::RequestFrame& request) {
+        m_dispatcher.Register("gateway.models.failover.status", [this](const protocol::RequestFrame& request) {
+            const std::string selectedPrimary =
+                m_failoverOverrideActive
+                    ? m_failoverOverrideModel
+                    : m_runtimeAgentModel;
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
                 .payloadJson =
-                    "{\"primary\":\"default\",\"fallbacks\":[\"reasoner\"],\"maxRetries\":2,\"strategy\":\"ordered\"}",
+                    "{\"primary\":\"" + EscapeJsonLocal(selectedPrimary) +
+                    "\",\"fallbacks\":[\"reasoner\"],\"maxRetries\":2,\"strategy\":\"ordered\",\"overrideActive\":" +
+                    std::string(m_failoverOverrideActive ? "true" : "false") + "}",
                 .error = std::nullopt,
             };
             });
@@ -2873,22 +2897,43 @@ namespace blazeclaw::gateway {
             };
             });
 
-        m_dispatcher.Register("gateway.runtime.streaming.sample", [](const protocol::RequestFrame& request) {
+        m_dispatcher.Register("gateway.runtime.streaming.sample", [this](const protocol::RequestFrame& request) {
+            const std::size_t chunks = m_streamingBufferedFrames > 0
+                ? (std::min)(m_streamingBufferedFrames, static_cast<std::size_t>(3))
+                : 2;
+            const bool finalChunk = !m_streamingThrottled;
+
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
                 .payloadJson =
-                    "{\"chunks\":[\"hello\",\"world\"],\"count\":2,\"final\":true}",
+                    "{\"chunks\":[\"hello\",\"world\"],\"count\":" +
+                    std::to_string(chunks) +
+                    ",\"final\":" +
+                    std::string(finalChunk ? "true" : "false") + "}",
                 .error = std::nullopt,
             };
             });
 
-        m_dispatcher.Register("gateway.models.failover.preview", [](const protocol::RequestFrame& request) {
+        m_dispatcher.Register("gateway.models.failover.preview", [this](const protocol::RequestFrame& request) {
+            std::string requested = ExtractStringParam(request.paramsJson, "model");
+            if (requested.empty()) {
+                requested = m_runtimeAgentModel;
+            }
+
+            const std::string selected =
+                m_failoverOverrideActive
+                    ? m_failoverOverrideModel
+                    : requested;
+
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
                 .payloadJson =
-                    "{\"model\":\"default\",\"attempts\":[\"default\",\"reasoner\"],\"selected\":\"default\"}",
+                    "{\"model\":\"" + EscapeJsonLocal(requested) +
+                    "\",\"attempts\":[\"" + EscapeJsonLocal(requested) +
+                    "\",\"reasoner\"],\"selected\":\"" +
+                    EscapeJsonLocal(selected) + "\"}",
                 .error = std::nullopt,
             };
             });
@@ -2935,20 +2980,37 @@ namespace blazeclaw::gateway {
             };
             });
 
-        m_dispatcher.Register("gateway.runtime.streaming.window", [](const protocol::RequestFrame& request) {
+        m_dispatcher.Register("gateway.runtime.streaming.window", [this](const protocol::RequestFrame& request) {
+            const auto windowMs = ExtractSizeParam(request.paramsJson, "windowMs");
+            if (windowMs.has_value() && windowMs.value() > 0) {
+                m_streamingWindowMs = windowMs.value();
+            }
+
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
-                .payloadJson = "{\"windowMs\":5000,\"frames\":2,\"dropped\":0}",
+                .payloadJson =
+                    "{\"windowMs\":" + std::to_string(m_streamingWindowMs) +
+                    ",\"frames\":" + std::to_string(m_streamingBufferedFrames) +
+                    ",\"dropped\":0}",
                 .error = std::nullopt,
             };
             });
 
-        m_dispatcher.Register("gateway.models.failover.metrics", [](const protocol::RequestFrame& request) {
+        m_dispatcher.Register("gateway.models.failover.metrics", [this](const protocol::RequestFrame& request) {
+            const double successRate =
+                m_failoverAttempts == 0
+                    ? 1.0
+                    : static_cast<double>(m_failoverAttempts - m_failoverFallbackHits) /
+                        static_cast<double>(m_failoverAttempts);
+
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
-                .payloadJson = "{\"attempts\":2,\"fallbackHits\":1,\"successRate\":1.0}",
+                .payloadJson =
+                    "{\"attempts\":" + std::to_string(m_failoverAttempts) +
+                    ",\"fallbackHits\":" + std::to_string(m_failoverFallbackHits) +
+                    ",\"successRate\":" + std::to_string(successRate) + "}",
                 .error = std::nullopt,
             };
             });
@@ -2983,22 +3045,49 @@ namespace blazeclaw::gateway {
             };
             });
 
-        m_dispatcher.Register("gateway.runtime.streaming.backpressure", [](const protocol::RequestFrame& request) {
+        m_dispatcher.Register("gateway.runtime.streaming.backpressure", [this](const protocol::RequestFrame& request) {
+            const std::size_t pressure =
+                m_streamingHighWatermark == 0
+                    ? 0
+                    : (m_streamingBufferedFrames * 100) / m_streamingHighWatermark;
+            m_streamingThrottled = pressure >= 80;
+
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
                 .payloadJson =
-                    "{\"pressure\":0,\"throttled\":false,\"bufferedFrames\":0}",
+                    "{\"pressure\":" + std::to_string(pressure) +
+                    ",\"throttled\":" +
+                    std::string(m_streamingThrottled ? "true" : "false") +
+                    ",\"bufferedFrames\":" +
+                    std::to_string(m_streamingBufferedFrames) + "}",
                 .error = std::nullopt,
             };
             });
 
-        m_dispatcher.Register("gateway.models.failover.simulate", [](const protocol::RequestFrame& request) {
+        m_dispatcher.Register("gateway.models.failover.simulate", [this](const protocol::RequestFrame& request) {
+            std::string requested = ExtractStringParam(request.paramsJson, "requested");
+            if (requested.empty()) {
+                requested = m_runtimeAgentModel;
+            }
+
+            const bool useFallback =
+                m_failoverOverrideActive && m_failoverOverrideModel != requested;
+            const std::string resolved =
+                useFallback ? m_failoverOverrideModel : requested;
+            ++m_failoverAttempts;
+            if (useFallback) {
+                ++m_failoverFallbackHits;
+            }
+
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
                 .payloadJson =
-                    "{\"requested\":\"default\",\"resolved\":\"default\",\"usedFallback\":false}",
+                    "{\"requested\":\"" + EscapeJsonLocal(requested) +
+                    "\",\"resolved\":\"" + EscapeJsonLocal(resolved) +
+                    "\",\"usedFallback\":" +
+                    std::string(useFallback ? "true" : "false") + "}",
                 .error = std::nullopt,
             };
             });
@@ -3028,12 +3117,16 @@ namespace blazeclaw::gateway {
             };
             });
 
-        m_dispatcher.Register("gateway.runtime.streaming.replay", [](const protocol::RequestFrame& request) {
+        m_dispatcher.Register("gateway.runtime.streaming.replay", [this](const protocol::RequestFrame& request) {
+            const std::size_t replayed =
+                (std::min)(m_streamingBufferedFrames, static_cast<std::size_t>(2));
+
             return protocol::ResponseFrame{
                 .id = request.id,
                 .ok = true,
                 .payloadJson =
-                    "{\"replayed\":2,\"cursor\":\"stream-cursor-1\",\"complete\":true}",
+                    "{\"replayed\":" + std::to_string(replayed) +
+                    ",\"cursor\":\"stream-cursor-1\",\"complete\":true}",
                 .error = std::nullopt,
             };
             });
@@ -3073,24 +3166,30 @@ namespace blazeclaw::gateway {
 
         m_dispatcher.Register(
             "gateway.runtime.streaming.cursor",
-            [](const protocol::RequestFrame& request) {
+            [this](const protocol::RequestFrame& request) {
+                const std::size_t lagMs =
+                    m_streamingBufferedFrames * 10;
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
                     .payloadJson =
-                        "{\"cursor\":\"stream-cursor-1\",\"lagMs\":0,\"hasMore\":false}",
+                        "{\"cursor\":\"stream-cursor-1\",\"lagMs\":" +
+                        std::to_string(lagMs) +
+                        ",\"hasMore\":" +
+                        std::string(m_streamingBufferedFrames > 0 ? "true" : "false") + "}",
                     .error = std::nullopt,
                 };
             });
 
         m_dispatcher.Register(
             "gateway.models.failover.policy",
-            [](const protocol::RequestFrame& request) {
+            [this](const protocol::RequestFrame& request) {
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
                     .payloadJson =
-                        "{\"policy\":\"ordered\",\"maxRetries\":2,\"stickyPrimary\":true}",
+                        "{\"policy\":\"ordered\",\"maxRetries\":2,\"stickyPrimary\":true,\"overrideModel\":\"" +
+                        EscapeJsonLocal(m_failoverOverrideModel) + "\"}",
                     .error = std::nullopt,
                 };
             });
@@ -3113,24 +3212,31 @@ namespace blazeclaw::gateway {
 
         m_dispatcher.Register(
             "gateway.runtime.streaming.metrics",
-            [](const protocol::RequestFrame& request) {
+            [this](const protocol::RequestFrame& request) {
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
                     .payloadJson =
-                        "{\"frames\":2,\"bytes\":10,\"avgChunkMs\":5}",
+                        "{\"frames\":" +
+                        std::to_string(m_streamingBufferedFrames) +
+                        ",\"bytes\":" +
+                        std::to_string(m_streamingBufferedBytes) +
+                        ",\"avgChunkMs\":5}",
                     .error = std::nullopt,
                 };
             });
 
         m_dispatcher.Register(
             "gateway.models.failover.history",
-            [](const protocol::RequestFrame& request) {
+            [this](const protocol::RequestFrame& request) {
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
                     .payloadJson =
-                        "{\"events\":[\"primary\",\"fallback\"],\"count\":2,\"last\":\"primary\"}",
+                        "{\"events\":[\"primary\",\"fallback\"],\"count\":" +
+                        std::to_string(m_failoverAttempts) +
+                        ",\"last\":\"" +
+                        std::string(m_failoverFallbackHits > 0 ? "fallback" : "primary") + "\"}",
                     .error = std::nullopt,
                 };
             });
@@ -3152,24 +3258,32 @@ namespace blazeclaw::gateway {
 
         m_dispatcher.Register(
             "gateway.runtime.streaming.health",
-            [](const protocol::RequestFrame& request) {
+            [this](const protocol::RequestFrame& request) {
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
                     .payloadJson =
-                        "{\"healthy\":true,\"stalls\":0,\"recoveries\":0}",
+                        "{\"healthy\":" +
+                        std::string(m_streamingBufferedFrames <= m_streamingHighWatermark ? "true" : "false") +
+                        ",\"stalls\":0,\"recoveries\":0}",
                     .error = std::nullopt,
                 };
             });
 
         m_dispatcher.Register(
             "gateway.models.failover.recent",
-            [](const protocol::RequestFrame& request) {
+            [this](const protocol::RequestFrame& request) {
+                const std::string activeModel =
+                    m_failoverOverrideActive
+                        ? m_failoverOverrideModel
+                        : m_runtimeAgentModel;
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
                     .payloadJson =
-                        "{\"models\":[\"default\",\"reasoner\"],\"count\":2,\"active\":\"default\"}",
+                        "{\"models\":[\"" + EscapeJsonLocal(m_runtimeAgentModel) +
+                        "\",\"reasoner\"],\"count\":2,\"active\":\"" +
+                        EscapeJsonLocal(activeModel) + "\"}",
                     .error = std::nullopt,
                 };
             });
@@ -3196,24 +3310,28 @@ namespace blazeclaw::gateway {
 
         m_dispatcher.Register(
             "gateway.runtime.streaming.snapshot",
-            [](const protocol::RequestFrame& request) {
+            [this](const protocol::RequestFrame& request) {
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
                     .payloadJson =
-                        "{\"frames\":2,\"cursor\":\"stream-cursor-2\",\"sealed\":true}",
+                        "{\"frames\":" + std::to_string(m_streamingBufferedFrames) +
+                        ",\"cursor\":\"stream-cursor-2\",\"sealed\":true}",
                     .error = std::nullopt,
                 };
             });
 
         m_dispatcher.Register(
             "gateway.models.failover.window",
-            [](const protocol::RequestFrame& request) {
+            [this](const protocol::RequestFrame& request) {
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
                     .payloadJson =
-                        "{\"windowSec\":60,\"attempts\":2,\"fallbacks\":1}",
+                        "{\"windowSec\":60,\"attempts\":" +
+                        std::to_string(m_failoverAttempts) +
+                        ",\"fallbacks\":" +
+                        std::to_string(m_failoverFallbackHits) + "}",
                     .error = std::nullopt,
                 };
             });
@@ -3232,24 +3350,28 @@ namespace blazeclaw::gateway {
 
         m_dispatcher.Register(
             "gateway.runtime.streaming.watermark",
-            [](const protocol::RequestFrame& request) {
+            [this](const protocol::RequestFrame& request) {
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
                     .payloadJson =
-                        "{\"high\":16,\"low\":4,\"current\":0}",
+                        "{\"high\":" + std::to_string(m_streamingHighWatermark) +
+                        ",\"low\":4,\"current\":" +
+                        std::to_string(m_streamingBufferedFrames) + "}",
                     .error = std::nullopt,
                 };
             });
 
         m_dispatcher.Register(
             "gateway.models.failover.digest",
-            [](const protocol::RequestFrame& request) {
+            [this](const protocol::RequestFrame& request) {
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
                     .payloadJson =
-                        "{\"digest\":\"sha256:failover-v1\",\"entries\":2,\"fresh\":true}",
+                        "{\"digest\":\"sha256:failover-v1\",\"entries\":" +
+                        std::to_string(m_failoverAttempts) +
+                        ",\"fresh\":true}",
                     .error = std::nullopt,
                 };
             });
@@ -3592,24 +3714,79 @@ namespace blazeclaw::gateway {
 
         m_dispatcher.Register(
             "gateway.runtime.streaming.buffer",
-            [](const protocol::RequestFrame& request) {
+            [this](const protocol::RequestFrame& request) {
+                const auto bufferedFrames =
+                    ExtractSizeParam(request.paramsJson, "bufferedFrames");
+                const auto bufferedBytes =
+                    ExtractSizeParam(request.paramsJson, "bufferedBytes");
+                const auto highWatermark =
+                    ExtractSizeParam(request.paramsJson, "highWatermark");
+
+                if (bufferedFrames.has_value()) {
+                    m_streamingBufferedFrames = bufferedFrames.value();
+                }
+
+                if (bufferedBytes.has_value()) {
+                    m_streamingBufferedBytes = bufferedBytes.value();
+                }
+
+                if (highWatermark.has_value() && highWatermark.value() > 0) {
+                    m_streamingHighWatermark = highWatermark.value();
+                }
+
+                m_streamingThrottled =
+                    m_streamingBufferedFrames >= m_streamingHighWatermark;
+
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
                     .payloadJson =
-                        "{\"bufferedFrames\":0,\"bufferedBytes\":0,\"highWatermark\":16}",
+                        "{\"bufferedFrames\":" +
+                        std::to_string(m_streamingBufferedFrames) +
+                        ",\"bufferedBytes\":" +
+                        std::to_string(m_streamingBufferedBytes) +
+                        ",\"highWatermark\":" +
+                        std::to_string(m_streamingHighWatermark) + "}",
                     .error = std::nullopt,
                 };
             });
 
         m_dispatcher.Register(
             "gateway.models.failover.override",
-            [](const protocol::RequestFrame& request) {
+            [this](const protocol::RequestFrame& request) {
+                std::string model =
+                    ExtractStringParam(request.paramsJson, "model");
+                std::string reason =
+                    ExtractStringParam(request.paramsJson, "reason");
+                const auto activeParam =
+                    ExtractBoolParam(request.paramsJson, "active");
+
+                if (model.empty()) {
+                    model = m_runtimeAgentModel;
+                }
+
+                if (reason.empty()) {
+                    reason = "manual";
+                }
+
+                const bool active = activeParam.value_or(true);
+                m_failoverOverrideActive = active;
+                m_failoverOverrideModel = model;
+                m_failoverOverrideReason = reason;
+                ++m_failoverOverrideChanges;
+
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
                     .payloadJson =
-                        "{\"active\":false,\"model\":\"default\",\"reason\":\"none\"}",
+                        "{\"active\":" +
+                        std::string(m_failoverOverrideActive ? "true" : "false") +
+                        ",\"model\":\"" +
+                        EscapeJsonLocal(m_failoverOverrideModel) +
+                        "\",\"reason\":\"" +
+                        EscapeJsonLocal(m_failoverOverrideReason) +
+                        "\",\"changes\":" +
+                        std::to_string(m_failoverOverrideChanges) + "}",
                     .error = std::nullopt,
                 };
             });
@@ -3628,24 +3805,53 @@ namespace blazeclaw::gateway {
 
         m_dispatcher.Register(
             "gateway.runtime.streaming.throttle",
-            [](const protocol::RequestFrame& request) {
+            [this](const protocol::RequestFrame& request) {
+                const auto throttled =
+                    ExtractBoolParam(request.paramsJson, "throttled");
+                const auto limitPerSec =
+                    ExtractSizeParam(request.paramsJson, "limitPerSec");
+
+                if (throttled.has_value()) {
+                    m_streamingThrottled = throttled.value();
+                }
+
+                if (limitPerSec.has_value() && limitPerSec.value() > 0) {
+                    m_streamingThrottleLimitPerSec = limitPerSec.value();
+                }
+
+                const std::size_t currentPerSec =
+                    m_streamingWindowMs == 0
+                        ? 0
+                        : (m_streamingBufferedFrames * 1000) / m_streamingWindowMs;
+
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
                     .payloadJson =
-                        "{\"throttled\":false,\"limitPerSec\":120,\"currentPerSec\":0}",
+                        "{\"throttled\":" +
+                        std::string(m_streamingThrottled ? "true" : "false") +
+                        ",\"limitPerSec\":" +
+                        std::to_string(m_streamingThrottleLimitPerSec) +
+                        ",\"currentPerSec\":" +
+                        std::to_string(currentPerSec) + "}",
                     .error = std::nullopt,
                 };
             });
 
         m_dispatcher.Register(
             "gateway.models.failover.override.clear",
-            [](const protocol::RequestFrame& request) {
+            [this](const protocol::RequestFrame& request) {
+                m_failoverOverrideActive = false;
+                m_failoverOverrideModel = m_runtimeAgentModel;
+                m_failoverOverrideReason = "cleared";
+                ++m_failoverOverrideChanges;
+
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
                     .payloadJson =
-                        "{\"cleared\":true,\"active\":false,\"model\":\"default\"}",
+                        "{\"cleared\":true,\"active\":false,\"model\":\"" +
+                        EscapeJsonLocal(m_failoverOverrideModel) + "\"}",
                     .error = std::nullopt,
                 };
             });
@@ -3676,12 +3882,19 @@ namespace blazeclaw::gateway {
 
         m_dispatcher.Register(
             "gateway.models.failover.override.status",
-            [](const protocol::RequestFrame& request) {
+            [this](const protocol::RequestFrame& request) {
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
                     .payloadJson =
-                        "{\"active\":false,\"model\":\"default\",\"source\":\"runtime\"}",
+                        "{\"active\":" +
+                        std::string(m_failoverOverrideActive ? "true" : "false") +
+                        ",\"model\":\"" +
+                        EscapeJsonLocal(m_failoverOverrideModel) +
+                        "\",\"reason\":\"" +
+                        EscapeJsonLocal(m_failoverOverrideReason) +
+                        "\",\"source\":\"runtime\",\"changes\":" +
+                        std::to_string(m_failoverOverrideChanges) + "}",
                     .error = std::nullopt,
                 };
             });

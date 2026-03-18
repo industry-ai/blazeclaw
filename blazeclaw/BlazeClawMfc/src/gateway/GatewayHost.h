@@ -60,6 +60,18 @@ namespace blazeclaw::gateway {
 		std::size_t m_runtimeAssignmentCount = 0;
 		std::size_t m_runtimeRebalanceCount = 0;
 		std::size_t m_runtimeDrainCount = 0;
+      std::size_t m_streamingBufferedFrames = 0;
+		std::size_t m_streamingBufferedBytes = 0;
+		std::size_t m_streamingHighWatermark = 16;
+		std::size_t m_streamingWindowMs = 5000;
+		std::size_t m_streamingThrottleLimitPerSec = 120;
+		bool m_streamingThrottled = false;
+		bool m_failoverOverrideActive = false;
+		std::string m_failoverOverrideModel = "default";
+		std::string m_failoverOverrideReason = "none";
+		std::size_t m_failoverOverrideChanges = 0;
+		std::size_t m_failoverAttempts = 0;
+		std::size_t m_failoverFallbackHits = 0;
 		std::string m_lastWarning;
 		GatewayMethodDispatcher m_dispatcher;
 		GatewayWebSocketTransport m_transport;
