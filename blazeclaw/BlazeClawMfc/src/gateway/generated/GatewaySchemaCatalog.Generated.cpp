@@ -19,8 +19,8 @@ constexpr std::array<SchemaMethodRule, 47> kSchemaMethodRules{{
 		{ "gateway.tools.call.execute", "objectOptional", "tools.execute", "" },
 		{ "gateway.logs.tail", "objectOptional", "logs.tail", "" },
 		{ "gateway.events.list", "none", "events.list", "" },
-		{ "gateway.events.get", "objectOptional", "events.get", "" },
-		{ "gateway.events.search", "objectOptional", "events.search", "" },
+		{ "gateway.events.get", "objectOptional", "events.get", "event" },
+		{ "gateway.events.search", "objectOptional", "events.search", "term" },
 		{ "gateway.transport.status", "none", "transport.status", "" },
 		{ "gateway.config.get", "none", "config.snapshot", "" },
 		{ "gateway.config.set", "objectOptional", "config.setResult", "" },
@@ -70,6 +70,17 @@ constexpr std::array<SchemaMethodPatternRule, 13> kSchemaMethodPatternRules{{
 		{ "gateway.ops.*", "none", "ops.generic" },
 }};
 
+constexpr std::array<const char*, 8> kSchemaRequiredEvents{{
+		"gateway.tick",
+		"gateway.health",
+		"gateway.shutdown",
+		"gateway.channels.update",
+		"gateway.channels.accounts.update",
+		"gateway.session.reset",
+		"gateway.agent.update",
+		"gateway.tools.catalog.update",
+}};
+
 } // namespace
 
 const std::array<SchemaMethodRule, 47>& GetSchemaMethodRules() noexcept {
@@ -78,6 +89,10 @@ const std::array<SchemaMethodRule, 47>& GetSchemaMethodRules() noexcept {
 
 const std::array<SchemaMethodPatternRule, 13>& GetSchemaMethodPatternRules() noexcept {
     return kSchemaMethodPatternRules;
+}
+
+const std::array<const char*, 8>& GetSchemaRequiredEvents() noexcept {
+    return kSchemaRequiredEvents;
 }
 
 } // namespace blazeclaw::gateway::generated

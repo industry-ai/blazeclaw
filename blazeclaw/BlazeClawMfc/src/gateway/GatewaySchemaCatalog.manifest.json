@@ -173,24 +173,26 @@
       "name": "gateway.events.get",
       "requestPolicy": {
         "type": "objectOptional",
-        "allowedFields": ["eventName"],
+        "allowedFields": ["event"],
         "fieldKinds": {
-          "eventName": "string"
+          "event": "string"
         }
       },
-      "responseShape": "events.get"
+      "responseShape": "events.get",
+      "stringIdField": "event"
     },
     {
       "name": "gateway.events.search",
       "requestPolicy": {
         "type": "objectOptional",
-        "allowedFields": ["query", "limit"],
+        "allowedFields": ["term", "limit"],
         "fieldKinds": {
-          "query": "string",
+          "term": "string",
           "limit": "number"
         }
       },
-      "responseShape": "events.search"
+      "responseShape": "events.search",
+      "stringIdField": "term"
     },
     {
       "name": "gateway.transport.status",
@@ -446,5 +448,15 @@
       "requestPolicy": { "type": "none" },
       "responseShape": "ops.generic"
     }
+  ],
+  "requiredEvents": [
+    "gateway.tick",
+    "gateway.health",
+    "gateway.shutdown",
+    "gateway.channels.update",
+    "gateway.channels.accounts.update",
+    "gateway.session.reset",
+    "gateway.agent.update",
+    "gateway.tools.catalog.update"
   ]
 }

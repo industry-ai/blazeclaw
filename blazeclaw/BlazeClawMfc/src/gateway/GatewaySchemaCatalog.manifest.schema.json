@@ -41,6 +41,13 @@
       "items": {
         "$ref": "#/definitions/methodPatternRule"
       }
+    },
+    "requiredEvents": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^gateway\\..+"
+      }
     }
   },
   "additionalProperties": false,

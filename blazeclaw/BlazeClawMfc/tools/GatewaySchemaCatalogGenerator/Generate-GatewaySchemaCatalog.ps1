@@ -67,11 +67,33 @@ if ($null -eq $manifest.methodPatterns) {
     $manifest | Add-Member -MemberType NoteProperty -Name methodPatterns -Value @()
 }
 
+if ($null -eq $manifest.requiredEvents) {
+    $manifest | Add-Member -MemberType NoteProperty -Name requiredEvents -Value @()
+}
+
 $methodNames = @{}
 foreach ($method in $manifest.methods) {
     if ([string]::IsNullOrWhiteSpace($method.name)) {
         throw "Each method rule must define a non-empty 'name'."
     }
+
+$requiredEventLines = @()
+foreach ($eventName in $manifest.requiredEvents) {
+    if ([string]::IsNullOrWhiteSpace($eventName)) {
+        continue
+    }
+
+    $eventLiteral = Convert-ToCppStringLiteral -Value ([string]$eventName
+)
+    $requiredEventLines += "`t`t$eventLiteral,"
+}
+
+$requiredEventArrayLiteral = if ($requiredEventLines.Count -gt 0) {
+    $requiredEventLines -join "`r`n"
+}
+else {
+    ""
+}
 
     if ($methodNames.ContainsKey($method.name)) {
         throw "Duplicate method name detected: $($method.name)"
@@ -159,6 +181,7 @@ inline constexpr int kGatewaySchemaCatalogVersion = $($manifest.version);
 
 const std::array<SchemaMethodRule, $($manifest.methods.Count)>& GetSchemaMethodRules() noexcept;
 const std::array<SchemaMethodPatternRule, $($manifest.methodPatterns.Count)>& GetSchemaMethodPatternRules() noexcept;
+const std::array<const char*, $($manifest.requiredEvents.Count)>& GetSchemaRequiredEvents() noexcept;
 
 } // namespace blazeclaw::gateway::generated
 "@
@@ -178,6 +201,10 @@ constexpr std::array<SchemaMethodPatternRule, $($manifest.methodPatterns.Count)>
 $patternArrayLiteral
 }};
 
+constexpr std::array<const char*, $($manifest.requiredEvents.Count)> kSchemaRequiredEvents{{
+$requiredEventArrayLiteral
+}};
+
 } // namespace
 
 const std::array<SchemaMethodRule, $($manifest.methods.Count)>& GetSchemaMethodRules() noexcept {
@@ -186,6 +213,10 @@ const std::array<SchemaMethodRule, $($manifest.methods.Count)>& GetSchemaMethodR
 
 const std::array<SchemaMethodPatternRule, $($manifest.methodPatterns.Count)>& GetSchemaMethodPatternRules() noexcept {
     return kSchemaMethodPatternRules;
+}
+
+const std::array<const char*, $($manifest.requiredEvents.Count)>& GetSchemaRequiredEvents() noexcept {
+    return kSchemaRequiredEvents;
 }
 
 } // namespace blazeclaw::gateway::generated

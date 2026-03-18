@@ -20,16 +20,20 @@ namespace blazeclaw::gateway::protocol {
 		constexpr const char* kChannelAdapterFieldTokens[] = { "id", "label", "defaultAccountId" };
 		constexpr const char* kFileFieldTokens[] = { "path", "size", "updatedMs", "content" };
 		constexpr const char* kFileListFieldTokens[] = { "path", "size", "updatedMs" };
-		constexpr const char* kCatalogEventNames[] = {
-			"gateway.tick",
-			"gateway.health",
-			"gateway.shutdown",
-			"gateway.channels.update",
-			"gateway.channels.accounts.update",
-			"gateway.session.reset",
-			"gateway.agent.update",
-			"gateway.tools.catalog.update",
-		};
+      bool PayloadContainsGeneratedRequiredEvents(const std::string& payload) {
+			for (const char* eventName : generated::GetSchemaRequiredEvents()) {
+				if (eventName == nullptr) {
+					continue;
+				}
+
+				const std::string token = "\"" + std::string(eventName) + "\"";
+				if (payload.find(token) == std::string::npos) {
+					return false;
+				}
+			}
+
+			return true;
+		}
 
 		bool PayloadContainsGeneratedMethodRules(const std::string& payload) {
 			for (const auto& rule : generated::GetSchemaMethodRules()) {
