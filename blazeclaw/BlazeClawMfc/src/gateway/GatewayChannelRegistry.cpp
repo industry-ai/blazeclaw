@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "GatewayChannelRegistry.h"
+#include "GatewayPersistencePaths.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -748,7 +749,7 @@ namespace blazeclaw::gateway {
 	}
 
 	std::filesystem::path GatewayChannelRegistry::PersistencePath() {
-		return std::filesystem::path("blazeclaw") / "state" / "channels.state";
+     return ResolveGatewayStateFilePath("channels.state");
 	}
 
 	void GatewayChannelRegistry::LoadPersistedState() {

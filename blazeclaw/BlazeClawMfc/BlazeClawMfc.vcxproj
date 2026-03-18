@@ -100,6 +100,7 @@
     <ClInclude Include="src\gateway\GatewayChannelRegistry.h" />
     <ClInclude Include="src\gateway\GatewayHost.h" />
     <ClInclude Include="src\gateway\GatewayMethodDispatcher.h" />
+    <ClInclude Include="src\gateway\GatewayPersistencePaths.h" />
     <ClInclude Include="src\gateway\GatewayProtocolContract.h" />
     <ClInclude Include="src\gateway\GatewayProtocolCodec.h" />
     <ClInclude Include="src\gateway\GatewayProtocolJson.h" />
@@ -132,6 +133,7 @@
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Transport.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Tools.cpp" />
     <ClCompile Include="src\gateway\GatewayMethodDispatcher.cpp" />
+    <ClCompile Include="src\gateway\GatewayPersistencePaths.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolCodec.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolContract.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolJson.cpp" />

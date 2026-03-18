@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "GatewaySessionRegistry.h"
+#include "GatewayPersistencePaths.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -174,7 +175,7 @@ namespace blazeclaw::gateway {
 	}
 
 	std::filesystem::path GatewaySessionRegistry::PersistencePath() {
-		return std::filesystem::path("blazeclaw") / "state" / "sessions.state";
+     return ResolveGatewayStateFilePath("sessions.state");
 	}
 
 	void GatewaySessionRegistry::LoadPersistedSessions() {
