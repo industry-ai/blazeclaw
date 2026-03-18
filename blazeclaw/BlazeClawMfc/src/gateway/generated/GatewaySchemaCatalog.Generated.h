@@ -8,6 +8,7 @@ struct SchemaMethodRule {
     const char* name;
     const char* requestPolicyType;
     const char* responseShape;
+    const char* stringIdField;
 };
 
 struct SchemaMethodPatternRule {
@@ -18,7 +19,7 @@ struct SchemaMethodPatternRule {
 
 inline constexpr int kGatewaySchemaCatalogVersion = 1;
 
-const std::array<SchemaMethodRule, 19>& GetSchemaMethodRules() noexcept;
+const std::array<SchemaMethodRule, 47>& GetSchemaMethodRules() noexcept;
 const std::array<SchemaMethodPatternRule, 13>& GetSchemaMethodPatternRules() noexcept;
 
 } // namespace blazeclaw::gateway::generated

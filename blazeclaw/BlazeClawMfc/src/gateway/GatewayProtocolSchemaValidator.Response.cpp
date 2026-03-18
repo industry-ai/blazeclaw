@@ -2432,7 +2432,7 @@ namespace blazeclaw::gateway::protocol {
             } },
 			{ "gateway.models.failover.override.vectorSpiral", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorSpiral") || !IsFieldValueType(payload, "model", '"')) {
-					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorSpiral` requires `active`, `vectorSpiral`, and `model` fields.";
+                    SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorSpiral` requires `active`, `vectorSpiral`, and `model` fields.");
 					return false;
 				}
 				return true;

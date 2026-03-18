@@ -213,52 +213,217 @@
         }
       },
       "responseShape": "config.setResult"
+    },
+    {
+      "name": "gateway.health",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "health.summary"
+    },
+    {
+      "name": "gateway.health.details",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "health.details"
+    },
+    {
+      "name": "gateway.logs.levels",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "logs.levels"
+    },
+    {
+      "name": "gateway.sessions.resolve",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "sessions.resolve",
+      "stringIdField": "sessionId"
+    },
+    {
+      "name": "gateway.sessions.exists",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "sessions.exists",
+      "stringIdField": "sessionId"
+    },
+    {
+      "name": "gateway.sessions.activate",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "sessions.activate",
+      "stringIdField": "sessionId"
+    },
+    {
+      "name": "gateway.sessions.delete",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "sessions.delete",
+      "stringIdField": "sessionId"
+    },
+    {
+      "name": "gateway.sessions.usage",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "sessions.usage",
+      "stringIdField": "sessionId"
+    },
+    {
+      "name": "gateway.agents.get",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "agents.get",
+      "stringIdField": "agentId"
+    },
+    {
+      "name": "gateway.agents.activate",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "agents.activate",
+      "stringIdField": "agentId"
+    },
+    {
+      "name": "gateway.agents.delete",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "agents.delete",
+      "stringIdField": "agentId"
+    },
+    {
+      "name": "gateway.agents.exists",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "agents.exists",
+      "stringIdField": "agentId"
+    },
+    {
+      "name": "gateway.config.exists",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "config.exists",
+      "stringIdField": "key"
+    },
+    {
+      "name": "gateway.config.getKey",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "config.getKey",
+      "stringIdField": "key"
+    },
+    {
+      "name": "gateway.config.count",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "config.count",
+      "stringIdField": "section"
+    },
+    {
+      "name": "gateway.config.getSection",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "config.getSection",
+      "stringIdField": "section"
+    },
+    {
+      "name": "gateway.events.exists",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "events.exists",
+      "stringIdField": "event"
+    },
+    {
+      "name": "gateway.events.count",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "events.count",
+      "stringIdField": "event"
+    },
+    {
+      "name": "gateway.events.latestByType",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "events.latestByType",
+      "stringIdField": "type"
+    },
+    {
+      "name": "gateway.models.exists",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "models.exists",
+      "stringIdField": "modelId"
+    },
+    {
+      "name": "gateway.models.get",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "models.get",
+      "stringIdField": "modelId"
+    },
+    {
+      "name": "gateway.models.count",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "models.count",
+      "stringIdField": "provider"
+    },
+    {
+      "name": "gateway.models.listByProvider",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "models.listByProvider",
+      "stringIdField": "provider"
+    },
+    {
+      "name": "gateway.tools.exists",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "tools.exists",
+      "stringIdField": "tool"
+    },
+    {
+      "name": "gateway.tools.get",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "tools.get",
+      "stringIdField": "tool"
+    },
+    {
+      "name": "gateway.tools.list",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "tools.list",
+      "stringIdField": "category"
+    },
+    {
+      "name": "gateway.transport.endpoint.exists",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "transport.endpoint.exists",
+      "stringIdField": "endpoint"
+    },
+    {
+      "name": "gateway.transport.endpoint.set",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "transport.endpoint.set",
+      "stringIdField": "endpoint"
     }
   ],
   "methodPatterns": [
     {
       "pattern": "gateway.sessions.*",
-      "requestPolicy": { "type": "objectOptional" },
+      "requestPolicy": { "type": "none" },
       "responseShape": "sessions.generic"
     },
     {
       "pattern": "gateway.agents.*",
-      "requestPolicy": { "type": "objectOptional" },
+      "requestPolicy": { "type": "none" },
       "responseShape": "agents.generic"
     },
     {
       "pattern": "gateway.channels.*",
-      "requestPolicy": { "type": "objectOptional" },
+      "requestPolicy": { "type": "none" },
       "responseShape": "channels.generic"
     },
     {
       "pattern": "gateway.tools.*",
-      "requestPolicy": { "type": "objectOptional" },
+      "requestPolicy": { "type": "none" },
       "responseShape": "tools.generic"
     },
     {
       "pattern": "gateway.models.*",
-      "requestPolicy": { "type": "objectOptional" },
+      "requestPolicy": { "type": "none" },
       "responseShape": "models.generic"
     },
     {
       "pattern": "gateway.config.*",
-      "requestPolicy": { "type": "objectOptional" },
+      "requestPolicy": { "type": "none" },
       "responseShape": "config.generic"
     },
     {
       "pattern": "gateway.transport.*",
-      "requestPolicy": { "type": "objectOptional" },
+      "requestPolicy": { "type": "none" },
       "responseShape": "transport.generic"
     },
     {
       "pattern": "gateway.events.*",
-      "requestPolicy": { "type": "objectOptional" },
+      "requestPolicy": { "type": "none" },
       "responseShape": "events.generic"
     },
     {
       "pattern": "gateway.runtime.*",
-      "requestPolicy": { "type": "objectOptional" },
+      "requestPolicy": { "type": "none" },
       "responseShape": "runtime.generic"
     },
     {

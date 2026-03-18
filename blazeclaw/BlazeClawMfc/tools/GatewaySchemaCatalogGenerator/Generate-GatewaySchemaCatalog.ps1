@@ -91,8 +91,15 @@ foreach ($method in $manifest.methods) {
     }
     $policyLiteral = Convert-ToCppStringLiteral -Value $policyType
     $shapeLiteral = Convert-ToCppStringLiteral -Value ([string]$method.responseShape)
+    $stringIdField = if ($null -ne $method.stringIdField) {
+        [string]$method.stringIdField
+    }
+    else {
+        ""
+    }
+    $stringIdLiteral = Convert-ToCppStringLiteral -Value $stringIdField
 
-    $methodLines += "`t`t{ $nameLiteral, $policyLiteral, $shapeLiteral },"
+    $methodLines += "`t`t{ $nameLiteral, $policyLiteral, $shapeLiteral, $stringIdLiteral },"
 }
 
 $patternLines = @()
@@ -139,6 +146,7 @@ struct SchemaMethodRule {
     const char* name;
     const char* requestPolicyType;
     const char* responseShape;
+    const char* stringIdField;
 };
 
 struct SchemaMethodPatternRule {
