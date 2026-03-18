@@ -6,9 +6,13 @@
 namespace {
 constexpr UINT kIdUiParityActionFormProbe = 0x8101;
 constexpr UINT kIdUiParityAdminSnapshot = 0x8102;
-constexpr UINT kIdUiParitySessionList = 0x8103;
-constexpr UINT kIdUiParityRuntimeStatus = 0x8104;
-constexpr UINT kIdUiParityDesktopStatus = 0x8105;
+constexpr UINT kIdUiParityAdminPolicyGet = 0x8103;
+constexpr UINT kIdUiParityAdminConfigAgent = 0x8104;
+constexpr UINT kIdUiParitySessionList = 0x8105;
+constexpr UINT kIdUiParitySessionActivate = 0x8106;
+constexpr UINT kIdUiParityRuntimeStatus = 0x8107;
+constexpr UINT kIdUiParityDesktopStatus = 0x8108;
+constexpr UINT kIdUiParityDesktopWebStatus = 0x8109;
 
 std::wstring ToWide(const std::string& value) {
   std::wstring output;
@@ -27,9 +31,13 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
   ON_WM_CREATE()
   ON_COMMAND(kIdUiParityActionFormProbe, &CMainFrame::OnUiParityActionFormProbe)
   ON_COMMAND(kIdUiParityAdminSnapshot, &CMainFrame::OnUiParityAdminSnapshot)
+  ON_COMMAND(kIdUiParityAdminPolicyGet, &CMainFrame::OnUiParityAdminPolicyGet)
+  ON_COMMAND(kIdUiParityAdminConfigAgent, &CMainFrame::OnUiParityAdminConfigAgent)
   ON_COMMAND(kIdUiParitySessionList, &CMainFrame::OnUiParitySessionList)
+  ON_COMMAND(kIdUiParitySessionActivate, &CMainFrame::OnUiParitySessionActivate)
   ON_COMMAND(kIdUiParityRuntimeStatus, &CMainFrame::OnUiParityRuntimeStatus)
   ON_COMMAND(kIdUiParityDesktopStatus, &CMainFrame::OnUiParityDesktopStatus)
+  ON_COMMAND(kIdUiParityDesktopWebStatus, &CMainFrame::OnUiParityDesktopWebStatus)
 END_MESSAGE_MAP()
 
 CMainFrame::CMainFrame() {
@@ -53,8 +61,20 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct) {
       _T("Admin Snapshot"));
   m_parityMenu.AppendMenu(
       MF_STRING,
+      kIdUiParityAdminPolicyGet,
+      _T("Admin Policy Get"));
+  m_parityMenu.AppendMenu(
+      MF_STRING,
+      kIdUiParityAdminConfigAgent,
+      _T("Admin Config Agent"));
+  m_parityMenu.AppendMenu(
+      MF_STRING,
       kIdUiParitySessionList,
       _T("Session List"));
+  m_parityMenu.AppendMenu(
+      MF_STRING,
+      kIdUiParitySessionActivate,
+      _T("Session Activate"));
   m_parityMenu.AppendMenu(
       MF_STRING,
       kIdUiParityRuntimeStatus,
@@ -63,6 +83,10 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct) {
       MF_STRING,
       kIdUiParityDesktopStatus,
       _T("Desktop Status"));
+  m_parityMenu.AppendMenu(
+      MF_STRING,
+      kIdUiParityDesktopWebStatus,
+      _T("Desktop Web Status"));
   m_menuBar.AppendMenu(
       MF_POPUP,
       reinterpret_cast<UINT_PTR>(m_parityMenu.GetSafeHmenu()),
@@ -110,11 +134,31 @@ void CMainFrame::OnUiParityAdminSnapshot() {
       "gateway.config.snapshot");
 }
 
+void CMainFrame::OnUiParityAdminPolicyGet() {
+  ShowParityResult(
+      L"Admin Policy Get",
+      "gateway.transport.policy.get");
+}
+
+void CMainFrame::OnUiParityAdminConfigAgent() {
+  ShowParityResult(
+      L"Admin Config Agent",
+      "gateway.config.getSection",
+      std::optional<std::string>("{\"section\":\"agent\"}"));
+}
+
 void CMainFrame::OnUiParitySessionList() {
   ShowParityResult(
       L"Session List",
       "gateway.session.list",
       std::optional<std::string>("{\"active\":true}"));
+}
+
+void CMainFrame::OnUiParitySessionActivate() {
+  ShowParityResult(
+      L"Session Activate",
+      "gateway.sessions.activate",
+      std::optional<std::string>("{\"sessionId\":\"main\"}"));
 }
 
 void CMainFrame::OnUiParityRuntimeStatus() {
@@ -127,4 +171,10 @@ void CMainFrame::OnUiParityDesktopStatus() {
   ShowParityResult(
       L"Desktop Status",
       "gateway.platform.cli.status");
+}
+
+void CMainFrame::OnUiParityDesktopWebStatus() {
+  ShowParityResult(
+      L"Desktop Web Status",
+      "gateway.platform.web.status");
 }
