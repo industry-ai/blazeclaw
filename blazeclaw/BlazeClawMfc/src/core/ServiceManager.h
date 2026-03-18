@@ -15,6 +15,9 @@ public:
 
   [[nodiscard]] bool IsRunning() const noexcept;
   [[nodiscard]] const FeatureRegistry& Registry() const noexcept;
+  [[nodiscard]] std::string InvokeGatewayMethod(
+      const std::string& method,
+      const std::optional<std::string>& paramsJson = std::nullopt) const;
 
 private:
   bool m_running = false;

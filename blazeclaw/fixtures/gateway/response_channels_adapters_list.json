@@ -4,6 +4,11 @@
   "result": {
     "adapters": [
       {
+        "id": "internal",
+        "label": "Internal Mock",
+        "defaultAccountId": "internal.default"
+      },
+      {
         "id": "whatsapp",
         "label": "WhatsApp",
         "defaultAccountId": "whatsapp.default"
@@ -104,6 +109,6 @@
         "defaultAccountId": "zalo.default"
       }
     ],
-    "count": 20
+    "count": 21
   }
 }

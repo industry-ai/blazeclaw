@@ -28,3 +28,11 @@ int CBlazeClawMfcApp::ExitInstance() {
   m_serviceManager.Stop();
   return CWinApp::ExitInstance();
 }
+
+blazeclaw::core::ServiceManager& CBlazeClawMfcApp::Services() noexcept {
+  return m_serviceManager;
+}
+
+const blazeclaw::core::ServiceManager& CBlazeClawMfcApp::Services() const noexcept {
+  return m_serviceManager;
+}

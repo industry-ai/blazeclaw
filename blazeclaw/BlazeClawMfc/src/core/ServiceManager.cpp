@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "ServiceManager.h"
 
+#include "../gateway/GatewayProtocolModels.h"
+
 namespace blazeclaw::core {
 
 ServiceManager::ServiceManager() = default;
@@ -26,6 +28,37 @@ bool ServiceManager::IsRunning() const noexcept {
 
 const FeatureRegistry& ServiceManager::Registry() const noexcept {
   return m_registry;
+}
+
+std::string ServiceManager::InvokeGatewayMethod(
+    const std::string& method,
+    const std::optional<std::string>& paramsJson) const {
+  if (!m_running) {
+    return "service_not_running";
+  }
+
+  if (method.empty()) {
+    return "invalid_method";
+  }
+
+  const blazeclaw::gateway::protocol::RequestFrame request{
+      .id = "ui-probe",
+      .method = method,
+      .paramsJson = paramsJson,
+  };
+
+  const auto response = m_gatewayHost.RouteRequest(request);
+  if (response.ok) {
+    return response.payloadJson.has_value() ? response.payloadJson.value()
+                                            : "ok";
+  }
+
+  if (!response.error.has_value()) {
+    return "error_unknown";
+  }
+
+  const auto& error = response.error.value();
+  return error.code + ":" + error.message;
 }
 
 } // namespace blazeclaw::core
