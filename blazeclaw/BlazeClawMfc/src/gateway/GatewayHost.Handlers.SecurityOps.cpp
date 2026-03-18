@@ -164,6 +164,16 @@ namespace blazeclaw::gateway {
             };
             });
 
+        m_dispatcher.Register("gateway.nodes.voice.stateKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"stateKey\":\"voice.state.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
         m_dispatcher.Register("gateway.nodes.camera.status", [](const protocol::RequestFrame& request) {
             return protocol::ResponseFrame{
                 .id = request.id,
@@ -274,6 +284,16 @@ namespace blazeclaw::gateway {
             };
             });
 
+        m_dispatcher.Register("gateway.nodes.camera.stateKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"stateKey\":\"camera.state.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
         m_dispatcher.Register("gateway.nodes.notifications.status", [](const protocol::RequestFrame& request) {
             return protocol::ResponseFrame{
                 .id = request.id,
@@ -380,6 +400,16 @@ namespace blazeclaw::gateway {
                 .ok = true,
                 .payloadJson =
                     "{\"scopeKey\":\"notifications.scope.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.nodes.notifications.stateKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"stateKey\":\"notifications.state.default\",\"active\":true}",
                 .error = std::nullopt,
             };
             });
@@ -764,6 +794,66 @@ namespace blazeclaw::gateway {
             };
             });
 
+        m_dispatcher.Register("gateway.security.logging.stateKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"stateKey\":\"logging.state.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.logging.healthKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"healthKey\":\"logging.health.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.logging.logKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"logKey\":\"logging.log.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.logging.metricKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"metricKey\":\"logging.metric.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.logging.traceKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"traceKey\":\"logging.trace.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.logging.debugKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"debugKey\":\"logging.debug.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
         m_dispatcher.Register("gateway.security.diagnostics.status", [](const protocol::RequestFrame& request) {
             return protocol::ResponseFrame{
                 .id = request.id,
@@ -1094,6 +1184,66 @@ namespace blazeclaw::gateway {
             };
             });
 
+        m_dispatcher.Register("gateway.security.diagnostics.stateKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"stateKey\":\"diagnostics.state.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.diagnostics.healthKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"healthKey\":\"diagnostics.health.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.diagnostics.logKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"logKey\":\"diagnostics.log.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.diagnostics.metricKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"metricKey\":\"diagnostics.metric.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.diagnostics.traceKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"traceKey\":\"diagnostics.trace.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.diagnostics.debugKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"debugKey\":\"diagnostics.debug.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
         m_dispatcher.Register("gateway.ops.doctor.status", [](const protocol::RequestFrame& request) {
             return protocol::ResponseFrame{
                 .id = request.id,
@@ -1234,6 +1384,16 @@ namespace blazeclaw::gateway {
             };
             });
 
+        m_dispatcher.Register("gateway.nodes.canvas.stateKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"stateKey\":\"canvas.state.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
         m_dispatcher.Register("gateway.platform.cli.status", [](const protocol::RequestFrame& request) {
             return protocol::ResponseFrame{
                 .id = request.id,
@@ -1364,6 +1524,16 @@ namespace blazeclaw::gateway {
             };
             });
 
+        m_dispatcher.Register("gateway.platform.cli.stateKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"stateKey\":\"cli.state.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
         m_dispatcher.Register("gateway.platform.web.status", [](const protocol::RequestFrame& request) {
             return protocol::ResponseFrame{
                 .id = request.id,
@@ -1490,6 +1660,16 @@ namespace blazeclaw::gateway {
                 .ok = true,
                 .payloadJson =
                     "{\"scopeKey\":\"web.scope.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.platform.web.stateKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"stateKey\":\"web.state.default\",\"active\":true}",
                 .error = std::nullopt,
             };
             });
