@@ -154,6 +154,16 @@ namespace blazeclaw::gateway {
             };
             });
 
+        m_dispatcher.Register("gateway.nodes.voice.scopeKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"scopeKey\":\"voice.scope.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
         m_dispatcher.Register("gateway.nodes.camera.status", [](const protocol::RequestFrame& request) {
             return protocol::ResponseFrame{
                 .id = request.id,
@@ -254,6 +264,16 @@ namespace blazeclaw::gateway {
             };
             });
 
+        m_dispatcher.Register("gateway.nodes.camera.scopeKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"scopeKey\":\"camera.scope.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
         m_dispatcher.Register("gateway.nodes.notifications.status", [](const protocol::RequestFrame& request) {
             return protocol::ResponseFrame{
                 .id = request.id,
@@ -350,6 +370,16 @@ namespace blazeclaw::gateway {
                 .ok = true,
                 .payloadJson =
                     "{\"tokenKey\":\"notifications.token.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.nodes.notifications.scopeKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"scopeKey\":\"notifications.scope.default\",\"active\":true}",
                 .error = std::nullopt,
             };
             });
@@ -674,6 +704,66 @@ namespace blazeclaw::gateway {
             };
             });
 
+        m_dispatcher.Register("gateway.security.logging.scopeKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"scopeKey\":\"logging.scope.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.logging.contextKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"contextKey\":\"logging.context.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.logging.channelKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"channelKey\":\"logging.channel.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.logging.routeKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"routeKey\":\"logging.route.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.logging.accountKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"accountKey\":\"logging.account.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.logging.agentKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"agentKey\":\"logging.agent.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
         m_dispatcher.Register("gateway.security.diagnostics.status", [](const protocol::RequestFrame& request) {
             return protocol::ResponseFrame{
                 .id = request.id,
@@ -944,6 +1034,66 @@ namespace blazeclaw::gateway {
             };
             });
 
+        m_dispatcher.Register("gateway.security.diagnostics.scopeKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"scopeKey\":\"diagnostics.scope.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.diagnostics.contextKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"contextKey\":\"diagnostics.context.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.diagnostics.channelKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"channelKey\":\"diagnostics.channel.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.diagnostics.routeKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"routeKey\":\"diagnostics.route.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.diagnostics.accountKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"accountKey\":\"diagnostics.account.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.security.diagnostics.agentKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"agentKey\":\"diagnostics.agent.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
         m_dispatcher.Register("gateway.ops.doctor.status", [](const protocol::RequestFrame& request) {
             return protocol::ResponseFrame{
                 .id = request.id,
@@ -1074,6 +1224,16 @@ namespace blazeclaw::gateway {
             };
             });
 
+        m_dispatcher.Register("gateway.nodes.canvas.scopeKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"scopeKey\":\"canvas.scope.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
         m_dispatcher.Register("gateway.platform.cli.status", [](const protocol::RequestFrame& request) {
             return protocol::ResponseFrame{
                 .id = request.id,
@@ -1194,6 +1354,16 @@ namespace blazeclaw::gateway {
             };
             });
 
+        m_dispatcher.Register("gateway.platform.cli.scopeKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"scopeKey\":\"cli.scope.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
         m_dispatcher.Register("gateway.platform.web.status", [](const protocol::RequestFrame& request) {
             return protocol::ResponseFrame{
                 .id = request.id,
@@ -1310,6 +1480,16 @@ namespace blazeclaw::gateway {
                 .ok = true,
                 .payloadJson =
                     "{\"tokenKey\":\"web.token.default\",\"active\":true}",
+                .error = std::nullopt,
+            };
+            });
+
+        m_dispatcher.Register("gateway.platform.web.scopeKey", [](const protocol::RequestFrame& request) {
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"scopeKey\":\"web.scope.default\",\"active\":true}",
                 .error = std::nullopt,
             };
             });
