@@ -151,14 +151,18 @@
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
   </ItemGroup>
-  <Target Name="GenerateGatewayHandlerCatalog" BeforeTargets="ClCompile">
-    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewayHandlerCatalogGenerator\Generate-GatewayHandlerCatalog.ps1&quot;" />
-  </Target>
-  <Target Name="GenerateGatewaySchemaCatalog" BeforeTargets="ClCompile">
-    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewaySchemaCatalogGenerator\Generate-GatewaySchemaCatalog.ps1&quot;" />
-  </Target>
-  <Target Name="VerifyGatewaySchemaCatalogGenerated" BeforeTargets="ClCompile">
-    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewaySchemaCatalogGenerator\Generate-GatewaySchemaCatalog.ps1&quot; -VerifyOnly" />
+  <PropertyGroup>
+    <GatewayCodegenMode Condition="'$(GatewayCodegenMode)'==''">verify</GatewayCodegenMode>
+  </PropertyGroup>
+  <Target Name="RunGatewayCodegen" BeforeTargets="ClCompile">
+    <Exec Condition="'$(GatewayCodegenMode)'=='generate'"
+          Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewayCodegen\Invoke-GatewayCodegen.ps1&quot; -GeneratorScript &quot;tools/GatewayHandlerCatalogGenerator/Generate-GatewayHandlerCatalog.ps1&quot;" />
+    <Exec Condition="'$(GatewayCodegenMode)'=='generate'"
+          Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewayCodegen\Invoke-GatewayCodegen.ps1&quot; -GeneratorScript &quot;tools/GatewaySchemaCatalogGenerator/Generate-GatewaySchemaCatalog.ps1&quot;" />
+    <Exec Condition="'$(GatewayCodegenMode)'!='generate'"
+          Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewayCodegen\Invoke-GatewayCodegen.ps1&quot; -GeneratorScript &quot;tools/GatewayHandlerCatalogGenerator/Generate-GatewayHandlerCatalog.ps1&quot; -VerifyOnly" />
+    <Exec Condition="'$(GatewayCodegenMode)'!='generate'"
+          Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewayCodegen\Invoke-GatewayCodegen.ps1&quot; -GeneratorScript &quot;tools/GatewaySchemaCatalogGenerator/Generate-GatewaySchemaCatalog.ps1&quot; -VerifyOnly" />
   </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

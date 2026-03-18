@@ -1,7 +1,8 @@
 param(
     [string]$ManifestPath = "src/gateway/GatewayHandlers.manifest.json",
     [string]$OutputHeaderPath = "src/gateway/generated/GatewayHandlerCatalog.Generated.h",
-    [string]$OutputSourcePath = "src/gateway/generated/GatewayHandlerCatalog.Generated.cpp"
+    [string]$OutputSourcePath = "src/gateway/generated/GatewayHandlerCatalog.Generated.cpp",
+    [switch]$VerifyOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -17,6 +18,15 @@ function Convert-ToCppStringLiteral {
 
     $escaped = $Value.Replace('\', '\\').Replace('"', '\"')
     return '"' + $escaped + '"'
+}
+function Normalize-Text {
+    param([string]$Value)
+
+    if ($null -eq $Value) {
+        return ""
+    }
+
+    return $Value.Replace("`r`n", "`n").TrimEnd()
 }
 
 $manifestFullPath = Resolve-RepoPath -RelativePath $ManifestPath
@@ -239,6 +249,24 @@ $toolsMetricRegistrationBody
 
 $headerDir = Split-Path -Path $outputHeaderFullPath -Parent
 $sourceDir = Split-Path -Path $outputSourceFullPath -Parent
+
+if ($VerifyOnly) {
+    if (-not (Test-Path $outputHeaderFullPath) -or
+        -not (Test-Path $outputSourceFullPath)) {
+        throw "Generated handler catalog files are missing."
+    }
+
+    $existingHeader = Get-Content -Path $outputHeaderFullPath -Raw
+    $existingSource = Get-Content -Path $outputSourceFullPath -Raw
+
+    if ((Normalize-Text $existingHeader) -ne (Normalize-Text $headerContent) -or
+        (Normalize-Text $existingSource) -ne (Normalize-Text $sourceContent)) {
+        throw "Generated handler catalog files are stale. Re-run generator."
+    }
+
+    Write-Host "Handler catalog generated files are up to date."
+    return
+}
 
 if (-not (Test-Path $headerDir)) {
     New-Item -ItemType Directory -Path $headerDir | Out-Null
