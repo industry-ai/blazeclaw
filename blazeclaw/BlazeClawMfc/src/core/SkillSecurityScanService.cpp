@@ -87,12 +87,17 @@ SkillSecurityScanSnapshot SkillSecurityScanService::BuildSnapshot(
     std::wregex pattern;
   };
 
-  const std::vector<ScanRule> rules = {
-      {L"dangerous-exec", L"critical", std::wregex(LR"((execSync|spawnSync|eval\s*\())")},
-      {L"env-harvest", L"critical", std::wregex(LR"((process\.env|_wgetenv|_wdupenv_s).*(http|fetch|post))")},
-      {L"suspicious-network", L"warn", std::wregex(LR"((WebSocket\s*\(|wss?:\/\/))")},
-      {L"obfuscated-payload", L"warn", std::wregex(LR"((\\x[0-9A-Fa-f]{2}{4,}|base64))")},
-  };
+  std::vector<ScanRule> rules;
+  try {
+    rules = {
+        {L"dangerous-exec", L"critical", std::wregex(LR"((execSync|spawnSync|eval\s*\())")},
+        {L"env-harvest", L"critical", std::wregex(LR"((process\.env|_wgetenv|_wdupenv_s).*(http|fetch|post))")},
+        {L"suspicious-network", L"warn", std::wregex(LR"((WebSocket\s*\(|wss?:\/\/))")},
+        {L"obfuscated-payload", L"warn", std::wregex(LR"(((\\x[0-9A-Fa-f]{2}){4,}|base64))")},
+    };
+  } catch (const std::regex_error&) {
+    return snapshot;
+  }
 
   for (const auto& entry : catalog.entries) {
     const auto eligibilityIt = eligibilityByName.find(ToLower(entry.skillName));
