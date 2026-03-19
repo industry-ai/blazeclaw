@@ -17,6 +17,36 @@ struct AgentConfig {
   bool enableStreaming = true;
 };
 
+struct AgentIdentityConfig {
+  std::wstring name;
+  std::wstring emoji;
+  std::wstring theme;
+  std::wstring avatar;
+};
+
+struct AgentEntryConfig {
+  std::wstring id;
+  std::wstring name;
+  std::wstring workspace;
+  std::wstring agentDir;
+  std::wstring model;
+  bool isDefault = false;
+  AgentIdentityConfig identity;
+};
+
+struct AgentsDefaultsConfig {
+  std::wstring agentId = L"default";
+  std::wstring workspace;
+  std::wstring workspaceRoot;
+  std::wstring agentDirRoot;
+  std::wstring model;
+};
+
+struct AgentsConfig {
+  AgentsDefaultsConfig defaults;
+  std::map<std::wstring, AgentEntryConfig> entries;
+};
+
 struct SkillEntryConfig {
   std::optional<bool> enabled;
   std::wstring apiKey;
@@ -53,6 +83,7 @@ struct SkillsConfig {
 struct AppConfig {
   GatewayConfig gateway;
   AgentConfig agent;
+  AgentsConfig agents;
   SkillsConfig skills;
   std::vector<std::wstring> enabledChannels;
 };

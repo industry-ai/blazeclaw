@@ -173,10 +173,16 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
   }
 
   m_activeConfig = config;
+  m_agentsScope = m_agentsCatalogService.BuildSnapshot(
+      std::filesystem::current_path(),
+      m_activeConfig);
+  m_agentsWorkspace = m_agentsWorkspaceService.BuildSnapshot(m_agentsScope);
   RefreshSkillsState(m_activeConfig, true, L"startup");
 
   std::wstring fixtureError;
   const std::vector<std::filesystem::path> fixtureCandidates = {
+      std::filesystem::current_path() / L"blazeclaw" / L"fixtures" / L"agents",
+      std::filesystem::current_path() / L"fixtures" / L"agents",
       std::filesystem::current_path() / L"blazeclaw" / L"fixtures" / L"skills-catalog",
       std::filesystem::current_path() / L"fixtures" / L"skills-catalog",
   };
@@ -184,6 +190,21 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
   for (const auto& candidate : fixtureCandidates) {
     std::error_code ec;
     if (!std::filesystem::is_directory(candidate, ec) || ec) {
+      continue;
+    }
+
+    const std::wstring candidateName = candidate.filename().wstring();
+    if (candidateName == L"agents") {
+      if (!m_agentsCatalogService.ValidateFixtureScenarios(candidate, fixtureError)) {
+        m_skillsCatalog.diagnostics.warnings.push_back(
+            L"agents-scope fixture validation failed: " + fixtureError);
+      }
+
+      if (!m_agentsWorkspaceService.ValidateFixtureScenarios(candidate, fixtureError)) {
+        m_skillsCatalog.diagnostics.warnings.push_back(
+            L"agents-workspace fixture validation failed: " + fixtureError);
+      }
+
       continue;
     }
 
@@ -258,6 +279,14 @@ bool ServiceManager::IsRunning() const noexcept {
 
 const FeatureRegistry& ServiceManager::Registry() const noexcept {
   return m_registry;
+}
+
+const AgentScopeSnapshot& ServiceManager::AgentsScope() const noexcept {
+  return m_agentsScope;
+}
+
+const AgentsWorkspaceSnapshot& ServiceManager::AgentsWorkspace() const noexcept {
+  return m_agentsWorkspace;
 }
 
 const SkillsCatalogSnapshot& ServiceManager::SkillsCatalog() const noexcept {

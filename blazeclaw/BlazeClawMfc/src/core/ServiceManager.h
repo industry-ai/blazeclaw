@@ -3,6 +3,8 @@
 #include "../config/ConfigModels.h"
 #include "../gateway/GatewayHost.h"
 #include "FeatureRegistry.h"
+#include "AgentsCatalogService.h"
+#include "AgentsWorkspaceService.h"
 #include "SkillsCommandService.h"
 #include "SkillsCatalogService.h"
 #include "SkillsEnvOverrideService.h"
@@ -24,6 +26,8 @@ public:
 
   [[nodiscard]] bool IsRunning() const noexcept;
   [[nodiscard]] const FeatureRegistry& Registry() const noexcept;
+  [[nodiscard]] const AgentScopeSnapshot& AgentsScope() const noexcept;
+  [[nodiscard]] const AgentsWorkspaceSnapshot& AgentsWorkspace() const noexcept;
   [[nodiscard]] const SkillsCatalogSnapshot& SkillsCatalog() const noexcept;
   [[nodiscard]] const SkillsEligibilitySnapshot& SkillsEligibility() const noexcept;
   [[nodiscard]] const SkillsPromptSnapshot& SkillsPrompt() const noexcept;
@@ -41,6 +45,10 @@ private:
   bool m_running = false;
   blazeclaw::config::AppConfig m_activeConfig;
   FeatureRegistry m_registry;
+  AgentsCatalogService m_agentsCatalogService;
+  AgentScopeSnapshot m_agentsScope;
+  AgentsWorkspaceService m_agentsWorkspaceService;
+  AgentsWorkspaceSnapshot m_agentsWorkspace;
   SkillsCatalogService m_skillsCatalogService;
   SkillsCatalogSnapshot m_skillsCatalog;
   SkillsEligibilityService m_skillsEligibilityService;

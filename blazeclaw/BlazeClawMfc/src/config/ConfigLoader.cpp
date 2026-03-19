@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cwctype>
 #include <fstream>
+#include <vector>
 
 namespace blazeclaw::config {
 
@@ -51,6 +52,53 @@ bool TryParseUInt(const std::wstring& raw, std::uint32_t& outValue) {
   }
 }
 
+std::vector<std::wstring> Split(
+    const std::wstring& value,
+    const wchar_t delimiter) {
+  std::vector<std::wstring> parts;
+  std::size_t start = 0;
+  while (start <= value.size()) {
+    const auto next = value.find(delimiter, start);
+    if (next == std::wstring::npos) {
+      parts.push_back(value.substr(start));
+      break;
+    }
+
+    parts.push_back(value.substr(start, next - start));
+    start = next + 1;
+  }
+
+  return parts;
+}
+
+std::wstring NormalizeAgentId(const std::wstring& raw) {
+  std::wstring normalized;
+  normalized.reserve(raw.size());
+  for (const wchar_t ch : raw) {
+    const wchar_t lowered = static_cast<wchar_t>(std::towlower(ch));
+    if ((lowered >= L'a' && lowered <= L'z') ||
+        (lowered >= L'0' && lowered <= L'9') ||
+        lowered == L'-' || lowered == L'_') {
+      normalized.push_back(lowered);
+      continue;
+    }
+
+    if (std::iswspace(lowered) != 0) {
+      normalized.push_back(L'-');
+    }
+  }
+
+  if (normalized.empty()) {
+    return L"default";
+  }
+
+  if (!std::iswalnum(normalized.front())) {
+    normalized.insert(normalized.begin(), L'a');
+  }
+
+  return normalized;
+}
+
 } // namespace
 
 bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) const {
@@ -92,6 +140,114 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
 
     if (trimmedLine.rfind(L"agent.streaming=", 0) == 0) {
       outConfig.agent.enableStreaming = ParseBool(trimmedLine.substr(16), true);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"agents.defaults.", 0) == 0) {
+      const auto keyValuePos = trimmedLine.find(L'=');
+      if (keyValuePos == std::wstring::npos) {
+        continue;
+      }
+
+      const std::wstring fieldName =
+          Trim(trimmedLine.substr(16, keyValuePos - 16));
+      const std::wstring value = Trim(trimmedLine.substr(keyValuePos + 1));
+      if (fieldName == L"id") {
+        outConfig.agents.defaults.agentId = NormalizeAgentId(value);
+        continue;
+      }
+
+      if (fieldName == L"workspace") {
+        outConfig.agents.defaults.workspace = value;
+        continue;
+      }
+
+      if (fieldName == L"workspaceRoot") {
+        outConfig.agents.defaults.workspaceRoot = value;
+        continue;
+      }
+
+      if (fieldName == L"agentDirRoot") {
+        outConfig.agents.defaults.agentDirRoot = value;
+        continue;
+      }
+
+      if (fieldName == L"model") {
+        outConfig.agents.defaults.model = value;
+      }
+
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"agents.list.", 0) == 0) {
+      const auto keyValuePos = trimmedLine.find(L'=');
+      if (keyValuePos == std::wstring::npos) {
+        continue;
+      }
+
+      const std::wstring path = Trim(trimmedLine.substr(12, keyValuePos - 12));
+      const std::wstring value = Trim(trimmedLine.substr(keyValuePos + 1));
+      const auto parts = Split(path, L'.');
+      if (parts.size() < 2) {
+        continue;
+      }
+
+      const std::wstring entryId = NormalizeAgentId(Trim(parts[0]));
+      if (entryId.empty()) {
+        continue;
+      }
+
+      auto& entry = outConfig.agents.entries[entryId];
+      entry.id = entryId;
+
+      const std::wstring fieldName = Trim(parts[1]);
+      if (fieldName == L"name") {
+        entry.name = value;
+        continue;
+      }
+
+      if (fieldName == L"workspace") {
+        entry.workspace = value;
+        continue;
+      }
+
+      if (fieldName == L"agentDir") {
+        entry.agentDir = value;
+        continue;
+      }
+
+      if (fieldName == L"model") {
+        entry.model = value;
+        continue;
+      }
+
+      if (fieldName == L"default") {
+        entry.isDefault = ParseBool(value, false);
+        continue;
+      }
+
+      if (fieldName == L"identity" && parts.size() >= 3) {
+        const std::wstring identityField = Trim(parts[2]);
+        if (identityField == L"name") {
+          entry.identity.name = value;
+          continue;
+        }
+
+        if (identityField == L"emoji") {
+          entry.identity.emoji = value;
+          continue;
+        }
+
+        if (identityField == L"theme") {
+          entry.identity.theme = value;
+          continue;
+        }
+
+        if (identityField == L"avatar") {
+          entry.identity.avatar = value;
+        }
+      }
+
       continue;
     }
 
@@ -214,6 +370,10 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
         }
       }
     }
+  }
+
+  if (outConfig.agents.defaults.model.empty()) {
+    outConfig.agents.defaults.model = outConfig.agent.model;
   }
 
   return true;
