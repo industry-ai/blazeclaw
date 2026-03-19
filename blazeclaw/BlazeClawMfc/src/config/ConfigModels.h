@@ -24,6 +24,11 @@ struct AgentIdentityConfig {
   std::wstring avatar;
 };
 
+struct AgentSubagentsConfig {
+  std::uint32_t maxDepth = 3;
+  std::vector<std::wstring> allowAgents;
+};
+
 struct AgentEntryConfig {
   std::wstring id;
   std::wstring name;
@@ -32,6 +37,7 @@ struct AgentEntryConfig {
   std::wstring model;
   bool isDefault = false;
   AgentIdentityConfig identity;
+  AgentSubagentsConfig subagents;
 };
 
 struct AgentsDefaultsConfig {

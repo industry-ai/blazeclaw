@@ -177,6 +177,9 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       std::filesystem::current_path(),
       m_activeConfig);
   m_agentsWorkspace = m_agentsWorkspaceService.BuildSnapshot(m_agentsScope);
+  m_subagentRegistryService.Configure(m_activeConfig);
+  m_subagentRegistryService.Initialize(std::filesystem::current_path());
+  m_subagentRegistry = m_subagentRegistryService.Snapshot();
   RefreshSkillsState(m_activeConfig, true, L"startup");
 
   std::wstring fixtureError;
@@ -203,6 +206,11 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       if (!m_agentsWorkspaceService.ValidateFixtureScenarios(candidate, fixtureError)) {
         m_skillsCatalog.diagnostics.warnings.push_back(
             L"agents-workspace fixture validation failed: " + fixtureError);
+      }
+
+      if (!m_subagentRegistryService.ValidateFixtureScenarios(candidate, fixtureError)) {
+        m_skillsCatalog.diagnostics.warnings.push_back(
+            L"agents-subagent fixture validation failed: " + fixtureError);
       }
 
       continue;
@@ -287,6 +295,10 @@ const AgentScopeSnapshot& ServiceManager::AgentsScope() const noexcept {
 
 const AgentsWorkspaceSnapshot& ServiceManager::AgentsWorkspace() const noexcept {
   return m_agentsWorkspace;
+}
+
+const SubagentRegistrySnapshot& ServiceManager::SubagentRegistry() const noexcept {
+  return m_subagentRegistry;
 }
 
 const SkillsCatalogSnapshot& ServiceManager::SkillsCatalog() const noexcept {

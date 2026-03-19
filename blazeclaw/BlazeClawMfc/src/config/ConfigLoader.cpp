@@ -246,6 +246,29 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
         if (identityField == L"avatar") {
           entry.identity.avatar = value;
         }
+
+        continue;
+      }
+
+      if (fieldName == L"subagents" && parts.size() >= 3) {
+        const std::wstring subField = Trim(parts[2]);
+        if (subField == L"maxDepth") {
+          std::uint32_t parsedDepth = 0;
+          if (TryParseUInt(value, parsedDepth)) {
+            entry.subagents.maxDepth = parsedDepth;
+          }
+
+          continue;
+        }
+
+        if (subField == L"allowAgent") {
+          const auto allowAgentId = NormalizeAgentId(value);
+          if (!allowAgentId.empty()) {
+            entry.subagents.allowAgents.push_back(allowAgentId);
+          }
+
+          continue;
+        }
       }
 
       continue;

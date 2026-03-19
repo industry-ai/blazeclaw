@@ -100,6 +100,7 @@
     <ClInclude Include="src\core\FeatureRegistry.h" />
     <ClInclude Include="src\core\AgentsCatalogService.h" />
     <ClInclude Include="src\core\AgentsWorkspaceService.h" />
+    <ClInclude Include="src\core\SubagentRegistryService.h" />
     <ClInclude Include="src\core\SkillsCommandService.h" />
     <ClInclude Include="src\core\SkillsCatalogService.h" />
     <ClInclude Include="src\core\SkillsEnvOverrideService.h" />
@@ -137,6 +138,7 @@
     <ClCompile Include="src\core\FeatureRegistry.cpp" />
     <ClCompile Include="src\core\AgentsCatalogService.cpp" />
     <ClCompile Include="src\core\AgentsWorkspaceService.cpp" />
+    <ClCompile Include="src\core\SubagentRegistryService.cpp" />
     <ClCompile Include="src\core\SkillsCommandService.cpp" />
     <ClCompile Include="src\core\SkillsCatalogService.cpp" />
     <ClCompile Include="src\core\SkillsEnvOverrideService.cpp" />

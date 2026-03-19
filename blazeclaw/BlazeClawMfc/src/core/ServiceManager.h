@@ -5,6 +5,7 @@
 #include "FeatureRegistry.h"
 #include "AgentsCatalogService.h"
 #include "AgentsWorkspaceService.h"
+#include "SubagentRegistryService.h"
 #include "SkillsCommandService.h"
 #include "SkillsCatalogService.h"
 #include "SkillsEnvOverrideService.h"
@@ -28,6 +29,7 @@ public:
   [[nodiscard]] const FeatureRegistry& Registry() const noexcept;
   [[nodiscard]] const AgentScopeSnapshot& AgentsScope() const noexcept;
   [[nodiscard]] const AgentsWorkspaceSnapshot& AgentsWorkspace() const noexcept;
+  [[nodiscard]] const SubagentRegistrySnapshot& SubagentRegistry() const noexcept;
   [[nodiscard]] const SkillsCatalogSnapshot& SkillsCatalog() const noexcept;
   [[nodiscard]] const SkillsEligibilitySnapshot& SkillsEligibility() const noexcept;
   [[nodiscard]] const SkillsPromptSnapshot& SkillsPrompt() const noexcept;
@@ -49,6 +51,8 @@ private:
   AgentScopeSnapshot m_agentsScope;
   AgentsWorkspaceService m_agentsWorkspaceService;
   AgentsWorkspaceSnapshot m_agentsWorkspace;
+  SubagentRegistryService m_subagentRegistryService;
+  SubagentRegistrySnapshot m_subagentRegistry;
   SkillsCatalogService m_skillsCatalogService;
   SkillsCatalogSnapshot m_skillsCatalog;
   SkillsEligibilityService m_skillsEligibilityService;
