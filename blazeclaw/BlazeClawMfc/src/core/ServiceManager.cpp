@@ -3,6 +3,8 @@
 
 #include "../gateway/GatewayProtocolModels.h"
 
+#include <filesystem>
+
 namespace blazeclaw::core {
 
 ServiceManager::ServiceManager() = default;
@@ -11,6 +13,10 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
   if (m_running) {
     return true;
   }
+
+  m_skillsCatalog = m_skillsCatalogService.LoadCatalog(
+      std::filesystem::current_path(),
+      config);
 
   const bool gatewayStarted = m_gatewayHost.Start(config.gateway);
   m_running = gatewayStarted;
@@ -28,6 +34,10 @@ bool ServiceManager::IsRunning() const noexcept {
 
 const FeatureRegistry& ServiceManager::Registry() const noexcept {
   return m_registry;
+}
+
+const SkillsCatalogSnapshot& ServiceManager::SkillsCatalog() const noexcept {
+  return m_skillsCatalog;
 }
 
 std::string ServiceManager::InvokeGatewayMethod(
