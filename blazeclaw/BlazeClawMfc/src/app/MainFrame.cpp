@@ -13,6 +13,13 @@ constexpr UINT kIdUiParitySessionActivate = 0x8106;
 constexpr UINT kIdUiParityRuntimeStatus = 0x8107;
 constexpr UINT kIdUiParityDesktopStatus = 0x8108;
 constexpr UINT kIdUiParityDesktopWebStatus = 0x8109;
+constexpr UINT kIdUiParitySkillsStatus = 0x8110;
+constexpr UINT kIdUiParitySkillsList = 0x8111;
+constexpr UINT kIdUiParitySkillsInfo = 0x8112;
+constexpr UINT kIdUiParitySkillsCheck = 0x8113;
+constexpr UINT kIdUiParitySkillsDiagnostics = 0x8114;
+constexpr UINT kIdUiParitySkillsInstallOptions = 0x8115;
+constexpr UINT kIdUiParitySkillsScanStatus = 0x8116;
 
 std::wstring ToWide(const std::string& value) {
   std::wstring output;
@@ -38,6 +45,13 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
   ON_COMMAND(kIdUiParityRuntimeStatus, &CMainFrame::OnUiParityRuntimeStatus)
   ON_COMMAND(kIdUiParityDesktopStatus, &CMainFrame::OnUiParityDesktopStatus)
   ON_COMMAND(kIdUiParityDesktopWebStatus, &CMainFrame::OnUiParityDesktopWebStatus)
+  ON_COMMAND(kIdUiParitySkillsStatus, &CMainFrame::OnUiParitySkillsStatus)
+  ON_COMMAND(kIdUiParitySkillsList, &CMainFrame::OnUiParitySkillsList)
+  ON_COMMAND(kIdUiParitySkillsInfo, &CMainFrame::OnUiParitySkillsInfo)
+  ON_COMMAND(kIdUiParitySkillsCheck, &CMainFrame::OnUiParitySkillsCheck)
+  ON_COMMAND(kIdUiParitySkillsDiagnostics, &CMainFrame::OnUiParitySkillsDiagnostics)
+  ON_COMMAND(kIdUiParitySkillsInstallOptions, &CMainFrame::OnUiParitySkillsInstallOptions)
+  ON_COMMAND(kIdUiParitySkillsScanStatus, &CMainFrame::OnUiParitySkillsScanStatus)
 END_MESSAGE_MAP()
 
 CMainFrame::CMainFrame() {
@@ -87,6 +101,35 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct) {
       MF_STRING,
       kIdUiParityDesktopWebStatus,
       _T("Desktop Web Status"));
+  m_parityMenu.AppendMenu(MF_SEPARATOR);
+  m_parityMenu.AppendMenu(
+      MF_STRING,
+      kIdUiParitySkillsStatus,
+      _T("Skills Status"));
+  m_parityMenu.AppendMenu(
+      MF_STRING,
+      kIdUiParitySkillsList,
+      _T("Skills List"));
+  m_parityMenu.AppendMenu(
+      MF_STRING,
+      kIdUiParitySkillsInfo,
+      _T("Skills Info"));
+  m_parityMenu.AppendMenu(
+      MF_STRING,
+      kIdUiParitySkillsCheck,
+      _T("Skills Check"));
+  m_parityMenu.AppendMenu(
+      MF_STRING,
+      kIdUiParitySkillsDiagnostics,
+      _T("Skills Diagnostics"));
+  m_parityMenu.AppendMenu(
+      MF_STRING,
+      kIdUiParitySkillsInstallOptions,
+      _T("Skills Install Options"));
+  m_parityMenu.AppendMenu(
+      MF_STRING,
+      kIdUiParitySkillsScanStatus,
+      _T("Skills Scan Status"));
   m_menuBar.AppendMenu(
       MF_POPUP,
       reinterpret_cast<UINT_PTR>(m_parityMenu.GetSafeHmenu()),
@@ -177,4 +220,48 @@ void CMainFrame::OnUiParityDesktopWebStatus() {
   ShowParityResult(
       L"Desktop Web Status",
       "gateway.platform.web.status");
+}
+
+void CMainFrame::OnUiParitySkillsStatus() {
+  ShowParityResult(
+      L"Skills Status",
+      "gateway.skills.status");
+}
+
+void CMainFrame::OnUiParitySkillsList() {
+  ShowParityResult(
+      L"Skills List",
+      "gateway.skills.list",
+      std::optional<std::string>("{\"includeInvalid\":true}"));
+}
+
+void CMainFrame::OnUiParitySkillsInfo() {
+  ShowParityResult(
+      L"Skills Info",
+      "gateway.skills.info",
+      std::optional<std::string>("{\"skill\":\"install-node\"}"));
+}
+
+void CMainFrame::OnUiParitySkillsCheck() {
+  ShowParityResult(
+      L"Skills Check",
+      "gateway.skills.check");
+}
+
+void CMainFrame::OnUiParitySkillsDiagnostics() {
+  ShowParityResult(
+      L"Skills Diagnostics",
+      "gateway.skills.diagnostics");
+}
+
+void CMainFrame::OnUiParitySkillsInstallOptions() {
+  ShowParityResult(
+      L"Skills Install Options",
+      "gateway.skills.install.options");
+}
+
+void CMainFrame::OnUiParitySkillsScanStatus() {
+  ShowParityResult(
+      L"Skills Scan Status",
+      "gateway.skills.scan.status");
 }

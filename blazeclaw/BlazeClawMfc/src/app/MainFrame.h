@@ -17,6 +17,13 @@ protected:
   afx_msg void OnUiParityRuntimeStatus();
   afx_msg void OnUiParityDesktopStatus();
   afx_msg void OnUiParityDesktopWebStatus();
+  afx_msg void OnUiParitySkillsStatus();
+  afx_msg void OnUiParitySkillsList();
+  afx_msg void OnUiParitySkillsInfo();
+  afx_msg void OnUiParitySkillsCheck();
+  afx_msg void OnUiParitySkillsDiagnostics();
+  afx_msg void OnUiParitySkillsInstallOptions();
+  afx_msg void OnUiParitySkillsScanStatus();
 
  private:
   void ShowParityResult(

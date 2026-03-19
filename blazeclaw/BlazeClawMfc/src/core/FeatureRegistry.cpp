@@ -15,7 +15,7 @@ FeatureRegistry::FeatureRegistry() {
       {L"skills-watch-refresh", FeatureState::Implemented},
       {L"skills-sandbox-sync", FeatureState::Implemented},
       {L"skills-installer-scanner", FeatureState::Implemented},
-      {L"skills-operator-surface", FeatureState::InProgress},
+      {L"skills-operator-surface", FeatureState::Implemented},
       {L"streaming-responses", FeatureState::Planned},
       {L"whatsapp-channel", FeatureState::Planned},
       {L"telegram-channel", FeatureState::Planned},
