@@ -181,6 +181,11 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       m_agentsScope,
       m_activeConfig);
   m_agentsShellRuntimeService.Configure(m_activeConfig);
+  m_agentsModelRoutingService.Configure(m_activeConfig);
+  m_modelRouting = m_agentsModelRoutingService.Snapshot();
+  m_agentsAuthProfileService.Configure(m_activeConfig);
+  m_agentsAuthProfileService.Initialize(std::filesystem::current_path());
+  m_authProfiles = m_agentsAuthProfileService.Snapshot(1735690000000);
   m_subagentRegistryService.Configure(m_activeConfig);
   m_subagentRegistryService.Initialize(std::filesystem::current_path());
   m_subagentRegistry = m_subagentRegistryService.Snapshot();
@@ -230,6 +235,16 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       if (!m_agentsShellRuntimeService.ValidateFixtureScenarios(candidate, fixtureError)) {
         m_skillsCatalog.diagnostics.warnings.push_back(
             L"agents-shell-runtime fixture validation failed: " + fixtureError);
+      }
+
+      if (!m_agentsModelRoutingService.ValidateFixtureScenarios(candidate, fixtureError)) {
+        m_skillsCatalog.diagnostics.warnings.push_back(
+            L"agents-model-routing fixture validation failed: " + fixtureError);
+      }
+
+      if (!m_agentsAuthProfileService.ValidateFixtureScenarios(candidate, fixtureError)) {
+        m_skillsCatalog.diagnostics.warnings.push_back(
+            L"agents-auth-profile fixture validation failed: " + fixtureError);
       }
 
       if (!m_subagentRegistryService.ValidateFixtureScenarios(candidate, fixtureError)) {
@@ -349,6 +364,14 @@ const AgentsToolPolicySnapshot& ServiceManager::ToolPolicy() const noexcept {
 
 std::size_t ServiceManager::ShellProcessCount() const noexcept {
   return m_agentsShellRuntimeService.ListProcesses().size();
+}
+
+const ModelRoutingSnapshot& ServiceManager::ModelRouting() const noexcept {
+  return m_modelRouting;
+}
+
+const AuthProfileSnapshot& ServiceManager::AuthProfiles() const noexcept {
+  return m_authProfiles;
 }
 
 const SkillsCatalogSnapshot& ServiceManager::SkillsCatalog() const noexcept {

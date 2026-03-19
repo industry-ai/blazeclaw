@@ -4,6 +4,8 @@
 #include "../gateway/GatewayHost.h"
 #include "FeatureRegistry.h"
 #include "AgentsCatalogService.h"
+#include "AgentsAuthProfileService.h"
+#include "AgentsModelRoutingService.h"
 #include "AgentsShellRuntimeService.h"
 #include "AgentsToolPolicyService.h"
 #include "AgentsWorkspaceService.h"
@@ -38,6 +40,8 @@ public:
   [[nodiscard]] std::size_t ActiveEmbeddedRuns() const noexcept;
   [[nodiscard]] const AgentsToolPolicySnapshot& ToolPolicy() const noexcept;
   [[nodiscard]] std::size_t ShellProcessCount() const noexcept;
+  [[nodiscard]] const ModelRoutingSnapshot& ModelRouting() const noexcept;
+  [[nodiscard]] const AuthProfileSnapshot& AuthProfiles() const noexcept;
   [[nodiscard]] const SkillsCatalogSnapshot& SkillsCatalog() const noexcept;
   [[nodiscard]] const SkillsEligibilitySnapshot& SkillsEligibility() const noexcept;
   [[nodiscard]] const SkillsPromptSnapshot& SkillsPrompt() const noexcept;
@@ -62,6 +66,10 @@ private:
   AgentsToolPolicyService m_agentsToolPolicyService;
   AgentsToolPolicySnapshot m_agentsToolPolicy;
   AgentsShellRuntimeService m_agentsShellRuntimeService;
+  AgentsModelRoutingService m_agentsModelRoutingService;
+  ModelRoutingSnapshot m_modelRouting;
+  AgentsAuthProfileService m_agentsAuthProfileService;
+  AuthProfileSnapshot m_authProfiles;
   SubagentRegistryService m_subagentRegistryService;
   SubagentRegistrySnapshot m_subagentRegistry;
   AcpSpawnService m_acpSpawnService;

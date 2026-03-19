@@ -99,6 +99,8 @@
     <ClInclude Include="src\config\ConfigModels.h" />
     <ClInclude Include="src\core\FeatureRegistry.h" />
     <ClInclude Include="src\core\AgentsCatalogService.h" />
+    <ClInclude Include="src\core\AgentsAuthProfileService.h" />
+    <ClInclude Include="src\core\AgentsModelRoutingService.h" />
     <ClInclude Include="src\core\AgentsShellRuntimeService.h" />
     <ClInclude Include="src\core\AgentsToolPolicyService.h" />
     <ClInclude Include="src\core\AgentsWorkspaceService.h" />
@@ -141,6 +143,8 @@
     <ClCompile Include="src\config\ConfigLoader.cpp" />
     <ClCompile Include="src\core\FeatureRegistry.cpp" />
     <ClCompile Include="src\core\AgentsCatalogService.cpp" />
+    <ClCompile Include="src\core\AgentsAuthProfileService.cpp" />
+    <ClCompile Include="src\core\AgentsModelRoutingService.cpp" />
     <ClCompile Include="src\core\AgentsShellRuntimeService.cpp" />
     <ClCompile Include="src\core\AgentsToolPolicyService.cpp" />
     <ClCompile Include="src\core\AgentsWorkspaceService.cpp" />

@@ -181,6 +181,104 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
       continue;
     }
 
+    if (trimmedLine.rfind(L"models.primary=", 0) == 0) {
+      outConfig.models.primary = Trim(trimmedLine.substr(13));
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"models.fallback=", 0) == 0) {
+      outConfig.models.fallback = Trim(trimmedLine.substr(14));
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"models.allow=", 0) == 0) {
+      const auto value = Trim(trimmedLine.substr(12));
+      if (!value.empty()) {
+        outConfig.models.allow.push_back(value);
+      }
+
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"models.alias.", 0) == 0) {
+      const auto keyValuePos = trimmedLine.find(L'=');
+      if (keyValuePos == std::wstring::npos) {
+        continue;
+      }
+
+      const std::wstring aliasKey = Trim(trimmedLine.substr(13, keyValuePos - 13));
+      const std::wstring aliasTarget = Trim(trimmedLine.substr(keyValuePos + 1));
+      if (!aliasKey.empty() && !aliasTarget.empty()) {
+        outConfig.models.aliases[aliasKey] = aliasTarget;
+      }
+
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"models.maxFailoverAttempts=", 0) == 0) {
+      std::uint32_t value = 0;
+      if (TryParseUInt(trimmedLine.substr(26), value)) {
+        outConfig.models.maxFailoverAttempts = value;
+      }
+
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"auth.order=", 0) == 0) {
+      const auto value = Trim(trimmedLine.substr(11));
+      if (!value.empty()) {
+        outConfig.authProfiles.order.push_back(value);
+      }
+
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"auth.profiles.", 0) == 0) {
+      const auto keyValuePos = trimmedLine.find(L'=');
+      if (keyValuePos == std::wstring::npos) {
+        continue;
+      }
+
+      const std::wstring path = Trim(trimmedLine.substr(14, keyValuePos - 14));
+      const std::wstring value = Trim(trimmedLine.substr(keyValuePos + 1));
+      const auto parts = Split(path, L'.');
+      if (parts.size() < 2) {
+        continue;
+      }
+
+      const std::wstring profileId = Trim(parts[0]);
+      if (profileId.empty()) {
+        continue;
+      }
+
+      auto& profile = outConfig.authProfiles.entries[profileId];
+      profile.id = profileId;
+      const std::wstring fieldName = Trim(parts[1]);
+      if (fieldName == L"provider") {
+        profile.provider = value;
+        continue;
+      }
+
+      if (fieldName == L"credentialRef") {
+        profile.credentialRef = value;
+        continue;
+      }
+
+      if (fieldName == L"cooldownSeconds") {
+        std::uint32_t parsedCooldown = 0;
+        if (TryParseUInt(value, parsedCooldown)) {
+          profile.cooldownSeconds = parsedCooldown;
+        }
+
+        continue;
+      }
+
+      if (fieldName == L"enabled") {
+        profile.enabled = ParseBool(value, true);
+        continue;
+      }
+    }
+
     if (trimmedLine.rfind(L"agents.defaults.", 0) == 0) {
       const auto keyValuePos = trimmedLine.find(L'=');
       if (keyValuePos == std::wstring::npos) {

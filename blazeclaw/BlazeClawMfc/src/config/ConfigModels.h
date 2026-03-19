@@ -73,6 +73,27 @@ struct EmbeddedRuntimeConfig {
   std::uint32_t maxQueueDepth = 64;
 };
 
+struct ModelsRoutingConfig {
+  std::wstring primary = L"default";
+  std::wstring fallback = L"reasoner";
+  std::vector<std::wstring> allow;
+  std::map<std::wstring, std::wstring> aliases;
+  std::uint32_t maxFailoverAttempts = 3;
+};
+
+struct AuthProfileEntryConfig {
+  std::wstring id;
+  std::wstring provider;
+  std::wstring credentialRef;
+  std::uint32_t cooldownSeconds = 0;
+  bool enabled = true;
+};
+
+struct AuthProfilesConfig {
+  std::vector<std::wstring> order;
+  std::map<std::wstring, AuthProfileEntryConfig> entries;
+};
+
 struct SkillEntryConfig {
   std::optional<bool> enabled;
   std::wstring apiKey;
@@ -112,6 +133,8 @@ struct AppConfig {
   AgentsConfig agents;
   AcpRuntimeConfig acp;
   EmbeddedRuntimeConfig embedded;
+  ModelsRoutingConfig models;
+  AuthProfilesConfig authProfiles;
   SkillsConfig skills;
   std::vector<std::wstring> enabledChannels;
 };
