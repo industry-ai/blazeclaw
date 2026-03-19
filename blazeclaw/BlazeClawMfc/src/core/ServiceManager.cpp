@@ -39,6 +39,11 @@ blazeclaw::gateway::SkillsCatalogGatewayState ServiceManager::BuildGatewaySkills
     commandsBySkill.emplace(command.skillName, command);
   }
 
+  std::unordered_map<std::wstring, SkillsInstallPlanEntry> installBySkill;
+  for (const auto& plan : m_skillsInstall.entries) {
+    installBySkill.emplace(plan.skillName, plan);
+  }
+
   for (const auto& entry : m_skillsCatalog.entries) {
     const auto eligibilityIt = eligibilityByName.find(entry.skillName);
     const bool hasEligibility = eligibilityIt != eligibilityByName.end();
@@ -49,12 +54,28 @@ blazeclaw::gateway::SkillsCatalogGatewayState ServiceManager::BuildGatewaySkills
       commandName = ToNarrow(commandIt->second.name);
     }
 
+    std::string installKind;
+    std::string installCommand;
+    std::string installReason;
+    bool installExecutable = false;
+    const auto installIt = installBySkill.find(entry.skillName);
+    if (installIt != installBySkill.end()) {
+      installKind = ToNarrow(installIt->second.kind);
+      installCommand = ToNarrow(installIt->second.command);
+      installReason = ToNarrow(installIt->second.reason);
+      installExecutable = installIt->second.executable;
+    }
+
     gatewaySkillsState.entries.push_back(
         blazeclaw::gateway::SkillsCatalogGatewayEntry{
             .name = ToNarrow(entry.skillName),
             .skillKey = hasEligibility ? ToNarrow(eligibilityIt->second.skillKey)
                                        : ToNarrow(entry.skillName),
             .commandName = commandName,
+            .installKind = installKind,
+            .installCommand = installCommand,
+            .installExecutable = installExecutable,
+            .installReason = installReason,
             .description = ToNarrow(entry.description),
             .source = ToNarrow(SkillsCatalogService::SourceKindLabel(entry.sourceKind)),
             .precedence = entry.precedence,
@@ -95,6 +116,12 @@ blazeclaw::gateway::SkillsCatalogGatewayState ServiceManager::BuildGatewaySkills
   gatewaySkillsState.sandboxSkipped = m_skillsSync.skippedSkills;
   gatewaySkillsState.envAllowed = m_skillsEnvOverrides.allowedCount;
   gatewaySkillsState.envBlocked = m_skillsEnvOverrides.blockedCount;
+  gatewaySkillsState.installExecutableCount = m_skillsInstall.executableCount;
+  gatewaySkillsState.installBlockedCount = m_skillsInstall.blockedCount;
+  gatewaySkillsState.scanInfoCount = m_skillSecurityScan.infoCount;
+  gatewaySkillsState.scanWarnCount = m_skillSecurityScan.warnCount;
+  gatewaySkillsState.scanCriticalCount = m_skillSecurityScan.criticalCount;
+  gatewaySkillsState.scanScannedFiles = m_skillSecurityScan.scannedFileCount;
   return gatewaySkillsState;
 }
 
@@ -121,6 +148,14 @@ void ServiceManager::RefreshSkillsState(
       m_skillsEligibility,
       config);
   m_skillsEnvOverrides = m_skillsEnvOverrideService.BuildSnapshot(
+      m_skillsCatalog,
+      m_skillsEligibility,
+      config);
+  m_skillsInstall = m_skillsInstallService.BuildSnapshot(
+      m_skillsCatalog,
+      m_skillsEligibility,
+      config);
+  m_skillSecurityScan = m_skillSecurityScanService.BuildSnapshot(
       m_skillsCatalog,
       m_skillsEligibility,
       config);
@@ -185,6 +220,16 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
     if (!m_skillsEnvOverrideService.ValidateFixtureScenarios(candidate, fixtureError)) {
       m_skillsCatalog.diagnostics.warnings.push_back(
           L"skills-env fixture validation failed: " + fixtureError);
+    }
+
+    if (!m_skillsInstallService.ValidateFixtureScenarios(candidate, fixtureError)) {
+      m_skillsCatalog.diagnostics.warnings.push_back(
+          L"skills-install fixture validation failed: " + fixtureError);
+    }
+
+    if (!m_skillSecurityScanService.ValidateFixtureScenarios(candidate, fixtureError)) {
+      m_skillsCatalog.diagnostics.warnings.push_back(
+          L"skills-scan fixture validation failed: " + fixtureError);
     }
 
     break;

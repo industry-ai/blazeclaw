@@ -3,6 +3,7 @@
 #include "SkillsCatalogService.h"
 #include "SkillsEligibilityService.h"
 
+#include <map>
 #include <string>
 #include <vector>
 

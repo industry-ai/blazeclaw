@@ -58,6 +58,15 @@ namespace blazeclaw::gateway {
                 EscapeJsonLocal(entry.skillKey) +
                 "\",\"command\":\"" +
                 EscapeJsonLocal(entry.commandName) +
+                "\",\"installKind\":\"" +
+                EscapeJsonLocal(entry.installKind) +
+                "\",\"installCommand\":\"" +
+                EscapeJsonLocal(entry.installCommand) +
+                "\",\"installExecutable\":" +
+                std::string(entry.installExecutable ? "true" : "false") +
+                ",\"installReason\":\"" +
+                EscapeJsonLocal(entry.installReason) +
+                "\"" +
                 "\",\"description\":\"" +
                 EscapeJsonLocal(entry.description) +
                 "\",\"source\":\"" +
@@ -195,8 +204,144 @@ namespace blazeclaw::gateway {
                         std::to_string(state.envAllowed) +
                         ",\"envBlocked\":" +
                         std::to_string(state.envBlocked) +
+                        ",\"installExecutable\":" +
+                        std::to_string(state.installExecutableCount) +
+                        ",\"installBlocked\":" +
+                        std::to_string(state.installBlockedCount) +
+                        ",\"scanInfo\":" +
+                        std::to_string(state.scanInfoCount) +
+                        ",\"scanWarn\":" +
+                        std::to_string(state.scanWarnCount) +
+                        ",\"scanCritical\":" +
+                        std::to_string(state.scanCriticalCount) +
+                        ",\"scanFiles\":" +
+                        std::to_string(state.scanScannedFiles) +
                         ",\"warnings\":" +
                         std::to_string(state.warningCount) +
+                        "}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.skills.install.options",
+            [this](const protocol::RequestFrame& request) {
+                std::string optionsJson = "[";
+                bool first = true;
+                std::size_t count = 0;
+                for (const auto& entry : m_skillsCatalogState.entries) {
+                    if (entry.installKind.empty()) {
+                        continue;
+                    }
+
+                    if (!first) {
+                        optionsJson += ",";
+                    }
+
+                    optionsJson +=
+                        "{\"skill\":\"" +
+                        EscapeJsonLocal(entry.name) +
+                        "\",\"kind\":\"" +
+                        EscapeJsonLocal(entry.installKind) +
+                        "\",\"command\":\"" +
+                        EscapeJsonLocal(entry.installCommand) +
+                        "\",\"executable\":" +
+                        std::string(entry.installExecutable ? "true" : "false") +
+                        ",\"reason\":\"" +
+                        EscapeJsonLocal(entry.installReason) +
+                        "\"}";
+                    first = false;
+                    ++count;
+                }
+
+                optionsJson += "]";
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"options\":" +
+                        optionsJson +
+                        ",\"count\":" +
+                        std::to_string(count) +
+                        "}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.skills.install.execute",
+            [this](const protocol::RequestFrame& request) {
+                const auto skillName =
+                    ExtractStringParam(request.paramsJson, "skill");
+                const auto it = std::find_if(
+                    m_skillsCatalogState.entries.begin(),
+                    m_skillsCatalogState.entries.end(),
+                    [&skillName](const SkillsCatalogGatewayEntry& item) {
+                        return item.name == skillName;
+                    });
+
+                if (it == m_skillsCatalogState.entries.end()) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = false,
+                        .payloadJson = std::nullopt,
+                        .error = protocol::ErrorShape{
+                            .code = "skill_not_found",
+                            .message = "Requested skill install target was not found.",
+                            .detailsJson = "{\"skill\":\"" +
+                                EscapeJsonLocal(skillName) +
+                                "\"}",
+                            .retryable = false,
+                            .retryAfterMs = std::nullopt,
+                        },
+                    };
+                }
+
+                const auto warning = m_skillsCatalogState.scanCriticalCount > 0
+                    ? "security_scan_critical"
+                    : (m_skillsCatalogState.scanWarnCount > 0
+                           ? "security_scan_warn"
+                           : "none");
+
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"skill\":\"" +
+                        EscapeJsonLocal(it->name) +
+                        "\",\"kind\":\"" +
+                        EscapeJsonLocal(it->installKind) +
+                        "\",\"command\":\"" +
+                        EscapeJsonLocal(it->installCommand) +
+                        "\",\"executed\":" +
+                        std::string(it->installExecutable ? "true" : "false") +
+                        ",\"warning\":\"" +
+                        warning +
+                        "\",\"scanCritical\":" +
+                        std::to_string(m_skillsCatalogState.scanCriticalCount) +
+                        ",\"scanWarn\":" +
+                        std::to_string(m_skillsCatalogState.scanWarnCount) +
+                        "}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.skills.scan.status",
+            [this](const protocol::RequestFrame& request) {
+                const auto& state = m_skillsCatalogState;
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"files\":" +
+                        std::to_string(state.scanScannedFiles) +
+                        ",\"info\":" +
+                        std::to_string(state.scanInfoCount) +
+                        ",\"warn\":" +
+                        std::to_string(state.scanWarnCount) +
+                        ",\"critical\":" +
+                        std::to_string(state.scanCriticalCount) +
                         "}",
                     .error = std::nullopt,
                 };

@@ -14,7 +14,7 @@ FeatureRegistry::FeatureRegistry() {
       {L"skills-prompt-snapshots", FeatureState::Implemented},
       {L"skills-watch-refresh", FeatureState::Implemented},
       {L"skills-sandbox-sync", FeatureState::Implemented},
-      {L"skills-installer-scanner", FeatureState::Planned},
+      {L"skills-installer-scanner", FeatureState::Implemented},
       {L"skills-operator-surface", FeatureState::InProgress},
       {L"streaming-responses", FeatureState::Planned},
       {L"whatsapp-channel", FeatureState::Planned},

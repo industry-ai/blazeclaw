@@ -7,7 +7,9 @@
 #include "SkillsCatalogService.h"
 #include "SkillsEnvOverrideService.h"
 #include "SkillsEligibilityService.h"
+#include "SkillsInstallService.h"
 #include "SkillsPromptService.h"
+#include "SkillSecurityScanService.h"
 #include "SkillsSyncService.h"
 #include "SkillsWatchService.h"
 
@@ -51,6 +53,10 @@ private:
   SkillsSyncSnapshot m_skillsSync;
   SkillsEnvOverrideService m_skillsEnvOverrideService;
   SkillsEnvOverrideSnapshot m_skillsEnvOverrides;
+  SkillsInstallService m_skillsInstallService;
+  SkillsInstallSnapshot m_skillsInstall;
+  SkillSecurityScanService m_skillSecurityScanService;
+  SkillSecurityScanSnapshot m_skillSecurityScan;
   SkillsWatchService m_skillsWatchService;
   SkillsWatchSnapshot m_skillsWatch;
   blazeclaw::gateway::GatewayHost m_gatewayHost;

@@ -15,6 +15,10 @@ namespace blazeclaw::gateway {
 		std::string name;
         std::string skillKey;
         std::string commandName;
+        std::string installKind;
+		std::string installCommand;
+		bool installExecutable = false;
+		std::string installReason;
 		std::string description;
 		std::string source;
 		std::int32_t precedence = 0;
@@ -50,6 +54,12 @@ namespace blazeclaw::gateway {
 		std::size_t sandboxSkipped = 0;
 		std::size_t envAllowed = 0;
 		std::size_t envBlocked = 0;
+      std::size_t installExecutableCount = 0;
+		std::size_t installBlockedCount = 0;
+		std::size_t scanInfoCount = 0;
+		std::size_t scanWarnCount = 0;
+		std::size_t scanCriticalCount = 0;
+		std::size_t scanScannedFiles = 0;
 	};
 
 	class GatewayHost {
