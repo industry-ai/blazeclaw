@@ -2,6 +2,9 @@
 
 #include "pch.h"
 
+#include <map>
+#include <optional>
+
 namespace blazeclaw::config {
 
 struct GatewayConfig {
@@ -14,9 +17,43 @@ struct AgentConfig {
   bool enableStreaming = true;
 };
 
+struct SkillEntryConfig {
+  std::optional<bool> enabled;
+  std::wstring apiKey;
+  std::map<std::wstring, std::wstring> env;
+};
+
+struct SkillsLoadConfig {
+  bool watch = true;
+  std::uint32_t watchDebounceMs = 250;
+  std::vector<std::wstring> extraDirs;
+};
+
+struct SkillsLimitsConfig {
+  std::uint32_t maxCandidatesPerRoot = 300;
+  std::uint32_t maxSkillsLoadedPerSource = 200;
+  std::uint32_t maxSkillsInPrompt = 150;
+  std::uint32_t maxSkillsPromptChars = 30000;
+  std::uint32_t maxSkillFileBytes = 256000;
+};
+
+struct SkillsInstallConfig {
+  bool preferBrew = true;
+  std::wstring nodeManager = L"npm";
+};
+
+struct SkillsConfig {
+  std::map<std::wstring, SkillEntryConfig> entries;
+  std::vector<std::wstring> allowBundled;
+  SkillsLoadConfig load;
+  SkillsLimitsConfig limits;
+  SkillsInstallConfig install;
+};
+
 struct AppConfig {
   GatewayConfig gateway;
   AgentConfig agent;
+  SkillsConfig skills;
   std::vector<std::wstring> enabledChannels;
 };
 
