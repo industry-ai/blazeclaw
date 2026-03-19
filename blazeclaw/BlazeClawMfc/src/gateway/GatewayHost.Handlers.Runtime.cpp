@@ -185,8 +185,54 @@ namespace blazeclaw::gateway {
                         ",\"watchReason\":\"" +
                         EscapeJsonLocal(state.watchReason) +
                         "\"" +
+                        ",\"sandboxSyncOk\":" +
+                        std::string(state.sandboxSyncOk ? "true" : "false") +
+                        ",\"sandboxSynced\":" +
+                        std::to_string(state.sandboxSynced) +
+                        ",\"sandboxSkipped\":" +
+                        std::to_string(state.sandboxSkipped) +
+                        ",\"envAllowed\":" +
+                        std::to_string(state.envAllowed) +
+                        ",\"envBlocked\":" +
+                        std::to_string(state.envBlocked) +
                         ",\"warnings\":" +
                         std::to_string(state.warningCount) +
+                        "}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.skills.sandbox.status",
+            [this](const protocol::RequestFrame& request) {
+                const auto& state = m_skillsCatalogState;
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"ok\":" +
+                        std::string(state.sandboxSyncOk ? "true" : "false") +
+                        ",\"synced\":" +
+                        std::to_string(state.sandboxSynced) +
+                        ",\"skipped\":" +
+                        std::to_string(state.sandboxSkipped) +
+                        "}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.skills.env.status",
+            [this](const protocol::RequestFrame& request) {
+                const auto& state = m_skillsCatalogState;
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"allowed\":" +
+                        std::to_string(state.envAllowed) +
+                        ",\"blocked\":" +
+                        std::to_string(state.envBlocked) +
                         "}",
                     .error = std::nullopt,
                 };

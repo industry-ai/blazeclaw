@@ -100,8 +100,10 @@
     <ClInclude Include="src\core\FeatureRegistry.h" />
     <ClInclude Include="src\core\SkillsCommandService.h" />
     <ClInclude Include="src\core\SkillsCatalogService.h" />
+    <ClInclude Include="src\core\SkillsEnvOverrideService.h" />
     <ClInclude Include="src\core\SkillsEligibilityService.h" />
     <ClInclude Include="src\core\SkillsPromptService.h" />
+    <ClInclude Include="src\core\SkillsSyncService.h" />
     <ClInclude Include="src\core\SkillsWatchService.h" />
     <ClInclude Include="src\core\ServiceManager.h" />
     <ClInclude Include="src\gateway\GatewayAgentRegistry.h" />
@@ -131,8 +133,10 @@
     <ClCompile Include="src\core\FeatureRegistry.cpp" />
     <ClCompile Include="src\core\SkillsCommandService.cpp" />
     <ClCompile Include="src\core\SkillsCatalogService.cpp" />
+    <ClCompile Include="src\core\SkillsEnvOverrideService.cpp" />
     <ClCompile Include="src\core\SkillsEligibilityService.cpp" />
     <ClCompile Include="src\core\SkillsPromptService.cpp" />
+    <ClCompile Include="src\core\SkillsSyncService.cpp" />
     <ClCompile Include="src\core\SkillsWatchService.cpp" />
     <ClCompile Include="src\core\ServiceManager.cpp" />
     <ClCompile Include="src\gateway\GatewayAgentRegistry.cpp" />

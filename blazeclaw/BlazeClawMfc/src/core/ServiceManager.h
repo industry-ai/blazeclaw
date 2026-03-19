@@ -5,8 +5,10 @@
 #include "FeatureRegistry.h"
 #include "SkillsCommandService.h"
 #include "SkillsCatalogService.h"
+#include "SkillsEnvOverrideService.h"
 #include "SkillsEligibilityService.h"
 #include "SkillsPromptService.h"
+#include "SkillsSyncService.h"
 #include "SkillsWatchService.h"
 
 namespace blazeclaw::core {
@@ -45,6 +47,10 @@ private:
   SkillsPromptSnapshot m_skillsPrompt;
   SkillsCommandService m_skillsCommandService;
   SkillsCommandSnapshot m_skillsCommands;
+  SkillsSyncService m_skillsSyncService;
+  SkillsSyncSnapshot m_skillsSync;
+  SkillsEnvOverrideService m_skillsEnvOverrideService;
+  SkillsEnvOverrideSnapshot m_skillsEnvOverrides;
   SkillsWatchService m_skillsWatchService;
   SkillsWatchSnapshot m_skillsWatch;
   blazeclaw::gateway::GatewayHost m_gatewayHost;

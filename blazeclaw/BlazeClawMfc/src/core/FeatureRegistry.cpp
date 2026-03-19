@@ -13,7 +13,7 @@ FeatureRegistry::FeatureRegistry() {
       {L"skills-eligibility-filtering", FeatureState::Implemented},
       {L"skills-prompt-snapshots", FeatureState::Implemented},
       {L"skills-watch-refresh", FeatureState::Implemented},
-      {L"skills-sandbox-sync", FeatureState::Planned},
+      {L"skills-sandbox-sync", FeatureState::Implemented},
       {L"skills-installer-scanner", FeatureState::Planned},
       {L"skills-operator-surface", FeatureState::InProgress},
       {L"streaming-responses", FeatureState::Planned},

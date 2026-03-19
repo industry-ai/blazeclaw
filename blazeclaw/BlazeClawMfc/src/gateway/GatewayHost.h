@@ -45,6 +45,11 @@ namespace blazeclaw::gateway {
 		std::uint32_t watchDebounceMs = 250;
 		std::string watchReason;
 		std::string prompt;
+      bool sandboxSyncOk = false;
+		std::size_t sandboxSynced = 0;
+		std::size_t sandboxSkipped = 0;
+		std::size_t envAllowed = 0;
+		std::size_t envBlocked = 0;
 	};
 
 	class GatewayHost {

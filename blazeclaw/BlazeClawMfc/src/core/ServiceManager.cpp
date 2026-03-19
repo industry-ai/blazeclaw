@@ -90,6 +90,11 @@ blazeclaw::gateway::SkillsCatalogGatewayState ServiceManager::BuildGatewaySkills
   gatewaySkillsState.watchDebounceMs = m_skillsWatch.debounceMs;
   gatewaySkillsState.watchReason = ToNarrow(m_skillsWatch.reason);
   gatewaySkillsState.prompt = ToNarrow(m_skillsPrompt.prompt);
+  gatewaySkillsState.sandboxSyncOk = m_skillsSync.success;
+  gatewaySkillsState.sandboxSynced = m_skillsSync.copiedSkills;
+  gatewaySkillsState.sandboxSkipped = m_skillsSync.skippedSkills;
+  gatewaySkillsState.envAllowed = m_skillsEnvOverrides.allowedCount;
+  gatewaySkillsState.envBlocked = m_skillsEnvOverrides.blockedCount;
   return gatewaySkillsState;
 }
 
@@ -110,6 +115,16 @@ void ServiceManager::RefreshSkillsState(
   m_skillsCommands = m_skillsCommandService.BuildSnapshot(
       m_skillsCatalog,
       m_skillsEligibility);
+  m_skillsSync = m_skillsSyncService.SyncToSandbox(
+      std::filesystem::current_path(),
+      m_skillsCatalog,
+      m_skillsEligibility,
+      config);
+  m_skillsEnvOverrides = m_skillsEnvOverrideService.BuildSnapshot(
+      m_skillsCatalog,
+      m_skillsEligibility,
+      config);
+  m_skillsEnvOverrideService.Apply(m_skillsEnvOverrides);
   m_skillsWatch = m_skillsWatchService.Observe(
       m_skillsCatalog,
       config,
@@ -162,6 +177,16 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
           L"skills-watch fixture validation failed: " + fixtureError);
     }
 
+    if (!m_skillsSyncService.ValidateFixtureScenarios(candidate, fixtureError)) {
+      m_skillsCatalog.diagnostics.warnings.push_back(
+          L"skills-sync fixture validation failed: " + fixtureError);
+    }
+
+    if (!m_skillsEnvOverrideService.ValidateFixtureScenarios(candidate, fixtureError)) {
+      m_skillsCatalog.diagnostics.warnings.push_back(
+          L"skills-env fixture validation failed: " + fixtureError);
+    }
+
     break;
   }
 
@@ -177,6 +202,7 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
 }
 
 void ServiceManager::Stop() {
+  m_skillsEnvOverrideService.RevertAll();
   m_gatewayHost.Stop();
   m_running = false;
 }
