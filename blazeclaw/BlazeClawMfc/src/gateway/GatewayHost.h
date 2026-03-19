@@ -90,6 +90,17 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] protocol::ResponseFrame RouteRequest(const protocol::RequestFrame& request) const;
 
 	private:
+     struct AgentRunState {
+			std::string runId;
+			std::string agentId;
+			std::string sessionId;
+			std::string message;
+			std::string status;
+			std::string summary;
+			std::uint64_t startedAtMs = 0;
+			std::optional<std::uint64_t> completedAtMs;
+		};
+
 		void RegisterDefaultHandlers();
       void RegisterChannelsHandlers();
      void RegisterEventHandlers();
@@ -134,6 +145,9 @@ namespace blazeclaw::gateway {
 		GatewayChannelRegistry m_channelRegistry;
 		GatewaySessionRegistry m_sessionRegistry;
 		GatewayToolRegistry m_toolRegistry;
+     std::unordered_map<std::string, AgentRunState> m_agentRuns;
+		std::unordered_map<std::string, std::string> m_agentRunByIdempotency;
+	  std::unordered_map<std::string, std::string> m_mutationPayloadByIdempotency;
         SkillsCatalogGatewayState m_skillsCatalogState;
       SkillsRefreshCallback m_skillsRefreshCallback;
 	};

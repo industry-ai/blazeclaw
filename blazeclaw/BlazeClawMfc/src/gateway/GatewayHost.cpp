@@ -6,6 +6,8 @@
 #include "GatewayProtocolSchemaValidator.h"
 #include "generated/GatewayHandlerCatalog.Generated.h"
 
+#include <chrono>
+
 namespace blazeclaw::gateway {
 	namespace {
 
@@ -199,6 +201,35 @@ namespace blazeclaw::gateway {
 			}
 
 			return static_cast<std::size_t>(value);
+		}
+
+		std::uint64_t CurrentEpochMs() {
+			const auto now = std::chrono::system_clock::now();
+			return static_cast<std::uint64_t>(
+				std::chrono::duration_cast<std::chrono::milliseconds>(
+					now.time_since_epoch())
+					.count());
+		}
+
+		bool IsUnsafeAgentFilePath(const std::string& path) {
+			if (path.empty()) {
+				return true;
+			}
+
+			if (path.find("..") != std::string::npos) {
+				return true;
+			}
+
+			if (path.find('\\') != std::string::npos ||
+				path.find(':') != std::string::npos) {
+				return true;
+			}
+
+			if (!path.empty() && path.front() == '/') {
+				return true;
+			}
+
+			return false;
 		}
 
 	} // namespace
@@ -946,13 +977,48 @@ namespace blazeclaw::gateway {
 		m_dispatcher.Register("gateway.agents.files.delete", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
 			const std::string requestedPath = ExtractStringParam(request.paramsJson, "path");
+            if (IsUnsafeAgentFilePath(requestedPath)) {
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = false,
+					.payloadJson = std::nullopt,
+					.error = protocol::ErrorShape{
+						.code = "invalid_path",
+						.message = "Agent file path is not allowed.",
+						.detailsJson = "{\"path\":\"" + EscapeJson(requestedPath) + "\"}",
+						.retryable = false,
+						.retryAfterMs = std::nullopt,
+					},
+				};
+			}
+
+			const std::string idempotencyKey = ExtractStringParam(request.paramsJson, "idempotencyKey");
+			const std::string mutationDedupeKey = "gateway.agents.files.delete::" + idempotencyKey;
+			if (!idempotencyKey.empty()) {
+				const auto dedupeIt = m_mutationPayloadByIdempotency.find(mutationDedupeKey);
+				if (dedupeIt != m_mutationPayloadByIdempotency.end()) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = true,
+						.payloadJson = dedupeIt->second,
+						.error = std::nullopt,
+					};
+				}
+			}
+
 			const AgentFileDeleteResult result = m_agentRegistry.DeleteFile(requestedId, requestedPath);
+			const std::string payload =
+				"{\"file\":" + SerializeAgentFileContent(result.file) +
+				",\"deleted\":" + std::string(result.deleted ? "true" : "false") + "}";
+
+			if (!idempotencyKey.empty()) {
+				m_mutationPayloadByIdempotency.insert_or_assign(mutationDedupeKey, payload);
+			}
 
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-				.payloadJson = "{\"file\":" + SerializeAgentFileContent(result.file) +
-					",\"deleted\":" + std::string(result.deleted ? "true" : "false") + "}",
+              .payloadJson = payload,
 				.error = std::nullopt,
 			};
 			});
@@ -960,13 +1026,47 @@ namespace blazeclaw::gateway {
 		m_dispatcher.Register("gateway.agents.files.set", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
 			const std::string requestedPath = ExtractStringParam(request.paramsJson, "path");
+          if (IsUnsafeAgentFilePath(requestedPath)) {
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = false,
+					.payloadJson = std::nullopt,
+					.error = protocol::ErrorShape{
+						.code = "invalid_path",
+						.message = "Agent file path is not allowed.",
+						.detailsJson = "{\"path\":\"" + EscapeJson(requestedPath) + "\"}",
+						.retryable = false,
+						.retryAfterMs = std::nullopt,
+					},
+				};
+			}
+
 			const std::string content = ExtractStringParam(request.paramsJson, "content");
+            const std::string idempotencyKey = ExtractStringParam(request.paramsJson, "idempotencyKey");
+			const std::string mutationDedupeKey = "gateway.agents.files.set::" + idempotencyKey;
+			if (!idempotencyKey.empty()) {
+				const auto dedupeIt = m_mutationPayloadByIdempotency.find(mutationDedupeKey);
+				if (dedupeIt != m_mutationPayloadByIdempotency.end()) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = true,
+						.payloadJson = dedupeIt->second,
+						.error = std::nullopt,
+					};
+				}
+			}
+
 			const AgentFileContentEntry file = m_agentRegistry.SetFile(requestedId, requestedPath, content);
+			const std::string payload = "{\"file\":" + SerializeAgentFileContent(file) + ",\"saved\":true}";
+
+			if (!idempotencyKey.empty()) {
+				m_mutationPayloadByIdempotency.insert_or_assign(mutationDedupeKey, payload);
+			}
 
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-				.payloadJson = "{\"file\":" + SerializeAgentFileContent(file) + ",\"saved\":true}",
+             .payloadJson = payload,
 				.error = std::nullopt,
 			};
 			});
@@ -974,6 +1074,20 @@ namespace blazeclaw::gateway {
 		m_dispatcher.Register("gateway.agents.files.get", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
 			const std::string requestedPath = ExtractStringParam(request.paramsJson, "path");
+         if (IsUnsafeAgentFilePath(requestedPath)) {
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = false,
+					.payloadJson = std::nullopt,
+					.error = protocol::ErrorShape{
+						.code = "invalid_path",
+						.message = "Agent file path is not allowed.",
+						.detailsJson = "{\"path\":\"" + EscapeJson(requestedPath) + "\"}",
+						.retryable = false,
+						.retryAfterMs = std::nullopt,
+					},
+				};
+			}
 			const AgentFileContentEntry file = m_agentRegistry.GetFile(requestedId, requestedPath);
 
 			return protocol::ResponseFrame{
@@ -1039,31 +1153,70 @@ namespace blazeclaw::gateway {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
 			const std::string requestedName = ExtractStringParam(request.paramsJson, "name");
 			const std::optional<bool> requestedActive = ExtractBooleanParam(request.paramsJson, "active");
+          const std::string idempotencyKey = ExtractStringParam(request.paramsJson, "idempotencyKey");
+			const std::string mutationDedupeKey = "gateway.agents.update::" + idempotencyKey;
+			if (!idempotencyKey.empty()) {
+				const auto dedupeIt = m_mutationPayloadByIdempotency.find(mutationDedupeKey);
+				if (dedupeIt != m_mutationPayloadByIdempotency.end()) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = true,
+						.payloadJson = dedupeIt->second,
+						.error = std::nullopt,
+					};
+				}
+			}
+
 			const AgentEntry updated = m_agentRegistry.Update(
 				requestedId,
 				requestedName.empty() ? std::nullopt : std::optional<std::string>(requestedName),
 				requestedActive);
+			const std::string payload = "{\"agent\":" + SerializeAgent(updated) + ",\"updated\":true}";
+
+			if (!idempotencyKey.empty()) {
+				m_mutationPayloadByIdempotency.insert_or_assign(mutationDedupeKey, payload);
+			}
 
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-				.payloadJson = "{\"agent\":" + SerializeAgent(updated) + ",\"updated\":true}",
+              .payloadJson = payload,
 				.error = std::nullopt,
 			};
 			});
 
 		m_dispatcher.Register("gateway.agents.delete", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
+            const std::string idempotencyKey = ExtractStringParam(request.paramsJson, "idempotencyKey");
+			const std::string mutationDedupeKey = "gateway.agents.delete::" + idempotencyKey;
+			if (!idempotencyKey.empty()) {
+				const auto dedupeIt = m_mutationPayloadByIdempotency.find(mutationDedupeKey);
+				if (dedupeIt != m_mutationPayloadByIdempotency.end()) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = true,
+						.payloadJson = dedupeIt->second,
+						.error = std::nullopt,
+					};
+				}
+			}
+
 			AgentEntry removedAgent;
 			const bool deleted = m_agentRegistry.Delete(requestedId, removedAgent);
 			const std::size_t remaining = m_agentRegistry.List().size();
+			const std::string payload =
+				"{\"agent\":" + SerializeAgent(removedAgent) +
+				",\"deleted\":" + std::string(deleted ? "true" : "false") +
+				",\"remaining\":" + std::to_string(remaining) + "}";
+
+			if (!idempotencyKey.empty()) {
+				m_mutationPayloadByIdempotency.insert_or_assign(mutationDedupeKey, payload);
+			}
 
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-				.payloadJson = "{\"agent\":" + SerializeAgent(removedAgent) +
-					",\"deleted\":" + std::string(deleted ? "true" : "false") +
-					",\"remaining\":" + std::to_string(remaining) + "}",
+               .payloadJson = payload,
 				.error = std::nullopt,
 			};
 			});
@@ -1072,15 +1225,34 @@ namespace blazeclaw::gateway {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
 			const std::string requestedName = ExtractStringParam(request.paramsJson, "name");
 			const std::optional<bool> requestedActive = ExtractBooleanParam(request.paramsJson, "active");
+          const std::string idempotencyKey = ExtractStringParam(request.paramsJson, "idempotencyKey");
+			const std::string mutationDedupeKey = "gateway.agents.create::" + idempotencyKey;
+			if (!idempotencyKey.empty()) {
+				const auto dedupeIt = m_mutationPayloadByIdempotency.find(mutationDedupeKey);
+				if (dedupeIt != m_mutationPayloadByIdempotency.end()) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = true,
+						.payloadJson = dedupeIt->second,
+						.error = std::nullopt,
+					};
+				}
+			}
+
 			const AgentEntry created = m_agentRegistry.Create(
 				requestedId,
 				requestedName.empty() ? std::nullopt : std::optional<std::string>(requestedName),
 				requestedActive);
+			const std::string payload = "{\"agent\":" + SerializeAgent(created) + ",\"created\":true}";
+
+			if (!idempotencyKey.empty()) {
+				m_mutationPayloadByIdempotency.insert_or_assign(mutationDedupeKey, payload);
+			}
 
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-				.payloadJson = "{\"agent\":" + SerializeAgent(created) + ",\"created\":true}",
+              .payloadJson = payload,
 				.error = std::nullopt,
 			};
 			});
@@ -1203,6 +1375,119 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = payload,
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.agents.run", [this](const protocol::RequestFrame& request) {
+			const std::string requestedAgentId = ExtractStringParam(request.paramsJson, "agentId");
+			const std::string requestedSessionId = ExtractStringParam(request.paramsJson, "sessionId");
+			const std::string message = ExtractStringParam(request.paramsJson, "message");
+			const std::string idempotencyKey = ExtractStringParam(request.paramsJson, "idempotencyKey");
+
+			if (!idempotencyKey.empty()) {
+				const auto dedupeIt = m_agentRunByIdempotency.find(idempotencyKey);
+				if (dedupeIt != m_agentRunByIdempotency.end()) {
+					const auto runIt = m_agentRuns.find(dedupeIt->second);
+					if (runIt != m_agentRuns.end()) {
+						const auto& run = runIt->second;
+						const std::string completedMsJson = run.completedAtMs.has_value()
+							? std::to_string(run.completedAtMs.value())
+							: "null";
+						return protocol::ResponseFrame{
+							.id = request.id,
+							.ok = true,
+							.payloadJson =
+								"{\"runId\":\"" + EscapeJson(run.runId) +
+								"\",\"status\":\"" + EscapeJson(run.status) +
+								"\",\"agentId\":\"" + EscapeJson(run.agentId) +
+								"\",\"sessionId\":\"" + EscapeJson(run.sessionId) +
+								"\",\"summary\":\"" + EscapeJson(run.summary) +
+								"\",\"deduped\":true,\"startedAtMs\":" +
+								std::to_string(run.startedAtMs) +
+								",\"completedAtMs\":" + completedMsJson + "}",
+							.error = std::nullopt,
+						};
+					}
+				}
+			}
+
+			const AgentEntry agent = m_agentRegistry.Get(requestedAgentId);
+			const SessionEntry session = m_sessionRegistry.Resolve(requestedSessionId);
+			const std::uint64_t startedAtMs = CurrentEpochMs();
+			const std::string runId = "run-" + std::to_string(startedAtMs) + "-" + agent.id;
+
+			AgentRunState run{
+				.runId = runId,
+				.agentId = agent.id,
+				.sessionId = session.id,
+				.message = message,
+				.status = "completed",
+				.summary = message.empty() ? "empty_message" : "completed",
+				.startedAtMs = startedAtMs,
+				.completedAtMs = startedAtMs + 1,
+			};
+
+			m_agentRuns.insert_or_assign(runId, run);
+			if (!idempotencyKey.empty()) {
+				m_agentRunByIdempotency.insert_or_assign(idempotencyKey, runId);
+			}
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson =
+					"{\"runId\":\"" + EscapeJson(run.runId) +
+					"\",\"status\":\"" + EscapeJson(run.status) +
+					"\",\"agentId\":\"" + EscapeJson(run.agentId) +
+					"\",\"sessionId\":\"" + EscapeJson(run.sessionId) +
+					"\",\"summary\":\"" + EscapeJson(run.summary) +
+					"\",\"deduped\":false,\"startedAtMs\":" +
+					std::to_string(run.startedAtMs) +
+					",\"completedAtMs\":" +
+					std::to_string(run.completedAtMs.value_or(run.startedAtMs)) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.agents.wait", [this](const protocol::RequestFrame& request) {
+			const std::string runId = ExtractStringParam(request.paramsJson, "runId");
+			const auto runIt = m_agentRuns.find(runId);
+			if (runIt == m_agentRuns.end()) {
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = false,
+					.payloadJson = std::nullopt,
+					.error = protocol::ErrorShape{
+						.code = "run_not_found",
+						.message = "Agent run was not found.",
+						.detailsJson = "{\"runId\":\"" + EscapeJson(runId) + "\"}",
+						.retryable = false,
+						.retryAfterMs = std::nullopt,
+					},
+				};
+			}
+
+			const auto& run = runIt->second;
+			const std::string completedMsJson = run.completedAtMs.has_value()
+				? std::to_string(run.completedAtMs.value())
+				: "null";
+			const std::string terminal = (run.status == "completed" || run.status == "failed")
+				? "true"
+				: "false";
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson =
+					"{\"runId\":\"" + EscapeJson(run.runId) +
+					"\",\"status\":\"" + EscapeJson(run.status) +
+					"\",\"summary\":\"" + EscapeJson(run.summary) +
+					"\",\"terminal\":" + terminal +
+					",\"agentId\":\"" + EscapeJson(run.agentId) +
+					"\",\"sessionId\":\"" + EscapeJson(run.sessionId) +
+					"\",\"startedAtMs\":" + std::to_string(run.startedAtMs) +
+					",\"completedAtMs\":" + completedMsJson + "}",
 				.error = std::nullopt,
 			};
 			});
