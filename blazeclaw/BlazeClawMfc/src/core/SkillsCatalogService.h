@@ -63,6 +63,10 @@ public:
       const std::filesystem::path& workspaceRoot,
       const blazeclaw::config::AppConfig& appConfig) const;
 
+  [[nodiscard]] bool ValidateFixtureScenarios(
+      const std::filesystem::path& fixturesRoot,
+      std::wstring& outError) const;
+
   [[nodiscard]] static std::wstring SourceKindLabel(SkillsSourceKind kind);
 
 private:

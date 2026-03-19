@@ -50,6 +50,23 @@ namespace blazeclaw::gateway {
             return value;
         }
 
+        std::string SerializeSkillCatalogEntry(
+            const SkillsCatalogGatewayEntry& entry) {
+            return "{\"name\":\"" +
+                EscapeJsonLocal(entry.name) +
+                "\",\"description\":\"" +
+                EscapeJsonLocal(entry.description) +
+                "\",\"source\":\"" +
+                EscapeJsonLocal(entry.source) +
+                "\",\"precedence\":" +
+                std::to_string(entry.precedence) +
+                ",\"validFrontmatter\":" +
+                std::string(entry.validFrontmatter ? "true" : "false") +
+                ",\"validationErrorCount\":" +
+                std::to_string(entry.validationErrorCount) +
+                "}";
+        }
+
         std::optional<std::size_t> ExtractSizeParam(
             const std::optional<std::string>& paramsJson,
             const std::string& fieldName) {
@@ -114,6 +131,73 @@ namespace blazeclaw::gateway {
     }
 
     void GatewayHost::RegisterRuntimeHandlers() {
+        m_dispatcher.Register(
+            "gateway.skills.status",
+            [this](const protocol::RequestFrame& request) {
+                const auto& state = m_skillsCatalogState;
+
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"total\":" +
+                        std::to_string(state.entries.size()) +
+                        ",\"rootsScanned\":" +
+                        std::to_string(state.rootsScanned) +
+                        ",\"rootsSkipped\":" +
+                        std::to_string(state.rootsSkipped) +
+                        ",\"oversizedSkillFiles\":" +
+                        std::to_string(state.oversizedSkillFiles) +
+                        ",\"invalidFrontmatterFiles\":" +
+                        std::to_string(state.invalidFrontmatterFiles) +
+                        ",\"warnings\":" +
+                        std::to_string(state.warningCount) +
+                        "}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.skills.list",
+            [this](const protocol::RequestFrame& request) {
+                const auto includeInvalid =
+                    ExtractBoolParam(request.paramsJson, "includeInvalid");
+                const bool shouldIncludeInvalid =
+                    !includeInvalid.has_value() || includeInvalid.value();
+
+                std::string entriesJson = "[";
+                bool first = true;
+                std::size_t count = 0;
+                for (const auto& entry : m_skillsCatalogState.entries) {
+                    if (!shouldIncludeInvalid && !entry.validFrontmatter) {
+                        continue;
+                    }
+
+                    if (!first) {
+                        entriesJson += ",";
+                    }
+
+                    entriesJson += SerializeSkillCatalogEntry(entry);
+                    first = false;
+                    ++count;
+                }
+                entriesJson += "]";
+
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"skills\":" +
+                        entriesJson +
+                        ",\"count\":" +
+                        std::to_string(count) +
+                        ",\"includeInvalid\":" +
+                        std::string(shouldIncludeInvalid ? "true" : "false") +
+                        "}",
+                    .error = std::nullopt,
+                };
+            });
+
         m_dispatcher.Register("gateway.runtime.orchestration.status", [this](const protocol::RequestFrame& request) {
             const auto sessions = m_sessionRegistry.List();
             const auto agents = m_agentRegistry.List();

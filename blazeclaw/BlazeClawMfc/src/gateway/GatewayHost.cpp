@@ -250,6 +250,10 @@ namespace blazeclaw::gateway {
 		m_port = 0;
 	}
 
+	void GatewayHost::SetSkillsCatalogState(SkillsCatalogGatewayState state) {
+		m_skillsCatalogState = std::move(state);
+	}
+
 	bool GatewayHost::IsRunning() const noexcept {
 		return m_running;
 	}

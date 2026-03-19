@@ -289,6 +289,89 @@ std::wstring SkillsCatalogService::SourceKindLabel(const SkillsSourceKind kind) 
   }
 }
 
+bool SkillsCatalogService::ValidateFixtureScenarios(
+    const std::filesystem::path& fixturesRoot,
+    std::wstring& outError) const {
+  outError.clear();
+
+  const auto precedenceWorkspace =
+      fixturesRoot / L"precedence" / L"workspace";
+  blazeclaw::config::AppConfig precedenceConfig;
+  precedenceConfig.skills.load.extraDirs = {L"../extra"};
+  precedenceConfig.skills.limits.maxCandidatesPerRoot = 32;
+  precedenceConfig.skills.limits.maxSkillsLoadedPerSource = 32;
+  precedenceConfig.skills.limits.maxSkillFileBytes = 32 * 1024;
+
+  const auto precedenceSnapshot =
+      LoadCatalog(precedenceWorkspace, precedenceConfig);
+  const auto precedenceEntry = std::find_if(
+      precedenceSnapshot.entries.begin(),
+      precedenceSnapshot.entries.end(),
+      [](const SkillsCatalogEntry& entry) {
+        return ToLower(Trim(entry.skillName)) == L"demo-skill";
+      });
+  if (precedenceEntry == precedenceSnapshot.entries.end()) {
+    outError =
+        L"Fixture validation failed: precedence scenario missing demo-skill.";
+    return false;
+  }
+
+  if (ToLower(Trim(precedenceEntry->description)) !=
+      L"workspace takes precedence") {
+    outError =
+        L"Fixture validation failed: expected workspace precedence for demo-skill.";
+    return false;
+  }
+
+  const auto invalidWorkspace =
+      fixturesRoot / L"invalid-size" / L"workspace";
+  blazeclaw::config::AppConfig invalidConfig;
+  invalidConfig.skills.limits.maxCandidatesPerRoot = 32;
+  invalidConfig.skills.limits.maxSkillsLoadedPerSource = 32;
+  invalidConfig.skills.limits.maxSkillFileBytes = 220;
+
+  const auto invalidSnapshot =
+      LoadCatalog(invalidWorkspace, invalidConfig);
+  if (invalidSnapshot.diagnostics.invalidFrontmatterFiles == 0) {
+    outError =
+        L"Fixture validation failed: expected invalid frontmatter diagnostics.";
+    return false;
+  }
+
+  if (invalidSnapshot.diagnostics.oversizedSkillFiles == 0) {
+    outError =
+        L"Fixture validation failed: expected oversized SKILL.md diagnostics.";
+    return false;
+  }
+
+  const auto hasInvalidEntry = std::any_of(
+      invalidSnapshot.entries.begin(),
+      invalidSnapshot.entries.end(),
+      [](const SkillsCatalogEntry& entry) {
+        return ToLower(Trim(entry.skillName)) == L"invalid-frontmatter" &&
+               !entry.validFrontmatter;
+      });
+  if (!hasInvalidEntry) {
+    outError =
+        L"Fixture validation failed: invalid-frontmatter entry diagnostics missing.";
+    return false;
+  }
+
+  const auto hasOversizedEntry = std::any_of(
+      invalidSnapshot.entries.begin(),
+      invalidSnapshot.entries.end(),
+      [](const SkillsCatalogEntry& entry) {
+        return ToLower(Trim(entry.skillName)) == L"oversized-fixture";
+      });
+  if (hasOversizedEntry) {
+    outError =
+        L"Fixture validation failed: oversized fixture should be excluded from catalog.";
+    return false;
+  }
+
+  return true;
+}
+
 std::optional<SkillFrontmatter> SkillsCatalogService::ParseFrontmatter(
     const std::wstring& skillContent,
     std::vector<std::wstring>& outValidationErrors) {

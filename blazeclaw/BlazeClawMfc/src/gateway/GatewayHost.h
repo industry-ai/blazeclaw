@@ -11,10 +11,29 @@
 
 namespace blazeclaw::gateway {
 
+	struct SkillsCatalogGatewayEntry {
+		std::string name;
+		std::string description;
+		std::string source;
+		std::int32_t precedence = 0;
+		bool validFrontmatter = false;
+		std::size_t validationErrorCount = 0;
+	};
+
+	struct SkillsCatalogGatewayState {
+		std::vector<SkillsCatalogGatewayEntry> entries;
+		std::size_t rootsScanned = 0;
+		std::size_t rootsSkipped = 0;
+		std::size_t oversizedSkillFiles = 0;
+		std::size_t invalidFrontmatterFiles = 0;
+		std::size_t warningCount = 0;
+	};
+
 	class GatewayHost {
 	public:
 		bool Start(const blazeclaw::config::GatewayConfig& config);
 		void Stop();
+		void SetSkillsCatalogState(SkillsCatalogGatewayState state);
 
 		[[nodiscard]] bool IsRunning() const noexcept;
 		[[nodiscard]] std::string LastWarning() const;
@@ -79,6 +98,7 @@ namespace blazeclaw::gateway {
 		GatewayChannelRegistry m_channelRegistry;
 		GatewaySessionRegistry m_sessionRegistry;
 		GatewayToolRegistry m_toolRegistry;
+        SkillsCatalogGatewayState m_skillsCatalogState;
 	};
 
 } // namespace blazeclaw::gateway
