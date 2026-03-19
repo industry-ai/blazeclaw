@@ -24,6 +24,8 @@ protected:
   afx_msg void OnUiParitySkillsDiagnostics();
   afx_msg void OnUiParitySkillsInstallOptions();
   afx_msg void OnUiParitySkillsScanStatus();
+  afx_msg void OnUiParityOperatorDiagnosticsReport();
+  afx_msg void OnUiParityOperatorPromotionReadiness();
 
  private:
   void ShowParityResult(

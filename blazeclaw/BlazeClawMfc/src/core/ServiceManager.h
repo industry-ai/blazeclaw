@@ -45,6 +45,7 @@ public:
   [[nodiscard]] const ModelRoutingSnapshot& ModelRouting() const noexcept;
   [[nodiscard]] const AuthProfileSnapshot& AuthProfiles() const noexcept;
   [[nodiscard]] const SandboxSnapshot& Sandbox() const noexcept;
+  [[nodiscard]] std::string BuildOperatorDiagnosticsReport() const;
   [[nodiscard]] const SkillsCatalogSnapshot& SkillsCatalog() const noexcept;
   [[nodiscard]] const SkillsEligibilitySnapshot& SkillsEligibility() const noexcept;
   [[nodiscard]] const SkillsPromptSnapshot& SkillsPrompt() const noexcept;

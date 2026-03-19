@@ -390,6 +390,71 @@ const SandboxSnapshot& ServiceManager::Sandbox() const noexcept {
   return m_sandbox;
 }
 
+std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
+  const auto featureStateLabel = [](const FeatureState state) {
+    switch (state) {
+      case FeatureState::Implemented:
+        return "implemented";
+      case FeatureState::InProgress:
+        return "in_progress";
+      case FeatureState::Planned:
+      default:
+        return "planned";
+    }
+  };
+
+  std::size_t implementedCount = 0;
+  std::size_t inProgressCount = 0;
+  std::size_t plannedCount = 0;
+  for (const auto& feature : m_registry.Features()) {
+    if (feature.state == FeatureState::Implemented) {
+      ++implementedCount;
+      continue;
+    }
+
+    if (feature.state == FeatureState::InProgress) {
+      ++inProgressCount;
+      continue;
+    }
+
+    ++plannedCount;
+  }
+
+  const auto routing = ModelRouting();
+  const auto auth = AuthProfiles();
+  const auto sandbox = Sandbox();
+
+  std::string report =
+      "{\"runtime\":{\"running\":" + std::string(m_running ? "true" : "false") +
+      ",\"gatewayWarning\":\"" + m_gatewayHost.LastWarning() + "\"},"
+      "\"agents\":{\"count\":" + std::to_string(m_agentsScope.entries.size()) +
+      ",\"defaultAgent\":\"" + ToNarrow(m_agentsScope.defaultAgentId) + "\"},"
+      "\"subagents\":{\"active\":" + std::to_string(m_subagentRegistry.activeRuns) +
+      ",\"pendingAnnounce\":" + std::to_string(m_subagentRegistry.pendingAnnounce) + "},"
+      "\"acp\":{\"lastAllowed\":" +
+      std::string(m_lastAcpDecision.allowed ? "true" : "false") +
+      ",\"reason\":\"" + m_lastAcpDecision.reason + "\"},"
+      "\"embedded\":{\"activeRuns\":" + std::to_string(ActiveEmbeddedRuns()) + "},"
+      "\"tools\":{\"policyEntries\":" + std::to_string(m_agentsToolPolicy.entries.size()) +
+      ",\"shellProcesses\":" + std::to_string(ShellProcessCount()) + "},"
+      "\"modelAuth\":{\"primary\":\"" + routing.primaryModel +
+      "\",\"fallback\":\"" + routing.fallbackModel +
+      "\",\"failovers\":" + std::to_string(routing.failoverHistory.size()) +
+      ",\"authProfiles\":" + std::to_string(auth.entries.size()) + "},"
+      "\"sandbox\":{\"enabledCount\":" + std::to_string(sandbox.enabledCount) +
+      ",\"browserEnabledCount\":" + std::to_string(sandbox.browserEnabledCount) + "},"
+      "\"skills\":{\"catalogEntries\":" + std::to_string(m_skillsCatalog.entries.size()) +
+      ",\"promptIncluded\":" + std::to_string(m_skillsPrompt.includedCount) + "},"
+      "\"features\":{\"implemented\":" + std::to_string(implementedCount) +
+      ",\"inProgress\":" + std::to_string(inProgressCount) +
+      ",\"planned\":" + std::to_string(plannedCount) +
+      ",\"registryState\":\"" + featureStateLabel(
+          m_registry.Features().empty() ? FeatureState::Planned : m_registry.Features().front().state) +
+      "\"}}";
+
+  return report;
+}
+
 const SkillsCatalogSnapshot& ServiceManager::SkillsCatalog() const noexcept {
   return m_skillsCatalog;
 }

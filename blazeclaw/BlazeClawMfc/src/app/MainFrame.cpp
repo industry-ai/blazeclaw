@@ -20,6 +20,8 @@ constexpr UINT kIdUiParitySkillsCheck = 0x8113;
 constexpr UINT kIdUiParitySkillsDiagnostics = 0x8114;
 constexpr UINT kIdUiParitySkillsInstallOptions = 0x8115;
 constexpr UINT kIdUiParitySkillsScanStatus = 0x8116;
+constexpr UINT kIdUiParityOperatorDiagnosticsReport = 0x8117;
+constexpr UINT kIdUiParityOperatorPromotionReadiness = 0x8118;
 
 std::wstring ToWide(const std::string& value) {
   std::wstring output;
@@ -52,6 +54,8 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
   ON_COMMAND(kIdUiParitySkillsDiagnostics, &CMainFrame::OnUiParitySkillsDiagnostics)
   ON_COMMAND(kIdUiParitySkillsInstallOptions, &CMainFrame::OnUiParitySkillsInstallOptions)
   ON_COMMAND(kIdUiParitySkillsScanStatus, &CMainFrame::OnUiParitySkillsScanStatus)
+  ON_COMMAND(kIdUiParityOperatorDiagnosticsReport, &CMainFrame::OnUiParityOperatorDiagnosticsReport)
+  ON_COMMAND(kIdUiParityOperatorPromotionReadiness, &CMainFrame::OnUiParityOperatorPromotionReadiness)
 END_MESSAGE_MAP()
 
 CMainFrame::CMainFrame() {
@@ -130,6 +134,15 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct) {
       MF_STRING,
       kIdUiParitySkillsScanStatus,
       _T("Skills Scan Status"));
+  m_parityMenu.AppendMenu(MF_SEPARATOR);
+  m_parityMenu.AppendMenu(
+      MF_STRING,
+      kIdUiParityOperatorDiagnosticsReport,
+      _T("Operator Diagnostics Report"));
+  m_parityMenu.AppendMenu(
+      MF_STRING,
+      kIdUiParityOperatorPromotionReadiness,
+      _T("Operator Promotion Readiness"));
   m_menuBar.AppendMenu(
       MF_POPUP,
       reinterpret_cast<UINT_PTR>(m_parityMenu.GetSafeHmenu()),
@@ -264,4 +277,73 @@ void CMainFrame::OnUiParitySkillsScanStatus() {
   ShowParityResult(
       L"Skills Scan Status",
       "gateway.skills.scan.status");
+}
+
+void CMainFrame::OnUiParityOperatorDiagnosticsReport() {
+  const auto* app =
+      dynamic_cast<CBlazeClawMfcApp*>(AfxGetApp());
+  if (app == nullptr) {
+    AfxMessageBox(_T("App context unavailable."));
+    return;
+  }
+
+  const std::string report =
+      app->Services().BuildOperatorDiagnosticsReport();
+  const std::wstring message =
+      L"Operator Diagnostics Report\n\n" + ToWide(report);
+
+  AfxMessageBox(
+      message.c_str(),
+      MB_OK | MB_ICONINFORMATION,
+      0);
+}
+
+void CMainFrame::OnUiParityOperatorPromotionReadiness() {
+  const auto* app =
+      dynamic_cast<CBlazeClawMfcApp*>(AfxGetApp());
+  if (app == nullptr) {
+    AfxMessageBox(_T("App context unavailable."));
+    return;
+  }
+
+  const auto& registry = app->Services().Registry();
+  std::size_t implemented = 0;
+  std::size_t planned = 0;
+  std::size_t inProgress = 0;
+
+  for (const auto& feature : registry.Features()) {
+    if (feature.state == blazeclaw::core::FeatureState::Implemented) {
+      ++implemented;
+      continue;
+    }
+
+    if (feature.state == blazeclaw::core::FeatureState::InProgress) {
+      ++inProgress;
+      continue;
+    }
+
+    ++planned;
+  }
+
+  const bool promotionReady =
+      app->Services().IsRunning() &&
+      inProgress == 0 &&
+      planned == 0;
+
+  std::wstring message = L"Promotion Readiness\n\n";
+  message += L"Runtime Running: ";
+  message += app->Services().IsRunning() ? L"yes" : L"no";
+  message += L"\nImplemented Features: ";
+  message += std::to_wstring(implemented);
+  message += L"\nIn-Progress Features: ";
+  message += std::to_wstring(inProgress);
+  message += L"\nPlanned Features: ";
+  message += std::to_wstring(planned);
+  message += L"\n\nPromotion Ready: ";
+  message += promotionReady ? L"yes" : L"no";
+
+  AfxMessageBox(
+      message.c_str(),
+      MB_OK | MB_ICONINFORMATION,
+      0);
 }
