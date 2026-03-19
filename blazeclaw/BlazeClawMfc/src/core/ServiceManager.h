@@ -5,6 +5,8 @@
 #include "FeatureRegistry.h"
 #include "AgentsCatalogService.h"
 #include "AgentsWorkspaceService.h"
+#include "AcpSpawnService.h"
+#include "PiEmbeddedService.h"
 #include "SubagentRegistryService.h"
 #include "SkillsCommandService.h"
 #include "SkillsCatalogService.h"
@@ -30,6 +32,8 @@ public:
   [[nodiscard]] const AgentScopeSnapshot& AgentsScope() const noexcept;
   [[nodiscard]] const AgentsWorkspaceSnapshot& AgentsWorkspace() const noexcept;
   [[nodiscard]] const SubagentRegistrySnapshot& SubagentRegistry() const noexcept;
+  [[nodiscard]] const AcpSpawnDecision& LastAcpDecision() const noexcept;
+  [[nodiscard]] std::size_t ActiveEmbeddedRuns() const noexcept;
   [[nodiscard]] const SkillsCatalogSnapshot& SkillsCatalog() const noexcept;
   [[nodiscard]] const SkillsEligibilitySnapshot& SkillsEligibility() const noexcept;
   [[nodiscard]] const SkillsPromptSnapshot& SkillsPrompt() const noexcept;
@@ -53,6 +57,9 @@ private:
   AgentsWorkspaceSnapshot m_agentsWorkspace;
   SubagentRegistryService m_subagentRegistryService;
   SubagentRegistrySnapshot m_subagentRegistry;
+  AcpSpawnService m_acpSpawnService;
+  AcpSpawnDecision m_lastAcpDecision;
+  PiEmbeddedService m_piEmbeddedService;
   SkillsCatalogService m_skillsCatalogService;
   SkillsCatalogSnapshot m_skillsCatalog;
   SkillsEligibilityService m_skillsEligibilityService;

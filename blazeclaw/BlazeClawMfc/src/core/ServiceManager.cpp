@@ -180,6 +180,16 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
   m_subagentRegistryService.Configure(m_activeConfig);
   m_subagentRegistryService.Initialize(std::filesystem::current_path());
   m_subagentRegistry = m_subagentRegistryService.Snapshot();
+  m_lastAcpDecision = m_acpSpawnService.Evaluate(
+      m_activeConfig,
+      AcpSpawnRequest{
+          .requesterSessionId = "main",
+          .requesterAgentId = "default",
+          .targetAgentId = "",
+          .threadRequested = false,
+          .requesterSandboxed = false,
+      });
+  m_piEmbeddedService.Configure(m_activeConfig);
   RefreshSkillsState(m_activeConfig, true, L"startup");
 
   std::wstring fixtureError;
@@ -211,6 +221,16 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       if (!m_subagentRegistryService.ValidateFixtureScenarios(candidate, fixtureError)) {
         m_skillsCatalog.diagnostics.warnings.push_back(
             L"agents-subagent fixture validation failed: " + fixtureError);
+      }
+
+      if (!m_acpSpawnService.ValidateFixtureScenarios(candidate, fixtureError)) {
+        m_skillsCatalog.diagnostics.warnings.push_back(
+            L"agents-acp fixture validation failed: " + fixtureError);
+      }
+
+      if (!m_piEmbeddedService.ValidateFixtureScenarios(candidate, fixtureError)) {
+        m_skillsCatalog.diagnostics.warnings.push_back(
+            L"agents-embedded fixture validation failed: " + fixtureError);
       }
 
       continue;
@@ -299,6 +319,14 @@ const AgentsWorkspaceSnapshot& ServiceManager::AgentsWorkspace() const noexcept 
 
 const SubagentRegistrySnapshot& ServiceManager::SubagentRegistry() const noexcept {
   return m_subagentRegistry;
+}
+
+const AcpSpawnDecision& ServiceManager::LastAcpDecision() const noexcept {
+  return m_lastAcpDecision;
+}
+
+std::size_t ServiceManager::ActiveEmbeddedRuns() const noexcept {
+  return m_piEmbeddedService.ActiveRuns();
 }
 
 const SkillsCatalogSnapshot& ServiceManager::SkillsCatalog() const noexcept {

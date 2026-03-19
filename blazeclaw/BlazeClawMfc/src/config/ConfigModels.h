@@ -53,6 +53,18 @@ struct AgentsConfig {
   std::map<std::wstring, AgentEntryConfig> entries;
 };
 
+struct AcpRuntimeConfig {
+  bool enabled = false;
+  std::wstring defaultAgent;
+  bool allowThreadSpawn = true;
+};
+
+struct EmbeddedRuntimeConfig {
+  bool enabled = true;
+  std::uint32_t runTimeoutMs = 120000;
+  std::uint32_t maxQueueDepth = 64;
+};
+
 struct SkillEntryConfig {
   std::optional<bool> enabled;
   std::wstring apiKey;
@@ -90,6 +102,8 @@ struct AppConfig {
   GatewayConfig gateway;
   AgentConfig agent;
   AgentsConfig agents;
+  AcpRuntimeConfig acp;
+  EmbeddedRuntimeConfig embedded;
   SkillsConfig skills;
   std::vector<std::wstring> enabledChannels;
 };

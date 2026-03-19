@@ -143,6 +143,44 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
       continue;
     }
 
+    if (trimmedLine.rfind(L"acp.enabled=", 0) == 0) {
+      outConfig.acp.enabled = ParseBool(trimmedLine.substr(12), false);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"acp.defaultAgent=", 0) == 0) {
+      outConfig.acp.defaultAgent = NormalizeAgentId(Trim(trimmedLine.substr(17)));
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"acp.allowThreadSpawn=", 0) == 0) {
+      outConfig.acp.allowThreadSpawn = ParseBool(trimmedLine.substr(21), true);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"embedded.enabled=", 0) == 0) {
+      outConfig.embedded.enabled = ParseBool(trimmedLine.substr(17), true);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"embedded.runTimeoutMs=", 0) == 0) {
+      std::uint32_t value = 0;
+      if (TryParseUInt(trimmedLine.substr(22), value)) {
+        outConfig.embedded.runTimeoutMs = value;
+      }
+
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"embedded.maxQueueDepth=", 0) == 0) {
+      std::uint32_t value = 0;
+      if (TryParseUInt(trimmedLine.substr(23), value)) {
+        outConfig.embedded.maxQueueDepth = value;
+      }
+
+      continue;
+    }
+
     if (trimmedLine.rfind(L"agents.defaults.", 0) == 0) {
       const auto keyValuePos = trimmedLine.find(L'=');
       if (keyValuePos == std::wstring::npos) {
