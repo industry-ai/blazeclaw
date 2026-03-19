@@ -309,6 +309,41 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
         }
       }
 
+      if (fieldName == L"tools" && parts.size() >= 3) {
+        const std::wstring toolField = Trim(parts[2]);
+        if (toolField == L"profile") {
+          if (!value.empty()) {
+            entry.tools.profile = value;
+          }
+
+          continue;
+        }
+
+        if (toolField == L"allowTool") {
+          if (!value.empty()) {
+            entry.tools.allow.push_back(value);
+          }
+
+          continue;
+        }
+
+        if (toolField == L"denyTool") {
+          if (!value.empty()) {
+            entry.tools.deny.push_back(value);
+          }
+
+          continue;
+        }
+
+        if (toolField == L"ownerOnlyTool") {
+          if (!value.empty()) {
+            entry.tools.ownerOnly.push_back(value);
+          }
+
+          continue;
+        }
+      }
+
       continue;
     }
 

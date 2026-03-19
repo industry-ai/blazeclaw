@@ -29,6 +29,13 @@ struct AgentSubagentsConfig {
   std::vector<std::wstring> allowAgents;
 };
 
+struct AgentToolsConfig {
+  std::wstring profile = L"full";
+  std::vector<std::wstring> allow;
+  std::vector<std::wstring> deny;
+  std::vector<std::wstring> ownerOnly;
+};
+
 struct AgentEntryConfig {
   std::wstring id;
   std::wstring name;
@@ -38,6 +45,7 @@ struct AgentEntryConfig {
   bool isDefault = false;
   AgentIdentityConfig identity;
   AgentSubagentsConfig subagents;
+  AgentToolsConfig tools;
 };
 
 struct AgentsDefaultsConfig {

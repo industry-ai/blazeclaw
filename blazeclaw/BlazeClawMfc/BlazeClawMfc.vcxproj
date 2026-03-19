@@ -99,6 +99,8 @@
     <ClInclude Include="src\config\ConfigModels.h" />
     <ClInclude Include="src\core\FeatureRegistry.h" />
     <ClInclude Include="src\core\AgentsCatalogService.h" />
+    <ClInclude Include="src\core\AgentsShellRuntimeService.h" />
+    <ClInclude Include="src\core\AgentsToolPolicyService.h" />
     <ClInclude Include="src\core\AgentsWorkspaceService.h" />
     <ClInclude Include="src\core\AcpSpawnService.h" />
     <ClInclude Include="src\core\PiEmbeddedService.h" />
@@ -139,6 +141,8 @@
     <ClCompile Include="src\config\ConfigLoader.cpp" />
     <ClCompile Include="src\core\FeatureRegistry.cpp" />
     <ClCompile Include="src\core\AgentsCatalogService.cpp" />
+    <ClCompile Include="src\core\AgentsShellRuntimeService.cpp" />
+    <ClCompile Include="src\core\AgentsToolPolicyService.cpp" />
     <ClCompile Include="src\core\AgentsWorkspaceService.cpp" />
     <ClCompile Include="src\core\AcpSpawnService.cpp" />
     <ClCompile Include="src\core\PiEmbeddedService.cpp" />

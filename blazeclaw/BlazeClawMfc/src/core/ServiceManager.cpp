@@ -177,6 +177,10 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       std::filesystem::current_path(),
       m_activeConfig);
   m_agentsWorkspace = m_agentsWorkspaceService.BuildSnapshot(m_agentsScope);
+  m_agentsToolPolicy = m_agentsToolPolicyService.BuildSnapshot(
+      m_agentsScope,
+      m_activeConfig);
+  m_agentsShellRuntimeService.Configure(m_activeConfig);
   m_subagentRegistryService.Configure(m_activeConfig);
   m_subagentRegistryService.Initialize(std::filesystem::current_path());
   m_subagentRegistry = m_subagentRegistryService.Snapshot();
@@ -216,6 +220,16 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       if (!m_agentsWorkspaceService.ValidateFixtureScenarios(candidate, fixtureError)) {
         m_skillsCatalog.diagnostics.warnings.push_back(
             L"agents-workspace fixture validation failed: " + fixtureError);
+      }
+
+      if (!m_agentsToolPolicyService.ValidateFixtureScenarios(candidate, fixtureError)) {
+        m_skillsCatalog.diagnostics.warnings.push_back(
+            L"agents-tool-policy fixture validation failed: " + fixtureError);
+      }
+
+      if (!m_agentsShellRuntimeService.ValidateFixtureScenarios(candidate, fixtureError)) {
+        m_skillsCatalog.diagnostics.warnings.push_back(
+            L"agents-shell-runtime fixture validation failed: " + fixtureError);
       }
 
       if (!m_subagentRegistryService.ValidateFixtureScenarios(candidate, fixtureError)) {
@@ -327,6 +341,14 @@ const AcpSpawnDecision& ServiceManager::LastAcpDecision() const noexcept {
 
 std::size_t ServiceManager::ActiveEmbeddedRuns() const noexcept {
   return m_piEmbeddedService.ActiveRuns();
+}
+
+const AgentsToolPolicySnapshot& ServiceManager::ToolPolicy() const noexcept {
+  return m_agentsToolPolicy;
+}
+
+std::size_t ServiceManager::ShellProcessCount() const noexcept {
+  return m_agentsShellRuntimeService.ListProcesses().size();
 }
 
 const SkillsCatalogSnapshot& ServiceManager::SkillsCatalog() const noexcept {
