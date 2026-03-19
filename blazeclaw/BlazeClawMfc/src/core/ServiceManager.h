@@ -3,9 +3,11 @@
 #include "../config/ConfigModels.h"
 #include "../gateway/GatewayHost.h"
 #include "FeatureRegistry.h"
+#include "SkillsCommandService.h"
 #include "SkillsCatalogService.h"
 #include "SkillsEligibilityService.h"
 #include "SkillsPromptService.h"
+#include "SkillsWatchService.h"
 
 namespace blazeclaw::core {
 
@@ -26,7 +28,14 @@ public:
       const std::optional<std::string>& paramsJson = std::nullopt) const;
 
 private:
+  [[nodiscard]] blazeclaw::gateway::SkillsCatalogGatewayState BuildGatewaySkillsState() const;
+  void RefreshSkillsState(
+      const blazeclaw::config::AppConfig& config,
+      bool forceRefresh,
+      const std::wstring& reason);
+
   bool m_running = false;
+  blazeclaw::config::AppConfig m_activeConfig;
   FeatureRegistry m_registry;
   SkillsCatalogService m_skillsCatalogService;
   SkillsCatalogSnapshot m_skillsCatalog;
@@ -34,6 +43,10 @@ private:
   SkillsEligibilitySnapshot m_skillsEligibility;
   SkillsPromptService m_skillsPromptService;
   SkillsPromptSnapshot m_skillsPrompt;
+  SkillsCommandService m_skillsCommandService;
+  SkillsCommandSnapshot m_skillsCommands;
+  SkillsWatchService m_skillsWatchService;
+  SkillsWatchSnapshot m_skillsWatch;
   blazeclaw::gateway::GatewayHost m_gatewayHost;
 };
 

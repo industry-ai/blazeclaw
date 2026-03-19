@@ -56,6 +56,8 @@ namespace blazeclaw::gateway {
                 EscapeJsonLocal(entry.name) +
                 "\",\"skillKey\":\"" +
                 EscapeJsonLocal(entry.skillKey) +
+                "\",\"command\":\"" +
+                EscapeJsonLocal(entry.commandName) +
                 "\",\"description\":\"" +
                 EscapeJsonLocal(entry.description) +
                 "\",\"source\":\"" +
@@ -174,6 +176,15 @@ namespace blazeclaw::gateway {
                         std::to_string(state.promptChars) +
                         ",\"promptTruncated\":" +
                         std::string(state.promptTruncated ? "true" : "false") +
+                        ",\"snapshotVersion\":" +
+                        std::to_string(state.snapshotVersion) +
+                        ",\"watchEnabled\":" +
+                        std::string(state.watchEnabled ? "true" : "false") +
+                        ",\"watchDebounceMs\":" +
+                        std::to_string(state.watchDebounceMs) +
+                        ",\"watchReason\":\"" +
+                        EscapeJsonLocal(state.watchReason) +
+                        "\"" +
                         ",\"warnings\":" +
                         std::to_string(state.warningCount) +
                         "}",
@@ -199,6 +210,73 @@ namespace blazeclaw::gateway {
                         ",\"truncated\":" +
                         std::string(state.promptTruncated ? "true" : "false") +
                         "}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.skills.commands",
+            [this](const protocol::RequestFrame& request) {
+                std::string commandsJson = "[";
+                bool first = true;
+                std::size_t count = 0;
+
+                for (const auto& entry : m_skillsCatalogState.entries) {
+                    if (entry.commandName.empty()) {
+                        continue;
+                    }
+
+                    if (!first) {
+                        commandsJson += ",";
+                    }
+
+                    commandsJson +=
+                        "{\"name\":\"" +
+                        EscapeJsonLocal(entry.commandName) +
+                        "\",\"skill\":\"" +
+                        EscapeJsonLocal(entry.name) +
+                        "\",\"description\":\"" +
+                        EscapeJsonLocal(entry.description) +
+                        "\"}";
+                    first = false;
+                    ++count;
+                }
+
+                commandsJson += "]";
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"commands\":" +
+                        commandsJson +
+                        ",\"count\":" +
+                        std::to_string(count) +
+                        "}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.skills.refresh",
+            [this](const protocol::RequestFrame& request) {
+                bool refreshed = false;
+                if (m_skillsRefreshCallback) {
+                    m_skillsCatalogState = m_skillsRefreshCallback();
+                    refreshed = true;
+                }
+
+                const auto& state = m_skillsCatalogState;
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"refreshed\":" +
+                        std::string(refreshed ? "true" : "false") +
+                        ",\"version\":" +
+                        std::to_string(state.snapshotVersion) +
+                        ",\"reason\":\"" +
+                        EscapeJsonLocal(state.watchReason) +
+                        "\"}",
                     .error = std::nullopt,
                 };
             });

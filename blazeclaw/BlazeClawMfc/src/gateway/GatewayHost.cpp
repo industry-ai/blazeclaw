@@ -254,6 +254,11 @@ namespace blazeclaw::gateway {
 		m_skillsCatalogState = std::move(state);
 	}
 
+	void GatewayHost::SetSkillsRefreshCallback(
+		SkillsRefreshCallback callback) {
+		m_skillsRefreshCallback = std::move(callback);
+	}
+
 	bool GatewayHost::IsRunning() const noexcept {
 		return m_running;
 	}

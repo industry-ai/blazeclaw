@@ -4,6 +4,7 @@
 #include "../gateway/GatewayProtocolModels.h"
 
 #include <filesystem>
+#include <unordered_map>
 
 namespace blazeclaw::core {
 
@@ -24,11 +25,78 @@ std::string ToNarrow(const std::wstring& value) {
 
 ServiceManager::ServiceManager() = default;
 
-bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
-  if (m_running) {
-    return true;
+blazeclaw::gateway::SkillsCatalogGatewayState ServiceManager::BuildGatewaySkillsState() const {
+  blazeclaw::gateway::SkillsCatalogGatewayState gatewaySkillsState;
+  gatewaySkillsState.entries.reserve(m_skillsCatalog.entries.size());
+
+  std::unordered_map<std::wstring, SkillsEligibilityEntry> eligibilityByName;
+  for (const auto& eligibility : m_skillsEligibility.entries) {
+    eligibilityByName.emplace(eligibility.skillName, eligibility);
   }
 
+  std::unordered_map<std::wstring, SkillsCommandSpec> commandsBySkill;
+  for (const auto& command : m_skillsCommands.commands) {
+    commandsBySkill.emplace(command.skillName, command);
+  }
+
+  for (const auto& entry : m_skillsCatalog.entries) {
+    const auto eligibilityIt = eligibilityByName.find(entry.skillName);
+    const bool hasEligibility = eligibilityIt != eligibilityByName.end();
+
+    std::string commandName;
+    const auto commandIt = commandsBySkill.find(entry.skillName);
+    if (commandIt != commandsBySkill.end()) {
+      commandName = ToNarrow(commandIt->second.name);
+    }
+
+    gatewaySkillsState.entries.push_back(
+        blazeclaw::gateway::SkillsCatalogGatewayEntry{
+            .name = ToNarrow(entry.skillName),
+            .skillKey = hasEligibility ? ToNarrow(eligibilityIt->second.skillKey)
+                                       : ToNarrow(entry.skillName),
+            .commandName = commandName,
+            .description = ToNarrow(entry.description),
+            .source = ToNarrow(SkillsCatalogService::SourceKindLabel(entry.sourceKind)),
+            .precedence = entry.precedence,
+            .eligible = hasEligibility ? eligibilityIt->second.eligible : false,
+            .disabled = hasEligibility ? eligibilityIt->second.disabled : false,
+            .blockedByAllowlist =
+                hasEligibility ? eligibilityIt->second.blockedByAllowlist : false,
+            .disableModelInvocation =
+                hasEligibility ? eligibilityIt->second.disableModelInvocation : false,
+            .validFrontmatter = entry.validFrontmatter,
+            .validationErrorCount = entry.validationErrors.size(),
+        });
+  }
+
+  gatewaySkillsState.rootsScanned = m_skillsCatalog.diagnostics.rootsScanned;
+  gatewaySkillsState.rootsSkipped = m_skillsCatalog.diagnostics.rootsSkipped;
+  gatewaySkillsState.oversizedSkillFiles =
+      m_skillsCatalog.diagnostics.oversizedSkillFiles;
+  gatewaySkillsState.invalidFrontmatterFiles =
+      m_skillsCatalog.diagnostics.invalidFrontmatterFiles;
+  gatewaySkillsState.warningCount = m_skillsCatalog.diagnostics.warnings.size();
+  gatewaySkillsState.eligibleCount = m_skillsEligibility.eligibleCount;
+  gatewaySkillsState.disabledCount = m_skillsEligibility.disabledCount;
+  gatewaySkillsState.blockedByAllowlistCount =
+      m_skillsEligibility.blockedByAllowlistCount;
+  gatewaySkillsState.missingRequirementsCount =
+      m_skillsEligibility.missingRequirementsCount;
+  gatewaySkillsState.promptIncludedCount = m_skillsPrompt.includedCount;
+  gatewaySkillsState.promptChars = m_skillsPrompt.promptChars;
+  gatewaySkillsState.promptTruncated = m_skillsPrompt.truncated;
+  gatewaySkillsState.snapshotVersion = m_skillsWatch.version;
+  gatewaySkillsState.watchEnabled = m_skillsWatch.watchEnabled;
+  gatewaySkillsState.watchDebounceMs = m_skillsWatch.debounceMs;
+  gatewaySkillsState.watchReason = ToNarrow(m_skillsWatch.reason);
+  gatewaySkillsState.prompt = ToNarrow(m_skillsPrompt.prompt);
+  return gatewaySkillsState;
+}
+
+void ServiceManager::RefreshSkillsState(
+    const blazeclaw::config::AppConfig& config,
+    const bool forceRefresh,
+    const std::wstring& reason) {
   m_skillsCatalog = m_skillsCatalogService.LoadCatalog(
       std::filesystem::current_path(),
       config);
@@ -39,6 +107,23 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       m_skillsCatalog,
       m_skillsEligibility,
       config);
+  m_skillsCommands = m_skillsCommandService.BuildSnapshot(
+      m_skillsCatalog,
+      m_skillsEligibility);
+  m_skillsWatch = m_skillsWatchService.Observe(
+      m_skillsCatalog,
+      config,
+      forceRefresh,
+      reason);
+}
+
+bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
+  if (m_running) {
+    return true;
+  }
+
+  m_activeConfig = config;
+  RefreshSkillsState(m_activeConfig, true, L"startup");
 
   std::wstring fixtureError;
   const std::vector<std::filesystem::path> fixtureCandidates = {
@@ -67,58 +152,24 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
           L"skills-prompt fixture validation failed: " + fixtureError);
     }
 
+    if (!m_skillsCommandService.ValidateFixtureScenarios(candidate, fixtureError)) {
+      m_skillsCatalog.diagnostics.warnings.push_back(
+          L"skills-command fixture validation failed: " + fixtureError);
+    }
+
+    if (!m_skillsWatchService.ValidateFixtureScenarios(candidate, fixtureError)) {
+      m_skillsCatalog.diagnostics.warnings.push_back(
+          L"skills-watch fixture validation failed: " + fixtureError);
+    }
+
     break;
   }
 
-  blazeclaw::gateway::SkillsCatalogGatewayState gatewaySkillsState;
-  gatewaySkillsState.entries.reserve(m_skillsCatalog.entries.size());
-  std::unordered_map<std::wstring, SkillsEligibilityEntry> eligibilityByName;
-  for (const auto& eligibility : m_skillsEligibility.entries) {
-    eligibilityByName.emplace(eligibility.skillName, eligibility);
-  }
-
-  for (const auto& entry : m_skillsCatalog.entries) {
-    const auto eligibilityIt = eligibilityByName.find(entry.skillName);
-    const bool hasEligibility = eligibilityIt != eligibilityByName.end();
-
-    gatewaySkillsState.entries.push_back(
-        blazeclaw::gateway::SkillsCatalogGatewayEntry{
-            .name = ToNarrow(entry.skillName),
-            .skillKey = hasEligibility ? ToNarrow(eligibilityIt->second.skillKey)
-                                       : ToNarrow(entry.skillName),
-            .description = ToNarrow(entry.description),
-            .source = ToNarrow(SkillsCatalogService::SourceKindLabel(entry.sourceKind)),
-            .precedence = entry.precedence,
-            .eligible = hasEligibility ? eligibilityIt->second.eligible : false,
-            .disabled = hasEligibility ? eligibilityIt->second.disabled : false,
-            .blockedByAllowlist =
-                hasEligibility ? eligibilityIt->second.blockedByAllowlist : false,
-            .disableModelInvocation =
-                hasEligibility ? eligibilityIt->second.disableModelInvocation : false,
-            .validFrontmatter = entry.validFrontmatter,
-            .validationErrorCount = entry.validationErrors.size(),
-        });
-  }
-
-  gatewaySkillsState.rootsScanned = m_skillsCatalog.diagnostics.rootsScanned;
-  gatewaySkillsState.rootsSkipped = m_skillsCatalog.diagnostics.rootsSkipped;
-  gatewaySkillsState.oversizedSkillFiles =
-      m_skillsCatalog.diagnostics.oversizedSkillFiles;
-  gatewaySkillsState.invalidFrontmatterFiles =
-      m_skillsCatalog.diagnostics.invalidFrontmatterFiles;
-  gatewaySkillsState.warningCount =
-      m_skillsCatalog.diagnostics.warnings.size();
-  gatewaySkillsState.eligibleCount = m_skillsEligibility.eligibleCount;
-  gatewaySkillsState.disabledCount = m_skillsEligibility.disabledCount;
-  gatewaySkillsState.blockedByAllowlistCount =
-      m_skillsEligibility.blockedByAllowlistCount;
-  gatewaySkillsState.missingRequirementsCount =
-      m_skillsEligibility.missingRequirementsCount;
-  gatewaySkillsState.promptIncludedCount = m_skillsPrompt.includedCount;
-  gatewaySkillsState.promptChars = m_skillsPrompt.promptChars;
-  gatewaySkillsState.promptTruncated = m_skillsPrompt.truncated;
-  gatewaySkillsState.prompt = ToNarrow(m_skillsPrompt.prompt);
-  m_gatewayHost.SetSkillsCatalogState(std::move(gatewaySkillsState));
+  m_gatewayHost.SetSkillsCatalogState(BuildGatewaySkillsState());
+  m_gatewayHost.SetSkillsRefreshCallback([this]() {
+    RefreshSkillsState(m_activeConfig, true, L"manual-refresh");
+    return BuildGatewaySkillsState();
+  });
 
   const bool gatewayStarted = m_gatewayHost.Start(config.gateway);
   m_running = gatewayStarted;

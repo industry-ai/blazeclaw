@@ -14,6 +14,7 @@ namespace blazeclaw::gateway {
 	struct SkillsCatalogGatewayEntry {
 		std::string name;
         std::string skillKey;
+        std::string commandName;
 		std::string description;
 		std::string source;
 		std::int32_t precedence = 0;
@@ -39,14 +40,21 @@ namespace blazeclaw::gateway {
 		std::size_t promptIncludedCount = 0;
 		std::size_t promptChars = 0;
 		bool promptTruncated = false;
+     std::uint64_t snapshotVersion = 0;
+		bool watchEnabled = true;
+		std::uint32_t watchDebounceMs = 250;
+		std::string watchReason;
 		std::string prompt;
 	};
 
 	class GatewayHost {
 	public:
+     using SkillsRefreshCallback = std::function<SkillsCatalogGatewayState()>;
+
 		bool Start(const blazeclaw::config::GatewayConfig& config);
 		void Stop();
 		void SetSkillsCatalogState(SkillsCatalogGatewayState state);
+		void SetSkillsRefreshCallback(SkillsRefreshCallback callback);
 
 		[[nodiscard]] bool IsRunning() const noexcept;
 		[[nodiscard]] std::string LastWarning() const;
@@ -112,6 +120,7 @@ namespace blazeclaw::gateway {
 		GatewaySessionRegistry m_sessionRegistry;
 		GatewayToolRegistry m_toolRegistry;
         SkillsCatalogGatewayState m_skillsCatalogState;
+      SkillsRefreshCallback m_skillsRefreshCallback;
 	};
 
 } // namespace blazeclaw::gateway
