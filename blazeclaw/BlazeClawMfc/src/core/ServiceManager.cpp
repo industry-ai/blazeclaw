@@ -186,6 +186,8 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
   m_agentsAuthProfileService.Configure(m_activeConfig);
   m_agentsAuthProfileService.Initialize(std::filesystem::current_path());
   m_authProfiles = m_agentsAuthProfileService.Snapshot(1735690000000);
+  m_sandbox = m_agentsSandboxService.BuildSnapshot(m_agentsScope, m_activeConfig);
+  m_agentsTranscriptSafetyService.Configure(m_activeConfig);
   m_subagentRegistryService.Configure(m_activeConfig);
   m_subagentRegistryService.Initialize(std::filesystem::current_path());
   m_subagentRegistry = m_subagentRegistryService.Snapshot();
@@ -245,6 +247,16 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       if (!m_agentsAuthProfileService.ValidateFixtureScenarios(candidate, fixtureError)) {
         m_skillsCatalog.diagnostics.warnings.push_back(
             L"agents-auth-profile fixture validation failed: " + fixtureError);
+      }
+
+      if (!m_agentsSandboxService.ValidateFixtureScenarios(candidate, fixtureError)) {
+        m_skillsCatalog.diagnostics.warnings.push_back(
+            L"agents-sandbox fixture validation failed: " + fixtureError);
+      }
+
+      if (!m_agentsTranscriptSafetyService.ValidateFixtureScenarios(candidate, fixtureError)) {
+        m_skillsCatalog.diagnostics.warnings.push_back(
+            L"agents-transcript fixture validation failed: " + fixtureError);
       }
 
       if (!m_subagentRegistryService.ValidateFixtureScenarios(candidate, fixtureError)) {
@@ -372,6 +384,10 @@ const ModelRoutingSnapshot& ServiceManager::ModelRouting() const noexcept {
 
 const AuthProfileSnapshot& ServiceManager::AuthProfiles() const noexcept {
   return m_authProfiles;
+}
+
+const SandboxSnapshot& ServiceManager::Sandbox() const noexcept {
+  return m_sandbox;
 }
 
 const SkillsCatalogSnapshot& ServiceManager::SkillsCatalog() const noexcept {

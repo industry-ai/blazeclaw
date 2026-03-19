@@ -101,7 +101,9 @@
     <ClInclude Include="src\core\AgentsCatalogService.h" />
     <ClInclude Include="src\core\AgentsAuthProfileService.h" />
     <ClInclude Include="src\core\AgentsModelRoutingService.h" />
+    <ClInclude Include="src\core\AgentsSandboxService.h" />
     <ClInclude Include="src\core\AgentsShellRuntimeService.h" />
+    <ClInclude Include="src\core\AgentsTranscriptSafetyService.h" />
     <ClInclude Include="src\core\AgentsToolPolicyService.h" />
     <ClInclude Include="src\core\AgentsWorkspaceService.h" />
     <ClInclude Include="src\core\AcpSpawnService.h" />
@@ -145,7 +147,9 @@
     <ClCompile Include="src\core\AgentsCatalogService.cpp" />
     <ClCompile Include="src\core\AgentsAuthProfileService.cpp" />
     <ClCompile Include="src\core\AgentsModelRoutingService.cpp" />
+    <ClCompile Include="src\core\AgentsSandboxService.cpp" />
     <ClCompile Include="src\core\AgentsShellRuntimeService.cpp" />
+    <ClCompile Include="src\core\AgentsTranscriptSafetyService.cpp" />
     <ClCompile Include="src\core\AgentsToolPolicyService.cpp" />
     <ClCompile Include="src\core\AgentsWorkspaceService.cpp" />
     <ClCompile Include="src\core\AcpSpawnService.cpp" />

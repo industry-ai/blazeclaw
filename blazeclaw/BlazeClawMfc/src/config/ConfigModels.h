@@ -94,6 +94,21 @@ struct AuthProfilesConfig {
   std::map<std::wstring, AuthProfileEntryConfig> entries;
 };
 
+struct SandboxConfig {
+  bool enabled = false;
+  std::wstring runtime = L"host";
+  std::wstring workspaceMirrorRoot;
+  bool allowHostNetwork = false;
+  bool browserEnabled = false;
+};
+
+struct TranscriptSafetyConfig {
+  bool repairEnabled = true;
+  bool writeLockEnabled = true;
+  bool redactSecrets = true;
+  std::uint32_t maxPayloadChars = 120000;
+};
+
 struct SkillEntryConfig {
   std::optional<bool> enabled;
   std::wstring apiKey;
@@ -135,6 +150,8 @@ struct AppConfig {
   EmbeddedRuntimeConfig embedded;
   ModelsRoutingConfig models;
   AuthProfilesConfig authProfiles;
+  SandboxConfig sandbox;
+  TranscriptSafetyConfig transcript;
   SkillsConfig skills;
   std::vector<std::wstring> enabledChannels;
 };

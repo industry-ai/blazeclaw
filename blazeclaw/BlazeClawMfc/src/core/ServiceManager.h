@@ -6,7 +6,9 @@
 #include "AgentsCatalogService.h"
 #include "AgentsAuthProfileService.h"
 #include "AgentsModelRoutingService.h"
+#include "AgentsSandboxService.h"
 #include "AgentsShellRuntimeService.h"
+#include "AgentsTranscriptSafetyService.h"
 #include "AgentsToolPolicyService.h"
 #include "AgentsWorkspaceService.h"
 #include "AcpSpawnService.h"
@@ -42,6 +44,7 @@ public:
   [[nodiscard]] std::size_t ShellProcessCount() const noexcept;
   [[nodiscard]] const ModelRoutingSnapshot& ModelRouting() const noexcept;
   [[nodiscard]] const AuthProfileSnapshot& AuthProfiles() const noexcept;
+  [[nodiscard]] const SandboxSnapshot& Sandbox() const noexcept;
   [[nodiscard]] const SkillsCatalogSnapshot& SkillsCatalog() const noexcept;
   [[nodiscard]] const SkillsEligibilitySnapshot& SkillsEligibility() const noexcept;
   [[nodiscard]] const SkillsPromptSnapshot& SkillsPrompt() const noexcept;
@@ -70,6 +73,9 @@ private:
   ModelRoutingSnapshot m_modelRouting;
   AgentsAuthProfileService m_agentsAuthProfileService;
   AuthProfileSnapshot m_authProfiles;
+  AgentsSandboxService m_agentsSandboxService;
+  SandboxSnapshot m_sandbox;
+  AgentsTranscriptSafetyService m_agentsTranscriptSafetyService;
   SubagentRegistryService m_subagentRegistryService;
   SubagentRegistrySnapshot m_subagentRegistry;
   AcpSpawnService m_acpSpawnService;

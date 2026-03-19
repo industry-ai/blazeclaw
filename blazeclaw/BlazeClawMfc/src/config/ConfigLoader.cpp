@@ -279,6 +279,55 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
       }
     }
 
+    if (trimmedLine.rfind(L"sandbox.enabled=", 0) == 0) {
+      outConfig.sandbox.enabled = ParseBool(trimmedLine.substr(16), false);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"sandbox.runtime=", 0) == 0) {
+      outConfig.sandbox.runtime = Trim(trimmedLine.substr(16));
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"sandbox.workspaceMirrorRoot=", 0) == 0) {
+      outConfig.sandbox.workspaceMirrorRoot = Trim(trimmedLine.substr(28));
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"sandbox.allowHostNetwork=", 0) == 0) {
+      outConfig.sandbox.allowHostNetwork = ParseBool(trimmedLine.substr(25), false);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"sandbox.browserEnabled=", 0) == 0) {
+      outConfig.sandbox.browserEnabled = ParseBool(trimmedLine.substr(23), false);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"transcript.repairEnabled=", 0) == 0) {
+      outConfig.transcript.repairEnabled = ParseBool(trimmedLine.substr(25), true);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"transcript.writeLockEnabled=", 0) == 0) {
+      outConfig.transcript.writeLockEnabled = ParseBool(trimmedLine.substr(28), true);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"transcript.redactSecrets=", 0) == 0) {
+      outConfig.transcript.redactSecrets = ParseBool(trimmedLine.substr(24), true);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"transcript.maxPayloadChars=", 0) == 0) {
+      std::uint32_t value = 0;
+      if (TryParseUInt(trimmedLine.substr(27), value)) {
+        outConfig.transcript.maxPayloadChars = value;
+      }
+
+      continue;
+    }
+
     if (trimmedLine.rfind(L"agents.defaults.", 0) == 0) {
       const auto keyValuePos = trimmedLine.find(L'=');
       if (keyValuePos == std::wstring::npos) {
