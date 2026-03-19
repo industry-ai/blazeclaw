@@ -32,6 +32,13 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
   m_skillsCatalog = m_skillsCatalogService.LoadCatalog(
       std::filesystem::current_path(),
       config);
+  m_skillsEligibility = m_skillsEligibilityService.Evaluate(
+      m_skillsCatalog,
+      config);
+  m_skillsPrompt = m_skillsPromptService.BuildSnapshot(
+      m_skillsCatalog,
+      m_skillsEligibility,
+      config);
 
   std::wstring fixtureError;
   const std::vector<std::filesystem::path> fixtureCandidates = {
@@ -49,18 +56,45 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       m_skillsCatalog.diagnostics.warnings.push_back(
           L"skills-catalog fixture validation failed: " + fixtureError);
     }
+
+    if (!m_skillsEligibilityService.ValidateFixtureScenarios(candidate, fixtureError)) {
+      m_skillsCatalog.diagnostics.warnings.push_back(
+          L"skills-eligibility fixture validation failed: " + fixtureError);
+    }
+
+    if (!m_skillsPromptService.ValidateFixtureScenarios(candidate, fixtureError)) {
+      m_skillsCatalog.diagnostics.warnings.push_back(
+          L"skills-prompt fixture validation failed: " + fixtureError);
+    }
+
     break;
   }
 
   blazeclaw::gateway::SkillsCatalogGatewayState gatewaySkillsState;
   gatewaySkillsState.entries.reserve(m_skillsCatalog.entries.size());
+  std::unordered_map<std::wstring, SkillsEligibilityEntry> eligibilityByName;
+  for (const auto& eligibility : m_skillsEligibility.entries) {
+    eligibilityByName.emplace(eligibility.skillName, eligibility);
+  }
+
   for (const auto& entry : m_skillsCatalog.entries) {
+    const auto eligibilityIt = eligibilityByName.find(entry.skillName);
+    const bool hasEligibility = eligibilityIt != eligibilityByName.end();
+
     gatewaySkillsState.entries.push_back(
         blazeclaw::gateway::SkillsCatalogGatewayEntry{
             .name = ToNarrow(entry.skillName),
+            .skillKey = hasEligibility ? ToNarrow(eligibilityIt->second.skillKey)
+                                       : ToNarrow(entry.skillName),
             .description = ToNarrow(entry.description),
             .source = ToNarrow(SkillsCatalogService::SourceKindLabel(entry.sourceKind)),
             .precedence = entry.precedence,
+            .eligible = hasEligibility ? eligibilityIt->second.eligible : false,
+            .disabled = hasEligibility ? eligibilityIt->second.disabled : false,
+            .blockedByAllowlist =
+                hasEligibility ? eligibilityIt->second.blockedByAllowlist : false,
+            .disableModelInvocation =
+                hasEligibility ? eligibilityIt->second.disableModelInvocation : false,
             .validFrontmatter = entry.validFrontmatter,
             .validationErrorCount = entry.validationErrors.size(),
         });
@@ -74,6 +108,16 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       m_skillsCatalog.diagnostics.invalidFrontmatterFiles;
   gatewaySkillsState.warningCount =
       m_skillsCatalog.diagnostics.warnings.size();
+  gatewaySkillsState.eligibleCount = m_skillsEligibility.eligibleCount;
+  gatewaySkillsState.disabledCount = m_skillsEligibility.disabledCount;
+  gatewaySkillsState.blockedByAllowlistCount =
+      m_skillsEligibility.blockedByAllowlistCount;
+  gatewaySkillsState.missingRequirementsCount =
+      m_skillsEligibility.missingRequirementsCount;
+  gatewaySkillsState.promptIncludedCount = m_skillsPrompt.includedCount;
+  gatewaySkillsState.promptChars = m_skillsPrompt.promptChars;
+  gatewaySkillsState.promptTruncated = m_skillsPrompt.truncated;
+  gatewaySkillsState.prompt = ToNarrow(m_skillsPrompt.prompt);
   m_gatewayHost.SetSkillsCatalogState(std::move(gatewaySkillsState));
 
   const bool gatewayStarted = m_gatewayHost.Start(config.gateway);
@@ -96,6 +140,14 @@ const FeatureRegistry& ServiceManager::Registry() const noexcept {
 
 const SkillsCatalogSnapshot& ServiceManager::SkillsCatalog() const noexcept {
   return m_skillsCatalog;
+}
+
+const SkillsEligibilitySnapshot& ServiceManager::SkillsEligibility() const noexcept {
+  return m_skillsEligibility;
+}
+
+const SkillsPromptSnapshot& ServiceManager::SkillsPrompt() const noexcept {
+  return m_skillsPrompt;
 }
 
 std::string ServiceManager::InvokeGatewayMethod(

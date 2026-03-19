@@ -54,12 +54,22 @@ namespace blazeclaw::gateway {
             const SkillsCatalogGatewayEntry& entry) {
             return "{\"name\":\"" +
                 EscapeJsonLocal(entry.name) +
+                "\",\"skillKey\":\"" +
+                EscapeJsonLocal(entry.skillKey) +
                 "\",\"description\":\"" +
                 EscapeJsonLocal(entry.description) +
                 "\",\"source\":\"" +
                 EscapeJsonLocal(entry.source) +
                 "\",\"precedence\":" +
                 std::to_string(entry.precedence) +
+                ",\"eligible\":" +
+                std::string(entry.eligible ? "true" : "false") +
+                ",\"disabled\":" +
+                std::string(entry.disabled ? "true" : "false") +
+                ",\"blockedByAllowlist\":" +
+                std::string(entry.blockedByAllowlist ? "true" : "false") +
+                ",\"disableModelInvocation\":" +
+                std::string(entry.disableModelInvocation ? "true" : "false") +
                 ",\"validFrontmatter\":" +
                 std::string(entry.validFrontmatter ? "true" : "false") +
                 ",\"validationErrorCount\":" +
@@ -150,8 +160,44 @@ namespace blazeclaw::gateway {
                         std::to_string(state.oversizedSkillFiles) +
                         ",\"invalidFrontmatterFiles\":" +
                         std::to_string(state.invalidFrontmatterFiles) +
+                        ",\"eligible\":" +
+                        std::to_string(state.eligibleCount) +
+                        ",\"disabled\":" +
+                        std::to_string(state.disabledCount) +
+                        ",\"blockedByAllowlist\":" +
+                        std::to_string(state.blockedByAllowlistCount) +
+                        ",\"missingRequirements\":" +
+                        std::to_string(state.missingRequirementsCount) +
+                        ",\"promptIncluded\":" +
+                        std::to_string(state.promptIncludedCount) +
+                        ",\"promptChars\":" +
+                        std::to_string(state.promptChars) +
+                        ",\"promptTruncated\":" +
+                        std::string(state.promptTruncated ? "true" : "false") +
                         ",\"warnings\":" +
                         std::to_string(state.warningCount) +
+                        "}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.skills.prompt",
+            [this](const protocol::RequestFrame& request) {
+                const auto& state = m_skillsCatalogState;
+
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"prompt\":\"" +
+                        EscapeJsonLocal(state.prompt) +
+                        "\",\"included\":" +
+                        std::to_string(state.promptIncludedCount) +
+                        ",\"chars\":" +
+                        std::to_string(state.promptChars) +
+                        ",\"truncated\":" +
+                        std::string(state.promptTruncated ? "true" : "false") +
                         "}",
                     .error = std::nullopt,
                 };

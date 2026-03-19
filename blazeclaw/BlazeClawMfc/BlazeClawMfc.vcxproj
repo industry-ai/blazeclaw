@@ -99,6 +99,8 @@
     <ClInclude Include="src\config\ConfigModels.h" />
     <ClInclude Include="src\core\FeatureRegistry.h" />
     <ClInclude Include="src\core\SkillsCatalogService.h" />
+    <ClInclude Include="src\core\SkillsEligibilityService.h" />
+    <ClInclude Include="src\core\SkillsPromptService.h" />
     <ClInclude Include="src\core\ServiceManager.h" />
     <ClInclude Include="src\gateway\GatewayAgentRegistry.h" />
     <ClInclude Include="src\gateway\GatewayChannelRegistry.h" />
@@ -126,6 +128,8 @@
     <ClCompile Include="src\config\ConfigLoader.cpp" />
     <ClCompile Include="src\core\FeatureRegistry.cpp" />
     <ClCompile Include="src\core\SkillsCatalogService.cpp" />
+    <ClCompile Include="src\core\SkillsEligibilityService.cpp" />
+    <ClCompile Include="src\core\SkillsPromptService.cpp" />
     <ClCompile Include="src\core\ServiceManager.cpp" />
     <ClCompile Include="src\gateway\GatewayAgentRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayChannelRegistry.cpp" />

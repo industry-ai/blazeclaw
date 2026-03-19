@@ -13,9 +13,14 @@ namespace blazeclaw::gateway {
 
 	struct SkillsCatalogGatewayEntry {
 		std::string name;
+        std::string skillKey;
 		std::string description;
 		std::string source;
 		std::int32_t precedence = 0;
+      bool eligible = false;
+		bool disabled = false;
+		bool blockedByAllowlist = false;
+		bool disableModelInvocation = false;
 		bool validFrontmatter = false;
 		std::size_t validationErrorCount = 0;
 	};
@@ -27,6 +32,14 @@ namespace blazeclaw::gateway {
 		std::size_t oversizedSkillFiles = 0;
 		std::size_t invalidFrontmatterFiles = 0;
 		std::size_t warningCount = 0;
+      std::size_t eligibleCount = 0;
+		std::size_t disabledCount = 0;
+		std::size_t blockedByAllowlistCount = 0;
+		std::size_t missingRequirementsCount = 0;
+		std::size_t promptIncludedCount = 0;
+		std::size_t promptChars = 0;
+		bool promptTruncated = false;
+		std::string prompt;
 	};
 
 	class GatewayHost {
