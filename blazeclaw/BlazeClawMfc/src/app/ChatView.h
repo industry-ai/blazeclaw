@@ -20,6 +20,8 @@ protected:
 	CListBox m_wndMsgList;
 	CChatInputEdit m_wndInput;
 	CButton  m_wndSend;
+	CButton  m_wndAbort;
+	CButton  m_wndAttach;
 
 	struct CHAT_ITEM
 	{
@@ -46,7 +48,13 @@ protected:
 		std::optional<std::string> chatThinkingLevel;
 		bool chatSending = false;
 		std::string chatMessage;
-		std::vector<std::string> chatAttachments;
+       struct Attachment
+		{
+			std::string filePath;
+			std::string mimeType;
+			std::string contentBase64;
+		};
+		std::vector<Attachment> chatAttachments;
 		std::optional<std::string> chatRunId;
 		std::optional<std::string> chatStream;
 		std::optional<std::uint64_t> chatStreamStartedAt;
@@ -65,7 +73,10 @@ protected:
 	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
 	afx_msg void OnSize(UINT nType, int cx, int cy);
 	afx_msg void OnSendClicked();
- afx_msg void OnTimer(UINT_PTR nIDEvent);
+   afx_msg void OnAbortClicked();
+	afx_msg void OnAttachClicked();
+	afx_msg void OnTimer(UINT_PTR nIDEvent);
+ afx_msg void OnDestroy();
 	afx_msg void OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct);
 	afx_msg void OnMeasureItem(int nIDCtl, LPMEASUREITEMSTRUCT lpMeasureItemStruct);
 	DECLARE_MESSAGE_MAP()
@@ -82,5 +93,8 @@ protected:
 	void AbortChatRunNative();
 	void PumpChatEventsNative();
 	void HandleChatEventNative(const NativeChatEventPayload& payload);
+  void SyncItemsFromState();
+	void UpdateControlStates();
+	void AddStatusMessage(const CString& message);
 };
 

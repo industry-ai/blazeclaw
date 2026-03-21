@@ -5,7 +5,11 @@
 
 #include "../gateway/GatewayJsonUtils.h"
 
+#include <algorithm>
+#include <cctype>
 #include <chrono>
+#include <fstream>
+#include <wincrypt.h>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -16,7 +20,13 @@ IMPLEMENT_DYNCREATE(CChatView, CView)
 namespace {
 	constexpr UINT_PTR kNativeChatPollTimerId = 0x5A11;
 	constexpr UINT kNativeChatPollIntervalMs = 500;
+	constexpr UINT kMsgListControlId = 1000;
+	constexpr UINT kSendButtonControlId = 1001;
+	constexpr UINT kInputControlId = 1002;
+	constexpr UINT kAbortButtonControlId = 1003;
+	constexpr UINT kAttachButtonControlId = 1004;
 	constexpr char kSilentReplyToken[] = "NO_REPLY";
+	constexpr std::size_t kMaxAttachmentBytes = 5 * 1024 * 1024;
 
 	std::uint64_t CurrentEpochMs()
 	{
@@ -24,7 +34,7 @@ namespace {
 		return static_cast<std::uint64_t>(
 			std::chrono::duration_cast<std::chrono::milliseconds>(
 				now.time_since_epoch())
-				.count());
+			.count());
 	}
 
 	std::string EscapeJson(const std::string& value)
@@ -55,7 +65,96 @@ namespace {
 				break;
 			}
 		}
+
 		return escaped;
+	}
+
+	std::optional<std::string> GuessMimeType(const std::string& filePath)
+	{
+		auto lastDot = filePath.find_last_of('.');
+		if (lastDot == std::string::npos)
+		{
+			return std::nullopt;
+		}
+
+		std::string ext = filePath.substr(lastDot + 1);
+		std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c)
+			{
+				return static_cast<char>(std::tolower(c));
+			});
+
+		if (ext == "png") return "image/png";
+		if (ext == "jpg" || ext == "jpeg") return "image/jpeg";
+		if (ext == "gif") return "image/gif";
+		if (ext == "webp") return "image/webp";
+		if (ext == "bmp") return "image/bmp";
+		return std::nullopt;
+	}
+
+	std::optional<std::vector<std::uint8_t>> ReadFileBytes(const std::string& filePath)
+	{
+		std::ifstream input(filePath, std::ios::binary | std::ios::ate);
+		if (!input)
+		{
+			return std::nullopt;
+		}
+
+		const auto endPos = input.tellg();
+		if (endPos <= 0)
+		{
+			return std::vector<std::uint8_t>{};
+		}
+
+		if (static_cast<std::size_t>(endPos) > kMaxAttachmentBytes)
+		{
+			return std::nullopt;
+		}
+
+		std::vector<std::uint8_t> bytes(static_cast<std::size_t>(endPos));
+		input.seekg(0, std::ios::beg);
+		if (!input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size())))
+		{
+			return std::nullopt;
+		}
+
+		return bytes;
+	}
+
+	std::optional<std::string> Base64EncodeBytes(const std::vector<std::uint8_t>& bytes)
+	{
+		if (bytes.empty())
+		{
+			return std::string();
+		}
+
+		DWORD outChars = 0;
+		if (!CryptBinaryToStringA(
+			bytes.data(),
+			static_cast<DWORD>(bytes.size()),
+			CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF,
+			nullptr,
+			&outChars))
+		{
+			return std::nullopt;
+		}
+
+		std::string encoded(outChars, '\0');
+		if (!CryptBinaryToStringA(
+			bytes.data(),
+			static_cast<DWORD>(bytes.size()),
+			CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF,
+			encoded.data(),
+			&outChars))
+		{
+			return std::nullopt;
+		}
+
+		if (!encoded.empty() && encoded.back() == '\0')
+		{
+			encoded.pop_back();
+		}
+
+		return encoded;
 	}
 
 	bool IsSilentReplyText(const std::string& text)
@@ -144,15 +243,17 @@ namespace {
 BEGIN_MESSAGE_MAP(CChatView, CView)
 	ON_WM_CREATE()
 	ON_WM_SIZE()
- ON_WM_TIMER()
+	ON_WM_TIMER()
+	ON_WM_DESTROY()
 	ON_WM_MEASUREITEM()
 	ON_WM_DRAWITEM()
-	ON_BN_CLICKED(1001, &CChatView::OnSendClicked)
+	ON_BN_CLICKED(kSendButtonControlId, &CChatView::OnSendClicked)
+	ON_BN_CLICKED(kAbortButtonControlId, &CChatView::OnAbortClicked)
+	ON_BN_CLICKED(kAttachButtonControlId, &CChatView::OnAttachClicked)
 END_MESSAGE_MAP()
 
 CChatView::CChatView() noexcept
-{
-}
+{}
 
 BOOL CChatView::PreCreateWindow(CREATESTRUCT& cs)
 {
@@ -174,7 +275,7 @@ int CChatView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	// 消息列表
 	if (!m_wndMsgList.Create(WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_BORDER |
 		LBS_NOINTEGRALHEIGHT | LBS_OWNERDRAWVARIABLE | LBS_HASSTRINGS,
-		rcDummy, this, 1000))
+		rcDummy, this, kMsgListControlId))
 	{
 		TRACE0("Failed to create message list\n");
 		return -1;
@@ -183,7 +284,7 @@ int CChatView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	// 输入框
 	if (!m_wndInput.Create(WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL |
 		ES_MULTILINE | ES_AUTOVSCROLL,
-		rcDummy, this, 1002))
+		rcDummy, this, kInputControlId))
 	{
 		TRACE0("Failed to create input edit\n");
 		return -1;
@@ -192,14 +293,29 @@ int CChatView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 
 	// 发送按钮
 	if (!m_wndSend.Create(_T("发送"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-		rcDummy, this, 1001))
+		rcDummy, this, kSendButtonControlId))
 	{
 		TRACE0("Failed to create send button\n");
 		return -1;
 	}
 
+	if (!m_wndAbort.Create(_T("停止"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+		rcDummy, this, kAbortButtonControlId))
+	{
+		TRACE0("Failed to create abort button\n");
+		return -1;
+	}
+
+	if (!m_wndAttach.Create(_T("附件"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+		rcDummy, this, kAttachButtonControlId))
+	{
+		TRACE0("Failed to create attach button\n");
+		return -1;
+	}
+
 	m_chatState.connected = IsGatewayConnected();
 	LoadChatHistoryNative();
+	UpdateControlStates();
 	m_chatPollTimerId = SetTimer(
 		kNativeChatPollTimerId,
 		kNativeChatPollIntervalMs,
@@ -221,7 +337,8 @@ void CChatView::LayoutControls(int cx, int cy)
 
 	const int nMargin = 8;
 	const int nInputHeight = 64;
-	const int nButtonWidth = 70;
+	const int nButtonWidth = 74;
+	const int nAttachWidth = 74;
 
 	CRect rcClient(0, 0, cx, cy);
 
@@ -243,12 +360,21 @@ void CChatView::LayoutControls(int cx, int cy)
 
 	CRect rcButton = rcBottom;
 	rcButton.left = rcButton.right - nButtonWidth;
+	CRect rcAbort = rcButton;
+	rcAbort.left -= (nButtonWidth + nMargin);
+	rcAbort.right -= (nButtonWidth + nMargin);
+
+	CRect rcAttach = rcBottom;
+	rcAttach.right = rcAttach.left + nAttachWidth;
 
 	CRect rcEdit = rcBottom;
-	rcEdit.right = rcButton.left - nMargin;
+	rcEdit.left = rcAttach.right + nMargin;
+	rcEdit.right = rcAbort.left - nMargin;
 
 	m_wndInput.MoveWindow(rcEdit);
 	m_wndSend.MoveWindow(rcButton);
+	m_wndAbort.MoveWindow(rcAbort);
+	m_wndAttach.MoveWindow(rcAttach);
 }
 
 void CChatView::OnSendClicked()
@@ -256,14 +382,70 @@ void CChatView::OnSendClicked()
 	CString strText;
 	m_wndInput.GetWindowText(strText);
 	strText.Trim();
-	if (!strText.IsEmpty())
+	if (!strText.IsEmpty() || !m_chatState.chatAttachments.empty())
 	{
-		AppendMessage(strText, TRUE);
 		m_wndInput.SetWindowText(_T(""));
-		AppendMessage(_T("这是一个自动回复的消息示例。"), FALSE);
-       const CStringA utf8Text(strText, CP_UTF8);
+		const CStringA utf8Text(strText, CP_UTF8);
 		SendChatMessageNative(std::string(utf8Text.GetString()));
+		SyncItemsFromState();
+		UpdateControlStates();
 	}
+}
+
+void CChatView::OnAbortClicked()
+{
+	AbortChatRunNative();
+	UpdateControlStates();
+}
+
+void CChatView::OnAttachClicked()
+{
+	CFileDialog dialog(
+		TRUE,
+		nullptr,
+		nullptr,
+		OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST,
+		_T("Images (*.png;*.jpg;*.jpeg;*.gif;*.webp;*.bmp)|*.png;*.jpg;*.jpeg;*.gif;*.webp;*.bmp||"),
+		this);
+	if (dialog.DoModal() != IDOK)
+	{
+		return;
+	}
+
+	const CString path = dialog.GetPathName();
+	const CStringA pathUtf8(path, CP_UTF8);
+	const std::string filePath(pathUtf8.GetString());
+	const auto mimeType = GuessMimeType(filePath);
+	if (!mimeType.has_value())
+	{
+		AfxMessageBox(L"Unsupported attachment type. Please select an image file.");
+		return;
+	}
+
+	const auto bytes = ReadFileBytes(filePath);
+	if (!bytes.has_value())
+	{
+		AfxMessageBox(L"Failed to read attachment or file exceeds size limit (5MB).");
+		return;
+	}
+
+	const auto base64 = Base64EncodeBytes(bytes.value());
+	if (!base64.has_value())
+	{
+		AfxMessageBox(L"Failed to encode attachment.");
+		return;
+	}
+
+	m_chatState.chatAttachments.push_back(NativeChatState::Attachment{
+		.filePath = filePath,
+		.mimeType = mimeType.value(),
+		.contentBase64 = base64.value(),
+		});
+
+	CString status;
+	status.Format(L"[Attachment] %s", path.GetString());
+	AddStatusMessage(status);
+	UpdateControlStates();
 }
 
 void CChatView::OnTimer(UINT_PTR nIDEvent)
@@ -271,9 +453,21 @@ void CChatView::OnTimer(UINT_PTR nIDEvent)
 	if (nIDEvent == m_chatPollTimerId && nIDEvent != 0)
 	{
 		PumpChatEventsNative();
+		UpdateControlStates();
 	}
 
 	CView::OnTimer(nIDEvent);
+}
+
+void CChatView::OnDestroy()
+{
+	if (m_chatPollTimerId != 0)
+	{
+		KillTimer(m_chatPollTimerId);
+		m_chatPollTimerId = 0;
+	}
+
+	CView::OnDestroy();
 }
 
 bool CChatView::IsGatewayConnected() const
@@ -323,23 +517,25 @@ void CChatView::LoadChatHistoryNative()
 	{
 		m_chatState.lastError = "chat.history failed";
 		m_chatState.chatLoading = false;
+		SyncItemsFromState();
+		UpdateControlStates();
 		return;
 	}
 
 	std::string messagesRaw;
 	if (blazeclaw::gateway::json::FindRawField(
-			response.payloadJson.value(),
-			"messages",
-			messagesRaw))
+		response.payloadJson.value(),
+		"messages",
+		messagesRaw))
 	{
 		m_chatState.chatMessages = SplitTopLevelObjects(messagesRaw);
 	}
 
 	std::string thinkingLevel;
 	if (blazeclaw::gateway::json::FindStringField(
-			response.payloadJson.value(),
-			"thinkingLevel",
-			thinkingLevel))
+		response.payloadJson.value(),
+		"thinkingLevel",
+		thinkingLevel))
 	{
 		m_chatState.chatThinkingLevel = thinkingLevel;
 	}
@@ -347,12 +543,15 @@ void CChatView::LoadChatHistoryNative()
 	m_chatState.chatStream.reset();
 	m_chatState.chatStreamStartedAt.reset();
 	m_chatState.chatLoading = false;
+	SyncItemsFromState();
+	UpdateControlStates();
 }
 
 void CChatView::SendChatMessageNative(const std::string& message)
 {
 	const std::string trimmed = blazeclaw::gateway::json::Trim(message);
-	if (trimmed.empty() || !IsGatewayConnected())
+	const bool hasAttachments = !m_chatState.chatAttachments.empty();
+	if ((trimmed.empty() && !hasAttachments) || !IsGatewayConnected())
 	{
 		return;
 	}
@@ -365,12 +564,56 @@ void CChatView::SendChatMessageNative(const std::string& message)
 	m_chatState.chatStreamStartedAt = CurrentEpochMs();
 	m_chatState.lastError.reset();
 
+	std::string userContent = "[";
+	bool firstBlock = true;
+	if (!trimmed.empty())
+	{
+		userContent +=
+			"{\"type\":\"text\",\"text\":\"" +
+			EscapeJson(trimmed) +
+			"\"}";
+		firstBlock = false;
+	}
+
+	for (const auto& att : m_chatState.chatAttachments)
+	{
+		if (!firstBlock)
+		{
+			userContent += ",";
+		}
+
+		userContent +=
+			"{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"" +
+			EscapeJson(att.mimeType) +
+			"\",\"data\":\"[selected]\"}}";
+		firstBlock = false;
+	}
+	userContent += "]";
+
 	m_chatState.chatMessages.push_back(
-		"{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"" +
-		EscapeJson(trimmed) +
-		"\"}],\"timestamp\":" +
+		"{\"role\":\"user\",\"content\":" +
+		userContent +
+		",\"timestamp\":" +
 		std::to_string(CurrentEpochMs()) +
 		"}");
+
+	std::string attachmentsJson = "[";
+	for (std::size_t i = 0; i < m_chatState.chatAttachments.size(); ++i)
+	{
+		if (i > 0)
+		{
+			attachmentsJson += ",";
+		}
+
+		const auto& att = m_chatState.chatAttachments[i];
+		attachmentsJson +=
+			"{\"type\":\"image\",\"mimeType\":\"" +
+			EscapeJson(att.mimeType) +
+			"\",\"content\":\"" +
+			EscapeJson(att.contentBase64) +
+			"\"}";
+	}
+	attachmentsJson += "]";
 
 	const std::string params =
 		std::string("{\"sessionKey\":\"") +
@@ -379,7 +622,9 @@ void CChatView::SendChatMessageNative(const std::string& message)
 		EscapeJson(trimmed) +
 		"\",\"deliver\":false,\"idempotencyKey\":\"" +
 		runId +
-		"\"}";
+		"\",\"attachments\":" +
+		attachmentsJson +
+		"}";
 
 	blazeclaw::gateway::protocol::ResponseFrame response;
 	if (!RequestGateway("chat.send", params, response) || !response.ok)
@@ -389,8 +634,14 @@ void CChatView::SendChatMessageNative(const std::string& message)
 		m_chatState.chatStreamStartedAt.reset();
 		m_chatState.lastError = "chat.send failed";
 	}
+	else
+	{
+		m_chatState.chatAttachments.clear();
+	}
 
 	m_chatState.chatSending = false;
+	SyncItemsFromState();
+	UpdateControlStates();
 }
 
 void CChatView::AbortChatRunNative()
@@ -415,6 +666,8 @@ void CChatView::AbortChatRunNative()
 	{
 		m_chatState.lastError = "chat.abort failed";
 	}
+
+	SyncItemsFromState();
 }
 
 void CChatView::HandleChatEventNative(const NativeChatEventPayload& payload)
@@ -498,12 +751,14 @@ void CChatView::PumpChatEventsNative()
 
 	std::string eventsRaw;
 	if (!blazeclaw::gateway::json::FindRawField(
-			response.payloadJson.value(),
-			"events",
-			eventsRaw))
+		response.payloadJson.value(),
+		"events",
+		eventsRaw))
 	{
 		return;
 	}
+
+	bool changed = false;
 
 	for (const auto& eventJson : SplitTopLevelObjects(eventsRaw))
 	{
@@ -528,7 +783,87 @@ void CChatView::PumpChatEventsNative()
 		}
 
 		HandleChatEventNative(payload);
+		changed = true;
 	}
+
+	if (changed)
+	{
+		SyncItemsFromState();
+	}
+}
+
+void CChatView::SyncItemsFromState()
+{
+	m_items.RemoveAll();
+	if (::IsWindow(m_wndMsgList.GetSafeHwnd()))
+	{
+		m_wndMsgList.ResetContent();
+	}
+
+	auto appendJsonMessage = [this](const std::string& messageJson)
+		{
+			std::string role;
+			blazeclaw::gateway::json::FindStringField(messageJson, "role", role);
+			const std::string text = ExtractMessageText(messageJson);
+			if (text.empty())
+			{
+				return;
+			}
+
+			CStringW textWide(CA2W(text.c_str(), CP_UTF8));
+			AppendMessage(textWide, role == "user" ? TRUE : FALSE);
+		};
+
+	for (const auto& messageJson : m_chatState.chatMessages)
+	{
+		appendJsonMessage(messageJson);
+	}
+
+	if (m_chatState.chatStream.has_value() &&
+		!blazeclaw::gateway::json::Trim(m_chatState.chatStream.value()).empty())
+	{
+		CStringW streamWide(CA2W(m_chatState.chatStream->c_str(), CP_UTF8));
+		AppendMessage(streamWide, FALSE);
+	}
+
+	if (m_chatState.lastError.has_value() && !m_chatState.lastError->empty())
+	{
+		CStringW errorWide(CA2W(m_chatState.lastError->c_str(), CP_UTF8));
+		CString line;
+		line.Format(L"[Error] %s", errorWide.GetString());
+		AppendMessage(line, FALSE);
+	}
+}
+
+void CChatView::UpdateControlStates()
+{
+	if (!::IsWindow(m_wndSend.GetSafeHwnd()))
+	{
+		return;
+	}
+
+	m_chatState.connected = IsGatewayConnected();
+	const bool busy = m_chatState.chatLoading || m_chatState.chatSending;
+	m_wndSend.EnableWindow(m_chatState.connected && !m_chatState.chatLoading);
+	m_wndInput.EnableWindow(m_chatState.connected && !busy);
+	m_wndAbort.EnableWindow(m_chatState.connected && m_chatState.chatRunId.has_value());
+	m_wndAttach.EnableWindow(m_chatState.connected && !busy);
+
+	CString sendText = m_chatState.chatSending ? L"发送中" : L"发送";
+	m_wndSend.SetWindowText(sendText);
+	CString attachText;
+	attachText.Format(L"附件(%d)", static_cast<int>(m_chatState.chatAttachments.size()));
+	m_wndAttach.SetWindowText(attachText);
+}
+
+void CChatView::AddStatusMessage(const CString& message)
+{
+	if (message.IsEmpty())
+	{
+		return;
+	}
+
+	AppendMessage(message, FALSE);
 }
 
 void CChatView::AppendMessage(const CString& strText, BOOL bSelf)
