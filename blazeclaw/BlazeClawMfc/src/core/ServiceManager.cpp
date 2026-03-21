@@ -470,21 +470,13 @@ const SkillsPromptSnapshot& ServiceManager::SkillsPrompt() const noexcept {
 std::string ServiceManager::InvokeGatewayMethod(
     const std::string& method,
     const std::optional<std::string>& paramsJson) const {
-  if (!m_running) {
-    return "service_not_running";
-  }
-
-  if (method.empty()) {
-    return "invalid_method";
-  }
-
   const blazeclaw::gateway::protocol::RequestFrame request{
       .id = "ui-probe",
       .method = method,
       .paramsJson = paramsJson,
   };
 
-  const auto response = m_gatewayHost.RouteRequest(request);
+  const auto response = RouteGatewayRequest(request);
   if (response.ok) {
     return response.payloadJson.has_value() ? response.payloadJson.value()
                                             : "ok";
@@ -496,6 +488,41 @@ std::string ServiceManager::InvokeGatewayMethod(
 
   const auto& error = response.error.value();
   return error.code + ":" + error.message;
+}
+
+blazeclaw::gateway::protocol::ResponseFrame ServiceManager::RouteGatewayRequest(
+    const blazeclaw::gateway::protocol::RequestFrame& request) const {
+  if (!m_running) {
+    return blazeclaw::gateway::protocol::ResponseFrame{
+        .id = request.id,
+        .ok = false,
+        .payloadJson = std::nullopt,
+        .error = blazeclaw::gateway::protocol::ErrorShape{
+            .code = "service_not_running",
+            .message = "Service manager is not running.",
+            .detailsJson = std::nullopt,
+            .retryable = false,
+            .retryAfterMs = std::nullopt,
+        },
+    };
+  }
+
+  if (request.method.empty()) {
+    return blazeclaw::gateway::protocol::ResponseFrame{
+        .id = request.id,
+        .ok = false,
+        .payloadJson = std::nullopt,
+        .error = blazeclaw::gateway::protocol::ErrorShape{
+            .code = "invalid_method",
+            .message = "Gateway method must not be empty.",
+            .detailsJson = std::nullopt,
+            .retryable = false,
+            .retryAfterMs = std::nullopt,
+        },
+    };
+  }
+
+  return m_gatewayHost.RouteRequest(request);
 }
 
 } // namespace blazeclaw::core

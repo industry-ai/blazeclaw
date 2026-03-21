@@ -22,10 +22,13 @@
 
 #include "BlazeClawMFCDoc.h"
 #include "BlazeClawMFCView.h"
+#include "../gateway/GatewayJsonUtils.h"
+#include "../gateway/GatewayProtocolModels.h"
 
 #include <cwctype>
 #include <filesystem>
 #include <optional>
+#include <sstream>
 #include <vector>
 
 #ifdef _DEBUG
@@ -33,6 +36,116 @@
 #endif
 
 namespace {
+
+constexpr UINT_PTR kBridgeLifecycleTimerId = 0x4A21;
+constexpr UINT kBridgeLifecycleTimerMs = 1000;
+
+std::string ToNarrow(const std::wstring& value)
+{
+	std::string output;
+	output.reserve(value.size());
+	for (const wchar_t ch : value)
+	{
+		output.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
+	}
+	return output;
+}
+
+std::wstring ToWide(const std::string& value)
+{
+	std::wstring output;
+	output.reserve(value.size());
+	for (const char ch : value)
+	{
+		output.push_back(
+			static_cast<wchar_t>(
+				static_cast<unsigned char>(ch)));
+	}
+	return output;
+}
+
+std::string EscapeJson(const std::string& value)
+{
+	std::string escaped;
+	escaped.reserve(value.size() + 8);
+	for (const char ch : value)
+	{
+		switch (ch)
+		{
+		case '"':
+			escaped += "\\\"";
+			break;
+		case '\\':
+			escaped += "\\\\";
+			break;
+		case '\n':
+			escaped += "\\n";
+			break;
+		case '\r':
+			escaped += "\\r";
+			break;
+		case '\t':
+			escaped += "\\t";
+			break;
+		default:
+			escaped.push_back(ch);
+			break;
+		}
+	}
+	return escaped;
+}
+
+std::string JsonString(const std::string& value)
+{
+	return std::string("\"") + EscapeJson(value) + "\"";
+}
+
+std::string BuildBridgeRpcResultJson(
+	const blazeclaw::gateway::protocol::ResponseFrame& response,
+	const std::string& correlationId)
+{
+	std::string json =
+		"{\"channel\":\"blazeclaw.gateway.rpc.result\",\"id\":" +
+		JsonString(correlationId) +
+		",\"ok\":" +
+		(response.ok ? "true" : "false");
+
+	if (response.ok)
+	{
+		if (response.payloadJson.has_value())
+		{
+			json += ",\"payload\":" + response.payloadJson.value();
+		}
+		else
+		{
+			json += ",\"payload\":null";
+		}
+	}
+	else
+	{
+		json += ",\"error\":";
+		if (response.error.has_value())
+		{
+			const auto& error = response.error.value();
+			json += "{";
+			json += "\"code\":" + JsonString(error.code);
+			json += ",\"message\":" + JsonString(error.message);
+			if (error.detailsJson.has_value())
+			{
+				json += ",\"details\":" + error.detailsJson.value();
+			}
+			json += "}";
+		}
+		else
+		{
+			json +=
+				"{\"code\":\"error_unknown\",\"message\":\"Gateway request failed.\"}";
+		}
+	}
+
+	json += "}";
+	return json;
+}
 
 std::optional<std::wstring> GetEnvValue(const wchar_t* name)
 {
@@ -76,27 +189,6 @@ std::wstring TrimCopy(std::wstring value)
 	}
 
 	return value;
-}
-
-bool IsHttpUrl(const std::wstring& value)
-{
-	if (value.size() < 8)
-	{
-		return false;
-	}
-
-	const std::wstring lower = [&value]()
-	{
-		std::wstring out;
-		out.reserve(value.size());
-		for (const wchar_t ch : value)
-		{
-         out.push_back(static_cast<wchar_t>(::towlower(ch)));
-		}
-		return out;
-	}();
-
-	return lower.rfind(L"http://", 0) == 0 || lower.rfind(L"https://", 0) == 0;
 }
 
 std::wstring BuildFileUrl(const std::filesystem::path& filePath)
@@ -255,6 +347,7 @@ BEGIN_MESSAGE_MAP(CBlazeClawMFCView, CView)
 	ON_WM_RBUTTONUP()
 	ON_WM_SIZE()
 	ON_WM_DESTROY()
+   ON_WM_TIMER()
 END_MESSAGE_MAP()
 
 // CBlazeClawMFCView construction/destruction
@@ -323,6 +416,181 @@ BOOL CBlazeClawMFCView::OnPreparePrinting(CPrintInfo* pInfo)
 	return DoPreparePrinting(pInfo);
 }
 
+void CBlazeClawMFCView::PostBridgeMessageJson(const std::wstring& jsonMessage)
+{
+#ifdef HAVE_WEBVIEW2_HEADER
+	if (!m_webView || jsonMessage.empty())
+	{
+		return;
+	}
+
+	m_webView->PostWebMessageAsJson(jsonMessage.c_str());
+#else
+	UNREFERENCED_PARAMETER(jsonMessage);
+#endif
+}
+
+void CBlazeClawMFCView::PostBridgeLifecycleEvent(
+	const wchar_t* state,
+	const wchar_t* reason)
+{
+	std::wstringstream stream;
+	stream
+		<< L"{\"channel\":\"blazeclaw.gateway.lifecycle\",\"sessionId\":\""
+		<< ToWide(m_bridgeSessionId)
+		<< L"\",\"state\":\""
+		<< (state != nullptr ? state : L"unknown")
+		<< L"\"";
+
+	if (reason != nullptr && *reason != L'\0')
+	{
+		stream << L",\"reason\":\"" << reason << L"\"";
+	}
+
+	stream << L"}";
+	PostBridgeMessageJson(stream.str());
+}
+
+void CBlazeClawMFCView::PumpBridgeLifecycle()
+{
+	const auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	const bool connected = app != nullptr && app->Services().IsRunning();
+
+	if (!m_bridgeLifecycleSent)
+	{
+		PostBridgeLifecycleEvent(
+			connected ? L"connected" : L"disconnected",
+			connected ? L"service-ready" : L"service-not-running");
+		m_bridgeLifecycleSent = true;
+		m_bridgeLastConnected = connected;
+		return;
+	}
+
+	if (connected == m_bridgeLastConnected)
+	{
+		return;
+	}
+
+	if (connected)
+	{
+		PostBridgeLifecycleEvent(L"reconnected", L"service-ready");
+	}
+	else
+	{
+		PostBridgeLifecycleEvent(L"disconnected", L"service-stopped");
+	}
+
+	m_bridgeLastConnected = connected;
+}
+
+void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
+{
+#ifdef HAVE_WEBVIEW2_HEADER
+	const std::string message = ToNarrow(webMessageJson);
+	std::string channel;
+	if (!blazeclaw::gateway::json::FindStringField(message, "channel", channel))
+	{
+		return;
+	}
+
+	if (channel == "blazeclaw.gateway.lifecycle.subscribe")
+	{
+		m_bridgeLifecycleSent = false;
+		PumpBridgeLifecycle();
+		return;
+	}
+
+	if (channel != "blazeclaw.gateway.rpc")
+	{
+		return;
+	}
+
+	std::string correlationId;
+	if (!blazeclaw::gateway::json::FindStringField(message, "id", correlationId))
+	{
+		correlationId = "rpc-unknown";
+	}
+
+	std::string method;
+	blazeclaw::gateway::json::FindStringField(message, "method", method);
+
+	std::string paramsJsonRaw;
+	std::optional<std::string> paramsJson;
+	if (blazeclaw::gateway::json::FindRawField(message, "params", paramsJsonRaw))
+	{
+		paramsJson = blazeclaw::gateway::json::Trim(paramsJsonRaw);
+	}
+
+	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	if (app == nullptr)
+	{
+		const std::string errorJson =
+			"{\"channel\":\"blazeclaw.gateway.rpc.result\",\"id\":" +
+			JsonString(correlationId) +
+			",\"ok\":false,\"error\":{\"code\":\"app_unavailable\",\"message\":\"Application context unavailable.\"}}";
+		PostBridgeMessageJson(ToWide(errorJson));
+		return;
+	}
+
+	const blazeclaw::gateway::protocol::RequestFrame request{
+		.id = correlationId,
+		.method = method,
+		.paramsJson = paramsJson,
+	};
+	const auto response = app->Services().RouteGatewayRequest(request);
+	const std::string responseJson = BuildBridgeRpcResultJson(response, correlationId);
+	PostBridgeMessageJson(ToWide(responseJson));
+#else
+	UNREFERENCED_PARAMETER(webMessageJson);
+#endif
+}
+
+void CBlazeClawMFCView::InitializeWebViewBridge()
+{
+#ifdef HAVE_WEBVIEW2_HEADER
+	if (!m_webView)
+	{
+		return;
+	}
+
+	m_webView->add_WebMessageReceived(
+		Microsoft::WRL::Callback<ICoreWebView2WebMessageReceivedEventHandler>(
+			[this](
+				ICoreWebView2* sender,
+				ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT
+			{
+				UNREFERENCED_PARAMETER(sender);
+				if (args == nullptr)
+				{
+					return S_OK;
+				}
+
+				LPWSTR rawJson = nullptr;
+				if (FAILED(args->get_WebMessageAsJson(&rawJson)) || rawJson == nullptr)
+				{
+					return S_OK;
+				}
+
+				std::wstring jsonMessage(rawJson);
+				CoTaskMemFree(rawJson);
+				HandleWebMessageJson(jsonMessage);
+				return S_OK;
+			}).Get(),
+		&m_webMessageToken);
+
+	if (m_bridgeTimerId == 0)
+	{
+		m_bridgeTimerId = SetTimer(
+			kBridgeLifecycleTimerId,
+			kBridgeLifecycleTimerMs,
+			nullptr);
+	}
+
+	m_bridgeLifecycleSent = false;
+	PumpBridgeLifecycle();
+#endif
+}
+
 void CBlazeClawMFCView::OnInitialUpdate()
 {
 	CView::OnInitialUpdate();
@@ -352,6 +620,7 @@ void CBlazeClawMFCView::OnInitialUpdate()
 
 							// Make controller visible
 							m_webViewController->put_IsVisible(TRUE);
+							InitializeWebViewBridge();
 
 							// Navigate to default URL
 							if (m_webView)
@@ -475,6 +744,17 @@ void CBlazeClawMFCView::OnSize(UINT nType, int cx, int cy)
 void CBlazeClawMFCView::OnDestroy()
 {
 #ifdef HAVE_WEBVIEW2_HEADER
+    if (m_bridgeTimerId != 0)
+	{
+		KillTimer(m_bridgeTimerId);
+		m_bridgeTimerId = 0;
+	}
+
+	if (m_webView)
+	{
+		m_webView->remove_WebMessageReceived(m_webMessageToken);
+	}
+
 	if (m_webViewController)
 	{
 		m_webViewController->Close();
@@ -484,4 +764,14 @@ void CBlazeClawMFCView::OnDestroy()
 #endif
 
 	CView::OnDestroy();
+}
+
+void CBlazeClawMFCView::OnTimer(UINT_PTR nIDEvent)
+{
+	if (nIDEvent == m_bridgeTimerId && nIDEvent != 0)
+	{
+		PumpBridgeLifecycle();
+	}
+
+	CView::OnTimer(nIDEvent);
 }

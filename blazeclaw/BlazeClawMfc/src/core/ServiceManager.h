@@ -52,6 +52,8 @@ public:
   [[nodiscard]] std::string InvokeGatewayMethod(
       const std::string& method,
       const std::optional<std::string>& paramsJson = std::nullopt) const;
+  [[nodiscard]] blazeclaw::gateway::protocol::ResponseFrame RouteGatewayRequest(
+      const blazeclaw::gateway::protocol::RequestFrame& request) const;
 
 private:
   [[nodiscard]] blazeclaw::gateway::SkillsCatalogGatewayState BuildGatewaySkillsState() const;
