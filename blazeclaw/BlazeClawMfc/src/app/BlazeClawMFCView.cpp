@@ -324,16 +324,29 @@ std::optional<std::filesystem::path> FindOpenClawUiIndex(const std::filesystem::
 	std::filesystem::path cursor = start;
 	while (!cursor.empty())
 	{
-		const auto direct = cursor / L"openclaw" / L"ui" / L"index.html";
-		if (std::filesystem::exists(direct))
-		{
-			return direct;
-		}
-
-		const auto dist = cursor / L"openclaw" / L"ui" / L"dist" / L"index.html";
+       const auto dist =
+			cursor /
+			L"blazeclaw" /
+			L"BlazeClawMfc" /
+			L"web" /
+			L"chat" /
+			L"dist" /
+			L"index.html";
 		if (std::filesystem::exists(dist))
 		{
 			return dist;
+		}
+
+       const auto direct =
+			cursor /
+			L"blazeclaw" /
+			L"BlazeClawMfc" /
+			L"web" /
+			L"chat" /
+			L"index.html";
+		if (std::filesystem::exists(direct))
+		{
+			return direct;
 		}
 
 		if (!cursor.has_parent_path())
@@ -702,6 +715,12 @@ void CBlazeClawMFCView::EnsureOpenClawBridgeShim()
   window.__blazeclawBridgeInjected = true;
 
   if (!window.chrome || !window.chrome.webview) return;
+
+  window.chrome.webview.postMessage({
+	channel: 'openclaw.ws.shim.ready',
+	phase: 'boot',
+	href: String(window.location && window.location.href ? window.location.href : '')
+  });
 
   const listeners = { open: [], message: [], close: [], error: [] };
   let activeSocket = null;
@@ -1256,12 +1275,18 @@ void CBlazeClawMFCView::OnInitialUpdate()
 									nullptr);
 
 								const std::wstring startupUrl = ResolveChatStartupUrl();
+                             AppendChatProcedureStatusLine(
+									L"startup.url",
+									ToNarrow(startupUrl));
 								if (startupUrl.empty())
 								{
+                                   AppendChatProcedureStatusLine(
+										L"warning.startup.asset.missing",
+										"No BlazeClaw web/chat startup asset resolved");
 									ShowChatStartupError(
 										m_webView.Get(),
 										L"No startup URL resolved",
-										L"Set OPENCLAW_UI_DEV_URL or ensure openclaw/ui/index.html exists.");
+                   L"Set BLAZECLAW_CHAT_DEV_URL or provide blazeclaw/BlazeClawMfc/web/chat assets.");
 								}
 								else
 								{

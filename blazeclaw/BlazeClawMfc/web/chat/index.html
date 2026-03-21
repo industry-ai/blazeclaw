@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BlazeClaw Chat</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      background: #1e1e1e;
+      color: #f0f0f0;
+    }
+    .app {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      height: 100vh;
+    }
+    .header {
+      padding: 10px 14px;
+      border-bottom: 1px solid #333;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+    .status {
+      font-size: 12px;
+      color: #9cc8ff;
+    }
+    .messages {
+      overflow: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .msg {
+      max-width: 78%;
+      padding: 8px 10px;
+      border-radius: 10px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .self {
+      align-self: flex-end;
+      background: #2d5f2f;
+    }
+    .peer {
+      align-self: flex-start;
+      background: #2d2d2d;
+    }
+    .error {
+      align-self: flex-start;
+      background: #7a1f1f;
+    }
+    .composer {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 8px;
+      padding: 10px;
+      border-top: 1px solid #333;
+    }
+    textarea {
+      resize: none;
+      min-height: 56px;
+      max-height: 160px;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #555;
+      background: #111;
+      color: #f0f0f0;
+    }
+    button {
+      border: 1px solid #555;
+      border-radius: 8px;
+      padding: 0 14px;
+      background: #2b2b2b;
+      color: #f0f0f0;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <div>BlazeClaw Chat (WebView)</div>
+      <div id="status" class="status">initializing...</div>
+    </div>
+    <div id="messages" class="messages"></div>
+    <div class="composer">
+      <textarea id="input" placeholder="Type a message..."></textarea>
+      <button id="sendBtn">Send</button>
+      <button id="abortBtn" disabled>Abort</button>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const sessionKey = "main";
+      let connected = false;
+      let runId = null;
+      let streamText = "";
+      const bridgeQueue = [];
+      const pending = new Map();
+
+      const statusEl = document.getElementById("status");
+      const messagesEl = document.getElementById("messages");
+      const inputEl = document.getElementById("input");
+      const sendBtn = document.getElementById("sendBtn");
+      const abortBtn = document.getElementById("abortBtn");
+
+      function setStatus(text) {
+        statusEl.textContent = text;
+      }
+
+      function scrollBottom() {
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      function addMessage(text, kind) {
+        const div = document.createElement("div");
+        div.className = `msg ${kind}`;
+        div.textContent = text;
+        messagesEl.appendChild(div);
+        scrollBottom();
+      }
+
+      function addOrReplaceStream(text) {
+        const existing = document.getElementById("stream-msg");
+        if (existing) {
+          existing.textContent = text;
+          scrollBottom();
+          return;
+        }
+        const div = document.createElement("div");
+        div.id = "stream-msg";
+        div.className = "msg peer";
+        div.textContent = text;
+        messagesEl.appendChild(div);
+        scrollBottom();
+      }
+
+      function finalizeStream() {
+        const existing = document.getElementById("stream-msg");
+        if (existing) {
+          existing.removeAttribute("id");
+        }
+      }
+
+      function nextId() {
+        return `web-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+      }
+
+      function post(msg) {
+        if (!window.chrome || !window.chrome.webview) {
+          bridgeQueue.push(msg);
+          return;
+        }
+        window.chrome.webview.postMessage(msg);
+      }
+
+      function flushQueue() {
+        while (bridgeQueue.length > 0) {
+          post(bridgeQueue.shift());
+        }
+      }
+
+      function request(method, params) {
+        return new Promise((resolve, reject) => {
+          const id = nextId();
+          pending.set(id, { resolve, reject });
+          post({ channel: "blazeclaw.gateway.rpc", id, method, params });
+        });
+      }
+
+      function parseTextFromMessage(message) {
+        if (!message || typeof message !== "object") {
+          return "";
+        }
+        if (typeof message.text === "string") {
+          return message.text;
+        }
+        if (Array.isArray(message.content)) {
+          const item = message.content.find((x) => x && x.type === "text" && typeof x.text === "string");
+          return item ? item.text : "";
+        }
+        return "";
+      }
+
+      function handleChatEvents(events) {
+        if (!Array.isArray(events)) {
+          return;
+        }
+        for (const evt of events) {
+          if (!evt || evt.sessionKey !== sessionKey) {
+            continue;
+          }
+          if (evt.state === "delta") {
+            const next = parseTextFromMessage(evt.message);
+            if (next && next.length >= streamText.length) {
+              streamText = next;
+              addOrReplaceStream(streamText);
+            }
+            continue;
+          }
+
+          if (evt.state === "final") {
+            const text = parseTextFromMessage(evt.message) || streamText;
+            if (text && text.trim() !== "NO_REPLY") {
+              if (streamText) {
+                addOrReplaceStream(text);
+                finalizeStream();
+              } else {
+                addMessage(text, "peer");
+              }
+            } else {
+              finalizeStream();
+            }
+            streamText = "";
+            runId = null;
+            abortBtn.disabled = true;
+            continue;
+          }
+
+          if (evt.state === "aborted") {
+            const text = parseTextFromMessage(evt.message) || streamText;
+            if (text) {
+              addOrReplaceStream(text);
+              finalizeStream();
+            }
+            streamText = "";
+            runId = null;
+            abortBtn.disabled = true;
+            continue;
+          }
+
+          if (evt.state === "error") {
+            addMessage(evt.errorMessage || "chat error", "error");
+            streamText = "";
+            runId = null;
+            abortBtn.disabled = true;
+          }
+        }
+      }
+
+      async function loadHistory() {
+        try {
+          const res = await request("chat.history", { sessionKey, limit: 200 });
+          const messages = Array.isArray(res && res.payload && res.payload.messages)
+            ? res.payload.messages
+            : Array.isArray(res && res.messages)
+              ? res.messages
+              : [];
+          for (const m of messages) {
+            const role = typeof m.role === "string" ? m.role : "assistant";
+            const text = parseTextFromMessage(m);
+            if (!text || text.trim() === "NO_REPLY") {
+              continue;
+            }
+            addMessage(text, role === "user" ? "self" : "peer");
+          }
+        } catch (err) {
+          addMessage(`history error: ${String(err)}`, "error");
+        }
+      }
+
+      async function send() {
+        const msg = inputEl.value.trim();
+        if (!msg || !connected) {
+          return;
+        }
+        inputEl.value = "";
+        addMessage(msg, "self");
+
+        runId = nextId();
+        abortBtn.disabled = false;
+        streamText = "";
+        try {
+          await request("chat.send", {
+            sessionKey,
+            message: msg,
+            deliver: false,
+            idempotencyKey: runId,
+            attachments: []
+          });
+        } catch (err) {
+          addMessage(`send error: ${String(err)}`, "error");
+          runId = null;
+          abortBtn.disabled = true;
+        }
+      }
+
+      async function abort() {
+        if (!runId || !connected) {
+          return;
+        }
+        try {
+          await request("chat.abort", { sessionKey, runId });
+        } catch (err) {
+          addMessage(`abort error: ${String(err)}`, "error");
+        }
+      }
+
+      sendBtn.addEventListener("click", send);
+      abortBtn.addEventListener("click", abort);
+      inputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          send();
+        }
+      });
+
+      if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.addEventListener("message", (event) => {
+          const msg = event && event.data;
+          if (!msg || typeof msg !== "object") {
+            return;
+          }
+
+          if (msg.channel === "blazeclaw.gateway.lifecycle") {
+            connected = msg.state === "connected" || msg.state === "reconnected";
+            setStatus(`gateway: ${msg.state}`);
+            if (connected) {
+              loadHistory();
+            }
+            return;
+          }
+
+          if (msg.channel === "blazeclaw.gateway.rpc.result") {
+            const slot = pending.get(msg.id);
+            if (!slot) {
+              return;
+            }
+            pending.delete(msg.id);
+            if (msg.ok) {
+              slot.resolve(msg);
+            } else {
+              slot.reject(msg.error ? msg.error.message || "request failed" : "request failed");
+            }
+            return;
+          }
+
+          if (msg.channel === "blazeclaw.gateway.chat.events") {
+            handleChatEvents(msg.events);
+          }
+        });
+
+        post({ channel: "blazeclaw.gateway.lifecycle.subscribe" });
+        flushQueue();
+        setStatus("gateway: subscribing...");
+      } else {
+        setStatus("bridge unavailable");
+      }
+    })();
+  </script>
+</body>
+</html>

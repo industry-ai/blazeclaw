@@ -224,7 +224,12 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="src\config\blazeclaw.conf" />
+    <None Include="web\chat\index.html" />
+    <None Include="web\chat\dist\index.html" />
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <BlazeClawChatWebAssets Include="$(ProjectDir)web\chat\**\*.*" />
   </ItemGroup>
   <PropertyGroup>
     <GatewayCodegenMode Condition="'$(GatewayCodegenMode)'==''">verify</GatewayCodegenMode>
@@ -247,5 +252,10 @@
   </Target>
   <Target Name="CopyBlazeClawConfig" AfterTargets="Build">
     <Copy SourceFiles="$(ProjectDir)src\config\blazeclaw.conf" DestinationFiles="$(OutDir)blazeclaw.conf" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CopyBlazeClawChatWebAssets" AfterTargets="Build">
+    <Copy SourceFiles="@(BlazeClawChatWebAssets)"
+          DestinationFiles="@(BlazeClawChatWebAssets->'$(OutDir)web\chat\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
   </Target>
 </Project>
