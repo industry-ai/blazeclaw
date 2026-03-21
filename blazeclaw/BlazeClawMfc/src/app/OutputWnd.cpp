@@ -54,7 +54,13 @@ int COutputWnd::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	}
 
 	// Create output panes:
-	const DWORD dwStyle = LBS_NOINTEGRALHEIGHT | WS_CHILD | WS_VISIBLE | WS_HSCROLL | WS_VSCROLL;
+   const DWORD dwStyle =
+		LBS_NOINTEGRALHEIGHT |
+		LBS_EXTENDEDSEL |
+		WS_CHILD |
+		WS_VISIBLE |
+		WS_HSCROLL |
+		WS_VSCROLL;
 
 	if (!m_wndOutputBuild.Create(dwStyle, rectDummy, &m_wndTabs, 2) ||
 		!m_wndOutputDebug.Create(dwStyle, rectDummy, &m_wndTabs, 3) ||
@@ -143,11 +149,35 @@ void COutputWnd::UpdateFonts()
 	m_wndOutputFind.SetFont(&afxGlobalData.fontRegular);
 }
 
+void COutputWnd::AddChatStatusLine(const CString& line)
+{
+	if (!::IsWindow(m_wndTabs.GetSafeHwnd()))
+	{
+		return;
+	}
+
+	m_wndOutputDebug.AppendLine(line);
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // COutputList1
 
 COutputList::COutputList() noexcept
 {
+}
+
+void COutputList::AppendLine(const CString& line)
+{
+	if (!::IsWindow(GetSafeHwnd()))
+	{
+		return;
+	}
+
+	const int index = AddString(line);
+	if (index >= 0)
+	{
+		SetTopIndex(index);
+	}
 }
 
 COutputList::~COutputList()
@@ -156,6 +186,7 @@ COutputList::~COutputList()
 
 BEGIN_MESSAGE_MAP(COutputList, CListBox)
 	ON_WM_CONTEXTMENU()
+    ON_COMMAND(ID_EDIT_SELECT_ALL, OnEditSelectAll)
 	ON_COMMAND(ID_EDIT_COPY, OnEditCopy)
 	ON_COMMAND(ID_EDIT_CLEAR, OnEditClear)
 	ON_COMMAND(ID_VIEW_OUTPUTWND, OnViewOutput)
@@ -185,9 +216,79 @@ void COutputList::OnContextMenu(CWnd* /*pWnd*/, CPoint point)
 	SetFocus();
 }
 
+void COutputList::OnEditSelectAll()
+{
+	const int count = GetCount();
+	if (count <= 0)
+	{
+		return;
+	}
+
+	SelItemRange(TRUE, 0, count - 1);
+}
+
 void COutputList::OnEditCopy()
 {
-	MessageBox(_T("Copy output"));
+  CString combined;
+	const int count = GetCount();
+	for (int i = 0; i < count; ++i)
+	{
+		if (GetSel(i) <= 0)
+		{
+			continue;
+		}
+
+		CString line;
+		GetText(i, line);
+		if (!combined.IsEmpty())
+		{
+			combined += _T("\r\n");
+		}
+		combined += line;
+	}
+
+	if (combined.IsEmpty())
+	{
+		return;
+	}
+
+	if (!OpenClipboard())
+	{
+		return;
+	}
+
+	if (!EmptyClipboard())
+	{
+		CloseClipboard();
+		return;
+	}
+
+	const SIZE_T bytes = (combined.GetLength() + 1) * sizeof(TCHAR);
+	HGLOBAL hGlobal = GlobalAlloc(GMEM_MOVEABLE, bytes);
+	if (hGlobal == nullptr)
+	{
+		CloseClipboard();
+		return;
+	}
+
+	void* data = GlobalLock(hGlobal);
+	if (data == nullptr)
+	{
+		GlobalFree(hGlobal);
+		CloseClipboard();
+		return;
+	}
+
+	memcpy(data, combined.GetString(), bytes);
+	GlobalUnlock(hGlobal);
+
+#ifdef UNICODE
+	SetClipboardData(CF_UNICODETEXT, hGlobal);
+#else
+	SetClipboardData(CF_TEXT, hGlobal);
+#endif
+
+	CloseClipboard();
 }
 
 void COutputList::OnEditClear()

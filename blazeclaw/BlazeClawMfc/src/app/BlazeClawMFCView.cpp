@@ -22,6 +22,7 @@
 
 #include "BlazeClawMFCDoc.h"
 #include "BlazeClawMFCView.h"
+#include "MainFrame.h"
 #include "../gateway/GatewayJsonUtils.h"
 #include "../gateway/GatewayProtocolModels.h"
 
@@ -51,6 +52,43 @@ std::string ToNarrow(const std::wstring& value)
 		output.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
 	}
 	return output;
+}
+
+void AppendChatProcedureStatusLine(const CString& line)
+{
+	auto* mainFrame =
+		dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+	if (mainFrame == nullptr)
+	{
+		return;
+	}
+
+	mainFrame->AddChatStatusLine(line);
+}
+
+void AppendChatProcedureStatusLine(const wchar_t* stage)
+{
+	if (stage == nullptr)
+	{
+		return;
+	}
+
+	CString line;
+	line.Format(L"[Chat] %s", stage);
+	AppendChatProcedureStatusLine(line);
+}
+
+void AppendChatProcedureStatusLine(
+	const wchar_t* stage,
+	const std::string& detail)
+{
+	CStringW detailW(CA2W(detail.c_str(), CP_UTF8));
+	CString line;
+	line.Format(
+		L"[Chat] %s - %s",
+		(stage != nullptr ? stage : L"stage"),
+		detailW.GetString());
+	AppendChatProcedureStatusLine(line);
 }
 
 std::wstring ToWide(const std::string& value)
@@ -533,11 +571,13 @@ void CBlazeClawMFCView::PostOpenClawWsFrameJson(const std::string& frameJson)
 	{
 		++m_bridgeTraceResCount;
 		TraceBridgeTraffic("ws.res", frameJson);
+       AppendChatProcedureStatusLine(L"bridge.ws.res");
 	}
 	else if (frameType == "event")
 	{
 		++m_bridgeTraceEventCount;
 		TraceBridgeTraffic("ws.event", frameJson);
+       AppendChatProcedureStatusLine(L"bridge.ws.event");
 	}
 
 	FlushBridgeTraceIfNeeded();
@@ -558,6 +598,7 @@ void CBlazeClawMFCView::PostOpenClawWsClose(
 		"ws.close",
 		std::string("code=") + std::to_string(code) +
 		",reason=" + (reason != nullptr ? reason : "closed"));
+ AppendChatProcedureStatusLine(L"bridge.ws.close");
 	FlushBridgeTraceIfNeeded();
 
 	const std::string closeJson =
@@ -819,6 +860,8 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 
 	if (!m_bridgeLifecycleSent)
 	{
+       AppendChatProcedureStatusLine(
+			connected ? L"lifecycle.connected" : L"lifecycle.disconnected");
 		PostBridgeLifecycleEvent(
 			connected ? L"connected" : L"disconnected",
 			connected ? L"service-ready" : L"service-not-running");
@@ -829,10 +872,12 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 	{
      if (connected)
 		{
+         AppendChatProcedureStatusLine(L"lifecycle.reconnected");
 			PostBridgeLifecycleEvent(L"reconnected", L"service-ready");
 		}
 		else
 		{
+          AppendChatProcedureStatusLine(L"lifecycle.service-stopped");
 			PostBridgeLifecycleEvent(L"disconnected", L"service-stopped");
            PostOpenClawWsClose(1001, "gateway disconnected");
 		}
@@ -857,6 +902,7 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 	const auto pollResponse = app->Services().RouteGatewayRequest(pollRequest);
 	if (!pollResponse.ok || !pollResponse.payloadJson.has_value())
 	{
+     AppendChatProcedureStatusLine(L"events.poll.failed");
 		return;
 	}
 
@@ -873,6 +919,8 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 	{
 		return;
 	}
+
+	AppendChatProcedureStatusLine(L"events.poll.batch", eventsRaw);
 
 	const std::string envelope =
 		"{\"channel\":\"blazeclaw.gateway.chat.events\",\"sessionId\":" +
@@ -905,6 +953,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 	{
        ++m_bridgeTraceReqCount;
 		TraceBridgeTraffic("ws.req.channel", message);
+     AppendChatProcedureStatusLine(L"bridge.ws.req");
 		FlushBridgeTraceIfNeeded();
 
 		std::string frameRaw;
@@ -936,6 +985,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		if (method.empty())
 		{
             TraceBridgeTraffic("ws.req.invalid", "missing method");
+            AppendChatProcedureStatusLine(L"bridge.ws.req.invalid");
 			const blazeclaw::gateway::protocol::ResponseFrame errorResponse{
 				.id = correlationId,
 				.ok = false,
@@ -956,6 +1006,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		if (method == "connect.challenge")
 		{
          TraceBridgeTraffic("ws.req.challenge", correlationId);
+         AppendChatProcedureStatusLine(L"bridge.connect.challenge");
 			++m_bridgeEventSeq;
 			const std::string eventFrame =
 				"{\"type\":\"event\",\"event\":\"connect.challenge\","
@@ -970,6 +1021,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		if (method == "connect")
 		{
             TraceBridgeTraffic("ws.req.connect", correlationId);
+            AppendChatProcedureStatusLine(L"bridge.connect");
 			const blazeclaw::gateway::protocol::ResponseFrame helloResponse{
 				.id = correlationId,
 				.ok = true,
@@ -992,6 +1044,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		if (app == nullptr)
 		{
             TraceBridgeTraffic("ws.req.error", "app unavailable");
+            AppendChatProcedureStatusLine(L"bridge.req.app_unavailable");
 			const blazeclaw::gateway::protocol::ResponseFrame errorResponse{
 				.id = correlationId,
 				.ok = false,
@@ -1016,6 +1069,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		};
 		const auto response = app->Services().RouteGatewayRequest(request);
         TraceBridgeTraffic("ws.req.route", method);
+        AppendChatProcedureStatusLine(L"bridge.req.route", method);
 		PostOpenClawWsFrameJson(
 			BuildOpenClawWsResponseFrameJson(response, correlationId));
 		return;
