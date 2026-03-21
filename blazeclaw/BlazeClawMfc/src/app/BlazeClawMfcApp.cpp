@@ -11,12 +11,40 @@
 #include "BlazeClawMFCView.h"
 #include "ChatView.h"
 
+#include <filesystem>
+
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
 
 namespace {
 	constexpr wchar_t kConfigPath[] = L"blazeclaw.conf";
+
+	void AppendMainFrameStatusLine(const CString& line) {
+		auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+		if (mainFrame == nullptr) {
+			return;
+		}
+
+		mainFrame->AddChatStatusLine(line);
+	}
+
+	void AppendStartupConfigStatus(const blazeclaw::config::AppConfig& config) {
+		const auto absoluteConfigPath =
+			std::filesystem::absolute(std::filesystem::path(kConfigPath));
+
+		CString configPathLine;
+		configPathLine.Format(
+			L"[Chat] startup.config.path - %s",
+			absoluteConfigPath.c_str());
+		AppendMainFrameStatusLine(configPathLine);
+
+		CString modeLine;
+		modeLine.Format(
+			L"[Chat] startup.config.mode - %s",
+			config.chat.mode.c_str());
+		AppendMainFrameStatusLine(modeLine);
+	}
 
 	CRuntimeClass* ResolveChatRuntimeViewClass(
 		const blazeclaw::config::AppConfig& config) {
@@ -175,6 +203,7 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 	// The main window has been initialized, so show and update it
 	pMainFrame->ShowWindow(SW_SHOWMAXIMIZED);
 	pMainFrame->UpdateWindow();
+	AppendStartupConfigStatus(m_config);
 
 	return TRUE;
 }

@@ -720,6 +720,11 @@ void CBlazeClawMFCView::EnsureOpenClawBridgeShim()
 	connectTimer = setTimeout(() => {
      if (!activeSocket) return;
 	  activeSocket.readyState = WebViewGatewaySocket.OPEN;
+     window.chrome.webview.postMessage({
+		channel: 'openclaw.ws.shim.ready',
+		url: syntheticUrl,
+		readyState: activeSocket.readyState
+	  });
 	  emit('open', { type: 'open' });
 	  window.chrome.webview.postMessage({
 		channel: 'openclaw.ws.req',
@@ -949,6 +954,12 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		return;
 	}
 
+	if (channel == "openclaw.ws.shim.ready")
+	{
+		AppendChatProcedureStatusLine(L"runtime.shim.ready", message);
+		return;
+	}
+
 	if (channel == "openclaw.ws.req")
 	{
        ++m_bridgeTraceReqCount;
@@ -1007,6 +1018,9 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		{
          TraceBridgeTraffic("ws.req.challenge", correlationId);
          AppendChatProcedureStatusLine(L"bridge.connect.challenge");
+         AppendChatProcedureStatusLine(
+				L"runtime.handshake",
+				"connect.challenge handled");
 			++m_bridgeEventSeq;
 			const std::string eventFrame =
 				"{\"type\":\"event\",\"event\":\"connect.challenge\","
@@ -1022,6 +1036,9 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		{
             TraceBridgeTraffic("ws.req.connect", correlationId);
             AppendChatProcedureStatusLine(L"bridge.connect");
+            AppendChatProcedureStatusLine(
+				L"runtime.handshake",
+				"connect handled");
 			const blazeclaw::gateway::protocol::ResponseFrame helloResponse{
 				.id = correlationId,
 				.ok = true,
@@ -1128,7 +1145,16 @@ void CBlazeClawMFCView::InitializeWebViewBridge()
 		return;
 	}
 
+	AppendChatProcedureStatusLine(
+		L"startup.view",
+		"CBlazeClawMFCView(webview2)");
+	AppendChatProcedureStatusLine(
+		L"startup.bridge.session",
+		m_bridgeSessionId);
+
 	EnsureOpenClawBridgeShim();
+	AppendChatProcedureStatusLine(
+		L"startup.shim.injected");
 
 	m_webView->add_WebMessageReceived(
 		Microsoft::WRL::Callback<ICoreWebView2WebMessageReceivedEventHandler>(
@@ -1161,6 +1187,9 @@ void CBlazeClawMFCView::InitializeWebViewBridge()
 			kBridgeLifecycleTimerId,
 			kBridgeLifecycleTimerMs,
 			nullptr);
+       AppendChatProcedureStatusLine(
+			L"startup.timer",
+			"bridge lifecycle timer started");
 	}
 
 	m_bridgeLifecycleSent = false;
