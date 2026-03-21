@@ -9,6 +9,7 @@
 #include "ChildFrm.h"
 #include "BlazeClawMFCDoc.h"
 #include "BlazeClawMFCView.h"
+#include "ChatView.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -16,6 +17,15 @@
 
 namespace {
 	constexpr wchar_t kConfigPath[] = L"blazeclaw.conf";
+
+	CRuntimeClass* ResolveChatRuntimeViewClass(
+		const blazeclaw::config::AppConfig& config) {
+		if (config.chat.mode == L"native") {
+			return RUNTIME_CLASS(CChatView);
+		}
+
+		return RUNTIME_CLASS(CBlazeClawMFCView);
+	}
 }
 
 
@@ -121,10 +131,11 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 	// Register the application's document templates.  Document templates
 	//  serve as the connection between documents, frame windows and views
 	CMultiDocTemplate* pDocTemplate;
+  CRuntimeClass* viewRuntimeClass = ResolveChatRuntimeViewClass(m_config);
 	pDocTemplate = new CMultiDocTemplate(IDR_BlazeClawMFCTYPE,
 		RUNTIME_CLASS(CBlazeClawMFCDoc),
 		RUNTIME_CLASS(CChildFrame), // custom MDI child frame
-		RUNTIME_CLASS(CBlazeClawMFCView));
+      viewRuntimeClass);
 	if (!pDocTemplate)
 		return FALSE;
 	AddDocTemplate(pDocTemplate);

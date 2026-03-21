@@ -99,6 +99,21 @@ std::wstring NormalizeAgentId(const std::wstring& raw) {
   return normalized;
 }
 
+std::wstring NormalizeChatUiMode(const std::wstring& raw) {
+  std::wstring normalized;
+  normalized.reserve(raw.size());
+  for (const wchar_t ch : raw) {
+    normalized.push_back(static_cast<wchar_t>(std::towlower(ch)));
+  }
+
+  normalized = Trim(normalized);
+  if (normalized == L"native") {
+    return normalized;
+  }
+
+  return L"webview2";
+}
+
 } // namespace
 
 bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) const {
@@ -140,6 +155,12 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
 
     if (trimmedLine.rfind(L"agent.streaming=", 0) == 0) {
       outConfig.agent.enableStreaming = ParseBool(trimmedLine.substr(16), true);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"chat.ui.mode=", 0) == 0) {
+      outConfig.chat.mode =
+          NormalizeChatUiMode(trimmedLine.substr(13));
       continue;
     }
 

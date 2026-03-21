@@ -142,9 +142,14 @@ struct SkillsConfig {
   SkillsInstallConfig install;
 };
 
+struct ChatUiConfig {
+  std::wstring mode = L"webview2";
+};
+
 struct AppConfig {
   GatewayConfig gateway;
   AgentConfig agent;
+  ChatUiConfig chat;
   AgentsConfig agents;
   AcpRuntimeConfig acp;
   EmbeddedRuntimeConfig embedded;
