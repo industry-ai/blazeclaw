@@ -223,6 +223,7 @@
     <ResourceCompile Include="src\app\BlazeClawMFC.rc" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="src\config\blazeclaw.conf" />
     <None Include="packages.config" />
   </ItemGroup>
   <PropertyGroup>
@@ -243,5 +244,8 @@
       <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
     </PropertyGroup>
     <Error Condition="!Exists('..\packages\Microsoft.Web.WebView2.1.0.3856.49\build\native\Microsoft.Web.WebView2.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Web.WebView2.1.0.3856.49\build\native\Microsoft.Web.WebView2.targets'))" />
+  </Target>
+  <Target Name="CopyBlazeClawConfig" AfterTargets="Build">
+    <Copy SourceFiles="$(ProjectDir)src\config\blazeclaw.conf" DestinationFiles="$(OutDir)blazeclaw.conf" SkipUnchangedFiles="true" />
   </Target>
 </Project>
