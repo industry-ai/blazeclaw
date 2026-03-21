@@ -2,6 +2,12 @@
 
 #include "pch.h"
 #include "ChatInputEdit.h"
+#include "../gateway/GatewayProtocolModels.h"
+
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <vector>
 
 class CChatView : public CView
 {
@@ -22,6 +28,34 @@ protected:
 	};
 	CArray<CHAT_ITEM, CHAT_ITEM&> m_items;
 
+	struct NativeChatEventPayload
+	{
+		std::string runId;
+		std::string sessionKey;
+		std::string state;
+		std::optional<std::string> messageJson;
+		std::optional<std::string> errorMessage;
+	};
+
+	struct NativeChatState
+	{
+		bool connected = false;
+		std::string sessionKey = "main";
+		bool chatLoading = false;
+		std::vector<std::string> chatMessages;
+		std::optional<std::string> chatThinkingLevel;
+		bool chatSending = false;
+		std::string chatMessage;
+		std::vector<std::string> chatAttachments;
+		std::optional<std::string> chatRunId;
+		std::optional<std::string> chatStream;
+		std::optional<std::uint64_t> chatStreamStartedAt;
+		std::optional<std::string> lastError;
+	};
+
+	NativeChatState m_chatState;
+  UINT_PTR m_chatPollTimerId = 0;
+
 // Overrides
 public:
 	virtual void OnDraw(CDC* /*pDC*/);
@@ -31,11 +65,22 @@ protected:
 	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
 	afx_msg void OnSize(UINT nType, int cx, int cy);
 	afx_msg void OnSendClicked();
+ afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct);
 	afx_msg void OnMeasureItem(int nIDCtl, LPMEASUREITEMSTRUCT lpMeasureItemStruct);
 	DECLARE_MESSAGE_MAP()
 
 	void LayoutControls(int cx, int cy);
 	void AppendMessage(const CString& strText, BOOL bSelf);
+  bool IsGatewayConnected() const;
+	bool RequestGateway(
+		const std::string& method,
+		const std::optional<std::string>& paramsJson,
+		blazeclaw::gateway::protocol::ResponseFrame& response) const;
+	void LoadChatHistoryNative();
+	void SendChatMessageNative(const std::string& message);
+	void AbortChatRunNative();
+	void PumpChatEventsNative();
+	void HandleChatEventNative(const NativeChatEventPayload& payload);
 };
 

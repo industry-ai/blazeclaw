@@ -1,6 +1,11 @@
 ﻿#include "pch.h"
 #include "framework.h"
 #include "ChatView.h"
+#include "BlazeClawMFCApp.h"
+
+#include "../gateway/GatewayJsonUtils.h"
+
+#include <chrono>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -8,9 +13,138 @@
 
 IMPLEMENT_DYNCREATE(CChatView, CView)
 
+namespace {
+	constexpr UINT_PTR kNativeChatPollTimerId = 0x5A11;
+	constexpr UINT kNativeChatPollIntervalMs = 500;
+	constexpr char kSilentReplyToken[] = "NO_REPLY";
+
+	std::uint64_t CurrentEpochMs()
+	{
+		const auto now = std::chrono::system_clock::now();
+		return static_cast<std::uint64_t>(
+			std::chrono::duration_cast<std::chrono::milliseconds>(
+				now.time_since_epoch())
+				.count());
+	}
+
+	std::string EscapeJson(const std::string& value)
+	{
+		std::string escaped;
+		escaped.reserve(value.size() + 8);
+		for (const char ch : value)
+		{
+			switch (ch)
+			{
+			case '"':
+				escaped += "\\\"";
+				break;
+			case '\\':
+				escaped += "\\\\";
+				break;
+			case '\n':
+				escaped += "\\n";
+				break;
+			case '\r':
+				escaped += "\\r";
+				break;
+			case '\t':
+				escaped += "\\t";
+				break;
+			default:
+				escaped.push_back(ch);
+				break;
+			}
+		}
+		return escaped;
+	}
+
+	bool IsSilentReplyText(const std::string& text)
+	{
+		return blazeclaw::gateway::json::Trim(text) == kSilentReplyToken;
+	}
+
+	std::vector<std::string> SplitTopLevelObjects(const std::string& arrayJson)
+	{
+		std::vector<std::string> objects;
+		const std::string trimmed = blazeclaw::gateway::json::Trim(arrayJson);
+		if (trimmed.size() < 2 || trimmed.front() != '[' || trimmed.back() != ']')
+		{
+			return objects;
+		}
+
+		bool inString = false;
+		int depth = 0;
+		std::size_t start = std::string::npos;
+		for (std::size_t i = 0; i < trimmed.size(); ++i)
+		{
+			const char ch = trimmed[i];
+			if (inString)
+			{
+				if (ch == '\\')
+				{
+					++i;
+					continue;
+				}
+				if (ch == '"')
+				{
+					inString = false;
+				}
+				continue;
+			}
+
+			if (ch == '"')
+			{
+				inString = true;
+				continue;
+			}
+
+			if (ch == '{')
+			{
+				if (depth == 0)
+				{
+					start = i;
+				}
+				++depth;
+				continue;
+			}
+
+			if (ch == '}')
+			{
+				--depth;
+				if (depth == 0 && start != std::string::npos)
+				{
+					objects.push_back(trimmed.substr(start, (i - start) + 1));
+					start = std::string::npos;
+				}
+			}
+		}
+
+		return objects;
+	}
+
+	std::string ExtractMessageText(const std::string& messageJson)
+	{
+		std::string text;
+		if (blazeclaw::gateway::json::FindStringField(messageJson, "text", text))
+		{
+			return text;
+		}
+
+		std::string contentRaw;
+		if (!blazeclaw::gateway::json::FindRawField(messageJson, "content", contentRaw))
+		{
+			return {};
+		}
+
+		blazeclaw::gateway::json::FindStringField(contentRaw, "text", text);
+		return text;
+	}
+}
+
 BEGIN_MESSAGE_MAP(CChatView, CView)
 	ON_WM_CREATE()
 	ON_WM_SIZE()
+ ON_WM_TIMER()
 	ON_WM_MEASUREITEM()
 	ON_WM_DRAWITEM()
 	ON_BN_CLICKED(1001, &CChatView::OnSendClicked)
@@ -63,6 +197,13 @@ int CChatView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 		TRACE0("Failed to create send button\n");
 		return -1;
 	}
+
+	m_chatState.connected = IsGatewayConnected();
+	LoadChatHistoryNative();
+	m_chatPollTimerId = SetTimer(
+		kNativeChatPollTimerId,
+		kNativeChatPollIntervalMs,
+		nullptr);
 
 	return 0;
 }
@@ -120,6 +261,273 @@ void CChatView::OnSendClicked()
 		AppendMessage(strText, TRUE);
 		m_wndInput.SetWindowText(_T(""));
 		AppendMessage(_T("这是一个自动回复的消息示例。"), FALSE);
+       const CStringA utf8Text(strText, CP_UTF8);
+		SendChatMessageNative(std::string(utf8Text.GetString()));
+	}
+}
+
+void CChatView::OnTimer(UINT_PTR nIDEvent)
+{
+	if (nIDEvent == m_chatPollTimerId && nIDEvent != 0)
+	{
+		PumpChatEventsNative();
+	}
+
+	CView::OnTimer(nIDEvent);
+}
+
+bool CChatView::IsGatewayConnected() const
+{
+	const auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	return app != nullptr && app->Services().IsRunning();
+}
+
+bool CChatView::RequestGateway(
+	const std::string& method,
+	const std::optional<std::string>& paramsJson,
+	blazeclaw::gateway::protocol::ResponseFrame& response) const
+{
+	const auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	if (app == nullptr)
+	{
+		return false;
+	}
+
+	const blazeclaw::gateway::protocol::RequestFrame request{
+		.id = "native-chat",
+		.method = method,
+		.paramsJson = paramsJson,
+	};
+
+	response = app->Services().RouteGatewayRequest(request);
+	return true;
+}
+
+void CChatView::LoadChatHistoryNative()
+{
+	m_chatState.chatLoading = true;
+	m_chatState.lastError.reset();
+	if (!IsGatewayConnected())
+	{
+		m_chatState.chatLoading = false;
+		return;
+	}
+
+	blazeclaw::gateway::protocol::ResponseFrame response;
+	const std::string params =
+		std::string("{\"sessionKey\":\"") +
+		m_chatState.sessionKey +
+		"\",\"limit\":200}";
+	if (!RequestGateway("chat.history", params, response) || !response.ok ||
+		!response.payloadJson.has_value())
+	{
+		m_chatState.lastError = "chat.history failed";
+		m_chatState.chatLoading = false;
+		return;
+	}
+
+	std::string messagesRaw;
+	if (blazeclaw::gateway::json::FindRawField(
+			response.payloadJson.value(),
+			"messages",
+			messagesRaw))
+	{
+		m_chatState.chatMessages = SplitTopLevelObjects(messagesRaw);
+	}
+
+	std::string thinkingLevel;
+	if (blazeclaw::gateway::json::FindStringField(
+			response.payloadJson.value(),
+			"thinkingLevel",
+			thinkingLevel))
+	{
+		m_chatState.chatThinkingLevel = thinkingLevel;
+	}
+
+	m_chatState.chatStream.reset();
+	m_chatState.chatStreamStartedAt.reset();
+	m_chatState.chatLoading = false;
+}
+
+void CChatView::SendChatMessageNative(const std::string& message)
+{
+	const std::string trimmed = blazeclaw::gateway::json::Trim(message);
+	if (trimmed.empty() || !IsGatewayConnected())
+	{
+		return;
+	}
+
+	const std::string runId =
+		"native-run-" + std::to_string(CurrentEpochMs());
+	m_chatState.chatSending = true;
+	m_chatState.chatRunId = runId;
+	m_chatState.chatStream = std::string();
+	m_chatState.chatStreamStartedAt = CurrentEpochMs();
+	m_chatState.lastError.reset();
+
+	m_chatState.chatMessages.push_back(
+		"{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"" +
+		EscapeJson(trimmed) +
+		"\"}],\"timestamp\":" +
+		std::to_string(CurrentEpochMs()) +
+		"}");
+
+	const std::string params =
+		std::string("{\"sessionKey\":\"") +
+		m_chatState.sessionKey +
+		"\",\"message\":\"" +
+		EscapeJson(trimmed) +
+		"\",\"deliver\":false,\"idempotencyKey\":\"" +
+		runId +
+		"\"}";
+
+	blazeclaw::gateway::protocol::ResponseFrame response;
+	if (!RequestGateway("chat.send", params, response) || !response.ok)
+	{
+		m_chatState.chatRunId.reset();
+		m_chatState.chatStream.reset();
+		m_chatState.chatStreamStartedAt.reset();
+		m_chatState.lastError = "chat.send failed";
+	}
+
+	m_chatState.chatSending = false;
+}
+
+void CChatView::AbortChatRunNative()
+{
+	if (!IsGatewayConnected())
+	{
+		return;
+	}
+
+	std::string params =
+		std::string("{\"sessionKey\":\"") +
+		m_chatState.sessionKey +
+		"\"";
+	if (m_chatState.chatRunId.has_value())
+	{
+		params += ",\"runId\":\"" + m_chatState.chatRunId.value() + "\"";
+	}
+	params += "}";
+
+	blazeclaw::gateway::protocol::ResponseFrame response;
+	if (!RequestGateway("chat.abort", params, response) || !response.ok)
+	{
+		m_chatState.lastError = "chat.abort failed";
+	}
+}
+
+void CChatView::HandleChatEventNative(const NativeChatEventPayload& payload)
+{
+	if (payload.sessionKey != m_chatState.sessionKey)
+	{
+		return;
+	}
+
+	if (payload.state == "delta")
+	{
+		const std::string next = payload.messageJson.has_value()
+			? ExtractMessageText(payload.messageJson.value())
+			: std::string();
+		if (!next.empty() && !IsSilentReplyText(next))
+		{
+			const std::string current = m_chatState.chatStream.value_or(std::string());
+			if (current.empty() || next.size() >= current.size())
+			{
+				m_chatState.chatStream = next;
+			}
+		}
+		return;
+	}
+
+	if (payload.state == "final" || payload.state == "aborted")
+	{
+		if (payload.messageJson.has_value())
+		{
+			const std::string text = ExtractMessageText(payload.messageJson.value());
+			if (!IsSilentReplyText(text))
+			{
+				m_chatState.chatMessages.push_back(payload.messageJson.value());
+			}
+		}
+		else if (m_chatState.chatStream.has_value() &&
+			!blazeclaw::gateway::json::Trim(m_chatState.chatStream.value()).empty() &&
+			!IsSilentReplyText(m_chatState.chatStream.value()))
+		{
+			m_chatState.chatMessages.push_back(
+				"{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"" +
+				EscapeJson(m_chatState.chatStream.value()) +
+				"\"}],\"timestamp\":" +
+				std::to_string(CurrentEpochMs()) +
+				"}");
+		}
+
+		m_chatState.chatRunId.reset();
+		m_chatState.chatStream.reset();
+		m_chatState.chatStreamStartedAt.reset();
+		return;
+	}
+
+	if (payload.state == "error")
+	{
+		m_chatState.chatRunId.reset();
+		m_chatState.chatStream.reset();
+		m_chatState.chatStreamStartedAt.reset();
+		m_chatState.lastError = payload.errorMessage.value_or("chat error");
+	}
+}
+
+void CChatView::PumpChatEventsNative()
+{
+	m_chatState.connected = IsGatewayConnected();
+	if (!m_chatState.connected)
+	{
+		return;
+	}
+
+	blazeclaw::gateway::protocol::ResponseFrame response;
+	const std::string params =
+		std::string("{\"sessionKey\":\"") +
+		m_chatState.sessionKey +
+		"\",\"limit\":20}";
+	if (!RequestGateway("chat.events.poll", params, response) || !response.ok ||
+		!response.payloadJson.has_value())
+	{
+		return;
+	}
+
+	std::string eventsRaw;
+	if (!blazeclaw::gateway::json::FindRawField(
+			response.payloadJson.value(),
+			"events",
+			eventsRaw))
+	{
+		return;
+	}
+
+	for (const auto& eventJson : SplitTopLevelObjects(eventsRaw))
+	{
+		NativeChatEventPayload payload;
+		blazeclaw::gateway::json::FindStringField(eventJson, "runId", payload.runId);
+		blazeclaw::gateway::json::FindStringField(
+			eventJson,
+			"sessionKey",
+			payload.sessionKey);
+		blazeclaw::gateway::json::FindStringField(eventJson, "state", payload.state);
+
+		std::string messageRaw;
+		if (blazeclaw::gateway::json::FindRawField(eventJson, "message", messageRaw))
+		{
+			payload.messageJson = blazeclaw::gateway::json::Trim(messageRaw);
+		}
+
+		std::string error;
+		if (blazeclaw::gateway::json::FindStringField(eventJson, "errorMessage", error))
+		{
+			payload.errorMessage = error;
+		}
+
+		HandleChatEventNative(payload);
 	}
 }
 
