@@ -23,9 +23,223 @@
 #include "BlazeClawMFCDoc.h"
 #include "BlazeClawMFCView.h"
 
+#include <cwctype>
+#include <filesystem>
+#include <optional>
+#include <vector>
+
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
+
+namespace {
+
+std::optional<std::wstring> GetEnvValue(const wchar_t* name)
+{
+	if (name == nullptr || *name == L'\0')
+	{
+		return std::nullopt;
+	}
+
+	size_t valueLength = 0;
+	wchar_t* rawValue = nullptr;
+	if (_wdupenv_s(&rawValue, &valueLength, name) != 0 || rawValue == nullptr)
+	{
+		return std::nullopt;
+	}
+
+	std::wstring value(rawValue);
+	free(rawValue);
+	if (value.empty())
+	{
+		return std::nullopt;
+	}
+
+	return value;
+}
+
+std::wstring TrimCopy(std::wstring value)
+{
+	auto isSpace = [](wchar_t ch)
+	{
+      return ::iswspace(ch) != 0;
+	};
+
+	while (!value.empty() && isSpace(value.front()))
+	{
+		value.erase(value.begin());
+	}
+
+	while (!value.empty() && isSpace(value.back()))
+	{
+		value.pop_back();
+	}
+
+	return value;
+}
+
+bool IsHttpUrl(const std::wstring& value)
+{
+	if (value.size() < 8)
+	{
+		return false;
+	}
+
+	const std::wstring lower = [&value]()
+	{
+		std::wstring out;
+		out.reserve(value.size());
+		for (const wchar_t ch : value)
+		{
+         out.push_back(static_cast<wchar_t>(::towlower(ch)));
+		}
+		return out;
+	}();
+
+	return lower.rfind(L"http://", 0) == 0 || lower.rfind(L"https://", 0) == 0;
+}
+
+std::wstring BuildFileUrl(const std::filesystem::path& filePath)
+{
+	std::wstring genericPath = filePath.lexically_normal().generic_wstring();
+	if (!genericPath.empty() && genericPath.front() != L'/')
+	{
+		genericPath.insert(genericPath.begin(), L'/');
+	}
+
+	std::wstring escaped;
+	escaped.reserve(genericPath.size() + 8);
+	for (const wchar_t ch : genericPath)
+	{
+		switch (ch)
+		{
+		case L' ':
+			escaped += L"%20";
+			break;
+		case L'#':
+			escaped += L"%23";
+			break;
+		default:
+			escaped.push_back(ch);
+			break;
+		}
+	}
+
+	return L"file://" + escaped;
+}
+
+std::optional<std::filesystem::path> FindOpenClawUiIndex(const std::filesystem::path& start)
+{
+	std::filesystem::path cursor = start;
+	while (!cursor.empty())
+	{
+		const auto direct = cursor / L"openclaw" / L"ui" / L"index.html";
+		if (std::filesystem::exists(direct))
+		{
+			return direct;
+		}
+
+		const auto dist = cursor / L"openclaw" / L"ui" / L"dist" / L"index.html";
+		if (std::filesystem::exists(dist))
+		{
+			return dist;
+		}
+
+		if (!cursor.has_parent_path())
+		{
+			break;
+		}
+
+		auto parent = cursor.parent_path();
+		if (parent == cursor)
+		{
+			break;
+		}
+
+		cursor = parent;
+	}
+
+	return std::nullopt;
+}
+
+std::wstring ResolveChatStartupUrl()
+{
+	if (const auto envUrl = GetEnvValue(L"OPENCLAW_UI_DEV_URL"); envUrl.has_value())
+	{
+		const std::wstring value = TrimCopy(envUrl.value());
+		if (!value.empty())
+		{
+			return value;
+		}
+	}
+
+	if (const auto envUrl = GetEnvValue(L"BLAZECLAW_CHAT_DEV_URL"); envUrl.has_value())
+	{
+		const std::wstring value = TrimCopy(envUrl.value());
+		if (!value.empty())
+		{
+			return value;
+		}
+	}
+
+	const auto mode = GetEnvValue(L"BLAZECLAW_CHAT_UI_MODE");
+	if (mode.has_value())
+	{
+		std::wstring normalized = TrimCopy(mode.value());
+		for (wchar_t& ch : normalized)
+		{
+           ch = static_cast<wchar_t>(::towlower(ch));
+		}
+
+		if (normalized == L"dev")
+		{
+			return L"http://127.0.0.1:5173";
+		}
+	}
+
+	std::vector<std::filesystem::path> roots;
+	roots.push_back(std::filesystem::current_path());
+
+	wchar_t modulePath[MAX_PATH]{};
+	if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) > 0)
+	{
+		roots.push_back(std::filesystem::path(modulePath).parent_path());
+	}
+
+	for (const auto& root : roots)
+	{
+		if (const auto found = FindOpenClawUiIndex(root); found.has_value())
+		{
+			return BuildFileUrl(found.value());
+		}
+	}
+
+	return {};
+}
+
+void ShowChatStartupError(
+	ICoreWebView2* webView,
+	const wchar_t* title,
+	const wchar_t* details)
+{
+	if (webView == nullptr)
+	{
+		return;
+	}
+
+	std::wstring html =
+		L"<html><body style='font-family:Segoe UI;padding:20px;'>"
+		L"<h2>BlazeClaw Chat Startup Error</h2>"
+		L"<p><strong>";
+	html += (title != nullptr ? title : L"Unable to load chat UI");
+	html += L"</strong></p><p>";
+	html += (details != nullptr ? details : L"");
+	html += L"</p></body></html>";
+
+	webView->NavigateToString(html.c_str());
+}
+
+} // namespace
 
 
 // CBlazeClawMFCView
@@ -142,7 +356,42 @@ void CBlazeClawMFCView::OnInitialUpdate()
 							// Navigate to default URL
 							if (m_webView)
 							{
-								m_webView->Navigate(L"https://www.baidu.com");
+                              m_webView->add_NavigationCompleted(
+									Microsoft::WRL::Callback<ICoreWebView2NavigationCompletedEventHandler>(
+										[this](
+											ICoreWebView2* sender,
+											ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT
+										{
+											BOOL isSuccess = FALSE;
+											if (args != nullptr)
+											{
+												args->get_IsSuccess(&isSuccess);
+											}
+
+											if (!isSuccess)
+											{
+												ShowChatStartupError(
+													sender,
+													L"Navigation failed",
+													L"Verify OpenClaw UI assets or dev server availability.");
+											}
+
+											return S_OK;
+										}).Get(),
+									nullptr);
+
+								const std::wstring startupUrl = ResolveChatStartupUrl();
+								if (startupUrl.empty())
+								{
+									ShowChatStartupError(
+										m_webView.Get(),
+										L"No startup URL resolved",
+										L"Set OPENCLAW_UI_DEV_URL or ensure openclaw/ui/index.html exists.");
+								}
+								else
+								{
+									m_webView->Navigate(startupUrl.c_str());
+								}
 							}
 
 							return S_OK;
