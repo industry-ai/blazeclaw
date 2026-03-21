@@ -663,7 +663,7 @@ void CBlazeClawMFCView::EnsureOpenClawBridgeShim()
   if (!window.chrome || !window.chrome.webview) return;
 
   const listeners = { open: [], message: [], close: [], error: [] };
-  let readyState = 0;
+  let activeSocket = null;
   let syntheticUrl = 'ws://127.0.0.1:18789';
   let connectTimer = null;
 
@@ -677,7 +677,8 @@ void CBlazeClawMFCView::EnsureOpenClawBridgeShim()
   function scheduleOpen() {
 	if (connectTimer) clearTimeout(connectTimer);
 	connectTimer = setTimeout(() => {
-	  readyState = 1;
+     if (!activeSocket) return;
+	  activeSocket.readyState = WebViewGatewaySocket.OPEN;
 	  emit('open', { type: 'open' });
 	  window.chrome.webview.postMessage({
 		channel: 'openclaw.ws.req',
@@ -693,11 +694,11 @@ void CBlazeClawMFCView::EnsureOpenClawBridgeShim()
 
   class WebViewGatewaySocket {
 	constructor(url) {
+      activeSocket = this;
 	  syntheticUrl = typeof url === 'string' && url.length ? url : syntheticUrl;
 	  this.url = syntheticUrl;
-	  this.readyState = 0;
-	  this.OPEN = 1;
-	  this.CLOSED = 3;
+    this.readyState = WebViewGatewaySocket.CONNECTING;
+	  this.binaryType = 'arraybuffer';
 	  scheduleOpen();
 	}
 
@@ -713,7 +714,7 @@ void CBlazeClawMFCView::EnsureOpenClawBridgeShim()
 	}
 
 	send(raw) {
-	  if (readyState !== 1) return;
+   if (this.readyState !== WebViewGatewaySocket.OPEN) return;
 	  let frame = null;
 	  try { frame = JSON.parse(String(raw || '')); } catch (_) {}
 	  if (!frame || frame.type !== 'req') return;
@@ -724,7 +725,10 @@ void CBlazeClawMFCView::EnsureOpenClawBridgeShim()
 	}
 
 	close(code, reason) {
-	  readyState = 3;
+     this.readyState = WebViewGatewaySocket.CLOSED;
+	  if (activeSocket === this) {
+		activeSocket = null;
+	  }
 	  emit('close', {
 		type: 'close',
 		code: typeof code === 'number' ? code : 1000,
@@ -732,6 +736,11 @@ void CBlazeClawMFCView::EnsureOpenClawBridgeShim()
 	  });
 	}
   }
+
+  WebViewGatewaySocket.CONNECTING = 0;
+  WebViewGatewaySocket.OPEN = 1;
+  WebViewGatewaySocket.CLOSING = 2;
+  WebViewGatewaySocket.CLOSED = 3;
 
   window.chrome.webview.addEventListener('message', (event) => {
 	const msg = event && event.data;
@@ -741,7 +750,10 @@ void CBlazeClawMFCView::EnsureOpenClawBridgeShim()
 	  return;
 	}
 	if (msg.channel === 'openclaw.ws.close') {
-	  readyState = 3;
+     if (activeSocket) {
+		activeSocket.readyState = WebViewGatewaySocket.CLOSED;
+		activeSocket = null;
+	  }
 	  emit('close', {
 		type: 'close',
 		code: typeof msg.code === 'number' ? msg.code : 1006,
@@ -906,8 +918,12 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		blazeclaw::gateway::json::FindStringField(frameRaw, "type", frameType);
 		if (frameType != "req")
 		{
+         TraceBridgeTraffic("ws.req.ignored", frameType);
+			FlushBridgeTraceIfNeeded();
 			return;
 		}
+
+		TraceBridgeTraffic("ws.req", frameRaw);
 
 		std::string correlationId;
 		if (!blazeclaw::gateway::json::FindStringField(frameRaw, "id", correlationId))

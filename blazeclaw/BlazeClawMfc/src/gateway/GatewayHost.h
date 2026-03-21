@@ -107,6 +107,10 @@ namespace blazeclaw::gateway {
 			std::string idempotencyKey;
 			std::string userMessage;
 			std::string assistantText;
+          std::size_t streamCursor = 0;
+			std::uint64_t lastEmitMs = 0;
+			bool failed = false;
+			std::string errorMessage;
 			std::uint64_t startedAtMs = 0;
 			bool active = true;
 		};

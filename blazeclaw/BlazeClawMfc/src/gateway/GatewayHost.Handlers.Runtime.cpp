@@ -172,6 +172,13 @@ namespace blazeclaw::gateway {
                 "}";
         }
 
+        std::string BuildAssistantDeltaMessageJson(const std::string& text) {
+            return
+                "{\"role\":\"assistant\",\"text\":\"" +
+                EscapeJsonLocal(text) +
+                "\"}";
+        }
+
         std::string BuildUserMessageJson(
             const std::string& text,
             const bool hasAttachments,
@@ -427,6 +434,10 @@ namespace blazeclaw::gateway {
                 const std::string assistantText = message.empty()
                     ? "Received image attachment."
                     : ("Echo: " + message);
+                const bool failRequested =
+                    request.paramsJson.has_value() &&
+                    request.paramsJson.value().find("\"forceError\":true") !=
+                    std::string::npos;
                 const bool silentAssistantReply = IsSilentReplyText(assistantText);
 
                 auto& sessionHistory = m_chatHistoryBySession[sessionKey];
@@ -435,32 +446,21 @@ namespace blazeclaw::gateway {
                     BuildUserMessageJson(message, hasAttachments, nowMs));
 
                 auto& sessionEvents = m_chatEventsBySession[sessionKey];
+                std::size_t streamCursor = 0;
                 if (!silentAssistantReply) {
-                    sessionEvents.push_back(ChatEventState{
-                        .runId = runId,
-                        .sessionKey = sessionKey,
-                        .state = "delta",
-                        .messageJson =
-                            "{\"role\":\"assistant\",\"text\":\"" +
-                            EscapeJsonLocal(assistantText) +
-                            "\"}",
-                        .errorMessage = std::nullopt,
-                        .timestampMs = nowMs,
-                        });
+                    streamCursor = (std::min)(assistantText.size(), std::size_t{ 6 });
+                    if (streamCursor > 0) {
+                        sessionEvents.push_back(ChatEventState{
+                            .runId = runId,
+                            .sessionKey = sessionKey,
+                            .state = "delta",
+                            .messageJson = BuildAssistantDeltaMessageJson(
+                                assistantText.substr(0, streamCursor)),
+                            .errorMessage = std::nullopt,
+                            .timestampMs = nowMs,
+                            });
+                    }
                 }
-
-                const std::optional<std::string> finalMessageJson = silentAssistantReply
-                    ? std::nullopt
-                    : std::optional<std::string>(
-                        BuildAssistantFinalMessageJson(assistantText, nowMs));
-                m_chatEventsBySession[sessionKey].push_back(ChatEventState{
-                    .runId = runId,
-                    .sessionKey = sessionKey,
-                    .state = "final",
-                    .messageJson = finalMessageJson,
-                    .errorMessage = std::nullopt,
-                    .timestampMs = nowMs,
-                    });
 
                 m_chatRunsById.insert_or_assign(
                     runId,
@@ -470,6 +470,12 @@ namespace blazeclaw::gateway {
                         .idempotencyKey = idempotencyKey,
                         .userMessage = message,
                         .assistantText = assistantText,
+                        .streamCursor = streamCursor,
+                        .lastEmitMs = nowMs,
+                        .failed = failRequested,
+                        .errorMessage = failRequested
+                            ? "chat runtime forced error"
+                            : std::string(),
                         .startedAtMs = nowMs,
                         .active = true,
                     });
@@ -555,6 +561,7 @@ namespace blazeclaw::gateway {
                     });
 
                 runIt->second.active = false;
+                runIt->second.streamCursor = runIt->second.assistantText.size();
 
                 return protocol::ResponseFrame{
                     .id = request.id,
@@ -581,11 +588,67 @@ namespace blazeclaw::gateway {
                 const std::size_t limit =
                     (std::max)(std::size_t{ 1 }, (std::min)(requestedLimit, std::size_t{ 100 }));
 
+                const std::uint64_t nowMs = CurrentEpochMsLocal();
+                auto queueIt = m_chatEventsBySession.find(sessionKey);
+                auto& queue = m_chatEventsBySession[sessionKey];
+
+                auto runIt = std::find_if(
+                    m_chatRunsById.begin(),
+                    m_chatRunsById.end(),
+                    [&](auto& pair) {
+                        return pair.second.sessionKey == sessionKey && pair.second.active;
+                    });
+
+                if (runIt != m_chatRunsById.end()) {
+                    auto& run = runIt->second;
+                    const bool silentAssistantReply = IsSilentReplyText(run.assistantText);
+                    const bool enoughTimeElapsed =
+                        run.lastEmitMs == 0 || (nowMs - run.lastEmitMs) >= 180;
+
+                    if (!silentAssistantReply && run.streamCursor < run.assistantText.size() &&
+                        enoughTimeElapsed) {
+                        const std::size_t nextCursor =
+                            (std::min)(run.assistantText.size(), run.streamCursor + std::size_t{ 8 });
+                        run.streamCursor = nextCursor;
+                        run.lastEmitMs = nowMs;
+
+                        queue.push_back(ChatEventState{
+                            .runId = run.runId,
+                            .sessionKey = run.sessionKey,
+                            .state = "delta",
+                            .messageJson = BuildAssistantDeltaMessageJson(
+                                run.assistantText.substr(0, run.streamCursor)),
+                            .errorMessage = std::nullopt,
+                            .timestampMs = nowMs,
+                            });
+                    }
+
+                    const bool streamCompleted =
+                        silentAssistantReply || run.streamCursor >= run.assistantText.size();
+                    if (streamCompleted) {
+                        queue.push_back(ChatEventState{
+                            .runId = run.runId,
+                            .sessionKey = run.sessionKey,
+                            .state = run.failed ? "error" : "final",
+                            .messageJson = run.failed || silentAssistantReply
+                                ? std::nullopt
+                                : std::optional<std::string>(
+                                    BuildAssistantFinalMessageJson(run.assistantText, nowMs)),
+                            .errorMessage = run.failed
+                                ? std::optional<std::string>(run.errorMessage.empty()
+                                    ? "chat error"
+                                    : run.errorMessage)
+                                : std::nullopt,
+                            .timestampMs = nowMs,
+                            });
+
+                        run.active = false;
+                    }
+                }
+
                 std::string eventsJson = "[";
                 std::size_t emitted = 0;
-                auto queueIt = m_chatEventsBySession.find(sessionKey);
-                if (queueIt != m_chatEventsBySession.end()) {
-                    auto& queue = queueIt->second;
+                if (!queue.empty()) {
                     while (emitted < limit && !queue.empty()) {
                         const ChatEventState eventState = queue.front();
                         queue.pop_front();
