@@ -93,8 +93,23 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="src\app\BlazeClawMfcApp.h" />
+    <ClInclude Include="src\app\BlazeClawMFCApp.h" />
+    <ClInclude Include="src\app\BlazeClawMFCDoc.h" />
+    <ClInclude Include="src\app\BlazeClawMFCView.h" />
+    <ClInclude Include="src\app\calendarbar.h" />
+    <ClInclude Include="src\app\ChatInputEdit.h" />
+    <ClInclude Include="src\app\ChatView.h" />
+    <ClInclude Include="src\app\ChildFrm.h" />
+    <ClInclude Include="src\app\ClassView.h" />
+    <ClInclude Include="src\app\FileView.h" />
+    <ClInclude Include="src\app\framework.h" />
     <ClInclude Include="src\app\MainFrame.h" />
+    <ClInclude Include="src\app\OutputWnd.h" />
+    <ClInclude Include="src\app\pch.h" />
+    <ClInclude Include="src\app\PropertiesWnd.h" />
+    <ClInclude Include="src\app\Resource.h" />
+    <ClInclude Include="src\app\targetver.h" />
+    <ClInclude Include="src\app\ViewTree.h" />
     <ClInclude Include="src\config\ConfigLoader.h" />
     <ClInclude Include="src\config\ConfigModels.h" />
     <ClInclude Include="src\core\FeatureRegistry.h" />
@@ -136,12 +151,29 @@
     <ClInclude Include="src\gateway\GatewayWebSocketTransport.h" />
     <ClInclude Include="src\gateway\generated\GatewayHandlerCatalog.Generated.h" />
     <ClInclude Include="src\gateway\generated\GatewaySchemaCatalog.Generated.h" />
-    <ClInclude Include="src\framework.h" />
-    <ClInclude Include="src\pch.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\app\BlazeClawMfcApp.cpp" />
+    <ClCompile Include="src\app\BlazeClawMFCApp.cpp" />
+    <ClCompile Include="src\app\BlazeClawMFCDoc.cpp" />
+    <ClCompile Include="src\app\BlazeClawMFCView.cpp" />
+    <ClCompile Include="src\app\calendarbar.cpp" />
+    <ClCompile Include="src\app\ChatInputEdit.cpp" />
+    <ClCompile Include="src\app\ChatView.cpp" />
+    <ClCompile Include="src\app\ChildFrm.cpp" />
+    <ClCompile Include="src\app\ClassView.cpp" />
+    <ClCompile Include="src\app\FileView.cpp" />
     <ClCompile Include="src\app\MainFrame.cpp" />
+    <ClCompile Include="src\app\OutputWnd.cpp" />
+    <ClCompile Include="src\app\pch.cpp">
+      <PrecompiledHeader
+        Condition="'$(Configuration)|$(Platform)'=='Debug|x64'"
+      >Create</PrecompiledHeader>
+      <PrecompiledHeader
+        Condition="'$(Configuration)|$(Platform)'=='Release|x64'"
+      >Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="src\app\PropertiesWnd.cpp" />
+    <ClCompile Include="src\app\ViewTree.cpp" />
     <ClCompile Include="src\config\ConfigLoader.cpp" />
     <ClCompile Include="src\core\FeatureRegistry.cpp" />
     <ClCompile Include="src\core\AgentsCatalogService.cpp" />
@@ -190,22 +222,18 @@
     <ClCompile Include="src\gateway\GatewaySessionRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayToolRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayWebSocketTransport.cpp" />
-    <ClCompile Include="src\pch.cpp">
-      <PrecompiledHeader>Create</PrecompiledHeader>
-    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="src\app\BlazeClawMFC.rc" />
   </ItemGroup>
   <PropertyGroup>
     <GatewayCodegenMode Condition="'$(GatewayCodegenMode)'==''">verify</GatewayCodegenMode>
   </PropertyGroup>
   <Target Name="RunGatewayCodegen" BeforeTargets="ClCompile">
-    <Exec Condition="'$(GatewayCodegenMode)'=='generate'"
-          Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewayCodegen\Invoke-GatewayCodegen.ps1&quot; -GeneratorScript &quot;tools/GatewayHandlerCatalogGenerator/Generate-GatewayHandlerCatalog.ps1&quot;" />
-    <Exec Condition="'$(GatewayCodegenMode)'=='generate'"
-          Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewayCodegen\Invoke-GatewayCodegen.ps1&quot; -GeneratorScript &quot;tools/GatewaySchemaCatalogGenerator/Generate-GatewaySchemaCatalog.ps1&quot;" />
-    <Exec Condition="'$(GatewayCodegenMode)'!='generate'"
-          Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewayCodegen\Invoke-GatewayCodegen.ps1&quot; -GeneratorScript &quot;tools/GatewayHandlerCatalogGenerator/Generate-GatewayHandlerCatalog.ps1&quot; -VerifyOnly" />
-    <Exec Condition="'$(GatewayCodegenMode)'!='generate'"
-          Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewayCodegen\Invoke-GatewayCodegen.ps1&quot; -GeneratorScript &quot;tools/GatewaySchemaCatalogGenerator/Generate-GatewaySchemaCatalog.ps1&quot; -VerifyOnly" />
+    <Exec Condition="'$(GatewayCodegenMode)'=='generate'" Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewayCodegen\Invoke-GatewayCodegen.ps1&quot; -GeneratorScript &quot;tools/GatewayHandlerCatalogGenerator/Generate-GatewayHandlerCatalog.ps1&quot;" />
+    <Exec Condition="'$(GatewayCodegenMode)'=='generate'" Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewayCodegen\Invoke-GatewayCodegen.ps1&quot; -GeneratorScript &quot;tools/GatewaySchemaCatalogGenerator/Generate-GatewaySchemaCatalog.ps1&quot;" />
+    <Exec Condition="'$(GatewayCodegenMode)'!='generate'" Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewayCodegen\Invoke-GatewayCodegen.ps1&quot; -GeneratorScript &quot;tools/GatewayHandlerCatalogGenerator/Generate-GatewayHandlerCatalog.ps1&quot; -VerifyOnly" />
+    <Exec Condition="'$(GatewayCodegenMode)'!='generate'" Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewayCodegen\Invoke-GatewayCodegen.ps1&quot; -GeneratorScript &quot;tools/GatewaySchemaCatalogGenerator/Generate-GatewaySchemaCatalog.ps1&quot; -VerifyOnly" />
   </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "pch.h"
+#include "../app/pch.h"
 
 namespace blazeclaw::gateway::protocol {
 
