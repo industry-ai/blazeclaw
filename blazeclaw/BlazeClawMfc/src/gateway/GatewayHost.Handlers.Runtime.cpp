@@ -7,6 +7,8 @@
 namespace blazeclaw::gateway {
 
     namespace {
+        constexpr char kSilentReplyToken[] = "NO_REPLY";
+
         std::string EscapeJsonLocal(const std::string& value) {
             std::string escaped;
             escaped.reserve(value.size() + 8);
@@ -233,6 +235,34 @@ namespace blazeclaw::gateway {
             payload += "}";
             return payload;
         }
+
+        bool IsSilentReplyText(const std::string& text) {
+            return json::Trim(text) == kSilentReplyToken;
+        }
+
+        bool IsSilentAssistantMessageJson(const std::string& messageJson) {
+            std::string role;
+            if (!json::FindStringField(messageJson, "role", role)) {
+                return false;
+            }
+
+            if (role != "assistant") {
+                return false;
+            }
+
+            return messageJson.find("\"text\":\"NO_REPLY\"") !=
+                std::string::npos;
+        }
+
+        void PushHistoryMessageIfNew(
+            std::vector<std::string>& history,
+            const std::string& messageJson) {
+            if (!history.empty() && history.back() == messageJson) {
+                return;
+            }
+
+            history.push_back(messageJson);
+        }
     }
 
     void GatewayHost::RegisterRuntimeHandlers() {
@@ -255,12 +285,18 @@ namespace blazeclaw::gateway {
                     const std::size_t begin = history.size() > limit
                         ? history.size() - limit
                         : 0;
+                    bool firstMessage = true;
                     for (std::size_t i = begin; i < history.size(); ++i) {
-                        if (i > begin) {
+                        if (IsSilentAssistantMessageJson(history[i])) {
+                            continue;
+                        }
+
+                        if (!firstMessage) {
                             messagesJson += ",";
                         }
 
                         messagesJson += history[i];
+                        firstMessage = false;
                     }
                 }
 
@@ -337,26 +373,37 @@ namespace blazeclaw::gateway {
                 const std::string assistantText = message.empty()
                     ? "Received image attachment."
                     : ("Echo: " + message);
+                const bool silentAssistantReply = IsSilentReplyText(assistantText);
 
-                m_chatHistoryBySession[sessionKey].push_back(
+                auto& sessionHistory = m_chatHistoryBySession[sessionKey];
+                PushHistoryMessageIfNew(
+                    sessionHistory,
                     BuildUserMessageJson(message, hasAttachments, nowMs));
-                m_chatEventsBySession[sessionKey].push_back(ChatEventState{
-                    .runId = runId,
-                    .sessionKey = sessionKey,
-                    .state = "delta",
-                    .messageJson =
-                        "{\"role\":\"assistant\",\"text\":\"" +
-                        EscapeJsonLocal(assistantText) +
-                        "\"}",
-                    .errorMessage = std::nullopt,
-                    .timestampMs = nowMs,
-                    });
+
+                auto& sessionEvents = m_chatEventsBySession[sessionKey];
+                if (!silentAssistantReply) {
+                    sessionEvents.push_back(ChatEventState{
+                        .runId = runId,
+                        .sessionKey = sessionKey,
+                        .state = "delta",
+                        .messageJson =
+                            "{\"role\":\"assistant\",\"text\":\"" +
+                            EscapeJsonLocal(assistantText) +
+                            "\"}",
+                        .errorMessage = std::nullopt,
+                        .timestampMs = nowMs,
+                        });
+                }
+
+                const std::optional<std::string> finalMessageJson = silentAssistantReply
+                    ? std::nullopt
+                    : std::optional<std::string>(
+                        BuildAssistantFinalMessageJson(assistantText, nowMs));
                 m_chatEventsBySession[sessionKey].push_back(ChatEventState{
                     .runId = runId,
                     .sessionKey = sessionKey,
                     .state = "final",
-                    .messageJson =
-                        BuildAssistantFinalMessageJson(assistantText, nowMs),
+                    .messageJson = finalMessageJson,
                     .errorMessage = std::nullopt,
                     .timestampMs = nowMs,
                     });
@@ -437,13 +484,18 @@ namespace blazeclaw::gateway {
                     });
 
                 const std::uint64_t nowMs = CurrentEpochMsLocal();
+                const bool silentAssistantReply =
+                    IsSilentReplyText(runIt->second.assistantText);
                 queue.push_back(ChatEventState{
                     .runId = runIt->second.runId,
                     .sessionKey = sessionKey,
                     .state = "aborted",
-                    .messageJson = BuildAssistantFinalMessageJson(
-                        runIt->second.assistantText,
-                        nowMs),
+                    .messageJson = silentAssistantReply
+                        ? std::nullopt
+                        : std::optional<std::string>(
+                            BuildAssistantFinalMessageJson(
+                                runIt->second.assistantText,
+                                nowMs)),
                     .errorMessage = std::nullopt,
                     .timestampMs = nowMs,
                     });
@@ -499,8 +551,10 @@ namespace blazeclaw::gateway {
 
                         if ((eventState.state == "final" ||
                             eventState.state == "aborted") &&
-                            eventState.messageJson.has_value()) {
-                            m_chatHistoryBySession[sessionKey].push_back(
+                            eventState.messageJson.has_value() &&
+                            !IsSilentAssistantMessageJson(eventState.messageJson.value())) {
+                            PushHistoryMessageIfNew(
+                                m_chatHistoryBySession[sessionKey],
                                 eventState.messageJson.value());
                         }
 

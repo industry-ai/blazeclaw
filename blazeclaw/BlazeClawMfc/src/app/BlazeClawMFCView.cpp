@@ -463,24 +463,20 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 			connected ? L"service-ready" : L"service-not-running");
 		m_bridgeLifecycleSent = true;
 		m_bridgeLastConnected = connected;
-		return;
 	}
-
-	if (connected == m_bridgeLastConnected)
+	else if (connected != m_bridgeLastConnected)
 	{
-		return;
-	}
+     if (connected)
+		{
+			PostBridgeLifecycleEvent(L"reconnected", L"service-ready");
+		}
+		else
+		{
+			PostBridgeLifecycleEvent(L"disconnected", L"service-stopped");
+		}
 
-	if (connected)
-	{
-		PostBridgeLifecycleEvent(L"reconnected", L"service-ready");
+		m_bridgeLastConnected = connected;
 	}
-	else
-	{
-		PostBridgeLifecycleEvent(L"disconnected", L"service-stopped");
-	}
-
-	m_bridgeLastConnected = connected;
 
 	if (!connected || app == nullptr)
 	{
