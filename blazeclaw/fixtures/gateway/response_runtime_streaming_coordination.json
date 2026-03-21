@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2503",
+  "ok": true,
+  "payload": {
+    "coordinated": true,
+    "lag": 0,
+    "stable": true
+  }
+}

@@ -1,0 +1,462 @@
+{
+  "version": 1,
+  "seed": {
+    "mode": "initial-bootstrap",
+    "sources": [
+      "src/gateway/GatewayHandlers.manifest.json",
+      "src/gateway/GatewayProtocolSchemaValidator.cpp",
+      "src/gateway/GatewayProtocolSchemaValidator.Request.cpp",
+      "src/gateway/GatewayProtocolSchemaValidator.Response.cpp"
+    ]
+  },
+  "defaults": {
+    "requestPolicy": {
+      "type": "none"
+    },
+    "responseShape": "generic.okPayload"
+  },
+  "methods": [
+    {
+      "name": "gateway.ping",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "core.pong"
+    },
+    {
+      "name": "gateway.protocol.version",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "core.protocolVersion"
+    },
+    {
+      "name": "gateway.features.list",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "catalog.features"
+    },
+    {
+      "name": "gateway.events.catalog",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "catalog.events"
+    },
+    {
+      "name": "gateway.session.list",
+      "requestPolicy": {
+        "type": "objectOptional",
+        "allowedFields": [
+          "active",
+          "scope",
+          "limit",
+          "activeMinutes",
+          "includeGlobal",
+          "includeUnknown",
+          "includeDerivedTitles",
+          "includeLastMessage",
+          "label",
+          "spawnedBy",
+          "agentId",
+          "search"
+        ],
+        "fieldKinds": {
+          "active": "boolean",
+          "scope": "string",
+          "limit": "number",
+          "activeMinutes": "number",
+          "includeGlobal": "boolean",
+          "includeUnknown": "boolean",
+          "includeDerivedTitles": "boolean",
+          "includeLastMessage": "boolean",
+          "label": "string",
+          "spawnedBy": "string",
+          "agentId": "string",
+          "search": "string"
+        }
+      },
+      "responseShape": "sessions.list"
+    },
+    {
+      "name": "gateway.agents.list",
+      "requestPolicy": {
+        "type": "objectOptional",
+        "allowedFields": ["active"],
+        "fieldKinds": {
+          "active": "boolean"
+        }
+      },
+      "responseShape": "agents.list"
+    },
+    {
+      "name": "gateway.channels.status",
+      "requestPolicy": {
+        "type": "objectOptional",
+        "allowedFields": ["channel"],
+        "fieldKinds": {
+          "channel": "string"
+        }
+      },
+      "responseShape": "channels.statusList"
+    },
+    {
+      "name": "gateway.channels.accounts",
+      "requestPolicy": {
+        "type": "objectOptional",
+        "allowedFields": ["channel"],
+        "fieldKinds": {
+          "channel": "string"
+        }
+      },
+      "responseShape": "channels.accountList"
+    },
+    {
+      "name": "gateway.channels.routes",
+      "requestPolicy": {
+        "type": "objectOptional",
+        "allowedFields": ["channel"],
+        "fieldKinds": {
+          "channel": "string"
+        }
+      },
+      "responseShape": "channels.routeList"
+    },
+    {
+      "name": "gateway.channels.route.resolve",
+      "requestPolicy": {
+        "type": "objectOptional",
+        "allowedFields": ["channel", "accountId", "sessionId", "agentId"],
+        "fieldKinds": {
+          "channel": "string",
+          "accountId": "string",
+          "sessionId": "string",
+          "agentId": "string"
+        }
+      },
+      "responseShape": "channels.routeResolve"
+    },
+    {
+      "name": "gateway.tools.call.preview",
+      "requestPolicy": {
+        "type": "objectOptional",
+        "allowedFields": ["tool", "args"],
+        "fieldKinds": {
+          "tool": "string",
+          "args": "object"
+        }
+      },
+      "responseShape": "tools.preview"
+    },
+    {
+      "name": "gateway.tools.call.execute",
+      "requestPolicy": {
+        "type": "objectOptional",
+        "allowedFields": ["tool", "args"],
+        "fieldKinds": {
+          "tool": "string",
+          "args": "object"
+        }
+      },
+      "responseShape": "tools.execute"
+    },
+    {
+      "name": "gateway.logs.tail",
+      "requestPolicy": {
+        "type": "objectOptional",
+        "allowedFields": ["limit"],
+        "fieldKinds": {
+          "limit": "number"
+        }
+      },
+      "responseShape": "logs.tail"
+    },
+    {
+      "name": "gateway.events.list",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "events.list"
+    },
+    {
+      "name": "gateway.events.get",
+      "requestPolicy": {
+        "type": "objectOptional",
+        "allowedFields": ["event"],
+        "fieldKinds": {
+          "event": "string"
+        }
+      },
+      "responseShape": "events.get",
+      "stringIdField": "event"
+    },
+    {
+      "name": "gateway.events.search",
+      "requestPolicy": {
+        "type": "objectOptional",
+        "allowedFields": ["term", "limit"],
+        "fieldKinds": {
+          "term": "string",
+          "limit": "number"
+        }
+      },
+      "responseShape": "events.search",
+      "stringIdField": "term"
+    },
+    {
+      "name": "gateway.transport.status",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "transport.status"
+    },
+    {
+      "name": "gateway.config.get",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "config.snapshot"
+    },
+    {
+      "name": "gateway.config.set",
+      "requestPolicy": {
+        "type": "objectOptional",
+        "allowedFields": ["gateway", "agent"],
+        "fieldKinds": {
+          "gateway": "object",
+          "agent": "object"
+        }
+      },
+      "responseShape": "config.setResult"
+    },
+    {
+      "name": "gateway.health",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "health.summary"
+    },
+    {
+      "name": "gateway.health.details",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "health.details"
+    },
+    {
+      "name": "gateway.logs.levels",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "logs.levels"
+    },
+    {
+      "name": "gateway.sessions.resolve",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "sessions.resolve",
+      "stringIdField": "sessionId"
+    },
+    {
+      "name": "gateway.sessions.exists",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "sessions.exists",
+      "stringIdField": "sessionId"
+    },
+    {
+      "name": "gateway.sessions.activate",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "sessions.activate",
+      "stringIdField": "sessionId"
+    },
+    {
+      "name": "gateway.sessions.delete",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "sessions.delete",
+      "stringIdField": "sessionId"
+    },
+    {
+      "name": "gateway.sessions.usage",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "sessions.usage",
+      "stringIdField": "sessionId"
+    },
+    {
+      "name": "gateway.agents.get",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "agents.get",
+      "stringIdField": "agentId"
+    },
+    {
+      "name": "gateway.agents.activate",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "agents.activate",
+      "stringIdField": "agentId"
+    },
+    {
+      "name": "gateway.agents.delete",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "agents.delete",
+      "stringIdField": "agentId"
+    },
+    {
+      "name": "gateway.agents.exists",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "agents.exists",
+      "stringIdField": "agentId"
+    },
+    {
+      "name": "gateway.config.exists",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "config.exists",
+      "stringIdField": "key"
+    },
+    {
+      "name": "gateway.config.getKey",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "config.getKey",
+      "stringIdField": "key"
+    },
+    {
+      "name": "gateway.config.count",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "config.count",
+      "stringIdField": "section"
+    },
+    {
+      "name": "gateway.config.getSection",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "config.getSection",
+      "stringIdField": "section"
+    },
+    {
+      "name": "gateway.events.exists",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "events.exists",
+      "stringIdField": "event"
+    },
+    {
+      "name": "gateway.events.count",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "events.count",
+      "stringIdField": "event"
+    },
+    {
+      "name": "gateway.events.latestByType",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "events.latestByType",
+      "stringIdField": "type"
+    },
+    {
+      "name": "gateway.models.exists",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "models.exists",
+      "stringIdField": "modelId"
+    },
+    {
+      "name": "gateway.models.get",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "models.get",
+      "stringIdField": "modelId"
+    },
+    {
+      "name": "gateway.models.count",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "models.count",
+      "stringIdField": "provider"
+    },
+    {
+      "name": "gateway.models.listByProvider",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "models.listByProvider",
+      "stringIdField": "provider"
+    },
+    {
+      "name": "gateway.tools.exists",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "tools.exists",
+      "stringIdField": "tool"
+    },
+    {
+      "name": "gateway.tools.get",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "tools.get",
+      "stringIdField": "tool"
+    },
+    {
+      "name": "gateway.tools.list",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "tools.list",
+      "stringIdField": "category"
+    },
+    {
+      "name": "gateway.transport.endpoint.exists",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "transport.endpoint.exists",
+      "stringIdField": "endpoint"
+    },
+    {
+      "name": "gateway.transport.endpoint.set",
+      "requestPolicy": { "type": "objectOptional" },
+      "responseShape": "transport.endpoint.set",
+      "stringIdField": "endpoint"
+    }
+  ],
+  "methodPatterns": [
+    {
+      "pattern": "gateway.sessions.*",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "sessions.generic"
+    },
+    {
+      "pattern": "gateway.agents.*",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "agents.generic"
+    },
+    {
+      "pattern": "gateway.channels.*",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "channels.generic"
+    },
+    {
+      "pattern": "gateway.tools.*",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "tools.generic"
+    },
+    {
+      "pattern": "gateway.models.*",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "models.generic"
+    },
+    {
+      "pattern": "gateway.config.*",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "config.generic"
+    },
+    {
+      "pattern": "gateway.transport.*",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "transport.generic"
+    },
+    {
+      "pattern": "gateway.events.*",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "events.generic"
+    },
+    {
+      "pattern": "gateway.runtime.*",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "runtime.generic"
+    },
+    {
+      "pattern": "gateway.security.*",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "security.generic"
+    },
+    {
+      "pattern": "gateway.nodes.*",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "nodes.generic"
+    },
+    {
+      "pattern": "gateway.platform.*",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "platform.generic"
+    },
+    {
+      "pattern": "gateway.ops.*",
+      "requestPolicy": { "type": "none" },
+      "responseShape": "ops.generic"
+    }
+  ],
+  "requiredEvents": [
+    "gateway.tick",
+    "gateway.health",
+    "gateway.shutdown",
+    "gateway.channels.update",
+    "gateway.channels.accounts.update",
+    "gateway.session.reset",
+    "gateway.agent.update",
+    "gateway.tools.catalog.update"
+  ]
+}

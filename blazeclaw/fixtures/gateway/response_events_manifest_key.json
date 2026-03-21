@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-360",
+  "ok": true,
+  "payload": {
+    "manifestKey": "manifest-key-1",
+    "event": "gateway.session.reset"
+  }
+}

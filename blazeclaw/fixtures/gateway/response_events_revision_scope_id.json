@@ -1,0 +1,8 @@
+{
+  "id": "fixture-events-revision-scope-id",
+  "ok": true,
+  "result": {
+    "revisionScopeId": "revision-scope-id-1",
+    "event": "gateway.session.reset"
+  }
+}

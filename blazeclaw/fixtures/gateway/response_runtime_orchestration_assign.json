@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-orchestration-assign",
+  "ok": true,
+  "result": {
+    "agentId": "default",
+    "sessionId": "main",
+    "assigned": true
+  }
+}

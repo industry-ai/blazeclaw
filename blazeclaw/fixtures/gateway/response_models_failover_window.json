@@ -1,0 +1,9 @@
+{
+  "id": "fixture-models-failover-window",
+  "ok": true,
+  "result": {
+    "windowSec": 60,
+    "attempts": 2,
+    "fallbacks": 1
+  }
+}

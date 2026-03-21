@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-702",
+  "ok": true,
+  "payload": {
+    "paceMs": 50,
+    "burst": 1,
+    "adaptive": true
+  }
+}

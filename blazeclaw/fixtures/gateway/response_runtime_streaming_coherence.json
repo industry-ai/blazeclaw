@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-streaming-coherence",
+  "ok": true,
+  "result": {
+    "coherent": true,
+    "drift": 0,
+    "segments": 2
+  }
+}

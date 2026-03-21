@@ -1,0 +1,12 @@
+{
+  "id": "fixture-models-failover-status",
+  "ok": true,
+  "result": {
+    "primary": "default",
+    "fallbacks": [
+      "reasoner"
+    ],
+    "maxRetries": 2,
+    "strategy": "ordered"
+  }
+}

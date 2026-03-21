@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-526",
+  "ok": true,
+  "payload": {
+    "streamScopedId": 0,
+    "fallback": 0,
+    "tools": 2
+  }
+}

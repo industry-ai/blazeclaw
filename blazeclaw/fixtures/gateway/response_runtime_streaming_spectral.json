@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2103",
+  "ok": true,
+  "payload": {
+    "spectral": 0,
+    "samples": 2,
+    "bounded": true
+  }
+}

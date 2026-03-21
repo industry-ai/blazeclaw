@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2968",
+  "ok": true,
+  "payload": {
+    "syncLink4": 1,
+    "samples": 2,
+    "stable": true
+  }
+}

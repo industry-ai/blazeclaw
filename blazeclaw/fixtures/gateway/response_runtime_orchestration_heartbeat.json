@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-orchestration-heartbeat",
+  "ok": true,
+  "result": {
+    "alive": true,
+    "intervalMs": 1000,
+    "jitterMs": 25
+  }
+}

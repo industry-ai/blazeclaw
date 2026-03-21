@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2104",
+  "ok": true,
+  "payload": {
+    "floor": 0,
+    "ceiling": 100,
+    "stable": true
+  }
+}

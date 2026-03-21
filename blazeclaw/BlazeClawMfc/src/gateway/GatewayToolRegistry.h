@@ -1,6 +1,6 @@
 #pragma once
 
-#include "pch.h"
+#include "../app/pch.h"
 
 namespace blazeclaw::gateway {
 
@@ -24,16 +24,37 @@ namespace blazeclaw::gateway {
 		std::string output;
 	};
 
+	struct ToolExecutionEntry {
+		std::string tool;
+		bool executed = false;
+		std::string status;
+		std::string output;
+		bool argsProvided = false;
+	};
+
+	struct ToolExecutionStats {
+		std::size_t count = 0;
+		std::size_t succeeded = 0;
+		std::size_t failed = 0;
+	};
+
 	class GatewayToolRegistry {
 	public:
 		GatewayToolRegistry();
 
 		std::vector<ToolCatalogEntry> List() const;
 		ToolPreviewResult Preview(const std::string& requestedTool) const;
-		ToolExecuteResult Execute(const std::string& requestedTool) const;
+      ToolExecuteResult Execute(
+			const std::string& requestedTool,
+           const std::optional<std::string>& argsJson = std::nullopt);
+		std::vector<ToolExecutionEntry> ListExecutions(std::size_t limit = 20) const;
+		std::optional<ToolExecutionEntry> LatestExecution() const;
+		ToolExecutionStats GetExecutionStats() const;
+		std::size_t ClearExecutions();
 
 	private:
 		std::unordered_map<std::string, ToolCatalogEntry> m_tools;
+      std::vector<ToolExecutionEntry> m_executionHistory;
 	};
 
 } // namespace blazeclaw::gateway

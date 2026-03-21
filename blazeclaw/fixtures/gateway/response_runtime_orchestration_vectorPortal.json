@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2842",
+  "ok": true,
+  "payload": {
+    "vectorPortal": 0,
+    "windowMs": 1000,
+    "stable": true
+  }
+}

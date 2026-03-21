@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2975",
+  "ok": true,
+  "payload": {
+    "active": false,
+    "vectorBridge4": 0,
+    "model": "default"
+  }
+}

@@ -1,1 +1,135 @@
-{"type":"res","id":"req-10","ok":true,"payload":{"channels":[{"id":"telegram","label":"Telegram","connected":false,"accounts":1},{"id":"discord","label":"Discord","connected":false,"accounts":1}]}}
+{
+  "type": "res",
+  "id": "req-10",
+  "ok": true,
+  "payload": {
+    "channels": [
+      {
+        "id": "internal",
+        "label": "Internal Mock",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "whatsapp",
+        "label": "WhatsApp",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "telegram",
+        "label": "Telegram",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "slack",
+        "label": "Slack",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "discord",
+        "label": "Discord",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "msteams",
+        "label": "Microsoft Teams",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "googlechat",
+        "label": "Google Chat",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "matrix",
+        "label": "Matrix",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "line",
+        "label": "LINE",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "feishu",
+        "label": "Feishu",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "mattermost",
+        "label": "Mattermost",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "nextcloudtalk",
+        "label": "Nextcloud Talk",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "signal",
+        "label": "Signal",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "irc",
+        "label": "IRC",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "nostr",
+        "label": "Nostr",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "bluebubbles",
+        "label": "iMessage / BlueBubbles",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "synologychat",
+        "label": "Synology Chat",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "webchat",
+        "label": "WebChat",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "tlon",
+        "label": "Tlon",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "twitch",
+        "label": "Twitch",
+        "connected": false,
+        "accounts": 1
+      },
+      {
+        "id": "zalo",
+        "label": "Zalo / Zalo Personal",
+        "connected": false,
+        "accounts": 1
+      }
+    ]
+  }
+}

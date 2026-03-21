@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-525",
+  "ok": true,
+  "payload": {
+    "streamScopeId": "stream-scope-id-1",
+    "event": "gateway.session.reset"
+  }
+}

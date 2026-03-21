@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-460",
+  "ok": true,
+  "payload": {
+    "profileScopeKey": "profile-scope-key-1",
+    "event": "gateway.session.reset"
+  }
+}

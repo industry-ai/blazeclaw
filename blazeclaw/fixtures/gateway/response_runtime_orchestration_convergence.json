@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2201",
+  "ok": true,
+  "payload": {
+    "convergence": 100,
+    "drift": 0,
+    "state": "locked"
+  }
+}

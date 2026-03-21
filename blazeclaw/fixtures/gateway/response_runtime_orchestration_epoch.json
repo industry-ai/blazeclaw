@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-orchestration-epoch",
+  "ok": true,
+  "result": {
+    "epoch": 1,
+    "startedMs": 1735689600000,
+    "active": true
+  }
+}

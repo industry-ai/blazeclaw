@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-1602",
+  "ok": true,
+  "payload": {
+    "smoothness": 100,
+    "jitterMs": 0,
+    "stable": true
+  }
+}

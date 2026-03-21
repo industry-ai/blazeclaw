@@ -1,0 +1,23 @@
+{
+  "id": "fixture-tools-executions-list",
+  "ok": true,
+  "result": {
+    "executions": [
+      {
+        "tool": "chat.send",
+        "executed": true,
+        "status": "ok",
+        "output": "sent:hello",
+        "argsProvided": true
+      },
+      {
+        "tool": "memory.search",
+        "executed": true,
+        "status": "ok",
+        "output": "results:seeded:knowledge",
+        "argsProvided": true
+      }
+    ],
+    "count": 2
+  }
+}

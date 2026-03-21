@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-903",
+  "ok": true,
+  "payload": {
+    "active": false,
+    "switches": 0,
+    "lastModel": "default"
+  }
+}

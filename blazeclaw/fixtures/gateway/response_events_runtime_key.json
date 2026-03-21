@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-250",
+  "ok": true,
+  "payload": {
+    "runtimeKey": "runtime-key-1",
+    "event": "gateway.session.reset"
+  }
+}

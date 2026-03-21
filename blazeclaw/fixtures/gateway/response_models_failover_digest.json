@@ -1,0 +1,9 @@
+{
+  "id": "fixture-models-failover-digest",
+  "ok": true,
+  "result": {
+    "digest": "sha256:failover-v1",
+    "entries": 2,
+    "fresh": true
+  }
+}

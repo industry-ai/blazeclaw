@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-500",
+  "ok": true,
+  "payload": {
+    "anchorScopeId": "anchor-scope-id-1",
+    "event": "gateway.session.reset"
+  }
+}

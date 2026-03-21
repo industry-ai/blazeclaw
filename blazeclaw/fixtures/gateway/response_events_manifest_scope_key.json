@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-455",
+  "ok": true,
+  "payload": {
+    "manifestScopeKey": "manifest-scope-key-1",
+    "event": "gateway.session.reset"
+  }
+}

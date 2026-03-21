@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2304",
+  "ok": true,
+  "payload": {
+    "horizonMs": 1000,
+    "samples": 2,
+    "stable": true
+  }
+}

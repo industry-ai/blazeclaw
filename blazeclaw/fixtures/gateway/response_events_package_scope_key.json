@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-445",
+  "ok": true,
+  "payload": {
+    "packageScopeKey": "package-scope-key-1",
+    "event": "gateway.session.reset"
+  }
+}

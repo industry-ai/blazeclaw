@@ -1,9 +1,26 @@
 #include "pch.h"
 #include "GatewayToolRegistry.h"
+#include "GatewayJsonUtils.h"
 
 #include <algorithm>
 
 namespace blazeclaw::gateway {
+	namespace {
+		std::string ExtractStringField(
+			const std::optional<std::string>& json,
+			const std::string& fieldName) {
+			if (!json.has_value()) {
+				return {};
+			}
+
+			std::string value;
+			if (!json::FindStringField(json.value(), fieldName, value)) {
+				return {};
+			}
+
+			return value;
+		}
+	}
 
 	GatewayToolRegistry::GatewayToolRegistry() {
 		m_tools.insert_or_assign(
@@ -65,23 +82,125 @@ namespace blazeclaw::gateway {
 		};
 	}
 
-	ToolExecuteResult GatewayToolRegistry::Execute(const std::string& requestedTool) const {
+ ToolExecuteResult GatewayToolRegistry::Execute(
+		const std::string& requestedTool,
+		const std::optional<std::string>& argsJson) {
+		auto recordExecution = [&](const ToolExecuteResult& result) {
+			m_executionHistory.push_back(ToolExecutionEntry{
+				.tool = result.tool,
+				.executed = result.executed,
+				.status = result.status,
+				.output = result.output,
+				.argsProvided = argsJson.has_value(),
+			});
+
+			if (m_executionHistory.size() > 64) {
+				m_executionHistory.erase(m_executionHistory.begin());
+			}
+		};
+
 		const ToolPreviewResult preview = Preview(requestedTool);
 		if (!preview.allowed) {
-			return ToolExecuteResult{
+           const ToolExecuteResult blocked = ToolExecuteResult{
 				.tool = preview.tool,
 				.executed = false,
 				.status = "blocked",
 				.output = preview.reason,
 			};
+           recordExecution(blocked);
+			return blocked;
 		}
 
-		return ToolExecuteResult{
+		if (preview.tool == "chat.send") {
+			const std::string message = ExtractStringField(argsJson, "message");
+			if (message.empty()) {
+               const ToolExecuteResult invalid = ToolExecuteResult{
+					.tool = preview.tool,
+					.executed = false,
+					.status = "invalid_args",
+					.output = "missing_message",
+				};
+               recordExecution(invalid);
+				return invalid;
+			}
+
+           const ToolExecuteResult sent = ToolExecuteResult{
+				.tool = preview.tool,
+				.executed = true,
+				.status = "ok",
+				.output = "sent:" + message,
+			};
+           recordExecution(sent);
+			return sent;
+		}
+
+		if (preview.tool == "memory.search") {
+			const std::string query = ExtractStringField(argsJson, "query");
+           const ToolExecuteResult searched = ToolExecuteResult{
+				.tool = preview.tool,
+				.executed = true,
+				.status = "ok",
+				.output = query.empty() ? "results:seeded" : "results:seeded:" + query,
+			};
+           recordExecution(searched);
+			return searched;
+		}
+
+       const ToolExecuteResult fallback = ToolExecuteResult{
 			.tool = preview.tool,
 			.executed = true,
 			.status = "ok",
 			.output = "seeded_execution_v1",
 		};
+       recordExecution(fallback);
+		return fallback;
+	}
+
+	std::vector<ToolExecutionEntry> GatewayToolRegistry::ListExecutions(std::size_t limit) const {
+		if (limit == 0 || m_executionHistory.empty()) {
+			return {};
+		}
+
+		const std::size_t count = (std::min)(limit, m_executionHistory.size());
+		std::vector<ToolExecutionEntry> output;
+		output.reserve(count);
+
+		for (std::size_t i = 0; i < count; ++i) {
+			const std::size_t index = m_executionHistory.size() - count + i;
+			output.push_back(m_executionHistory[index]);
+		}
+
+		return output;
+	}
+
+	std::optional<ToolExecutionEntry> GatewayToolRegistry::LatestExecution() const {
+		if (m_executionHistory.empty()) {
+			return std::nullopt;
+		}
+
+		return m_executionHistory.back();
+	}
+
+	ToolExecutionStats GatewayToolRegistry::GetExecutionStats() const {
+		ToolExecutionStats stats{};
+		stats.count = m_executionHistory.size();
+
+		for (const auto& execution : m_executionHistory) {
+			if (execution.executed) {
+				++stats.succeeded;
+			}
+			else {
+				++stats.failed;
+			}
+		}
+
+		return stats;
+	}
+
+	std::size_t GatewayToolRegistry::ClearExecutions() {
+		const std::size_t cleared = m_executionHistory.size();
+		m_executionHistory.clear();
+		return cleared;
 	}
 
 } // namespace blazeclaw::gateway

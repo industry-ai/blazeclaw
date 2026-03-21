@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2740",
+  "ok": true,
+  "payload": {
+    "active": false,
+    "driftVector": 0,
+    "model": "default"
+  }
+}

@@ -1,0 +1,1044 @@
+// Microsoft Visual C++ generated resource script.
+//
+#pragma code_page(65001)
+
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#ifndef APSTUDIO_INVOKED
+#include "targetver.h"
+#endif
+#include "afxres.h"
+#include "verrsrc.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// Chinese (Simplified, China) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)
+LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE 
+BEGIN
+    "#ifndef APSTUDIO_INVOKED\r\n"
+    "#include ""targetver.h""\r\n"
+    "#endif\r\n"
+    "#include ""afxres.h""\r\n"
+    "#include ""verrsrc.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE 
+BEGIN
+    "#define _AFX_NO_OLE_RESOURCES\r\n"
+    "#define _AFX_NO_TRACKER_RESOURCES\r\n"
+    "#define _AFX_NO_PROPERTY_RESOURCES\r\n"
+    "\r\n"
+    "#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)\r\n"
+    "LANGUAGE 9, 1\r\n"
+    "#include ""res\\BlazeClawMFC.rc2""  // non-Microsoft Visual C++ edited resources\r\n"
+    "#include ""afxres.rc""      // Standard components\r\n"
+    "#include ""afxprint.rc""    // printing/print preview resources\r\n"
+    "#if !defined(_AFXDLL)\r\n"
+    "#include ""afxribbon.rc""        // MFC ribbon and control bar resources\r\n"
+    "#endif\r\n"
+    "#endif\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+#endif    // Chinese (Simplified, China) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+/////////////////////////////////////////////////////////////////////////////
+// English (United States) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDR_MAINFRAME           ICON                    "res\\BlazeClaw.MFC.ico"
+
+IDR_BlazeClawMFCTYPE    ICON                    "res\\BlazeClaw.MFCDoc.ico"
+
+IDI_FILE_VIEW           ICON                    "res\\file_view.ico"
+
+IDI_FILE_VIEW_HC        ICON                    "res\\file_view_hc.ico"
+
+IDI_CLASS_VIEW          ICON                    "res\\class_view.ico"
+
+IDI_CLASS_VIEW_HC       ICON                    "res\\class_view_hc.ico"
+
+IDI_OUTPUT_WND          ICON                    "res\\output_wnd.ico"
+
+IDI_OUTPUT_WND_HC       ICON                    "res\\output_wnd_hc.ico"
+
+IDI_PROPERTIES_WND      ICON                    "res\\properties_wnd.ico"
+
+IDI_PROPERTIES_WND_HC   ICON                    "res\\properties_wnd_hc.ico"
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Bitmap
+//
+
+IDR_MAINFRAME           BITMAP                  "res\\Toolbar.bmp"
+
+IDR_MAINFRAME_256       BITMAP                  "res\\Toolbar256.bmp"
+
+IDB_MAIN                BITMAP                  "res\\main.bmp"
+
+IDB_FILELARGE           BITMAP                  "res\\filelarge.bmp"
+
+IDB_FILESMALL           BITMAP                  "res\\filesmall.bmp"
+
+IDB_WRITELARGE          BITMAP                  "res\\writelarge.bmp"
+
+IDB_WRITESMALL          BITMAP                  "res\\writesmall.bmp"
+
+IDB_BUTTONS             BITMAP                  "res\\buttons.bmp"
+
+IDR_SORT                BITMAP                  "res\\sort.bmp"
+
+IDB_SORT_24             BITMAP                  "res\\sort_hc.bmp"
+
+IDB_FILE_VIEW           BITMAP                  "res\\fileview.bmp"
+
+IDB_FILE_VIEW_24        BITMAP                  "res\\fileview_hc.bmp"
+
+IDB_CLASS_VIEW          BITMAP                  "res\\classview.bmp"
+
+IDB_CLASS_VIEW_24       BITMAP                  "res\\classview_hc.bmp"
+
+IDR_EXPLORER            BITMAP                  "res\\explorer.bmp"
+
+IDB_EXPLORER_24         BITMAP                  "res\\explorer_hc.bmp"
+
+IDR_MENU_IMAGES         BITMAP                  "res\\menuimages.bmp"
+
+IDB_MENU_IMAGES_24      BITMAP                  "res\\menuimages_hc.bmp"
+
+IDR_PROPERTIES          BITMAP                  "res\\properties.bmp"
+
+IDB_PROPERTIES_HC       BITMAP                  "res\\properties_hc.bmp"
+
+IDB_NAVIGATION_LARGE    BITMAP                  "res\\nav_large.bmp"
+
+IDB_NAVIGATION_LARGE_HC BITMAP                  "res\\nav_large_hc.bmp"
+
+IDB_PAGES               BITMAP                  "res\\pages.bmp"
+
+IDB_PAGES_HC            BITMAP                  "res\\pages_hc.bmp"
+
+IDB_PAGES_SMALL         BITMAP                  "res\\pages_small.bmp"
+
+IDB_PAGES_SMALL_HC      BITMAP                  "res\\pages_small_hc.bmp"
+
+IDB_INFO                BITMAP                  "res\\info.bmp"
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Toolbar
+//
+
+IDR_MAINFRAME TOOLBAR 16, 15
+BEGIN
+    BUTTON      ID_FILE_NEW
+    BUTTON      ID_FILE_OPEN
+    BUTTON      ID_FILE_SAVE
+    SEPARATOR
+    BUTTON      ID_EDIT_CUT
+    BUTTON      ID_EDIT_COPY
+    BUTTON      ID_EDIT_PASTE
+    SEPARATOR
+    BUTTON      ID_FILE_PRINT
+    BUTTON      ID_APP_ABOUT
+END
+
+IDR_MAINFRAME_256 TOOLBAR 16, 15
+BEGIN
+    BUTTON      ID_FILE_NEW
+    BUTTON      ID_FILE_OPEN
+    BUTTON      ID_FILE_SAVE
+    SEPARATOR
+    BUTTON      ID_EDIT_CUT
+    BUTTON      ID_EDIT_COPY
+    BUTTON      ID_EDIT_PASTE
+    SEPARATOR
+    BUTTON      ID_FILE_PRINT
+    BUTTON      ID_APP_ABOUT
+END
+
+IDR_SORT TOOLBAR 16, 15
+BEGIN
+    BUTTON      ID_SORT_MENU
+    BUTTON      ID_NEW_FOLDER
+END
+
+IDR_EXPLORER TOOLBAR 16, 15
+BEGIN
+    BUTTON      ID_PROPERTIES
+END
+
+IDR_MENU_IMAGES TOOLBAR 16, 15
+BEGIN
+    BUTTON      ID_WINDOW_MANAGER
+    SEPARATOR
+    BUTTON      ID_WINDOW_CASCADE
+    BUTTON      ID_WINDOW_TILE_HORZ
+    BUTTON      ID_TOOLS_MACRO
+    BUTTON      ID_SORTING_SORTALPHABETIC
+    BUTTON      ID_SORTING_SORTBYTYPE
+    BUTTON      ID_SORTING_SORTBYACCESS
+    BUTTON      ID_SORTING_GROUPBYTYPE
+END
+
+IDR_PROPERTIES TOOLBAR 16, 15
+BEGIN
+    BUTTON      ID_EXPAND_ALL
+    BUTTON      ID_SORTPROPERTIES
+    BUTTON      ID_PROPERTIES1
+    BUTTON      ID_PROPERTIES2
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Menu
+//
+
+IDR_MAINFRAME MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&New\tCtrl+N",                ID_FILE_NEW
+        MENUITEM "&Open...\tCtrl+O",            ID_FILE_OPEN
+        MENUITEM "&Close",                      ID_FILE_CLOSE
+        MENUITEM SEPARATOR
+        MENUITEM "P&rint Setup...",             ID_FILE_PRINT_SETUP
+        MENUITEM SEPARATOR
+        MENUITEM "Recent File",                 ID_FILE_MRU_FILE1, GRAYED
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit",                       ID_APP_EXIT
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "&Status Bar",                 ID_VIEW_STATUS_BAR
+        MENUITEM "&Caption Bar",                ID_VIEW_CAPTION_BAR
+        POPUP "&Application Look"
+        BEGIN
+            MENUITEM "Windows &2000",               ID_VIEW_APPLOOK_WIN_2000
+            MENUITEM "Office &XP",                  ID_VIEW_APPLOOK_OFF_XP
+            MENUITEM "&Windows XP",                 ID_VIEW_APPLOOK_WIN_XP
+            MENUITEM "Office 200&3",                ID_VIEW_APPLOOK_OFF_2003
+            MENUITEM "Visual Studio 200&5",         ID_VIEW_APPLOOK_VS_2005
+            MENUITEM "Visual Studio 200&8",         ID_VIEW_APPLOOK_VS_2008
+            POPUP "Office 200&7"
+            BEGIN
+                MENUITEM "&Blue Style",                 ID_VIEW_APPLOOK_OFF_2007_BLUE
+                MENUITEM "B&lack Style",                ID_VIEW_APPLOOK_OFF_2007_BLACK
+                MENUITEM "&Silver Style",               ID_VIEW_APPLOOK_OFF_2007_SILVER
+                MENUITEM "&Aqua Style",                 ID_VIEW_APPLOOK_OFF_2007_AQUA
+            END
+        END
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&About BlazeClaw.MFC...",     ID_APP_ABOUT
+    END
+END
+
+IDR_BlazeClawMFCTYPE MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&New\tCtrl+N",                ID_FILE_NEW
+        MENUITEM "&Open...\tCtrl+O",            ID_FILE_OPEN
+        MENUITEM "&Close",                      ID_FILE_CLOSE
+        MENUITEM "&Save\tCtrl+S",               ID_FILE_SAVE
+        MENUITEM "Save &As...",                 ID_FILE_SAVE_AS
+        MENUITEM SEPARATOR
+        MENUITEM "&Print...\tCtrl+P",           ID_FILE_PRINT
+        MENUITEM "Print Pre&view",              ID_FILE_PRINT_PREVIEW
+        MENUITEM "P&rint Setup...",             ID_FILE_PRINT_SETUP
+        MENUITEM SEPARATOR
+        MENUITEM "Recent File",                 ID_FILE_MRU_FILE1, GRAYED
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit",                       ID_APP_EXIT
+    END
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "&Undo\tCtrl+Z",               ID_EDIT_UNDO
+        MENUITEM SEPARATOR
+        MENUITEM "Cu&t\tCtrl+X",                ID_EDIT_CUT
+        MENUITEM "&Copy\tCtrl+C",               ID_EDIT_COPY
+        MENUITEM "&Paste\tCtrl+V",              ID_EDIT_PASTE
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "&Status Bar",                 ID_VIEW_STATUS_BAR
+        MENUITEM "&Caption Bar",                ID_VIEW_CAPTION_BAR
+        POPUP "&Application Look"
+        BEGIN
+            MENUITEM "Windows &2000",               ID_VIEW_APPLOOK_WIN_2000
+            MENUITEM "Office &XP",                  ID_VIEW_APPLOOK_OFF_XP
+            MENUITEM "&Windows XP",                 ID_VIEW_APPLOOK_WIN_XP
+            MENUITEM "Office 200&3",                ID_VIEW_APPLOOK_OFF_2003
+            MENUITEM "Visual Studio 200&5",         ID_VIEW_APPLOOK_VS_2005
+            MENUITEM "Visual Studio 200&8",         ID_VIEW_APPLOOK_VS_2008
+            POPUP "Office 200&7"
+            BEGIN
+                MENUITEM "&Blue Style",                 ID_VIEW_APPLOOK_OFF_2007_BLUE
+                MENUITEM "B&lack Style",                ID_VIEW_APPLOOK_OFF_2007_BLACK
+                MENUITEM "&Silver Style",               ID_VIEW_APPLOOK_OFF_2007_SILVER
+                MENUITEM "&Aqua Style",                 ID_VIEW_APPLOOK_OFF_2007_AQUA
+            END
+        END
+    END
+    POPUP "&Window"
+    BEGIN
+        MENUITEM "&New Window",                 ID_WINDOW_NEW
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&About BlazeClaw.MFC...",     ID_APP_ABOUT
+    END
+END
+
+IDR_POPUP_EDIT MENU
+BEGIN
+    POPUP "Edit"
+    BEGIN
+        MENUITEM "Cu&t\tCtrl+X",                ID_EDIT_CUT
+        MENUITEM "&Copy\tCtrl+C",               ID_EDIT_COPY
+        MENUITEM "&Paste\tCtrl+V",              ID_EDIT_PASTE
+    END
+END
+
+IDR_WINDOWS_MENU MENU
+BEGIN
+    MENUITEM "&New Window",                 ID_WINDOW_NEW
+END
+
+IDR_POPUP_SORT MENU
+BEGIN
+    POPUP "Sorting"
+    BEGIN
+        MENUITEM "&Sort Alphabeticaly",         ID_SORTING_SORTALPHABETIC
+        MENUITEM "Sort by &Type",               ID_SORTING_SORTBYTYPE
+        MENUITEM "Sort by Acc&ess",             ID_SORTING_SORTBYACCESS
+        MENUITEM "Group by t&ype",              ID_SORTING_GROUPBYTYPE
+    END
+END
+
+IDR_POPUP_EXPLORER MENU
+BEGIN
+    POPUP "Explorer"
+    BEGIN
+        MENUITEM "&Open",                       ID_OPEN
+        MENUITEM "Open &With....",              ID_OPEN_WITH
+        MENUITEM SEPARATOR
+        MENUITEM "&Compile",                    ID_DUMMY_COMPILE
+        MENUITEM SEPARATOR
+        MENUITEM "Cu&t\tCtrl+X",                ID_EDIT_CUT
+        MENUITEM "&Copy\tCtrl+C",               ID_EDIT_COPY
+        MENUITEM "&Remove",                     ID_EDIT_CLEAR
+        MENUITEM SEPARATOR
+        MENUITEM "&Properties...",              ID_PROPERTIES
+    END
+END
+
+IDR_OUTPUT_POPUP MENU
+BEGIN
+    POPUP "Popup"
+    BEGIN
+        MENUITEM "&Copy",                       ID_EDIT_COPY
+        MENUITEM "&Clear",                      ID_EDIT_CLEAR
+        MENUITEM SEPARATOR
+        MENUITEM "&Hide",                       ID_VIEW_OUTPUTWND
+    END
+END
+
+IDR_HELP_MENU MENU
+BEGIN
+    MENUITEM "&About BlazeClaw.MFC...",     ID_APP_ABOUT
+END
+
+IDR_THEME_MENU MENU
+BEGIN
+    MENUITEM "Office 2007 (&Blue Style)",   ID_VIEW_APPLOOK_OFF_2007_BLUE
+    MENUITEM "Office 2007 (B&lack Style)",  ID_VIEW_APPLOOK_OFF_2007_BLACK
+    MENUITEM "Office 2007 (&Silver Style)", ID_VIEW_APPLOOK_OFF_2007_SILVER
+    MENUITEM "Office 2007 (&Aqua Style)",   ID_VIEW_APPLOOK_OFF_2007_AQUA
+    MENUITEM "Win&dows 7",                  ID_VIEW_APPLOOK_WINDOWS_7
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Accelerator
+//
+
+IDR_MAINFRAME ACCELERATORS
+BEGIN
+    "N",            ID_FILE_NEW,            VIRTKEY, CONTROL
+    "O",            ID_FILE_OPEN,           VIRTKEY, CONTROL
+    "S",            ID_FILE_SAVE,           VIRTKEY, CONTROL
+    "P",            ID_FILE_PRINT,          VIRTKEY, CONTROL
+    "Z",            ID_EDIT_UNDO,           VIRTKEY, CONTROL
+    "X",            ID_EDIT_CUT,            VIRTKEY, CONTROL
+    "C",            ID_EDIT_COPY,           VIRTKEY, CONTROL
+    "V",            ID_EDIT_PASTE,          VIRTKEY, CONTROL
+    VK_BACK,        ID_EDIT_UNDO,           VIRTKEY, ALT
+    VK_DELETE,      ID_EDIT_CUT,            VIRTKEY, SHIFT
+    VK_INSERT,      ID_EDIT_COPY,           VIRTKEY, CONTROL
+    VK_INSERT,      ID_EDIT_PASTE,          VIRTKEY, SHIFT
+    VK_F6,          ID_NEXT_PANE,           VIRTKEY 
+    VK_F6,          ID_PREV_PANE,           VIRTKEY, SHIFT
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_ABOUTBOX DIALOGEX 0, 0, 170, 62
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "About BlazeClaw.MFC"
+FONT 8, "MS Shell Dlg", 0, 0, 0x1
+BEGIN
+    ICON            IDR_MAINFRAME,IDC_STATIC,14,14,21,20
+    LTEXT           "BlazeClaw.MFC, Version 1.0",IDC_STATIC,42,14,114,8,SS_NOPREFIX
+    LTEXT           "Copyright (C) 2026",IDC_STATIC,42,26,114,8
+    DEFPUSHBUTTON   "OK",IDOK,113,41,50,14,WS_GROUP
+END
+
+IDD_OVERVIEW_DIALOG DIALOGEX 0, 0, 680, 320
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "总览"
+FONT 9, "Microsoft YaHei UI", 0, 0, 0x1
+BEGIN
+    LTEXT           "总览",IDC_STATIC_TITLE,20,20,200,20,SS_NOPREFIX
+    LTEXT           "配置并管理网关连接与代理设置。",IDC_STATIC_DESCRIPTION,20,45,400,15,SS_NOPREFIX
+    GROUPBOX        "网关",IDC_GROUP_GATEWAY,20,70,640,200
+    LTEXT           "配置网关连接参数，所有更改将立即生效。",IDC_STATIC_GATEWAY_DESC,30,90,400,15,SS_NOPREFIX
+    LTEXT           "WebSocket URL",IDC_STATIC_WS_URL,30,115,100,15,SS_NOPREFIX
+    EDITTEXT        IDC_EDIT_WS_URL,30,130,120,14,ES_AUTOHSCROLL
+    LTEXT           "令牌",IDC_STATIC_GATEWAY_TOKEN,170,115,100,15,SS_NOPREFIX
+    EDITTEXT        IDC_EDIT_GATEWAY_TOKEN,170,130,120,14,ES_AUTOHSCROLL
+    LTEXT           "密码 (可选)",IDC_STATIC_PASSWORD,310,115,100,15,SS_NOPREFIX
+    EDITTEXT        IDC_EDIT_PASSWORD,310,130,120,14,ES_PASSWORD | ES_AUTOHSCROLL
+    LTEXT           "会话密钥",IDC_STATIC_SESSION_KEY,450,115,100,15,SS_NOPREFIX
+    EDITTEXT        IDC_EDIT_SESSION_KEY,450,130,120,14,ES_AUTOHSCROLL
+    LTEXT           "语言",IDC_STATIC_LANGUAGE,590,115,60,15,SS_NOPREFIX
+    COMBOBOX        IDC_COMBO_LANGUAGE,590,130,60,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON      "连接",IDC_BUTTON_CONNECT,30,160,60,20
+    PUSHBUTTON      "刷新",IDC_BUTTON_REFRESH,100,160,60,20
+    LTEXT           "请先填写网关信息并点击连接。",IDC_STATIC_HINT,180,165,300,15,SS_NOPREFIX
+    DEFPUSHBUTTON   "确定",IDOK,567,294,50,20,WS_GROUP
+    PUSHBUTTON      "取消",IDCANCEL,623,294,50,20,WS_GROUP
+END
+
+IDD_INSTANCE_DIALOG DIALOGEX 0, 0, 560, 360
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "实例"
+FONT 9, "Microsoft YaHei UI", 0, 0, 0x1
+BEGIN
+    LTEXT           "实例",IDC_STATIC_INST_MAIN_TITLE,20,12,200,14,SS_NOPREFIX
+    LTEXT           "来自网关或客户端节点的在线信号。",IDC_STATIC_INST_MAIN_DESC,20,30,500,24,SS_NOPREFIX
+    GROUPBOX        "Connected Instances",IDC_GROUP_CONN_INST,20,55,520,270
+    LTEXT           "Presence beacons from the gateway and clients.",IDC_STATIC_CONN_SUBTITLE,30,72,380,14,SS_NOPREFIX
+    PUSHBUTTON      "Refresh",IDC_BUTTON_INST_REFRESH,450,68,80,22
+    GROUPBOX        "DESKTOP-PFRGO2L",IDC_GROUP_INSTANCE_CARD,30,95,500,130
+    LTEXT           "DESKTOP-PFRGO2L / 192.168.20.100 gateway 2026.3.7",IDC_STATIC_INSTANCE_DETAIL,40,112,460,14,SS_NOPREFIX
+    LTEXT           "gateway    Windows 10.0.22200    Windows    x64    2026.3.7",IDC_STATIC_INSTANCE_TAGS,40,130,460,14,SS_NOPREFIX
+    RTEXT           "just now",IDC_STATIC_INST_STATUS_JUST,400,108,120,12
+    RTEXT           "Last seen: n/a",IDC_STATIC_INST_STATUS_LAST,400,122,120,12
+    RTEXT           "Beacon: on",IDC_STATIC_INST_STATUS_BEACON,400,136,120,12
+    DEFPUSHBUTTON   "确定",IDOK,491,335,65,22,WS_GROUP
+END
+
+IDD_SESSION_DIALOG DIALOGEX 0, 0, 680, 400
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "会话"
+FONT 9, "Microsoft YaHei UI", 0, 0, 0x1
+BEGIN
+    LTEXT           "会话",IDC_STATIC_SESS_MAIN_TITLE,20,10,200,14,SS_NOPREFIX
+    LTEXT           "检查活动会话并调整每个会话的默认设置。",IDC_STATIC_SESS_MAIN_DESC,20,28,620,28,SS_NOPREFIX
+    GROUPBOX        "Sessions",IDC_GROUP_SESS_CARD,20,58,640,310
+    LTEXT           "Active session keys and per-session overrides.",IDC_STATIC_SESS_EN_SUBTITLE,30,74,420,14,SS_NOPREFIX
+    PUSHBUTTON      "Refresh",IDC_BUTTON_SESS_REFRESH,560,70,80,22
+    LTEXT           "Active within (seconds):",IDC_STATIC_ACTIVE_WITHIN_LABEL,30,98,120,10,SS_NOPREFIX
+    EDITTEXT        IDC_EDIT_ACTIVE_WITHIN_SEC,112,96,44,14,ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "Limit:",IDC_STATIC_LIMIT_LABEL,205,98,40,10,SS_NOPREFIX
+    EDITTEXT        IDC_EDIT_LIMIT,225,96,44,14,ES_AUTOHSCROLL
+    CONTROL         "Include global",IDC_CHECK_INCLUDE_GLOBAL,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,300,96,100,12
+    CONTROL         "Include unknown",IDC_CHECK_INCLUDE_UNKNOWN,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,410,96,110,12
+    LTEXT           "Score (multiple):",IDC_STATIC_SCORE_LABEL,30,122,200,10,SS_NOPREFIX
+    LTEXT           "Key",IDC_STATIC_HDR_KEY,30,138,72,10,SS_NOPREFIX
+    LTEXT           "Label",IDC_STATIC_HDR_LABEL,105,138,70,10,SS_NOPREFIX
+    LTEXT           "Kind",IDC_STATIC_HDR_KIND,180,138,45,10,SS_NOPREFIX
+    LTEXT           "Updated",IDC_STATIC_HDR_UPDATED,230,138,55,10,SS_NOPREFIX
+    LTEXT           "Index",IDC_STATIC_HDR_INDEX,290,138,40,10,SS_NOPREFIX
+    LTEXT           "Thinking (Strategy)",IDC_STATIC_HDR_THINKING,335,138,85,10,SS_NOPREFIX
+    LTEXT           "Instance",IDC_STATIC_HDR_INSTANCE,425,138,55,10,SS_NOPREFIX
+    LTEXT           "Remaining (Priority)",IDC_STATIC_HDR_REMAINING,485,138,95,10,SS_NOPREFIX
+    LTEXT           "Actions",IDC_STATIC_HDR_ACTIONS,595,138,50,10,SS_NOPREFIX
+    LTEXT           "agent:realm:realm",IDC_STATIC_ROW_KEY,30,156,100,12,SS_NOPREFIX
+    EDITTEXT        IDC_EDIT_ROW_LABEL,100,154,72,14,ES_AUTOHSCROLL
+    LTEXT           "direct",IDC_STATIC_ROW_KIND,178,156,45,12,SS_NOPREFIX
+    LTEXT           "25m ago",IDC_STATIC_ROW_UPDATED,228,156,50,12,SS_NOPREFIX
+    LTEXT           "n/a",IDC_STATIC_ROW_INDEX,288,156,35,12,SS_NOPREFIX
+    COMBOBOX        IDC_COMBO_ROW_THINKING,330,154,85,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    COMBOBOX        IDC_COMBO_ROW_INSTANCE,420,154,55,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    COMBOBOX        IDC_COMBO_ROW_REMAINING,480,154,95,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON      "Delete",IDC_BUTTON_ROW_DELETE,585,152,55,18
+    DEFPUSHBUTTON   "确定",IDOK,594,372,65,22,WS_GROUP
+END
+
+IDD_USAGE_DIALOG DIALOGEX 0, 0, 720, 520
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "使用情况"
+FONT 9, "Microsoft YaHei UI", 0, 0, 0x1
+BEGIN
+    LTEXT           "Usage",IDC_STATIC_USAGE_MAIN_TITLE,20,10,200,14,SS_NOPREFIX
+    LTEXT           "See where tokens go, when sessions spike, and what drives cost.",IDC_STATIC_USAGE_MAIN_DESC,20,28,680,24,SS_NOPREFIX
+    PUSHBUTTON      "Today",IDC_BUTTON_USAGE_TODAY,20,56,44,18
+    PUSHBUTTON      "7d",IDC_BUTTON_USAGE_7D,68,56,36,18
+    PUSHBUTTON      "30d",IDC_BUTTON_USAGE_30D,108,56,36,18
+    CONTROL         "2026/03/20",IDC_EDIT_USAGE_DATE_FROM,"SysDateTimePick32",DTS_RIGHTALIGN | WS_TABSTOP,150,56,88,16
+    LTEXT           "to",IDC_STATIC_USAGE_TO_LABEL,242,60,16,10,SS_NOPREFIX
+    CONTROL         "2026/03/20",IDC_EDIT_USAGE_DATE_TO,"SysDateTimePick32",DTS_RIGHTALIGN | WS_TABSTOP,262,56,88,16
+    COMBOBOX        IDC_COMBO_USAGE_SCOPE,356,59,72,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "Tokens",IDC_RADIO_USAGE_TOKENS,"Button",BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP,436,58,52,12
+    CONTROL         "Cost",IDC_RADIO_USAGE_COST,"Button",BS_AUTORADIOBUTTON | WS_TABSTOP,492,57,44,12
+    PUSHBUTTON      "Refresh",IDC_BUTTON_USAGE_REFRESH_TOP,542,55,60,18
+    PUSHBUTTON      "Export",IDC_BUTTON_USAGE_EXPORT,608,55,72,18
+    EDITTEXT        IDC_EDIT_USAGE_FILTER,20,82,680,14,ES_AUTOHSCROLL
+    LTEXT           "Tip: use filters or click bars in the charts.",IDC_STATIC_USAGE_TIP,20,100,680,12,SS_NOPREFIX
+    GROUPBOX        "",IDC_GROUP_ACTIVITY_TIME,20,118,680,120
+    LTEXT           "Activity by Time",IDC_STATIC_ACTIVITY_TITLE,30,130,200,12,SS_NOPREFIX
+    LTEXT           "Estimates require session timestamps.",IDC_STATIC_ACTIVITY_SUB,30,144,400,12,SS_NOPREFIX
+    RTEXT           "0 tokens",IDC_STATIC_ACTIVITY_TOKEN_COUNT,580,130,110,12
+    CTEXT           "No timeline data yet.",IDC_STATIC_ACTIVITY_EMPTY,30,168,660,40
+    GROUPBOX        "",IDC_GROUP_DAILY_USAGE,20,248,340,160
+    LTEXT           "Daily Usage",IDC_STATIC_DAILY_TITLE,30,260,120,12,SS_NOPREFIX
+    CTEXT           "No data",IDC_STATIC_DAILY_EMPTY,30,300,300,40
+    GROUPBOX        "",IDC_GROUP_USAGE_SESSIONS_PANEL,370,248,330,160
+    LTEXT           "Sessions",IDC_STATIC_USAGE_SESS_TITLE,380,260,80,12,SS_NOPREFIX
+    RTEXT           "0 tokens",IDC_STATIC_USAGE_SESS_COUNT,580,260,110,12
+    PUSHBUTTON      "viewed",IDC_BUTTON_USAGE_VIEW,457,275,40,16
+    PUSHBUTTON      "Recently",IDC_BUTTON_USAGE_Recently,411,275,44,16
+    PUSHBUTTON      "All",IDC_BUTTON_USAGE_ALL_FILTER,374,275,36,16
+    LTEXT           "Sort",IDC_STATIC_USAGE_RECENT,513,278,55,10,SS_NOPREFIX
+    COMBOBOX        IDC_COMBO_USAGE_SORT,532,277,100,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    CTEXT           "No sessions in range",IDC_STATIC_USAGE_SESS_EMPTY,380,330,300,30
+    DEFPUSHBUTTON   "确定",IDOK,630,488,65,22,WS_GROUP
+END
+
+IDD_TASK_DIALOG DIALOGEX 0, 0, 960, 850
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_VSCROLL | WS_SYSMENU
+CAPTION "定时任务"
+FONT 9, "Microsoft YaHei UI", 0, 0, 0x1
+BEGIN
+    LTEXT           "定时任务",IDC_STATIC_TASK_MAIN_TITLE,20,10,200,14,SS_NOPREFIX
+    LTEXT           "管理定时任务与运行历史。",IDC_STATIC_TASK_MAIN_DESC,20,28,430,18,SS_NOPREFIX
+    LTEXT           "总数",IDC_STATIC_SUM_PROXY_LBL,20,50,28,10,SS_NOPREFIX
+    LTEXT           "0",IDC_STATIC_SUM_PROXY_VAL,50,50,36,12,SS_NOPREFIX
+    LTEXT           "生效数",IDC_STATIC_SUM_COUNT_LBL,100,50,36,10,SS_NOPREFIX
+    LTEXT           "0",IDC_STATIC_SUM_COUNT_VAL,138,50,36,12,SS_NOPREFIX
+    LTEXT           "下一次执行",IDC_STATIC_SUM_NEXT_LBL,190,50,48,10,SS_NOPREFIX
+    LTEXT           "n/a",IDC_STATIC_SUM_NEXT_VAL,240,50,160,12,SS_NOPREFIX
+    PUSHBUTTON      "刷新",IDC_BUTTON_TASK_REFRESH_TOP,860,42,72,22
+    GROUPBOX        "任务列表",IDC_GROUP_TASK_LIST,20,72,430,228
+    EDITTEXT        IDC_EDIT_TASK_LIST_SEARCH,26,104,71,14,ES_AUTOHSCROLL
+    COMBOBOX        IDC_COMBO_TASK_STARTUP,99,104,61,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    COMBOBOX        IDC_COMBO_TASK_SCHEDULE,161,104,62,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    COMBOBOX        IDC_COMBO_TASK_CONTROL,225,104,52,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    COMBOBOX        IDC_COMBO_TASK_SORT,350,104,43,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    COMBOBOX        IDC_COMBO_TASK_SORT_DIR,279,104,72,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON      "重置",IDC_BUTTON_TASK_LIST_RESET,398,104,44,18
+    CTEXT           "没有找到匹配的任务",IDC_STATIC_TASK_LIST_EMPTY,30,132,390,156
+    GROUPBOX        "运行历史",IDC_GROUP_RUN_HISTORY,20,308,430,300
+    LTEXT           "范围",-1,30,324,36,10
+    EDITTEXT        IDC_EDIT_HIST_TASK_NAME,68,322,100,14,ES_AUTOHSCROLL
+    LTEXT           "搜索运行",-1,172,324,40,10
+    EDITTEXT        IDC_EDIT_HIST_DEPT,214,322,88,14,ES_AUTOHSCROLL
+    LTEXT           "排序",-1,308,324,28,10
+    COMBOBOX        IDC_COMBO_HIST_STATUS,338,322,52,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "状态",-1,30,346,28,10
+    COMBOBOX        IDC_COMBO_HIST_FILTER,60,344,72,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "投递",-1,136,346,28,10
+    COMBOBOX        IDC_COMBO_HIST_SORT,166,344,100,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    CTEXT           "没有匹配的运行记录",IDC_STATIC_HIST_EMPTY,30,372,390,224
+    GROUPBOX        "新建任务",IDC_GROUP_CREATE_OUTER,460,68,480,732
+    GROUPBOX        "基本信息",IDC_GROUP_TASK_BASIC,468,84,464,132
+    LTEXT           "名称*",-1,476,98,200,10
+    EDITTEXT        IDC_EDIT_TASK_NAME,476,110,448,14,ES_AUTOHSCROLL
+    LTEXT           "描述",-1,476,128,200,10
+    EDITTEXT        IDC_EDIT_TASK_DESC,476,140,448,14,ES_AUTOHSCROLL
+    LTEXT           "代理 ID",-1,476,158,200,10
+    EDITTEXT        IDC_EDIT_TASK_FILE,476,170,305,14,ES_AUTOHSCROLL
+    CONTROL         "已启用",IDC_CHECK_TASK_NODES,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,798,171,120,12
+    GROUPBOX        "调度",IDC_GROUP_TASK_SCHEDULE_FORM,468,222,464,56
+    LTEXT           "调度",-1,476,236,28,10
+    COMBOBOX        IDC_COMBO_SCHEDULE_TYPE,508,234,140,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "每隔*",-1,656,236,32,10
+    EDITTEXT        IDC_EDIT_SCHEDULE_INTERVAL,690,234,40,14,ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "单位",-1,736,236,28,10
+    COMBOBOX        IDC_COMBO_SCHEDULE_UNIT,766,234,80,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    GROUPBOX        "执行",IDC_GROUP_TASK_RUN_FORM,468,284,464,232
+    LTEXT           "会话",-1,476,298,28,10
+    COMBOBOX        IDC_COMBO_TRANSFER_MODE,508,296,200,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "映射测试",-1,476,320,48,10
+    COMBOBOX        IDC_COMBO_EXEC_MAP,528,318,388,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "执行内容",-1,476,342,48,10
+    COMBOBOX        IDC_COMBO_EXEC_CONTENT,528,340,388,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "超时 (秒)",-1,476,364,48,10
+    EDITTEXT        IDC_EDIT_EXEC_TIMEOUT,528,362,120,14,ES_AUTOHSCROLL
+    LTEXT           "执行命令或代码*",-1,476,382,120,10
+    EDITTEXT        IDC_EDIT_SCRIPT_ARGS,476,394,448,112,ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN | WS_VSCROLL
+    GROUPBOX        "投递",IDC_GROUP_TASK_RESULT_FORM,468,522,464,132
+    LTEXT           "结果投递",-1,476,536,48,10
+    COMBOBOX        IDC_COMBO_RESULT_CHANNEL,520,534,403,100,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "频道",-1,476,558,28,10
+    EDITTEXT        IDC_EDIT_RESULT_TAG,520,556,403,14,ES_AUTOHSCROLL
+    LTEXT           "接收人",-1,476,578,40,10
+    EDITTEXT        IDC_EDIT_RESULT_RECIPIENTS,520,576,404,14,ES_AUTOHSCROLL
+    PUSHBUTTON      "添加任务",IDC_BUTTON_TASK_CREATE,468,662,100,24
+    DEFPUSHBUTTON   "确定",IDOK,780,812,72,22,WS_GROUP
+    PUSHBUTTON      "取消",IDCANCEL,860,812,72,22,WS_GROUP
+    LTEXT           "搜索任务",-1,29,90,28,10
+    LTEXT           "会话",-1,500,318,28,10
+    LTEXT           "启用状态",-1,104,90,28,10
+    LTEXT           "Schedule",-1,173,90,35,10
+    LTEXT           "Last run",-1,230,90,28,10
+    LTEXT           "排序",-1,287,90,28,10
+    LTEXT           "方向",-1,360,90,28,10
+    LTEXT           "Reset",-1,405,90,28,10
+END
+
+IDD_SKILL_DIALOG DIALOGEX 0, 0, 720, 520
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "技能"
+FONT 9, "Microsoft YaHei UI", 0, 0, 0x1
+BEGIN
+    LTEXT           "技能",IDC_STATIC_SKILL_PAGE_TITLE,20,10,200,14,SS_NOPREFIX
+    LTEXT           "管理已安装与工作区技能。",IDC_STATIC_SKILL_PAGE_DESC,20,28,680,24,SS_NOPREFIX
+    GROUPBOX        "",IDC_GROUP_SKILL_CARD,20,56,680,420
+    LTEXT           "Skills",IDC_STATIC_SKILL_CARD_TITLE,30,72,120,12,SS_NOPREFIX
+    LTEXT           "Installed, managed, and workspace skills.",IDC_STATIC_SKILL_CARD_SUB,30,86,500,14,SS_NOPREFIX
+    PUSHBUTTON      "Refresh",IDC_BUTTON_SKILL_REFRESH,610,68,72,22
+    LTEXT           "Filter",IDC_STATIC_SKILL_FILTER_LABEL,30,108,40,10,SS_NOPREFIX
+    EDITTEXT        IDC_EDIT_SKILL_SEARCH,30,120,560,14,ES_AUTOHSCROLL
+    RTEXT           "0 shown",IDC_STATIC_SKILL_SHOWN_COUNT,600,122,90,12
+    PUSHBUTTON      "BUILT-IN SKILLS (0)  v",IDC_BTN_TOGGLE_BUILTIN,30,144,660,20
+    CONTROL         "",IDC_LIST_SKILL_BUILTIN,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP,30,168,660,100
+    PUSHBUTTON      "EXTRA SKILLS (0)  ^",IDC_BTN_TOGGLE_EXTRA,30,276,660,20
+    CONTROL         "",IDC_LIST_SKILL_EXTRA,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP,30,300,660,160
+    DEFPUSHBUTTON   "确定",IDOK,630,488,72,22,WS_GROUP
+END
+
+IDD_LOG_DIALOG DIALOGEX 0, 0, 760, 560
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "日志"
+FONT 9, "Microsoft YaHei UI", 0, 0, 0x1
+BEGIN
+    LTEXT           "日志",IDC_STATIC_LOG_PAGE_TITLE,20,10,200,14,SS_NOPREFIX
+    LTEXT           "展示文件内容的实时追踪。",IDC_STATIC_LOG_PAGE_DESC,20,28,720,24,SS_NOPREFIX
+    PUSHBUTTON      "刷新",IDC_BUTTON_LOG_REFRESH,580,52,72,22
+    PUSHBUTTON      "导出可见",IDC_BUTTON_LOG_EXPORT,660,52,80,22
+    LTEXT           "Logs",IDC_STATIC_LOG_CARD_TITLE,20,47,80,12,SS_NOPREFIX
+    LTEXT           "Gateway file logs (json)",IDC_STATIC_LOG_CARD_SUB,20,61,400,14,SS_NOPREFIX
+    LTEXT           "Filter",IDC_STATIC_LOG_FILTER_LABEL,20,80,40,10,SS_NOPREFIX
+    EDITTEXT        IDC_EDIT_LOG_SEARCH,20,93,405,14,ES_AUTOHSCROLL
+    CONTROL         "Auto follow",IDC_CHECK_LOG_AUTO_FOLLOW,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,434,95,100,12
+    CONTROL         "trace",IDC_CHECK_LOG_TRACE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,20,117,50,12
+    CONTROL         "debug",IDC_CHECK_LOG_DEBUG,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,80,117,50,12
+    CONTROL         "info",IDC_CHECK_LOG_INFO,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,140,117,44,12
+    CONTROL         "warn",IDC_CHECK_LOG_WARN,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,192,117,44,12
+    CONTROL         "error",IDC_CHECK_LOG_ERROR,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,244,117,50,12
+    CONTROL         "fatal",IDC_CHECK_LOG_FATAL,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,302,117,50,12
+    LTEXT           "File: C:\\...",IDC_STATIC_LOG_FILE_PATH,20,137,720,12,SS_NOPREFIX
+    CONTROL         "",IDC_LIST_LOG_ENTRIES,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP,20,153,720,320
+    DEFPUSHBUTTON   "确定",IDOK,660,528,72,22,WS_GROUP
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Version
+//
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,0,1
+ PRODUCTVERSION 1,0,0,1
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "TODO: <Company name>"
+            VALUE "FileDescription", "BlazeClaw.MFC"
+            VALUE "FileVersion", "1.0.0.1"
+            VALUE "InternalName", "BlazeClaw.MFC.exe"
+            VALUE "LegalCopyright", "TODO: (c) <Company name>.  All rights reserved."
+            VALUE "OriginalFilename", "BlazeClaw.MFC.exe"
+            VALUE "ProductName", "TODO: <Product name>"
+            VALUE "ProductVersion", "1.0.0.1"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO
+BEGIN
+    IDD_ABOUTBOX, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 163
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 55
+    END
+
+    IDD_OVERVIEW_DIALOG, DIALOG
+    BEGIN
+    END
+
+    IDD_INSTANCE_DIALOG, DIALOG
+    BEGIN
+    END
+
+    IDD_SESSION_DIALOG, DIALOG
+    BEGIN
+    END
+
+    IDD_USAGE_DIALOG, DIALOG
+    BEGIN
+    END
+
+    IDD_TASK_DIALOG, DIALOG
+    BEGIN
+    END
+
+    IDD_SKILL_DIALOG, DIALOG
+    BEGIN
+    END
+
+    IDD_LOG_DIALOG, DIALOG
+    BEGIN
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Ribbon
+//
+
+IDR_RIBBON              RT_RIBBON_XML           "res\\ribbon.mfcribbon-ms"
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// AFX_DIALOG_LAYOUT
+//
+
+IDD_OVERVIEW_DIALOG AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+IDD_INSTANCE_DIALOG AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+IDD_SESSION_DIALOG AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+IDD_USAGE_DIALOG AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+IDD_TASK_DIALOG AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+IDD_SKILL_DIALOG AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+IDD_LOG_DIALOG AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// String Table
+//
+
+STRINGTABLE
+BEGIN
+    IDP_OLE_INIT_FAILED     "OLE initialization failed.  Make sure that the OLE libraries are the correct version."
+    IDP_SOCKETS_INIT_FAILED "Windows sockets initialization failed."
+END
+
+STRINGTABLE
+BEGIN
+    IDR_MAINFRAME           "BlazeClaw.MFC"
+    IDR_BlazeClawMFCTYPE    "\nBlazeClawMFC\nBlazeClaw.MFC\n\n\nBlazeClawMFC.Document\nBlazeClaw.MFC.Document"
+    ID_WINDOW_MANAGER       "&Windows..."
+END
+
+STRINGTABLE
+BEGIN
+    AFX_IDS_APP_TITLE       "BlazeClaw.MFC"
+    AFX_IDS_IDLEMESSAGE     "Ready"
+END
+
+STRINGTABLE
+BEGIN
+    ID_INDICATOR_EXT        "EXT"
+    ID_INDICATOR_CAPS       "CAP"
+    ID_INDICATOR_NUM        "NUM"
+    ID_INDICATOR_SCRL       "SCRL"
+    ID_INDICATOR_OVR        "OVR"
+    ID_INDICATOR_REC        "REC"
+END
+
+STRINGTABLE
+BEGIN
+    ID_FILE_NEW             "Create a new document\nNew"
+    ID_FILE_OPEN            "Open an existing document\nOpen"
+    ID_FILE_CLOSE           "Close the active document\nClose"
+    ID_FILE_SAVE            "Save the active document\nSave"
+    ID_FILE_SAVE_AS         "Save the active document with a new name\nSave As"
+    ID_FILE_PAGE_SETUP      "Change the printing options\nPage Setup"
+    ID_FILE_PRINT_SETUP     "Change the printer and printing options\nPrint Setup"
+    ID_FILE_PRINT           "Print the active document\nPrint"
+    ID_FILE_PRINT_PREVIEW   "Display full pages\nPrint Preview"
+END
+
+STRINGTABLE
+BEGIN
+    ID_APP_ABOUT            "Display program information, version number and copyright\nAbout"
+    ID_APP_EXIT             "Quit the application; prompts to save documents\nExit"
+END
+
+STRINGTABLE
+BEGIN
+    ID_FILE_MRU_FILE1       "Open this document"
+    ID_FILE_MRU_FILE2       "Open this document"
+    ID_FILE_MRU_FILE3       "Open this document"
+    ID_FILE_MRU_FILE4       "Open this document"
+    ID_FILE_MRU_FILE5       "Open this document"
+    ID_FILE_MRU_FILE6       "Open this document"
+    ID_FILE_MRU_FILE7       "Open this document"
+    ID_FILE_MRU_FILE8       "Open this document"
+    ID_FILE_MRU_FILE9       "Open this document"
+    ID_FILE_MRU_FILE10      "Open this document"
+    ID_FILE_MRU_FILE11      "Open this document"
+    ID_FILE_MRU_FILE12      "Open this document"
+    ID_FILE_MRU_FILE13      "Open this document"
+    ID_FILE_MRU_FILE14      "Open this document"
+    ID_FILE_MRU_FILE15      "Open this document"
+    ID_FILE_MRU_FILE16      "Open this document"
+END
+
+STRINGTABLE
+BEGIN
+    ID_NEXT_PANE            "Switch to the next window pane\nNext Pane"
+    ID_PREV_PANE            "Switch back to the previous window pane\nPrevious Pane"
+END
+
+STRINGTABLE
+BEGIN
+    ID_WINDOW_NEW           "Open another window for the active document\nNew Window"
+    ID_WINDOW_ARRANGE       "Arrange icons at the bottom of the window\nArrange Icons"
+    ID_WINDOW_CASCADE       "Arrange windows so they overlap\nCascade Windows"
+    ID_WINDOW_TILE_HORZ     "Arrange windows as non-overlapping tiles\nTile Windows"
+    ID_WINDOW_TILE_VERT     "Arrange windows as non-overlapping tiles\nTile Windows"
+    ID_WINDOW_SPLIT         "Split the active window into panes\nSplit"
+END
+
+STRINGTABLE
+BEGIN
+    ID_EDIT_CLEAR           "Erase the selection\nErase"
+    ID_EDIT_CLEAR_ALL       "Erase everything\nErase All"
+    ID_EDIT_COPY            "Copy the selection and put it on the Clipboard\nCopy"
+    ID_EDIT_CUT             "Cut the selection and put it on the Clipboard\nCut"
+    ID_EDIT_FIND            "Find the specified text\nFind"
+    ID_EDIT_PASTE           "Insert Clipboard contents\nPaste"
+    ID_EDIT_REPEAT          "Repeat the last action\nRepeat"
+    ID_EDIT_REPLACE         "Replace specific text with different text\nReplace"
+    ID_EDIT_SELECT_ALL      "Select the entire document\nSelect All"
+    ID_EDIT_UNDO            "Undo the last action\nUndo"
+    ID_EDIT_REDO            "Redo the previously undone action\nRedo"
+END
+
+STRINGTABLE
+BEGIN
+    ID_VIEW_TOOLBAR         "Show or hide the toolbar\nToggle ToolBar"
+    ID_VIEW_STATUS_BAR      "Show or hide the status bar\nToggle Status Bar"
+END
+
+STRINGTABLE
+BEGIN
+    ID_VIEW_CAPTION_BAR     "Show or hide the caption bar\nToggle Caption Bar"
+END
+
+STRINGTABLE
+BEGIN
+    AFX_IDS_SCSIZE          "Change the window size"
+    AFX_IDS_SCMOVE          "Change the window position"
+    AFX_IDS_SCMINIMIZE      "Reduce the window to an icon"
+    AFX_IDS_SCMAXIMIZE      "Enlarge the window to full size"
+    AFX_IDS_SCNEXTWINDOW    "Switch to the next document window"
+    AFX_IDS_SCPREVWINDOW    "Switch to the previous document window"
+    AFX_IDS_SCCLOSE         "Close the active window and prompts to save the documents"
+END
+
+STRINGTABLE
+BEGIN
+    AFX_IDS_SCRESTORE       "Restore the window to normal size"
+    AFX_IDS_SCTASKLIST      "Activate Task List"
+    AFX_IDS_MDICHILD        "Activate this window"
+END
+
+STRINGTABLE
+BEGIN
+    AFX_IDS_PREVIEW_CLOSE   "Close print preview mode\nCancel Preview"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_STATUS_PANE1        "Pane 1"
+    IDS_STATUS_PANE2        "Pane 2"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_FILE_VIEW           "File View"
+    IDS_CLASS_VIEW          "Class View"
+    IDS_OUTPUT_WND          "Output"
+    IDS_PROPERTIES_WND      "Properties"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_EXPLORER            "Explorer"
+    IDS_EDIT_MENU           "Edit"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_BUILD_TAB           "Build"
+    IDS_DEBUG_TAB           "Debug"
+    IDS_FIND_TAB            "Find"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_MYCALENDARS         "My Calendars"
+    IDS_CALENDAR            "Calendar"
+    IDS_SHORTCUTS           "Shortcuts"
+    IDS_FOLDERS             "Folders"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_OUTLOOKBAR          "Outlook Bar"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_CAPTION_BUTTON      "Options..."
+    IDS_CAPTION_BUTTON_TIP  "Click here to see more options"
+    IDS_CAPTION_TEXT        "This is a caption bar where a message can be presented to the user."
+    IDS_CAPTION_IMAGE_TIP   "Important"
+    IDS_CAPTION_IMAGE_TEXT  "Here is an informational message for the user."
+END
+
+#endif    // English (United States) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+#define _AFX_NO_OLE_RESOURCES
+#define _AFX_NO_TRACKER_RESOURCES
+#define _AFX_NO_PROPERTY_RESOURCES
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+LANGUAGE 9, 1
+#include "res\BlazeClawMFC.rc2"  // non-Microsoft Visual C++ edited resources
+#include "afxres.rc"      // Standard components
+#include "afxprint.rc"    // printing/print preview resources
+#if !defined(_AFXDLL)
+#include "afxribbon.rc"        // MFC ribbon and control bar resources
+#endif
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+

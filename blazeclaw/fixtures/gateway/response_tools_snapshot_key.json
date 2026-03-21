@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-386",
+  "ok": true,
+  "payload": {
+    "snapshottedKey": 0,
+    "fallback": 0,
+    "tools": 2
+  }
+}

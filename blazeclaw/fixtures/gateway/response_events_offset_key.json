@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-315",
+  "ok": true,
+  "payload": {
+    "offsetKey": "offset-key-1",
+    "event": "gateway.session.reset"
+  }
+}

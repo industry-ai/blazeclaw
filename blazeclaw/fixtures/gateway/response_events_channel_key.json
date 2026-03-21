@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-205",
+  "ok": true,
+  "payload": {
+    "channelKey": "channel-key-1",
+    "event": "gateway.session.reset"
+  }
+}

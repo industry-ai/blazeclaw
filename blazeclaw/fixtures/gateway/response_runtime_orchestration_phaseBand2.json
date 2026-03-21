@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2881",
+  "ok": true,
+  "payload": {
+    "phaseBand2": 0,
+    "windowMs": 1000,
+    "stable": true
+  }
+}

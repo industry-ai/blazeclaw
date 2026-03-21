@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-483",
+  "ok": true,
+  "payload": {
+    "sections": [ "gateway", "agent" ],
+    "count": 2
+  }
+}

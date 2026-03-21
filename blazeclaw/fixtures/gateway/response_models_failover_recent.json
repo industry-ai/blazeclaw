@@ -1,0 +1,12 @@
+{
+  "id": "fixture-models-failover-recent",
+  "ok": true,
+  "result": {
+    "models": [
+      "default",
+      "reasoner"
+    ],
+    "count": 2,
+    "active": "default"
+  }
+}

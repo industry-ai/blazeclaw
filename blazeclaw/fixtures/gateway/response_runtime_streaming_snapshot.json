@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-streaming-snapshot",
+  "ok": true,
+  "result": {
+    "frames": 2,
+    "cursor": "stream-cursor-2",
+    "sealed": true
+  }
+}

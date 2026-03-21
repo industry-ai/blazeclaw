@@ -1,0 +1,16 @@
+{
+  "type": "res",
+  "id": "req-402",
+  "ok": true,
+  "payload": {
+    "found": true,
+    "execution": {
+      "tool": "memory.search",
+      "executed": true,
+      "status": "ok",
+      "output": "results:seeded:knowledge",
+      "argsProvided": true
+    },
+    "count": 2
+  }
+}

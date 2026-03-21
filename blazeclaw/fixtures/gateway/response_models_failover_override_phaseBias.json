@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2720",
+  "ok": true,
+  "payload": {
+    "active": false,
+    "phaseBias": 0,
+    "model": "default"
+  }
+}

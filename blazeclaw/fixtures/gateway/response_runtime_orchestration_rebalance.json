@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-orchestration-rebalance",
+  "ok": true,
+  "result": {
+    "moved": 0,
+    "remaining": 2,
+    "strategy": "sticky"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-901",
+  "ok": true,
+  "payload": {
+    "balanced": true,
+    "skew": 0,
+    "state": "stable"
+  }
+}

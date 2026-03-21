@@ -1,0 +1,8 @@
+{
+  "id": "fixture-events-profile-scope-id",
+  "ok": true,
+  "result": {
+    "profileScopeId": "profile-scope-id-1",
+    "event": "gateway.session.reset"
+  }
+}

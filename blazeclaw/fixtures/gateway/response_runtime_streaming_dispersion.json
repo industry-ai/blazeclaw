@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-1402",
+  "ok": true,
+  "payload": {
+    "dispersion": 0,
+    "samples": 2,
+    "bounded": true
+  }
+}

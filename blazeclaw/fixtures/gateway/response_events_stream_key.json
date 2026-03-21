@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-340",
+  "ok": true,
+  "payload": {
+    "streamKey": "stream-key-1",
+    "event": "gateway.session.reset"
+  }
+}

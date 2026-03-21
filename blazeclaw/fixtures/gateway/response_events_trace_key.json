@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-275",
+  "ok": true,
+  "payload": {
+    "traceKey": "trace-key-1",
+    "event": "gateway.session.reset"
+  }
+}

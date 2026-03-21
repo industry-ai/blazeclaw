@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-235",
+  "ok": true,
+  "payload": {
+    "policyKey": "policy-key-1",
+    "event": "gateway.session.reset"
+  }
+}

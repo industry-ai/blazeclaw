@@ -1,1 +1,156 @@
-{"type":"res","id":"req-19","ok":true,"payload":{"accounts":[{"channel":"telegram","accountId":"telegram.default","label":"Telegram Default","active":true,"connected":false},{"channel":"discord","accountId":"discord.default","label":"Discord Default","active":true,"connected":false}]}}
+{
+  "type": "res",
+  "id": "req-19",
+  "ok": true,
+  "payload": {
+    "accounts": [
+      {
+        "channel": "internal",
+        "accountId": "internal.default",
+        "label": "Internal Mock Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "whatsapp",
+        "accountId": "whatsapp.default",
+        "label": "WhatsApp Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "telegram",
+        "accountId": "telegram.default",
+        "label": "Telegram Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "slack",
+        "accountId": "slack.default",
+        "label": "Slack Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "discord",
+        "accountId": "discord.default",
+        "label": "Discord Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "msteams",
+        "accountId": "msteams.default",
+        "label": "Microsoft Teams Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "googlechat",
+        "accountId": "googlechat.default",
+        "label": "Google Chat Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "matrix",
+        "accountId": "matrix.default",
+        "label": "Matrix Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "line",
+        "accountId": "line.default",
+        "label": "LINE Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "feishu",
+        "accountId": "feishu.default",
+        "label": "Feishu Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "mattermost",
+        "accountId": "mattermost.default",
+        "label": "Mattermost Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "nextcloudtalk",
+        "accountId": "nextcloudtalk.default",
+        "label": "Nextcloud Talk Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "signal",
+        "accountId": "signal.default",
+        "label": "Signal Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "irc",
+        "accountId": "irc.default",
+        "label": "IRC Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "nostr",
+        "accountId": "nostr.default",
+        "label": "Nostr Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "bluebubbles",
+        "accountId": "bluebubbles.default",
+        "label": "iMessage / BlueBubbles Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "synologychat",
+        "accountId": "synologychat.default",
+        "label": "Synology Chat Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "webchat",
+        "accountId": "webchat.default",
+        "label": "WebChat Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "tlon",
+        "accountId": "tlon.default",
+        "label": "Tlon Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "twitch",
+        "accountId": "twitch.default",
+        "label": "Twitch Default",
+        "active": true,
+        "connected": false
+      },
+      {
+        "channel": "zalo",
+        "accountId": "zalo.default",
+        "label": "Zalo / Zalo Personal Default",
+        "active": true,
+        "connected": false
+      }
+    ]
+  }
+}

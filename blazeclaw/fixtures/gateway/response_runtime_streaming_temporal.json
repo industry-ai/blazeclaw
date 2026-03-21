@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2003",
+  "ok": true,
+  "payload": {
+    "temporal": 0,
+    "samples": 2,
+    "stable": true
+  }
+}

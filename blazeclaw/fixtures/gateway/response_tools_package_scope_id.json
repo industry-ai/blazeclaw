@@ -1,0 +1,9 @@
+{
+  "id": "fixture-tools-package-scope-id",
+  "ok": true,
+  "result": {
+    "packageScopedId": 0,
+    "fallback": 0,
+    "tools": 2
+  }
+}

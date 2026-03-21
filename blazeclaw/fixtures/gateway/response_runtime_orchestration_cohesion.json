@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-1501",
+  "ok": true,
+  "payload": {
+    "cohesion": 100,
+    "groups": 1,
+    "state": "coherent"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2873",
+  "ok": true,
+  "payload": {
+    "syncMesh2": 1,
+    "samples": 2,
+    "stable": true
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-320",
+  "ok": true,
+  "payload": {
+    "markerKey": "marker-key-1",
+    "event": "gateway.session.reset"
+  }
+}

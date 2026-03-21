@@ -2,11 +2,15 @@
 #include "GatewayProtocolContract.h"
 
 #include "GatewayProtocolCodec.h"
+#include "GatewayJsonUtils.h"
 #include "GatewayProtocolSchemaValidator.h"
 
+#include <algorithm>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <vector>
 
 namespace blazeclaw::gateway::protocol {
 	namespace {
@@ -22,19 +26,121 @@ namespace blazeclaw::gateway::protocol {
 			return buffer.str();
 		}
 
-		std::string TrimBoundaryWhitespace(const std::string& value) {
-			std::size_t start = 0;
-			std::size_t end = value.size();
+      std::string TrimBoundaryWhitespace(const std::string& value) {
+			return json::Trim(value);
+		}
 
-			while (start < end && std::isspace(static_cast<unsigned char>(value[start])) != 0) {
-				++start;
+		bool FindStringField(
+			const std::string& text,
+			const std::string& fieldName,
+			std::string& outValue) {
+			return json::FindStringField(text, fieldName, outValue);
+		}
+
+		bool FindRawField(
+			const std::string& text,
+			const std::string& fieldName,
+			std::string& outValue) {
+			return json::FindRawField(text, fieldName, outValue);
+		}
+
+		bool FindBoolField(
+			const std::string& text,
+			const std::string& fieldName,
+			bool& outValue) {
+			return json::FindBoolField(text, fieldName, outValue);
+		}
+
+		bool FindUInt64Field(
+			const std::string& text,
+			const std::string& fieldName,
+			std::uint64_t& outValue) {
+			return json::FindUInt64Field(text, fieldName, outValue);
+		}
+
+		bool TryDecodeResponseFrame(
+			const std::string& inboundJson,
+			ResponseFrame& outFrame,
+			std::string& error) {
+			std::string type;
+			if (!FindStringField(inboundJson, "type", type)) {
+				error = "Missing required field: type";
+				return false;
 			}
 
-			while (end > start && std::isspace(static_cast<unsigned char>(value[end - 1])) != 0) {
-				--end;
+			if (type != "res") {
+				error = "Unsupported frame type for response decode: " + type;
+				return false;
 			}
 
-			return value.substr(start, end - start);
+			if (!FindStringField(inboundJson, "id", outFrame.id)) {
+				error = "Missing required field: id";
+				return false;
+			}
+
+			if (!FindBoolField(inboundJson, "ok", outFrame.ok)) {
+				error = "Missing or invalid required field: ok";
+				return false;
+			}
+
+			std::string payload;
+			if (FindRawField(inboundJson, "payload", payload)) {
+				outFrame.payloadJson = payload;
+			}
+			else {
+				outFrame.payloadJson = std::nullopt;
+			}
+
+			error.clear();
+			return true;
+		}
+
+		bool TryDecodeEventFrame(
+			const std::string& inboundJson,
+			EventFrame& outFrame,
+			std::string& error) {
+			std::string type;
+			if (!FindStringField(inboundJson, "type", type)) {
+				error = "Missing required field: type";
+				return false;
+			}
+
+			if (type != "event") {
+				error = "Unsupported frame type for event decode: " + type;
+				return false;
+			}
+
+			if (!FindStringField(inboundJson, "event", outFrame.eventName)) {
+				error = "Missing required field: event";
+				return false;
+			}
+
+			std::string payload;
+			if (FindRawField(inboundJson, "payload", payload)) {
+				outFrame.payloadJson = payload;
+			}
+			else {
+				outFrame.payloadJson = std::nullopt;
+			}
+
+			std::uint64_t seq = 0;
+			if (FindUInt64Field(inboundJson, "seq", seq)) {
+				outFrame.seq = seq;
+			}
+			else {
+				outFrame.seq = std::nullopt;
+			}
+
+			std::uint64_t stateVersion = 0;
+			if (FindUInt64Field(inboundJson, "stateVersion", stateVersion)) {
+				outFrame.stateVersion = stateVersion;
+			}
+			else {
+				outFrame.stateVersion = std::nullopt;
+			}
+
+			error.clear();
+			return true;
 		}
 
 		bool CompareFixture(const std::filesystem::path& path, const std::string& actual, std::string& error) {
@@ -53,14 +159,96 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool StartsWith(const std::string& value, const std::string& prefix) {
+			return value.size() >= prefix.size() && value.compare(0, prefix.size(), prefix) == 0;
+		}
+
+		std::string ReplaceUnderscoresWithDots(std::string value) {
+			for (char& ch : value) {
+				if (ch == '_') {
+					ch = '.';
+				}
+			}
+			return value;
+		}
+
+		std::string InferMethodFromResponseFixtureName(const std::string& fileName) {
+			if (fileName == "response_pong.json") {
+				return "gateway.ping";
+			}
+
+			if (!StartsWith(fileName, "response_") || fileName.size() <= 14 || fileName.substr(fileName.size() - 5) != ".json") {
+				return {};
+			}
+
+			const std::string stem = fileName.substr(9, fileName.size() - 14);
+			if (stem.empty()) {
+				return {};
+			}
+
+			return "gateway." + ReplaceUnderscoresWithDots(stem);
+		}
+
+		std::string InferEventNameFromEventFixtureName(const std::string& fileName) {
+			if (!StartsWith(fileName, "event_") || fileName.size() <= 11 || fileName.substr(fileName.size() - 5) != ".json") {
+				return {};
+			}
+
+			const std::string stem = fileName.substr(6, fileName.size() - 11);
+			if (stem.empty()) {
+				return {};
+			}
+
+			return "gateway." + ReplaceUnderscoresWithDots(stem);
+		}
+
+		bool ValidateDecodedResponseCase(
+			const std::filesystem::path& fixturePath,
+			const std::string& method,
+			const ResponseFrame& response,
+			std::string& error) {
+			SchemaValidationIssue issue;
+			if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(method, response, issue)) {
+				error = "Response schema validation failed for " + method + " (" + fixturePath.filename().string() + "): " + issue.message;
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateDecodedEventCase(
+			const std::filesystem::path& fixturePath,
+			const EventFrame& event,
+			std::string& error) {
+			SchemaValidationIssue issue;
+			if (!GatewayProtocolSchemaValidator::ValidateEvent(event, issue)) {
+				error = "Event schema validation failed for " + event.eventName + " (" + fixturePath.filename().string() + "): " + issue.message;
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateNegativeResponseCase(
+			const std::string& method,
+			const ResponseFrame& response,
+			const std::string& label,
+			std::string& error) {
+			SchemaValidationIssue issue;
+			if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(method, response, issue)) {
+				error = "Schema response negative case unexpectedly passed for " + label + ".";
+				return false;
+			}
+
+			return true;
+		}
+
 	} // namespace
 
 	bool GatewayProtocolContract::ValidateFixtureParity(const std::string& fixtureRoot, std::string& error) {
 		const std::filesystem::path root(fixtureRoot);
-		const std::string requestFixture = TrimBoundaryWhitespace(ReadFileText(root / "request_ping.json"));
-		const std::string invalidProtocolParamsRequestFixture =
-			TrimBoundaryWhitespace(ReadFileText(root / "request_invalid_protocol_params.json"));
 
+		const std::string requestFixture = TrimBoundaryWhitespace(ReadFileText(root / "request_ping.json"));
 		RequestFrame decodedRequest;
 		std::string decodeError;
 		if (!TryDecodeRequestFrame(requestFixture, decodedRequest, decodeError)) {
@@ -78,6 +266,12 @@ namespace blazeclaw::gateway::protocol {
 			return false;
 		}
 
+		if (!CompareFixture(root / "request_ping.json", SerializeRequestFrame(decodedRequest), error)) {
+			return false;
+		}
+
+		const std::string invalidProtocolParamsRequestFixture =
+			TrimBoundaryWhitespace(ReadFileText(root / "request_invalid_protocol_params.json"));
 		RequestFrame invalidProtocolParamsRequest;
 		std::string invalidDecodeError;
 		if (!TryDecodeRequestFrame(
@@ -94,1349 +288,6 @@ namespace blazeclaw::gateway::protocol {
 			return false;
 		}
 
-		const RequestFrame request{
-			.id = "req-1",
-			.method = "gateway.ping",
-			.paramsJson = "{\"echo\":\"hello\"}",
-		};
-
-		const ResponseFrame response{
-			.id = "req-1",
-			.ok = true,
-			.payloadJson = "{\"pong\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame protocolVersionResponse{
-			.id = "req-2",
-			.ok = true,
-			.payloadJson = "{\"minProtocol\":1,\"maxProtocol\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame featuresListResponse{
-			.id = "req-3",
-			.ok = true,
-      .payloadJson = "{\"methods\":[\"gateway.agents.activate\",\"gateway.agents.count\",\"gateway.agents.create\",\"gateway.agents.delete\",\"gateway.agents.exists\",\"gateway.agents.files.delete\",\"gateway.agents.files.exists\",\"gateway.agents.files.get\",\"gateway.agents.files.list\",\"gateway.agents.files.set\",\"gateway.agents.get\",\"gateway.agents.list\",\"gateway.agents.update\",\"gateway.channels.accounts\",\"gateway.channels.accounts.activate\",\"gateway.channels.accounts.clear\",\"gateway.channels.accounts.count\",\"gateway.channels.accounts.create\",\"gateway.channels.accounts.deactivate\",\"gateway.channels.accounts.delete\",\"gateway.channels.accounts.exists\",\"gateway.channels.accounts.get\",\"gateway.channels.accounts.reset\",\"gateway.channels.accounts.restore\",\"gateway.channels.accounts.update\",\"gateway.channels.logout\",\"gateway.channels.route.delete\",\"gateway.channels.route.exists\",\"gateway.channels.route.get\",\"gateway.channels.route.patch\",\"gateway.channels.route.resolve\",\"gateway.channels.route.reset\",\"gateway.channels.route.restore\",\"gateway.channels.route.set\",\"gateway.channels.routes\",\"gateway.channels.routes.clear\",\"gateway.channels.routes.count\",\"gateway.channels.routes.reset\",\"gateway.channels.routes.restore\",\"gateway.channels.status\",\"gateway.channels.status.count\",\"gateway.channels.status.exists\",\"gateway.channels.status.get\",\"gateway.config.archive\",\"gateway.config.audit\",\"gateway.config.backup\",\"gateway.config.bundle\",\"gateway.config.count\",\"gateway.config.diff\",\"gateway.config.exists\",\"gateway.config.get\",\"gateway.config.getKey\",\"gateway.config.getSection\",\"gateway.config.history\",\"gateway.config.index\",\"gateway.config.keys\",\"gateway.config.manifest\",\"gateway.config.package\",\"gateway.config.profile\",\"gateway.config.revision\",\"gateway.config.rollback\",\"gateway.config.schema\",\"gateway.config.sections\",\"gateway.config.set\",\"gateway.config.snapshot\",\"gateway.config.state\",\"gateway.config.template\",\"gateway.config.validate\",\"gateway.events.anchor\",\"gateway.events.batch\",\"gateway.events.catalog\",\"gateway.events.channels\",\"gateway.events.count\",\"gateway.events.cursor\",\"gateway.events.exists\",\"gateway.events.get\",\"gateway.events.last\",\"gateway.events.latestByType\",\"gateway.events.list\",\"gateway.events.marker\",\"gateway.events.offset\",\"gateway.events.pointer\",\"gateway.events.recent\",\"gateway.events.sample\",\"gateway.events.search\",\"gateway.events.sequence\",\"gateway.events.stream\",\"gateway.events.summary\",\"gateway.events.timeline\",\"gateway.events.token\",\"gateway.events.types\",\"gateway.events.window\",\"gateway.features.list\",\"gateway.health\",\"gateway.health.details\",\"gateway.logs.count\",\"gateway.logs.levels\",\"gateway.logs.tail\",\"gateway.models.affinity\",\"gateway.models.catalog\",\"gateway.models.compatibility\",\"gateway.models.count\",\"gateway.models.default.get\",\"gateway.models.exists\",\"gateway.models.fallback\",\"gateway.models.get\",\"gateway.models.index\",\"gateway.models.inventory\",\"gateway.models.list\",\"gateway.models.listByProvider\",\"gateway.models.manifest\",\"gateway.models.pool\",\"gateway.models.preference\",\"gateway.models.priority\",\"gateway.models.providers\",\"gateway.models.recommended\",\"gateway.models.registry\",\"gateway.models.routing\",\"gateway.models.selection\",\"gateway.models.snapshot\",\"gateway.models.state\",\"gateway.ping\",\"gateway.protocol.version\",\"gateway.session.list\",\"gateway.sessions.activate\",\"gateway.sessions.compact\",\"gateway.sessions.count\",\"gateway.sessions.create\",\"gateway.sessions.delete\",\"gateway.sessions.exists\",\"gateway.sessions.patch\",\"gateway.sessions.preview\",\"gateway.sessions.reset\",\"gateway.sessions.resolve\",\"gateway.sessions.usage\",\"gateway.tools.backlog\",\"gateway.tools.call.execute\",\"gateway.tools.call.preview\",\"gateway.tools.capacity\",\"gateway.tools.catalog\",\"gateway.tools.categories\",\"gateway.tools.count\",\"gateway.tools.dispatch\",\"gateway.tools.errors\",\"gateway.tools.exists\",\"gateway.tools.failures\",\"gateway.tools.get\",\"gateway.tools.health\",\"gateway.tools.latency\",\"gateway.tools.list\",\"gateway.tools.metrics\",\"gateway.tools.pipeline\",\"gateway.tools.queue\",\"gateway.tools.router\",\"gateway.tools.scheduler\",\"gateway.tools.selector\",\"gateway.tools.stats\",\"gateway.tools.throughput\",\"gateway.tools.usage\",\"gateway.tools.window\",\"gateway.transport.connections.count\",\"gateway.transport.endpoint.exists\",\"gateway.transport.endpoint.get\",\"gateway.transport.endpoint.set\",\"gateway.transport.endpoints.list\",\"gateway.transport.policy.apply\",\"gateway.transport.policy.commit\",\"gateway.transport.policy.digest\",\"gateway.transport.policy.export\",\"gateway.transport.policy.get\",\"gateway.transport.policy.history\",\"gateway.transport.policy.import\",\"gateway.transport.policy.metrics\",\"gateway.transport.policy.preview\",\"gateway.transport.policy.reconcile\",\"gateway.transport.policy.refresh\",\"gateway.transport.policy.reset\",\"gateway.transport.policy.set\",\"gateway.transport.policy.stage\",\"gateway.transport.policy.status\",\"gateway.transport.policy.sync\",\"gateway.transport.policy.validate\",\"gateway.transport.status\"],\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame agentsListResponse{
-			.id = "req-16",
-			.ok = true,
-		   .payloadJson = "{\"agents\":[{\"id\":\"default\",\"name\":\"Default Agent\",\"active\":true}],\"count\":1,\"activeAgentId\":\"default\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame agentsGetResponse{
-			.id = "req-17",
-			.ok = true,
-			.payloadJson = "{\"agent\":{\"id\":\"default\",\"name\":\"Default Agent\",\"active\":true}}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame agentsActivateResponse{
-			.id = "req-18",
-			.ok = true,
-			.payloadJson = "{\"agent\":{\"id\":\"default\",\"name\":\"Default Agent\",\"active\":true},\"event\":\"gateway.agent.update\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configGetResponse{
-			.id = "req-9",
-			.ok = true,
-			.payloadJson = "{\"gateway\":{\"bind\":\"127.0.0.1\",\"port\":18789},\"agent\":{\"model\":\"default\",\"streaming\":true}}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsStatusResponse{
-			.id = "req-10",
-			.ok = true,
-			.payloadJson = "{\"channels\":[{\"id\":\"telegram\",\"label\":\"Telegram\",\"connected\":false,\"accounts\":1},{\"id\":\"discord\",\"label\":\"Discord\",\"connected\":false,\"accounts\":1}]}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsAccountsResponse{
-			.id = "req-19",
-			.ok = true,
-			.payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":false},{\"channel\":\"discord\",\"accountId\":\"discord.default\",\"label\":\"Discord Default\",\"active\":true,\"connected\":false}]}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsRoutesResponse{
-			.id = "req-13",
-			.ok = true,
-			.payloadJson = "{\"routes\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"agentId\":\"default\",\"sessionId\":\"main\"},{\"channel\":\"discord\",\"accountId\":\"discord.default\",\"agentId\":\"default\",\"sessionId\":\"main\"}]}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsRouteResolveResponse{
-			.id = "req-20",
-			.ok = true,
-			.payloadJson = "{\"route\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"agentId\":\"default\",\"sessionId\":\"main\"}}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame logsTailResponse{
-			.id = "req-11",
-			.ok = true,
-			.payloadJson = "{\"entries\":[{\"ts\":1735689600000,\"level\":\"info\",\"source\":\"gateway\",\"message\":\"Gateway host started\"},{\"ts\":1735689600100,\"level\":\"info\",\"source\":\"transport\",\"message\":\"WebSocket listener active\"},{\"ts\":1735689600200,\"level\":\"debug\",\"source\":\"dispatcher\",\"message\":\"Method handlers registered\"}]}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsCatalogResponse{
-			.id = "req-21",
-			.ok = true,
-			.payloadJson = "{\"tools\":[{\"id\":\"chat.send\",\"label\":\"Chat Send\",\"category\":\"messaging\",\"enabled\":true},{\"id\":\"memory.search\",\"label\":\"Memory Search\",\"category\":\"knowledge\",\"enabled\":true}]}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsCallPreviewResponse{
-			.id = "req-22",
-			.ok = true,
-			.payloadJson = "{\"tool\":\"none\",\"allowed\":false,\"reason\":\"missing_tool\",\"argsProvided\":false,\"policy\":\"seeded_preview_v1\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame sessionsResolveResponse{
-			.id = "req-12",
-			.ok = true,
-			.payloadJson = "{\"session\":{\"id\":\"main\",\"scope\":\"default\",\"active\":true}}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame sessionsCreateResponse{
-			.id = "req-14",
-			.ok = true,
-			.payloadJson = "{\"session\":{\"id\":\"main\",\"scope\":\"default\",\"active\":true}}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame sessionsResetResponse{
-			.id = "req-15",
-			.ok = true,
-			.payloadJson = "{\"session\":{\"id\":\"main\",\"scope\":\"default\",\"active\":true},\"event\":\"gateway.session.reset\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame sessionsDeleteResponse{
-			.id = "req-23",
-			.ok = true,
-			.payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true,\"remaining\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame sessionsUsageResponse{
-			.id = "req-24",
-			.ok = true,
-			.payloadJson = "{\"sessionId\":\"main\",\"messages\":42,\"tokens\":{\"input\":1024,\"output\":512,\"total\":1536},\"lastActiveMs\":1735689600200}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame sessionsCompactResponse{
-			.id = "req-25",
-			.ok = true,
-			.payloadJson = "{\"compacted\":1,\"remaining\":1,\"dryRun\":false}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame sessionsPreviewResponse{
-			.id = "req-26",
-			.ok = true,
-			.payloadJson = "{\"session\":{\"id\":\"main\",\"scope\":\"default\",\"active\":true},\"title\":\"Session main\",\"hasMessages\":true,\"unread\":0}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame sessionsPatchResponse{
-			.id = "req-27",
-			.ok = true,
-			.payloadJson = "{\"session\":{\"id\":\"main\",\"scope\":\"default\",\"active\":true},\"patched\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame agentsCreateResponse{
-			.id = "req-28",
-			.ok = true,
-			.payloadJson = "{\"agent\":{\"id\":\"builder\",\"name\":\"Agent builder\",\"active\":false},\"created\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame agentsDeleteResponse{
-			.id = "req-29",
-			.ok = true,
-			.payloadJson = "{\"agent\":{\"id\":\"builder\",\"name\":\"Agent builder\",\"active\":false},\"deleted\":true,\"remaining\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame agentsUpdateResponse{
-			.id = "req-30",
-			.ok = true,
-			.payloadJson = "{\"agent\":{\"id\":\"builder\",\"name\":\"Builder Prime\",\"active\":true},\"updated\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsLogoutResponse{
-			.id = "req-31",
-			.ok = true,
-			.payloadJson = "{\"loggedOut\":true,\"affected\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsCallExecuteResponse{
-			.id = "req-32",
-			.ok = true,
-			.payloadJson = "{\"tool\":\"chat.send\",\"executed\":true,\"status\":\"ok\",\"output\":\"seeded_execution_v1\",\"argsProvided\":false}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configSetResponse{
-			.id = "req-33",
-			.ok = true,
-			.payloadJson = "{\"gateway\":{\"bind\":\"127.0.0.1\",\"port\":18789},\"agent\":{\"model\":\"default\",\"streaming\":true},\"updated\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsListResponse{
-			.id = "req-34",
-			.ok = true,
-			.payloadJson = "{\"models\":[{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true},{\"id\":\"reasoner\",\"provider\":\"seed\",\"displayName\":\"Reasoner Model\",\"streaming\":false}]}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame agentsFilesListResponse{
-			.id = "req-35",
-			.ok = true,
-			.payloadJson = "{\"files\":[{\"path\":\"agents/default/profile.json\",\"size\":512,\"updatedMs\":1735689600000},{\"path\":\"agents/default/memory.txt\",\"size\":2048,\"updatedMs\":1735689605000}],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame agentsFilesGetResponse{
-			.id = "req-36",
-			.ok = true,
-			.payloadJson = "{\"file\":{\"path\":\"agents/default/profile.json\",\"size\":512,\"updatedMs\":1735689600000,\"content\":\"seeded_content_for_agents/default/profile.json\"}}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame agentsFilesSetResponse{
-			.id = "req-37",
-			.ok = true,
-			.payloadJson = "{\"file\":{\"path\":\"agents/default/profile.json\",\"size\":5,\"updatedMs\":1735689620000,\"content\":\"hello\"},\"saved\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame agentsFilesDeleteResponse{
-			.id = "req-38",
-			.ok = true,
-			.payloadJson = "{\"file\":{\"path\":\"agents/default/profile.json\",\"size\":0,\"updatedMs\":1735689630000,\"content\":\"\"},\"deleted\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame agentsFilesExistsResponse{
-			.id = "req-39",
-			.ok = true,
-			.payloadJson = "{\"path\":\"agents/default/profile.json\",\"exists\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsRouteSetResponse{
-			.id = "req-40",
-			.ok = true,
-			.payloadJson = "{\"route\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"agentId\":\"default\",\"sessionId\":\"main\"},\"saved\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsRouteDeleteResponse{
-			.id = "req-41",
-			.ok = true,
-			.payloadJson = "{\"route\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"agentId\":\"default\",\"sessionId\":\"main\"},\"deleted\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsRouteExistsResponse{
-			.id = "req-42",
-			.ok = true,
-			.payloadJson = "{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"exists\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsAccountsActivateResponse{
-			.id = "req-43",
-			.ok = true,
-			.payloadJson = "{\"account\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":true},\"activated\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsAccountsDeactivateResponse{
-			.id = "req-44",
-			.ok = true,
-			.payloadJson = "{\"account\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":false,\"connected\":false},\"deactivated\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsAccountsExistsResponse{
-			.id = "req-45",
-			.ok = true,
-			.payloadJson = "{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"exists\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsAccountsUpdateResponse{
-			.id = "req-46",
-			.ok = true,
-			.payloadJson = "{\"account\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Renamed\",\"active\":true,\"connected\":true},\"updated\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsAccountsGetResponse{
-			.id = "req-47",
-			.ok = true,
-			.payloadJson = "{\"account\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":false}}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsAccountsCreateResponse{
-			.id = "req-48",
-			.ok = true,
-			.payloadJson = "{\"account\":{\"channel\":\"telegram\",\"accountId\":\"telegram.new\",\"label\":\"Telegram Account\",\"active\":true,\"connected\":false},\"created\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsAccountsDeleteResponse{
-			.id = "req-49",
-			.ok = true,
-			.payloadJson = "{\"account\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":false},\"deleted\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsRoutesClearResponse{
-			.id = "req-50",
-			.ok = true,
-			.payloadJson = "{\"cleared\":1,\"remaining\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsRoutesRestoreResponse{
-			.id = "req-51",
-			.ok = true,
-			.payloadJson = "{\"restored\":1,\"total\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsRouteGetResponse{
-			.id = "req-52",
-			.ok = true,
-			.payloadJson = "{\"route\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"agentId\":\"default\",\"sessionId\":\"main\"}}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsRouteRestoreResponse{
-			.id = "req-53",
-			.ok = true,
-			.payloadJson = "{\"route\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"agentId\":\"default\",\"sessionId\":\"main\"},\"restored\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsAccountsClearResponse{
-			.id = "req-54",
-			.ok = true,
-			.payloadJson = "{\"cleared\":1,\"remaining\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsAccountsRestoreResponse{
-			.id = "req-55",
-			.ok = true,
-			.payloadJson = "{\"restored\":1,\"total\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsAccountsCountResponse{
-			.id = "req-56",
-			.ok = true,
-			.payloadJson = "{\"channel\":\"telegram\",\"count\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsRoutesCountResponse{
-			.id = "req-57",
-			.ok = true,
-			.payloadJson = "{\"channel\":\"telegram\",\"count\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsRoutePatchResponse{
-			.id = "req-58",
-			.ok = true,
-			.payloadJson = "{\"route\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"agentId\":\"assistant\",\"sessionId\":\"main\"},\"updated\":true}",
-		   .error = std::nullopt,
-		};
-
-		const ResponseFrame channelsRoutesResetResponse{
-			.id = "req-59",
-			.ok = true,
-			.payloadJson = "{\"cleared\":1,\"restored\":1,\"total\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsAccountsResetResponse{
-			.id = "req-60",
-			.ok = true,
-			.payloadJson = "{\"cleared\":1,\"restored\":1,\"total\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsRouteResetResponse{
-			.id = "req-61",
-			.ok = true,
-			.payloadJson = "{\"route\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"agentId\":\"default\",\"sessionId\":\"main\"},\"deleted\":true,\"restored\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsStatusGetResponse{
-			.id = "req-62",
-			.ok = true,
-			.payloadJson = "{\"channel\":{\"id\":\"telegram\",\"label\":\"Telegram\",\"connected\":false,\"accounts\":1}}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsStatusExistsResponse{
-			.id = "req-63",
-			.ok = true,
-			.payloadJson = "{\"channel\":\"telegram\",\"exists\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame channelsStatusCountResponse{
-			.id = "req-64",
-			.ok = true,
-			.payloadJson = "{\"channel\":\"telegram\",\"count\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame sessionsExistsResponse{
-			.id = "req-65",
-			.ok = true,
-			.payloadJson = "{\"sessionId\":\"main\",\"exists\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame sessionsCountResponse{
-			.id = "req-66",
-			.ok = true,
-			.payloadJson = "{\"scope\":\"default\",\"count\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame sessionsActivateResponse{
-			.id = "req-67",
-			.ok = true,
-			.payloadJson = "{\"session\":{\"id\":\"main\",\"scope\":\"default\",\"active\":true},\"activated\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame agentsExistsResponse{
-			.id = "req-68",
-			.ok = true,
-			.payloadJson = "{\"agentId\":\"default\",\"exists\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame agentsCountResponse{
-			.id = "req-69",
-			.ok = true,
-			.payloadJson = "{\"active\":true,\"activeFilterApplied\":true,\"count\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsExistsResponse{
-			.id = "req-70",
-			.ok = true,
-			.payloadJson = "{\"event\":\"gateway.tick\",\"exists\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsCountResponse{
-			.id = "req-71",
-			.ok = true,
-			.payloadJson = "{\"event\":\"gateway.tick\",\"count\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsExistsResponse{
-			.id = "req-72",
-			.ok = true,
-			.payloadJson = "{\"tool\":\"chat.send\",\"exists\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsCountResponse{
-			.id = "req-73",
-			.ok = true,
-			.payloadJson = "{\"active\":true,\"activeFilterApplied\":true,\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsExistsResponse{
-			.id = "req-74",
-			.ok = true,
-			.payloadJson = "{\"modelId\":\"default\",\"exists\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configExistsResponse{
-			.id = "req-75",
-			.ok = true,
-			.payloadJson = "{\"key\":\"gateway.bind\",\"exists\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configKeysResponse{
-			.id = "req-76",
-			.ok = true,
-			.payloadJson = "{\"keys\":[\"gateway.bind\",\"gateway.port\",\"agent.model\",\"agent.streaming\"],\"count\":4}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportConnectionsCountResponse{
-			.id = "req-77",
-			.ok = true,
-			.payloadJson = "{\"count\":0}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame healthDetailsResponse{
-			.id = "req-78",
-			.ok = true,
-			.payloadJson = "{\"status\":\"ok\",\"running\":true,\"transport\":{\"running\":true,\"endpoint\":\"ws://127.0.0.1:18789\",\"connections\":0}}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame logsCountResponse{
-			.id = "req-79",
-			.ok = true,
-			.payloadJson = "{\"level\":\"info\",\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configCountResponse{
-			.id = "req-80",
-			.ok = true,
-			.payloadJson = "{\"section\":\"gateway\",\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsCountResponse{
-			.id = "req-81",
-			.ok = true,
-			.payloadJson = "{\"provider\":\"seed\",\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsGetResponse{
-			.id = "req-82",
-			.ok = true,
-			.payloadJson = "{\"event\":\"gateway.tick\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportEndpointGetResponse{
-			.id = "req-83",
-			.ok = true,
-			.payloadJson = "{\"endpoint\":\"ws://127.0.0.1:18789\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame logsLevelsResponse{
-			.id = "req-84",
-			.ok = true,
-			.payloadJson = "{\"levels\":[\"info\",\"debug\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsListResponse{
-			.id = "req-85",
-			.ok = true,
-			.payloadJson = "{\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"],\"count\":8}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsGetResponse{
-			.id = "req-86",
-			.ok = true,
-			.payloadJson = "{\"tool\":{\"id\":\"chat.send\",\"label\":\"Chat Send\",\"category\":\"messaging\",\"enabled\":true}}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsGetResponse{
-			.id = "req-87",
-			.ok = true,
-			.payloadJson = "{\"model\":{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true}}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configGetKeyResponse{
-			.id = "req-88",
-			.ok = true,
-			.payloadJson = "{\"key\":\"gateway.bind\",\"value\":\"127.0.0.1\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportEndpointExistsResponse{
-			.id = "req-89",
-			.ok = true,
-			.payloadJson = "{\"endpoint\":\"ws://127.0.0.1:18789\",\"exists\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsLastResponse{
-			.id = "req-90",
-			.ok = true,
-			.payloadJson = "{\"event\":\"gateway.tools.catalog.update\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsListResponse{
-			.id = "req-91",
-			.ok = true,
-			.payloadJson = "{\"tools\":[{\"id\":\"chat.send\",\"label\":\"Chat Send\",\"category\":\"messaging\",\"enabled\":true},{\"id\":\"memory.search\",\"label\":\"Memory Search\",\"category\":\"knowledge\",\"enabled\":true}],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsListByProviderResponse{
-			.id = "req-92",
-			.ok = true,
-			.payloadJson = "{\"provider\":\"seed\",\"models\":[{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true},{\"id\":\"reasoner\",\"provider\":\"seed\",\"displayName\":\"Reasoner Model\",\"streaming\":false}],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configSectionsResponse{
-			.id = "req-93",
-			.ok = true,
-			.payloadJson = "{\"sections\":[\"gateway\",\"agent\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportEndpointSetResponse{
-			.id = "req-94",
-			.ok = true,
-			.payloadJson = "{\"endpoint\":\"ws://127.0.0.1:18789\",\"updated\":false}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsSearchResponse{
-			.id = "req-95",
-			.ok = true,
-			.payloadJson = "{\"term\":\"gateway\",\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"],\"count\":8}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsCategoriesResponse{
-			.id = "req-96",
-			.ok = true,
-			.payloadJson = "{\"categories\":[\"messaging\",\"knowledge\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsProvidersResponse{
-			.id = "req-97",
-			.ok = true,
-			.payloadJson = "{\"providers\":[\"seed\"],\"count\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configGetSectionResponse{
-			.id = "req-98",
-			.ok = true,
-			.payloadJson = "{\"section\":\"gateway\",\"config\":{\"bind\":\"127.0.0.1\",\"port\":18789}}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportEndpointsListResponse{
-			.id = "req-99",
-			.ok = true,
-			.payloadJson = "{\"endpoints\":[\"ws://127.0.0.1:18789\"],\"count\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsSummaryResponse{
-			.id = "req-100",
-			.ok = true,
-			.payloadJson = "{\"total\":8,\"lifecycle\":3,\"updates\":5}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsStatsResponse{
-			.id = "req-101",
-			.ok = true,
-			.payloadJson = "{\"enabled\":2,\"disabled\":0,\"total\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsDefaultGetResponse{
-			.id = "req-102",
-			.ok = true,
-			.payloadJson = "{\"model\":{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true}}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configSchemaResponse{
-			.id = "req-103",
-			.ok = true,
-			.payloadJson = "{\"gateway\":{\"bind\":\"string\",\"port\":\"number\"},\"agent\":{\"model\":\"string\",\"streaming\":\"boolean\"}}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportPolicyGetResponse{
-			.id = "req-104",
-			.ok = true,
-			.payloadJson = "{\"exclusiveAddrUse\":true,\"keepAlive\":true,\"noDelay\":true,\"idleTimeoutMs\":120000,\"handshakeTimeoutMs\":5000}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsTypesResponse{
-			.id = "req-105",
-			.ok = true,
-			.payloadJson = "{\"types\":[\"lifecycle\",\"update\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsHealthResponse{
-			.id = "req-106",
-			.ok = true,
-			.payloadJson = "{\"healthy\":true,\"enabled\":2,\"total\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsCompatibilityResponse{
-			.id = "req-107",
-			.ok = true,
-			.payloadJson = "{\"default\":\"full\",\"reasoner\":\"partial\",\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configValidateResponse{
-			.id = "req-108",
-			.ok = true,
-			.payloadJson = "{\"valid\":true,\"errors\":[],\"count\":0}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportPolicySetResponse{
-			.id = "req-109",
-			.ok = true,
-			.payloadJson = "{\"applied\":false,\"reason\":\"runtime_immutable\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsChannelsResponse{
-			.id = "req-110",
-			.ok = true,
-			.payloadJson = "{\"channelEvents\":3,\"accountEvents\":1,\"count\":4}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsMetricsResponse{
-			.id = "req-111",
-			.ok = true,
-			.payloadJson = "{\"invocations\":0,\"enabled\":2,\"disabled\":0,\"total\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsRecommendedResponse{
-			.id = "req-112",
-			.ok = true,
-			.payloadJson = "{\"model\":{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true},\"reason\":\"seed_default\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configAuditResponse{
-			.id = "req-113",
-			.ok = true,
-			.payloadJson = "{\"enabled\":true,\"source\":\"runtime\",\"lastUpdatedMs\":1735689600000}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportPolicyResetResponse{
-			.id = "req-114",
-			.ok = true,
-			.payloadJson = "{\"reset\":true,\"applied\":false}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsTimelineResponse{
-			.id = "req-115",
-			.ok = true,
-			.payloadJson = "{\"events\":[\"gateway.shutdown\",\"gateway.session.reset\",\"gateway.agent.update\",\"gateway.tools.catalog.update\"],\"count\":4}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsFailuresResponse{
-			.id = "req-116",
-			.ok = true,
-			.payloadJson = "{\"failed\":0,\"total\":2,\"rate\":0}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsFallbackResponse{
-			.id = "req-117",
-			.ok = true,
-			.payloadJson = "{\"preferred\":\"default\",\"fallback\":\"reasoner\",\"configured\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configRollbackResponse{
-			.id = "req-118",
-			.ok = true,
-			.payloadJson = "{\"rolledBack\":false,\"version\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportPolicyStatusResponse{
-			.id = "req-119",
-			.ok = true,
-			.payloadJson = "{\"mutable\":false,\"lastApplied\":\"runtime_immutable\",\"policyVersion\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsLatestByTypeResponse{
-			.id = "req-120",
-			.ok = true,
-			.payloadJson = "{\"type\":\"update\",\"event\":\"gateway.tools.catalog.update\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsUsageResponse{
-			.id = "req-121",
-			.ok = true,
-			.payloadJson = "{\"calls\":0,\"tools\":2,\"avgMs\":0}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsSelectionResponse{
-			.id = "req-122",
-			.ok = true,
-			.payloadJson = "{\"selected\":\"default\",\"strategy\":\"seed_priority\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configBackupResponse{
-			.id = "req-123",
-			.ok = true,
-			.payloadJson = "{\"saved\":true,\"version\":1,\"path\":\"config/runtime.backup.json\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportPolicyValidateResponse{
-			.id = "req-124",
-			.ok = true,
-			.payloadJson = "{\"valid\":true,\"errors\":[],\"count\":0}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsSampleResponse{
-			.id = "req-125",
-			.ok = true,
-			.payloadJson = "{\"events\":[\"gateway.health\",\"gateway.tools.catalog.update\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsLatencyResponse{
-			.id = "req-126",
-			.ok = true,
-			.payloadJson = "{\"minMs\":0,\"maxMs\":0,\"avgMs\":0,\"samples\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsRoutingResponse{
-			.id = "req-127",
-			.ok = true,
-			.payloadJson = "{\"primary\":\"default\",\"fallback\":\"reasoner\",\"strategy\":\"seed_priority\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configDiffResponse{
-			.id = "req-128",
-			.ok = true,
-			.payloadJson = "{\"changed\":[],\"count\":0}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportPolicyHistoryResponse{
-			.id = "req-129",
-			.ok = true,
-			.payloadJson = "{\"entries\":[{\"version\":1,\"applied\":false,\"reason\":\"runtime_immutable\"}],\"count\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsWindowResponse{
-			.id = "req-130",
-			.ok = true,
-			.payloadJson = "{\"events\":[\"gateway.session.reset\",\"gateway.agent.update\",\"gateway.tools.catalog.update\"],\"count\":3}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsErrorsResponse{
-			.id = "req-131",
-			.ok = true,
-			.payloadJson = "{\"errors\":0,\"tools\":2,\"rate\":0}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsPreferenceResponse{
-			.id = "req-132",
-			.ok = true,
-			.payloadJson = "{\"model\":\"default\",\"provider\":\"seed\",\"source\":\"runtime\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configSnapshotResponse{
-			.id = "req-133",
-			.ok = true,
-			.payloadJson = "{\"gateway\":{\"bind\":\"127.0.0.1\",\"port\":18789},\"agent\":{\"model\":\"default\",\"streaming\":true}}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportPolicyMetricsResponse{
-			.id = "req-134",
-			.ok = true,
-			.payloadJson = "{\"validations\":0,\"resets\":0,\"sets\":0}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsRecentResponse{
-			.id = "req-135",
-			.ok = true,
-			.payloadJson = "{\"events\":[\"gateway.shutdown\",\"gateway.session.reset\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsThroughputResponse{
-			.id = "req-136",
-			.ok = true,
-			.payloadJson = "{\"calls\":0,\"windowSec\":60,\"perMinute\":0,\"tools\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsPriorityResponse{
-			.id = "req-137",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configRevisionResponse{
-			.id = "req-138",
-			.ok = true,
-			.payloadJson = "{\"revision\":1,\"source\":\"runtime\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportPolicyExportResponse{
-			.id = "req-139",
-			.ok = true,
-			.payloadJson = "{\"path\":\"transport/policy-export.json\",\"version\":1,\"exported\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsBatchResponse{
-			.id = "req-140",
-			.ok = true,
-			.payloadJson = "{\"batches\":[\"lifecycle\",\"updates\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsCapacityResponse{
-			.id = "req-141",
-			.ok = true,
-			.payloadJson = "{\"total\":2,\"used\":0,\"free\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsAffinityResponse{
-			.id = "req-142",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"],\"affinity\":\"balanced\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configHistoryResponse{
-			.id = "req-143",
-			.ok = true,
-			.payloadJson = "{\"revisions\":[1],\"count\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportPolicyImportResponse{
-			.id = "req-144",
-			.ok = true,
-			.payloadJson = "{\"imported\":true,\"version\":1,\"applied\":false}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsCursorResponse{
-			.id = "req-145",
-			.ok = true,
-			.payloadJson = "{\"cursor\":\"evt-2\",\"event\":\"gateway.session.reset\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsQueueResponse{
-			.id = "req-146",
-			.ok = true,
-			.payloadJson = "{\"queued\":0,\"running\":0,\"tools\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsPoolResponse{
-			.id = "req-147",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configProfileResponse{
-			.id = "req-148",
-			.ok = true,
-			.payloadJson = "{\"name\":\"default\",\"source\":\"runtime\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportPolicyDigestResponse{
-			.id = "req-149",
-			.ok = true,
-			.payloadJson = "{\"digest\":\"sha256:seed-policy-v1\",\"version\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsAnchorResponse{
-			.id = "req-150",
-			.ok = true,
-			.payloadJson = "{\"anchor\":\"evt-1\",\"event\":\"gateway.shutdown\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsSchedulerResponse{
-			.id = "req-151",
-			.ok = true,
-			.payloadJson = "{\"ticks\":0,\"queued\":0,\"tools\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsManifestResponse{
-			.id = "req-152",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"],\"manifestVersion\":1}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configTemplateResponse{
-			.id = "req-153",
-			.ok = true,
-			.payloadJson = "{\"template\":\"default\",\"keys\":[\"gateway.bind\",\"gateway.port\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportPolicyPreviewResponse{
-			.id = "req-154",
-			.ok = true,
-			.payloadJson = "{\"path\":\"transport/policy-preview.json\",\"applied\":false,\"notes\":\"runtime_immutable\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsOffsetResponse{
-			.id = "req-155",
-			.ok = true,
-			.payloadJson = "{\"offset\":1,\"event\":\"gateway.session.reset\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsBacklogResponse{
-			.id = "req-156",
-			.ok = true,
-			.payloadJson = "{\"pending\":0,\"capacity\":2,\"tools\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsCatalogResponse{
-			.id = "req-157",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configBundleResponse{
-			.id = "req-158",
-			.ok = true,
-			.payloadJson = "{\"name\":\"runtime\",\"sections\":[\"gateway\",\"agent\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportPolicyCommitResponse{
-			.id = "req-159",
-			.ok = true,
-			.payloadJson = "{\"committed\":false,\"version\":1,\"applied\":false}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsMarkerResponse{
-			.id = "req-160",
-			.ok = true,
-			.payloadJson = "{\"marker\":\"evt-marker-1\",\"event\":\"gateway.shutdown\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsWindowResponse{
-			.id = "req-161",
-			.ok = true,
-			.payloadJson = "{\"windowSec\":60,\"calls\":0,\"tools\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsInventoryResponse{
-			.id = "req-162",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configPackageResponse{
-			.id = "req-163",
-			.ok = true,
-			.payloadJson = "{\"package\":\"runtime\",\"sections\":[\"gateway\",\"agent\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportPolicyApplyResponse{
-			.id = "req-164",
-			.ok = true,
-			.payloadJson = "{\"applied\":false,\"version\":1,\"reason\":\"runtime_immutable\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsSequenceResponse{
-			.id = "req-165",
-			.ok = true,
-			.payloadJson = "{\"sequence\":1,\"event\":\"gateway.session.reset\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsPipelineResponse{
-			.id = "req-166",
-			.ok = true,
-			.payloadJson = "{\"queued\":0,\"running\":0,\"failed\":0,\"tools\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsSnapshotResponse{
-			.id = "req-167",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configArchiveResponse{
-			.id = "req-168",
-			.ok = true,
-			.payloadJson = "{\"archive\":\"runtime\",\"sections\":[\"gateway\",\"agent\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportPolicyStageResponse{
-			.id = "req-169",
-			.ok = true,
-			.payloadJson = "{\"staged\":true,\"version\":1,\"applied\":false}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsPointerResponse{
-			.id = "req-170",
-			.ok = true,
-			.payloadJson = "{\"pointer\":\"evt-pointer-1\",\"event\":\"gateway.shutdown\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsDispatchResponse{
-			.id = "req-171",
-			.ok = true,
-			.payloadJson = "{\"queued\":0,\"dispatched\":0,\"tools\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsRegistryResponse{
-			.id = "req-172",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configManifestResponse{
-			.id = "req-173",
-			.ok = true,
-			.payloadJson = "{\"manifest\":\"runtime\",\"sections\":[\"gateway\",\"agent\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportPolicyReconcileResponse{
-			.id = "req-174",
-			.ok = true,
-			.payloadJson = "{\"reconciled\":false,\"version\":1,\"applied\":false}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsTokenResponse{
-			.id = "req-175",
-			.ok = true,
-			.payloadJson = "{\"token\":\"evt-token-1\",\"event\":\"gateway.session.reset\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsRouterResponse{
-			.id = "req-176",
-			.ok = true,
-			.payloadJson = "{\"routed\":0,\"fallback\":0,\"tools\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame modelsIndexResponse{
-			.id = "req-177",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configIndexResponse{
-			.id = "req-178",
-			.ok = true,
-			.payloadJson = "{\"keys\":[\"gateway.bind\",\"gateway.port\",\"agent.model\",\"agent.streaming\"],\"count\":4}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportPolicySyncResponse{
-			.id = "req-179",
-			.ok = true,
-			.payloadJson = "{\"synced\":false,\"version\":1,\"applied\":false}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsStreamResponse{
-			.id = "req-180",
-			.ok = true,
-			.payloadJson = "{\"stream\":\"evt-stream-1\",\"event\":\"gateway.tools.catalog.update\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame toolsSelectorResponse{
-			.id = "req-181",
-			.ok = true,
-			.payloadJson = "{\"selected\":0,\"fallback\":0,\"tools\":2}",
-           .error = std::nullopt,
-		};
-
-		const ResponseFrame modelsStateResponse{
-			.id = "req-182",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame configStateResponse{
-			.id = "req-183",
-			.ok = true,
-			.payloadJson = "{\"sections\":[\"gateway\",\"agent\"],\"count\":2}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportPolicyRefreshResponse{
-			.id = "req-184",
-			.ok = true,
-			.payloadJson = "{\"refreshed\":false,\"version\":1,\"applied\":false}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame healthResponse{
-			.id = "req-5",
-			.ok = true,
-			.payloadJson = "{\"status\":\"ok\",\"running\":true}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame sessionListResponse{
-			.id = "req-6",
-			.ok = true,
-			.payloadJson = "{\"sessions\":[{\"id\":\"main\",\"scope\":\"default\",\"active\":true}],\"count\":1,\"activeSessionId\":\"main\"}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame eventsCatalogResponse{
-			.id = "req-7",
-			.ok = true,
-			.payloadJson = "{\"events\":[\"gateway.agent.update\",\"gateway.channels.accounts.update\",\"gateway.channels.update\",\"gateway.health\",\"gateway.session.reset\",\"gateway.shutdown\",\"gateway.tick\",\"gateway.tools.catalog.update\"]}",
-			.error = std::nullopt,
-		};
-
-		const ResponseFrame transportStatusResponse{
-			.id = "req-8",
-			.ok = true,
-			.payloadJson = "{\"running\":true,\"endpoint\":\"ws://127.0.0.1:18789\",\"connections\":0,\"timeouts\":{\"handshake\":0,\"idle\":0},\"closes\":{\"invalidUtf8\":0,\"messageTooBig\":0,\"extensionRejected\":0}}",
-			.error = std::nullopt,
-		};
-
-		const EventFrame event{
-			.eventName = "gateway.tick",
-			.payloadJson = "{\"ts\":1735689600000,\"running\":true,\"connections\":0}",
-			.seq = 1,
-			.stateVersion = 1,
-		};
-
-		const EventFrame healthEvent{
-			.eventName = "gateway.health",
-			.payloadJson = "{\"status\":\"ok\",\"running\":true,\"endpoint\":\"ws://127.0.0.1:18789\",\"connections\":0,\"timeouts\":{\"handshake\":0,\"idle\":0},\"closes\":{\"invalidUtf8\":0,\"messageTooBig\":0,\"extensionRejected\":0}}",
-			.seq = 2,
-			.stateVersion = 2,
-		};
-
-		const EventFrame shutdownEvent{
-			.eventName = "gateway.shutdown",
-			.payloadJson = "{\"reason\":\"maintenance\",\"graceful\":true,\"seq\":3}",
-			.seq = 3,
-			.stateVersion = 3,
-		};
-
-		const EventFrame channelsUpdateEvent{
-			.eventName = "gateway.channels.update",
-			.payloadJson = "{\"channels\":[{\"id\":\"telegram\",\"label\":\"Telegram\",\"connected\":false,\"accounts\":1},{\"id\":\"discord\",\"label\":\"Discord\",\"connected\":false,\"accounts\":1}]}",
-			.seq = 4,
-			.stateVersion = 4,
-		};
-
-		const EventFrame sessionResetEvent{
-			.eventName = "gateway.session.reset",
-			.payloadJson = "{\"sessionId\":\"main\",\"session\":{\"id\":\"main\",\"scope\":\"default\",\"active\":true}}",
-			.seq = 5,
-			.stateVersion = 5,
-		};
-
-		const EventFrame agentUpdateEvent{
-			.eventName = "gateway.agent.update",
-			.payloadJson = "{\"agentId\":\"default\",\"agent\":{\"id\":\"default\",\"name\":\"Default Agent\",\"active\":true}}",
-			.seq = 6,
-			.stateVersion = 6,
-		};
-
-		const EventFrame channelsAccountsUpdateEvent{
-			.eventName = "gateway.channels.accounts.update",
-			.payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":false},{\"channel\":\"discord\",\"accountId\":\"discord.default\",\"label\":\"Discord Default\",\"active\":true,\"connected\":false}]}",
-			.seq = 7,
-			.stateVersion = 7,
-		};
-
-		const EventFrame toolsCatalogUpdateEvent{
-			.eventName = "gateway.tools.catalog.update",
-			.payloadJson = "{\"tools\":[{\"id\":\"chat.send\",\"label\":\"Chat Send\",\"category\":\"messaging\",\"enabled\":true},{\"id\":\"memory.search\",\"label\":\"Memory Search\",\"category\":\"knowledge\",\"enabled\":true}]}",
-			.seq = 8,
-			.stateVersion = 8,
-		};
-
 		const ResponseFrame invalidProtocolParamsResponse{
 			.id = invalidProtocolParamsRequest.id,
 			.ok = false,
@@ -1450,5134 +301,797 @@ namespace blazeclaw::gateway::protocol {
 			},
 		};
 
-		SchemaValidationIssue responseIssue;
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod("gateway.ping", response, responseIssue)) {
-			error = "Ping response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.protocol.version",
-			protocolVersionResponse,
-			responseIssue)) {
-			error = "Protocol version response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.features.list",
-			featuresListResponse,
-			responseIssue)) {
-			error = "Features list response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod("gateway.health", healthResponse, responseIssue)) {
-			error = "Health response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.status",
-			transportStatusResponse,
-			responseIssue)) {
-			error = "Transport status response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.session.list",
-			sessionListResponse,
-			responseIssue)) {
-			error = "Session list response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.catalog",
-			eventsCatalogResponse,
-			responseIssue)) {
-			error = "Events catalog response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.get",
-			configGetResponse,
-			responseIssue)) {
-			error = "Config get response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.status",
-			channelsStatusResponse,
-			responseIssue)) {
-			error = "Channels status response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts",
-			channelsAccountsResponse,
-			responseIssue)) {
-			error = "Channels accounts response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.routes",
-			channelsRoutesResponse,
-			responseIssue)) {
-			error = "Channels routes response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.route.resolve",
-			channelsRouteResolveResponse,
-			responseIssue)) {
-			error = "Channels route resolve response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.logs.tail",
-			logsTailResponse,
-			responseIssue)) {
-			error = "Logs tail response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.catalog",
-			toolsCatalogResponse,
-			responseIssue)) {
-			error = "Tools catalog response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.call.preview",
-			toolsCallPreviewResponse,
-			responseIssue)) {
-			error = "Tools call preview response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.sessions.resolve",
-			sessionsResolveResponse,
-			responseIssue)) {
-			error = "Sessions resolve response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.sessions.create",
-			sessionsCreateResponse,
-			responseIssue)) {
-			error = "Sessions create response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.sessions.reset",
-			sessionsResetResponse,
-			responseIssue)) {
-			error = "Sessions reset response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.sessions.delete",
-			sessionsDeleteResponse,
-			responseIssue)) {
-			error = "Sessions delete response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.sessions.usage",
-			sessionsUsageResponse,
-			responseIssue)) {
-			error = "Sessions usage response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.sessions.compact",
-			sessionsCompactResponse,
-			responseIssue)) {
-			error = "Sessions compact response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.sessions.preview",
-			sessionsPreviewResponse,
-			responseIssue)) {
-			error = "Sessions preview response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.sessions.patch",
-			sessionsPatchResponse,
-			responseIssue)) {
-			error = "Sessions patch response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.create",
-			agentsCreateResponse,
-			responseIssue)) {
-			error = "Agents create response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.delete",
-			agentsDeleteResponse,
-			responseIssue)) {
-			error = "Agents delete response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.update",
-			agentsUpdateResponse,
-			responseIssue)) {
-			error = "Agents update response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.logout",
-			channelsLogoutResponse,
-			responseIssue)) {
-			error = "Channels logout response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.call.execute",
-			toolsCallExecuteResponse,
-			responseIssue)) {
-			error = "Tools call execute response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.set",
-			configSetResponse,
-			responseIssue)) {
-			error = "Config set response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.list",
-			modelsListResponse,
-			responseIssue)) {
-			error = "Models list response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.files.list",
-			agentsFilesListResponse,
-			responseIssue)) {
-			error = "Agents files list response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.files.get",
-			agentsFilesGetResponse,
-			responseIssue)) {
-			error = "Agents files get response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.files.set",
-			agentsFilesSetResponse,
-			responseIssue)) {
-			error = "Agents files set response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.files.delete",
-			agentsFilesDeleteResponse,
-			responseIssue)) {
-			error = "Agents files delete response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.files.exists",
-			agentsFilesExistsResponse,
-			responseIssue)) {
-			error = "Agents files exists response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.route.set",
-			channelsRouteSetResponse,
-			responseIssue)) {
-			error = "Channels route set response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.route.delete",
-			channelsRouteDeleteResponse,
-			responseIssue)) {
-			error = "Channels route delete response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.route.exists",
-			channelsRouteExistsResponse,
-			responseIssue)) {
-			error = "Channels route exists response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.activate",
-			channelsAccountsActivateResponse,
-			responseIssue)) {
-			error = "Channels accounts activate response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.deactivate",
-			channelsAccountsDeactivateResponse,
-			responseIssue)) {
-			error = "Channels accounts deactivate response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.exists",
-			channelsAccountsExistsResponse,
-			responseIssue)) {
-			error = "Channels accounts exists response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.update",
-			channelsAccountsUpdateResponse,
-			responseIssue)) {
-			error = "Channels accounts update response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.get",
-			channelsAccountsGetResponse,
-			responseIssue)) {
-			error = "Channels accounts get response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.create",
-			channelsAccountsCreateResponse,
-			responseIssue)) {
-			error = "Channels accounts create response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.delete",
-			channelsAccountsDeleteResponse,
-			responseIssue)) {
-			error = "Channels accounts delete response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.routes.clear",
-			channelsRoutesClearResponse,
-			responseIssue)) {
-			error = "Channels routes clear response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.routes.restore",
-			channelsRoutesRestoreResponse,
-			responseIssue)) {
-			error = "Channels routes restore response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.route.get",
-			channelsRouteGetResponse,
-			responseIssue)) {
-			error = "Channels route get response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.route.restore",
-			channelsRouteRestoreResponse,
-			responseIssue)) {
-			error = "Channels route restore response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.clear",
-			channelsAccountsClearResponse,
-			responseIssue)) {
-			error = "Channels accounts clear response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.restore",
-			channelsAccountsRestoreResponse,
-			responseIssue)) {
-			error = "Channels accounts restore response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.count",
-			channelsAccountsCountResponse,
-			responseIssue)) {
-			error = "Channels accounts count response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.routes.count",
-			channelsRoutesCountResponse,
-			responseIssue)) {
-			error = "Channels routes count response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.route.patch",
-			channelsRoutePatchResponse,
-			responseIssue)) {
-			error = "Channels route patch response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.routes.reset",
-			channelsRoutesResetResponse,
-			responseIssue)) {
-			error = "Channels routes reset response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.reset",
-			channelsAccountsResetResponse,
-			responseIssue)) {
-			error = "Channels accounts reset response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.route.reset",
-			channelsRouteResetResponse,
-			responseIssue)) {
-			error = "Channels route reset response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.status.get",
-			channelsStatusGetResponse,
-			responseIssue)) {
-			error = "Channels status get response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.status.exists",
-			channelsStatusExistsResponse,
-			responseIssue)) {
-			error = "Channels status exists response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.status.count",
-			channelsStatusCountResponse,
-			responseIssue)) {
-			error = "Channels status count response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.sessions.exists",
-			sessionsExistsResponse,
-			responseIssue)) {
-			error = "Sessions exists response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.sessions.count",
-			sessionsCountResponse,
-			responseIssue)) {
-			error = "Sessions count response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.sessions.activate",
-			sessionsActivateResponse,
-			responseIssue)) {
-			error = "Sessions activate response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.exists",
-			agentsExistsResponse,
-			responseIssue)) {
-			error = "Agents exists response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.count",
-			agentsCountResponse,
-			responseIssue)) {
-			error = "Agents count response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.exists",
-			eventsExistsResponse,
-			responseIssue)) {
-			error = "Events exists response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.count",
-			eventsCountResponse,
-			responseIssue)) {
-			error = "Events count response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.exists",
-			toolsExistsResponse,
-			responseIssue)) {
-			error = "Tools exists response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.count",
-			toolsCountResponse,
-			responseIssue)) {
-			error = "Tools count response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.exists",
-			modelsExistsResponse,
-			responseIssue)) {
-			error = "Models exists response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.exists",
-			configExistsResponse,
-			responseIssue)) {
-			error = "Config exists response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.keys",
-			configKeysResponse,
-			responseIssue)) {
-			error = "Config keys response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.connections.count",
-			transportConnectionsCountResponse,
-			responseIssue)) {
-			error = "Transport connections count response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.health.details",
-			healthDetailsResponse,
-			responseIssue)) {
-			error = "Health details response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.logs.count",
-			logsCountResponse,
-			responseIssue)) {
-			error = "Logs count response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.count",
-			configCountResponse,
-			responseIssue)) {
-			error = "Config count response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.count",
-			modelsCountResponse,
-			responseIssue)) {
-			error = "Models count response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.get",
-			eventsGetResponse,
-			responseIssue)) {
-			error = "Events get response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.endpoint.get",
-			transportEndpointGetResponse,
-			responseIssue)) {
-			error = "Transport endpoint get response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.logs.levels",
-			logsLevelsResponse,
-			responseIssue)) {
-			error = "Logs levels response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.list",
-			eventsListResponse,
-			responseIssue)) {
-			error = "Events list response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.get",
-			toolsGetResponse,
-			responseIssue)) {
-			error = "Tools get response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.get",
-			modelsGetResponse,
-			responseIssue)) {
-			error = "Models get response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.getKey",
-			configGetKeyResponse,
-			responseIssue)) {
-			error = "Config getKey response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.endpoint.exists",
-			transportEndpointExistsResponse,
-			responseIssue)) {
-			error = "Transport endpoint exists response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.last",
-			eventsLastResponse,
-			responseIssue)) {
-			error = "Events last response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.list",
-			toolsListResponse,
-			responseIssue)) {
-			error = "Tools list response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.listByProvider",
-			modelsListByProviderResponse,
-			responseIssue)) {
-			error = "Models listByProvider response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.sections",
-			configSectionsResponse,
-			responseIssue)) {
-			error = "Config sections response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.endpoint.set",
-			transportEndpointSetResponse,
-			responseIssue)) {
-			error = "Transport endpoint set response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.search",
-			eventsSearchResponse,
-			responseIssue)) {
-			error = "Events search response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.categories",
-			toolsCategoriesResponse,
-			responseIssue)) {
-			error = "Tools categories response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.providers",
-			modelsProvidersResponse,
-			responseIssue)) {
-			error = "Models providers response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.getSection",
-			configGetSectionResponse,
-			responseIssue)) {
-			error = "Config getSection response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.endpoints.list",
-			transportEndpointsListResponse,
-			responseIssue)) {
-			error = "Transport endpoints list response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.summary",
-			eventsSummaryResponse,
-			responseIssue)) {
-			error = "Events summary response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.stats",
-			toolsStatsResponse,
-			responseIssue)) {
-			error = "Tools stats response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.default.get",
-			modelsDefaultGetResponse,
-			responseIssue)) {
-			error = "Models default get response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.schema",
-			configSchemaResponse,
-			responseIssue)) {
-			error = "Config schema response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.get",
-			transportPolicyGetResponse,
-			responseIssue)) {
-			error = "Transport policy get response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.types",
-			eventsTypesResponse,
-			responseIssue)) {
-			error = "Events types response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.health",
-			toolsHealthResponse,
-			responseIssue)) {
-			error = "Tools health response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.compatibility",
-			modelsCompatibilityResponse,
-			responseIssue)) {
-			error = "Models compatibility response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.validate",
-			configValidateResponse,
-			responseIssue)) {
-			error = "Config validate response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.set",
-			transportPolicySetResponse,
-			responseIssue)) {
-			error = "Transport policy set response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.channels",
-			eventsChannelsResponse,
-			responseIssue)) {
-			error = "Events channels response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.metrics",
-			toolsMetricsResponse,
-			responseIssue)) {
-			error = "Tools metrics response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.recommended",
-			modelsRecommendedResponse,
-			responseIssue)) {
-			error = "Models recommended response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.audit",
-			configAuditResponse,
-			responseIssue)) {
-			error = "Config audit response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.reset",
-			transportPolicyResetResponse,
-			responseIssue)) {
-			error = "Transport policy reset response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.timeline",
-			eventsTimelineResponse,
-			responseIssue)) {
-			error = "Events timeline response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.failures",
-			toolsFailuresResponse,
-			responseIssue)) {
-			error = "Tools failures response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.fallback",
-			modelsFallbackResponse,
-			responseIssue)) {
-			error = "Models fallback response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.rollback",
-			configRollbackResponse,
-			responseIssue)) {
-			error = "Config rollback response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.status",
-			transportPolicyStatusResponse,
-			responseIssue)) {
-			error = "Transport policy status response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.latestByType",
-			eventsLatestByTypeResponse,
-			responseIssue)) {
-			error = "Events latestByType response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.usage",
-			toolsUsageResponse,
-			responseIssue)) {
-			error = "Tools usage response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.selection",
-			modelsSelectionResponse,
-			responseIssue)) {
-			error = "Models selection response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.backup",
-			configBackupResponse,
-			responseIssue)) {
-			error = "Config backup response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.validate",
-			transportPolicyValidateResponse,
-			responseIssue)) {
-			error = "Transport policy validate response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.sample",
-			eventsSampleResponse,
-			responseIssue)) {
-			error = "Events sample response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.latency",
-			toolsLatencyResponse,
-			responseIssue)) {
-			error = "Tools latency response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.routing",
-			modelsRoutingResponse,
-			responseIssue)) {
-			error = "Models routing response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.diff",
-			configDiffResponse,
-			responseIssue)) {
-			error = "Config diff response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.history",
-			transportPolicyHistoryResponse,
-			responseIssue)) {
-			error = "Transport policy history response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.window",
-			eventsWindowResponse,
-			responseIssue)) {
-			error = "Events window response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.errors",
-			toolsErrorsResponse,
-			responseIssue)) {
-			error = "Tools errors response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.preference",
-			modelsPreferenceResponse,
-			responseIssue)) {
-			error = "Models preference response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.snapshot",
-			configSnapshotResponse,
-			responseIssue)) {
-			error = "Config snapshot response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.metrics",
-			transportPolicyMetricsResponse,
-			responseIssue)) {
-			error = "Transport policy metrics response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.recent",
-			eventsRecentResponse,
-			responseIssue)) {
-			error = "Events recent response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.throughput",
-			toolsThroughputResponse,
-			responseIssue)) {
-			error = "Tools throughput response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.priority",
-			modelsPriorityResponse,
-			responseIssue)) {
-			error = "Models priority response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.revision",
-			configRevisionResponse,
-			responseIssue)) {
-			error = "Config revision response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.export",
-			transportPolicyExportResponse,
-			responseIssue)) {
-			error = "Transport policy export response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.batch",
-			eventsBatchResponse,
-			responseIssue)) {
-			error = "Events batch response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.capacity",
-			toolsCapacityResponse,
-			responseIssue)) {
-			error = "Tools capacity response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.affinity",
-			modelsAffinityResponse,
-			responseIssue)) {
-			error = "Models affinity response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.history",
-			configHistoryResponse,
-			responseIssue)) {
-			error = "Config history response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.import",
-			transportPolicyImportResponse,
-			responseIssue)) {
-			error = "Transport policy import response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.cursor",
-			eventsCursorResponse,
-			responseIssue)) {
-			error = "Events cursor response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.queue",
-			toolsQueueResponse,
-			responseIssue)) {
-			error = "Tools queue response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.pool",
-			modelsPoolResponse,
-			responseIssue)) {
-			error = "Models pool response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.profile",
-			configProfileResponse,
-			responseIssue)) {
-			error = "Config profile response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.digest",
-			transportPolicyDigestResponse,
-			responseIssue)) {
-			error = "Transport policy digest response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.anchor",
-			eventsAnchorResponse,
-			responseIssue)) {
-			error = "Events anchor response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.scheduler",
-			toolsSchedulerResponse,
-			responseIssue)) {
-			error = "Tools scheduler response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.manifest",
-			modelsManifestResponse,
-			responseIssue)) {
-			error = "Models manifest response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.template",
-			configTemplateResponse,
-			responseIssue)) {
-			error = "Config template response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.preview",
-			transportPolicyPreviewResponse,
-			responseIssue)) {
-			error = "Transport policy preview response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.offset",
-			eventsOffsetResponse,
-			responseIssue)) {
-			error = "Events offset response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.backlog",
-			toolsBacklogResponse,
-			responseIssue)) {
-			error = "Tools backlog response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.catalog",
-			modelsCatalogResponse,
-			responseIssue)) {
-			error = "Models catalog response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.bundle",
-			configBundleResponse,
-			responseIssue)) {
-			error = "Config bundle response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.commit",
-			transportPolicyCommitResponse,
-			responseIssue)) {
-			error = "Transport policy commit response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.marker",
-			eventsMarkerResponse,
-			responseIssue)) {
-			error = "Events marker response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.window",
-			toolsWindowResponse,
-			responseIssue)) {
-			error = "Tools window response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.inventory",
-			modelsInventoryResponse,
-			responseIssue)) {
-			error = "Models inventory response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.package",
-			configPackageResponse,
-			responseIssue)) {
-			error = "Config package response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.apply",
-			transportPolicyApplyResponse,
-			responseIssue)) {
-			error = "Transport policy apply response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.sequence",
-			eventsSequenceResponse,
-			responseIssue)) {
-			error = "Events sequence response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.pipeline",
-			toolsPipelineResponse,
-			responseIssue)) {
-			error = "Tools pipeline response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.snapshot",
-			modelsSnapshotResponse,
-			responseIssue)) {
-			error = "Models snapshot response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.archive",
-			configArchiveResponse,
-			responseIssue)) {
-			error = "Config archive response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.stage",
-			transportPolicyStageResponse,
-			responseIssue)) {
-			error = "Transport policy stage response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.pointer",
-			eventsPointerResponse,
-			responseIssue)) {
-			error = "Events pointer response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.dispatch",
-			toolsDispatchResponse,
-			responseIssue)) {
-			error = "Tools dispatch response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.registry",
-			modelsRegistryResponse,
-			responseIssue)) {
-			error = "Models registry response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.manifest",
-			configManifestResponse,
-			responseIssue)) {
-			error = "Config manifest response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.reconcile",
-			transportPolicyReconcileResponse,
-			responseIssue)) {
-			error = "Transport policy reconcile response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.token",
-			eventsTokenResponse,
-			responseIssue)) {
-			error = "Events token response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.router",
-			toolsRouterResponse,
-			responseIssue)) {
-			error = "Tools router response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.index",
-			modelsIndexResponse,
-			responseIssue)) {
-			error = "Models index response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.index",
-			configIndexResponse,
-			responseIssue)) {
-			error = "Config index response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.sync",
-			transportPolicySyncResponse,
-			responseIssue)) {
-			error = "Transport policy sync response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.stream",
-			eventsStreamResponse,
-			responseIssue)) {
-			error = "Events stream response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.selector",
-			toolsSelectorResponse,
-			responseIssue)) {
-			error = "Tools selector response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.state",
-			modelsStateResponse,
-			responseIssue)) {
-			error = "Models state response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.state",
-			configStateResponse,
-			responseIssue)) {
-			error = "Config state response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.refresh",
-			transportPolicyRefreshResponse,
-			responseIssue)) {
-			error = "Transport policy refresh response schema validation failed: " + responseIssue.message;
-			return false;
-		}
-
-		SchemaValidationIssue eventIssue;
-		if (!GatewayProtocolSchemaValidator::ValidateEvent(event, eventIssue)) {
-			error = "Tick event schema validation failed: " + eventIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateEvent(healthEvent, eventIssue)) {
-			error = "Health event schema validation failed: " + eventIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateEvent(shutdownEvent, eventIssue)) {
-			error = "Shutdown event schema validation failed: " + eventIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateEvent(channelsUpdateEvent, eventIssue)) {
-			error = "Channels update event schema validation failed: " + eventIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateEvent(sessionResetEvent, eventIssue)) {
-			error = "Session reset event schema validation failed: " + eventIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateEvent(agentUpdateEvent, eventIssue)) {
-			error = "Agent update event schema validation failed: " + eventIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateEvent(channelsAccountsUpdateEvent, eventIssue)) {
-			error = "Channels accounts update event schema validation failed: " + eventIssue.message;
-			return false;
-		}
-
-		if (!GatewayProtocolSchemaValidator::ValidateEvent(toolsCatalogUpdateEvent, eventIssue)) {
-			error = "Tools catalog update event schema validation failed: " + eventIssue.message;
-			return false;
-		}
-
-		const RequestFrame toolsPreviewRequestPositive{
-			.id = "req-schema-1",
-			.method = "gateway.tools.call.preview",
-			.paramsJson = "{\"tool\":\"chat.send\",\"args\":{}}",
-		};
-		SchemaValidationIssue requestIssue;
-		if (!GatewayProtocolSchemaValidator::ValidateRequest(toolsPreviewRequestPositive, requestIssue)) {
-			error = "Schema request positive case failed for gateway.tools.call.preview: " + requestIssue.message;
-			return false;
-		}
-
-		const RequestFrame toolsPreviewRequestNegative{
-			.id = "req-schema-2",
-			.method = "gateway.tools.call.preview",
-			.paramsJson = "{\"tool\":\"chat.send\",\"args\":[]}",
-		};
-		if (GatewayProtocolSchemaValidator::ValidateRequest(toolsPreviewRequestNegative, requestIssue)) {
-			error = "Schema request negative case unexpectedly passed for gateway.tools.call.preview args type.";
-			return false;
-		}
-
-		const ResponseFrame channelsAccountsResponseNegative{
-			.id = "req-schema-3",
-			.ok = true,
-			.payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true}]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts",
-			channelsAccountsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.accounts missing `connected`.";
-			return false;
-		}
-
-		const ResponseFrame sessionsDeleteResponseNegative{
-			.id = "req-schema-13",
-			.ok = true,
-			.payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.sessions.delete",
-			sessionsDeleteResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.sessions.delete missing `remaining`.";
-			return false;
-		}
-
-		const ResponseFrame sessionsUsageResponseNegative{
-			.id = "req-schema-14",
-			.ok = true,
-			.payloadJson = "{\"sessionId\":\"main\",\"messages\":42,\"tokens\":{\"input\":1024,\"output\":512},\"lastActiveMs\":1735689600200}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.sessions.usage",
-			sessionsUsageResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.sessions.usage missing `tokens.total`.";
-			return false;
-		}
-
-		const ResponseFrame sessionsCompactResponseNegative{
-			.id = "req-schema-15",
-			.ok = true,
-			.payloadJson = "{\"compacted\":1,\"remaining\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.sessions.compact",
-			sessionsCompactResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.sessions.compact missing `dryRun`.";
-			return false;
-		}
-
-		const ResponseFrame sessionsPreviewResponseNegative{
-			.id = "req-schema-16",
-			.ok = true,
-			.payloadJson = "{\"session\":{\"id\":\"main\",\"scope\":\"default\",\"active\":true},\"title\":\"Session main\",\"hasMessages\":true}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.sessions.preview",
-			sessionsPreviewResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.sessions.preview missing `unread`.";
-			return false;
-		}
-
-		const ResponseFrame sessionsPatchResponseNegative{
-			.id = "req-schema-17",
-			.ok = true,
-			.payloadJson = "{\"session\":{\"id\":\"main\",\"scope\":\"default\",\"active\":true}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.sessions.patch",
-			sessionsPatchResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.sessions.patch missing `patched`.";
-			return false;
-		}
-
-		const ResponseFrame agentsCreateResponseNegative{
-			.id = "req-schema-18",
-			.ok = true,
-			.payloadJson = "{\"agent\":{\"id\":\"builder\",\"name\":\"Agent builder\",\"active\":false}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.create",
-			agentsCreateResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.agents.create missing `created`.";
-			return false;
-		}
-
-		const ResponseFrame agentsDeleteResponseNegative{
-			.id = "req-schema-19",
-			.ok = true,
-			.payloadJson = "{\"agent\":{\"id\":\"builder\",\"name\":\"Agent builder\",\"active\":false},\"deleted\":true}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.delete",
-			agentsDeleteResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.agents.delete missing `remaining`.";
-			return false;
-		}
-
-		const ResponseFrame agentsUpdateResponseNegative{
-			.id = "req-schema-20",
-			.ok = true,
-			.payloadJson = "{\"agent\":{\"id\":\"builder\",\"name\":\"Builder Prime\",\"active\":true}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.update",
-			agentsUpdateResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.agents.update missing `updated`.";
-			return false;
-		}
-
-		const ResponseFrame channelsLogoutResponseNegative{
-			.id = "req-schema-21",
-			.ok = true,
-			.payloadJson = "{\"loggedOut\":true}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.logout",
-			channelsLogoutResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.logout missing `affected`.";
-			return false;
-		}
-
-		const ResponseFrame toolsCallExecuteResponseNegative{
-			.id = "req-schema-22",
-			.ok = true,
-			.payloadJson = "{\"tool\":\"chat.send\",\"executed\":true,\"status\":\"ok\",\"argsProvided\":false}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.call.execute",
-			toolsCallExecuteResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.call.execute missing `output`.";
-			return false;
-		}
-
-		const ResponseFrame configSetResponseNegative{
-			.id = "req-schema-23",
-			.ok = true,
-			.payloadJson = "{\"gateway\":{\"bind\":\"127.0.0.1\",\"port\":18789},\"agent\":{\"model\":\"default\",\"streaming\":true}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.set",
-			configSetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.set missing `updated`.";
-			return false;
-		}
-
-		const ResponseFrame modelsListResponseNegative{
-			.id = "req-schema-24",
-			.ok = true,
-			.payloadJson = "{\"models\":[{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\"}]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.list",
-			modelsListResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.list missing `streaming`.";
-			return false;
-		}
-
-		const ResponseFrame agentsFilesListResponseNegative{
-			.id = "req-schema-25",
-			.ok = true,
-			.payloadJson = "{\"files\":[{\"path\":\"agents/default/profile.json\",\"size\":512}],\"count\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.files.list",
-			agentsFilesListResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.agents.files.list missing `updatedMs`.";
-			return false;
-		}
-
-		const ResponseFrame agentsFilesGetResponseNegative{
-			.id = "req-schema-26",
-			.ok = true,
-			.payloadJson = "{\"file\":{\"path\":\"agents/default/profile.json\",\"size\":512,\"updatedMs\":1735689600000}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.files.get",
-			agentsFilesGetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.agents.files.get missing `content`.";
-			return false;
-		}
-
-		const ResponseFrame agentsFilesSetResponseNegative{
-			.id = "req-schema-27",
-			.ok = true,
-			.payloadJson = "{\"file\":{\"path\":\"agents/default/profile.json\",\"size\":5,\"updatedMs\":1735689620000,\"content\":\"hello\"}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.files.set",
-			agentsFilesSetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.agents.files.set missing `saved`.";
-			return false;
-		}
-
-		const ResponseFrame agentsFilesDeleteResponseNegative{
-			.id = "req-schema-28",
-			.ok = true,
-			.payloadJson = "{\"file\":{\"path\":\"agents/default/profile.json\",\"size\":0,\"updatedMs\":1735689630000,\"content\":\"\"}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.files.delete",
-			agentsFilesDeleteResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.agents.files.delete missing `deleted`.";
-			return false;
-		}
-
-		const ResponseFrame agentsFilesExistsResponseNegative{
-			.id = "req-schema-29",
-			.ok = true,
-			.payloadJson = "{\"path\":\"agents/default/profile.json\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.files.exists",
-			agentsFilesExistsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.agents.files.exists missing `exists`.";
-			return false;
-		}
-
-		const ResponseFrame channelsRouteSetResponseNegative{
-			.id = "req-schema-30",
-			.ok = true,
-			.payloadJson = "{\"route\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"agentId\":\"default\",\"sessionId\":\"main\"}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.route.set",
-			channelsRouteSetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.route.set missing `saved`.";
-			return false;
-		}
-
-		const ResponseFrame channelsRouteDeleteResponseNegative{
-			.id = "req-schema-31",
-			.ok = true,
-			.payloadJson = "{\"route\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"agentId\":\"default\",\"sessionId\":\"main\"}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.route.delete",
-			channelsRouteDeleteResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.route.delete missing `deleted`.";
-			return false;
-		}
-
-		const ResponseFrame channelsRouteExistsResponseNegative{
-			.id = "req-schema-32",
-			.ok = true,
-			.payloadJson = "{\"channel\":\"telegram\",\"accountId\":\"telegram.default\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.route.exists",
-			channelsRouteExistsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.route.exists missing `exists`.";
-			return false;
-		}
-
-		const ResponseFrame channelsAccountsActivateResponseNegative{
-			.id = "req-schema-33",
-			.ok = true,
-			.payloadJson = "{\"account\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":true}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.activate",
-			channelsAccountsActivateResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.accounts.activate missing `activated`.";
-			return false;
-		}
-
-		const ResponseFrame channelsAccountsDeactivateResponseNegative{
-			.id = "req-schema-34",
-			.ok = true,
-			.payloadJson = "{\"account\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":false,\"connected\":false}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.deactivate",
-			channelsAccountsDeactivateResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.accounts.deactivate missing `deactivated`.";
-			return false;
-		}
-
-		const ResponseFrame channelsAccountsExistsResponseNegative{
-			.id = "req-schema-35",
-			.ok = true,
-			.payloadJson = "{\"channel\":\"telegram\",\"accountId\":\"telegram.default\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.exists",
-			channelsAccountsExistsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.accounts.exists missing `exists`.";
-			return false;
-		}
-
-		const ResponseFrame channelsAccountsUpdateResponseNegative{
-			.id = "req-schema-36",
-			.ok = true,
-			.payloadJson = "{\"account\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Renamed\",\"active\":true,\"connected\":true}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.update",
-			channelsAccountsUpdateResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.accounts.update missing `updated`.";
-			return false;
-		}
-
-		const ResponseFrame channelsAccountsGetResponseNegative{
-			.id = "req-schema-37",
-			.ok = true,
-			.payloadJson = "{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":false}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.get",
-			channelsAccountsGetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.accounts.get missing `account` object envelope.";
-			return false;
-		}
-
-		const ResponseFrame channelsAccountsCreateResponseNegative{
-			.id = "req-schema-38",
-			.ok = true,
-			.payloadJson = "{\"account\":{\"channel\":\"telegram\",\"accountId\":\"telegram.new\",\"label\":\"Telegram Account\",\"active\":true,\"connected\":false}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.create",
-			channelsAccountsCreateResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.accounts.create missing `created`.";
-			return false;
-		}
-
-		const ResponseFrame channelsAccountsDeleteResponseNegative{
-			.id = "req-schema-39",
-			.ok = true,
-			.payloadJson = "{\"account\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":false}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.delete",
-			channelsAccountsDeleteResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.accounts.delete missing `deleted`.";
-			return false;
-		}
-
-		const ResponseFrame channelsRoutesClearResponseNegative{
-			.id = "req-schema-40",
-			.ok = true,
-			.payloadJson = "{\"cleared\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.routes.clear",
-			channelsRoutesClearResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.routes.clear missing `remaining`.";
-			return false;
-		}
-
-		const ResponseFrame channelsRoutesRestoreResponseNegative{
-			.id = "req-schema-41",
-			.ok = true,
-			.payloadJson = "{\"restored\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.routes.restore",
-			channelsRoutesRestoreResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.routes.restore missing `total`.";
-			return false;
-		}
-
-		const ResponseFrame channelsRouteGetResponseNegative{
-			.id = "req-schema-42",
-			.ok = true,
-			.payloadJson = "{\"route\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"agentId\":\"default\"}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.route.get",
-			channelsRouteGetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.route.get missing `sessionId`.";
-			return false;
-		}
-
-		const ResponseFrame channelsRouteRestoreResponseNegative{
-			.id = "req-schema-43",
-			.ok = true,
-			.payloadJson = "{\"route\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"agentId\":\"default\",\"sessionId\":\"main\"}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.route.restore",
-			channelsRouteRestoreResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.route.restore missing `restored`.";
-			return false;
-		}
-
-		const ResponseFrame channelsAccountsClearResponseNegative{
-			.id = "req-schema-44",
-			.ok = true,
-			.payloadJson = "{\"cleared\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.clear",
-			channelsAccountsClearResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.accounts.clear missing `remaining`.";
-			return false;
-		}
-
-		const ResponseFrame channelsAccountsRestoreResponseNegative{
-			.id = "req-schema-45",
-			.ok = true,
-			.payloadJson = "{\"restored\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.restore",
-			channelsAccountsRestoreResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.accounts.restore missing `total`.";
-			return false;
-		}
-
-		const ResponseFrame channelsAccountsCountResponseNegative{
-			.id = "req-schema-46",
-			.ok = true,
-			.payloadJson = "{\"channel\":\"telegram\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.count",
-			channelsAccountsCountResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.accounts.count missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame channelsRoutesCountResponseNegative{
-			.id = "req-schema-47",
-			.ok = true,
-			.payloadJson = "{\"channel\":\"telegram\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.routes.count",
-			channelsRoutesCountResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.routes.count missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame channelsRoutePatchResponseNegative{
-			.id = "req-schema-48",
-			.ok = true,
-			.payloadJson = "{\"route\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"agentId\":\"assistant\",\"sessionId\":\"main\"}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.route.patch",
-			channelsRoutePatchResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.route.patch missing `updated`.";
-			return false;
-		}
-
-		const ResponseFrame channelsRoutesResetResponseNegative{
-			.id = "req-schema-49",
-			.ok = true,
-			.payloadJson = "{\"cleared\":1,\"restored\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.routes.reset",
-			channelsRoutesResetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.routes.reset missing `total`.";
-			return false;
-		}
-
-		const ResponseFrame channelsAccountsResetResponseNegative{
-			.id = "req-schema-50",
-			.ok = true,
-			.payloadJson = "{\"cleared\":1,\"restored\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.accounts.reset",
-			channelsAccountsResetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.accounts.reset missing `total`.";
-			return false;
-		}
-
-		const ResponseFrame channelsRouteResetResponseNegative{
-			.id = "req-schema-51",
-			.ok = true,
-			.payloadJson = "{\"route\":{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"agentId\":\"default\",\"sessionId\":\"main\"},\"deleted\":true}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.route.reset",
-			channelsRouteResetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.route.reset missing `restored`.";
-			return false;
-		}
-
-		const ResponseFrame channelsStatusGetResponseNegative{
-			.id = "req-schema-52",
-			.ok = true,
-			.payloadJson = "{\"channel\":{\"id\":\"telegram\",\"label\":\"Telegram\",\"connected\":false}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.status.get",
-			channelsStatusGetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.status.get missing `accounts`.";
-			return false;
-		}
-
-		const ResponseFrame channelsStatusExistsResponseNegative{
-			.id = "req-schema-53",
-			.ok = true,
-			.payloadJson = "{\"channel\":\"telegram\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.status.exists",
-			channelsStatusExistsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.status.exists missing `exists`.";
-			return false;
-		}
-
-		const ResponseFrame channelsStatusCountResponseNegative{
-			.id = "req-schema-54",
-			.ok = true,
-			.payloadJson = "{\"channel\":\"telegram\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.channels.status.count",
-			channelsStatusCountResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.channels.status.count missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame sessionsExistsResponseNegative{
-			.id = "req-schema-55",
-			.ok = true,
-			.payloadJson = "{\"sessionId\":\"main\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.sessions.exists",
-			sessionsExistsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.sessions.exists missing `exists`.";
-			return false;
-		}
-
-		const ResponseFrame sessionsCountResponseNegative{
-			.id = "req-schema-56",
-			.ok = true,
-			.payloadJson = "{\"scope\":\"default\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.sessions.count",
-			sessionsCountResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.sessions.count missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame sessionsActivateResponseNegative{
-			.id = "req-schema-57",
-			.ok = true,
-			.payloadJson = "{\"session\":{\"id\":\"main\",\"scope\":\"default\",\"active\":true}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.sessions.activate",
-			sessionsActivateResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.sessions.activate missing `activated`.";
-			return false;
-		}
-
-		const ResponseFrame agentsExistsResponseNegative{
-			.id = "req-schema-58",
-			.ok = true,
-			.payloadJson = "{\"agentId\":\"default\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.exists",
-			agentsExistsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.agents.exists missing `exists`.";
-			return false;
-		}
-
-		const ResponseFrame agentsCountResponseNegative{
-			.id = "req-schema-59",
-			.ok = true,
-			.payloadJson = "{\"active\":true,\"activeFilterApplied\":true}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.agents.count",
-			agentsCountResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.agents.count missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame eventsExistsResponseNegative{
-			.id = "req-schema-60",
-			.ok = true,
-			.payloadJson = "{\"event\":\"gateway.tick\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.exists",
-			eventsExistsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.exists missing `exists`.";
-			return false;
-		}
-
-		const ResponseFrame eventsCountResponseNegative{
-			.id = "req-schema-61",
-			.ok = true,
-			.payloadJson = "{\"event\":\"gateway.tick\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.count",
-			eventsCountResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.count missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame toolsExistsResponseNegative{
-			.id = "req-schema-62",
-			.ok = true,
-			.payloadJson = "{\"tool\":\"chat.send\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.exists",
-			toolsExistsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.exists missing `exists`.";
-			return false;
-		}
-
-		const ResponseFrame toolsCountResponseNegative{
-			.id = "req-schema-63",
-			.ok = true,
-			.payloadJson = "{\"active\":true,\"activeFilterApplied\":true}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.count",
-			toolsCountResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.count missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame modelsExistsResponseNegative{
-			.id = "req-schema-64",
-			.ok = true,
-			.payloadJson = "{\"modelId\":\"default\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.exists",
-			modelsExistsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.exists missing `exists`.";
-			return false;
-		}
-
-		const ResponseFrame configExistsResponseNegative{
-			.id = "req-schema-65",
-			.ok = true,
-			.payloadJson = "{\"key\":\"gateway.bind\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.exists",
-			configExistsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.exists missing `exists`.";
-			return false;
-		}
-
-		const ResponseFrame configKeysResponseNegative{
-			.id = "req-schema-66",
-			.ok = true,
-			.payloadJson = "{\"keys\":[\"gateway.bind\",\"gateway.port\",\"agent.model\",\"agent.streaming\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.keys",
-			configKeysResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.keys missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame transportConnectionsCountResponseNegative{
-			.id = "req-schema-67",
-			.ok = true,
-			.payloadJson = "{}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.connections.count",
-			transportConnectionsCountResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.connections.count missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame healthDetailsResponseNegative{
-			.id = "req-schema-68",
-			.ok = true,
-			.payloadJson = "{\"status\":\"ok\",\"running\":true,\"transport\":{\"running\":true,\"endpoint\":\"ws://127.0.0.1:18789\"}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.health.details",
-			healthDetailsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.health.details missing `transport.connections`.";
-			return false;
-		}
-
-		const ResponseFrame logsCountResponseNegative{
-			.id = "req-schema-69",
-			.ok = true,
-			.payloadJson = "{\"level\":\"info\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.logs.count",
-			logsCountResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.logs.count missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame configCountResponseNegative{
-			.id = "req-schema-70",
-			.ok = true,
-			.payloadJson = "{\"section\":\"gateway\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.count",
-			configCountResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.count missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame modelsCountResponseNegative{
-			.id = "req-schema-71",
-			.ok = true,
-			.payloadJson = "{\"provider\":\"seed\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.count",
-			modelsCountResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.count missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame eventsGetResponseNegative{
-			.id = "req-schema-72",
-			.ok = true,
-			.payloadJson = "{}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.get",
-			eventsGetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.get missing `event`.";
-			return false;
-		}
-
-		const ResponseFrame transportEndpointGetResponseNegative{
-			.id = "req-schema-73",
-			.ok = true,
-			.payloadJson = "{}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.endpoint.get",
-			transportEndpointGetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.endpoint.get missing `endpoint`.";
-			return false;
-		}
-
-		const ResponseFrame logsLevelsResponseNegative{
-			.id = "req-schema-74",
-			.ok = true,
-			.payloadJson = "{\"levels\":[\"info\",\"debug\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.logs.levels",
-			logsLevelsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.logs.levels missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame eventsListResponseNegative{
-			.id = "req-schema-75",
-			.ok = true,
-			.payloadJson = "{\"events\":[\"gateway.tick\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.list",
-			eventsListResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.list missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame toolsGetResponseNegative{
-			.id = "req-schema-76",
-			.ok = true,
-			.payloadJson = "{}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.get",
-			toolsGetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.get missing `tool`.";
-			return false;
-		}
-
-		const ResponseFrame modelsGetResponseNegative{
-			.id = "req-schema-77",
-			.ok = true,
-			.payloadJson = "{}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.get",
-			modelsGetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.get missing `model`.";
-			return false;
-		}
-
-		const ResponseFrame configGetKeyResponseNegative{
-			.id = "req-schema-78",
-			.ok = true,
-			.payloadJson = "{\"key\":\"gateway.bind\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.getKey",
-			configGetKeyResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.getKey missing `value`.";
-			return false;
-		}
-
-		const ResponseFrame transportEndpointExistsResponseNegative{
-			.id = "req-schema-79",
-			.ok = true,
-			.payloadJson = "{\"endpoint\":\"ws://127.0.0.1:18789\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.endpoint.exists",
-			transportEndpointExistsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.endpoint.exists missing `exists`.";
-			return false;
-		}
-
-		const ResponseFrame eventsLastResponseNegative{
-			.id = "req-schema-80",
-			.ok = true,
-			.payloadJson = "{}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.last",
-			eventsLastResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.last missing `event`.";
-			return false;
-		}
-
-		const ResponseFrame toolsListResponseNegative{
-			.id = "req-schema-81",
-			.ok = true,
-			.payloadJson = "{\"tools\":[]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.list",
-			toolsListResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.list missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame modelsListByProviderResponseNegative{
-			.id = "req-schema-82",
-			.ok = true,
-			.payloadJson = "{\"provider\":\"seed\",\"models\":[]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.listByProvider",
-			modelsListByProviderResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.listByProvider missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame configSectionsResponseNegative{
-			.id = "req-schema-83",
-			.ok = true,
-			.payloadJson = "{\"sections\":[\"gateway\",\"agent\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.sections",
-			configSectionsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.sections missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame transportEndpointSetResponseNegative{
-			.id = "req-schema-84",
-			.ok = true,
-			.payloadJson = "{\"endpoint\":\"ws://127.0.0.1:18789\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.endpoint.set",
-			transportEndpointSetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.endpoint.set missing `updated`.";
-			return false;
-		}
-
-		const ResponseFrame eventsSearchResponseNegative{
-			.id = "req-schema-85",
-			.ok = true,
-			.payloadJson = "{\"term\":\"gateway\",\"events\":[]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.search",
-			eventsSearchResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.search missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame toolsCategoriesResponseNegative{
-			.id = "req-schema-86",
-			.ok = true,
-			.payloadJson = "{\"categories\":[\"messaging\",\"knowledge\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.categories",
-			toolsCategoriesResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.categories missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame modelsProvidersResponseNegative{
-			.id = "req-schema-87",
-			.ok = true,
-			.payloadJson = "{\"providers\":[\"seed\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.providers",
-			modelsProvidersResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.providers missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame configGetSectionResponseNegative{
-			.id = "req-schema-88",
-			.ok = true,
-			.payloadJson = "{\"section\":\"gateway\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.getSection",
-			configGetSectionResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.getSection missing `config`.";
-			return false;
-		}
-
-		const ResponseFrame transportEndpointsListResponseNegative{
-			.id = "req-schema-89",
-			.ok = true,
-			.payloadJson = "{\"endpoints\":[\"ws://127.0.0.1:18789\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.endpoints.list",
-			transportEndpointsListResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.endpoints.list missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame eventsSummaryResponseNegative{
-			.id = "req-schema-90",
-			.ok = true,
-			.payloadJson = "{\"total\":8,\"lifecycle\":3}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.summary",
-			eventsSummaryResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.summary missing `updates`.";
-			return false;
-		}
-
-		const ResponseFrame toolsStatsResponseNegative{
-			.id = "req-schema-91",
-			.ok = true,
-			.payloadJson = "{\"enabled\":2,\"total\":2}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.stats",
-			toolsStatsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.stats missing `disabled`.";
-			return false;
-		}
-
-		const ResponseFrame modelsDefaultGetResponseNegative{
-			.id = "req-schema-92",
-			.ok = true,
-			.payloadJson = "{}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.default.get",
-			modelsDefaultGetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.default.get missing `model`.";
-			return false;
-		}
-
-		const ResponseFrame configSchemaResponseNegative{
-			.id = "req-schema-93",
-			.ok = true,
-			.payloadJson = "{\"gateway\":{\"bind\":\"string\",\"port\":\"number\"}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.schema",
-			configSchemaResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.schema missing `agent` schema object.";
-			return false;
-		}
-
-		const ResponseFrame transportPolicyGetResponseNegative{
-			.id = "req-schema-94",
-			.ok = true,
-			.payloadJson = "{\"exclusiveAddrUse\":true,\"keepAlive\":true,\"noDelay\":true,\"idleTimeoutMs\":120000}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.get",
-			transportPolicyGetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.policy.get missing `handshakeTimeoutMs`.";
-			return false;
-		}
-
-		const ResponseFrame eventsTypesResponseNegative{
-			.id = "req-schema-95",
-			.ok = true,
-			.payloadJson = "{\"types\":[\"lifecycle\",\"update\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.types",
-			eventsTypesResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.types missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame toolsHealthResponseNegative{
-			.id = "req-schema-96",
-			.ok = true,
-			.payloadJson = "{\"healthy\":true,\"enabled\":2}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.health",
-			toolsHealthResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.health missing `total`.";
-			return false;
-		}
-
-		const ResponseFrame modelsCompatibilityResponseNegative{
-			.id = "req-schema-97",
-			.ok = true,
-			.payloadJson = "{\"default\":\"full\",\"reasoner\":\"partial\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.compatibility",
-			modelsCompatibilityResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.compatibility missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame configValidateResponseNegative{
-			.id = "req-schema-98",
-			.ok = true,
-			.payloadJson = "{\"valid\":true,\"errors\":[]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.validate",
-			configValidateResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.validate missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame transportPolicySetResponseNegative{
-			.id = "req-schema-99",
-			.ok = true,
-			.payloadJson = "{\"applied\":false}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.set",
-			transportPolicySetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.policy.set missing `reason`.";
-			return false;
-		}
-
-		const ResponseFrame eventsChannelsResponseNegative{
-			.id = "req-schema-100",
-			.ok = true,
-			.payloadJson = "{\"channelEvents\":3,\"accountEvents\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.channels",
-			eventsChannelsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.channels missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame toolsMetricsResponseNegative{
-			.id = "req-schema-101",
-			.ok = true,
-			.payloadJson = "{\"invocations\":0,\"enabled\":2,\"disabled\":0}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.metrics",
-			toolsMetricsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.metrics missing `total`.";
-			return false;
-		}
-
-		const ResponseFrame modelsRecommendedResponseNegative{
-			.id = "req-schema-102",
-			.ok = true,
-			.payloadJson = "{\"reason\":\"seed_default\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.recommended",
-			modelsRecommendedResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.recommended missing `model`.";
-			return false;
-		}
-
-		const ResponseFrame configAuditResponseNegative{
-			.id = "req-schema-103",
-			.ok = true,
-			.payloadJson = "{\"enabled\":true,\"source\":\"runtime\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.audit",
-			configAuditResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.audit missing `lastUpdatedMs`.";
-			return false;
-		}
-
-		const ResponseFrame transportPolicyResetResponseNegative{
-			.id = "req-schema-104",
-			.ok = true,
-			.payloadJson = "{\"reset\":true}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.reset",
-			transportPolicyResetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.policy.reset missing `applied`.";
-			return false;
-		}
-
-		const ResponseFrame eventsTimelineResponseNegative{
-			.id = "req-schema-105",
-			.ok = true,
-			.payloadJson = "{\"events\":[\"gateway.shutdown\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.timeline",
-			eventsTimelineResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.timeline missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame toolsFailuresResponseNegative{
-			.id = "req-schema-106",
-			.ok = true,
-			.payloadJson = "{\"failed\":0,\"total\":2}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.failures",
-			toolsFailuresResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.failures missing `rate`.";
-			return false;
-		}
-
-		const ResponseFrame modelsFallbackResponseNegative{
-			.id = "req-schema-107",
-			.ok = true,
-			.payloadJson = "{\"preferred\":\"default\",\"fallback\":\"reasoner\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.fallback",
-			modelsFallbackResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.fallback missing `configured`.";
-			return false;
-		}
-
-		const ResponseFrame configRollbackResponseNegative{
-			.id = "req-schema-108",
-			.ok = true,
-			.payloadJson = "{\"rolledBack\":false}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.rollback",
-			configRollbackResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.rollback missing `version`.";
-			return false;
-		}
-
-		const ResponseFrame transportPolicyStatusResponseNegative{
-			.id = "req-schema-109",
-			.ok = true,
-			.payloadJson = "{\"mutable\":false,\"lastApplied\":\"runtime_immutable\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.status",
-			transportPolicyStatusResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.policy.status missing `policyVersion`.";
-			return false;
-		}
-
-		const ResponseFrame eventsLatestByTypeResponseNegative{
-			.id = "req-schema-110",
-			.ok = true,
-			.payloadJson = "{\"type\":\"update\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.latestByType",
-			eventsLatestByTypeResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.latestByType missing `event`.";
-			return false;
-		}
-
-		const ResponseFrame toolsUsageResponseNegative{
-			.id = "req-schema-111",
-			.ok = true,
-			.payloadJson = "{\"calls\":0,\"tools\":2}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.usage",
-			toolsUsageResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.usage missing `avgMs`.";
-			return false;
-		}
-
-		const ResponseFrame modelsSelectionResponseNegative{
-			.id = "req-schema-112",
-			.ok = true,
-			.payloadJson = "{\"selected\":\"default\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.selection",
-			modelsSelectionResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.selection missing `strategy`.";
-			return false;
-		}
-
-		const ResponseFrame configBackupResponseNegative{
-			.id = "req-schema-113",
-			.ok = true,
-			.payloadJson = "{\"saved\":true,\"version\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.backup",
-			configBackupResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.backup missing `path`.";
-			return false;
-		}
-
-		const ResponseFrame transportPolicyValidateResponseNegative{
-			.id = "req-schema-114",
-			.ok = true,
-			.payloadJson = "{\"valid\":true,\"errors\":[]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.validate",
-			transportPolicyValidateResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.policy.validate missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame eventsSampleResponseNegative{
-			.id = "req-schema-115",
-			.ok = true,
-			.payloadJson = "{\"events\":[\"gateway.health\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.sample",
-			eventsSampleResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.sample missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame toolsLatencyResponseNegative{
-			.id = "req-schema-116",
-			.ok = true,
-			.payloadJson = "{\"minMs\":0,\"maxMs\":0,\"avgMs\":0}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.latency",
-			toolsLatencyResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.latency missing `samples`.";
-			return false;
-		}
-
-		const ResponseFrame modelsRoutingResponseNegative{
-			.id = "req-schema-117",
-			.ok = true,
-			.payloadJson = "{\"primary\":\"default\",\"fallback\":\"reasoner\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.routing",
-			modelsRoutingResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.routing missing `strategy`.";
-			return false;
-		}
-
-		const ResponseFrame configDiffResponseNegative{
-			.id = "req-schema-118",
-			.ok = true,
-			.payloadJson = "{\"changed\":[]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.diff",
-			configDiffResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.diff missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame transportPolicyHistoryResponseNegative{
-			.id = "req-schema-119",
-			.ok = true,
-			.payloadJson = "{\"entries\":[{\"version\":1,\"applied\":false,\"reason\":\"runtime_immutable\"}]}",
-		   .error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.history",
-			transportPolicyHistoryResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.policy.history missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame eventsWindowResponseNegative{
-			.id = "req-schema-120",
-			.ok = true,
-			.payloadJson = "{\"events\":[\"gateway.session.reset\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.window",
-			eventsWindowResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.window missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame toolsErrorsResponseNegative{
-			.id = "req-schema-121",
-			.ok = true,
-			.payloadJson = "{\"errors\":0,\"tools\":2}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.errors",
-			toolsErrorsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.errors missing `rate`.";
-			return false;
-		}
-
-		const ResponseFrame modelsPreferenceResponseNegative{
-			.id = "req-schema-122",
-			.ok = true,
-			.payloadJson = "{\"model\":\"default\",\"provider\":\"seed\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.preference",
-			modelsPreferenceResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.preference missing `source`.";
-			return false;
-		}
-
-		const ResponseFrame configSnapshotResponseNegative{
-			.id = "req-schema-123",
-			.ok = true,
-			.payloadJson = "{\"gateway\":{\"bind\":\"127.0.0.1\",\"port\":18789}}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.snapshot",
-			configSnapshotResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.snapshot missing `agent`.";
-			return false;
-		}
-
-		const ResponseFrame transportPolicyMetricsResponseNegative{
-			.id = "req-schema-124",
-			.ok = true,
-			.payloadJson = "{\"validations\":0,\"resets\":0}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.metrics",
-			transportPolicyMetricsResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.policy.metrics missing `sets`.";
-			return false;
-		}
-
-		const ResponseFrame eventsRecentResponseNegative{
-			.id = "req-schema-125",
-			.ok = true,
-			.payloadJson = "{\"events\":[\"gateway.shutdown\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.recent",
-			eventsRecentResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.recent missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame toolsThroughputResponseNegative{
-			.id = "req-schema-126",
-			.ok = true,
-			.payloadJson = "{\"calls\":0,\"windowSec\":60,\"perMinute\":0}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.throughput",
-			toolsThroughputResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.throughput missing `tools`.";
-			return false;
-		}
-
-		const ResponseFrame modelsPriorityResponseNegative{
-			.id = "req-schema-127",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.priority",
-			modelsPriorityResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.priority missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame configRevisionResponseNegative{
-			.id = "req-schema-128",
-			.ok = true,
-			.payloadJson = "{\"revision\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.revision",
-			configRevisionResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.revision missing `source`.";
-			return false;
-		}
-
-		const ResponseFrame transportPolicyExportResponseNegative{
-			.id = "req-schema-129",
-			.ok = true,
-			.payloadJson = "{\"path\":\"transport/policy-export.json\",\"version\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.export",
-			transportPolicyExportResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.policy.export missing `exported`.";
-			return false;
-		}
-
-		const ResponseFrame eventsBatchResponseNegative{
-			.id = "req-schema-130",
-			.ok = true,
-			.payloadJson = "{\"batches\":[\"lifecycle\",\"updates\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.batch",
-			eventsBatchResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.batch missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame toolsCapacityResponseNegative{
-			.id = "req-schema-131",
-			.ok = true,
-			.payloadJson = "{\"total\":2,\"used\":0}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.capacity",
-			toolsCapacityResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.capacity missing `free`.";
-			return false;
-		}
-
-		const ResponseFrame modelsAffinityResponseNegative{
-			.id = "req-schema-132",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.affinity",
-			modelsAffinityResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.affinity missing `affinity`.";
-			return false;
-		}
-
-		const ResponseFrame configHistoryResponseNegative{
-			.id = "req-schema-133",
-			.ok = true,
-			.payloadJson = "{\"revisions\":[1]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.history",
-			configHistoryResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.history missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame transportPolicyImportResponseNegative{
-			.id = "req-schema-134",
-			.ok = true,
-			.payloadJson = "{\"imported\":true,\"version\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.import",
-			transportPolicyImportResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.policy.import missing `applied`.";
-			return false;
-		}
-
-		const ResponseFrame eventsCursorResponseNegative{
-			.id = "req-schema-135",
-			.ok = true,
-			.payloadJson = "{\"cursor\":\"evt-2\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.cursor",
-			eventsCursorResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.cursor missing `event`.";
-			return false;
-		}
-
-		const ResponseFrame toolsQueueResponseNegative{
-			.id = "req-schema-136",
-			.ok = true,
-			.payloadJson = "{\"queued\":0,\"running\":0}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.queue",
-			toolsQueueResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.queue missing `tools`.";
-			return false;
-		}
-
-		const ResponseFrame modelsPoolResponseNegative{
-			.id = "req-schema-137",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.pool",
-			modelsPoolResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.pool missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame configProfileResponseNegative{
-			.id = "req-schema-138",
-			.ok = true,
-			.payloadJson = "{\"name\":\"default\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.profile",
-			configProfileResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.profile missing `source`.";
-			return false;
-		}
-
-		const ResponseFrame transportPolicyDigestResponseNegative{
-			.id = "req-schema-139",
-			.ok = true,
-			.payloadJson = "{\"digest\":\"sha256:seed-policy-v1\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.digest",
-			transportPolicyDigestResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.policy.digest missing `version`.";
-			return false;
-		}
-
-		const ResponseFrame eventsAnchorResponseNegative{
-			.id = "req-schema-140",
-			.ok = true,
-			.payloadJson = "{\"anchor\":\"evt-1\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.anchor",
-			eventsAnchorResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.anchor missing `event`.";
-			return false;
-		}
-
-		const ResponseFrame toolsSchedulerResponseNegative{
-			.id = "req-schema-141",
-			.ok = true,
-			.payloadJson = "{\"ticks\":0,\"queued\":0}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.scheduler",
-			toolsSchedulerResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.scheduler missing `tools`.";
-			return false;
-		}
-
-		const ResponseFrame modelsManifestResponseNegative{
-			.id = "req-schema-142",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.manifest",
-			modelsManifestResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.manifest missing `manifestVersion`.";
-			return false;
-		}
-
-		const ResponseFrame configTemplateResponseNegative{
-			.id = "req-schema-143",
-			.ok = true,
-			.payloadJson = "{\"template\":\"default\",\"keys\":[\"gateway.bind\",\"gateway.port\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.template",
-			configTemplateResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.template missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame transportPolicyPreviewResponseNegative{
-			.id = "req-schema-144",
-			.ok = true,
-			.payloadJson = "{\"path\":\"transport/policy-preview.json\",\"applied\":false}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.preview",
-			transportPolicyPreviewResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.policy.preview missing `notes`.";
-			return false;
-		}
-
-		const ResponseFrame eventsOffsetResponseNegative{
-			.id = "req-schema-145",
-			.ok = true,
-			.payloadJson = "{\"offset\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.offset",
-			eventsOffsetResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.offset missing `event`.";
-			return false;
-		}
-
-		const ResponseFrame toolsBacklogResponseNegative{
-			.id = "req-schema-146",
-			.ok = true,
-			.payloadJson = "{\"pending\":0,\"capacity\":2}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.backlog",
-			toolsBacklogResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.backlog missing `tools`.";
-			return false;
-		}
-
-		const ResponseFrame modelsCatalogResponseNegative{
-			.id = "req-schema-147",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.catalog",
-			modelsCatalogResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.catalog missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame configBundleResponseNegative{
-			.id = "req-schema-148",
-			.ok = true,
-			.payloadJson = "{\"name\":\"runtime\",\"sections\":[\"gateway\",\"agent\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.bundle",
-			configBundleResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.bundle missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame transportPolicyCommitResponseNegative{
-			.id = "req-schema-149",
-			.ok = true,
-			.payloadJson = "{\"committed\":false,\"version\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.commit",
-			transportPolicyCommitResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.policy.commit missing `applied`.";
-			return false;
-		}
-
-		const ResponseFrame eventsMarkerResponseNegative{
-			.id = "req-schema-150",
-			.ok = true,
-			.payloadJson = "{\"marker\":\"evt-marker-1\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.marker",
-			eventsMarkerResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.marker missing `event`.";
-			return false;
-		}
-
-		const ResponseFrame toolsWindowResponseNegative{
-			.id = "req-schema-151",
-			.ok = true,
-			.payloadJson = "{\"windowSec\":60,\"calls\":0}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.window",
-			toolsWindowResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.window missing `tools`.";
-			return false;
-		}
-
-		const ResponseFrame modelsInventoryResponseNegative{
-			.id = "req-schema-152",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.inventory",
-			modelsInventoryResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.inventory missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame configPackageResponseNegative{
-			.id = "req-schema-153",
-			.ok = true,
-			.payloadJson = "{\"package\":\"runtime\",\"sections\":[\"gateway\",\"agent\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.package",
-			configPackageResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.package missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame transportPolicyApplyResponseNegative{
-			.id = "req-schema-154",
-			.ok = true,
-			.payloadJson = "{\"applied\":false,\"version\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.apply",
-			transportPolicyApplyResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.policy.apply missing `reason`.";
-			return false;
-		}
-
-		const ResponseFrame eventsSequenceResponseNegative{
-			.id = "req-schema-155",
-			.ok = true,
-			.payloadJson = "{\"sequence\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.sequence",
-			eventsSequenceResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.sequence missing `event`.";
-			return false;
-		}
-
-		const ResponseFrame toolsPipelineResponseNegative{
-			.id = "req-schema-156",
-			.ok = true,
-			.payloadJson = "{\"queued\":0,\"running\":0,\"failed\":0}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.pipeline",
-			toolsPipelineResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.pipeline missing `tools`.";
-			return false;
-		}
-
-		const ResponseFrame modelsSnapshotResponseNegative{
-			.id = "req-schema-157",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.snapshot",
-			modelsSnapshotResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.snapshot missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame configArchiveResponseNegative{
-			.id = "req-schema-158",
-			.ok = true,
-			.payloadJson = "{\"archive\":\"runtime\",\"sections\":[\"gateway\",\"agent\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.archive",
-			configArchiveResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.archive missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame transportPolicyStageResponseNegative{
-			.id = "req-schema-159",
-			.ok = true,
-			.payloadJson = "{\"staged\":true,\"version\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.stage",
-			transportPolicyStageResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.policy.stage missing `applied`.";
-			return false;
-		}
-
-		const ResponseFrame eventsPointerResponseNegative{
-			.id = "req-schema-160",
-			.ok = true,
-			.payloadJson = "{\"pointer\":\"evt-pointer-1\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.pointer",
-			eventsPointerResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.pointer missing `event`.";
-			return false;
-		}
-
-		const ResponseFrame toolsDispatchResponseNegative{
-			.id = "req-schema-161",
-			.ok = true,
-			.payloadJson = "{\"queued\":0,\"dispatched\":0}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.dispatch",
-			toolsDispatchResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.dispatch missing `tools`.";
-			return false;
-		}
-
-		const ResponseFrame modelsRegistryResponseNegative{
-			.id = "req-schema-162",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.registry",
-			modelsRegistryResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.registry missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame configManifestResponseNegative{
-			.id = "req-schema-163",
-			.ok = true,
-			.payloadJson = "{\"manifest\":\"runtime\",\"sections\":[\"gateway\",\"agent\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.manifest",
-			configManifestResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.manifest missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame transportPolicyReconcileResponseNegative{
-			.id = "req-schema-164",
-			.ok = true,
-			.payloadJson = "{\"reconciled\":false,\"version\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.reconcile",
-			transportPolicyReconcileResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.policy.reconcile missing `applied`.";
-			return false;
-		}
-
-		const ResponseFrame eventsTokenResponseNegative{
-			.id = "req-schema-165",
-			.ok = true,
-			.payloadJson = "{\"token\":\"evt-token-1\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.token",
-			eventsTokenResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.token missing `event`.";
-			return false;
-		}
-
-		const ResponseFrame toolsRouterResponseNegative{
-			.id = "req-schema-166",
-			.ok = true,
-			.payloadJson = "{\"routed\":0,\"fallback\":0}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.router",
-			toolsRouterResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.router missing `tools`.";
-			return false;
-		}
-
-		const ResponseFrame modelsIndexResponseNegative{
-			.id = "req-schema-167",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.index",
-			modelsIndexResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.index missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame configIndexResponseNegative{
-			.id = "req-schema-168",
-			.ok = true,
-			.payloadJson = "{\"keys\":[\"gateway.bind\",\"gateway.port\",\"agent.model\",\"agent.streaming\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.index",
-			configIndexResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.index missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame transportPolicySyncResponseNegative{
-			.id = "req-schema-169",
-			.ok = true,
-			.payloadJson = "{\"synced\":false,\"version\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.sync",
-			transportPolicySyncResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.policy.sync missing `applied`.";
-			return false;
-		}
-
-		const ResponseFrame eventsStreamResponseNegative{
-			.id = "req-schema-170",
-			.ok = true,
-			.payloadJson = "{\"stream\":\"evt-stream-1\"}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.events.stream",
-			eventsStreamResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.events.stream missing `event`.";
-			return false;
-		}
-
-		const ResponseFrame toolsSelectorResponseNegative{
-			.id = "req-schema-171",
-			.ok = true,
-			.payloadJson = "{\"selected\":0,\"fallback\":0}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.tools.selector",
-			toolsSelectorResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.tools.selector missing `tools`.";
-			return false;
-		}
-
-		const ResponseFrame modelsStateResponseNegative{
-			.id = "req-schema-172",
-			.ok = true,
-			.payloadJson = "{\"models\":[\"default\",\"reasoner\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.models.state",
-			modelsStateResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.models.state missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame configStateResponseNegative{
-			.id = "req-schema-173",
-			.ok = true,
-			.payloadJson = "{\"sections\":[\"gateway\",\"agent\"]}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.config.state",
-			configStateResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.config.state missing `count`.";
-			return false;
-		}
-
-		const ResponseFrame transportPolicyRefreshResponseNegative{
-			.id = "req-schema-174",
-			.ok = true,
-			.payloadJson = "{\"refreshed\":false,\"version\":1}",
-			.error = std::nullopt,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateResponseForMethod(
-			"gateway.transport.policy.refresh",
-			transportPolicyRefreshResponseNegative,
-			responseIssue)) {
-			error = "Schema response negative case unexpectedly passed for gateway.transport.policy.refresh missing `applied`.";
-			return false;
-		}
-
-		const EventFrame channelsAccountsUpdateEventPositive{
-			.eventName = "gateway.channels.accounts.update",
-			.payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":false}]}",
-			.seq = 9,
-			.stateVersion = 9,
-		};
-		if (!GatewayProtocolSchemaValidator::ValidateEvent(channelsAccountsUpdateEventPositive, eventIssue)) {
-			error = "Schema event positive case failed for gateway.channels.accounts.update: " + eventIssue.message;
-			return false;
-		}
-
-		const EventFrame channelsAccountsUpdateEventNegative{
-			.eventName = "gateway.channels.accounts.update",
-			.payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"label\":\"Telegram Default\",\"active\":true,\"connected\":false}]}",
-			.seq = 10,
-			.stateVersion = 10,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateEvent(channelsAccountsUpdateEventNegative, eventIssue)) {
-			error = "Schema event negative case unexpectedly passed for gateway.channels.accounts.update missing `accountId`.";
-			return false;
-		}
-
-		const EventFrame toolsCatalogUpdateEventPositive{
-			.eventName = "gateway.tools.catalog.update",
-			.payloadJson = "{\"tools\":[{\"id\":\"chat.send\",\"label\":\"Chat Send\",\"category\":\"messaging\",\"enabled\":true}]}",
-			.seq = 11,
-			.stateVersion = 11,
-		};
-		if (!GatewayProtocolSchemaValidator::ValidateEvent(toolsCatalogUpdateEventPositive, eventIssue)) {
-			error = "Schema event positive case failed for gateway.tools.catalog.update: " + eventIssue.message;
-			return false;
-		}
-
-		const EventFrame toolsCatalogUpdateEventNegative{
-			.eventName = "gateway.tools.catalog.update",
-			.payloadJson = "{\"tools\":[{\"id\":\"chat.send\",\"label\":\"Chat Send\",\"enabled\":true}]}",
-			.seq = 12,
-			.stateVersion = 12,
-		};
-		if (GatewayProtocolSchemaValidator::ValidateEvent(toolsCatalogUpdateEventNegative, eventIssue)) {
-			error = "Schema event negative case unexpectedly passed for gateway.tools.catalog.update missing `category`.";
-			return false;
-		}
-
-		if (!CompareFixture(root / "request_ping.json", SerializeRequestFrame(request), error)) {
-			return false;
-		}
-
-		if (!CompareFixture(root / "response_pong.json", SerializeResponseFrame(response), error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_protocol_version.json", SerializeResponseFrame(protocolVersionResponse), error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_features_list.json", SerializeResponseFrame(featuresListResponse), error)) {
-			return false;
-		}
-
-		if (!CompareFixture(root / "response_agents_list.json", SerializeResponseFrame(agentsListResponse), error)) {
-			return false;
-		}
-
-		if (!CompareFixture(root / "response_agents_get.json", SerializeResponseFrame(agentsGetResponse), error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_agents_activate.json",
-			SerializeResponseFrame(agentsActivateResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(root / "response_health.json", SerializeResponseFrame(healthResponse), error)) {
-			return false;
-		}
-
-		if (!CompareFixture(root / "response_config_get.json", SerializeResponseFrame(configGetResponse), error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_status.json",
-			SerializeResponseFrame(channelsStatusResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_accounts.json",
-			SerializeResponseFrame(channelsAccountsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_routes.json",
-			SerializeResponseFrame(channelsRoutesResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_route_resolve.json",
-			SerializeResponseFrame(channelsRouteResolveResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(root / "response_logs_tail.json", SerializeResponseFrame(logsTailResponse), error)) {
-			return false;
-		}
-
-		if (!CompareFixture(root / "response_tools_catalog.json", SerializeResponseFrame(toolsCatalogResponse), error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_call_preview.json",
-			SerializeResponseFrame(toolsCallPreviewResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_sessions_resolve.json",
-			SerializeResponseFrame(sessionsResolveResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_sessions_create.json",
-			SerializeResponseFrame(sessionsCreateResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_sessions_reset.json",
-			SerializeResponseFrame(sessionsResetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_sessions_delete.json",
-			SerializeResponseFrame(sessionsDeleteResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_sessions_usage.json",
-			SerializeResponseFrame(sessionsUsageResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_sessions_compact.json",
-			SerializeResponseFrame(sessionsCompactResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_sessions_preview.json",
-			SerializeResponseFrame(sessionsPreviewResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_sessions_patch.json",
-			SerializeResponseFrame(sessionsPatchResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_agents_create.json",
-			SerializeResponseFrame(agentsCreateResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_agents_delete.json",
-			SerializeResponseFrame(agentsDeleteResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_agents_update.json",
-			SerializeResponseFrame(agentsUpdateResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_logout.json",
-			SerializeResponseFrame(channelsLogoutResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_call_execute.json",
-			SerializeResponseFrame(toolsCallExecuteResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_set.json",
-			SerializeResponseFrame(configSetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_list.json",
-			SerializeResponseFrame(modelsListResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_agents_files_list.json",
-			SerializeResponseFrame(agentsFilesListResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_agents_files_get.json",
-			SerializeResponseFrame(agentsFilesGetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_agents_files_set.json",
-			SerializeResponseFrame(agentsFilesSetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_agents_files_delete.json",
-			SerializeResponseFrame(agentsFilesDeleteResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_agents_files_exists.json",
-			SerializeResponseFrame(agentsFilesExistsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_route_set.json",
-			SerializeResponseFrame(channelsRouteSetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_route_delete.json",
-			SerializeResponseFrame(channelsRouteDeleteResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_route_exists.json",
-			SerializeResponseFrame(channelsRouteExistsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_accounts_activate.json",
-			SerializeResponseFrame(channelsAccountsActivateResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_accounts_deactivate.json",
-			SerializeResponseFrame(channelsAccountsDeactivateResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_accounts_exists.json",
-			SerializeResponseFrame(channelsAccountsExistsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_accounts_update.json",
-			SerializeResponseFrame(channelsAccountsUpdateResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_accounts_get.json",
-			SerializeResponseFrame(channelsAccountsGetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_accounts_create.json",
-			SerializeResponseFrame(channelsAccountsCreateResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_accounts_delete.json",
-			SerializeResponseFrame(channelsAccountsDeleteResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_routes_clear.json",
-			SerializeResponseFrame(channelsRoutesClearResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_routes_restore.json",
-			SerializeResponseFrame(channelsRoutesRestoreResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_route_get.json",
-			SerializeResponseFrame(channelsRouteGetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_route_restore.json",
-			SerializeResponseFrame(channelsRouteRestoreResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_accounts_clear.json",
-			SerializeResponseFrame(channelsAccountsClearResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_accounts_restore.json",
-			SerializeResponseFrame(channelsAccountsRestoreResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_accounts_count.json",
-			SerializeResponseFrame(channelsAccountsCountResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_routes_count.json",
-			SerializeResponseFrame(channelsRoutesCountResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_route_patch.json",
-			SerializeResponseFrame(channelsRoutePatchResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_routes_reset.json",
-			SerializeResponseFrame(channelsRoutesResetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_accounts_reset.json",
-			SerializeResponseFrame(channelsAccountsResetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_route_reset.json",
-			SerializeResponseFrame(channelsRouteResetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_status_get.json",
-			SerializeResponseFrame(channelsStatusGetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_status_exists.json",
-			SerializeResponseFrame(channelsStatusExistsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_channels_status_count.json",
-			SerializeResponseFrame(channelsStatusCountResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_sessions_exists.json",
-			SerializeResponseFrame(sessionsExistsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_sessions_count.json",
-			SerializeResponseFrame(sessionsCountResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_sessions_activate.json",
-			SerializeResponseFrame(sessionsActivateResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_agents_exists.json",
-			SerializeResponseFrame(agentsExistsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_agents_count.json",
-			SerializeResponseFrame(agentsCountResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_exists.json",
-			SerializeResponseFrame(eventsExistsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_count.json",
-			SerializeResponseFrame(eventsCountResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_exists.json",
-			SerializeResponseFrame(toolsExistsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_count.json",
-			SerializeResponseFrame(toolsCountResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_exists.json",
-			SerializeResponseFrame(modelsExistsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_exists.json",
-			SerializeResponseFrame(configExistsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_keys.json",
-			SerializeResponseFrame(configKeysResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_connections_count.json",
-			SerializeResponseFrame(transportConnectionsCountResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_health_details.json",
-			SerializeResponseFrame(healthDetailsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_logs_count.json",
-			SerializeResponseFrame(logsCountResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_count.json",
-			SerializeResponseFrame(configCountResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_count.json",
-			SerializeResponseFrame(modelsCountResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_get.json",
-			SerializeResponseFrame(eventsGetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_endpoint_get.json",
-			SerializeResponseFrame(transportEndpointGetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_logs_levels.json",
-			SerializeResponseFrame(logsLevelsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_list.json",
-			SerializeResponseFrame(eventsListResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_get.json",
-			SerializeResponseFrame(toolsGetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_get.json",
-			SerializeResponseFrame(modelsGetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_getKey.json",
-			SerializeResponseFrame(configGetKeyResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_endpoint_exists.json",
-			SerializeResponseFrame(transportEndpointExistsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_last.json",
-			SerializeResponseFrame(eventsLastResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_list.json",
-			SerializeResponseFrame(toolsListResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_listByProvider.json",
-			SerializeResponseFrame(modelsListByProviderResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_sections.json",
-			SerializeResponseFrame(configSectionsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_endpoint_set.json",
-			SerializeResponseFrame(transportEndpointSetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_search.json",
-			SerializeResponseFrame(eventsSearchResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_categories.json",
-			SerializeResponseFrame(toolsCategoriesResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_providers.json",
-			SerializeResponseFrame(modelsProvidersResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_getSection.json",
-			SerializeResponseFrame(configGetSectionResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_endpoints_list.json",
-			SerializeResponseFrame(transportEndpointsListResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_summary.json",
-			SerializeResponseFrame(eventsSummaryResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_stats.json",
-			SerializeResponseFrame(toolsStatsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_default_get.json",
-			SerializeResponseFrame(modelsDefaultGetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_schema.json",
-			SerializeResponseFrame(configSchemaResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_policy_get.json",
-			SerializeResponseFrame(transportPolicyGetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_types.json",
-			SerializeResponseFrame(eventsTypesResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_health.json",
-			SerializeResponseFrame(toolsHealthResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_compatibility.json",
-			SerializeResponseFrame(modelsCompatibilityResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_validate.json",
-			SerializeResponseFrame(configValidateResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_policy_set.json",
-			SerializeResponseFrame(transportPolicySetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_channels.json",
-			SerializeResponseFrame(eventsChannelsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_metrics.json",
-			SerializeResponseFrame(toolsMetricsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_recommended.json",
-			SerializeResponseFrame(modelsRecommendedResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_audit.json",
-			SerializeResponseFrame(configAuditResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_policy_reset.json",
-			SerializeResponseFrame(transportPolicyResetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_timeline.json",
-			SerializeResponseFrame(eventsTimelineResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_failures.json",
-			SerializeResponseFrame(toolsFailuresResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_fallback.json",
-			SerializeResponseFrame(modelsFallbackResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_rollback.json",
-			SerializeResponseFrame(configRollbackResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_policy_status.json",
-			SerializeResponseFrame(transportPolicyStatusResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_latestByType.json",
-			SerializeResponseFrame(eventsLatestByTypeResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_usage.json",
-			SerializeResponseFrame(toolsUsageResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_selection.json",
-			SerializeResponseFrame(modelsSelectionResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_backup.json",
-			SerializeResponseFrame(configBackupResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_policy_validate.json",
-			SerializeResponseFrame(transportPolicyValidateResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_sample.json",
-			SerializeResponseFrame(eventsSampleResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_latency.json",
-			SerializeResponseFrame(toolsLatencyResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_routing.json",
-			SerializeResponseFrame(modelsRoutingResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_diff.json",
-			SerializeResponseFrame(configDiffResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_policy_history.json",
-			SerializeResponseFrame(transportPolicyHistoryResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_window.json",
-			SerializeResponseFrame(eventsWindowResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_errors.json",
-			SerializeResponseFrame(toolsErrorsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_preference.json",
-			SerializeResponseFrame(modelsPreferenceResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_snapshot.json",
-			SerializeResponseFrame(configSnapshotResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_policy_metrics.json",
-			SerializeResponseFrame(transportPolicyMetricsResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_recent.json",
-			SerializeResponseFrame(eventsRecentResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_throughput.json",
-			SerializeResponseFrame(toolsThroughputResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_priority.json",
-			SerializeResponseFrame(modelsPriorityResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_revision.json",
-			SerializeResponseFrame(configRevisionResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_policy_export.json",
-			SerializeResponseFrame(transportPolicyExportResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_batch.json",
-			SerializeResponseFrame(eventsBatchResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_capacity.json",
-			SerializeResponseFrame(toolsCapacityResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_affinity.json",
-			SerializeResponseFrame(modelsAffinityResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_history.json",
-			SerializeResponseFrame(configHistoryResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_policy_import.json",
-			SerializeResponseFrame(transportPolicyImportResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_cursor.json",
-			SerializeResponseFrame(eventsCursorResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_queue.json",
-			SerializeResponseFrame(toolsQueueResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_pool.json",
-			SerializeResponseFrame(modelsPoolResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_profile.json",
-			SerializeResponseFrame(configProfileResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_policy_digest.json",
-			SerializeResponseFrame(transportPolicyDigestResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_anchor.json",
-			SerializeResponseFrame(eventsAnchorResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_scheduler.json",
-			SerializeResponseFrame(toolsSchedulerResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_manifest.json",
-			SerializeResponseFrame(modelsManifestResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_template.json",
-			SerializeResponseFrame(configTemplateResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_policy_preview.json",
-			SerializeResponseFrame(transportPolicyPreviewResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_offset.json",
-			SerializeResponseFrame(eventsOffsetResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_backlog.json",
-			SerializeResponseFrame(toolsBacklogResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_catalog.json",
-			SerializeResponseFrame(modelsCatalogResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_bundle.json",
-			SerializeResponseFrame(configBundleResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_policy_commit.json",
-			SerializeResponseFrame(transportPolicyCommitResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_marker.json",
-			SerializeResponseFrame(eventsMarkerResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_window.json",
-			SerializeResponseFrame(toolsWindowResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_inventory.json",
-			SerializeResponseFrame(modelsInventoryResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_package.json",
-			SerializeResponseFrame(configPackageResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_policy_apply.json",
-			SerializeResponseFrame(transportPolicyApplyResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_sequence.json",
-			SerializeResponseFrame(eventsSequenceResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_pipeline.json",
-			SerializeResponseFrame(toolsPipelineResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_snapshot.json",
-			SerializeResponseFrame(modelsSnapshotResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_archive.json",
-			SerializeResponseFrame(configArchiveResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_policy_stage.json",
-			SerializeResponseFrame(transportPolicyStageResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_pointer.json",
-			SerializeResponseFrame(eventsPointerResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_dispatch.json",
-			SerializeResponseFrame(toolsDispatchResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_registry.json",
-			SerializeResponseFrame(modelsRegistryResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_manifest.json",
-			SerializeResponseFrame(configManifestResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_policy_reconcile.json",
-			SerializeResponseFrame(transportPolicyReconcileResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_token.json",
-			SerializeResponseFrame(eventsTokenResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_router.json",
-			SerializeResponseFrame(toolsRouterResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_index.json",
-			SerializeResponseFrame(modelsIndexResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_index.json",
-			SerializeResponseFrame(configIndexResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_policy_sync.json",
-			SerializeResponseFrame(transportPolicySyncResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_stream.json",
-			SerializeResponseFrame(eventsStreamResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_tools_selector.json",
-			SerializeResponseFrame(toolsSelectorResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_models_state.json",
-			SerializeResponseFrame(modelsStateResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_config_state.json",
-			SerializeResponseFrame(configStateResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_policy_refresh.json",
-			SerializeResponseFrame(transportPolicyRefreshResponse),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_session_list.json", SerializeResponseFrame(sessionListResponse), error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_events_catalog.json", SerializeResponseFrame(eventsCatalogResponse), error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "response_transport_status.json", SerializeResponseFrame(transportStatusResponse), error)) {
-			return false;
-		}
-
-		if (!CompareFixture(root / "event_tick.json", SerializeEventFrame(event), error)) {
-			return false;
-		}
-
-		if (!CompareFixture(root / "event_health.json", SerializeEventFrame(healthEvent), error)) {
-			return false;
-		}
-
-		if (!CompareFixture(root / "event_shutdown.json", SerializeEventFrame(shutdownEvent), error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "event_channels_update.json",
-			SerializeEventFrame(channelsUpdateEvent),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "event_session_reset.json",
-			SerializeEventFrame(sessionResetEvent),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "event_agent_update.json",
-			SerializeEventFrame(agentUpdateEvent),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "event_channels_accounts_update.json",
-			SerializeEventFrame(channelsAccountsUpdateEvent),
-			error)) {
-			return false;
-		}
-
-		if (!CompareFixture(
-			root / "event_tools_catalog_update.json",
-			SerializeEventFrame(toolsCatalogUpdateEvent),
-			error)) {
-			return false;
-		}
-
 		if (!CompareFixture(
 			root / "response_invalid_protocol_params.json",
 			SerializeResponseFrame(invalidProtocolParamsResponse),
 			error)) {
+			return false;
+		}
+
+		std::vector<std::filesystem::path> responseFixtures;
+		std::vector<std::filesystem::path> eventFixtures;
+		for (const auto& entry : std::filesystem::directory_iterator(root)) {
+			if (!entry.is_regular_file()) {
+				continue;
+			}
+
+			const std::string name = entry.path().filename().string();
+			if (StartsWith(name, "response_") && name != "response_invalid_protocol_params.json") {
+				responseFixtures.push_back(entry.path());
+				continue;
+			}
+
+			if (StartsWith(name, "event_")) {
+				eventFixtures.push_back(entry.path());
+			}
+		}
+
+		std::sort(responseFixtures.begin(), responseFixtures.end());
+		std::sort(eventFixtures.begin(), eventFixtures.end());
+
+		for (const auto& fixturePath : responseFixtures) {
+			const std::string fixtureText = TrimBoundaryWhitespace(ReadFileText(fixturePath));
+			ResponseFrame decodedResponse;
+			std::string responseDecodeError;
+			if (!TryDecodeResponseFrame(fixtureText, decodedResponse, responseDecodeError)) {
+				error = "Response frame decode failed for " + fixturePath.filename().string() + ": " + responseDecodeError;
+				return false;
+			}
+
+			const std::string method = InferMethodFromResponseFixtureName(fixturePath.filename().string());
+			if (method.empty()) {
+				error = "Could not infer method from fixture name: " + fixturePath.filename().string();
+				return false;
+			}
+
+			if (!ValidateDecodedResponseCase(fixturePath, method, decodedResponse, error)) {
+				return false;
+			}
+
+			if (!CompareFixture(fixturePath, SerializeResponseFrame(decodedResponse), error)) {
+				return false;
+			}
+		}
+
+		for (const auto& fixturePath : eventFixtures) {
+			const std::string fixtureText = TrimBoundaryWhitespace(ReadFileText(fixturePath));
+			EventFrame decodedEvent;
+			std::string eventDecodeError;
+			if (!TryDecodeEventFrame(fixtureText, decodedEvent, eventDecodeError)) {
+				error = "Event frame decode failed for " + fixturePath.filename().string() + ": " + eventDecodeError;
+				return false;
+			}
+
+			const std::string expectedEventName = InferEventNameFromEventFixtureName(fixturePath.filename().string());
+			if (expectedEventName.empty() || decodedEvent.eventName != expectedEventName) {
+				error = "Decoded event name mismatch for fixture: " + fixturePath.filename().string();
+				return false;
+			}
+
+			if (!ValidateDecodedEventCase(fixturePath, decodedEvent, error)) {
+				return false;
+			}
+
+			if (!CompareFixture(fixturePath, SerializeEventFrame(decodedEvent), error)) {
+				return false;
+			}
+		}
+
+      const std::array<ResponseFrame, 356> negativeResponses = {
+			ResponseFrame{.id = "neg-1", .ok = true, .payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true}]}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-2", .ok = true, .payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-3", .ok = true, .payloadJson = "{\"tool\":\"chat.send\",\"executed\":true,\"status\":\"ok\",\"argsProvided\":false}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-4", .ok = true, .payloadJson = "{\"count\":2,\"succeeded\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-5", .ok = true, .payloadJson = "{\"found\":true,\"count\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-6", .ok = true, .payloadJson = "{\"cleared\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-7", .ok = true, .payloadJson = "{\"queueLoad\":0,\"agentLoad\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-8", .ok = true, .payloadJson = "{\"bufferedFrames\":0,\"highWatermark\":16}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-9", .ok = true, .payloadJson = "{\"active\":false,\"model\":\"default\"}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-10", .ok = true, .payloadJson = "{\"saturation\":0,\"capacity\":8}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-11", .ok = true, .payloadJson = "{\"limitPerSec\":120,\"currentPerSec\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-12", .ok = true, .payloadJson = "{\"cleared\":true,\"active\":false}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-13", .ok = true, .payloadJson = "{\"pressure\":0,\"threshold\":80}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-14", .ok = true, .payloadJson = "{\"paceMs\":50,\"burst\":1}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-15", .ok = true, .payloadJson = "{\"active\":false,\"model\":\"default\"}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-16", .ok = true, .payloadJson = "{\"headroom\":8,\"used\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-17", .ok = true, .payloadJson = "{\"jitterMs\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-18", .ok = true, .payloadJson = "{\"entries\":0,\"lastModel\":\"default\"}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-19", .ok = true, .payloadJson = "{\"balanced\":true,\"skew\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-20", .ok = true, .payloadJson = "{\"driftMs\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-21", .ok = true, .payloadJson = "{\"active\":false,\"switches\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-22", .ok = true, .payloadJson = "{\"efficiency\":100,\"waste\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-23", .ok = true, .payloadJson = "{\"variance\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-24", .ok = true, .payloadJson = "{\"active\":false,\"windowSec\":60}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-25", .ok = true, .payloadJson = "{\"utilization\":0,\"capacity\":8}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-26", .ok = true, .payloadJson = "{\"deviation\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-27", .ok = true, .payloadJson = "{\"active\":false,\"digest\":\"sha256:override-v1\"}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-28", .ok = true, .payloadJson = "{\"capacity\":8,\"used\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-29", .ok = true, .payloadJson = "{\"aligned\":true,\"offsetMs\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-30", .ok = true, .payloadJson = "{\"entries\":0,\"active\":false}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-31", .ok = true, .payloadJson = "{\"occupancy\":0,\"slots\":8}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-32", .ok = true, .payloadJson = "{\"skewMs\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-33", .ok = true, .payloadJson = "{\"active\":false,\"count\":1}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-34", .ok = true, .payloadJson = "{\"elasticity\":100,\"headroom\":8}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-35", .ok = true, .payloadJson = "{\"dispersion\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-36", .ok = true, .payloadJson = "{\"active\":false,\"entries\":1}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-37", .ok = true, .payloadJson = "{\"cohesion\":100,\"groups\":1}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-38", .ok = true, .payloadJson = "{\"curvature\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-39", .ok = true, .payloadJson = "{\"active\":false,\"rows\":1}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-40", .ok = true, .payloadJson = "{\"resilience\":100,\"faults\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-41", .ok = true, .payloadJson = "{\"smoothness\":100,\"jitterMs\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-42", .ok = true, .payloadJson = "{\"active\":false,\"revision\":1}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-43", .ok = true, .payloadJson = "{\"ready\":true,\"queueDepth\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-44", .ok = true, .payloadJson = "{\"harmonics\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-45", .ok = true, .payloadJson = "{\"active\":false,\"pointer\":\"default\"}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-46", .ok = true, .payloadJson = "{\"contention\":0,\"waiters\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-47", .ok = true, .payloadJson = "{\"phase\":\"steady\",\"step\":1}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-48", .ok = true, .payloadJson = "{\"active\":false,\"state\":\"none\"}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-49", .ok = true, .payloadJson = "{\"fairness\":100,\"skew\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-50", .ok = true, .payloadJson = "{\"tempo\":1,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-51", .ok = true, .payloadJson = "{\"active\":false,\"profile\":\"default\"}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-52", .ok = true, .payloadJson = "{\"equilibrium\":100,\"delta\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-53", .ok = true, .payloadJson = "{\"steady\":true,\"variance\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-54", .ok = true, .payloadJson = "{\"temporal\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-55", .ok = true, .payloadJson = "{\"consistent\":true,\"deviation\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-56", .ok = true, .payloadJson = "{\"active\":false,\"entries\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-57", .ok = true, .payloadJson = "{\"parity\":100,\"gap\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-58", .ok = true, .payloadJson = "{\"stabilityIndex\":100,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-59", .ok = true, .payloadJson = "{\"spectral\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-60", .ok = true, .payloadJson = "{\"floor\":0,\"ceiling\":100}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-61", .ok = true, .payloadJson = "{\"active\":false,\"checkpoint\":\"cp-override-1\"}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-62", .ok = true, .payloadJson = "{\"convergence\":100,\"drift\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-63", .ok = true, .payloadJson = "{\"hysteresis\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-64", .ok = true, .payloadJson = "{\"resonance\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-65", .ok = true, .payloadJson = "{\"vectors\":2,\"magnitude\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-66", .ok = true, .payloadJson = "{\"active\":false,\"baseline\":\"default\"}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-67", .ok = true, .payloadJson = "{\"balanceIndex\":100,\"skew\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-68", .ok = true, .payloadJson = "{\"locked\":true,\"phase\":\"steady\"}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-69", .ok = true, .payloadJson = "{\"waveform\":\"flat\",\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-70", .ok = true, .payloadJson = "{\"horizonMs\":1000,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-71", .ok = true, .payloadJson = "{\"active\":false,\"manifest\":\"default\"}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-72", .ok = true, .payloadJson = "{\"symmetry\":100,\"offset\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-73", .ok = true, .payloadJson = "{\"gradient\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-74", .ok = true, .payloadJson = "{\"clock\":1,\"lag\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-75", .ok = true, .payloadJson = "{\"trend\":\"flat\",\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-76", .ok = true, .payloadJson = "{\"active\":false,\"entries\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-77", .ok = true, .payloadJson = "{\"harmonicity\":100,\"detune\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-78", .ok = true, .payloadJson = "{\"inertia\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-79", .ok = true, .payloadJson = "{\"coordinated\":true,\"lag\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-80", .ok = true, .payloadJson = "{\"minMs\":0,\"maxMs\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-81", .ok = true, .payloadJson = "{\"active\":false,\"index\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-82", .ok = true, .payloadJson = "{\"cadenceIndex\":100,\"jitter\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-83", .ok = true, .payloadJson = "{\"damping\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-84", .ok = true, .payloadJson = "{\"phaseNoise\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-85", .ok = true, .payloadJson = "{\"beatHz\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-86", .ok = true, .payloadJson = "{\"active\":false,\"digestIndex\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-87", .ok = true, .payloadJson = "{\"locked\":true,\"phase\":\"steady\"}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-88", .ok = true, .payloadJson = "{\"flux\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-89", .ok = true, .payloadJson = "{\"modulation\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-90", .ok = true, .payloadJson = "{\"pulseHz\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-91", .ok = true, .payloadJson = "{\"active\":false,\"cursor\":\"default\"}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-92", .ok = true, .payloadJson = "{\"vectors\":2,\"magnitude\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-93", .ok = true, .payloadJson = "{\"phase\":\"steady\",\"amplitude\":1}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-94", .ok = true, .payloadJson = "{\"cohesive\":true,\"delta\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-95", .ok = true, .payloadJson = "{\"waveIndex\":1,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-96", .ok = true, .payloadJson = "{\"active\":false,\"vector\":\"default\"}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-97", .ok = true, .payloadJson = "{\"vectorDrift\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-98", .ok = true, .payloadJson = "{\"phase\":\"steady\",\"bias\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-99", .ok = true, .payloadJson = "{\"syncBand\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-100", .ok = true, .payloadJson = "{\"waveDrift\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-101", .ok = true, .payloadJson = "{\"active\":false,\"vectorDrift\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-102", .ok = true, .payloadJson = "{\"vectorPhase\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-103", .ok = true, .payloadJson = "{\"biasDrift\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-104", .ok = true, .payloadJson = "{\"syncDrift\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-105", .ok = true, .payloadJson = "{\"bandStability\":100,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-106", .ok = true, .payloadJson = "{\"active\":false,\"phaseBias\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-107", .ok = true, .payloadJson = "{\"phaseVector\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-108", .ok = true, .payloadJson = "{\"biasEnvelope\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-109", .ok = true, .payloadJson = "{\"syncEnvelope\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-110", .ok = true, .payloadJson = "{\"bandDrift\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-111", .ok = true, .payloadJson = "{\"active\":false,\"biasEnvelope\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-112", .ok = true, .payloadJson = "{\"phaseLattice\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-113", .ok = true, .payloadJson = "{\"envelopeDrift\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-114", .ok = true, .payloadJson = "{\"syncMatrix\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-115", .ok = true, .payloadJson = "{\"bandVector\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-116", .ok = true, .payloadJson = "{\"active\":false,\"envelopeDrift\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-117", .ok = true, .payloadJson = "{\"phaseContour\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-118", .ok = true, .payloadJson = "{\"driftVector\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-119", .ok = true, .payloadJson = "{\"syncContour\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-120", .ok = true, .payloadJson = "{\"bandMatrix\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-121", .ok = true, .payloadJson = "{\"active\":false,\"driftVector\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-122", .ok = true, .payloadJson = "{\"phaseRibbon\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-123", .ok = true, .payloadJson = "{\"vectorEnvelope\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-124", .ok = true, .payloadJson = "{\"syncRibbon\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-125", .ok = true, .payloadJson = "{\"bandContour\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-126", .ok = true, .payloadJson = "{\"active\":false,\"vectorEnvelope\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-127", .ok = true, .payloadJson = "{\"phaseSpiral\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-128", .ok = true, .payloadJson = "{\"vectorRibbon\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-129", .ok = true, .payloadJson = "{\"syncSpiral\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-130", .ok = true, .payloadJson = "{\"bandHelix\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-131", .ok = true, .payloadJson = "{\"active\":false,\"vectorRibbon\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-132", .ok = true, .payloadJson = "{\"phaseMesh\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-133", .ok = true, .payloadJson = "{\"vectorArc\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-134", .ok = true, .payloadJson = "{\"syncMesh\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-135", .ok = true, .payloadJson = "{\"bandLattice\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-136", .ok = true, .payloadJson = "{\"active\":false,\"vectorArc\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-137", .ok = true, .payloadJson = "{\"phaseFabric\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-138", .ok = true, .payloadJson = "{\"vectorMesh\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-139", .ok = true, .payloadJson = "{\"syncFabric\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-140", .ok = true, .payloadJson = "{\"bandArc\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-141", .ok = true, .payloadJson = "{\"active\":false,\"vectorMesh\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-142", .ok = true, .payloadJson = "{\"phaseNet\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-143", .ok = true, .payloadJson = "{\"vectorNode\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-144", .ok = true, .payloadJson = "{\"syncNet\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-145", .ok = true, .payloadJson = "{\"bandNode\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-146", .ok = true, .payloadJson = "{\"active\":false,\"vectorNode\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-147", .ok = true, .payloadJson = "{\"phaseCore\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-148", .ok = true, .payloadJson = "{\"vectorCore\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-149", .ok = true, .payloadJson = "{\"syncCore\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-150", .ok = true, .payloadJson = "{\"bandCore\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-151", .ok = true, .payloadJson = "{\"active\":false,\"vectorCore\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-152", .ok = true, .payloadJson = "{\"phaseFrame\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-153", .ok = true, .payloadJson = "{\"vectorFrame\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-154", .ok = true, .payloadJson = "{\"syncFrame\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-155", .ok = true, .payloadJson = "{\"bandFrame\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-156", .ok = true, .payloadJson = "{\"active\":false,\"vectorFrame\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-157", .ok = true, .payloadJson = "{\"phaseSpan\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-158", .ok = true, .payloadJson = "{\"vectorSpan\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-159", .ok = true, .payloadJson = "{\"syncSpan\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-160", .ok = true, .payloadJson = "{\"bandSpan\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-161", .ok = true, .payloadJson = "{\"active\":false,\"vectorSpan\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-162", .ok = true, .payloadJson = "{\"phaseGrid\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-163", .ok = true, .payloadJson = "{\"vectorGrid\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-164", .ok = true, .payloadJson = "{\"syncGrid\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-165", .ok = true, .payloadJson = "{\"bandGrid\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-166", .ok = true, .payloadJson = "{\"active\":false,\"vectorGrid\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-167", .ok = true, .payloadJson = "{\"phaseLane\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-168", .ok = true, .payloadJson = "{\"vectorLane\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-169", .ok = true, .payloadJson = "{\"syncLane\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-170", .ok = true, .payloadJson = "{\"bandLane\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-171", .ok = true, .payloadJson = "{\"active\":false,\"vectorLane\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-172", .ok = true, .payloadJson = "{\"phaseTrack\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-173", .ok = true, .payloadJson = "{\"vectorTrack\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-174", .ok = true, .payloadJson = "{\"syncTrack\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-175", .ok = true, .payloadJson = "{\"bandTrack\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-176", .ok = true, .payloadJson = "{\"active\":false,\"vectorTrack\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-177", .ok = true, .payloadJson = "{\"phaseRail\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-178", .ok = true, .payloadJson = "{\"vectorRail\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-179", .ok = true, .payloadJson = "{\"syncRail\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-180", .ok = true, .payloadJson = "{\"bandRail\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-181", .ok = true, .payloadJson = "{\"active\":false,\"vectorRail\":0}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-182", .ok = true, .payloadJson = "{\"phaseSpline\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-183", .ok = true, .payloadJson = "{\"vectorSpline\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-184", .ok = true, .payloadJson = "{\"syncSpline\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-185", .ok = true, .payloadJson = "{\"bandSpline\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-186", .ok = true, .payloadJson = "{\"active\":false,\"vectorSpline\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-187", .ok = true, .payloadJson = "{\"phaseChain\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-188", .ok = true, .payloadJson = "{\"vectorChain\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-189", .ok = true, .payloadJson = "{\"syncChain\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-190", .ok = true, .payloadJson = "{\"bandChain\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-191", .ok = true, .payloadJson = "{\"active\":false,\"vectorChain\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-192", .ok = true, .payloadJson = "{\"phaseThread\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-193", .ok = true, .payloadJson = "{\"vectorThread\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-194", .ok = true, .payloadJson = "{\"syncThread\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-195", .ok = true, .payloadJson = "{\"bandThread\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-196", .ok = true, .payloadJson = "{\"active\":false,\"vectorThread\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-197", .ok = true, .payloadJson = "{\"phaseLink\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-198", .ok = true, .payloadJson = "{\"vectorLink\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-199", .ok = true, .payloadJson = "{\"syncLink\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-200", .ok = true, .payloadJson = "{\"bandLink\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-201", .ok = true, .payloadJson = "{\"active\":false,\"vectorLink\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-202", .ok = true, .payloadJson = "{\"phaseNode\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-203", .ok = true, .payloadJson = "{\"vectorNode2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-204", .ok = true, .payloadJson = "{\"syncNode2\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-205", .ok = true, .payloadJson = "{\"bandNode2\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-206", .ok = true, .payloadJson = "{\"active\":false,\"vectorNode2\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-207", .ok = true, .payloadJson = "{\"phaseBridge\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-208", .ok = true, .payloadJson = "{\"vectorBridge\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-209", .ok = true, .payloadJson = "{\"syncBridge\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-210", .ok = true, .payloadJson = "{\"bandBridge\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-211", .ok = true, .payloadJson = "{\"active\":false,\"vectorBridge\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-212", .ok = true, .payloadJson = "{\"phasePortal\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-213", .ok = true, .payloadJson = "{\"vectorPortal\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-214", .ok = true, .payloadJson = "{\"syncPortal\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-215", .ok = true, .payloadJson = "{\"bandPortal\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-216", .ok = true, .payloadJson = "{\"active\":false,\"vectorPortal\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-217", .ok = true, .payloadJson = "{\"phaseRelay2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-218", .ok = true, .payloadJson = "{\"vectorRelay2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-219", .ok = true, .payloadJson = "{\"syncRelay2\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-220", .ok = true, .payloadJson = "{\"bandRelay2\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-221", .ok = true, .payloadJson = "{\"active\":false,\"vectorRelay2\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-222", .ok = true, .payloadJson = "{\"phaseGate2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-223", .ok = true, .payloadJson = "{\"vectorGate2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-224", .ok = true, .payloadJson = "{\"syncGate2\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-225", .ok = true, .payloadJson = "{\"bandGate2\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-226", .ok = true, .payloadJson = "{\"active\":false,\"vectorGate2\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-227", .ok = true, .payloadJson = "{\"phaseHub2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-228", .ok = true, .payloadJson = "{\"vectorHub2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-229", .ok = true, .payloadJson = "{\"syncHub2\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-230", .ok = true, .payloadJson = "{\"bandHub2\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-231", .ok = true, .payloadJson = "{\"active\":false,\"vectorHub2\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-232", .ok = true, .payloadJson = "{\"phaseNode3\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-233", .ok = true, .payloadJson = "{\"vectorNode3\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-234", .ok = true, .payloadJson = "{\"syncNode3\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-235", .ok = true, .payloadJson = "{\"bandNode3\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-236", .ok = true, .payloadJson = "{\"active\":false,\"vectorNode3\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-237", .ok = true, .payloadJson = "{\"phaseLink2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-238", .ok = true, .payloadJson = "{\"vectorLink2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-239", .ok = true, .payloadJson = "{\"syncLink2\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-240", .ok = true, .payloadJson = "{\"bandLink2\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-241", .ok = true, .payloadJson = "{\"active\":false,\"vectorLink2\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-242", .ok = true, .payloadJson = "{\"phaseMesh2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-243", .ok = true, .payloadJson = "{\"vectorMesh2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-244", .ok = true, .payloadJson = "{\"syncMesh2\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-245", .ok = true, .payloadJson = "{\"bandMesh2\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-246", .ok = true, .payloadJson = "{\"active\":false,\"vectorMesh2\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-247", .ok = true, .payloadJson = "{\"phaseArc2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-248", .ok = true, .payloadJson = "{\"vectorArc2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-249", .ok = true, .payloadJson = "{\"syncArc2\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-250", .ok = true, .payloadJson = "{\"bandArc2\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-251", .ok = true, .payloadJson = "{\"active\":false,\"vectorArc2\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-252", .ok = true, .payloadJson = "{\"phaseBand2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-253", .ok = true, .payloadJson = "{\"vectorBand2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-254", .ok = true, .payloadJson = "{\"syncBand2\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-255", .ok = true, .payloadJson = "{\"bandBand2\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-256", .ok = true, .payloadJson = "{\"active\":false,\"vectorBand2\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-257", .ok = true, .payloadJson = "{\"phaseGrid2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-258", .ok = true, .payloadJson = "{\"vectorGrid2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-259", .ok = true, .payloadJson = "{\"syncGrid2\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-260", .ok = true, .payloadJson = "{\"bandGrid2\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-261", .ok = true, .payloadJson = "{\"active\":false,\"vectorGrid2\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-262", .ok = true, .payloadJson = "{\"phaseLane2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-263", .ok = true, .payloadJson = "{\"vectorLane2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-264", .ok = true, .payloadJson = "{\"syncLane2\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-265", .ok = true, .payloadJson = "{\"bandLane2\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-266", .ok = true, .payloadJson = "{\"active\":false,\"vectorLane2\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-267", .ok = true, .payloadJson = "{\"phaseTrack2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-268", .ok = true, .payloadJson = "{\"vectorTrack2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-269", .ok = true, .payloadJson = "{\"syncTrack2\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-270", .ok = true, .payloadJson = "{\"bandTrack2\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-271", .ok = true, .payloadJson = "{\"active\":false,\"vectorTrack2\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-272", .ok = true, .payloadJson = "{\"phaseRail2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-273", .ok = true, .payloadJson = "{\"vectorRail2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-274", .ok = true, .payloadJson = "{\"syncRail2\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-275", .ok = true, .payloadJson = "{\"bandRail2\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-276", .ok = true, .payloadJson = "{\"active\":false,\"vectorRail2\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-277", .ok = true, .payloadJson = "{\"phaseSpline2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-278", .ok = true, .payloadJson = "{\"vectorSpline2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-279", .ok = true, .payloadJson = "{\"syncSpline2\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-280", .ok = true, .payloadJson = "{\"bandSpline2\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-281", .ok = true, .payloadJson = "{\"active\":false,\"vectorSpline2\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-282", .ok = true, .payloadJson = "{\"phaseChain2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-283", .ok = true, .payloadJson = "{\"vectorChain2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-284", .ok = true, .payloadJson = "{\"syncChain2\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-285", .ok = true, .payloadJson = "{\"bandChain2\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-286", .ok = true, .payloadJson = "{\"active\":false,\"vectorChain2\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-287", .ok = true, .payloadJson = "{\"phaseThread2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-288", .ok = true, .payloadJson = "{\"vectorThread2\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-289", .ok = true, .payloadJson = "{\"syncThread2\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-290", .ok = true, .payloadJson = "{\"bandThread2\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-291", .ok = true, .payloadJson = "{\"active\":false,\"vectorThread2\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-292", .ok = true, .payloadJson = "{\"phaseLink3\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-293", .ok = true, .payloadJson = "{\"vectorLink3\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-294", .ok = true, .payloadJson = "{\"syncLink3\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-295", .ok = true, .payloadJson = "{\"bandLink3\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-296", .ok = true, .payloadJson = "{\"active\":false,\"vectorLink3\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-297", .ok = true, .payloadJson = "{\"phaseNode4\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-298", .ok = true, .payloadJson = "{\"vectorNode4\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-299", .ok = true, .payloadJson = "{\"syncNode4\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-300", .ok = true, .payloadJson = "{\"bandNode4\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-301", .ok = true, .payloadJson = "{\"active\":false,\"vectorNode4\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-302", .ok = true, .payloadJson = "{\"phaseMesh3\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-303", .ok = true, .payloadJson = "{\"vectorMesh3\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-304", .ok = true, .payloadJson = "{\"syncMesh3\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-305", .ok = true, .payloadJson = "{\"bandMesh3\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-306", .ok = true, .payloadJson = "{\"active\":false,\"vectorMesh3\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-307", .ok = true, .payloadJson = "{\"phaseBridge3\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-308", .ok = true, .payloadJson = "{\"vectorBridge3\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-309", .ok = true, .payloadJson = "{\"syncBridge3\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-310", .ok = true, .payloadJson = "{\"bandBridge3\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-311", .ok = true, .payloadJson = "{\"active\":false,\"vectorBridge3\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-312", .ok = true, .payloadJson = "{\"phasePortal3\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-313", .ok = true, .payloadJson = "{\"vectorPortal3\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-314", .ok = true, .payloadJson = "{\"syncPortal3\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-315", .ok = true, .payloadJson = "{\"bandPortal3\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-316", .ok = true, .payloadJson = "{\"active\":false,\"vectorPortal3\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-317", .ok = true, .payloadJson = "{\"phaseRelay3\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-318", .ok = true, .payloadJson = "{\"vectorRelay3\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-319", .ok = true, .payloadJson = "{\"syncRelay3\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-320", .ok = true, .payloadJson = "{\"bandRelay3\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-321", .ok = true, .payloadJson = "{\"active\":false,\"vectorRelay3\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-322", .ok = true, .payloadJson = "{\"phaseGate3\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-323", .ok = true, .payloadJson = "{\"vectorGate3\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-324", .ok = true, .payloadJson = "{\"syncGate3\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-325", .ok = true, .payloadJson = "{\"bandGate3\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-326", .ok = true, .payloadJson = "{\"active\":false,\"vectorGate3\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-327", .ok = true, .payloadJson = "{\"phaseHub3\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-328", .ok = true, .payloadJson = "{\"vectorHub3\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-329", .ok = true, .payloadJson = "{\"syncHub3\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-330", .ok = true, .payloadJson = "{\"bandHub3\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-331", .ok = true, .payloadJson = "{\"active\":false,\"vectorHub3\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-332", .ok = true, .payloadJson = "{\"phaseNode5\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-333", .ok = true, .payloadJson = "{\"vectorNode5\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-334", .ok = true, .payloadJson = "{\"syncNode5\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-335", .ok = true, .payloadJson = "{\"bandNode5\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-336", .ok = true, .payloadJson = "{\"active\":false,\"vectorNode5\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-337", .ok = true, .payloadJson = "{\"phaseLink4\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-338", .ok = true, .payloadJson = "{\"vectorLink4\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-339", .ok = true, .payloadJson = "{\"syncLink4\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-340", .ok = true, .payloadJson = "{\"bandLink4\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-341", .ok = true, .payloadJson = "{\"active\":false,\"vectorLink4\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-342", .ok = true, .payloadJson = "{\"phaseBridge4\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-343", .ok = true, .payloadJson = "{\"vectorBridge4\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-344", .ok = true, .payloadJson = "{\"syncBridge4\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-345", .ok = true, .payloadJson = "{\"bandBridge4\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-346", .ok = true, .payloadJson = "{\"active\":false,\"vectorBridge4\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-347", .ok = true, .payloadJson = "{\"phasePortal4\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-348", .ok = true, .payloadJson = "{\"vectorPortal4\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-349", .ok = true, .payloadJson = "{\"syncPortal4\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-350", .ok = true, .payloadJson = "{\"bandPortal4\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-351", .ok = true, .payloadJson = "{\"active\":false,\"vectorPortal4\":0}", .error = std::nullopt },
+          ResponseFrame{.id = "neg-352", .ok = true, .payloadJson = "{\"phaseGate4\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-353", .ok = true, .payloadJson = "{\"vectorGate4\":0,\"windowMs\":1000}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-354", .ok = true, .payloadJson = "{\"syncGate4\":1,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-355", .ok = true, .payloadJson = "{\"bandGate4\":0,\"samples\":2}", .error = std::nullopt },
+			ResponseFrame{.id = "neg-356", .ok = true, .payloadJson = "{\"active\":false,\"vectorGate4\":0}", .error = std::nullopt },
+		};
+
+		if (!ValidateNegativeResponseCase("gateway.channels.accounts", negativeResponses[0], "gateway.channels.accounts missing `connected`", error) ||
+			!ValidateNegativeResponseCase("gateway.sessions.delete", negativeResponses[1], "gateway.sessions.delete missing `remaining`", error) ||
+			!ValidateNegativeResponseCase("gateway.tools.call.execute", negativeResponses[2], "gateway.tools.call.execute missing `output`", error) ||
+			!ValidateNegativeResponseCase("gateway.tools.executions.count", negativeResponses[3], "gateway.tools.executions.count missing `failed`", error) ||
+			!ValidateNegativeResponseCase("gateway.tools.executions.latest", negativeResponses[4], "gateway.tools.executions.latest missing `execution`", error) ||
+			!ValidateNegativeResponseCase("gateway.tools.executions.clear", negativeResponses[5], "gateway.tools.executions.clear missing `remaining`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.load", negativeResponses[6], "gateway.runtime.orchestration.load missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.buffer", negativeResponses[7], "gateway.runtime.streaming.buffer missing `bufferedBytes`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override", negativeResponses[8], "gateway.models.failover.override missing `reason`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.saturation", negativeResponses[9], "gateway.runtime.orchestration.saturation missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.throttle", negativeResponses[10], "gateway.runtime.streaming.throttle missing `throttled`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.clear", negativeResponses[11], "gateway.models.failover.override.clear missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.pressure", negativeResponses[12], "gateway.runtime.orchestration.pressure missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.pacing", negativeResponses[13], "gateway.runtime.streaming.pacing missing `adaptive`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.status", negativeResponses[14], "gateway.models.failover.override.status missing `source`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.headroom", negativeResponses[15], "gateway.runtime.orchestration.headroom missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.jitter", negativeResponses[16], "gateway.runtime.streaming.jitter missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.history", negativeResponses[17], "gateway.models.failover.override.history missing `active`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.balance", negativeResponses[18], "gateway.runtime.orchestration.balance missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.drift", negativeResponses[19], "gateway.runtime.streaming.drift missing `corrected`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.metrics", negativeResponses[20], "gateway.models.failover.override.metrics missing `lastModel`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.efficiency", negativeResponses[21], "gateway.runtime.orchestration.efficiency missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.variance", negativeResponses[22], "gateway.runtime.streaming.variance missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.window", negativeResponses[23], "gateway.models.failover.override.window missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.utilization", negativeResponses[24], "gateway.runtime.orchestration.utilization missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.deviation", negativeResponses[25], "gateway.runtime.streaming.deviation missing `withinBudget`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.digest", negativeResponses[26], "gateway.models.failover.override.digest missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.capacity", negativeResponses[27], "gateway.runtime.orchestration.capacity missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.alignment", negativeResponses[28], "gateway.runtime.streaming.alignment missing `windowMs`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.timeline", negativeResponses[29], "gateway.models.failover.override.timeline missing `lastModel`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.occupancy", negativeResponses[30], "gateway.runtime.orchestration.occupancy missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.skew", negativeResponses[31], "gateway.runtime.streaming.skew missing `bounded`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.catalog", negativeResponses[32], "gateway.models.failover.override.catalog missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.elasticity", negativeResponses[33], "gateway.runtime.orchestration.elasticity missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.dispersion", negativeResponses[34], "gateway.runtime.streaming.dispersion missing `bounded`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.registry", negativeResponses[35], "gateway.models.failover.override.registry missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.cohesion", negativeResponses[36], "gateway.runtime.orchestration.cohesion missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.curvature", negativeResponses[37], "gateway.runtime.streaming.curvature missing `bounded`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.matrix", negativeResponses[38], "gateway.models.failover.override.matrix missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.resilience", negativeResponses[39], "gateway.runtime.orchestration.resilience missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.smoothness", negativeResponses[40], "gateway.runtime.streaming.smoothness missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.snapshot", negativeResponses[41], "gateway.models.failover.override.snapshot missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.readiness", negativeResponses[42], "gateway.runtime.orchestration.readiness missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.harmonics", negativeResponses[43], "gateway.runtime.streaming.harmonics missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.pointer", negativeResponses[44], "gateway.models.failover.override.pointer missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.contention", negativeResponses[45], "gateway.runtime.orchestration.contention missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.phase", negativeResponses[46], "gateway.runtime.streaming.phase missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.state", negativeResponses[47], "gateway.models.failover.override.state missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.fairness", negativeResponses[48], "gateway.runtime.orchestration.fairness missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.tempo", negativeResponses[49], "gateway.runtime.streaming.tempo missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.profile", negativeResponses[50], "gateway.models.failover.override.profile missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.equilibrium", negativeResponses[51], "gateway.runtime.orchestration.equilibrium missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.steadiness", negativeResponses[52], "gateway.runtime.orchestration.steadiness missing `windowMs`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.temporal", negativeResponses[53], "gateway.runtime.streaming.temporal missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.consistency", negativeResponses[54], "gateway.runtime.streaming.consistency missing `samples`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.audit", negativeResponses[55], "gateway.models.failover.override.audit missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.parity", negativeResponses[56], "gateway.runtime.orchestration.parity missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.stabilityIndex", negativeResponses[57], "gateway.runtime.orchestration.stabilityIndex missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.spectral", negativeResponses[58], "gateway.runtime.streaming.spectral missing `bounded`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.envelope", negativeResponses[59], "gateway.runtime.streaming.envelope missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.checkpoint", negativeResponses[60], "gateway.models.failover.override.checkpoint missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.convergence", negativeResponses[61], "gateway.runtime.orchestration.convergence missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.hysteresis", negativeResponses[62], "gateway.runtime.orchestration.hysteresis missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.resonance", negativeResponses[63], "gateway.runtime.streaming.resonance missing `bounded`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.vectorField", negativeResponses[64], "gateway.runtime.streaming.vectorField missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.baseline", negativeResponses[65], "gateway.models.failover.override.baseline missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.balanceIndex", negativeResponses[66], "gateway.runtime.orchestration.balanceIndex missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseLock", negativeResponses[67], "gateway.runtime.orchestration.phaseLock missing `drift`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.waveform", negativeResponses[68], "gateway.runtime.streaming.waveform missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.horizon", negativeResponses[69], "gateway.runtime.streaming.horizon missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.manifest", negativeResponses[70], "gateway.models.failover.override.manifest missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.symmetry", negativeResponses[71], "gateway.runtime.orchestration.symmetry missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.gradient", negativeResponses[72], "gateway.runtime.orchestration.gradient missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.vectorClock", negativeResponses[73], "gateway.runtime.streaming.vectorClock missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.trend", negativeResponses[74], "gateway.runtime.streaming.trend missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.ledger", negativeResponses[75], "gateway.models.failover.override.ledger missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.harmonicity", negativeResponses[76], "gateway.runtime.orchestration.harmonicity missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.inertia", negativeResponses[77], "gateway.runtime.orchestration.inertia missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.coordination", negativeResponses[78], "gateway.runtime.streaming.coordination missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.latencyBand", negativeResponses[79], "gateway.runtime.streaming.latencyBand missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.snapshotIndex", negativeResponses[80], "gateway.models.failover.override.snapshotIndex missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.cadenceIndex", negativeResponses[81], "gateway.runtime.orchestration.cadenceIndex missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.damping", negativeResponses[82], "gateway.runtime.orchestration.damping missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.phaseNoise", negativeResponses[83], "gateway.runtime.streaming.phaseNoise missing `bounded`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.beat", negativeResponses[84], "gateway.runtime.streaming.beat missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.digestIndex", negativeResponses[85], "gateway.models.failover.override.digestIndex missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.waveLock", negativeResponses[86], "gateway.runtime.orchestration.waveLock missing `slip`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.flux", negativeResponses[87], "gateway.runtime.orchestration.flux missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.modulation", negativeResponses[88], "gateway.runtime.streaming.modulation missing `bounded`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.pulseTrain", negativeResponses[89], "gateway.runtime.streaming.pulseTrain missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.cursor", negativeResponses[90], "gateway.models.failover.override.cursor missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorField", negativeResponses[91], "gateway.runtime.orchestration.vectorField missing `state`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseEnvelope", negativeResponses[92], "gateway.runtime.orchestration.phaseEnvelope missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.cohesion", negativeResponses[93], "gateway.runtime.streaming.cohesion missing `samples`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.waveIndex", negativeResponses[94], "gateway.runtime.streaming.waveIndex missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vector", negativeResponses[95], "gateway.models.failover.override.vector missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorDrift", negativeResponses[96], "gateway.runtime.orchestration.vectorDrift missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseBias", negativeResponses[97], "gateway.runtime.orchestration.phaseBias missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncBand", negativeResponses[98], "gateway.runtime.streaming.syncBand missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.waveDrift", negativeResponses[99], "gateway.runtime.streaming.waveDrift missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorDrift", negativeResponses[100], "gateway.models.failover.override.vectorDrift missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorPhase", negativeResponses[101], "gateway.runtime.orchestration.vectorPhase missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.biasDrift", negativeResponses[102], "gateway.runtime.orchestration.biasDrift missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncDrift", negativeResponses[103], "gateway.runtime.streaming.syncDrift missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandStability", negativeResponses[104], "gateway.runtime.streaming.bandStability missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.phaseBias", negativeResponses[105], "gateway.models.failover.override.phaseBias missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseVector", negativeResponses[106], "gateway.runtime.orchestration.phaseVector missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.biasEnvelope", negativeResponses[107], "gateway.runtime.orchestration.biasEnvelope missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncEnvelope", negativeResponses[108], "gateway.runtime.streaming.syncEnvelope missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandDrift", negativeResponses[109], "gateway.runtime.streaming.bandDrift missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.biasEnvelope", negativeResponses[110], "gateway.models.failover.override.biasEnvelope missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseLattice", negativeResponses[111], "gateway.runtime.orchestration.phaseLattice missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.envelopeDrift", negativeResponses[112], "gateway.runtime.orchestration.envelopeDrift missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncMatrix", negativeResponses[113], "gateway.runtime.streaming.syncMatrix missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandVector", negativeResponses[114], "gateway.runtime.streaming.bandVector missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.envelopeDrift", negativeResponses[115], "gateway.models.failover.override.envelopeDrift missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseContour", negativeResponses[116], "gateway.runtime.orchestration.phaseContour missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.driftVector", negativeResponses[117], "gateway.runtime.orchestration.driftVector missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncContour", negativeResponses[118], "gateway.runtime.streaming.syncContour missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandMatrix", negativeResponses[119], "gateway.runtime.streaming.bandMatrix missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.driftVector", negativeResponses[120], "gateway.models.failover.override.driftVector missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseRibbon", negativeResponses[121], "gateway.runtime.orchestration.phaseRibbon missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorEnvelope", negativeResponses[122], "gateway.runtime.orchestration.vectorEnvelope missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncRibbon", negativeResponses[123], "gateway.runtime.streaming.syncRibbon missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandContour", negativeResponses[124], "gateway.runtime.streaming.bandContour missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorEnvelope", negativeResponses[125], "gateway.models.failover.override.vectorEnvelope missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseSpiral", negativeResponses[126], "gateway.runtime.orchestration.phaseSpiral missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorRibbon", negativeResponses[127], "gateway.runtime.orchestration.vectorRibbon missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncSpiral", negativeResponses[128], "gateway.runtime.streaming.syncSpiral missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandHelix", negativeResponses[129], "gateway.runtime.streaming.bandHelix missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorRibbon", negativeResponses[130], "gateway.models.failover.override.vectorRibbon missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseMesh", negativeResponses[131], "gateway.runtime.orchestration.phaseMesh missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorArc", negativeResponses[132], "gateway.runtime.orchestration.vectorArc missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncMesh", negativeResponses[133], "gateway.runtime.streaming.syncMesh missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandLattice", negativeResponses[134], "gateway.runtime.streaming.bandLattice missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorArc", negativeResponses[135], "gateway.models.failover.override.vectorArc missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseFabric", negativeResponses[136], "gateway.runtime.orchestration.phaseFabric missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorMesh", negativeResponses[137], "gateway.runtime.orchestration.vectorMesh missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncFabric", negativeResponses[138], "gateway.runtime.streaming.syncFabric missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandArc", negativeResponses[139], "gateway.runtime.streaming.bandArc missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorMesh", negativeResponses[140], "gateway.models.failover.override.vectorMesh missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseNet", negativeResponses[141], "gateway.runtime.orchestration.phaseNet missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorNode", negativeResponses[142], "gateway.runtime.orchestration.vectorNode missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncNet", negativeResponses[143], "gateway.runtime.streaming.syncNet missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandNode", negativeResponses[144], "gateway.runtime.streaming.bandNode missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorNode", negativeResponses[145], "gateway.models.failover.override.vectorNode missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseCore", negativeResponses[146], "gateway.runtime.orchestration.phaseCore missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorCore", negativeResponses[147], "gateway.runtime.orchestration.vectorCore missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncCore", negativeResponses[148], "gateway.runtime.streaming.syncCore missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandCore", negativeResponses[149], "gateway.runtime.streaming.bandCore missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorCore", negativeResponses[150], "gateway.models.failover.override.vectorCore missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseFrame", negativeResponses[151], "gateway.runtime.orchestration.phaseFrame missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorFrame", negativeResponses[152], "gateway.runtime.orchestration.vectorFrame missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncFrame", negativeResponses[153], "gateway.runtime.streaming.syncFrame missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandFrame", negativeResponses[154], "gateway.runtime.streaming.bandFrame missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorFrame", negativeResponses[155], "gateway.models.failover.override.vectorFrame missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseSpan", negativeResponses[156], "gateway.runtime.orchestration.phaseSpan missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorSpan", negativeResponses[157], "gateway.runtime.orchestration.vectorSpan missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncSpan", negativeResponses[158], "gateway.runtime.streaming.syncSpan missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandSpan", negativeResponses[159], "gateway.runtime.streaming.bandSpan missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorSpan", negativeResponses[160], "gateway.models.failover.override.vectorSpan missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseGrid", negativeResponses[161], "gateway.runtime.orchestration.phaseGrid missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorGrid", negativeResponses[162], "gateway.runtime.orchestration.vectorGrid missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncGrid", negativeResponses[163], "gateway.runtime.streaming.syncGrid missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandGrid", negativeResponses[164], "gateway.runtime.streaming.bandGrid missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorGrid", negativeResponses[165], "gateway.models.failover.override.vectorGrid missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseLane", negativeResponses[166], "gateway.runtime.orchestration.phaseLane missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorLane", negativeResponses[167], "gateway.runtime.orchestration.vectorLane missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncLane", negativeResponses[168], "gateway.runtime.streaming.syncLane missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandLane", negativeResponses[169], "gateway.runtime.streaming.bandLane missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorLane", negativeResponses[170], "gateway.models.failover.override.vectorLane missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseTrack", negativeResponses[171], "gateway.runtime.orchestration.phaseTrack missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorTrack", negativeResponses[172], "gateway.runtime.orchestration.vectorTrack missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncTrack", negativeResponses[173], "gateway.runtime.streaming.syncTrack missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandTrack", negativeResponses[174], "gateway.runtime.streaming.bandTrack missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorTrack", negativeResponses[175], "gateway.models.failover.override.vectorTrack missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseRail", negativeResponses[176], "gateway.runtime.orchestration.phaseRail missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorRail", negativeResponses[177], "gateway.runtime.orchestration.vectorRail missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncRail", negativeResponses[178], "gateway.runtime.streaming.syncRail missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandRail", negativeResponses[179], "gateway.runtime.streaming.bandRail missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorRail", negativeResponses[180], "gateway.models.failover.override.vectorRail missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseSpline", negativeResponses[181], "gateway.runtime.orchestration.phaseSpline missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorSpline", negativeResponses[182], "gateway.runtime.orchestration.vectorSpline missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncSpline", negativeResponses[183], "gateway.runtime.streaming.syncSpline missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandSpline", negativeResponses[184], "gateway.runtime.streaming.bandSpline missing `stable`", error) ||
+           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorSpline", negativeResponses[185], "gateway.models.failover.override.vectorSpline missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseChain", negativeResponses[186], "gateway.runtime.orchestration.phaseChain missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorChain", negativeResponses[187], "gateway.runtime.orchestration.vectorChain missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncChain", negativeResponses[188], "gateway.runtime.streaming.syncChain missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandChain", negativeResponses[189], "gateway.runtime.streaming.bandChain missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorChain", negativeResponses[190], "gateway.models.failover.override.vectorChain missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseThread", negativeResponses[191], "gateway.runtime.orchestration.phaseThread missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorThread", negativeResponses[192], "gateway.runtime.orchestration.vectorThread missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncThread", negativeResponses[193], "gateway.runtime.streaming.syncThread missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandThread", negativeResponses[194], "gateway.runtime.streaming.bandThread missing `stable`", error) ||
+           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorThread", negativeResponses[195], "gateway.models.failover.override.vectorThread missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseLink", negativeResponses[196], "gateway.runtime.orchestration.phaseLink missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorLink", negativeResponses[197], "gateway.runtime.orchestration.vectorLink missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncLink", negativeResponses[198], "gateway.runtime.streaming.syncLink missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandLink", negativeResponses[199], "gateway.runtime.streaming.bandLink missing `stable`", error) ||
+           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorLink", negativeResponses[200], "gateway.models.failover.override.vectorLink missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseNode", negativeResponses[201], "gateway.runtime.orchestration.phaseNode missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorNode2", negativeResponses[202], "gateway.runtime.orchestration.vectorNode2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncNode2", negativeResponses[203], "gateway.runtime.streaming.syncNode2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandNode2", negativeResponses[204], "gateway.runtime.streaming.bandNode2 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorNode2", negativeResponses[205], "gateway.models.failover.override.vectorNode2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseBridge", negativeResponses[206], "gateway.runtime.orchestration.phaseBridge missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorBridge", negativeResponses[207], "gateway.runtime.orchestration.vectorBridge missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncBridge", negativeResponses[208], "gateway.runtime.streaming.syncBridge missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandBridge", negativeResponses[209], "gateway.runtime.streaming.bandBridge missing `stable`", error) ||
+           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorBridge", negativeResponses[210], "gateway.models.failover.override.vectorBridge missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phasePortal", negativeResponses[211], "gateway.runtime.orchestration.phasePortal missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorPortal", negativeResponses[212], "gateway.runtime.orchestration.vectorPortal missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncPortal", negativeResponses[213], "gateway.runtime.streaming.syncPortal missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandPortal", negativeResponses[214], "gateway.runtime.streaming.bandPortal missing `stable`", error) ||
+           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorPortal", negativeResponses[215], "gateway.models.failover.override.vectorPortal missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseRelay2", negativeResponses[216], "gateway.runtime.orchestration.phaseRelay2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorRelay2", negativeResponses[217], "gateway.runtime.orchestration.vectorRelay2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncRelay2", negativeResponses[218], "gateway.runtime.streaming.syncRelay2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandRelay2", negativeResponses[219], "gateway.runtime.streaming.bandRelay2 missing `stable`", error) ||
+           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorRelay2", negativeResponses[220], "gateway.models.failover.override.vectorRelay2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseGate2", negativeResponses[221], "gateway.runtime.orchestration.phaseGate2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorGate2", negativeResponses[222], "gateway.runtime.orchestration.vectorGate2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncGate2", negativeResponses[223], "gateway.runtime.streaming.syncGate2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandGate2", negativeResponses[224], "gateway.runtime.streaming.bandGate2 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorGate2", negativeResponses[225], "gateway.models.failover.override.vectorGate2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseHub2", negativeResponses[226], "gateway.runtime.orchestration.phaseHub2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorHub2", negativeResponses[227], "gateway.runtime.orchestration.vectorHub2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncHub2", negativeResponses[228], "gateway.runtime.streaming.syncHub2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandHub2", negativeResponses[229], "gateway.runtime.streaming.bandHub2 missing `stable`", error) ||
+           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorHub2", negativeResponses[230], "gateway.models.failover.override.vectorHub2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseNode3", negativeResponses[231], "gateway.runtime.orchestration.phaseNode3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorNode3", negativeResponses[232], "gateway.runtime.orchestration.vectorNode3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncNode3", negativeResponses[233], "gateway.runtime.streaming.syncNode3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandNode3", negativeResponses[234], "gateway.runtime.streaming.bandNode3 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorNode3", negativeResponses[235], "gateway.models.failover.override.vectorNode3 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseLink2", negativeResponses[236], "gateway.runtime.orchestration.phaseLink2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorLink2", negativeResponses[237], "gateway.runtime.orchestration.vectorLink2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncLink2", negativeResponses[238], "gateway.runtime.streaming.syncLink2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandLink2", negativeResponses[239], "gateway.runtime.streaming.bandLink2 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorLink2", negativeResponses[240], "gateway.models.failover.override.vectorLink2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseMesh2", negativeResponses[241], "gateway.runtime.orchestration.phaseMesh2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorMesh2", negativeResponses[242], "gateway.runtime.orchestration.vectorMesh2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncMesh2", negativeResponses[243], "gateway.runtime.streaming.syncMesh2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandMesh2", negativeResponses[244], "gateway.runtime.streaming.bandMesh2 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorMesh2", negativeResponses[245], "gateway.models.failover.override.vectorMesh2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseArc2", negativeResponses[246], "gateway.runtime.orchestration.phaseArc2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorArc2", negativeResponses[247], "gateway.runtime.orchestration.vectorArc2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncArc2", negativeResponses[248], "gateway.runtime.streaming.syncArc2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandArc2", negativeResponses[249], "gateway.runtime.streaming.bandArc2 missing `stable`", error) ||
+           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorArc2", negativeResponses[250], "gateway.models.failover.override.vectorArc2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseBand2", negativeResponses[251], "gateway.runtime.orchestration.phaseBand2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorBand2", negativeResponses[252], "gateway.runtime.orchestration.vectorBand2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncBand2", negativeResponses[253], "gateway.runtime.streaming.syncBand2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandBand2", negativeResponses[254], "gateway.runtime.streaming.bandBand2 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorBand2", negativeResponses[255], "gateway.models.failover.override.vectorBand2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseGrid2", negativeResponses[256], "gateway.runtime.orchestration.phaseGrid2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorGrid2", negativeResponses[257], "gateway.runtime.orchestration.vectorGrid2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncGrid2", negativeResponses[258], "gateway.runtime.streaming.syncGrid2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandGrid2", negativeResponses[259], "gateway.runtime.streaming.bandGrid2 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorGrid2", negativeResponses[260], "gateway.models.failover.override.vectorGrid2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseLane2", negativeResponses[261], "gateway.runtime.orchestration.phaseLane2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorLane2", negativeResponses[262], "gateway.runtime.orchestration.vectorLane2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncLane2", negativeResponses[263], "gateway.runtime.streaming.syncLane2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandLane2", negativeResponses[264], "gateway.runtime.streaming.bandLane2 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorLane2", negativeResponses[265], "gateway.models.failover.override.vectorLane2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseTrack2", negativeResponses[266], "gateway.runtime.orchestration.phaseTrack2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorTrack2", negativeResponses[267], "gateway.runtime.orchestration.vectorTrack2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncTrack2", negativeResponses[268], "gateway.runtime.streaming.syncTrack2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandTrack2", negativeResponses[269], "gateway.runtime.streaming.bandTrack2 missing `stable`", error) ||
+           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorTrack2", negativeResponses[270], "gateway.models.failover.override.vectorTrack2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseRail2", negativeResponses[271], "gateway.runtime.orchestration.phaseRail2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorRail2", negativeResponses[272], "gateway.runtime.orchestration.vectorRail2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncRail2", negativeResponses[273], "gateway.runtime.streaming.syncRail2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandRail2", negativeResponses[274], "gateway.runtime.streaming.bandRail2 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorRail2", negativeResponses[275], "gateway.models.failover.override.vectorRail2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseSpline2", negativeResponses[276], "gateway.runtime.orchestration.phaseSpline2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorSpline2", negativeResponses[277], "gateway.runtime.orchestration.vectorSpline2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncSpline2", negativeResponses[278], "gateway.runtime.streaming.syncSpline2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandSpline2", negativeResponses[279], "gateway.runtime.streaming.bandSpline2 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorSpline2", negativeResponses[280], "gateway.models.failover.override.vectorSpline2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseChain2", negativeResponses[281], "gateway.runtime.orchestration.phaseChain2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorChain2", negativeResponses[282], "gateway.runtime.orchestration.vectorChain2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncChain2", negativeResponses[283], "gateway.runtime.streaming.syncChain2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandChain2", negativeResponses[284], "gateway.runtime.streaming.bandChain2 missing `stable`", error) ||
+           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorChain2", negativeResponses[285], "gateway.models.failover.override.vectorChain2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseThread2", negativeResponses[286], "gateway.runtime.orchestration.phaseThread2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorThread2", negativeResponses[287], "gateway.runtime.orchestration.vectorThread2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncThread2", negativeResponses[288], "gateway.runtime.streaming.syncThread2 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandThread2", negativeResponses[289], "gateway.runtime.streaming.bandThread2 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorThread2", negativeResponses[290], "gateway.models.failover.override.vectorThread2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseLink3", negativeResponses[291], "gateway.runtime.orchestration.phaseLink3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorLink3", negativeResponses[292], "gateway.runtime.orchestration.vectorLink3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncLink3", negativeResponses[293], "gateway.runtime.streaming.syncLink3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandLink3", negativeResponses[294], "gateway.runtime.streaming.bandLink3 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorLink3", negativeResponses[295], "gateway.models.failover.override.vectorLink3 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseNode4", negativeResponses[296], "gateway.runtime.orchestration.phaseNode4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorNode4", negativeResponses[297], "gateway.runtime.orchestration.vectorNode4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncNode4", negativeResponses[298], "gateway.runtime.streaming.syncNode4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandNode4", negativeResponses[299], "gateway.runtime.streaming.bandNode4 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorNode4", negativeResponses[300], "gateway.models.failover.override.vectorNode4 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseMesh3", negativeResponses[301], "gateway.runtime.orchestration.phaseMesh3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorMesh3", negativeResponses[302], "gateway.runtime.orchestration.vectorMesh3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncMesh3", negativeResponses[303], "gateway.runtime.streaming.syncMesh3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandMesh3", negativeResponses[304], "gateway.runtime.streaming.bandMesh3 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorMesh3", negativeResponses[305], "gateway.models.failover.override.vectorMesh3 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseBridge3", negativeResponses[306], "gateway.runtime.orchestration.phaseBridge3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorBridge3", negativeResponses[307], "gateway.runtime.orchestration.vectorBridge3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncBridge3", negativeResponses[308], "gateway.runtime.streaming.syncBridge3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandBridge3", negativeResponses[309], "gateway.runtime.streaming.bandBridge3 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorBridge3", negativeResponses[310], "gateway.models.failover.override.vectorBridge3 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phasePortal3", negativeResponses[311], "gateway.runtime.orchestration.phasePortal3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorPortal3", negativeResponses[312], "gateway.runtime.orchestration.vectorPortal3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncPortal3", negativeResponses[313], "gateway.runtime.streaming.syncPortal3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandPortal3", negativeResponses[314], "gateway.runtime.streaming.bandPortal3 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorPortal3", negativeResponses[315], "gateway.models.failover.override.vectorPortal3 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseRelay3", negativeResponses[316], "gateway.runtime.orchestration.phaseRelay3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorRelay3", negativeResponses[317], "gateway.runtime.orchestration.vectorRelay3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncRelay3", negativeResponses[318], "gateway.runtime.streaming.syncRelay3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandRelay3", negativeResponses[319], "gateway.runtime.streaming.bandRelay3 missing `stable`", error) ||
+           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorRelay3", negativeResponses[320], "gateway.models.failover.override.vectorRelay3 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseGate3", negativeResponses[321], "gateway.runtime.orchestration.phaseGate3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorGate3", negativeResponses[322], "gateway.runtime.orchestration.vectorGate3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncGate3", negativeResponses[323], "gateway.runtime.streaming.syncGate3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandGate3", negativeResponses[324], "gateway.runtime.streaming.bandGate3 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorGate3", negativeResponses[325], "gateway.models.failover.override.vectorGate3 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseHub3", negativeResponses[326], "gateway.runtime.orchestration.phaseHub3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorHub3", negativeResponses[327], "gateway.runtime.orchestration.vectorHub3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncHub3", negativeResponses[328], "gateway.runtime.streaming.syncHub3 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandHub3", negativeResponses[329], "gateway.runtime.streaming.bandHub3 missing `stable`", error) ||
+           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorHub3", negativeResponses[330], "gateway.models.failover.override.vectorHub3 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseNode5", negativeResponses[331], "gateway.runtime.orchestration.phaseNode5 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorNode5", negativeResponses[332], "gateway.runtime.orchestration.vectorNode5 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncNode5", negativeResponses[333], "gateway.runtime.streaming.syncNode5 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandNode5", negativeResponses[334], "gateway.runtime.streaming.bandNode5 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorNode5", negativeResponses[335], "gateway.models.failover.override.vectorNode5 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseLink4", negativeResponses[336], "gateway.runtime.orchestration.phaseLink4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorLink4", negativeResponses[337], "gateway.runtime.orchestration.vectorLink4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncLink4", negativeResponses[338], "gateway.runtime.streaming.syncLink4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandLink4", negativeResponses[339], "gateway.runtime.streaming.bandLink4 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorLink4", negativeResponses[340], "gateway.models.failover.override.vectorLink4 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseBridge4", negativeResponses[341], "gateway.runtime.orchestration.phaseBridge4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorBridge4", negativeResponses[342], "gateway.runtime.orchestration.vectorBridge4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncBridge4", negativeResponses[343], "gateway.runtime.streaming.syncBridge4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandBridge4", negativeResponses[344], "gateway.runtime.streaming.bandBridge4 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorBridge4", negativeResponses[345], "gateway.models.failover.override.vectorBridge4 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phasePortal4", negativeResponses[346], "gateway.runtime.orchestration.phasePortal4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorPortal4", negativeResponses[347], "gateway.runtime.orchestration.vectorPortal4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncPortal4", negativeResponses[348], "gateway.runtime.streaming.syncPortal4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandPortal4", negativeResponses[349], "gateway.runtime.streaming.bandPortal4 missing `stable`", error) ||
+         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorPortal4", negativeResponses[350], "gateway.models.failover.override.vectorPortal4 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseGate4", negativeResponses[351], "gateway.runtime.orchestration.phaseGate4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorGate4", negativeResponses[352], "gateway.runtime.orchestration.vectorGate4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncGate4", negativeResponses[353], "gateway.runtime.streaming.syncGate4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandGate4", negativeResponses[354], "gateway.runtime.streaming.bandGate4 missing `stable`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorGate4", negativeResponses[355], "gateway.models.failover.override.vectorGate4 missing `model`", error)) {
 			return false;
 		}
 

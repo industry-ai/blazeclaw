@@ -1,0 +1,8 @@
+{
+  "id": "fixture-events-history-scope-id",
+  "ok": true,
+  "result": {
+    "historyScopeId": "history-scope-id-1",
+    "event": "gateway.session.reset"
+  }
+}

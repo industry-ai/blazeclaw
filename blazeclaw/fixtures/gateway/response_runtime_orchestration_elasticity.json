@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-1401",
+  "ok": true,
+  "payload": {
+    "elasticity": 100,
+    "headroom": 8,
+    "state": "expandable"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-239",
+  "ok": true,
+  "payload": {
+    "policyScoped": false,
+    "version": 1,
+    "applied": false
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-1102",
+  "ok": true,
+  "payload": {
+    "deviation": 0,
+    "samples": 2,
+    "withinBudget": true
+  }
+}

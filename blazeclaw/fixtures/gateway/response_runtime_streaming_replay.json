@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-streaming-replay",
+  "ok": true,
+  "result": {
+    "replayed": 2,
+    "cursor": "stream-cursor-1",
+    "complete": true
+  }
+}

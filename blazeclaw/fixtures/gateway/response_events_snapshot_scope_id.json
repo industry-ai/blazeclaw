@@ -1,0 +1,8 @@
+{
+  "id": "fixture-events-snapshot-scope-id",
+  "ok": true,
+  "result": {
+    "snapshotScopeId": "snapshot-scope-id-1",
+    "event": "gateway.session.reset"
+  }
+}

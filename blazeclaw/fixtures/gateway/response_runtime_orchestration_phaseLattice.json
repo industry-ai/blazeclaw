@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2731",
+  "ok": true,
+  "payload": {
+    "phaseLattice": 0,
+    "windowMs": 1000,
+    "stable": true
+  }
+}

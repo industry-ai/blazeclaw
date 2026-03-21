@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-streaming-window",
+  "ok": true,
+  "result": {
+    "windowMs": 5000,
+    "frames": 2,
+    "dropped": 0
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-480",
+  "ok": true,
+  "payload": {
+    "snapshotScopeKey": "snapshot-scope-key-1",
+    "event": "gateway.session.reset"
+  }
+}

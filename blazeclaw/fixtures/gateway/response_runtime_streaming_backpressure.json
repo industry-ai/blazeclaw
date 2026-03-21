@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-streaming-backpressure",
+  "ok": true,
+  "result": {
+    "pressure": 0,
+    "throttled": false,
+    "bufferedFrames": 0
+  }
+}

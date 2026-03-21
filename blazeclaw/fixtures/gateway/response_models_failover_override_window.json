@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-1003",
+  "ok": true,
+  "payload": {
+    "active": false,
+    "windowSec": 60,
+    "model": "default"
+  }
+}

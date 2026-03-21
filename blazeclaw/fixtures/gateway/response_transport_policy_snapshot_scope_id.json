@@ -1,0 +1,9 @@
+{
+  "id": "fixture-transport-policy-snapshot-scope-id",
+  "ok": true,
+  "result": {
+    "snapshotScopeScopedId": false,
+    "version": 1,
+    "applied": false
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-299",
+  "ok": true,
+  "payload": {
+    "queueScoped": false,
+    "version": 1,
+    "applied": false
+  }
+}

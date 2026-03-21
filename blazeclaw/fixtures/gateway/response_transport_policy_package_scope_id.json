@@ -1,0 +1,9 @@
+{
+  "id": "fixture-transport-policy-package-scope-id",
+  "ok": true,
+  "result": {
+    "packageScopeScopedId": false,
+    "version": 1,
+    "applied": false
+  }
+}

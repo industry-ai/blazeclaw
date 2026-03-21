@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-streaming-watermark",
+  "ok": true,
+  "result": {
+    "high": 16,
+    "low": 4,
+    "current": 0
+  }
+}

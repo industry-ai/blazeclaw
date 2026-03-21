@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2960",
+  "ok": true,
+  "payload": {
+    "active": false,
+    "vectorHub3": 0,
+    "model": "default"
+  }
+}

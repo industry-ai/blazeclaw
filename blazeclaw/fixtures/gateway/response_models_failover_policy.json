@@ -1,0 +1,9 @@
+{
+  "id": "fixture-models-failover-policy",
+  "ok": true,
+  "result": {
+    "policy": "ordered",
+    "maxRetries": 2,
+    "stickyPrimary": true
+  }
+}

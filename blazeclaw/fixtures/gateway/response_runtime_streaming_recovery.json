@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-streaming-recovery",
+  "ok": true,
+  "result": {
+    "recovering": false,
+    "attempts": 0,
+    "lastMs": 0
+  }
+}

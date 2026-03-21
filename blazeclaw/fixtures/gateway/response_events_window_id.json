@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-185",
+  "ok": true,
+  "payload": {
+    "windowId": "evt-window-1",
+    "event": "gateway.session.reset"
+  }
+}

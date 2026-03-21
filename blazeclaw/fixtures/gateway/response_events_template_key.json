@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-370",
+  "ok": true,
+  "payload": {
+    "templateKey": "template-key-1",
+    "event": "gateway.session.reset"
+  }
+}

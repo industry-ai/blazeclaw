@@ -1,1 +1,135 @@
-{"type":"res","id":"req-13","ok":true,"payload":{"routes":[{"channel":"telegram","accountId":"telegram.default","agentId":"default","sessionId":"main"},{"channel":"discord","accountId":"discord.default","agentId":"default","sessionId":"main"}]}}
+{
+  "type": "res",
+  "id": "req-13",
+  "ok": true,
+  "payload": {
+    "routes": [
+      {
+        "channel": "internal",
+        "accountId": "internal.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "whatsapp",
+        "accountId": "whatsapp.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "telegram",
+        "accountId": "telegram.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "slack",
+        "accountId": "slack.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "discord",
+        "accountId": "discord.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "msteams",
+        "accountId": "msteams.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "googlechat",
+        "accountId": "googlechat.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "matrix",
+        "accountId": "matrix.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "line",
+        "accountId": "line.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "feishu",
+        "accountId": "feishu.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "mattermost",
+        "accountId": "mattermost.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "nextcloudtalk",
+        "accountId": "nextcloudtalk.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "signal",
+        "accountId": "signal.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "irc",
+        "accountId": "irc.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "nostr",
+        "accountId": "nostr.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "bluebubbles",
+        "accountId": "bluebubbles.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "synologychat",
+        "accountId": "synologychat.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "webchat",
+        "accountId": "webchat.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "tlon",
+        "accountId": "tlon.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "twitch",
+        "accountId": "twitch.default",
+        "agentId": "default",
+        "sessionId": "main"
+      },
+      {
+        "channel": "zalo",
+        "accountId": "zalo.default",
+        "agentId": "default",
+        "sessionId": "main"
+      }
+    ]
+  }
+}

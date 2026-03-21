@@ -1,0 +1,10 @@
+{
+  "id": "fixture-runtime-orchestration-status",
+  "ok": true,
+  "result": {
+    "state": "idle",
+    "activeSession": "main",
+    "activeAgent": "default",
+    "queueDepth": 0
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-330",
+  "ok": true,
+  "payload": {
+    "tokenKey": "token-key-1",
+    "event": "gateway.session.reset"
+  }
+}

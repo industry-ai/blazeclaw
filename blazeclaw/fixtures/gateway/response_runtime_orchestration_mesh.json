@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-orchestration-mesh",
+  "ok": true,
+  "result": {
+    "nodes": 4,
+    "edges": 3,
+    "connected": true
+  }
+}

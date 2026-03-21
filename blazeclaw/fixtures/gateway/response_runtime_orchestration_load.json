@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-501",
+  "ok": true,
+  "payload": {
+    "queueLoad": 0,
+    "agentLoad": 0,
+    "state": "steady"
+  }
+}

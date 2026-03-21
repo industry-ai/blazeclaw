@@ -44,6 +44,9 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Label="Vcpkg">
+    <VcpkgXUseBuiltInApplocalDeps>true</VcpkgXUseBuiltInApplocalDeps>
+  </PropertyGroup>
   <PropertyGroup>
     <OutDir>$(SolutionDir)bin\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)obj\$(ProjectName)\$(Configuration)\</IntDir>
@@ -55,6 +58,7 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>$(ProjectDir)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_WINDOWS;_AFXDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -74,6 +78,7 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>$(ProjectDir)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_WINDOWS;_AFXDLL;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -88,48 +93,148 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="src\app\BlazeClawMfcApp.h" />
+    <ClInclude Include="src\app\BlazeClawMFCApp.h" />
+    <ClInclude Include="src\app\BlazeClawMFCDoc.h" />
+    <ClInclude Include="src\app\BlazeClawMFCView.h" />
+    <ClInclude Include="src\app\calendarbar.h" />
+    <ClInclude Include="src\app\ChatInputEdit.h" />
+    <ClInclude Include="src\app\ChatView.h" />
+    <ClInclude Include="src\app\ChildFrm.h" />
+    <ClInclude Include="src\app\ClassView.h" />
+    <ClInclude Include="src\app\FileView.h" />
+    <ClInclude Include="src\app\framework.h" />
     <ClInclude Include="src\app\MainFrame.h" />
+    <ClInclude Include="src\app\OutputWnd.h" />
+    <ClInclude Include="src\app\pch.h" />
+    <ClInclude Include="src\app\PropertiesWnd.h" />
+    <ClInclude Include="src\app\Resource.h" />
+    <ClInclude Include="src\app\targetver.h" />
+    <ClInclude Include="src\app\ViewTree.h" />
     <ClInclude Include="src\config\ConfigLoader.h" />
     <ClInclude Include="src\config\ConfigModels.h" />
     <ClInclude Include="src\core\FeatureRegistry.h" />
+    <ClInclude Include="src\core\AgentsCatalogService.h" />
+    <ClInclude Include="src\core\AgentsAuthProfileService.h" />
+    <ClInclude Include="src\core\AgentsModelRoutingService.h" />
+    <ClInclude Include="src\core\AgentsSandboxService.h" />
+    <ClInclude Include="src\core\AgentsShellRuntimeService.h" />
+    <ClInclude Include="src\core\AgentsTranscriptSafetyService.h" />
+    <ClInclude Include="src\core\AgentsToolPolicyService.h" />
+    <ClInclude Include="src\core\AgentsWorkspaceService.h" />
+    <ClInclude Include="src\core\AcpSpawnService.h" />
+    <ClInclude Include="src\core\PiEmbeddedService.h" />
+    <ClInclude Include="src\core\SubagentRegistryService.h" />
+    <ClInclude Include="src\core\SkillsCommandService.h" />
+    <ClInclude Include="src\core\SkillsCatalogService.h" />
+    <ClInclude Include="src\core\SkillsEnvOverrideService.h" />
+    <ClInclude Include="src\core\SkillsEligibilityService.h" />
+    <ClInclude Include="src\core\SkillsInstallService.h" />
+    <ClInclude Include="src\core\SkillSecurityScanService.h" />
+    <ClInclude Include="src\core\SkillsPromptService.h" />
+    <ClInclude Include="src\core\SkillsSyncService.h" />
+    <ClInclude Include="src\core\SkillsWatchService.h" />
     <ClInclude Include="src\core\ServiceManager.h" />
     <ClInclude Include="src\gateway\GatewayAgentRegistry.h" />
     <ClInclude Include="src\gateway\GatewayChannelRegistry.h" />
     <ClInclude Include="src\gateway\GatewayHost.h" />
     <ClInclude Include="src\gateway\GatewayMethodDispatcher.h" />
+    <ClInclude Include="src\gateway\GatewayPersistencePaths.h" />
     <ClInclude Include="src\gateway\GatewayProtocolContract.h" />
     <ClInclude Include="src\gateway\GatewayProtocolCodec.h" />
     <ClInclude Include="src\gateway\GatewayProtocolJson.h" />
     <ClInclude Include="src\gateway\GatewayProtocolModels.h" />
+    <ClInclude Include="src\gateway\GatewayJsonUtils.h" />
     <ClInclude Include="src\gateway\GatewayProtocolSchemaValidator.h" />
+    <ClInclude Include="src\gateway\GatewayProtocolSchemaValidator.Internal.h" />
     <ClInclude Include="src\gateway\GatewaySessionRegistry.h" />
     <ClInclude Include="src\gateway\GatewayToolRegistry.h" />
     <ClInclude Include="src\gateway\GatewayWebSocketTransport.h" />
-    <ClInclude Include="src\framework.h" />
-    <ClInclude Include="src\pch.h" />
+    <ClInclude Include="src\gateway\generated\GatewayHandlerCatalog.Generated.h" />
+    <ClInclude Include="src\gateway\generated\GatewaySchemaCatalog.Generated.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\app\BlazeClawMfcApp.cpp" />
+    <ClCompile Include="src\app\BlazeClawMFCApp.cpp" />
+    <ClCompile Include="src\app\BlazeClawMFCDoc.cpp" />
+    <ClCompile Include="src\app\BlazeClawMFCView.cpp" />
+    <ClCompile Include="src\app\calendarbar.cpp" />
+    <ClCompile Include="src\app\ChatInputEdit.cpp" />
+    <ClCompile Include="src\app\ChatView.cpp" />
+    <ClCompile Include="src\app\ChildFrm.cpp" />
+    <ClCompile Include="src\app\ClassView.cpp" />
+    <ClCompile Include="src\app\FileView.cpp" />
     <ClCompile Include="src\app\MainFrame.cpp" />
+    <ClCompile Include="src\app\OutputWnd.cpp" />
+    <ClCompile Include="src\app\pch.cpp">
+      <PrecompiledHeader
+        Condition="'$(Configuration)|$(Platform)'=='Debug|x64'"
+      >Create</PrecompiledHeader>
+      <PrecompiledHeader
+        Condition="'$(Configuration)|$(Platform)'=='Release|x64'"
+      >Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="src\app\PropertiesWnd.cpp" />
+    <ClCompile Include="src\app\ViewTree.cpp" />
     <ClCompile Include="src\config\ConfigLoader.cpp" />
     <ClCompile Include="src\core\FeatureRegistry.cpp" />
+    <ClCompile Include="src\core\AgentsCatalogService.cpp" />
+    <ClCompile Include="src\core\AgentsAuthProfileService.cpp" />
+    <ClCompile Include="src\core\AgentsModelRoutingService.cpp" />
+    <ClCompile Include="src\core\AgentsSandboxService.cpp" />
+    <ClCompile Include="src\core\AgentsShellRuntimeService.cpp" />
+    <ClCompile Include="src\core\AgentsTranscriptSafetyService.cpp" />
+    <ClCompile Include="src\core\AgentsToolPolicyService.cpp" />
+    <ClCompile Include="src\core\AgentsWorkspaceService.cpp" />
+    <ClCompile Include="src\core\AcpSpawnService.cpp" />
+    <ClCompile Include="src\core\PiEmbeddedService.cpp" />
+    <ClCompile Include="src\core\SubagentRegistryService.cpp" />
+    <ClCompile Include="src\core\SkillsCommandService.cpp" />
+    <ClCompile Include="src\core\SkillsCatalogService.cpp" />
+    <ClCompile Include="src\core\SkillsEnvOverrideService.cpp" />
+    <ClCompile Include="src\core\SkillsEligibilityService.cpp" />
+    <ClCompile Include="src\core\SkillsInstallService.cpp" />
+    <ClCompile Include="src\core\SkillSecurityScanService.cpp" />
+    <ClCompile Include="src\core\SkillsPromptService.cpp" />
+    <ClCompile Include="src\core\SkillsSyncService.cpp" />
+    <ClCompile Include="src\core\SkillsWatchService.cpp" />
     <ClCompile Include="src\core\ServiceManager.cpp" />
     <ClCompile Include="src\gateway\GatewayAgentRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayChannelRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.cpp" />
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Events.cpp" />
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Channels.cpp" />
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.cpp" />
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.SecurityOps.cpp" />
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.ScopeCluster.cpp" />
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Transport.cpp" />
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.Tools.cpp" />
     <ClCompile Include="src\gateway\GatewayMethodDispatcher.cpp" />
+    <ClCompile Include="src\gateway\GatewayPersistencePaths.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolCodec.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolContract.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolJson.cpp" />
-    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.cpp" />
+    <ClCompile Include="src\gateway\GatewayJsonUtils.cpp" />
+    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Request.cpp" />
+    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Event.cpp" />
+    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Response.cpp" />
+    <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Shared.cpp" />
+    <ClCompile Include="src\gateway\generated\GatewayHandlerCatalog.Generated.cpp" />
+    <ClCompile Include="src\gateway\generated\GatewaySchemaCatalog.Generated.cpp" />
     <ClCompile Include="src\gateway\GatewaySessionRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayToolRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayWebSocketTransport.cpp" />
-    <ClCompile Include="src\pch.cpp">
-      <PrecompiledHeader>Create</PrecompiledHeader>
-    </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="src\app\BlazeClawMFC.rc" />
+  </ItemGroup>
+  <PropertyGroup>
+    <GatewayCodegenMode Condition="'$(GatewayCodegenMode)'==''">verify</GatewayCodegenMode>
+  </PropertyGroup>
+  <Target Name="RunGatewayCodegen" BeforeTargets="ClCompile">
+    <Exec Condition="'$(GatewayCodegenMode)'=='generate'" Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewayCodegen\Invoke-GatewayCodegen.ps1&quot; -GeneratorScript &quot;tools/GatewayHandlerCatalogGenerator/Generate-GatewayHandlerCatalog.ps1&quot;" />
+    <Exec Condition="'$(GatewayCodegenMode)'=='generate'" Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewayCodegen\Invoke-GatewayCodegen.ps1&quot; -GeneratorScript &quot;tools/GatewaySchemaCatalogGenerator/Generate-GatewaySchemaCatalog.ps1&quot;" />
+    <Exec Condition="'$(GatewayCodegenMode)'!='generate'" Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewayCodegen\Invoke-GatewayCodegen.ps1&quot; -GeneratorScript &quot;tools/GatewayHandlerCatalogGenerator/Generate-GatewayHandlerCatalog.ps1&quot; -VerifyOnly" />
+    <Exec Condition="'$(GatewayCodegenMode)'!='generate'" Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewayCodegen\Invoke-GatewayCodegen.ps1&quot; -GeneratorScript &quot;tools/GatewaySchemaCatalogGenerator/Generate-GatewaySchemaCatalog.ps1&quot; -VerifyOnly" />
+  </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
 </Project>

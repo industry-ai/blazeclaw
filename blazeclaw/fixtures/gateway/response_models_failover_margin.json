@@ -1,0 +1,9 @@
+{
+  "id": "fixture-models-failover-margin",
+  "ok": true,
+  "result": {
+    "headroom": 10,
+    "buffer": 2,
+    "safe": true
+  }
+}

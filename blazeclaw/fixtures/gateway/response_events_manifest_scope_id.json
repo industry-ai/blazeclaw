@@ -1,0 +1,8 @@
+{
+  "id": "fixture-events-manifest-scope-id",
+  "ok": true,
+  "result": {
+    "manifestScopeId": "manifest-scope-id-1",
+    "event": "gateway.session.reset"
+  }
+}

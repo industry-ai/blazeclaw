@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-456",
+  "ok": true,
+  "payload": {
+    "manifestScopedKey": 0,
+    "fallback": 0,
+    "tools": 2
+  }
+}

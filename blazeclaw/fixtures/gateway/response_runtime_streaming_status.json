@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-streaming-status",
+  "ok": true,
+  "result": {
+    "enabled": true,
+    "mode": "chunked",
+    "heartbeatMs": 1500
+  }
+}

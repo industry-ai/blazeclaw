@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-510",
+  "ok": true,
+  "payload": {
+    "pointerScopeId": "pointer-scope-id-1",
+    "event": "gateway.session.reset"
+  }
+}

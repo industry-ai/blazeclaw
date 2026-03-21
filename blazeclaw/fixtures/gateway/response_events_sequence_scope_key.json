@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-430",
+  "ok": true,
+  "payload": {
+    "sequenceScopeKey": "sequence-scope-key-1",
+    "event": "gateway.session.reset"
+  }
+}

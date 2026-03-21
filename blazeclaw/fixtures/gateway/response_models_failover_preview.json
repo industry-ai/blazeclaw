@@ -1,0 +1,12 @@
+{
+  "id": "fixture-models-failover-preview",
+  "ok": true,
+  "result": {
+    "model": "default",
+    "attempts": [
+      "default",
+      "reasoner"
+    ],
+    "selected": "default"
+  }
+}

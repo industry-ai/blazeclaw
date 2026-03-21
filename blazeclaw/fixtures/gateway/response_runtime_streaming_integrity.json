@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-streaming-integrity",
+  "ok": true,
+  "result": {
+    "valid": true,
+    "violations": 0,
+    "checked": 2
+  }
+}

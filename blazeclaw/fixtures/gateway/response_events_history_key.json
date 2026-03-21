@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-380",
+  "ok": true,
+  "payload": {
+    "historyKey": "history-key-1",
+    "event": "gateway.session.reset"
+  }
+}

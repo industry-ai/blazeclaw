@@ -1,0 +1,9 @@
+{
+  "type": "res",
+  "id": "req-300",
+  "ok": true,
+  "payload": {
+    "windowKey": "window-key-1",
+    "event": "gateway.session.reset"
+  }
+}

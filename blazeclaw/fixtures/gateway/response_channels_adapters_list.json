@@ -1,0 +1,114 @@
+{
+  "id": "fixture-channels-adapters-list",
+  "ok": true,
+  "result": {
+    "adapters": [
+      {
+        "id": "internal",
+        "label": "Internal Mock",
+        "defaultAccountId": "internal.default"
+      },
+      {
+        "id": "whatsapp",
+        "label": "WhatsApp",
+        "defaultAccountId": "whatsapp.default"
+      },
+      {
+        "id": "telegram",
+        "label": "Telegram",
+        "defaultAccountId": "telegram.default"
+      },
+      {
+        "id": "slack",
+        "label": "Slack",
+        "defaultAccountId": "slack.default"
+      },
+      {
+        "id": "discord",
+        "label": "Discord",
+        "defaultAccountId": "discord.default"
+      },
+      {
+        "id": "msteams",
+        "label": "Microsoft Teams",
+        "defaultAccountId": "msteams.default"
+      },
+      {
+        "id": "googlechat",
+        "label": "Google Chat",
+        "defaultAccountId": "googlechat.default"
+      },
+      {
+        "id": "matrix",
+        "label": "Matrix",
+        "defaultAccountId": "matrix.default"
+      },
+      {
+        "id": "line",
+        "label": "LINE",
+        "defaultAccountId": "line.default"
+      },
+      {
+        "id": "feishu",
+        "label": "Feishu",
+        "defaultAccountId": "feishu.default"
+      },
+      {
+        "id": "mattermost",
+        "label": "Mattermost",
+        "defaultAccountId": "mattermost.default"
+      },
+      {
+        "id": "nextcloudtalk",
+        "label": "Nextcloud Talk",
+        "defaultAccountId": "nextcloudtalk.default"
+      },
+      {
+        "id": "signal",
+        "label": "Signal",
+        "defaultAccountId": "signal.default"
+      },
+      {
+        "id": "irc",
+        "label": "IRC",
+        "defaultAccountId": "irc.default"
+      },
+      {
+        "id": "nostr",
+        "label": "Nostr",
+        "defaultAccountId": "nostr.default"
+      },
+      {
+        "id": "bluebubbles",
+        "label": "iMessage / BlueBubbles",
+        "defaultAccountId": "bluebubbles.default"
+      },
+      {
+        "id": "synologychat",
+        "label": "Synology Chat",
+        "defaultAccountId": "synologychat.default"
+      },
+      {
+        "id": "webchat",
+        "label": "WebChat",
+        "defaultAccountId": "webchat.default"
+      },
+      {
+        "id": "tlon",
+        "label": "Tlon",
+        "defaultAccountId": "tlon.default"
+      },
+      {
+        "id": "twitch",
+        "label": "Twitch",
+        "defaultAccountId": "twitch.default"
+      },
+      {
+        "id": "zalo",
+        "label": "Zalo / Zalo Personal",
+        "defaultAccountId": "zalo.default"
+      }
+    ],
+    "count": 21
+  }
+}

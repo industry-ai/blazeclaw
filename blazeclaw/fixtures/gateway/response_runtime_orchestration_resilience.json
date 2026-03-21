@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-1601",
+  "ok": true,
+  "payload": {
+    "resilience": 100,
+    "faults": 0,
+    "state": "steady"
+  }
+}

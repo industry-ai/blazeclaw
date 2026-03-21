@@ -1,0 +1,9 @@
+{
+  "id": "fixture-runtime-streaming-checkpoint",
+  "ok": true,
+  "result": {
+    "checkpoint": "cp-1",
+    "frames": 2,
+    "persisted": true
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2708",
+  "ok": true,
+  "payload": {
+    "cohesive": true,
+    "delta": 0,
+    "samples": 2
+  }
+}

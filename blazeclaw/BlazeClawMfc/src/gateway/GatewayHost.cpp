@@ -1,8 +1,12 @@
 #include "pch.h"
 #include "GatewayHost.h"
 
+#include "GatewayJsonUtils.h"
 #include "GatewayProtocolCodec.h"
 #include "GatewayProtocolSchemaValidator.h"
+#include "generated/GatewayHandlerCatalog.Generated.h"
+
+#include <chrono>
 
 namespace blazeclaw::gateway {
 	namespace {
@@ -48,6 +52,25 @@ namespace blazeclaw::gateway {
 			return escaped;
 		}
 
+		std::optional<std::string> ExtractObjectParam(
+			const std::optional<std::string>& paramsJson,
+			const std::string& fieldName) {
+			if (!paramsJson.has_value()) {
+				return std::nullopt;
+			}
+
+			std::string raw;
+			if (!json::FindRawField(paramsJson.value(), fieldName, raw)) {
+				return std::nullopt;
+			}
+
+			if (!json::IsJsonObjectShape(raw)) {
+				return std::nullopt;
+			}
+
+			return raw;
+		}
+
 		std::optional<bool> ExtractBooleanParam(
 			const std::optional<std::string>& paramsJson,
 			const std::string& fieldName) {
@@ -55,32 +78,12 @@ namespace blazeclaw::gateway {
 				return std::nullopt;
 			}
 
-			const std::string token = "\"" + fieldName + "\"";
-			const std::string& params = paramsJson.value();
-			const std::size_t keyPos = params.find(token);
-			if (keyPos == std::string::npos) {
+			bool value = false;
+			if (!json::FindBoolField(paramsJson.value(), fieldName, value)) {
 				return std::nullopt;
 			}
 
-			std::size_t valuePos = params.find(':', keyPos + token.size());
-			if (valuePos == std::string::npos) {
-				return std::nullopt;
-			}
-
-			++valuePos;
-			while (valuePos < params.size() && std::isspace(static_cast<unsigned char>(params[valuePos])) != 0) {
-				++valuePos;
-			}
-
-			if (params.compare(valuePos, 4, "true") == 0) {
-				return true;
-			}
-
-			if (params.compare(valuePos, 5, "false") == 0) {
-				return false;
-			}
-
-			return std::nullopt;
+			return value;
 		}
 
 		std::string SerializeSession(const SessionEntry& session) {
@@ -129,6 +132,20 @@ namespace blazeclaw::gateway {
 				std::string(tool.enabled ? "true" : "false") + "}";
 		}
 
+		std::string SerializeToolExecution(const ToolExecutionEntry& execution) {
+			return "{\"tool\":\"" + EscapeJson(execution.tool) + "\",\"executed\":" +
+				std::string(execution.executed ? "true" : "false") +
+				",\"status\":\"" + EscapeJson(execution.status) + "\",\"output\":\"" +
+				EscapeJson(execution.output) + "\",\"argsProvided\":" +
+				std::string(execution.argsProvided ? "true" : "false") + "}";
+		}
+
+		std::string SerializeChannelAdapter(const ChannelAdapterDescriptor& adapter) {
+			return "{\"id\":\"" + EscapeJson(adapter.id) + "\",\"label\":\"" +
+				EscapeJson(adapter.label) + "\",\"defaultAccountId\":\"" +
+				EscapeJson(adapter.defaultAccountId) + "\"}";
+		}
+
 		std::string SerializeStringArray(const std::vector<std::string>& values) {
 			std::string json = "[";
 			for (std::size_t i = 0; i < values.size(); ++i) {
@@ -163,29 +180,12 @@ namespace blazeclaw::gateway {
 				return {};
 			}
 
-			const std::string token = "\"" + fieldName + "\"";
-			const std::string& params = paramsJson.value();
-			const std::size_t keyPos = params.find(token);
-			if (keyPos == std::string::npos) {
+			std::string value;
+			if (!json::FindStringField(paramsJson.value(), fieldName, value)) {
 				return {};
 			}
 
-			std::size_t valuePos = params.find(':', keyPos + token.size());
-			if (valuePos == std::string::npos) {
-				return {};
-			}
-
-			valuePos = params.find('"', valuePos);
-			if (valuePos == std::string::npos) {
-				return {};
-			}
-
-			const std::size_t endQuote = params.find('"', valuePos + 1);
-			if (endQuote == std::string::npos) {
-				return {};
-			}
-
-			return params.substr(valuePos + 1, endQuote - valuePos - 1);
+			return value;
 		}
 
 		std::optional<std::size_t> ExtractNumericParam(
@@ -195,38 +195,41 @@ namespace blazeclaw::gateway {
 				return std::nullopt;
 			}
 
-			const std::string token = "\"" + fieldName + "\"";
-			const std::string& params = paramsJson.value();
-			const std::size_t keyPos = params.find(token);
-			if (keyPos == std::string::npos) {
+			std::uint64_t value = 0;
+			if (!json::FindUInt64Field(paramsJson.value(), fieldName, value)) {
 				return std::nullopt;
 			}
 
-			std::size_t valuePos = params.find(':', keyPos + token.size());
-			if (valuePos == std::string::npos) {
-				return std::nullopt;
+			return static_cast<std::size_t>(value);
+		}
+
+		std::uint64_t CurrentEpochMs() {
+			const auto now = std::chrono::system_clock::now();
+			return static_cast<std::uint64_t>(
+				std::chrono::duration_cast<std::chrono::milliseconds>(
+					now.time_since_epoch())
+					.count());
+		}
+
+		bool IsUnsafeAgentFilePath(const std::string& path) {
+			if (path.empty()) {
+				return true;
 			}
 
-			++valuePos;
-			while (valuePos < params.size() && std::isspace(static_cast<unsigned char>(params[valuePos])) != 0) {
-				++valuePos;
+			if (path.find("..") != std::string::npos) {
+				return true;
 			}
 
-			if (valuePos >= params.size() || std::isdigit(static_cast<unsigned char>(params[valuePos])) == 0) {
-				return std::nullopt;
+			if (path.find('\\') != std::string::npos ||
+				path.find(':') != std::string::npos) {
+				return true;
 			}
 
-			std::size_t endPos = valuePos;
-			while (endPos < params.size() && std::isdigit(static_cast<unsigned char>(params[endPos])) != 0) {
-				++endPos;
+			if (!path.empty() && path.front() == '/') {
+				return true;
 			}
 
-			try {
-				return static_cast<std::size_t>(std::stoull(params.substr(valuePos, endPos - valuePos)));
-			}
-			catch (...) {
-				return std::nullopt;
-			}
+			return false;
 		}
 
 	} // namespace
@@ -276,6 +279,15 @@ namespace blazeclaw::gateway {
 		m_running = false;
 		m_bindAddress.clear();
 		m_port = 0;
+	}
+
+	void GatewayHost::SetSkillsCatalogState(SkillsCatalogGatewayState state) {
+		m_skillsCatalogState = std::move(state);
+	}
+
+	void GatewayHost::SetSkillsRefreshCallback(
+		SkillsRefreshCallback callback) {
+		m_skillsRefreshCallback = std::move(callback);
 	}
 
 	bool GatewayHost::IsRunning() const noexcept {
@@ -586,304 +598,83 @@ namespace blazeclaw::gateway {
 	}
 
 	void GatewayHost::RegisterDefaultHandlers() {
-		m_dispatcher.Register("gateway.ping", [](const protocol::RequestFrame& request) {
+		RegisterChannelsHandlers();
+
+		RegisterEventHandlers();
+
+		m_dispatcher.Register("gateway.tools.executions.list", [this](const protocol::RequestFrame& request) {
+			const auto executions = m_toolRegistry.ListExecutions(20);
+			std::string executionsJson = "[";
+			for (std::size_t i = 0; i < executions.size(); ++i) {
+				if (i > 0) {
+					executionsJson += ",";
+				}
+				executionsJson += SerializeToolExecution(executions[i]);
+			}
+			executionsJson += "]";
+
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-				.payloadJson = "{\"pong\":true}",
+				.payloadJson = "{\"executions\":" + executionsJson + ",\"count\":" + std::to_string(executions.size()) + "}",
 				.error = std::nullopt,
 			};
 			});
 
-		m_dispatcher.Register("gateway.events.batch", [](const protocol::RequestFrame& request) {
+		m_dispatcher.Register("gateway.tools.executions.count", [this](const protocol::RequestFrame& request) {
+			const ToolExecutionStats stats = m_toolRegistry.GetExecutionStats();
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-				.payloadJson = "{\"batches\":[\"lifecycle\",\"updates\"],\"count\":2}",
+				.payloadJson =
+					"{\"count\":" + std::to_string(stats.count) +
+					",\"succeeded\":" + std::to_string(stats.succeeded) +
+					",\"failed\":" + std::to_string(stats.failed) + "}",
 				.error = std::nullopt,
 			};
 			});
 
-		m_dispatcher.Register("gateway.events.cursor", [](const protocol::RequestFrame& request) {
+		m_dispatcher.Register("gateway.tools.executions.latest", [this](const protocol::RequestFrame& request) {
+			const std::optional<ToolExecutionEntry> latest = m_toolRegistry.LatestExecution();
+			const ToolExecutionEntry fallback = ToolExecutionEntry{
+				.tool = "none",
+				.executed = false,
+				.status = "empty",
+				.output = "no_history",
+				.argsProvided = false,
+			};
+
+			const ToolExecutionEntry& selected = latest.has_value() ? latest.value() : fallback;
+			const ToolExecutionStats stats = m_toolRegistry.GetExecutionStats();
+
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-				.payloadJson = "{\"cursor\":\"evt-2\",\"event\":\"gateway.session.reset\"}",
+				.payloadJson =
+					"{\"found\":" + std::string(latest.has_value() ? "true" : "false") +
+					",\"execution\":" + SerializeToolExecution(selected) +
+					",\"count\":" + std::to_string(stats.count) + "}",
 				.error = std::nullopt,
 			};
 			});
 
-		m_dispatcher.Register("gateway.events.anchor", [](const protocol::RequestFrame& request) {
+		m_dispatcher.Register("gateway.tools.executions.clear", [this](const protocol::RequestFrame& request) {
+			const std::size_t cleared = m_toolRegistry.ClearExecutions();
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-				.payloadJson = "{\"anchor\":\"evt-1\",\"event\":\"gateway.shutdown\"}",
+				.payloadJson =
+					"{\"cleared\":" + std::to_string(cleared) +
+					",\"remaining\":0}",
 				.error = std::nullopt,
 			};
 			});
 
-		m_dispatcher.Register("gateway.events.offset", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"offset\":1,\"event\":\"gateway.session.reset\"}",
-				.error = std::nullopt,
-			};
-			});
 
-		m_dispatcher.Register("gateway.events.marker", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"marker\":\"evt-marker-1\",\"event\":\"gateway.shutdown\"}",
-				.error = std::nullopt,
-			};
-			});
 
-		m_dispatcher.Register("gateway.events.sequence", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"sequence\":1,\"event\":\"gateway.session.reset\"}",
-				.error = std::nullopt,
-			};
-			});
+		RegisterToolsHandlers();
 
-		m_dispatcher.Register("gateway.events.pointer", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"pointer\":\"evt-pointer-1\",\"event\":\"gateway.shutdown\"}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.events.token", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"token\":\"evt-token-1\",\"event\":\"gateway.session.reset\"}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.events.stream", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"stream\":\"evt-stream-1\",\"event\":\"gateway.tools.catalog.update\"}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.events.recent", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"events\":[\"gateway.shutdown\",\"gateway.session.reset\"],\"count\":2}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.tools.capacity", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			const std::size_t total = tools.size();
-			const std::size_t used = 0;
-			const std::size_t free = total >= used ? total - used : 0;
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"total\":" + std::to_string(total) + ",\"used\":" + std::to_string(used) + ",\"free\":" + std::to_string(free) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.tools.queue", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			const std::size_t queued = 0;
-			const std::size_t running = 0;
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"queued\":" + std::to_string(queued) + ",\"running\":" + std::to_string(running) + ",\"tools\":" + std::to_string(tools.size()) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.tools.scheduler", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"ticks\":0,\"queued\":0,\"tools\":" + std::to_string(tools.size()) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.tools.backlog", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			const std::size_t pending = 0;
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"pending\":" + std::to_string(pending) + ",\"capacity\":" + std::to_string(tools.size()) + ",\"tools\":" + std::to_string(tools.size()) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.tools.window", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"windowSec\":60,\"calls\":0,\"tools\":" + std::to_string(tools.size()) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.tools.pipeline", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"queued\":0,\"running\":0,\"failed\":0,\"tools\":" + std::to_string(tools.size()) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.tools.dispatch", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"queued\":0,\"dispatched\":0,\"tools\":" + std::to_string(tools.size()) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.tools.router", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"routed\":0,\"fallback\":0,\"tools\":" + std::to_string(tools.size()) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.tools.selector", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"selected\":0,\"fallback\":0,\"tools\":" + std::to_string(tools.size()) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.events.window", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"events\":[\"gateway.session.reset\",\"gateway.agent.update\",\"gateway.tools.catalog.update\"],\"count\":3}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.models.affinity", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"models\":[\"default\",\"reasoner\"],\"affinity\":\"balanced\"}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.models.pool", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"models\":[\"default\",\"reasoner\"],\"count\":2}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.models.manifest", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"models\":[\"default\",\"reasoner\"],\"manifestVersion\":1}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.models.catalog", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"models\":[\"default\",\"reasoner\"],\"count\":2}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.tools.throughput", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			const std::size_t calls = 0;
-			const std::size_t windowSec = 60;
-			const std::size_t perMinute = calls;
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"calls\":" + std::to_string(calls) + ",\"windowSec\":" + std::to_string(windowSec) + ",\"perMinute\":" + std::to_string(perMinute) + ",\"tools\":" + std::to_string(tools.size()) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.config.history", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"revisions\":[1],\"count\":1}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.events.sample", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"events\":[\"gateway.health\",\"gateway.tools.catalog.update\"],\"count\":2}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.models.priority", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"models\":[\"default\",\"reasoner\"],\"count\":2}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.tools.errors", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"errors\":0,\"tools\":" + std::to_string(tools.size()) + ",\"rate\":0}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.config.revision", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"revision\":1,\"source\":\"runtime\"}",
-				.error = std::nullopt,
-			};
-			});
+		RegisterGeneratedScopeClusterHandlers();
 
 		m_dispatcher.Register("gateway.events.latestByType", [](const protocol::RequestFrame& request) {
 			const std::string type = ExtractStringParam(request.paramsJson, "type");
@@ -897,139 +688,11 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-		m_dispatcher.Register("gateway.models.preference", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"model\":\"default\",\"provider\":\"seed\",\"source\":\"runtime\"}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.tools.latency", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			const std::size_t count = tools.size();
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"minMs\":0,\"maxMs\":0,\"avgMs\":0,\"samples\":" + std::to_string(count) + "}",
-				.error = std::nullopt,
-			};
-			});
-
 		m_dispatcher.Register("gateway.config.snapshot", [this](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"gateway\":{\"bind\":\"" + EscapeJson(m_runtimeGatewayBind) + "\",\"port\":" + std::to_string(m_runtimeGatewayPort) + "},\"agent\":{\"model\":\"" + EscapeJson(m_runtimeAgentModel) + "\",\"streaming\":" + std::string(m_runtimeAgentStreaming ? "true" : "false") + "}}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.events.channels", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"channelEvents\":3,\"accountEvents\":1,\"count\":4}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.models.routing", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"primary\":\"default\",\"fallback\":\"reasoner\",\"strategy\":\"seed_priority\"}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.tools.usage", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"calls\":0,\"tools\":" + std::to_string(tools.size()) + ",\"avgMs\":0}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.config.diff", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"changed\":[],\"count\":0}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.events.timeline", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"events\":[\"gateway.shutdown\",\"gateway.session.reset\",\"gateway.agent.update\",\"gateway.tools.catalog.update\"],\"count\":4}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.models.selection", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"selected\":\"default\",\"strategy\":\"seed_priority\"}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.events.types", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"types\":[\"lifecycle\",\"update\"],\"count\":2}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.config.backup", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"saved\":true,\"version\":1,\"path\":\"config/runtime.backup.json\"}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.tools.failures", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"failed\":0,\"total\":" + std::to_string(tools.size()) + ",\"rate\":0}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.tools.metrics", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			const std::size_t enabled = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {
-				return item.enabled;
-				}));
-			const std::size_t total = tools.size();
-			const std::size_t disabled = total >= enabled ? total - enabled : 0;
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"invocations\":0,\"enabled\":" + std::to_string(enabled) + ",\"disabled\":" + std::to_string(disabled) + ",\"total\":" + std::to_string(total) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.models.fallback", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"preferred\":\"default\",\"fallback\":\"reasoner\",\"configured\":true}",
 				.error = std::nullopt,
 			};
 			});
@@ -1049,47 +712,7 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-		m_dispatcher.Register("gateway.config.rollback", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"rolledBack\":false,\"version\":1}",
-				.error = std::nullopt,
-			};
-			});
 
-		m_dispatcher.Register("gateway.models.recommended", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"model\":{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true},\"reason\":\"seed_default\"}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.tools.health", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			const std::size_t enabled = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {
-				return item.enabled;
-				}));
-			const bool healthy = enabled == tools.size();
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"healthy\":" + std::string(healthy ? "true" : "false") + ",\"enabled\":" + std::to_string(enabled) + ",\"total\":" + std::to_string(tools.size()) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.config.audit", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"enabled\":true,\"source\":\"runtime\",\"lastUpdatedMs\":1735689600000}",
-				.error = std::nullopt,
-			};
-			});
 
 		m_dispatcher.Register("gateway.events.search", [](const protocol::RequestFrame& request) {
 			const std::string term = ExtractStringParam(request.paramsJson, "term");
@@ -1116,40 +739,6 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-		m_dispatcher.Register("gateway.models.compatibility", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"default\":\"full\",\"reasoner\":\"partial\",\"count\":2}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.tools.stats", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			const std::size_t enabled = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [](const ToolCatalogEntry& item) {
-				return item.enabled;
-				}));
-			const std::size_t total = tools.size();
-			const std::size_t disabled = total >= enabled ? total - enabled : 0;
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"enabled\":" + std::to_string(enabled) + ",\"disabled\":" + std::to_string(disabled) + ",\"total\":" + std::to_string(total) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.config.validate", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"valid\":true,\"errors\":[],\"count\":0}",
-				.error = std::nullopt,
-			};
-			});
-
 		m_dispatcher.Register("gateway.events.last", [](const protocol::RequestFrame& request) {
 			const auto& events = EventCatalogNames();
 			const std::string last = events.empty() ? "none" : events.back();
@@ -1157,15 +746,6 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"event\":\"" + EscapeJson(last) + "\"}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.models.default.get", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"model\":{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true}}",
 				.error = std::nullopt,
 			};
 			});
@@ -1187,30 +767,12 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-		m_dispatcher.Register("gateway.config.schema", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"gateway\":{\"bind\":\"string\",\"port\":\"number\"},\"agent\":{\"model\":\"string\",\"streaming\":\"boolean\"}}",
-				.error = std::nullopt,
-			};
-			});
-
 		m_dispatcher.Register("gateway.events.list", [](const protocol::RequestFrame& request) {
 			const auto& events = EventCatalogNames();
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"events\":" + SerializeStringArray(events) + ",\"count\":" + std::to_string(events.size()) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.models.providers", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"providers\":[\"seed\"],\"count\":1}",
 				.error = std::nullopt,
 			};
 			});
@@ -1397,374 +959,6 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-		m_dispatcher.Register("gateway.channels.accounts.reset", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::size_t cleared = m_channelRegistry.ClearAccounts(channel);
-			const std::size_t restored = m_channelRegistry.RestoreAccounts(channel);
-			const std::size_t total = m_channelRegistry.ListAccounts().size();
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"cleared\":" + std::to_string(cleared) +
-					",\"restored\":" + std::to_string(restored) +
-					",\"total\":" + std::to_string(total) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.accounts.restore", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::size_t restored = m_channelRegistry.RestoreAccounts(channel);
-			const std::size_t total = m_channelRegistry.ListAccounts().size();
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"restored\":" + std::to_string(restored) +
-					",\"total\":" + std::to_string(total) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.route.reset", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
-			ChannelRouteEntry removedRoute;
-			const bool deleted = m_channelRegistry.DeleteRoute(channel, accountId, removedRoute);
-			bool restored = false;
-			const ChannelRouteEntry route = m_channelRegistry.RestoreRoute(channel, accountId, restored);
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"route\":" + SerializeChannelRoute(route) +
-					",\"deleted\":" + std::string(deleted ? "true" : "false") +
-					",\"restored\":" + std::string(restored ? "true" : "false") + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.accounts.count", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const auto accounts = m_channelRegistry.ListAccounts();
-			const std::size_t count = static_cast<std::size_t>(std::count_if(
-				accounts.begin(),
-				accounts.end(),
-				[&](const ChannelAccountEntry& account) {
-					return channel.empty() || account.channel == channel;
-				}));
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"channel\":\"" + EscapeJson(channel.empty() ? "*" : channel) +
-					"\",\"count\":" + std::to_string(count) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.accounts.clear", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::size_t cleared = m_channelRegistry.ClearAccounts(channel);
-			const std::size_t remaining = m_channelRegistry.ListAccounts().size();
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"cleared\":" + std::to_string(cleared) +
-					",\"remaining\":" + std::to_string(remaining) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.routes.reset", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const RouteResetResult result = m_channelRegistry.ResetRoutes(channel);
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"cleared\":" + std::to_string(result.cleared) +
-					",\"restored\":" + std::to_string(result.restored) +
-					",\"total\":" + std::to_string(result.total) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.routes.count", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const auto routes = m_channelRegistry.ListRoutes();
-			const std::size_t count = static_cast<std::size_t>(std::count_if(
-				routes.begin(),
-				routes.end(),
-				[&](const ChannelRouteEntry& route) {
-					return channel.empty() || route.channel == channel;
-				}));
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"channel\":\"" + EscapeJson(channel.empty() ? "*" : channel) +
-					"\",\"count\":" + std::to_string(count) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.route.restore", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
-			bool restored = false;
-			const ChannelRouteEntry route = m_channelRegistry.RestoreRoute(channel, accountId, restored);
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"route\":" + SerializeChannelRoute(route) +
-					",\"restored\":" + std::string(restored ? "true" : "false") + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.route.patch", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
-			const bool hasAgentId = request.paramsJson.has_value() &&
-				request.paramsJson.value().find("\"agentId\"") != std::string::npos;
-			const bool hasSessionId = request.paramsJson.has_value() &&
-				request.paramsJson.value().find("\"sessionId\"") != std::string::npos;
-			const std::optional<std::string> agentId = hasAgentId
-				? std::optional<std::string>(ExtractStringParam(request.paramsJson, "agentId"))
-				: std::nullopt;
-			const std::optional<std::string> sessionId = hasSessionId
-				? std::optional<std::string>(ExtractStringParam(request.paramsJson, "sessionId"))
-				: std::nullopt;
-			bool updated = false;
-			const ChannelRouteEntry route = m_channelRegistry.PatchRoute(channel, accountId, agentId, sessionId, updated);
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"route\":" + SerializeChannelRoute(route) +
-					",\"updated\":" + std::string(updated ? "true" : "false") + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.route.get", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
-			const ChannelRouteEntry route = m_channelRegistry.GetRoute(channel, accountId);
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"route\":" + SerializeChannelRoute(route) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.routes.restore", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::size_t restored = m_channelRegistry.RestoreRoutes(channel);
-			const std::size_t total = m_channelRegistry.ListRoutes().size();
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"restored\":" + std::to_string(restored) +
-					",\"total\":" + std::to_string(total) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.routes.clear", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::size_t cleared = m_channelRegistry.ClearRoutes(channel);
-			const std::size_t remaining = m_channelRegistry.ListRoutes().size();
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"cleared\":" + std::to_string(cleared) +
-					",\"remaining\":" + std::to_string(remaining) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.accounts.delete", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
-			bool deleted = false;
-			const ChannelAccountEntry account = m_channelRegistry.DeleteAccount(channel, accountId, deleted);
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"account\":" + SerializeChannelAccount(account) +
-					",\"deleted\":" + std::string(deleted ? "true" : "false") + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.accounts.create", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
-			const bool hasLabel = request.paramsJson.has_value() &&
-				request.paramsJson.value().find("\"label\"") != std::string::npos;
-			const std::optional<std::string> label = hasLabel
-				? std::optional<std::string>(ExtractStringParam(request.paramsJson, "label"))
-				: std::nullopt;
-			const std::optional<bool> active = ExtractBooleanParam(request.paramsJson, "active");
-			const std::optional<bool> connected = ExtractBooleanParam(request.paramsJson, "connected");
-			bool created = false;
-			const ChannelAccountEntry account = m_channelRegistry.CreateAccount(
-				channel,
-				accountId,
-				label,
-				active,
-				connected,
-				created);
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"account\":" + SerializeChannelAccount(account) +
-					",\"created\":" + std::string(created ? "true" : "false") + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.accounts.get", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
-			const ChannelAccountEntry account = m_channelRegistry.GetAccount(channel, accountId);
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"account\":" + SerializeChannelAccount(account) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.accounts.update", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
-			const bool hasLabel = request.paramsJson.has_value() &&
-				request.paramsJson.value().find("\"label\"") != std::string::npos;
-			const std::optional<std::string> label = hasLabel
-				? std::optional<std::string>(ExtractStringParam(request.paramsJson, "label"))
-				: std::nullopt;
-			const std::optional<bool> active = ExtractBooleanParam(request.paramsJson, "active");
-			const std::optional<bool> connected = ExtractBooleanParam(request.paramsJson, "connected");
-			bool updated = false;
-			const ChannelAccountEntry account = m_channelRegistry.UpdateAccount(
-				channel,
-				accountId,
-				label,
-				active,
-				connected,
-				updated);
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"account\":" + SerializeChannelAccount(account) +
-					",\"updated\":" + std::string(updated ? "true" : "false") + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.accounts.exists", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
-			const bool exists = m_channelRegistry.AccountExists(channel, accountId);
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"channel\":\"" + EscapeJson(channel.empty() ? "*" : channel) +
-					"\",\"accountId\":\"" + EscapeJson(accountId.empty() ? "*" : accountId) +
-					"\",\"exists\":" + std::string(exists ? "true" : "false") + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.accounts.deactivate", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
-			bool deactivated = false;
-			const ChannelAccountEntry account = m_channelRegistry.DeactivateAccount(channel, accountId, deactivated);
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"account\":" + SerializeChannelAccount(account) +
-					",\"deactivated\":" + std::string(deactivated ? "true" : "false") + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.accounts.activate", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
-			bool activated = false;
-			const ChannelAccountEntry account = m_channelRegistry.ActivateAccount(channel, accountId, activated);
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"account\":" + SerializeChannelAccount(account) +
-					",\"activated\":" + std::string(activated ? "true" : "false") + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.route.exists", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
-			const bool exists = m_channelRegistry.RouteExists(channel, accountId);
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"channel\":\"" + EscapeJson(channel.empty() ? "*" : channel) +
-					"\",\"accountId\":\"" + EscapeJson(accountId.empty() ? "*" : accountId) +
-					"\",\"exists\":" + std::string(exists ? "true" : "false") + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.route.delete", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
-			ChannelRouteEntry removedRoute;
-			const bool deleted = m_channelRegistry.DeleteRoute(channel, accountId, removedRoute);
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"route\":" + SerializeChannelRoute(removedRoute) +
-					",\"deleted\":" + std::string(deleted ? "true" : "false") + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.route.set", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
-			const std::string agentId = ExtractStringParam(request.paramsJson, "agentId");
-			const std::string sessionId = ExtractStringParam(request.paramsJson, "sessionId");
-			const ChannelRouteEntry route = m_channelRegistry.SetRoute(channel, accountId, agentId, sessionId);
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"route\":" + SerializeChannelRoute(route) + ",\"saved\":true}",
-				.error = std::nullopt,
-			};
-			});
 
 		m_dispatcher.Register("gateway.agents.files.exists", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
@@ -1783,13 +977,48 @@ namespace blazeclaw::gateway {
 		m_dispatcher.Register("gateway.agents.files.delete", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
 			const std::string requestedPath = ExtractStringParam(request.paramsJson, "path");
+            if (IsUnsafeAgentFilePath(requestedPath)) {
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = false,
+					.payloadJson = std::nullopt,
+					.error = protocol::ErrorShape{
+						.code = "invalid_path",
+						.message = "Agent file path is not allowed.",
+						.detailsJson = "{\"path\":\"" + EscapeJson(requestedPath) + "\"}",
+						.retryable = false,
+						.retryAfterMs = std::nullopt,
+					},
+				};
+			}
+
+			const std::string idempotencyKey = ExtractStringParam(request.paramsJson, "idempotencyKey");
+			const std::string mutationDedupeKey = "gateway.agents.files.delete::" + idempotencyKey;
+			if (!idempotencyKey.empty()) {
+				const auto dedupeIt = m_mutationPayloadByIdempotency.find(mutationDedupeKey);
+				if (dedupeIt != m_mutationPayloadByIdempotency.end()) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = true,
+						.payloadJson = dedupeIt->second,
+						.error = std::nullopt,
+					};
+				}
+			}
+
 			const AgentFileDeleteResult result = m_agentRegistry.DeleteFile(requestedId, requestedPath);
+			const std::string payload =
+				"{\"file\":" + SerializeAgentFileContent(result.file) +
+				",\"deleted\":" + std::string(result.deleted ? "true" : "false") + "}";
+
+			if (!idempotencyKey.empty()) {
+				m_mutationPayloadByIdempotency.insert_or_assign(mutationDedupeKey, payload);
+			}
 
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-				.payloadJson = "{\"file\":" + SerializeAgentFileContent(result.file) +
-					",\"deleted\":" + std::string(result.deleted ? "true" : "false") + "}",
+              .payloadJson = payload,
 				.error = std::nullopt,
 			};
 			});
@@ -1797,13 +1026,47 @@ namespace blazeclaw::gateway {
 		m_dispatcher.Register("gateway.agents.files.set", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
 			const std::string requestedPath = ExtractStringParam(request.paramsJson, "path");
+          if (IsUnsafeAgentFilePath(requestedPath)) {
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = false,
+					.payloadJson = std::nullopt,
+					.error = protocol::ErrorShape{
+						.code = "invalid_path",
+						.message = "Agent file path is not allowed.",
+						.detailsJson = "{\"path\":\"" + EscapeJson(requestedPath) + "\"}",
+						.retryable = false,
+						.retryAfterMs = std::nullopt,
+					},
+				};
+			}
+
 			const std::string content = ExtractStringParam(request.paramsJson, "content");
+            const std::string idempotencyKey = ExtractStringParam(request.paramsJson, "idempotencyKey");
+			const std::string mutationDedupeKey = "gateway.agents.files.set::" + idempotencyKey;
+			if (!idempotencyKey.empty()) {
+				const auto dedupeIt = m_mutationPayloadByIdempotency.find(mutationDedupeKey);
+				if (dedupeIt != m_mutationPayloadByIdempotency.end()) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = true,
+						.payloadJson = dedupeIt->second,
+						.error = std::nullopt,
+					};
+				}
+			}
+
 			const AgentFileContentEntry file = m_agentRegistry.SetFile(requestedId, requestedPath, content);
+			const std::string payload = "{\"file\":" + SerializeAgentFileContent(file) + ",\"saved\":true}";
+
+			if (!idempotencyKey.empty()) {
+				m_mutationPayloadByIdempotency.insert_or_assign(mutationDedupeKey, payload);
+			}
 
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-				.payloadJson = "{\"file\":" + SerializeAgentFileContent(file) + ",\"saved\":true}",
+             .payloadJson = payload,
 				.error = std::nullopt,
 			};
 			});
@@ -1811,6 +1074,20 @@ namespace blazeclaw::gateway {
 		m_dispatcher.Register("gateway.agents.files.get", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
 			const std::string requestedPath = ExtractStringParam(request.paramsJson, "path");
+         if (IsUnsafeAgentFilePath(requestedPath)) {
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = false,
+					.payloadJson = std::nullopt,
+					.error = protocol::ErrorShape{
+						.code = "invalid_path",
+						.message = "Agent file path is not allowed.",
+						.detailsJson = "{\"path\":\"" + EscapeJson(requestedPath) + "\"}",
+						.retryable = false,
+						.retryAfterMs = std::nullopt,
+					},
+				};
+			}
 			const AgentFileContentEntry file = m_agentRegistry.GetFile(requestedId, requestedPath);
 
 			return protocol::ResponseFrame{
@@ -1854,7 +1131,8 @@ namespace blazeclaw::gateway {
 
 		m_dispatcher.Register("gateway.tools.call.execute", [this](const protocol::RequestFrame& request) {
 			const std::string requestedTool = ExtractStringParam(request.paramsJson, "tool");
-			const ToolExecuteResult execution = m_toolRegistry.Execute(requestedTool);
+          const std::optional<std::string> argsJson = ExtractObjectParam(request.paramsJson, "args");
+			const ToolExecuteResult execution = m_toolRegistry.Execute(requestedTool, argsJson);
 			const bool argsProvided = request.paramsJson.has_value() &&
 				request.paramsJson.value().find("\"args\"") != std::string::npos;
 
@@ -1870,49 +1148,75 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-		m_dispatcher.Register("gateway.channels.logout", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::string accountId = ExtractStringParam(request.paramsJson, "accountId");
-			const ChannelLogoutResult result = m_channelRegistry.Logout(channel, accountId);
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"loggedOut\":" + std::string(result.loggedOut ? "true" : "false") +
-					",\"affected\":" + std::to_string(result.affected) + "}",
-				.error = std::nullopt,
-			};
-			});
 
 		m_dispatcher.Register("gateway.agents.update", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
 			const std::string requestedName = ExtractStringParam(request.paramsJson, "name");
 			const std::optional<bool> requestedActive = ExtractBooleanParam(request.paramsJson, "active");
+          const std::string idempotencyKey = ExtractStringParam(request.paramsJson, "idempotencyKey");
+			const std::string mutationDedupeKey = "gateway.agents.update::" + idempotencyKey;
+			if (!idempotencyKey.empty()) {
+				const auto dedupeIt = m_mutationPayloadByIdempotency.find(mutationDedupeKey);
+				if (dedupeIt != m_mutationPayloadByIdempotency.end()) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = true,
+						.payloadJson = dedupeIt->second,
+						.error = std::nullopt,
+					};
+				}
+			}
+
 			const AgentEntry updated = m_agentRegistry.Update(
 				requestedId,
 				requestedName.empty() ? std::nullopt : std::optional<std::string>(requestedName),
 				requestedActive);
+			const std::string payload = "{\"agent\":" + SerializeAgent(updated) + ",\"updated\":true}";
+
+			if (!idempotencyKey.empty()) {
+				m_mutationPayloadByIdempotency.insert_or_assign(mutationDedupeKey, payload);
+			}
 
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-				.payloadJson = "{\"agent\":" + SerializeAgent(updated) + ",\"updated\":true}",
+              .payloadJson = payload,
 				.error = std::nullopt,
 			};
 			});
 
 		m_dispatcher.Register("gateway.agents.delete", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
+            const std::string idempotencyKey = ExtractStringParam(request.paramsJson, "idempotencyKey");
+			const std::string mutationDedupeKey = "gateway.agents.delete::" + idempotencyKey;
+			if (!idempotencyKey.empty()) {
+				const auto dedupeIt = m_mutationPayloadByIdempotency.find(mutationDedupeKey);
+				if (dedupeIt != m_mutationPayloadByIdempotency.end()) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = true,
+						.payloadJson = dedupeIt->second,
+						.error = std::nullopt,
+					};
+				}
+			}
+
 			AgentEntry removedAgent;
 			const bool deleted = m_agentRegistry.Delete(requestedId, removedAgent);
 			const std::size_t remaining = m_agentRegistry.List().size();
+			const std::string payload =
+				"{\"agent\":" + SerializeAgent(removedAgent) +
+				",\"deleted\":" + std::string(deleted ? "true" : "false") +
+				",\"remaining\":" + std::to_string(remaining) + "}";
+
+			if (!idempotencyKey.empty()) {
+				m_mutationPayloadByIdempotency.insert_or_assign(mutationDedupeKey, payload);
+			}
 
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-				.payloadJson = "{\"agent\":" + SerializeAgent(removedAgent) +
-					",\"deleted\":" + std::string(deleted ? "true" : "false") +
-					",\"remaining\":" + std::to_string(remaining) + "}",
+               .payloadJson = payload,
 				.error = std::nullopt,
 			};
 			});
@@ -1921,15 +1225,34 @@ namespace blazeclaw::gateway {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
 			const std::string requestedName = ExtractStringParam(request.paramsJson, "name");
 			const std::optional<bool> requestedActive = ExtractBooleanParam(request.paramsJson, "active");
+          const std::string idempotencyKey = ExtractStringParam(request.paramsJson, "idempotencyKey");
+			const std::string mutationDedupeKey = "gateway.agents.create::" + idempotencyKey;
+			if (!idempotencyKey.empty()) {
+				const auto dedupeIt = m_mutationPayloadByIdempotency.find(mutationDedupeKey);
+				if (dedupeIt != m_mutationPayloadByIdempotency.end()) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = true,
+						.payloadJson = dedupeIt->second,
+						.error = std::nullopt,
+					};
+				}
+			}
+
 			const AgentEntry created = m_agentRegistry.Create(
 				requestedId,
 				requestedName.empty() ? std::nullopt : std::optional<std::string>(requestedName),
 				requestedActive);
+			const std::string payload = "{\"agent\":" + SerializeAgent(created) + ",\"created\":true}";
+
+			if (!idempotencyKey.empty()) {
+				m_mutationPayloadByIdempotency.insert_or_assign(mutationDedupeKey, payload);
+			}
 
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-				.payloadJson = "{\"agent\":" + SerializeAgent(created) + ",\"created\":true}",
+              .payloadJson = payload,
 				.error = std::nullopt,
 			};
 			});
@@ -2009,15 +1332,6 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-		m_dispatcher.Register("gateway.protocol.version", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"minProtocol\":1,\"maxProtocol\":1}",
-				.error = std::nullopt,
-			};
-			});
-
 		m_dispatcher.Register("gateway.features.list", [this](const protocol::RequestFrame& request) {
 			const std::string methodsJson = SerializeStringArray(m_dispatcher.RegisteredMethods());
 			const std::string eventsJson = SerializeStringArray(EventCatalogNames());
@@ -2061,6 +1375,119 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = payload,
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.agents.run", [this](const protocol::RequestFrame& request) {
+			const std::string requestedAgentId = ExtractStringParam(request.paramsJson, "agentId");
+			const std::string requestedSessionId = ExtractStringParam(request.paramsJson, "sessionId");
+			const std::string message = ExtractStringParam(request.paramsJson, "message");
+			const std::string idempotencyKey = ExtractStringParam(request.paramsJson, "idempotencyKey");
+
+			if (!idempotencyKey.empty()) {
+				const auto dedupeIt = m_agentRunByIdempotency.find(idempotencyKey);
+				if (dedupeIt != m_agentRunByIdempotency.end()) {
+					const auto runIt = m_agentRuns.find(dedupeIt->second);
+					if (runIt != m_agentRuns.end()) {
+						const auto& run = runIt->second;
+						const std::string completedMsJson = run.completedAtMs.has_value()
+							? std::to_string(run.completedAtMs.value())
+							: "null";
+						return protocol::ResponseFrame{
+							.id = request.id,
+							.ok = true,
+							.payloadJson =
+								"{\"runId\":\"" + EscapeJson(run.runId) +
+								"\",\"status\":\"" + EscapeJson(run.status) +
+								"\",\"agentId\":\"" + EscapeJson(run.agentId) +
+								"\",\"sessionId\":\"" + EscapeJson(run.sessionId) +
+								"\",\"summary\":\"" + EscapeJson(run.summary) +
+								"\",\"deduped\":true,\"startedAtMs\":" +
+								std::to_string(run.startedAtMs) +
+								",\"completedAtMs\":" + completedMsJson + "}",
+							.error = std::nullopt,
+						};
+					}
+				}
+			}
+
+			const AgentEntry agent = m_agentRegistry.Get(requestedAgentId);
+			const SessionEntry session = m_sessionRegistry.Resolve(requestedSessionId);
+			const std::uint64_t startedAtMs = CurrentEpochMs();
+			const std::string runId = "run-" + std::to_string(startedAtMs) + "-" + agent.id;
+
+			AgentRunState run{
+				.runId = runId,
+				.agentId = agent.id,
+				.sessionId = session.id,
+				.message = message,
+				.status = "completed",
+				.summary = message.empty() ? "empty_message" : "completed",
+				.startedAtMs = startedAtMs,
+				.completedAtMs = startedAtMs + 1,
+			};
+
+			m_agentRuns.insert_or_assign(runId, run);
+			if (!idempotencyKey.empty()) {
+				m_agentRunByIdempotency.insert_or_assign(idempotencyKey, runId);
+			}
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson =
+					"{\"runId\":\"" + EscapeJson(run.runId) +
+					"\",\"status\":\"" + EscapeJson(run.status) +
+					"\",\"agentId\":\"" + EscapeJson(run.agentId) +
+					"\",\"sessionId\":\"" + EscapeJson(run.sessionId) +
+					"\",\"summary\":\"" + EscapeJson(run.summary) +
+					"\",\"deduped\":false,\"startedAtMs\":" +
+					std::to_string(run.startedAtMs) +
+					",\"completedAtMs\":" +
+					std::to_string(run.completedAtMs.value_or(run.startedAtMs)) + "}",
+				.error = std::nullopt,
+			};
+			});
+
+		m_dispatcher.Register("gateway.agents.wait", [this](const protocol::RequestFrame& request) {
+			const std::string runId = ExtractStringParam(request.paramsJson, "runId");
+			const auto runIt = m_agentRuns.find(runId);
+			if (runIt == m_agentRuns.end()) {
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = false,
+					.payloadJson = std::nullopt,
+					.error = protocol::ErrorShape{
+						.code = "run_not_found",
+						.message = "Agent run was not found.",
+						.detailsJson = "{\"runId\":\"" + EscapeJson(runId) + "\"}",
+						.retryable = false,
+						.retryAfterMs = std::nullopt,
+					},
+				};
+			}
+
+			const auto& run = runIt->second;
+			const std::string completedMsJson = run.completedAtMs.has_value()
+				? std::to_string(run.completedAtMs.value())
+				: "null";
+			const std::string terminal = (run.status == "completed" || run.status == "failed")
+				? "true"
+				: "false";
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson =
+					"{\"runId\":\"" + EscapeJson(run.runId) +
+					"\",\"status\":\"" + EscapeJson(run.status) +
+					"\",\"summary\":\"" + EscapeJson(run.summary) +
+					"\",\"terminal\":" + terminal +
+					",\"agentId\":\"" + EscapeJson(run.agentId) +
+					"\",\"sessionId\":\"" + EscapeJson(run.sessionId) +
+					"\",\"startedAtMs\":" + std::to_string(run.startedAtMs) +
+					",\"completedAtMs\":" + completedMsJson + "}",
 				.error = std::nullopt,
 			};
 			});
@@ -2285,61 +1712,6 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-		m_dispatcher.Register("gateway.channels.routes", [this](const protocol::RequestFrame& request) {
-			const std::string channelFilter = ExtractStringParam(request.paramsJson, "channel");
-			const auto routes = m_channelRegistry.ListRoutes();
-			std::string routesJson = "[";
-			bool first = true;
-			for (std::size_t i = 0; i < routes.size(); ++i) {
-				if (!channelFilter.empty() && routes[i].channel != channelFilter) {
-					continue;
-				}
-
-				if (!first) {
-					routesJson += ",";
-				}
-
-				routesJson += SerializeChannelRoute(routes[i]);
-				first = false;
-			}
-
-			routesJson += "]";
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"routes\":" + routesJson + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.channels.status", [this](const protocol::RequestFrame& request) {
-			const std::string channelFilter = ExtractStringParam(request.paramsJson, "channel");
-			const auto channels = m_channelRegistry.ListStatus();
-			std::string channelsJson = "[";
-			bool first = true;
-			for (std::size_t i = 0; i < channels.size(); ++i) {
-				if (!channelFilter.empty() && channels[i].id != channelFilter) {
-					continue;
-				}
-
-				if (!first) {
-					channelsJson += ",";
-				}
-
-				channelsJson += SerializeChannelStatus(channels[i]);
-				first = false;
-			}
-
-			channelsJson += "]";
-
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"channels\":" + channelsJson + "}",
-				.error = std::nullopt,
-			};
-			});
 
 		m_dispatcher.Register("gateway.logs.tail", [](const protocol::RequestFrame& request) {
 			const std::vector<std::string> seededEntries = {
@@ -2427,21 +1799,11 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-		m_dispatcher.Register("gateway.transport.status", [this](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"running\":" + std::string(m_transport.IsRunning() ? "true" : "false") +
-					",\"endpoint\":\"" + m_transport.Endpoint() + "\",\"connections\":" +
-					std::to_string(m_transport.ConnectionCount()) +
-					",\"timeouts\":{\"handshake\":" + std::to_string(m_transport.HandshakeTimeoutCount()) +
-					",\"idle\":" + std::to_string(m_transport.IdleTimeoutCloseCount()) +
-					"},\"closes\":{\"invalidUtf8\":" + std::to_string(m_transport.InvalidUtf8CloseCount()) +
-					",\"messageTooBig\":" + std::to_string(m_transport.MessageTooBigCloseCount()) +
-					",\"extensionRejected\":" + std::to_string(m_transport.ExtensionRejectCount()) + "}}",
-				.error = std::nullopt,
-			};
-			});
+		RegisterSecurityOpsHandlers();
+
+		RegisterRuntimeHandlers();
+
+		RegisterTransportHandlers();
 
 		m_dispatcher.Register("gateway.session.list", [this](const protocol::RequestFrame& request) {
 			const std::optional<bool> activeFilter = ExtractBooleanParam(request.paramsJson, "active");
@@ -2588,25 +1950,6 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-		m_dispatcher.Register("gateway.config.keys", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"keys\":[\"gateway.bind\",\"gateway.port\",\"agent.model\",\"agent.streaming\"],\"count\":4}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.transport.connections.count", [this](const protocol::RequestFrame& request) {
-			const std::size_t count = m_transport.ConnectionCount();
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"count\":" + std::to_string(count) + "}",
-				.error = std::nullopt,
-			};
-			});
-
 		m_dispatcher.Register("gateway.health.details", [this](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
@@ -2682,14 +2025,6 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-		m_dispatcher.Register("gateway.transport.endpoint.get", [this](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"endpoint\":\"" + EscapeJson(m_transport.Endpoint()) + "\"}",
-				.error = std::nullopt,
-			};
-			});
 
 		m_dispatcher.Register("gateway.logs.levels", [](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
@@ -2737,144 +2072,6 @@ namespace blazeclaw::gateway {
 				.id = request.id,
 				.ok = true,
 				.payloadJson = "{\"provider\":\"" + EscapeJson(provider.empty() ? "*" : provider) + "\",\"models\":" + modelsJson + ",\"count\":" + std::to_string(count) + "}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.config.sections", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"sections\":[\"gateway\",\"agent\"],\"count\":2}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.transport.endpoint.set", [this](const protocol::RequestFrame& request) {
-			const std::string endpoint = ExtractStringParam(request.paramsJson, "endpoint");
-			const std::string resolved = endpoint.empty() ? m_transport.Endpoint() : endpoint;
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"endpoint\":\"" + EscapeJson(resolved) + "\",\"updated\":false}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.transport.endpoints.list", [this](const protocol::RequestFrame& request) {
-			const std::string endpoint = m_transport.Endpoint();
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"endpoints\":[\"" + EscapeJson(endpoint) + "\"],\"count\":1}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.transport.policy.get", [this](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"exclusiveAddrUse\":true,\"keepAlive\":true,\"noDelay\":true,\"idleTimeoutMs\":120000,\"handshakeTimeoutMs\":5000}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.transport.policy.set", [this](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-			   .payloadJson = "{\"applied\":false,\"reason\":\"runtime_immutable\"}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.transport.policy.reset", [this](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"reset\":true,\"applied\":false}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.transport.policy.status", [this](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"mutable\":false,\"lastApplied\":\"runtime_immutable\",\"policyVersion\":1}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.transport.policy.validate", [this](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"valid\":true,\"errors\":[],\"count\":0}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.transport.policy.history", [this](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"entries\":[{\"version\":1,\"applied\":false,\"reason\":\"runtime_immutable\"}],\"count\":1}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.transport.policy.metrics", [this](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"validations\":0,\"resets\":0,\"sets\":0}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.transport.policy.export", [this](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"path\":\"transport/policy-export.json\",\"version\":1,\"exported\":true}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.transport.policy.import", [this](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"imported\":true,\"version\":1,\"applied\":false}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.transport.policy.digest", [this](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"digest\":\"sha256:seed-policy-v1\",\"version\":1}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.transport.policy.preview", [this](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"path\":\"transport/policy-preview.json\",\"applied\":false,\"notes\":\"runtime_immutable\"}",
-				.error = std::nullopt,
-			};
-			});
-
-		m_dispatcher.Register("gateway.transport.policy.commit", [this](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = "{\"committed\":false,\"version\":1,\"applied\":false}",
 				.error = std::nullopt,
 			};
 			});

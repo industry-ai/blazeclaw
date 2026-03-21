@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2904",
+  "ok": true,
+  "payload": {
+    "bandRail2": 0,
+    "samples": 2,
+    "stable": true
+  }
+}

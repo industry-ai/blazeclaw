@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "runtime-streaming-accuracy",
+  "ok": true,
+  "payload": {
+    "accuracy": 99,
+    "mismatches": 0,
+    "calibrated": true
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2888",
+  "ok": true,
+  "payload": {
+    "syncGrid2": 1,
+    "samples": 2,
+    "stable": true
+  }
+}

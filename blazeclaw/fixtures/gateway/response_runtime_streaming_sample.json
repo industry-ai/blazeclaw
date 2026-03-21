@@ -1,0 +1,12 @@
+{
+  "id": "fixture-runtime-streaming-sample",
+  "ok": true,
+  "result": {
+    "chunks": [
+      "hello",
+      "world"
+    ],
+    "count": 2,
+    "final": true
+  }
+}

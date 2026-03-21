@@ -1,0 +1,8 @@
+{
+  "id": "fixture-events-package-scope-id",
+  "ok": true,
+  "result": {
+    "packageScopeId": "package-scope-id-1",
+    "event": "gateway.session.reset"
+  }
+}

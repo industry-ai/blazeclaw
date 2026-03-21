@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "models-failover-reserve",
+  "ok": true,
+  "payload": {
+    "reserve": 1,
+    "available": true,
+    "priority": 2
+  }
+}

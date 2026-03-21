@@ -1,0 +1,10 @@
+{
+  "type": "res",
+  "id": "req-2776",
+  "ok": true,
+  "payload": {
+    "phaseCore": 0,
+    "windowMs": 1000,
+    "stable": true
+  }
+}

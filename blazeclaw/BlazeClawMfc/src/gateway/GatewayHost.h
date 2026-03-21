@@ -11,10 +11,65 @@
 
 namespace blazeclaw::gateway {
 
+	struct SkillsCatalogGatewayEntry {
+		std::string name;
+        std::string skillKey;
+        std::string commandName;
+        std::string installKind;
+		std::string installCommand;
+		bool installExecutable = false;
+		std::string installReason;
+		std::string description;
+		std::string source;
+		std::int32_t precedence = 0;
+      bool eligible = false;
+		bool disabled = false;
+		bool blockedByAllowlist = false;
+		bool disableModelInvocation = false;
+		bool validFrontmatter = false;
+		std::size_t validationErrorCount = 0;
+	};
+
+	struct SkillsCatalogGatewayState {
+		std::vector<SkillsCatalogGatewayEntry> entries;
+		std::size_t rootsScanned = 0;
+		std::size_t rootsSkipped = 0;
+		std::size_t oversizedSkillFiles = 0;
+		std::size_t invalidFrontmatterFiles = 0;
+		std::size_t warningCount = 0;
+      std::size_t eligibleCount = 0;
+		std::size_t disabledCount = 0;
+		std::size_t blockedByAllowlistCount = 0;
+		std::size_t missingRequirementsCount = 0;
+		std::size_t promptIncludedCount = 0;
+		std::size_t promptChars = 0;
+		bool promptTruncated = false;
+     std::uint64_t snapshotVersion = 0;
+		bool watchEnabled = true;
+		std::uint32_t watchDebounceMs = 250;
+		std::string watchReason;
+		std::string prompt;
+      bool sandboxSyncOk = false;
+		std::size_t sandboxSynced = 0;
+		std::size_t sandboxSkipped = 0;
+		std::size_t envAllowed = 0;
+		std::size_t envBlocked = 0;
+      std::size_t installExecutableCount = 0;
+		std::size_t installBlockedCount = 0;
+		std::size_t scanInfoCount = 0;
+		std::size_t scanWarnCount = 0;
+		std::size_t scanCriticalCount = 0;
+		std::size_t scanScannedFiles = 0;
+	};
+
 	class GatewayHost {
 	public:
+     using SkillsRefreshCallback = std::function<SkillsCatalogGatewayState()>;
+
 		bool Start(const blazeclaw::config::GatewayConfig& config);
 		void Stop();
+		void SetSkillsCatalogState(SkillsCatalogGatewayState state);
+		void SetSkillsRefreshCallback(SkillsRefreshCallback callback);
 
 		[[nodiscard]] bool IsRunning() const noexcept;
 		[[nodiscard]] std::string LastWarning() const;
@@ -35,7 +90,26 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] protocol::ResponseFrame RouteRequest(const protocol::RequestFrame& request) const;
 
 	private:
+     struct AgentRunState {
+			std::string runId;
+			std::string agentId;
+			std::string sessionId;
+			std::string message;
+			std::string status;
+			std::string summary;
+			std::uint64_t startedAtMs = 0;
+			std::optional<std::uint64_t> completedAtMs;
+		};
+
 		void RegisterDefaultHandlers();
+      void RegisterChannelsHandlers();
+     void RegisterEventHandlers();
+     void RegisterToolsHandlers();
+     void RegisterScopeClusterHandlers();
+     void RegisterGeneratedScopeClusterHandlers();
+		void RegisterSecurityOpsHandlers();
+		void RegisterRuntimeHandlers();
+		void RegisterTransportHandlers();
 
 		bool m_running = false;
 		std::string m_bindAddress;
@@ -44,6 +118,26 @@ namespace blazeclaw::gateway {
 		std::uint16_t m_runtimeGatewayPort = 18789;
 		std::string m_runtimeAgentModel = "default";
 		bool m_runtimeAgentStreaming = true;
+      std::string m_runtimeAssignedSessionId = "main";
+		std::string m_runtimeAssignedAgentId = "default";
+		std::size_t m_runtimeQueueDepth = 0;
+		std::size_t m_runtimeRunningCount = 0;
+		std::size_t m_runtimeQueueCapacity = 8;
+		std::size_t m_runtimeAssignmentCount = 0;
+		std::size_t m_runtimeRebalanceCount = 0;
+		std::size_t m_runtimeDrainCount = 0;
+      std::size_t m_streamingBufferedFrames = 0;
+		std::size_t m_streamingBufferedBytes = 0;
+		std::size_t m_streamingHighWatermark = 16;
+		std::size_t m_streamingWindowMs = 5000;
+		std::size_t m_streamingThrottleLimitPerSec = 120;
+		bool m_streamingThrottled = false;
+		bool m_failoverOverrideActive = false;
+		std::string m_failoverOverrideModel = "default";
+		std::string m_failoverOverrideReason = "none";
+		std::size_t m_failoverOverrideChanges = 0;
+		std::size_t m_failoverAttempts = 0;
+		std::size_t m_failoverFallbackHits = 0;
 		std::string m_lastWarning;
 		GatewayMethodDispatcher m_dispatcher;
 		GatewayWebSocketTransport m_transport;
@@ -51,6 +145,11 @@ namespace blazeclaw::gateway {
 		GatewayChannelRegistry m_channelRegistry;
 		GatewaySessionRegistry m_sessionRegistry;
 		GatewayToolRegistry m_toolRegistry;
+     std::unordered_map<std::string, AgentRunState> m_agentRuns;
+		std::unordered_map<std::string, std::string> m_agentRunByIdempotency;
+	  std::unordered_map<std::string, std::string> m_mutationPayloadByIdempotency;
+        SkillsCatalogGatewayState m_skillsCatalogState;
+      SkillsRefreshCallback m_skillsRefreshCallback;
 	};
 
 } // namespace blazeclaw::gateway
