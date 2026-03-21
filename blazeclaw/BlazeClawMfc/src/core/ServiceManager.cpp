@@ -331,6 +331,66 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
     return BuildGatewaySkillsState();
   });
 
+  m_gatewayHost.SetChatRuntimeCallback([this](
+      const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
+    const auto modelSelection = m_agentsModelRoutingService.SelectModel(
+        m_activeConfig.agent.model.empty()
+            ? std::string()
+            : ToNarrow(m_activeConfig.agent.model),
+        "chat.send");
+
+    const auto embeddedRun = m_piEmbeddedService.QueueRun(
+        EmbeddedRunRequest{
+            .sessionId = request.sessionKey.empty() ? "main" : request.sessionKey,
+            .agentId = "default",
+            .message = request.message,
+        });
+
+    if (!embeddedRun.accepted) {
+      m_agentsModelRoutingService.RecordFailover(
+          modelSelection.selectedModel,
+          embeddedRun.reason,
+          embeddedRun.startedAtMs == 0 ? 1735689800000 : embeddedRun.startedAtMs);
+      return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+          .ok = false,
+          .assistantText = {},
+          .modelId = modelSelection.selectedModel,
+          .errorCode = "embedded_run_rejected",
+          .errorMessage = embeddedRun.reason,
+      };
+    }
+
+    const std::string assistantText = request.message.empty()
+        ? "Received image attachment."
+        : ("Model(" + modelSelection.selectedModel + "): " + request.message);
+
+    const bool completed = m_piEmbeddedService.CompleteRun(
+        embeddedRun.runId,
+        "completed",
+        embeddedRun.startedAtMs + 1);
+    if (!completed) {
+      m_agentsModelRoutingService.RecordFailover(
+          modelSelection.selectedModel,
+          "embedded_completion_failed",
+          embeddedRun.startedAtMs + 1);
+      return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+          .ok = false,
+          .assistantText = {},
+          .modelId = modelSelection.selectedModel,
+          .errorCode = "embedded_completion_failed",
+          .errorMessage = "embedded completion failed",
+      };
+    }
+
+    return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+        .ok = true,
+        .assistantText = assistantText,
+        .modelId = modelSelection.selectedModel,
+        .errorCode = {},
+        .errorMessage = {},
+    };
+  });
+
   const bool gatewayStarted = m_gatewayHost.Start(config.gateway);
   m_running = gatewayStarted;
   return m_running;

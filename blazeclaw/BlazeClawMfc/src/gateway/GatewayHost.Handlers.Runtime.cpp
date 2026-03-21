@@ -431,13 +431,37 @@ namespace blazeclaw::gateway {
                     : ("chat-run-" + std::to_string(nowMs) +
                         "-" + std::to_string(m_chatRunsById.size() + 1));
 
-                const std::string assistantText = message.empty()
+                std::string assistantText = message.empty()
                     ? "Received image attachment."
                     : ("Echo: " + message);
-                const bool failRequested =
-                    request.paramsJson.has_value() &&
-                    request.paramsJson.value().find("\"forceError\":true") !=
-                    std::string::npos;
+                std::string backendErrorCode;
+                std::string backendErrorMessage;
+                bool failed = false;
+
+                if (m_chatRuntimeCallback) {
+                    const auto runtimeResult = m_chatRuntimeCallback(
+                        ChatRuntimeRequest{
+                            .sessionKey = sessionKey,
+                            .message = message,
+                            .hasAttachments = hasAttachments,
+                        });
+
+                    if (runtimeResult.ok) {
+                        if (!runtimeResult.assistantText.empty()) {
+                            assistantText = runtimeResult.assistantText;
+                        }
+                    }
+                    else {
+                        failed = true;
+                        backendErrorCode = runtimeResult.errorCode.empty()
+                            ? "chat_runtime_error"
+                            : runtimeResult.errorCode;
+                        backendErrorMessage = runtimeResult.errorMessage.empty()
+                            ? "chat runtime failed"
+                            : runtimeResult.errorMessage;
+                    }
+                }
+
                 const bool silentAssistantReply = IsSilentReplyText(assistantText);
 
                 auto& sessionHistory = m_chatHistoryBySession[sessionKey];
@@ -447,7 +471,7 @@ namespace blazeclaw::gateway {
 
                 auto& sessionEvents = m_chatEventsBySession[sessionKey];
                 std::size_t streamCursor = 0;
-                if (!silentAssistantReply) {
+                if (!failed && !silentAssistantReply) {
                     streamCursor = (std::min)(assistantText.size(), std::size_t{ 6 });
                     if (streamCursor > 0) {
                         sessionEvents.push_back(ChatEventState{
@@ -472,10 +496,8 @@ namespace blazeclaw::gateway {
                         .assistantText = assistantText,
                         .streamCursor = streamCursor,
                         .lastEmitMs = nowMs,
-                        .failed = failRequested,
-                        .errorMessage = failRequested
-                            ? "chat runtime forced error"
-                            : std::string(),
+                        .failed = failed,
+                        .errorMessage = backendErrorMessage,
                         .startedAtMs = nowMs,
                         .active = true,
                     });
@@ -490,7 +512,11 @@ namespace blazeclaw::gateway {
                     .payloadJson =
                         "{\"runId\":\"" +
                         EscapeJsonLocal(runId) +
-                        "\",\"queued\":true,\"deduped\":false}",
+                        "\",\"backendErrorCode\":" +
+                        (backendErrorCode.empty()
+                            ? std::string("null")
+                            : ("\"" + EscapeJsonLocal(backendErrorCode) + "\"")) +
+                        ",\"queued\":true,\"deduped\":false}",
                     .error = std::nullopt,
                 };
             });

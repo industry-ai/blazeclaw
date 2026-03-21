@@ -66,10 +66,27 @@ namespace blazeclaw::gateway {
 	public:
      using SkillsRefreshCallback = std::function<SkillsCatalogGatewayState()>;
 
+	 struct ChatRuntimeRequest {
+		 std::string sessionKey;
+		 std::string message;
+		 bool hasAttachments = false;
+	 };
+
+	 struct ChatRuntimeResult {
+		 bool ok = false;
+		 std::string assistantText;
+		 std::string modelId;
+		 std::string errorCode;
+		 std::string errorMessage;
+	 };
+
+	 using ChatRuntimeCallback = std::function<ChatRuntimeResult(const ChatRuntimeRequest&)>;
+
 		bool Start(const blazeclaw::config::GatewayConfig& config);
 		void Stop();
 		void SetSkillsCatalogState(SkillsCatalogGatewayState state);
 		void SetSkillsRefreshCallback(SkillsRefreshCallback callback);
+		void SetChatRuntimeCallback(ChatRuntimeCallback callback);
 
 		[[nodiscard]] bool IsRunning() const noexcept;
 		[[nodiscard]] std::string LastWarning() const;
@@ -177,6 +194,7 @@ namespace blazeclaw::gateway {
 	  std::unordered_map<std::string, std::string> m_chatRunByIdempotency;
         SkillsCatalogGatewayState m_skillsCatalogState;
       SkillsRefreshCallback m_skillsRefreshCallback;
+      ChatRuntimeCallback m_chatRuntimeCallback;
 	};
 
 } // namespace blazeclaw::gateway

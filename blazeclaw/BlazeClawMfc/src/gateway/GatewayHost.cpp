@@ -290,6 +290,11 @@ namespace blazeclaw::gateway {
 		m_skillsRefreshCallback = std::move(callback);
 	}
 
+	void GatewayHost::SetChatRuntimeCallback(
+		ChatRuntimeCallback callback) {
+		m_chatRuntimeCallback = std::move(callback);
+	}
+
 	bool GatewayHost::IsRunning() const noexcept {
 		return m_running;
 	}
