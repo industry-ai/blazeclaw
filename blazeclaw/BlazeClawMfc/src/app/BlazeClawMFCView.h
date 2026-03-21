@@ -79,7 +79,7 @@ protected:
 	UINT_PTR m_bridgeTimerId = 0;
 	bool m_bridgeLastConnected = false;
 	bool m_bridgeLifecycleSent = false;
-	std::string m_bridgeSessionId = "bridge-main";
+  std::string m_bridgeSessionId = "main";
 
 	void InitializeWebViewBridge();
 	void HandleWebMessageJson(const std::wstring& webMessageJson);

@@ -2,6 +2,8 @@
 #include "GatewayHost.h"
 #include "GatewayJsonUtils.h"
 
+#include <chrono>
+
 namespace blazeclaw::gateway {
 
     namespace {
@@ -149,9 +151,391 @@ namespace blazeclaw::gateway {
                     return entry.id == sessionId;
                 });
         }
+
+        std::uint64_t CurrentEpochMsLocal() {
+            const auto now = std::chrono::system_clock::now();
+            return static_cast<std::uint64_t>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    now.time_since_epoch())
+                    .count());
+        }
+
+        std::string BuildAssistantFinalMessageJson(
+            const std::string& text,
+            const std::uint64_t timestampMs) {
+            return "{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"" +
+                EscapeJsonLocal(text) +
+                "\"}],\"timestamp\":" +
+                std::to_string(timestampMs) +
+                "}";
+        }
+
+        std::string BuildUserMessageJson(
+            const std::string& text,
+            const bool hasAttachments,
+            const std::uint64_t timestampMs) {
+            std::string content = "[";
+            bool first = true;
+            if (!text.empty()) {
+                content +=
+                    "{\"type\":\"text\",\"text\":\"" +
+                    EscapeJsonLocal(text) +
+                    "\"}";
+                first = false;
+            }
+
+            if (hasAttachments) {
+                if (!first) {
+                    content += ",";
+                }
+
+                content +=
+                    "{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/*\",\"data\":\"[omitted]\"}}";
+            }
+
+            content += "]";
+
+            return "{\"role\":\"user\",\"content\":" +
+                content +
+                ",\"timestamp\":" +
+                std::to_string(timestampMs) +
+                "}";
+        }
+
+        std::string BuildChatEventJson(
+            const std::string& runId,
+            const std::string& sessionKey,
+            const std::string& state,
+            const std::optional<std::string>& messageJson,
+            const std::optional<std::string>& errorMessage,
+            const std::uint64_t timestampMs) {
+            std::string payload =
+                "{\"runId\":\"" +
+                EscapeJsonLocal(runId) +
+                "\",\"sessionKey\":\"" +
+                EscapeJsonLocal(sessionKey) +
+                "\",\"state\":\"" +
+                EscapeJsonLocal(state) +
+                "\",\"timestamp\":" +
+                std::to_string(timestampMs);
+
+            if (messageJson.has_value()) {
+                payload += ",\"message\":" + messageJson.value();
+            }
+
+            if (errorMessage.has_value()) {
+                payload +=
+                    ",\"errorMessage\":\"" +
+                    EscapeJsonLocal(errorMessage.value()) +
+                    "\"";
+            }
+
+            payload += "}";
+            return payload;
+        }
     }
 
     void GatewayHost::RegisterRuntimeHandlers() {
+        m_dispatcher.Register(
+            "chat.history",
+            [this](const protocol::RequestFrame& request) {
+                const std::string requestedSessionKey =
+                    ExtractStringParam(request.paramsJson, "sessionKey");
+                const std::string sessionKey =
+                    requestedSessionKey.empty() ? "main" : requestedSessionKey;
+                const std::size_t requestedLimit =
+                    ExtractSizeParam(request.paramsJson, "limit").value_or(200);
+                const std::size_t limit =
+                    (std::max)(std::size_t{ 1 }, (std::min)(requestedLimit, std::size_t{ 500 }));
+
+                const auto historyIt = m_chatHistoryBySession.find(sessionKey);
+                std::string messagesJson = "[";
+                if (historyIt != m_chatHistoryBySession.end()) {
+                    const auto& history = historyIt->second;
+                    const std::size_t begin = history.size() > limit
+                        ? history.size() - limit
+                        : 0;
+                    for (std::size_t i = begin; i < history.size(); ++i) {
+                        if (i > begin) {
+                            messagesJson += ",";
+                        }
+
+                        messagesJson += history[i];
+                    }
+                }
+
+                messagesJson += "]";
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"messages\":" +
+                        messagesJson +
+                        ",\"thinkingLevel\":\"normal\"}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "chat.send",
+            [this](const protocol::RequestFrame& request) {
+                const std::string requestedSessionKey =
+                    ExtractStringParam(request.paramsJson, "sessionKey");
+                const std::string sessionKey =
+                    requestedSessionKey.empty() ? "main" : requestedSessionKey;
+                const std::string message =
+                    ExtractStringParam(request.paramsJson, "message");
+                const std::string idempotencyKey =
+                    ExtractStringParam(request.paramsJson, "idempotencyKey");
+
+                std::string attachmentsRaw;
+                const bool hasAttachments =
+                    request.paramsJson.has_value() &&
+                    json::FindRawField(
+                        request.paramsJson.value(),
+                        "attachments",
+                        attachmentsRaw) &&
+                    json::Trim(attachmentsRaw) != "[]";
+
+                if (message.empty() && !hasAttachments) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = false,
+                        .payloadJson = std::nullopt,
+                        .error = protocol::ErrorShape{
+                            .code = "invalid_message",
+                            .message = "chat.send requires non-empty message or attachments.",
+                            .detailsJson = std::nullopt,
+                            .retryable = false,
+                            .retryAfterMs = std::nullopt,
+                        },
+                    };
+                }
+
+                if (!idempotencyKey.empty()) {
+                    const auto dedupeIt =
+                        m_chatRunByIdempotency.find(idempotencyKey);
+                    if (dedupeIt != m_chatRunByIdempotency.end()) {
+                        return protocol::ResponseFrame{
+                            .id = request.id,
+                            .ok = true,
+                            .payloadJson =
+                                "{\"runId\":\"" +
+                                EscapeJsonLocal(dedupeIt->second) +
+                                "\",\"queued\":false,\"deduped\":true}",
+                            .error = std::nullopt,
+                        };
+                    }
+                }
+
+                const std::uint64_t nowMs = CurrentEpochMsLocal();
+                const std::string runId = !request.id.empty()
+                    ? request.id
+                    : ("chat-run-" + std::to_string(nowMs) +
+                        "-" + std::to_string(m_chatRunsById.size() + 1));
+
+                const std::string assistantText = message.empty()
+                    ? "Received image attachment."
+                    : ("Echo: " + message);
+
+                m_chatHistoryBySession[sessionKey].push_back(
+                    BuildUserMessageJson(message, hasAttachments, nowMs));
+                m_chatEventsBySession[sessionKey].push_back(ChatEventState{
+                    .runId = runId,
+                    .sessionKey = sessionKey,
+                    .state = "delta",
+                    .messageJson =
+                        "{\"role\":\"assistant\",\"text\":\"" +
+                        EscapeJsonLocal(assistantText) +
+                        "\"}",
+                    .errorMessage = std::nullopt,
+                    .timestampMs = nowMs,
+                    });
+                m_chatEventsBySession[sessionKey].push_back(ChatEventState{
+                    .runId = runId,
+                    .sessionKey = sessionKey,
+                    .state = "final",
+                    .messageJson =
+                        BuildAssistantFinalMessageJson(assistantText, nowMs),
+                    .errorMessage = std::nullopt,
+                    .timestampMs = nowMs,
+                    });
+
+                m_chatRunsById.insert_or_assign(
+                    runId,
+                    ChatRunState{
+                        .runId = runId,
+                        .sessionKey = sessionKey,
+                        .idempotencyKey = idempotencyKey,
+                        .userMessage = message,
+                        .assistantText = assistantText,
+                        .startedAtMs = nowMs,
+                        .active = true,
+                    });
+
+                if (!idempotencyKey.empty()) {
+                    m_chatRunByIdempotency.insert_or_assign(idempotencyKey, runId);
+                }
+
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"runId\":\"" +
+                        EscapeJsonLocal(runId) +
+                        "\",\"queued\":true,\"deduped\":false}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "chat.abort",
+            [this](const protocol::RequestFrame& request) {
+                const std::string requestedSessionKey =
+                    ExtractStringParam(request.paramsJson, "sessionKey");
+                const std::string sessionKey =
+                    requestedSessionKey.empty() ? "main" : requestedSessionKey;
+                const std::string requestedRunId =
+                    ExtractStringParam(request.paramsJson, "runId");
+
+                auto runIt = m_chatRunsById.end();
+                if (!requestedRunId.empty()) {
+                    const auto exact = m_chatRunsById.find(requestedRunId);
+                    if (exact != m_chatRunsById.end() &&
+                        exact->second.sessionKey == sessionKey) {
+                        runIt = exact;
+                    }
+                }
+                else {
+                    runIt = std::find_if(
+                        m_chatRunsById.begin(),
+                        m_chatRunsById.end(),
+                        [&](const auto& pair) {
+                            return pair.second.sessionKey == sessionKey &&
+                                pair.second.active;
+                        });
+                }
+
+                if (runIt == m_chatRunsById.end()) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = true,
+                        .payloadJson =
+                            "{\"aborted\":false,\"sessionKey\":\"" +
+                            EscapeJsonLocal(sessionKey) +
+                            "\"}",
+                        .error = std::nullopt,
+                    };
+                }
+
+                const std::string runId = runIt->second.runId;
+                auto& queue = m_chatEventsBySession[sessionKey];
+                std::erase_if(
+                    queue,
+                    [&](const ChatEventState& item) {
+                        return item.runId == runId;
+                    });
+
+                const std::uint64_t nowMs = CurrentEpochMsLocal();
+                queue.push_back(ChatEventState{
+                    .runId = runIt->second.runId,
+                    .sessionKey = sessionKey,
+                    .state = "aborted",
+                    .messageJson = BuildAssistantFinalMessageJson(
+                        runIt->second.assistantText,
+                        nowMs),
+                    .errorMessage = std::nullopt,
+                    .timestampMs = nowMs,
+                    });
+
+                runIt->second.active = false;
+
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"aborted\":true,\"runId\":\"" +
+                        EscapeJsonLocal(runId) +
+                        "\",\"sessionKey\":\"" +
+                        EscapeJsonLocal(sessionKey) +
+                        "\"}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "chat.events.poll",
+            [this](const protocol::RequestFrame& request) {
+                const std::string requestedSessionKey =
+                    ExtractStringParam(request.paramsJson, "sessionKey");
+                const std::string sessionKey =
+                    requestedSessionKey.empty() ? "main" : requestedSessionKey;
+                const std::size_t requestedLimit =
+                    ExtractSizeParam(request.paramsJson, "limit").value_or(20);
+                const std::size_t limit =
+                    (std::max)(std::size_t{ 1 }, (std::min)(requestedLimit, std::size_t{ 100 }));
+
+                std::string eventsJson = "[";
+                std::size_t emitted = 0;
+                auto queueIt = m_chatEventsBySession.find(sessionKey);
+                if (queueIt != m_chatEventsBySession.end()) {
+                    auto& queue = queueIt->second;
+                    while (emitted < limit && !queue.empty()) {
+                        const ChatEventState eventState = queue.front();
+                        queue.pop_front();
+
+                        if (emitted > 0) {
+                            eventsJson += ",";
+                        }
+
+                        eventsJson += BuildChatEventJson(
+                            eventState.runId,
+                            eventState.sessionKey,
+                            eventState.state,
+                            eventState.messageJson,
+                            eventState.errorMessage,
+                            eventState.timestampMs);
+                        ++emitted;
+
+                        if ((eventState.state == "final" ||
+                            eventState.state == "aborted") &&
+                            eventState.messageJson.has_value()) {
+                            m_chatHistoryBySession[sessionKey].push_back(
+                                eventState.messageJson.value());
+                        }
+
+                        if (eventState.state == "final" ||
+                            eventState.state == "aborted" ||
+                            eventState.state == "error") {
+                            const auto runIt = m_chatRunsById.find(eventState.runId);
+                            if (runIt != m_chatRunsById.end()) {
+                                if (!runIt->second.idempotencyKey.empty()) {
+                                    m_chatRunByIdempotency.erase(
+                                        runIt->second.idempotencyKey);
+                                }
+
+                                m_chatRunsById.erase(runIt);
+                            }
+                        }
+                    }
+                }
+
+                eventsJson += "]";
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"sessionKey\":\"" +
+                        EscapeJsonLocal(sessionKey) +
+                        "\",\"events\":" +
+                        eventsJson +
+                        ",\"count\":" +
+                        std::to_string(emitted) +
+                        "}",
+                    .error = std::nullopt,
+                };
+            });
+
         m_dispatcher.Register(
             "gateway.skills.status",
             [this](const protocol::RequestFrame& request) {

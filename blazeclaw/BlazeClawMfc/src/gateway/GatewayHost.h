@@ -101,6 +101,25 @@ namespace blazeclaw::gateway {
 			std::optional<std::uint64_t> completedAtMs;
 		};
 
+		struct ChatRunState {
+			std::string runId;
+			std::string sessionKey;
+			std::string idempotencyKey;
+			std::string userMessage;
+			std::string assistantText;
+			std::uint64_t startedAtMs = 0;
+			bool active = true;
+		};
+
+		struct ChatEventState {
+			std::string runId;
+			std::string sessionKey;
+			std::string state;
+			std::optional<std::string> messageJson;
+			std::optional<std::string> errorMessage;
+			std::uint64_t timestampMs = 0;
+		};
+
 		void RegisterDefaultHandlers();
       void RegisterChannelsHandlers();
      void RegisterEventHandlers();
@@ -148,6 +167,10 @@ namespace blazeclaw::gateway {
      std::unordered_map<std::string, AgentRunState> m_agentRuns;
 		std::unordered_map<std::string, std::string> m_agentRunByIdempotency;
 	  std::unordered_map<std::string, std::string> m_mutationPayloadByIdempotency;
+      std::unordered_map<std::string, std::vector<std::string>> m_chatHistoryBySession;
+	  std::unordered_map<std::string, std::deque<ChatEventState>> m_chatEventsBySession;
+	  std::unordered_map<std::string, ChatRunState> m_chatRunsById;
+	  std::unordered_map<std::string, std::string> m_chatRunByIdempotency;
         SkillsCatalogGatewayState m_skillsCatalogState;
       SkillsRefreshCallback m_skillsRefreshCallback;
 	};

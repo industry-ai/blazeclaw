@@ -481,6 +481,48 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 	}
 
 	m_bridgeLastConnected = connected;
+
+	if (!connected || app == nullptr)
+	{
+		return;
+	}
+
+	const blazeclaw::gateway::protocol::RequestFrame pollRequest{
+		.id = "bridge-chat-events",
+		.method = "chat.events.poll",
+		.paramsJson =
+			std::string("{\"sessionKey\":\"") +
+			m_bridgeSessionId +
+			"\",\"limit\":20}",
+	};
+
+	const auto pollResponse = app->Services().RouteGatewayRequest(pollRequest);
+	if (!pollResponse.ok || !pollResponse.payloadJson.has_value())
+	{
+		return;
+	}
+
+	std::string eventsRaw;
+	if (!blazeclaw::gateway::json::FindRawField(
+			pollResponse.payloadJson.value(),
+			"events",
+			eventsRaw))
+	{
+		return;
+	}
+
+	if (blazeclaw::gateway::json::Trim(eventsRaw) == "[]")
+	{
+		return;
+	}
+
+	const std::string envelope =
+		"{\"channel\":\"blazeclaw.gateway.chat.events\",\"sessionId\":" +
+		JsonString(m_bridgeSessionId) +
+		",\"events\":" +
+		eventsRaw +
+		"}";
+	PostBridgeMessageJson(ToWide(envelope));
 }
 
 void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
