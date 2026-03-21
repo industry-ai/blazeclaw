@@ -263,6 +263,47 @@ namespace blazeclaw::gateway {
 
             history.push_back(messageJson);
         }
+
+        bool ValidateAttachmentPayloadShape(
+            const std::optional<std::string>& paramsJson,
+            bool& hasAttachments,
+            std::string& errorCode,
+            std::string& errorMessage) {
+            hasAttachments = false;
+            errorCode.clear();
+            errorMessage.clear();
+            if (!paramsJson.has_value()) {
+                return true;
+            }
+
+            std::string attachmentsRaw;
+            if (!json::FindRawField(paramsJson.value(), "attachments", attachmentsRaw)) {
+                return true;
+            }
+
+            const std::string attachmentsTrimmed = json::Trim(attachmentsRaw);
+            if (attachmentsTrimmed.empty() || attachmentsTrimmed == "[]") {
+                return true;
+            }
+
+            if (attachmentsTrimmed.front() != '[' || attachmentsTrimmed.back() != ']') {
+                errorCode = "invalid_attachments";
+                errorMessage = "attachments must be a JSON array.";
+                return false;
+            }
+
+            hasAttachments = true;
+            if (attachmentsTrimmed.find("\"type\":\"image\"") == std::string::npos ||
+                attachmentsTrimmed.find("\"mimeType\":\"") == std::string::npos ||
+                attachmentsTrimmed.find("\"content\":\"") == std::string::npos) {
+                errorCode = "invalid_attachments";
+                errorMessage =
+                    "attachments entries must include type=image, mimeType, and content.";
+                return false;
+            }
+
+            return true;
+        }
     }
 
     void GatewayHost::RegisterRuntimeHandlers() {
@@ -324,14 +365,27 @@ namespace blazeclaw::gateway {
                 const std::string idempotencyKey =
                     ExtractStringParam(request.paramsJson, "idempotencyKey");
 
-                std::string attachmentsRaw;
-                const bool hasAttachments =
-                    request.paramsJson.has_value() &&
-                    json::FindRawField(
-                        request.paramsJson.value(),
-                        "attachments",
-                        attachmentsRaw) &&
-                    json::Trim(attachmentsRaw) != "[]";
+                bool hasAttachments = false;
+                std::string attachmentsErrorCode;
+                std::string attachmentsErrorMessage;
+                if (!ValidateAttachmentPayloadShape(
+                        request.paramsJson,
+                        hasAttachments,
+                        attachmentsErrorCode,
+                        attachmentsErrorMessage)) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = false,
+                        .payloadJson = std::nullopt,
+                        .error = protocol::ErrorShape{
+                            .code = attachmentsErrorCode,
+                            .message = attachmentsErrorMessage,
+                            .detailsJson = std::nullopt,
+                            .retryable = false,
+                            .retryAfterMs = std::nullopt,
+                        },
+                    };
+                }
 
                 if (message.empty() && !hasAttachments) {
                     return protocol::ResponseFrame{
