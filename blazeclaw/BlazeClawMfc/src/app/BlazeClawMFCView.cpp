@@ -26,6 +26,7 @@
 #include "../gateway/GatewayProtocolModels.h"
 
 #include <cwctype>
+#include <cctype>
 #include <filesystem>
 #include <optional>
 #include <sstream>
@@ -39,6 +40,7 @@ namespace {
 
 constexpr UINT_PTR kBridgeLifecycleTimerId = 0x4A21;
 constexpr UINT kBridgeLifecycleTimerMs = 1000;
+constexpr std::uint64_t kBridgeTraceFlushIntervalMs = 1000;
 
 std::string ToNarrow(const std::wstring& value)
 {
@@ -145,6 +147,65 @@ std::string BuildBridgeRpcResultJson(
 
 	json += "}";
 	return json;
+}
+
+std::string BuildOpenClawWsResponseFrameJson(
+	const blazeclaw::gateway::protocol::ResponseFrame& response,
+	const std::string& correlationId)
+{
+	std::string frame =
+		"{\"type\":\"res\",\"id\":" +
+		JsonString(correlationId) +
+		",\"ok\":" +
+		(response.ok ? "true" : "false");
+
+	if (response.ok)
+	{
+		if (response.payloadJson.has_value())
+		{
+			frame += ",\"payload\":" + response.payloadJson.value();
+		}
+	}
+	else
+	{
+		frame += ",\"error\":";
+		if (response.error.has_value())
+		{
+			const auto& error = response.error.value();
+			frame += "{";
+			frame += "\"code\":" + JsonString(error.code);
+			frame += ",\"message\":" + JsonString(error.message);
+			if (error.detailsJson.has_value())
+			{
+				frame += ",\"details\":" + error.detailsJson.value();
+			}
+			frame += "}";
+		}
+		else
+		{
+			frame +=
+				"{\"code\":\"UNAVAILABLE\",\"message\":\"request failed\"}";
+		}
+	}
+
+	frame += "}";
+	return frame;
+}
+
+std::string BuildOpenClawHelloPayloadJson()
+{
+	return
+		"{"
+		"\"type\":\"hello-ok\"," 
+		"\"protocol\":3,"
+		"\"server\":{\"version\":\"blazeclaw-mfc\",\"connId\":\"webview2-bridge\"},"
+		"\"features\":{"
+		"\"methods\":[\"chat.history\",\"chat.send\",\"chat.abort\",\"chat.events.poll\"],"
+		"\"events\":[\"chat\"]"
+		"},"
+		"\"snapshot\":{},"
+		"\"policy\":{\"tickIntervalMs\":1000}"
+		"}";
 }
 
 std::optional<std::wstring> GetEnvValue(const wchar_t* name)
@@ -410,6 +471,294 @@ void CBlazeClawMFCView::OnFilePrintPreview()
 #endif
 }
 
+void CBlazeClawMFCView::TraceBridgeTraffic(
+	const char* kind,
+	const std::string& detail)
+{
+#ifdef _DEBUG
+	if (kind == nullptr)
+	{
+		return;
+	}
+
+	const CStringW kindW(CA2W(kind, CP_UTF8));
+	const CStringW detailW(CA2W(detail.c_str(), CP_UTF8));
+	if (!detail.empty())
+	{
+		TRACE(
+			L"[Bridge][%s] %s\n",
+			kindW.GetString(),
+			detailW.GetString());
+	}
+	else
+	{
+		TRACE(L"[Bridge][%s]\n", kindW.GetString());
+	}
+#else
+	UNREFERENCED_PARAMETER(kind);
+	UNREFERENCED_PARAMETER(detail);
+#endif
+}
+
+void CBlazeClawMFCView::FlushBridgeTraceIfNeeded()
+{
+#ifdef _DEBUG
+	const std::uint64_t nowMs = GetTickCount64();
+	if (m_bridgeTraceLastFlushTickMs != 0 &&
+		(nowMs - m_bridgeTraceLastFlushTickMs) < kBridgeTraceFlushIntervalMs)
+	{
+		return;
+	}
+
+	m_bridgeTraceLastFlushTickMs = nowMs;
+	TRACE(
+		L"[Bridge][Counters] req=%llu res=%llu evt=%llu seq=%llu\n",
+		static_cast<unsigned long long>(m_bridgeTraceReqCount),
+		static_cast<unsigned long long>(m_bridgeTraceResCount),
+		static_cast<unsigned long long>(m_bridgeTraceEventCount),
+		static_cast<unsigned long long>(m_bridgeEventSeq));
+#endif
+}
+
+void CBlazeClawMFCView::PostOpenClawWsFrameJson(const std::string& frameJson)
+{
+	if (frameJson.empty())
+	{
+		return;
+	}
+
+	std::string frameType;
+	blazeclaw::gateway::json::FindStringField(frameJson, "type", frameType);
+	if (frameType == "res")
+	{
+		++m_bridgeTraceResCount;
+		TraceBridgeTraffic("ws.res", frameJson);
+	}
+	else if (frameType == "event")
+	{
+		++m_bridgeTraceEventCount;
+		TraceBridgeTraffic("ws.event", frameJson);
+	}
+
+	FlushBridgeTraceIfNeeded();
+
+	const std::wstring wide = ToWide(
+		std::string(
+			"{\"channel\":\"openclaw.ws.frame\",\"frame\":") +
+		frameJson +
+		"}");
+	PostBridgeMessageJson(wide);
+}
+
+void CBlazeClawMFCView::PostOpenClawWsClose(
+	const std::uint16_t code,
+	const char* reason)
+{
+   TraceBridgeTraffic(
+		"ws.close",
+		std::string("code=") + std::to_string(code) +
+		",reason=" + (reason != nullptr ? reason : "closed"));
+	FlushBridgeTraceIfNeeded();
+
+	const std::string closeJson =
+		std::string("{\"channel\":\"openclaw.ws.close\",\"code\":") +
+		std::to_string(code) +
+		",\"reason\":" +
+		JsonString(reason != nullptr ? reason : "closed") +
+		"}";
+	PostBridgeMessageJson(ToWide(closeJson));
+}
+
+void CBlazeClawMFCView::EmitOpenClawChatEvents(
+	const std::string& eventsArrayJson)
+{
+	std::string seqRaw = "1";
+	if (!eventsArrayJson.empty())
+	{
+		const auto array = blazeclaw::gateway::json::Trim(eventsArrayJson);
+		if (array.size() >= 2 && array.front() == '[' && array.back() == ']')
+		{
+			std::size_t index = 1;
+			while (index < array.size() - 1)
+			{
+				while (index < array.size() - 1 &&
+					(std::isspace(static_cast<unsigned char>(array[index])) != 0 ||
+						array[index] == ','))
+				{
+					++index;
+				}
+
+				if (index >= array.size() - 1 || array[index] != '{')
+				{
+					break;
+				}
+
+				const std::size_t start = index;
+				int depth = 0;
+				bool inString = false;
+				for (; index < array.size() - 1; ++index)
+				{
+					const char ch = array[index];
+					if (inString)
+					{
+						if (ch == '\\')
+						{
+							++index;
+							continue;
+						}
+						if (ch == '"')
+						{
+							inString = false;
+						}
+						continue;
+					}
+
+					if (ch == '"')
+					{
+						inString = true;
+						continue;
+					}
+
+					if (ch == '{')
+					{
+						++depth;
+					}
+					else if (ch == '}')
+					{
+						--depth;
+						if (depth == 0)
+						{
+							const std::string payload = array.substr(start, (index - start) + 1);
+							++m_bridgeEventSeq;
+							const std::string frame =
+								"{\"type\":\"event\",\"event\":\"chat\",\"payload\":" +
+								payload +
+								",\"seq\":" +
+								std::to_string(m_bridgeEventSeq) +
+								"}";
+							PostOpenClawWsFrameJson(frame);
+							++index;
+							break;
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+void CBlazeClawMFCView::EnsureOpenClawBridgeShim()
+{
+#ifdef HAVE_WEBVIEW2_HEADER
+	if (!m_webView)
+	{
+		return;
+	}
+
+	const wchar_t* shimScript = LR"JS(
+(function() {
+  if (window.__blazeclawBridgeInjected) return;
+  window.__blazeclawBridgeInjected = true;
+
+  if (!window.chrome || !window.chrome.webview) return;
+
+  const listeners = { open: [], message: [], close: [], error: [] };
+  let readyState = 0;
+  let syntheticUrl = 'ws://127.0.0.1:18789';
+  let connectTimer = null;
+
+  function emit(type, evt) {
+	const arr = listeners[type] || [];
+	for (const fn of arr) {
+	  try { fn(evt); } catch (_) {}
+	}
+  }
+
+  function scheduleOpen() {
+	if (connectTimer) clearTimeout(connectTimer);
+	connectTimer = setTimeout(() => {
+	  readyState = 1;
+	  emit('open', { type: 'open' });
+	  window.chrome.webview.postMessage({
+		channel: 'openclaw.ws.req',
+		frame: {
+		  type: 'req',
+		  id: 'bridge-connect-challenge',
+		  method: 'connect.challenge',
+		  params: {}
+		}
+	  });
+	}, 0);
+  }
+
+  class WebViewGatewaySocket {
+	constructor(url) {
+	  syntheticUrl = typeof url === 'string' && url.length ? url : syntheticUrl;
+	  this.url = syntheticUrl;
+	  this.readyState = 0;
+	  this.OPEN = 1;
+	  this.CLOSED = 3;
+	  scheduleOpen();
+	}
+
+	addEventListener(type, handler) {
+	  if (!listeners[type]) return;
+	  listeners[type].push(handler);
+	}
+
+	removeEventListener(type, handler) {
+	  if (!listeners[type]) return;
+	  const index = listeners[type].indexOf(handler);
+	  if (index >= 0) listeners[type].splice(index, 1);
+	}
+
+	send(raw) {
+	  if (readyState !== 1) return;
+	  let frame = null;
+	  try { frame = JSON.parse(String(raw || '')); } catch (_) {}
+	  if (!frame || frame.type !== 'req') return;
+	  window.chrome.webview.postMessage({
+		channel: 'openclaw.ws.req',
+		frame
+	  });
+	}
+
+	close(code, reason) {
+	  readyState = 3;
+	  emit('close', {
+		type: 'close',
+		code: typeof code === 'number' ? code : 1000,
+		reason: typeof reason === 'string' ? reason : 'closed'
+	  });
+	}
+  }
+
+  window.chrome.webview.addEventListener('message', (event) => {
+	const msg = event && event.data;
+	if (!msg || typeof msg !== 'object') return;
+	if (msg.channel === 'openclaw.ws.frame' && msg.frame) {
+	  emit('message', { data: JSON.stringify(msg.frame) });
+	  return;
+	}
+	if (msg.channel === 'openclaw.ws.close') {
+	  readyState = 3;
+	  emit('close', {
+		type: 'close',
+		code: typeof msg.code === 'number' ? msg.code : 1006,
+		reason: typeof msg.reason === 'string' ? msg.reason : 'closed'
+	  });
+	}
+  });
+
+  window.WebSocket = WebViewGatewaySocket;
+  window.__OPENCLAW_CONTROL_UI_BASE_PATH__ = '/';
+})();
+)JS";
+
+	m_webView->AddScriptToExecuteOnDocumentCreated(shimScript, nullptr);
+#endif
+}
+
 BOOL CBlazeClawMFCView::OnPreparePrinting(CPrintInfo* pInfo)
 {
 	// default preparation
@@ -473,6 +822,7 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 		else
 		{
 			PostBridgeLifecycleEvent(L"disconnected", L"service-stopped");
+           PostOpenClawWsClose(1001, "gateway disconnected");
 		}
 
 		m_bridgeLastConnected = connected;
@@ -519,6 +869,7 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 		eventsRaw +
 		"}";
 	PostBridgeMessageJson(ToWide(envelope));
+   EmitOpenClawChatEvents(eventsRaw);
 }
 
 void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
@@ -535,6 +886,122 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 	{
 		m_bridgeLifecycleSent = false;
 		PumpBridgeLifecycle();
+		return;
+	}
+
+	if (channel == "openclaw.ws.req")
+	{
+       ++m_bridgeTraceReqCount;
+		TraceBridgeTraffic("ws.req.channel", message);
+		FlushBridgeTraceIfNeeded();
+
+		std::string frameRaw;
+		if (!blazeclaw::gateway::json::FindRawField(message, "frame", frameRaw))
+		{
+         TraceBridgeTraffic("ws.req.invalid", "missing frame field");
+			return;
+		}
+
+		std::string frameType;
+		blazeclaw::gateway::json::FindStringField(frameRaw, "type", frameType);
+		if (frameType != "req")
+		{
+			return;
+		}
+
+		std::string correlationId;
+		if (!blazeclaw::gateway::json::FindStringField(frameRaw, "id", correlationId))
+		{
+			correlationId = "openclaw-unknown";
+		}
+
+		std::string method;
+		blazeclaw::gateway::json::FindStringField(frameRaw, "method", method);
+		if (method.empty())
+		{
+            TraceBridgeTraffic("ws.req.invalid", "missing method");
+			const blazeclaw::gateway::protocol::ResponseFrame errorResponse{
+				.id = correlationId,
+				.ok = false,
+				.payloadJson = std::nullopt,
+				.error = blazeclaw::gateway::protocol::ErrorShape{
+					.code = "invalid_frame",
+					.message = "WebView bridge frame missing method.",
+					.detailsJson = std::nullopt,
+					.retryable = false,
+					.retryAfterMs = std::nullopt,
+				},
+			};
+			PostOpenClawWsFrameJson(
+				BuildOpenClawWsResponseFrameJson(errorResponse, correlationId));
+			return;
+		}
+
+		if (method == "connect.challenge")
+		{
+         TraceBridgeTraffic("ws.req.challenge", correlationId);
+			++m_bridgeEventSeq;
+			const std::string eventFrame =
+				"{\"type\":\"event\",\"event\":\"connect.challenge\","
+				"\"payload\":{\"nonce\":\"blazeclaw-bridge\"},"
+				"\"seq\":" +
+				std::to_string(m_bridgeEventSeq) +
+				"}";
+			PostOpenClawWsFrameJson(eventFrame);
+			return;
+		}
+
+		if (method == "connect")
+		{
+            TraceBridgeTraffic("ws.req.connect", correlationId);
+			const blazeclaw::gateway::protocol::ResponseFrame helloResponse{
+				.id = correlationId,
+				.ok = true,
+				.payloadJson = BuildOpenClawHelloPayloadJson(),
+				.error = std::nullopt,
+			};
+			PostOpenClawWsFrameJson(
+				BuildOpenClawWsResponseFrameJson(helloResponse, correlationId));
+			return;
+		}
+
+		std::optional<std::string> paramsJson;
+		std::string paramsRaw;
+		if (blazeclaw::gateway::json::FindRawField(frameRaw, "params", paramsRaw))
+		{
+			paramsJson = blazeclaw::gateway::json::Trim(paramsRaw);
+		}
+
+		auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+		if (app == nullptr)
+		{
+            TraceBridgeTraffic("ws.req.error", "app unavailable");
+			const blazeclaw::gateway::protocol::ResponseFrame errorResponse{
+				.id = correlationId,
+				.ok = false,
+				.payloadJson = std::nullopt,
+				.error = blazeclaw::gateway::protocol::ErrorShape{
+					.code = "app_unavailable",
+					.message = "Application context unavailable.",
+					.detailsJson = std::nullopt,
+					.retryable = false,
+					.retryAfterMs = std::nullopt,
+				},
+			};
+			PostOpenClawWsFrameJson(
+				BuildOpenClawWsResponseFrameJson(errorResponse, correlationId));
+			return;
+		}
+
+		const blazeclaw::gateway::protocol::RequestFrame request{
+			.id = correlationId,
+			.method = method,
+			.paramsJson = paramsJson,
+		};
+		const auto response = app->Services().RouteGatewayRequest(request);
+        TraceBridgeTraffic("ws.req.route", method);
+		PostOpenClawWsFrameJson(
+			BuildOpenClawWsResponseFrameJson(response, correlationId));
 		return;
 	}
 
@@ -590,6 +1057,8 @@ void CBlazeClawMFCView::InitializeWebViewBridge()
 	{
 		return;
 	}
+
+	EnsureOpenClawBridgeShim();
 
 	m_webView->add_WebMessageReceived(
 		Microsoft::WRL::Callback<ICoreWebView2WebMessageReceivedEventHandler>(

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 #if defined(__has_include)
@@ -80,10 +81,23 @@ protected:
 	bool m_bridgeLastConnected = false;
 	bool m_bridgeLifecycleSent = false;
   std::string m_bridgeSessionId = "main";
+	std::uint64_t m_bridgeEventSeq = 0;
+	std::uint64_t m_bridgeTraceReqCount = 0;
+	std::uint64_t m_bridgeTraceResCount = 0;
+	std::uint64_t m_bridgeTraceEventCount = 0;
+	std::uint64_t m_bridgeTraceLastFlushTickMs = 0;
 
 	void InitializeWebViewBridge();
 	void HandleWebMessageJson(const std::wstring& webMessageJson);
 	void PostBridgeMessageJson(const std::wstring& jsonMessage);
+   void PostOpenClawWsFrameJson(const std::string& frameJson);
+	void PostOpenClawWsClose(std::uint16_t code, const char* reason);
+	void EmitOpenClawChatEvents(const std::string& eventsArrayJson);
+	void EnsureOpenClawBridgeShim();
+   void TraceBridgeTraffic(
+		const char* kind,
+		const std::string& detail = std::string());
+	void FlushBridgeTraceIfNeeded();
 	void PostBridgeLifecycleEvent(const wchar_t* state, const wchar_t* reason = nullptr);
 	void PumpBridgeLifecycle();
 

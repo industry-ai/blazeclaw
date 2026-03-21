@@ -385,8 +385,8 @@ void CChatView::OnSendClicked()
 	if (!strText.IsEmpty() || !m_chatState.chatAttachments.empty())
 	{
 		m_wndInput.SetWindowText(_T(""));
-		const CStringA utf8Text(strText, CP_UTF8);
-		SendChatMessageNative(std::string(utf8Text.GetString()));
+		CW2A utf8(strText.GetString(), CP_UTF8);
+		SendChatMessageNative(std::string(utf8));
 		SyncItemsFromState();
 		UpdateControlStates();
 	}
@@ -413,8 +413,8 @@ void CChatView::OnAttachClicked()
 	}
 
 	const CString path = dialog.GetPathName();
-	const CStringA pathUtf8(path, CP_UTF8);
-	const std::string filePath(pathUtf8.GetString());
+	CW2A pathUtf8(path.GetString(), CP_UTF8);
+	const std::string filePath(pathUtf8);
 	const auto mimeType = GuessMimeType(filePath);
 	if (!mimeType.has_value())
 	{
