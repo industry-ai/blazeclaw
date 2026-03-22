@@ -86,10 +86,13 @@ int COutputWnd::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	ASSERT(bNameValid);
 	m_wndTabs.AddTab(&m_wndOutputFind, strTabName, (UINT)2);
 
-	// Fill output tabs with some dummy text (nothing magic here)
+   // Fill output tabs with some dummy text (nothing magic here)
 	FillBuildWindow();
 	FillDebugWindow();
 	FillFindWindow();
+
+	// Set Debug tab as the start tab
+	m_wndTabs.SetActiveTab(1);
 
 	return 0;
 }

@@ -20,6 +20,18 @@
 namespace {
 	constexpr wchar_t kConfigPath[] = L"blazeclaw.conf";
 
+	std::wstring ToWide(const std::string& value) {
+		std::wstring output;
+		output.reserve(value.size());
+
+		for (const char ch : value) {
+			output.push_back(static_cast<wchar_t>(
+				static_cast<unsigned char>(ch)));
+		}
+
+		return output;
+	}
+
 	void AppendMainFrameStatusLine(const CString& line) {
 		auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
 		if (mainFrame == nullptr) {
@@ -44,6 +56,39 @@ namespace {
 			L"[Chat] startup.config.mode - %s",
 			config.chat.mode.c_str());
 		AppendMainFrameStatusLine(modeLine);
+	}
+
+	void AppendStartupEmbeddingsStatus(
+		const blazeclaw::config::AppConfig& config,
+		const blazeclaw::core::ServiceManager& services) {
+		if (!config.embeddings.enabled) {
+			AppendMainFrameStatusLine(
+				L"[Embeddings] startup.disabled - embeddings.enabled=false");
+			return;
+		}
+
+		CString configLine;
+		configLine.Format(
+			L"[Embeddings] startup.config - provider=%s model=%s tokenizer=%s",
+			config.embeddings.provider.c_str(),
+			config.embeddings.modelPath.c_str(),
+			config.embeddings.tokenizerPath.c_str());
+		AppendMainFrameStatusLine(configLine);
+
+		const std::string probeResult = services.InvokeGatewayMethod(
+			"gateway.embeddings.generate",
+			std::optional<std::string>(
+				"{\"text\":\"startup-embedding-probe\"}"));
+
+		if (probeResult.find("\"vector\":") != std::string::npos) {
+			AppendMainFrameStatusLine(
+				L"[Embeddings] startup.loaded - model probe succeeded");
+			return;
+		}
+
+		const CString errorLine(
+			(L"[Embeddings] startup.error - " + ToWide(probeResult)).c_str());
+		AppendMainFrameStatusLine(errorLine);
 	}
 
 	CRuntimeClass* ResolveChatRuntimeViewClass(
@@ -204,6 +249,7 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 	pMainFrame->ShowWindow(SW_SHOWMAXIMIZED);
 	pMainFrame->UpdateWindow();
 	AppendStartupConfigStatus(m_config);
+	AppendStartupEmbeddingsStatus(m_config, m_serviceManager);
 
 	return TRUE;
 }
