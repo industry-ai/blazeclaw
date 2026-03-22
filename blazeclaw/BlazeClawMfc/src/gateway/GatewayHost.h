@@ -67,9 +67,15 @@ namespace blazeclaw::gateway {
      using SkillsRefreshCallback = std::function<SkillsCatalogGatewayState()>;
 
 	 struct ChatRuntimeRequest {
+         std::string runId;
 		 std::string sessionKey;
 		 std::string message;
 		 bool hasAttachments = false;
+	 };
+
+	 struct ChatAbortRequest {
+		 std::string runId;
+		 std::string sessionKey;
 	 };
 
 	 struct ChatRuntimeResult {
@@ -119,6 +125,7 @@ namespace blazeclaw::gateway {
 	 };
 
 	 using ChatRuntimeCallback = std::function<ChatRuntimeResult(const ChatRuntimeRequest&)>;
+  using ChatAbortCallback = std::function<bool(const ChatAbortRequest&)>;
 	 using EmbeddingsGenerateCallback =
 		 std::function<EmbeddingsGenerateResult(const EmbeddingsGenerateRequest&)>;
 	 using EmbeddingsBatchCallback =
@@ -129,6 +136,7 @@ namespace blazeclaw::gateway {
 		void SetSkillsCatalogState(SkillsCatalogGatewayState state);
 		void SetSkillsRefreshCallback(SkillsRefreshCallback callback);
 		void SetChatRuntimeCallback(ChatRuntimeCallback callback);
+        void SetChatAbortCallback(ChatAbortCallback callback);
 		void SetEmbeddingsGenerateCallback(EmbeddingsGenerateCallback callback);
 		void SetEmbeddingsBatchCallback(EmbeddingsBatchCallback callback);
 
@@ -239,6 +247,7 @@ namespace blazeclaw::gateway {
         SkillsCatalogGatewayState m_skillsCatalogState;
       SkillsRefreshCallback m_skillsRefreshCallback;
       ChatRuntimeCallback m_chatRuntimeCallback;
+      ChatAbortCallback m_chatAbortCallback;
     EmbeddingsGenerateCallback m_embeddingsGenerateCallback;
 	  EmbeddingsBatchCallback m_embeddingsBatchCallback;
 	};

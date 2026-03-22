@@ -375,6 +375,50 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
     const std::string sessionId =
         request.sessionKey.empty() ? "main" : request.sessionKey;
+
+    if (m_activeConfig.localModel.enabled) {
+      const std::string prompt = request.message.empty()
+          ? std::string("Describe the attached image.")
+          : request.message;
+      const auto localResult = m_localModelRuntime.GenerateStream(
+          localmodel::TextGenerationRequest{
+              .runId = request.runId,
+              .prompt = prompt,
+              .maxTokens = std::nullopt,
+              .temperature = std::nullopt,
+          },
+          nullptr);
+      m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
+
+      if (!localResult.ok) {
+        const std::string errorCode =
+            localResult.error.has_value()
+            ? localmodel::TextGenerationErrorCodeToString(
+                localResult.error->code)
+            : "chat_runtime_error";
+        const std::string errorMessage =
+            localResult.error.has_value() &&
+                !localResult.error->message.empty()
+            ? localResult.error->message
+            : "local model generation failed";
+        return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+            .ok = false,
+            .assistantText = {},
+            .modelId = localResult.modelId,
+            .errorCode = errorCode,
+            .errorMessage = errorMessage,
+        };
+      }
+
+      return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+          .ok = true,
+          .assistantText = localResult.text,
+          .modelId = localResult.modelId,
+          .errorCode = {},
+          .errorMessage = {},
+      };
+    }
+
     const auto modelSelection = m_agentsModelRoutingService.SelectModel(
         m_activeConfig.agent.model.empty()
             ? std::string()
@@ -486,6 +530,17 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
         .errorCode = {},
         .errorMessage = {},
     };
+  });
+
+  m_gatewayHost.SetChatAbortCallback([this](
+      const blazeclaw::gateway::GatewayHost::ChatAbortRequest& request) {
+    if (!m_activeConfig.localModel.enabled) {
+      return false;
+    }
+
+    const bool cancelled = m_localModelRuntime.Cancel(request.runId);
+    m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
+    return cancelled;
   });
 
   m_gatewayHost.SetEmbeddingsGenerateCallback([this](

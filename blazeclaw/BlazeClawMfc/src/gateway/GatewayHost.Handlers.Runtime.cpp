@@ -717,6 +717,7 @@ namespace blazeclaw::gateway {
                 if (!forceError && m_chatRuntimeCallback) {
                     const auto runtimeResult = m_chatRuntimeCallback(
                         ChatRuntimeRequest{
+                            .runId = runId,
                             .sessionKey = sessionKey,
                             .message = message,
                             .hasAttachments = hasAttachments,
@@ -838,6 +839,14 @@ namespace blazeclaw::gateway {
                 }
 
                 const std::string runId = runIt->second.runId;
+                if (m_chatAbortCallback) {
+                    m_chatAbortCallback(
+                        ChatAbortRequest{
+                            .runId = runId,
+                            .sessionKey = sessionKey,
+                        });
+                }
+
                 auto& queue = m_chatEventsBySession[sessionKey];
                 std::erase_if(
                     queue,
