@@ -1944,7 +1944,17 @@ namespace blazeclaw::gateway {
 				key == "gateway.bind" ||
 				key == "gateway.port" ||
 				key == "agent.model" ||
-				key == "agent.streaming";
+               key == "agent.streaming" ||
+				key == "embeddings.enabled" ||
+				key == "embeddings.provider" ||
+				key == "embeddings.model_path" ||
+				key == "embeddings.tokenizer_path" ||
+				key == "embeddings.dimension" ||
+				key == "embeddings.max_sequence_length" ||
+				key == "embeddings.normalize" ||
+				key == "embeddings.intra_threads" ||
+				key == "embeddings.inter_threads" ||
+				key == "embeddings.execution_mode";
 
 			return protocol::ResponseFrame{
 				.id = request.id,

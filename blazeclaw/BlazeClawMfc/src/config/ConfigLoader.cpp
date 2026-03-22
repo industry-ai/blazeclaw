@@ -114,6 +114,41 @@ std::wstring NormalizeChatUiMode(const std::wstring& raw) {
   return L"webview2";
 }
 
+std::wstring ToLowerTrim(const std::wstring& raw) {
+  const std::wstring trimmed = Trim(raw);
+  std::wstring normalized;
+  normalized.reserve(trimmed.size());
+  for (const wchar_t ch : trimmed) {
+    normalized.push_back(
+        static_cast<wchar_t>(std::towlower(ch)));
+  }
+
+  return normalized;
+}
+
+std::wstring NormalizeEmbeddingsProvider(const std::wstring& raw) {
+  const std::wstring normalized = ToLowerTrim(raw);
+  if (normalized.empty()) {
+    return L"onnx";
+  }
+
+  if (normalized == L"onnx") {
+    return normalized;
+  }
+
+  return L"onnx";
+}
+
+std::wstring NormalizeEmbeddingsExecutionMode(
+    const std::wstring& raw) {
+  const std::wstring normalized = ToLowerTrim(raw);
+  if (normalized == L"parallel") {
+    return normalized;
+  }
+
+  return L"sequential";
+}
+
 } // namespace
 
 bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) const {
@@ -242,6 +277,77 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
         outConfig.models.maxFailoverAttempts = value;
       }
 
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"embeddings.enabled=", 0) == 0) {
+      outConfig.embeddings.enabled = ParseBool(
+          trimmedLine.substr(19),
+          false);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"embeddings.provider=", 0) == 0) {
+      outConfig.embeddings.provider = NormalizeEmbeddingsProvider(
+          trimmedLine.substr(20));
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"embeddings.model_path=", 0) == 0) {
+      outConfig.embeddings.modelPath = Trim(
+          trimmedLine.substr(22));
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"embeddings.tokenizer_path=", 0) == 0) {
+      outConfig.embeddings.tokenizerPath = Trim(
+          trimmedLine.substr(26));
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"embeddings.dimension=", 0) == 0) {
+      std::uint32_t value = 0;
+      if (TryParseUInt(trimmedLine.substr(21), value) && value > 0) {
+        outConfig.embeddings.dimension = value;
+      }
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"embeddings.max_sequence_length=", 0) == 0) {
+      std::uint32_t value = 0;
+      if (TryParseUInt(trimmedLine.substr(31), value) && value > 0) {
+        outConfig.embeddings.maxSequenceLength = value;
+      }
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"embeddings.normalize=", 0) == 0) {
+      outConfig.embeddings.normalize = ParseBool(
+          trimmedLine.substr(21),
+          true);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"embeddings.intra_threads=", 0) == 0) {
+      std::uint32_t value = 0;
+      if (TryParseUInt(trimmedLine.substr(25), value)) {
+        outConfig.embeddings.intraThreads = value;
+      }
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"embeddings.inter_threads=", 0) == 0) {
+      std::uint32_t value = 0;
+      if (TryParseUInt(trimmedLine.substr(25), value)) {
+        outConfig.embeddings.interThreads = value;
+      }
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"embeddings.execution_mode=", 0) == 0) {
+      outConfig.embeddings.executionMode =
+          NormalizeEmbeddingsExecutionMode(
+              trimmedLine.substr(26));
       continue;
     }
 
@@ -638,6 +744,18 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
 
   if (outConfig.agents.defaults.model.empty()) {
     outConfig.agents.defaults.model = outConfig.agent.model;
+  }
+
+  outConfig.embeddings.provider = NormalizeEmbeddingsProvider(
+      outConfig.embeddings.provider);
+  outConfig.embeddings.executionMode = NormalizeEmbeddingsExecutionMode(
+      outConfig.embeddings.executionMode);
+  if (outConfig.embeddings.dimension == 0) {
+    outConfig.embeddings.dimension = 384;
+  }
+
+  if (outConfig.embeddings.maxSequenceLength == 0) {
+    outConfig.embeddings.maxSequenceLength = 256;
   }
 
   return true;

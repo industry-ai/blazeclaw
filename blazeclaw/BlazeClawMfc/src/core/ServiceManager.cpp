@@ -483,6 +483,14 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
   const auto routing = ModelRouting();
   const auto auth = AuthProfiles();
   const auto sandbox = Sandbox();
+  const auto provider = ToNarrow(m_activeConfig.embeddings.provider);
+  const auto executionMode = ToNarrow(m_activeConfig.embeddings.executionMode);
+  const bool modelPathConfigured =
+      !m_activeConfig.embeddings.modelPath.empty();
+  const bool tokenizerPathConfigured =
+      !m_activeConfig.embeddings.tokenizerPath.empty();
+  const bool configFeatureImplemented =
+      m_registry.IsImplemented(L"embeddings-config-foundation");
 
   std::string report =
       "{\"runtime\":{\"running\":" + std::string(m_running ? "true" : "false") +
@@ -503,6 +511,19 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       ",\"authProfiles\":" + std::to_string(auth.entries.size()) + "},"
       "\"sandbox\":{\"enabledCount\":" + std::to_string(sandbox.enabledCount) +
       ",\"browserEnabledCount\":" + std::to_string(sandbox.browserEnabledCount) + "},"
+      "\"embeddings\":{\"enabled\":" +
+      std::string(m_activeConfig.embeddings.enabled ? "true" : "false") +
+      ",\"provider\":\"" + provider +
+      "\",\"executionMode\":\"" + executionMode +
+      "\",\"dimension\":" + std::to_string(m_activeConfig.embeddings.dimension) +
+      ",\"maxSequenceLength\":" +
+      std::to_string(m_activeConfig.embeddings.maxSequenceLength) +
+      ",\"modelPathConfigured\":" +
+      std::string(modelPathConfigured ? "true" : "false") +
+      ",\"tokenizerPathConfigured\":" +
+      std::string(tokenizerPathConfigured ? "true" : "false") +
+      ",\"configFeatureImplemented\":" +
+      std::string(configFeatureImplemented ? "true" : "false") + "},"
       "\"skills\":{\"catalogEntries\":" + std::to_string(m_skillsCatalog.entries.size()) +
       ",\"promptIncluded\":" + std::to_string(m_skillsPrompt.includedCount) + "},"
       "\"features\":{\"implemented\":" + std::to_string(implementedCount) +

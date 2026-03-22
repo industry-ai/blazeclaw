@@ -81,6 +81,19 @@ struct ModelsRoutingConfig {
   std::uint32_t maxFailoverAttempts = 3;
 };
 
+struct EmbeddingsConfig {
+  bool enabled = false;
+  std::wstring provider = L"onnx";
+  std::wstring modelPath;
+  std::wstring tokenizerPath;
+  std::uint32_t dimension = 384;
+  std::uint32_t maxSequenceLength = 256;
+  bool normalize = true;
+  std::uint32_t intraThreads = 0;
+  std::uint32_t interThreads = 0;
+  std::wstring executionMode = L"sequential";
+};
+
 struct AuthProfileEntryConfig {
   std::wstring id;
   std::wstring provider;
@@ -154,6 +167,7 @@ struct AppConfig {
   AcpRuntimeConfig acp;
   EmbeddedRuntimeConfig embedded;
   ModelsRoutingConfig models;
+  EmbeddingsConfig embeddings;
   AuthProfilesConfig authProfiles;
   SandboxConfig sandbox;
   TranscriptSafetyConfig transcript;
