@@ -231,6 +231,12 @@
   <ItemGroup>
     <BlazeClawChatWebAssets Include="$(ProjectDir)web\chat\**\*.*" />
   </ItemGroup>
+  <ItemGroup>
+    <BlazeClawOnnxRuntimeAssets Include="$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.1.19.2\runtimes\win-x64\native\*.dll" />
+  </ItemGroup>
+  <ItemGroup>
+    <BlazeClawEmbeddingModelAssets Include="$(ProjectDir)models\embeddings\**\*.*" />
+  </ItemGroup>
   <PropertyGroup>
     <GatewayCodegenMode Condition="'$(GatewayCodegenMode)'==''">verify</GatewayCodegenMode>
   </PropertyGroup>
@@ -242,12 +248,14 @@
   </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
+    <Import Project="..\packages\Microsoft.ML.OnnxRuntime.1.19.2\build\native\Microsoft.ML.OnnxRuntime.targets" Condition="Exists('..\packages\Microsoft.ML.OnnxRuntime.1.19.2\build\native\Microsoft.ML.OnnxRuntime.targets')" />
     <Import Project="..\packages\Microsoft.Web.WebView2.1.0.3856.49\build\native\Microsoft.Web.WebView2.targets" Condition="Exists('..\packages\Microsoft.Web.WebView2.1.0.3856.49\build\native\Microsoft.Web.WebView2.targets')" />
   </ImportGroup>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
       <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
     </PropertyGroup>
+    <Error Condition="!Exists('..\packages\Microsoft.ML.OnnxRuntime.1.19.2\build\native\Microsoft.ML.OnnxRuntime.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.ML.OnnxRuntime.1.19.2\build\native\Microsoft.ML.OnnxRuntime.targets'))" />
     <Error Condition="!Exists('..\packages\Microsoft.Web.WebView2.1.0.3856.49\build\native\Microsoft.Web.WebView2.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Web.WebView2.1.0.3856.49\build\native\Microsoft.Web.WebView2.targets'))" />
   </Target>
   <Target Name="CopyBlazeClawConfig" AfterTargets="Build">
@@ -257,5 +265,17 @@
     <Copy SourceFiles="@(BlazeClawChatWebAssets)"
           DestinationFiles="@(BlazeClawChatWebAssets->'$(OutDir)web\chat\%(RecursiveDir)%(Filename)%(Extension)')"
           SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CopyBlazeClawOnnxRuntimeAssets" AfterTargets="Build">
+    <Copy SourceFiles="@(BlazeClawOnnxRuntimeAssets)"
+          DestinationFiles="@(BlazeClawOnnxRuntimeAssets->'$(OutDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true"
+          Condition="'@(BlazeClawOnnxRuntimeAssets)'!=''" />
+  </Target>
+  <Target Name="CopyBlazeClawEmbeddingModelAssets" AfterTargets="Build">
+    <Copy SourceFiles="@(BlazeClawEmbeddingModelAssets)"
+          DestinationFiles="@(BlazeClawEmbeddingModelAssets->'$(OutDir)models\embeddings\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true"
+          Condition="'@(BlazeClawEmbeddingModelAssets)'!=''" />
   </Target>
 </Project>
