@@ -12,6 +12,9 @@ function Resolve-SessionKey {
         return $ExplicitSessionKey
     }
 
+    return "smoke-det-" + [guid]::NewGuid().ToString("N")
+}
+
 function Is-PortListening {
     param([int]$Port)
 
@@ -23,13 +26,8 @@ function Is-PortListening {
     return $false
 }
 
-    return "smoke-det-" + [guid]::NewGuid().ToString("N")
-}
-
 function Test-GatewayReachability {
-    param(
-        [string]$Url
-    )
+    param([string]$Url)
 
     try {
         $uri = [System.Uri]::new($Url)
@@ -40,62 +38,9 @@ function Test-GatewayReachability {
         $port = if ($uri.IsDefaultPort) {
             if ($uri.Scheme -eq "wss") { 443 } else { 80 }
         }
-
-function Poll-Events {
-    param(
-        [System.Net.WebSockets.ClientWebSocket]$Socket,
-        [string]$Session,
-        [ref]$CapturedEvents
-    )
-
-    $pollReq = New-ReqFrame -Method "chat.events.poll" -Params @{
-        sessionKey = $Session
-        limit = 50
-    }
-
-    Send-Req -Socket $Socket -Frame $pollReq
-    $pollRes = Wait-Response -Socket $Socket -RequestId $pollReq.id -CapturedEvents ([ref]$CapturedEvents.Value)
-    if ($null -eq $pollRes -or -not $pollRes.ok) {
-        throw "chat.events.poll failed"
-    }
-
-    return $pollRes
-}
-
-function Wait-RunTerminalState {
-    param(
-        [System.Net.WebSockets.ClientWebSocket]$Socket,
-        [string]$Session,
-        [string]$RunId,
-        [string[]]$TargetStates,
-        [int]$Retries = 20,
-        [int]$DelayMs = 200,
-        [ref]$CapturedEvents
-    )
-
-    for ($i = 0; $i -lt $Retries; $i++) {
-        $poll = Poll-Events -Socket $Socket -Session $Session -CapturedEvents ([ref]$CapturedEvents.Value)
-        $events = @($poll.payload.events)
-        foreach ($evt in $events) {
-            if ([string]$evt.runId -ne $RunId) {
-                continue
-            }
-
-            if ($TargetStates -contains [string]$evt.state) {
-                return [string]$evt.state
-            }
-        }
-
-        Start-Sleep -Milliseconds $DelayMs
-    }
-
-    throw "run $RunId did not reach expected states: $($TargetStates -join ',')"
-}
         else {
             $uri.Port
         }
-
-$resolvedSessionKey = Resolve-SessionKey -ExplicitSessionKey $SessionKey
 
         $client = [System.Net.Sockets.TcpClient]::new()
         $task = $client.ConnectAsync($uri.Host, $port)
@@ -195,6 +140,59 @@ function Wait-Response {
 
     throw "response timeout for request id $RequestId"
 }
+
+function Poll-Events {
+    param(
+        [System.Net.WebSockets.ClientWebSocket]$Socket,
+        [string]$Session,
+        [ref]$CapturedEvents
+    )
+
+    $pollReq = New-ReqFrame -Method "chat.events.poll" -Params @{
+        sessionKey = $Session
+        limit = 50
+    }
+
+    Send-Req -Socket $Socket -Frame $pollReq
+    $pollRes = Wait-Response -Socket $Socket -RequestId $pollReq.id -CapturedEvents ([ref]$CapturedEvents.Value)
+    if ($null -eq $pollRes -or -not $pollRes.ok) {
+        throw "chat.events.poll failed"
+    }
+
+    return $pollRes
+}
+
+function Wait-RunTerminalState {
+    param(
+        [System.Net.WebSockets.ClientWebSocket]$Socket,
+        [string]$Session,
+        [string]$RunId,
+        [string[]]$TargetStates,
+        [int]$Retries = 20,
+        [int]$DelayMs = 200,
+        [ref]$CapturedEvents
+    )
+
+    for ($i = 0; $i -lt $Retries; $i++) {
+        $poll = Poll-Events -Socket $Socket -Session $Session -CapturedEvents ([ref]$CapturedEvents.Value)
+        $events = @($poll.payload.events)
+        foreach ($evt in $events) {
+            if ([string]$evt.runId -ne $RunId) {
+                continue
+            }
+
+            if ($TargetStates -contains [string]$evt.state) {
+                return [string]$evt.state
+            }
+        }
+
+        Start-Sleep -Milliseconds $DelayMs
+    }
+
+    throw "run $RunId did not reach expected states: $($TargetStates -join ',')"
+}
+
+$resolvedSessionKey = Resolve-SessionKey -ExplicitSessionKey $SessionKey
 
 if (-not (Test-GatewayReachability -Url $GatewayUrl)) {
     Write-Output "[INFO] Gateway endpoint is not reachable: $GatewayUrl"
