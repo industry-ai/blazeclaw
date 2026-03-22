@@ -159,10 +159,20 @@ struct ChatUiConfig {
   std::wstring mode = L"webview2";
 };
 
+struct LocalModelConfig {
+  bool enabled = false;
+  std::wstring provider = L"onnx";
+  std::wstring modelPath;
+  std::wstring tokenizerPath;
+  std::uint32_t maxTokens = 256;
+  double temperature = 0.0;
+};
+
 struct AppConfig {
   GatewayConfig gateway;
   AgentConfig agent;
   ChatUiConfig chat;
+  LocalModelConfig localModel;
   AgentsConfig agents;
   AcpRuntimeConfig acp;
   EmbeddedRuntimeConfig embedded;

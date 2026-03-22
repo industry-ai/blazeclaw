@@ -33,6 +33,15 @@ jobs:
         shell: powershell
         run: msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64
 
+      - name: Verify ONNX runtime assets in build output
+        shell: powershell
+        run: |
+          $onnxDlls = Get-ChildItem -Path "blazeclaw/bin/Debug" -Filter "onnxruntime*.dll" -ErrorAction SilentlyContinue
+          if (-not $onnxDlls -or $onnxDlls.Count -eq 0) {
+            throw "ONNX runtime native DLLs were not found in blazeclaw/bin/Debug."
+          }
+          $onnxDlls | Select-Object -ExpandProperty FullName
+
       - name: Start BlazeClaw
         shell: powershell
         run: |
@@ -84,6 +93,9 @@ jobs:
           if (Test-Path "blazeclaw/bin/Debug/blazeclaw.conf") {
             Copy-Item "blazeclaw/bin/Debug/blazeclaw.conf" "artifacts/blazeclaw.conf" -Force
           }
+          Get-ChildItem -Path "blazeclaw/bin/Debug" -Filter "onnxruntime*.dll" -ErrorAction SilentlyContinue |
+            Select-Object FullName, Length |
+            Format-Table -AutoSize > artifacts/onnxruntime-assets.txt
           Get-Process BlazeClaw -ErrorAction SilentlyContinue | Format-List * > artifacts/blazeclaw-process.txt
           netstat -ano | findstr "18789" > artifacts/gateway-port-netstat.txt
 

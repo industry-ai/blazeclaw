@@ -238,7 +238,7 @@
     <BlazeClawChatWebAssets Include="$(ProjectDir)web\chat\**\*.*" />
   </ItemGroup>
   <ItemGroup>
-    <BlazeClawOnnxRuntimeAssets Include="$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.1.19.2\runtimes\win-x64\native\*.dll" />
+    <BlazeClawOnnxRuntimeAssets Include="$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.1.24.4\runtimes\win-x64\native\*.dll" />
   </ItemGroup>
   <ItemGroup>
     <BlazeClawEmbeddingModelAssets Include="$(ProjectDir)models\embeddings\**\*.*" />

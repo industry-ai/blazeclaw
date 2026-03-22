@@ -91,6 +91,25 @@ namespace {
 		AppendMainFrameStatusLine(errorLine);
 	}
 
+	void AppendStartupLocalModelStatus(
+		const blazeclaw::config::AppConfig& config) {
+		if (!config.localModel.enabled) {
+			AppendMainFrameStatusLine(
+				L"[Chat] startup.localModel.disabled - chat.localModel.enabled=false");
+			return;
+		}
+
+		CString localModelLine;
+		localModelLine.Format(
+			L"[Chat] startup.localModel.config - provider=%s model=%s tokenizer=%s maxTokens=%u temperature=%.2f",
+			config.localModel.provider.c_str(),
+			config.localModel.modelPath.c_str(),
+			config.localModel.tokenizerPath.c_str(),
+			config.localModel.maxTokens,
+			config.localModel.temperature);
+		AppendMainFrameStatusLine(localModelLine);
+	}
+
 	CRuntimeClass* ResolveChatRuntimeViewClass(
 		const blazeclaw::config::AppConfig& config) {
 		if (config.chat.mode == L"native") {
@@ -249,6 +268,7 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 	pMainFrame->ShowWindow(SW_SHOWMAXIMIZED);
 	pMainFrame->UpdateWindow();
 	AppendStartupConfigStatus(m_config);
+  AppendStartupLocalModelStatus(m_config);
 	AppendStartupEmbeddingsStatus(m_config, m_serviceManager);
 
 	return TRUE;

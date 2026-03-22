@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cwctype>
 #include <filesystem>
+#include <limits>
 #include <numeric>
 
 #if __has_include(<onnxruntime_cxx_api.h>)
@@ -121,6 +122,114 @@ void NormalizeL2(std::vector<float>& values) {
         static_cast<double>(value) / norm);
   }
 }
+
+#if BLAZECLAW_HAS_ONNXRUNTIME
+std::vector<std::int32_t> ConvertToInt32(
+    const std::vector<std::int64_t>& values) {
+  std::vector<std::int32_t> converted;
+  converted.reserve(values.size());
+  for (const std::int64_t value : values) {
+    converted.push_back(static_cast<std::int32_t>(value));
+  }
+
+  return converted;
+}
+
+std::vector<float> ConvertToFloat(
+    const std::vector<std::int64_t>& values) {
+  std::vector<float> converted;
+  converted.reserve(values.size());
+  for (const std::int64_t value : values) {
+    converted.push_back(static_cast<float>(value));
+  }
+
+  return converted;
+}
+
+std::vector<Ort::Float16_t> ConvertToFloat16(
+    const std::vector<std::int64_t>& values) {
+  std::vector<Ort::Float16_t> converted;
+  converted.reserve(values.size());
+  for (const std::int64_t value : values) {
+    converted.emplace_back(static_cast<float>(value));
+  }
+
+  return converted;
+}
+
+bool IsSequenceLikeInputName(const std::string& inputName) {
+  return inputName.find("input") != std::string::npos ||
+      inputName.find("attention") != std::string::npos ||
+      inputName.find("token_type") != std::string::npos ||
+      inputName.find("position") != std::string::npos;
+}
+
+bool TryResolveShape(
+    const std::vector<std::int64_t>& modelShape,
+    const bool sequenceLike,
+    const std::size_t tokenCount,
+    std::vector<std::int64_t>& resolvedShape,
+    std::size_t& elementCount) {
+  resolvedShape.clear();
+  elementCount = 1;
+
+  if (modelShape.empty()) {
+    resolvedShape.push_back(static_cast<std::int64_t>(tokenCount));
+    elementCount = tokenCount;
+    return true;
+  }
+
+  resolvedShape.reserve(modelShape.size());
+  for (std::size_t i = 0; i < modelShape.size(); ++i) {
+    const std::int64_t rawDim = modelShape[i];
+    std::int64_t dim = rawDim;
+    if (dim <= 0) {
+      if (i == 0) {
+        dim = 1;
+      } else if (sequenceLike && i == 1) {
+        dim = static_cast<std::int64_t>(tokenCount);
+      } else {
+        dim = 1;
+      }
+    }
+
+    if (dim <= 0) {
+      return false;
+    }
+
+    const std::size_t dimSize = static_cast<std::size_t>(dim);
+    if (dimSize > 0 &&
+        elementCount >
+            (std::numeric_limits<std::size_t>::max)() / dimSize) {
+      return false;
+    }
+
+    elementCount *= dimSize;
+    resolvedShape.push_back(dim);
+  }
+
+  return elementCount > 0;
+}
+
+std::vector<std::int64_t> FitInt64InputValues(
+    const std::vector<std::int64_t>& source,
+    const std::size_t elementCount,
+    const bool zeroFillOnly) {
+  std::vector<std::int64_t> values(elementCount, 0);
+  if (zeroFillOnly || source.empty()) {
+    return values;
+  }
+
+  const std::size_t copyCount = (std::min)(
+      source.size(),
+      elementCount);
+  std::copy_n(
+      source.data(),
+      copyCount,
+      values.data());
+  return values;
+}
+#endif
 
 EmbeddingResult BuildErrorResult(
     const EmbeddingsServiceSnapshot& snapshot,
@@ -449,9 +558,10 @@ EmbeddingResult OnnxEmbeddingsService::EmbedSingleTextLocked(
     }
 
     std::vector<std::int64_t> tokenTypeIds(maxTokens, 0);
-    std::array<std::int64_t, 2> inputShape{
-        1,
-        static_cast<std::int64_t>(maxTokens)};
+    std::vector<std::int64_t> positionIds(maxTokens, 0);
+    for (std::size_t i = 0; i < maxTokens; ++i) {
+      positionIds[i] = static_cast<std::int64_t>(i);
+    }
 
     Ort::AllocatorWithDefaultOptions allocator;
     const auto memoryInfo = Ort::MemoryInfo::CreateCpu(
@@ -463,9 +573,17 @@ EmbeddingResult OnnxEmbeddingsService::EmbedSingleTextLocked(
     std::vector<Ort::Value> inputTensors;
     std::vector<const char*> inputNames;
     std::vector<std::string> inputNameStorage;
+    std::vector<std::vector<std::int64_t>> int64Inputs;
+    std::vector<std::vector<std::int32_t>> int32Inputs;
+    std::vector<std::vector<float>> floatInputs;
+    std::vector<std::vector<Ort::Float16_t>> float16Inputs;
     inputTensors.reserve(inputCount);
     inputNames.reserve(inputCount);
     inputNameStorage.reserve(inputCount);
+    int64Inputs.reserve(inputCount);
+    int32Inputs.reserve(inputCount);
+    floatInputs.reserve(inputCount);
+    float16Inputs.reserve(inputCount);
 
     for (std::size_t index = 0; index < inputCount; ++index) {
       const auto nameAllocated =
@@ -481,32 +599,104 @@ EmbeddingResult OnnxEmbeddingsService::EmbedSingleTextLocked(
       inputNameStorage.push_back(inputName);
       inputNames.push_back(inputNameStorage.back().c_str());
 
+      auto inputTypeInfo =
+          m_sessionState->session->GetInputTypeInfo(index);
+      if (inputTypeInfo.GetONNXType() != ONNX_TYPE_TENSOR) {
+        return BuildErrorResult(
+            m_snapshot,
+            EmbeddingErrorCode::ShapeMismatch,
+            "onnx input type is not a tensor");
+      }
+
+      const auto inputTensorInfo = inputTypeInfo.GetTensorTypeAndShapeInfo();
+      const auto inputElementType = inputTensorInfo.GetElementType();
+      const bool sequenceLike = IsSequenceLikeInputName(inputNameStr);
+
+      std::vector<std::int64_t> resolvedShape;
+      std::size_t elementCount = 0;
+      if (!TryResolveShape(
+              inputTensorInfo.GetShape(),
+              sequenceLike,
+              maxTokens,
+              resolvedShape,
+              elementCount)) {
+        return BuildErrorResult(
+            m_snapshot,
+            EmbeddingErrorCode::ShapeMismatch,
+            "onnx input shape is invalid");
+      }
+
+      const std::vector<std::int64_t>* inputValues = &inputIds;
+      bool zeroFillOnly = !sequenceLike;
+
       if (inputNameStr.find("attention") != std::string::npos) {
+        inputValues = &attentionMask;
+        zeroFillOnly = false;
+      } else if (inputNameStr.find("token_type") != std::string::npos) {
+        inputValues = &tokenTypeIds;
+        zeroFillOnly = false;
+      } else if (inputNameStr.find("position") != std::string::npos) {
+        inputValues = &positionIds;
+        zeroFillOnly = false;
+      }
+
+      auto inputValuesFitted = FitInt64InputValues(
+          *inputValues,
+          elementCount,
+          zeroFillOnly);
+
+      if (inputElementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
+        int64Inputs.push_back(std::move(inputValuesFitted));
+        auto& converted = int64Inputs.back();
         inputTensors.push_back(Ort::Value::CreateTensor<std::int64_t>(
             memoryInfo,
-            attentionMask.data(),
-            attentionMask.size(),
-            inputShape.data(),
-            inputShape.size()));
+            converted.data(),
+            converted.size(),
+            resolvedShape.data(),
+            resolvedShape.size()));
         continue;
       }
 
-      if (inputNameStr.find("token_type") != std::string::npos) {
-        inputTensors.push_back(Ort::Value::CreateTensor<std::int64_t>(
+      if (inputElementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32) {
+        int32Inputs.push_back(ConvertToInt32(inputValuesFitted));
+        auto& converted = int32Inputs.back();
+        inputTensors.push_back(Ort::Value::CreateTensor<std::int32_t>(
             memoryInfo,
-            tokenTypeIds.data(),
-            tokenTypeIds.size(),
-            inputShape.data(),
-            inputShape.size()));
+            converted.data(),
+            converted.size(),
+            resolvedShape.data(),
+            resolvedShape.size()));
         continue;
       }
 
-      inputTensors.push_back(Ort::Value::CreateTensor<std::int64_t>(
-          memoryInfo,
-          inputIds.data(),
-          inputIds.size(),
-          inputShape.data(),
-          inputShape.size()));
+      if (inputElementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+        floatInputs.push_back(ConvertToFloat(inputValuesFitted));
+        auto& converted = floatInputs.back();
+        inputTensors.push_back(Ort::Value::CreateTensor<float>(
+            memoryInfo,
+            converted.data(),
+            converted.size(),
+            resolvedShape.data(),
+            resolvedShape.size()));
+        continue;
+      }
+
+      if (inputElementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16) {
+        float16Inputs.push_back(ConvertToFloat16(inputValuesFitted));
+        auto& converted = float16Inputs.back();
+        inputTensors.push_back(Ort::Value::CreateTensor<Ort::Float16_t>(
+            memoryInfo,
+            converted.data(),
+            converted.size(),
+            resolvedShape.data(),
+            resolvedShape.size()));
+        continue;
+      }
+
+      return BuildErrorResult(
+          m_snapshot,
+          EmbeddingErrorCode::ShapeMismatch,
+          "onnx input tensor element type is unsupported");
     }
 
     const std::size_t outputCount =
@@ -546,7 +736,36 @@ EmbeddingResult OnnxEmbeddingsService::EmbedSingleTextLocked(
 
     auto outputInfo = outputValues.front().GetTensorTypeAndShapeInfo();
     const auto outputShape = outputInfo.GetShape();
-    const float* outputData = outputValues.front().GetTensorData<float>();
+    const auto outputElementType = outputInfo.GetElementType();
+    const std::size_t outputElementCount = outputInfo.GetElementCount();
+
+    const float* outputData = nullptr;
+    std::vector<float> convertedOutput;
+
+    if (outputElementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+      outputData = outputValues.front().GetTensorData<float>();
+    } else if (outputElementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16) {
+      const auto* outputData16 =
+          outputValues.front().GetTensorData<Ort::Float16_t>();
+      if (!outputData16) {
+        return BuildErrorResult(
+            m_snapshot,
+            EmbeddingErrorCode::ShapeMismatch,
+            "onnx output float16 tensor is invalid");
+      }
+
+      convertedOutput.reserve(outputElementCount);
+      for (std::size_t i = 0; i < outputElementCount; ++i) {
+        convertedOutput.push_back(outputData16[i].ToFloat());
+      }
+      outputData = convertedOutput.data();
+    } else {
+      return BuildErrorResult(
+          m_snapshot,
+          EmbeddingErrorCode::ShapeMismatch,
+          "onnx output tensor element type is unsupported");
+    }
+
     if (!outputData || outputShape.empty()) {
       return BuildErrorResult(
           m_snapshot,

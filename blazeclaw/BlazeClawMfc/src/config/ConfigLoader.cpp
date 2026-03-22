@@ -29,6 +29,15 @@ std::wstring Trim(const std::wstring& value) {
   return std::wstring(first, last);
 }
 
+bool TryParseDouble(const std::wstring& raw, double& outValue) {
+  try {
+    outValue = std::stod(Trim(raw));
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+
 bool ParseBool(const std::wstring& raw, const bool fallback) {
   const std::wstring value = Trim(raw);
   if (value == L"true" || value == L"1" || value == L"yes") {
@@ -149,6 +158,19 @@ std::wstring NormalizeEmbeddingsExecutionMode(
   return L"sequential";
 }
 
+std::wstring NormalizeLocalModelProvider(const std::wstring& raw) {
+  const std::wstring normalized = ToLowerTrim(raw);
+  if (normalized.empty()) {
+    return L"onnx";
+  }
+
+  if (normalized == L"onnx") {
+    return normalized;
+  }
+
+  return L"onnx";
+}
+
 } // namespace
 
 bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) const {
@@ -196,6 +218,47 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
     if (trimmedLine.rfind(L"chat.ui.mode=", 0) == 0) {
       outConfig.chat.mode =
           NormalizeChatUiMode(trimmedLine.substr(13));
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"chat.localModel.enabled=", 0) == 0) {
+      outConfig.localModel.enabled = ParseBool(
+          trimmedLine.substr(24),
+          false);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"chat.localModel.provider=", 0) == 0) {
+      outConfig.localModel.provider = NormalizeLocalModelProvider(
+          trimmedLine.substr(25));
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"chat.localModel.modelPath=", 0) == 0) {
+      outConfig.localModel.modelPath = Trim(
+          trimmedLine.substr(26));
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"chat.localModel.tokenizerPath=", 0) == 0) {
+      outConfig.localModel.tokenizerPath = Trim(
+          trimmedLine.substr(30));
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"chat.localModel.maxTokens=", 0) == 0) {
+      std::uint32_t value = 0;
+      if (TryParseUInt(trimmedLine.substr(26), value) && value > 0) {
+        outConfig.localModel.maxTokens = value;
+      }
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"chat.localModel.temperature=", 0) == 0) {
+      double value = 0.0;
+      if (TryParseDouble(trimmedLine.substr(28), value) && value >= 0.0) {
+        outConfig.localModel.temperature = value;
+      }
       continue;
     }
 
@@ -750,12 +813,18 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
       outConfig.embeddings.provider);
   outConfig.embeddings.executionMode = NormalizeEmbeddingsExecutionMode(
       outConfig.embeddings.executionMode);
+  outConfig.localModel.provider = NormalizeLocalModelProvider(
+      outConfig.localModel.provider);
   if (outConfig.embeddings.dimension == 0) {
     outConfig.embeddings.dimension = 384;
   }
 
   if (outConfig.embeddings.maxSequenceLength == 0) {
     outConfig.embeddings.maxSequenceLength = 256;
+  }
+
+  if (outConfig.localModel.maxTokens == 0) {
+    outConfig.localModel.maxTokens = 256;
   }
 
   return true;

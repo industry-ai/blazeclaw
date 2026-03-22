@@ -5,3 +5,5 @@ bin/
 obj/
 
 packages/
+
+model.onnx.data
