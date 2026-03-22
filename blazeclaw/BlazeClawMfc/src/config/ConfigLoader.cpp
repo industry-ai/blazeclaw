@@ -148,6 +148,18 @@ std::wstring NormalizeEmbeddingsProvider(const std::wstring& raw) {
   return L"onnx";
 }
 
+std::wstring NormalizeLocalModelRolloutStage(
+    const std::wstring& raw) {
+  const std::wstring normalized = ToLowerTrim(raw);
+  if (normalized == L"dev" ||
+      normalized == L"nightly" ||
+      normalized == L"stable") {
+    return normalized;
+  }
+
+  return L"dev";
+}
+
 std::wstring NormalizeEmbeddingsExecutionMode(
     const std::wstring& raw) {
   const std::wstring normalized = ToLowerTrim(raw);
@@ -231,6 +243,13 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
     if (trimmedLine.rfind(L"chat.localModel.provider=", 0) == 0) {
       outConfig.localModel.provider = NormalizeLocalModelProvider(
           trimmedLine.substr(25));
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"chat.localModel.rolloutStage=", 0) == 0) {
+      outConfig.localModel.rolloutStage =
+          NormalizeLocalModelRolloutStage(
+              trimmedLine.substr(29));
       continue;
     }
 

@@ -784,6 +784,7 @@ void OnnxTextGenerationRuntime::ResetSnapshotLocked() {
   m_snapshot.ready = false;
   m_snapshot.verboseMetrics = m_config.localModel.verboseMetrics;
   m_snapshot.provider = ToNarrow(m_config.localModel.provider);
+  m_snapshot.rolloutStage = ToNarrow(m_config.localModel.rolloutStage);
   m_snapshot.storageRoot = ToNarrow(m_config.localModel.storageRoot);
   m_snapshot.version = ToNarrow(m_config.localModel.version);
   m_snapshot.modelPath = ToNarrow(m_config.localModel.modelPath);

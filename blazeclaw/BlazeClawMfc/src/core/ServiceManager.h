@@ -63,6 +63,8 @@ public:
   bool PumpGatewayNetworkOnce(std::string& error);
 
 private:
+  [[nodiscard]] bool IsLocalModelRolloutEligible() const;
+
   [[nodiscard]] blazeclaw::gateway::SkillsCatalogGatewayState BuildGatewaySkillsState() const;
   void RefreshSkillsState(
       const blazeclaw::config::AppConfig& config,
@@ -94,6 +96,9 @@ private:
   EmbeddingsServiceSnapshot m_embeddings;
   localmodel::OnnxTextGenerationRuntime m_localModelRuntime;
   localmodel::LocalModelRuntimeSnapshot m_localModelRuntimeSnapshot;
+  bool m_localModelRolloutEligible = false;
+  bool m_localModelActivationEnabled = false;
+  std::string m_localModelActivationReason;
   RetrievalMemoryService m_retrievalMemoryService;
   RetrievalMemorySnapshot m_retrievalMemory;
   PiEmbeddedService m_piEmbeddedService;

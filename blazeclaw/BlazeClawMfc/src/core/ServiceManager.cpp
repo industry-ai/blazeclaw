@@ -75,6 +75,18 @@ std::string BuildLocalModelPrompt(
   return prompt;
 }
 
+bool IsOneOfChannels(
+    const std::vector<std::wstring>& enabledChannels,
+    const std::wstring& candidate) {
+  for (const auto& channel : enabledChannels) {
+    if (_wcsicmp(channel.c_str(), candidate.c_str()) == 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 } // namespace
 
 ServiceManager::ServiceManager() = default;
@@ -256,6 +268,17 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       });
   m_embeddingsService.Configure(m_activeConfig);
   m_embeddings = m_embeddingsService.Snapshot();
+
+  m_localModelRolloutEligible = IsLocalModelRolloutEligible();
+  m_localModelActivationEnabled = false;
+  m_localModelActivationReason.clear();
+
+  if (!m_activeConfig.localModel.enabled) {
+    m_localModelActivationReason = "config_disabled";
+  } else if (!m_localModelRolloutEligible) {
+    m_localModelActivationReason = "rollout_stage_not_eligible";
+  }
+
   m_localModelRuntime.Configure(m_activeConfig);
   const bool localModelLoaded = m_localModelRuntime.LoadModel();
   m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
@@ -263,11 +286,34 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
     m_localModelRuntimeSnapshot.status = "load_failed";
   }
 
-  if (m_activeConfig.localModel.enabled && m_localModelRuntimeSnapshot.ready) {
+  if (m_activeConfig.localModel.enabled &&
+      m_localModelRolloutEligible &&
+      localModelLoaded &&
+      m_localModelRuntimeSnapshot.ready) {
+    m_localModelActivationEnabled = true;
+    m_localModelActivationReason = "active";
+  } else if (m_activeConfig.localModel.enabled &&
+             m_localModelRolloutEligible &&
+             !m_localModelRuntimeSnapshot.ready) {
+    m_localModelActivationReason = "initialization_failed";
+  }
+
+  TRACE(
+      "[LocalModel] startup.gating enabled=%s rolloutEligible=%s activation=%s reason=%s stage=%S status=%s\n",
+      m_activeConfig.localModel.enabled ? "true" : "false",
+      m_localModelRolloutEligible ? "true" : "false",
+      m_localModelActivationEnabled ? "true" : "false",
+      m_localModelActivationReason.c_str(),
+      m_activeConfig.localModel.rolloutStage.c_str(),
+      m_localModelRuntimeSnapshot.status.c_str());
+
+  if (m_localModelActivationEnabled && m_localModelRuntimeSnapshot.ready) {
     std::string localContractFailure;
     if (!m_localModelRuntime.VerifyDeterministicContract(localContractFailure)) {
       m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
       m_localModelRuntimeSnapshot.status = "contract_verification_failed";
+      m_localModelActivationEnabled = false;
+      m_localModelActivationReason = "contract_verification_failed";
       if (!localContractFailure.empty()) {
         m_localModelRuntimeSnapshot.error = localmodel::TextGenerationError{
             .code = localmodel::TextGenerationErrorCode::InferenceFailed,
@@ -428,7 +474,7 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
     const std::string sessionId =
         request.sessionKey.empty() ? "main" : request.sessionKey;
 
-    if (m_activeConfig.localModel.enabled) {
+    if (m_localModelActivationEnabled) {
       const std::string prompt = BuildLocalModelPrompt(request);
       TRACE(
           "[LocalModel] request.enqueue runId=%s session=%s promptChars=%zu attachments=%s\n",
@@ -490,6 +536,16 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
           .errorCode = {},
           .errorMessage = {},
       };
+    }
+
+    if (m_activeConfig.localModel.enabled &&
+        !m_localModelActivationEnabled) {
+      TRACE(
+          "[LocalModel] request.fallback runId=%s reason=%s rolloutEligible=%s status=%s\n",
+          request.runId.c_str(),
+          m_localModelActivationReason.c_str(),
+          m_localModelRolloutEligible ? "true" : "false",
+          m_localModelRuntimeSnapshot.status.c_str());
     }
 
     const auto modelSelection = m_agentsModelRoutingService.SelectModel(
@@ -607,7 +663,7 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
 
   m_gatewayHost.SetChatAbortCallback([this](
       const blazeclaw::gateway::GatewayHost::ChatAbortRequest& request) {
-    if (!m_activeConfig.localModel.enabled) {
+    if (!m_localModelActivationEnabled) {
       return false;
     }
 
@@ -824,7 +880,13 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       std::string(localModel.enabled ? "true" : "false") +
       ",\"ready\":" +
       std::string(localModel.ready ? "true" : "false") +
+      ",\"rolloutEligible\":" +
+      std::string(m_localModelRolloutEligible ? "true" : "false") +
+      ",\"activationEnabled\":" +
+      std::string(m_localModelActivationEnabled ? "true" : "false") +
+      ",\"activationReason\":\"" + m_localModelActivationReason +
       ",\"provider\":\"" + localModel.provider +
+      "\",\"rolloutStage\":\"" + localModel.rolloutStage +
       "\",\"storageRoot\":\"" + localModel.storageRoot +
       "\",\"version\":\"" + localModel.version +
       "\",\"status\":\"" + localModel.status +
@@ -832,7 +894,7 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       std::string(localModel.verboseMetrics ? "true" : "false") +
       ",\"runtimeDllPresent\":" +
       std::string(localModel.runtimeDllPresent ? "true" : "false") +
-      "\",\"maxTokens\":" +
+      ",\"maxTokens\":" +
       std::to_string(localModel.maxTokens) +
       ",\"temperature\":" +
       std::to_string(localModel.temperature) +
@@ -965,6 +1027,19 @@ bool ServiceManager::PumpGatewayNetworkOnce(std::string& error) {
   }
 
   return m_gatewayHost.PumpNetworkOnce(error);
+}
+
+bool ServiceManager::IsLocalModelRolloutEligible() const {
+  const std::wstring stage = m_activeConfig.localModel.rolloutStage;
+  if (_wcsicmp(stage.c_str(), L"stable") == 0) {
+    return true;
+  }
+
+  if (_wcsicmp(stage.c_str(), L"nightly") == 0) {
+    return IsOneOfChannels(m_activeConfig.enabledChannels, L"nightly");
+  }
+
+  return true;
 }
 
 } // namespace blazeclaw::core

@@ -34,6 +34,7 @@ struct LocalModelRuntimeSnapshot {
   bool ready = false;
   bool verboseMetrics = false;
   std::string provider;
+  std::string rolloutStage;
   std::string storageRoot;
   std::string version;
   std::string modelPath;

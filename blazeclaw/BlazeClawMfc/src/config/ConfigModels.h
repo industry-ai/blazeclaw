@@ -162,6 +162,7 @@ struct ChatUiConfig {
 struct LocalModelConfig {
   bool enabled = false;
   std::wstring provider = L"onnx";
+  std::wstring rolloutStage = L"dev";
   std::wstring storageRoot = L"models/chat";
   std::wstring version = L"";
   std::wstring modelPath;
