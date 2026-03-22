@@ -34,8 +34,17 @@ struct LocalModelRuntimeSnapshot {
   bool ready = false;
   bool verboseMetrics = false;
   std::string provider;
+  std::string storageRoot;
+  std::string version;
   std::string modelPath;
+  std::string modelExpectedSha256;
+  std::string modelActualSha256;
+  bool modelHashVerified = false;
   std::string tokenizerPath;
+  std::string tokenizerExpectedSha256;
+  std::string tokenizerActualSha256;
+  bool tokenizerHashVerified = false;
+  bool runtimeDllPresent = false;
   std::uint32_t maxTokens = 256;
   double temperature = 0.0;
   std::uint64_t modelLoadAttempts = 0;

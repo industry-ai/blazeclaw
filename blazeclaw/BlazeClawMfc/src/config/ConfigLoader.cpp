@@ -234,15 +234,39 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
       continue;
     }
 
+    if (trimmedLine.rfind(L"chat.localModel.storageRoot=", 0) == 0) {
+      outConfig.localModel.storageRoot = Trim(
+          trimmedLine.substr(28));
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"chat.localModel.version=", 0) == 0) {
+      outConfig.localModel.version = Trim(
+          trimmedLine.substr(24));
+      continue;
+    }
+
     if (trimmedLine.rfind(L"chat.localModel.modelPath=", 0) == 0) {
       outConfig.localModel.modelPath = Trim(
           trimmedLine.substr(26));
       continue;
     }
 
+    if (trimmedLine.rfind(L"chat.localModel.modelSha256=", 0) == 0) {
+      outConfig.localModel.modelSha256 = ToLowerTrim(
+          trimmedLine.substr(28));
+      continue;
+    }
+
     if (trimmedLine.rfind(L"chat.localModel.tokenizerPath=", 0) == 0) {
       outConfig.localModel.tokenizerPath = Trim(
           trimmedLine.substr(30));
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"chat.localModel.tokenizerSha256=", 0) == 0) {
+      outConfig.localModel.tokenizerSha256 = ToLowerTrim(
+          trimmedLine.substr(32));
       continue;
     }
 

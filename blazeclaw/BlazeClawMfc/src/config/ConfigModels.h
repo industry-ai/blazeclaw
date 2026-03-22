@@ -162,8 +162,12 @@ struct ChatUiConfig {
 struct LocalModelConfig {
   bool enabled = false;
   std::wstring provider = L"onnx";
+  std::wstring storageRoot = L"models/chat";
+  std::wstring version = L"";
   std::wstring modelPath;
+  std::wstring modelSha256;
   std::wstring tokenizerPath;
+  std::wstring tokenizerSha256;
   std::uint32_t maxTokens = 256;
   double temperature = 0.0;
   bool verboseMetrics = false;

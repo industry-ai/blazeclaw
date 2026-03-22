@@ -2,7 +2,13 @@
 #include "OnnxTextGenerationRuntime.h"
 
 #include <chrono>
+#include <array>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
+
+#include <Windows.h>
+#include <Wincrypt.h>
 
 #if __has_include(<onnxruntime_cxx_api.h>)
 #include <onnxruntime_cxx_api.h>
@@ -14,6 +20,163 @@
 namespace blazeclaw::core::localmodel {
 
 namespace {
+
+std::string ToLowerAscii(const std::string& value) {
+  std::string lowered = value;
+  for (char& ch : lowered) {
+    if (ch >= 'A' && ch <= 'Z') {
+      ch = static_cast<char>(ch - 'A' + 'a');
+    }
+  }
+
+  return lowered;
+}
+
+std::string ToHexLower(const std::uint8_t* data, const std::size_t size) {
+  static constexpr char kHex[] = "0123456789abcdef";
+  std::string hex;
+  hex.reserve(size * 2);
+  for (std::size_t i = 0; i < size; ++i) {
+    const std::uint8_t byte = data[i];
+    hex.push_back(kHex[(byte >> 4) & 0x0F]);
+    hex.push_back(kHex[byte & 0x0F]);
+  }
+
+  return hex;
+}
+
+bool ComputeFileSha256(
+    const std::filesystem::path& filePath,
+    std::string& outSha256,
+    std::string& outError) {
+  outSha256.clear();
+  outError.clear();
+
+  std::ifstream input(filePath, std::ios::binary);
+  if (!input.is_open()) {
+    outError = "failed to open file for hashing";
+    return false;
+  }
+
+  HCRYPTPROV provider = 0;
+  HCRYPTHASH hash = 0;
+  if (!CryptAcquireContextA(
+          &provider,
+          nullptr,
+          nullptr,
+          PROV_RSA_AES,
+          CRYPT_VERIFYCONTEXT)) {
+    outError = "CryptAcquireContextA failed";
+    return false;
+  }
+
+  bool success = false;
+  do {
+    if (!CryptCreateHash(provider, CALG_SHA_256, 0, 0, &hash)) {
+      outError = "CryptCreateHash(CALG_SHA_256) failed";
+      break;
+    }
+
+    std::array<char, 4096> buffer{};
+    while (input.good()) {
+      input.read(buffer.data(),
+                 static_cast<std::streamsize>(buffer.size()));
+      const auto readCount = input.gcount();
+      if (readCount <= 0) {
+        break;
+      }
+
+      if (!CryptHashData(
+              hash,
+              reinterpret_cast<const BYTE*>(buffer.data()),
+              static_cast<DWORD>(readCount),
+              0)) {
+        outError = "CryptHashData failed";
+        break;
+      }
+    }
+
+    if (!outError.empty()) {
+      break;
+    }
+
+    std::array<std::uint8_t, 32> digest{};
+    DWORD digestLength = static_cast<DWORD>(digest.size());
+    if (!CryptGetHashParam(
+            hash,
+            HP_HASHVAL,
+            digest.data(),
+            &digestLength,
+            0)) {
+      outError = "CryptGetHashParam failed";
+      break;
+    }
+
+    outSha256 = ToHexLower(digest.data(), digestLength);
+    success = true;
+  } while (false);
+
+  if (hash != 0) {
+    CryptDestroyHash(hash);
+  }
+
+  if (provider != 0) {
+    CryptReleaseContext(provider, 0);
+  }
+
+  return success;
+}
+
+std::string MakeHashMismatchMessage(
+    const char* label,
+    const std::string& expected,
+    const std::string& actual) {
+  std::ostringstream stream;
+  stream << label << " SHA-256 mismatch (expected="
+         << expected << ", actual=" << actual << ")";
+  return stream.str();
+}
+
+std::filesystem::path ResolveConfiguredPath(
+    const std::string& configuredPath,
+    const std::string& storageRoot) {
+  const std::filesystem::path path(configuredPath);
+  if (path.empty() || path.is_absolute()) {
+    return path;
+  }
+
+  const std::filesystem::path root(storageRoot);
+  if (root.empty()) {
+    return path;
+  }
+
+  const std::filesystem::path candidate = root / path;
+  std::error_code ec;
+  if (std::filesystem::exists(candidate, ec) && !ec) {
+    return candidate;
+  }
+
+  return path;
+}
+
+bool IsSha256LengthValid(const std::string& value) {
+  return value.empty() || value.size() == 64;
+}
+
+bool IsOnnxRuntimeDllAvailable() {
+  HMODULE handle = ::GetModuleHandleW(L"onnxruntime.dll");
+  if (handle != nullptr) {
+    return true;
+  }
+
+  handle = ::LoadLibraryW(L"onnxruntime.dll");
+  if (handle == nullptr) {
+    return false;
+  }
+
+  ::FreeLibrary(handle);
+  return true;
+}
 
 std::uint32_t ElapsedMs(
     const std::chrono::steady_clock::time_point& startedAt) {
@@ -70,10 +233,24 @@ bool OnnxTextGenerationRuntime::LoadModel() {
   std::lock_guard<std::mutex> lock(m_mutex);
   ResetSnapshotLocked();
   ++m_snapshot.modelLoadAttempts;
+
+  m_snapshot.modelPath = ResolveConfiguredPath(
+      m_snapshot.modelPath,
+      m_snapshot.storageRoot)
+      .string();
+  m_snapshot.tokenizerPath = ResolveConfiguredPath(
+      m_snapshot.tokenizerPath,
+      m_snapshot.storageRoot)
+      .string();
+
+  m_snapshot.runtimeDllPresent = IsOnnxRuntimeDllAvailable();
+
   TraceRuntime(
       "model.load.start",
       {},
       "provider=" + m_snapshot.provider +
+          " storageRoot=" + m_snapshot.storageRoot +
+          " version=" + m_snapshot.version +
           " model=" + m_snapshot.modelPath +
           " tokenizer=" + m_snapshot.tokenizerPath);
 
@@ -89,6 +266,51 @@ bool OnnxTextGenerationRuntime::LoadModel() {
         "model.load.failure",
         {},
         "status=disabled reason=chat.localModel.enabled=false");
+    return false;
+  }
+
+  if (!m_snapshot.runtimeDllPresent) {
+    m_snapshot.ready = false;
+    m_snapshot.status = "runtime_dll_missing";
+    ++m_snapshot.modelLoadFailures;
+    m_snapshot.error = TextGenerationError{
+        .code = TextGenerationErrorCode::RuntimeUnavailable,
+        .message = "onnxruntime.dll is missing. Ensure ONNX runtime binaries are packaged and available in PATH or app directory.",
+    };
+    TraceRuntime(
+        "model.load.failure",
+        {},
+        "status=runtime_dll_missing reason=onnxruntime_dll_not_found");
+    return false;
+  }
+
+  if (!IsSha256LengthValid(m_snapshot.modelExpectedSha256)) {
+    m_snapshot.ready = false;
+    m_snapshot.status = "model_hash_invalid";
+    ++m_snapshot.modelLoadFailures;
+    m_snapshot.error = TextGenerationError{
+        .code = TextGenerationErrorCode::ModelLoadFailed,
+        .message = "chat.localModel.modelSha256 must be empty or 64 hex chars.",
+    };
+    TraceRuntime(
+        "model.load.failure",
+        {},
+        "status=model_hash_invalid reason=invalid_model_hash_length");
+    return false;
+  }
+
+  if (!IsSha256LengthValid(m_snapshot.tokenizerExpectedSha256)) {
+    m_snapshot.ready = false;
+    m_snapshot.status = "tokenizer_hash_invalid";
+    ++m_snapshot.modelLoadFailures;
+    m_snapshot.error = TextGenerationError{
+        .code = TextGenerationErrorCode::ModelLoadFailed,
+        .message = "chat.localModel.tokenizerSha256 must be empty or 64 hex chars.",
+    };
+    TraceRuntime(
+        "model.load.failure",
+        {},
+        "status=tokenizer_hash_invalid reason=invalid_tokenizer_hash_length");
     return false;
   }
 
@@ -139,6 +361,46 @@ bool OnnxTextGenerationRuntime::LoadModel() {
     return false;
   }
 
+  if (!m_snapshot.modelExpectedSha256.empty()) {
+    std::string actualHash;
+    std::string hashError;
+    if (!ComputeFileSha256(modelPath, actualHash, hashError)) {
+      m_snapshot.ready = false;
+      m_snapshot.status = "model_hash_failed";
+      ++m_snapshot.modelLoadFailures;
+      m_snapshot.error = TextGenerationError{
+          .code = TextGenerationErrorCode::ModelLoadFailed,
+          .message = "Failed to compute model SHA-256: " + hashError,
+      };
+      TraceRuntime(
+          "model.load.failure",
+          {},
+          "status=model_hash_failed reason=" + hashError);
+      return false;
+    }
+
+    m_snapshot.modelActualSha256 = actualHash;
+    m_snapshot.modelHashVerified =
+        m_snapshot.modelExpectedSha256 == actualHash;
+    if (!m_snapshot.modelHashVerified) {
+      m_snapshot.ready = false;
+      m_snapshot.status = "model_hash_mismatch";
+      ++m_snapshot.modelLoadFailures;
+      m_snapshot.error = TextGenerationError{
+          .code = TextGenerationErrorCode::ModelLoadFailed,
+          .message = MakeHashMismatchMessage(
+              "Model",
+              m_snapshot.modelExpectedSha256,
+              m_snapshot.modelActualSha256),
+      };
+      TraceRuntime(
+          "model.load.failure",
+          {},
+          "status=model_hash_mismatch");
+      return false;
+    }
+  }
+
   std::string tokenizerError;
   if (!m_tokenizer.Load(std::filesystem::path(m_snapshot.tokenizerPath),
                         tokenizerError)) {
@@ -157,6 +419,47 @@ bool OnnxTextGenerationRuntime::LoadModel() {
         "status=tokenizer_missing reason=" +
             (tokenizerError.empty() ? std::string("load_failed") : tokenizerError));
     return false;
+  }
+
+  if (!m_snapshot.tokenizerExpectedSha256.empty()) {
+    const std::filesystem::path tokenizerPath(m_snapshot.tokenizerPath);
+    std::string actualHash;
+    std::string hashError;
+    if (!ComputeFileSha256(tokenizerPath, actualHash, hashError)) {
+      m_snapshot.ready = false;
+      m_snapshot.status = "tokenizer_hash_failed";
+      ++m_snapshot.modelLoadFailures;
+      m_snapshot.error = TextGenerationError{
+          .code = TextGenerationErrorCode::ModelLoadFailed,
+          .message = "Failed to compute tokenizer SHA-256: " + hashError,
+      };
+      TraceRuntime(
+          "model.load.failure",
+          {},
+          "status=tokenizer_hash_failed reason=" + hashError);
+      return false;
+    }
+
+    m_snapshot.tokenizerActualSha256 = actualHash;
+    m_snapshot.tokenizerHashVerified =
+        m_snapshot.tokenizerExpectedSha256 == actualHash;
+    if (!m_snapshot.tokenizerHashVerified) {
+      m_snapshot.ready = false;
+      m_snapshot.status = "tokenizer_hash_mismatch";
+      ++m_snapshot.modelLoadFailures;
+      m_snapshot.error = TextGenerationError{
+          .code = TextGenerationErrorCode::ModelLoadFailed,
+          .message = MakeHashMismatchMessage(
+              "Tokenizer",
+              m_snapshot.tokenizerExpectedSha256,
+              m_snapshot.tokenizerActualSha256),
+      };
+      TraceRuntime(
+          "model.load.failure",
+          {},
+          "status=tokenizer_hash_mismatch");
+      return false;
+    }
   }
 
 #if BLAZECLAW_HAS_ONNXRUNTIME
@@ -210,7 +513,11 @@ bool OnnxTextGenerationRuntime::LoadModel() {
   TraceRuntime(
       "model.load.success",
       {},
-      "status=ready model=" + m_snapshot.modelPath);
+      "status=ready model=" + m_snapshot.modelPath +
+          " modelHashVerified=" +
+          std::string(m_snapshot.modelHashVerified ? "true" : "false") +
+          " tokenizerHashVerified=" +
+          std::string(m_snapshot.tokenizerHashVerified ? "true" : "false"));
   return true;
 }
 
@@ -477,8 +784,21 @@ void OnnxTextGenerationRuntime::ResetSnapshotLocked() {
   m_snapshot.ready = false;
   m_snapshot.verboseMetrics = m_config.localModel.verboseMetrics;
   m_snapshot.provider = ToNarrow(m_config.localModel.provider);
+  m_snapshot.storageRoot = ToNarrow(m_config.localModel.storageRoot);
+  m_snapshot.version = ToNarrow(m_config.localModel.version);
   m_snapshot.modelPath = ToNarrow(m_config.localModel.modelPath);
+  m_snapshot.modelExpectedSha256 = ToLowerAscii(
+      ToNarrow(m_config.localModel.modelSha256));
+  m_snapshot.modelActualSha256.clear();
+  m_snapshot.modelHashVerified =
+      m_snapshot.modelExpectedSha256.empty();
   m_snapshot.tokenizerPath = ToNarrow(m_config.localModel.tokenizerPath);
+  m_snapshot.tokenizerExpectedSha256 = ToLowerAscii(
+      ToNarrow(m_config.localModel.tokenizerSha256));
+  m_snapshot.tokenizerActualSha256.clear();
+  m_snapshot.tokenizerHashVerified =
+      m_snapshot.tokenizerExpectedSha256.empty();
+  m_snapshot.runtimeDllPresent = false;
   m_snapshot.maxTokens = m_config.localModel.maxTokens;
   m_snapshot.temperature = m_config.localModel.temperature;
   m_snapshot.status = "configured";

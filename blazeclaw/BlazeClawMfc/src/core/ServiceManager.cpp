@@ -825,9 +825,13 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       ",\"ready\":" +
       std::string(localModel.ready ? "true" : "false") +
       ",\"provider\":\"" + localModel.provider +
+      "\",\"storageRoot\":\"" + localModel.storageRoot +
+      "\",\"version\":\"" + localModel.version +
       "\",\"status\":\"" + localModel.status +
       "\",\"verboseMetrics\":" +
       std::string(localModel.verboseMetrics ? "true" : "false") +
+      ",\"runtimeDllPresent\":" +
+      std::string(localModel.runtimeDllPresent ? "true" : "false") +
       "\",\"maxTokens\":" +
       std::to_string(localModel.maxTokens) +
       ",\"temperature\":" +
@@ -856,8 +860,16 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       std::to_string(localModel.lastTokensPerSecond) +
       ",\"modelPathConfigured\":" +
       std::string(!localModel.modelPath.empty() ? "true" : "false") +
+      ",\"modelHashConfigured\":" +
+      std::string(!localModel.modelExpectedSha256.empty() ? "true" : "false") +
+      ",\"modelHashVerified\":" +
+      std::string(localModel.modelHashVerified ? "true" : "false") +
       ",\"tokenizerPathConfigured\":" +
       std::string(!localModel.tokenizerPath.empty() ? "true" : "false") +
+      ",\"tokenizerHashConfigured\":" +
+      std::string(!localModel.tokenizerExpectedSha256.empty() ? "true" : "false") +
+      ",\"tokenizerHashVerified\":" +
+      std::string(localModel.tokenizerHashVerified ? "true" : "false") +
       "},"
       "\"retrieval\":{\"enabled\":" +
       std::string(retrieval.enabled ? "true" : "false") +
