@@ -25,6 +25,7 @@
 #include "SkillSecurityScanService.h"
 #include "SkillsSyncService.h"
 #include "SkillsWatchService.h"
+#include "runtime/LocalModel/OnnxTextGenerationRuntime.h"
 
 namespace blazeclaw::core {
 
@@ -48,6 +49,7 @@ public:
   [[nodiscard]] const AuthProfileSnapshot& AuthProfiles() const noexcept;
   [[nodiscard]] const SandboxSnapshot& Sandbox() const noexcept;
   [[nodiscard]] const EmbeddingsServiceSnapshot& Embeddings() const noexcept;
+  [[nodiscard]] const localmodel::LocalModelRuntimeSnapshot& LocalModelRuntime() const noexcept;
   [[nodiscard]] const RetrievalMemorySnapshot& RetrievalMemory() const noexcept;
   [[nodiscard]] std::string BuildOperatorDiagnosticsReport() const;
   [[nodiscard]] const SkillsCatalogSnapshot& SkillsCatalog() const noexcept;
@@ -90,6 +92,8 @@ private:
   AcpSpawnDecision m_lastAcpDecision;
   OnnxEmbeddingsService m_embeddingsService;
   EmbeddingsServiceSnapshot m_embeddings;
+  localmodel::OnnxTextGenerationRuntime m_localModelRuntime;
+  localmodel::LocalModelRuntimeSnapshot m_localModelRuntimeSnapshot;
   RetrievalMemoryService m_retrievalMemoryService;
   RetrievalMemorySnapshot m_retrievalMemory;
   PiEmbeddedService m_piEmbeddedService;

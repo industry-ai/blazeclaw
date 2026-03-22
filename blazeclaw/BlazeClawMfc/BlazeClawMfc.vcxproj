@@ -138,6 +138,9 @@
     <ClInclude Include="src\core\SkillsSyncService.h" />
     <ClInclude Include="src\core\SkillsWatchService.h" />
     <ClInclude Include="src\core\ServiceManager.h" />
+    <ClInclude Include="src\core\runtime\LocalModel\ITextGenerationRuntime.h" />
+    <ClInclude Include="src\core\runtime\LocalModel\OnnxTextGenerationRuntime.h" />
+    <ClInclude Include="src\core\runtime\LocalModel\TokenizerBridge.h" />
     <ClInclude Include="src\gateway\GatewayAgentRegistry.h" />
     <ClInclude Include="src\gateway\GatewayChannelRegistry.h" />
     <ClInclude Include="src\gateway\GatewayHost.h" />
@@ -199,6 +202,9 @@
     <ClCompile Include="src\core\SkillsSyncService.cpp" />
     <ClCompile Include="src\core\SkillsWatchService.cpp" />
     <ClCompile Include="src\core\ServiceManager.cpp" />
+    <ClCompile Include="src\core\runtime\LocalModel\ITextGenerationRuntime.cpp" />
+    <ClCompile Include="src\core\runtime\LocalModel\OnnxTextGenerationRuntime.cpp" />
+    <ClCompile Include="src\core\runtime\LocalModel\TokenizerBridge.cpp" />
     <ClCompile Include="src\gateway\GatewayAgentRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayChannelRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.cpp" />

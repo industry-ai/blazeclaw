@@ -222,6 +222,12 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       });
   m_embeddingsService.Configure(m_activeConfig);
   m_embeddings = m_embeddingsService.Snapshot();
+  m_localModelRuntime.Configure(m_activeConfig);
+  const bool localModelLoaded = m_localModelRuntime.LoadModel();
+  m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
+  if (!localModelLoaded && m_localModelRuntimeSnapshot.status.empty()) {
+    m_localModelRuntimeSnapshot.status = "load_failed";
+  }
   m_retrievalMemoryService.Configure(m_activeConfig);
   m_retrievalMemory = m_retrievalMemoryService.Snapshot();
   m_piEmbeddedService.Configure(m_activeConfig);
@@ -605,6 +611,10 @@ const EmbeddingsServiceSnapshot& ServiceManager::Embeddings() const noexcept {
   return m_embeddings;
 }
 
+const localmodel::LocalModelRuntimeSnapshot& ServiceManager::LocalModelRuntime() const noexcept {
+  return m_localModelRuntimeSnapshot;
+}
+
 const RetrievalMemorySnapshot& ServiceManager::RetrievalMemory() const noexcept {
   return m_retrievalMemory;
 }
@@ -643,6 +653,7 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
   const auto auth = AuthProfiles();
   const auto sandbox = Sandbox();
   const auto embeddings = Embeddings();
+  const auto localModel = LocalModelRuntime();
   const auto retrieval = RetrievalMemory();
   const bool configFeatureImplemented =
       m_registry.IsImplemented(L"embeddings-config-foundation");
@@ -681,6 +692,21 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       std::string(!embeddings.tokenizerPath.empty() ? "true" : "false") +
       ",\"configFeatureImplemented\":" +
       std::string(configFeatureImplemented ? "true" : "false") + "},"
+      "\"localModel\":{\"enabled\":" +
+      std::string(localModel.enabled ? "true" : "false") +
+      ",\"ready\":" +
+      std::string(localModel.ready ? "true" : "false") +
+      ",\"provider\":\"" + localModel.provider +
+      "\",\"status\":\"" + localModel.status +
+      "\",\"maxTokens\":" +
+      std::to_string(localModel.maxTokens) +
+      ",\"temperature\":" +
+      std::to_string(localModel.temperature) +
+      ",\"modelPathConfigured\":" +
+      std::string(!localModel.modelPath.empty() ? "true" : "false") +
+      ",\"tokenizerPathConfigured\":" +
+      std::string(!localModel.tokenizerPath.empty() ? "true" : "false") +
+      "},"
       "\"retrieval\":{\"enabled\":" +
       std::string(retrieval.enabled ? "true" : "false") +
       ",\"recordCount\":" + std::to_string(retrieval.recordCount) +
