@@ -58,7 +58,7 @@
     }
     .composer {
       display: grid;
-      grid-template-columns: 1fr auto auto;
+      grid-template-columns: 1fr auto auto auto;
       gap: 8px;
       padding: 10px;
       border-top: 1px solid #333;
@@ -97,6 +97,7 @@
     <div class="composer">
       <textarea id="input" placeholder="Type a message..."></textarea>
       <button id="sendBtn">Send</button>
+      <button id="sendErrBtn">Send Error</button>
       <button id="abortBtn" disabled>Abort</button>
     </div>
   </div>
@@ -114,7 +115,12 @@
       const messagesEl = document.getElementById("messages");
       const inputEl = document.getElementById("input");
       const sendBtn = document.getElementById("sendBtn");
+      const sendErrBtn = document.getElementById("sendErrBtn");
       const abortBtn = document.getElementById("abortBtn");
+
+      function isSilentReplyText(text) {
+        return typeof text === "string" && /^\s*NO_REPLY\s*$/i.test(text);
+      }
 
       function setStatus(text) {
         statusEl.textContent = text;
@@ -133,6 +139,10 @@
       }
 
       function addOrReplaceStream(text) {
+        if (!text || isSilentReplyText(text)) {
+          return;
+        }
+
         const existing = document.getElementById("stream-msg");
         if (existing) {
           existing.textContent = text;
@@ -184,6 +194,19 @@
         if (!message || typeof message !== "object") {
           return "";
         }
+
+      function consumeTerminalText(message) {
+        const parsed = parseTextFromMessage(message);
+        if (parsed && !isSilentReplyText(parsed)) {
+          return parsed;
+        }
+
+        if (streamText && !isSilentReplyText(streamText)) {
+          return streamText;
+        }
+
+        return "";
+      }
         if (typeof message.text === "string") {
           return message.text;
         }
@@ -204,7 +227,7 @@
           }
           if (evt.state === "delta") {
             const next = parseTextFromMessage(evt.message);
-            if (next && next.length >= streamText.length) {
+            if (next && !isSilentReplyText(next) && next.length >= streamText.length) {
               streamText = next;
               addOrReplaceStream(streamText);
             }
@@ -212,8 +235,8 @@
           }
 
           if (evt.state === "final") {
-            const text = parseTextFromMessage(evt.message) || streamText;
-            if (text && text.trim() !== "NO_REPLY") {
+            const text = consumeTerminalText(evt.message);
+            if (text) {
               if (streamText) {
                 addOrReplaceStream(text);
                 finalizeStream();
@@ -230,7 +253,7 @@
           }
 
           if (evt.state === "aborted") {
-            const text = parseTextFromMessage(evt.message) || streamText;
+            const text = consumeTerminalText(evt.message);
             if (text) {
               addOrReplaceStream(text);
               finalizeStream();
@@ -272,6 +295,14 @@
       }
 
       async function send() {
+        return sendInternal(false);
+      }
+
+      async function sendError() {
+        return sendInternal(true);
+      }
+
+      async function sendInternal(forceError) {
         const msg = inputEl.value.trim();
         if (!msg || !connected) {
           return;
@@ -288,6 +319,7 @@
             message: msg,
             deliver: false,
             idempotencyKey: runId,
+            forceError,
             attachments: []
           });
         } catch (err) {
@@ -309,6 +341,7 @@
       }
 
       sendBtn.addEventListener("click", send);
+      sendErrBtn.addEventListener("click", sendError);
       abortBtn.addEventListener("click", abort);
       inputEl.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {

@@ -54,6 +54,7 @@ public:
       const std::optional<std::string>& paramsJson = std::nullopt) const;
   [[nodiscard]] blazeclaw::gateway::protocol::ResponseFrame RouteGatewayRequest(
       const blazeclaw::gateway::protocol::RequestFrame& request) const;
+  bool PumpGatewayNetworkOnce(std::string& error);
 
 private:
   [[nodiscard]] blazeclaw::gateway::SkillsCatalogGatewayState BuildGatewaySkillsState() const;

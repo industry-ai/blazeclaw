@@ -585,4 +585,13 @@ blazeclaw::gateway::protocol::ResponseFrame ServiceManager::RouteGatewayRequest(
   return m_gatewayHost.RouteRequest(request);
 }
 
+bool ServiceManager::PumpGatewayNetworkOnce(std::string& error) {
+  if (!m_running) {
+    error = "service manager is not running";
+    return false;
+  }
+
+  return m_gatewayHost.PumpNetworkOnce(error);
+}
+
 } // namespace blazeclaw::core

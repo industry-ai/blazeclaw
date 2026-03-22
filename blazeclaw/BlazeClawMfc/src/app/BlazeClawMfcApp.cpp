@@ -216,6 +216,21 @@ int CBlazeClawMFCApp::ExitInstance() {
 	return CWinApp::ExitInstance();
 }
 
+BOOL CBlazeClawMFCApp::OnIdle(LONG lCount) {
+	BOOL baseHandled = CWinAppEx::OnIdle(lCount);
+
+	std::string pumpError;
+	if (!m_serviceManager.PumpGatewayNetworkOnce(pumpError)) {
+		if (!pumpError.empty()) {
+			TRACE(
+				"[Gateway][PumpNetworkOnce] %s\n",
+				pumpError.c_str());
+		}
+	}
+
+	return baseHandled;
+}
+
 blazeclaw::core::ServiceManager& CBlazeClawMFCApp::Services() noexcept {
 	return m_serviceManager;
 }
