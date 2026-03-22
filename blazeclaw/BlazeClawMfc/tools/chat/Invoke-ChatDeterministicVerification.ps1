@@ -12,6 +12,17 @@ function Resolve-SessionKey {
         return $ExplicitSessionKey
     }
 
+function Is-PortListening {
+    param([int]$Port)
+
+    $state = netstat -ano | findstr (":" + $Port)
+    if ($state) {
+        return $true
+    }
+
+    return $false
+}
+
     return "smoke-det-" + [guid]::NewGuid().ToString("N")
 }
 
@@ -26,14 +37,65 @@ function Test-GatewayReachability {
             return $false
         }
 
-$resolvedSessionKey = Resolve-SessionKey -ExplicitSessionKey $SessionKey
-
         $port = if ($uri.IsDefaultPort) {
             if ($uri.Scheme -eq "wss") { 443 } else { 80 }
         }
+
+function Poll-Events {
+    param(
+        [System.Net.WebSockets.ClientWebSocket]$Socket,
+        [string]$Session,
+        [ref]$CapturedEvents
+    )
+
+    $pollReq = New-ReqFrame -Method "chat.events.poll" -Params @{
+        sessionKey = $Session
+        limit = 50
+    }
+
+    Send-Req -Socket $Socket -Frame $pollReq
+    $pollRes = Wait-Response -Socket $Socket -RequestId $pollReq.id -CapturedEvents ([ref]$CapturedEvents.Value)
+    if ($null -eq $pollRes -or -not $pollRes.ok) {
+        throw "chat.events.poll failed"
+    }
+
+    return $pollRes
+}
+
+function Wait-RunTerminalState {
+    param(
+        [System.Net.WebSockets.ClientWebSocket]$Socket,
+        [string]$Session,
+        [string]$RunId,
+        [string[]]$TargetStates,
+        [int]$Retries = 20,
+        [int]$DelayMs = 200,
+        [ref]$CapturedEvents
+    )
+
+    for ($i = 0; $i -lt $Retries; $i++) {
+        $poll = Poll-Events -Socket $Socket -Session $Session -CapturedEvents ([ref]$CapturedEvents.Value)
+        $events = @($poll.payload.events)
+        foreach ($evt in $events) {
+            if ([string]$evt.runId -ne $RunId) {
+                continue
+            }
+
+            if ($TargetStates -contains [string]$evt.state) {
+                return [string]$evt.state
+            }
+        }
+
+        Start-Sleep -Milliseconds $DelayMs
+    }
+
+    throw "run $RunId did not reach expected states: $($TargetStates -join ',')"
+}
         else {
             $uri.Port
         }
+
+$resolvedSessionKey = Resolve-SessionKey -ExplicitSessionKey $SessionKey
 
         $client = [System.Net.Sockets.TcpClient]::new()
         $task = $client.ConnectAsync($uri.Host, $port)
@@ -136,8 +198,27 @@ function Wait-Response {
 
 if (-not (Test-GatewayReachability -Url $GatewayUrl)) {
     Write-Output "[INFO] Gateway endpoint is not reachable: $GatewayUrl"
-    Write-Output "[INFO] Please start BlazeClaw first, then rerun this verification script."
-    return
+    try {
+        $uri = [System.Uri]::new($GatewayUrl)
+        $port = if ($uri.IsDefaultPort) {
+            if ($uri.Scheme -eq "wss") { 443 } else { 80 }
+        }
+        else {
+            $uri.Port
+        }
+
+        if (Is-PortListening -Port $port) {
+            Write-Output "[INFO] Reachability false-negative detected; continuing because port is listening."
+        }
+        else {
+            Write-Output "[INFO] Please start BlazeClaw first, then rerun this verification script."
+            return
+        }
+    }
+    catch {
+        Write-Output "[INFO] Please start BlazeClaw first, then rerun this verification script."
+        return
+    }
 }
 
 $socket = [System.Net.WebSockets.ClientWebSocket]::new()
@@ -180,10 +261,40 @@ try {
     $sendRes = Wait-Response -Socket $socket -RequestId $sendReq.id -CapturedEvents ([ref]$events)
     Write-Output "[PASS] chat.send response received"
 
-    $pollReq = New-ReqFrame -Method "chat.events.poll" -Params @{ sessionKey = $resolvedSessionKey; limit = 50 }
-    Send-Req -Socket $socket -Frame $pollReq
-    $pollRes = Wait-Response -Socket $socket -RequestId $pollReq.id -CapturedEvents ([ref]$events)
+    $pollRes = Poll-Events -Socket $socket -Session $resolvedSessionKey -CapturedEvents ([ref]$events)
     Write-Output "[PASS] chat.events.poll response received"
+
+    $sendAttachmentReq = New-ReqFrame -Method "chat.send" -Params @{
+        sessionKey = $resolvedSessionKey
+        message = "deterministic-attachment-check"
+        deliver = $false
+        idempotencyKey = "det-att-" + [guid]::NewGuid().ToString("N")
+        attachments = @(
+            @{
+                type = "image"
+                mimeType = "image/png"
+                content = "AQ=="
+            }
+        )
+    }
+    Send-Req -Socket $socket -Frame $sendAttachmentReq
+    $sendAttachmentRes = Wait-Response -Socket $socket -RequestId $sendAttachmentReq.id -CapturedEvents ([ref]$events)
+    if (-not $sendAttachmentRes.ok) {
+        $attErrorCode = ""
+        if ($sendAttachmentRes.error) {
+            $attErrorCode = [string]$sendAttachmentRes.error.code
+        }
+
+        if ($attErrorCode -eq "invalid_frame") {
+            throw "attachment request hit frame decode regression (invalid_frame)"
+        }
+
+        throw "chat.send attachment request failed: $attErrorCode"
+    }
+    Write-Output "[PASS] chat.send attachment response received"
+
+    [void](Wait-RunTerminalState -Socket $socket -Session $resolvedSessionKey -RunId ([string]$sendAttachmentRes.payload.runId) -TargetStates @("final", "error") -CapturedEvents ([ref]$events))
+    Write-Output "[PASS] chat.send attachment terminal state observed"
 
     $abortReq = New-ReqFrame -Method "chat.abort" -Params @{ sessionKey = $resolvedSessionKey }
     Send-Req -Socket $socket -Frame $abortReq
@@ -202,10 +313,11 @@ try {
     $sendErrRes = Wait-Response -Socket $socket -RequestId $sendErrReq.id -CapturedEvents ([ref]$events)
     Write-Output "[PASS] chat.send(forceError) response received"
 
-    $pollErrReq = New-ReqFrame -Method "chat.events.poll" -Params @{ sessionKey = $resolvedSessionKey; limit = 50 }
-    Send-Req -Socket $socket -Frame $pollErrReq
-    $pollErrRes = Wait-Response -Socket $socket -RequestId $pollErrReq.id -CapturedEvents ([ref]$events)
+    $pollErrRes = Poll-Events -Socket $socket -Session $resolvedSessionKey -CapturedEvents ([ref]$events)
     Write-Output "[PASS] chat.events.poll after forceError response received"
+
+    [void](Wait-RunTerminalState -Socket $socket -Session $resolvedSessionKey -RunId ([string]$sendErrRes.payload.runId) -TargetStates @("error") -CapturedEvents ([ref]$events))
+    Write-Output "[PASS] chat.send(forceError) terminal error observed"
 
     Write-Output ""
     Write-Output "Deterministic verification summary"
@@ -213,9 +325,12 @@ try {
     Write-Output "- connect: pass"
     Write-Output "- history: pass"
     Write-Output "- send: pass"
+    Write-Output "- send-attachment: pass"
+    Write-Output "- send-attachment-terminal: pass"
     Write-Output "- poll: pass"
     Write-Output "- abort: pass"
     Write-Output "- forceError: pass"
+    Write-Output "- forceError-terminal: pass"
 }
 finally {
     if ($socket.State -eq [System.Net.WebSockets.WebSocketState]::Open) {

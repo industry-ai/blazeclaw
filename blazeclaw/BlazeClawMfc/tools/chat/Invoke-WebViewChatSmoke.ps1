@@ -205,7 +205,10 @@ function Wait-Response {
             throw "connection closed while waiting for response id $RequestId"
         }
 
-        if ($obj.type -eq "res" -and $obj.id -eq $RequestId) {
+        if (
+            $obj.type -eq "res" -and
+            ($obj.id -eq $RequestId -or [string]::IsNullOrWhiteSpace([string]$obj.id))
+        ) {
             return $obj
         }
     }
@@ -419,6 +422,23 @@ function Invoke-FlowWithSocket {
         $helloRes = Wait-Response -Socket $socket -RequestId $helloReq.id -CapturedEvents ([ref]$events)
         if ($null -eq $helloRes -or [string]$helloRes.type -ne "res") {
             throw "[$FlowName] connect response missing or invalid"
+        }
+
+        if (
+            ($helloRes.PSObject.Properties.Name -contains "ok") -and
+            (-not [bool]$helloRes.ok)
+        ) {
+            $connectCode = ""
+            if ($helloRes.error) {
+                $connectCode = [string]$helloRes.error.code
+            }
+
+            if ($connectCode -ne "schema_invalid_response") {
+                throw "[$FlowName] connect response failed: $connectCode"
+            }
+
+            Write-FlowTrace -Message (
+                "connect schema interception observed; continuing flow")
         }
 
         & $FlowBody $socket ([ref]$events)

@@ -371,6 +371,8 @@ namespace blazeclaw::gateway {
                     ExtractStringParam(request.paramsJson, "message");
                 const std::string idempotencyKey =
                     ExtractStringParam(request.paramsJson, "idempotencyKey");
+                const bool forceError =
+                    ExtractBoolParam(request.paramsJson, "forceError").value_or(false);
 
                 bool hasAttachments = false;
                 std::string attachmentsErrorCode;
@@ -438,7 +440,13 @@ namespace blazeclaw::gateway {
                 std::string backendErrorMessage;
                 bool failed = false;
 
-                if (m_chatRuntimeCallback) {
+                if (forceError) {
+                    failed = true;
+                    backendErrorCode = "forced_error";
+                    backendErrorMessage = "forced error for deterministic verification";
+                }
+
+                if (!forceError && m_chatRuntimeCallback) {
                     const auto runtimeResult = m_chatRuntimeCallback(
                         ChatRuntimeRequest{
                             .sessionKey = sessionKey,
