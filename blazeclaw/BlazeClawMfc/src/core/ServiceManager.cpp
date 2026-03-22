@@ -41,6 +41,40 @@ std::uint64_t CurrentEpochMs() {
           .count());
 }
 
+std::string BuildAttachmentSummary(
+    const std::vector<std::string>& attachmentMimeTypes) {
+  std::string summary = "[attachments]";
+  if (attachmentMimeTypes.empty()) {
+    summary += "\n- image (mimeType=unknown)";
+    return summary;
+  }
+
+  for (const auto& mimeType : attachmentMimeTypes) {
+    summary += "\n- image (mimeType=";
+    summary += mimeType.empty() ? "unknown" : mimeType;
+    summary += ")";
+  }
+
+  return summary;
+}
+
+std::string BuildLocalModelPrompt(
+    const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
+  std::string prompt = request.message;
+  if (prompt.empty()) {
+    prompt = "User sent image attachments.";
+  }
+
+  if (!request.hasAttachments) {
+    return prompt;
+  }
+
+  prompt += "\n\n";
+  prompt += BuildAttachmentSummary(request.attachmentMimeTypes);
+  prompt += "\nInstruction: produce a text-only response.";
+  return prompt;
+}
+
 } // namespace
 
 ServiceManager::ServiceManager() = default;
@@ -377,9 +411,7 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
         request.sessionKey.empty() ? "main" : request.sessionKey;
 
     if (m_activeConfig.localModel.enabled) {
-      const std::string prompt = request.message.empty()
-          ? std::string("Describe the attached image.")
-          : request.message;
+      const std::string prompt = BuildLocalModelPrompt(request);
       const auto localResult = m_localModelRuntime.GenerateStream(
           localmodel::TextGenerationRequest{
               .runId = request.runId,

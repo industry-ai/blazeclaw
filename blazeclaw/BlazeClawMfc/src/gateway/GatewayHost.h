@@ -71,6 +71,7 @@ namespace blazeclaw::gateway {
 		 std::string sessionKey;
 		 std::string message;
 		 bool hasAttachments = false;
+      std::vector<std::string> attachmentMimeTypes;
 	 };
 
 	 struct ChatAbortRequest {

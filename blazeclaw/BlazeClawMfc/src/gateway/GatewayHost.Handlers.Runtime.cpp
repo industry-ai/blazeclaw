@@ -313,6 +313,70 @@ namespace blazeclaw::gateway {
             return true;
         }
 
+        std::vector<std::string> ExtractAttachmentMimeTypes(
+            const std::optional<std::string>& paramsJson) {
+            std::vector<std::string> mimeTypes;
+            if (!paramsJson.has_value()) {
+                return mimeTypes;
+            }
+
+            std::string attachmentsRaw;
+            if (!json::FindRawField(
+                    paramsJson.value(),
+                    "attachments",
+                    attachmentsRaw)) {
+                return mimeTypes;
+            }
+
+            const std::string key = "\"mimeType\":\"";
+            std::size_t cursor = 0;
+            while (cursor < attachmentsRaw.size()) {
+                const auto keyPos = attachmentsRaw.find(key, cursor);
+                if (keyPos == std::string::npos) {
+                    break;
+                }
+
+                const std::size_t valueStart = keyPos + key.size();
+                if (valueStart >= attachmentsRaw.size()) {
+                    break;
+                }
+
+                std::size_t valueEnd = valueStart;
+                bool escaped = false;
+                while (valueEnd < attachmentsRaw.size()) {
+                    const char ch = attachmentsRaw[valueEnd];
+                    if (escaped) {
+                        escaped = false;
+                        ++valueEnd;
+                        continue;
+                    }
+
+                    if (ch == '\\') {
+                        escaped = true;
+                        ++valueEnd;
+                        continue;
+                    }
+
+                    if (ch == '"') {
+                        break;
+                    }
+
+                    ++valueEnd;
+                }
+
+                if (valueEnd > valueStart) {
+                    mimeTypes.push_back(
+                        attachmentsRaw.substr(valueStart, valueEnd - valueStart));
+                }
+
+                cursor = valueEnd == std::string::npos
+                    ? attachmentsRaw.size()
+                    : valueEnd + 1;
+            }
+
+            return mimeTypes;
+        }
+
         std::vector<std::string> ParseJsonStringArrayLocal(
             const std::string& rawArray) {
             std::vector<std::string> values;
@@ -419,6 +483,9 @@ namespace blazeclaw::gateway {
                         },
                     };
                 }
+
+                const std::vector<std::string> attachmentMimeTypes =
+                    ExtractAttachmentMimeTypes(request.paramsJson);
 
                 if (!m_embeddingsGenerateCallback) {
                     return protocol::ResponseFrame{
@@ -679,6 +746,9 @@ namespace blazeclaw::gateway {
                     };
                 }
 
+                const std::vector<std::string> attachmentMimeTypes =
+                    ExtractAttachmentMimeTypes(request.paramsJson);
+
                 if (!idempotencyKey.empty()) {
                     const auto dedupeIt =
                         m_chatRunByIdempotency.find(idempotencyKey);
@@ -721,6 +791,7 @@ namespace blazeclaw::gateway {
                             .sessionKey = sessionKey,
                             .message = message,
                             .hasAttachments = hasAttachments,
+                            .attachmentMimeTypes = attachmentMimeTypes,
                         });
 
                     if (runtimeResult.ok) {
