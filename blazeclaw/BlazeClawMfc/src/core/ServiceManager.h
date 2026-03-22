@@ -14,6 +14,7 @@
 #include "AcpSpawnService.h"
 #include "OnnxEmbeddingsService.h"
 #include "PiEmbeddedService.h"
+#include "RetrievalMemoryService.h"
 #include "SubagentRegistryService.h"
 #include "SkillsCommandService.h"
 #include "SkillsCatalogService.h"
@@ -47,6 +48,7 @@ public:
   [[nodiscard]] const AuthProfileSnapshot& AuthProfiles() const noexcept;
   [[nodiscard]] const SandboxSnapshot& Sandbox() const noexcept;
   [[nodiscard]] const EmbeddingsServiceSnapshot& Embeddings() const noexcept;
+  [[nodiscard]] const RetrievalMemorySnapshot& RetrievalMemory() const noexcept;
   [[nodiscard]] std::string BuildOperatorDiagnosticsReport() const;
   [[nodiscard]] const SkillsCatalogSnapshot& SkillsCatalog() const noexcept;
   [[nodiscard]] const SkillsEligibilitySnapshot& SkillsEligibility() const noexcept;
@@ -88,6 +90,8 @@ private:
   AcpSpawnDecision m_lastAcpDecision;
   OnnxEmbeddingsService m_embeddingsService;
   EmbeddingsServiceSnapshot m_embeddings;
+  RetrievalMemoryService m_retrievalMemoryService;
+  RetrievalMemorySnapshot m_retrievalMemory;
   PiEmbeddedService m_piEmbeddedService;
   SkillsCatalogService m_skillsCatalogService;
   SkillsCatalogSnapshot m_skillsCatalog;

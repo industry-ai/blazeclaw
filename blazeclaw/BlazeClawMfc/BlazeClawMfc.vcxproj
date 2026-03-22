@@ -126,6 +126,7 @@
     <ClInclude Include="src\core\EmbeddingsService.h" />
     <ClInclude Include="src\core\OnnxEmbeddingsService.h" />
     <ClInclude Include="src\core\PiEmbeddedService.h" />
+    <ClInclude Include="src\core\RetrievalMemoryService.h" />
     <ClInclude Include="src\core\SubagentRegistryService.h" />
     <ClInclude Include="src\core\SkillsCommandService.h" />
     <ClInclude Include="src\core\SkillsCatalogService.h" />
@@ -186,6 +187,7 @@
     <ClCompile Include="src\core\AcpSpawnService.cpp" />
     <ClCompile Include="src\core\OnnxEmbeddingsService.cpp" />
     <ClCompile Include="src\core\PiEmbeddedService.cpp" />
+    <ClCompile Include="src\core\RetrievalMemoryService.cpp" />
     <ClCompile Include="src\core\SubagentRegistryService.cpp" />
     <ClCompile Include="src\core\SkillsCommandService.cpp" />
     <ClCompile Include="src\core\SkillsCatalogService.cpp" />

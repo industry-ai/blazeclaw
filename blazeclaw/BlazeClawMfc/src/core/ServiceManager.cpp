@@ -3,6 +3,7 @@
 
 #include "../gateway/GatewayProtocolModels.h"
 
+#include <chrono>
 #include <filesystem>
 #include <unordered_map>
 
@@ -30,6 +31,14 @@ std::wstring ToWide(const std::string& value) {
   }
 
   return output;
+}
+
+std::uint64_t CurrentEpochMs() {
+  const auto now = std::chrono::system_clock::now();
+  return static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          now.time_since_epoch())
+          .count());
 }
 
 } // namespace
@@ -213,6 +222,8 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       });
   m_embeddingsService.Configure(m_activeConfig);
   m_embeddings = m_embeddingsService.Snapshot();
+  m_retrievalMemoryService.Configure(m_activeConfig);
+  m_retrievalMemory = m_retrievalMemoryService.Snapshot();
   m_piEmbeddedService.Configure(m_activeConfig);
   RefreshSkillsState(m_activeConfig, true, L"startup");
 
@@ -287,6 +298,11 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
             L"agents-embeddings fixture validation failed: " + fixtureError);
       }
 
+      if (!m_retrievalMemoryService.ValidateFixtureScenarios(candidate, fixtureError)) {
+        m_skillsCatalog.diagnostics.warnings.push_back(
+            L"agents-retrieval fixture validation failed: " + fixtureError);
+      }
+
       if (!m_piEmbeddedService.ValidateFixtureScenarios(candidate, fixtureError)) {
         m_skillsCatalog.diagnostics.warnings.push_back(
             L"agents-embedded fixture validation failed: " + fixtureError);
@@ -351,15 +367,53 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
 
   m_gatewayHost.SetChatRuntimeCallback([this](
       const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
+    const std::string sessionId =
+        request.sessionKey.empty() ? "main" : request.sessionKey;
     const auto modelSelection = m_agentsModelRoutingService.SelectModel(
         m_activeConfig.agent.model.empty()
             ? std::string()
             : ToNarrow(m_activeConfig.agent.model),
         "chat.send");
 
+    std::string retrievalContext;
+    if (m_activeConfig.embeddings.enabled && !request.message.empty()) {
+      const auto userEmbedding = m_embeddingsService.EmbedText(
+          EmbeddingRequest{
+              .text = ToWide(request.message),
+              .normalize = true,
+              .traceId = "chat-retrieval-query",
+          });
+      if (userEmbedding.ok) {
+        const auto matches = m_retrievalMemoryService.Query(
+            sessionId,
+            userEmbedding.vector,
+            2);
+        if (!matches.empty()) {
+          retrievalContext = " [ctx:";
+          for (std::size_t i = 0; i < matches.size(); ++i) {
+            if (i > 0) {
+              retrievalContext += " | ";
+            }
+
+            retrievalContext += matches[i].text;
+          }
+
+          retrievalContext += "]";
+        }
+
+        m_retrievalMemoryService.Upsert(
+            sessionId,
+            "user",
+            request.message,
+            userEmbedding.vector,
+            CurrentEpochMs());
+        m_retrievalMemory = m_retrievalMemoryService.Snapshot();
+      }
+    }
+
     const auto embeddedRun = m_piEmbeddedService.QueueRun(
         EmbeddedRunRequest{
-            .sessionId = request.sessionKey.empty() ? "main" : request.sessionKey,
+            .sessionId = sessionId,
             .agentId = "default",
             .message = request.message,
         });
@@ -380,7 +434,26 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
 
     const std::string assistantText = request.message.empty()
         ? "Received image attachment."
-        : ("Model(" + modelSelection.selectedModel + "): " + request.message);
+        : ("Model(" + modelSelection.selectedModel + "): " +
+            request.message + retrievalContext);
+
+    if (m_activeConfig.embeddings.enabled && !assistantText.empty()) {
+      const auto assistantEmbedding = m_embeddingsService.EmbedText(
+          EmbeddingRequest{
+              .text = ToWide(assistantText),
+              .normalize = true,
+              .traceId = "chat-retrieval-index",
+          });
+      if (assistantEmbedding.ok) {
+        m_retrievalMemoryService.Upsert(
+            sessionId,
+            "assistant",
+            assistantText,
+            assistantEmbedding.vector,
+            CurrentEpochMs());
+        m_retrievalMemory = m_retrievalMemoryService.Snapshot();
+      }
+    }
 
     const bool completed = m_piEmbeddedService.CompleteRun(
         embeddedRun.runId,
@@ -532,6 +605,10 @@ const EmbeddingsServiceSnapshot& ServiceManager::Embeddings() const noexcept {
   return m_embeddings;
 }
 
+const RetrievalMemorySnapshot& ServiceManager::RetrievalMemory() const noexcept {
+  return m_retrievalMemory;
+}
+
 std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
   const auto featureStateLabel = [](const FeatureState state) {
     switch (state) {
@@ -566,6 +643,7 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
   const auto auth = AuthProfiles();
   const auto sandbox = Sandbox();
   const auto embeddings = Embeddings();
+  const auto retrieval = RetrievalMemory();
   const bool configFeatureImplemented =
       m_registry.IsImplemented(L"embeddings-config-foundation");
 
@@ -603,6 +681,11 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       std::string(!embeddings.tokenizerPath.empty() ? "true" : "false") +
       ",\"configFeatureImplemented\":" +
       std::string(configFeatureImplemented ? "true" : "false") + "},"
+      "\"retrieval\":{\"enabled\":" +
+      std::string(retrieval.enabled ? "true" : "false") +
+      ",\"recordCount\":" + std::to_string(retrieval.recordCount) +
+      ",\"lastQueryCount\":" + std::to_string(retrieval.lastQueryCount) +
+      ",\"status\":\"" + retrieval.status + "\"},"
       "\"skills\":{\"catalogEntries\":" + std::to_string(m_skillsCatalog.entries.size()) +
       ",\"promptIncluded\":" + std::to_string(m_skillsPrompt.includedCount) + "},"
       "\"features\":{\"implemented\":" + std::to_string(implementedCount) +

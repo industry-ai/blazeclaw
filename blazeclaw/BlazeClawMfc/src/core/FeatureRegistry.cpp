@@ -40,6 +40,8 @@ FeatureRegistry::FeatureRegistry() {
       {L"embeddings-config-foundation", FeatureState::Implemented},
       {L"embeddings-provider-onnx", FeatureState::Implemented},
       {L"embeddings-gateway-surface", FeatureState::Planned},
+      {L"embeddings-retrieval-memory", FeatureState::Implemented},
+      {L"embeddings-chat-retrieval-context", FeatureState::Implemented},
       {L"streaming-responses", FeatureState::Planned},
       {L"whatsapp-channel", FeatureState::Planned},
       {L"telegram-channel", FeatureState::Planned},
