@@ -21,6 +21,17 @@ std::string ToNarrow(const std::wstring& value) {
   return output;
 }
 
+std::wstring ToWide(const std::string& value) {
+  std::wstring output;
+  output.reserve(value.size());
+  for (const char ch : value) {
+    output.push_back(
+        static_cast<wchar_t>(static_cast<unsigned char>(ch)));
+  }
+
+  return output;
+}
+
 } // namespace
 
 ServiceManager::ServiceManager() = default;
@@ -396,6 +407,66 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
         .errorCode = {},
         .errorMessage = {},
     };
+  });
+
+  m_gatewayHost.SetEmbeddingsGenerateCallback([this](
+      const blazeclaw::gateway::GatewayHost::EmbeddingsGenerateRequest& request) {
+    const auto result = m_embeddingsService.EmbedText(
+        EmbeddingRequest{
+            .text = ToWide(request.text),
+            .normalize = request.normalize,
+            .traceId = request.traceId,
+        });
+
+    blazeclaw::gateway::GatewayHost::EmbeddingsGenerateResult gatewayResult;
+    gatewayResult.ok = result.ok;
+    gatewayResult.vector = result.vector;
+    gatewayResult.dimension = result.dimension;
+    gatewayResult.provider = result.provider;
+    gatewayResult.modelId = result.modelId;
+    gatewayResult.latencyMs = result.latencyMs;
+    gatewayResult.status = m_embeddingsService.Snapshot().status;
+
+    if (result.error.has_value()) {
+      gatewayResult.errorCode =
+          EmbeddingErrorCodeToString(result.error->code);
+      gatewayResult.errorMessage = result.error->message;
+    }
+
+    return gatewayResult;
+  });
+
+  m_gatewayHost.SetEmbeddingsBatchCallback([this](
+      const blazeclaw::gateway::GatewayHost::EmbeddingsBatchRequest& request) {
+    std::vector<std::wstring> texts;
+    texts.reserve(request.texts.size());
+    for (const auto& text : request.texts) {
+      texts.push_back(ToWide(text));
+    }
+
+    const auto result = m_embeddingsService.EmbedBatch(
+        EmbeddingBatchRequest{
+            .texts = std::move(texts),
+            .normalize = request.normalize,
+            .traceId = request.traceId,
+        });
+
+    blazeclaw::gateway::GatewayHost::EmbeddingsBatchResult gatewayResult;
+    gatewayResult.ok = result.ok;
+    gatewayResult.vectors = result.vectors;
+    gatewayResult.dimension = result.dimension;
+    gatewayResult.provider = result.provider;
+    gatewayResult.modelId = result.modelId;
+    gatewayResult.latencyMs = result.latencyMs;
+    gatewayResult.status = m_embeddingsService.Snapshot().status;
+
+    if (result.error.has_value()) {
+      gatewayResult.errorCode =
+          EmbeddingErrorCodeToString(result.error->code);
+      gatewayResult.errorMessage = result.error->message;
+    }
+
+    return gatewayResult;
   });
 
   const bool gatewayStarted = m_gatewayHost.Start(config.gateway);

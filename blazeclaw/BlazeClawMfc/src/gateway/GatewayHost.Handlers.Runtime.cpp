@@ -3,6 +3,7 @@
 #include "GatewayJsonUtils.h"
 
 #include <chrono>
+#include <sstream>
 
 namespace blazeclaw::gateway {
 
@@ -311,9 +312,276 @@ namespace blazeclaw::gateway {
 
             return true;
         }
+
+        std::vector<std::string> ParseJsonStringArrayLocal(
+            const std::string& rawArray) {
+            std::vector<std::string> values;
+            const std::string trimmed = json::Trim(rawArray);
+            if (trimmed.size() < 2 ||
+                trimmed.front() != '[' ||
+                trimmed.back() != ']') {
+                return values;
+            }
+
+            std::string current;
+            bool inString = false;
+            bool escaping = false;
+            for (std::size_t i = 1; i + 1 < trimmed.size(); ++i) {
+                const char ch = trimmed[i];
+                if (!inString) {
+                    if (ch == '"') {
+                        inString = true;
+                        current.clear();
+                    }
+                    continue;
+                }
+
+                if (escaping) {
+                    current.push_back(ch);
+                    escaping = false;
+                    continue;
+                }
+
+                if (ch == '\\') {
+                    escaping = true;
+                    continue;
+                }
+
+                if (ch == '"') {
+                    values.push_back(current);
+                    inString = false;
+                    continue;
+                }
+
+                current.push_back(ch);
+            }
+
+            return values;
+        }
+
+        std::string SerializeFloatArrayLocal(
+            const std::vector<float>& values) {
+            std::ostringstream output;
+            output.setf(std::ios::fixed);
+            output.precision(6);
+            output << "[";
+            for (std::size_t i = 0; i < values.size(); ++i) {
+                if (i > 0) {
+                    output << ",";
+                }
+
+                output << values[i];
+            }
+            output << "]";
+            return output.str();
+        }
+
+        std::string SerializeFloatMatrixLocal(
+            const std::vector<std::vector<float>>& vectors) {
+            std::string output = "[";
+            for (std::size_t i = 0; i < vectors.size(); ++i) {
+                if (i > 0) {
+                    output += ",";
+                }
+
+                output += SerializeFloatArrayLocal(vectors[i]);
+            }
+
+            output += "]";
+            return output;
+        }
     }
 
     void GatewayHost::RegisterRuntimeHandlers() {
+        m_dispatcher.Register(
+            "gateway.embeddings.generate",
+            [this](const protocol::RequestFrame& request) {
+                const std::string text =
+                    ExtractStringParam(request.paramsJson, "text");
+                const std::optional<bool> normalize =
+                    ExtractBoolParam(request.paramsJson, "normalize");
+                const std::string model =
+                    ExtractStringParam(request.paramsJson, "model");
+                const std::string traceId =
+                    request.id.empty() ? "gateway.embeddings.generate" : request.id;
+
+                if (text.empty()) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = false,
+                        .payloadJson = std::nullopt,
+                        .error = protocol::ErrorShape{
+                            .code = "invalid_params",
+                            .message = "`text` must be a non-empty string.",
+                            .detailsJson = std::nullopt,
+                            .retryable = false,
+                            .retryAfterMs = std::nullopt,
+                        },
+                    };
+                }
+
+                if (!m_embeddingsGenerateCallback) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = false,
+                        .payloadJson = std::nullopt,
+                        .error = protocol::ErrorShape{
+                            .code = "runtime_unavailable",
+                            .message = "Embeddings runtime callback is unavailable.",
+                            .detailsJson = std::nullopt,
+                            .retryable = false,
+                            .retryAfterMs = std::nullopt,
+                        },
+                    };
+                }
+
+                const auto result = m_embeddingsGenerateCallback(
+                    EmbeddingsGenerateRequest{
+                        .text = text,
+                        .normalize = normalize,
+                        .model = model,
+                        .traceId = traceId,
+                    });
+
+                if (!result.ok) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = false,
+                        .payloadJson = std::nullopt,
+                        .error = protocol::ErrorShape{
+                            .code = result.errorCode.empty()
+                                ? "embedding_failed"
+                                : result.errorCode,
+                            .message = result.errorMessage.empty()
+                                ? "Embedding generation failed."
+                                : result.errorMessage,
+                            .detailsJson = std::nullopt,
+                            .retryable = false,
+                            .retryAfterMs = std::nullopt,
+                        },
+                    };
+                }
+
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"vector\":" + SerializeFloatArrayLocal(result.vector) +
+                        ",\"dimension\":" + std::to_string(result.dimension) +
+                        ",\"provider\":\"" + EscapeJsonLocal(result.provider) +
+                        "\",\"model\":\"" + EscapeJsonLocal(result.modelId) +
+                        "\",\"latencyMs\":" + std::to_string(result.latencyMs) +
+                        ",\"status\":\"" + EscapeJsonLocal(result.status) +
+                        "\"}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.embeddings.batchGenerate",
+            [this](const protocol::RequestFrame& request) {
+                std::string rawTexts;
+                std::vector<std::string> texts;
+                if (request.paramsJson.has_value() &&
+                    json::FindRawField(request.paramsJson.value(), "texts", rawTexts)) {
+                    texts = ParseJsonStringArrayLocal(rawTexts);
+                }
+
+                const std::optional<bool> normalize =
+                    ExtractBoolParam(request.paramsJson, "normalize");
+                const std::string model =
+                    ExtractStringParam(request.paramsJson, "model");
+                const std::string traceId =
+                    request.id.empty() ? "gateway.embeddings.batchGenerate" : request.id;
+
+                if (texts.empty()) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = false,
+                        .payloadJson = std::nullopt,
+                        .error = protocol::ErrorShape{
+                            .code = "invalid_params",
+                            .message = "`texts` must be a non-empty string array.",
+                            .detailsJson = std::nullopt,
+                            .retryable = false,
+                            .retryAfterMs = std::nullopt,
+                        },
+                    };
+                }
+
+                if (texts.size() > 64) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = false,
+                        .payloadJson = std::nullopt,
+                        .error = protocol::ErrorShape{
+                            .code = "invalid_params",
+                            .message = "`texts` exceeds maximum batch size of 64.",
+                            .detailsJson = std::nullopt,
+                            .retryable = false,
+                            .retryAfterMs = std::nullopt,
+                        },
+                    };
+                }
+
+                if (!m_embeddingsBatchCallback) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = false,
+                        .payloadJson = std::nullopt,
+                        .error = protocol::ErrorShape{
+                            .code = "runtime_unavailable",
+                            .message = "Embeddings runtime callback is unavailable.",
+                            .detailsJson = std::nullopt,
+                            .retryable = false,
+                            .retryAfterMs = std::nullopt,
+                        },
+                    };
+                }
+
+                const auto result = m_embeddingsBatchCallback(
+                    EmbeddingsBatchRequest{
+                        .texts = texts,
+                        .normalize = normalize,
+                        .model = model,
+                        .traceId = traceId,
+                    });
+
+                if (!result.ok) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = false,
+                        .payloadJson = std::nullopt,
+                        .error = protocol::ErrorShape{
+                            .code = result.errorCode.empty()
+                                ? "embedding_failed"
+                                : result.errorCode,
+                            .message = result.errorMessage.empty()
+                                ? "Embedding batch generation failed."
+                                : result.errorMessage,
+                            .detailsJson = std::nullopt,
+                            .retryable = false,
+                            .retryAfterMs = std::nullopt,
+                        },
+                    };
+                }
+
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"vectors\":" + SerializeFloatMatrixLocal(result.vectors) +
+                        ",\"count\":" + std::to_string(result.vectors.size()) +
+                        ",\"dimension\":" + std::to_string(result.dimension) +
+                        ",\"provider\":\"" + EscapeJsonLocal(result.provider) +
+                        "\",\"model\":\"" + EscapeJsonLocal(result.modelId) +
+                        "\",\"latencyMs\":" + std::to_string(result.latencyMs) +
+                        ",\"status\":\"" + EscapeJsonLocal(result.status) +
+                        "\"}",
+                    .error = std::nullopt,
+                };
+            });
+
         m_dispatcher.Register(
             "chat.history",
             [this](const protocol::RequestFrame& request) {

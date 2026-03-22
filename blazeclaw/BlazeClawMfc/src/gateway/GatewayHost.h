@@ -80,13 +80,57 @@ namespace blazeclaw::gateway {
 		 std::string errorMessage;
 	 };
 
+	 struct EmbeddingsGenerateRequest {
+		 std::string text;
+		 std::optional<bool> normalize;
+		 std::string model;
+		 std::string traceId;
+	 };
+
+	 struct EmbeddingsGenerateResult {
+		 bool ok = false;
+		 std::vector<float> vector;
+		 std::size_t dimension = 0;
+		 std::string provider;
+		 std::string modelId;
+		 std::uint32_t latencyMs = 0;
+		 std::string status;
+		 std::string errorCode;
+		 std::string errorMessage;
+	 };
+
+	 struct EmbeddingsBatchRequest {
+		 std::vector<std::string> texts;
+		 std::optional<bool> normalize;
+		 std::string model;
+		 std::string traceId;
+	 };
+
+	 struct EmbeddingsBatchResult {
+		 bool ok = false;
+		 std::vector<std::vector<float>> vectors;
+		 std::size_t dimension = 0;
+		 std::string provider;
+		 std::string modelId;
+		 std::uint32_t latencyMs = 0;
+		 std::string status;
+		 std::string errorCode;
+		 std::string errorMessage;
+	 };
+
 	 using ChatRuntimeCallback = std::function<ChatRuntimeResult(const ChatRuntimeRequest&)>;
+	 using EmbeddingsGenerateCallback =
+		 std::function<EmbeddingsGenerateResult(const EmbeddingsGenerateRequest&)>;
+	 using EmbeddingsBatchCallback =
+		 std::function<EmbeddingsBatchResult(const EmbeddingsBatchRequest&)>;
 
 		bool Start(const blazeclaw::config::GatewayConfig& config);
 		void Stop();
 		void SetSkillsCatalogState(SkillsCatalogGatewayState state);
 		void SetSkillsRefreshCallback(SkillsRefreshCallback callback);
 		void SetChatRuntimeCallback(ChatRuntimeCallback callback);
+		void SetEmbeddingsGenerateCallback(EmbeddingsGenerateCallback callback);
+		void SetEmbeddingsBatchCallback(EmbeddingsBatchCallback callback);
 
 		[[nodiscard]] bool IsRunning() const noexcept;
 		[[nodiscard]] std::string LastWarning() const;
@@ -195,6 +239,8 @@ namespace blazeclaw::gateway {
         SkillsCatalogGatewayState m_skillsCatalogState;
       SkillsRefreshCallback m_skillsRefreshCallback;
       ChatRuntimeCallback m_chatRuntimeCallback;
+    EmbeddingsGenerateCallback m_embeddingsGenerateCallback;
+	  EmbeddingsBatchCallback m_embeddingsBatchCallback;
 	};
 
 } // namespace blazeclaw::gateway

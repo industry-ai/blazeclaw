@@ -295,6 +295,16 @@ namespace blazeclaw::gateway {
 		m_chatRuntimeCallback = std::move(callback);
 	}
 
+	void GatewayHost::SetEmbeddingsGenerateCallback(
+		EmbeddingsGenerateCallback callback) {
+		m_embeddingsGenerateCallback = std::move(callback);
+	}
+
+	void GatewayHost::SetEmbeddingsBatchCallback(
+		EmbeddingsBatchCallback callback) {
+		m_embeddingsBatchCallback = std::move(callback);
+	}
+
 	bool GatewayHost::IsRunning() const noexcept {
 		return m_running;
 	}
