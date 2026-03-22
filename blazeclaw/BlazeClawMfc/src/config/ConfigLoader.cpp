@@ -262,6 +262,13 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
       continue;
     }
 
+    if (trimmedLine.rfind(L"chat.localModel.verboseMetrics=", 0) == 0) {
+      outConfig.localModel.verboseMetrics = ParseBool(
+          trimmedLine.substr(31),
+          false);
+      continue;
+    }
+
     if (trimmedLine.rfind(L"acp.enabled=", 0) == 0) {
       outConfig.acp.enabled = ParseBool(trimmedLine.substr(12), false);
       continue;

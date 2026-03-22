@@ -23,6 +23,17 @@ std::uint32_t ElapsedMs(
           .count());
 }
 
+double TokensPerSecond(
+    const std::uint32_t generatedTokens,
+    const std::uint32_t latencyMs) {
+  if (generatedTokens == 0 || latencyMs == 0) {
+    return 0.0;
+  }
+
+  return static_cast<double>(generatedTokens) * 1000.0 /
+      static_cast<double>(latencyMs);
+}
+
 } // namespace
 
 struct OnnxTextGenerationRuntime::SessionState {
@@ -58,34 +69,56 @@ LocalModelRuntimeSnapshot OnnxTextGenerationRuntime::Snapshot() const {
 bool OnnxTextGenerationRuntime::LoadModel() {
   std::lock_guard<std::mutex> lock(m_mutex);
   ResetSnapshotLocked();
+  ++m_snapshot.modelLoadAttempts;
+  TraceRuntime(
+      "model.load.start",
+      {},
+      "provider=" + m_snapshot.provider +
+          " model=" + m_snapshot.modelPath +
+          " tokenizer=" + m_snapshot.tokenizerPath);
 
   if (!m_snapshot.enabled) {
     m_snapshot.ready = false;
     m_snapshot.status = "disabled";
+    ++m_snapshot.modelLoadFailures;
     m_snapshot.error = TextGenerationError{
         .code = TextGenerationErrorCode::LocalModelDisabled,
         .message = "chat.localModel.enabled=false",
     };
+    TraceRuntime(
+        "model.load.failure",
+        {},
+        "status=disabled reason=chat.localModel.enabled=false");
     return false;
   }
 
   if (m_snapshot.provider != "onnx") {
     m_snapshot.ready = false;
     m_snapshot.status = "provider_not_supported";
+    ++m_snapshot.modelLoadFailures;
     m_snapshot.error = TextGenerationError{
         .code = TextGenerationErrorCode::ProviderNotSupported,
         .message = "Only ONNX provider is supported for local generation.",
     };
+    TraceRuntime(
+        "model.load.failure",
+        {},
+        "status=provider_not_supported provider=" + m_snapshot.provider);
     return false;
   }
 
   if (m_snapshot.modelPath.empty()) {
     m_snapshot.ready = false;
     m_snapshot.status = "model_missing";
+    ++m_snapshot.modelLoadFailures;
     m_snapshot.error = TextGenerationError{
         .code = TextGenerationErrorCode::ModelNotFound,
         .message = "chat.localModel.modelPath is not configured.",
     };
+    TraceRuntime(
+        "model.load.failure",
+        {},
+        "status=model_missing reason=modelPath_not_configured");
     return false;
   }
 
@@ -94,10 +127,15 @@ bool OnnxTextGenerationRuntime::LoadModel() {
   if (!std::filesystem::exists(modelPath, ec) || ec) {
     m_snapshot.ready = false;
     m_snapshot.status = "model_missing";
+    ++m_snapshot.modelLoadFailures;
     m_snapshot.error = TextGenerationError{
         .code = TextGenerationErrorCode::ModelNotFound,
         .message = "Local model file was not found.",
     };
+    TraceRuntime(
+        "model.load.failure",
+        {},
+        "status=model_missing reason=model_file_not_found");
     return false;
   }
 
@@ -106,12 +144,18 @@ bool OnnxTextGenerationRuntime::LoadModel() {
                         tokenizerError)) {
     m_snapshot.ready = false;
     m_snapshot.status = "tokenizer_missing";
+    ++m_snapshot.modelLoadFailures;
     m_snapshot.error = TextGenerationError{
         .code = TextGenerationErrorCode::TokenizerNotFound,
         .message = tokenizerError.empty()
             ? "Tokenizer could not be loaded."
             : tokenizerError,
     };
+    TraceRuntime(
+        "model.load.failure",
+        {},
+        "status=tokenizer_missing reason=" +
+            (tokenizerError.empty() ? std::string("load_failed") : tokenizerError));
     return false;
   }
 
@@ -134,25 +178,39 @@ bool OnnxTextGenerationRuntime::LoadModel() {
   } catch (const std::exception& ex) {
     m_snapshot.ready = false;
     m_snapshot.status = "model_load_failed";
+    ++m_snapshot.modelLoadFailures;
     m_snapshot.error = TextGenerationError{
         .code = TextGenerationErrorCode::ModelLoadFailed,
         .message = ex.what(),
     };
+    TraceRuntime(
+        "model.load.failure",
+        {},
+        "status=model_load_failed reason=" + std::string(ex.what()));
     return false;
   }
 #else
   m_snapshot.ready = false;
   m_snapshot.status = "runtime_unavailable";
+  ++m_snapshot.modelLoadFailures;
   m_snapshot.error = TextGenerationError{
       .code = TextGenerationErrorCode::RuntimeUnavailable,
       .message = "ONNX Runtime headers are unavailable at compile time.",
   };
+  TraceRuntime(
+      "model.load.failure",
+      {},
+      "status=runtime_unavailable reason=onnx_headers_missing");
   return false;
 #endif
 
   m_snapshot.ready = true;
   m_snapshot.status = "ready";
   m_snapshot.error.reset();
+  TraceRuntime(
+      "model.load.success",
+      {},
+      "status=ready model=" + m_snapshot.modelPath);
   return true;
 }
 
@@ -164,8 +222,16 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
 
   {
     std::lock_guard<std::mutex> lock(m_mutex);
+    ++m_snapshot.requestsStarted;
+    TraceRuntime(
+        "request.start",
+        request.runId,
+        "promptChars=" + std::to_string(request.prompt.size()));
+
     if (!EnsureLoadedLocked(result)) {
+      ++m_snapshot.requestsFailed;
       result.latencyMs = ElapsedMs(startedAt);
+      m_snapshot.lastLatencyMs = result.latencyMs;
       return result;
     }
 
@@ -177,6 +243,13 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
           .message = "Prompt must not be empty.",
       };
       result.latencyMs = ElapsedMs(startedAt);
+      ++m_snapshot.requestsFailed;
+      m_snapshot.lastLatencyMs = result.latencyMs;
+      TraceRuntime(
+          "request.terminal",
+          request.runId,
+          "state=error reason=invalid_input latencyMs=" +
+              std::to_string(result.latencyMs));
       return result;
     }
 
@@ -201,6 +274,16 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
     result.modelId = m_snapshot.modelPath;
     result.error = tokenizationError;
     result.latencyMs = ElapsedMs(startedAt);
+    {
+      std::lock_guard<std::mutex> lock(m_mutex);
+      ++m_snapshot.requestsFailed;
+      m_snapshot.lastLatencyMs = result.latencyMs;
+    }
+    TraceRuntime(
+        "request.terminal",
+        request.runId,
+        "state=error reason=tokenization_failed latencyMs=" +
+            std::to_string(result.latencyMs));
     return result;
   }
 
@@ -209,6 +292,7 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
   emittedTokens.push_back("Local");
   emittedTokens.push_back("ONNX");
   emittedTokens.push_back("response:");
+  bool firstTokenLogged = false;
 
   for (const auto& token : promptTokens) {
     if (emittedTokens.size() >= maxTokens) {
@@ -239,6 +323,14 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
     }
 
     emittedTokens.push_back(token);
+    if (!firstTokenLogged) {
+      TraceRuntime(
+          "request.first_token",
+          request.runId,
+          "tokenIndex=" + std::to_string(emittedTokens.size()));
+      firstTokenLogged = true;
+    }
+
     if (onDelta) {
       const std::string delta = emittedTokens.size() == 1
           ? emittedTokens.back()
@@ -261,6 +353,23 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
   result.text = m_tokenizer.Detokenize(emittedTokens);
   result.latencyMs = ElapsedMs(startedAt);
   result.error.reset();
+  const double tokensPerSecond =
+      TokensPerSecond(result.generatedTokens, result.latencyMs);
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    ++m_snapshot.requestsCompleted;
+    m_snapshot.cumulativeTokens += result.generatedTokens;
+    m_snapshot.cumulativeLatencyMs += result.latencyMs;
+    m_snapshot.lastLatencyMs = result.latencyMs;
+    m_snapshot.lastGeneratedTokens = result.generatedTokens;
+    m_snapshot.lastTokensPerSecond = tokensPerSecond;
+  }
+  TraceRuntime(
+      "request.terminal",
+      request.runId,
+      "state=final latencyMs=" + std::to_string(result.latencyMs) +
+          " tokens=" + std::to_string(result.generatedTokens) +
+          " tps=" + std::to_string(tokensPerSecond));
   return result;
 }
 
@@ -272,10 +381,18 @@ bool OnnxTextGenerationRuntime::Cancel(const std::string& runId) {
   std::lock_guard<std::mutex> lock(m_mutex);
   const auto it = m_cancelFlagsByRunId.find(runId);
   if (it == m_cancelFlagsByRunId.end()) {
+    TraceRuntime(
+        "request.cancel",
+        runId,
+        "accepted=false reason=run_not_found");
     return false;
   }
 
   it->second = true;
+  TraceRuntime(
+      "request.cancel",
+      runId,
+      "accepted=true");
   return true;
 }
 
@@ -311,6 +428,7 @@ std::string OnnxTextGenerationRuntime::ToNarrow(const std::wstring& value) {
 void OnnxTextGenerationRuntime::ResetSnapshotLocked() {
   m_snapshot.enabled = m_config.localModel.enabled;
   m_snapshot.ready = false;
+  m_snapshot.verboseMetrics = m_config.localModel.verboseMetrics;
   m_snapshot.provider = ToNarrow(m_config.localModel.provider);
   m_snapshot.modelPath = ToNarrow(m_config.localModel.modelPath);
   m_snapshot.tokenizerPath = ToNarrow(m_config.localModel.tokenizerPath);
@@ -318,6 +436,25 @@ void OnnxTextGenerationRuntime::ResetSnapshotLocked() {
   m_snapshot.temperature = m_config.localModel.temperature;
   m_snapshot.status = "configured";
   m_snapshot.error.reset();
+}
+
+void OnnxTextGenerationRuntime::TraceRuntime(
+    const char* stage,
+    const std::string& runId,
+    const std::string& details) {
+  std::string trace = "[LocalModel] ";
+  trace += stage;
+  if (!runId.empty()) {
+    trace += " runId=";
+    trace += runId;
+  }
+
+  if (!details.empty()) {
+    trace += " - ";
+    trace += details;
+  }
+
+  TRACE("%s\n", trace.c_str());
 }
 
 } // namespace blazeclaw::core::localmodel

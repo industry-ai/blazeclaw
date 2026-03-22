@@ -166,6 +166,7 @@ struct LocalModelConfig {
   std::wstring tokenizerPath;
   std::uint32_t maxTokens = 256;
   double temperature = 0.0;
+  bool verboseMetrics = false;
 };
 
 struct AppConfig {

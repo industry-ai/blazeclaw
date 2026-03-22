@@ -412,6 +412,16 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
 
     if (m_activeConfig.localModel.enabled) {
       const std::string prompt = BuildLocalModelPrompt(request);
+      TRACE(
+          "[LocalModel] request.enqueue runId=%s session=%s promptChars=%zu attachments=%s\n",
+          request.runId.c_str(),
+          sessionId.c_str(),
+          prompt.size(),
+          request.hasAttachments ? "true" : "false");
+      TRACE(
+          "[LocalModel] request.start runId=%s\n",
+          request.runId.c_str());
+
       const auto localResult = m_localModelRuntime.GenerateStream(
           localmodel::TextGenerationRequest{
               .runId = request.runId,
@@ -433,6 +443,13 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
                 !localResult.error->message.empty()
             ? localResult.error->message
             : "local model generation failed";
+        TRACE(
+            "[LocalModel] request.terminal runId=%s state=%s latencyMs=%u tokens=%u reason=%s\n",
+            request.runId.c_str(),
+            localResult.cancelled ? "aborted" : "error",
+            localResult.latencyMs,
+            localResult.generatedTokens,
+            errorMessage.c_str());
         return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
             .ok = false,
             .assistantText = {},
@@ -441,6 +458,12 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
             .errorMessage = errorMessage,
         };
       }
+
+      TRACE(
+          "[LocalModel] request.terminal runId=%s state=final latencyMs=%u tokens=%u\n",
+          request.runId.c_str(),
+          localResult.latencyMs,
+          localResult.generatedTokens);
 
       return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
           .ok = true,
@@ -785,10 +808,34 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       std::string(localModel.ready ? "true" : "false") +
       ",\"provider\":\"" + localModel.provider +
       "\",\"status\":\"" + localModel.status +
+      "\",\"verboseMetrics\":" +
+      std::string(localModel.verboseMetrics ? "true" : "false") +
       "\",\"maxTokens\":" +
       std::to_string(localModel.maxTokens) +
       ",\"temperature\":" +
       std::to_string(localModel.temperature) +
+      ",\"modelLoadAttempts\":" +
+      std::to_string(localModel.modelLoadAttempts) +
+      ",\"modelLoadFailures\":" +
+      std::to_string(localModel.modelLoadFailures) +
+      ",\"requestsStarted\":" +
+      std::to_string(localModel.requestsStarted) +
+      ",\"requestsCompleted\":" +
+      std::to_string(localModel.requestsCompleted) +
+      ",\"requestsFailed\":" +
+      std::to_string(localModel.requestsFailed) +
+      ",\"requestsCancelled\":" +
+      std::to_string(localModel.requestsCancelled) +
+      ",\"cumulativeTokens\":" +
+      std::to_string(localModel.cumulativeTokens) +
+      ",\"cumulativeLatencyMs\":" +
+      std::to_string(localModel.cumulativeLatencyMs) +
+      ",\"lastLatencyMs\":" +
+      std::to_string(localModel.lastLatencyMs) +
+      ",\"lastGeneratedTokens\":" +
+      std::to_string(localModel.lastGeneratedTokens) +
+      ",\"lastTokensPerSecond\":" +
+      std::to_string(localModel.lastTokensPerSecond) +
       ",\"modelPathConfigured\":" +
       std::string(!localModel.modelPath.empty() ? "true" : "false") +
       ",\"tokenizerPathConfigured\":" +

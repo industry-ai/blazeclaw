@@ -33,6 +33,11 @@ private:
 
   [[nodiscard]] static std::string ToNarrow(const std::wstring& value);
 
+  static void TraceRuntime(
+      const char* stage,
+      const std::string& runId,
+      const std::string& details);
+
   void ResetSnapshotLocked();
 
   mutable std::mutex m_mutex;

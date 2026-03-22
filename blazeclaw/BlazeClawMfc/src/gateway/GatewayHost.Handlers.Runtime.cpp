@@ -484,9 +484,6 @@ namespace blazeclaw::gateway {
                     };
                 }
 
-                const std::vector<std::string> attachmentMimeTypes =
-                    ExtractAttachmentMimeTypes(request.paramsJson);
-
                 if (!m_embeddingsGenerateCallback) {
                     return protocol::ResponseFrame{
                         .id = request.id,

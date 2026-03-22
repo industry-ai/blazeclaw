@@ -32,11 +32,23 @@ struct TextGenerationError {
 struct LocalModelRuntimeSnapshot {
   bool enabled = false;
   bool ready = false;
+  bool verboseMetrics = false;
   std::string provider;
   std::string modelPath;
   std::string tokenizerPath;
   std::uint32_t maxTokens = 256;
   double temperature = 0.0;
+  std::uint64_t modelLoadAttempts = 0;
+  std::uint64_t modelLoadFailures = 0;
+  std::uint64_t requestsStarted = 0;
+  std::uint64_t requestsCompleted = 0;
+  std::uint64_t requestsFailed = 0;
+  std::uint64_t requestsCancelled = 0;
+  std::uint64_t cumulativeTokens = 0;
+  std::uint64_t cumulativeLatencyMs = 0;
+  std::uint32_t lastLatencyMs = 0;
+  std::uint32_t lastGeneratedTokens = 0;
+  double lastTokensPerSecond = 0.0;
   std::string status;
   std::optional<TextGenerationError> error;
 };
