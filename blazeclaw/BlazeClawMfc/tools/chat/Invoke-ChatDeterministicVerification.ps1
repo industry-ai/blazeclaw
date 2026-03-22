@@ -1,9 +1,19 @@
 param(
     [string]$GatewayUrl = "ws://127.0.0.1:18789",
-    [string]$SessionKey = "main"
+    [string]$SessionKey = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+function Resolve-SessionKey {
+    param([string]$ExplicitSessionKey)
+
+    if (-not [string]::IsNullOrWhiteSpace($ExplicitSessionKey)) {
+        return $ExplicitSessionKey
+    }
+
+    return "smoke-det-" + [guid]::NewGuid().ToString("N")
+}
 
 function Test-GatewayReachability {
     param(
@@ -15,6 +25,8 @@ function Test-GatewayReachability {
         if ($uri.Scheme -ne "ws" -and $uri.Scheme -ne "wss") {
             return $false
         }
+
+$resolvedSessionKey = Resolve-SessionKey -ExplicitSessionKey $SessionKey
 
         $port = if ($uri.IsDefaultPort) {
             if ($uri.Scheme -eq "wss") { 443 } else { 80 }
@@ -152,13 +164,13 @@ try {
 
     Write-Output "[PASS] connect response received"
 
-    $historyReq = New-ReqFrame -Method "chat.history" -Params @{ sessionKey = $SessionKey; limit = 20 }
+    $historyReq = New-ReqFrame -Method "chat.history" -Params @{ sessionKey = $resolvedSessionKey; limit = 20 }
     Send-Req -Socket $socket -Frame $historyReq
     $historyRes = Wait-Response -Socket $socket -RequestId $historyReq.id -CapturedEvents ([ref]$events)
     Write-Output "[PASS] chat.history response received"
 
     $sendReq = New-ReqFrame -Method "chat.send" -Params @{
-        sessionKey = $SessionKey
+        sessionKey = $resolvedSessionKey
         message = "deterministic-check"
         deliver = $false
         idempotencyKey = "det-" + [guid]::NewGuid().ToString("N")
@@ -168,18 +180,18 @@ try {
     $sendRes = Wait-Response -Socket $socket -RequestId $sendReq.id -CapturedEvents ([ref]$events)
     Write-Output "[PASS] chat.send response received"
 
-    $pollReq = New-ReqFrame -Method "chat.events.poll" -Params @{ sessionKey = $SessionKey; limit = 50 }
+    $pollReq = New-ReqFrame -Method "chat.events.poll" -Params @{ sessionKey = $resolvedSessionKey; limit = 50 }
     Send-Req -Socket $socket -Frame $pollReq
     $pollRes = Wait-Response -Socket $socket -RequestId $pollReq.id -CapturedEvents ([ref]$events)
     Write-Output "[PASS] chat.events.poll response received"
 
-    $abortReq = New-ReqFrame -Method "chat.abort" -Params @{ sessionKey = $SessionKey }
+    $abortReq = New-ReqFrame -Method "chat.abort" -Params @{ sessionKey = $resolvedSessionKey }
     Send-Req -Socket $socket -Frame $abortReq
     $abortRes = Wait-Response -Socket $socket -RequestId $abortReq.id -CapturedEvents ([ref]$events)
     Write-Output "[PASS] chat.abort response received"
 
     $sendErrReq = New-ReqFrame -Method "chat.send" -Params @{
-        sessionKey = $SessionKey
+        sessionKey = $resolvedSessionKey
         message = "deterministic-error-check"
         deliver = $false
         forceError = $true
@@ -190,13 +202,14 @@ try {
     $sendErrRes = Wait-Response -Socket $socket -RequestId $sendErrReq.id -CapturedEvents ([ref]$events)
     Write-Output "[PASS] chat.send(forceError) response received"
 
-    $pollErrReq = New-ReqFrame -Method "chat.events.poll" -Params @{ sessionKey = $SessionKey; limit = 50 }
+    $pollErrReq = New-ReqFrame -Method "chat.events.poll" -Params @{ sessionKey = $resolvedSessionKey; limit = 50 }
     Send-Req -Socket $socket -Frame $pollErrReq
     $pollErrRes = Wait-Response -Socket $socket -RequestId $pollErrReq.id -CapturedEvents ([ref]$events)
     Write-Output "[PASS] chat.events.poll after forceError response received"
 
     Write-Output ""
     Write-Output "Deterministic verification summary"
+    Write-Output "- sessionKey: $resolvedSessionKey"
     Write-Output "- connect: pass"
     Write-Output "- history: pass"
     Write-Output "- send: pass"

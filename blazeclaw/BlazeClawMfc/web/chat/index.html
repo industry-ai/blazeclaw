@@ -58,7 +58,7 @@
     }
     .composer {
       display: grid;
-      grid-template-columns: 1fr auto auto auto;
+      grid-template-columns: 1fr auto auto auto auto;
       gap: 8px;
       padding: 10px;
       border-top: 1px solid #333;
@@ -98,8 +98,10 @@
       <textarea id="input" placeholder="Type a message..."></textarea>
       <button id="sendBtn">Send</button>
       <button id="sendErrBtn">Send Error</button>
+      <button id="attachBtn">Attach</button>
       <button id="abortBtn" disabled>Abort</button>
     </div>
+    <input id="attachInput" type="file" accept="image/*" multiple hidden />
   </div>
 
   <script>
@@ -108,6 +110,7 @@
       let connected = false;
       let runId = null;
       let streamText = "";
+      let attachments = [];
       const bridgeQueue = [];
       const pending = new Map();
 
@@ -116,6 +119,8 @@
       const inputEl = document.getElementById("input");
       const sendBtn = document.getElementById("sendBtn");
       const sendErrBtn = document.getElementById("sendErrBtn");
+      const attachBtn = document.getElementById("attachBtn");
+      const attachInput = document.getElementById("attachInput");
       const abortBtn = document.getElementById("abortBtn");
 
       function isSilentReplyText(text) {
@@ -168,6 +173,39 @@
         return `web-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
       }
 
+      function updateComposerState() {
+        const hasInput = inputEl.value.trim().length > 0;
+        const hasAttachments = attachments.length > 0;
+        sendBtn.disabled = !connected || (!hasInput && !hasAttachments);
+        sendErrBtn.disabled = !connected || (!hasInput && !hasAttachments);
+        abortBtn.disabled = !connected || !runId;
+        attachBtn.disabled = !connected;
+        attachBtn.textContent = attachments.length > 0
+          ? `Attach(${attachments.length})`
+          : "Attach";
+      }
+
+      function dataUrlToBase64(dataUrl) {
+        const match = /^data:([^;]+);base64,(.+)$/i.exec(String(dataUrl || ""));
+        if (!match) {
+          return null;
+        }
+
+        return {
+          mimeType: match[1],
+          content: match[2]
+        };
+      }
+
+      function readFileAsDataUrl(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = () => reject(new Error("file read failed"));
+          reader.readAsDataURL(file);
+        });
+      }
+
       function post(msg) {
         if (!window.chrome || !window.chrome.webview) {
           bridgeQueue.push(msg);
@@ -195,6 +233,50 @@
           return "";
         }
 
+      function normalizeFinalAssistantMessage(message) {
+        if (!message || typeof message !== "object") {
+          return null;
+        }
+
+        const candidate = message;
+        if ("role" in candidate && typeof candidate.role === "string") {
+          if (String(candidate.role).toLowerCase() !== "assistant") {
+            return null;
+          }
+        }
+
+        if (!("content" in candidate) && !("text" in candidate)) {
+          return null;
+        }
+
+        return candidate;
+      }
+
+      function normalizeAbortedAssistantMessage(message) {
+        if (!message || typeof message !== "object") {
+          return null;
+        }
+
+        if (!("role" in message) || String(message.role) !== "assistant") {
+          return null;
+        }
+
+        if (!Array.isArray(message.content)) {
+          return null;
+        }
+
+        return message;
+      }
+        if (typeof message.text === "string") {
+          return message.text;
+        }
+        if (Array.isArray(message.content)) {
+          const item = message.content.find((x) => x && x.type === "text" && typeof x.text === "string");
+          return item ? item.text : "";
+        }
+        return "";
+      }
+
       function consumeTerminalText(message) {
         const parsed = parseTextFromMessage(message);
         if (parsed && !isSilentReplyText(parsed)) {
@@ -207,15 +289,6 @@
 
         return "";
       }
-        if (typeof message.text === "string") {
-          return message.text;
-        }
-        if (Array.isArray(message.content)) {
-          const item = message.content.find((x) => x && x.type === "text" && typeof x.text === "string");
-          return item ? item.text : "";
-        }
-        return "";
-      }
 
       function handleChatEvents(events) {
         if (!Array.isArray(events)) {
@@ -225,6 +298,21 @@
           if (!evt || evt.sessionKey !== sessionKey) {
             continue;
           }
+
+          if (evt.state === "error" && evt.runId && runId && evt.runId !== runId) {
+            continue;
+          }
+
+          if (evt.runId && runId && evt.runId !== runId) {
+            if (evt.state === "final") {
+              const otherFinal = normalizeFinalAssistantMessage(evt.message);
+              if (otherFinal && !isSilentReplyText(parseTextFromMessage(otherFinal))) {
+                addMessage(parseTextFromMessage(otherFinal), "peer");
+              }
+            }
+            continue;
+          }
+
           if (evt.state === "delta") {
             const next = parseTextFromMessage(evt.message);
             if (next && !isSilentReplyText(next) && next.length >= streamText.length) {
@@ -235,7 +323,8 @@
           }
 
           if (evt.state === "final") {
-            const text = consumeTerminalText(evt.message);
+            const normalizedFinal = normalizeFinalAssistantMessage(evt.message);
+            const text = consumeTerminalText(normalizedFinal || evt.message);
             if (text) {
               if (streamText) {
                 addOrReplaceStream(text);
@@ -253,7 +342,8 @@
           }
 
           if (evt.state === "aborted") {
-            const text = consumeTerminalText(evt.message);
+            const normalizedAborted = normalizeAbortedAssistantMessage(evt.message);
+            const text = consumeTerminalText(normalizedAborted || evt.message);
             if (text) {
               addOrReplaceStream(text);
               finalizeStream();
@@ -275,6 +365,10 @@
 
       async function loadHistory() {
         try {
+          streamText = "";
+          runId = null;
+          finalizeStream();
+
           const res = await request("chat.history", { sessionKey, limit: 200 });
           const messages = Array.isArray(res && res.payload && res.payload.messages)
             ? res.payload.messages
@@ -284,7 +378,7 @@
           for (const m of messages) {
             const role = typeof m.role === "string" ? m.role : "assistant";
             const text = parseTextFromMessage(m);
-            if (!text || text.trim() === "NO_REPLY") {
+            if (!text || isSilentReplyText(text)) {
               continue;
             }
             addMessage(text, role === "user" ? "self" : "peer");
@@ -304,15 +398,38 @@
 
       async function sendInternal(forceError) {
         const msg = inputEl.value.trim();
-        if (!msg || !connected) {
+        if ((!msg && attachments.length === 0) || !connected) {
           return;
         }
         inputEl.value = "";
-        addMessage(msg, "self");
+        if (msg) {
+          addMessage(msg, "self");
+        }
+        if (attachments.length > 0) {
+          addMessage(
+            `[Attachment] ${attachments.map((a) => a.name).join(", ")}`,
+            "self");
+        }
 
         runId = nextId();
-        abortBtn.disabled = false;
         streamText = "";
+        updateComposerState();
+
+        const apiAttachments = attachments
+          .map((item) => {
+            const parsed = dataUrlToBase64(item.dataUrl);
+            if (!parsed) {
+              return null;
+            }
+
+            return {
+              type: "image",
+              mimeType: parsed.mimeType || item.mimeType || "image/*",
+              content: parsed.content
+            };
+          })
+          .filter((x) => x !== null);
+
         try {
           await request("chat.send", {
             sessionKey,
@@ -320,13 +437,15 @@
             deliver: false,
             idempotencyKey: runId,
             forceError,
-            attachments: []
+            attachments: apiAttachments
           });
+          attachments = [];
         } catch (err) {
           addMessage(`send error: ${String(err)}`, "error");
           runId = null;
-          abortBtn.disabled = true;
         }
+
+        updateComposerState();
       }
 
       async function abort() {
@@ -338,11 +457,44 @@
         } catch (err) {
           addMessage(`abort error: ${String(err)}`, "error");
         }
+
+        updateComposerState();
+      }
+
+      async function handleAttachChange() {
+        const files = Array.from(attachInput.files || []);
+        if (files.length === 0) {
+          return;
+        }
+
+        for (const file of files) {
+          if (!file || !String(file.type || "").startsWith("image/")) {
+            addMessage(`attachment skipped: ${file ? file.name : "unknown"}`, "error");
+            continue;
+          }
+
+          try {
+            const dataUrl = await readFileAsDataUrl(file);
+            attachments.push({
+              name: file.name,
+              mimeType: file.type || "image/*",
+              dataUrl
+            });
+          } catch (err) {
+            addMessage(`attachment read error: ${file.name}`, "error");
+          }
+        }
+
+        attachInput.value = "";
+        updateComposerState();
       }
 
       sendBtn.addEventListener("click", send);
       sendErrBtn.addEventListener("click", sendError);
+      attachBtn.addEventListener("click", () => attachInput.click());
+      attachInput.addEventListener("change", handleAttachChange);
       abortBtn.addEventListener("click", abort);
+      inputEl.addEventListener("input", updateComposerState);
       inputEl.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
@@ -363,6 +515,7 @@
             if (connected) {
               loadHistory();
             }
+            updateComposerState();
             return;
           }
 
@@ -388,8 +541,10 @@
         post({ channel: "blazeclaw.gateway.lifecycle.subscribe" });
         flushQueue();
         setStatus("gateway: subscribing...");
+        updateComposerState();
       } else {
         setStatus("bridge unavailable");
+        updateComposerState();
       }
     })();
   </script>

@@ -1,0 +1,95 @@
+name: blazeclaw-chat-nightly-smoke
+
+on:
+  push:
+    branches:
+      - opt
+    paths:
+      - "blazeclaw/BlazeClawMfc/**"
+      - "docs/CHAT_*"
+      - ".github/workflows/blazeclaw-chat-nightly-smoke.yml"
+  pull_request:
+    branches:
+      - opt
+    paths:
+      - "blazeclaw/BlazeClawMfc/**"
+      - "docs/CHAT_*"
+      - ".github/workflows/blazeclaw-chat-nightly-smoke.yml"
+  workflow_dispatch:
+  schedule:
+    - cron: "0 2 * * *"
+
+jobs:
+  blazeclaw-chat-smoke:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build BlazeClaw Debug x64
+        shell: powershell
+        run: msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64
+
+      - name: Start BlazeClaw
+        shell: powershell
+        run: |
+          Start-Process -FilePath "blazeclaw/bin/Debug/BlazeClaw.exe"
+          Start-Sleep -Seconds 5
+
+      - name: Wait for gateway readiness
+        shell: powershell
+        run: |
+          $ready = $false
+          for ($i = 0; $i -lt 30; $i++) {
+            $line = netstat -ano | findstr "127.0.0.1:18789"
+            if ($line) {
+              $ready = $true
+              break
+            }
+            Start-Sleep -Milliseconds 500
+          }
+          if (-not $ready) {
+            throw "Gateway port 18789 did not become ready in time."
+          }
+
+      - name: Prepare smoke artifacts directory
+        shell: powershell
+        run: New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+
+      - name: Run deterministic gateway verifier
+        shell: powershell
+        run: |
+          powershell -ExecutionPolicy Bypass -File "blazeclaw/BlazeClawMfc/tools/chat/Invoke-ChatDeterministicVerification.ps1" 2>&1 |
+            Tee-Object -FilePath artifacts/deterministic-verifier.log
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Run WebView chat smoke
+        shell: powershell
+        run: |
+          powershell -ExecutionPolicy Bypass -File "blazeclaw/BlazeClawMfc/tools/chat/Invoke-WebViewChatSmoke.ps1" 2>&1 |
+            Tee-Object -FilePath artifacts/webview-smoke.log
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Collect diagnostics on failure
+        if: failure()
+        shell: powershell
+        run: |
+          if (Test-Path "blazeclaw/bin/Debug/blazeclaw.conf") {
+            Copy-Item "blazeclaw/bin/Debug/blazeclaw.conf" "artifacts/blazeclaw.conf" -Force
+          }
+          Get-Process BlazeClaw -ErrorAction SilentlyContinue | Format-List * > artifacts/blazeclaw-process.txt
+          netstat -ano | findstr "18789" > artifacts/gateway-port-netstat.txt
+
+      - name: Upload diagnostics artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blazeclaw-chat-smoke-diagnostics
+          path: artifacts
