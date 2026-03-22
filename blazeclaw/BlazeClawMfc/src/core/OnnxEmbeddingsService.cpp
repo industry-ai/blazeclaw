@@ -765,6 +765,19 @@ bool OnnxEmbeddingsService::ValidateFixtureScenarios(
     return false;
   }
 
+  const auto emptyInputResult = disabledService.EmbedText(
+      EmbeddingRequest{
+          .text = L"",
+          .normalize = std::nullopt,
+          .traceId = "fixture-empty-input",
+      });
+  if (emptyInputResult.ok || !emptyInputResult.error.has_value() ||
+      emptyInputResult.error->code != EmbeddingErrorCode::InvalidInput) {
+    outError =
+        L"Fixture validation failed: expected invalid-input rejection for empty text.";
+    return false;
+  }
+
   blazeclaw::config::AppConfig missingModelConfig;
   missingModelConfig.embeddings.enabled = true;
   missingModelConfig.embeddings.provider = L"onnx";
@@ -783,6 +796,19 @@ bool OnnxEmbeddingsService::ValidateFixtureScenarios(
       missingModelResult.error->code != EmbeddingErrorCode::ModelNotFound) {
     outError =
         L"Fixture validation failed: expected model-not-found rejection.";
+    return false;
+  }
+
+  const auto emptyBatchResult = missingModelService.EmbedBatch(
+      EmbeddingBatchRequest{
+          .texts = {},
+          .normalize = std::nullopt,
+          .traceId = "fixture-empty-batch",
+      });
+  if (emptyBatchResult.ok || !emptyBatchResult.error.has_value() ||
+      emptyBatchResult.error->code != EmbeddingErrorCode::InvalidInput) {
+    outError =
+        L"Fixture validation failed: expected invalid-input rejection for empty batch.";
     return false;
   }
 
