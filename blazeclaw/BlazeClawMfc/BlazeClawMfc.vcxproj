@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="..\packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\Microsoft.ML.OnnxRuntime.props" Condition="Exists('..\packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\Microsoft.ML.OnnxRuntime.props')" />
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
       <Configuration>Debug</Configuration>
@@ -122,6 +123,8 @@
     <ClInclude Include="src\core\AgentsToolPolicyService.h" />
     <ClInclude Include="src\core\AgentsWorkspaceService.h" />
     <ClInclude Include="src\core\AcpSpawnService.h" />
+    <ClInclude Include="src\core\EmbeddingsService.h" />
+    <ClInclude Include="src\core\OnnxEmbeddingsService.h" />
     <ClInclude Include="src\core\PiEmbeddedService.h" />
     <ClInclude Include="src\core\SubagentRegistryService.h" />
     <ClInclude Include="src\core\SkillsCommandService.h" />
@@ -181,6 +184,7 @@
     <ClCompile Include="src\core\AgentsToolPolicyService.cpp" />
     <ClCompile Include="src\core\AgentsWorkspaceService.cpp" />
     <ClCompile Include="src\core\AcpSpawnService.cpp" />
+    <ClCompile Include="src\core\OnnxEmbeddingsService.cpp" />
     <ClCompile Include="src\core\PiEmbeddedService.cpp" />
     <ClCompile Include="src\core\SubagentRegistryService.cpp" />
     <ClCompile Include="src\core\SkillsCommandService.cpp" />
@@ -248,34 +252,27 @@
   </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
-    <Import Project="..\packages\Microsoft.ML.OnnxRuntime.1.19.2\build\native\Microsoft.ML.OnnxRuntime.targets" Condition="Exists('..\packages\Microsoft.ML.OnnxRuntime.1.19.2\build\native\Microsoft.ML.OnnxRuntime.targets')" />
     <Import Project="..\packages\Microsoft.Web.WebView2.1.0.3856.49\build\native\Microsoft.Web.WebView2.targets" Condition="Exists('..\packages\Microsoft.Web.WebView2.1.0.3856.49\build\native\Microsoft.Web.WebView2.targets')" />
+    <Import Project="..\packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\Microsoft.ML.OnnxRuntime.targets" Condition="Exists('..\packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\Microsoft.ML.OnnxRuntime.targets')" />
   </ImportGroup>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
       <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
     </PropertyGroup>
-    <Error Condition="!Exists('..\packages\Microsoft.ML.OnnxRuntime.1.19.2\build\native\Microsoft.ML.OnnxRuntime.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.ML.OnnxRuntime.1.19.2\build\native\Microsoft.ML.OnnxRuntime.targets'))" />
     <Error Condition="!Exists('..\packages\Microsoft.Web.WebView2.1.0.3856.49\build\native\Microsoft.Web.WebView2.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Web.WebView2.1.0.3856.49\build\native\Microsoft.Web.WebView2.targets'))" />
+    <Error Condition="!Exists('..\packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\Microsoft.ML.OnnxRuntime.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\Microsoft.ML.OnnxRuntime.props'))" />
+    <Error Condition="!Exists('..\packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\Microsoft.ML.OnnxRuntime.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\Microsoft.ML.OnnxRuntime.targets'))" />
   </Target>
   <Target Name="CopyBlazeClawConfig" AfterTargets="Build">
     <Copy SourceFiles="$(ProjectDir)src\config\blazeclaw.conf" DestinationFiles="$(OutDir)blazeclaw.conf" SkipUnchangedFiles="true" />
   </Target>
   <Target Name="CopyBlazeClawChatWebAssets" AfterTargets="Build">
-    <Copy SourceFiles="@(BlazeClawChatWebAssets)"
-          DestinationFiles="@(BlazeClawChatWebAssets->'$(OutDir)web\chat\%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(BlazeClawChatWebAssets)" DestinationFiles="@(BlazeClawChatWebAssets->'$(OutDir)web\chat\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
   <Target Name="CopyBlazeClawOnnxRuntimeAssets" AfterTargets="Build">
-    <Copy SourceFiles="@(BlazeClawOnnxRuntimeAssets)"
-          DestinationFiles="@(BlazeClawOnnxRuntimeAssets->'$(OutDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true"
-          Condition="'@(BlazeClawOnnxRuntimeAssets)'!=''" />
+    <Copy SourceFiles="@(BlazeClawOnnxRuntimeAssets)" DestinationFiles="@(BlazeClawOnnxRuntimeAssets->'$(OutDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Condition="'@(BlazeClawOnnxRuntimeAssets)'!=''" />
   </Target>
   <Target Name="CopyBlazeClawEmbeddingModelAssets" AfterTargets="Build">
-    <Copy SourceFiles="@(BlazeClawEmbeddingModelAssets)"
-          DestinationFiles="@(BlazeClawEmbeddingModelAssets->'$(OutDir)models\embeddings\%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true"
-          Condition="'@(BlazeClawEmbeddingModelAssets)'!=''" />
+    <Copy SourceFiles="@(BlazeClawEmbeddingModelAssets)" DestinationFiles="@(BlazeClawEmbeddingModelAssets->'$(OutDir)models\embeddings\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Condition="'@(BlazeClawEmbeddingModelAssets)'!=''" />
   </Target>
 </Project>

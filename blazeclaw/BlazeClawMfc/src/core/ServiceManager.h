@@ -12,6 +12,7 @@
 #include "AgentsToolPolicyService.h"
 #include "AgentsWorkspaceService.h"
 #include "AcpSpawnService.h"
+#include "OnnxEmbeddingsService.h"
 #include "PiEmbeddedService.h"
 #include "SubagentRegistryService.h"
 #include "SkillsCommandService.h"
@@ -45,6 +46,7 @@ public:
   [[nodiscard]] const ModelRoutingSnapshot& ModelRouting() const noexcept;
   [[nodiscard]] const AuthProfileSnapshot& AuthProfiles() const noexcept;
   [[nodiscard]] const SandboxSnapshot& Sandbox() const noexcept;
+  [[nodiscard]] const EmbeddingsServiceSnapshot& Embeddings() const noexcept;
   [[nodiscard]] std::string BuildOperatorDiagnosticsReport() const;
   [[nodiscard]] const SkillsCatalogSnapshot& SkillsCatalog() const noexcept;
   [[nodiscard]] const SkillsEligibilitySnapshot& SkillsEligibility() const noexcept;
@@ -84,6 +86,8 @@ private:
   SubagentRegistrySnapshot m_subagentRegistry;
   AcpSpawnService m_acpSpawnService;
   AcpSpawnDecision m_lastAcpDecision;
+  OnnxEmbeddingsService m_embeddingsService;
+  EmbeddingsServiceSnapshot m_embeddings;
   PiEmbeddedService m_piEmbeddedService;
   SkillsCatalogService m_skillsCatalogService;
   SkillsCatalogSnapshot m_skillsCatalog;

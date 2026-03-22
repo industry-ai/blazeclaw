@@ -38,7 +38,7 @@ FeatureRegistry::FeatureRegistry() {
       {L"skills-installer-scanner", FeatureState::Implemented},
       {L"skills-operator-surface", FeatureState::Implemented},
       {L"embeddings-config-foundation", FeatureState::Implemented},
-      {L"embeddings-provider-onnx", FeatureState::Planned},
+      {L"embeddings-provider-onnx", FeatureState::Implemented},
       {L"embeddings-gateway-surface", FeatureState::Planned},
       {L"streaming-responses", FeatureState::Planned},
       {L"whatsapp-channel", FeatureState::Planned},

@@ -200,6 +200,8 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
           .threadRequested = false,
           .requesterSandboxed = false,
       });
+  m_embeddingsService.Configure(m_activeConfig);
+  m_embeddings = m_embeddingsService.Snapshot();
   m_piEmbeddedService.Configure(m_activeConfig);
   RefreshSkillsState(m_activeConfig, true, L"startup");
 
@@ -267,6 +269,11 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       if (!m_acpSpawnService.ValidateFixtureScenarios(candidate, fixtureError)) {
         m_skillsCatalog.diagnostics.warnings.push_back(
             L"agents-acp fixture validation failed: " + fixtureError);
+      }
+
+      if (!m_embeddingsService.ValidateFixtureScenarios(candidate, fixtureError)) {
+        m_skillsCatalog.diagnostics.warnings.push_back(
+            L"agents-embeddings fixture validation failed: " + fixtureError);
       }
 
       if (!m_piEmbeddedService.ValidateFixtureScenarios(candidate, fixtureError)) {
@@ -450,6 +457,10 @@ const SandboxSnapshot& ServiceManager::Sandbox() const noexcept {
   return m_sandbox;
 }
 
+const EmbeddingsServiceSnapshot& ServiceManager::Embeddings() const noexcept {
+  return m_embeddings;
+}
+
 std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
   const auto featureStateLabel = [](const FeatureState state) {
     switch (state) {
@@ -483,12 +494,7 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
   const auto routing = ModelRouting();
   const auto auth = AuthProfiles();
   const auto sandbox = Sandbox();
-  const auto provider = ToNarrow(m_activeConfig.embeddings.provider);
-  const auto executionMode = ToNarrow(m_activeConfig.embeddings.executionMode);
-  const bool modelPathConfigured =
-      !m_activeConfig.embeddings.modelPath.empty();
-  const bool tokenizerPathConfigured =
-      !m_activeConfig.embeddings.tokenizerPath.empty();
+  const auto embeddings = Embeddings();
   const bool configFeatureImplemented =
       m_registry.IsImplemented(L"embeddings-config-foundation");
 
@@ -512,16 +518,18 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       "\"sandbox\":{\"enabledCount\":" + std::to_string(sandbox.enabledCount) +
       ",\"browserEnabledCount\":" + std::to_string(sandbox.browserEnabledCount) + "},"
       "\"embeddings\":{\"enabled\":" +
-      std::string(m_activeConfig.embeddings.enabled ? "true" : "false") +
-      ",\"provider\":\"" + provider +
-      "\",\"executionMode\":\"" + executionMode +
-      "\",\"dimension\":" + std::to_string(m_activeConfig.embeddings.dimension) +
+      std::string(embeddings.enabled ? "true" : "false") +
+      ",\"ready\":" +
+      std::string(embeddings.ready ? "true" : "false") +
+      ",\"provider\":\"" + embeddings.provider +
+      "\",\"status\":\"" + embeddings.status +
+      "\",\"dimension\":" + std::to_string(embeddings.dimension) +
       ",\"maxSequenceLength\":" +
-      std::to_string(m_activeConfig.embeddings.maxSequenceLength) +
+      std::to_string(embeddings.maxSequenceLength) +
       ",\"modelPathConfigured\":" +
-      std::string(modelPathConfigured ? "true" : "false") +
+      std::string(!embeddings.modelPath.empty() ? "true" : "false") +
       ",\"tokenizerPathConfigured\":" +
-      std::string(tokenizerPathConfigured ? "true" : "false") +
+      std::string(!embeddings.tokenizerPath.empty() ? "true" : "false") +
       ",\"configFeatureImplemented\":" +
       std::string(configFeatureImplemented ? "true" : "false") + "},"
       "\"skills\":{\"catalogEntries\":" + std::to_string(m_skillsCatalog.entries.size()) +
