@@ -87,6 +87,9 @@ public:
       const TextDeltaCallback& onDelta) = 0;
 
   [[nodiscard]] virtual bool Cancel(const std::string& runId) = 0;
+
+  [[nodiscard]] virtual bool VerifyDeterministicContract(
+      std::string& outFailureReason) = 0;
 };
 
 [[nodiscard]] std::string TextGenerationErrorCodeToString(

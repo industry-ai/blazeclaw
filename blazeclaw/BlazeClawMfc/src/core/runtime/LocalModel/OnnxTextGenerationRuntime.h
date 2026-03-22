@@ -26,6 +26,9 @@ public:
 
   [[nodiscard]] bool Cancel(const std::string& runId) override;
 
+  [[nodiscard]] bool VerifyDeterministicContract(
+      std::string& outFailureReason) override;
+
 private:
   struct SessionState;
 

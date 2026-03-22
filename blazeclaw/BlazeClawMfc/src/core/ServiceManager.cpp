@@ -262,6 +262,24 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
   if (!localModelLoaded && m_localModelRuntimeSnapshot.status.empty()) {
     m_localModelRuntimeSnapshot.status = "load_failed";
   }
+
+  if (m_activeConfig.localModel.enabled && m_localModelRuntimeSnapshot.ready) {
+    std::string localContractFailure;
+    if (!m_localModelRuntime.VerifyDeterministicContract(localContractFailure)) {
+      m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
+      m_localModelRuntimeSnapshot.status = "contract_verification_failed";
+      if (!localContractFailure.empty()) {
+        m_localModelRuntimeSnapshot.error = localmodel::TextGenerationError{
+            .code = localmodel::TextGenerationErrorCode::InferenceFailed,
+            .message = localContractFailure,
+        };
+      }
+
+      m_skillsCatalog.diagnostics.warnings.push_back(
+          L"local-model deterministic contract verification failed");
+    }
+  }
+
   m_retrievalMemoryService.Configure(m_activeConfig);
   m_retrievalMemory = m_retrievalMemoryService.Snapshot();
   m_piEmbeddedService.Configure(m_activeConfig);

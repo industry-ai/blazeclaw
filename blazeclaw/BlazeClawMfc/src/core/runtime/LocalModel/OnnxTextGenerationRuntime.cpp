@@ -214,6 +214,53 @@ bool OnnxTextGenerationRuntime::LoadModel() {
   return true;
 }
 
+bool OnnxTextGenerationRuntime::VerifyDeterministicContract(
+    std::string& outFailureReason) {
+  outFailureReason.clear();
+
+  const auto baseline = Snapshot();
+  if (!baseline.enabled) {
+    outFailureReason = "local model disabled";
+    return false;
+  }
+
+  if (!baseline.ready) {
+    outFailureReason = "local runtime not ready";
+    return false;
+  }
+
+  const std::string runId =
+      "phase6-det-contract-" + std::to_string(baseline.requestsStarted + 1);
+  const auto result = GenerateStream(
+      TextGenerationRequest{
+          .runId = runId,
+          .prompt = "deterministic verification ping",
+          .maxTokens = 16,
+          .temperature = 0.0,
+      },
+      nullptr);
+
+  if (!result.ok) {
+    outFailureReason = result.error.has_value() &&
+            !result.error->message.empty()
+        ? result.error->message
+        : "deterministic generation failed";
+    return false;
+  }
+
+  if (result.text.empty()) {
+    outFailureReason = "deterministic generation returned empty text";
+    return false;
+  }
+
+  if (result.generatedTokens == 0) {
+    outFailureReason = "deterministic generation returned zero tokens";
+    return false;
+  }
+
+  return true;
+}
+
 TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
     const TextGenerationRequest& request,
     const TextDeltaCallback& onDelta) {
