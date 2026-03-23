@@ -207,23 +207,60 @@ std::vector<std::int64_t> TokenizerBridge::EncodeToIds(
   }
 
   std::vector<std::string> pieces;
-  const auto spans = PretokenizeSpans(text);
-  for (const auto& span : spans) {
-    if (span.end <= span.start || span.end > text.size()) {
+  auto appendNormalSegment = [&](const std::string& segment) {
+    if (segment.empty()) {
+      return;
+    }
+
+    const auto spans = PretokenizeSpans(segment);
+    for (const auto& span : spans) {
+      if (span.end <= span.start || span.end > segment.size()) {
+        continue;
+      }
+
+      const std::string piece = segment.substr(
+          span.start,
+          span.end - span.start);
+      const auto bytePieces = ByteEncodePieces(piece);
+      for (const auto& bytePiece : bytePieces) {
+        const auto bpeTokens = ApplyBpe(bytePiece);
+        pieces.insert(
+            pieces.end(),
+            bpeTokens.begin(),
+            bpeTokens.end());
+      }
+    }
+  };
+
+  std::size_t cursor = 0;
+  while (cursor < text.size()) {
+    const std::size_t specialStart = text.find("<|", cursor);
+    if (specialStart == std::string::npos) {
+      appendNormalSegment(text.substr(cursor));
+      break;
+    }
+
+    if (specialStart > cursor) {
+      appendNormalSegment(text.substr(cursor, specialStart - cursor));
+    }
+
+    const std::size_t specialEnd = text.find("|>", specialStart + 2);
+    if (specialEnd == std::string::npos) {
+      appendNormalSegment(text.substr(specialStart));
+      break;
+    }
+
+    const std::string candidate = text.substr(
+        specialStart,
+        (specialEnd + 2) - specialStart);
+    if (m_tokenToId.find(candidate) != m_tokenToId.end()) {
+      pieces.push_back(candidate);
+      cursor = specialEnd + 2;
       continue;
     }
 
-    const std::string piece = text.substr(
-        span.start,
-        span.end - span.start);
-    const auto bytePieces = ByteEncodePieces(piece);
-    for (const auto& bytePiece : bytePieces) {
-      const auto bpeTokens = ApplyBpe(bytePiece);
-      pieces.insert(
-          pieces.end(),
-          bpeTokens.begin(),
-          bpeTokens.end());
-    }
+    appendNormalSegment(candidate);
+    cursor = specialEnd + 2;
   }
 
   return EncodePiecesToIds(
@@ -317,6 +354,10 @@ bool TokenizerBridge::TryGetTokenId(
 
   outTokenId = it->second;
   return true;
+}
+
+std::size_t TokenizerBridge::VocabSize() const noexcept {
+  return m_idToToken.size();
 }
 
 std::string TokenizerBridge::ToLowerAscii(const std::string& value) {
@@ -525,50 +566,11 @@ bool TokenizerBridge::AdvanceToJsonKey(
 
 std::vector<TokenizerBridge::Span> TokenizerBridge::PretokenizeSpans(
     const std::string& text) {
-  std::vector<Span> spans;
-  std::size_t i = 0;
-  while (i < text.size()) {
-    const std::size_t start = i;
-    const char ch = text[i];
-
-    if (IsBoundaryToken(ch)) {
-      spans.push_back(Span{.start = i, .end = i + 1});
-      ++i;
-      continue;
-    }
-
-    if (IsAsciiSpace(ch)) {
-      while (i < text.size() && IsAsciiSpace(text[i]) && !IsBoundaryToken(text[i])) {
-        ++i;
-      }
-
-      spans.push_back(Span{.start = start, .end = i});
-      continue;
-    }
-
-    if (IsAsciiAlpha(ch)) {
-      while (i < text.size() && IsAsciiAlpha(text[i])) {
-        ++i;
-      }
-
-      spans.push_back(Span{.start = start, .end = i});
-      continue;
-    }
-
-    if (IsAsciiDigit(ch)) {
-      while (i < text.size() && IsAsciiDigit(text[i])) {
-        ++i;
-      }
-
-      spans.push_back(Span{.start = start, .end = i});
-      continue;
-    }
-
-    ++i;
-    spans.push_back(Span{.start = start, .end = i});
+  if (text.empty()) {
+    return {};
   }
 
-  return spans;
+  return { Span{.start = 0, .end = text.size()} };
 }
 
 std::vector<std::string> TokenizerBridge::SplitUtf8CodePoints(
@@ -602,11 +604,16 @@ std::vector<std::string> TokenizerBridge::SplitUtf8CodePoints(
 std::vector<std::string> TokenizerBridge::ByteEncodePieces(
     const std::string& text) const {
   std::string encoded;
+  encoded.reserve(text.size() * 2);
   for (const unsigned char byte : text) {
     encoded += m_byteToUnicode[byte];
   }
 
-  return SplitUtf8CodePoints(encoded);
+  if (encoded.empty()) {
+    return {};
+  }
+
+  return { encoded };
 }
 
 std::vector<std::string> TokenizerBridge::ApplyBpe(
@@ -914,19 +921,69 @@ bool TokenizerBridge::LoadMerges(
       break;
     }
 
-    if (tokenizerJson[i] != '"') {
-      ++i;
+    if (tokenizerJson[i] == '"') {
+      bool ok = false;
+      const std::string merge = ParseJsonString(tokenizerJson, i, ok);
+      if (!ok || merge.empty()) {
+        outError = "Tokenizer JSON merge entry parse failed.";
+        return false;
+      }
+
+      m_bpeMergeRanks.insert_or_assign(merge, rank++);
       continue;
     }
 
-    bool ok = false;
-    const std::string merge = ParseJsonString(tokenizerJson, i, ok);
-    if (!ok || merge.empty()) {
-      outError = "Tokenizer JSON merge entry parse failed.";
-      return false;
+    if (tokenizerJson[i] == '[') {
+      std::size_t j = i + 1;
+      if (!SkipJsonWhitespace(tokenizerJson, j) ||
+          j >= tokenizerJson.size() ||
+          tokenizerJson[j] != '"') {
+        outError = "Tokenizer JSON merge pair left token parse failed.";
+        return false;
+      }
+
+      bool leftOk = false;
+      const std::string left = ParseJsonString(tokenizerJson, j, leftOk);
+      if (!leftOk) {
+        outError = "Tokenizer JSON merge pair left token parse failed.";
+        return false;
+      }
+
+      if (!SkipJsonWhitespace(tokenizerJson, j) ||
+          j >= tokenizerJson.size() ||
+          tokenizerJson[j] != ',') {
+        outError = "Tokenizer JSON merge pair separator parse failed.";
+        return false;
+      }
+
+      ++j;
+      if (!SkipJsonWhitespace(tokenizerJson, j) ||
+          j >= tokenizerJson.size() ||
+          tokenizerJson[j] != '"') {
+        outError = "Tokenizer JSON merge pair right token parse failed.";
+        return false;
+      }
+
+      bool rightOk = false;
+      const std::string right = ParseJsonString(tokenizerJson, j, rightOk);
+      if (!rightOk) {
+        outError = "Tokenizer JSON merge pair right token parse failed.";
+        return false;
+      }
+
+      if (!SkipJsonWhitespace(tokenizerJson, j) ||
+          j >= tokenizerJson.size() ||
+          tokenizerJson[j] != ']') {
+        outError = "Tokenizer JSON merge pair closing bracket parse failed.";
+        return false;
+      }
+
+      i = j + 1;
+      m_bpeMergeRanks.insert_or_assign(left + " " + right, rank++);
+      continue;
     }
 
-    m_bpeMergeRanks.insert_or_assign(merge, rank++);
+    ++i;
   }
 
   return true;

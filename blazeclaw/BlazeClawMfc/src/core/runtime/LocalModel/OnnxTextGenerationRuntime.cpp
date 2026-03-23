@@ -8,6 +8,7 @@
 #include <fstream>
 #include <limits>
 #include <sstream>
+#include <unordered_set>
 
 #include <Windows.h>
 #include <Wincrypt.h>
@@ -220,31 +221,44 @@ std::filesystem::path ResolveConfiguredPath(
   const bool hasStorageRoot = !root.empty();
 
   std::vector<std::filesystem::path> candidates;
-  candidates.reserve(8);
+  candidates.reserve(24);
+
+  auto appendWithAncestors = [&candidates](
+                                 const std::filesystem::path& base,
+                                 const std::filesystem::path& relativePath) {
+    if (base.empty()) {
+      return;
+    }
+
+    std::filesystem::path cursor = base;
+    while (!cursor.empty()) {
+      candidates.push_back(cursor / relativePath);
+      if (!cursor.has_parent_path()) {
+        break;
+      }
+
+      const std::filesystem::path parent = cursor.parent_path();
+      if (parent == cursor) {
+        break;
+      }
+
+      cursor = parent;
+    }
+  };
 
   if (hasStorageRoot) {
     if (root.is_absolute()) {
       candidates.push_back(root / configured);
     } else {
-      if (!configDirectory.empty()) {
-        candidates.push_back(configDirectory / root / configured);
-      }
-
-      if (!executableDirectory.empty()) {
-        candidates.push_back(executableDirectory / root / configured);
-      }
+      appendWithAncestors(configDirectory, root / configured);
+      appendWithAncestors(executableDirectory, root / configured);
 
       candidates.push_back(root / configured);
     }
   }
 
-  if (!configDirectory.empty()) {
-    candidates.push_back(configDirectory / configured);
-  }
-
-  if (!executableDirectory.empty()) {
-    candidates.push_back(executableDirectory / configured);
-  }
+  appendWithAncestors(configDirectory, configured);
+  appendWithAncestors(executableDirectory, configured);
 
   candidates.push_back(configured);
 
@@ -302,6 +316,9 @@ double TokensPerSecond(
   return static_cast<double>(generatedTokens) * 1000.0 /
       static_cast<double>(latencyMs);
 }
+
+constexpr float kRepeatPenalty = 1.12f;
+constexpr std::size_t kRepeatPenaltyWindow = 128;
 
 std::vector<std::int64_t> BuildPositionIds(
     const std::size_t count) {
@@ -466,6 +483,206 @@ bool ResolveInputShape(
   }
 
   return true;
+}
+
+bool ResolveLogitsSlice(
+    const std::vector<std::int64_t>& logitsShape,
+    const std::size_t expectedVocabSize,
+    std::vector<std::size_t>& outDims,
+    std::vector<std::size_t>& outStrides,
+    std::size_t& outVocabAxis,
+    std::size_t& outTokenAxis,
+    std::size_t& outTokenIndex,
+    std::size_t& outVocabSize,
+    std::size_t& outBaseOffset) {
+  outDims.clear();
+  outStrides.clear();
+  outVocabAxis = 0;
+  outTokenAxis = 0;
+  outTokenIndex = 0;
+  outVocabSize = 0;
+  outBaseOffset = 0;
+
+  if (logitsShape.empty()) {
+    return false;
+  }
+
+  outDims.reserve(logitsShape.size());
+  for (const auto dim : logitsShape) {
+    outDims.push_back(static_cast<std::size_t>((std::max)(std::int64_t{1}, dim)));
+  }
+
+  outVocabAxis = 0;
+  if (expectedVocabSize > 0) {
+    std::size_t bestDistance = (std::numeric_limits<std::size_t>::max)();
+    for (std::size_t i = 0; i < outDims.size(); ++i) {
+      const std::size_t axisSize = outDims[i];
+      const std::size_t distance = axisSize > expectedVocabSize
+          ? (axisSize - expectedVocabSize)
+          : (expectedVocabSize - axisSize);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        outVocabAxis = i;
+      }
+    }
+  } else {
+    outVocabAxis = static_cast<std::size_t>(
+        std::distance(
+            outDims.begin(),
+            std::max_element(outDims.begin(), outDims.end())));
+  }
+
+  outTokenAxis = outVocabAxis;
+  for (std::size_t i = outDims.size(); i-- > 0;) {
+    if (i == outVocabAxis) {
+      continue;
+    }
+
+    if (outDims[i] > 1) {
+      outTokenAxis = i;
+      break;
+    }
+  }
+
+  outTokenIndex = outTokenAxis == outVocabAxis
+      ? 0
+      : outDims[outTokenAxis] - 1;
+  outVocabSize = outDims[outVocabAxis];
+  if (outVocabSize == 0) {
+    return false;
+  }
+
+  outStrides.assign(outDims.size(), 1);
+  for (std::size_t i = outDims.size(); i-- > 1;) {
+    const std::size_t next = i;
+    const std::size_t current = i - 1;
+    if (outDims[next] != 0 &&
+        outStrides[next] >
+            (std::numeric_limits<std::size_t>::max)() / outDims[next]) {
+      return false;
+    }
+
+    outStrides[current] = outStrides[next] * outDims[next];
+  }
+
+  std::size_t baseOffset = 0;
+  if (outTokenAxis != outVocabAxis) {
+    const std::size_t tokenOffset = outTokenIndex * outStrides[outTokenAxis];
+    if (tokenOffset > (std::numeric_limits<std::size_t>::max)() - baseOffset) {
+      return false;
+    }
+
+    baseOffset += tokenOffset;
+  }
+
+  outBaseOffset = baseOffset;
+  return true;
+}
+
+std::string FormatShape(const std::vector<std::int64_t>& shape) {
+  std::string text = "[";
+  for (std::size_t i = 0; i < shape.size(); ++i) {
+    if (i > 0) {
+      text += ",";
+    }
+
+    text += std::to_string(shape[i]);
+  }
+
+  text += "]";
+  return text;
+}
+
+std::size_t ScoreOutputShapeDistanceToVocab(
+    const std::vector<std::int64_t>& shape,
+    const std::size_t expectedVocabSize) {
+  if (shape.empty()) {
+    return (std::numeric_limits<std::size_t>::max)();
+  }
+
+  std::size_t bestDistance = (std::numeric_limits<std::size_t>::max)();
+  for (const auto dim : shape) {
+    const std::size_t size =
+        static_cast<std::size_t>((std::max)(std::int64_t{1}, dim));
+    const std::size_t distance = size > expectedVocabSize
+        ? (size - expectedVocabSize)
+        : (expectedVocabSize - size);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+    }
+  }
+
+  return bestDistance;
+}
+
+std::size_t SelectBestLogitsOutputIndex(
+    const std::vector<Ort::Value>& outputs,
+    const std::vector<std::string>& outputNames,
+    const std::size_t expectedVocabSize) {
+  if (outputs.empty()) {
+    return (std::numeric_limits<std::size_t>::max)();
+  }
+
+  std::size_t selectedIndex = 0;
+  std::size_t selectedDistance =
+      (std::numeric_limits<std::size_t>::max)();
+  bool found = false;
+  std::size_t namedIndex = 0;
+  std::size_t namedDistance =
+      (std::numeric_limits<std::size_t>::max)();
+  bool foundNamed = false;
+  const std::size_t maxAllowedDistance = expectedVocabSize > 0
+      ? (std::max)(std::size_t{256}, expectedVocabSize / 20)
+      : (std::numeric_limits<std::size_t>::max)();
+
+  for (std::size_t i = 0; i < outputs.size(); ++i) {
+    const auto& output = outputs[i];
+    if (!output.IsTensor()) {
+      continue;
+    }
+
+    auto tensorInfo = output.GetTensorTypeAndShapeInfo();
+    const auto elementType = tensorInfo.GetElementType();
+    if (elementType != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT &&
+        elementType != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16) {
+      continue;
+    }
+
+    const std::size_t distance = ScoreOutputShapeDistanceToVocab(
+        tensorInfo.GetShape(),
+        expectedVocabSize);
+    const bool namedLogits = i < outputNames.size() &&
+        IsInputNameContains(outputNames[i], "logits");
+
+    if (namedLogits) {
+      if (!foundNamed || distance < namedDistance) {
+        namedIndex = i;
+        namedDistance = distance;
+        foundNamed = true;
+      }
+
+      continue;
+    }
+
+    if (expectedVocabSize > 0 && distance > maxAllowedDistance) {
+      continue;
+    }
+
+    if (!found ||
+        distance < selectedDistance) {
+      selectedIndex = i;
+      selectedDistance = distance;
+      found = true;
+    }
+  }
+
+  if (foundNamed) {
+    return namedIndex;
+  }
+
+  return found
+      ? selectedIndex
+      : (std::numeric_limits<std::size_t>::max)();
 }
 
 } // namespace
@@ -1164,9 +1381,6 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
 
         outputNameStorage.push_back(rawName);
         outputNames.push_back(outputNameStorage.back().c_str());
-        if (IsInputNameContains(outputNameStorage.back(), "logits")) {
-          logitsOutputIndex = outputNames.size() - 1;
-        }
       }
 
       auto outputs = m_sessionState->session->Run(
@@ -1176,12 +1390,18 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
           inputTensors.size(),
           outputNames.data(),
           outputNames.size());
-      if (outputs.empty() || logitsOutputIndex >= outputs.size()) {
+      logitsOutputIndex = SelectBestLogitsOutputIndex(
+          outputs,
+          outputNameStorage,
+          m_tokenizer.VocabSize());
+      if (outputs.empty() ||
+          logitsOutputIndex == (std::numeric_limits<std::size_t>::max)() ||
+          logitsOutputIndex >= outputs.size()) {
         result.ok = false;
         result.modelId = m_snapshot.modelPath;
         result.error = TextGenerationError{
             .code = TextGenerationErrorCode::InferenceFailed,
-            .message = "ONNX inference produced no logits output.",
+            .message = "ONNX inference produced no logits-like output. The model export may not expose language-model logits.",
         };
         result.latencyMs = ElapsedMs(startedAt);
         return result;
@@ -1201,7 +1421,23 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
 
       auto logitsInfo = logitsValue.GetTensorTypeAndShapeInfo();
       const auto logitsShape = logitsInfo.GetShape();
-      if (logitsShape.size() < 3) {
+      std::vector<std::size_t> logitsDims;
+      std::vector<std::size_t> logitsStrides;
+      std::size_t vocabAxis = 0;
+      std::size_t tokenAxis = 0;
+      std::size_t tokenIndex = 0;
+      std::size_t vocabSize = 0;
+      std::size_t baseOffset = 0;
+      if (!ResolveLogitsSlice(
+              logitsShape,
+              m_tokenizer.VocabSize(),
+              logitsDims,
+              logitsStrides,
+              vocabAxis,
+              tokenAxis,
+              tokenIndex,
+              vocabSize,
+              baseOffset)) {
         result.ok = false;
         result.modelId = m_snapshot.modelPath;
         result.error = TextGenerationError{
@@ -1212,23 +1448,25 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
         return result;
       }
 
-      const std::size_t sequenceLength = static_cast<std::size_t>(
-          (std::max)(std::int64_t{1}, logitsShape[1]));
-      const std::size_t vocabSize = static_cast<std::size_t>(
-          (std::max)(std::int64_t{1}, logitsShape[2]));
-      const std::size_t baseOffset = (sequenceLength - 1) * vocabSize;
+      if (generatedCount == 0) {
+        TraceRuntime(
+            "request.logits",
+            request.runId,
+            std::string("outputIndex=") +
+                std::to_string(logitsOutputIndex) +
+                " shape=" + FormatShape(logitsShape) +
+                " vocabAxis=" + std::to_string(vocabAxis) +
+                " tokenAxis=" + std::to_string(tokenAxis) +
+                " vocabSize=" + std::to_string(vocabSize));
+      }
 
-      std::vector<float> logitsFloat;
       const float* logitsData = nullptr;
+      const Ort::Float16_t* logitsData16 = nullptr;
       if (logitsInfo.GetElementType() == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
         logitsData = logitsValue.GetTensorData<float>();
       } else if (
           logitsInfo.GetElementType() == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16) {
-        const auto* logitsData16 = logitsValue.GetTensorData<Ort::Float16_t>();
-        logitsFloat.reserve(vocabSize);
-        for (std::size_t i = 0; i < vocabSize; ++i) {
-          logitsFloat.push_back(logitsData16[baseOffset + i].ToFloat());
-        }
+        logitsData16 = logitsValue.GetTensorData<Ort::Float16_t>();
       } else {
         result.ok = false;
         result.modelId = m_snapshot.modelPath;
@@ -1240,16 +1478,54 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
         return result;
       }
 
+      const std::size_t logitsElementCount = logitsInfo.GetElementCount();
+
+      std::unordered_set<std::int64_t> penalizedIds;
+      if (!inputTokenIds.empty()) {
+        const std::size_t windowStart = inputTokenIds.size() > kRepeatPenaltyWindow
+            ? inputTokenIds.size() - kRepeatPenaltyWindow
+            : 0;
+        penalizedIds.reserve(inputTokenIds.size() - windowStart);
+        for (std::size_t i = windowStart; i < inputTokenIds.size(); ++i) {
+          penalizedIds.insert(inputTokenIds[i]);
+        }
+      }
+
       float maxLogit = -std::numeric_limits<float>::infinity();
       std::size_t maxIndex = 0;
+      bool hasCandidate = false;
       for (std::size_t i = 0; i < vocabSize; ++i) {
-        const float value = logitsData != nullptr
-            ? logitsData[baseOffset + i]
-            : logitsFloat[i];
-        if (i == 0 || value > maxLogit) {
+        const std::size_t offset = baseOffset +
+            (i * logitsStrides[vocabAxis]);
+        if (offset >= logitsElementCount) {
+          continue;
+        }
+
+        float value = logitsData != nullptr
+            ? logitsData[offset]
+            : logitsData16[offset].ToFloat();
+        if (penalizedIds.find(static_cast<std::int64_t>(i)) != penalizedIds.end()) {
+          value = value > 0.0f
+              ? (value / kRepeatPenalty)
+              : (value * kRepeatPenalty);
+        }
+
+        if (!hasCandidate || value > maxLogit) {
           maxLogit = value;
           maxIndex = i;
+          hasCandidate = true;
         }
+      }
+
+      if (!hasCandidate) {
+        result.ok = false;
+        result.modelId = m_snapshot.modelPath;
+        result.error = TextGenerationError{
+            .code = TextGenerationErrorCode::InferenceFailed,
+            .message = "ONNX logits indexing failed for resolved shape.",
+        };
+        result.latencyMs = ElapsedMs(startedAt);
+        return result;
       }
 
       const std::int64_t nextTokenId = static_cast<std::int64_t>(maxIndex);
