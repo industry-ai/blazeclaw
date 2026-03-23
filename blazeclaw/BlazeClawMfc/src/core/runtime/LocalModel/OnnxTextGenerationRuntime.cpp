@@ -3,8 +3,11 @@
 
 #include <chrono>
 #include <array>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <limits>
+#include <map>
 #include <sstream>
 
 #include <Windows.h>
@@ -195,6 +198,117 @@ double TokensPerSecond(
 
   return static_cast<double>(generatedTokens) * 1000.0 /
       static_cast<double>(latencyMs);
+}
+
+std::int64_t StableTokenId(const std::string& token) {
+  std::uint64_t hash = 1469598103934665603ULL;
+  for (const char ch : token) {
+    const unsigned char lower = static_cast<unsigned char>(
+        std::tolower(static_cast<unsigned char>(ch)));
+    hash ^= static_cast<std::uint64_t>(lower);
+    hash *= 1099511628211ULL;
+  }
+
+  return static_cast<std::int64_t>((hash % 30000ULL) + 100ULL);
+}
+
+std::vector<std::int64_t> BuildPositionIds(
+    const std::size_t count) {
+  std::vector<std::int64_t> ids;
+  ids.reserve(count);
+  for (std::size_t i = 0; i < count; ++i) {
+    ids.push_back(static_cast<std::int64_t>(i));
+  }
+
+  return ids;
+}
+
+bool IsInputNameContains(
+    const std::string& value,
+    const char* token) {
+  if (token == nullptr || *token == '\0') {
+    return false;
+  }
+
+  const std::string lowered = ToLowerAscii(value);
+  return lowered.find(token) != std::string::npos;
+}
+
+bool IsPastKeyValueName(const std::string& inputName) {
+  return IsInputNameContains(inputName, "past_key") ||
+      IsInputNameContains(inputName, "past_value") ||
+      IsInputNameContains(inputName, "past_key_values");
+}
+
+bool ResolveInputShape(
+    const std::string& inputName,
+    const std::vector<std::int64_t>& modelShape,
+    const std::size_t sequenceLength,
+    std::vector<std::int64_t>& outShape,
+    std::size_t& outElementCount) {
+  outShape.clear();
+  outElementCount = 1;
+
+  if (modelShape.empty()) {
+    outShape.push_back(1);
+    outShape.push_back(static_cast<std::int64_t>(sequenceLength));
+    outElementCount = sequenceLength;
+    return true;
+  }
+
+  const bool isInputIds = IsInputNameContains(inputName, "input_ids");
+  const bool isAttentionMask = IsInputNameContains(inputName, "attention_mask");
+  const bool isPositionIds = IsInputNameContains(inputName, "position");
+  const bool isPast = IsPastKeyValueName(inputName);
+
+  outShape.reserve(modelShape.size());
+  for (std::size_t i = 0; i < modelShape.size(); ++i) {
+    const std::int64_t sourceDim = modelShape[i];
+    std::int64_t dim = sourceDim;
+
+    if (dim <= 0) {
+      if (i == 0) {
+        dim = 1;
+      } else if ((isInputIds || isAttentionMask || isPositionIds) && i == 1) {
+        dim = static_cast<std::int64_t>(sequenceLength);
+      } else if (isPast && i == 2) {
+        dim = 0;
+      } else {
+        dim = 1;
+      }
+    }
+
+    if (dim < 0) {
+      return false;
+    }
+
+    if (dim > 0) {
+      const std::size_t dimSize = static_cast<std::size_t>(dim);
+      if (dimSize > 0 && outElementCount >
+          (std::numeric_limits<std::size_t>::max)() / dimSize) {
+        return false;
+      }
+
+      outElementCount *= dimSize;
+    } else {
+      outElementCount = 0;
+    }
+
+    outShape.push_back(dim);
+  }
+
+  return true;
+}
+
+std::string DecodeGeneratedToken(
+    const std::int64_t tokenId,
+    const std::map<std::int64_t, std::string>& promptIdLookup) {
+  const auto it = promptIdLookup.find(tokenId);
+  if (it != promptIdLookup.end()) {
+    return it->second;
+  }
+
+  return "<tok:" + std::to_string(tokenId) + ">";
 }
 
 } // namespace
@@ -641,18 +755,24 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
     return result;
   }
 
+  std::vector<std::int64_t> inputTokenIds;
+  inputTokenIds.reserve(promptTokens.size() + 1);
+  inputTokenIds.push_back(151643);
+
+  std::map<std::int64_t, std::string> promptIdLookup;
+  for (const auto& token : promptTokens) {
+    const std::int64_t tokenId = StableTokenId(token);
+    inputTokenIds.push_back(tokenId);
+    promptIdLookup.insert_or_assign(tokenId, token);
+  }
+
   std::vector<std::string> emittedTokens;
-  emittedTokens.reserve(promptTokens.size() + 4);
-  emittedTokens.push_back("Local");
-  emittedTokens.push_back("ONNX");
-  emittedTokens.push_back("response:");
+  emittedTokens.reserve(maxTokens);
   bool firstTokenLogged = false;
 
-  for (const auto& token : promptTokens) {
-    if (emittedTokens.size() >= maxTokens) {
-      break;
-    }
-
+#if BLAZECLAW_HAS_ONNXRUNTIME
+  std::uint32_t generatedCount = 0;
+  while (generatedCount < maxTokens) {
     bool cancelled = false;
     {
       std::lock_guard<std::mutex> lock(m_mutex);
@@ -676,22 +796,302 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
       return result;
     }
 
-    emittedTokens.push_back(token);
-    if (!firstTokenLogged) {
-      TraceRuntime(
-          "request.first_token",
-          request.runId,
-          "tokenIndex=" + std::to_string(emittedTokens.size()));
-      firstTokenLogged = true;
-    }
+    std::vector<std::int64_t> attentionMask(
+        inputTokenIds.size(),
+        1);
+    std::vector<std::int64_t> positionIds = BuildPositionIds(
+        inputTokenIds.size());
 
-    if (onDelta) {
-      const std::string delta = emittedTokens.size() == 1
-          ? emittedTokens.back()
-          : (" " + emittedTokens.back());
-      onDelta(delta);
+    std::vector<const char*> inputNames;
+    std::vector<std::string> inputNameStorage;
+    std::vector<Ort::Value> inputTensors;
+    std::vector<std::vector<std::int64_t>> int64Storage;
+    std::vector<std::vector<std::int32_t>> int32Storage;
+    std::vector<std::vector<Ort::Float16_t>> float16Storage;
+
+    std::vector<const char*> outputNames;
+    std::vector<std::string> outputNameStorage;
+    std::size_t logitsOutputIndex = 0;
+
+    try {
+      Ort::AllocatorWithDefaultOptions allocator;
+      const auto memoryInfo = Ort::MemoryInfo::CreateCpu(
+          OrtArenaAllocator,
+          OrtMemTypeDefault);
+
+      const std::size_t inputCount = m_sessionState->session->GetInputCount();
+      inputNames.reserve(inputCount);
+      inputNameStorage.reserve(inputCount);
+      inputTensors.reserve(inputCount);
+
+      for (std::size_t i = 0; i < inputCount; ++i) {
+        auto nameAllocated = m_sessionState->session->GetInputNameAllocated(
+            i,
+            allocator);
+        const char* rawName = nameAllocated.get();
+        if (rawName == nullptr) {
+          continue;
+        }
+
+        const std::string inputName = rawName;
+        inputNameStorage.push_back(inputName);
+        inputNames.push_back(inputNameStorage.back().c_str());
+
+        auto inputType = m_sessionState->session->GetInputTypeInfo(i);
+        if (inputType.GetONNXType() != ONNX_TYPE_TENSOR) {
+          continue;
+        }
+
+        auto tensorInfo = inputType.GetTensorTypeAndShapeInfo();
+        std::vector<std::int64_t> resolvedShape;
+        std::size_t elementCount = 0;
+        if (!ResolveInputShape(
+                inputName,
+                tensorInfo.GetShape(),
+                inputTokenIds.size(),
+                resolvedShape,
+                elementCount)) {
+          result.ok = false;
+          result.modelId = m_snapshot.modelPath;
+          result.error = TextGenerationError{
+              .code = TextGenerationErrorCode::InferenceFailed,
+              .message = "Unable to resolve ONNX input shape.",
+          };
+          result.latencyMs = ElapsedMs(startedAt);
+          return result;
+        }
+
+        const bool isInputIds = IsInputNameContains(inputName, "input_ids");
+        const bool isAttentionMask = IsInputNameContains(inputName, "attention_mask");
+        const bool isPositionIds = IsInputNameContains(inputName, "position");
+
+        std::vector<std::int64_t> sourceValues(elementCount, 0);
+        const auto copyCount = (std::min)(
+            sourceValues.size(),
+            inputTokenIds.size());
+        if (isInputIds) {
+          std::copy_n(
+              inputTokenIds.data(),
+              copyCount,
+              sourceValues.data());
+        } else if (isAttentionMask) {
+          std::copy_n(
+              attentionMask.data(),
+              copyCount,
+              sourceValues.data());
+        } else if (isPositionIds) {
+          std::copy_n(
+              positionIds.data(),
+              copyCount,
+              sourceValues.data());
+        }
+
+        const auto elementType = tensorInfo.GetElementType();
+        if (elementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
+          int64Storage.push_back(std::move(sourceValues));
+          auto& values = int64Storage.back();
+          inputTensors.push_back(Ort::Value::CreateTensor<std::int64_t>(
+              memoryInfo,
+              values.data(),
+              values.size(),
+              resolvedShape.data(),
+              resolvedShape.size()));
+          continue;
+        }
+
+        if (elementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32) {
+          int32Storage.emplace_back();
+          auto& values = int32Storage.back();
+          values.reserve(sourceValues.size());
+          for (const auto value : sourceValues) {
+            values.push_back(static_cast<std::int32_t>(value));
+          }
+
+          inputTensors.push_back(Ort::Value::CreateTensor<std::int32_t>(
+              memoryInfo,
+              values.data(),
+              values.size(),
+              resolvedShape.data(),
+              resolvedShape.size()));
+          continue;
+        }
+
+        if (elementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16) {
+          float16Storage.emplace_back();
+          auto& values = float16Storage.back();
+          values.reserve(sourceValues.size());
+          for (const auto value : sourceValues) {
+            values.emplace_back(static_cast<float>(value));
+          }
+
+          inputTensors.push_back(Ort::Value::CreateTensor<Ort::Float16_t>(
+              memoryInfo,
+              values.data(),
+              values.size(),
+              resolvedShape.data(),
+              resolvedShape.size()));
+          continue;
+        }
+
+        int64Storage.emplace_back(sourceValues.size(), 0);
+        auto& values = int64Storage.back();
+        inputTensors.push_back(Ort::Value::CreateTensor<std::int64_t>(
+            memoryInfo,
+            values.data(),
+            values.size(),
+            resolvedShape.data(),
+            resolvedShape.size()));
+      }
+
+      const std::size_t outputCount = m_sessionState->session->GetOutputCount();
+      outputNames.reserve(outputCount);
+      outputNameStorage.reserve(outputCount);
+      for (std::size_t i = 0; i < outputCount; ++i) {
+        auto nameAllocated = m_sessionState->session->GetOutputNameAllocated(
+            i,
+            allocator);
+        const char* rawName = nameAllocated.get();
+        if (rawName == nullptr) {
+          continue;
+        }
+
+        outputNameStorage.push_back(rawName);
+        outputNames.push_back(outputNameStorage.back().c_str());
+        if (IsInputNameContains(outputNameStorage.back(), "logits")) {
+          logitsOutputIndex = outputNames.size() - 1;
+        }
+      }
+
+      auto outputs = m_sessionState->session->Run(
+          Ort::RunOptions{nullptr},
+          inputNames.data(),
+          inputTensors.data(),
+          inputTensors.size(),
+          outputNames.data(),
+          outputNames.size());
+      if (outputs.empty() || logitsOutputIndex >= outputs.size()) {
+        result.ok = false;
+        result.modelId = m_snapshot.modelPath;
+        result.error = TextGenerationError{
+            .code = TextGenerationErrorCode::InferenceFailed,
+            .message = "ONNX inference produced no logits output.",
+        };
+        result.latencyMs = ElapsedMs(startedAt);
+        return result;
+      }
+
+      auto& logitsValue = outputs[logitsOutputIndex];
+      if (!logitsValue.IsTensor()) {
+        result.ok = false;
+        result.modelId = m_snapshot.modelPath;
+        result.error = TextGenerationError{
+            .code = TextGenerationErrorCode::InferenceFailed,
+            .message = "ONNX logits output is not a tensor.",
+        };
+        result.latencyMs = ElapsedMs(startedAt);
+        return result;
+      }
+
+      auto logitsInfo = logitsValue.GetTensorTypeAndShapeInfo();
+      const auto logitsShape = logitsInfo.GetShape();
+      if (logitsShape.size() < 3) {
+        result.ok = false;
+        result.modelId = m_snapshot.modelPath;
+        result.error = TextGenerationError{
+            .code = TextGenerationErrorCode::InferenceFailed,
+            .message = "ONNX logits output shape is unsupported.",
+        };
+        result.latencyMs = ElapsedMs(startedAt);
+        return result;
+      }
+
+      const std::size_t sequenceLength = static_cast<std::size_t>(
+          (std::max)(std::int64_t{1}, logitsShape[1]));
+      const std::size_t vocabSize = static_cast<std::size_t>(
+          (std::max)(std::int64_t{1}, logitsShape[2]));
+      const std::size_t baseOffset = (sequenceLength - 1) * vocabSize;
+
+      std::vector<float> logitsFloat;
+      const float* logitsData = nullptr;
+      if (logitsInfo.GetElementType() == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+        logitsData = logitsValue.GetTensorData<float>();
+      } else if (
+          logitsInfo.GetElementType() == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16) {
+        const auto* logitsData16 = logitsValue.GetTensorData<Ort::Float16_t>();
+        logitsFloat.reserve(vocabSize);
+        for (std::size_t i = 0; i < vocabSize; ++i) {
+          logitsFloat.push_back(logitsData16[baseOffset + i].ToFloat());
+        }
+      } else {
+        result.ok = false;
+        result.modelId = m_snapshot.modelPath;
+        result.error = TextGenerationError{
+            .code = TextGenerationErrorCode::InferenceFailed,
+            .message = "ONNX logits tensor type is unsupported.",
+        };
+        result.latencyMs = ElapsedMs(startedAt);
+        return result;
+      }
+
+      float maxLogit = -std::numeric_limits<float>::infinity();
+      std::size_t maxIndex = 0;
+      for (std::size_t i = 0; i < vocabSize; ++i) {
+        const float value = logitsData != nullptr
+            ? logitsData[baseOffset + i]
+            : logitsFloat[i];
+        if (i == 0 || value > maxLogit) {
+          maxLogit = value;
+          maxIndex = i;
+        }
+      }
+
+      const std::int64_t nextTokenId = static_cast<std::int64_t>(maxIndex);
+      if (nextTokenId == 151645 || nextTokenId == 151643) {
+        break;
+      }
+
+      inputTokenIds.push_back(nextTokenId);
+      const std::string nextToken = DecodeGeneratedToken(
+          nextTokenId,
+          promptIdLookup);
+      emittedTokens.push_back(nextToken);
+      ++generatedCount;
+
+      if (!firstTokenLogged) {
+        TraceRuntime(
+            "request.first_token",
+            request.runId,
+            "tokenIndex=" + std::to_string(emittedTokens.size()));
+        firstTokenLogged = true;
+      }
+
+      if (onDelta) {
+        const std::string delta = emittedTokens.size() == 1
+            ? emittedTokens.back()
+            : (" " + emittedTokens.back());
+        onDelta(delta);
+      }
+    } catch (const Ort::Exception& ex) {
+      result.ok = false;
+      result.modelId = m_snapshot.modelPath;
+      result.error = TextGenerationError{
+          .code = TextGenerationErrorCode::InferenceFailed,
+          .message = ex.what(),
+      };
+      result.latencyMs = ElapsedMs(startedAt);
+      return result;
     }
   }
+#else
+  result.ok = false;
+  result.modelId = m_snapshot.modelPath;
+  result.error = TextGenerationError{
+      .code = TextGenerationErrorCode::RuntimeUnavailable,
+      .message = "ONNX Runtime is unavailable at compile time.",
+  };
+  result.latencyMs = ElapsedMs(startedAt);
+  return result;
+#endif
 
   {
     std::lock_guard<std::mutex> lock(m_mutex);
