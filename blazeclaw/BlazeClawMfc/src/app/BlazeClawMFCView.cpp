@@ -45,12 +45,46 @@ constexpr std::uint64_t kBridgeTraceFlushIntervalMs = 1000;
 
 std::string ToNarrow(const std::wstring& value)
 {
-	std::string output;
-	output.reserve(value.size());
-	for (const wchar_t ch : value)
+ if (value.empty())
 	{
-		output.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
+		return {};
 	}
+
+	const int sizeNeeded = WideCharToMultiByte(
+		CP_UTF8,
+		0,
+		value.c_str(),
+		static_cast<int>(value.size()),
+		nullptr,
+		0,
+		nullptr,
+		nullptr);
+	if (sizeNeeded <= 0)
+	{
+		std::string fallback;
+		fallback.reserve(value.size());
+		for (const wchar_t ch : value)
+		{
+			fallback.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
+		}
+		return fallback;
+	}
+
+	std::string output(sizeNeeded, '\0');
+	const int written = WideCharToMultiByte(
+		CP_UTF8,
+		0,
+		value.c_str(),
+		static_cast<int>(value.size()),
+		output.data(),
+		sizeNeeded,
+		nullptr,
+		nullptr);
+	if (written <= 0)
+	{
+		return {};
+	}
+
 	return output;
 }
 
@@ -93,14 +127,43 @@ void AppendChatProcedureStatusLine(
 
 std::wstring ToWide(const std::string& value)
 {
-	std::wstring output;
-	output.reserve(value.size());
-	for (const char ch : value)
+    if (value.empty())
 	{
-		output.push_back(
-			static_cast<wchar_t>(
-				static_cast<unsigned char>(ch)));
+		return {};
 	}
+
+	const int sizeNeeded = MultiByteToWideChar(
+		CP_UTF8,
+		0,
+		value.c_str(),
+		static_cast<int>(value.size()),
+		nullptr,
+		0);
+	if (sizeNeeded <= 0)
+	{
+		std::wstring fallback;
+		fallback.reserve(value.size());
+		for (const char ch : value)
+		{
+			fallback.push_back(static_cast<wchar_t>(
+				static_cast<unsigned char>(ch)));
+		}
+		return fallback;
+	}
+
+	std::wstring output(sizeNeeded, L'\0');
+	const int written = MultiByteToWideChar(
+		CP_UTF8,
+		0,
+		value.c_str(),
+		static_cast<int>(value.size()),
+		output.data(),
+		sizeNeeded);
+	if (written <= 0)
+	{
+		return {};
+	}
+
 	return output;
 }
 
@@ -133,6 +196,95 @@ std::string EscapeJson(const std::string& value)
 		}
 	}
 	return escaped;
+}
+
+bool TryExtractJsonStringAfterKey(
+	const std::string& json,
+	const std::size_t start,
+	const std::string& key,
+	std::string& outValue)
+{
+	outValue.clear();
+	if (start >= json.size())
+	{
+		return false;
+	}
+
+	const std::string token = "\"" + key + "\":\"";
+	const std::size_t keyPos = json.find(token, start);
+	if (keyPos == std::string::npos)
+	{
+		return false;
+	}
+
+	std::size_t cursor = keyPos + token.size();
+	bool escaping = false;
+	while (cursor < json.size())
+	{
+		const char ch = json[cursor++];
+		if (escaping)
+		{
+			switch (ch)
+			{
+			case 'n':
+				outValue.push_back('\n');
+				break;
+			case 'r':
+				outValue.push_back('\r');
+				break;
+			case 't':
+				outValue.push_back('\t');
+				break;
+			case '\\':
+			case '"':
+				outValue.push_back(ch);
+				break;
+			default:
+				outValue.push_back(ch);
+				break;
+			}
+			escaping = false;
+			continue;
+		}
+
+		if (ch == '\\')
+		{
+			escaping = true;
+			continue;
+		}
+
+		if (ch == '"')
+		{
+			return true;
+		}
+
+		outValue.push_back(ch);
+	}
+
+	return false;
+}
+
+std::string TryExtractFinalAssistantText(
+	const std::string& eventsRaw)
+{
+	const std::size_t finalPos =
+		eventsRaw.find("\"state\":\"final\"");
+	if (finalPos == std::string::npos)
+	{
+		return {};
+	}
+
+	std::string extracted;
+	if (TryExtractJsonStringAfterKey(
+			eventsRaw,
+			finalPos,
+			"text",
+			extracted))
+	{
+		return extracted;
+	}
+
+	return {};
 }
 
 std::string JsonString(const std::string& value)
@@ -945,6 +1097,15 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 	}
 
 	AppendChatProcedureStatusLine(L"events.poll.batch", eventsRaw);
+
+	const std::string finalAssistantText =
+		TryExtractFinalAssistantText(eventsRaw);
+	if (!finalAssistantText.empty())
+	{
+		AppendChatProcedureStatusLine(
+			L"localModel.response",
+			finalAssistantText);
+	}
 
 	const std::string envelope =
 		"{\"channel\":\"blazeclaw.gateway.chat.events\",\"sessionId\":" +

@@ -44,6 +44,8 @@ public:
       const std::string& token,
       std::int64_t& outTokenId) const noexcept;
 
+  [[nodiscard]] std::size_t VocabSize() const noexcept;
+
   [[nodiscard]] std::string Detokenize(
       const std::vector<std::string>& tokens) const;
 
