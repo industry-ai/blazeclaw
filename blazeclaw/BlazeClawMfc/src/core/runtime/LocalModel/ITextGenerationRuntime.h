@@ -61,6 +61,7 @@ struct LocalModelRuntimeSnapshot {
   std::uint32_t lastGeneratedTokens = 0;
   double lastTokensPerSecond = 0.0;
   std::string status;
+  std::string effectiveExecutionProvider;
   std::optional<TextGenerationError> error;
 };
 

@@ -34,6 +34,54 @@ std::string ToLowerAscii(const std::string& value) {
   return lowered;
 }
 
+#if BLAZECLAW_HAS_ONNXRUNTIME
+void ConfigureDefaultSessionOptions(Ort::SessionOptions& options) {
+  options.SetGraphOptimizationLevel(
+      GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
+  options.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
+}
+
+bool TryAppendDirectMlExecutionProvider(
+    Ort::SessionOptions& options,
+    std::string& outReason) {
+  outReason.clear();
+
+  using AppendDirectMlFn = OrtStatus*(ORT_API_CALL*)(
+      OrtSessionOptions*,
+      int);
+
+  HMODULE onnxRuntimeModule = ::GetModuleHandleW(L"onnxruntime.dll");
+  if (onnxRuntimeModule == nullptr) {
+    outReason = "onnxruntime.dll not loaded";
+    return false;
+  }
+
+  const auto appendDirectMl = reinterpret_cast<AppendDirectMlFn>(
+      ::GetProcAddress(
+          onnxRuntimeModule,
+          "OrtSessionOptionsAppendExecutionProvider_DML"));
+  if (appendDirectMl == nullptr) {
+    outReason = "DirectML execution provider API unavailable";
+    return false;
+  }
+
+  OrtStatus* status = appendDirectMl(
+      options,
+      0);
+  if (status != nullptr) {
+    const OrtApi& api = Ort::GetApi();
+    const char* message = api.GetErrorMessage(status);
+    outReason = message == nullptr
+        ? "DirectML provider append failed"
+        : message;
+    api.ReleaseStatus(status);
+    return false;
+  }
+
+  return true;
+}
+#endif
+
 std::string ToHexLower(const std::uint8_t* data, const std::size_t size) {
   static constexpr char kHex[] = "0123456789abcdef";
   std::string hex;
@@ -707,14 +755,53 @@ bool OnnxTextGenerationRuntime::LoadModel() {
         ORT_LOGGING_LEVEL_WARNING,
         "blazeclaw-local-chat-runtime");
     m_sessionState->options = std::make_unique<Ort::SessionOptions>();
-    m_sessionState->options->SetGraphOptimizationLevel(
-        GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
-    m_sessionState->options->SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
+    ConfigureDefaultSessionOptions(*m_sessionState->options);
 
-    m_sessionState->session = std::make_unique<Ort::Session>(
-        *m_sessionState->env,
-        modelPath.c_str(),
-        *m_sessionState->options);
+    bool usingDirectMl = false;
+    std::string directMlFallbackReason;
+    if (TryAppendDirectMlExecutionProvider(
+            *m_sessionState->options,
+            directMlFallbackReason)) {
+      usingDirectMl = true;
+      m_snapshot.effectiveExecutionProvider = "directml";
+      TraceRuntime(
+          "model.execution_provider",
+          {},
+          "provider=directml");
+    } else {
+      m_snapshot.effectiveExecutionProvider = "cpu";
+      TraceRuntime(
+          "model.execution_provider",
+          {},
+          "provider=cpu fallbackReason=" + directMlFallbackReason);
+    }
+
+    try {
+      m_sessionState->session = std::make_unique<Ort::Session>(
+          *m_sessionState->env,
+          modelPath.c_str(),
+          *m_sessionState->options);
+    } catch (const std::exception& ex) {
+      if (!usingDirectMl) {
+        throw;
+      }
+
+      directMlFallbackReason =
+          "directml_session_init_failed: " + std::string(ex.what());
+      m_snapshot.effectiveExecutionProvider = "cpu";
+      TraceRuntime(
+          "model.execution_provider",
+          {},
+          "provider=cpu fallbackReason=" + directMlFallbackReason);
+
+      m_sessionState->options = std::make_unique<Ort::SessionOptions>();
+      ConfigureDefaultSessionOptions(*m_sessionState->options);
+      m_sessionState->session = std::make_unique<Ort::Session>(
+          *m_sessionState->env,
+          modelPath.c_str(),
+          *m_sessionState->options);
+    }
+
     m_sessionState->loaded = true;
   } catch (const std::exception& ex) {
     m_snapshot.ready = false;
@@ -731,6 +818,7 @@ bool OnnxTextGenerationRuntime::LoadModel() {
     return false;
   }
 #else
+  m_snapshot.effectiveExecutionProvider = "cpu";
   m_snapshot.ready = false;
   m_snapshot.status = "runtime_unavailable";
   ++m_snapshot.modelLoadFailures;
@@ -1350,6 +1438,7 @@ void OnnxTextGenerationRuntime::ResetSnapshotLocked() {
   m_snapshot.maxTokens = m_config.localModel.maxTokens;
   m_snapshot.temperature = m_config.localModel.temperature;
   m_snapshot.status = "configured";
+  m_snapshot.effectiveExecutionProvider = "unknown";
   m_snapshot.error.reset();
 }
 

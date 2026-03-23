@@ -152,6 +152,12 @@ namespace {
 			runtime.tokenizerHashVerified ? L"true" : L"false");
 		AppendMainFrameStatusLine(integrityLine);
 
+		CString executionProviderLine;
+		executionProviderLine.Format(
+			L"[Chat] startup.localModel.executionProvider - effective=%s",
+			ToWide(runtime.effectiveExecutionProvider).c_str());
+		AppendMainFrameStatusLine(executionProviderLine);
+
 		if (!runtime.tokenizerPath.empty()) {
 			blazeclaw::core::localmodel::TokenizerBridge tokenizer;
 			std::string tokenizerLoadError;
