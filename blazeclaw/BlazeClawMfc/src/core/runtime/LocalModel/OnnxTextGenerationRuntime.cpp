@@ -142,23 +142,79 @@ std::string MakeHashMismatchMessage(
 std::filesystem::path ResolveConfiguredPath(
     const std::string& configuredPath,
     const std::string& storageRoot) {
-  const std::filesystem::path path(configuredPath);
-  if (path.empty() || path.is_absolute()) {
-    return path;
+  const std::filesystem::path configured(configuredPath);
+  if (configured.empty()) {
+    return configured;
+  }
+
+  if (configured.is_absolute()) {
+    return configured.lexically_normal();
+  }
+
+  std::error_code ec;
+  const std::filesystem::path configDirectory =
+      std::filesystem::current_path(ec);
+  ec.clear();
+
+  std::filesystem::path executableDirectory;
+  std::array<wchar_t, MAX_PATH> modulePath{};
+  const DWORD moduleLength = ::GetModuleFileNameW(
+      nullptr,
+      modulePath.data(),
+      static_cast<DWORD>(modulePath.size()));
+  if (moduleLength > 0) {
+    executableDirectory = std::filesystem::path(
+        std::wstring(modulePath.data(), moduleLength))
+                              .parent_path();
   }
 
   const std::filesystem::path root(storageRoot);
-  if (root.empty()) {
-    return path;
+  const bool hasStorageRoot = !root.empty();
+
+  std::vector<std::filesystem::path> candidates;
+  candidates.reserve(8);
+
+  if (hasStorageRoot) {
+    if (root.is_absolute()) {
+      candidates.push_back(root / configured);
+    } else {
+      if (!configDirectory.empty()) {
+        candidates.push_back(configDirectory / root / configured);
+      }
+
+      if (!executableDirectory.empty()) {
+        candidates.push_back(executableDirectory / root / configured);
+      }
+
+      candidates.push_back(root / configured);
+    }
   }
 
-  const std::filesystem::path candidate = root / path;
-  std::error_code ec;
-  if (std::filesystem::exists(candidate, ec) && !ec) {
-    return candidate;
+  if (!configDirectory.empty()) {
+    candidates.push_back(configDirectory / configured);
   }
 
-  return path;
+  if (!executableDirectory.empty()) {
+    candidates.push_back(executableDirectory / configured);
+  }
+
+  candidates.push_back(configured);
+
+  for (const auto& candidate : candidates) {
+    const std::filesystem::path normalized = candidate.lexically_normal();
+    ec.clear();
+    if (std::filesystem::exists(normalized, ec) && !ec) {
+      return normalized;
+    }
+  }
+
+  for (const auto& candidate : candidates) {
+    if (candidate.is_absolute()) {
+      return candidate.lexically_normal();
+    }
+  }
+
+  return configured.lexically_normal();
 }
 
 bool IsSha256LengthValid(const std::string& value) {
@@ -566,6 +622,21 @@ bool OnnxTextGenerationRuntime::LoadModel() {
           "status=model_hash_mismatch");
       return false;
     }
+  }
+
+  if (m_snapshot.tokenizerPath.empty()) {
+    m_snapshot.ready = false;
+    m_snapshot.status = "tokenizer_missing";
+    ++m_snapshot.modelLoadFailures;
+    m_snapshot.error = TextGenerationError{
+        .code = TextGenerationErrorCode::TokenizerNotFound,
+        .message = "chat.localModel.tokenizerPath is not configured.",
+    };
+    TraceRuntime(
+        "model.load.failure",
+        {},
+        "status=tokenizer_missing reason=tokenizerPath_not_configured");
+    return false;
   }
 
   std::string tokenizerError;
