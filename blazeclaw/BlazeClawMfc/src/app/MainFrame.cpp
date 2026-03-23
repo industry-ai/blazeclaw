@@ -92,6 +92,16 @@ CMainFrame::~CMainFrame()
 {
 }
 
+void CMainFrame::AddChatStatusLine(const CString& line)
+{
+	if (!::IsWindow(m_hWnd))
+	{
+		return;
+	}
+
+	m_wndOutput.AddChatStatusLine(line);
+}
+
 int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 {
 	if (CMDIFrameWndEx::OnCreate(lpCreateStruct) == -1)

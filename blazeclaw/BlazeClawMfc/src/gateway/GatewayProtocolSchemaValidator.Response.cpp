@@ -328,6 +328,39 @@ namespace blazeclaw::gateway::protocol {
 		const std::string payload = response.payloadJson.value_or("{}");
 
 		const std::unordered_map<std::string, std::function<bool()>> groupedValidators = {
+            { "gateway.embeddings.generate", [&]() {
+				if (!IsFieldValueType(payload, "vector", '[') ||
+					!IsFieldNumber(payload, "dimension") ||
+					!IsFieldValueType(payload, "provider", '"') ||
+					!IsFieldValueType(payload, "model", '"') ||
+					!IsFieldNumber(payload, "latencyMs") ||
+					!IsFieldValueType(payload, "status", '"')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`gateway.embeddings.generate` requires `vector`, `dimension`, `provider`, `model`, `latencyMs`, and `status`.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "gateway.embeddings.batchGenerate", [&]() {
+				if (!IsFieldValueType(payload, "vectors", '[') ||
+					!IsFieldNumber(payload, "count") ||
+					!IsFieldNumber(payload, "dimension") ||
+					!IsFieldValueType(payload, "provider", '"') ||
+					!IsFieldValueType(payload, "model", '"') ||
+					!IsFieldNumber(payload, "latencyMs") ||
+					!IsFieldValueType(payload, "status", '"')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`gateway.embeddings.batchGenerate` requires `vectors`, `count`, `dimension`, `provider`, `model`, `latencyMs`, and `status`.");
+					return false;
+				}
+
+				return true;
+			} },
 			{ "gateway.channels.status", [&]() {
 				return ValidateArrayWithOptionalEntryTokens(
 					payload,

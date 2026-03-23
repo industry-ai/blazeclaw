@@ -1,0 +1,25 @@
+{
+  "type": "res",
+  "id": "req-emb-2",
+  "ok": true,
+  "payload": {
+    "vectors": [
+      [
+        0.110000,
+        0.220000,
+        0.330000
+      ],
+      [
+        0.410000,
+        0.520000,
+        0.630000
+      ]
+    ],
+    "count": 2,
+    "dimension": 3,
+    "provider": "onnx",
+    "model": "models/embeddings/all-MiniLM-L6-v2/model.onnx",
+    "latencyMs": 23,
+    "status": "ready"
+  }
+}

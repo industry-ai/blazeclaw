@@ -25,6 +25,7 @@ public:
 
 // Operations
 public:
+	void AddChatStatusLine(const CString& line);
 
 // Overrides
 public:

@@ -66,10 +66,80 @@ namespace blazeclaw::gateway {
 	public:
      using SkillsRefreshCallback = std::function<SkillsCatalogGatewayState()>;
 
+	 struct ChatRuntimeRequest {
+         std::string runId;
+		 std::string sessionKey;
+		 std::string message;
+		 bool hasAttachments = false;
+      std::vector<std::string> attachmentMimeTypes;
+	 };
+
+	 struct ChatAbortRequest {
+		 std::string runId;
+		 std::string sessionKey;
+	 };
+
+	 struct ChatRuntimeResult {
+		 bool ok = false;
+		 std::string assistantText;
+		 std::string modelId;
+		 std::string errorCode;
+		 std::string errorMessage;
+	 };
+
+	 struct EmbeddingsGenerateRequest {
+		 std::string text;
+		 std::optional<bool> normalize;
+		 std::string model;
+		 std::string traceId;
+	 };
+
+	 struct EmbeddingsGenerateResult {
+		 bool ok = false;
+		 std::vector<float> vector;
+		 std::size_t dimension = 0;
+		 std::string provider;
+		 std::string modelId;
+		 std::uint32_t latencyMs = 0;
+		 std::string status;
+		 std::string errorCode;
+		 std::string errorMessage;
+	 };
+
+	 struct EmbeddingsBatchRequest {
+		 std::vector<std::string> texts;
+		 std::optional<bool> normalize;
+		 std::string model;
+		 std::string traceId;
+	 };
+
+	 struct EmbeddingsBatchResult {
+		 bool ok = false;
+		 std::vector<std::vector<float>> vectors;
+		 std::size_t dimension = 0;
+		 std::string provider;
+		 std::string modelId;
+		 std::uint32_t latencyMs = 0;
+		 std::string status;
+		 std::string errorCode;
+		 std::string errorMessage;
+	 };
+
+	 using ChatRuntimeCallback = std::function<ChatRuntimeResult(const ChatRuntimeRequest&)>;
+  using ChatAbortCallback = std::function<bool(const ChatAbortRequest&)>;
+	 using EmbeddingsGenerateCallback =
+		 std::function<EmbeddingsGenerateResult(const EmbeddingsGenerateRequest&)>;
+	 using EmbeddingsBatchCallback =
+		 std::function<EmbeddingsBatchResult(const EmbeddingsBatchRequest&)>;
+
 		bool Start(const blazeclaw::config::GatewayConfig& config);
 		void Stop();
 		void SetSkillsCatalogState(SkillsCatalogGatewayState state);
 		void SetSkillsRefreshCallback(SkillsRefreshCallback callback);
+		void SetChatRuntimeCallback(ChatRuntimeCallback callback);
+        void SetChatAbortCallback(ChatAbortCallback callback);
+		void SetEmbeddingsGenerateCallback(EmbeddingsGenerateCallback callback);
+		void SetEmbeddingsBatchCallback(EmbeddingsBatchCallback callback);
 
 		[[nodiscard]] bool IsRunning() const noexcept;
 		[[nodiscard]] std::string LastWarning() const;
@@ -99,6 +169,29 @@ namespace blazeclaw::gateway {
 			std::string summary;
 			std::uint64_t startedAtMs = 0;
 			std::optional<std::uint64_t> completedAtMs;
+		};
+
+		struct ChatRunState {
+			std::string runId;
+			std::string sessionKey;
+			std::string idempotencyKey;
+			std::string userMessage;
+			std::string assistantText;
+          std::size_t streamCursor = 0;
+			std::uint64_t lastEmitMs = 0;
+			bool failed = false;
+			std::string errorMessage;
+			std::uint64_t startedAtMs = 0;
+			bool active = true;
+		};
+
+		struct ChatEventState {
+			std::string runId;
+			std::string sessionKey;
+			std::string state;
+			std::optional<std::string> messageJson;
+			std::optional<std::string> errorMessage;
+			std::uint64_t timestampMs = 0;
 		};
 
 		void RegisterDefaultHandlers();
@@ -148,8 +241,16 @@ namespace blazeclaw::gateway {
      std::unordered_map<std::string, AgentRunState> m_agentRuns;
 		std::unordered_map<std::string, std::string> m_agentRunByIdempotency;
 	  std::unordered_map<std::string, std::string> m_mutationPayloadByIdempotency;
+      std::unordered_map<std::string, std::vector<std::string>> m_chatHistoryBySession;
+	  std::unordered_map<std::string, std::deque<ChatEventState>> m_chatEventsBySession;
+	  std::unordered_map<std::string, ChatRunState> m_chatRunsById;
+	  std::unordered_map<std::string, std::string> m_chatRunByIdempotency;
         SkillsCatalogGatewayState m_skillsCatalogState;
       SkillsRefreshCallback m_skillsRefreshCallback;
+      ChatRuntimeCallback m_chatRuntimeCallback;
+      ChatAbortCallback m_chatAbortCallback;
+    EmbeddingsGenerateCallback m_embeddingsGenerateCallback;
+	  EmbeddingsBatchCallback m_embeddingsBatchCallback;
 	};
 
 } // namespace blazeclaw::gateway

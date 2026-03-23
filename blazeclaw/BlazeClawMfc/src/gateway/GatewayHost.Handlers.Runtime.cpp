@@ -2,9 +2,14 @@
 #include "GatewayHost.h"
 #include "GatewayJsonUtils.h"
 
+#include <chrono>
+#include <sstream>
+
 namespace blazeclaw::gateway {
 
     namespace {
+        constexpr char kSilentReplyToken[] = "NO_REPLY";
+
         std::string EscapeJsonLocal(const std::string& value) {
             std::string escaped;
             escaped.reserve(value.size() + 8);
@@ -149,9 +154,938 @@ namespace blazeclaw::gateway {
                     return entry.id == sessionId;
                 });
         }
+
+        std::uint64_t CurrentEpochMsLocal() {
+            const auto now = std::chrono::system_clock::now();
+            return static_cast<std::uint64_t>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    now.time_since_epoch())
+                    .count());
+        }
+
+        std::string BuildAssistantFinalMessageJson(
+            const std::string& text,
+            const std::uint64_t timestampMs) {
+            return "{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"" +
+                EscapeJsonLocal(text) +
+                "\"}],\"timestamp\":" +
+                std::to_string(timestampMs) +
+                "}";
+        }
+
+        std::string BuildAssistantDeltaMessageJson(const std::string& text) {
+            return
+                "{\"role\":\"assistant\",\"text\":\"" +
+                EscapeJsonLocal(text) +
+                "\"}";
+        }
+
+        std::string BuildUserMessageJson(
+            const std::string& text,
+            const bool hasAttachments,
+            const std::uint64_t timestampMs) {
+            std::string content = "[";
+            bool first = true;
+            if (!text.empty()) {
+                content +=
+                    "{\"type\":\"text\",\"text\":\"" +
+                    EscapeJsonLocal(text) +
+                    "\"}";
+                first = false;
+            }
+
+            if (hasAttachments) {
+                if (!first) {
+                    content += ",";
+                }
+
+                content +=
+                    "{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/*\",\"data\":\"[omitted]\"}}";
+            }
+
+            content += "]";
+
+            return "{\"role\":\"user\",\"content\":" +
+                content +
+                ",\"timestamp\":" +
+                std::to_string(timestampMs) +
+                "}";
+        }
+
+        std::string BuildChatEventJson(
+            const std::string& runId,
+            const std::string& sessionKey,
+            const std::string& state,
+            const std::optional<std::string>& messageJson,
+            const std::optional<std::string>& errorMessage,
+            const std::uint64_t timestampMs) {
+            std::string payload =
+                "{\"runId\":\"" +
+                EscapeJsonLocal(runId) +
+                "\",\"sessionKey\":\"" +
+                EscapeJsonLocal(sessionKey) +
+                "\",\"state\":\"" +
+                EscapeJsonLocal(state) +
+                "\",\"timestamp\":" +
+                std::to_string(timestampMs);
+
+            if (messageJson.has_value()) {
+                payload += ",\"message\":" + messageJson.value();
+            }
+
+            if (errorMessage.has_value()) {
+                payload +=
+                    ",\"errorMessage\":\"" +
+                    EscapeJsonLocal(errorMessage.value()) +
+                    "\"";
+            }
+
+            payload += "}";
+            return payload;
+        }
+
+        bool IsSilentReplyText(const std::string& text) {
+            return json::Trim(text) == kSilentReplyToken;
+        }
+
+        bool IsSilentAssistantMessageJson(const std::string& messageJson) {
+            std::string role;
+            if (!json::FindStringField(messageJson, "role", role)) {
+                return false;
+            }
+
+            if (role != "assistant") {
+                return false;
+            }
+
+            return messageJson.find("\"text\":\"NO_REPLY\"") !=
+                std::string::npos;
+        }
+
+        void PushHistoryMessageIfNew(
+            std::vector<std::string>& history,
+            const std::string& messageJson) {
+            if (!history.empty() && history.back() == messageJson) {
+                return;
+            }
+
+            history.push_back(messageJson);
+        }
+
+        bool ValidateAttachmentPayloadShape(
+            const std::optional<std::string>& paramsJson,
+            bool& hasAttachments,
+            std::string& errorCode,
+            std::string& errorMessage) {
+            hasAttachments = false;
+            errorCode.clear();
+            errorMessage.clear();
+            if (!paramsJson.has_value()) {
+                return true;
+            }
+
+            std::string attachmentsRaw;
+            if (!json::FindRawField(paramsJson.value(), "attachments", attachmentsRaw)) {
+                return true;
+            }
+
+            const std::string attachmentsTrimmed = json::Trim(attachmentsRaw);
+            if (attachmentsTrimmed.empty() || attachmentsTrimmed == "[]") {
+                return true;
+            }
+
+            if (attachmentsTrimmed.front() != '[' || attachmentsTrimmed.back() != ']') {
+                errorCode = "invalid_attachments";
+                errorMessage = "attachments must be a JSON array.";
+                return false;
+            }
+
+            hasAttachments = true;
+            if (attachmentsTrimmed.find("\"type\":\"image\"") == std::string::npos ||
+                attachmentsTrimmed.find("\"mimeType\":\"") == std::string::npos ||
+                attachmentsTrimmed.find("\"content\":\"") == std::string::npos) {
+                errorCode = "invalid_attachments";
+                errorMessage =
+                    "attachments entries must include type=image, mimeType, and content.";
+                return false;
+            }
+
+            return true;
+        }
+
+        std::vector<std::string> ExtractAttachmentMimeTypes(
+            const std::optional<std::string>& paramsJson) {
+            std::vector<std::string> mimeTypes;
+            if (!paramsJson.has_value()) {
+                return mimeTypes;
+            }
+
+            std::string attachmentsRaw;
+            if (!json::FindRawField(
+                    paramsJson.value(),
+                    "attachments",
+                    attachmentsRaw)) {
+                return mimeTypes;
+            }
+
+            const std::string key = "\"mimeType\":\"";
+            std::size_t cursor = 0;
+            while (cursor < attachmentsRaw.size()) {
+                const auto keyPos = attachmentsRaw.find(key, cursor);
+                if (keyPos == std::string::npos) {
+                    break;
+                }
+
+                const std::size_t valueStart = keyPos + key.size();
+                if (valueStart >= attachmentsRaw.size()) {
+                    break;
+                }
+
+                std::size_t valueEnd = valueStart;
+                bool escaped = false;
+                while (valueEnd < attachmentsRaw.size()) {
+                    const char ch = attachmentsRaw[valueEnd];
+                    if (escaped) {
+                        escaped = false;
+                        ++valueEnd;
+                        continue;
+                    }
+
+                    if (ch == '\\') {
+                        escaped = true;
+                        ++valueEnd;
+                        continue;
+                    }
+
+                    if (ch == '"') {
+                        break;
+                    }
+
+                    ++valueEnd;
+                }
+
+                if (valueEnd > valueStart) {
+                    mimeTypes.push_back(
+                        attachmentsRaw.substr(valueStart, valueEnd - valueStart));
+                }
+
+                cursor = valueEnd == std::string::npos
+                    ? attachmentsRaw.size()
+                    : valueEnd + 1;
+            }
+
+            return mimeTypes;
+        }
+
+        std::vector<std::string> ParseJsonStringArrayLocal(
+            const std::string& rawArray) {
+            std::vector<std::string> values;
+            const std::string trimmed = json::Trim(rawArray);
+            if (trimmed.size() < 2 ||
+                trimmed.front() != '[' ||
+                trimmed.back() != ']') {
+                return values;
+            }
+
+            std::string current;
+            bool inString = false;
+            bool escaping = false;
+            for (std::size_t i = 1; i + 1 < trimmed.size(); ++i) {
+                const char ch = trimmed[i];
+                if (!inString) {
+                    if (ch == '"') {
+                        inString = true;
+                        current.clear();
+                    }
+                    continue;
+                }
+
+                if (escaping) {
+                    current.push_back(ch);
+                    escaping = false;
+                    continue;
+                }
+
+                if (ch == '\\') {
+                    escaping = true;
+                    continue;
+                }
+
+                if (ch == '"') {
+                    values.push_back(current);
+                    inString = false;
+                    continue;
+                }
+
+                current.push_back(ch);
+            }
+
+            return values;
+        }
+
+        std::string SerializeFloatArrayLocal(
+            const std::vector<float>& values) {
+            std::ostringstream output;
+            output.setf(std::ios::fixed);
+            output.precision(6);
+            output << "[";
+            for (std::size_t i = 0; i < values.size(); ++i) {
+                if (i > 0) {
+                    output << ",";
+                }
+
+                output << values[i];
+            }
+            output << "]";
+            return output.str();
+        }
+
+        std::string SerializeFloatMatrixLocal(
+            const std::vector<std::vector<float>>& vectors) {
+            std::string output = "[";
+            for (std::size_t i = 0; i < vectors.size(); ++i) {
+                if (i > 0) {
+                    output += ",";
+                }
+
+                output += SerializeFloatArrayLocal(vectors[i]);
+            }
+
+            output += "]";
+            return output;
+        }
     }
 
     void GatewayHost::RegisterRuntimeHandlers() {
+        m_dispatcher.Register(
+            "gateway.embeddings.generate",
+            [this](const protocol::RequestFrame& request) {
+                const std::string text =
+                    ExtractStringParam(request.paramsJson, "text");
+                const std::optional<bool> normalize =
+                    ExtractBoolParam(request.paramsJson, "normalize");
+                const std::string model =
+                    ExtractStringParam(request.paramsJson, "model");
+                const std::string traceId =
+                    request.id.empty() ? "gateway.embeddings.generate" : request.id;
+
+                if (text.empty()) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = false,
+                        .payloadJson = std::nullopt,
+                        .error = protocol::ErrorShape{
+                            .code = "invalid_params",
+                            .message = "`text` must be a non-empty string.",
+                            .detailsJson = std::nullopt,
+                            .retryable = false,
+                            .retryAfterMs = std::nullopt,
+                        },
+                    };
+                }
+
+                if (!m_embeddingsGenerateCallback) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = false,
+                        .payloadJson = std::nullopt,
+                        .error = protocol::ErrorShape{
+                            .code = "runtime_unavailable",
+                            .message = "Embeddings runtime callback is unavailable.",
+                            .detailsJson = std::nullopt,
+                            .retryable = false,
+                            .retryAfterMs = std::nullopt,
+                        },
+                    };
+                }
+
+                const auto result = m_embeddingsGenerateCallback(
+                    EmbeddingsGenerateRequest{
+                        .text = text,
+                        .normalize = normalize,
+                        .model = model,
+                        .traceId = traceId,
+                    });
+
+                if (!result.ok) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = false,
+                        .payloadJson = std::nullopt,
+                        .error = protocol::ErrorShape{
+                            .code = result.errorCode.empty()
+                                ? "embedding_failed"
+                                : result.errorCode,
+                            .message = result.errorMessage.empty()
+                                ? "Embedding generation failed."
+                                : result.errorMessage,
+                            .detailsJson = std::nullopt,
+                            .retryable = false,
+                            .retryAfterMs = std::nullopt,
+                        },
+                    };
+                }
+
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"vector\":" + SerializeFloatArrayLocal(result.vector) +
+                        ",\"dimension\":" + std::to_string(result.dimension) +
+                        ",\"provider\":\"" + EscapeJsonLocal(result.provider) +
+                        "\",\"model\":\"" + EscapeJsonLocal(result.modelId) +
+                        "\",\"latencyMs\":" + std::to_string(result.latencyMs) +
+                        ",\"status\":\"" + EscapeJsonLocal(result.status) +
+                        "\"}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.embeddings.batchGenerate",
+            [this](const protocol::RequestFrame& request) {
+                std::string rawTexts;
+                std::vector<std::string> texts;
+                if (request.paramsJson.has_value() &&
+                    json::FindRawField(request.paramsJson.value(), "texts", rawTexts)) {
+                    texts = ParseJsonStringArrayLocal(rawTexts);
+                }
+
+                const std::optional<bool> normalize =
+                    ExtractBoolParam(request.paramsJson, "normalize");
+                const std::string model =
+                    ExtractStringParam(request.paramsJson, "model");
+                const std::string traceId =
+                    request.id.empty() ? "gateway.embeddings.batchGenerate" : request.id;
+
+                if (texts.empty()) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = false,
+                        .payloadJson = std::nullopt,
+                        .error = protocol::ErrorShape{
+                            .code = "invalid_params",
+                            .message = "`texts` must be a non-empty string array.",
+                            .detailsJson = std::nullopt,
+                            .retryable = false,
+                            .retryAfterMs = std::nullopt,
+                        },
+                    };
+                }
+
+                if (texts.size() > 64) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = false,
+                        .payloadJson = std::nullopt,
+                        .error = protocol::ErrorShape{
+                            .code = "invalid_params",
+                            .message = "`texts` exceeds maximum batch size of 64.",
+                            .detailsJson = std::nullopt,
+                            .retryable = false,
+                            .retryAfterMs = std::nullopt,
+                        },
+                    };
+                }
+
+                if (!m_embeddingsBatchCallback) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = false,
+                        .payloadJson = std::nullopt,
+                        .error = protocol::ErrorShape{
+                            .code = "runtime_unavailable",
+                            .message = "Embeddings runtime callback is unavailable.",
+                            .detailsJson = std::nullopt,
+                            .retryable = false,
+                            .retryAfterMs = std::nullopt,
+                        },
+                    };
+                }
+
+                const auto result = m_embeddingsBatchCallback(
+                    EmbeddingsBatchRequest{
+                        .texts = texts,
+                        .normalize = normalize,
+                        .model = model,
+                        .traceId = traceId,
+                    });
+
+                if (!result.ok) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = false,
+                        .payloadJson = std::nullopt,
+                        .error = protocol::ErrorShape{
+                            .code = result.errorCode.empty()
+                                ? "embedding_failed"
+                                : result.errorCode,
+                            .message = result.errorMessage.empty()
+                                ? "Embedding batch generation failed."
+                                : result.errorMessage,
+                            .detailsJson = std::nullopt,
+                            .retryable = false,
+                            .retryAfterMs = std::nullopt,
+                        },
+                    };
+                }
+
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"vectors\":" + SerializeFloatMatrixLocal(result.vectors) +
+                        ",\"count\":" + std::to_string(result.vectors.size()) +
+                        ",\"dimension\":" + std::to_string(result.dimension) +
+                        ",\"provider\":\"" + EscapeJsonLocal(result.provider) +
+                        "\",\"model\":\"" + EscapeJsonLocal(result.modelId) +
+                        "\",\"latencyMs\":" + std::to_string(result.latencyMs) +
+                        ",\"status\":\"" + EscapeJsonLocal(result.status) +
+                        "\"}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "chat.history",
+            [this](const protocol::RequestFrame& request) {
+                const std::string requestedSessionKey =
+                    ExtractStringParam(request.paramsJson, "sessionKey");
+                const std::string sessionKey =
+                    requestedSessionKey.empty() ? "main" : requestedSessionKey;
+                const std::size_t requestedLimit =
+                    ExtractSizeParam(request.paramsJson, "limit").value_or(200);
+                const std::size_t limit =
+                    (std::max)(std::size_t{ 1 }, (std::min)(requestedLimit, std::size_t{ 500 }));
+
+                const auto historyIt = m_chatHistoryBySession.find(sessionKey);
+                std::string messagesJson = "[";
+                if (historyIt != m_chatHistoryBySession.end()) {
+                    const auto& history = historyIt->second;
+                    const std::size_t begin = history.size() > limit
+                        ? history.size() - limit
+                        : 0;
+                    bool firstMessage = true;
+                    for (std::size_t i = begin; i < history.size(); ++i) {
+                        if (IsSilentAssistantMessageJson(history[i])) {
+                            continue;
+                        }
+
+                        if (!firstMessage) {
+                            messagesJson += ",";
+                        }
+
+                        messagesJson += history[i];
+                        firstMessage = false;
+                    }
+                }
+
+                messagesJson += "]";
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"messages\":" +
+                        messagesJson +
+                        ",\"thinkingLevel\":\"normal\"}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "chat.send",
+            [this](const protocol::RequestFrame& request) {
+                const std::string requestedSessionKey =
+                    ExtractStringParam(request.paramsJson, "sessionKey");
+                const std::string sessionKey =
+                    requestedSessionKey.empty() ? "main" : requestedSessionKey;
+                const std::string message =
+                    ExtractStringParam(request.paramsJson, "message");
+                const std::string idempotencyKey =
+                    ExtractStringParam(request.paramsJson, "idempotencyKey");
+                const bool forceError =
+                    ExtractBoolParam(request.paramsJson, "forceError").value_or(false);
+
+                bool hasAttachments = false;
+                std::string attachmentsErrorCode;
+                std::string attachmentsErrorMessage;
+                if (!ValidateAttachmentPayloadShape(
+                        request.paramsJson,
+                        hasAttachments,
+                        attachmentsErrorCode,
+                        attachmentsErrorMessage)) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = false,
+                        .payloadJson = std::nullopt,
+                        .error = protocol::ErrorShape{
+                            .code = attachmentsErrorCode,
+                            .message = attachmentsErrorMessage,
+                            .detailsJson = std::nullopt,
+                            .retryable = false,
+                            .retryAfterMs = std::nullopt,
+                        },
+                    };
+                }
+
+                if (message.empty() && !hasAttachments) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = false,
+                        .payloadJson = std::nullopt,
+                        .error = protocol::ErrorShape{
+                            .code = "invalid_message",
+                            .message = "chat.send requires non-empty message or attachments.",
+                            .detailsJson = std::nullopt,
+                            .retryable = false,
+                            .retryAfterMs = std::nullopt,
+                        },
+                    };
+                }
+
+                const std::vector<std::string> attachmentMimeTypes =
+                    ExtractAttachmentMimeTypes(request.paramsJson);
+
+                if (!idempotencyKey.empty()) {
+                    const auto dedupeIt =
+                        m_chatRunByIdempotency.find(idempotencyKey);
+                    if (dedupeIt != m_chatRunByIdempotency.end()) {
+                        return protocol::ResponseFrame{
+                            .id = request.id,
+                            .ok = true,
+                            .payloadJson =
+                                "{\"runId\":\"" +
+                                EscapeJsonLocal(dedupeIt->second) +
+                                "\",\"queued\":false,\"deduped\":true}",
+                            .error = std::nullopt,
+                        };
+                    }
+                }
+
+                const std::uint64_t nowMs = CurrentEpochMsLocal();
+                const std::string runId = !request.id.empty()
+                    ? request.id
+                    : ("chat-run-" + std::to_string(nowMs) +
+                        "-" + std::to_string(m_chatRunsById.size() + 1));
+
+                std::string assistantText = message.empty()
+                    ? "Received image attachment."
+                    : ("Echo: " + message);
+                std::string backendErrorCode;
+                std::string backendErrorMessage;
+                bool failed = false;
+
+                if (forceError) {
+                    failed = true;
+                    backendErrorCode = "forced_error";
+                    backendErrorMessage = "forced error for deterministic verification";
+                }
+
+                if (!forceError && m_chatRuntimeCallback) {
+                    const auto runtimeResult = m_chatRuntimeCallback(
+                        ChatRuntimeRequest{
+                            .runId = runId,
+                            .sessionKey = sessionKey,
+                            .message = message,
+                            .hasAttachments = hasAttachments,
+                            .attachmentMimeTypes = attachmentMimeTypes,
+                        });
+
+                    if (runtimeResult.ok) {
+                        if (!runtimeResult.assistantText.empty()) {
+                            assistantText = runtimeResult.assistantText;
+                        }
+                    }
+                    else {
+                        failed = true;
+                        backendErrorCode = runtimeResult.errorCode.empty()
+                            ? "chat_runtime_error"
+                            : runtimeResult.errorCode;
+                        backendErrorMessage = runtimeResult.errorMessage.empty()
+                            ? "chat runtime failed"
+                            : runtimeResult.errorMessage;
+                    }
+                }
+
+                const bool silentAssistantReply = IsSilentReplyText(assistantText);
+
+                auto& sessionHistory = m_chatHistoryBySession[sessionKey];
+                PushHistoryMessageIfNew(
+                    sessionHistory,
+                    BuildUserMessageJson(message, hasAttachments, nowMs));
+
+                auto& sessionEvents = m_chatEventsBySession[sessionKey];
+                std::size_t streamCursor = 0;
+                if (!failed && !silentAssistantReply) {
+                    streamCursor = (std::min)(assistantText.size(), std::size_t{ 6 });
+                    if (streamCursor > 0) {
+                        sessionEvents.push_back(ChatEventState{
+                            .runId = runId,
+                            .sessionKey = sessionKey,
+                            .state = "delta",
+                            .messageJson = BuildAssistantDeltaMessageJson(
+                                assistantText.substr(0, streamCursor)),
+                            .errorMessage = std::nullopt,
+                            .timestampMs = nowMs,
+                            });
+                    }
+                }
+
+                m_chatRunsById.insert_or_assign(
+                    runId,
+                    ChatRunState{
+                        .runId = runId,
+                        .sessionKey = sessionKey,
+                        .idempotencyKey = idempotencyKey,
+                        .userMessage = message,
+                        .assistantText = assistantText,
+                        .streamCursor = streamCursor,
+                        .lastEmitMs = nowMs,
+                        .failed = failed,
+                        .errorMessage = backendErrorMessage,
+                        .startedAtMs = nowMs,
+                        .active = true,
+                    });
+
+                if (!idempotencyKey.empty()) {
+                    m_chatRunByIdempotency.insert_or_assign(idempotencyKey, runId);
+                }
+
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"runId\":\"" +
+                        EscapeJsonLocal(runId) +
+                        "\",\"backendErrorCode\":" +
+                        (backendErrorCode.empty()
+                            ? std::string("null")
+                            : ("\"" + EscapeJsonLocal(backendErrorCode) + "\"")) +
+                        ",\"queued\":true,\"deduped\":false}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "chat.abort",
+            [this](const protocol::RequestFrame& request) {
+                const std::string requestedSessionKey =
+                    ExtractStringParam(request.paramsJson, "sessionKey");
+                const std::string sessionKey =
+                    requestedSessionKey.empty() ? "main" : requestedSessionKey;
+                const std::string requestedRunId =
+                    ExtractStringParam(request.paramsJson, "runId");
+
+                auto runIt = m_chatRunsById.end();
+                if (!requestedRunId.empty()) {
+                    const auto exact = m_chatRunsById.find(requestedRunId);
+                    if (exact != m_chatRunsById.end() &&
+                        exact->second.sessionKey == sessionKey) {
+                        runIt = exact;
+                    }
+                }
+                else {
+                    runIt = std::find_if(
+                        m_chatRunsById.begin(),
+                        m_chatRunsById.end(),
+                        [&](const auto& pair) {
+                            return pair.second.sessionKey == sessionKey &&
+                                pair.second.active;
+                        });
+                }
+
+                if (runIt == m_chatRunsById.end()) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = true,
+                        .payloadJson =
+                            "{\"aborted\":false,\"sessionKey\":\"" +
+                            EscapeJsonLocal(sessionKey) +
+                            "\"}",
+                        .error = std::nullopt,
+                    };
+                }
+
+                const std::string runId = runIt->second.runId;
+                if (m_chatAbortCallback) {
+                    m_chatAbortCallback(
+                        ChatAbortRequest{
+                            .runId = runId,
+                            .sessionKey = sessionKey,
+                        });
+                }
+
+                auto& queue = m_chatEventsBySession[sessionKey];
+                std::erase_if(
+                    queue,
+                    [&](const ChatEventState& item) {
+                        return item.runId == runId;
+                    });
+
+                const std::uint64_t nowMs = CurrentEpochMsLocal();
+                const bool silentAssistantReply =
+                    IsSilentReplyText(runIt->second.assistantText);
+                queue.push_back(ChatEventState{
+                    .runId = runIt->second.runId,
+                    .sessionKey = sessionKey,
+                    .state = "aborted",
+                    .messageJson = silentAssistantReply
+                        ? std::nullopt
+                        : std::optional<std::string>(
+                            BuildAssistantFinalMessageJson(
+                                runIt->second.assistantText,
+                                nowMs)),
+                    .errorMessage = std::nullopt,
+                    .timestampMs = nowMs,
+                    });
+
+                runIt->second.active = false;
+                runIt->second.streamCursor = runIt->second.assistantText.size();
+
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"aborted\":true,\"runId\":\"" +
+                        EscapeJsonLocal(runId) +
+                        "\",\"sessionKey\":\"" +
+                        EscapeJsonLocal(sessionKey) +
+                        "\"}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "chat.events.poll",
+            [this](const protocol::RequestFrame& request) {
+                const std::string requestedSessionKey =
+                    ExtractStringParam(request.paramsJson, "sessionKey");
+                const std::string sessionKey =
+                    requestedSessionKey.empty() ? "main" : requestedSessionKey;
+                const std::size_t requestedLimit =
+                    ExtractSizeParam(request.paramsJson, "limit").value_or(20);
+                const std::size_t limit =
+                    (std::max)(std::size_t{ 1 }, (std::min)(requestedLimit, std::size_t{ 100 }));
+
+                const std::uint64_t nowMs = CurrentEpochMsLocal();
+                auto queueIt = m_chatEventsBySession.find(sessionKey);
+                auto& queue = m_chatEventsBySession[sessionKey];
+
+                auto runIt = std::find_if(
+                    m_chatRunsById.begin(),
+                    m_chatRunsById.end(),
+                    [&](auto& pair) {
+                        return pair.second.sessionKey == sessionKey && pair.second.active;
+                    });
+
+                if (runIt != m_chatRunsById.end()) {
+                    auto& run = runIt->second;
+                    const bool silentAssistantReply = IsSilentReplyText(run.assistantText);
+                    const bool enoughTimeElapsed =
+                        run.lastEmitMs == 0 || (nowMs - run.lastEmitMs) >= 180;
+
+                    if (!silentAssistantReply && run.streamCursor < run.assistantText.size() &&
+                        enoughTimeElapsed) {
+                        const std::size_t nextCursor =
+                            (std::min)(run.assistantText.size(), run.streamCursor + std::size_t{ 8 });
+                        run.streamCursor = nextCursor;
+                        run.lastEmitMs = nowMs;
+
+                        queue.push_back(ChatEventState{
+                            .runId = run.runId,
+                            .sessionKey = run.sessionKey,
+                            .state = "delta",
+                            .messageJson = BuildAssistantDeltaMessageJson(
+                                run.assistantText.substr(0, run.streamCursor)),
+                            .errorMessage = std::nullopt,
+                            .timestampMs = nowMs,
+                            });
+                    }
+
+                    const bool streamCompleted =
+                        silentAssistantReply || run.streamCursor >= run.assistantText.size();
+                    if (streamCompleted) {
+                        queue.push_back(ChatEventState{
+                            .runId = run.runId,
+                            .sessionKey = run.sessionKey,
+                            .state = run.failed ? "error" : "final",
+                            .messageJson = run.failed || silentAssistantReply
+                                ? std::nullopt
+                                : std::optional<std::string>(
+                                    BuildAssistantFinalMessageJson(run.assistantText, nowMs)),
+                            .errorMessage = run.failed
+                                ? std::optional<std::string>(run.errorMessage.empty()
+                                    ? "chat error"
+                                    : run.errorMessage)
+                                : std::nullopt,
+                            .timestampMs = nowMs,
+                            });
+
+                        run.active = false;
+                    }
+                }
+
+                std::string eventsJson = "[";
+                std::size_t emitted = 0;
+                if (!queue.empty()) {
+                    while (emitted < limit && !queue.empty()) {
+                        const ChatEventState eventState = queue.front();
+                        queue.pop_front();
+
+                        if (emitted > 0) {
+                            eventsJson += ",";
+                        }
+
+                        eventsJson += BuildChatEventJson(
+                            eventState.runId,
+                            eventState.sessionKey,
+                            eventState.state,
+                            eventState.messageJson,
+                            eventState.errorMessage,
+                            eventState.timestampMs);
+                        ++emitted;
+
+                        if ((eventState.state == "final" ||
+                            eventState.state == "aborted") &&
+                            eventState.messageJson.has_value() &&
+                            !IsSilentAssistantMessageJson(eventState.messageJson.value())) {
+                            PushHistoryMessageIfNew(
+                                m_chatHistoryBySession[sessionKey],
+                                eventState.messageJson.value());
+                        }
+
+                        if (eventState.state == "final" ||
+                            eventState.state == "aborted" ||
+                            eventState.state == "error") {
+                            const auto runIt = m_chatRunsById.find(eventState.runId);
+                            if (runIt != m_chatRunsById.end()) {
+                                if (!runIt->second.idempotencyKey.empty()) {
+                                    m_chatRunByIdempotency.erase(
+                                        runIt->second.idempotencyKey);
+                                }
+
+                                m_chatRunsById.erase(runIt);
+                            }
+                        }
+                    }
+                }
+
+                eventsJson += "]";
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"sessionKey\":\"" +
+                        EscapeJsonLocal(sessionKey) +
+                        "\",\"events\":" +
+                        eventsJson +
+                        ",\"count\":" +
+                        std::to_string(emitted) +
+                        "}",
+                    .error = std::nullopt,
+                };
+            });
+
         m_dispatcher.Register(
             "gateway.skills.status",
             [this](const protocol::RequestFrame& request) {

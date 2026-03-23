@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="..\packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\Microsoft.ML.OnnxRuntime.props" Condition="Exists('..\packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\Microsoft.ML.OnnxRuntime.props')" />
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
       <Configuration>Debug</Configuration>
@@ -122,7 +123,10 @@
     <ClInclude Include="src\core\AgentsToolPolicyService.h" />
     <ClInclude Include="src\core\AgentsWorkspaceService.h" />
     <ClInclude Include="src\core\AcpSpawnService.h" />
+    <ClInclude Include="src\core\EmbeddingsService.h" />
+    <ClInclude Include="src\core\OnnxEmbeddingsService.h" />
     <ClInclude Include="src\core\PiEmbeddedService.h" />
+    <ClInclude Include="src\core\RetrievalMemoryService.h" />
     <ClInclude Include="src\core\SubagentRegistryService.h" />
     <ClInclude Include="src\core\SkillsCommandService.h" />
     <ClInclude Include="src\core\SkillsCatalogService.h" />
@@ -134,6 +138,9 @@
     <ClInclude Include="src\core\SkillsSyncService.h" />
     <ClInclude Include="src\core\SkillsWatchService.h" />
     <ClInclude Include="src\core\ServiceManager.h" />
+    <ClInclude Include="src\core\runtime\LocalModel\ITextGenerationRuntime.h" />
+    <ClInclude Include="src\core\runtime\LocalModel\OnnxTextGenerationRuntime.h" />
+    <ClInclude Include="src\core\runtime\LocalModel\TokenizerBridge.h" />
     <ClInclude Include="src\gateway\GatewayAgentRegistry.h" />
     <ClInclude Include="src\gateway\GatewayChannelRegistry.h" />
     <ClInclude Include="src\gateway\GatewayHost.h" />
@@ -165,12 +172,8 @@
     <ClCompile Include="src\app\MainFrame.cpp" />
     <ClCompile Include="src\app\OutputWnd.cpp" />
     <ClCompile Include="src\app\pch.cpp">
-      <PrecompiledHeader
-        Condition="'$(Configuration)|$(Platform)'=='Debug|x64'"
-      >Create</PrecompiledHeader>
-      <PrecompiledHeader
-        Condition="'$(Configuration)|$(Platform)'=='Release|x64'"
-      >Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="src\app\PropertiesWnd.cpp" />
     <ClCompile Include="src\app\ViewTree.cpp" />
@@ -185,7 +188,9 @@
     <ClCompile Include="src\core\AgentsToolPolicyService.cpp" />
     <ClCompile Include="src\core\AgentsWorkspaceService.cpp" />
     <ClCompile Include="src\core\AcpSpawnService.cpp" />
+    <ClCompile Include="src\core\OnnxEmbeddingsService.cpp" />
     <ClCompile Include="src\core\PiEmbeddedService.cpp" />
+    <ClCompile Include="src\core\RetrievalMemoryService.cpp" />
     <ClCompile Include="src\core\SubagentRegistryService.cpp" />
     <ClCompile Include="src\core\SkillsCommandService.cpp" />
     <ClCompile Include="src\core\SkillsCatalogService.cpp" />
@@ -197,6 +202,9 @@
     <ClCompile Include="src\core\SkillsSyncService.cpp" />
     <ClCompile Include="src\core\SkillsWatchService.cpp" />
     <ClCompile Include="src\core\ServiceManager.cpp" />
+    <ClCompile Include="src\core\runtime\LocalModel\ITextGenerationRuntime.cpp" />
+    <ClCompile Include="src\core\runtime\LocalModel\OnnxTextGenerationRuntime.cpp" />
+    <ClCompile Include="src\core\runtime\LocalModel\TokenizerBridge.cpp" />
     <ClCompile Include="src\gateway\GatewayAgentRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayChannelRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.cpp" />
@@ -226,6 +234,21 @@
   <ItemGroup>
     <ResourceCompile Include="src\app\BlazeClawMFC.rc" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="src\config\blazeclaw.conf" />
+    <None Include="web\chat\index.html" />
+    <None Include="web\chat\dist\index.html" />
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <BlazeClawChatWebAssets Include="$(ProjectDir)web\chat\**\*.*" />
+  </ItemGroup>
+  <ItemGroup>
+    <BlazeClawOnnxRuntimeAssets Include="$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.1.24.4\runtimes\win-x64\native\*.dll" />
+  </ItemGroup>
+  <ItemGroup>
+    <BlazeClawEmbeddingModelAssets Include="$(ProjectDir)models\embeddings\**\*.*" />
+  </ItemGroup>
   <PropertyGroup>
     <GatewayCodegenMode Condition="'$(GatewayCodegenMode)'==''">verify</GatewayCodegenMode>
   </PropertyGroup>
@@ -236,5 +259,28 @@
     <Exec Condition="'$(GatewayCodegenMode)'!='generate'" Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\GatewayCodegen\Invoke-GatewayCodegen.ps1&quot; -GeneratorScript &quot;tools/GatewaySchemaCatalogGenerator/Generate-GatewaySchemaCatalog.ps1&quot; -VerifyOnly" />
   </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <ImportGroup Label="ExtensionTargets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="..\packages\Microsoft.Web.WebView2.1.0.3856.49\build\native\Microsoft.Web.WebView2.targets" Condition="Exists('..\packages\Microsoft.Web.WebView2.1.0.3856.49\build\native\Microsoft.Web.WebView2.targets')" />
+    <Import Project="..\packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\Microsoft.ML.OnnxRuntime.targets" Condition="Exists('..\packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\Microsoft.ML.OnnxRuntime.targets')" />
+  </ImportGroup>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('..\packages\Microsoft.Web.WebView2.1.0.3856.49\build\native\Microsoft.Web.WebView2.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Web.WebView2.1.0.3856.49\build\native\Microsoft.Web.WebView2.targets'))" />
+    <Error Condition="!Exists('..\packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\Microsoft.ML.OnnxRuntime.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\Microsoft.ML.OnnxRuntime.props'))" />
+    <Error Condition="!Exists('..\packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\Microsoft.ML.OnnxRuntime.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.ML.OnnxRuntime.1.24.4\build\native\Microsoft.ML.OnnxRuntime.targets'))" />
+  </Target>
+  <Target Name="CopyBlazeClawConfig" AfterTargets="Build">
+    <Copy SourceFiles="$(ProjectDir)src\config\blazeclaw.conf" DestinationFiles="$(OutDir)blazeclaw.conf" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CopyBlazeClawChatWebAssets" AfterTargets="Build">
+    <Copy SourceFiles="@(BlazeClawChatWebAssets)" DestinationFiles="@(BlazeClawChatWebAssets->'$(OutDir)web\chat\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CopyBlazeClawOnnxRuntimeAssets" AfterTargets="Build">
+    <Copy SourceFiles="@(BlazeClawOnnxRuntimeAssets)" DestinationFiles="@(BlazeClawOnnxRuntimeAssets->'$(OutDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Condition="'@(BlazeClawOnnxRuntimeAssets)'!=''" />
+  </Target>
+  <Target Name="CopyBlazeClawEmbeddingModelAssets" AfterTargets="Build">
+    <Copy SourceFiles="@(BlazeClawEmbeddingModelAssets)" DestinationFiles="@(BlazeClawEmbeddingModelAssets->'$(OutDir)models\embeddings\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Condition="'@(BlazeClawEmbeddingModelAssets)'!=''" />
+  </Target>
 </Project>

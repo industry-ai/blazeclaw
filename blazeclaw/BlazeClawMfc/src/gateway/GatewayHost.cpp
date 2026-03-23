@@ -290,6 +290,26 @@ namespace blazeclaw::gateway {
 		m_skillsRefreshCallback = std::move(callback);
 	}
 
+	void GatewayHost::SetChatRuntimeCallback(
+		ChatRuntimeCallback callback) {
+		m_chatRuntimeCallback = std::move(callback);
+	}
+
+	void GatewayHost::SetChatAbortCallback(
+		ChatAbortCallback callback) {
+		m_chatAbortCallback = std::move(callback);
+	}
+
+	void GatewayHost::SetEmbeddingsGenerateCallback(
+		EmbeddingsGenerateCallback callback) {
+		m_embeddingsGenerateCallback = std::move(callback);
+	}
+
+	void GatewayHost::SetEmbeddingsBatchCallback(
+		EmbeddingsBatchCallback callback) {
+		m_embeddingsBatchCallback = std::move(callback);
+	}
+
 	bool GatewayHost::IsRunning() const noexcept {
 		return m_running;
 	}
@@ -1939,7 +1959,17 @@ namespace blazeclaw::gateway {
 				key == "gateway.bind" ||
 				key == "gateway.port" ||
 				key == "agent.model" ||
-				key == "agent.streaming";
+               key == "agent.streaming" ||
+				key == "embeddings.enabled" ||
+				key == "embeddings.provider" ||
+				key == "embeddings.model_path" ||
+				key == "embeddings.tokenizer_path" ||
+				key == "embeddings.dimension" ||
+				key == "embeddings.max_sequence_length" ||
+				key == "embeddings.normalize" ||
+				key == "embeddings.intra_threads" ||
+				key == "embeddings.inter_threads" ||
+				key == "embeddings.execution_mode";
 
 			return protocol::ResponseFrame{
 				.id = request.id,

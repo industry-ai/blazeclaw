@@ -18,6 +18,7 @@ public:
 public:
 	virtual BOOL InitInstance();
 	virtual int ExitInstance();
+	virtual BOOL OnIdle(LONG lCount);
 
 // Implementation
 	UINT  m_nAppLook;
@@ -29,6 +30,8 @@ public:
 
 	afx_msg void OnAppAbout();
 	DECLARE_MESSAGE_MAP()
+
+public:
 
 	blazeclaw::core::ServiceManager& Services() noexcept;
 	const blazeclaw::core::ServiceManager& Services() const noexcept;

@@ -379,6 +379,8 @@ IDR_OUTPUT_POPUP MENU
 BEGIN
     POPUP "Popup"
     BEGIN
+        MENUITEM "Select &All",                 ID_EDIT_SELECT_ALL
+        MENUITEM SEPARATOR
         MENUITEM "&Copy",                       ID_EDIT_COPY
         MENUITEM "&Clear",                      ID_EDIT_CLEAR
         MENUITEM SEPARATOR

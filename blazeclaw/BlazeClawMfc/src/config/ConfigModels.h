@@ -81,6 +81,19 @@ struct ModelsRoutingConfig {
   std::uint32_t maxFailoverAttempts = 3;
 };
 
+struct EmbeddingsConfig {
+  bool enabled = false;
+  std::wstring provider = L"onnx";
+  std::wstring modelPath;
+  std::wstring tokenizerPath;
+  std::uint32_t dimension = 384;
+  std::uint32_t maxSequenceLength = 256;
+  bool normalize = true;
+  std::uint32_t intraThreads = 0;
+  std::uint32_t interThreads = 0;
+  std::wstring executionMode = L"sequential";
+};
+
 struct AuthProfileEntryConfig {
   std::wstring id;
   std::wstring provider;
@@ -142,13 +155,35 @@ struct SkillsConfig {
   SkillsInstallConfig install;
 };
 
+struct ChatUiConfig {
+  std::wstring mode = L"webview2";
+};
+
+struct LocalModelConfig {
+  bool enabled = false;
+  std::wstring provider = L"onnx";
+  std::wstring rolloutStage = L"dev";
+  std::wstring storageRoot = L"models/chat";
+  std::wstring version = L"";
+  std::wstring modelPath;
+  std::wstring modelSha256;
+  std::wstring tokenizerPath;
+  std::wstring tokenizerSha256;
+  std::uint32_t maxTokens = 256;
+  double temperature = 0.0;
+  bool verboseMetrics = false;
+};
+
 struct AppConfig {
   GatewayConfig gateway;
   AgentConfig agent;
+  ChatUiConfig chat;
+  LocalModelConfig localModel;
   AgentsConfig agents;
   AcpRuntimeConfig acp;
   EmbeddedRuntimeConfig embedded;
   ModelsRoutingConfig models;
+  EmbeddingsConfig embeddings;
   AuthProfilesConfig authProfiles;
   SandboxConfig sandbox;
   TranscriptSafetyConfig transcript;

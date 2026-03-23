@@ -3,6 +3,7 @@
 
 #include "../gateway/GatewayProtocolModels.h"
 
+#include <chrono>
 #include <filesystem>
 #include <unordered_map>
 
@@ -19,6 +20,71 @@ std::string ToNarrow(const std::wstring& value) {
   }
 
   return output;
+}
+
+std::wstring ToWide(const std::string& value) {
+  std::wstring output;
+  output.reserve(value.size());
+  for (const char ch : value) {
+    output.push_back(
+        static_cast<wchar_t>(static_cast<unsigned char>(ch)));
+  }
+
+  return output;
+}
+
+std::uint64_t CurrentEpochMs() {
+  const auto now = std::chrono::system_clock::now();
+  return static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          now.time_since_epoch())
+          .count());
+}
+
+std::string BuildAttachmentSummary(
+    const std::vector<std::string>& attachmentMimeTypes) {
+  std::string summary = "[attachments]";
+  if (attachmentMimeTypes.empty()) {
+    summary += "\n- image (mimeType=unknown)";
+    return summary;
+  }
+
+  for (const auto& mimeType : attachmentMimeTypes) {
+    summary += "\n- image (mimeType=";
+    summary += mimeType.empty() ? "unknown" : mimeType;
+    summary += ")";
+  }
+
+  return summary;
+}
+
+std::string BuildLocalModelPrompt(
+    const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
+  std::string prompt = request.message;
+  if (prompt.empty()) {
+    prompt = "User sent image attachments.";
+  }
+
+  if (!request.hasAttachments) {
+    return prompt;
+  }
+
+  prompt += "\n\n";
+  prompt += BuildAttachmentSummary(request.attachmentMimeTypes);
+  prompt += "\nInstruction: produce a text-only response.";
+  return prompt;
+}
+
+bool IsOneOfChannels(
+    const std::vector<std::wstring>& enabledChannels,
+    const std::wstring& candidate) {
+  for (const auto& channel : enabledChannels) {
+    if (_wcsicmp(channel.c_str(), candidate.c_str()) == 0) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 } // namespace
@@ -200,6 +266,68 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
           .threadRequested = false,
           .requesterSandboxed = false,
       });
+  m_embeddingsService.Configure(m_activeConfig);
+  m_embeddings = m_embeddingsService.Snapshot();
+
+  m_localModelRolloutEligible = IsLocalModelRolloutEligible();
+  m_localModelActivationEnabled = false;
+  m_localModelActivationReason.clear();
+
+  if (!m_activeConfig.localModel.enabled) {
+    m_localModelActivationReason = "config_disabled";
+  } else if (!m_localModelRolloutEligible) {
+    m_localModelActivationReason = "rollout_stage_not_eligible";
+  }
+
+  m_localModelRuntime.Configure(m_activeConfig);
+  const bool localModelLoaded = m_localModelRuntime.LoadModel();
+  m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
+  if (!localModelLoaded && m_localModelRuntimeSnapshot.status.empty()) {
+    m_localModelRuntimeSnapshot.status = "load_failed";
+  }
+
+  if (m_activeConfig.localModel.enabled &&
+      m_localModelRolloutEligible &&
+      localModelLoaded &&
+      m_localModelRuntimeSnapshot.ready) {
+    m_localModelActivationEnabled = true;
+    m_localModelActivationReason = "active";
+  } else if (m_activeConfig.localModel.enabled &&
+             m_localModelRolloutEligible &&
+             !m_localModelRuntimeSnapshot.ready) {
+    m_localModelActivationReason = "initialization_failed";
+  }
+
+  TRACE(
+      "[LocalModel] startup.gating enabled=%s rolloutEligible=%s activation=%s reason=%s stage=%S status=%s\n",
+      m_activeConfig.localModel.enabled ? "true" : "false",
+      m_localModelRolloutEligible ? "true" : "false",
+      m_localModelActivationEnabled ? "true" : "false",
+      m_localModelActivationReason.c_str(),
+      m_activeConfig.localModel.rolloutStage.c_str(),
+      m_localModelRuntimeSnapshot.status.c_str());
+
+  if (m_localModelActivationEnabled && m_localModelRuntimeSnapshot.ready) {
+    std::string localContractFailure;
+    if (!m_localModelRuntime.VerifyDeterministicContract(localContractFailure)) {
+      m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
+      m_localModelRuntimeSnapshot.status = "contract_verification_failed";
+      m_localModelActivationEnabled = false;
+      m_localModelActivationReason = "contract_verification_failed";
+      if (!localContractFailure.empty()) {
+        m_localModelRuntimeSnapshot.error = localmodel::TextGenerationError{
+            .code = localmodel::TextGenerationErrorCode::InferenceFailed,
+            .message = localContractFailure,
+        };
+      }
+
+      m_skillsCatalog.diagnostics.warnings.push_back(
+          L"local-model deterministic contract verification failed");
+    }
+  }
+
+  m_retrievalMemoryService.Configure(m_activeConfig);
+  m_retrievalMemory = m_retrievalMemoryService.Snapshot();
   m_piEmbeddedService.Configure(m_activeConfig);
   RefreshSkillsState(m_activeConfig, true, L"startup");
 
@@ -269,6 +397,16 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
             L"agents-acp fixture validation failed: " + fixtureError);
       }
 
+      if (!m_embeddingsService.ValidateFixtureScenarios(candidate, fixtureError)) {
+        m_skillsCatalog.diagnostics.warnings.push_back(
+            L"agents-embeddings fixture validation failed: " + fixtureError);
+      }
+
+      if (!m_retrievalMemoryService.ValidateFixtureScenarios(candidate, fixtureError)) {
+        m_skillsCatalog.diagnostics.warnings.push_back(
+            L"agents-retrieval fixture validation failed: " + fixtureError);
+      }
+
       if (!m_piEmbeddedService.ValidateFixtureScenarios(candidate, fixtureError)) {
         m_skillsCatalog.diagnostics.warnings.push_back(
             L"agents-embedded fixture validation failed: " + fixtureError);
@@ -331,6 +469,269 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
     return BuildGatewaySkillsState();
   });
 
+  m_gatewayHost.SetChatRuntimeCallback([this](
+      const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
+    const std::string sessionId =
+        request.sessionKey.empty() ? "main" : request.sessionKey;
+
+    if (m_localModelActivationEnabled) {
+      const std::string prompt = BuildLocalModelPrompt(request);
+      TRACE(
+          "[LocalModel] request.enqueue runId=%s session=%s promptChars=%zu attachments=%s\n",
+          request.runId.c_str(),
+          sessionId.c_str(),
+          prompt.size(),
+          request.hasAttachments ? "true" : "false");
+      TRACE(
+          "[LocalModel] request.start runId=%s\n",
+          request.runId.c_str());
+
+      const auto localResult = m_localModelRuntime.GenerateStream(
+          localmodel::TextGenerationRequest{
+              .runId = request.runId,
+              .prompt = prompt,
+              .maxTokens = std::nullopt,
+              .temperature = std::nullopt,
+          },
+          nullptr);
+      m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
+
+      if (!localResult.ok) {
+        const std::string errorCode =
+            localResult.error.has_value()
+            ? localmodel::TextGenerationErrorCodeToString(
+                localResult.error->code)
+            : "chat_runtime_error";
+        const std::string errorMessage =
+            localResult.error.has_value() &&
+                !localResult.error->message.empty()
+            ? localResult.error->message
+            : "local model generation failed";
+        TRACE(
+            "[LocalModel] request.terminal runId=%s state=%s latencyMs=%u tokens=%u reason=%s\n",
+            request.runId.c_str(),
+            localResult.cancelled ? "aborted" : "error",
+            localResult.latencyMs,
+            localResult.generatedTokens,
+            errorMessage.c_str());
+        return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+            .ok = false,
+            .assistantText = {},
+            .modelId = localResult.modelId,
+            .errorCode = errorCode,
+            .errorMessage = errorMessage,
+        };
+      }
+
+      TRACE(
+          "[LocalModel] request.terminal runId=%s state=final latencyMs=%u tokens=%u\n",
+          request.runId.c_str(),
+          localResult.latencyMs,
+          localResult.generatedTokens);
+
+      return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+          .ok = true,
+          .assistantText = localResult.text,
+          .modelId = localResult.modelId,
+          .errorCode = {},
+          .errorMessage = {},
+      };
+    }
+
+    if (m_activeConfig.localModel.enabled &&
+        !m_localModelActivationEnabled) {
+      TRACE(
+          "[LocalModel] request.fallback runId=%s reason=%s rolloutEligible=%s status=%s\n",
+          request.runId.c_str(),
+          m_localModelActivationReason.c_str(),
+          m_localModelRolloutEligible ? "true" : "false",
+          m_localModelRuntimeSnapshot.status.c_str());
+    }
+
+    const auto modelSelection = m_agentsModelRoutingService.SelectModel(
+        m_activeConfig.agent.model.empty()
+            ? std::string()
+            : ToNarrow(m_activeConfig.agent.model),
+        "chat.send");
+
+    std::string retrievalContext;
+    if (m_activeConfig.embeddings.enabled && !request.message.empty()) {
+      const auto userEmbedding = m_embeddingsService.EmbedText(
+          EmbeddingRequest{
+              .text = ToWide(request.message),
+              .normalize = true,
+              .traceId = "chat-retrieval-query",
+          });
+      if (userEmbedding.ok) {
+        const auto matches = m_retrievalMemoryService.Query(
+            sessionId,
+            userEmbedding.vector,
+            2);
+        if (!matches.empty()) {
+          retrievalContext = " [ctx:";
+          for (std::size_t i = 0; i < matches.size(); ++i) {
+            if (i > 0) {
+              retrievalContext += " | ";
+            }
+
+            retrievalContext += matches[i].text;
+          }
+
+          retrievalContext += "]";
+        }
+
+        m_retrievalMemoryService.Upsert(
+            sessionId,
+            "user",
+            request.message,
+            userEmbedding.vector,
+            CurrentEpochMs());
+        m_retrievalMemory = m_retrievalMemoryService.Snapshot();
+      }
+    }
+
+    const auto embeddedRun = m_piEmbeddedService.QueueRun(
+        EmbeddedRunRequest{
+            .sessionId = sessionId,
+            .agentId = "default",
+            .message = request.message,
+        });
+
+    if (!embeddedRun.accepted) {
+      m_agentsModelRoutingService.RecordFailover(
+          modelSelection.selectedModel,
+          embeddedRun.reason,
+          embeddedRun.startedAtMs == 0 ? 1735689800000 : embeddedRun.startedAtMs);
+      return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+          .ok = false,
+          .assistantText = {},
+          .modelId = modelSelection.selectedModel,
+          .errorCode = "embedded_run_rejected",
+          .errorMessage = embeddedRun.reason,
+      };
+    }
+
+    const std::string assistantText = request.message.empty()
+        ? "Received image attachment."
+        : ("Model(" + modelSelection.selectedModel + "): " +
+            request.message + retrievalContext);
+
+    if (m_activeConfig.embeddings.enabled && !assistantText.empty()) {
+      const auto assistantEmbedding = m_embeddingsService.EmbedText(
+          EmbeddingRequest{
+              .text = ToWide(assistantText),
+              .normalize = true,
+              .traceId = "chat-retrieval-index",
+          });
+      if (assistantEmbedding.ok) {
+        m_retrievalMemoryService.Upsert(
+            sessionId,
+            "assistant",
+            assistantText,
+            assistantEmbedding.vector,
+            CurrentEpochMs());
+        m_retrievalMemory = m_retrievalMemoryService.Snapshot();
+      }
+    }
+
+    const bool completed = m_piEmbeddedService.CompleteRun(
+        embeddedRun.runId,
+        "completed",
+        embeddedRun.startedAtMs + 1);
+    if (!completed) {
+      m_agentsModelRoutingService.RecordFailover(
+          modelSelection.selectedModel,
+          "embedded_completion_failed",
+          embeddedRun.startedAtMs + 1);
+      return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+          .ok = false,
+          .assistantText = {},
+          .modelId = modelSelection.selectedModel,
+          .errorCode = "embedded_completion_failed",
+          .errorMessage = "embedded completion failed",
+      };
+    }
+
+    return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+        .ok = true,
+        .assistantText = assistantText,
+        .modelId = modelSelection.selectedModel,
+        .errorCode = {},
+        .errorMessage = {},
+    };
+  });
+
+  m_gatewayHost.SetChatAbortCallback([this](
+      const blazeclaw::gateway::GatewayHost::ChatAbortRequest& request) {
+    if (!m_localModelActivationEnabled) {
+      return false;
+    }
+
+    const bool cancelled = m_localModelRuntime.Cancel(request.runId);
+    m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
+    return cancelled;
+  });
+
+  m_gatewayHost.SetEmbeddingsGenerateCallback([this](
+      const blazeclaw::gateway::GatewayHost::EmbeddingsGenerateRequest& request) {
+    const auto result = m_embeddingsService.EmbedText(
+        EmbeddingRequest{
+            .text = ToWide(request.text),
+            .normalize = request.normalize,
+            .traceId = request.traceId,
+        });
+
+    blazeclaw::gateway::GatewayHost::EmbeddingsGenerateResult gatewayResult;
+    gatewayResult.ok = result.ok;
+    gatewayResult.vector = result.vector;
+    gatewayResult.dimension = result.dimension;
+    gatewayResult.provider = result.provider;
+    gatewayResult.modelId = result.modelId;
+    gatewayResult.latencyMs = result.latencyMs;
+    gatewayResult.status = m_embeddingsService.Snapshot().status;
+
+    if (result.error.has_value()) {
+      gatewayResult.errorCode =
+          EmbeddingErrorCodeToString(result.error->code);
+      gatewayResult.errorMessage = result.error->message;
+    }
+
+    return gatewayResult;
+  });
+
+  m_gatewayHost.SetEmbeddingsBatchCallback([this](
+      const blazeclaw::gateway::GatewayHost::EmbeddingsBatchRequest& request) {
+    std::vector<std::wstring> texts;
+    texts.reserve(request.texts.size());
+    for (const auto& text : request.texts) {
+      texts.push_back(ToWide(text));
+    }
+
+    const auto result = m_embeddingsService.EmbedBatch(
+        EmbeddingBatchRequest{
+            .texts = std::move(texts),
+            .normalize = request.normalize,
+            .traceId = request.traceId,
+        });
+
+    blazeclaw::gateway::GatewayHost::EmbeddingsBatchResult gatewayResult;
+    gatewayResult.ok = result.ok;
+    gatewayResult.vectors = result.vectors;
+    gatewayResult.dimension = result.dimension;
+    gatewayResult.provider = result.provider;
+    gatewayResult.modelId = result.modelId;
+    gatewayResult.latencyMs = result.latencyMs;
+    gatewayResult.status = m_embeddingsService.Snapshot().status;
+
+    if (result.error.has_value()) {
+      gatewayResult.errorCode =
+          EmbeddingErrorCodeToString(result.error->code);
+      gatewayResult.errorMessage = result.error->message;
+    }
+
+    return gatewayResult;
+  });
+
   const bool gatewayStarted = m_gatewayHost.Start(config.gateway);
   m_running = gatewayStarted;
   return m_running;
@@ -390,6 +791,30 @@ const SandboxSnapshot& ServiceManager::Sandbox() const noexcept {
   return m_sandbox;
 }
 
+const EmbeddingsServiceSnapshot& ServiceManager::Embeddings() const noexcept {
+  return m_embeddings;
+}
+
+const localmodel::LocalModelRuntimeSnapshot& ServiceManager::LocalModelRuntime() const noexcept {
+  return m_localModelRuntimeSnapshot;
+}
+
+bool ServiceManager::LocalModelRolloutEligible() const noexcept {
+  return m_localModelRolloutEligible;
+}
+
+bool ServiceManager::LocalModelActivationEnabled() const noexcept {
+  return m_localModelActivationEnabled;
+}
+
+const std::string& ServiceManager::LocalModelActivationReason() const noexcept {
+  return m_localModelActivationReason;
+}
+
+const RetrievalMemorySnapshot& ServiceManager::RetrievalMemory() const noexcept {
+  return m_retrievalMemory;
+}
+
 std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
   const auto featureStateLabel = [](const FeatureState state) {
     switch (state) {
@@ -423,6 +848,11 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
   const auto routing = ModelRouting();
   const auto auth = AuthProfiles();
   const auto sandbox = Sandbox();
+  const auto embeddings = Embeddings();
+  const auto localModel = LocalModelRuntime();
+  const auto retrieval = RetrievalMemory();
+  const bool configFeatureImplemented =
+      m_registry.IsImplemented(L"embeddings-config-foundation");
 
   std::string report =
       "{\"runtime\":{\"running\":" + std::string(m_running ? "true" : "false") +
@@ -443,6 +873,83 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       ",\"authProfiles\":" + std::to_string(auth.entries.size()) + "},"
       "\"sandbox\":{\"enabledCount\":" + std::to_string(sandbox.enabledCount) +
       ",\"browserEnabledCount\":" + std::to_string(sandbox.browserEnabledCount) + "},"
+      "\"embeddings\":{\"enabled\":" +
+      std::string(embeddings.enabled ? "true" : "false") +
+      ",\"ready\":" +
+      std::string(embeddings.ready ? "true" : "false") +
+      ",\"provider\":\"" + embeddings.provider +
+      "\",\"status\":\"" + embeddings.status +
+      "\",\"dimension\":" + std::to_string(embeddings.dimension) +
+      ",\"maxSequenceLength\":" +
+      std::to_string(embeddings.maxSequenceLength) +
+      ",\"modelPathConfigured\":" +
+      std::string(!embeddings.modelPath.empty() ? "true" : "false") +
+      ",\"tokenizerPathConfigured\":" +
+      std::string(!embeddings.tokenizerPath.empty() ? "true" : "false") +
+      ",\"configFeatureImplemented\":" +
+      std::string(configFeatureImplemented ? "true" : "false") + "},"
+      "\"localModel\":{\"enabled\":" +
+      std::string(localModel.enabled ? "true" : "false") +
+      ",\"ready\":" +
+      std::string(localModel.ready ? "true" : "false") +
+      ",\"rolloutEligible\":" +
+      std::string(m_localModelRolloutEligible ? "true" : "false") +
+      ",\"activationEnabled\":" +
+      std::string(m_localModelActivationEnabled ? "true" : "false") +
+      ",\"activationReason\":\"" + m_localModelActivationReason +
+      ",\"provider\":\"" + localModel.provider +
+      "\",\"rolloutStage\":\"" + localModel.rolloutStage +
+      "\",\"storageRoot\":\"" + localModel.storageRoot +
+      "\",\"version\":\"" + localModel.version +
+      "\",\"status\":\"" + localModel.status +
+      "\",\"verboseMetrics\":" +
+      std::string(localModel.verboseMetrics ? "true" : "false") +
+      ",\"runtimeDllPresent\":" +
+      std::string(localModel.runtimeDllPresent ? "true" : "false") +
+      ",\"maxTokens\":" +
+      std::to_string(localModel.maxTokens) +
+      ",\"temperature\":" +
+      std::to_string(localModel.temperature) +
+      ",\"modelLoadAttempts\":" +
+      std::to_string(localModel.modelLoadAttempts) +
+      ",\"modelLoadFailures\":" +
+      std::to_string(localModel.modelLoadFailures) +
+      ",\"requestsStarted\":" +
+      std::to_string(localModel.requestsStarted) +
+      ",\"requestsCompleted\":" +
+      std::to_string(localModel.requestsCompleted) +
+      ",\"requestsFailed\":" +
+      std::to_string(localModel.requestsFailed) +
+      ",\"requestsCancelled\":" +
+      std::to_string(localModel.requestsCancelled) +
+      ",\"cumulativeTokens\":" +
+      std::to_string(localModel.cumulativeTokens) +
+      ",\"cumulativeLatencyMs\":" +
+      std::to_string(localModel.cumulativeLatencyMs) +
+      ",\"lastLatencyMs\":" +
+      std::to_string(localModel.lastLatencyMs) +
+      ",\"lastGeneratedTokens\":" +
+      std::to_string(localModel.lastGeneratedTokens) +
+      ",\"lastTokensPerSecond\":" +
+      std::to_string(localModel.lastTokensPerSecond) +
+      ",\"modelPathConfigured\":" +
+      std::string(!localModel.modelPath.empty() ? "true" : "false") +
+      ",\"modelHashConfigured\":" +
+      std::string(!localModel.modelExpectedSha256.empty() ? "true" : "false") +
+      ",\"modelHashVerified\":" +
+      std::string(localModel.modelHashVerified ? "true" : "false") +
+      ",\"tokenizerPathConfigured\":" +
+      std::string(!localModel.tokenizerPath.empty() ? "true" : "false") +
+      ",\"tokenizerHashConfigured\":" +
+      std::string(!localModel.tokenizerExpectedSha256.empty() ? "true" : "false") +
+      ",\"tokenizerHashVerified\":" +
+      std::string(localModel.tokenizerHashVerified ? "true" : "false") +
+      "},"
+      "\"retrieval\":{\"enabled\":" +
+      std::string(retrieval.enabled ? "true" : "false") +
+      ",\"recordCount\":" + std::to_string(retrieval.recordCount) +
+      ",\"lastQueryCount\":" + std::to_string(retrieval.lastQueryCount) +
+      ",\"status\":\"" + retrieval.status + "\"},"
       "\"skills\":{\"catalogEntries\":" + std::to_string(m_skillsCatalog.entries.size()) +
       ",\"promptIncluded\":" + std::to_string(m_skillsPrompt.includedCount) + "},"
       "\"features\":{\"implemented\":" + std::to_string(implementedCount) +
@@ -470,21 +977,13 @@ const SkillsPromptSnapshot& ServiceManager::SkillsPrompt() const noexcept {
 std::string ServiceManager::InvokeGatewayMethod(
     const std::string& method,
     const std::optional<std::string>& paramsJson) const {
-  if (!m_running) {
-    return "service_not_running";
-  }
-
-  if (method.empty()) {
-    return "invalid_method";
-  }
-
   const blazeclaw::gateway::protocol::RequestFrame request{
       .id = "ui-probe",
       .method = method,
       .paramsJson = paramsJson,
   };
 
-  const auto response = m_gatewayHost.RouteRequest(request);
+  const auto response = RouteGatewayRequest(request);
   if (response.ok) {
     return response.payloadJson.has_value() ? response.payloadJson.value()
                                             : "ok";
@@ -496,6 +995,63 @@ std::string ServiceManager::InvokeGatewayMethod(
 
   const auto& error = response.error.value();
   return error.code + ":" + error.message;
+}
+
+blazeclaw::gateway::protocol::ResponseFrame ServiceManager::RouteGatewayRequest(
+    const blazeclaw::gateway::protocol::RequestFrame& request) const {
+  if (!m_running) {
+    return blazeclaw::gateway::protocol::ResponseFrame{
+        .id = request.id,
+        .ok = false,
+        .payloadJson = std::nullopt,
+        .error = blazeclaw::gateway::protocol::ErrorShape{
+            .code = "service_not_running",
+            .message = "Service manager is not running.",
+            .detailsJson = std::nullopt,
+            .retryable = false,
+            .retryAfterMs = std::nullopt,
+        },
+    };
+  }
+
+  if (request.method.empty()) {
+    return blazeclaw::gateway::protocol::ResponseFrame{
+        .id = request.id,
+        .ok = false,
+        .payloadJson = std::nullopt,
+        .error = blazeclaw::gateway::protocol::ErrorShape{
+            .code = "invalid_method",
+            .message = "Gateway method must not be empty.",
+            .detailsJson = std::nullopt,
+            .retryable = false,
+            .retryAfterMs = std::nullopt,
+        },
+    };
+  }
+
+  return m_gatewayHost.RouteRequest(request);
+}
+
+bool ServiceManager::PumpGatewayNetworkOnce(std::string& error) {
+  if (!m_running) {
+    error = "service manager is not running";
+    return false;
+  }
+
+  return m_gatewayHost.PumpNetworkOnce(error);
+}
+
+bool ServiceManager::IsLocalModelRolloutEligible() const {
+  const std::wstring stage = m_activeConfig.localModel.rolloutStage;
+  if (_wcsicmp(stage.c_str(), L"stable") == 0) {
+    return true;
+  }
+
+  if (_wcsicmp(stage.c_str(), L"nightly") == 0) {
+    return IsOneOfChannels(m_activeConfig.enabledChannels, L"nightly");
+  }
+
+  return true;
 }
 
 } // namespace blazeclaw::core

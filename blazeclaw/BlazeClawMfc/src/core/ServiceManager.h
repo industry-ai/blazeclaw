@@ -12,7 +12,9 @@
 #include "AgentsToolPolicyService.h"
 #include "AgentsWorkspaceService.h"
 #include "AcpSpawnService.h"
+#include "OnnxEmbeddingsService.h"
 #include "PiEmbeddedService.h"
+#include "RetrievalMemoryService.h"
 #include "SubagentRegistryService.h"
 #include "SkillsCommandService.h"
 #include "SkillsCatalogService.h"
@@ -23,6 +25,7 @@
 #include "SkillSecurityScanService.h"
 #include "SkillsSyncService.h"
 #include "SkillsWatchService.h"
+#include "runtime/LocalModel/OnnxTextGenerationRuntime.h"
 
 namespace blazeclaw::core {
 
@@ -45,6 +48,12 @@ public:
   [[nodiscard]] const ModelRoutingSnapshot& ModelRouting() const noexcept;
   [[nodiscard]] const AuthProfileSnapshot& AuthProfiles() const noexcept;
   [[nodiscard]] const SandboxSnapshot& Sandbox() const noexcept;
+  [[nodiscard]] const EmbeddingsServiceSnapshot& Embeddings() const noexcept;
+  [[nodiscard]] const localmodel::LocalModelRuntimeSnapshot& LocalModelRuntime() const noexcept;
+  [[nodiscard]] bool LocalModelRolloutEligible() const noexcept;
+  [[nodiscard]] bool LocalModelActivationEnabled() const noexcept;
+  [[nodiscard]] const std::string& LocalModelActivationReason() const noexcept;
+  [[nodiscard]] const RetrievalMemorySnapshot& RetrievalMemory() const noexcept;
   [[nodiscard]] std::string BuildOperatorDiagnosticsReport() const;
   [[nodiscard]] const SkillsCatalogSnapshot& SkillsCatalog() const noexcept;
   [[nodiscard]] const SkillsEligibilitySnapshot& SkillsEligibility() const noexcept;
@@ -52,8 +61,13 @@ public:
   [[nodiscard]] std::string InvokeGatewayMethod(
       const std::string& method,
       const std::optional<std::string>& paramsJson = std::nullopt) const;
+  [[nodiscard]] blazeclaw::gateway::protocol::ResponseFrame RouteGatewayRequest(
+      const blazeclaw::gateway::protocol::RequestFrame& request) const;
+  bool PumpGatewayNetworkOnce(std::string& error);
 
 private:
+  [[nodiscard]] bool IsLocalModelRolloutEligible() const;
+
   [[nodiscard]] blazeclaw::gateway::SkillsCatalogGatewayState BuildGatewaySkillsState() const;
   void RefreshSkillsState(
       const blazeclaw::config::AppConfig& config,
@@ -81,6 +95,15 @@ private:
   SubagentRegistrySnapshot m_subagentRegistry;
   AcpSpawnService m_acpSpawnService;
   AcpSpawnDecision m_lastAcpDecision;
+  OnnxEmbeddingsService m_embeddingsService;
+  EmbeddingsServiceSnapshot m_embeddings;
+  localmodel::OnnxTextGenerationRuntime m_localModelRuntime;
+  localmodel::LocalModelRuntimeSnapshot m_localModelRuntimeSnapshot;
+  bool m_localModelRolloutEligible = false;
+  bool m_localModelActivationEnabled = false;
+  std::string m_localModelActivationReason;
+  RetrievalMemoryService m_retrievalMemoryService;
+  RetrievalMemorySnapshot m_retrievalMemory;
   PiEmbeddedService m_piEmbeddedService;
   SkillsCatalogService m_skillsCatalogService;
   SkillsCatalogSnapshot m_skillsCatalog;

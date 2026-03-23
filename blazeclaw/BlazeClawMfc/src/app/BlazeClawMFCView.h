@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <cstdint>
+#include <string>
+
 #if defined(__has_include)
 # if __has_include(<WebView2.h>)
 # include <WebView2.h>
@@ -68,17 +71,42 @@ protected:
 #ifdef HAVE_WEBVIEW2_HEADER
 	ComPtr<ICoreWebView2Controller> m_webViewController;
 	ComPtr<ICoreWebView2> m_webView;
+   EventRegistrationToken m_webMessageToken{};
 #else
 	// keep raw pointers when header not available
 	ICoreWebView2Controller* m_webViewController = nullptr;
 	ICoreWebView2* m_webView = nullptr;
 #endif
+	UINT_PTR m_bridgeTimerId = 0;
+	bool m_bridgeLastConnected = false;
+	bool m_bridgeLifecycleSent = false;
+  std::string m_bridgeSessionId = "main";
+	std::uint64_t m_bridgeEventSeq = 0;
+	std::uint64_t m_bridgeTraceReqCount = 0;
+	std::uint64_t m_bridgeTraceResCount = 0;
+	std::uint64_t m_bridgeTraceEventCount = 0;
+	std::uint64_t m_bridgeTraceLastFlushTickMs = 0;
+
+	void InitializeWebViewBridge();
+	void HandleWebMessageJson(const std::wstring& webMessageJson);
+	void PostBridgeMessageJson(const std::wstring& jsonMessage);
+   void PostOpenClawWsFrameJson(const std::string& frameJson);
+	void PostOpenClawWsClose(std::uint16_t code, const char* reason);
+	void EmitOpenClawChatEvents(const std::string& eventsArrayJson);
+	void EnsureOpenClawBridgeShim();
+   void TraceBridgeTraffic(
+		const char* kind,
+		const std::string& detail = std::string());
+	void FlushBridgeTraceIfNeeded();
+	void PostBridgeLifecycleEvent(const wchar_t* state, const wchar_t* reason = nullptr);
+	void PumpBridgeLifecycle();
 
 // Generated message map functions
 protected:
 	afx_msg void OnFilePrintPreview();
 	afx_msg void OnRButtonUp(UINT nFlags, CPoint point);
 	afx_msg void OnContextMenu(CWnd* pWnd, CPoint point);
+   afx_msg void OnTimer(UINT_PTR nIDEvent);
 	DECLARE_MESSAGE_MAP()
 public:
 	virtual void OnInitialUpdate();

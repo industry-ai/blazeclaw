@@ -9,6 +9,11 @@
 #include "ChildFrm.h"
 #include "BlazeClawMFCDoc.h"
 #include "BlazeClawMFCView.h"
+#include "ChatView.h"
+
+#include "../core/runtime/LocalModel/TokenizerBridge.h"
+
+#include <filesystem>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -16,6 +21,192 @@
 
 namespace {
 	constexpr wchar_t kConfigPath[] = L"blazeclaw.conf";
+
+	std::wstring ToWide(const std::string& value) {
+		std::wstring output;
+		output.reserve(value.size());
+
+		for (const char ch : value) {
+			output.push_back(static_cast<wchar_t>(
+				static_cast<unsigned char>(ch)));
+		}
+
+		return output;
+	}
+
+	void AppendMainFrameStatusLine(const CString& line) {
+		auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+		if (mainFrame == nullptr) {
+			return;
+		}
+
+		mainFrame->AddChatStatusLine(line);
+	}
+
+	void AppendStartupConfigStatus(const blazeclaw::config::AppConfig& config) {
+		const auto absoluteConfigPath =
+			std::filesystem::absolute(std::filesystem::path(kConfigPath));
+
+		CString configPathLine;
+		configPathLine.Format(
+			L"[Chat] startup.config.path - %s",
+			absoluteConfigPath.c_str());
+		AppendMainFrameStatusLine(configPathLine);
+
+		CString modeLine;
+		modeLine.Format(
+			L"[Chat] startup.config.mode - %s",
+			config.chat.mode.c_str());
+		AppendMainFrameStatusLine(modeLine);
+	}
+
+	void AppendStartupEmbeddingsStatus(
+		const blazeclaw::config::AppConfig& config,
+		const blazeclaw::core::ServiceManager& services) {
+		if (!config.embeddings.enabled) {
+			AppendMainFrameStatusLine(
+				L"[Embeddings] startup.disabled - embeddings.enabled=false");
+			return;
+		}
+
+		CString configLine;
+		configLine.Format(
+			L"[Embeddings] startup.config - provider=%s model=%s tokenizer=%s",
+			config.embeddings.provider.c_str(),
+			config.embeddings.modelPath.c_str(),
+			config.embeddings.tokenizerPath.c_str());
+		AppendMainFrameStatusLine(configLine);
+
+		const std::string probeResult = services.InvokeGatewayMethod(
+			"gateway.embeddings.generate",
+			std::optional<std::string>(
+				"{\"text\":\"startup-embedding-probe\"}"));
+
+		if (probeResult.find("\"vector\":") != std::string::npos) {
+			AppendMainFrameStatusLine(
+				L"[Embeddings] startup.loaded - model probe succeeded");
+			return;
+		}
+
+		const CString errorLine(
+			(L"[Embeddings] startup.error - " + ToWide(probeResult)).c_str());
+		AppendMainFrameStatusLine(errorLine);
+	}
+
+	void AppendStartupLocalModelStatus(
+       const blazeclaw::config::AppConfig& config,
+		const blazeclaw::core::ServiceManager& services) {
+		if (!config.localModel.enabled) {
+			AppendMainFrameStatusLine(
+				L"[Chat] startup.localModel.disabled - chat.localModel.enabled=false");
+			return;
+		}
+
+		const auto runtime = services.LocalModelRuntime();
+
+		CString localModelLine;
+		localModelLine.Format(
+          L"[Chat] startup.localModel.config - provider=%s stage=%s model=%s tokenizer=%s maxTokens=%u temperature=%.2f",
+         ToWide(runtime.provider).c_str(),
+          ToWide(runtime.rolloutStage).c_str(),
+			ToWide(runtime.modelPath).c_str(),
+			ToWide(runtime.tokenizerPath).c_str(),
+			runtime.maxTokens,
+			runtime.temperature);
+		AppendMainFrameStatusLine(localModelLine);
+
+		CString gatingLine;
+		gatingLine.Format(
+			L"[Chat] startup.localModel.gating - rolloutEligible=%s activationEnabled=%s reason=%s",
+			services.LocalModelRolloutEligible() ? L"true" : L"false",
+			services.LocalModelActivationEnabled() ? L"true" : L"false",
+			ToWide(services.LocalModelActivationReason()).c_str());
+		AppendMainFrameStatusLine(gatingLine);
+
+		CString integrityLine;
+		integrityLine.Format(
+			L"[Chat] startup.localModel.integrity - runtimeDll=%s modelHashVerified=%s tokenizerHashVerified=%s",
+			runtime.runtimeDllPresent ? L"true" : L"false",
+			runtime.modelHashVerified ? L"true" : L"false",
+			runtime.tokenizerHashVerified ? L"true" : L"false");
+		AppendMainFrameStatusLine(integrityLine);
+
+		if (!runtime.tokenizerPath.empty()) {
+			blazeclaw::core::localmodel::TokenizerBridge tokenizer;
+			std::string tokenizerLoadError;
+			const std::filesystem::path tokenizerPath(
+				ToWide(runtime.tokenizerPath));
+			if (!tokenizer.Load(tokenizerPath, tokenizerLoadError)) {
+				const CString tokenizerErrorLine(
+					(L"[Chat] startup.localModel.tokenizer.roundtrip - load_failed: " +
+						ToWide(tokenizerLoadError)).c_str());
+				AppendMainFrameStatusLine(tokenizerErrorLine);
+			}
+			else {
+				blazeclaw::core::localmodel::TextGenerationError tokenizationError;
+				const std::string probeText =
+					"roundtrip probe: hello tokenizer 123";
+				const auto ids = tokenizer.EncodeToIds(
+					probeText,
+					96,
+					tokenizationError,
+					true);
+
+				if (ids.empty()) {
+					const std::wstring reason = tokenizationError.message.empty()
+						? L"unknown"
+						: ToWide(tokenizationError.message);
+					const CString tokenizerErrorLine(
+						(L"[Chat] startup.localModel.tokenizer.roundtrip - encode_failed: " +
+							reason).c_str());
+					AppendMainFrameStatusLine(tokenizerErrorLine);
+				}
+				else {
+					const std::string decoded = tokenizer.DecodeFromIds(ids);
+					const bool matched = decoded == probeText;
+
+					CString tokenizerLine;
+					tokenizerLine.Format(
+						L"[Chat] startup.localModel.tokenizer.roundtrip - ok=%s ids=%zu",
+						matched ? L"true" : L"false",
+						ids.size());
+					AppendMainFrameStatusLine(tokenizerLine);
+
+					if (!matched) {
+						const CString mismatchLine(
+							(L"[Chat] startup.localModel.tokenizer.roundtrip.mismatch - decoded=" +
+								ToWide(decoded)).c_str());
+						AppendMainFrameStatusLine(mismatchLine);
+					}
+				}
+			}
+		}
+
+		if (runtime.ready) {
+          if (services.LocalModelActivationEnabled()) {
+				AppendMainFrameStatusLine(
+					L"[Chat] startup.localModel.loaded - local ONNX runtime ready and active");
+			} else {
+				AppendMainFrameStatusLine(
+					L"[Chat] startup.localModel.loaded - local ONNX runtime ready but fallback is active");
+			}
+			return;
+		}
+
+		const CString errorLine(
+			(L"[Chat] startup.localModel.error - status=" +
+				ToWide(runtime.status)).c_str());
+		AppendMainFrameStatusLine(errorLine);
+	}
+
+	CRuntimeClass* ResolveChatRuntimeViewClass(
+		const blazeclaw::config::AppConfig& config) {
+		if (config.chat.mode == L"native") {
+			return RUNTIME_CLASS(CChatView);
+		}
+
+		return RUNTIME_CLASS(CBlazeClawMFCView);
+	}
 }
 
 
@@ -121,10 +312,11 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 	// Register the application's document templates.  Document templates
 	//  serve as the connection between documents, frame windows and views
 	CMultiDocTemplate* pDocTemplate;
+  CRuntimeClass* viewRuntimeClass = ResolveChatRuntimeViewClass(m_config);
 	pDocTemplate = new CMultiDocTemplate(IDR_BlazeClawMFCTYPE,
 		RUNTIME_CLASS(CBlazeClawMFCDoc),
 		RUNTIME_CLASS(CChildFrame), // custom MDI child frame
-		RUNTIME_CLASS(CBlazeClawMFCView));
+      viewRuntimeClass);
 	if (!pDocTemplate)
 		return FALSE;
 	AddDocTemplate(pDocTemplate);
@@ -164,6 +356,9 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 	// The main window has been initialized, so show and update it
 	pMainFrame->ShowWindow(SW_SHOWMAXIMIZED);
 	pMainFrame->UpdateWindow();
+	AppendStartupConfigStatus(m_config);
+  AppendStartupLocalModelStatus(m_config, m_serviceManager);
+	AppendStartupEmbeddingsStatus(m_config, m_serviceManager);
 
 	return TRUE;
 }
@@ -174,6 +369,21 @@ int CBlazeClawMFCApp::ExitInstance() {
 	AfxOleTerm(FALSE);
 
 	return CWinApp::ExitInstance();
+}
+
+BOOL CBlazeClawMFCApp::OnIdle(LONG lCount) {
+	BOOL baseHandled = CWinAppEx::OnIdle(lCount);
+
+	std::string pumpError;
+	if (!m_serviceManager.PumpGatewayNetworkOnce(pumpError)) {
+		if (!pumpError.empty()) {
+			TRACE(
+				"[Gateway][PumpNetworkOnce] %s\n",
+				pumpError.c_str());
+		}
+	}
+
+	return baseHandled;
 }
 
 blazeclaw::core::ServiceManager& CBlazeClawMFCApp::Services() noexcept {
