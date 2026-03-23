@@ -11,6 +11,8 @@
 #include "BlazeClawMFCView.h"
 #include "ChatView.h"
 
+#include "../core/runtime/LocalModel/TokenizerBridge.h"
+
 #include <filesystem>
 
 #ifdef _DEBUG
@@ -128,6 +130,57 @@ namespace {
 			runtime.modelHashVerified ? L"true" : L"false",
 			runtime.tokenizerHashVerified ? L"true" : L"false");
 		AppendMainFrameStatusLine(integrityLine);
+
+		if (!runtime.tokenizerPath.empty()) {
+			blazeclaw::core::localmodel::TokenizerBridge tokenizer;
+			std::string tokenizerLoadError;
+			const std::filesystem::path tokenizerPath(
+				ToWide(runtime.tokenizerPath));
+			if (!tokenizer.Load(tokenizerPath, tokenizerLoadError)) {
+				const CString tokenizerErrorLine(
+					(L"[Chat] startup.localModel.tokenizer.roundtrip - load_failed: " +
+						ToWide(tokenizerLoadError)).c_str());
+				AppendMainFrameStatusLine(tokenizerErrorLine);
+			}
+			else {
+				blazeclaw::core::localmodel::TextGenerationError tokenizationError;
+				const std::string probeText =
+					"roundtrip probe: hello tokenizer 123";
+				const auto ids = tokenizer.EncodeToIds(
+					probeText,
+					96,
+					tokenizationError,
+					true);
+
+				if (ids.empty()) {
+					const std::wstring reason = tokenizationError.message.empty()
+						? L"unknown"
+						: ToWide(tokenizationError.message);
+					const CString tokenizerErrorLine(
+						(L"[Chat] startup.localModel.tokenizer.roundtrip - encode_failed: " +
+							reason).c_str());
+					AppendMainFrameStatusLine(tokenizerErrorLine);
+				}
+				else {
+					const std::string decoded = tokenizer.DecodeFromIds(ids);
+					const bool matched = decoded == probeText;
+
+					CString tokenizerLine;
+					tokenizerLine.Format(
+						L"[Chat] startup.localModel.tokenizer.roundtrip - ok=%s ids=%zu",
+						matched ? L"true" : L"false",
+						ids.size());
+					AppendMainFrameStatusLine(tokenizerLine);
+
+					if (!matched) {
+						const CString mismatchLine(
+							(L"[Chat] startup.localModel.tokenizer.roundtrip.mismatch - decoded=" +
+								ToWide(decoded)).c_str());
+						AppendMainFrameStatusLine(mismatchLine);
+					}
+				}
+			}
+		}
 
 		if (runtime.ready) {
           if (services.LocalModelActivationEnabled()) {
