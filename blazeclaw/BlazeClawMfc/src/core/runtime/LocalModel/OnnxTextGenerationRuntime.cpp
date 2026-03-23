@@ -7,7 +7,6 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
-#include <map>
 #include <sstream>
 
 #include <Windows.h>
@@ -200,18 +199,6 @@ double TokensPerSecond(
       static_cast<double>(latencyMs);
 }
 
-std::int64_t StableTokenId(const std::string& token) {
-  std::uint64_t hash = 1469598103934665603ULL;
-  for (const char ch : token) {
-    const unsigned char lower = static_cast<unsigned char>(
-        std::tolower(static_cast<unsigned char>(ch)));
-    hash ^= static_cast<std::uint64_t>(lower);
-    hash *= 1099511628211ULL;
-  }
-
-  return static_cast<std::int64_t>((hash % 30000ULL) + 100ULL);
-}
-
 std::vector<std::int64_t> BuildPositionIds(
     const std::size_t count) {
   std::vector<std::int64_t> ids;
@@ -298,17 +285,6 @@ bool ResolveInputShape(
   }
 
   return true;
-}
-
-std::string DecodeGeneratedToken(
-    const std::int64_t tokenId,
-    const std::map<std::int64_t, std::string>& promptIdLookup) {
-  const auto it = promptIdLookup.find(tokenId);
-  if (it != promptIdLookup.end()) {
-    return it->second;
-  }
-
-  return "<tok:" + std::to_string(tokenId) + ">";
 }
 
 } // namespace
@@ -733,11 +709,12 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
       (std::max)(std::uint32_t{1}, requestedMaxTokens);
 
   TextGenerationError tokenizationError;
-  const std::vector<std::string> promptTokens = m_tokenizer.Tokenize(
+  std::vector<std::int64_t> inputTokenIds = m_tokenizer.EncodeToIds(
       request.prompt,
       maxTokens,
-      tokenizationError);
-  if (promptTokens.empty()) {
+      tokenizationError,
+      true);
+  if (inputTokenIds.empty()) {
     result.ok = false;
     result.modelId = m_snapshot.modelPath;
     result.error = tokenizationError;
@@ -755,19 +732,8 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
     return result;
   }
 
-  std::vector<std::int64_t> inputTokenIds;
-  inputTokenIds.reserve(promptTokens.size() + 1);
-  inputTokenIds.push_back(151643);
-
-  std::map<std::int64_t, std::string> promptIdLookup;
-  for (const auto& token : promptTokens) {
-    const std::int64_t tokenId = StableTokenId(token);
-    inputTokenIds.push_back(tokenId);
-    promptIdLookup.insert_or_assign(tokenId, token);
-  }
-
-  std::vector<std::string> emittedTokens;
-  emittedTokens.reserve(maxTokens);
+  std::vector<std::int64_t> generatedTokenIds;
+  generatedTokenIds.reserve(maxTokens);
   bool firstTokenLogged = false;
 
 #if BLAZECLAW_HAS_ONNXRUNTIME
@@ -787,7 +753,7 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
       result.ok = false;
       result.cancelled = true;
       result.modelId = m_snapshot.modelPath;
-      result.generatedTokens = static_cast<std::uint32_t>(emittedTokens.size());
+      result.generatedTokens = static_cast<std::uint32_t>(generatedTokenIds.size());
       result.error = TextGenerationError{
           .code = TextGenerationErrorCode::Cancelled,
           .message = "Generation cancelled.",
@@ -1046,29 +1012,30 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
       }
 
       const std::int64_t nextTokenId = static_cast<std::int64_t>(maxIndex);
-      if (nextTokenId == 151645 || nextTokenId == 151643) {
+      if (m_tokenizer.IsEndOfSequenceId(nextTokenId) ||
+          nextTokenId == m_tokenizer.BosTokenId()) {
         break;
       }
 
       inputTokenIds.push_back(nextTokenId);
-      const std::string nextToken = DecodeGeneratedToken(
-          nextTokenId,
-          promptIdLookup);
-      emittedTokens.push_back(nextToken);
+      generatedTokenIds.push_back(nextTokenId);
       ++generatedCount;
 
       if (!firstTokenLogged) {
         TraceRuntime(
             "request.first_token",
             request.runId,
-            "tokenIndex=" + std::to_string(emittedTokens.size()));
+            "tokenIndex=" + std::to_string(generatedTokenIds.size()));
         firstTokenLogged = true;
       }
 
       if (onDelta) {
-        const std::string delta = emittedTokens.size() == 1
-            ? emittedTokens.back()
-            : (" " + emittedTokens.back());
+        const std::string decoded = m_tokenizer.DecodeFromIds(generatedTokenIds);
+        const std::size_t previousSize = result.text.size();
+        result.text = decoded;
+        const std::string delta = decoded.size() > previousSize
+            ? decoded.substr(previousSize)
+            : std::string();
         onDelta(delta);
       }
     } catch (const Ort::Exception& ex) {
@@ -1103,8 +1070,8 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
   result.ok = true;
   result.cancelled = false;
   result.modelId = m_snapshot.modelPath;
-  result.generatedTokens = static_cast<std::uint32_t>(emittedTokens.size());
-  result.text = m_tokenizer.Detokenize(emittedTokens);
+  result.generatedTokens = static_cast<std::uint32_t>(generatedTokenIds.size());
+  result.text = m_tokenizer.DecodeFromIds(generatedTokenIds);
   result.latencyMs = ElapsedMs(startedAt);
   result.error.reset();
   const double tokensPerSecond =
