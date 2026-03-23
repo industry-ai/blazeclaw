@@ -50,6 +50,9 @@ public:
   [[nodiscard]] const SandboxSnapshot& Sandbox() const noexcept;
   [[nodiscard]] const EmbeddingsServiceSnapshot& Embeddings() const noexcept;
   [[nodiscard]] const localmodel::LocalModelRuntimeSnapshot& LocalModelRuntime() const noexcept;
+  [[nodiscard]] bool LocalModelRolloutEligible() const noexcept;
+  [[nodiscard]] bool LocalModelActivationEnabled() const noexcept;
+  [[nodiscard]] const std::string& LocalModelActivationReason() const noexcept;
   [[nodiscard]] const RetrievalMemorySnapshot& RetrievalMemory() const noexcept;
   [[nodiscard]] std::string BuildOperatorDiagnosticsReport() const;
   [[nodiscard]] const SkillsCatalogSnapshot& SkillsCatalog() const noexcept;

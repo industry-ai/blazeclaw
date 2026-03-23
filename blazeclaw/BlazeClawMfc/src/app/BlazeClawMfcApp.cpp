@@ -104,17 +104,39 @@ namespace {
 
 		CString localModelLine;
 		localModelLine.Format(
-			L"[Chat] startup.localModel.config - provider=%s model=%s tokenizer=%s maxTokens=%u temperature=%.2f",
+          L"[Chat] startup.localModel.config - provider=%s stage=%s model=%s tokenizer=%s maxTokens=%u temperature=%.2f",
          ToWide(runtime.provider).c_str(),
+          ToWide(runtime.rolloutStage).c_str(),
 			ToWide(runtime.modelPath).c_str(),
 			ToWide(runtime.tokenizerPath).c_str(),
 			runtime.maxTokens,
 			runtime.temperature);
 		AppendMainFrameStatusLine(localModelLine);
 
+		CString gatingLine;
+		gatingLine.Format(
+			L"[Chat] startup.localModel.gating - rolloutEligible=%s activationEnabled=%s reason=%s",
+			services.LocalModelRolloutEligible() ? L"true" : L"false",
+			services.LocalModelActivationEnabled() ? L"true" : L"false",
+			ToWide(services.LocalModelActivationReason()).c_str());
+		AppendMainFrameStatusLine(gatingLine);
+
+		CString integrityLine;
+		integrityLine.Format(
+			L"[Chat] startup.localModel.integrity - runtimeDll=%s modelHashVerified=%s tokenizerHashVerified=%s",
+			runtime.runtimeDllPresent ? L"true" : L"false",
+			runtime.modelHashVerified ? L"true" : L"false",
+			runtime.tokenizerHashVerified ? L"true" : L"false");
+		AppendMainFrameStatusLine(integrityLine);
+
 		if (runtime.ready) {
-			AppendMainFrameStatusLine(
-				L"[Chat] startup.localModel.loaded - local ONNX runtime ready");
+          if (services.LocalModelActivationEnabled()) {
+				AppendMainFrameStatusLine(
+					L"[Chat] startup.localModel.loaded - local ONNX runtime ready and active");
+			} else {
+				AppendMainFrameStatusLine(
+					L"[Chat] startup.localModel.loaded - local ONNX runtime ready but fallback is active");
+			}
 			return;
 		}
 

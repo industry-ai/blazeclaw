@@ -799,6 +799,18 @@ const localmodel::LocalModelRuntimeSnapshot& ServiceManager::LocalModelRuntime()
   return m_localModelRuntimeSnapshot;
 }
 
+bool ServiceManager::LocalModelRolloutEligible() const noexcept {
+  return m_localModelRolloutEligible;
+}
+
+bool ServiceManager::LocalModelActivationEnabled() const noexcept {
+  return m_localModelActivationEnabled;
+}
+
+const std::string& ServiceManager::LocalModelActivationReason() const noexcept {
+  return m_localModelActivationReason;
+}
+
 const RetrievalMemorySnapshot& ServiceManager::RetrievalMemory() const noexcept {
   return m_retrievalMemory;
 }
