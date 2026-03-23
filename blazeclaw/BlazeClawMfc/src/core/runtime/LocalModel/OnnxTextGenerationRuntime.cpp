@@ -210,6 +210,83 @@ std::vector<std::int64_t> BuildPositionIds(
   return ids;
 }
 
+std::string StripQwenThinkingAndControlTokens(
+    const std::string& value) {
+  std::string output = value;
+
+  auto eraseAll = [&output](const std::string& token) {
+    std::size_t pos = output.find(token);
+    while (pos != std::string::npos) {
+      output.erase(pos, token.size());
+      pos = output.find(token);
+    }
+  };
+
+  eraseAll("<|im_start|>");
+  eraseAll("<|im_end|>");
+  eraseAll("<think>");
+  eraseAll("</think>");
+
+  const std::string assistantPrefix = "assistant\n";
+  std::size_t prefixPos = output.find(assistantPrefix);
+  if (prefixPos != std::string::npos) {
+    output = output.substr(prefixPos + assistantPrefix.size());
+  }
+
+  while (!output.empty() &&
+         (output.front() == '\n' || output.front() == '\r')) {
+    output.erase(output.begin());
+  }
+
+  while (!output.empty() &&
+         (output.back() == '\n' || output.back() == '\r')) {
+    output.pop_back();
+  }
+
+  return output;
+}
+
+bool IsEffectivelyEmptyModelOutput(const std::string& value) {
+  if (value.empty()) {
+    return true;
+  }
+
+  for (const char ch : value) {
+    const unsigned char c = static_cast<unsigned char>(ch);
+    if (std::isspace(c) != 0) {
+      continue;
+    }
+
+    if (ch == '<' || ch == '>' || ch == '|' || ch == '\r' || ch == '\n') {
+      continue;
+    }
+
+    return false;
+  }
+
+  return true;
+}
+
+std::vector<std::int64_t> FindSequenceTail(
+    const std::vector<std::int64_t>& allIds,
+    const std::vector<std::int64_t>& prefix) {
+  if (allIds.empty()) {
+    return {};
+  }
+
+  if (prefix.empty() || allIds.size() <= prefix.size()) {
+    return allIds;
+  }
+
+  if (std::equal(prefix.begin(), prefix.end(), allIds.begin())) {
+    return std::vector<std::int64_t>(
+        allIds.begin() + static_cast<std::ptrdiff_t>(prefix.size()),
+        allIds.end());
+  }
+
+  return allIds;
+}
+
 bool IsInputNameContains(
     const std::string& value,
     const char* token) {
@@ -736,6 +813,11 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
   generatedTokenIds.reserve(maxTokens);
   bool firstTokenLogged = false;
 
+  std::int64_t imEndTokenId = -1;
+  const bool hasImEndToken = m_tokenizer.TryGetTokenId(
+      "<|im_end|>",
+      imEndTokenId);
+
 #if BLAZECLAW_HAS_ONNXRUNTIME
   std::uint32_t generatedCount = 0;
   while (generatedCount < maxTokens) {
@@ -1013,7 +1095,8 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
 
       const std::int64_t nextTokenId = static_cast<std::int64_t>(maxIndex);
       if (m_tokenizer.IsEndOfSequenceId(nextTokenId) ||
-          nextTokenId == m_tokenizer.BosTokenId()) {
+          nextTokenId == m_tokenizer.BosTokenId() ||
+          (hasImEndToken && nextTokenId == imEndTokenId)) {
         break;
       }
 
@@ -1030,11 +1113,12 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
       }
 
       if (onDelta) {
-        const std::string decoded = m_tokenizer.DecodeFromIds(generatedTokenIds);
-        const std::size_t previousSize = result.text.size();
+        const std::string decodedRaw = m_tokenizer.DecodeFromIds(generatedTokenIds);
+        const std::string decoded = StripQwenThinkingAndControlTokens(decodedRaw);
+        const std::string previous = result.text;
         result.text = decoded;
-        const std::string delta = decoded.size() > previousSize
-            ? decoded.substr(previousSize)
+        const std::string delta = decoded.size() > previous.size()
+            ? decoded.substr(previous.size())
             : std::string();
         onDelta(delta);
       }
@@ -1070,8 +1154,33 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
   result.ok = true;
   result.cancelled = false;
   result.modelId = m_snapshot.modelPath;
-  result.generatedTokens = static_cast<std::uint32_t>(generatedTokenIds.size());
-  result.text = m_tokenizer.DecodeFromIds(generatedTokenIds);
+  const auto decodeTailIds = FindSequenceTail(
+      generatedTokenIds,
+      inputTokenIds);
+  result.generatedTokens = static_cast<std::uint32_t>(decodeTailIds.size());
+  result.text = StripQwenThinkingAndControlTokens(
+      m_tokenizer.DecodeFromIds(decodeTailIds));
+  if (IsEffectivelyEmptyModelOutput(result.text)) {
+    result.ok = false;
+    result.generatedTokens = 0;
+    result.error = TextGenerationError{
+        .code = TextGenerationErrorCode::EmptyOutput,
+        .message = "local model returned empty output after decode normalization",
+    };
+    result.latencyMs = ElapsedMs(startedAt);
+    {
+      std::lock_guard<std::mutex> lock(m_mutex);
+      ++m_snapshot.requestsFailed;
+      m_snapshot.lastLatencyMs = result.latencyMs;
+    }
+    TraceRuntime(
+        "request.terminal",
+        request.runId,
+        "state=error reason=local_model_empty_output latencyMs=" +
+            std::to_string(result.latencyMs));
+    return result;
+  }
+
   result.latencyMs = ElapsedMs(startedAt);
   result.error.reset();
   const double tokensPerSecond =

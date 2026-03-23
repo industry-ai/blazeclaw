@@ -40,6 +40,10 @@ public:
 
   [[nodiscard]] std::int64_t BosTokenId() const noexcept;
 
+  [[nodiscard]] bool TryGetTokenId(
+      const std::string& token,
+      std::int64_t& outTokenId) const noexcept;
+
   [[nodiscard]] std::string Detokenize(
       const std::vector<std::string>& tokens) const;
 

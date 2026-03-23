@@ -183,6 +183,8 @@ namespace {
 		}
 
 		if (runtime.ready) {
+         AppendMainFrameStatusLine(
+				L"[Chat] startup.localModel.qwenContract - promptTemplate=qwen3-chat markers=<|im_start|>/<|im_end|> decodeStop=<|im_end|>");
           if (services.LocalModelActivationEnabled()) {
 				AppendMainFrameStatusLine(
 					L"[Chat] startup.localModel.loaded - local ONNX runtime ready and active");

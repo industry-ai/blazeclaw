@@ -19,6 +19,7 @@ enum class TextGenerationErrorCode {
   TokenizationFailed,
   InvalidInput,
   InputTooLarge,
+  EmptyOutput,
   InferenceFailed,
   RuntimeUnavailable,
   Cancelled,
