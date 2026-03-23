@@ -31,6 +31,80 @@ bool IsBoundaryToken(const char ch) {
   return ch == '\r' || ch == '\n';
 }
 
+int HexValue(const char ch) {
+  if (ch >= '0' && ch <= '9') {
+    return ch - '0';
+  }
+
+  if (ch >= 'a' && ch <= 'f') {
+    return 10 + (ch - 'a');
+  }
+
+  if (ch >= 'A' && ch <= 'F') {
+    return 10 + (ch - 'A');
+  }
+
+  return -1;
+}
+
+bool TryParseHex4(
+    const std::string& input,
+    const std::size_t cursor,
+    std::uint32_t& outCodepoint) {
+  if (cursor + 4 > input.size()) {
+    return false;
+  }
+
+  std::uint32_t value = 0;
+  for (std::size_t i = 0; i < 4; ++i) {
+    const int nibble = HexValue(input[cursor + i]);
+    if (nibble < 0) {
+      return false;
+    }
+
+    value = (value << 4U) | static_cast<std::uint32_t>(nibble);
+  }
+
+  outCodepoint = value;
+  return true;
+}
+
+void AppendUtf8Codepoint(
+    std::string& target,
+    const std::uint32_t codepoint) {
+  if (codepoint <= 0x7FU) {
+    target.push_back(static_cast<char>(codepoint));
+    return;
+  }
+
+  if (codepoint <= 0x7FFU) {
+    target.push_back(
+        static_cast<char>(0xC0U | ((codepoint >> 6U) & 0x1FU)));
+    target.push_back(
+        static_cast<char>(0x80U | (codepoint & 0x3FU)));
+    return;
+  }
+
+  if (codepoint <= 0xFFFFU) {
+    target.push_back(
+        static_cast<char>(0xE0U | ((codepoint >> 12U) & 0x0FU)));
+    target.push_back(
+        static_cast<char>(0x80U | ((codepoint >> 6U) & 0x3FU)));
+    target.push_back(
+        static_cast<char>(0x80U | (codepoint & 0x3FU)));
+    return;
+  }
+
+  target.push_back(
+      static_cast<char>(0xF0U | ((codepoint >> 18U) & 0x07U)));
+  target.push_back(
+      static_cast<char>(0x80U | ((codepoint >> 12U) & 0x3FU)));
+  target.push_back(
+      static_cast<char>(0x80U | ((codepoint >> 6U) & 0x3FU)));
+  target.push_back(
+      static_cast<char>(0x80U | (codepoint & 0x3FU)));
+}
+
 std::string ReadAllTextFile(
     const std::filesystem::path& path,
     bool& ok) {
@@ -233,6 +307,18 @@ std::int64_t TokenizerBridge::BosTokenId() const noexcept {
   return m_bosTokenId;
 }
 
+bool TokenizerBridge::TryGetTokenId(
+    const std::string& token,
+    std::int64_t& outTokenId) const noexcept {
+  const auto it = m_tokenToId.find(token);
+  if (it == m_tokenToId.end()) {
+    return false;
+  }
+
+  outTokenId = it->second;
+  return true;
+}
+
 std::string TokenizerBridge::ToLowerAscii(const std::string& value) {
   std::string lowered;
   lowered.reserve(value.size());
@@ -327,12 +413,31 @@ std::string TokenizerBridge::ParseJsonString(
         value.push_back('\t');
         break;
       case 'u': {
-        if (cursor + 4 > input.size()) {
+        std::uint32_t codepoint = 0;
+        if (!TryParseHex4(input, cursor, codepoint)) {
           return {};
         }
 
         cursor += 4;
-        value.push_back('?');
+
+        if (codepoint >= 0xD800U && codepoint <= 0xDBFFU) {
+          if (cursor + 6 <= input.size() &&
+              input[cursor] == '\\' &&
+              input[cursor + 1] == 'u') {
+            std::uint32_t low = 0;
+            if (TryParseHex4(input, cursor + 2, low) &&
+                low >= 0xDC00U &&
+                low <= 0xDFFFU) {
+              const std::uint32_t highPart = codepoint - 0xD800U;
+              const std::uint32_t lowPart = low - 0xDC00U;
+              codepoint = 0x10000U +
+                  ((highPart << 10U) | lowPart);
+              cursor += 6;
+            }
+          }
+        }
+
+        AppendUtf8Codepoint(value, codepoint);
         break;
       }
       default:

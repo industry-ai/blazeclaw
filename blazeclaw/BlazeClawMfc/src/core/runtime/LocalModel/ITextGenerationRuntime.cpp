@@ -24,6 +24,8 @@ std::string TextGenerationErrorCodeToString(
       return "invalid_input";
     case TextGenerationErrorCode::InputTooLarge:
       return "input_too_large";
+    case TextGenerationErrorCode::EmptyOutput:
+      return "local_model_empty_output";
     case TextGenerationErrorCode::InferenceFailed:
       return "inference_failed";
     case TextGenerationErrorCode::RuntimeUnavailable:

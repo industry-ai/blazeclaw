@@ -58,21 +58,42 @@ std::string BuildAttachmentSummary(
   return summary;
 }
 
+std::string BuildQwen3ChatPrompt(
+    const std::string& userMessage,
+    const bool hasAttachments,
+    const std::vector<std::string>& attachmentMimeTypes) {
+  std::string normalizedUserMessage = userMessage;
+  if (normalizedUserMessage.empty()) {
+    normalizedUserMessage = "User sent image attachments.";
+  }
+
+  if (hasAttachments) {
+    normalizedUserMessage += "\n\n";
+    normalizedUserMessage += BuildAttachmentSummary(attachmentMimeTypes);
+    normalizedUserMessage +=
+        "\nInstruction: respond as a text assistant. "
+        "Do not repeat the user message.";
+  }
+
+  std::string prompt;
+  prompt.reserve(normalizedUserMessage.size() + 256);
+  prompt += "<|im_start|>system\n";
+  prompt += "You are a helpful assistant. Answer the user directly. ";
+  prompt += "Do not echo the user prompt verbatim.\n";
+  prompt += "<|im_end|>\n";
+  prompt += "<|im_start|>user\n";
+  prompt += normalizedUserMessage;
+  prompt += "\n<|im_end|>\n";
+  prompt += "<|im_start|>assistant\n";
+  return prompt;
+}
+
 std::string BuildLocalModelPrompt(
     const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
-  std::string prompt = request.message;
-  if (prompt.empty()) {
-    prompt = "User sent image attachments.";
-  }
-
-  if (!request.hasAttachments) {
-    return prompt;
-  }
-
-  prompt += "\n\n";
-  prompt += BuildAttachmentSummary(request.attachmentMimeTypes);
-  prompt += "\nInstruction: produce a text-only response.";
-  return prompt;
+  return BuildQwen3ChatPrompt(
+      request.message,
+      request.hasAttachments,
+      request.attachmentMimeTypes);
 }
 
 bool IsOneOfChannels(

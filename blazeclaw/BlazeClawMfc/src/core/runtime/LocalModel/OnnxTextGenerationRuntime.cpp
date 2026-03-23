@@ -34,6 +34,54 @@ std::string ToLowerAscii(const std::string& value) {
   return lowered;
 }
 
+#if BLAZECLAW_HAS_ONNXRUNTIME
+void ConfigureDefaultSessionOptions(Ort::SessionOptions& options) {
+  options.SetGraphOptimizationLevel(
+      GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
+  options.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
+}
+
+bool TryAppendDirectMlExecutionProvider(
+    Ort::SessionOptions& options,
+    std::string& outReason) {
+  outReason.clear();
+
+  using AppendDirectMlFn = OrtStatus*(ORT_API_CALL*)(
+      OrtSessionOptions*,
+      int);
+
+  HMODULE onnxRuntimeModule = ::GetModuleHandleW(L"onnxruntime.dll");
+  if (onnxRuntimeModule == nullptr) {
+    outReason = "onnxruntime.dll not loaded";
+    return false;
+  }
+
+  const auto appendDirectMl = reinterpret_cast<AppendDirectMlFn>(
+      ::GetProcAddress(
+          onnxRuntimeModule,
+          "OrtSessionOptionsAppendExecutionProvider_DML"));
+  if (appendDirectMl == nullptr) {
+    outReason = "DirectML execution provider API unavailable";
+    return false;
+  }
+
+  OrtStatus* status = appendDirectMl(
+      options,
+      0);
+  if (status != nullptr) {
+    const OrtApi& api = Ort::GetApi();
+    const char* message = api.GetErrorMessage(status);
+    outReason = message == nullptr
+        ? "DirectML provider append failed"
+        : message;
+    api.ReleaseStatus(status);
+    return false;
+  }
+
+  return true;
+}
+#endif
+
 std::string ToHexLower(const std::uint8_t* data, const std::size_t size) {
   static constexpr char kHex[] = "0123456789abcdef";
   std::string hex;
@@ -142,23 +190,79 @@ std::string MakeHashMismatchMessage(
 std::filesystem::path ResolveConfiguredPath(
     const std::string& configuredPath,
     const std::string& storageRoot) {
-  const std::filesystem::path path(configuredPath);
-  if (path.empty() || path.is_absolute()) {
-    return path;
+  const std::filesystem::path configured(configuredPath);
+  if (configured.empty()) {
+    return configured;
+  }
+
+  if (configured.is_absolute()) {
+    return configured.lexically_normal();
+  }
+
+  std::error_code ec;
+  const std::filesystem::path configDirectory =
+      std::filesystem::current_path(ec);
+  ec.clear();
+
+  std::filesystem::path executableDirectory;
+  std::array<wchar_t, MAX_PATH> modulePath{};
+  const DWORD moduleLength = ::GetModuleFileNameW(
+      nullptr,
+      modulePath.data(),
+      static_cast<DWORD>(modulePath.size()));
+  if (moduleLength > 0) {
+    executableDirectory = std::filesystem::path(
+        std::wstring(modulePath.data(), moduleLength))
+                              .parent_path();
   }
 
   const std::filesystem::path root(storageRoot);
-  if (root.empty()) {
-    return path;
+  const bool hasStorageRoot = !root.empty();
+
+  std::vector<std::filesystem::path> candidates;
+  candidates.reserve(8);
+
+  if (hasStorageRoot) {
+    if (root.is_absolute()) {
+      candidates.push_back(root / configured);
+    } else {
+      if (!configDirectory.empty()) {
+        candidates.push_back(configDirectory / root / configured);
+      }
+
+      if (!executableDirectory.empty()) {
+        candidates.push_back(executableDirectory / root / configured);
+      }
+
+      candidates.push_back(root / configured);
+    }
   }
 
-  const std::filesystem::path candidate = root / path;
-  std::error_code ec;
-  if (std::filesystem::exists(candidate, ec) && !ec) {
-    return candidate;
+  if (!configDirectory.empty()) {
+    candidates.push_back(configDirectory / configured);
   }
 
-  return path;
+  if (!executableDirectory.empty()) {
+    candidates.push_back(executableDirectory / configured);
+  }
+
+  candidates.push_back(configured);
+
+  for (const auto& candidate : candidates) {
+    const std::filesystem::path normalized = candidate.lexically_normal();
+    ec.clear();
+    if (std::filesystem::exists(normalized, ec) && !ec) {
+      return normalized;
+    }
+  }
+
+  for (const auto& candidate : candidates) {
+    if (candidate.is_absolute()) {
+      return candidate.lexically_normal();
+    }
+  }
+
+  return configured.lexically_normal();
 }
 
 bool IsSha256LengthValid(const std::string& value) {
@@ -208,6 +312,83 @@ std::vector<std::int64_t> BuildPositionIds(
   }
 
   return ids;
+}
+
+std::string StripQwenThinkingAndControlTokens(
+    const std::string& value) {
+  std::string output = value;
+
+  auto eraseAll = [&output](const std::string& token) {
+    std::size_t pos = output.find(token);
+    while (pos != std::string::npos) {
+      output.erase(pos, token.size());
+      pos = output.find(token);
+    }
+  };
+
+  eraseAll("<|im_start|>");
+  eraseAll("<|im_end|>");
+  eraseAll("<think>");
+  eraseAll("</think>");
+
+  const std::string assistantPrefix = "assistant\n";
+  std::size_t prefixPos = output.find(assistantPrefix);
+  if (prefixPos != std::string::npos) {
+    output = output.substr(prefixPos + assistantPrefix.size());
+  }
+
+  while (!output.empty() &&
+         (output.front() == '\n' || output.front() == '\r')) {
+    output.erase(output.begin());
+  }
+
+  while (!output.empty() &&
+         (output.back() == '\n' || output.back() == '\r')) {
+    output.pop_back();
+  }
+
+  return output;
+}
+
+bool IsEffectivelyEmptyModelOutput(const std::string& value) {
+  if (value.empty()) {
+    return true;
+  }
+
+  for (const char ch : value) {
+    const unsigned char c = static_cast<unsigned char>(ch);
+    if (std::isspace(c) != 0) {
+      continue;
+    }
+
+    if (ch == '<' || ch == '>' || ch == '|' || ch == '\r' || ch == '\n') {
+      continue;
+    }
+
+    return false;
+  }
+
+  return true;
+}
+
+std::vector<std::int64_t> FindSequenceTail(
+    const std::vector<std::int64_t>& allIds,
+    const std::vector<std::int64_t>& prefix) {
+  if (allIds.empty()) {
+    return {};
+  }
+
+  if (prefix.empty() || allIds.size() <= prefix.size()) {
+    return allIds;
+  }
+
+  if (std::equal(prefix.begin(), prefix.end(), allIds.begin())) {
+    return std::vector<std::int64_t>(
+        allIds.begin() + static_cast<std::ptrdiff_t>(prefix.size()),
+        allIds.end());
+  }
+
+  return allIds;
 }
 
 bool IsInputNameContains(
@@ -491,6 +672,21 @@ bool OnnxTextGenerationRuntime::LoadModel() {
     }
   }
 
+  if (m_snapshot.tokenizerPath.empty()) {
+    m_snapshot.ready = false;
+    m_snapshot.status = "tokenizer_missing";
+    ++m_snapshot.modelLoadFailures;
+    m_snapshot.error = TextGenerationError{
+        .code = TextGenerationErrorCode::TokenizerNotFound,
+        .message = "chat.localModel.tokenizerPath is not configured.",
+    };
+    TraceRuntime(
+        "model.load.failure",
+        {},
+        "status=tokenizer_missing reason=tokenizerPath_not_configured");
+    return false;
+  }
+
   std::string tokenizerError;
   if (!m_tokenizer.Load(std::filesystem::path(m_snapshot.tokenizerPath),
                         tokenizerError)) {
@@ -559,14 +755,53 @@ bool OnnxTextGenerationRuntime::LoadModel() {
         ORT_LOGGING_LEVEL_WARNING,
         "blazeclaw-local-chat-runtime");
     m_sessionState->options = std::make_unique<Ort::SessionOptions>();
-    m_sessionState->options->SetGraphOptimizationLevel(
-        GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
-    m_sessionState->options->SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
+    ConfigureDefaultSessionOptions(*m_sessionState->options);
 
-    m_sessionState->session = std::make_unique<Ort::Session>(
-        *m_sessionState->env,
-        modelPath.c_str(),
-        *m_sessionState->options);
+    bool usingDirectMl = false;
+    std::string directMlFallbackReason;
+    if (TryAppendDirectMlExecutionProvider(
+            *m_sessionState->options,
+            directMlFallbackReason)) {
+      usingDirectMl = true;
+      m_snapshot.effectiveExecutionProvider = "directml";
+      TraceRuntime(
+          "model.execution_provider",
+          {},
+          "provider=directml");
+    } else {
+      m_snapshot.effectiveExecutionProvider = "cpu";
+      TraceRuntime(
+          "model.execution_provider",
+          {},
+          "provider=cpu fallbackReason=" + directMlFallbackReason);
+    }
+
+    try {
+      m_sessionState->session = std::make_unique<Ort::Session>(
+          *m_sessionState->env,
+          modelPath.c_str(),
+          *m_sessionState->options);
+    } catch (const std::exception& ex) {
+      if (!usingDirectMl) {
+        throw;
+      }
+
+      directMlFallbackReason =
+          "directml_session_init_failed: " + std::string(ex.what());
+      m_snapshot.effectiveExecutionProvider = "cpu";
+      TraceRuntime(
+          "model.execution_provider",
+          {},
+          "provider=cpu fallbackReason=" + directMlFallbackReason);
+
+      m_sessionState->options = std::make_unique<Ort::SessionOptions>();
+      ConfigureDefaultSessionOptions(*m_sessionState->options);
+      m_sessionState->session = std::make_unique<Ort::Session>(
+          *m_sessionState->env,
+          modelPath.c_str(),
+          *m_sessionState->options);
+    }
+
     m_sessionState->loaded = true;
   } catch (const std::exception& ex) {
     m_snapshot.ready = false;
@@ -583,6 +818,7 @@ bool OnnxTextGenerationRuntime::LoadModel() {
     return false;
   }
 #else
+  m_snapshot.effectiveExecutionProvider = "cpu";
   m_snapshot.ready = false;
   m_snapshot.status = "runtime_unavailable";
   ++m_snapshot.modelLoadFailures;
@@ -735,6 +971,11 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
   std::vector<std::int64_t> generatedTokenIds;
   generatedTokenIds.reserve(maxTokens);
   bool firstTokenLogged = false;
+
+  std::int64_t imEndTokenId = -1;
+  const bool hasImEndToken = m_tokenizer.TryGetTokenId(
+      "<|im_end|>",
+      imEndTokenId);
 
 #if BLAZECLAW_HAS_ONNXRUNTIME
   std::uint32_t generatedCount = 0;
@@ -1013,7 +1254,8 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
 
       const std::int64_t nextTokenId = static_cast<std::int64_t>(maxIndex);
       if (m_tokenizer.IsEndOfSequenceId(nextTokenId) ||
-          nextTokenId == m_tokenizer.BosTokenId()) {
+          nextTokenId == m_tokenizer.BosTokenId() ||
+          (hasImEndToken && nextTokenId == imEndTokenId)) {
         break;
       }
 
@@ -1030,11 +1272,12 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
       }
 
       if (onDelta) {
-        const std::string decoded = m_tokenizer.DecodeFromIds(generatedTokenIds);
-        const std::size_t previousSize = result.text.size();
+        const std::string decodedRaw = m_tokenizer.DecodeFromIds(generatedTokenIds);
+        const std::string decoded = StripQwenThinkingAndControlTokens(decodedRaw);
+        const std::string previous = result.text;
         result.text = decoded;
-        const std::string delta = decoded.size() > previousSize
-            ? decoded.substr(previousSize)
+        const std::string delta = decoded.size() > previous.size()
+            ? decoded.substr(previous.size())
             : std::string();
         onDelta(delta);
       }
@@ -1070,8 +1313,33 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
   result.ok = true;
   result.cancelled = false;
   result.modelId = m_snapshot.modelPath;
-  result.generatedTokens = static_cast<std::uint32_t>(generatedTokenIds.size());
-  result.text = m_tokenizer.DecodeFromIds(generatedTokenIds);
+  const auto decodeTailIds = FindSequenceTail(
+      generatedTokenIds,
+      inputTokenIds);
+  result.generatedTokens = static_cast<std::uint32_t>(decodeTailIds.size());
+  result.text = StripQwenThinkingAndControlTokens(
+      m_tokenizer.DecodeFromIds(decodeTailIds));
+  if (IsEffectivelyEmptyModelOutput(result.text)) {
+    result.ok = false;
+    result.generatedTokens = 0;
+    result.error = TextGenerationError{
+        .code = TextGenerationErrorCode::EmptyOutput,
+        .message = "local model returned empty output after decode normalization",
+    };
+    result.latencyMs = ElapsedMs(startedAt);
+    {
+      std::lock_guard<std::mutex> lock(m_mutex);
+      ++m_snapshot.requestsFailed;
+      m_snapshot.lastLatencyMs = result.latencyMs;
+    }
+    TraceRuntime(
+        "request.terminal",
+        request.runId,
+        "state=error reason=local_model_empty_output latencyMs=" +
+            std::to_string(result.latencyMs));
+    return result;
+  }
+
   result.latencyMs = ElapsedMs(startedAt);
   result.error.reset();
   const double tokensPerSecond =
@@ -1170,6 +1438,7 @@ void OnnxTextGenerationRuntime::ResetSnapshotLocked() {
   m_snapshot.maxTokens = m_config.localModel.maxTokens;
   m_snapshot.temperature = m_config.localModel.temperature;
   m_snapshot.status = "configured";
+  m_snapshot.effectiveExecutionProvider = "unknown";
   m_snapshot.error.reset();
 }
 

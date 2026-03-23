@@ -14,6 +14,7 @@
 #include "../core/runtime/LocalModel/TokenizerBridge.h"
 
 #include <filesystem>
+#include <Windows.h>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -46,6 +47,26 @@ namespace {
 	void AppendStartupConfigStatus(const blazeclaw::config::AppConfig& config) {
 		const auto absoluteConfigPath =
 			std::filesystem::absolute(std::filesystem::path(kConfigPath));
+
+		wchar_t modulePath[MAX_PATH]{};
+		const DWORD moduleLength = GetModuleFileNameW(
+			nullptr,
+			modulePath,
+			MAX_PATH);
+		const std::wstring executablePath = moduleLength > 0
+			? std::wstring(modulePath, modulePath + moduleLength)
+			: std::wstring(L"unknown");
+
+		const std::wstring workingDirectory =
+			std::filesystem::current_path().wstring();
+
+		CString runtimeContextLine;
+		runtimeContextLine.Format(
+			L"[Chat] startup.runtime.context - exe=%s cwd=%s config=%s",
+			executablePath.c_str(),
+			workingDirectory.c_str(),
+			absoluteConfigPath.c_str());
+		AppendMainFrameStatusLine(runtimeContextLine);
 
 		CString configPathLine;
 		configPathLine.Format(
@@ -131,6 +152,12 @@ namespace {
 			runtime.tokenizerHashVerified ? L"true" : L"false");
 		AppendMainFrameStatusLine(integrityLine);
 
+		CString executionProviderLine;
+		executionProviderLine.Format(
+			L"[Chat] startup.localModel.executionProvider - effective=%s",
+			ToWide(runtime.effectiveExecutionProvider).c_str());
+		AppendMainFrameStatusLine(executionProviderLine);
+
 		if (!runtime.tokenizerPath.empty()) {
 			blazeclaw::core::localmodel::TokenizerBridge tokenizer;
 			std::string tokenizerLoadError;
@@ -183,6 +210,8 @@ namespace {
 		}
 
 		if (runtime.ready) {
+         AppendMainFrameStatusLine(
+				L"[Chat] startup.localModel.qwenContract - promptTemplate=qwen3-chat markers=<|im_start|>/<|im_end|> decodeStop=<|im_end|>");
           if (services.LocalModelActivationEnabled()) {
 				AppendMainFrameStatusLine(
 					L"[Chat] startup.localModel.loaded - local ONNX runtime ready and active");
