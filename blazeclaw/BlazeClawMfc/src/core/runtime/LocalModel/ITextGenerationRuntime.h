@@ -47,6 +47,10 @@ struct LocalModelRuntimeSnapshot {
   std::string tokenizerActualSha256;
   bool tokenizerHashVerified = false;
   bool runtimeDllPresent = false;
+  std::string onnxRuntimeDllPath;
+  bool cudaExecutionProviderAvailable = false;
+  bool cudaExecutionProviderEnabled = false;
+  std::string cudaExecutionProviderReason;
   std::uint32_t maxTokens = 256;
   double temperature = 0.0;
   std::uint64_t modelLoadAttempts = 0;

@@ -152,11 +152,33 @@ namespace {
 			runtime.tokenizerHashVerified ? L"true" : L"false");
 		AppendMainFrameStatusLine(integrityLine);
 
+		const std::wstring runtimeDllPath =
+			runtime.onnxRuntimeDllPath.empty()
+			? L"unresolved"
+			: ToWide(runtime.onnxRuntimeDllPath);
+		CString runtimeDllPathLine;
+		runtimeDllPathLine.Format(
+			L"[Chat] startup.localModel.runtimeDll.path - %s",
+			runtimeDllPath.c_str());
+		AppendMainFrameStatusLine(runtimeDllPathLine);
+
 		CString executionProviderLine;
 		executionProviderLine.Format(
 			L"[Chat] startup.localModel.executionProvider - effective=%s",
 			ToWide(runtime.effectiveExecutionProvider).c_str());
 		AppendMainFrameStatusLine(executionProviderLine);
+
+		CString cudaStatusLine;
+		const std::wstring cudaReason =
+			runtime.cudaExecutionProviderReason.empty()
+			? L"none"
+			: ToWide(runtime.cudaExecutionProviderReason);
+		cudaStatusLine.Format(
+			L"[Chat] startup.localModel.cuda - available=%s enabled=%s reason=%s",
+			runtime.cudaExecutionProviderAvailable ? L"true" : L"false",
+			runtime.cudaExecutionProviderEnabled ? L"true" : L"false",
+			cudaReason.c_str());
+		AppendMainFrameStatusLine(cudaStatusLine);
 
 		if (!runtime.tokenizerPath.empty()) {
 			blazeclaw::core::localmodel::TokenizerBridge tokenizer;

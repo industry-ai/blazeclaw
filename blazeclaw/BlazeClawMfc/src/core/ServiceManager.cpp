@@ -3,6 +3,7 @@
 
 #include "../gateway/GatewayProtocolModels.h"
 
+#include <cctype>
 #include <chrono>
 #include <filesystem>
 #include <unordered_map>
@@ -61,7 +62,8 @@ std::string BuildAttachmentSummary(
 std::string BuildQwen3ChatPrompt(
     const std::string& userMessage,
     const bool hasAttachments,
-    const std::vector<std::string>& attachmentMimeTypes) {
+    const std::vector<std::string>& attachmentMimeTypes,
+    const bool strictNoEcho) {
   std::string normalizedUserMessage = userMessage;
   if (normalizedUserMessage.empty()) {
     normalizedUserMessage = "User sent image attachments.";
@@ -79,7 +81,12 @@ std::string BuildQwen3ChatPrompt(
   prompt.reserve(normalizedUserMessage.size() + 256);
   prompt += "<|im_start|>system\n";
   prompt += "You are a helpful assistant. Answer the user directly. ";
-  prompt += "Do not echo the user prompt verbatim.\n";
+  prompt += "Do not echo the user prompt verbatim. ";
+  if (strictNoEcho) {
+    prompt += "Do not quote or repeat the user's wording. ";
+    prompt += "Give only the helpful answer content. ";
+  }
+  prompt += "\n";
   prompt += "<|im_end|>\n";
   prompt += "<|im_start|>user\n";
   prompt += normalizedUserMessage;
@@ -93,7 +100,84 @@ std::string BuildLocalModelPrompt(
   return BuildQwen3ChatPrompt(
       request.message,
       request.hasAttachments,
-      request.attachmentMimeTypes);
+      request.attachmentMimeTypes,
+      false);
+}
+
+std::string BuildLocalModelRetryPrompt(
+    const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
+  return BuildQwen3ChatPrompt(
+      request.message,
+      request.hasAttachments,
+      request.attachmentMimeTypes,
+      true);
+}
+
+std::string TrimAsciiWhitespace(const std::string& value) {
+  const std::size_t first = value.find_first_not_of(" \t\r\n");
+  if (first == std::string::npos) {
+    return {};
+  }
+
+  const std::size_t last = value.find_last_not_of(" \t\r\n");
+  return value.substr(first, last - first + 1);
+}
+
+std::string NormalizeForEchoCheck(const std::string& value) {
+  const std::string trimmed = TrimAsciiWhitespace(value);
+  std::string normalized;
+  normalized.reserve(trimmed.size());
+
+  bool previousWasSpace = false;
+  for (const char ch : trimmed) {
+    const unsigned char code = static_cast<unsigned char>(ch);
+    if (std::isspace(code) != 0) {
+      if (!previousWasSpace) {
+        normalized.push_back(' ');
+        previousWasSpace = true;
+      }
+      continue;
+    }
+
+    if (std::ispunct(code) != 0) {
+      continue;
+    }
+
+    normalized.push_back(
+        static_cast<char>(std::tolower(code)));
+    previousWasSpace = false;
+  }
+
+  return TrimAsciiWhitespace(normalized);
+}
+
+bool IsLikelyEchoResponse(
+    const std::string& userMessage,
+    const std::string& assistantText) {
+  if (userMessage.empty() || assistantText.empty()) {
+    return false;
+  }
+
+  const std::string normalizedUser =
+      NormalizeForEchoCheck(userMessage);
+  const std::string normalizedAssistant =
+      NormalizeForEchoCheck(assistantText);
+  if (normalizedUser.empty() || normalizedAssistant.empty()) {
+    return false;
+  }
+
+  if (normalizedAssistant == normalizedUser) {
+    return true;
+  }
+
+  if (normalizedAssistant.size() > normalizedUser.size() &&
+      normalizedAssistant.rfind(normalizedUser, 0) == 0) {
+    const std::string trailing = TrimAsciiWhitespace(
+        normalizedAssistant.substr(normalizedUser.size()));
+    return trailing.empty();
+  }
+
+  return false;
 }
 
 bool IsOneOfChannels(
@@ -332,9 +416,15 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
     std::string localContractFailure;
     if (!m_localModelRuntime.VerifyDeterministicContract(localContractFailure)) {
       m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
-      m_localModelRuntimeSnapshot.status = "contract_verification_failed";
-      m_localModelActivationEnabled = false;
-      m_localModelActivationReason = "contract_verification_failed";
+      const bool enforceContract =
+          _wcsicmp(m_activeConfig.localModel.rolloutStage.c_str(), L"dev") != 0;
+      m_localModelRuntimeSnapshot.status = enforceContract
+          ? "contract_verification_failed"
+          : "contract_verification_warning";
+      m_localModelActivationEnabled = !enforceContract;
+      m_localModelActivationReason = enforceContract
+          ? "contract_verification_failed"
+          : "active_contract_warning";
       if (!localContractFailure.empty()) {
         m_localModelRuntimeSnapshot.error = localmodel::TextGenerationError{
             .code = localmodel::TextGenerationErrorCode::InferenceFailed,
@@ -544,16 +634,59 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
         };
       }
 
+      std::string assistantText = localResult.text;
+      std::string modelId = localResult.modelId;
+      std::uint32_t latencyMs = localResult.latencyMs;
+      std::uint32_t generatedTokens = localResult.generatedTokens;
+      if (IsLikelyEchoResponse(request.message, assistantText)) {
+        TRACE(
+            "[LocalModel] request.retry runId=%s reason=echo_detected\n",
+            request.runId.c_str());
+        const std::string retryPrompt = BuildLocalModelRetryPrompt(request);
+        const auto retryResult = m_localModelRuntime.GenerateStream(
+            localmodel::TextGenerationRequest{
+                .runId = request.runId + "-retry",
+                .prompt = retryPrompt,
+                .maxTokens = std::nullopt,
+                .temperature = std::nullopt,
+            },
+            nullptr);
+        m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
+
+        if (retryResult.ok &&
+            !IsLikelyEchoResponse(request.message, retryResult.text)) {
+          assistantText = retryResult.text;
+          modelId = retryResult.modelId;
+          latencyMs = retryResult.latencyMs;
+          generatedTokens = retryResult.generatedTokens;
+        }
+      }
+
+      if (IsLikelyEchoResponse(request.message, assistantText)) {
+        TRACE(
+            "[LocalModel] request.terminal runId=%s state=error latencyMs=%u tokens=%u reason=echo_output_detected\n",
+            request.runId.c_str(),
+            latencyMs,
+            generatedTokens);
+        return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+            .ok = false,
+            .assistantText = {},
+            .modelId = modelId,
+            .errorCode = "local_model_echo_output",
+            .errorMessage = "local model echoed user input",
+        };
+      }
+
       TRACE(
           "[LocalModel] request.terminal runId=%s state=final latencyMs=%u tokens=%u\n",
           request.runId.c_str(),
-          localResult.latencyMs,
-          localResult.generatedTokens);
+          latencyMs,
+          generatedTokens);
 
       return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
           .ok = true,
-          .assistantText = localResult.text,
-          .modelId = localResult.modelId,
+          .assistantText = assistantText,
+          .modelId = modelId,
           .errorCode = {},
           .errorMessage = {},
       };

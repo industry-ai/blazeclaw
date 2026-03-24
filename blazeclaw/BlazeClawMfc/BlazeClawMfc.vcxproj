@@ -246,6 +246,12 @@
   <ItemGroup>
     <BlazeClawOnnxRuntimeAssets Include="$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.DirectML.1.24.4\runtimes\win-x64\native\*.dll" />
   </ItemGroup>
+  <PropertyGroup>
+    <OnnxRuntimeGpuOverrideDir>$(SolutionDir)third_party\onnxruntime-gpu\runtimes\win-x64\native</OnnxRuntimeGpuOverrideDir>
+  </PropertyGroup>
+  <ItemGroup Condition="Exists('$(OnnxRuntimeGpuOverrideDir)')">
+    <BlazeClawOnnxRuntimeGpuOverrideAssets Include="$(OnnxRuntimeGpuOverrideDir)\*.dll" />
+  </ItemGroup>
   <ItemGroup>
     <BlazeClawEmbeddingModelAssets Include="$(ProjectDir)models\embeddings\**\*.*" />
   </ItemGroup>
@@ -279,6 +285,9 @@
   </Target>
   <Target Name="CopyBlazeClawOnnxRuntimeAssets" AfterTargets="Build">
     <Copy SourceFiles="@(BlazeClawOnnxRuntimeAssets)" DestinationFiles="@(BlazeClawOnnxRuntimeAssets->'$(OutDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Condition="'@(BlazeClawOnnxRuntimeAssets)'!=''" />
+  </Target>
+  <Target Name="CopyOnnxRuntimeGpuOverride" AfterTargets="CopyBlazeClawOnnxRuntimeAssets" Condition="'@(BlazeClawOnnxRuntimeGpuOverrideAssets)' != ''">
+    <Copy SourceFiles="@(BlazeClawOnnxRuntimeGpuOverrideAssets)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="false" />
   </Target>
   <Target Name="CopyBlazeClawEmbeddingModelAssets" AfterTargets="Build">
     <Copy SourceFiles="@(BlazeClawEmbeddingModelAssets)" DestinationFiles="@(BlazeClawEmbeddingModelAssets->'$(OutDir)models\embeddings\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Condition="'@(BlazeClawEmbeddingModelAssets)'!=''" />
