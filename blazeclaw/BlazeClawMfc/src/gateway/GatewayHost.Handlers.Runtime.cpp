@@ -804,6 +804,7 @@ namespace blazeclaw::gateway {
                         backendErrorMessage = runtimeResult.errorMessage.empty()
                             ? "chat runtime failed"
                             : runtimeResult.errorMessage;
+                        assistantText.clear();
                     }
                 }
 
@@ -984,7 +985,8 @@ namespace blazeclaw::gateway {
                     const bool enoughTimeElapsed =
                         run.lastEmitMs == 0 || (nowMs - run.lastEmitMs) >= 180;
 
-                    if (!silentAssistantReply && run.streamCursor < run.assistantText.size() &&
+                    if (!run.failed && !silentAssistantReply &&
+                        run.streamCursor < run.assistantText.size() &&
                         enoughTimeElapsed) {
                         const std::size_t nextCursor =
                             (std::min)(run.assistantText.size(), run.streamCursor + std::size_t{ 8 });

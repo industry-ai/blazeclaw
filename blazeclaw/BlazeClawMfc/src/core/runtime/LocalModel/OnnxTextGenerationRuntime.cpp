@@ -8,6 +8,7 @@
 #include <fstream>
 #include <limits>
 #include <sstream>
+#include <unordered_map>
 #include <unordered_set>
 
 #include <Windows.h>
@@ -74,6 +75,49 @@ bool TryAppendDirectMlExecutionProvider(
     const char* message = api.GetErrorMessage(status);
     outReason = message == nullptr
         ? "DirectML provider append failed"
+        : message;
+    api.ReleaseStatus(status);
+    return false;
+  }
+
+  return true;
+}
+
+bool TryAppendCudaExecutionProvider(
+    Ort::SessionOptions& options,
+    bool& outApiAvailable,
+    std::string& outReason) {
+  outApiAvailable = false;
+  outReason.clear();
+
+  using AppendCudaFn = OrtStatus*(ORT_API_CALL*)(
+      OrtSessionOptions*,
+      int);
+
+  HMODULE onnxRuntimeModule = ::GetModuleHandleW(L"onnxruntime.dll");
+  if (onnxRuntimeModule == nullptr) {
+    outReason = "onnxruntime.dll not loaded";
+    return false;
+  }
+
+  const auto appendCuda = reinterpret_cast<AppendCudaFn>(
+      ::GetProcAddress(
+          onnxRuntimeModule,
+          "OrtSessionOptionsAppendExecutionProvider_CUDA"));
+  if (appendCuda == nullptr) {
+    outReason = "CUDA execution provider API unavailable";
+    return false;
+  }
+
+  outApiAvailable = true;
+  OrtStatus* status = appendCuda(
+      options,
+      0);
+  if (status != nullptr) {
+    const OrtApi& api = Ort::GetApi();
+    const char* message = api.GetErrorMessage(status);
+    outReason = message == nullptr
+        ? "CUDA provider append failed"
         : message;
     api.ReleaseStatus(status);
     return false;
@@ -283,18 +327,38 @@ bool IsSha256LengthValid(const std::string& value) {
   return value.empty() || value.size() == 64;
 }
 
-bool IsOnnxRuntimeDllAvailable() {
+bool ResolveOnnxRuntimeDllPath(std::string& outPath) {
+  outPath.clear();
+
   HMODULE handle = ::GetModuleHandleW(L"onnxruntime.dll");
+  bool loadedForProbe = false;
   if (handle != nullptr) {
-    return true;
+    loadedForProbe = false;
+  } else {
+    handle = ::LoadLibraryW(L"onnxruntime.dll");
+    if (handle == nullptr) {
+      return false;
+    }
+
+    loadedForProbe = true;
   }
 
-  handle = ::LoadLibraryW(L"onnxruntime.dll");
-  if (handle == nullptr) {
-    return false;
+  std::array<wchar_t, MAX_PATH> modulePath{};
+  const DWORD moduleLength = ::GetModuleFileNameW(
+      handle,
+      modulePath.data(),
+      static_cast<DWORD>(modulePath.size()));
+  if (moduleLength > 0) {
+    outPath = std::filesystem::path(
+        std::wstring(modulePath.data(), moduleLength))
+                  .lexically_normal()
+                  .string();
   }
 
-  ::FreeLibrary(handle);
+  if (loadedForProbe) {
+    ::FreeLibrary(handle);
+  }
+
   return true;
 }
 
@@ -423,6 +487,74 @@ bool IsPastKeyValueName(const std::string& inputName) {
   return IsInputNameContains(inputName, "past_key") ||
       IsInputNameContains(inputName, "past_value") ||
       IsInputNameContains(inputName, "past_key_values");
+}
+
+bool IsKvCacheTensorName(const std::string& value) {
+  const std::string lowered = ToLowerAscii(value);
+  const bool hasKeyOrValue =
+      lowered.find("key") != std::string::npos ||
+      lowered.find("value") != std::string::npos;
+  if (!hasKeyOrValue) {
+    return false;
+  }
+
+  return lowered.find("present") != std::string::npos ||
+      lowered.find("past_key_values") != std::string::npos;
+}
+
+std::string ReplaceAllTokens(
+    std::string text,
+    const std::string& from,
+    const std::string& to) {
+  if (from.empty() || from == to) {
+    return text;
+  }
+
+  std::size_t position = text.find(from);
+  while (position != std::string::npos) {
+    text.replace(position, from.size(), to);
+    position = text.find(from, position + to.size());
+  }
+
+  return text;
+}
+
+bool AreKvTensorNamesCompatible(
+    const std::string& inputName,
+    const std::string& cacheName) {
+  const std::string inputLower = ToLowerAscii(inputName);
+  const std::string cacheLower = ToLowerAscii(cacheName);
+  if (inputLower == cacheLower) {
+    return true;
+  }
+
+  const bool inputIsKey = inputLower.find("key") != std::string::npos;
+  const bool cacheIsKey = cacheLower.find("key") != std::string::npos;
+  const bool inputIsValue = inputLower.find("value") != std::string::npos;
+  const bool cacheIsValue = cacheLower.find("value") != std::string::npos;
+  if (inputIsKey != cacheIsKey || inputIsValue != cacheIsValue) {
+    return false;
+  }
+
+  std::string normalizedInput = inputLower;
+  normalizedInput = ReplaceAllTokens(
+      normalizedInput,
+      "past_key_values",
+      "present_key_values");
+  normalizedInput = ReplaceAllTokens(
+      normalizedInput,
+      "past_key_values",
+      "present");
+  normalizedInput = ReplaceAllTokens(
+      normalizedInput,
+      "past_",
+      "present_");
+  normalizedInput = ReplaceAllTokens(
+      normalizedInput,
+      "past",
+      "present");
+
+  return normalizedInput == cacheLower;
 }
 
 bool ResolveInputShape(
@@ -615,6 +747,7 @@ std::size_t ScoreOutputShapeDistanceToVocab(
   return bestDistance;
 }
 
+#if BLAZECLAW_HAS_ONNXRUNTIME
 std::size_t SelectBestLogitsOutputIndex(
     const std::vector<Ort::Value>& outputs,
     const std::vector<std::string>& outputNames,
@@ -684,6 +817,7 @@ std::size_t SelectBestLogitsOutputIndex(
       ? selectedIndex
       : (std::numeric_limits<std::size_t>::max)();
 }
+#endif
 
 } // namespace
 
@@ -731,7 +865,11 @@ bool OnnxTextGenerationRuntime::LoadModel() {
       m_snapshot.storageRoot)
       .string();
 
-  m_snapshot.runtimeDllPresent = IsOnnxRuntimeDllAvailable();
+  m_snapshot.runtimeDllPresent =
+      ResolveOnnxRuntimeDllPath(m_snapshot.onnxRuntimeDllPath);
+  if (!m_snapshot.runtimeDllPresent) {
+    m_snapshot.onnxRuntimeDllPath.clear();
+  }
 
   TraceRuntime(
       "model.load.start",
@@ -974,23 +1112,56 @@ bool OnnxTextGenerationRuntime::LoadModel() {
     m_sessionState->options = std::make_unique<Ort::SessionOptions>();
     ConfigureDefaultSessionOptions(*m_sessionState->options);
 
+    m_snapshot.cudaExecutionProviderAvailable = false;
+    m_snapshot.cudaExecutionProviderEnabled = false;
+    m_snapshot.cudaExecutionProviderReason.clear();
+
+    bool usingCuda = false;
     bool usingDirectMl = false;
-    std::string directMlFallbackReason;
-    if (TryAppendDirectMlExecutionProvider(
+    auto configureDirectMlOrCpu = [&]() {
+      std::string directMlFallbackReason;
+      if (TryAppendDirectMlExecutionProvider(
+              *m_sessionState->options,
+              directMlFallbackReason)) {
+        usingDirectMl = true;
+        m_snapshot.effectiveExecutionProvider = "directml";
+        TraceRuntime(
+            "model.execution_provider",
+            {},
+            "provider=directml");
+      } else {
+        usingDirectMl = false;
+        m_snapshot.effectiveExecutionProvider = "cpu";
+        TraceRuntime(
+            "model.execution_provider",
+            {},
+            "provider=cpu fallbackReason=" + directMlFallbackReason);
+      }
+    };
+
+    bool cudaApiAvailable = false;
+    std::string cudaFallbackReason;
+    if (TryAppendCudaExecutionProvider(
             *m_sessionState->options,
-            directMlFallbackReason)) {
-      usingDirectMl = true;
-      m_snapshot.effectiveExecutionProvider = "directml";
+            cudaApiAvailable,
+            cudaFallbackReason)) {
+      usingCuda = true;
+      m_snapshot.cudaExecutionProviderAvailable = true;
+      m_snapshot.cudaExecutionProviderEnabled = true;
+      m_snapshot.cudaExecutionProviderReason = "active";
+      m_snapshot.effectiveExecutionProvider = "cuda";
       TraceRuntime(
           "model.execution_provider",
           {},
-          "provider=directml");
+          "provider=cuda");
     } else {
-      m_snapshot.effectiveExecutionProvider = "cpu";
+      m_snapshot.cudaExecutionProviderAvailable = cudaApiAvailable;
+      m_snapshot.cudaExecutionProviderReason = cudaFallbackReason;
       TraceRuntime(
           "model.execution_provider",
           {},
-          "provider=cpu fallbackReason=" + directMlFallbackReason);
+          "provider=cuda unavailableReason=" + cudaFallbackReason);
+      configureDirectMlOrCpu();
     }
 
     try {
@@ -999,24 +1170,36 @@ bool OnnxTextGenerationRuntime::LoadModel() {
           modelPath.c_str(),
           *m_sessionState->options);
     } catch (const std::exception& ex) {
-      if (!usingDirectMl) {
+      if (usingCuda) {
+        m_snapshot.cudaExecutionProviderEnabled = false;
+        m_snapshot.cudaExecutionProviderReason =
+            "cuda_session_init_failed: " + std::string(ex.what());
+
+        m_sessionState->options = std::make_unique<Ort::SessionOptions>();
+        ConfigureDefaultSessionOptions(*m_sessionState->options);
+        configureDirectMlOrCpu();
+        m_sessionState->session = std::make_unique<Ort::Session>(
+            *m_sessionState->env,
+            modelPath.c_str(),
+            *m_sessionState->options);
+      } else if (usingDirectMl) {
+        const std::string directMlFallbackReason =
+            "directml_session_init_failed: " + std::string(ex.what());
+        m_snapshot.effectiveExecutionProvider = "cpu";
+        TraceRuntime(
+            "model.execution_provider",
+            {},
+            "provider=cpu fallbackReason=" + directMlFallbackReason);
+
+        m_sessionState->options = std::make_unique<Ort::SessionOptions>();
+        ConfigureDefaultSessionOptions(*m_sessionState->options);
+        m_sessionState->session = std::make_unique<Ort::Session>(
+            *m_sessionState->env,
+            modelPath.c_str(),
+            *m_sessionState->options);
+      } else {
         throw;
       }
-
-      directMlFallbackReason =
-          "directml_session_init_failed: " + std::string(ex.what());
-      m_snapshot.effectiveExecutionProvider = "cpu";
-      TraceRuntime(
-          "model.execution_provider",
-          {},
-          "provider=cpu fallbackReason=" + directMlFallbackReason);
-
-      m_sessionState->options = std::make_unique<Ort::SessionOptions>();
-      ConfigureDefaultSessionOptions(*m_sessionState->options);
-      m_sessionState->session = std::make_unique<Ort::Session>(
-          *m_sessionState->env,
-          modelPath.c_str(),
-          *m_sessionState->options);
     }
 
     m_sessionState->loaded = true;
@@ -1081,10 +1264,18 @@ bool OnnxTextGenerationRuntime::VerifyDeterministicContract(
 
   const std::string runId =
       "phase6-det-contract-" + std::to_string(baseline.requestsStarted + 1);
+  const std::string contractPrompt =
+      "<|im_start|>system\n"
+      "You are a helpful assistant.\n"
+      "<|im_end|>\n"
+      "<|im_start|>user\n"
+      "Respond with exactly: pong\n"
+      "<|im_end|>\n"
+      "<|im_start|>assistant\n";
   const auto result = GenerateStream(
       TextGenerationRequest{
           .runId = runId,
-          .prompt = "deterministic verification ping",
+          .prompt = contractPrompt,
           .maxTokens = 16,
           .temperature = 0.0,
       },
@@ -1155,6 +1346,12 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
     }
   }
 
+  bool verboseMetricsEnabled = false;
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    verboseMetricsEnabled = m_snapshot.verboseMetrics;
+  }
+
   const std::uint32_t requestedMaxTokens = request.maxTokens.has_value()
       ? request.maxTokens.value()
       : m_snapshot.maxTokens;
@@ -1195,6 +1392,7 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
       imEndTokenId);
 
 #if BLAZECLAW_HAS_ONNXRUNTIME
+  std::vector<std::pair<std::string, Ort::Value>> kvCacheTensors;
   std::uint32_t generatedCount = 0;
   while (generatedCount < maxTokens) {
     bool cancelled = false;
@@ -1220,17 +1418,45 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
       return result;
     }
 
+    const bool hasKvCache = !kvCacheTensors.empty();
+    const std::vector<std::int64_t> modelInputIds = hasKvCache
+        ? std::vector<std::int64_t>{inputTokenIds.back()}
+        : inputTokenIds;
+    const std::size_t totalSequenceLength = inputTokenIds.size();
+    const std::size_t modelSequenceLength = modelInputIds.size();
+
+    if (hasKvCache && verboseMetricsEnabled) {
+      TraceRuntime(
+          "request.kv_cache",
+          request.runId,
+          "active=true step=" + std::to_string(generatedCount + 1) +
+              " cacheTensors=" + std::to_string(kvCacheTensors.size()) +
+              " inputTokens=" + std::to_string(modelSequenceLength) +
+              " totalTokens=" + std::to_string(totalSequenceLength));
+    }
+
     std::vector<std::int64_t> attentionMask(
-        inputTokenIds.size(),
+        totalSequenceLength,
         1);
-    std::vector<std::int64_t> positionIds = BuildPositionIds(
-        inputTokenIds.size());
+    std::vector<std::int64_t> positionIds;
+    if (hasKvCache) {
+      const std::int64_t startPosition = totalSequenceLength > modelSequenceLength
+          ? static_cast<std::int64_t>(totalSequenceLength - modelSequenceLength)
+          : 0;
+      positionIds.reserve(modelSequenceLength);
+      for (std::size_t i = 0; i < modelSequenceLength; ++i) {
+        positionIds.push_back(startPosition + static_cast<std::int64_t>(i));
+      }
+    } else {
+      positionIds = BuildPositionIds(totalSequenceLength);
+    }
 
     std::vector<const char*> inputNames;
     std::vector<std::string> inputNameStorage;
     std::vector<Ort::Value> inputTensors;
     std::vector<std::vector<std::int64_t>> int64Storage;
     std::vector<std::vector<std::int32_t>> int32Storage;
+    std::vector<std::vector<float>> floatStorage;
     std::vector<std::vector<Ort::Float16_t>> float16Storage;
 
     std::vector<const char*> outputNames;
@@ -1247,6 +1473,11 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
       inputNames.reserve(inputCount);
       inputNameStorage.reserve(inputCount);
       inputTensors.reserve(inputCount);
+      floatStorage.reserve(inputCount);
+
+      bool kvBindingFailed = false;
+      std::size_t pastInputsSeen = 0;
+      std::size_t pastInputsBound = 0;
 
       for (std::size_t i = 0; i < inputCount; ++i) {
         auto nameAllocated = m_sessionState->session->GetInputNameAllocated(
@@ -1258,8 +1489,38 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
         }
 
         const std::string inputName = rawName;
-        inputNameStorage.push_back(inputName);
-        inputNames.push_back(inputNameStorage.back().c_str());
+        const bool isInputIds = IsInputNameContains(inputName, "input_ids");
+        const bool isAttentionMask = IsInputNameContains(inputName, "attention_mask");
+        const bool isPositionIds = IsInputNameContains(inputName, "position");
+        const bool isPastInput = IsPastKeyValueName(inputName);
+
+        if (isPastInput && hasKvCache) {
+          ++pastInputsSeen;
+          bool cacheBound = false;
+          for (auto& cachedTensor : kvCacheTensors) {
+            if (!cachedTensor.second.IsTensor()) {
+              continue;
+            }
+
+            if (!AreKvTensorNamesCompatible(inputName, cachedTensor.first)) {
+              continue;
+            }
+
+            inputTensors.push_back(std::move(cachedTensor.second));
+            inputNameStorage.push_back(inputName);
+            inputNames.push_back(inputNameStorage.back().c_str());
+            cacheBound = true;
+            ++pastInputsBound;
+            break;
+          }
+
+          if (cacheBound) {
+            continue;
+          }
+
+          kvBindingFailed = true;
+          break;
+        }
 
         auto inputType = m_sessionState->session->GetInputTypeInfo(i);
         if (inputType.GetONNXType() != ONNX_TYPE_TENSOR) {
@@ -1269,10 +1530,13 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
         auto tensorInfo = inputType.GetTensorTypeAndShapeInfo();
         std::vector<std::int64_t> resolvedShape;
         std::size_t elementCount = 0;
+        const std::size_t shapeSequenceLength = isInputIds || isPositionIds
+            ? modelSequenceLength
+            : totalSequenceLength;
         if (!ResolveInputShape(
                 inputName,
                 tensorInfo.GetShape(),
-                inputTokenIds.size(),
+                shapeSequenceLength,
                 resolvedShape,
                 elementCount)) {
           result.ok = false;
@@ -1285,25 +1549,27 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
           return result;
         }
 
-        const bool isInputIds = IsInputNameContains(inputName, "input_ids");
-        const bool isAttentionMask = IsInputNameContains(inputName, "attention_mask");
-        const bool isPositionIds = IsInputNameContains(inputName, "position");
-
         std::vector<std::int64_t> sourceValues(elementCount, 0);
-        const auto copyCount = (std::min)(
-            sourceValues.size(),
-            inputTokenIds.size());
         if (isInputIds) {
+          const auto copyCount = (std::min)(
+              sourceValues.size(),
+              modelInputIds.size());
           std::copy_n(
-              inputTokenIds.data(),
+              modelInputIds.data(),
               copyCount,
               sourceValues.data());
         } else if (isAttentionMask) {
+          const auto copyCount = (std::min)(
+              sourceValues.size(),
+              attentionMask.size());
           std::copy_n(
               attentionMask.data(),
               copyCount,
               sourceValues.data());
         } else if (isPositionIds) {
+          const auto copyCount = (std::min)(
+              sourceValues.size(),
+              positionIds.size());
           std::copy_n(
               positionIds.data(),
               copyCount,
@@ -1320,6 +1586,27 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
               values.size(),
               resolvedShape.data(),
               resolvedShape.size()));
+          inputNameStorage.push_back(inputName);
+          inputNames.push_back(inputNameStorage.back().c_str());
+          continue;
+        }
+
+        if (elementType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+          floatStorage.emplace_back();
+          auto& values = floatStorage.back();
+          values.reserve(sourceValues.size());
+          for (const auto value : sourceValues) {
+            values.push_back(static_cast<float>(value));
+          }
+
+          inputTensors.push_back(Ort::Value::CreateTensor<float>(
+              memoryInfo,
+              values.data(),
+              values.size(),
+              resolvedShape.data(),
+              resolvedShape.size()));
+          inputNameStorage.push_back(inputName);
+          inputNames.push_back(inputNameStorage.back().c_str());
           continue;
         }
 
@@ -1337,6 +1624,8 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
               values.size(),
               resolvedShape.data(),
               resolvedShape.size()));
+          inputNameStorage.push_back(inputName);
+          inputNames.push_back(inputNameStorage.back().c_str());
           continue;
         }
 
@@ -1354,6 +1643,8 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
               values.size(),
               resolvedShape.data(),
               resolvedShape.size()));
+          inputNameStorage.push_back(inputName);
+          inputNames.push_back(inputNameStorage.back().c_str());
           continue;
         }
 
@@ -1365,6 +1656,33 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
             values.size(),
             resolvedShape.data(),
             resolvedShape.size()));
+        inputNameStorage.push_back(inputName);
+        inputNames.push_back(inputNameStorage.back().c_str());
+      }
+
+      if (hasKvCache &&
+          (kvBindingFailed ||
+           (pastInputsSeen > 0 && pastInputsBound != pastInputsSeen))) {
+        kvCacheTensors.clear();
+        if (verboseMetricsEnabled) {
+          TraceRuntime(
+              "request.kv_cache",
+              request.runId,
+              "active=false reason=binding_failed");
+        }
+        continue;
+      }
+
+      if (inputNames.size() != inputTensors.size()) {
+        result.ok = false;
+        result.modelId = m_snapshot.modelPath;
+        result.error = TextGenerationError{
+            .code = TextGenerationErrorCode::InferenceFailed,
+            .message =
+                "ONNX input binding mismatch between names and tensors.",
+        };
+        result.latencyMs = ElapsedMs(startedAt);
+        return result;
       }
 
       const std::size_t outputCount = m_sessionState->session->GetOutputCount();
@@ -1533,6 +1851,33 @@ TextGenerationResult OnnxTextGenerationRuntime::GenerateStream(
           nextTokenId == m_tokenizer.BosTokenId() ||
           (hasImEndToken && nextTokenId == imEndTokenId)) {
         break;
+      }
+
+      std::vector<std::pair<std::string, Ort::Value>> nextKvCacheTensors;
+      nextKvCacheTensors.reserve(outputNameStorage.size());
+      for (std::size_t i = 0; i < outputs.size(); ++i) {
+        if (i == logitsOutputIndex || i >= outputNameStorage.size()) {
+          continue;
+        }
+
+        if (!outputs[i].IsTensor()) {
+          continue;
+        }
+
+        const std::string outputName = outputNameStorage[i];
+        if (!IsKvCacheTensorName(outputName)) {
+          continue;
+        }
+
+        nextKvCacheTensors.push_back(
+            std::pair<std::string, Ort::Value>{
+                ToLowerAscii(outputName),
+                std::move(outputs[i]),
+            });
+      }
+
+      if (!nextKvCacheTensors.empty()) {
+        kvCacheTensors = std::move(nextKvCacheTensors);
       }
 
       inputTokenIds.push_back(nextTokenId);
@@ -1711,6 +2056,10 @@ void OnnxTextGenerationRuntime::ResetSnapshotLocked() {
   m_snapshot.tokenizerHashVerified =
       m_snapshot.tokenizerExpectedSha256.empty();
   m_snapshot.runtimeDllPresent = false;
+  m_snapshot.onnxRuntimeDllPath.clear();
+  m_snapshot.cudaExecutionProviderAvailable = false;
+  m_snapshot.cudaExecutionProviderEnabled = false;
+  m_snapshot.cudaExecutionProviderReason.clear();
   m_snapshot.maxTokens = m_config.localModel.maxTokens;
   m_snapshot.temperature = m_config.localModel.temperature;
   m_snapshot.status = "configured";

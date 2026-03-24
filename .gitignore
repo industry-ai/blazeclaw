@@ -9,3 +9,11 @@ packages/
 model.onnx.data
 /blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/model.onnx_data
 /blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/model_fp16.onnx
+/blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/model.onnx
+/blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/model_q4f16.onnx
+/blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/model_q4.onnx
+/blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/model_bnb4.onnx
+/blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/model_int8.onnx
+/blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/model_quantized.onnx
+/blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/model_uint8.onnx
+/blazeclaw/third_party/onnxruntime-gpu/runtimes/win-x64/native
