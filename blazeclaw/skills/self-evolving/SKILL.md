@@ -74,9 +74,8 @@ When a pattern is proven, promote it to:
 
 ## Known Limitations
 
-- Hook execution uses a constrained TypeScript contract adapter (`bootstrapFiles.push(...)` allowlist)
-  rather than full general-purpose TypeScript runtime execution.
+None in current self-evolving runtime scope.
 
 ## Follow-Up Enhancements
 
-- Expand TypeScript hook runtime support from constrained adapter mode to full general-purpose TypeScript runtime execution.
+- Expand operational runtime coverage and hardening guidance for broader multi-package hook ecosystems.

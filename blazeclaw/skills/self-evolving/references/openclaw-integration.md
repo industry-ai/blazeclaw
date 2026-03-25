@@ -83,8 +83,8 @@ When a pattern is proven, promote it to persistent guidance:
 
 ## Known Limitations
 
-- Hook runtime support is scoped to self-evolving adapter contract in current rollout.
+- Runtime execution depends on availability of configured TypeScript-capable runner (`bun`, `tsx`, or `node` + `ts-node/esm`).
 
 ## Follow-Up Enhancements
 
-- Expand TypeScript runtime support to additional hook packages beyond self-evolving.
+- Expand operational hardening and package-level runtime orchestration for broader hook ecosystems.

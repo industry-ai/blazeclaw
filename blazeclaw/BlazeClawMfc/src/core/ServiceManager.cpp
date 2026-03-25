@@ -634,8 +634,13 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
   if (m_hooksEngineEnabled && emittedBootstrapEvent && !m_hookEvents.events.empty()) {
     std::wstring dispatchError;
     const auto& latestEvent = m_hookEvents.events.back();
+    HookLifecycleEvent eventForDispatch = latestEvent;
+    if (m_hooksReminderVerbosity == L"detailed") {
+      eventForDispatch.bootstrapFiles.push_back(
+          HookBootstrapFile{.path = L"HOOK_RUNTIME_DETAILED_CONTEXT.md", .virtualFile = true});
+    }
     if (!m_hookExecutionService.Dispatch(
-            latestEvent,
+            eventForDispatch,
             m_hookCatalog,
             HookExecutionPolicy{
                 .reminderEnabled = m_hooksReminderEnabled,

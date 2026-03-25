@@ -6,8 +6,11 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <cwctype>
+#include <cstdlib>
 #include <fstream>
+#include <sstream>
 #include <stdexcept>
 #include <tuple>
 
@@ -91,63 +94,298 @@ std::optional<std::wstring> ReadFileUtf8(const std::filesystem::path& filePath) 
   return Utf8ToWide(content);
 }
 
-std::vector<std::wstring> ExtractBootstrapPathsFromHandler(
-    const std::wstring& handlerContent,
-    std::wstring& outError) {
-  outError.clear();
-  std::vector<std::wstring> paths;
-
-  constexpr auto kPushPattern = L"bootstrapFiles.push({";
-  std::size_t cursor = 0;
-  while (cursor < handlerContent.size()) {
-    const auto pushPos = handlerContent.find(kPushPattern, cursor);
-    if (pushPos == std::wstring::npos) {
-      break;
-    }
-
-    const auto blockEnd = handlerContent.find(L"});", pushPos);
-    if (blockEnd == std::wstring::npos) {
-      outError = L"Malformed handler contract: unterminated bootstrapFiles.push block.";
-      return {};
-    }
-
-    const auto block = handlerContent.substr(pushPos, blockEnd - pushPos + 3);
-    const auto pathPos = block.find(L"path");
-    if (pathPos == std::wstring::npos) {
-      outError = L"Malformed handler contract: missing path in bootstrapFiles.push block.";
-      return {};
-    }
-
-    const auto colonPos = block.find(L':', pathPos + 4);
-    if (colonPos == std::wstring::npos) {
-      outError = L"Malformed handler contract: invalid path field in bootstrapFiles.push block.";
-      return {};
-    }
-
-    const auto quotePos = block.find_first_of(L"'\"", colonPos + 1);
-    if (quotePos == std::wstring::npos) {
-      outError = L"Malformed handler contract: path must be quoted.";
-      return {};
-    }
-
-    const wchar_t quote = block[quotePos];
-    const auto endQuotePos = block.find(quote, quotePos + 1);
-    if (endQuotePos == std::wstring::npos) {
-      outError = L"Malformed handler contract: unterminated quoted path.";
-      return {};
-    }
-
-    const auto path = Trim(block.substr(quotePos + 1, endQuotePos - quotePos - 1));
-    if (path.empty()) {
-      outError = L"Malformed handler contract: empty path value.";
-      return {};
-    }
-
-    paths.push_back(path);
-    cursor = blockEnd + 3;
+std::string ToNarrowAscii(const std::wstring& value) {
+  std::string output;
+  output.reserve(value.size());
+  for (const auto ch : value) {
+    output.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
   }
 
-  return paths;
+  return output;
+}
+
+std::wstring EscapeJson(const std::wstring& value) {
+  std::wstring escaped;
+  escaped.reserve(value.size() + 8);
+  for (const auto ch : value) {
+    switch (ch) {
+      case L'\\':
+        escaped += L"\\\\";
+        break;
+      case L'"':
+        escaped += L"\\\"";
+        break;
+      case L'\n':
+        escaped += L"\\n";
+        break;
+      case L'\r':
+        escaped += L"\\r";
+        break;
+      case L'\t':
+        escaped += L"\\t";
+        break;
+      default:
+        escaped.push_back(ch);
+        break;
+    }
+  }
+
+  return escaped;
+}
+
+std::wstring BuildEventJson(const HookLifecycleEvent& event) {
+  std::wstringstream builder;
+  builder << L"{\"type\":\"" << EscapeJson(event.type)
+          << L"\",\"action\":\"" << EscapeJson(event.action)
+          << L"\",\"sessionKey\":\"" << EscapeJson(event.sessionKey)
+          << L"\",\"context\":{\"bootstrapFiles\":[";
+
+  for (std::size_t i = 0; i < event.bootstrapFiles.size(); ++i) {
+    const auto& file = event.bootstrapFiles[i];
+    if (i > 0) {
+      builder << L",";
+    }
+
+    builder << L"{\"path\":\"" << EscapeJson(file.path)
+            << L"\",\"virtual\":"
+            << (file.virtualFile ? L"true" : L"false")
+            << L"}";
+  }
+
+  builder << L"]}}";
+  return builder.str();
+}
+
+bool WriteUtf8File(const std::filesystem::path& filePath, const std::wstring& content) {
+  std::ofstream output(filePath, std::ios::binary | std::ios::trunc);
+  if (!output.is_open()) {
+    return false;
+  }
+
+  const std::string narrow = ToNarrowAscii(content);
+  output.write(narrow.c_str(), static_cast<std::streamsize>(narrow.size()));
+  return output.good();
+}
+
+std::wstring BuildTsRunnerScript() {
+  return LR"JS(
+const fsRead = async (p) => {
+  try {
+    const mod = await import('node:fs/promises');
+    return await mod.readFile(p, 'utf8');
+  } catch {
+    return await Deno.readTextFile(p);
+  }
+};
+
+const toFileUrl = async (p) => {
+  try {
+    const mod = await import('node:url');
+    return mod.pathToFileURL(p).href;
+  } catch {
+    return new URL(`file://${p.replace(/\\/g, '/')}`).href;
+  }
+};
+
+const main = async () => {
+  const args = process.argv.slice(2);
+  const handlerPath = args[0];
+  const eventPath = args[1];
+  const raw = await fsRead(eventPath);
+  const event = JSON.parse(raw);
+  if (!event.context || typeof event.context !== 'object') {
+    event.context = { bootstrapFiles: [] };
+  }
+  if (!Array.isArray(event.context.bootstrapFiles)) {
+    event.context.bootstrapFiles = [];
+  }
+
+  const before = event.context.bootstrapFiles.length;
+  const handlerUrl = await toFileUrl(handlerPath);
+  const mod = await import(handlerUrl);
+  const handler = mod.default ?? mod.handler;
+  if (typeof handler !== 'function') {
+    console.log('ERROR\tmissing_handler_export');
+    return 11;
+  }
+
+  await handler(event);
+
+  const files = Array.isArray(event.context.bootstrapFiles)
+    ? event.context.bootstrapFiles
+    : [];
+  for (let i = before; i < files.length; i++) {
+    const item = files[i] || {};
+    if (typeof item.path !== 'string') {
+      continue;
+    }
+    const virtualFlag = item.virtual === true || item.virtualFile === true ? '1' : '0';
+    console.log(`MUTATION\t${item.path}\t${virtualFlag}`);
+  }
+
+  return 0;
+};
+
+main()
+  .then((code) => {
+    if (typeof process !== 'undefined') {
+      process.exit(code || 0);
+    }
+  })
+  .catch((err) => {
+    console.log(`ERROR\t${err?.message || 'runtime_failure'}`);
+    if (typeof process !== 'undefined') {
+      process.exit(12);
+    }
+  });
+)JS";
+}
+
+bool ParseRunnerOutput(
+    const std::vector<std::wstring>& lines,
+    std::vector<HookBootstrapFile>& outMutations,
+    std::wstring& outError) {
+  outError.clear();
+  for (const auto& rawLine : lines) {
+    const auto line = Trim(rawLine);
+    if (line.empty()) {
+      continue;
+    }
+
+    if (line.rfind(L"ERROR\t", 0) == 0) {
+      outError = L"TypeScript runtime execution failed: " + line.substr(6);
+      return false;
+    }
+
+    if (line.rfind(L"MUTATION\t", 0) != 0) {
+      continue;
+    }
+
+    const auto firstTab = line.find(L'\t', 9);
+    if (firstTab == std::wstring::npos) {
+      continue;
+    }
+
+    const auto path = Trim(line.substr(9, firstTab - 9));
+    const auto flag = Trim(line.substr(firstTab + 1));
+    if (path.empty()) {
+      continue;
+    }
+
+    outMutations.push_back(
+        HookBootstrapFile{.path = path, .virtualFile = (flag == L"1")});
+  }
+
+  return true;
+}
+
+bool ExecuteTypeScriptHook(
+    const std::filesystem::path& handlerPath,
+    const HookLifecycleEvent& event,
+    std::vector<HookBootstrapFile>& outMutations,
+    std::wstring& outRuntimeName,
+    std::wstring& outError) {
+  outMutations.clear();
+  outRuntimeName.clear();
+  outError.clear();
+
+  std::error_code ec;
+  const auto tempRoot = std::filesystem::temp_directory_path(ec) / L"blazeclaw-hook-runtime";
+  std::filesystem::create_directories(tempRoot, ec);
+  if (ec) {
+    outError = L"Unable to initialize temporary hook runtime directory.";
+    return false;
+  }
+
+  const auto nonce = std::to_wstring(
+      static_cast<std::uint64_t>(
+          std::chrono::steady_clock::now().time_since_epoch().count()));
+  const auto runnerFile = tempRoot / (L"hook-runner-" + nonce + L".mjs");
+  const auto eventFile = tempRoot / (L"hook-event-" + nonce + L".json");
+
+  if (!WriteUtf8File(runnerFile, BuildTsRunnerScript())) {
+    outError = L"Unable to write TypeScript runtime bridge script.";
+    return false;
+  }
+
+  if (!WriteUtf8File(eventFile, BuildEventJson(event))) {
+    outError = L"Unable to write TypeScript runtime event payload.";
+    std::filesystem::remove(runnerFile, ec);
+    return false;
+  }
+
+  wchar_t* runtimeOverride = nullptr;
+  std::size_t runtimeLen = 0;
+  std::vector<std::pair<std::wstring, std::wstring>> runtimeCandidates;
+  if (_wdupenv_s(
+          &runtimeOverride,
+          &runtimeLen,
+          L"BLAZECLAW_HOOK_TS_RUNTIME") == 0 &&
+      runtimeOverride != nullptr && runtimeLen > 0) {
+    runtimeCandidates.emplace_back(runtimeOverride, runtimeOverride);
+  }
+  if (runtimeOverride != nullptr) {
+    free(runtimeOverride);
+  }
+
+  runtimeCandidates.emplace_back(L"bun", L"bun");
+  runtimeCandidates.emplace_back(L"tsx", L"tsx");
+  runtimeCandidates.emplace_back(L"node --loader ts-node/esm", L"node-ts-node");
+
+  bool executed = false;
+  std::wstring lastError;
+  for (const auto& candidate : runtimeCandidates) {
+    const auto command = candidate.first +
+        L" \"" + runnerFile.wstring() +
+        L"\" \"" + handlerPath.wstring() +
+        L"\" \"" + eventFile.wstring() +
+        L"\" 2>&1";
+    FILE* pipe = _wpopen(command.c_str(), L"rt");
+    if (pipe == nullptr) {
+      lastError = L"runtime process launch failed";
+      continue;
+    }
+
+    std::vector<std::wstring> lines;
+    wchar_t buffer[512];
+    while (fgetws(buffer, static_cast<int>(std::size(buffer)), pipe) != nullptr) {
+      lines.emplace_back(buffer);
+    }
+
+    const int exitCode = _pclose(pipe);
+    if (exitCode != 0) {
+      std::wstring runtimeError;
+      std::vector<HookBootstrapFile> ignored;
+      if (ParseRunnerOutput(lines, ignored, runtimeError) && runtimeError.empty()) {
+        runtimeError = L"non-zero process exit";
+      }
+
+      lastError = runtimeError.empty() ? L"non-zero process exit" : runtimeError;
+      continue;
+    }
+
+    std::wstring parseError;
+    if (!ParseRunnerOutput(lines, outMutations, parseError)) {
+      lastError = parseError;
+      continue;
+    }
+
+    outRuntimeName = candidate.second;
+    executed = true;
+    break;
+  }
+
+  std::filesystem::remove(runnerFile, ec);
+  std::filesystem::remove(eventFile, ec);
+
+  if (!executed) {
+    outError =
+        L"TypeScript runtime unavailable or failed. Last error: " +
+        (lastError.empty() ? L"unknown" : lastError);
+    return false;
+  }
+
+  return true;
 }
 
 std::vector<const HookCatalogEntry*> BuildDispatchOrder(
@@ -278,30 +516,25 @@ bool HookExecutionService::Dispatch(
     const auto started = std::chrono::steady_clock::now();
     try {
       std::vector<HookBootstrapFile> proposed;
-      const auto handlerContent = ReadFileUtf8(hook->handlerFile);
-      if (!handlerContent.has_value()) {
-        ++m_snapshot.diagnostics.failureCount;
-        m_snapshot.diagnostics.warnings.push_back(
-            L"Hook execution failed: cannot read handler file.");
-        continue;
-      }
-
-      std::wstring parseError;
-      const auto extractedPaths = ExtractBootstrapPathsFromHandler(
-          handlerContent.value(),
-          parseError);
-      if (!parseError.empty()) {
+      std::wstring runtimeName;
+      std::wstring runtimeError;
+      if (!ExecuteTypeScriptHook(
+              hook->handlerFile,
+              event,
+              proposed,
+              runtimeName,
+              runtimeError)) {
         ++m_snapshot.diagnostics.failureCount;
         ++m_snapshot.diagnostics.reminderSkippedCount;
         m_snapshot.diagnostics.lastReminderState = L"reminder_skipped";
-        m_snapshot.diagnostics.lastReminderReason = L"handler_contract_invalid";
-        m_snapshot.diagnostics.warnings.push_back(parseError);
+        m_snapshot.diagnostics.lastReminderReason = L"ts_runtime_failure";
+        m_snapshot.diagnostics.warnings.push_back(
+            runtimeError);
         continue;
       }
 
-      for (const auto& extractedPath : extractedPaths) {
-        proposed.push_back(
-            HookBootstrapFile{.path = extractedPath, .virtualFile = true});
+      if (!runtimeName.empty()) {
+        m_snapshot.diagnostics.engineMode = runtimeName;
       }
 
       if (ToLower(policy.reminderVerbosity) == L"minimal") {

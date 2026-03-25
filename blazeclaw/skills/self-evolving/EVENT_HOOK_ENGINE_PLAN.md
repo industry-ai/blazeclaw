@@ -362,7 +362,7 @@ Implement a native BlazeClaw hook engine that executes self-evolving hook handle
   - reminder transition telemetry
   - TypeScript hook runtime support expanded beyond self-evolving scope
     (additional package fixtures validated)
+  - full TypeScript runtime execution path implemented for self-evolving
+    hook scope (`bun` / `tsx` / `node-ts-node` bridge)
 - Remaining (intended):
-  - execution engine remains `ts-contract-adapter` for scoped
-    `bootstrapFiles.push(...)` operations, not full general-purpose
-    TypeScript runtime execution.
+  - broader multi-package runtime orchestration and operational hardening.
