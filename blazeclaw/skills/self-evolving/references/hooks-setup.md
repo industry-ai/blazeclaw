@@ -78,3 +78,8 @@ Reminder policy controls are configurable via:
 
 - `hooks.engine.reminderEnabled`
 - `hooks.engine.reminderVerbosity` (`minimal|normal|detailed`)
+
+Governance and rollout templates:
+
+- `references/hook-governance-policy-template.md`
+- `references/hook-rollout-policy-template.md`

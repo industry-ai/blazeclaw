@@ -364,5 +364,8 @@ Implement a native BlazeClaw hook engine that executes self-evolving hook handle
     (additional package fixtures validated)
   - full TypeScript runtime execution path implemented for self-evolving
     hook scope (`bun` / `tsx` / `node-ts-node` bridge)
+  - governance and rollout policy templates added for tenant-level
+    multi-package hook ecosystem management
 - Remaining (intended):
   - broader multi-package runtime orchestration and operational hardening.
+  - governance automation for policy enforcement and drift detection.

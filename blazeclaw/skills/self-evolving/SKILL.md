@@ -46,6 +46,8 @@ When a pattern is proven, promote it to:
 - `references/examples.md`
 - `references/hooks-setup.md`
 - `references/openclaw-integration.md` (BlazeClaw content in legacy filename)
+- `references/hook-governance-policy-template.md`
+- `references/hook-rollout-policy-template.md`
 
 ## Usage Guide (BlazeClaw)
 
@@ -78,4 +80,4 @@ None in current self-evolving runtime scope.
 
 ## Follow-Up Enhancements
 
-- Add governance and rollout policy templates for tenant-level multi-package hook ecosystem management.
+- Expand governance automation for tenant policy enforcement and drift detection.

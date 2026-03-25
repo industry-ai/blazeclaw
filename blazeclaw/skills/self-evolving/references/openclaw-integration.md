@@ -87,4 +87,9 @@ When a pattern is proven, promote it to persistent guidance:
 
 ## Follow-Up Enhancements
 
-- Add governance and policy templates for tenant-level hook package rollout controls.
+- Expand governance automation for tenant policy enforcement and drift detection.
+
+Policy templates:
+
+- `references/hook-governance-policy-template.md`
+- `references/hook-rollout-policy-template.md`
