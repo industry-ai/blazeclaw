@@ -146,6 +146,50 @@ Implement a native BlazeClaw hook engine that executes self-evolving hook handle
   - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
 - Result: success, 0 errors, 0 warnings.
 
+## Phase C Execution Results (Completed)
+
+### Hook execution engine implemented
+- Added `HookExecutionService` with:
+  - event filtering (`agent.bootstrap`)
+  - deterministic dispatch ordering (skill/hook name sort)
+  - per-hook timeout accounting
+  - exception handling and warning capture
+- Added context mutation guardrails for `bootstrapFiles`:
+  - safe relative path enforcement
+  - rejection of traversal/absolute/drive-style paths
+  - bounded bootstrap file count
+
+### Runtime integration applied
+- Integrated execution engine into startup lifecycle after normalized
+  `agent.bootstrap` event emission.
+- Persisted execution snapshot in runtime state for operator visibility.
+- Added fixture validation call for hook execution scenarios in startup pass.
+
+### Fixture coverage added
+- Added `fixtures/skills-catalog/s9-hooks-exec/workspace/skills/*` scenarios:
+  - `self-evolving` (dispatch success + reminder mutation)
+  - `hook-unsafe-mutation` (guardrail rejection path)
+- Added `HookExecutionService::ValidateFixtureScenarios()` assertions for:
+  - successful dispatch for normalized bootstrap event
+  - reminder file mutation presence
+  - guard rejection count > 0 for unsafe mutation attempts
+
+### Observability updates
+- Extended diagnostics `hooks` block with execution metrics:
+  - `dispatches`
+  - `dispatchSuccess`
+  - `dispatchFailures`
+  - `dispatchSkipped`
+  - `dispatchTimeouts`
+  - `guardRejected`
+- Added feature registry entry:
+  - `hooks-execution-engine` = implemented
+
+### Build validation
+- Ran:
+  - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
+- Result: success, 0 errors, 0 warnings.
+
 ## Phase B Execution Results (Completed)
 
 ### Normalized lifecycle event model added

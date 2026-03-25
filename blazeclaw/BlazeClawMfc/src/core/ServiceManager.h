@@ -18,6 +18,7 @@
 #include "SubagentRegistryService.h"
 #include "HookCatalogService.h"
 #include "HookEventService.h"
+#include "HookExecutionService.h"
 #include "SkillsCommandService.h"
 #include "SkillsCatalogService.h"
 #include "SkillsEnvOverrideService.h"
@@ -111,6 +112,8 @@ private:
   HookCatalogSnapshot m_hookCatalog;
   HookEventService m_hookEventService;
   HookEventSnapshot m_hookEvents;
+  HookExecutionService m_hookExecutionService;
+  HookExecutionSnapshot m_hookExecution;
   SkillsCatalogService m_skillsCatalogService;
   SkillsCatalogSnapshot m_skillsCatalog;
   SkillsEligibilityService m_skillsEligibilityService;

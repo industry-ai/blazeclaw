@@ -307,6 +307,7 @@ void ServiceManager::RefreshSkillsState(
       m_skillsCatalog,
       config);
   m_hookCatalog = m_hookCatalogService.BuildSnapshot(m_skillsCatalog);
+  m_hookExecution = m_hookExecutionService.Snapshot();
   m_skillsPrompt = m_skillsPromptService.BuildSnapshot(
       m_skillsCatalog,
       m_skillsEligibility,
@@ -457,6 +458,18 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
         L"hooks-event emission failed: " + hookEventError);
   }
 
+  if (emittedBootstrapEvent && !m_hookEvents.events.empty()) {
+    std::wstring dispatchError;
+    const auto& latestEvent = m_hookEvents.events.back();
+    if (!m_hookExecutionService.Dispatch(latestEvent, m_hookCatalog, dispatchError) &&
+        !dispatchError.empty()) {
+      m_skillsCatalog.diagnostics.warnings.push_back(
+          L"hooks-dispatch failed: " + dispatchError);
+    }
+
+    m_hookExecution = m_hookExecutionService.Snapshot();
+  }
+
   std::wstring fixtureError;
   const std::vector<std::filesystem::path> fixtureCandidates = {
       std::filesystem::current_path() / L"blazeclaw" / L"fixtures" / L"agents",
@@ -594,6 +607,11 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
     if (!m_hookEventService.ValidateFixtureScenarios(candidate, fixtureError)) {
       m_skillsCatalog.diagnostics.warnings.push_back(
           L"hooks-events fixture validation failed: " + fixtureError);
+    }
+
+    if (!m_hookExecutionService.ValidateFixtureScenarios(candidate, fixtureError)) {
+      m_skillsCatalog.diagnostics.warnings.push_back(
+          L"hooks-execution fixture validation failed: " + fixtureError);
     }
 
     break;
@@ -1151,6 +1169,18 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       std::to_string(m_hookEvents.diagnostics.validationFailedCount) +
       ",\"eventsDropped\":" +
       std::to_string(m_hookEvents.diagnostics.droppedCount) +
+      ",\"dispatches\":" +
+      std::to_string(m_hookExecution.diagnostics.dispatchCount) +
+      ",\"dispatchSuccess\":" +
+      std::to_string(m_hookExecution.diagnostics.successCount) +
+      ",\"dispatchFailures\":" +
+      std::to_string(m_hookExecution.diagnostics.failureCount) +
+      ",\"dispatchSkipped\":" +
+      std::to_string(m_hookExecution.diagnostics.skippedCount) +
+      ",\"dispatchTimeouts\":" +
+      std::to_string(m_hookExecution.diagnostics.timeoutCount) +
+      ",\"guardRejected\":" +
+      std::to_string(m_hookExecution.diagnostics.guardRejectedCount) +
       "},"
       "\"features\":{\"implemented\":" + std::to_string(implementedCount) +
       ",\"inProgress\":" + std::to_string(inProgressCount) +
