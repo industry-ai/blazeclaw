@@ -101,6 +101,8 @@ Approval gate checklist:
 - [ ] `autoRemediationEnabled` matches rollout phase intent
 - [ ] `autoRemediationRequiresApproval` enabled for protected environments
 - [ ] Approval token management process validated
+- [ ] tenant playbook path configured and writable
+- [ ] token max-age policy reviewed with security owner
 
 ## 6) Rollback Plan
 

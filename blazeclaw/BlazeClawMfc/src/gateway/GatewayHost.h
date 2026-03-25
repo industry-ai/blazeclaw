@@ -70,6 +70,10 @@ namespace blazeclaw::gateway {
 		bool autoRemediationRequiresApproval = true;
 		std::size_t autoRemediationExecuted = 0;
 		std::string lastAutoRemediationStatus;
+      std::string autoRemediationTenantId;
+		std::string lastAutoRemediationPlaybookPath;
+		std::size_t autoRemediationTokenMaxAgeMinutes = 0;
+		std::size_t autoRemediationTokenRotations = 0;
 	};
 
 	class GatewayHost {

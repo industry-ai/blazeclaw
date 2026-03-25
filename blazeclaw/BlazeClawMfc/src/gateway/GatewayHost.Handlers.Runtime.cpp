@@ -536,20 +536,28 @@ namespace blazeclaw::gateway {
                 }
 
                 bool approvalAccepted = false;
+                std::string approvalToken;
+                if (request.paramsJson.has_value()) {
+                    json::FindStringField(
+                        request.paramsJson.value(),
+                        "approvalToken",
+                        approvalToken);
+                }
                 if (state.autoRemediationRequiresApproval) {
                     bool approved = false;
                     if (request.paramsJson.has_value()) {
                         json::FindBoolField(request.paramsJson.value(), "approved", approved);
                     }
                     approvalAccepted = approved;
-                    if (!approvalAccepted) {
+                    const bool tokenAccepted = !approvalToken.empty();
+                    if (!approvalAccepted || !tokenAccepted) {
                         return protocol::ResponseFrame{
                             .id = request.id,
                             .ok = false,
                             .payloadJson = std::nullopt,
                             .error = protocol::ErrorShape{
                                 .code = "approval_required",
-                                .message = "Auto-remediation execution requires explicit approval.",
+                                .message = "Auto-remediation execution requires explicit approval and token.",
                                 .detailsJson = std::nullopt,
                                 .retryable = false,
                                 .retryAfterMs = std::nullopt,
@@ -571,6 +579,11 @@ namespace blazeclaw::gateway {
                     .payloadJson =
                         "{\"executed\":true,\"status\":\"applied\",\"approvalAccepted\":" +
                         std::string(approvalAccepted ? "true" : "false") +
+                        ",\"tenantId\":\"" + EscapeJsonLocal(state.autoRemediationTenantId) +
+                        "\",\"playbookPath\":\"" +
+                        EscapeJsonLocal(state.lastAutoRemediationPlaybookPath) +
+                        "\",\"tokenMaxAgeMinutes\":" +
+                        std::to_string(state.autoRemediationTokenMaxAgeMinutes) +
                         ",\"action\":\"" + EscapeJsonLocal(action) +
                         "\",\"reportPath\":\"" +
                         EscapeJsonLocal(state.lastGovernanceReportPath) +

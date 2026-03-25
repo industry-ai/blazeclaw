@@ -100,6 +100,9 @@ Closed-loop remediation policy controls:
 - `hooks.engine.autoRemediationEnabled`
 - `hooks.engine.autoRemediationRequiresApproval`
 - `hooks.engine.autoRemediationApprovalToken`
+- `hooks.engine.autoRemediationTenantId`
+- `hooks.engine.autoRemediationPlaybookDir`
+- `hooks.engine.autoRemediationTokenMaxAgeMinutes`
 
 Governance reporting diagnostics:
 
@@ -111,6 +114,7 @@ Centralized observability and remediation endpoints:
 - `gateway.runtime.governance.reportStatus`
 - `gateway.runtime.governance.remediationPlan`
 - `gateway.runtime.governance.executeRemediation`
+  - requires `approved=true` and `approvalToken` when approval gates are enabled
 
 Governance and rollout templates:
 

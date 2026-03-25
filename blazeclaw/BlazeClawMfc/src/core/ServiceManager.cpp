@@ -9,6 +9,7 @@
 #include <cwctype>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <unordered_map>
 
 namespace blazeclaw::core {
@@ -161,6 +162,164 @@ std::wstring ResolveHooksAutoRemediationApprovalToken(
   }
 
   return Trim(value);
+}
+
+std::wstring ResolveHooksAutoRemediationTenantId(
+    const blazeclaw::config::AppConfig& config) {
+  std::wstring value = config.hooks.engine.autoRemediationTenantId;
+  wchar_t* env = nullptr;
+  std::size_t len = 0;
+  if (_wdupenv_s(
+          &env,
+          &len,
+          L"BLAZECLAW_HOOKS_AUTO_REMEDIATION_TENANT_ID") == 0 &&
+      env != nullptr &&
+      len > 0) {
+    value.assign(env);
+  }
+  if (env != nullptr) {
+    free(env);
+  }
+
+  const auto trimmed = Trim(value);
+  return trimmed.empty() ? L"default" : trimmed;
+}
+
+std::filesystem::path ResolveHooksAutoRemediationPlaybookDir(
+    const blazeclaw::config::AppConfig& config) {
+  std::wstring value = config.hooks.engine.autoRemediationPlaybookDir;
+  wchar_t* env = nullptr;
+  std::size_t len = 0;
+  if (_wdupenv_s(
+          &env,
+          &len,
+          L"BLAZECLAW_HOOKS_AUTO_REMEDIATION_PLAYBOOK_DIR") == 0 &&
+      env != nullptr &&
+      len > 0) {
+    value.assign(env);
+  }
+  if (env != nullptr) {
+    free(env);
+  }
+
+  const auto trimmed = Trim(value);
+  if (trimmed.empty()) {
+    return std::filesystem::path(L"blazeclaw/reports/hooks-remediation-playbooks");
+  }
+
+  return std::filesystem::path(trimmed);
+}
+
+std::uint32_t ResolveHooksAutoRemediationTokenMaxAgeMinutes(
+    const blazeclaw::config::AppConfig& config) {
+  std::uint32_t value = config.hooks.engine.autoRemediationTokenMaxAgeMinutes;
+  wchar_t* env = nullptr;
+  std::size_t len = 0;
+  if (_wdupenv_s(
+          &env,
+          &len,
+          L"BLAZECLAW_HOOKS_AUTO_REMEDIATION_TOKEN_MAX_AGE_MINUTES") == 0 &&
+      env != nullptr &&
+      len > 0) {
+    std::wstring trimmedEnv = Trim(env);
+    if (!trimmedEnv.empty()) {
+      std::wistringstream parser(trimmedEnv);
+      std::uint32_t parsed = 0;
+      if ((parser >> parsed) && parser.eof()) {
+        value = parsed;
+      }
+    }
+  }
+  if (env != nullptr) {
+    free(env);
+  }
+
+  return value == 0 ? 1440 : value;
+}
+
+std::wstring BuildRemediationPlaybookJson(
+    const std::wstring& tenantId,
+    const HookExecutionSnapshot& execution,
+    const std::wstring& reportPath,
+    const std::uint32_t tokenMaxAgeMinutes) {
+  std::wstringstream builder;
+  builder << L"{\"tenantId\":\"" << tenantId
+          << L"\",\"policyBlocked\":"
+          << execution.diagnostics.policyBlockedCount
+          << L",\"driftDetected\":"
+          << execution.diagnostics.driftDetectedCount
+          << L",\"lastDriftReason\":\""
+          << execution.diagnostics.lastDriftReason
+          << L"\",\"sourceReportPath\":\""
+          << reportPath
+          << L"\",\"tokenMaxAgeMinutes\":"
+          << tokenMaxAgeMinutes
+          << L",\"recommendedSteps\":[\"validate_approval_token\",\"review_policy_drift\",\"execute_remediation_with_gate\"]}";
+  return builder.str();
+}
+
+void EmitTenantRemediationPlaybookIfNeeded(
+    const HookExecutionSnapshot& execution,
+    const bool autoRemediationEnabled,
+    const std::wstring& tenantId,
+    const std::filesystem::path& playbookDir,
+    const std::wstring& sourceReportPath,
+    const std::uint32_t tokenMaxAgeMinutes,
+    std::wstring& outPlaybookPath,
+    std::vector<std::wstring>& inOutWarnings) {
+  outPlaybookPath.clear();
+  if (!autoRemediationEnabled) {
+    return;
+  }
+
+  if (execution.diagnostics.policyBlockedCount == 0 &&
+      execution.diagnostics.driftDetectedCount == 0) {
+    return;
+  }
+
+  std::error_code ec;
+  auto fullDir = playbookDir;
+  if (fullDir.is_relative()) {
+    fullDir = std::filesystem::current_path(ec) / fullDir;
+  }
+
+  std::filesystem::create_directories(fullDir, ec);
+  if (ec) {
+    inOutWarnings.push_back(
+        L"hooks-remediation playbook generation failed: cannot create directory.");
+    return;
+  }
+
+  const auto nonce = std::to_wstring(
+      static_cast<std::uint64_t>(
+          std::chrono::system_clock::now().time_since_epoch().count()));
+  const auto playbookFile =
+      fullDir / (L"hooks-remediation-" + tenantId + L"-" + nonce + L".json");
+  const auto content = BuildRemediationPlaybookJson(
+      tenantId,
+      execution,
+      sourceReportPath,
+      tokenMaxAgeMinutes);
+  std::ofstream output(playbookFile, std::ios::binary | std::ios::trunc);
+  if (!output.is_open()) {
+    inOutWarnings.push_back(
+        L"hooks-remediation playbook generation failed: cannot write file.");
+    return;
+  }
+
+  std::string narrow;
+  narrow.reserve(content.size());
+  for (const auto ch : content) {
+    narrow.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
+  }
+  output.write(narrow.c_str(), static_cast<std::streamsize>(narrow.size()));
+  if (!output.good()) {
+    inOutWarnings.push_back(
+        L"hooks-remediation playbook generation failed: cannot write file.");
+    return;
+  }
+
+  outPlaybookPath = playbookFile.wstring();
 }
 
 std::wstring ToWide(const std::string& value) {
@@ -710,6 +869,14 @@ blazeclaw::gateway::SkillsCatalogGatewayState ServiceManager::BuildGatewaySkills
       static_cast<std::size_t>(m_hooksAutoRemediationExecuted);
   gatewaySkillsState.lastAutoRemediationStatus =
       ToNarrow(m_hooksLastAutoRemediationStatus);
+  gatewaySkillsState.autoRemediationTenantId =
+      ToNarrow(m_hooksAutoRemediationTenantId);
+  gatewaySkillsState.lastAutoRemediationPlaybookPath =
+      ToNarrow(m_hooksLastAutoRemediationPlaybookPath);
+  gatewaySkillsState.autoRemediationTokenMaxAgeMinutes =
+      static_cast<std::size_t>(m_hooksAutoRemediationTokenMaxAgeMinutes);
+  gatewaySkillsState.autoRemediationTokenRotations =
+      static_cast<std::size_t>(m_hooksAutoRemediationTokenRotations);
   return gatewaySkillsState;
 }
 
@@ -784,10 +951,18 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       ResolveHooksAutoRemediationRequiresApproval(m_activeConfig);
   m_hooksAutoRemediationApprovalToken =
       ResolveHooksAutoRemediationApprovalToken(m_activeConfig);
+  m_hooksAutoRemediationTenantId =
+      ResolveHooksAutoRemediationTenantId(m_activeConfig);
+  m_hooksAutoRemediationPlaybookDir =
+      ResolveHooksAutoRemediationPlaybookDir(m_activeConfig);
+  m_hooksAutoRemediationTokenMaxAgeMinutes =
+      ResolveHooksAutoRemediationTokenMaxAgeMinutes(m_activeConfig);
   m_hooksGovernanceReportsGenerated = 0;
   m_hooksLastGovernanceReportPath.clear();
   m_hooksAutoRemediationExecuted = 0;
   m_hooksLastAutoRemediationStatus = L"idle";
+  m_hooksLastAutoRemediationPlaybookPath.clear();
+  m_hooksAutoRemediationTokenRotations = 0;
   m_selfEvolvingHookTriggered = false;
   m_agentsScope = m_agentsCatalogService.BuildSnapshot(
       std::filesystem::current_path(),
@@ -932,6 +1107,18 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
         m_hooksGovernanceReportsGenerated,
         m_hooksLastGovernanceReportPath,
         m_skillsCatalog.diagnostics.warnings);
+    EmitTenantRemediationPlaybookIfNeeded(
+        m_hookExecution,
+        m_hooksAutoRemediationEnabled,
+        m_hooksAutoRemediationTenantId,
+        m_hooksAutoRemediationPlaybookDir,
+        m_hooksLastGovernanceReportPath,
+        m_hooksAutoRemediationTokenMaxAgeMinutes,
+        m_hooksLastAutoRemediationPlaybookPath,
+        m_skillsCatalog.diagnostics.warnings);
+    if (!m_hooksLastAutoRemediationPlaybookPath.empty()) {
+      m_hooksLastAutoRemediationStatus = L"playbook_generated";
+    }
     m_selfEvolvingHookTriggered = ContainsBootstrapFile(
         m_hookExecution.bootstrapFiles,
         L"SELF_EVOLVING_REMINDER.md");
@@ -1692,6 +1879,14 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       std::to_string(m_hooksAutoRemediationExecuted) +
       ",\"lastAutoRemediationStatus\":\"" +
       WideToNarrowAscii(m_hooksLastAutoRemediationStatus) + "\"" +
+      ",\"autoRemediationTenantId\":\"" +
+      WideToNarrowAscii(m_hooksAutoRemediationTenantId) + "\"" +
+      ",\"lastAutoRemediationPlaybookPath\":\"" +
+      WideToNarrowAscii(m_hooksLastAutoRemediationPlaybookPath) + "\"" +
+      ",\"autoRemediationTokenMaxAgeMinutes\":" +
+      std::to_string(m_hooksAutoRemediationTokenMaxAgeMinutes) +
+      ",\"autoRemediationTokenRotations\":" +
+      std::to_string(m_hooksAutoRemediationTokenRotations) +
       ",\"selfEvolvingHookTriggered\":" +
       std::string(m_selfEvolvingHookTriggered ? "true" : "false") +
       ",\"invalidMetadata\":" +

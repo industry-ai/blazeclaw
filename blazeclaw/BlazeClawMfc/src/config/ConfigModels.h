@@ -167,6 +167,10 @@ struct HooksEngineConfig {
   bool autoRemediationEnabled = false;
   bool autoRemediationRequiresApproval = true;
   std::wstring autoRemediationApprovalToken;
+  std::wstring autoRemediationTenantId = L"default";
+  std::wstring autoRemediationPlaybookDir =
+      L"blazeclaw/reports/hooks-remediation-playbooks";
+  std::uint32_t autoRemediationTokenMaxAgeMinutes = 1440;
 };
 
 struct HooksConfig {

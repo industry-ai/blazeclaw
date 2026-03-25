@@ -113,6 +113,9 @@ Closed-loop remediation gates:
 - Auto-remediation enabled: `hooks.engine.autoRemediationEnabled`
 - Approval gate required: `hooks.engine.autoRemediationRequiresApproval`
 - Approval token reference: `hooks.engine.autoRemediationApprovalToken`
+- Tenant id: `hooks.engine.autoRemediationTenantId`
+- Playbook output directory: `hooks.engine.autoRemediationPlaybookDir`
+- Token max age (minutes): `hooks.engine.autoRemediationTokenMaxAgeMinutes`
 
 Centralized integration endpoints:
 

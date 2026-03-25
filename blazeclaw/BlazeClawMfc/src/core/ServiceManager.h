@@ -127,8 +127,13 @@ private:
   bool m_hooksAutoRemediationEnabled = false;
   bool m_hooksAutoRemediationRequiresApproval = true;
   std::wstring m_hooksAutoRemediationApprovalToken;
+  std::wstring m_hooksAutoRemediationTenantId = L"default";
+  std::filesystem::path m_hooksAutoRemediationPlaybookDir;
+  std::uint32_t m_hooksAutoRemediationTokenMaxAgeMinutes = 1440;
   std::uint64_t m_hooksAutoRemediationExecuted = 0;
   std::wstring m_hooksLastAutoRemediationStatus;
+  std::wstring m_hooksLastAutoRemediationPlaybookPath;
+  std::uint64_t m_hooksAutoRemediationTokenRotations = 0;
   bool m_selfEvolvingHookTriggered = false;
   SkillsCatalogService m_skillsCatalogService;
   SkillsCatalogSnapshot m_skillsCatalog;
