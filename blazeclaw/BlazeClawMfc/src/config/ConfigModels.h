@@ -171,6 +171,9 @@ struct LocalModelConfig {
   std::wstring tokenizerSha256;
   std::uint32_t maxTokens = 256;
   double temperature = 0.0;
+  std::uint32_t intraThreads = 0;
+  std::uint32_t interThreads = 0;
+  std::wstring executionMode = L"sequential";	// "parallel" or "sequential"
   bool verboseMetrics = false;
 };
 

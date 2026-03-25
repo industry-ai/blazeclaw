@@ -160,6 +160,16 @@ std::wstring NormalizeLocalModelRolloutStage(
   return L"dev";
 }
 
+std::wstring NormalizeLocalModelExecutionMode(
+    const std::wstring& raw) {
+  const std::wstring normalized = ToLowerTrim(raw);
+  if (normalized == L"parallel") {
+    return normalized;
+  }
+
+  return L"sequential";
+}
+
 std::wstring NormalizeEmbeddingsExecutionMode(
     const std::wstring& raw) {
   const std::wstring normalized = ToLowerTrim(raw);
@@ -302,6 +312,28 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
       if (TryParseDouble(trimmedLine.substr(28), value) && value >= 0.0) {
         outConfig.localModel.temperature = value;
       }
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"chat.localModel.intraThreads=", 0) == 0) {
+      std::uint32_t value = 0;
+      if (TryParseUInt(trimmedLine.substr(29), value)) {
+        outConfig.localModel.intraThreads = value;
+      }
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"chat.localModel.interThreads=", 0) == 0) {
+      std::uint32_t value = 0;
+      if (TryParseUInt(trimmedLine.substr(29), value)) {
+        outConfig.localModel.interThreads = value;
+      }
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"chat.localModel.executionMode=", 0) == 0) {
+      outConfig.localModel.executionMode = NormalizeLocalModelExecutionMode(
+          trimmedLine.substr(30));
       continue;
     }
 

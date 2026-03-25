@@ -53,6 +53,9 @@ struct LocalModelRuntimeSnapshot {
   std::string cudaExecutionProviderReason;
   std::uint32_t maxTokens = 256;
   double temperature = 0.0;
+  std::uint32_t intraThreads = 0;
+  std::uint32_t interThreads = 0;
+  std::string executionMode;
   std::uint64_t modelLoadAttempts = 0;
   std::uint64_t modelLoadFailures = 0;
   std::uint64_t requestsStarted = 0;

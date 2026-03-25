@@ -37,10 +37,26 @@ std::string ToLowerAscii(const std::string& value) {
 }
 
 #if BLAZECLAW_HAS_ONNXRUNTIME
-void ConfigureDefaultSessionOptions(Ort::SessionOptions& options) {
+void ConfigureDefaultSessionOptions(
+    Ort::SessionOptions& options,
+    const LocalModelRuntimeSnapshot& snapshot) {
   options.SetGraphOptimizationLevel(
       GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
-  options.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
+  const bool useParallelMode = snapshot.executionMode == "parallel";
+  options.SetExecutionMode(
+      useParallelMode
+          ? ExecutionMode::ORT_PARALLEL
+          : ExecutionMode::ORT_SEQUENTIAL);
+
+  if (snapshot.intraThreads > 0) {
+    options.SetIntraOpNumThreads(
+        static_cast<int>(snapshot.intraThreads));
+  }
+
+  if (snapshot.interThreads > 0) {
+    options.SetInterOpNumThreads(
+        static_cast<int>(snapshot.interThreads));
+  }
 }
 
 bool TryAppendDirectMlExecutionProvider(
@@ -1110,7 +1126,9 @@ bool OnnxTextGenerationRuntime::LoadModel() {
         ORT_LOGGING_LEVEL_WARNING,
         "blazeclaw-local-chat-runtime");
     m_sessionState->options = std::make_unique<Ort::SessionOptions>();
-    ConfigureDefaultSessionOptions(*m_sessionState->options);
+    ConfigureDefaultSessionOptions(
+        *m_sessionState->options,
+        m_snapshot);
 
     m_snapshot.cudaExecutionProviderAvailable = false;
     m_snapshot.cudaExecutionProviderEnabled = false;
@@ -1176,7 +1194,9 @@ bool OnnxTextGenerationRuntime::LoadModel() {
             "cuda_session_init_failed: " + std::string(ex.what());
 
         m_sessionState->options = std::make_unique<Ort::SessionOptions>();
-        ConfigureDefaultSessionOptions(*m_sessionState->options);
+        ConfigureDefaultSessionOptions(
+            *m_sessionState->options,
+            m_snapshot);
         configureDirectMlOrCpu();
         m_sessionState->session = std::make_unique<Ort::Session>(
             *m_sessionState->env,
@@ -1192,7 +1212,9 @@ bool OnnxTextGenerationRuntime::LoadModel() {
             "provider=cpu fallbackReason=" + directMlFallbackReason);
 
         m_sessionState->options = std::make_unique<Ort::SessionOptions>();
-        ConfigureDefaultSessionOptions(*m_sessionState->options);
+        ConfigureDefaultSessionOptions(
+            *m_sessionState->options,
+            m_snapshot);
         m_sessionState->session = std::make_unique<Ort::Session>(
             *m_sessionState->env,
             modelPath.c_str(),
@@ -2062,6 +2084,9 @@ void OnnxTextGenerationRuntime::ResetSnapshotLocked() {
   m_snapshot.cudaExecutionProviderReason.clear();
   m_snapshot.maxTokens = m_config.localModel.maxTokens;
   m_snapshot.temperature = m_config.localModel.temperature;
+  m_snapshot.intraThreads = m_config.localModel.intraThreads;
+  m_snapshot.interThreads = m_config.localModel.interThreads;
+  m_snapshot.executionMode = ToNarrow(m_config.localModel.executionMode);
   m_snapshot.status = "configured";
   m_snapshot.effectiveExecutionProvider = "unknown";
   m_snapshot.error.reset();
