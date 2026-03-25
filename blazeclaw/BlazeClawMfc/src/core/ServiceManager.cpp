@@ -658,6 +658,17 @@ blazeclaw::gateway::SkillsCatalogGatewayState ServiceManager::BuildGatewaySkills
   gatewaySkillsState.scanWarnCount = m_skillSecurityScan.warnCount;
   gatewaySkillsState.scanCriticalCount = m_skillSecurityScan.criticalCount;
   gatewaySkillsState.scanScannedFiles = m_skillSecurityScan.scannedFileCount;
+  gatewaySkillsState.governanceReportingEnabled = m_hooksGovernanceReportingEnabled;
+  gatewaySkillsState.governanceReportsGenerated =
+      static_cast<std::size_t>(m_hooksGovernanceReportsGenerated);
+  gatewaySkillsState.lastGovernanceReportPath =
+      ToNarrow(m_hooksLastGovernanceReportPath);
+  gatewaySkillsState.policyBlockedCount =
+      static_cast<std::size_t>(m_hookExecution.diagnostics.policyBlockedCount);
+  gatewaySkillsState.driftDetectedCount =
+      static_cast<std::size_t>(m_hookExecution.diagnostics.driftDetectedCount);
+  gatewaySkillsState.lastDriftReason =
+      ToNarrow(m_hookExecution.diagnostics.lastDriftReason);
   return gatewaySkillsState;
 }
 

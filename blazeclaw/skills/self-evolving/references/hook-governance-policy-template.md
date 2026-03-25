@@ -108,6 +108,11 @@ Governance reporting artifacts:
 - Report output directory: `hooks.engine.governanceReportDir`
 - Expected artifact: `hooks-governance-<timestamp>.json`
 
+Centralized integration endpoints:
+
+- `gateway.runtime.governance.reportStatus`
+- `gateway.runtime.governance.remediationPlan`
+
 ## 8) Compliance and Audit
 
 - Audit artifacts retained:

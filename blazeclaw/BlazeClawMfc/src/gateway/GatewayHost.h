@@ -60,6 +60,12 @@ namespace blazeclaw::gateway {
 		std::size_t scanWarnCount = 0;
 		std::size_t scanCriticalCount = 0;
 		std::size_t scanScannedFiles = 0;
+      bool governanceReportingEnabled = false;
+		std::size_t governanceReportsGenerated = 0;
+		std::string lastGovernanceReportPath;
+		std::size_t policyBlockedCount = 0;
+		std::size_t driftDetectedCount = 0;
+		std::string lastDriftReason;
 	};
 
 	class GatewayHost {

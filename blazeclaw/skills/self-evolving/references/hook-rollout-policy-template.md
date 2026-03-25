@@ -90,6 +90,11 @@ Dashboard links:
 - `<dashboard-link-1>`
 - `<dashboard-link-2>`
 
+Automation endpoints:
+
+- `gateway.runtime.governance.reportStatus`
+- `gateway.runtime.governance.remediationPlan`
+
 ## 6) Rollback Plan
 
 Rollback triggers:

@@ -100,6 +100,11 @@ Governance reporting diagnostics:
 - `hooks.governanceReportsGenerated`
 - `hooks.lastGovernanceReportPath`
 
+Centralized observability and remediation endpoints:
+
+- `gateway.runtime.governance.reportStatus`
+- `gateway.runtime.governance.remediationPlan`
+
 Governance and rollout templates:
 
 - `references/hook-governance-policy-template.md`

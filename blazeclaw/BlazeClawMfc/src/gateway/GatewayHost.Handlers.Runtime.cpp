@@ -458,6 +458,66 @@ namespace blazeclaw::gateway {
 
     void GatewayHost::RegisterRuntimeHandlers() {
         m_dispatcher.Register(
+            "gateway.runtime.governance.reportStatus",
+            [this](const protocol::RequestFrame& request) {
+                const auto& state = m_skillsCatalogState;
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"governanceReportingEnabled\":" +
+                        std::string(state.governanceReportingEnabled ? "true" : "false") +
+                        ",\"governanceReportsGenerated\":" +
+                        std::to_string(state.governanceReportsGenerated) +
+                        ",\"lastGovernanceReportPath\":\"" +
+                        EscapeJsonLocal(state.lastGovernanceReportPath) +
+                        "\",\"policyBlocked\":" +
+                        std::to_string(state.policyBlockedCount) +
+                        ",\"driftDetected\":" +
+                        std::to_string(state.driftDetectedCount) +
+                        ",\"lastDriftReason\":\"" +
+                        EscapeJsonLocal(state.lastDriftReason) +
+                        "\"}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.governance.remediationPlan",
+            [this](const protocol::RequestFrame& request) {
+                (void)request;
+                const auto& state = m_skillsCatalogState;
+                std::string severity = "none";
+                std::string recommendedAction = "monitor";
+                if (state.driftDetectedCount > 0) {
+                    severity = "high";
+                    recommendedAction =
+                        "review drift report; enforce strict policy and investigate runtime divergence";
+                } else if (state.policyBlockedCount > 0) {
+                    severity = "medium";
+                    recommendedAction =
+                        "review package allowlist policy and blocked package changes";
+                }
+
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"severity\":\"" + EscapeJsonLocal(severity) +
+                        "\",\"recommendedAction\":\"" +
+                        EscapeJsonLocal(recommendedAction) +
+                        "\",\"policyBlocked\":" +
+                        std::to_string(state.policyBlockedCount) +
+                        ",\"driftDetected\":" +
+                        std::to_string(state.driftDetectedCount) +
+                        ",\"reportPath\":\"" +
+                        EscapeJsonLocal(state.lastGovernanceReportPath) +
+                        "\"}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
             "gateway.embeddings.generate",
             [this](const protocol::RequestFrame& request) {
                 const std::string text =
