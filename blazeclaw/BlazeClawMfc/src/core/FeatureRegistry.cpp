@@ -32,6 +32,7 @@ FeatureRegistry::FeatureRegistry() {
       {L"skills-config-foundation", FeatureState::InProgress},
       {L"skills-catalog-discovery", FeatureState::Planned},
       {L"hooks-catalog-loader", FeatureState::Implemented},
+      {L"hooks-event-emission", FeatureState::Implemented},
       {L"skills-eligibility-filtering", FeatureState::Implemented},
       {L"skills-prompt-snapshots", FeatureState::Implemented},
       {L"skills-watch-refresh", FeatureState::Implemented},

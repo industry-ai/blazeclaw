@@ -311,6 +311,7 @@ void ServiceManager::RefreshSkillsState(
       m_skillsCatalog,
       m_skillsEligibility,
       config);
+  m_hookEvents = m_hookEventService.Snapshot();
   m_skillsCommands = m_skillsCommandService.BuildSnapshot(
       m_skillsCatalog,
       m_skillsEligibility);
@@ -442,6 +443,19 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
   m_retrievalMemory = m_retrievalMemoryService.Snapshot();
   m_piEmbeddedService.Configure(m_activeConfig);
   RefreshSkillsState(m_activeConfig, true, L"startup");
+
+  std::wstring hookEventError;
+  const bool emittedBootstrapEvent = m_hookEventService.EmitAgentBootstrap(
+      L"main",
+      std::vector<HookBootstrapFile>{
+          HookBootstrapFile{.path = L"BOOTSTRAP.md", .virtualFile = true},
+          HookBootstrapFile{.path = L"MEMORY.md", .virtualFile = true}},
+      hookEventError);
+  m_hookEvents = m_hookEventService.Snapshot();
+  if (!emittedBootstrapEvent && !hookEventError.empty()) {
+    m_skillsCatalog.diagnostics.warnings.push_back(
+        L"hooks-event emission failed: " + hookEventError);
+  }
 
   std::wstring fixtureError;
   const std::vector<std::filesystem::path> fixtureCandidates = {
@@ -575,6 +589,11 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
     if (!m_hookCatalogService.ValidateFixtureScenarios(candidate, fixtureError)) {
       m_skillsCatalog.diagnostics.warnings.push_back(
           L"hooks-catalog fixture validation failed: " + fixtureError);
+    }
+
+    if (!m_hookEventService.ValidateFixtureScenarios(candidate, fixtureError)) {
+      m_skillsCatalog.diagnostics.warnings.push_back(
+          L"hooks-events fixture validation failed: " + fixtureError);
     }
 
     break;
@@ -1126,6 +1145,12 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       std::to_string(m_hookCatalog.diagnostics.unsafeHandlerPaths) +
       ",\"missingHandlers\":" +
       std::to_string(m_hookCatalog.diagnostics.missingHandlerFiles) +
+      ",\"eventsEmitted\":" +
+      std::to_string(m_hookEvents.diagnostics.emittedCount) +
+      ",\"eventValidationFailed\":" +
+      std::to_string(m_hookEvents.diagnostics.validationFailedCount) +
+      ",\"eventsDropped\":" +
+      std::to_string(m_hookEvents.diagnostics.droppedCount) +
       "},"
       "\"features\":{\"implemented\":" + std::to_string(implementedCount) +
       ",\"inProgress\":" + std::to_string(inProgressCount) +

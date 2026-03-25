@@ -145,3 +145,42 @@ Implement a native BlazeClaw hook engine that executes self-evolving hook handle
 - Ran:
   - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
 - Result: success, 0 errors, 0 warnings.
+
+## Phase B Execution Results (Completed)
+
+### Normalized lifecycle event model added
+- Added `HookEventService` with normalized event schema:
+  - `type`
+  - `action`
+  - `sessionKey`
+  - `bootstrapFiles[]`
+- Added schema validation for emitted events with explicit checks for:
+  - `type == agent`
+  - `action == bootstrap`
+  - non-empty `sessionKey`
+  - non-empty `bootstrapFiles[*].path`
+
+### Runtime event emission wired
+- Integrated `HookEventService` into `ServiceManager` lifecycle.
+- Emitted `agent.bootstrap` normalized event from startup lifecycle path.
+- Captured event snapshot in runtime state for diagnostics.
+
+### Fixture and validation coverage added
+- Added `HookEventService::ValidateFixtureScenarios()` assertions for:
+  - successful emission of valid bootstrap event
+  - rejection of invalid bootstrap event
+  - emitted/failed counter expectations
+- Hook-event fixture validation is now executed during startup fixture validation pass.
+
+### Observability updates
+- Extended diagnostics report `hooks` block with event metrics:
+  - `eventsEmitted`
+  - `eventValidationFailed`
+  - `eventsDropped`
+- Added feature registry entry:
+  - `hooks-event-emission` = implemented
+
+### Build validation
+- Ran:
+  - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
+- Result: success, 0 errors, 0 warnings.

@@ -129,6 +129,7 @@
     <ClInclude Include="src\core\RetrievalMemoryService.h" />
     <ClInclude Include="src\core\SubagentRegistryService.h" />
     <ClInclude Include="src\core\HookCatalogService.h" />
+    <ClInclude Include="src\core\HookEventService.h" />
     <ClInclude Include="src\core\SkillsCommandService.h" />
     <ClInclude Include="src\core\SkillsCatalogService.h" />
     <ClInclude Include="src\core\SkillsEnvOverrideService.h" />
@@ -194,6 +195,7 @@
     <ClCompile Include="src\core\RetrievalMemoryService.cpp" />
     <ClCompile Include="src\core\SubagentRegistryService.cpp" />
     <ClCompile Include="src\core\HookCatalogService.cpp" />
+    <ClCompile Include="src\core\HookEventService.cpp" />
     <ClCompile Include="src\core\SkillsCommandService.cpp" />
     <ClCompile Include="src\core\SkillsCatalogService.cpp" />
     <ClCompile Include="src\core\SkillsEnvOverrideService.cpp" />
