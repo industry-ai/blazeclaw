@@ -28,6 +28,27 @@ Validation requirements:
 - Drift simulation tests: `<command>`
 - Required pass threshold: `<percent>`
 
+## 2.1) Tenant Policy Registry Wiring
+
+Define how each tenant consumes approved policy bundles from a registry.
+
+- Registry endpoint: `<https://policy-registry.example>`
+- Registry namespace strategy: `<org>/<environment>/<tenant>`
+- Bundle locator format: `<registry>/<namespace>/<bundle>:<version>`
+- Tenant registry mapping source:
+  `<config-service|tenant-manifest|runtime-policy-map>`
+- Registry auth mode: `<managed-identity|oidc|token>`
+- Sync mode: `<pull-on-start|scheduled-sync|event-driven>`
+- Sync interval: `<duration>`
+- Rollback bundle pin: `<bundle-id@version>`
+
+Registry integrity checks:
+
+- [ ] Bundle digest matches signed catalog
+- [ ] Tenant allowed namespace policy passes
+- [ ] Version pin policy satisfied
+- [ ] Emergency rollback bundle reachable
+
 ## 3) Attestation Pipeline Design
 
 - Pipeline id: `<pipeline-id>`
@@ -40,6 +61,23 @@ Validation requirements:
 - Signing identity: `<kms-key|sigstore-identity|internal-ca>`
 - Verification command: `<command>`
 - Verification gate action on failure: `<hold|rollback|alert>`
+
+## 3.1) Centralized Attestation Authority Wiring
+
+- Authority endpoint: `<https://attestation-authority.example>`
+- Authority trust anchor id: `<trust-anchor-id>`
+- Certificate chain source: `<uri-or-secret-ref>`
+- Signature profile: `<x509|sigstore|jwks>`
+- Issuance policy id: `<policy-id>`
+- Verification audience: `<runtime|gateway|ci>`
+- Authority failover endpoint: `<optional-endpoint>`
+
+Authority verification controls:
+
+- [ ] Trust chain validation passes
+- [ ] Revocation/expiry checks pass
+- [ ] Issuer policy id matches expected value
+- [ ] Tenant workload identity is authorized
 
 Pipeline stages:
 
@@ -82,6 +120,13 @@ Publication verification checks:
   - R2: attestation verification
   - R3: publication SLA compliance
   - R4: federated approval sign-off
+
+Registry and authority verification checkpoints:
+
+- R1: tenant-to-registry mapping resolved for canary tenants
+- R2: centralized authority trust chain validated in staging
+- R3: registry sync and signature verification stable at broad scope
+- R4: production authority attestation and publication verification signed off
 
 ## 6) Audit and Retention
 

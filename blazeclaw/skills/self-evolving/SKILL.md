@@ -81,6 +81,9 @@ When a pattern is proven, promote it to:
 - Verify organization-specific policy engine and attestation publication
   workflow is defined from
   `references/enterprise-policy-attestation-publication-template.md`.
+- Verify tenant policy registry and centralized attestation authority
+  wiring is defined in
+  `references/enterprise-policy-attestation-publication-template.md`.
 - Add team-facing guidance entry in `.github/copilot-instructions.md`.
 
 ## Known Limitations
@@ -89,4 +92,4 @@ None in current self-evolving runtime scope.
 
 ## Follow-Up Enhancements
 
-- Extend policy-as-code controls with organization-specific policy engines, attestation pipelines, and automated scorecard publication.
+- Add outage simulation and automated failover runbooks for policy registry and centralized attestation authority dependencies.

@@ -124,6 +124,15 @@ Engine precedence and conflict policy:
 - Tie-breaker policy: `<deny-wins|majority|priority-engine>`
 - Fallback behavior when engine unavailable: `<fail-closed|fail-open>`
 
+Tenant policy registry wiring:
+
+- Tenant policy registry endpoint: `<registry-url>`
+- Tenant registry namespace: `<org/env/tenant>`
+- Bundle resolution policy: `<latest-approved|pinned-version>`
+- Registry authentication mode: `<managed-identity|oidc|token>`
+- Registry synchronization cadence: `<duration>`
+- Registry outage fallback bundle: `<bundle-id@version>`
+
 ## 6.3) Attestation Pipeline Controls
 
 - Attestation pipeline enabled: `<true|false>`
@@ -136,6 +145,15 @@ Engine precedence and conflict policy:
 - Signing authority: `<kms-key|sigstore-identity|internal-ca>`
 - Verification command: `<attestation verify command>`
 - Promotion gate on verification failure: `<hold|rollback>`
+
+Centralized attestation authority wiring:
+
+- Authority endpoint: `<authority-url>`
+- Trust anchor id: `<trust-anchor-id>`
+- Certificate/JWKS source: `<secret-ref-or-uri>`
+- Issuance policy id: `<policy-id>`
+- Revocation check mode: `<strict|best-effort>`
+- Failover authority endpoint: `<optional-authority-url>`
 
 ## 6.4) Automated Scorecard Publication Controls
 
@@ -205,6 +223,8 @@ Federated scorecard controls:
 - Scorecard publication target: `<dashboard|artifact-store>`
 - Scorecard publication pipeline id: `<pipeline-id>`
 - Scorecard publication verification required: `<true|false>`
+- Registry mapping verification required: `<true|false>`
+- Authority trust-chain verification required: `<true|false>`
 - Cross-tenant remediation coverage threshold: `<percent>`
 - Cross-tenant policy compliance threshold: `<percent>`
 - Scorecard review cadence: `<weekly|monthly|quarterly>`

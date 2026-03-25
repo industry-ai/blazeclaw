@@ -151,6 +151,15 @@ Organization policy engine and publication controls:
 - `hooks.engine.scorecardPublicationEnabled`
 - `hooks.engine.scorecardPublicationPipelineId`
 
+Tenant policy registry and centralized authority controls:
+
+- `hooks.engine.policyRegistryEndpoint`
+- `hooks.engine.policyRegistryNamespace`
+- `hooks.engine.policyRegistrySyncMode`
+- `hooks.engine.attestationAuthorityEndpoint`
+- `hooks.engine.attestationTrustAnchorId`
+- `hooks.engine.attestationRevocationMode`
+
 Enterprise attestation endpoint:
 
 - `gateway.runtime.governance.attestationStatus`
@@ -172,4 +181,7 @@ Federated governance scorecard workflow:
    rollout phase transition.
 4. Define organization policy engines, attestation pipeline, and
    automated publication workflow in
+   `enterprise-policy-attestation-publication-template.md`.
+5. Wire tenant policy registry mappings and centralized attestation
+   authority trust settings using
    `enterprise-policy-attestation-publication-template.md`.

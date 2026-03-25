@@ -84,11 +84,19 @@ Hold promotion from R2 to R3 until policy-block incidents are reduced below thre
 - Pipeline run: att-20250115-77
 - Signature verification: pass
 - Verification timestamp: 2025-01-15T19:05:00Z
+- Central authority endpoint: https://attest.example/authority
+- Trust anchor id: trust-anchor-prod-01
 
 ### Scorecard Publication
 - Pipeline run: pub-20250115-11
 - Targets: governance-dashboard, artifact-store
 - Publication SLA: met (7m < 10m)
+
+### Tenant Registry Binding
+- Registry endpoint: https://policy.example/registry
+- Tenant namespace: org/prod/tenant-a
+- Bundle resolution: pinned-version (bundle-a@1.3.4)
+- Registry sync health: pass
 
 ---
 ```

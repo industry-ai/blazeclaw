@@ -87,8 +87,8 @@ When a pattern is proven, promote it to persistent guidance:
 
 ## Follow-Up Enhancements
 
-- Wire enterprise templates to tenant policy registries and centralized
-  attestation authorities.
+- Add resilience patterns for registry/authority outages and runtime
+  trust-chain recovery workflows.
 
 Policy templates:
 

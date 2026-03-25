@@ -21,6 +21,13 @@ Policy engine context:
 - Policy bundle reference: `<bundle-id@version>`
 - Decision mode: `<enforce|audit>`
 
+Registry and authority context:
+
+- Tenant policy registry endpoint: `<registry-url>`
+- Registry namespace coverage: `<tenant-group-or-scope>`
+- Centralized attestation authority endpoint: `<authority-url>`
+- Authority trust anchor id: `<trust-anchor-id>`
+
 ## 2) Policy-as-Code Control Summary
 
 | Control ID | Description | Pass Count | Fail Count | Exception Count | Status |
@@ -74,6 +81,8 @@ Federation-level aggregates:
 - Signature reference: `<signature-uri>`
 - Verification result: `<pass|fail>`
 - Verification timestamp: `<timestamp>`
+- Authority issuer policy id: `<policy-id>`
+- Trust-chain validation result: `<pass|fail>`
 
 ## 6.2) Scorecard Publication Status
 
@@ -85,6 +94,13 @@ Federation-level aggregates:
 - Published formats: `<json|markdown|both>`
 - Publication completed at: `<timestamp>`
 - Publication verification status: `<pass|fail>`
+
+## 6.3) Registry Binding Evidence
+
+- Tenant mapping snapshot path: `<path>`
+- Bundle resolution mode: `<latest-approved|pinned-version>`
+- Registry sync status: `<pass|fail>`
+- Last sync timestamp: `<timestamp>`
 
 ## 7) Review and Sign-off
 
