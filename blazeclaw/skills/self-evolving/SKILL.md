@@ -64,14 +64,17 @@ When a pattern is proven, promote it to:
 - Verify reminder appears in prompt lifecycle when skill is eligible.
 - Verify scripts run in your shell environment:
   - `scripts/activator.sh`
+  - `scripts/activator.ps1`
   - `scripts/error-detector.sh`
+  - `scripts/error-detector.ps1`
   - `scripts/extract-skill.sh --dry-run`
+  - `scripts/extract-skill.ps1 --dry-run`
 - Add team-facing guidance entry in `.github/copilot-instructions.md`.
 
 ## Known Limitations
 
 - Handler execution currently uses a constrained adapter that derives bootstrap mutation paths from handler contract content, not a full TypeScript runtime.
-- Shell helpers are Bash-oriented; PowerShell equivalents are a follow-up enhancement.
+- Shell helper parity is available for both Bash (`.sh`) and PowerShell (`.ps1`) variants.
 
 ## Follow-Up Enhancements
 

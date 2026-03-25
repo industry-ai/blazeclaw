@@ -35,6 +35,8 @@ If your local CLI supports shell hooks, point them to scripts under:
 
 - `blazeclaw/skills/self-evolving/scripts/activator.sh`
 - `blazeclaw/skills/self-evolving/scripts/error-detector.sh`
+- `blazeclaw/skills/self-evolving/scripts/activator.ps1`
+- `blazeclaw/skills/self-evolving/scripts/error-detector.ps1`
 
 (These scripts are ported in Phase 4.)
 
