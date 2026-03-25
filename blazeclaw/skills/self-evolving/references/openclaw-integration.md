@@ -83,8 +83,8 @@ When a pattern is proven, promote it to persistent guidance:
 
 ## Known Limitations
 
-- Runtime execution depends on availability of configured TypeScript-capable runner (`bun`, `tsx`, or `node` + `ts-node/esm`).
+- Runtime execution depends on availability of configured TypeScript-capable runner (`bun`, `tsx`, `deno`, or `node` + `ts-node/esm`).
 
 ## Follow-Up Enhancements
 
-- Expand operational hardening and package-level runtime orchestration for broader hook ecosystems.
+- Add governance and policy templates for tenant-level hook package rollout controls.

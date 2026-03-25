@@ -13,6 +13,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <tuple>
+#include <unordered_set>
 
 namespace blazeclaw::core {
 
@@ -49,6 +50,10 @@ std::wstring ToLower(const std::wstring& value) {
         return static_cast<wchar_t>(std::towlower(ch));
       });
   return lowered;
+}
+
+std::wstring NormalizePathKey(const std::wstring& value) {
+  return ToLower(Trim(value));
 }
 
 std::wstring Utf8ToWide(const std::string& value) {
@@ -331,6 +336,7 @@ bool ExecuteTypeScriptHook(
   runtimeCandidates.emplace_back(L"bun", L"bun");
   runtimeCandidates.emplace_back(L"tsx", L"tsx");
   runtimeCandidates.emplace_back(L"node --loader ts-node/esm", L"node-ts-node");
+  runtimeCandidates.emplace_back(L"deno run --quiet --allow-read", L"deno");
 
   bool executed = false;
   std::wstring lastError;
@@ -510,6 +516,14 @@ bool HookExecutionService::Dispatch(
   ++m_snapshot.diagnostics.reminderTriggeredCount;
   m_snapshot.diagnostics.lastReminderState = L"reminder_triggered";
 
+  std::unordered_set<std::wstring> existingPathKeys;
+  for (const auto& file : m_snapshot.bootstrapFiles) {
+    const auto key = NormalizePathKey(file.path);
+    if (!key.empty()) {
+      existingPathKeys.insert(key);
+    }
+  }
+
   const auto ordered = BuildDispatchOrder(hooks, event);
   bool injected = false;
   for (const auto* hook : ordered) {
@@ -549,6 +563,17 @@ bool HookExecutionService::Dispatch(
       }
 
       for (const auto& file : proposed) {
+        const auto pathKey = NormalizePathKey(file.path);
+        if (pathKey.empty()) {
+          continue;
+        }
+
+        if (existingPathKeys.find(pathKey) != existingPathKeys.end()) {
+          m_snapshot.diagnostics.warnings.push_back(
+              L"Hook mutation skipped due to duplicate bootstrap file path.");
+          continue;
+        }
+
         if (!IsSafeBootstrapPath(file.path)) {
           ++m_snapshot.diagnostics.guardRejectedCount;
           ++m_snapshot.diagnostics.reminderSkippedCount;
@@ -570,6 +595,7 @@ bool HookExecutionService::Dispatch(
         }
 
         m_snapshot.bootstrapFiles.push_back(file);
+        existingPathKeys.insert(pathKey);
         if (ToLower(file.path) == L"self_evolving_reminder.md") {
           injected = true;
         }

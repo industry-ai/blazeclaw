@@ -49,13 +49,14 @@ If your local CLI supports shell hooks, point them to scripts under:
 - Confirm your workflow guidance includes explicit logging instructions
 - Confirm at least one test entry can be appended without format errors
 - Confirm runtime diagnostics include:
-  - `hooks.engineMode` with active runtime value (`bun`, `tsx`, or `node-ts-node`)
+  - `hooks.engineMode` with active runtime value (`bun`, `tsx`, `node-ts-node`, or `deno`)
   - `hooks.selfEvolvingHookTriggered: true` when self-evolving hook executed
   - `hooks.hookDispatchCount > 0` during active runs
   - `hooks.hookFailureCount == 0` for healthy dispatch
   - `hooks.reminderState` in `{reminder_triggered, reminder_injected, reminder_skipped, reminder_fallback_used}`
   - `hooks.reminderReason` for transition reason details
   - `hooks.reminderEnabled` and `hooks.reminderVerbosity` for active policy
+  - no duplicate `bootstrapFiles` entries when multiple hook packages inject shared paths
 
 ## Notes
 
