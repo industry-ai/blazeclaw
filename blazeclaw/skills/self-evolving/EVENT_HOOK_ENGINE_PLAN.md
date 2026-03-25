@@ -1,0 +1,147 @@
+# Dedicated Event-Hook Execution Engine Plan (Self-Evolving)
+
+## Problem
+Current behavior injects self-evolving reminder content via **skills prompt lifecycle**.
+Target behavior is a **dedicated event-hook execution engine** in BlazeClaw runtime.
+
+## Goal
+Implement a native BlazeClaw hook engine that executes self-evolving hook handlers on runtime lifecycle events, without relying on prompt injection as the primary dispatch path.
+
+## Scope
+- Runtime: BlazeClaw C++ MFC / Gateway integration
+- Skill: `blazeclaw/skills/self-evolving/hooks/blazeclaw/*`
+- Events: bootstrap/session lifecycle events required for self-evolving reminder flow
+
+## Non-Goals
+- Reintroducing any OpenClaw runtime dependency
+- Expanding to all possible hook types in first iteration
+- Replacing existing script helpers (`activator.sh`, `error-detector.sh`)
+
+## Architecture Target
+1. **Hook Catalog Loader**
+   - Discover hook metadata from skill path (`HOOK.md`)
+   - Resolve hook handler source (`handler.ts` contract)
+   - Validate required fields and event subscriptions
+
+2. **Hook Event Dispatcher**
+   - Emit normalized runtime events from BlazeClaw lifecycle transitions
+   - Route events to subscribed hooks
+   - Enforce isolation, error capture, and timeout boundaries
+
+3. **Hook Execution Adapter**
+   - Execute handler contract against normalized event object
+   - Support context mutation (`bootstrapFiles` append) in controlled way
+   - Preserve safety guards (invalid shape rejection, subagent skip)
+
+4. **Observability & Diagnostics**
+   - Report hook registration/execution status in diagnostics
+   - Add counters for dispatches, successes, failures, skips, timeouts
+
+## Implementation Plan
+
+### Phase A — Contract and Loader
+- Define BlazeClaw-native hook metadata schema for `HOOK.md`
+- Add loader service in core runtime to parse and validate hooks
+- Add fixture coverage for valid/invalid hook metadata and path safety
+
+### Phase B — Event Emission
+- Introduce normalized lifecycle events (starting with `agent.bootstrap`)
+- Wire event emission from runtime/session bootstrap path
+- Add schema validation for emitted events
+
+### Phase C — Execution Engine
+- Add hook dispatcher + execution pipeline with:
+  - event filtering
+  - deterministic execution order
+  - timeout + exception handling
+- Add context mutation guardrails for `bootstrapFiles`
+
+### Phase D — Self-Evolving Integration
+- Register `self-evolving` hook in engine
+- Move reminder flow trigger from prompt-only path to event-hook path
+- Keep prompt injection as temporary fallback behind feature flag
+
+### Phase E — Rollout Hardening
+- Add diagnostics fields:
+  - `hookEngineEnabled`
+  - `hooksLoaded`
+  - `hookDispatchCount`
+  - `hookFailureCount`
+  - `selfEvolvingHookTriggered`
+- Add toggle/rollout config:
+  - `hooks.engine.enabled`
+  - `hooks.engine.fallbackPromptInjection`
+
+## Validation Plan
+
+## 1) Build Validation
+- Run:
+  - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
+
+## 2) Fixture/Service Validation
+- Add/extend fixture scenarios for:
+  - hook metadata parsing
+  - lifecycle event dispatch
+  - self-evolving reminder hook execution
+  - failure/timeout handling
+
+## 3) Runtime Verification
+- Confirm reminder injection occurs after hook dispatch on bootstrap event
+- Confirm diagnostics show hook execution metrics
+- Confirm fallback behavior when hook engine disabled
+
+## 4) Regression Checks
+- Ensure existing skill prompt generation still works
+- Ensure no OpenClaw runtime imports/files are required
+
+## Risks and Mitigations
+- **Risk:** Handler runtime integration complexity (TS contract execution from C++ path)
+  - **Mitigation:** Introduce a narrow adapter boundary and start with constrained contract.
+- **Risk:** Event ordering issues during bootstrap
+  - **Mitigation:** Define explicit lifecycle sequence and deterministic dispatch order.
+- **Risk:** Silent hook failures
+  - **Mitigation:** Add mandatory diagnostics counters and warning surfaces.
+
+## Deliverables
+- Hook loader + dispatcher runtime components
+- Lifecycle event emission for bootstrap
+- Self-evolving hook execution path wired to event engine
+- Config flags for enablement/fallback
+- Fixture/test updates and passing solution build
+- Updated docs (`SKILL.md`, `references/hooks-setup.md`, `PORTING_PLAN.md`) reflecting dedicated event-hook execution engine
+
+## Definition of Done
+- Self-evolving reminder is triggered through dedicated event-hook execution engine.
+- Prompt lifecycle injection is no longer the primary mechanism.
+- Build/tests pass and diagnostics prove hook engine activity.
+- BlazeClaw remains fully independent from OpenClaw runtime.
+
+## Phase A Execution Results (Completed)
+
+### Contract and loader implemented
+- Added `HookCatalogService` with:
+  - `HOOK.md` frontmatter parsing contract
+  - required fields validation (`name`, `description`, `blazeclaw.event`, `blazeclaw.handler`)
+  - handler path safety checks and file existence checks
+- Added runtime diagnostics counters:
+  - `hooksLoaded`
+  - `invalidMetadataFiles`
+  - `unsafeHandlerPaths`
+  - `missingHandlerFiles`
+
+### Runtime integration applied
+- Hook catalog snapshot is now refreshed from current skills catalog in `ServiceManager` lifecycle.
+- Hook fixture validation is now executed during startup fixture validation pass.
+- Operator diagnostics report now includes a `hooks` block with loader metrics.
+
+### Fixture coverage added
+- Added `fixtures/skills-catalog/s8-hooks/workspace/skills/*` scenarios:
+  - `hook-valid`
+  - `hook-invalid-metadata`
+  - `hook-unsafe-handler`
+- Added `HookCatalogService::ValidateFixtureScenarios()` assertions for valid/invalid/unsafe paths.
+
+### Build validation
+- Ran:
+  - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
+- Result: success, 0 errors, 0 warnings.

@@ -306,6 +306,7 @@ void ServiceManager::RefreshSkillsState(
   m_skillsEligibility = m_skillsEligibilityService.Evaluate(
       m_skillsCatalog,
       config);
+  m_hookCatalog = m_hookCatalogService.BuildSnapshot(m_skillsCatalog);
   m_skillsPrompt = m_skillsPromptService.BuildSnapshot(
       m_skillsCatalog,
       m_skillsEligibility,
@@ -569,6 +570,11 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
     if (!m_skillSecurityScanService.ValidateFixtureScenarios(candidate, fixtureError)) {
       m_skillsCatalog.diagnostics.warnings.push_back(
           L"skills-scan fixture validation failed: " + fixtureError);
+    }
+
+    if (!m_hookCatalogService.ValidateFixtureScenarios(candidate, fixtureError)) {
+      m_skillsCatalog.diagnostics.warnings.push_back(
+          L"hooks-catalog fixture validation failed: " + fixtureError);
     }
 
     break;
@@ -1111,6 +1117,15 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       ",\"promptIncluded\":" + std::to_string(m_skillsPrompt.includedCount) +
       ",\"selfEvolvingReminderInjected\":" +
       std::string(selfEvolvingReminderInjected ? "true" : "false") +
+      "},"
+      "\"hooks\":{\"loaded\":" +
+      std::to_string(m_hookCatalog.diagnostics.hooksLoaded) +
+      ",\"invalidMetadata\":" +
+      std::to_string(m_hookCatalog.diagnostics.invalidMetadataFiles) +
+      ",\"unsafeHandlerPaths\":" +
+      std::to_string(m_hookCatalog.diagnostics.unsafeHandlerPaths) +
+      ",\"missingHandlers\":" +
+      std::to_string(m_hookCatalog.diagnostics.missingHandlerFiles) +
       "},"
       "\"features\":{\"implemented\":" + std::to_string(implementedCount) +
       ",\"inProgress\":" + std::to_string(inProgressCount) +

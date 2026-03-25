@@ -16,6 +16,7 @@
 #include "PiEmbeddedService.h"
 #include "RetrievalMemoryService.h"
 #include "SubagentRegistryService.h"
+#include "HookCatalogService.h"
 #include "SkillsCommandService.h"
 #include "SkillsCatalogService.h"
 #include "SkillsEnvOverrideService.h"
@@ -105,6 +106,8 @@ private:
   RetrievalMemoryService m_retrievalMemoryService;
   RetrievalMemorySnapshot m_retrievalMemory;
   PiEmbeddedService m_piEmbeddedService;
+  HookCatalogService m_hookCatalogService;
+  HookCatalogSnapshot m_hookCatalog;
   SkillsCatalogService m_skillsCatalogService;
   SkillsCatalogSnapshot m_skillsCatalog;
   SkillsEligibilityService m_skillsEligibilityService;
