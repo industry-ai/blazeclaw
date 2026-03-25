@@ -182,6 +182,16 @@ bool IsLikelyEchoResponse(
   return false;
 }
 
+std::string WideToNarrowAscii(const std::wstring& value) {
+  std::string output;
+  output.reserve(value.size());
+  for (const auto ch : value) {
+    output.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
+  }
+
+  return output;
+}
+
 bool IsOneOfChannels(
     const std::vector<std::wstring>& enabledChannels,
     const std::wstring& candidate) {
@@ -236,6 +246,39 @@ bool ResolveHooksFallbackPromptInjection(
       config.hooks.engine.fallbackPromptInjection);
 }
 
+bool ResolveHooksReminderEnabled(const blazeclaw::config::AppConfig& config) {
+  return ReadBoolEnvOrDefault(
+      L"BLAZECLAW_HOOKS_REMINDER_ENABLED",
+      config.hooks.engine.reminderEnabled);
+}
+
+std::wstring ResolveHooksReminderVerbosity(
+    const blazeclaw::config::AppConfig& config) {
+  std::wstring value = config.hooks.engine.reminderVerbosity;
+  wchar_t* env = nullptr;
+  std::size_t length = 0;
+  if (_wdupenv_s(&env, &length, L"BLAZECLAW_HOOKS_REMINDER_VERBOSITY") == 0 &&
+      env != nullptr &&
+      length > 0) {
+    value.assign(env);
+  }
+  if (env != nullptr) {
+    free(env);
+  }
+
+  std::wstring normalized;
+  normalized.reserve(value.size());
+  for (const wchar_t ch : value) {
+    normalized.push_back(static_cast<wchar_t>(std::towlower(ch)));
+  }
+
+  if (normalized == L"minimal" || normalized == L"normal" || normalized == L"detailed") {
+    return normalized;
+  }
+
+  return L"normal";
+}
+
 bool ContainsBootstrapFile(
     const std::vector<HookBootstrapFile>& files,
     const std::wstring& expectedPath) {
@@ -273,6 +316,14 @@ std::wstring BuildSelfEvolvingReminderPromptBlock() {
          L"- failures -> .learnings/ERRORS.md\n"
          L"- missing capabilities -> .learnings/FEATURE_REQUESTS.md\n"
          L"Promote proven patterns to AGENTS.md / SOUL.md / TOOLS.md.\n";
+}
+
+std::wstring BuildReminderSkipReason(const HookExecutionSnapshot& execution) {
+  if (!execution.diagnostics.lastReminderReason.empty()) {
+    return execution.diagnostics.lastReminderReason;
+  }
+
+  return L"none";
 }
 
 } // namespace
@@ -435,6 +486,8 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
   m_hooksEngineEnabled = ResolveHooksEngineEnabled(m_activeConfig);
   m_hooksFallbackPromptInjection =
       ResolveHooksFallbackPromptInjection(m_activeConfig);
+  m_hooksReminderEnabled = ResolveHooksReminderEnabled(m_activeConfig);
+  m_hooksReminderVerbosity = ResolveHooksReminderVerbosity(m_activeConfig);
   m_selfEvolvingHookTriggered = false;
   m_agentsScope = m_agentsCatalogService.BuildSnapshot(
       std::filesystem::current_path(),
@@ -550,7 +603,13 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
   if (m_hooksEngineEnabled && emittedBootstrapEvent && !m_hookEvents.events.empty()) {
     std::wstring dispatchError;
     const auto& latestEvent = m_hookEvents.events.back();
-    if (!m_hookExecutionService.Dispatch(latestEvent, m_hookCatalog, dispatchError) &&
+    if (!m_hookExecutionService.Dispatch(
+            latestEvent,
+            m_hookCatalog,
+            HookExecutionPolicy{
+                .reminderEnabled = m_hooksReminderEnabled,
+                .reminderVerbosity = m_hooksReminderVerbosity},
+            dispatchError) &&
         !dispatchError.empty()) {
       m_skillsCatalog.diagnostics.warnings.push_back(
           L"hooks-dispatch failed: " + dispatchError);
@@ -574,9 +633,14 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
             static_cast<std::uint32_t>(m_skillsPrompt.prompt.size());
         m_skillsPrompt.truncated = true;
       }
+
+      m_hookExecution.diagnostics.lastReminderState = L"reminder_fallback_used";
+      m_hookExecution.diagnostics.lastReminderReason = L"prompt_fallback";
     }
   } else if (!m_hooksEngineEnabled) {
     ++m_hookExecution.diagnostics.skippedCount;
+    m_hookExecution.diagnostics.lastReminderState = L"reminder_skipped";
+    m_hookExecution.diagnostics.lastReminderReason = L"hook_engine_disabled";
   }
 
   std::wstring fixtureError;
@@ -1270,6 +1334,10 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       std::string(m_hooksEngineEnabled ? "true" : "false") +
       ",\"fallbackPromptInjection\":" +
       std::string(m_hooksFallbackPromptInjection ? "true" : "false") +
+      ",\"reminderEnabled\":" +
+      std::string(m_hooksReminderEnabled ? "true" : "false") +
+      ",\"reminderVerbosity\":\"" +
+      WideToNarrowAscii(m_hooksReminderVerbosity) + "\"" +
       ",\"selfEvolvingHookTriggered\":" +
       std::string(m_selfEvolvingHookTriggered ? "true" : "false") +
       ",\"invalidMetadata\":" +
@@ -1300,6 +1368,16 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       std::to_string(m_hookExecution.diagnostics.timeoutCount) +
       ",\"guardRejected\":" +
       std::to_string(m_hookExecution.diagnostics.guardRejectedCount) +
+      ",\"reminderTriggered\":" +
+      std::to_string(m_hookExecution.diagnostics.reminderTriggeredCount) +
+      ",\"reminderInjected\":" +
+      std::to_string(m_hookExecution.diagnostics.reminderInjectedCount) +
+      ",\"reminderSkipped\":" +
+      std::to_string(m_hookExecution.diagnostics.reminderSkippedCount) +
+      ",\"reminderState\":\"" +
+      WideToNarrowAscii(m_hookExecution.diagnostics.lastReminderState) + "\"" +
+      ",\"reminderReason\":\"" +
+      WideToNarrowAscii(m_hookExecution.diagnostics.lastReminderReason) + "\"" +
       "},"
       "\"features\":{\"implemented\":" + std::to_string(implementedCount) +
       ",\"inProgress\":" + std::to_string(inProgressCount) +

@@ -57,6 +57,7 @@ When a pattern is proven, promote it to:
 4. Verify prompt lifecycle injection via diagnostics report field:
    - `hooks.selfEvolvingHookTriggered: true`
    - `skills.selfEvolvingReminderInjected: true` (fallback/legacy visibility)
+   - `hooks.reminderState` and `hooks.reminderReason` for transition telemetry
 
 ## Rollout Checklist
 
@@ -73,11 +74,9 @@ When a pattern is proven, promote it to:
 
 ## Known Limitations
 
-- Handler execution currently uses a constrained adapter that derives bootstrap mutation paths from handler contract content, not a full TypeScript runtime.
-- Shell helper parity is available for both Bash (`.sh`) and PowerShell (`.ps1`) variants.
+- Hook execution uses a constrained contract parser for `bootstrapFiles.push(...)`
+  operations rather than full TypeScript runtime execution.
 
 ## Follow-Up Enhancements
 
-- Add `.ps1` script variants for Windows-native workflows.
-- Add explicit gateway event telemetry around reminder injection transitions.
-- Add optional policy toggles to control reminder verbosity.
+- Evaluate optional full TypeScript hook runtime execution as a future expansion.

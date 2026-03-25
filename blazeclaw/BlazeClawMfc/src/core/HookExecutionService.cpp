@@ -9,6 +9,7 @@
 #include <cwctype>
 #include <fstream>
 #include <stdexcept>
+#include <tuple>
 
 namespace blazeclaw::core {
 
@@ -91,39 +92,59 @@ std::optional<std::wstring> ReadFileUtf8(const std::filesystem::path& filePath) 
 }
 
 std::vector<std::wstring> ExtractBootstrapPathsFromHandler(
-    const std::wstring& handlerContent) {
+    const std::wstring& handlerContent,
+    std::wstring& outError) {
+  outError.clear();
   std::vector<std::wstring> paths;
+
+  constexpr auto kPushPattern = L"bootstrapFiles.push({";
   std::size_t cursor = 0;
   while (cursor < handlerContent.size()) {
-    const auto pathPos = handlerContent.find(L"path", cursor);
+    const auto pushPos = handlerContent.find(kPushPattern, cursor);
+    if (pushPos == std::wstring::npos) {
+      break;
+    }
+
+    const auto blockEnd = handlerContent.find(L"});", pushPos);
+    if (blockEnd == std::wstring::npos) {
+      outError = L"Malformed handler contract: unterminated bootstrapFiles.push block.";
+      return {};
+    }
+
+    const auto block = handlerContent.substr(pushPos, blockEnd - pushPos + 3);
+    const auto pathPos = block.find(L"path");
     if (pathPos == std::wstring::npos) {
-      break;
+      outError = L"Malformed handler contract: missing path in bootstrapFiles.push block.";
+      return {};
     }
 
-    const auto colonPos = handlerContent.find(L':', pathPos + 4);
+    const auto colonPos = block.find(L':', pathPos + 4);
     if (colonPos == std::wstring::npos) {
-      break;
+      outError = L"Malformed handler contract: invalid path field in bootstrapFiles.push block.";
+      return {};
     }
 
-    const auto quotePos = handlerContent.find_first_of(L"'\"", colonPos + 1);
+    const auto quotePos = block.find_first_of(L"'\"", colonPos + 1);
     if (quotePos == std::wstring::npos) {
-      cursor = colonPos + 1;
-      continue;
+      outError = L"Malformed handler contract: path must be quoted.";
+      return {};
     }
 
-    const wchar_t quote = handlerContent[quotePos];
-    const auto endQuotePos = handlerContent.find(quote, quotePos + 1);
+    const wchar_t quote = block[quotePos];
+    const auto endQuotePos = block.find(quote, quotePos + 1);
     if (endQuotePos == std::wstring::npos) {
-      cursor = quotePos + 1;
-      continue;
+      outError = L"Malformed handler contract: unterminated quoted path.";
+      return {};
     }
 
-    const auto path = Trim(handlerContent.substr(quotePos + 1, endQuotePos - quotePos - 1));
-    if (!path.empty()) {
-      paths.push_back(path);
+    const auto path = Trim(block.substr(quotePos + 1, endQuotePos - quotePos - 1));
+    if (path.empty()) {
+      outError = L"Malformed handler contract: empty path value.";
+      return {};
     }
 
-    cursor = endQuotePos + 1;
+    paths.push_back(path);
+    cursor = blockEnd + 3;
   }
 
   return paths;
@@ -212,25 +233,47 @@ bool HookExecutionService::IsSafeBootstrapPath(const std::wstring& value) {
 bool HookExecutionService::Dispatch(
     const HookLifecycleEvent& event,
     const HookCatalogSnapshot& hooks,
+    const HookExecutionPolicy& policy,
     std::wstring& outError) {
   outError.clear();
 
+  m_snapshot.diagnostics.lastReminderState.clear();
+  m_snapshot.diagnostics.lastReminderReason.clear();
+
   if (!MatchesEvent(L"agent.bootstrap", event)) {
     ++m_snapshot.diagnostics.skippedCount;
+    ++m_snapshot.diagnostics.reminderSkippedCount;
+    m_snapshot.diagnostics.lastReminderState = L"reminder_skipped";
+    m_snapshot.diagnostics.lastReminderReason = L"unsupported_event";
     outError = L"Hook dispatch skipped: unsupported event.";
     return false;
   }
 
   if (event.sessionKey.find(L":subagent:") != std::wstring::npos) {
     ++m_snapshot.diagnostics.skippedCount;
+    ++m_snapshot.diagnostics.reminderSkippedCount;
+    m_snapshot.diagnostics.lastReminderState = L"reminder_skipped";
+    m_snapshot.diagnostics.lastReminderReason = L"subagent_session";
     outError = L"Hook dispatch skipped: subagent session.";
+    return false;
+  }
+
+  if (!policy.reminderEnabled) {
+    ++m_snapshot.diagnostics.skippedCount;
+    ++m_snapshot.diagnostics.reminderSkippedCount;
+    m_snapshot.diagnostics.lastReminderState = L"reminder_skipped";
+    m_snapshot.diagnostics.lastReminderReason = L"reminder_disabled";
+    outError = L"Hook dispatch skipped: reminder policy disabled.";
     return false;
   }
 
   m_snapshot.bootstrapFiles = event.bootstrapFiles;
   ++m_snapshot.diagnostics.dispatchCount;
+  ++m_snapshot.diagnostics.reminderTriggeredCount;
+  m_snapshot.diagnostics.lastReminderState = L"reminder_triggered";
 
   const auto ordered = BuildDispatchOrder(hooks, event);
+  bool injected = false;
   for (const auto* hook : ordered) {
     const auto started = std::chrono::steady_clock::now();
     try {
@@ -243,14 +286,41 @@ bool HookExecutionService::Dispatch(
         continue;
       }
 
-      const auto extractedPaths = ExtractBootstrapPathsFromHandler(handlerContent.value());
+      std::wstring parseError;
+      const auto extractedPaths = ExtractBootstrapPathsFromHandler(
+          handlerContent.value(),
+          parseError);
+      if (!parseError.empty()) {
+        ++m_snapshot.diagnostics.failureCount;
+        ++m_snapshot.diagnostics.reminderSkippedCount;
+        m_snapshot.diagnostics.lastReminderState = L"reminder_skipped";
+        m_snapshot.diagnostics.lastReminderReason = L"handler_contract_invalid";
+        m_snapshot.diagnostics.warnings.push_back(parseError);
+        continue;
+      }
+
       for (const auto& extractedPath : extractedPaths) {
-        proposed.push_back(HookBootstrapFile{.path = extractedPath, .virtualFile = true});
+        proposed.push_back(
+            HookBootstrapFile{.path = extractedPath, .virtualFile = true});
+      }
+
+      if (ToLower(policy.reminderVerbosity) == L"minimal") {
+        proposed.erase(
+            std::remove_if(
+                proposed.begin(),
+                proposed.end(),
+                [](const HookBootstrapFile& item) {
+                  return ToLower(item.path) != L"self_evolving_reminder.md";
+                }),
+            proposed.end());
       }
 
       for (const auto& file : proposed) {
         if (!IsSafeBootstrapPath(file.path)) {
           ++m_snapshot.diagnostics.guardRejectedCount;
+          ++m_snapshot.diagnostics.reminderSkippedCount;
+          m_snapshot.diagnostics.lastReminderState = L"reminder_skipped";
+          m_snapshot.diagnostics.lastReminderReason = L"unsafe_path";
           m_snapshot.diagnostics.warnings.push_back(
               L"Hook mutation rejected due to unsafe bootstrap file path.");
           continue;
@@ -258,12 +328,18 @@ bool HookExecutionService::Dispatch(
 
         if (m_snapshot.bootstrapFiles.size() >= kMaxBootstrapFiles) {
           ++m_snapshot.diagnostics.guardRejectedCount;
+          ++m_snapshot.diagnostics.reminderSkippedCount;
+          m_snapshot.diagnostics.lastReminderState = L"reminder_skipped";
+          m_snapshot.diagnostics.lastReminderReason = L"bootstrap_limit";
           m_snapshot.diagnostics.warnings.push_back(
               L"Hook mutation rejected due to bootstrap file limit.");
           continue;
         }
 
         m_snapshot.bootstrapFiles.push_back(file);
+        if (ToLower(file.path) == L"self_evolving_reminder.md") {
+          injected = true;
+        }
       }
 
       const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -278,13 +354,29 @@ bool HookExecutionService::Dispatch(
       ++m_snapshot.diagnostics.successCount;
     } catch (const std::exception&) {
       ++m_snapshot.diagnostics.failureCount;
+      ++m_snapshot.diagnostics.reminderSkippedCount;
+      m_snapshot.diagnostics.lastReminderState = L"reminder_skipped";
+      m_snapshot.diagnostics.lastReminderReason = L"exception";
       m_snapshot.diagnostics.warnings.push_back(
           L"Hook execution failed with exception.");
     } catch (...) {
       ++m_snapshot.diagnostics.failureCount;
+      ++m_snapshot.diagnostics.reminderSkippedCount;
+      m_snapshot.diagnostics.lastReminderState = L"reminder_skipped";
+      m_snapshot.diagnostics.lastReminderReason = L"unknown_exception";
       m_snapshot.diagnostics.warnings.push_back(
           L"Hook execution failed with unknown exception.");
     }
+  }
+
+  if (injected) {
+    ++m_snapshot.diagnostics.reminderInjectedCount;
+    m_snapshot.diagnostics.lastReminderState = L"reminder_injected";
+    m_snapshot.diagnostics.lastReminderReason = L"hook_execution";
+  } else if (m_snapshot.diagnostics.lastReminderState.empty()) {
+    ++m_snapshot.diagnostics.reminderSkippedCount;
+    m_snapshot.diagnostics.lastReminderState = L"reminder_skipped";
+    m_snapshot.diagnostics.lastReminderReason = L"no_injection";
   }
 
   return true;
@@ -318,6 +410,7 @@ bool HookExecutionService::ValidateFixtureScenarios(
               std::vector<HookBootstrapFile>{
                   HookBootstrapFile{.path = L"BOOTSTRAP.md", .virtualFile = true}}},
       hooks,
+      HookExecutionPolicy{},
       dispatchError);
 
   if (!ok) {
@@ -349,6 +442,20 @@ bool HookExecutionService::ValidateFixtureScenarios(
       snapshot.diagnostics.successCount == 0) {
     outError =
         L"S9 hooks exec fixture failed: expected dispatch and success counters > 0.";
+    return false;
+  }
+
+  if (snapshot.diagnostics.reminderTriggeredCount == 0 ||
+      snapshot.diagnostics.reminderInjectedCount == 0) {
+    outError =
+        L"S9 hooks exec fixture failed: expected reminder triggered/injected telemetry counters > 0.";
+    return false;
+  }
+
+  if (snapshot.diagnostics.lastReminderState.empty() ||
+      snapshot.diagnostics.lastReminderReason.empty()) {
+    outError =
+        L"S9 hooks exec fixture failed: expected reminder state and reason telemetry values.";
     return false;
   }
 

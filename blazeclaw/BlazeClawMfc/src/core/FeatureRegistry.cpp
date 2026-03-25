@@ -35,6 +35,8 @@ FeatureRegistry::FeatureRegistry() {
       {L"hooks-event-emission", FeatureState::Implemented},
       {L"hooks-execution-engine", FeatureState::Implemented},
       {L"hooks-self-evolving-integration", FeatureState::Implemented},
+      {L"hooks-reminder-policy-controls", FeatureState::Implemented},
+      {L"hooks-reminder-transition-telemetry", FeatureState::Implemented},
       {L"skills-eligibility-filtering", FeatureState::Implemented},
       {L"skills-prompt-snapshots", FeatureState::Implemented},
       {L"skills-watch-refresh", FeatureState::Implemented},

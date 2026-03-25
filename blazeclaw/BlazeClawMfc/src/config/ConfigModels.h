@@ -158,6 +158,8 @@ struct SkillsConfig {
 struct HooksEngineConfig {
   bool enabled = true;
   bool fallbackPromptInjection = false;
+  bool reminderEnabled = true;
+  std::wstring reminderVerbosity = L"normal";
 };
 
 struct HooksConfig {

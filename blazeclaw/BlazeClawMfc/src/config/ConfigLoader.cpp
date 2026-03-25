@@ -170,6 +170,17 @@ std::wstring NormalizeLocalModelExecutionMode(
   return L"sequential";
 }
 
+std::wstring NormalizeReminderVerbosity(const std::wstring& raw) {
+  const std::wstring normalized = ToLowerTrim(raw);
+  if (normalized == L"minimal" ||
+      normalized == L"normal" ||
+      normalized == L"detailed") {
+    return normalized;
+  }
+
+  return L"normal";
+}
+
 std::wstring NormalizeEmbeddingsExecutionMode(
     const std::wstring& raw) {
   const std::wstring normalized = ToLowerTrim(raw);
@@ -609,6 +620,18 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
     if (trimmedLine.rfind(L"hooks.engine.fallbackPromptInjection=", 0) == 0) {
       outConfig.hooks.engine.fallbackPromptInjection =
           ParseBool(trimmedLine.substr(38), false);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"hooks.engine.reminderEnabled=", 0) == 0) {
+      outConfig.hooks.engine.reminderEnabled =
+          ParseBool(trimmedLine.substr(29), true);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"hooks.engine.reminderVerbosity=", 0) == 0) {
+      outConfig.hooks.engine.reminderVerbosity =
+          NormalizeReminderVerbosity(trimmedLine.substr(31));
       continue;
     }
 

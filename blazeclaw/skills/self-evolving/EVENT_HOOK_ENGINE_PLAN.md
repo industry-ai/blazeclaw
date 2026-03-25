@@ -171,6 +171,39 @@ Implement a native BlazeClaw hook engine that executes self-evolving hook handle
   scoped adapter architecture, with build-validated runtime integration,
   diagnostics, config rollouts, and aligned docs.
 
+## Limitations & Follow-Up Remediation Pass (Completed)
+
+### Phase 1 — Documentation correction completed
+- Removed completed PowerShell parity follow-up from `SKILL.md`.
+- Updated limitation wording to keep only unresolved adapter constraint.
+- Updated `references/hooks-setup.md` with current telemetry/policy guidance.
+
+### Phase 2 — Reminder policy controls completed
+- Added config toggles:
+  - `hooks.engine.reminderEnabled`
+  - `hooks.engine.reminderVerbosity` (`minimal|normal|detailed`)
+- Wired parsing in `ConfigLoader` and runtime resolution in `ServiceManager`.
+- Exposed effective policy in diagnostics: `reminderEnabled`, `reminderVerbosity`.
+
+### Phase 3 — Reminder transition telemetry completed
+- Added reminder transition counters/states in hook execution diagnostics:
+  - `reminderTriggered`
+  - `reminderInjected`
+  - `reminderSkipped`
+  - `reminderState`
+  - `reminderReason`
+- Added fallback transition state support (`reminder_fallback_used`).
+
+### Phase 4 — Adapter hardening completed
+- Replaced loose path extraction with constrained parsing of
+  `bootstrapFiles.push({...})` handler contract blocks.
+- Added deterministic parse error signaling and reasoned skip telemetry.
+
+### Phase 5 — Validation and closure completed
+- Updated execution fixtures to exercise constrained contract parser and
+  unsafe-path guardrail behavior.
+- Build and fixture validation executed successfully.
+
 ## Phase E Execution Results (Completed)
 
 ### Rollout config implemented

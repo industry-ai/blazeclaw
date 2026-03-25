@@ -16,7 +16,17 @@ struct HookExecutionDiagnostics {
   std::uint64_t skippedCount = 0;
   std::uint64_t timeoutCount = 0;
   std::uint64_t guardRejectedCount = 0;
+  std::uint64_t reminderTriggeredCount = 0;
+  std::uint64_t reminderInjectedCount = 0;
+  std::uint64_t reminderSkippedCount = 0;
+  std::wstring lastReminderState;
+  std::wstring lastReminderReason;
   std::vector<std::wstring> warnings;
+};
+
+struct HookExecutionPolicy {
+  bool reminderEnabled = true;
+  std::wstring reminderVerbosity = L"normal";
 };
 
 struct HookExecutionSnapshot {
@@ -31,6 +41,7 @@ public:
   [[nodiscard]] bool Dispatch(
       const HookLifecycleEvent& event,
       const HookCatalogSnapshot& hooks,
+      const HookExecutionPolicy& policy,
       std::wstring& outError);
 
   [[nodiscard]] bool ValidateFixtureScenarios(

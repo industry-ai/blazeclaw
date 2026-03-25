@@ -49,6 +49,9 @@ If your local CLI supports shell hooks, point them to scripts under:
   - `hooks.selfEvolvingHookTriggered: true` when self-evolving hook executed
   - `hooks.hookDispatchCount > 0` during active runs
   - `hooks.hookFailureCount == 0` for healthy dispatch
+  - `hooks.reminderState` in `{reminder_triggered, reminder_injected, reminder_skipped, reminder_fallback_used}`
+  - `hooks.reminderReason` for transition reason details
+  - `hooks.reminderEnabled` and `hooks.reminderVerbosity` for active policy
 
 ## Notes
 
@@ -65,3 +68,8 @@ Runtime integration activates reminder injection when:
 
 Prompt-side reminder injection is retained only as optional fallback via
 `hooks.engine.fallbackPromptInjection`.
+
+Reminder policy controls are configurable via:
+
+- `hooks.engine.reminderEnabled`
+- `hooks.engine.reminderVerbosity` (`minimal|normal|detailed`)
