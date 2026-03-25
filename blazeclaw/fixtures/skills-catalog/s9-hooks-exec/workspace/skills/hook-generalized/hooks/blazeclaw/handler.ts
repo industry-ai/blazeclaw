@@ -1,0 +1,12 @@
+export default async function handler(event: unknown): Promise<void> {
+  void event;
+
+  const context = {
+    bootstrapFiles: [] as Array<{ path: string; virtual: boolean }>,
+  };
+
+  context.bootstrapFiles.push({
+    path: 'HOOK_GENERALIZED_CONTEXT.md',
+    virtual: true,
+  });
+}

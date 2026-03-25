@@ -432,6 +432,18 @@ bool HookExecutionService::ValidateFixtureScenarios(
     return false;
   }
 
+  const bool hasGeneralizedContext = std::any_of(
+      snapshot.bootstrapFiles.begin(),
+      snapshot.bootstrapFiles.end(),
+      [](const HookBootstrapFile& file) {
+        return ToLower(file.path) == L"hook_generalized_context.md";
+      });
+  if (!hasGeneralizedContext) {
+    outError =
+        L"S9 hooks exec fixture failed: expected generalized hook bootstrap file injection.";
+    return false;
+  }
+
   if (snapshot.diagnostics.guardRejectedCount == 0) {
     outError =
         L"S9 hooks exec fixture failed: expected unsafe mutation guard rejection count > 0.";

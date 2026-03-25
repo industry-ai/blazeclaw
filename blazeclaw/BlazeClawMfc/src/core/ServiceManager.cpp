@@ -318,6 +318,37 @@ std::wstring BuildSelfEvolvingReminderPromptBlock() {
          L"Promote proven patterns to AGENTS.md / SOUL.md / TOOLS.md.\n";
 }
 
+std::wstring BuildGenericHookBootstrapContextBlock(
+    const std::vector<HookBootstrapFile>& bootstrapFiles) {
+  std::wstringstream builder;
+  bool headerWritten = false;
+  for (const auto& file : bootstrapFiles) {
+    const auto lowered = file.path;
+    std::wstring normalized;
+    normalized.reserve(lowered.size());
+    for (const auto ch : lowered) {
+      normalized.push_back(static_cast<wchar_t>(std::towlower(ch)));
+    }
+
+    if (normalized == L"self_evolving_reminder.md") {
+      continue;
+    }
+
+    if (!headerWritten) {
+      builder << L"\n## Hook Bootstrap Context\n";
+      headerWritten = true;
+    }
+
+    builder << L"- " << file.path;
+    if (file.virtualFile) {
+      builder << L" (virtual)";
+    }
+    builder << L"\n";
+  }
+
+  return builder.str();
+}
+
 std::wstring BuildReminderSkipReason(const HookExecutionSnapshot& execution) {
   if (!execution.diagnostics.lastReminderReason.empty()) {
     return execution.diagnostics.lastReminderReason;
@@ -636,6 +667,24 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
 
       m_hookExecution.diagnostics.lastReminderState = L"reminder_fallback_used";
       m_hookExecution.diagnostics.lastReminderReason = L"prompt_fallback";
+    }
+
+    const std::wstring genericHookContext = BuildGenericHookBootstrapContextBlock(
+        m_hookExecution.bootstrapFiles);
+    if (!genericHookContext.empty() &&
+        m_skillsPrompt.prompt.find(L"## Hook Bootstrap Context") == std::wstring::npos) {
+      m_skillsPrompt.prompt += genericHookContext;
+      m_skillsPrompt.promptChars =
+          static_cast<std::uint32_t>(m_skillsPrompt.prompt.size());
+      if (m_skillsPrompt.prompt.size() >
+          m_activeConfig.skills.limits.maxSkillsPromptChars) {
+        m_skillsPrompt.prompt = m_skillsPrompt.prompt.substr(
+            0,
+            m_activeConfig.skills.limits.maxSkillsPromptChars);
+        m_skillsPrompt.promptChars =
+            static_cast<std::uint32_t>(m_skillsPrompt.prompt.size());
+        m_skillsPrompt.truncated = true;
+      }
     }
   } else if (!m_hooksEngineEnabled) {
     ++m_hookExecution.diagnostics.skippedCount;

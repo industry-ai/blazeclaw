@@ -79,4 +79,4 @@ When a pattern is proven, promote it to:
 
 ## Follow-Up Enhancements
 
-- Expand TypeScript hook runtime support beyond current self-evolving scope to additional hook packages.
+- Expand TypeScript hook runtime support from constrained adapter mode to full general-purpose TypeScript runtime execution.

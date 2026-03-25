@@ -360,6 +360,8 @@ Implement a native BlazeClaw hook engine that executes self-evolving hook handle
   - PowerShell helper parity
   - reminder policy controls
   - reminder transition telemetry
+  - TypeScript hook runtime support expanded beyond self-evolving scope
+    (additional package fixtures validated)
 - Remaining (intended):
   - execution engine remains `ts-contract-adapter` for scoped
     `bootstrapFiles.push(...)` operations, not full general-purpose
