@@ -44,6 +44,7 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
 - Success criteria:
   - `hookFailureCount` below `<threshold>`
   - `reminderState=reminder_injected` in expected sessions
+  - policy-as-code controls pass for canary tenant scope
 
 ### Phase R2 — Limited
 
@@ -52,6 +53,7 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
 - Additional criteria:
   - no sustained `reminder_skipped` anomalies
   - no guard rejection spikes
+  - federated scorecard generated for participating tenants
 
 ### Phase R3 — Broad
 
@@ -60,6 +62,7 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
 - Criteria:
   - telemetry stable across target packages
   - incident rate within baseline
+  - remediation coverage meets federated scorecard threshold
 
 ### Phase R4 — General Availability
 
@@ -67,6 +70,16 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
 - Exit criteria:
   - all success criteria met for `<duration>`
   - sign-off from engineering + operations
+  - governance scorecard accepted by security and compliance owners
+
+### Federated Governance Scorecard Gates
+
+| Phase | Required Scorecard Evidence | Gate Owner |
+|---|---|---|
+| R1 | Tenant-level policy control pass/fail snapshot | `<engineering owner>` |
+| R2 | Aggregated remediation backlog and SLA posture | `<operations owner>` |
+| R3 | Cross-tenant compliance trend and exception summary | `<security owner>` |
+| R4 | Final federated governance scorecard sign-off | `<engineering + security + operations>` |
 
 ## 5) Monitoring Plan
 
@@ -113,6 +126,8 @@ Approval gate checklist:
 - [ ] tenant playbook path configured and writable
 - [ ] token max-age policy reviewed with security owner
 - [ ] telemetry and audit output directories configured and writable
+- [ ] scorecard template completed for current rollout phase
+- [ ] scorecard exceptions accepted or remediated before phase promotion
 
 ## 6) Rollback Plan
 

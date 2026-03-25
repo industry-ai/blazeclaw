@@ -87,9 +87,11 @@ When a pattern is proven, promote it to persistent guidance:
 
 ## Follow-Up Enhancements
 
-- Expand governance automation for tenant policy enforcement and drift detection.
+- Integrate organization-specific policy engines and automated scorecard
+  publication for governance portals.
 
 Policy templates:
 
 - `references/hook-governance-policy-template.md`
 - `references/hook-rollout-policy-template.md`
+- `references/federated-remediation-governance-scorecard-template.md`

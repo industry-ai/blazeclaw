@@ -1,0 +1,77 @@
+# Federated Remediation Governance Scorecard Template
+
+Use this template to track policy-as-code compliance and remediation
+posture across tenants during hook runtime rollout.
+
+## 1) Scorecard Metadata
+
+- Scorecard ID: `<scorecard-id>`
+- Reporting Window: `<yyyy-mm-dd..yyyy-mm-dd>`
+- Generated At: `<timestamp>`
+- Scope Type: `<tenant|workspace|federated>`
+- Scope Identifier: `<tenant-id|workspace-id|federation-id>`
+- Owners:
+  - Engineering: `<owner>`
+  - Security: `<owner>`
+  - Operations: `<owner>`
+
+## 2) Policy-as-Code Control Summary
+
+| Control ID | Description | Pass Count | Fail Count | Exception Count | Status |
+|---|---|---:|---:|---:|---|
+| `POL-HOOK-001` | Allowlisted package enforcement | `<n>` | `<n>` | `<n>` | `<green|yellow|red>` |
+| `POL-HOOK-002` | Approval gate enforcement | `<n>` | `<n>` | `<n>` | `<green|yellow|red>` |
+| `POL-HOOK-003` | Drift and policy-block SLO compliance | `<n>` | `<n>` | `<n>` | `<green|yellow|red>` |
+
+## 3) Federated Remediation Posture
+
+| Metric | Current | Target | Trend | Status |
+|---|---:|---:|---|---|
+| Remediation backlog size | `<n>` | `<n>` | `<up|flat|down>` | `<green|yellow|red>` |
+| Policy blocked incidents | `<n>` | `<n>` | `<up|flat|down>` | `<green|yellow|red>` |
+| Drift detected incidents | `<n>` | `<n>` | `<up|flat|down>` | `<green|yellow|red>` |
+| Auto-remediation success ratio | `<percent>` | `<percent>` | `<up|flat|down>` | `<green|yellow|red>` |
+| Approval-gated remediation latency (p95) | `<duration>` | `<duration>` | `<up|flat|down>` | `<green|yellow|red>` |
+
+## 4) Cross-Tenant Aggregation
+
+| Tenant | Compliance Score | Remediation Coverage | Open Exceptions | Score |
+|---|---:|---:|---:|---|
+| `<tenant-a>` | `<percent>` | `<percent>` | `<n>` | `<green|yellow|red>` |
+| `<tenant-b>` | `<percent>` | `<percent>` | `<n>` | `<green|yellow|red>` |
+
+Federation-level aggregates:
+
+- Weighted compliance score: `<percent>`
+- Weighted remediation coverage: `<percent>`
+- Total open exceptions: `<n>`
+- Scorecard status: `<green|yellow|red>`
+
+## 5) Exception and Risk Register
+
+| Exception ID | Tenant | Related Control | Risk Level | Expiry Date | Owner | Mitigation Plan |
+|---|---|---|---|---|---|---|
+| `<exc-001>` | `<tenant-id>` | `POL-HOOK-001` | `<low|medium|high>` | `<yyyy-mm-dd>` | `<owner>` | `<plan>` |
+
+## 6) Required Artifacts
+
+- Governance report path: `<path>`
+- Remediation telemetry path: `<path>`
+- Remediation audit path: `<path>`
+- Compliance attestation path: `<path>`
+- Cross-tenant aggregation path: `<path>`
+
+## 7) Review and Sign-off
+
+- Engineering Approval: `<name/date/status>`
+- Security Approval: `<name/date/status>`
+- Operations Approval: `<name/date/status>`
+- Compliance Approval (optional): `<name/date/status>`
+
+## 8) Promotion Decision
+
+- Recommended rollout phase outcome: `<hold|promote|rollback>`
+- Decision rationale: `<short rationale>`
+- Required follow-up actions:
+  - `<action-1>`
+  - `<action-2>`

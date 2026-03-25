@@ -48,6 +48,7 @@ When a pattern is proven, promote it to:
 - `references/openclaw-integration.md` (BlazeClaw content in legacy filename)
 - `references/hook-governance-policy-template.md`
 - `references/hook-rollout-policy-template.md`
+- `references/federated-remediation-governance-scorecard-template.md`
 
 ## Usage Guide (BlazeClaw)
 
@@ -72,6 +73,10 @@ When a pattern is proven, promote it to:
   - `scripts/error-detector.ps1`
   - `scripts/extract-skill.sh --dry-run`
   - `scripts/extract-skill.ps1 --dry-run`
+- Verify policy-as-code rollout controls are mapped in
+  `references/hook-governance-policy-template.md`.
+- Verify federated remediation scorecards are defined from
+  `references/federated-remediation-governance-scorecard-template.md`.
 - Add team-facing guidance entry in `.github/copilot-instructions.md`.
 
 ## Known Limitations
@@ -80,4 +85,4 @@ None in current self-evolving runtime scope.
 
 ## Follow-Up Enhancements
 
-- Add enterprise policy-as-code rollout controls and federated remediation governance scorecards.
+- Extend policy-as-code controls with organization-specific policy engines, attestation pipelines, and automated scorecard publication.

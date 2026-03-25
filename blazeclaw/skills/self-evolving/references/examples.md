@@ -33,6 +33,36 @@ check existing fixtures for scope patterns before defaulting to function scope.
 ---
 ```
 
+## Federated Remediation Governance Scorecard Snapshot
+
+```markdown
+## [SCORE-20250115-001] federated_governance
+
+**Logged**: 2025-01-15T18:00:00Z
+**Window**: 2025-01-08..2025-01-15
+**Scope**: federated
+**Status**: yellow
+
+### Control Summary
+- POL-HOOK-001 allowlist enforcement: pass
+- POL-HOOK-002 approval gate enforcement: pass
+- POL-HOOK-003 drift/policy SLO: warning
+
+### Federation Metrics
+- Weighted compliance score: 96%
+- Weighted remediation coverage: 91%
+- Open exceptions: 3
+
+### Decision
+Hold promotion from R2 to R3 until policy-block incidents are reduced below threshold.
+
+### Artifacts
+- Governance report: reports/hooks-governance-20250115.json
+- Aggregation report: reports/attestation-aggregate-20250115.json
+
+---
+```
+
 ## Learning: Knowledge Gap (Resolved)
 
 ```markdown

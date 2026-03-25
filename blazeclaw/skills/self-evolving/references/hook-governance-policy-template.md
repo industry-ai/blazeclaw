@@ -89,6 +89,25 @@ Alerting thresholds:
 - Timeout threshold: `<value>`
 - Guard rejection threshold: `<value>`
 
+## 6.1) Policy-as-Code Rollout Controls
+
+Define explicit control mapping so rollout gates can be evaluated by
+automation and human reviewers consistently.
+
+| Control ID | Policy Statement | Enforcement Stage | Rule Source | Owner | Exception Process |
+|---|---|---|---|---|---|
+| `POL-HOOK-001` | Hook packages must be allowlisted | pre-merge + runtime | `<repo/policy/path>` | `<team>` | `<ticket workflow>` |
+| `POL-HOOK-002` | High-risk remediation requires approval token | runtime | `<repo/policy/path>` | `<team>` | `<ticket workflow>` |
+| `POL-HOOK-003` | Drift and policy block SLOs must stay below thresholds | post-deploy | `<repo/policy/path>` | `<team>` | `<ticket workflow>` |
+
+Policy bundle workflow:
+
+- Bundle identifier: `<policy-bundle-id>`
+- Bundle version pinning: `<semver|git-sha>`
+- Validation command: `<policy test command>`
+- CI gate required: `<true|false>`
+- Deployment gate required: `<true|false>`
+
 ## 7) Incident Response
 
 - Immediate rollback control:
@@ -139,6 +158,15 @@ Enterprise SLA governance and aggregation:
 - SLA policy id: `hooks.engine.enterpriseSlaPolicyId`
 - Cross-tenant aggregation enabled: `hooks.engine.crossTenantAttestationAggregationEnabled`
 - Cross-tenant aggregation directory: `hooks.engine.crossTenantAttestationAggregationDir`
+
+Federated scorecard controls:
+
+- Scorecard generation enabled: `<true|false>`
+- Scorecard storage path: `<path>`
+- Scorecard publication target: `<dashboard|artifact-store>`
+- Cross-tenant remediation coverage threshold: `<percent>`
+- Cross-tenant policy compliance threshold: `<percent>`
+- Scorecard review cadence: `<weekly|monthly|quarterly>`
 
 ## 8) Compliance and Audit
 

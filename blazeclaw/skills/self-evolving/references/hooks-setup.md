@@ -151,3 +151,12 @@ Governance and rollout templates:
 
 - `references/hook-governance-policy-template.md`
 - `references/hook-rollout-policy-template.md`
+- `references/federated-remediation-governance-scorecard-template.md`
+
+Federated governance scorecard workflow:
+
+1. Define policy controls in `hook-governance-policy-template.md`.
+2. Apply rollout gates in `hook-rollout-policy-template.md`.
+3. Generate a federated scorecard from
+   `federated-remediation-governance-scorecard-template.md` at each
+   rollout phase transition.
