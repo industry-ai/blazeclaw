@@ -237,6 +237,70 @@ std::uint32_t ResolveHooksAutoRemediationTokenMaxAgeMinutes(
   return value == 0 ? 1440 : value;
 }
 
+bool ResolveHooksRemediationTelemetryEnabled(
+    const blazeclaw::config::AppConfig& config) {
+  return ReadBoolEnvOrDefault(
+      L"BLAZECLAW_HOOKS_REMEDIATION_TELEMETRY_ENABLED",
+      config.hooks.engine.remediationTelemetryEnabled);
+}
+
+std::filesystem::path ResolveHooksRemediationTelemetryDir(
+    const blazeclaw::config::AppConfig& config) {
+  std::wstring value = config.hooks.engine.remediationTelemetryDir;
+  wchar_t* env = nullptr;
+  std::size_t len = 0;
+  if (_wdupenv_s(
+          &env,
+          &len,
+          L"BLAZECLAW_HOOKS_REMEDIATION_TELEMETRY_DIR") == 0 &&
+      env != nullptr &&
+      len > 0) {
+    value.assign(env);
+  }
+  if (env != nullptr) {
+    free(env);
+  }
+
+  const auto trimmed = Trim(value);
+  if (trimmed.empty()) {
+    return std::filesystem::path(L"blazeclaw/reports/hooks-remediation-telemetry");
+  }
+
+  return std::filesystem::path(trimmed);
+}
+
+bool ResolveHooksRemediationAuditEnabled(
+    const blazeclaw::config::AppConfig& config) {
+  return ReadBoolEnvOrDefault(
+      L"BLAZECLAW_HOOKS_REMEDIATION_AUDIT_ENABLED",
+      config.hooks.engine.remediationAuditEnabled);
+}
+
+std::filesystem::path ResolveHooksRemediationAuditDir(
+    const blazeclaw::config::AppConfig& config) {
+  std::wstring value = config.hooks.engine.remediationAuditDir;
+  wchar_t* env = nullptr;
+  std::size_t len = 0;
+  if (_wdupenv_s(
+          &env,
+          &len,
+          L"BLAZECLAW_HOOKS_REMEDIATION_AUDIT_DIR") == 0 &&
+      env != nullptr &&
+      len > 0) {
+    value.assign(env);
+  }
+  if (env != nullptr) {
+    free(env);
+  }
+
+  const auto trimmed = Trim(value);
+  if (trimmed.empty()) {
+    return std::filesystem::path(L"blazeclaw/reports/hooks-remediation-audit");
+  }
+
+  return std::filesystem::path(trimmed);
+}
+
 std::wstring BuildRemediationPlaybookJson(
     const std::wstring& tenantId,
     const HookExecutionSnapshot& execution,
@@ -320,6 +384,142 @@ void EmitTenantRemediationPlaybookIfNeeded(
   }
 
   outPlaybookPath = playbookFile.wstring();
+}
+
+std::wstring BuildRemediationTelemetryJson(
+    const std::wstring& tenantId,
+    const std::wstring& playbookPath,
+    const HookExecutionSnapshot& execution,
+    const std::wstring& remediationStatus) {
+  std::wstringstream builder;
+  builder << L"{\"tenantId\":\"" << tenantId
+          << L"\",\"playbookPath\":\"" << playbookPath
+          << L"\",\"status\":\"" << remediationStatus
+          << L"\",\"policyBlocked\":"
+          << execution.diagnostics.policyBlockedCount
+          << L",\"driftDetected\":"
+          << execution.diagnostics.driftDetectedCount
+          << L",\"lastDriftReason\":\""
+          << execution.diagnostics.lastDriftReason
+          << L"\"}";
+  return builder.str();
+}
+
+std::wstring BuildRemediationAuditJson(
+    const std::wstring& tenantId,
+    const std::wstring& approvalToken,
+    const std::wstring& remediationStatus,
+    const std::wstring& reportPath,
+    const std::wstring& playbookPath,
+    const std::uint64_t tokenRotations) {
+  std::wstringstream builder;
+  builder << L"{\"tenantId\":\"" << tenantId
+          << L"\",\"approvalTokenConfigured\":"
+          << (!approvalToken.empty() ? L"true" : L"false")
+          << L",\"status\":\"" << remediationStatus
+          << L"\",\"reportPath\":\"" << reportPath
+          << L"\",\"playbookPath\":\"" << playbookPath
+          << L"\",\"tokenRotations\":" << tokenRotations
+          << L"}";
+  return builder.str();
+}
+
+std::wstring WriteLifecycleArtifact(
+    const std::filesystem::path& outputDir,
+    const std::wstring& filePrefix,
+    const std::wstring& tenantId,
+    const std::wstring& content,
+    const std::wstring& failureLabel,
+    std::vector<std::wstring>& inOutWarnings) {
+  std::error_code ec;
+  auto fullDir = outputDir;
+  if (fullDir.is_relative()) {
+    fullDir = std::filesystem::current_path(ec) / fullDir;
+  }
+  std::filesystem::create_directories(fullDir, ec);
+  if (ec) {
+    inOutWarnings.push_back(failureLabel + L": cannot create directory.");
+    return {};
+  }
+
+  const auto nonce = std::to_wstring(
+      static_cast<std::uint64_t>(
+          std::chrono::system_clock::now().time_since_epoch().count()));
+  const auto path = fullDir / (filePrefix + L"-" + tenantId + L"-" + nonce + L".json");
+  std::ofstream output(path, std::ios::binary | std::ios::trunc);
+  if (!output.is_open()) {
+    inOutWarnings.push_back(failureLabel + L": cannot write file.");
+    return {};
+  }
+
+  std::string narrow;
+  narrow.reserve(content.size());
+  for (const auto ch : content) {
+    narrow.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
+  }
+  output.write(narrow.c_str(), static_cast<std::streamsize>(narrow.size()));
+  if (!output.good()) {
+    inOutWarnings.push_back(failureLabel + L": cannot flush file.");
+    return {};
+  }
+
+  return path.wstring();
+}
+
+void EmitRemediationTelemetryAndAuditIfNeeded(
+    const HookExecutionSnapshot& execution,
+    const bool telemetryEnabled,
+    const std::filesystem::path& telemetryDir,
+    const bool auditEnabled,
+    const std::filesystem::path& auditDir,
+    const std::wstring& tenantId,
+    const std::wstring& approvalToken,
+    const std::wstring& reportPath,
+    const std::wstring& playbookPath,
+    const std::wstring& remediationStatus,
+    const std::uint64_t tokenRotations,
+    std::wstring& outTelemetryPath,
+    std::wstring& outAuditPath,
+    std::vector<std::wstring>& inOutWarnings) {
+  outTelemetryPath.clear();
+  outAuditPath.clear();
+
+  if (execution.diagnostics.policyBlockedCount == 0 &&
+      execution.diagnostics.driftDetectedCount == 0) {
+    return;
+  }
+
+  if (telemetryEnabled) {
+    const auto telemetryContent = BuildRemediationTelemetryJson(
+        tenantId,
+        playbookPath,
+        execution,
+        remediationStatus);
+    outTelemetryPath = WriteLifecycleArtifact(
+        telemetryDir,
+        L"hooks-remediation-telemetry",
+        tenantId,
+        telemetryContent,
+        L"hooks-remediation telemetry emission failed",
+        inOutWarnings);
+  }
+
+  if (auditEnabled) {
+    const auto auditContent = BuildRemediationAuditJson(
+        tenantId,
+        approvalToken,
+        remediationStatus,
+        reportPath,
+        playbookPath,
+        tokenRotations);
+    outAuditPath = WriteLifecycleArtifact(
+        auditDir,
+        L"hooks-remediation-audit",
+        tenantId,
+        auditContent,
+        L"hooks-remediation audit emission failed",
+        inOutWarnings);
+  }
 }
 
 std::wstring ToWide(const std::string& value) {
@@ -877,6 +1077,10 @@ blazeclaw::gateway::SkillsCatalogGatewayState ServiceManager::BuildGatewaySkills
       static_cast<std::size_t>(m_hooksAutoRemediationTokenMaxAgeMinutes);
   gatewaySkillsState.autoRemediationTokenRotations =
       static_cast<std::size_t>(m_hooksAutoRemediationTokenRotations);
+  gatewaySkillsState.lastRemediationTelemetryPath =
+      ToNarrow(m_hooksLastRemediationTelemetryPath);
+  gatewaySkillsState.lastRemediationAuditPath =
+      ToNarrow(m_hooksLastRemediationAuditPath);
   return gatewaySkillsState;
 }
 
@@ -957,12 +1161,22 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       ResolveHooksAutoRemediationPlaybookDir(m_activeConfig);
   m_hooksAutoRemediationTokenMaxAgeMinutes =
       ResolveHooksAutoRemediationTokenMaxAgeMinutes(m_activeConfig);
+  m_hooksRemediationTelemetryEnabled =
+      ResolveHooksRemediationTelemetryEnabled(m_activeConfig);
+  m_hooksRemediationTelemetryDir =
+      ResolveHooksRemediationTelemetryDir(m_activeConfig);
+  m_hooksRemediationAuditEnabled =
+      ResolveHooksRemediationAuditEnabled(m_activeConfig);
+  m_hooksRemediationAuditDir =
+      ResolveHooksRemediationAuditDir(m_activeConfig);
   m_hooksGovernanceReportsGenerated = 0;
   m_hooksLastGovernanceReportPath.clear();
   m_hooksAutoRemediationExecuted = 0;
   m_hooksLastAutoRemediationStatus = L"idle";
   m_hooksLastAutoRemediationPlaybookPath.clear();
   m_hooksAutoRemediationTokenRotations = 0;
+  m_hooksLastRemediationTelemetryPath.clear();
+  m_hooksLastRemediationAuditPath.clear();
   m_selfEvolvingHookTriggered = false;
   m_agentsScope = m_agentsCatalogService.BuildSnapshot(
       std::filesystem::current_path(),
@@ -1119,6 +1333,21 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
     if (!m_hooksLastAutoRemediationPlaybookPath.empty()) {
       m_hooksLastAutoRemediationStatus = L"playbook_generated";
     }
+    EmitRemediationTelemetryAndAuditIfNeeded(
+        m_hookExecution,
+        m_hooksRemediationTelemetryEnabled,
+        m_hooksRemediationTelemetryDir,
+        m_hooksRemediationAuditEnabled,
+        m_hooksRemediationAuditDir,
+        m_hooksAutoRemediationTenantId,
+        m_hooksAutoRemediationApprovalToken,
+        m_hooksLastGovernanceReportPath,
+        m_hooksLastAutoRemediationPlaybookPath,
+        m_hooksLastAutoRemediationStatus,
+        m_hooksAutoRemediationTokenRotations,
+        m_hooksLastRemediationTelemetryPath,
+        m_hooksLastRemediationAuditPath,
+        m_skillsCatalog.diagnostics.warnings);
     m_selfEvolvingHookTriggered = ContainsBootstrapFile(
         m_hookExecution.bootstrapFiles,
         L"SELF_EVOLVING_REMINDER.md");
@@ -1887,6 +2116,14 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       std::to_string(m_hooksAutoRemediationTokenMaxAgeMinutes) +
       ",\"autoRemediationTokenRotations\":" +
       std::to_string(m_hooksAutoRemediationTokenRotations) +
+      ",\"remediationTelemetryEnabled\":" +
+      std::string(m_hooksRemediationTelemetryEnabled ? "true" : "false") +
+      ",\"remediationAuditEnabled\":" +
+      std::string(m_hooksRemediationAuditEnabled ? "true" : "false") +
+      ",\"lastRemediationTelemetryPath\":\"" +
+      WideToNarrowAscii(m_hooksLastRemediationTelemetryPath) + "\"" +
+      ",\"lastRemediationAuditPath\":\"" +
+      WideToNarrowAscii(m_hooksLastRemediationAuditPath) + "\"" +
       ",\"selfEvolvingHookTriggered\":" +
       std::string(m_selfEvolvingHookTriggered ? "true" : "false") +
       ",\"invalidMetadata\":" +

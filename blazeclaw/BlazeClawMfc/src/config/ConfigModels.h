@@ -171,6 +171,12 @@ struct HooksEngineConfig {
   std::wstring autoRemediationPlaybookDir =
       L"blazeclaw/reports/hooks-remediation-playbooks";
   std::uint32_t autoRemediationTokenMaxAgeMinutes = 1440;
+  bool remediationTelemetryEnabled = true;
+  std::wstring remediationTelemetryDir =
+      L"blazeclaw/reports/hooks-remediation-telemetry";
+  bool remediationAuditEnabled = true;
+  std::wstring remediationAuditDir =
+      L"blazeclaw/reports/hooks-remediation-audit";
 };
 
 struct HooksConfig {

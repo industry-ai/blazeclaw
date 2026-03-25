@@ -699,6 +699,30 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
       continue;
     }
 
+    if (trimmedLine.rfind(L"hooks.engine.remediationTelemetryEnabled=", 0) == 0) {
+      outConfig.hooks.engine.remediationTelemetryEnabled =
+          ParseBool(trimmedLine.substr(40), true);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"hooks.engine.remediationTelemetryDir=", 0) == 0) {
+      outConfig.hooks.engine.remediationTelemetryDir =
+          Trim(trimmedLine.substr(36));
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"hooks.engine.remediationAuditEnabled=", 0) == 0) {
+      outConfig.hooks.engine.remediationAuditEnabled =
+          ParseBool(trimmedLine.substr(36), true);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"hooks.engine.remediationAuditDir=", 0) == 0) {
+      outConfig.hooks.engine.remediationAuditDir =
+          Trim(trimmedLine.substr(32));
+      continue;
+    }
+
     if (trimmedLine.rfind(L"agents.defaults.", 0) == 0) {
       const auto keyValuePos = trimmedLine.find(L'=');
       if (keyValuePos == std::wstring::npos) {

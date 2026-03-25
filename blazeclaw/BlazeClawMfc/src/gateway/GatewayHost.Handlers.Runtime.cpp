@@ -467,6 +467,14 @@ namespace blazeclaw::gateway {
                     .payloadJson =
                         "{\"governanceReportingEnabled\":" +
                         std::string(state.governanceReportingEnabled ? "true" : "false") +
+                        ",\"remediationTelemetryPath\":\"" +
+                        EscapeJsonLocal(state.lastRemediationTelemetryPath) +
+                        "\",\"remediationAuditPath\":\"" +
+                        EscapeJsonLocal(state.lastRemediationAuditPath) +
+                        "\",\"autoRemediationTenantId\":\"" +
+                        EscapeJsonLocal(state.autoRemediationTenantId) +
+                        "\",\"autoRemediationTokenRotations\":" +
+                        std::to_string(state.autoRemediationTokenRotations) +
                         ",\"governanceReportsGenerated\":" +
                         std::to_string(state.governanceReportsGenerated) +
                         ",\"lastGovernanceReportPath\":\"" +

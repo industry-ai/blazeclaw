@@ -107,6 +107,10 @@ Governance reporting artifacts:
 - Reporting enabled: `hooks.engine.governanceReportingEnabled=true`
 - Report output directory: `hooks.engine.governanceReportDir`
 - Expected artifact: `hooks-governance-<timestamp>.json`
+- Remediation telemetry enabled: `hooks.engine.remediationTelemetryEnabled=true`
+- Remediation telemetry directory: `hooks.engine.remediationTelemetryDir`
+- Remediation audit enabled: `hooks.engine.remediationAuditEnabled=true`
+- Remediation audit directory: `hooks.engine.remediationAuditDir`
 
 Closed-loop remediation gates:
 

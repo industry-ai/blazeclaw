@@ -108,6 +108,10 @@ Governance reporting diagnostics:
 
 - `hooks.governanceReportsGenerated`
 - `hooks.lastGovernanceReportPath`
+- `hooks.remediationTelemetryEnabled`
+- `hooks.remediationAuditEnabled`
+- `hooks.lastRemediationTelemetryPath`
+- `hooks.lastRemediationAuditPath`
 
 Centralized observability and remediation endpoints:
 
@@ -115,6 +119,13 @@ Centralized observability and remediation endpoints:
 - `gateway.runtime.governance.remediationPlan`
 - `gateway.runtime.governance.executeRemediation`
   - requires `approved=true` and `approvalToken` when approval gates are enabled
+
+Enterprise telemetry and audit controls:
+
+- `hooks.engine.remediationTelemetryEnabled`
+- `hooks.engine.remediationTelemetryDir`
+- `hooks.engine.remediationAuditEnabled`
+- `hooks.engine.remediationAuditDir`
 
 Governance and rollout templates:
 

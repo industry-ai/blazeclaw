@@ -84,6 +84,8 @@ Track at minimum:
 - `hooks.lastDriftReason`
 - `hooks.governanceReportsGenerated`
 - `hooks.lastGovernanceReportPath`
+- `hooks.lastRemediationTelemetryPath`
+- `hooks.lastRemediationAuditPath`
 
 Dashboard links:
 
@@ -103,6 +105,7 @@ Approval gate checklist:
 - [ ] Approval token management process validated
 - [ ] tenant playbook path configured and writable
 - [ ] token max-age policy reviewed with security owner
+- [ ] telemetry and audit output directories configured and writable
 
 ## 6) Rollback Plan
 

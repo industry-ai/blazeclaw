@@ -134,6 +134,12 @@ private:
   std::wstring m_hooksLastAutoRemediationStatus;
   std::wstring m_hooksLastAutoRemediationPlaybookPath;
   std::uint64_t m_hooksAutoRemediationTokenRotations = 0;
+  bool m_hooksRemediationTelemetryEnabled = true;
+  std::filesystem::path m_hooksRemediationTelemetryDir;
+  std::wstring m_hooksLastRemediationTelemetryPath;
+  bool m_hooksRemediationAuditEnabled = true;
+  std::filesystem::path m_hooksRemediationAuditDir;
+  std::wstring m_hooksLastRemediationAuditPath;
   bool m_selfEvolvingHookTriggered = false;
   SkillsCatalogService m_skillsCatalogService;
   SkillsCatalogSnapshot m_skillsCatalog;
