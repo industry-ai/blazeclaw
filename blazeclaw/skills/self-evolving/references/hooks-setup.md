@@ -142,6 +142,15 @@ Enterprise SLA governance and cross-tenant aggregation controls:
 - `hooks.engine.crossTenantAttestationAggregationEnabled`
 - `hooks.engine.crossTenantAttestationAggregationDir`
 
+Organization policy engine and publication controls:
+
+- `hooks.engine.policyEngineProfile`
+- `hooks.engine.policyEngineDecisionMode`
+- `hooks.engine.attestationPipelineEnabled`
+- `hooks.engine.attestationPipelineId`
+- `hooks.engine.scorecardPublicationEnabled`
+- `hooks.engine.scorecardPublicationPipelineId`
+
 Enterprise attestation endpoint:
 
 - `gateway.runtime.governance.attestationStatus`
@@ -152,6 +161,7 @@ Governance and rollout templates:
 - `references/hook-governance-policy-template.md`
 - `references/hook-rollout-policy-template.md`
 - `references/federated-remediation-governance-scorecard-template.md`
+- `references/enterprise-policy-attestation-publication-template.md`
 
 Federated governance scorecard workflow:
 
@@ -160,3 +170,6 @@ Federated governance scorecard workflow:
 3. Generate a federated scorecard from
    `federated-remediation-governance-scorecard-template.md` at each
    rollout phase transition.
+4. Define organization policy engines, attestation pipeline, and
+   automated publication workflow in
+   `enterprise-policy-attestation-publication-template.md`.

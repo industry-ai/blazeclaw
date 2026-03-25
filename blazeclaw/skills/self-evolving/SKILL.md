@@ -49,6 +49,7 @@ When a pattern is proven, promote it to:
 - `references/hook-governance-policy-template.md`
 - `references/hook-rollout-policy-template.md`
 - `references/federated-remediation-governance-scorecard-template.md`
+- `references/enterprise-policy-attestation-publication-template.md`
 
 ## Usage Guide (BlazeClaw)
 
@@ -77,6 +78,9 @@ When a pattern is proven, promote it to:
   `references/hook-governance-policy-template.md`.
 - Verify federated remediation scorecards are defined from
   `references/federated-remediation-governance-scorecard-template.md`.
+- Verify organization-specific policy engine and attestation publication
+  workflow is defined from
+  `references/enterprise-policy-attestation-publication-template.md`.
 - Add team-facing guidance entry in `.github/copilot-instructions.md`.
 
 ## Known Limitations

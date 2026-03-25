@@ -87,11 +87,12 @@ When a pattern is proven, promote it to persistent guidance:
 
 ## Follow-Up Enhancements
 
-- Integrate organization-specific policy engines and automated scorecard
-  publication for governance portals.
+- Wire enterprise templates to tenant policy registries and centralized
+  attestation authorities.
 
 Policy templates:
 
 - `references/hook-governance-policy-template.md`
 - `references/hook-rollout-policy-template.md`
 - `references/federated-remediation-governance-scorecard-template.md`
+- `references/enterprise-policy-attestation-publication-template.md`

@@ -15,6 +15,12 @@ posture across tenants during hook runtime rollout.
   - Security: `<owner>`
   - Operations: `<owner>`
 
+Policy engine context:
+
+- Engine profiles evaluated: `<profile-a,profile-b>`
+- Policy bundle reference: `<bundle-id@version>`
+- Decision mode: `<enforce|audit>`
+
 ## 2) Policy-as-Code Control Summary
 
 | Control ID | Description | Pass Count | Fail Count | Exception Count | Status |
@@ -60,6 +66,25 @@ Federation-level aggregates:
 - Remediation audit path: `<path>`
 - Compliance attestation path: `<path>`
 - Cross-tenant aggregation path: `<path>`
+
+## 6.1) Attestation Pipeline Evidence
+
+- Pipeline run id: `<pipeline-run-id>`
+- Manifest digest: `<sha256>`
+- Signature reference: `<signature-uri>`
+- Verification result: `<pass|fail>`
+- Verification timestamp: `<timestamp>`
+
+## 6.2) Scorecard Publication Status
+
+- Publication pipeline id: `<pipeline-id>`
+- Publication run id: `<run-id>`
+- Publication targets:
+  - `<dashboard-url-or-id>`
+  - `<artifact-uri>`
+- Published formats: `<json|markdown|both>`
+- Publication completed at: `<timestamp>`
+- Publication verification status: `<pass|fail>`
 
 ## 7) Review and Sign-off
 

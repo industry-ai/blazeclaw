@@ -108,6 +108,45 @@ Policy bundle workflow:
 - CI gate required: `<true|false>`
 - Deployment gate required: `<true|false>`
 
+## 6.2) Organization-Specific Policy Engine Profiles
+
+Use one or more policy engines to enforce the same control set across
+different organization environments.
+
+| Engine Profile | Engine Type | Policy Source | Validation Command | Decision Mode | Owner |
+|---|---|---|---|---|---|
+| `org-prod-opa` | `<opa|conftest|sentinel|custom>` | `<repo/path-or-registry-ref>` | `<command>` | `<enforce|audit>` | `<team>` |
+| `org-regional-eu` | `<opa|conftest|sentinel|custom>` | `<repo/path-or-registry-ref>` | `<command>` | `<enforce|audit>` | `<team>` |
+
+Engine precedence and conflict policy:
+
+- Evaluation order: `<ordered-profile-list>`
+- Tie-breaker policy: `<deny-wins|majority|priority-engine>`
+- Fallback behavior when engine unavailable: `<fail-closed|fail-open>`
+
+## 6.3) Attestation Pipeline Controls
+
+- Attestation pipeline enabled: `<true|false>`
+- Attestation pipeline id: `<pipeline-id>`
+- Evidence manifest path: `<path>`
+- Required attestations:
+  - policy bundle digest attestation
+  - runtime config snapshot attestation
+  - remediation execution attestation
+- Signing authority: `<kms-key|sigstore-identity|internal-ca>`
+- Verification command: `<attestation verify command>`
+- Promotion gate on verification failure: `<hold|rollback>`
+
+## 6.4) Automated Scorecard Publication Controls
+
+- Publication pipeline enabled: `<true|false>`
+- Publication trigger: `<phase-complete|scheduled|manual>`
+- Publication target(s): `<dashboard|artifact-store|gitops-repo>`
+- Publication format: `<json|markdown|both>`
+- Publication SLA: `<duration>`
+- Publication approval required: `<true|false>`
+- Publication evidence retention days: `<days>`
+
 ## 7) Incident Response
 
 - Immediate rollback control:
@@ -164,6 +203,8 @@ Federated scorecard controls:
 - Scorecard generation enabled: `<true|false>`
 - Scorecard storage path: `<path>`
 - Scorecard publication target: `<dashboard|artifact-store>`
+- Scorecard publication pipeline id: `<pipeline-id>`
+- Scorecard publication verification required: `<true|false>`
 - Cross-tenant remediation coverage threshold: `<percent>`
 - Cross-tenant policy compliance threshold: `<percent>`
 - Scorecard review cadence: `<weekly|monthly|quarterly>`
@@ -182,3 +223,9 @@ Federated scorecard controls:
 - Engineering Owner: `<name/date>`
 - Security Owner: `<name/date>`
 - Operations Owner: `<name/date>`
+
+## 10) Related Templates
+
+- `references/hook-rollout-policy-template.md`
+- `references/federated-remediation-governance-scorecard-template.md`
+- `references/enterprise-policy-attestation-publication-template.md`

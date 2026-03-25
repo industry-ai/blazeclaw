@@ -18,6 +18,9 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
 - [ ] Fixture validation passed
 - [ ] Build validation passed (`msbuild BlazeClaw.sln`)
 - [ ] Governance policy approved
+- [ ] Organization policy engine profiles validated
+- [ ] Attestation pipeline dry-run succeeded
+- [ ] Scorecard publication pipeline dry-run succeeded
 
 ## 3) Environment Matrix
 
@@ -45,6 +48,7 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
   - `hookFailureCount` below `<threshold>`
   - `reminderState=reminder_injected` in expected sessions
   - policy-as-code controls pass for canary tenant scope
+  - primary policy engine profile returns expected decisions
 
 ### Phase R2 — Limited
 
@@ -54,6 +58,7 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
   - no sustained `reminder_skipped` anomalies
   - no guard rejection spikes
   - federated scorecard generated for participating tenants
+  - attestation pipeline publishes verifiable evidence manifests
 
 ### Phase R3 — Broad
 
@@ -63,6 +68,7 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
   - telemetry stable across target packages
   - incident rate within baseline
   - remediation coverage meets federated scorecard threshold
+  - scorecard publication pipeline meets publication SLA
 
 ### Phase R4 — General Availability
 
@@ -71,15 +77,16 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
   - all success criteria met for `<duration>`
   - sign-off from engineering + operations
   - governance scorecard accepted by security and compliance owners
+  - publication verification confirms final scorecards are discoverable
 
 ### Federated Governance Scorecard Gates
 
 | Phase | Required Scorecard Evidence | Gate Owner |
 |---|---|---|
 | R1 | Tenant-level policy control pass/fail snapshot | `<engineering owner>` |
-| R2 | Aggregated remediation backlog and SLA posture | `<operations owner>` |
-| R3 | Cross-tenant compliance trend and exception summary | `<security owner>` |
-| R4 | Final federated governance scorecard sign-off | `<engineering + security + operations>` |
+| R2 | Aggregated remediation backlog, SLA posture, and attestation evidence | `<operations owner>` |
+| R3 | Cross-tenant compliance trend, exceptions, and publication status | `<security owner>` |
+| R4 | Final federated governance scorecard and publication verification sign-off | `<engineering + security + operations>` |
 
 ## 5) Monitoring Plan
 
@@ -128,6 +135,9 @@ Approval gate checklist:
 - [ ] telemetry and audit output directories configured and writable
 - [ ] scorecard template completed for current rollout phase
 - [ ] scorecard exceptions accepted or remediated before phase promotion
+- [ ] policy engine profile fallback behavior tested
+- [ ] attestation signature verification passing in target environment
+- [ ] published scorecard link validation passed for all targets
 
 ## 6) Rollback Plan
 
@@ -154,3 +164,9 @@ Rollback actions:
 - Action items:
   - `<item-1>`
   - `<item-2>`
+
+## 8) Related Templates
+
+- `references/hook-governance-policy-template.md`
+- `references/federated-remediation-governance-scorecard-template.md`
+- `references/enterprise-policy-attestation-publication-template.md`

@@ -59,6 +59,36 @@ Hold promotion from R2 to R3 until policy-block incidents are reduced below thre
 ### Artifacts
 - Governance report: reports/hooks-governance-20250115.json
 - Aggregation report: reports/attestation-aggregate-20250115.json
+- Attestation manifest: reports/attestation-manifest-20250115.json
+- Published dashboard: https://governance.example/scorecards/20250115
+
+---
+```
+
+## Policy Engine + Publication Control Snapshot
+
+```markdown
+## [GOV-20250115-002] policy_engine_publication
+
+**Logged**: 2025-01-15T19:15:00Z
+**Status**: pass
+**Scope**: tenant
+
+### Engine Profile Validation
+- Profile: org-prod-opa
+- Decision mode: enforce
+- Validation command: policyctl validate --profile org-prod-opa
+- Result: pass
+
+### Attestation Pipeline
+- Pipeline run: att-20250115-77
+- Signature verification: pass
+- Verification timestamp: 2025-01-15T19:05:00Z
+
+### Scorecard Publication
+- Pipeline run: pub-20250115-11
+- Targets: governance-dashboard, artifact-store
+- Publication SLA: met (7m < 10m)
 
 ---
 ```
