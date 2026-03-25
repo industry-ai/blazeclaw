@@ -268,6 +268,22 @@ std::optional<std::wstring> ReadEnvVar(const wchar_t* key) {
   return result;
 }
 
+std::filesystem::path ResolveDefaultSkillsRoot(
+    const std::filesystem::path& directPath,
+    const std::filesystem::path& nestedPath) {
+  std::error_code ec;
+  if (std::filesystem::is_directory(directPath, ec) && !ec) {
+    return directPath;
+  }
+
+  ec.clear();
+  if (std::filesystem::is_directory(nestedPath, ec) && !ec) {
+    return nestedPath;
+  }
+
+  return directPath;
+}
+
 } // namespace
 
 std::wstring SkillsCatalogService::SourceKindLabel(const SkillsSourceKind kind) {
@@ -366,6 +382,39 @@ bool SkillsCatalogService::ValidateFixtureScenarios(
   if (hasOversizedEntry) {
     outError =
         L"Fixture validation failed: oversized fixture should be excluded from catalog.";
+    return false;
+  }
+
+  const auto selfEvolvingWorkspace =
+      fixturesRoot / L"s7-self-evolving" / L"workspace";
+  blazeclaw::config::AppConfig selfEvolvingConfig;
+  selfEvolvingConfig.skills.limits.maxCandidatesPerRoot = 32;
+  selfEvolvingConfig.skills.limits.maxSkillsLoadedPerSource = 32;
+  selfEvolvingConfig.skills.limits.maxSkillFileBytes = 32 * 1024;
+
+  const auto selfEvolvingSnapshot =
+      LoadCatalog(selfEvolvingWorkspace, selfEvolvingConfig);
+  const auto selfEvolvingEntry = std::find_if(
+      selfEvolvingSnapshot.entries.begin(),
+      selfEvolvingSnapshot.entries.end(),
+      [](const SkillsCatalogEntry& entry) {
+        return ToLower(Trim(entry.skillName)) == L"self-evolving";
+      });
+  if (selfEvolvingEntry == selfEvolvingSnapshot.entries.end()) {
+    outError =
+        L"Fixture validation failed: expected self-evolving skill from nested blazeclaw/skills path.";
+    return false;
+  }
+
+  if (!selfEvolvingEntry->validFrontmatter) {
+    outError =
+        L"Fixture validation failed: self-evolving skill frontmatter should be valid.";
+    return false;
+  }
+
+  if (ToLower(Trim(selfEvolvingEntry->description)).empty()) {
+    outError =
+        L"Fixture validation failed: self-evolving skill description should be parsed.";
     return false;
   }
 
@@ -470,7 +519,9 @@ std::vector<SkillsSourceRoot> SkillsCatalogService::BuildSourceRoots(
   const auto bundledOverride = ReadEnvVar(L"BLAZECLAW_BUNDLED_SKILLS_DIR");
   const std::filesystem::path bundledRoot = bundledOverride.has_value()
       ? ResolveRootPath(workspaceRoot, bundledOverride.value())
-      : (workspaceRoot / L"skills-bundled");
+      : ResolveDefaultSkillsRoot(
+            workspaceRoot / L"skills-bundled",
+            workspaceRoot / L"blazeclaw" / L"skills-bundled");
   roots.push_back({
       .kind = SkillsSourceKind::Bundled,
       .precedence = 1,
@@ -508,7 +559,9 @@ std::vector<SkillsSourceRoot> SkillsCatalogService::BuildSourceRoots(
       .resolvedRoot = CanonicalOrSelf(projectRoot),
   });
 
-  const auto workspaceSkillsRoot = workspaceRoot / L"skills";
+  const auto workspaceSkillsRoot = ResolveDefaultSkillsRoot(
+      workspaceRoot / L"skills",
+      workspaceRoot / L"blazeclaw" / L"skills");
   roots.push_back({
       .kind = SkillsSourceKind::Workspace,
       .precedence = 5,

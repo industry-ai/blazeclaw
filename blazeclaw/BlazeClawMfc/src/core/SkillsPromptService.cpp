@@ -67,6 +67,50 @@ std::wstring CompactHomePath(const std::filesystem::path& pathValue) {
   return pathText;
 }
 
+bool IncludesSkill(
+    const std::vector<std::wstring>& includedSkills,
+    const std::wstring& skillName) {
+  const auto target = ToLower(Trim(skillName));
+  return std::any_of(
+      includedSkills.begin(),
+      includedSkills.end(),
+      [&](const std::wstring& item) {
+        return ToLower(Trim(item)) == target;
+      });
+}
+
+bool IsSelfEvolvingHookBridgeReady(const SkillsCatalogSnapshot& catalog) {
+  const std::wstring target = L"self-evolving";
+  for (const auto& entry : catalog.entries) {
+    if (ToLower(Trim(entry.skillName)) != target) {
+      continue;
+    }
+
+    std::error_code ec;
+    const auto hookDoc = entry.skillDir / L"hooks" / L"blazeclaw" / L"HOOK.md";
+    const auto hookHandler =
+        entry.skillDir / L"hooks" / L"blazeclaw" / L"handler.ts";
+    const bool hasHookDoc = std::filesystem::is_regular_file(hookDoc, ec) && !ec;
+    ec.clear();
+    const bool hasHookHandler =
+        std::filesystem::is_regular_file(hookHandler, ec) && !ec;
+    return hasHookDoc && hasHookHandler;
+  }
+
+  return false;
+}
+
+std::wstring BuildSelfEvolvingReminderBlock() {
+  std::wstringstream reminder;
+  reminder << L"\n## Self-Evolving Reminder\n";
+  reminder << L"When tasks finish, capture reusable learnings:\n";
+  reminder << L"- corrections -> .learnings/LEARNINGS.md\n";
+  reminder << L"- failures -> .learnings/ERRORS.md\n";
+  reminder << L"- missing capabilities -> .learnings/FEATURE_REQUESTS.md\n";
+  reminder << L"Promote proven patterns to AGENTS.md / SOUL.md / TOOLS.md.\n";
+  return reminder.str();
+}
+
 } // namespace
 
 std::optional<std::vector<std::wstring>> SkillsPromptService::NormalizeFilter(
@@ -145,6 +189,11 @@ SkillsPromptSnapshot SkillsPromptService::BuildSnapshot(
     ++included;
   }
 
+  if (IncludesSkill(snapshot.includedSkills, L"self-evolving") &&
+      IsSelfEvolvingHookBridgeReady(catalog)) {
+    builder << BuildSelfEvolvingReminderBlock();
+  }
+
   snapshot.prompt = builder.str();
   if (snapshot.prompt.size() > appConfig.skills.limits.maxSkillsPromptChars) {
     snapshot.prompt = snapshot.prompt.substr(
@@ -179,6 +228,11 @@ bool SkillsPromptService::ValidateFixtureScenarios(
     return false;
   }
 
+  if (snapshot.prompt.find(L"## Self-Evolving Reminder") != std::wstring::npos) {
+    outError = L"S2 prompt fixture failed: self-evolving reminder should not appear without self-evolving skill.";
+    return false;
+  }
+
   if (snapshot.includedCount != 1) {
     outError = L"S2 prompt fixture failed: expected maxSkillsInPrompt limit of 1.";
     return false;
@@ -190,6 +244,23 @@ bool SkillsPromptService::ValidateFixtureScenarios(
   if (filtered.includedSkills.empty() ||
       ToLower(filtered.includedSkills.front()) != L"prompt-skill-b") {
     outError = L"S2 prompt fixture failed: expected filter to include prompt-skill-b.";
+    return false;
+  }
+
+  const auto selfEvolvingRoot =
+      fixturesRoot / L"s7-self-evolving" / L"workspace";
+  blazeclaw::config::AppConfig selfEvolvingConfig;
+  selfEvolvingConfig.skills.limits.maxSkillsInPrompt = 8;
+  selfEvolvingConfig.skills.limits.maxSkillsPromptChars = 4000;
+  selfEvolvingConfig.skills.limits.maxCandidatesPerRoot = 32;
+  selfEvolvingConfig.skills.limits.maxSkillsLoadedPerSource = 32;
+  selfEvolvingConfig.skills.limits.maxSkillFileBytes = 32 * 1024;
+
+  const auto selfCatalog = catalogService.LoadCatalog(selfEvolvingRoot, selfEvolvingConfig);
+  const auto selfEligibility = eligibilityService.Evaluate(selfCatalog, selfEvolvingConfig);
+  const auto selfSnapshot = BuildSnapshot(selfCatalog, selfEligibility, selfEvolvingConfig);
+  if (selfSnapshot.prompt.find(L"## Self-Evolving Reminder") == std::wstring::npos) {
+    outError = L"S7 self-evolving fixture failed: expected self-evolving reminder injection in prompt.";
     return false;
   }
 

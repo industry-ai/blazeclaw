@@ -1,0 +1,13 @@
+{
+  "owner": "blazeclaw",
+  "slug": "self-evolving",
+  "displayName": "self-evolving",
+  "source": {
+    "project": "openclaw",
+    "path": "openclaw/skills/pskoett/self-improving-agent"
+  },
+  "porting": {
+    "phase": 2,
+    "status": "skeleton-created"
+  }
+}

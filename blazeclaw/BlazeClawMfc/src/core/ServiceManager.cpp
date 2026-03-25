@@ -1005,6 +1005,9 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
   const auto embeddings = Embeddings();
   const auto localModel = LocalModelRuntime();
   const auto retrieval = RetrievalMemory();
+  const bool selfEvolvingReminderInjected =
+      m_skillsPrompt.prompt.find(L"## Self-Evolving Reminder") !=
+      std::wstring::npos;
   const bool configFeatureImplemented =
       m_registry.IsImplemented(L"embeddings-config-foundation");
 
@@ -1105,7 +1108,10 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       ",\"lastQueryCount\":" + std::to_string(retrieval.lastQueryCount) +
       ",\"status\":\"" + retrieval.status + "\"},"
       "\"skills\":{\"catalogEntries\":" + std::to_string(m_skillsCatalog.entries.size()) +
-      ",\"promptIncluded\":" + std::to_string(m_skillsPrompt.includedCount) + "},"
+      ",\"promptIncluded\":" + std::to_string(m_skillsPrompt.includedCount) +
+      ",\"selfEvolvingReminderInjected\":" +
+      std::string(selfEvolvingReminderInjected ? "true" : "false") +
+      "},"
       "\"features\":{\"implemented\":" + std::to_string(implementedCount) +
       ",\"inProgress\":" + std::to_string(inProgressCount) +
       ",\"planned\":" + std::to_string(plannedCount) +

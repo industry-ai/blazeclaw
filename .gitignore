@@ -17,4 +17,3 @@ model.onnx.data
 /blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/model_quantized.onnx
 /blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/model_uint8.onnx
 /blazeclaw/third_party/onnxruntime-gpu/runtimes/win-x64/native
-/blazeclaw/skills/self-evolving/PORTING_PLAN.md
