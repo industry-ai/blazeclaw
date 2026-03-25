@@ -34,6 +34,7 @@ FeatureRegistry::FeatureRegistry() {
       {L"hooks-catalog-loader", FeatureState::Implemented},
       {L"hooks-event-emission", FeatureState::Implemented},
       {L"hooks-execution-engine", FeatureState::Implemented},
+      {L"hooks-self-evolving-integration", FeatureState::Implemented},
       {L"skills-eligibility-filtering", FeatureState::Implemented},
       {L"skills-prompt-snapshots", FeatureState::Implemented},
       {L"skills-watch-refresh", FeatureState::Implemented},

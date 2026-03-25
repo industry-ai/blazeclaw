@@ -138,7 +138,8 @@ SkillsPromptSnapshot SkillsPromptService::BuildSnapshot(
     const SkillsCatalogSnapshot& catalog,
     const SkillsEligibilitySnapshot& eligibility,
     const blazeclaw::config::AppConfig& appConfig,
-    const std::optional<std::vector<std::wstring>>& skillFilter) const {
+    const std::optional<std::vector<std::wstring>>& skillFilter,
+    const bool enableSelfEvolvingPromptFallback) const {
   SkillsPromptSnapshot snapshot;
   snapshot.totalEligible = eligibility.eligibleCount;
   snapshot.filter = NormalizeFilter(skillFilter);
@@ -189,7 +190,8 @@ SkillsPromptSnapshot SkillsPromptService::BuildSnapshot(
     ++included;
   }
 
-  if (IncludesSkill(snapshot.includedSkills, L"self-evolving") &&
+  if (enableSelfEvolvingPromptFallback &&
+      IncludesSkill(snapshot.includedSkills, L"self-evolving") &&
       IsSelfEvolvingHookBridgeReady(catalog)) {
     builder << BuildSelfEvolvingReminderBlock();
   }
@@ -258,9 +260,25 @@ bool SkillsPromptService::ValidateFixtureScenarios(
 
   const auto selfCatalog = catalogService.LoadCatalog(selfEvolvingRoot, selfEvolvingConfig);
   const auto selfEligibility = eligibilityService.Evaluate(selfCatalog, selfEvolvingConfig);
-  const auto selfSnapshot = BuildSnapshot(selfCatalog, selfEligibility, selfEvolvingConfig);
-  if (selfSnapshot.prompt.find(L"## Self-Evolving Reminder") == std::wstring::npos) {
-    outError = L"S7 self-evolving fixture failed: expected self-evolving reminder injection in prompt.";
+  const auto selfSnapshot = BuildSnapshot(
+      selfCatalog,
+      selfEligibility,
+      selfEvolvingConfig,
+      std::nullopt,
+      false);
+  if (selfSnapshot.prompt.find(L"## Self-Evolving Reminder") != std::wstring::npos) {
+    outError = L"S7 self-evolving fixture failed: reminder should be absent when prompt fallback is disabled.";
+    return false;
+  }
+
+  const auto selfSnapshotWithFallback = BuildSnapshot(
+      selfCatalog,
+      selfEligibility,
+      selfEvolvingConfig,
+      std::nullopt,
+      true);
+  if (selfSnapshotWithFallback.prompt.find(L"## Self-Evolving Reminder") == std::wstring::npos) {
+    outError = L"S7 self-evolving fixture failed: expected reminder when prompt fallback is enabled.";
     return false;
   }
 

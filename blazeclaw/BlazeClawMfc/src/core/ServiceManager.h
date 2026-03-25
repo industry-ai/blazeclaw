@@ -114,6 +114,9 @@ private:
   HookEventSnapshot m_hookEvents;
   HookExecutionService m_hookExecutionService;
   HookExecutionSnapshot m_hookExecution;
+  bool m_hooksEngineEnabled = true;
+  bool m_hooksFallbackPromptInjection = false;
+  bool m_selfEvolvingHookTriggered = false;
   SkillsCatalogService m_skillsCatalogService;
   SkillsCatalogSnapshot m_skillsCatalog;
   SkillsEligibilityService m_skillsEligibilityService;

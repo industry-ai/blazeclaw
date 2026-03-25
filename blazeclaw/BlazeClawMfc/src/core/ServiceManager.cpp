@@ -5,6 +5,8 @@
 
 #include <cctype>
 #include <chrono>
+#include <cstdlib>
+#include <cwctype>
 #include <filesystem>
 #include <unordered_map>
 
@@ -192,6 +194,74 @@ bool IsOneOfChannels(
   return false;
 }
 
+bool ReadBoolEnvOrDefault(const wchar_t* key, const bool fallback) {
+  wchar_t* value = nullptr;
+  std::size_t length = 0;
+  if (_wdupenv_s(&value, &length, key) != 0 || value == nullptr || length == 0) {
+    if (value != nullptr) {
+      free(value);
+    }
+
+    return fallback;
+  }
+
+  std::wstring normalized;
+  normalized.reserve(length);
+  for (std::size_t i = 0; i < length && value[i] != L'\0'; ++i) {
+    normalized.push_back(static_cast<wchar_t>(std::towlower(value[i])));
+  }
+  free(value);
+
+  if (normalized == L"1" || normalized == L"true" || normalized == L"yes" || normalized == L"on") {
+    return true;
+  }
+
+  if (normalized == L"0" || normalized == L"false" || normalized == L"no" || normalized == L"off") {
+    return false;
+  }
+
+  return fallback;
+}
+
+bool ContainsBootstrapFile(
+    const std::vector<HookBootstrapFile>& files,
+    const std::wstring& expectedPath) {
+  for (const auto& file : files) {
+    std::wstring lowered = file.path;
+    std::transform(
+        lowered.begin(),
+        lowered.end(),
+        lowered.begin(),
+        [](const wchar_t ch) {
+          return static_cast<wchar_t>(std::towlower(ch));
+        });
+
+    std::wstring expected = expectedPath;
+    std::transform(
+        expected.begin(),
+        expected.end(),
+        expected.begin(),
+        [](const wchar_t ch) {
+          return static_cast<wchar_t>(std::towlower(ch));
+        });
+
+    if (lowered == expected) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+std::wstring BuildSelfEvolvingReminderPromptBlock() {
+  return L"\n## Self-Evolving Reminder\n"
+         L"When tasks finish, capture reusable learnings:\n"
+         L"- corrections -> .learnings/LEARNINGS.md\n"
+         L"- failures -> .learnings/ERRORS.md\n"
+         L"- missing capabilities -> .learnings/FEATURE_REQUESTS.md\n"
+         L"Promote proven patterns to AGENTS.md / SOUL.md / TOOLS.md.\n";
+}
+
 } // namespace
 
 ServiceManager::ServiceManager() = default;
@@ -311,7 +381,9 @@ void ServiceManager::RefreshSkillsState(
   m_skillsPrompt = m_skillsPromptService.BuildSnapshot(
       m_skillsCatalog,
       m_skillsEligibility,
-      config);
+      config,
+      std::nullopt,
+      m_hooksFallbackPromptInjection);
   m_hookEvents = m_hookEventService.Snapshot();
   m_skillsCommands = m_skillsCommandService.BuildSnapshot(
       m_skillsCatalog,
@@ -347,6 +419,10 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
   }
 
   m_activeConfig = config;
+  m_hooksEngineEnabled = ReadBoolEnvOrDefault(L"BLAZECLAW_HOOKS_ENGINE_ENABLED", true);
+  m_hooksFallbackPromptInjection =
+      ReadBoolEnvOrDefault(L"BLAZECLAW_HOOKS_FALLBACK_PROMPT_INJECTION", false);
+  m_selfEvolvingHookTriggered = false;
   m_agentsScope = m_agentsCatalogService.BuildSnapshot(
       std::filesystem::current_path(),
       m_activeConfig);
@@ -458,7 +534,7 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
         L"hooks-event emission failed: " + hookEventError);
   }
 
-  if (emittedBootstrapEvent && !m_hookEvents.events.empty()) {
+  if (m_hooksEngineEnabled && emittedBootstrapEvent && !m_hookEvents.events.empty()) {
     std::wstring dispatchError;
     const auto& latestEvent = m_hookEvents.events.back();
     if (!m_hookExecutionService.Dispatch(latestEvent, m_hookCatalog, dispatchError) &&
@@ -468,6 +544,26 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
     }
 
     m_hookExecution = m_hookExecutionService.Snapshot();
+    m_selfEvolvingHookTriggered = ContainsBootstrapFile(
+        m_hookExecution.bootstrapFiles,
+        L"SELF_EVOLVING_REMINDER.md");
+    if (m_selfEvolvingHookTriggered &&
+        m_skillsPrompt.prompt.find(L"## Self-Evolving Reminder") == std::wstring::npos) {
+      m_skillsPrompt.prompt += BuildSelfEvolvingReminderPromptBlock();
+      m_skillsPrompt.promptChars =
+          static_cast<std::uint32_t>(m_skillsPrompt.prompt.size());
+      if (m_skillsPrompt.prompt.size() >
+          m_activeConfig.skills.limits.maxSkillsPromptChars) {
+        m_skillsPrompt.prompt = m_skillsPrompt.prompt.substr(
+            0,
+            m_activeConfig.skills.limits.maxSkillsPromptChars);
+        m_skillsPrompt.promptChars =
+            static_cast<std::uint32_t>(m_skillsPrompt.prompt.size());
+        m_skillsPrompt.truncated = true;
+      }
+    }
+  } else if (!m_hooksEngineEnabled) {
+    ++m_hookExecution.diagnostics.skippedCount;
   }
 
   std::wstring fixtureError;
@@ -1157,6 +1253,12 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       "},"
       "\"hooks\":{\"loaded\":" +
       std::to_string(m_hookCatalog.diagnostics.hooksLoaded) +
+      ",\"hookEngineEnabled\":" +
+      std::string(m_hooksEngineEnabled ? "true" : "false") +
+      ",\"fallbackPromptInjection\":" +
+      std::string(m_hooksFallbackPromptInjection ? "true" : "false") +
+      ",\"selfEvolvingHookTriggered\":" +
+      std::string(m_selfEvolvingHookTriggered ? "true" : "false") +
       ",\"invalidMetadata\":" +
       std::to_string(m_hookCatalog.diagnostics.invalidMetadataFiles) +
       ",\"unsafeHandlerPaths\":" +

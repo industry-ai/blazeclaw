@@ -146,6 +146,45 @@ Implement a native BlazeClaw hook engine that executes self-evolving hook handle
   - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
 - Result: success, 0 errors, 0 warnings.
 
+## Phase D Execution Results (Completed)
+
+### Self-evolving hook path promoted to primary
+- Runtime now treats event-hook execution as the primary trigger for
+  self-evolving reminder flow.
+- Reminder prompt content is appended from hook execution outcome when
+  `SELF_EVOLVING_REMINDER.md` is produced by dispatch.
+
+### Prompt injection converted to explicit fallback
+- Updated `SkillsPromptService::BuildSnapshot(...)` contract with
+  `enableSelfEvolvingPromptFallback` flag.
+- Default behavior keeps fallback disabled.
+- Prompt-side reminder insertion occurs only when fallback flag is enabled.
+
+### Runtime control flags added
+- Added environment-driven toggles in `ServiceManager`:
+  - `BLAZECLAW_HOOKS_ENGINE_ENABLED` (default: enabled)
+  - `BLAZECLAW_HOOKS_FALLBACK_PROMPT_INJECTION` (default: disabled)
+- Added runtime state tracking:
+  - `m_selfEvolvingHookTriggered`
+
+### Diagnostics and feature signaling updates
+- Extended diagnostics `hooks` block with:
+  - `hookEngineEnabled`
+  - `fallbackPromptInjection`
+  - `selfEvolvingHookTriggered`
+- Added feature registry entry:
+  - `hooks-self-evolving-integration` = implemented
+
+### Validation adjustments
+- Extended `SkillsPromptService::ValidateFixtureScenarios()` to verify:
+  - reminder absent when fallback disabled
+  - reminder present when fallback enabled
+
+### Build validation
+- Ran:
+  - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
+- Result: success, 0 errors, 0 warnings.
+
 ## Phase C Execution Results (Completed)
 
 ### Hook execution engine implemented

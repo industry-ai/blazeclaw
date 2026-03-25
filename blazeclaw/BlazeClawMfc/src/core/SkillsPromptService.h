@@ -25,7 +25,8 @@ public:
       const SkillsCatalogSnapshot& catalog,
       const SkillsEligibilitySnapshot& eligibility,
       const blazeclaw::config::AppConfig& appConfig,
-      const std::optional<std::vector<std::wstring>>& skillFilter = std::nullopt) const;
+      const std::optional<std::vector<std::wstring>>& skillFilter = std::nullopt,
+      bool enableSelfEvolvingPromptFallback = false) const;
 
   [[nodiscard]] bool ValidateFixtureScenarios(
       const std::filesystem::path& fixturesRoot,
