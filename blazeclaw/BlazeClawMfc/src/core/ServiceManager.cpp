@@ -223,6 +223,19 @@ bool ReadBoolEnvOrDefault(const wchar_t* key, const bool fallback) {
   return fallback;
 }
 
+bool ResolveHooksEngineEnabled(const blazeclaw::config::AppConfig& config) {
+  return ReadBoolEnvOrDefault(
+      L"BLAZECLAW_HOOKS_ENGINE_ENABLED",
+      config.hooks.engine.enabled);
+}
+
+bool ResolveHooksFallbackPromptInjection(
+    const blazeclaw::config::AppConfig& config) {
+  return ReadBoolEnvOrDefault(
+      L"BLAZECLAW_HOOKS_FALLBACK_PROMPT_INJECTION",
+      config.hooks.engine.fallbackPromptInjection);
+}
+
 bool ContainsBootstrapFile(
     const std::vector<HookBootstrapFile>& files,
     const std::wstring& expectedPath) {
@@ -419,9 +432,9 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
   }
 
   m_activeConfig = config;
-  m_hooksEngineEnabled = ReadBoolEnvOrDefault(L"BLAZECLAW_HOOKS_ENGINE_ENABLED", true);
+  m_hooksEngineEnabled = ResolveHooksEngineEnabled(m_activeConfig);
   m_hooksFallbackPromptInjection =
-      ReadBoolEnvOrDefault(L"BLAZECLAW_HOOKS_FALLBACK_PROMPT_INJECTION", false);
+      ResolveHooksFallbackPromptInjection(m_activeConfig);
   m_selfEvolvingHookTriggered = false;
   m_agentsScope = m_agentsCatalogService.BuildSnapshot(
       std::filesystem::current_path(),
@@ -1273,9 +1286,13 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       std::to_string(m_hookEvents.diagnostics.droppedCount) +
       ",\"dispatches\":" +
       std::to_string(m_hookExecution.diagnostics.dispatchCount) +
+      ",\"hookDispatchCount\":" +
+      std::to_string(m_hookExecution.diagnostics.dispatchCount) +
       ",\"dispatchSuccess\":" +
       std::to_string(m_hookExecution.diagnostics.successCount) +
       ",\"dispatchFailures\":" +
+      std::to_string(m_hookExecution.diagnostics.failureCount) +
+      ",\"hookFailureCount\":" +
       std::to_string(m_hookExecution.diagnostics.failureCount) +
       ",\"dispatchSkipped\":" +
       std::to_string(m_hookExecution.diagnostics.skippedCount) +

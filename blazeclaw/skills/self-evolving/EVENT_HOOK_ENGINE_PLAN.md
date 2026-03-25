@@ -146,6 +146,35 @@ Implement a native BlazeClaw hook engine that executes self-evolving hook handle
   - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
 - Result: success, 0 errors, 0 warnings.
 
+## Phase E Execution Results (Completed)
+
+### Rollout config implemented
+- Added config model support:
+  - `hooks.engine.enabled`
+  - `hooks.engine.fallbackPromptInjection`
+- Added parsing in `ConfigLoader` and default model values in `ConfigModels`.
+- Added documented keys in `src/config/blazeclaw.conf` template comments.
+
+### Runtime toggle behavior hardened
+- `ServiceManager` now resolves rollout toggles from config first, with
+  environment variables as optional override layer:
+  - `BLAZECLAW_HOOKS_ENGINE_ENABLED`
+  - `BLAZECLAW_HOOKS_FALLBACK_PROMPT_INJECTION`
+
+### Diagnostics alignment completed
+- Diagnostics `hooks` block already exposed:
+  - `hookEngineEnabled`
+  - `hooksLoaded`
+  - `selfEvolvingHookTriggered`
+- Added Phase E naming aliases:
+  - `hookDispatchCount`
+  - `hookFailureCount`
+
+### Build validation
+- Ran:
+  - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
+- Result: success, 0 errors, 0 warnings.
+
 ## Phase D Execution Results (Completed)
 
 ### Self-evolving hook path promoted to primary

@@ -155,6 +155,15 @@ struct SkillsConfig {
   SkillsInstallConfig install;
 };
 
+struct HooksEngineConfig {
+  bool enabled = true;
+  bool fallbackPromptInjection = false;
+};
+
+struct HooksConfig {
+  HooksEngineConfig engine;
+};
+
 struct ChatUiConfig {
   std::wstring mode = L"webview2";
 };
@@ -191,6 +200,7 @@ struct AppConfig {
   SandboxConfig sandbox;
   TranscriptSafetyConfig transcript;
   SkillsConfig skills;
+  HooksConfig hooks;
   std::vector<std::wstring> enabledChannels;
 };
 

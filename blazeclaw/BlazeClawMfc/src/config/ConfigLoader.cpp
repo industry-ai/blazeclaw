@@ -600,6 +600,18 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
       continue;
     }
 
+    if (trimmedLine.rfind(L"hooks.engine.enabled=", 0) == 0) {
+      outConfig.hooks.engine.enabled =
+          ParseBool(trimmedLine.substr(21), true);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"hooks.engine.fallbackPromptInjection=", 0) == 0) {
+      outConfig.hooks.engine.fallbackPromptInjection =
+          ParseBool(trimmedLine.substr(38), false);
+      continue;
+    }
+
     if (trimmedLine.rfind(L"agents.defaults.", 0) == 0) {
       const auto keyValuePos = trimmedLine.find(L'=');
       if (keyValuePos == std::wstring::npos) {
