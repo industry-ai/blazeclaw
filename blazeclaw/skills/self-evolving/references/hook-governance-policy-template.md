@@ -108,10 +108,17 @@ Governance reporting artifacts:
 - Report output directory: `hooks.engine.governanceReportDir`
 - Expected artifact: `hooks-governance-<timestamp>.json`
 
+Closed-loop remediation gates:
+
+- Auto-remediation enabled: `hooks.engine.autoRemediationEnabled`
+- Approval gate required: `hooks.engine.autoRemediationRequiresApproval`
+- Approval token reference: `hooks.engine.autoRemediationApprovalToken`
+
 Centralized integration endpoints:
 
 - `gateway.runtime.governance.reportStatus`
 - `gateway.runtime.governance.remediationPlan`
+- `gateway.runtime.governance.executeRemediation`
 
 ## 8) Compliance and Audit
 

@@ -66,6 +66,10 @@ namespace blazeclaw::gateway {
 		std::size_t policyBlockedCount = 0;
 		std::size_t driftDetectedCount = 0;
 		std::string lastDriftReason;
+      bool autoRemediationEnabled = false;
+		bool autoRemediationRequiresApproval = true;
+		std::size_t autoRemediationExecuted = 0;
+		std::string lastAutoRemediationStatus;
 	};
 
 	class GatewayHost {

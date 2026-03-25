@@ -42,6 +42,7 @@ FeatureRegistry::FeatureRegistry() {
       {L"hooks-policy-drift-detection", FeatureState::Implemented},
       {L"hooks-governance-reporting-pipeline", FeatureState::Implemented},
       {L"hooks-governance-centralized-observability", FeatureState::Implemented},
+      {L"hooks-governance-closed-loop-remediation", FeatureState::Implemented},
       {L"skills-eligibility-filtering", FeatureState::Implemented},
       {L"skills-prompt-snapshots", FeatureState::Implemented},
       {L"skills-watch-refresh", FeatureState::Implemented},

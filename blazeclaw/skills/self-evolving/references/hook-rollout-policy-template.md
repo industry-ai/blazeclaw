@@ -94,6 +94,13 @@ Automation endpoints:
 
 - `gateway.runtime.governance.reportStatus`
 - `gateway.runtime.governance.remediationPlan`
+- `gateway.runtime.governance.executeRemediation`
+
+Approval gate checklist:
+
+- [ ] `autoRemediationEnabled` matches rollout phase intent
+- [ ] `autoRemediationRequiresApproval` enabled for protected environments
+- [ ] Approval token management process validated
 
 ## 6) Rollback Plan
 

@@ -124,6 +124,11 @@ private:
   std::filesystem::path m_hooksGovernanceReportDir;
   std::uint64_t m_hooksGovernanceReportsGenerated = 0;
   std::wstring m_hooksLastGovernanceReportPath;
+  bool m_hooksAutoRemediationEnabled = false;
+  bool m_hooksAutoRemediationRequiresApproval = true;
+  std::wstring m_hooksAutoRemediationApprovalToken;
+  std::uint64_t m_hooksAutoRemediationExecuted = 0;
+  std::wstring m_hooksLastAutoRemediationStatus;
   bool m_selfEvolvingHookTriggered = false;
   SkillsCatalogService m_skillsCatalogService;
   SkillsCatalogSnapshot m_skillsCatalog;

@@ -129,6 +129,40 @@ bool ResolveHooksStrictPolicyEnforcement(
       config.hooks.engine.strictPolicyEnforcement);
 }
 
+bool ResolveHooksAutoRemediationEnabled(
+    const blazeclaw::config::AppConfig& config) {
+  return ReadBoolEnvOrDefault(
+      L"BLAZECLAW_HOOKS_AUTO_REMEDIATION_ENABLED",
+      config.hooks.engine.autoRemediationEnabled);
+}
+
+bool ResolveHooksAutoRemediationRequiresApproval(
+    const blazeclaw::config::AppConfig& config) {
+  return ReadBoolEnvOrDefault(
+      L"BLAZECLAW_HOOKS_AUTO_REMEDIATION_REQUIRES_APPROVAL",
+      config.hooks.engine.autoRemediationRequiresApproval);
+}
+
+std::wstring ResolveHooksAutoRemediationApprovalToken(
+    const blazeclaw::config::AppConfig& config) {
+  std::wstring value = config.hooks.engine.autoRemediationApprovalToken;
+  wchar_t* env = nullptr;
+  std::size_t len = 0;
+  if (_wdupenv_s(
+          &env,
+          &len,
+          L"BLAZECLAW_HOOKS_AUTO_REMEDIATION_APPROVAL_TOKEN") == 0 &&
+      env != nullptr &&
+      len > 0) {
+    value.assign(env);
+  }
+  if (env != nullptr) {
+    free(env);
+  }
+
+  return Trim(value);
+}
+
 std::wstring ToWide(const std::string& value) {
   std::wstring output;
   output.reserve(value.size());
@@ -669,6 +703,13 @@ blazeclaw::gateway::SkillsCatalogGatewayState ServiceManager::BuildGatewaySkills
       static_cast<std::size_t>(m_hookExecution.diagnostics.driftDetectedCount);
   gatewaySkillsState.lastDriftReason =
       ToNarrow(m_hookExecution.diagnostics.lastDriftReason);
+  gatewaySkillsState.autoRemediationEnabled = m_hooksAutoRemediationEnabled;
+  gatewaySkillsState.autoRemediationRequiresApproval =
+      m_hooksAutoRemediationRequiresApproval;
+  gatewaySkillsState.autoRemediationExecuted =
+      static_cast<std::size_t>(m_hooksAutoRemediationExecuted);
+  gatewaySkillsState.lastAutoRemediationStatus =
+      ToNarrow(m_hooksLastAutoRemediationStatus);
   return gatewaySkillsState;
 }
 
@@ -737,8 +778,16 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       ResolveHooksGovernanceReportingEnabled(m_activeConfig);
   m_hooksGovernanceReportDir =
       ResolveHooksGovernanceReportDir(m_activeConfig);
+  m_hooksAutoRemediationEnabled =
+      ResolveHooksAutoRemediationEnabled(m_activeConfig);
+  m_hooksAutoRemediationRequiresApproval =
+      ResolveHooksAutoRemediationRequiresApproval(m_activeConfig);
+  m_hooksAutoRemediationApprovalToken =
+      ResolveHooksAutoRemediationApprovalToken(m_activeConfig);
   m_hooksGovernanceReportsGenerated = 0;
   m_hooksLastGovernanceReportPath.clear();
+  m_hooksAutoRemediationExecuted = 0;
+  m_hooksLastAutoRemediationStatus = L"idle";
   m_selfEvolvingHookTriggered = false;
   m_agentsScope = m_agentsCatalogService.BuildSnapshot(
       std::filesystem::current_path(),
@@ -1635,6 +1684,14 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       std::to_string(m_hooksGovernanceReportsGenerated) +
       ",\"lastGovernanceReportPath\":\"" +
       WideToNarrowAscii(m_hooksLastGovernanceReportPath) + "\"" +
+      ",\"autoRemediationEnabled\":" +
+      std::string(m_hooksAutoRemediationEnabled ? "true" : "false") +
+      ",\"autoRemediationRequiresApproval\":" +
+      std::string(m_hooksAutoRemediationRequiresApproval ? "true" : "false") +
+      ",\"autoRemediationExecuted\":" +
+      std::to_string(m_hooksAutoRemediationExecuted) +
+      ",\"lastAutoRemediationStatus\":\"" +
+      WideToNarrowAscii(m_hooksLastAutoRemediationStatus) + "\"" +
       ",\"selfEvolvingHookTriggered\":" +
       std::string(m_selfEvolvingHookTriggered ? "true" : "false") +
       ",\"invalidMetadata\":" +

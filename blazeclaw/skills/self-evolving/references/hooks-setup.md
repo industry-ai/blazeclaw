@@ -95,6 +95,12 @@ Governance reporting pipeline controls:
 - `hooks.engine.governanceReportingEnabled`
 - `hooks.engine.governanceReportDir`
 
+Closed-loop remediation policy controls:
+
+- `hooks.engine.autoRemediationEnabled`
+- `hooks.engine.autoRemediationRequiresApproval`
+- `hooks.engine.autoRemediationApprovalToken`
+
 Governance reporting diagnostics:
 
 - `hooks.governanceReportsGenerated`
@@ -104,6 +110,7 @@ Centralized observability and remediation endpoints:
 
 - `gateway.runtime.governance.reportStatus`
 - `gateway.runtime.governance.remediationPlan`
+- `gateway.runtime.governance.executeRemediation`
 
 Governance and rollout templates:
 

@@ -661,6 +661,24 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
       continue;
     }
 
+    if (trimmedLine.rfind(L"hooks.engine.autoRemediationEnabled=", 0) == 0) {
+      outConfig.hooks.engine.autoRemediationEnabled =
+          ParseBool(trimmedLine.substr(35), false);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"hooks.engine.autoRemediationRequiresApproval=", 0) == 0) {
+      outConfig.hooks.engine.autoRemediationRequiresApproval =
+          ParseBool(trimmedLine.substr(44), true);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"hooks.engine.autoRemediationApprovalToken=", 0) == 0) {
+      outConfig.hooks.engine.autoRemediationApprovalToken =
+          Trim(trimmedLine.substr(41));
+      continue;
+    }
+
     if (trimmedLine.rfind(L"agents.defaults.", 0) == 0) {
       const auto keyValuePos = trimmedLine.find(L'=');
       if (keyValuePos == std::wstring::npos) {

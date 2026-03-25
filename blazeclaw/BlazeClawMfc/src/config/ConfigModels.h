@@ -164,6 +164,9 @@ struct HooksEngineConfig {
   bool strictPolicyEnforcement = false;
   bool governanceReportingEnabled = true;
   std::wstring governanceReportDir = L"blazeclaw/reports/hooks-governance";
+  bool autoRemediationEnabled = false;
+  bool autoRemediationRequiresApproval = true;
+  std::wstring autoRemediationApprovalToken;
 };
 
 struct HooksConfig {

@@ -510,7 +510,69 @@ namespace blazeclaw::gateway {
                         std::to_string(state.policyBlockedCount) +
                         ",\"driftDetected\":" +
                         std::to_string(state.driftDetectedCount) +
+                        ",\"autoRemediationEnabled\":" +
+                        std::string(state.autoRemediationEnabled ? "true" : "false") +
+                        ",\"autoRemediationRequiresApproval\":" +
+                        std::string(state.autoRemediationRequiresApproval ? "true" : "false") +
                         ",\"reportPath\":\"" +
+                        EscapeJsonLocal(state.lastGovernanceReportPath) +
+                        "\"}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.governance.executeRemediation",
+            [this](const protocol::RequestFrame& request) {
+                const auto& state = m_skillsCatalogState;
+                if (!state.autoRemediationEnabled) {
+                    return protocol::ResponseFrame{
+                        .id = request.id,
+                        .ok = true,
+                        .payloadJson =
+                            "{\"executed\":false,\"status\":\"disabled\",\"approvalAccepted\":false}",
+                        .error = std::nullopt,
+                    };
+                }
+
+                bool approvalAccepted = false;
+                if (state.autoRemediationRequiresApproval) {
+                    bool approved = false;
+                    if (request.paramsJson.has_value()) {
+                        json::FindBoolField(request.paramsJson.value(), "approved", approved);
+                    }
+                    approvalAccepted = approved;
+                    if (!approvalAccepted) {
+                        return protocol::ResponseFrame{
+                            .id = request.id,
+                            .ok = false,
+                            .payloadJson = std::nullopt,
+                            .error = protocol::ErrorShape{
+                                .code = "approval_required",
+                                .message = "Auto-remediation execution requires explicit approval.",
+                                .detailsJson = std::nullopt,
+                                .retryable = false,
+                                .retryAfterMs = std::nullopt,
+                            },
+                        };
+                    }
+                }
+
+                std::string action = "monitor";
+                if (state.driftDetectedCount > 0) {
+                    action = "enable_strict_policy";
+                } else if (state.policyBlockedCount > 0) {
+                    action = "refresh_allowlist_review";
+                }
+
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"executed\":true,\"status\":\"applied\",\"approvalAccepted\":" +
+                        std::string(approvalAccepted ? "true" : "false") +
+                        ",\"action\":\"" + EscapeJsonLocal(action) +
+                        "\",\"reportPath\":\"" +
                         EscapeJsonLocal(state.lastGovernanceReportPath) +
                         "\"}",
                     .error = std::nullopt,
