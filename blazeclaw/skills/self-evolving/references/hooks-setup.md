@@ -112,6 +112,10 @@ Governance reporting diagnostics:
 - `hooks.remediationAuditEnabled`
 - `hooks.lastRemediationTelemetryPath`
 - `hooks.lastRemediationAuditPath`
+- `hooks.remediationSloStatus`
+- `hooks.remediationSloMaxDriftDetected`
+- `hooks.remediationSloMaxPolicyBlocked`
+- `hooks.lastComplianceAttestationPath`
 
 Centralized observability and remediation endpoints:
 
@@ -126,6 +130,14 @@ Enterprise telemetry and audit controls:
 - `hooks.engine.remediationTelemetryDir`
 - `hooks.engine.remediationAuditEnabled`
 - `hooks.engine.remediationAuditDir`
+- `hooks.engine.remediationSloMaxDriftDetected`
+- `hooks.engine.remediationSloMaxPolicyBlocked`
+- `hooks.engine.complianceAttestationEnabled`
+- `hooks.engine.complianceAttestationDir`
+
+Enterprise attestation endpoint:
+
+- `gateway.runtime.governance.attestationStatus`
 
 Governance and rollout templates:
 

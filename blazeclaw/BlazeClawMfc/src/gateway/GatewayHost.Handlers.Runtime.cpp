@@ -475,6 +475,16 @@ namespace blazeclaw::gateway {
                         EscapeJsonLocal(state.autoRemediationTenantId) +
                         "\",\"autoRemediationTokenRotations\":" +
                         std::to_string(state.autoRemediationTokenRotations) +
+                        ",\"remediationSloStatus\":\"" +
+                        EscapeJsonLocal(state.remediationSloStatus) +
+                        "\",\"remediationSloMaxDriftDetected\":" +
+                        std::to_string(state.remediationSloMaxDriftDetected) +
+                        ",\"remediationSloMaxPolicyBlocked\":" +
+                        std::to_string(state.remediationSloMaxPolicyBlocked) +
+                        ",\"lastComplianceAttestationPath\":\"" +
+                        EscapeJsonLocal(state.lastComplianceAttestationPath) +
+                        "\",\"complianceAttestationEnabled\":" +
+                        std::string(!state.lastComplianceAttestationPath.empty() ? "true" : "false") +
                         ",\"governanceReportsGenerated\":" +
                         std::to_string(state.governanceReportsGenerated) +
                         ",\"lastGovernanceReportPath\":\"" +
@@ -485,6 +495,33 @@ namespace blazeclaw::gateway {
                         std::to_string(state.driftDetectedCount) +
                         ",\"lastDriftReason\":\"" +
                         EscapeJsonLocal(state.lastDriftReason) +
+                        "\"}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.governance.attestationStatus",
+            [this](const protocol::RequestFrame& request) {
+                const auto& state = m_skillsCatalogState;
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"tenantId\":\"" +
+                        EscapeJsonLocal(state.autoRemediationTenantId) +
+                        "\",\"sloStatus\":\"" +
+                        EscapeJsonLocal(state.remediationSloStatus) +
+                        "\",\"maxDriftDetected\":" +
+                        std::to_string(state.remediationSloMaxDriftDetected) +
+                        ",\"maxPolicyBlocked\":" +
+                        std::to_string(state.remediationSloMaxPolicyBlocked) +
+                        ",\"attestationPath\":\"" +
+                        EscapeJsonLocal(state.lastComplianceAttestationPath) +
+                        "\",\"telemetryPath\":\"" +
+                        EscapeJsonLocal(state.lastRemediationTelemetryPath) +
+                        "\",\"auditPath\":\"" +
+                        EscapeJsonLocal(state.lastRemediationAuditPath) +
                         "\"}",
                     .error = std::nullopt,
                 };

@@ -723,6 +723,34 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
       continue;
     }
 
+    if (trimmedLine.rfind(L"hooks.engine.remediationSloMaxDriftDetected=", 0) == 0) {
+      std::uint32_t value = 0;
+      if (TryParseUInt(trimmedLine.substr(42), value)) {
+        outConfig.hooks.engine.remediationSloMaxDriftDetected = value;
+      }
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"hooks.engine.remediationSloMaxPolicyBlocked=", 0) == 0) {
+      std::uint32_t value = 0;
+      if (TryParseUInt(trimmedLine.substr(41), value)) {
+        outConfig.hooks.engine.remediationSloMaxPolicyBlocked = value;
+      }
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"hooks.engine.complianceAttestationEnabled=", 0) == 0) {
+      outConfig.hooks.engine.complianceAttestationEnabled =
+          ParseBool(trimmedLine.substr(40), true);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"hooks.engine.complianceAttestationDir=", 0) == 0) {
+      outConfig.hooks.engine.complianceAttestationDir =
+          Trim(trimmedLine.substr(36));
+      continue;
+    }
+
     if (trimmedLine.rfind(L"agents.defaults.", 0) == 0) {
       const auto keyValuePos = trimmedLine.find(L'=');
       if (keyValuePos == std::wstring::npos) {

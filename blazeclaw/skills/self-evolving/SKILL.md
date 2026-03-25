@@ -80,4 +80,4 @@ None in current self-evolving runtime scope.
 
 ## Follow-Up Enhancements
 
-- Add enterprise remediation SLO policies and automated compliance attestation workflows.
+- Expand enterprise remediation SLA governance and cross-tenant attestation aggregation workflows.

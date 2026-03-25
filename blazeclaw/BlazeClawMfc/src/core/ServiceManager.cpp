@@ -210,6 +210,92 @@ std::filesystem::path ResolveHooksAutoRemediationPlaybookDir(
   return std::filesystem::path(trimmed);
 }
 
+std::uint32_t ResolveHooksRemediationSloMaxDriftDetected(
+    const blazeclaw::config::AppConfig& config) {
+  std::uint32_t value = config.hooks.engine.remediationSloMaxDriftDetected;
+  wchar_t* env = nullptr;
+  std::size_t len = 0;
+  if (_wdupenv_s(
+          &env,
+          &len,
+          L"BLAZECLAW_HOOKS_REMEDIATION_SLO_MAX_DRIFT_DETECTED") == 0 &&
+      env != nullptr &&
+      len > 0) {
+    std::wstring trimmedEnv = Trim(env);
+    if (!trimmedEnv.empty()) {
+      std::wistringstream parser(trimmedEnv);
+      std::uint32_t parsed = 0;
+      if ((parser >> parsed) && parser.eof()) {
+        value = parsed;
+      }
+    }
+  }
+  if (env != nullptr) {
+    free(env);
+  }
+
+  return value;
+}
+
+std::uint32_t ResolveHooksRemediationSloMaxPolicyBlocked(
+    const blazeclaw::config::AppConfig& config) {
+  std::uint32_t value = config.hooks.engine.remediationSloMaxPolicyBlocked;
+  wchar_t* env = nullptr;
+  std::size_t len = 0;
+  if (_wdupenv_s(
+          &env,
+          &len,
+          L"BLAZECLAW_HOOKS_REMEDIATION_SLO_MAX_POLICY_BLOCKED") == 0 &&
+      env != nullptr &&
+      len > 0) {
+    std::wstring trimmedEnv = Trim(env);
+    if (!trimmedEnv.empty()) {
+      std::wistringstream parser(trimmedEnv);
+      std::uint32_t parsed = 0;
+      if ((parser >> parsed) && parser.eof()) {
+        value = parsed;
+      }
+    }
+  }
+  if (env != nullptr) {
+    free(env);
+  }
+
+  return value;
+}
+
+bool ResolveHooksComplianceAttestationEnabled(
+    const blazeclaw::config::AppConfig& config) {
+  return ReadBoolEnvOrDefault(
+      L"BLAZECLAW_HOOKS_COMPLIANCE_ATTESTATION_ENABLED",
+      config.hooks.engine.complianceAttestationEnabled);
+}
+
+std::filesystem::path ResolveHooksComplianceAttestationDir(
+    const blazeclaw::config::AppConfig& config) {
+  std::wstring value = config.hooks.engine.complianceAttestationDir;
+  wchar_t* env = nullptr;
+  std::size_t len = 0;
+  if (_wdupenv_s(
+          &env,
+          &len,
+          L"BLAZECLAW_HOOKS_COMPLIANCE_ATTESTATION_DIR") == 0 &&
+      env != nullptr &&
+      len > 0) {
+    value.assign(env);
+  }
+  if (env != nullptr) {
+    free(env);
+  }
+
+  const auto trimmed = Trim(value);
+  if (trimmed.empty()) {
+    return std::filesystem::path(L"blazeclaw/reports/hooks-remediation-attestation");
+  }
+
+  return std::filesystem::path(trimmed);
+}
+
 std::uint32_t ResolveHooksAutoRemediationTokenMaxAgeMinutes(
     const blazeclaw::config::AppConfig& config) {
   std::uint32_t value = config.hooks.engine.autoRemediationTokenMaxAgeMinutes;
@@ -235,6 +321,106 @@ std::uint32_t ResolveHooksAutoRemediationTokenMaxAgeMinutes(
   }
 
   return value == 0 ? 1440 : value;
+}
+
+std::wstring EvaluateRemediationSloStatus(
+    const HookExecutionSnapshot& execution,
+    const std::uint32_t maxDriftDetected,
+    const std::uint32_t maxPolicyBlocked) {
+  if (execution.diagnostics.driftDetectedCount > maxDriftDetected) {
+    return L"breach_drift";
+  }
+
+  if (execution.diagnostics.policyBlockedCount > maxPolicyBlocked) {
+    return L"breach_policy_blocked";
+  }
+
+  return L"healthy";
+}
+
+std::wstring BuildComplianceAttestationJson(
+    const std::wstring& tenantId,
+    const std::wstring& sloStatus,
+    const HookExecutionSnapshot& execution,
+    const std::wstring& telemetryPath,
+    const std::wstring& auditPath) {
+  std::wstringstream builder;
+  builder << L"{\"tenantId\":\"" << tenantId
+          << L"\",\"sloStatus\":\"" << sloStatus
+          << L"\",\"driftDetected\":"
+          << execution.diagnostics.driftDetectedCount
+          << L",\"policyBlocked\":"
+          << execution.diagnostics.policyBlockedCount
+          << L",\"telemetryPath\":\"" << telemetryPath
+          << L"\",\"auditPath\":\"" << auditPath
+          << L"\"}";
+  return builder.str();
+}
+
+void EmitComplianceAttestationIfNeeded(
+    const bool enabled,
+    const std::filesystem::path& attestationDir,
+    const std::wstring& tenantId,
+    const std::wstring& sloStatus,
+    const HookExecutionSnapshot& execution,
+    const std::wstring& telemetryPath,
+    const std::wstring& auditPath,
+    std::wstring& outAttestationPath,
+    std::vector<std::wstring>& inOutWarnings) {
+  outAttestationPath.clear();
+  if (!enabled) {
+    return;
+  }
+
+  if (execution.diagnostics.policyBlockedCount == 0 &&
+      execution.diagnostics.driftDetectedCount == 0) {
+    return;
+  }
+
+  std::error_code ec;
+  auto fullDir = attestationDir;
+  if (fullDir.is_relative()) {
+    fullDir = std::filesystem::current_path(ec) / fullDir;
+  }
+  std::filesystem::create_directories(fullDir, ec);
+  if (ec) {
+    inOutWarnings.push_back(
+        L"hooks-remediation compliance attestation emission failed: cannot create directory.");
+    return;
+  }
+
+  const auto content = BuildComplianceAttestationJson(
+      tenantId,
+      sloStatus,
+      execution,
+      telemetryPath,
+      auditPath);
+  const auto nonce = std::to_wstring(
+      static_cast<std::uint64_t>(
+          std::chrono::system_clock::now().time_since_epoch().count()));
+  const auto attestationPath =
+      fullDir / (L"hooks-remediation-attestation-" + tenantId + L"-" + nonce + L".json");
+
+  std::ofstream output(attestationPath, std::ios::binary | std::ios::trunc);
+  if (!output.is_open()) {
+    inOutWarnings.push_back(
+        L"hooks-remediation compliance attestation emission failed: cannot write file.");
+    return;
+  }
+
+  std::string narrow;
+  narrow.reserve(content.size());
+  for (const auto ch : content) {
+    narrow.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
+  }
+  output.write(narrow.c_str(), static_cast<std::streamsize>(narrow.size()));
+  if (!output.good()) {
+    inOutWarnings.push_back(
+        L"hooks-remediation compliance attestation emission failed: cannot flush file.");
+    return;
+  }
+
+  outAttestationPath = attestationPath.wstring();
 }
 
 bool ResolveHooksRemediationTelemetryEnabled(
@@ -1081,6 +1267,14 @@ blazeclaw::gateway::SkillsCatalogGatewayState ServiceManager::BuildGatewaySkills
       ToNarrow(m_hooksLastRemediationTelemetryPath);
   gatewaySkillsState.lastRemediationAuditPath =
       ToNarrow(m_hooksLastRemediationAuditPath);
+  gatewaySkillsState.remediationSloStatus =
+      ToNarrow(m_hooksRemediationSloStatus);
+  gatewaySkillsState.remediationSloMaxDriftDetected =
+      static_cast<std::size_t>(m_hooksRemediationSloMaxDriftDetected);
+  gatewaySkillsState.remediationSloMaxPolicyBlocked =
+      static_cast<std::size_t>(m_hooksRemediationSloMaxPolicyBlocked);
+  gatewaySkillsState.lastComplianceAttestationPath =
+      ToNarrow(m_hooksLastComplianceAttestationPath);
   return gatewaySkillsState;
 }
 
@@ -1169,6 +1363,14 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       ResolveHooksRemediationAuditEnabled(m_activeConfig);
   m_hooksRemediationAuditDir =
       ResolveHooksRemediationAuditDir(m_activeConfig);
+  m_hooksRemediationSloMaxDriftDetected =
+      ResolveHooksRemediationSloMaxDriftDetected(m_activeConfig);
+  m_hooksRemediationSloMaxPolicyBlocked =
+      ResolveHooksRemediationSloMaxPolicyBlocked(m_activeConfig);
+  m_hooksComplianceAttestationEnabled =
+      ResolveHooksComplianceAttestationEnabled(m_activeConfig);
+  m_hooksComplianceAttestationDir =
+      ResolveHooksComplianceAttestationDir(m_activeConfig);
   m_hooksGovernanceReportsGenerated = 0;
   m_hooksLastGovernanceReportPath.clear();
   m_hooksAutoRemediationExecuted = 0;
@@ -1177,6 +1379,8 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
   m_hooksAutoRemediationTokenRotations = 0;
   m_hooksLastRemediationTelemetryPath.clear();
   m_hooksLastRemediationAuditPath.clear();
+  m_hooksRemediationSloStatus = L"unknown";
+  m_hooksLastComplianceAttestationPath.clear();
   m_selfEvolvingHookTriggered = false;
   m_agentsScope = m_agentsCatalogService.BuildSnapshot(
       std::filesystem::current_path(),
@@ -1347,6 +1551,20 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
         m_hooksAutoRemediationTokenRotations,
         m_hooksLastRemediationTelemetryPath,
         m_hooksLastRemediationAuditPath,
+        m_skillsCatalog.diagnostics.warnings);
+    m_hooksRemediationSloStatus = EvaluateRemediationSloStatus(
+        m_hookExecution,
+        m_hooksRemediationSloMaxDriftDetected,
+        m_hooksRemediationSloMaxPolicyBlocked);
+    EmitComplianceAttestationIfNeeded(
+        m_hooksComplianceAttestationEnabled,
+        m_hooksComplianceAttestationDir,
+        m_hooksAutoRemediationTenantId,
+        m_hooksRemediationSloStatus,
+        m_hookExecution,
+        m_hooksLastRemediationTelemetryPath,
+        m_hooksLastRemediationAuditPath,
+        m_hooksLastComplianceAttestationPath,
         m_skillsCatalog.diagnostics.warnings);
     m_selfEvolvingHookTriggered = ContainsBootstrapFile(
         m_hookExecution.bootstrapFiles,
@@ -2124,6 +2342,16 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       WideToNarrowAscii(m_hooksLastRemediationTelemetryPath) + "\"" +
       ",\"lastRemediationAuditPath\":\"" +
       WideToNarrowAscii(m_hooksLastRemediationAuditPath) + "\"" +
+      ",\"remediationSloStatus\":\"" +
+      WideToNarrowAscii(m_hooksRemediationSloStatus) + "\"" +
+      ",\"remediationSloMaxDriftDetected\":" +
+      std::to_string(m_hooksRemediationSloMaxDriftDetected) +
+      ",\"remediationSloMaxPolicyBlocked\":" +
+      std::to_string(m_hooksRemediationSloMaxPolicyBlocked) +
+      ",\"complianceAttestationEnabled\":" +
+      std::string(m_hooksComplianceAttestationEnabled ? "true" : "false") +
+      ",\"lastComplianceAttestationPath\":\"" +
+      WideToNarrowAscii(m_hooksLastComplianceAttestationPath) + "\"" +
       ",\"selfEvolvingHookTriggered\":" +
       std::string(m_selfEvolvingHookTriggered ? "true" : "false") +
       ",\"invalidMetadata\":" +

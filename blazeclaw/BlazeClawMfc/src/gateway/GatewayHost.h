@@ -76,6 +76,10 @@ namespace blazeclaw::gateway {
 		std::size_t autoRemediationTokenRotations = 0;
       std::string lastRemediationTelemetryPath;
 		std::string lastRemediationAuditPath;
+      std::string remediationSloStatus;
+		std::size_t remediationSloMaxDriftDetected = 0;
+		std::size_t remediationSloMaxPolicyBlocked = 0;
+		std::string lastComplianceAttestationPath;
 	};
 
 	class GatewayHost {

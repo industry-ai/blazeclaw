@@ -111,6 +111,10 @@ Governance reporting artifacts:
 - Remediation telemetry directory: `hooks.engine.remediationTelemetryDir`
 - Remediation audit enabled: `hooks.engine.remediationAuditEnabled=true`
 - Remediation audit directory: `hooks.engine.remediationAuditDir`
+- Compliance attestation enabled: `hooks.engine.complianceAttestationEnabled=true`
+- Compliance attestation directory: `hooks.engine.complianceAttestationDir`
+- Remediation SLO max drift detected: `hooks.engine.remediationSloMaxDriftDetected`
+- Remediation SLO max policy blocked: `hooks.engine.remediationSloMaxPolicyBlocked`
 
 Closed-loop remediation gates:
 
@@ -126,6 +130,7 @@ Centralized integration endpoints:
 - `gateway.runtime.governance.reportStatus`
 - `gateway.runtime.governance.remediationPlan`
 - `gateway.runtime.governance.executeRemediation`
+- `gateway.runtime.governance.attestationStatus`
 
 ## 8) Compliance and Audit
 

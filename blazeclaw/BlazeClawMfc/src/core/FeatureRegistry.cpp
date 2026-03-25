@@ -44,6 +44,7 @@ FeatureRegistry::FeatureRegistry() {
       {L"hooks-governance-centralized-observability", FeatureState::Implemented},
       {L"hooks-governance-closed-loop-remediation", FeatureState::Implemented},
       {L"hooks-governance-enterprise-telemetry-audit", FeatureState::Implemented},
+      {L"hooks-governance-slo-attestation", FeatureState::Implemented},
       {L"skills-eligibility-filtering", FeatureState::Implemented},
       {L"skills-prompt-snapshots", FeatureState::Implemented},
       {L"skills-watch-refresh", FeatureState::Implemented},

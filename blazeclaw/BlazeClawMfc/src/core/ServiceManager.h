@@ -140,6 +140,12 @@ private:
   bool m_hooksRemediationAuditEnabled = true;
   std::filesystem::path m_hooksRemediationAuditDir;
   std::wstring m_hooksLastRemediationAuditPath;
+  std::uint32_t m_hooksRemediationSloMaxDriftDetected = 0;
+  std::uint32_t m_hooksRemediationSloMaxPolicyBlocked = 0;
+  std::wstring m_hooksRemediationSloStatus;
+  bool m_hooksComplianceAttestationEnabled = true;
+  std::filesystem::path m_hooksComplianceAttestationDir;
+  std::wstring m_hooksLastComplianceAttestationPath;
   bool m_selfEvolvingHookTriggered = false;
   SkillsCatalogService m_skillsCatalogService;
   SkillsCatalogSnapshot m_skillsCatalog;

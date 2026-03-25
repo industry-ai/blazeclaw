@@ -177,6 +177,11 @@ struct HooksEngineConfig {
   bool remediationAuditEnabled = true;
   std::wstring remediationAuditDir =
       L"blazeclaw/reports/hooks-remediation-audit";
+  std::uint32_t remediationSloMaxDriftDetected = 0;
+  std::uint32_t remediationSloMaxPolicyBlocked = 0;
+  bool complianceAttestationEnabled = true;
+  std::wstring complianceAttestationDir =
+      L"blazeclaw/reports/hooks-remediation-attestation";
 };
 
 struct HooksConfig {
