@@ -10,6 +10,7 @@
 namespace blazeclaw::core {
 
 struct HookExecutionDiagnostics {
+  std::wstring engineMode = L"ts-contract-adapter";
   std::uint64_t dispatchCount = 0;
   std::uint64_t successCount = 0;
   std::uint64_t failureCount = 0;

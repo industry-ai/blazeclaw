@@ -48,17 +48,21 @@ And supports requirement aliases used by OpenClaw skills, including:
   - sub-agent session exclusion
   - virtual reminder content injection intent
 - Adapted:
-  - reminder flow is activated through BlazeClaw skills prompt lifecycle wiring
+  - reminder flow is activated through BlazeClaw event-hook lifecycle execution
   - no direct OpenClaw runtime hook API dependency
 
 ## Runtime status in BlazeClaw
 
 - Discovery/loading includes nested `blazeclaw/skills` roots.
 - Reminder injection is active when:
-  - `self-evolving` is prompt-eligible, and
-  - `hooks/blazeclaw/HOOK.md` + `hooks/blazeclaw/handler.ts` are present.
+  - `hooks.engine.enabled=true`
+  - `hooks.engine.reminderEnabled=true`
+  - self-evolving hook artifacts are present and eligible
 - Diagnostics signal:
-  - `skills.selfEvolvingReminderInjected`
+  - `hooks.engineMode`
+  - `hooks.selfEvolvingHookTriggered`
+  - `hooks.reminderState`
+  - `hooks.reminderReason`
 
 ## Promotion targets in BlazeClaw workspaces
 
@@ -79,11 +83,8 @@ When a pattern is proven, promote it to persistent guidance:
 
 ## Known Limitations
 
-- Reminder flow currently uses skills prompt lifecycle dispatch, not a standalone hook runtime.
-- Script tooling is Bash-first; PowerShell-native companions are not included yet.
+- Hook runtime support is scoped to self-evolving adapter contract in current rollout.
 
 ## Follow-Up Enhancements
 
-- Add PowerShell script equivalents for all helper scripts.
-- Add finer-grained runtime toggles for reminder injection policy.
-- Add dedicated telemetry and trace events for reminder injection path.
+- Expand TypeScript runtime support to additional hook packages beyond self-evolving.

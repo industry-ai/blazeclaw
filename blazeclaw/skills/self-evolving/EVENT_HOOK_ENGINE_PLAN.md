@@ -146,6 +146,157 @@ Implement a native BlazeClaw hook engine that executes self-evolving hook handle
   - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
 - Result: success, 0 errors, 0 warnings.
 
+## Phase B Execution Results (Completed)
+
+### Normalized lifecycle event model added
+- Added `HookEventService` with normalized event schema:
+  - `type`
+  - `action`
+  - `sessionKey`
+  - `bootstrapFiles[]`
+- Added schema validation for emitted events with explicit checks for:
+  - `type == agent`
+  - `action == bootstrap`
+  - non-empty `sessionKey`
+  - non-empty `bootstrapFiles[*].path`
+
+### Runtime event emission wired
+- Integrated `HookEventService` into `ServiceManager` lifecycle.
+- Emitted `agent.bootstrap` normalized event from startup lifecycle path.
+- Captured event snapshot in runtime state for diagnostics.
+
+### Fixture and validation coverage added
+- Added `HookEventService::ValidateFixtureScenarios()` assertions for:
+  - successful emission of valid bootstrap event
+  - rejection of invalid bootstrap event
+  - emitted/failed counter expectations
+- Hook-event fixture validation is now executed during startup fixture validation pass.
+
+### Observability updates
+- Extended diagnostics report `hooks` block with event metrics:
+  - `eventsEmitted`
+  - `eventValidationFailed`
+  - `eventsDropped`
+- Added feature registry entry:
+  - `hooks-event-emission` = implemented
+
+### Build validation
+- Ran:
+  - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
+- Result: success, 0 errors, 0 warnings.
+
+## Phase C Execution Results (Completed)
+
+### Hook execution engine implemented
+- Added `HookExecutionService` with:
+  - event filtering (`agent.bootstrap`)
+  - deterministic dispatch ordering (skill/hook name sort)
+  - per-hook timeout accounting
+  - exception handling and warning capture
+- Added context mutation guardrails for `bootstrapFiles`:
+  - safe relative path enforcement
+  - rejection of traversal/absolute/drive-style paths
+  - bounded bootstrap file count
+
+### Runtime integration applied
+- Integrated execution engine into startup lifecycle after normalized
+  `agent.bootstrap` event emission.
+- Persisted execution snapshot in runtime state for operator visibility.
+- Added fixture validation call for hook execution scenarios in startup pass.
+
+### Fixture coverage added
+- Added `fixtures/skills-catalog/s9-hooks-exec/workspace/skills/*` scenarios:
+  - `self-evolving` (dispatch success + reminder mutation)
+  - `hook-unsafe-mutation` (guardrail rejection path)
+- Added `HookExecutionService::ValidateFixtureScenarios()` assertions for:
+  - successful dispatch for normalized bootstrap event
+  - reminder file mutation presence
+  - guard rejection count > 0 for unsafe mutation attempts
+
+### Observability updates
+- Extended diagnostics `hooks` block with execution metrics:
+  - `dispatches`
+  - `dispatchSuccess`
+  - `dispatchFailures`
+  - `dispatchSkipped`
+  - `dispatchTimeouts`
+  - `guardRejected`
+- Added feature registry entry:
+  - `hooks-execution-engine` = implemented
+
+### Build validation
+- Ran:
+  - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
+- Result: success, 0 errors, 0 warnings.
+
+## Phase D Execution Results (Completed)
+
+### Self-evolving hook path promoted to primary
+- Runtime now treats event-hook execution as the primary trigger for
+  self-evolving reminder flow.
+- Reminder prompt content is appended from hook execution outcome when
+  `SELF_EVOLVING_REMINDER.md` is produced by dispatch.
+
+### Prompt injection converted to explicit fallback
+- Updated `SkillsPromptService::BuildSnapshot(...)` contract with
+  `enableSelfEvolvingPromptFallback` flag.
+- Default behavior keeps fallback disabled.
+- Prompt-side reminder insertion occurs only when fallback flag is enabled.
+
+### Runtime control flags added
+- Added environment-driven toggles in `ServiceManager`:
+  - `BLAZECLAW_HOOKS_ENGINE_ENABLED` (default: enabled)
+  - `BLAZECLAW_HOOKS_FALLBACK_PROMPT_INJECTION` (default: disabled)
+- Added runtime state tracking:
+  - `m_selfEvolvingHookTriggered`
+
+### Diagnostics and feature signaling updates
+- Extended diagnostics `hooks` block with:
+  - `hookEngineEnabled`
+  - `fallbackPromptInjection`
+  - `selfEvolvingHookTriggered`
+- Added feature registry entry:
+  - `hooks-self-evolving-integration` = implemented
+
+### Validation adjustments
+- Extended `SkillsPromptService::ValidateFixtureScenarios()` to verify:
+  - reminder absent when fallback disabled
+  - reminder present when fallback enabled
+
+### Build validation
+- Ran:
+  - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
+- Result: success, 0 errors, 0 warnings.
+
+## Phase E Execution Results (Completed)
+
+### Rollout config implemented
+- Added config model support:
+  - `hooks.engine.enabled`
+  - `hooks.engine.fallbackPromptInjection`
+- Added parsing in `ConfigLoader` and default model values in `ConfigModels`.
+- Added documented keys in `src/config/blazeclaw.conf` template comments.
+
+### Runtime toggle behavior hardened
+- `ServiceManager` now resolves rollout toggles from config first, with
+  environment variables as optional override layer:
+  - `BLAZECLAW_HOOKS_ENGINE_ENABLED`
+  - `BLAZECLAW_HOOKS_FALLBACK_PROMPT_INJECTION`
+
+### Diagnostics alignment completed
+- Diagnostics `hooks` block already exposed:
+  - `hookEngineEnabled`
+  - `hooksLoaded`
+  - `selfEvolvingHookTriggered`
+- Added Phase E naming aliases:
+  - `hookDispatchCount`
+  - `hookFailureCount`
+
+### Build validation
+- Ran:
+  - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
+- Result: success, 0 errors, 0 warnings.
+
 ## Final Cleanup Pass (Completed)
 
 ### Remaining code gap closed
@@ -204,153 +355,12 @@ Implement a native BlazeClaw hook engine that executes self-evolving hook handle
   unsafe-path guardrail behavior.
 - Build and fixture validation executed successfully.
 
-## Phase E Execution Results (Completed)
-
-### Rollout config implemented
-- Added config model support:
-  - `hooks.engine.enabled`
-  - `hooks.engine.fallbackPromptInjection`
-- Added parsing in `ConfigLoader` and default model values in `ConfigModels`.
-- Added documented keys in `src/config/blazeclaw.conf` template comments.
-
-### Runtime toggle behavior hardened
-- `ServiceManager` now resolves rollout toggles from config first, with
-  environment variables as optional override layer:
-  - `BLAZECLAW_HOOKS_ENGINE_ENABLED`
-  - `BLAZECLAW_HOOKS_FALLBACK_PROMPT_INJECTION`
-
-### Diagnostics alignment completed
-- Diagnostics `hooks` block already exposed:
-  - `hookEngineEnabled`
-  - `hooksLoaded`
-  - `selfEvolvingHookTriggered`
-- Added Phase E naming aliases:
-  - `hookDispatchCount`
-  - `hookFailureCount`
-
-### Build validation
-- Ran:
-  - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
-- Result: success, 0 errors, 0 warnings.
-
-## Phase D Execution Results (Completed)
-
-### Self-evolving hook path promoted to primary
-- Runtime now treats event-hook execution as the primary trigger for
-  self-evolving reminder flow.
-- Reminder prompt content is appended from hook execution outcome when
-  `SELF_EVOLVING_REMINDER.md` is produced by dispatch.
-
-### Prompt injection converted to explicit fallback
-- Updated `SkillsPromptService::BuildSnapshot(...)` contract with
-  `enableSelfEvolvingPromptFallback` flag.
-- Default behavior keeps fallback disabled.
-- Prompt-side reminder insertion occurs only when fallback flag is enabled.
-
-### Runtime control flags added
-- Added environment-driven toggles in `ServiceManager`:
-  - `BLAZECLAW_HOOKS_ENGINE_ENABLED` (default: enabled)
-  - `BLAZECLAW_HOOKS_FALLBACK_PROMPT_INJECTION` (default: disabled)
-- Added runtime state tracking:
-  - `m_selfEvolvingHookTriggered`
-
-### Diagnostics and feature signaling updates
-- Extended diagnostics `hooks` block with:
-  - `hookEngineEnabled`
-  - `fallbackPromptInjection`
-  - `selfEvolvingHookTriggered`
-- Added feature registry entry:
-  - `hooks-self-evolving-integration` = implemented
-
-### Validation adjustments
-- Extended `SkillsPromptService::ValidateFixtureScenarios()` to verify:
-  - reminder absent when fallback disabled
-  - reminder present when fallback enabled
-
-### Build validation
-- Ran:
-  - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
-- Result: success, 0 errors, 0 warnings.
-
-## Phase C Execution Results (Completed)
-
-### Hook execution engine implemented
-- Added `HookExecutionService` with:
-  - event filtering (`agent.bootstrap`)
-  - deterministic dispatch ordering (skill/hook name sort)
-  - per-hook timeout accounting
-  - exception handling and warning capture
-- Added context mutation guardrails for `bootstrapFiles`:
-  - safe relative path enforcement
-  - rejection of traversal/absolute/drive-style paths
-  - bounded bootstrap file count
-
-### Runtime integration applied
-- Integrated execution engine into startup lifecycle after normalized
-  `agent.bootstrap` event emission.
-- Persisted execution snapshot in runtime state for operator visibility.
-- Added fixture validation call for hook execution scenarios in startup pass.
-
-### Fixture coverage added
-- Added `fixtures/skills-catalog/s9-hooks-exec/workspace/skills/*` scenarios:
-  - `self-evolving` (dispatch success + reminder mutation)
-  - `hook-unsafe-mutation` (guardrail rejection path)
-- Added `HookExecutionService::ValidateFixtureScenarios()` assertions for:
-  - successful dispatch for normalized bootstrap event
-  - reminder file mutation presence
-  - guard rejection count > 0 for unsafe mutation attempts
-
-### Observability updates
-- Extended diagnostics `hooks` block with execution metrics:
-  - `dispatches`
-  - `dispatchSuccess`
-  - `dispatchFailures`
-  - `dispatchSkipped`
-  - `dispatchTimeouts`
-  - `guardRejected`
-- Added feature registry entry:
-  - `hooks-execution-engine` = implemented
-
-### Build validation
-- Ran:
-  - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
-- Result: success, 0 errors, 0 warnings.
-
-## Phase B Execution Results (Completed)
-
-### Normalized lifecycle event model added
-- Added `HookEventService` with normalized event schema:
-  - `type`
-  - `action`
-  - `sessionKey`
-  - `bootstrapFiles[]`
-- Added schema validation for emitted events with explicit checks for:
-  - `type == agent`
-  - `action == bootstrap`
-  - non-empty `sessionKey`
-  - non-empty `bootstrapFiles[*].path`
-
-### Runtime event emission wired
-- Integrated `HookEventService` into `ServiceManager` lifecycle.
-- Emitted `agent.bootstrap` normalized event from startup lifecycle path.
-- Captured event snapshot in runtime state for diagnostics.
-
-### Fixture and validation coverage added
-- Added `HookEventService::ValidateFixtureScenarios()` assertions for:
-  - successful emission of valid bootstrap event
-  - rejection of invalid bootstrap event
-  - emitted/failed counter expectations
-- Hook-event fixture validation is now executed during startup fixture validation pass.
-
-### Observability updates
-- Extended diagnostics report `hooks` block with event metrics:
-  - `eventsEmitted`
-  - `eventValidationFailed`
-  - `eventsDropped`
-- Added feature registry entry:
-  - `hooks-event-emission` = implemented
-
-### Build validation
-- Ran:
-  - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
-- Result: success, 0 errors, 0 warnings.
+### Final limitations status after remediation
+- Completed:
+  - PowerShell helper parity
+  - reminder policy controls
+  - reminder transition telemetry
+- Remaining (intended):
+  - execution engine remains `ts-contract-adapter` for scoped
+    `bootstrapFiles.push(...)` operations, not full general-purpose
+    TypeScript runtime execution.

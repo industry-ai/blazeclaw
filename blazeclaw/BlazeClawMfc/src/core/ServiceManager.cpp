@@ -1330,6 +1330,8 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       "},"
       "\"hooks\":{\"loaded\":" +
       std::to_string(m_hookCatalog.diagnostics.hooksLoaded) +
+      ",\"engineMode\":\"" +
+      WideToNarrowAscii(m_hookExecution.diagnostics.engineMode) + "\"" +
       ",\"hookEngineEnabled\":" +
       std::string(m_hooksEngineEnabled ? "true" : "false") +
       ",\"fallbackPromptInjection\":" +

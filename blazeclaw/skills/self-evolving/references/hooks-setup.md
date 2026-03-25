@@ -7,6 +7,9 @@ Configure self-evolving reminders for coding workflows.
 Runtime integration provides reminder injection through BlazeClaw
 event-hook execution lifecycle.
 
+The self-evolving hook now runs through a constrained TypeScript contract
+adapter path in BlazeClaw for this scope.
+
 This is an adapter model for BlazeClaw runtime (not a direct clone of
 OpenClaw's `agent:bootstrap` hook runtime).
 
@@ -46,6 +49,7 @@ If your local CLI supports shell hooks, point them to scripts under:
 - Confirm your workflow guidance includes explicit logging instructions
 - Confirm at least one test entry can be appended without format errors
 - Confirm runtime diagnostics include:
+  - `hooks.engineMode: "ts-contract-adapter"`
   - `hooks.selfEvolvingHookTriggered: true` when self-evolving hook executed
   - `hooks.hookDispatchCount > 0` during active runs
   - `hooks.hookFailureCount == 0` for healthy dispatch
