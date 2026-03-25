@@ -20,6 +20,9 @@ struct HookExecutionDiagnostics {
   std::uint64_t reminderTriggeredCount = 0;
   std::uint64_t reminderInjectedCount = 0;
   std::uint64_t reminderSkippedCount = 0;
+  std::uint64_t policyBlockedCount = 0;
+  std::uint64_t driftDetectedCount = 0;
+  std::wstring lastDriftReason;
   std::wstring lastReminderState;
   std::wstring lastReminderReason;
   std::vector<std::wstring> warnings;
@@ -28,6 +31,8 @@ struct HookExecutionDiagnostics {
 struct HookExecutionPolicy {
   bool reminderEnabled = true;
   std::wstring reminderVerbosity = L"normal";
+  std::vector<std::wstring> allowedPackages;
+  bool strictPolicyEnforcement = false;
 };
 
 struct HookExecutionSnapshot {

@@ -79,6 +79,17 @@ Reminder policy controls are configurable via:
 - `hooks.engine.reminderEnabled`
 - `hooks.engine.reminderVerbosity` (`minimal|normal|detailed`)
 
+Tenant governance automation controls are configurable via:
+
+- `hooks.engine.allowPackage` (repeat per package)
+- `hooks.engine.strictPolicyEnforcement`
+
+Governance drift diagnostics:
+
+- `hooks.policyBlocked`
+- `hooks.driftDetected`
+- `hooks.lastDriftReason`
+
 Governance and rollout templates:
 
 - `references/hook-governance-policy-template.md`

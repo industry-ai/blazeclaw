@@ -635,6 +635,20 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
       continue;
     }
 
+    if (trimmedLine.rfind(L"hooks.engine.allowPackage=", 0) == 0) {
+      const auto packageName = ToLowerTrim(trimmedLine.substr(25));
+      if (!packageName.empty()) {
+        outConfig.hooks.engine.allowedPackages.push_back(packageName);
+      }
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"hooks.engine.strictPolicyEnforcement=", 0) == 0) {
+      outConfig.hooks.engine.strictPolicyEnforcement =
+          ParseBool(trimmedLine.substr(37), false);
+      continue;
+    }
+
     if (trimmedLine.rfind(L"agents.defaults.", 0) == 0) {
       const auto keyValuePos = trimmedLine.find(L'=');
       if (keyValuePos == std::wstring::npos) {

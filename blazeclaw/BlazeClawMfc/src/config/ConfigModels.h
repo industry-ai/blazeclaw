@@ -160,6 +160,8 @@ struct HooksEngineConfig {
   bool fallbackPromptInjection = false;
   bool reminderEnabled = true;
   std::wstring reminderVerbosity = L"normal";
+  std::vector<std::wstring> allowedPackages;
+  bool strictPolicyEnforcement = false;
 };
 
 struct HooksConfig {

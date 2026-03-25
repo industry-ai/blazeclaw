@@ -56,6 +56,19 @@ std::wstring NormalizePathKey(const std::wstring& value) {
   return ToLower(Trim(value));
 }
 
+std::unordered_set<std::wstring> BuildAllowedPackageSet(
+    const HookExecutionPolicy& policy) {
+  std::unordered_set<std::wstring> allowed;
+  for (const auto& item : policy.allowedPackages) {
+    const auto normalized = ToLower(Trim(item));
+    if (!normalized.empty()) {
+      allowed.insert(normalized);
+    }
+  }
+
+  return allowed;
+}
+
 std::wstring Utf8ToWide(const std::string& value) {
   if (value.empty()) {
     return {};
@@ -525,8 +538,30 @@ bool HookExecutionService::Dispatch(
   }
 
   const auto ordered = BuildDispatchOrder(hooks, event);
+  const auto allowedPackages = BuildAllowedPackageSet(policy);
+  const bool enforceAllowlist = !allowedPackages.empty();
   bool injected = false;
   for (const auto* hook : ordered) {
+    const auto packageKey = ToLower(Trim(hook->skillName));
+    if (enforceAllowlist &&
+        allowedPackages.find(packageKey) == allowedPackages.end()) {
+      ++m_snapshot.diagnostics.policyBlockedCount;
+      m_snapshot.diagnostics.warnings.push_back(
+          L"Hook package blocked by tenant allowlist policy: " +
+          hook->skillName);
+
+      if (policy.strictPolicyEnforcement) {
+        ++m_snapshot.diagnostics.failureCount;
+        ++m_snapshot.diagnostics.reminderSkippedCount;
+        m_snapshot.diagnostics.lastReminderState = L"reminder_skipped";
+        m_snapshot.diagnostics.lastReminderReason = L"policy_blocked_strict";
+        outError = L"Hook dispatch stopped by strict package policy.";
+        return false;
+      }
+
+      continue;
+    }
+
     const auto started = std::chrono::steady_clock::now();
     try {
       std::vector<HookBootstrapFile> proposed;
@@ -548,6 +583,14 @@ bool HookExecutionService::Dispatch(
       }
 
       if (!runtimeName.empty()) {
+        if (!m_snapshot.diagnostics.engineMode.empty() &&
+            m_snapshot.diagnostics.engineMode != runtimeName) {
+          ++m_snapshot.diagnostics.driftDetectedCount;
+          m_snapshot.diagnostics.lastDriftReason =
+              L"runtime_mode_changed";
+          m_snapshot.diagnostics.warnings.push_back(
+              L"Hook runtime drift detected: runtime mode changed during dispatch.");
+        }
         m_snapshot.diagnostics.engineMode = runtimeName;
       }
 
@@ -569,6 +612,9 @@ bool HookExecutionService::Dispatch(
         }
 
         if (existingPathKeys.find(pathKey) != existingPathKeys.end()) {
+          ++m_snapshot.diagnostics.driftDetectedCount;
+          m_snapshot.diagnostics.lastDriftReason =
+              L"duplicate_mutation_path";
           m_snapshot.diagnostics.warnings.push_back(
               L"Hook mutation skipped due to duplicate bootstrap file path.");
           continue;

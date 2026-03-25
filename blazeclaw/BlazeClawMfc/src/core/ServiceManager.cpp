@@ -25,6 +25,109 @@ std::string ToNarrow(const std::wstring& value) {
   return output;
 }
 
+std::wstring Trim(const std::wstring& value) {
+  const auto first = std::find_if_not(
+      value.begin(),
+      value.end(),
+      [](const wchar_t ch) { return std::iswspace(ch) != 0; });
+  const auto last = std::find_if_not(
+      value.rbegin(),
+      value.rend(),
+      [](const wchar_t ch) { return std::iswspace(ch) != 0; })
+                        .base();
+
+  if (first >= last) {
+    return {};
+  }
+
+  return std::wstring(first, last);
+}
+
+bool ReadBoolEnvOrDefault(const wchar_t* key, const bool fallback) {
+  wchar_t* value = nullptr;
+  std::size_t length = 0;
+  if (_wdupenv_s(&value, &length, key) != 0 || value == nullptr ||
+      length == 0) {
+    if (value != nullptr) {
+      free(value);
+    }
+
+    return fallback;
+  }
+
+  std::wstring normalized;
+  normalized.reserve(length);
+  for (std::size_t i = 0; i < length && value[i] != L'\0'; ++i) {
+    normalized.push_back(static_cast<wchar_t>(std::towlower(value[i])));
+  }
+  free(value);
+
+  if (normalized == L"1" || normalized == L"true" || normalized == L"yes" ||
+      normalized == L"on") {
+    return true;
+  }
+
+  if (normalized == L"0" || normalized == L"false" || normalized == L"no" ||
+      normalized == L"off") {
+    return false;
+  }
+
+  return fallback;
+}
+
+std::vector<std::wstring> ResolveHooksAllowedPackages(
+    const blazeclaw::config::AppConfig& config) {
+  std::vector<std::wstring> values;
+
+  const auto addNormalized = [&values](const std::wstring& raw) {
+    const auto trimmed = Trim(raw);
+    if (trimmed.empty()) {
+      return;
+    }
+
+    std::wstring lowered;
+    lowered.reserve(trimmed.size());
+    for (const auto ch : trimmed) {
+      lowered.push_back(static_cast<wchar_t>(std::towlower(ch)));
+    }
+    values.push_back(lowered);
+  };
+
+  for (const auto& item : config.hooks.engine.allowedPackages) {
+    addNormalized(item);
+  }
+
+  wchar_t* env = nullptr;
+  std::size_t len = 0;
+  if (_wdupenv_s(&env, &len, L"BLAZECLAW_HOOKS_ALLOWED_PACKAGES") == 0 &&
+      env != nullptr && len > 0) {
+    std::wstring token;
+    for (std::size_t i = 0; i < len && env[i] != L'\0'; ++i) {
+      if (env[i] == L',' || env[i] == L';') {
+        addNormalized(token);
+        token.clear();
+      } else {
+        token.push_back(env[i]);
+      }
+    }
+    addNormalized(token);
+  }
+  if (env != nullptr) {
+    free(env);
+  }
+
+  std::sort(values.begin(), values.end());
+  values.erase(std::unique(values.begin(), values.end()), values.end());
+  return values;
+}
+
+bool ResolveHooksStrictPolicyEnforcement(
+    const blazeclaw::config::AppConfig& config) {
+  return ReadBoolEnvOrDefault(
+      L"BLAZECLAW_HOOKS_STRICT_POLICY_ENFORCEMENT",
+      config.hooks.engine.strictPolicyEnforcement);
+}
+
 std::wstring ToWide(const std::string& value) {
   std::wstring output;
   output.reserve(value.size());
@@ -202,35 +305,6 @@ bool IsOneOfChannels(
   }
 
   return false;
-}
-
-bool ReadBoolEnvOrDefault(const wchar_t* key, const bool fallback) {
-  wchar_t* value = nullptr;
-  std::size_t length = 0;
-  if (_wdupenv_s(&value, &length, key) != 0 || value == nullptr || length == 0) {
-    if (value != nullptr) {
-      free(value);
-    }
-
-    return fallback;
-  }
-
-  std::wstring normalized;
-  normalized.reserve(length);
-  for (std::size_t i = 0; i < length && value[i] != L'\0'; ++i) {
-    normalized.push_back(static_cast<wchar_t>(std::towlower(value[i])));
-  }
-  free(value);
-
-  if (normalized == L"1" || normalized == L"true" || normalized == L"yes" || normalized == L"on") {
-    return true;
-  }
-
-  if (normalized == L"0" || normalized == L"false" || normalized == L"no" || normalized == L"off") {
-    return false;
-  }
-
-  return fallback;
 }
 
 bool ResolveHooksEngineEnabled(const blazeclaw::config::AppConfig& config) {
@@ -519,6 +593,9 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       ResolveHooksFallbackPromptInjection(m_activeConfig);
   m_hooksReminderEnabled = ResolveHooksReminderEnabled(m_activeConfig);
   m_hooksReminderVerbosity = ResolveHooksReminderVerbosity(m_activeConfig);
+  m_hooksAllowedPackages = ResolveHooksAllowedPackages(m_activeConfig);
+  m_hooksStrictPolicyEnforcement =
+      ResolveHooksStrictPolicyEnforcement(m_activeConfig);
   m_selfEvolvingHookTriggered = false;
   m_agentsScope = m_agentsCatalogService.BuildSnapshot(
       std::filesystem::current_path(),
@@ -644,7 +721,9 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
             m_hookCatalog,
             HookExecutionPolicy{
                 .reminderEnabled = m_hooksReminderEnabled,
-                .reminderVerbosity = m_hooksReminderVerbosity},
+                .reminderVerbosity = m_hooksReminderVerbosity,
+                .allowedPackages = m_hooksAllowedPackages,
+                .strictPolicyEnforcement = m_hooksStrictPolicyEnforcement},
             dispatchError) &&
         !dispatchError.empty()) {
       m_skillsCatalog.diagnostics.warnings.push_back(
@@ -1394,6 +1473,10 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       std::string(m_hooksReminderEnabled ? "true" : "false") +
       ",\"reminderVerbosity\":\"" +
       WideToNarrowAscii(m_hooksReminderVerbosity) + "\"" +
+      ",\"strictPolicyEnforcement\":" +
+      std::string(m_hooksStrictPolicyEnforcement ? "true" : "false") +
+      ",\"allowedPackagesCount\":" +
+      std::to_string(m_hooksAllowedPackages.size()) +
       ",\"selfEvolvingHookTriggered\":" +
       std::string(m_selfEvolvingHookTriggered ? "true" : "false") +
       ",\"invalidMetadata\":" +
@@ -1430,6 +1513,12 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       std::to_string(m_hookExecution.diagnostics.reminderInjectedCount) +
       ",\"reminderSkipped\":" +
       std::to_string(m_hookExecution.diagnostics.reminderSkippedCount) +
+      ",\"policyBlocked\":" +
+      std::to_string(m_hookExecution.diagnostics.policyBlockedCount) +
+      ",\"driftDetected\":" +
+      std::to_string(m_hookExecution.diagnostics.driftDetectedCount) +
+      ",\"lastDriftReason\":\"" +
+      WideToNarrowAscii(m_hookExecution.diagnostics.lastDriftReason) + "\"" +
       ",\"reminderState\":\"" +
       WideToNarrowAscii(m_hookExecution.diagnostics.lastReminderState) + "\"" +
       ",\"reminderReason\":\"" +

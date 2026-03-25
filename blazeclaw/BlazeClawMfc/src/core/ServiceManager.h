@@ -118,6 +118,8 @@ private:
   bool m_hooksFallbackPromptInjection = false;
   bool m_hooksReminderEnabled = true;
   std::wstring m_hooksReminderVerbosity = L"normal";
+  std::vector<std::wstring> m_hooksAllowedPackages;
+  bool m_hooksStrictPolicyEnforcement = false;
   bool m_selfEvolvingHookTriggered = false;
   SkillsCatalogService m_skillsCatalogService;
   SkillsCatalogSnapshot m_skillsCatalog;

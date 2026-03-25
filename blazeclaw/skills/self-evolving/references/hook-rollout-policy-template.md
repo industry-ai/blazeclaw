@@ -27,6 +27,14 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
 | Staging | `<true|false>` | `<true|false>` | `<true|false>` | `<minimal|normal|detailed>` |
 | Production | `<true|false>` | `<true|false>` | `<true|false>` | `<minimal|normal|detailed>` |
 
+### Package Governance Matrix
+
+| Environment | Allowed Packages | Strict Policy Enforcement |
+|---|---|---:|
+| Dev | `<comma-separated-packages>` | `<true|false>` |
+| Staging | `<comma-separated-packages>` | `<true|false>` |
+| Production | `<comma-separated-packages>` | `<true|false>` |
+
 ## 4) Progressive Rollout Phases
 
 ### Phase R1 — Canary
@@ -71,6 +79,9 @@ Track at minimum:
 - `hooks.guardRejected`
 - `hooks.reminderState`
 - `hooks.reminderReason`
+- `hooks.policyBlocked`
+- `hooks.driftDetected`
+- `hooks.lastDriftReason`
 
 Dashboard links:
 

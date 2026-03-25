@@ -61,6 +61,9 @@ Use this template to define governance controls for multi-package hook ecosystem
 - Reminder policy:
   - `hooks.engine.reminderEnabled`: `<true|false>`
   - `hooks.engine.reminderVerbosity`: `<minimal|normal|detailed>`
+- Package governance policy:
+  - `hooks.engine.allowPackage`: `<repeatable-package-entry>`
+  - `hooks.engine.strictPolicyEnforcement`: `<true|false>`
 
 ## 6) Observability Requirements
 
@@ -74,6 +77,9 @@ Required diagnostics fields to monitor:
 - `hooks.reminderSkipped`
 - `hooks.reminderState`
 - `hooks.reminderReason`
+- `hooks.policyBlocked`
+- `hooks.driftDetected`
+- `hooks.lastDriftReason`
 
 Alerting thresholds:
 
