@@ -23,6 +23,8 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
 - [ ] Scorecard publication pipeline dry-run succeeded
 - [ ] Tenant policy registry binding validated for rollout scope
 - [ ] Centralized attestation authority trust chain validated
+- [ ] Outage simulation drills executed for registry and authority
+- [ ] Automated failover runbooks validated in target environment
 
 ## 3) Environment Matrix
 
@@ -52,6 +54,7 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
   - policy-as-code controls pass for canary tenant scope
   - primary policy engine profile returns expected decisions
   - tenant registry namespace and bundle resolution verified
+  - registry outage simulation pass recorded for canary scope
 
 ### Phase R2 — Limited
 
@@ -63,6 +66,7 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
   - federated scorecard generated for participating tenants
   - attestation pipeline publishes verifiable evidence manifests
   - centralized authority verification passes for limited scope
+  - authority outage simulation and failover drill pass recorded
 
 ### Phase R3 — Broad
 
@@ -74,6 +78,7 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
   - remediation coverage meets federated scorecard threshold
   - scorecard publication pipeline meets publication SLA
   - registry synchronization remains stable across tenant groups
+  - automated failover runbooks execute successfully in broad scope
 
 ### Phase R4 — General Availability
 
@@ -84,15 +89,16 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
   - governance scorecard accepted by security and compliance owners
   - publication verification confirms final scorecards are discoverable
   - centralized authority production sign-off completed
+  - production failback validation completed with approval evidence
 
 ### Federated Governance Scorecard Gates
 
 | Phase | Required Scorecard Evidence | Gate Owner |
 |---|---|---|
-| R1 | Tenant-level policy control pass/fail and registry mapping snapshot | `<engineering owner>` |
-| R2 | Aggregated remediation posture, attestation evidence, and authority validation | `<operations owner>` |
-| R3 | Cross-tenant compliance trend with registry sync and publication status | `<security owner>` |
-| R4 | Final federated scorecard with authority sign-off and publication verification | `<engineering + security + operations>` |
+| R1 | Tenant-level controls, registry mapping, and registry outage drill snapshot | `<engineering owner>` |
+| R2 | Remediation posture, attestation evidence, authority validation, and authority drill results | `<operations owner>` |
+| R3 | Cross-tenant compliance trend with failover execution and publication status | `<security owner>` |
+| R4 | Final federated scorecard with failback approval and publication verification | `<engineering + security + operations>` |
 
 ## 5) Monitoring Plan
 
@@ -146,6 +152,8 @@ Approval gate checklist:
 - [ ] published scorecard link validation passed for all targets
 - [ ] tenant policy registry sync health checks passing
 - [ ] centralized authority revocation checks passing
+- [ ] outage simulation report attached for current phase
+- [ ] automated failover and failback audit logs attached
 
 ## 6) Rollback Plan
 

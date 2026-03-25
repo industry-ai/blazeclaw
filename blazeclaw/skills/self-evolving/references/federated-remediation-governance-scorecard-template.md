@@ -102,6 +102,16 @@ Federation-level aggregates:
 - Registry sync status: `<pass|fail>`
 - Last sync timestamp: `<timestamp>`
 
+## 6.4) Outage Simulation and Failover Evidence
+
+- Registry simulation id(s): `<sim-id-list>`
+- Authority simulation id(s): `<sim-id-list>`
+- Drill execution window: `<timestamp-range>`
+- Automated failover triggered: `<yes|no>`
+- Automated failback completed: `<yes|no>`
+- Failover decision log path: `<path>`
+- Recovery validation status: `<pass|fail>`
+
 ## 7) Review and Sign-off
 
 - Engineering Approval: `<name/date/status>`

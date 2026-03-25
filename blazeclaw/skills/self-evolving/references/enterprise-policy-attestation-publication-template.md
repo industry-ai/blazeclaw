@@ -79,6 +79,26 @@ Authority verification controls:
 - [ ] Issuer policy id matches expected value
 - [ ] Tenant workload identity is authorized
 
+## 3.2) Outage Simulation Matrix
+
+Run controlled simulations for both dependency classes before each
+production promotion.
+
+| Simulation ID | Dependency | Failure Mode | Injection Method | Expected Behavior | Pass Criteria |
+|---|---|---|---|---|---|
+| `SIM-REG-001` | policy registry | endpoint unavailable | block egress / mock 503 | pinned fallback bundle activated | no policy evaluation outage beyond `<duration>` |
+| `SIM-REG-002` | policy registry | stale bundle index | serve older catalog snapshot | drift alert raised and promotion blocked | alert emitted and rollout gate holds |
+| `SIM-AUTH-001` | attestation authority | authority timeout | synthetic latency / timeout | failover authority endpoint used | signature verification continues within SLA |
+| `SIM-AUTH-002` | attestation authority | trust-anchor mismatch | rotate invalid trust anchor | fail-closed + incident workflow | no unsigned artifact promoted |
+
+Simulation scheduling controls:
+
+- Drill cadence: `<weekly|biweekly|monthly>`
+- Required environments: `<staging|preprod|prod-canary>`
+- Maximum concurrent drills: `<n>`
+- Mandatory observers: `<engineering|security|operations>`
+- Drill evidence output path: `<path>`
+
 Pipeline stages:
 
 1. Collect governance and remediation artifacts.
@@ -128,12 +148,56 @@ Registry and authority verification checkpoints:
 - R3: registry sync and signature verification stable at broad scope
 - R4: production authority attestation and publication verification signed off
 
+## 5.1) Automated Failover Runbooks
+
+### Registry Failover Runbook
+
+Trigger conditions:
+
+- Registry health probe fails for `<n>` consecutive checks
+- Bundle retrieval error rate exceeds `<percent>`
+
+Automated actions:
+
+1. Switch policy resolution to rollback bundle pin.
+2. Set runtime policy mode to protected fallback.
+3. Emit incident event and attach drill/health context.
+4. Continue policy evaluation in fail-closed or approved fail-open mode.
+
+Recovery validation:
+
+- Registry probe stable for `<duration>`
+- Bundle digest and signed catalog checks pass
+- Controlled reversion to primary registry completed
+
+### Attestation Authority Failover Runbook
+
+Trigger conditions:
+
+- Authority signing/verification endpoint timeout exceeds `<threshold>`
+- Revocation endpoint unavailable for `<duration>`
+
+Automated actions:
+
+1. Redirect verification to configured failover authority endpoint.
+2. Validate failover trust anchor and issuer policy constraints.
+3. Enforce no-publish gate when trust checks fail.
+4. Record failover decision in attestation audit log.
+
+Recovery validation:
+
+- Primary authority trust chain revalidated
+- Revocation checks return healthy responses
+- Publication gate re-enabled with explicit approval event
+
 ## 6) Audit and Retention
 
 - Attestation retention days: `<days>`
 - Publication artifact retention days: `<days>`
 - Audit export path: `<path>`
 - Quarterly review owner: `<owner>`
+- Simulation drill retention days: `<days>`
+- Failover event retention days: `<days>`
 
 ## 7) Sign-off
 

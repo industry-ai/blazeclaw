@@ -87,8 +87,8 @@ When a pattern is proven, promote it to persistent guidance:
 
 ## Follow-Up Enhancements
 
-- Add resilience patterns for registry/authority outages and runtime
-  trust-chain recovery workflows.
+- Integrate outage simulation outputs with incident knowledge capture and
+  policy tuning feedback loops.
 
 Policy templates:
 

@@ -132,6 +132,8 @@ Tenant policy registry wiring:
 - Registry authentication mode: `<managed-identity|oidc|token>`
 - Registry synchronization cadence: `<duration>`
 - Registry outage fallback bundle: `<bundle-id@version>`
+- Registry outage simulation required: `<true|false>`
+- Registry failover runbook reference: `<runbook-link-or-id>`
 
 ## 6.3) Attestation Pipeline Controls
 
@@ -154,6 +156,8 @@ Centralized attestation authority wiring:
 - Issuance policy id: `<policy-id>`
 - Revocation check mode: `<strict|best-effort>`
 - Failover authority endpoint: `<optional-authority-url>`
+- Authority outage simulation required: `<true|false>`
+- Authority failover runbook reference: `<runbook-link-or-id>`
 
 ## 6.4) Automated Scorecard Publication Controls
 
@@ -177,6 +181,15 @@ Runbook links:
 - Incident runbook: `<link>`
 - Owner escalation: `<link|contact>`
 - Postmortem template: `<link>`
+- Registry failover runbook: `<link|id>`
+- Authority failover runbook: `<link|id>`
+
+Simulation and failover governance:
+
+- Outage drill cadence: `<weekly|biweekly|monthly>`
+- Last drill evidence path: `<path>`
+- Auto-failover mode: `<enabled|disabled>`
+- Failback approval required: `<true|false>`
 
 Governance reporting artifacts:
 
@@ -225,6 +238,8 @@ Federated scorecard controls:
 - Scorecard publication verification required: `<true|false>`
 - Registry mapping verification required: `<true|false>`
 - Authority trust-chain verification required: `<true|false>`
+- Outage simulation evidence required: `<true|false>`
+- Automated failover evidence required: `<true|false>`
 - Cross-tenant remediation coverage threshold: `<percent>`
 - Cross-tenant policy compliance threshold: `<percent>`
 - Scorecard review cadence: `<weekly|monthly|quarterly>`

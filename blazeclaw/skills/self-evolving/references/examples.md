@@ -98,6 +98,13 @@ Hold promotion from R2 to R3 until policy-block incidents are reduced below thre
 - Bundle resolution: pinned-version (bundle-a@1.3.4)
 - Registry sync health: pass
 
+### Outage Simulation and Failover
+- Registry simulation: SIM-REG-001 pass
+- Authority simulation: SIM-AUTH-001 pass
+- Automated failover triggered: yes
+- Automated failback completed: yes
+- Drill evidence: reports/drills/failover-20250115.json
+
 ---
 ```
 

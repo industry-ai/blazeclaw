@@ -160,6 +160,14 @@ Tenant policy registry and centralized authority controls:
 - `hooks.engine.attestationTrustAnchorId`
 - `hooks.engine.attestationRevocationMode`
 
+Outage simulation and failover controls:
+
+- `hooks.engine.registryOutageSimulationEnabled`
+- `hooks.engine.registryFailoverRunbookId`
+- `hooks.engine.authorityOutageSimulationEnabled`
+- `hooks.engine.authorityFailoverRunbookId`
+- `hooks.engine.failbackRequiresApproval`
+
 Enterprise attestation endpoint:
 
 - `gateway.runtime.governance.attestationStatus`
@@ -184,4 +192,7 @@ Federated governance scorecard workflow:
    `enterprise-policy-attestation-publication-template.md`.
 5. Wire tenant policy registry mappings and centralized attestation
    authority trust settings using
+   `enterprise-policy-attestation-publication-template.md`.
+6. Execute outage simulations and validate automated failover/failback
+   runbooks using
    `enterprise-policy-attestation-publication-template.md`.
