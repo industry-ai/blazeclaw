@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cwctype>
+#include <fstream>
 #include <stdexcept>
 
 namespace blazeclaw::core {
@@ -44,6 +45,88 @@ std::wstring ToLower(const std::wstring& value) {
         return static_cast<wchar_t>(std::towlower(ch));
       });
   return lowered;
+}
+
+std::wstring Utf8ToWide(const std::string& value) {
+  if (value.empty()) {
+    return {};
+  }
+
+  const int required = MultiByteToWideChar(
+      CP_UTF8,
+      0,
+      value.c_str(),
+      static_cast<int>(value.size()),
+      nullptr,
+      0);
+  if (required <= 0) {
+    return std::wstring(value.begin(), value.end());
+  }
+
+  std::wstring output(static_cast<std::size_t>(required), L'\0');
+  const int converted = MultiByteToWideChar(
+      CP_UTF8,
+      0,
+      value.c_str(),
+      static_cast<int>(value.size()),
+      output.data(),
+      required);
+  if (converted <= 0) {
+    return std::wstring(value.begin(), value.end());
+  }
+
+  return output;
+}
+
+std::optional<std::wstring> ReadFileUtf8(const std::filesystem::path& filePath) {
+  std::ifstream input(filePath, std::ios::binary);
+  if (!input.is_open()) {
+    return std::nullopt;
+  }
+
+  std::string content(
+      (std::istreambuf_iterator<char>(input)),
+      std::istreambuf_iterator<char>());
+  return Utf8ToWide(content);
+}
+
+std::vector<std::wstring> ExtractBootstrapPathsFromHandler(
+    const std::wstring& handlerContent) {
+  std::vector<std::wstring> paths;
+  std::size_t cursor = 0;
+  while (cursor < handlerContent.size()) {
+    const auto pathPos = handlerContent.find(L"path", cursor);
+    if (pathPos == std::wstring::npos) {
+      break;
+    }
+
+    const auto colonPos = handlerContent.find(L':', pathPos + 4);
+    if (colonPos == std::wstring::npos) {
+      break;
+    }
+
+    const auto quotePos = handlerContent.find_first_of(L"'\"", colonPos + 1);
+    if (quotePos == std::wstring::npos) {
+      cursor = colonPos + 1;
+      continue;
+    }
+
+    const wchar_t quote = handlerContent[quotePos];
+    const auto endQuotePos = handlerContent.find(quote, quotePos + 1);
+    if (endQuotePos == std::wstring::npos) {
+      cursor = quotePos + 1;
+      continue;
+    }
+
+    const auto path = Trim(handlerContent.substr(quotePos + 1, endQuotePos - quotePos - 1));
+    if (!path.empty()) {
+      paths.push_back(path);
+    }
+
+    cursor = endQuotePos + 1;
+  }
+
+  return paths;
 }
 
 std::vector<const HookCatalogEntry*> BuildDispatchOrder(
@@ -84,13 +167,6 @@ std::vector<const HookCatalogEntry*> BuildDispatchOrder(
       });
 
   return ordered;
-}
-
-std::wstring BuildSelfEvolvingReminder() {
-  return L"## Self-Evolving Reminder\n"
-         L"Log corrections to .learnings/LEARNINGS.md\n"
-         L"Log failures to .learnings/ERRORS.md\n"
-         L"Log missing capabilities to .learnings/FEATURE_REQUESTS.md\n";
 }
 
 } // namespace
@@ -159,13 +235,17 @@ bool HookExecutionService::Dispatch(
     const auto started = std::chrono::steady_clock::now();
     try {
       std::vector<HookBootstrapFile> proposed;
-      const auto skill = ToLower(hook->skillName);
-      if (skill == L"self-evolving") {
-        proposed.push_back(HookBootstrapFile{
-            .path = L"SELF_EVOLVING_REMINDER.md",
-            .virtualFile = true});
-      } else if (skill == L"hook-unsafe-mutation") {
-        proposed.push_back(HookBootstrapFile{.path = L"../UNSAFE.md", .virtualFile = true});
+      const auto handlerContent = ReadFileUtf8(hook->handlerFile);
+      if (!handlerContent.has_value()) {
+        ++m_snapshot.diagnostics.failureCount;
+        m_snapshot.diagnostics.warnings.push_back(
+            L"Hook execution failed: cannot read handler file.");
+        continue;
+      }
+
+      const auto extractedPaths = ExtractBootstrapPathsFromHandler(handlerContent.value());
+      for (const auto& extractedPath : extractedPaths) {
+        proposed.push_back(HookBootstrapFile{.path = extractedPath, .virtualFile = true});
       }
 
       for (const auto& file : proposed) {

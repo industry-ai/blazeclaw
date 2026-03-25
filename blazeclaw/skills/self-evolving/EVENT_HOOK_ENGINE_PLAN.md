@@ -146,6 +146,31 @@ Implement a native BlazeClaw hook engine that executes self-evolving hook handle
   - `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
 - Result: success, 0 errors, 0 warnings.
 
+## Final Cleanup Pass (Completed)
+
+### Remaining code gap closed
+- Replaced hardcoded skill-name mutation behavior in `HookExecutionService`
+  with handler-contract-driven extraction from `handler.ts` content.
+- Hook execution now derives proposed bootstrap mutations from handler
+  `path` fields before guardrails are applied.
+
+### Runtime behavior alignment confirmed
+- `selfEvolvingHookTriggered` remains tied to executed bootstrap mutation
+  output (`SELF_EVOLVING_REMINDER.md`).
+- Prompt-based reminder path remains fallback-only via
+  `hooks.engine.fallbackPromptInjection`.
+
+### Documentation alignment completed
+- `SKILL.md` updated to reflect event-hook primary path and revised
+  diagnostics verification.
+- `references/hooks-setup.md` updated to reflect event-hook lifecycle
+  primary behavior and Phase E diagnostics fields.
+
+### Accomplishment status
+- Dedicated event-hook engine plan is now materially closed for the
+  scoped adapter architecture, with build-validated runtime integration,
+  diagnostics, config rollouts, and aligned docs.
+
 ## Phase E Execution Results (Completed)
 
 ### Rollout config implemented

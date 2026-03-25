@@ -22,8 +22,8 @@ Log learnings and errors to markdown files for continuous improvement. Important
 - `.learnings/` — runtime logs and entries
 - `assets/` — reusable templates
 - `references/` — setup and integration guidance
-- `scripts/` — helper scripts (ported in next phase)
-- `hooks/blazeclaw/` — runtime adaptation target (later phases)
+- `scripts/` — helper scripts
+- `hooks/blazeclaw/` — dedicated event-hook adapter artifacts
 
 ## Logging Targets
 
@@ -55,7 +55,8 @@ When a pattern is proven, promote it to:
    - `hooks/blazeclaw/handler.ts`
 3. Start BlazeClaw runtime from repo root.
 4. Verify prompt lifecycle injection via diagnostics report field:
-   - `skills.selfEvolvingReminderInjected: true`
+   - `hooks.selfEvolvingHookTriggered: true`
+   - `skills.selfEvolvingReminderInjected: true` (fallback/legacy visibility)
 
 ## Rollout Checklist
 
@@ -69,7 +70,7 @@ When a pattern is proven, promote it to:
 
 ## Known Limitations
 
-- Runtime integration currently injects reminder content through skills prompt lifecycle, not a dedicated event-hook execution engine.
+- Handler execution currently uses a constrained adapter that derives bootstrap mutation paths from handler contract content, not a full TypeScript runtime.
 - Shell helpers are Bash-oriented; PowerShell equivalents are a follow-up enhancement.
 
 ## Follow-Up Enhancements

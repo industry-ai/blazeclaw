@@ -5,10 +5,10 @@ Configure self-evolving reminders for coding workflows.
 ## Current Status
 
 Runtime integration provides reminder injection through BlazeClaw
-skills prompt refresh lifecycle.
+event-hook execution lifecycle.
 
-This is an adapter model (not a direct clone of OpenClaw's
-`agent:bootstrap` hook runtime).
+This is an adapter model for BlazeClaw runtime (not a direct clone of
+OpenClaw's `agent:bootstrap` hook runtime).
 
 You can still use these options for local workflow reinforcement:
 
@@ -44,7 +44,9 @@ If your local CLI supports shell hooks, point them to scripts under:
 - Confirm your workflow guidance includes explicit logging instructions
 - Confirm at least one test entry can be appended without format errors
 - Confirm runtime diagnostics include:
-  - `skills.selfEvolvingReminderInjected: true` when self-evolving is active
+  - `hooks.selfEvolvingHookTriggered: true` when self-evolving hook executed
+  - `hooks.hookDispatchCount > 0` during active runs
+  - `hooks.hookFailureCount == 0` for healthy dispatch
 
 ## Notes
 
@@ -54,7 +56,10 @@ Phase 5 established hook metadata and handler contract files under:
 - `blazeclaw/skills/self-evolving/hooks/blazeclaw/HOOK.md`
 - `blazeclaw/skills/self-evolving/hooks/blazeclaw/handler.ts`
 
-Phase 6 runtime integration activates reminder injection when:
+Runtime integration activates reminder injection when:
 
 - the `self-evolving` skill is included in eligible prompt skills, and
 - `hooks/blazeclaw/HOOK.md` plus `hooks/blazeclaw/handler.ts` are present.
+
+Prompt-side reminder injection is retained only as optional fallback via
+`hooks.engine.fallbackPromptInjection`.
