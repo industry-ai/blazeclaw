@@ -210,6 +210,66 @@ std::filesystem::path ResolveHooksAutoRemediationPlaybookDir(
   return std::filesystem::path(trimmed);
 }
 
+bool ResolveHooksEnterpriseSlaGovernanceEnabled(
+    const blazeclaw::config::AppConfig& config) {
+  return ReadBoolEnvOrDefault(
+      L"BLAZECLAW_HOOKS_ENTERPRISE_SLA_GOVERNANCE_ENABLED",
+      config.hooks.engine.enterpriseSlaGovernanceEnabled);
+}
+
+std::wstring ResolveHooksEnterpriseSlaPolicyId(
+    const blazeclaw::config::AppConfig& config) {
+  std::wstring value = config.hooks.engine.enterpriseSlaPolicyId;
+  wchar_t* env = nullptr;
+  std::size_t len = 0;
+  if (_wdupenv_s(
+          &env,
+          &len,
+          L"BLAZECLAW_HOOKS_ENTERPRISE_SLA_POLICY_ID") == 0 &&
+      env != nullptr &&
+      len > 0) {
+    value.assign(env);
+  }
+  if (env != nullptr) {
+    free(env);
+  }
+
+  const auto trimmed = Trim(value);
+  return trimmed.empty() ? L"default-policy" : trimmed;
+}
+
+bool ResolveHooksCrossTenantAttestationAggregationEnabled(
+    const blazeclaw::config::AppConfig& config) {
+  return ReadBoolEnvOrDefault(
+      L"BLAZECLAW_HOOKS_CROSS_TENANT_ATTESTATION_AGGREGATION_ENABLED",
+      config.hooks.engine.crossTenantAttestationAggregationEnabled);
+}
+
+std::filesystem::path ResolveHooksCrossTenantAttestationAggregationDir(
+    const blazeclaw::config::AppConfig& config) {
+  std::wstring value = config.hooks.engine.crossTenantAttestationAggregationDir;
+  wchar_t* env = nullptr;
+  std::size_t len = 0;
+  if (_wdupenv_s(
+          &env,
+          &len,
+          L"BLAZECLAW_HOOKS_CROSS_TENANT_ATTESTATION_AGGREGATION_DIR") == 0 &&
+      env != nullptr &&
+      len > 0) {
+    value.assign(env);
+  }
+  if (env != nullptr) {
+    free(env);
+  }
+
+  const auto trimmed = Trim(value);
+  if (trimmed.empty()) {
+    return std::filesystem::path(L"blazeclaw/reports/hooks-attestation-aggregation");
+  }
+
+  return std::filesystem::path(trimmed);
+}
+
 std::uint32_t ResolveHooksRemediationSloMaxDriftDetected(
     const blazeclaw::config::AppConfig& config) {
   std::uint32_t value = config.hooks.engine.remediationSloMaxDriftDetected;
@@ -421,6 +481,83 @@ void EmitComplianceAttestationIfNeeded(
   }
 
   outAttestationPath = attestationPath.wstring();
+}
+
+std::wstring BuildCrossTenantAttestationAggregationJson(
+    const std::wstring& tenantId,
+    const std::wstring& policyId,
+    const std::wstring& sloStatus,
+    const std::wstring& attestationPath,
+    const HookExecutionSnapshot& execution,
+    const std::uint64_t aggregationCount) {
+  std::wstringstream builder;
+  builder << L"{\"tenantId\":\"" << tenantId
+          << L"\",\"policyId\":\"" << policyId
+          << L"\",\"sloStatus\":\"" << sloStatus
+          << L"\",\"attestationPath\":\"" << attestationPath
+          << L"\",\"driftDetected\":"
+          << execution.diagnostics.driftDetectedCount
+          << L",\"policyBlocked\":"
+          << execution.diagnostics.policyBlockedCount
+          << L",\"aggregationSequence\":"
+          << (aggregationCount + 1)
+          << L"}";
+  return builder.str();
+}
+
+std::wstring WriteLifecycleArtifact(
+    const std::filesystem::path& outputDir,
+    const std::wstring& filePrefix,
+    const std::wstring& tenantId,
+    const std::wstring& content,
+    const std::wstring& failureLabel,
+    std::vector<std::wstring>& inOutWarnings);
+
+void EmitCrossTenantAttestationAggregationIfNeeded(
+    const bool enabled,
+    const std::filesystem::path& aggregationDir,
+    const std::wstring& tenantId,
+    const std::wstring& policyId,
+    const std::wstring& sloStatus,
+    const std::wstring& attestationPath,
+    const HookExecutionSnapshot& execution,
+    std::uint64_t& inOutAggregationCount,
+    std::wstring& outAggregationStatus,
+    std::wstring& outAggregationPath,
+    std::vector<std::wstring>& inOutWarnings) {
+  outAggregationPath.clear();
+  if (!enabled) {
+    outAggregationStatus = L"aggregation_disabled";
+    return;
+  }
+
+  if (attestationPath.empty()) {
+    outAggregationStatus = L"attestation_missing";
+    return;
+  }
+
+  const auto content = BuildCrossTenantAttestationAggregationJson(
+      tenantId,
+      policyId,
+      sloStatus,
+      attestationPath,
+      execution,
+      inOutAggregationCount);
+  const auto path = WriteLifecycleArtifact(
+      aggregationDir,
+      L"hooks-attestation-aggregation",
+      tenantId,
+      content,
+      L"hooks-remediation cross-tenant aggregation emission failed",
+      inOutWarnings);
+  if (path.empty()) {
+    outAggregationStatus = L"aggregation_emit_failed";
+    return;
+  }
+
+  ++inOutAggregationCount;
+  outAggregationStatus = L"aggregation_emitted";
+  outAggregationPath = path;
 }
 
 bool ResolveHooksRemediationTelemetryEnabled(
@@ -1275,6 +1412,16 @@ blazeclaw::gateway::SkillsCatalogGatewayState ServiceManager::BuildGatewaySkills
       static_cast<std::size_t>(m_hooksRemediationSloMaxPolicyBlocked);
   gatewaySkillsState.lastComplianceAttestationPath =
       ToNarrow(m_hooksLastComplianceAttestationPath);
+  gatewaySkillsState.enterpriseSlaPolicyId =
+      ToNarrow(m_hooksEnterpriseSlaPolicyId);
+  gatewaySkillsState.crossTenantAttestationAggregationEnabled =
+      m_hooksCrossTenantAttestationAggregationEnabled;
+  gatewaySkillsState.crossTenantAttestationAggregationStatus =
+      ToNarrow(m_hooksCrossTenantAttestationAggregationStatus);
+  gatewaySkillsState.crossTenantAttestationAggregationCount =
+      static_cast<std::size_t>(m_hooksCrossTenantAttestationAggregationCount);
+  gatewaySkillsState.lastCrossTenantAttestationAggregationPath =
+      ToNarrow(m_hooksLastCrossTenantAttestationAggregationPath);
   return gatewaySkillsState;
 }
 
@@ -1371,6 +1518,14 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       ResolveHooksComplianceAttestationEnabled(m_activeConfig);
   m_hooksComplianceAttestationDir =
       ResolveHooksComplianceAttestationDir(m_activeConfig);
+  m_hooksEnterpriseSlaGovernanceEnabled =
+      ResolveHooksEnterpriseSlaGovernanceEnabled(m_activeConfig);
+  m_hooksEnterpriseSlaPolicyId =
+      ResolveHooksEnterpriseSlaPolicyId(m_activeConfig);
+  m_hooksCrossTenantAttestationAggregationEnabled =
+      ResolveHooksCrossTenantAttestationAggregationEnabled(m_activeConfig);
+  m_hooksCrossTenantAttestationAggregationDir =
+      ResolveHooksCrossTenantAttestationAggregationDir(m_activeConfig);
   m_hooksGovernanceReportsGenerated = 0;
   m_hooksLastGovernanceReportPath.clear();
   m_hooksAutoRemediationExecuted = 0;
@@ -1381,6 +1536,9 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
   m_hooksLastRemediationAuditPath.clear();
   m_hooksRemediationSloStatus = L"unknown";
   m_hooksLastComplianceAttestationPath.clear();
+  m_hooksLastCrossTenantAttestationAggregationPath.clear();
+  m_hooksCrossTenantAttestationAggregationCount = 0;
+  m_hooksCrossTenantAttestationAggregationStatus = L"idle";
   m_selfEvolvingHookTriggered = false;
   m_agentsScope = m_agentsCatalogService.BuildSnapshot(
       std::filesystem::current_path(),
@@ -1565,6 +1723,18 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
         m_hooksLastRemediationTelemetryPath,
         m_hooksLastRemediationAuditPath,
         m_hooksLastComplianceAttestationPath,
+        m_skillsCatalog.diagnostics.warnings);
+    EmitCrossTenantAttestationAggregationIfNeeded(
+        m_hooksCrossTenantAttestationAggregationEnabled,
+        m_hooksCrossTenantAttestationAggregationDir,
+        m_hooksAutoRemediationTenantId,
+        m_hooksEnterpriseSlaPolicyId,
+        m_hooksRemediationSloStatus,
+        m_hooksLastComplianceAttestationPath,
+        m_hookExecution,
+        m_hooksCrossTenantAttestationAggregationCount,
+        m_hooksCrossTenantAttestationAggregationStatus,
+        m_hooksLastCrossTenantAttestationAggregationPath,
         m_skillsCatalog.diagnostics.warnings);
     m_selfEvolvingHookTriggered = ContainsBootstrapFile(
         m_hookExecution.bootstrapFiles,
@@ -2352,6 +2522,18 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       std::string(m_hooksComplianceAttestationEnabled ? "true" : "false") +
       ",\"lastComplianceAttestationPath\":\"" +
       WideToNarrowAscii(m_hooksLastComplianceAttestationPath) + "\"" +
+      ",\"enterpriseSlaGovernanceEnabled\":" +
+      std::string(m_hooksEnterpriseSlaGovernanceEnabled ? "true" : "false") +
+      ",\"enterpriseSlaPolicyId\":\"" +
+      WideToNarrowAscii(m_hooksEnterpriseSlaPolicyId) + "\"" +
+      ",\"crossTenantAttestationAggregationEnabled\":" +
+      std::string(m_hooksCrossTenantAttestationAggregationEnabled ? "true" : "false") +
+      ",\"crossTenantAttestationAggregationStatus\":\"" +
+      WideToNarrowAscii(m_hooksCrossTenantAttestationAggregationStatus) + "\"" +
+      ",\"crossTenantAttestationAggregationCount\":" +
+      std::to_string(m_hooksCrossTenantAttestationAggregationCount) +
+      ",\"lastCrossTenantAttestationAggregationPath\":\"" +
+      WideToNarrowAscii(m_hooksLastCrossTenantAttestationAggregationPath) + "\"" +
       ",\"selfEvolvingHookTriggered\":" +
       std::string(m_selfEvolvingHookTriggered ? "true" : "false") +
       ",\"invalidMetadata\":" +

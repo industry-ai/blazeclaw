@@ -80,6 +80,11 @@ namespace blazeclaw::gateway {
 		std::size_t remediationSloMaxDriftDetected = 0;
 		std::size_t remediationSloMaxPolicyBlocked = 0;
 		std::string lastComplianceAttestationPath;
+      std::string enterpriseSlaPolicyId;
+		bool crossTenantAttestationAggregationEnabled = false;
+		std::string crossTenantAttestationAggregationStatus;
+		std::size_t crossTenantAttestationAggregationCount = 0;
+		std::string lastCrossTenantAttestationAggregationPath;
 	};
 
 	class GatewayHost {

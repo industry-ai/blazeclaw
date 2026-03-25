@@ -135,9 +135,17 @@ Enterprise telemetry and audit controls:
 - `hooks.engine.complianceAttestationEnabled`
 - `hooks.engine.complianceAttestationDir`
 
+Enterprise SLA governance and cross-tenant aggregation controls:
+
+- `hooks.engine.enterpriseSlaGovernanceEnabled`
+- `hooks.engine.enterpriseSlaPolicyId`
+- `hooks.engine.crossTenantAttestationAggregationEnabled`
+- `hooks.engine.crossTenantAttestationAggregationDir`
+
 Enterprise attestation endpoint:
 
 - `gateway.runtime.governance.attestationStatus`
+- `gateway.runtime.governance.aggregationStatus`
 
 Governance and rollout templates:
 

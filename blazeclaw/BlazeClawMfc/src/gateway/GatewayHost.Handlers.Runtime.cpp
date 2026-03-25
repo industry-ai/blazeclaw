@@ -485,6 +485,17 @@ namespace blazeclaw::gateway {
                         EscapeJsonLocal(state.lastComplianceAttestationPath) +
                         "\",\"complianceAttestationEnabled\":" +
                         std::string(!state.lastComplianceAttestationPath.empty() ? "true" : "false") +
+                        ",\"enterpriseSlaPolicyId\":\"" +
+                        EscapeJsonLocal(state.enterpriseSlaPolicyId) +
+                        "\",\"crossTenantAttestationAggregationEnabled\":" +
+                        std::string(state.crossTenantAttestationAggregationEnabled ? "true" : "false") +
+                        ",\"crossTenantAttestationAggregationStatus\":\"" +
+                        EscapeJsonLocal(state.crossTenantAttestationAggregationStatus) +
+                        "\",\"crossTenantAttestationAggregationCount\":" +
+                        std::to_string(state.crossTenantAttestationAggregationCount) +
+                        ",\"lastCrossTenantAttestationAggregationPath\":\"" +
+                        EscapeJsonLocal(state.lastCrossTenantAttestationAggregationPath) +
+                        "\"" +
                         ",\"governanceReportsGenerated\":" +
                         std::to_string(state.governanceReportsGenerated) +
                         ",\"lastGovernanceReportPath\":\"" +
@@ -518,10 +529,43 @@ namespace blazeclaw::gateway {
                         std::to_string(state.remediationSloMaxPolicyBlocked) +
                         ",\"attestationPath\":\"" +
                         EscapeJsonLocal(state.lastComplianceAttestationPath) +
+                        "\",\"aggregationStatus\":\"" +
+                        EscapeJsonLocal(state.crossTenantAttestationAggregationStatus) +
+                        "\",\"aggregationPath\":\"" +
+                        EscapeJsonLocal(state.lastCrossTenantAttestationAggregationPath) +
                         "\",\"telemetryPath\":\"" +
                         EscapeJsonLocal(state.lastRemediationTelemetryPath) +
                         "\",\"auditPath\":\"" +
                         EscapeJsonLocal(state.lastRemediationAuditPath) +
+                        "\"}",
+                    .error = std::nullopt,
+                };
+            });
+
+        m_dispatcher.Register(
+            "gateway.runtime.governance.aggregationStatus",
+            [this](const protocol::RequestFrame& request) {
+                const auto& state = m_skillsCatalogState;
+                return protocol::ResponseFrame{
+                    .id = request.id,
+                    .ok = true,
+                    .payloadJson =
+                        "{\"tenantId\":\"" +
+                        EscapeJsonLocal(state.autoRemediationTenantId) +
+                        "\",\"policyId\":\"" +
+                        EscapeJsonLocal(state.enterpriseSlaPolicyId) +
+                        "\",\"aggregationEnabled\":" +
+                        std::string(state.crossTenantAttestationAggregationEnabled ? "true" : "false") +
+                        ",\"aggregationStatus\":\"" +
+                        EscapeJsonLocal(state.crossTenantAttestationAggregationStatus) +
+                        "\",\"aggregationCount\":" +
+                        std::to_string(state.crossTenantAttestationAggregationCount) +
+                        ",\"aggregationPath\":\"" +
+                        EscapeJsonLocal(state.lastCrossTenantAttestationAggregationPath) +
+                        "\",\"attestationPath\":\"" +
+                        EscapeJsonLocal(state.lastComplianceAttestationPath) +
+                        "\",\"sloStatus\":\"" +
+                        EscapeJsonLocal(state.remediationSloStatus) +
                         "\"}",
                     .error = std::nullopt,
                 };

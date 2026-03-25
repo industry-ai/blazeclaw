@@ -751,6 +751,30 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
       continue;
     }
 
+    if (trimmedLine.rfind(L"hooks.engine.enterpriseSlaGovernanceEnabled=", 0) == 0) {
+      outConfig.hooks.engine.enterpriseSlaGovernanceEnabled =
+          ParseBool(trimmedLine.substr(42), true);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"hooks.engine.enterpriseSlaPolicyId=", 0) == 0) {
+      outConfig.hooks.engine.enterpriseSlaPolicyId =
+          Trim(trimmedLine.substr(34));
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"hooks.engine.crossTenantAttestationAggregationEnabled=", 0) == 0) {
+      outConfig.hooks.engine.crossTenantAttestationAggregationEnabled =
+          ParseBool(trimmedLine.substr(52), true);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"hooks.engine.crossTenantAttestationAggregationDir=", 0) == 0) {
+      outConfig.hooks.engine.crossTenantAttestationAggregationDir =
+          Trim(trimmedLine.substr(48));
+      continue;
+    }
+
     if (trimmedLine.rfind(L"agents.defaults.", 0) == 0) {
       const auto keyValuePos = trimmedLine.find(L'=');
       if (keyValuePos == std::wstring::npos) {

@@ -80,4 +80,4 @@ None in current self-evolving runtime scope.
 
 ## Follow-Up Enhancements
 
-- Expand enterprise remediation SLA governance and cross-tenant attestation aggregation workflows.
+- Add enterprise policy-as-code rollout controls and federated remediation governance scorecards.

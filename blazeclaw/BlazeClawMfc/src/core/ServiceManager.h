@@ -146,6 +146,13 @@ private:
   bool m_hooksComplianceAttestationEnabled = true;
   std::filesystem::path m_hooksComplianceAttestationDir;
   std::wstring m_hooksLastComplianceAttestationPath;
+  bool m_hooksEnterpriseSlaGovernanceEnabled = true;
+  std::wstring m_hooksEnterpriseSlaPolicyId = L"default-policy";
+  bool m_hooksCrossTenantAttestationAggregationEnabled = true;
+  std::filesystem::path m_hooksCrossTenantAttestationAggregationDir;
+  std::wstring m_hooksLastCrossTenantAttestationAggregationPath;
+  std::uint64_t m_hooksCrossTenantAttestationAggregationCount = 0;
+  std::wstring m_hooksCrossTenantAttestationAggregationStatus;
   bool m_selfEvolvingHookTriggered = false;
   SkillsCatalogService m_skillsCatalogService;
   SkillsCatalogSnapshot m_skillsCatalog;

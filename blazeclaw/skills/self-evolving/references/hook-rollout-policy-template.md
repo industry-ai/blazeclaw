@@ -88,6 +88,9 @@ Track at minimum:
 - `hooks.lastRemediationAuditPath`
 - `hooks.remediationSloStatus`
 - `hooks.lastComplianceAttestationPath`
+- `hooks.crossTenantAttestationAggregationStatus`
+- `hooks.crossTenantAttestationAggregationCount`
+- `hooks.lastCrossTenantAttestationAggregationPath`
 
 Dashboard links:
 
@@ -100,6 +103,7 @@ Automation endpoints:
 - `gateway.runtime.governance.remediationPlan`
 - `gateway.runtime.governance.executeRemediation`
 - `gateway.runtime.governance.attestationStatus`
+- `gateway.runtime.governance.aggregationStatus`
 
 Approval gate checklist:
 

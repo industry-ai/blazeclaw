@@ -182,6 +182,11 @@ struct HooksEngineConfig {
   bool complianceAttestationEnabled = true;
   std::wstring complianceAttestationDir =
       L"blazeclaw/reports/hooks-remediation-attestation";
+  bool enterpriseSlaGovernanceEnabled = true;
+  std::wstring enterpriseSlaPolicyId = L"default-policy";
+  bool crossTenantAttestationAggregationEnabled = true;
+  std::wstring crossTenantAttestationAggregationDir =
+      L"blazeclaw/reports/hooks-attestation-aggregation";
 };
 
 struct HooksConfig {

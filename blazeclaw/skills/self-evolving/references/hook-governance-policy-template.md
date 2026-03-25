@@ -131,6 +131,14 @@ Centralized integration endpoints:
 - `gateway.runtime.governance.remediationPlan`
 - `gateway.runtime.governance.executeRemediation`
 - `gateway.runtime.governance.attestationStatus`
+- `gateway.runtime.governance.aggregationStatus`
+
+Enterprise SLA governance and aggregation:
+
+- SLA governance enabled: `hooks.engine.enterpriseSlaGovernanceEnabled`
+- SLA policy id: `hooks.engine.enterpriseSlaPolicyId`
+- Cross-tenant aggregation enabled: `hooks.engine.crossTenantAttestationAggregationEnabled`
+- Cross-tenant aggregation directory: `hooks.engine.crossTenantAttestationAggregationDir`
 
 ## 8) Compliance and Audit
 
