@@ -80,6 +80,8 @@ Required diagnostics fields to monitor:
 - `hooks.policyBlocked`
 - `hooks.driftDetected`
 - `hooks.lastDriftReason`
+- `hooks.governanceReportsGenerated`
+- `hooks.lastGovernanceReportPath`
 
 Alerting thresholds:
 
@@ -99,6 +101,12 @@ Runbook links:
 - Incident runbook: `<link>`
 - Owner escalation: `<link|contact>`
 - Postmortem template: `<link>`
+
+Governance reporting artifacts:
+
+- Reporting enabled: `hooks.engine.governanceReportingEnabled=true`
+- Report output directory: `hooks.engine.governanceReportDir`
+- Expected artifact: `hooks-governance-<timestamp>.json`
 
 ## 8) Compliance and Audit
 

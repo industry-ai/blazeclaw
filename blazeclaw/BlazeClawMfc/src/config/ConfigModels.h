@@ -162,6 +162,8 @@ struct HooksEngineConfig {
   std::wstring reminderVerbosity = L"normal";
   std::vector<std::wstring> allowedPackages;
   bool strictPolicyEnforcement = false;
+  bool governanceReportingEnabled = true;
+  std::wstring governanceReportDir = L"blazeclaw/reports/hooks-governance";
 };
 
 struct HooksConfig {

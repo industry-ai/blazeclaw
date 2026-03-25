@@ -120,6 +120,10 @@ private:
   std::wstring m_hooksReminderVerbosity = L"normal";
   std::vector<std::wstring> m_hooksAllowedPackages;
   bool m_hooksStrictPolicyEnforcement = false;
+  bool m_hooksGovernanceReportingEnabled = true;
+  std::filesystem::path m_hooksGovernanceReportDir;
+  std::uint64_t m_hooksGovernanceReportsGenerated = 0;
+  std::wstring m_hooksLastGovernanceReportPath;
   bool m_selfEvolvingHookTriggered = false;
   SkillsCatalogService m_skillsCatalogService;
   SkillsCatalogSnapshot m_skillsCatalog;

@@ -82,6 +82,8 @@ Track at minimum:
 - `hooks.policyBlocked`
 - `hooks.driftDetected`
 - `hooks.lastDriftReason`
+- `hooks.governanceReportsGenerated`
+- `hooks.lastGovernanceReportPath`
 
 Dashboard links:
 

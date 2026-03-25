@@ -649,6 +649,18 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
       continue;
     }
 
+    if (trimmedLine.rfind(L"hooks.engine.governanceReportingEnabled=", 0) == 0) {
+      outConfig.hooks.engine.governanceReportingEnabled =
+          ParseBool(trimmedLine.substr(39), true);
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"hooks.engine.governanceReportDir=", 0) == 0) {
+      outConfig.hooks.engine.governanceReportDir =
+          Trim(trimmedLine.substr(33));
+      continue;
+    }
+
     if (trimmedLine.rfind(L"agents.defaults.", 0) == 0) {
       const auto keyValuePos = trimmedLine.find(L'=');
       if (keyValuePos == std::wstring::npos) {

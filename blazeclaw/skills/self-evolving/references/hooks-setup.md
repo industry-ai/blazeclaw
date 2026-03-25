@@ -90,6 +90,16 @@ Governance drift diagnostics:
 - `hooks.driftDetected`
 - `hooks.lastDriftReason`
 
+Governance reporting pipeline controls:
+
+- `hooks.engine.governanceReportingEnabled`
+- `hooks.engine.governanceReportDir`
+
+Governance reporting diagnostics:
+
+- `hooks.governanceReportsGenerated`
+- `hooks.lastGovernanceReportPath`
+
 Governance and rollout templates:
 
 - `references/hook-governance-policy-template.md`

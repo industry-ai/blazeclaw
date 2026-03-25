@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <cwctype>
 #include <filesystem>
+#include <fstream>
 #include <unordered_map>
 
 namespace blazeclaw::core {
@@ -353,6 +354,131 @@ std::wstring ResolveHooksReminderVerbosity(
   return L"normal";
 }
 
+bool ResolveHooksGovernanceReportingEnabled(
+    const blazeclaw::config::AppConfig& config) {
+  return ReadBoolEnvOrDefault(
+      L"BLAZECLAW_HOOKS_GOVERNANCE_REPORTING_ENABLED",
+      config.hooks.engine.governanceReportingEnabled);
+}
+
+std::filesystem::path ResolveHooksGovernanceReportDir(
+    const blazeclaw::config::AppConfig& config) {
+  std::wstring value = config.hooks.engine.governanceReportDir;
+  wchar_t* env = nullptr;
+  std::size_t len = 0;
+  if (_wdupenv_s(&env, &len, L"BLAZECLAW_HOOKS_GOVERNANCE_REPORT_DIR") == 0 &&
+      env != nullptr && len > 0) {
+    value.assign(env);
+  }
+  if (env != nullptr) {
+    free(env);
+  }
+
+  const auto trimmed = Trim(value);
+  if (trimmed.empty()) {
+    return std::filesystem::path(L"blazeclaw/reports/hooks-governance");
+  }
+
+  return std::filesystem::path(trimmed);
+}
+
+std::wstring BuildGovernanceReportJson(
+    const HookExecutionSnapshot& execution,
+    const std::vector<std::wstring>& allowedPackages,
+    const bool strictMode) {
+  std::wstringstream builder;
+  builder << L"{\"policyBlocked\":"
+          << execution.diagnostics.policyBlockedCount
+          << L",\"driftDetected\":"
+          << execution.diagnostics.driftDetectedCount
+          << L",\"lastDriftReason\":\""
+          << execution.diagnostics.lastDriftReason
+          << L"\",\"strictPolicyEnforcement\":"
+          << (strictMode ? L"true" : L"false")
+          << L",\"allowedPackages\":[";
+
+  for (std::size_t i = 0; i < allowedPackages.size(); ++i) {
+    if (i > 0) {
+      builder << L",";
+    }
+    builder << L"\"" << allowedPackages[i] << L"\"";
+  }
+
+  builder << L"],\"reminderState\":\""
+          << execution.diagnostics.lastReminderState
+          << L"\",\"reminderReason\":\""
+          << execution.diagnostics.lastReminderReason
+          << L"\"}";
+  return builder.str();
+}
+
+bool WriteGovernanceReportFile(
+    const std::filesystem::path& reportFile,
+    const std::wstring& content) {
+  std::ofstream output(reportFile, std::ios::binary | std::ios::trunc);
+  if (!output.is_open()) {
+    return false;
+  }
+
+  std::string narrow;
+  narrow.reserve(content.size());
+  for (const auto ch : content) {
+    narrow.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
+  }
+
+  output.write(narrow.c_str(), static_cast<std::streamsize>(narrow.size()));
+  return output.good();
+}
+
+void EmitGovernanceReportIfNeeded(
+    const HookExecutionSnapshot& execution,
+    const bool enabled,
+    const std::filesystem::path& reportDir,
+    const std::vector<std::wstring>& allowedPackages,
+    const bool strictMode,
+    std::uint64_t& inOutReportCount,
+    std::wstring& outLastReportPath,
+    std::vector<std::wstring>& inOutWarnings) {
+  if (!enabled) {
+    return;
+  }
+
+  if (execution.diagnostics.policyBlockedCount == 0 &&
+      execution.diagnostics.driftDetectedCount == 0) {
+    return;
+  }
+
+  std::error_code ec;
+  auto fullDir = reportDir;
+  if (fullDir.is_relative()) {
+    fullDir = std::filesystem::current_path(ec) / fullDir;
+  }
+
+  std::filesystem::create_directories(fullDir, ec);
+  if (ec) {
+    inOutWarnings.push_back(
+        L"hooks-governance report generation failed: cannot create report directory.");
+    return;
+  }
+
+  const auto nonce = std::to_wstring(
+      static_cast<std::uint64_t>(
+          std::chrono::system_clock::now().time_since_epoch().count()));
+  const auto reportFile = fullDir / (L"hooks-governance-" + nonce + L".json");
+  const auto reportContent = BuildGovernanceReportJson(
+      execution,
+      allowedPackages,
+      strictMode);
+  if (!WriteGovernanceReportFile(reportFile, reportContent)) {
+    inOutWarnings.push_back(
+        L"hooks-governance report generation failed: cannot write report file.");
+    return;
+  }
+
+  ++inOutReportCount;
+  outLastReportPath = reportFile.wstring();
+}
+
 bool ContainsBootstrapFile(
     const std::vector<HookBootstrapFile>& files,
     const std::wstring& expectedPath) {
@@ -596,6 +722,12 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
   m_hooksAllowedPackages = ResolveHooksAllowedPackages(m_activeConfig);
   m_hooksStrictPolicyEnforcement =
       ResolveHooksStrictPolicyEnforcement(m_activeConfig);
+  m_hooksGovernanceReportingEnabled =
+      ResolveHooksGovernanceReportingEnabled(m_activeConfig);
+  m_hooksGovernanceReportDir =
+      ResolveHooksGovernanceReportDir(m_activeConfig);
+  m_hooksGovernanceReportsGenerated = 0;
+  m_hooksLastGovernanceReportPath.clear();
   m_selfEvolvingHookTriggered = false;
   m_agentsScope = m_agentsCatalogService.BuildSnapshot(
       std::filesystem::current_path(),
@@ -731,6 +863,15 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
     }
 
     m_hookExecution = m_hookExecutionService.Snapshot();
+    EmitGovernanceReportIfNeeded(
+        m_hookExecution,
+        m_hooksGovernanceReportingEnabled,
+        m_hooksGovernanceReportDir,
+        m_hooksAllowedPackages,
+        m_hooksStrictPolicyEnforcement,
+        m_hooksGovernanceReportsGenerated,
+        m_hooksLastGovernanceReportPath,
+        m_skillsCatalog.diagnostics.warnings);
     m_selfEvolvingHookTriggered = ContainsBootstrapFile(
         m_hookExecution.bootstrapFiles,
         L"SELF_EVOLVING_REMINDER.md");
@@ -1477,6 +1618,12 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       std::string(m_hooksStrictPolicyEnforcement ? "true" : "false") +
       ",\"allowedPackagesCount\":" +
       std::to_string(m_hooksAllowedPackages.size()) +
+      ",\"governanceReportingEnabled\":" +
+      std::string(m_hooksGovernanceReportingEnabled ? "true" : "false") +
+      ",\"governanceReportsGenerated\":" +
+      std::to_string(m_hooksGovernanceReportsGenerated) +
+      ",\"lastGovernanceReportPath\":\"" +
+      WideToNarrowAscii(m_hooksLastGovernanceReportPath) + "\"" +
       ",\"selfEvolvingHookTriggered\":" +
       std::string(m_selfEvolvingHookTriggered ? "true" : "false") +
       ",\"invalidMetadata\":" +
