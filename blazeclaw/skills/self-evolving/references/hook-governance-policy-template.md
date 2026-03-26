@@ -295,6 +295,8 @@ Outage outcome recommendation controls:
   `blazeclaw/skills/self-evolving/.learnings/CAUSAL_CONFIDENCE_GRAPH.md`
 - Causal graph explainability trace path:
   `blazeclaw/skills/self-evolving/.learnings/CAUSAL_GRAPH_EXPLAINABILITY_TRACES.md`
+- Causal graph explainability history path:
+  `blazeclaw/skills/self-evolving/.learnings/CAUSAL_GRAPH_EXPLAINABILITY_HISTORY.csv`
 - Default trend window size: `<n>`
 - Trend segmentation mode: `tenant + dependency class`
 - Required promoter inputs: `tenant-id`, `rollout-phase`, `policy-profile`
@@ -364,6 +366,8 @@ Outage outcome recommendation controls:
     required: `deny rollout gate`
   - explainability trace output disabled during required audit phases:
     `deny rollout gate`
+  - explainer diffing disabled or drift threshold missing for required
+    audit phases: `deny rollout gate`
 - Recommendation severity gating:
   - `critical|high` in `r3|r4` requires explicit hold or remediation approval
   - `medium` requires owner review before phase promotion

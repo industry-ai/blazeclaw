@@ -191,6 +191,8 @@ Federation-level aggregates:
 - Temporal-decay weighted persistence trend: `<increasing|stable|decreasing>`
 - Explainability trace coverage rate: `<percent of recommendations with trace>`
 - Explainability factor drift count across cohorts: `<count>`
+- Consecutive cohort explainer drift alert rate: `<percent>`
+- Median confidence delta between cohorts: `<delta>`
 - Highest-impact accepted tuning:
   `<short summary with control reference>`
 

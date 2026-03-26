@@ -30,6 +30,7 @@ OVERLAY_CANDIDATE_FILE="./blazeclaw/skills/self-evolving/.learnings/SEASONAL_OVE
 CAUSAL_GRAPHING_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-causal-graphing-policy.conf"
 CAUSAL_GRAPH_FILE="./blazeclaw/skills/self-evolving/.learnings/CAUSAL_CONFIDENCE_GRAPH.md"
 GRAPH_EXPLAINABILITY_FILE="./blazeclaw/skills/self-evolving/.learnings/CAUSAL_GRAPH_EXPLAINABILITY_TRACES.md"
+EXPLAINABILITY_HISTORY_FILE="./blazeclaw/skills/self-evolving/.learnings/CAUSAL_GRAPH_EXPLAINABILITY_HISTORY.csv"
 
 SIMULATION_ID=""
 TENANT_ID=""
@@ -66,6 +67,8 @@ ENABLE_GRAPH_EDGE_PERSISTENCE=true
 GRAPH_COHORT_WINDOW=30
 GRAPH_TEMPORAL_DECAY_RATE=0.15
 ENABLE_GRAPH_EXPLAINABILITY_TRACES=true
+ENABLE_EXPLAINER_DIFFING=true
+EXPLAINER_DRIFT_THRESHOLD=15
 MANIFEST_FILE_EXPLICIT=false
 SIGNATURE_VERIFICATION_MODE="none"
 KMS_PUBLIC_KEY_FILE=""
@@ -153,6 +156,8 @@ Optional:
   --disable-graph-edge-persistence Disable graph edge persistence scoring
   --graph-explainability-file Cohort-aware explainability trace markdown output
   --disable-graph-explainability-traces Disable explainability trace output
+  --disable-explainer-diffing Disable consecutive cohort explainer diffing
+  --explainer-drift-threshold Drift threshold for audit diff alerts (default: 15)
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -418,6 +423,14 @@ while [[ $# -gt 0 ]]; do
             ENABLE_GRAPH_EXPLAINABILITY_TRACES=false
             shift
             ;;
+        --disable-explainer-diffing)
+            ENABLE_EXPLAINER_DIFFING=false
+            shift
+            ;;
+        --explainer-drift-threshold)
+            EXPLAINER_DRIFT_THRESHOLD="${2:-}"
+            shift 2
+            ;;
         --signature-verification-mode)
             SIGNATURE_VERIFICATION_MODE="${2:-}"
             shift 2
@@ -526,6 +539,11 @@ if ! awk -v v="$GRAPH_TEMPORAL_DECAY_RATE" 'BEGIN { exit !(v+0>=0) }'; then
     exit 1
 fi
 
+if ! [[ "$EXPLAINER_DRIFT_THRESHOLD" =~ ^[0-9]+$ ]]; then
+    echo "--explainer-drift-threshold must be a non-negative integer" >&2
+    exit 1
+fi
+
 if [ -z "$POLICY_PROFILE" ]; then
     echo "--policy-profile cannot be empty" >&2
     exit 1
@@ -556,6 +574,10 @@ fi
 
 if [ ! -f "$CAUSAL_HISTORY_FILE" ]; then
     printf "%s\n" "timestamp,tenant_id,rollout_phase,dependency,failure_mode,result,simulation_id" > "$CAUSAL_HISTORY_FILE"
+fi
+
+if [ ! -f "$EXPLAINABILITY_HISTORY_FILE" ]; then
+    printf "%s\n" "timestamp,tenant_id,rollout_phase,dependency,failure_mode,sample_contrib,fail_contrib,context_contrib,persistence_contrib,confidence_score,recommended_overlay,decision" > "$EXPLAINABILITY_HISTORY_FILE"
 fi
 
 if [ "$ENABLE_ATTESTATION_DASHBOARD" = true ] && [ ! -f "$ATTESTATION_TREND_HISTORY_FILE" ]; then
@@ -1322,6 +1344,45 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
 ---
 EOF
 )
+EXPLAINABILITY_HISTORY_RECORD="$TIMESTAMP,$TENANT_ID,$ROLLOUT_PHASE,$DEPENDENCY,${FAILURE_MODE:-unspecified},${EXPLAIN_SAMPLE_CONTRIB:-0},${EXPLAIN_FAIL_CONTRIB:-0},${EXPLAIN_CONTEXT_CONTRIB:-0},${EXPLAIN_PERSIST_CONTRIB:-0},${CAUSAL_CONFIDENCE_SCORE:-0},${CAUSAL_CLUSTER_SUGGESTED_OVERLAY:-none},$(if [ "${CAUSAL_CLUSTER_SUGGESTED_OVERLAY:-none}" = "none" ]; then echo "below-threshold-or-no-signal"; else echo "qualified"; fi)"
+
+EXPLAINER_DIFF_ENTRY=""
+if [ "$ENABLE_EXPLAINER_DIFFING" = true ]; then
+    PREV_ROW=$(awk -F',' -v t="$TENANT_ID" -v p="$ROLLOUT_PHASE" -v d="$DEPENDENCY" -v f="${FAILURE_MODE:-unspecified}" 'NR>1 && $2==t && $3==p && $4==d && $5==f { row=$0 } END { print row }' "$EXPLAINABILITY_HISTORY_FILE")
+    if [ -n "$PREV_ROW" ]; then
+        IFS=',' read -r _pts _ptenant _pphase _pdep _pfmode _psamp _pfail _pctx _ppers _pconf _pover _pdec <<< "$PREV_ROW"
+        DIFF_SAMPLE=$(( ${EXPLAIN_SAMPLE_CONTRIB:-0} - ${_psamp:-0} ))
+        DIFF_FAIL=$(( ${EXPLAIN_FAIL_CONTRIB:-0} - ${_pfail:-0} ))
+        DIFF_CONTEXT=$(( ${EXPLAIN_CONTEXT_CONTRIB:-0} - ${_pctx:-0} ))
+        DIFF_PERSIST=$(( ${EXPLAIN_PERSIST_CONTRIB:-0} - ${_ppers:-0} ))
+        DIFF_CONF=$(( ${CAUSAL_CONFIDENCE_SCORE:-0} - ${_pconf:-0} ))
+        ABS_CONF_DIFF=${DIFF_CONF#-}
+        DRIFT_STATE="stable"
+        if [ "$ABS_CONF_DIFF" -ge "$EXPLAINER_DRIFT_THRESHOLD" ]; then
+            DRIFT_STATE="drift-detected"
+        fi
+        EXPLAINER_DIFF_ENTRY=$(cat << EOF
+## [XDIFF-$ENTRY_ID] explainer_diff_consecutive_cohorts
+
+**Logged**: $TIMESTAMP
+**Tenant ID**: $TENANT_ID
+**Cluster Key**: ${CAUSAL_CLUSTER_KEY:-none}
+**Previous Timestamp**: ${_pts:-unknown}
+**Current Confidence Score**: ${CAUSAL_CONFIDENCE_SCORE:-0}
+**Previous Confidence Score**: ${_pconf:-0}
+**Confidence Delta**: $DIFF_CONF
+**Sample Contribution Delta**: $DIFF_SAMPLE
+**Fail Contribution Delta**: $DIFF_FAIL
+**Context Contribution Delta**: $DIFF_CONTEXT
+**Persistence Contribution Delta**: $DIFF_PERSIST
+**Drift Threshold**: $EXPLAINER_DRIFT_THRESHOLD
+**Drift State**: $DRIFT_STATE
+
+---
+EOF
+)
+    fi
+fi
 GRAPH_EXPLAINABILITY_ENTRY=$(cat << EOF
 ## [XPL-$ENTRY_ID] cohort_aware_graph_explainability
 
@@ -1817,6 +1878,12 @@ if [ "$DRY_RUN" = true ]; then
     if [ "$ENABLE_GRAPH_EXPLAINABILITY_TRACES" = true ]; then
         echo "[DRY-RUN] Would append cohort explainability trace entry to $GRAPH_EXPLAINABILITY_FILE:"
         echo "$GRAPH_EXPLAINABILITY_ENTRY"
+        echo "[DRY-RUN] Would append explainability history record to $EXPLAINABILITY_HISTORY_FILE:"
+        echo "$EXPLAINABILITY_HISTORY_RECORD"
+        if [ -n "$EXPLAINER_DIFF_ENTRY" ]; then
+            echo "[DRY-RUN] Would append explainer diff entry to $GRAPH_EXPLAINABILITY_FILE:"
+            echo "$EXPLAINER_DIFF_ENTRY"
+        fi
     fi
     exit 0
 fi
@@ -1848,6 +1915,10 @@ if [ "$ENABLE_GRAPH_EXPLAINABILITY_TRACES" = true ]; then
         printf "%s\n\n" "# Cohort-Aware Causal Graph Explainability Traces" > "$GRAPH_EXPLAINABILITY_FILE"
     fi
     printf "%s\n" "$GRAPH_EXPLAINABILITY_ENTRY" >> "$GRAPH_EXPLAINABILITY_FILE"
+    printf "%s\n" "$EXPLAINABILITY_HISTORY_RECORD" >> "$EXPLAINABILITY_HISTORY_FILE"
+    if [ -n "$EXPLAINER_DIFF_ENTRY" ]; then
+        printf "%s\n" "$EXPLAINER_DIFF_ENTRY" >> "$GRAPH_EXPLAINABILITY_FILE"
+    fi
 fi
 
 echo "Appended outage simulation learning entry to $LEARNINGS_FILE"

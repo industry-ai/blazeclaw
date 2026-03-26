@@ -55,6 +55,8 @@ $causalGraphFile =
     './blazeclaw/skills/self-evolving/.learnings/CAUSAL_CONFIDENCE_GRAPH.md'
 $graphExplainabilityFile =
     './blazeclaw/skills/self-evolving/.learnings/CAUSAL_GRAPH_EXPLAINABILITY_TRACES.md'
+$explainabilityHistoryFile =
+    './blazeclaw/skills/self-evolving/.learnings/CAUSAL_GRAPH_EXPLAINABILITY_HISTORY.csv'
 
 function Show-Usage {
 @"
@@ -125,6 +127,8 @@ Optional:
   --disable-graph-edge-persistence Disable graph edge persistence scoring
   --graph-explainability-file Cohort-aware explainability trace markdown output
   --disable-graph-explainability-traces Disable explainability trace output
+  --disable-explainer-diffing Disable consecutive cohort explainer diffing
+  --explainer-drift-threshold Drift threshold for audit diff alerts (default: 15)
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -174,6 +178,8 @@ $enableGraphEdgePersistence = $true
 $graphCohortWindow = 30
 $graphTemporalDecayRate = 0.15
 $enableGraphExplainabilityTraces = $true
+$enableExplainerDiffing = $true
+$explainerDriftThreshold = 15
 $manifestFileExplicit = $false
 $signatureVerificationMode = 'none'
 $kmsPublicKeyFile = ''
@@ -483,6 +489,13 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         '--disable-graph-explainability-traces' {
             $enableGraphExplainabilityTraces = $false
         }
+        '--disable-explainer-diffing' {
+            $enableExplainerDiffing = $false
+        }
+        '--explainer-drift-threshold' {
+            $i++
+            $explainerDriftThreshold = [int]$args[$i]
+        }
         '--signature-verification-mode' {
             $i++
             $signatureVerificationMode = [string]$args[$i]
@@ -586,8 +599,18 @@ if ($graphTemporalDecayRate -lt 0) {
     throw '--graph-temporal-decay-rate must be a non-negative number'
 }
 
+if ($explainerDriftThreshold -lt 0) {
+    throw '--explainer-drift-threshold must be a non-negative integer'
+}
+
 if ([string]::IsNullOrWhiteSpace($policyProfile)) {
     throw '--policy-profile cannot be empty'
+}
+
+if (-not (Test-Path -LiteralPath $explainabilityHistoryFile)) {
+    Set-Content -LiteralPath $explainabilityHistoryFile -NoNewline -Value
+        'timestamp,tenant_id,rollout_phase,dependency,failure_mode,sample_contrib,fail_contrib,context_contrib,persistence_contrib,confidence_score,recommended_overlay,decision'
+    Add-Content -LiteralPath $explainabilityHistoryFile -Value ''
 }
 
 if ($signatureVerificationMode -notin @('none', 'kms', 'sigstore')) {
@@ -1668,6 +1691,55 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
 
 ---
 "@
+$explainabilityHistoryRecord =
+    "$timestamp,$tenantId,$rolloutPhase,$dependency,$(if ($failureMode) { $failureMode } else { 'unspecified' }),$explainSampleContrib,$explainFailContrib,$explainContextContrib,$explainPersistContrib,$causalConfidenceScore,$causalClusterSuggestedOverlay,$(if ($causalClusterSuggestedOverlay -eq 'none') { 'below-threshold-or-no-signal' } else { 'qualified' })"
+$explainerDiffEntry = ''
+if ($enableExplainerDiffing) {
+    $effectiveFailureModeForDiff = if ($failureMode) { $failureMode } else { 'unspecified' }
+    $prevExplainRow = Import-Csv -LiteralPath $explainabilityHistoryFile |
+        Where-Object {
+            $_.tenant_id -eq $tenantId -and
+            $_.rollout_phase -eq $rolloutPhase -and
+            $_.dependency -eq $dependency -and
+            $_.failure_mode -eq $effectiveFailureModeForDiff
+        } |
+        Select-Object -Last 1
+
+    if ($prevExplainRow) {
+        [int]$prevSample = 0; [int]::TryParse([string]$prevExplainRow.sample_contrib, [ref]$prevSample) | Out-Null
+        [int]$prevFail = 0; [int]::TryParse([string]$prevExplainRow.fail_contrib, [ref]$prevFail) | Out-Null
+        [int]$prevContext = 0; [int]::TryParse([string]$prevExplainRow.context_contrib, [ref]$prevContext) | Out-Null
+        [int]$prevPersist = 0; [int]::TryParse([string]$prevExplainRow.persistence_contrib, [ref]$prevPersist) | Out-Null
+        [int]$prevConfidence = 0; [int]::TryParse([string]$prevExplainRow.confidence_score, [ref]$prevConfidence) | Out-Null
+
+        $deltaSample = $explainSampleContrib - $prevSample
+        $deltaFail = $explainFailContrib - $prevFail
+        $deltaContext = $explainContextContrib - $prevContext
+        $deltaPersist = $explainPersistContrib - $prevPersist
+        $deltaConfidence = $causalConfidenceScore - $prevConfidence
+        $driftState = if ([Math]::Abs($deltaConfidence) -ge $explainerDriftThreshold) { 'drift-detected' } else { 'stable' }
+
+        $explainerDiffEntry = @"
+## [XDIFF-$entryId] explainer_diff_consecutive_cohorts
+
+**Logged**: $timestamp
+**Tenant ID**: $tenantId
+**Cluster Key**: $causalClusterKey
+**Previous Timestamp**: $($prevExplainRow.timestamp)
+**Current Confidence Score**: $causalConfidenceScore
+**Previous Confidence Score**: $prevConfidence
+**Confidence Delta**: $deltaConfidence
+**Sample Contribution Delta**: $deltaSample
+**Fail Contribution Delta**: $deltaFail
+**Context Contribution Delta**: $deltaContext
+**Persistence Contribution Delta**: $deltaPersist
+**Drift Threshold**: $explainerDriftThreshold
+**Drift State**: $driftState
+
+---
+"@
+    }
+}
 $graphExplainabilityEntry = @"
 ## [XPL-$entryId] cohort_aware_graph_explainability
 
@@ -2186,6 +2258,12 @@ if ($dryRun) {
     if ($enableGraphExplainabilityTraces) {
         Write-Host "[DRY-RUN] Would append cohort explainability trace entry to ${graphExplainabilityFile}:"
         Write-Host $graphExplainabilityEntry
+        Write-Host "[DRY-RUN] Would append explainability history record to ${explainabilityHistoryFile}:"
+        Write-Host $explainabilityHistoryRecord
+        if (-not [string]::IsNullOrWhiteSpace($explainerDiffEntry)) {
+            Write-Host "[DRY-RUN] Would append explainer diff entry to ${graphExplainabilityFile}:"
+            Write-Host $explainerDiffEntry
+        }
     }
     exit 0
 }
@@ -2218,6 +2296,10 @@ if ($enableGraphExplainabilityTraces) {
         Add-Content -LiteralPath $graphExplainabilityFile -Value ''
     }
     Add-Content -LiteralPath $graphExplainabilityFile -Value $graphExplainabilityEntry
+    Add-Content -LiteralPath $explainabilityHistoryFile -Value $explainabilityHistoryRecord
+    if (-not [string]::IsNullOrWhiteSpace($explainerDiffEntry)) {
+        Add-Content -LiteralPath $graphExplainabilityFile -Value $explainerDiffEntry
+    }
 }
 
 Write-Host "Appended outage simulation learning entry to $learningsFile"

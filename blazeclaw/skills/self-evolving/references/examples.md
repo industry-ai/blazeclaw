@@ -267,6 +267,12 @@ phase promotion.
 - Context Contribution: 10
 - Persistence Contribution: 13
 - Recommendation Decision: qualified
+- Confidence Delta: 18
+- Sample Contribution Delta: 3
+- Fail Contribution Delta: 9
+- Context Contribution Delta: 0
+- Persistence Contribution Delta: 6
+- Drift State: drift-detected
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode

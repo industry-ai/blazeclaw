@@ -190,6 +190,7 @@ Approval gate checklist:
 - [ ] confidence-weighted causal graphing policy is validated for recommendation thresholds
 - [ ] temporal decay and edge persistence parameters are validated for cohort graph scoring
 - [ ] explainability trace outputs are validated for recommendation audit evidence
+- [ ] consecutive cohort explainer diff outputs are validated for drift detection alerts
 
 ## 6) Rollback Plan
 
