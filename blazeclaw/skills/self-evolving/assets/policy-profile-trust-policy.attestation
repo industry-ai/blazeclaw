@@ -1,0 +1,5 @@
+distribution_id=fed-dist-2026-03-26-001
+published_at=2026-03-26T00:00:00Z
+attestation_status=verified
+signer=governance-attestation-service
+artifact_digest=87c453303891e310d5c56cb641835a40dd9322895e7c78be31a6235242c302c6

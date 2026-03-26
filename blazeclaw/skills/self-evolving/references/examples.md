@@ -200,6 +200,17 @@ phase promotion.
 - Trust Policy Gate: true
 - Revocation List Source: assets/policy-profile-key-revocations.csv
 - Revocation Check Gate: true
+- Trust Policy Attestation Source: assets/policy-profile-trust-policy.attestation
+- Trust Policy Attestation Distribution Id: fed-dist-2026-03-26-001
+- Trust Policy Attestation Published At: 2026-03-26T00:00:00Z
+- Trust Policy Attestation Status: verified
+- Trust Policy Attestation Signer: governance-attestation-service
+- Trust Policy Attestation Gate: true
+- Revocation SLO Source: assets/policy-profile-revocation-slo.conf
+- Revocation SLO Max Hours: 24
+- Revocation SLO Last Check At: 2026-03-26T00:00:00Z
+- Revocation SLO Status: healthy
+- Revocation SLO Gate: true
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode
@@ -237,6 +248,11 @@ Signature verification mode mismatch: requested 'sigstore' but manifest declares
 ```text
 $ scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-006 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --require-signed-manifest --manifest-file ./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --require-trust-policy --trust-policy-file ./blazeclaw/skills/self-evolving/assets/missing-trust-policy.conf --require-revocation-check --revocation-file ./blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv --dependency registry --result pass --evidence-path reports/drills/sim-reg-006.json
 Missing trust-policy file: ./blazeclaw/skills/self-evolving/assets/missing-trust-policy.conf
+```
+
+```text
+$ scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-007 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --require-signed-manifest --manifest-file ./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --require-trust-policy --trust-policy-file ./blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf --require-revocation-check --revocation-file ./blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv --require-trust-policy-attestation --trust-policy-attestation-file ./blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.attestation --require-revocation-slo --revocation-slo-file ./blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.stale.conf --dependency registry --result pass --evidence-path reports/drills/sim-reg-007.json
+Revocation propagation SLO breach: age 240 hours exceeds 24 in ./blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.stale.conf
 ```
 
 ## Learning: Knowledge Gap (Resolved)

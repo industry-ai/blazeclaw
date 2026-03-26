@@ -1,0 +1,8 @@
+# Trust-policy publication attestation template
+# Fill values before enabling --require-trust-policy-attestation.
+
+distribution_id=<distribution-id>
+published_at=<yyyy-mm-ddThh:mm:ssZ>
+attestation_status=<published|verified>
+signer=<signing-identity>
+artifact_digest=<sha256-of-policy-profile-trust-policy.conf>

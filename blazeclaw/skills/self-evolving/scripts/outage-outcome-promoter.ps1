@@ -19,6 +19,10 @@ $trustPolicyFile =
     './blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf'
 $revocationListFile =
     './blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv'
+$trustPolicyAttestationFile =
+    './blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.attestation'
+$revocationSloFile =
+    './blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.conf'
 
 function Show-Usage {
 @"
@@ -45,6 +49,10 @@ Optional:
   --require-trust-policy Enforce trust-policy allow/revoke checks
   --revocation-file     Revocation list file for key revocation checks
   --require-revocation-check Enforce revocation-list checks
+  --trust-policy-attestation-file Trust-policy publication attestation file
+  --require-trust-policy-attestation Enforce trust-policy attestation checks
+  --revocation-slo-file Revocation propagation SLO policy file
+  --require-revocation-slo Enforce revocation SLO checks
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -67,6 +75,8 @@ $strictSchemaVersion = ''
 $requireSignedManifest = $false
 $requireTrustPolicy = $false
 $requireRevocationCheck = $false
+$requireTrustPolicyAttestation = $false
+$requireRevocationSlo = $false
 $manifestFileExplicit = $false
 $signatureVerificationMode = 'none'
 $kmsPublicKeyFile = ''
@@ -94,6 +104,13 @@ $trustPolicyDistributedAt = ''
 $trustPolicyFederationScope = ''
 $trustPolicyActiveKeyCount = 0
 $trustPolicyRevokedKeyCount = 0
+$attestationDistributionId = ''
+$attestationPublishedAt = ''
+$attestationStatus = ''
+$attestationSigner = ''
+$revocationSloMaxHours = ''
+$revocationSloLastCheckAt = ''
+$revocationSloStatus = ''
 $notes = ''
 $trendWindowSize = 20
 $dryRun = $false
@@ -170,6 +187,20 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         }
         '--require-revocation-check' {
             $requireRevocationCheck = $true
+        }
+        '--trust-policy-attestation-file' {
+            $i++
+            $trustPolicyAttestationFile = [string]$args[$i]
+        }
+        '--require-trust-policy-attestation' {
+            $requireTrustPolicyAttestation = $true
+        }
+        '--revocation-slo-file' {
+            $i++
+            $revocationSloFile = [string]$args[$i]
+        }
+        '--require-revocation-slo' {
+            $requireRevocationSlo = $true
         }
         '--signature-verification-mode' {
             $i++
@@ -265,11 +296,77 @@ if ($requireTrustPolicy -or $requireRevocationCheck) {
     $requireSignedManifest = $true
 }
 
+if ($requireTrustPolicyAttestation -or $requireRevocationSlo) {
+    $requireSignedManifest = $true
+}
+
 if (-not (Test-Path -LiteralPath $trendHistoryFile)) {
     Set-Content -LiteralPath $trendHistoryFile -NoNewline -Value
         'timestamp,tenant_id,rollout_phase,dependency,result,simulation_id'
     Add-Content -LiteralPath $trendHistoryFile -Value ''
 }
+
+    if ($requireTrustPolicyAttestation) {
+        if (-not (Test-Path -LiteralPath $trustPolicyAttestationFile)) {
+            throw "Missing trust-policy attestation file: $trustPolicyAttestationFile"
+        }
+
+        $attestationFields = @{}
+        foreach ($line in (Get-Content -LiteralPath $trustPolicyAttestationFile)) {
+            if ([string]::IsNullOrWhiteSpace($line) -or
+                $line.Trim().StartsWith('#')) {
+                continue
+            }
+
+            $split = $line.Split('=', 2)
+            if ($split.Length -eq 2) {
+                $attestationFields[$split[0].Trim()] = $split[1].Trim()
+            }
+        }
+
+        $requiredAttestationFields = @(
+            'distribution_id',
+            'published_at',
+            'attestation_status',
+            'signer',
+            'artifact_digest'
+        )
+
+        foreach ($field in $requiredAttestationFields) {
+            if (-not $attestationFields.ContainsKey($field) -or
+                [string]::IsNullOrWhiteSpace([string]$attestationFields[$field])) {
+                throw "Malformed trust-policy attestation file: required field '$field' missing in $trustPolicyAttestationFile"
+            }
+        }
+
+        $attestationDistributionId =
+            [string]$attestationFields['distribution_id']
+        $attestationPublishedAt = [string]$attestationFields['published_at']
+        $attestationStatus = [string]$attestationFields['attestation_status']
+        $attestationSigner = [string]$attestationFields['signer']
+        $attestationArtifactDigest =
+            [string]$attestationFields['artifact_digest']
+
+        if ($attestationStatus -notin @('published', 'verified')) {
+            throw "Trust-policy attestation status invalid: expected published|verified in $trustPolicyAttestationFile"
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($trustPolicyDistributionId) -and
+            $attestationDistributionId -ne $trustPolicyDistributionId) {
+            throw "Trust-policy attestation mismatch: distribution_id '$attestationDistributionId' does not match trust policy '$trustPolicyDistributionId'"
+        }
+
+        if ($attestationArtifactDigest -notmatch '^[A-Fa-f0-9]{64}$') {
+            throw "Malformed trust-policy attestation file: artifact_digest must be 64-char hex"
+        }
+
+        $trustPolicyHash =
+            (Get-FileHash -LiteralPath $trustPolicyFile -Algorithm SHA256).Hash
+        if ($trustPolicyHash.ToLowerInvariant() -ne
+            $attestationArtifactDigest.ToLowerInvariant()) {
+            throw "Trust-policy attestation digest mismatch for $trustPolicyFile"
+        }
+    }
 
 $timestamp = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 $dateStamp = (Get-Date).ToUniversalTime().ToString('yyyyMMdd')
@@ -524,6 +621,63 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
             throw "Revocation check failed: key_id '$manifestKeyId' is revoked in $revocationListFile"
         }
     }
+
+    if ($requireRevocationSlo) {
+        if (-not (Test-Path -LiteralPath $revocationSloFile)) {
+            throw "Missing revocation SLO file: $revocationSloFile"
+        }
+
+        $sloFields = @{}
+        foreach ($line in (Get-Content -LiteralPath $revocationSloFile)) {
+            if ([string]::IsNullOrWhiteSpace($line) -or
+                $line.Trim().StartsWith('#')) {
+                continue
+            }
+
+            $split = $line.Split('=', 2)
+            if ($split.Length -eq 2) {
+                $sloFields[$split[0].Trim()] = $split[1].Trim()
+            }
+        }
+
+        $requiredSloFields = @(
+            'max_propagation_hours',
+            'last_propagation_check_at',
+            'status'
+        )
+
+        foreach ($field in $requiredSloFields) {
+            if (-not $sloFields.ContainsKey($field) -or
+                [string]::IsNullOrWhiteSpace([string]$sloFields[$field])) {
+                throw "Malformed revocation SLO file: required field '$field' missing in $revocationSloFile"
+            }
+        }
+
+        $revocationSloMaxHours = [string]$sloFields['max_propagation_hours']
+        $revocationSloLastCheckAt =
+            [string]$sloFields['last_propagation_check_at']
+        $revocationSloStatus = [string]$sloFields['status']
+
+        [int]$maxHours = 0
+        if (-not [int]::TryParse($revocationSloMaxHours, [ref]$maxHours)) {
+            throw "Malformed revocation SLO file: max_propagation_hours must be numeric in $revocationSloFile"
+        }
+
+        if ($revocationSloStatus -notin @('healthy', 'warning')) {
+            throw "Revocation SLO status invalid: expected healthy|warning in $revocationSloFile"
+        }
+
+        [DateTime]$lastCheckValue = [DateTime]::MinValue
+        if (-not [DateTime]::TryParse($revocationSloLastCheckAt,
+                [ref]$lastCheckValue)) {
+            throw "Malformed revocation SLO file: last_propagation_check_at is invalid in $revocationSloFile"
+        }
+
+        $ageHours = [int]((New-TimeSpan -Start $lastCheckValue.ToUniversalTime() -End (Get-Date).ToUniversalTime()).TotalHours)
+        if ($ageHours -gt $maxHours) {
+            throw "Revocation propagation SLO breach: age $ageHours hours exceeds $maxHours in $revocationSloFile"
+        }
+    }
 }
 
 $profileRows = Import-Csv -LiteralPath $profileWeightsFile
@@ -764,8 +918,19 @@ $recommendation
 - Trust Policy Active Key Count: $trustPolicyActiveKeyCount
 - Trust Policy Revoked Key Count: $trustPolicyRevokedKeyCount
 - Trust Policy Gate: $requireTrustPolicy
+- Trust Policy Attestation Source: $trustPolicyAttestationFile
+- Trust Policy Attestation Distribution Id: $(if ($attestationDistributionId) { $attestationDistributionId } else { 'not-verified' })
+- Trust Policy Attestation Published At: $(if ($attestationPublishedAt) { $attestationPublishedAt } else { 'not-verified' })
+- Trust Policy Attestation Status: $(if ($attestationStatus) { $attestationStatus } else { 'not-verified' })
+- Trust Policy Attestation Signer: $(if ($attestationSigner) { $attestationSigner } else { 'not-verified' })
+- Trust Policy Attestation Gate: $requireTrustPolicyAttestation
 - Revocation List Source: $revocationListFile
 - Revocation Check Gate: $requireRevocationCheck
+- Revocation SLO Source: $revocationSloFile
+- Revocation SLO Max Hours: $(if ($revocationSloMaxHours) { $revocationSloMaxHours } else { 'not-verified' })
+- Revocation SLO Last Check At: $(if ($revocationSloLastCheckAt) { $revocationSloLastCheckAt } else { 'not-verified' })
+- Revocation SLO Status: $(if ($revocationSloStatus) { $revocationSloStatus } else { 'not-verified' })
+- Revocation SLO Gate: $requireRevocationSlo
 - Weight Inputs:
   - fail-base=$failBaseScore
   - pass-base=$passBaseScore

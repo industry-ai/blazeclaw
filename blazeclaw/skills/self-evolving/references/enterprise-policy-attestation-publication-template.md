@@ -106,9 +106,9 @@ Outcome promotion controls:
 - Policy tuning output path:
   `blazeclaw/skills/self-evolving/.learnings/POLICY_TUNING_RECOMMENDATIONS.md`
 - Automation command (shell):
-  `scripts/outage-outcome-promoter.sh --simulation-id <id> --tenant-id <tenant-id> --rollout-phase <r1|r2|r3|r4> --policy-profile <profile-id> --strict-schema-version <version-optional> --require-signed-manifest --manifest-file <manifest-path-optional> --signature-verification-mode <none|kms|sigstore> --require-trust-policy --trust-policy-file <trust-policy-path-optional> --require-revocation-check --revocation-file <revocation-path-optional> --dependency <registry|authority> --result <pass|fail> --evidence-path <path>`
+  `scripts/outage-outcome-promoter.sh --simulation-id <id> --tenant-id <tenant-id> --rollout-phase <r1|r2|r3|r4> --policy-profile <profile-id> --strict-schema-version <version-optional> --require-signed-manifest --manifest-file <manifest-path-optional> --signature-verification-mode <none|kms|sigstore> --require-trust-policy --trust-policy-file <trust-policy-path-optional> --require-revocation-check --revocation-file <revocation-path-optional> --require-trust-policy-attestation --trust-policy-attestation-file <attestation-path-optional> --require-revocation-slo --revocation-slo-file <revocation-slo-path-optional> --dependency <registry|authority> --result <pass|fail> --evidence-path <path>`
 - Automation command (powershell):
-  `scripts/outage-outcome-promoter.ps1 --simulation-id <id> --tenant-id <tenant-id> --rollout-phase <r1|r2|r3|r4> --policy-profile <profile-id> --strict-schema-version <version-optional> --require-signed-manifest --manifest-file <manifest-path-optional> --signature-verification-mode <none|kms|sigstore> --require-trust-policy --trust-policy-file <trust-policy-path-optional> --require-revocation-check --revocation-file <revocation-path-optional> --dependency <registry|authority> --result <pass|fail> --evidence-path <path>`
+  `scripts/outage-outcome-promoter.ps1 --simulation-id <id> --tenant-id <tenant-id> --rollout-phase <r1|r2|r3|r4> --policy-profile <profile-id> --strict-schema-version <version-optional> --require-signed-manifest --manifest-file <manifest-path-optional> --signature-verification-mode <none|kms|sigstore> --require-trust-policy --trust-policy-file <trust-policy-path-optional> --require-revocation-check --revocation-file <revocation-path-optional> --require-trust-policy-attestation --trust-policy-attestation-file <attestation-path-optional> --require-revocation-slo --revocation-slo-file <revocation-slo-path-optional> --dependency <registry|authority> --result <pass|fail> --evidence-path <path>`
 - Trend history output path:
   `blazeclaw/skills/self-evolving/.learnings/OUTAGE_TREND_HISTORY.csv`
 - Scoring profile weights path:
@@ -119,6 +119,10 @@ Outcome promotion controls:
   `blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf`
 - Key revocation list path:
   `blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv`
+- Trust-policy attestation path:
+  `blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.attestation`
+- Revocation propagation SLO policy path:
+  `blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.conf`
 - Detached signature artifact path: `<signature-path>`
 - Signature certificate artifact path (sigstore): `<certificate-path>`
 - KMS verifier dependency: `openssl`
@@ -156,6 +160,11 @@ Scoring guidance:
   active key membership must pass or promotion is blocked.
 - Revocation rule: when enabled, manifest key must not be revoked in
   federated revocation registry or promotion is blocked.
+- Trust-policy publication attestation rule: when enabled, attestation
+  distribution metadata and digest verification must pass or promotion is
+  blocked.
+- Revocation propagation SLO rule: when enabled, propagation freshness must
+  stay within threshold or promotion is blocked.
 
 Pipeline stages:
 

@@ -12,6 +12,8 @@ PROFILE_WEIGHTS_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-sco
 PROFILE_MANIFEST_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest"
 TRUST_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf"
 REVOCATION_LIST_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv"
+TRUST_POLICY_ATTESTATION_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.attestation"
+REVOCATION_SLO_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.conf"
 
 SIMULATION_ID=""
 TENANT_ID=""
@@ -21,6 +23,8 @@ STRICT_SCHEMA_VERSION=""
 REQUIRE_SIGNED_MANIFEST=false
 REQUIRE_TRUST_POLICY=false
 REQUIRE_REVOCATION_CHECK=false
+REQUIRE_TRUST_POLICY_ATTESTATION=false
+REQUIRE_REVOCATION_SLO=false
 MANIFEST_FILE_EXPLICIT=false
 SIGNATURE_VERIFICATION_MODE="none"
 KMS_PUBLIC_KEY_FILE=""
@@ -64,6 +68,10 @@ Optional:
   --require-trust-policy Enforce trust-policy allow/revoke checks
   --revocation-file     Revocation list file for key revocation checks
   --require-revocation-check Enforce revocation-list checks
+  --trust-policy-attestation-file Trust-policy publication attestation file
+  --require-trust-policy-attestation Enforce trust-policy publication attestation checks
+  --revocation-slo-file Revocation propagation SLO policy file
+  --require-revocation-slo Enforce revocation propagation SLO checks
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -151,6 +159,22 @@ while [[ $# -gt 0 ]]; do
             ;;
         --require-revocation-check)
             REQUIRE_REVOCATION_CHECK=true
+            shift
+            ;;
+        --trust-policy-attestation-file)
+            TRUST_POLICY_ATTESTATION_FILE="${2:-}"
+            shift 2
+            ;;
+        --require-trust-policy-attestation)
+            REQUIRE_TRUST_POLICY_ATTESTATION=true
+            shift
+            ;;
+        --revocation-slo-file)
+            REVOCATION_SLO_FILE="${2:-}"
+            shift 2
+            ;;
+        --require-revocation-slo)
+            REQUIRE_REVOCATION_SLO=true
             shift
             ;;
         --signature-verification-mode)
@@ -248,6 +272,10 @@ if [ "$SIGNATURE_VERIFICATION_MODE" != "none" ]; then
 fi
 
 if [ "$REQUIRE_TRUST_POLICY" = true ] || [ "$REQUIRE_REVOCATION_CHECK" = true ]; then
+    REQUIRE_SIGNED_MANIFEST=true
+fi
+
+if [ "$REQUIRE_TRUST_POLICY_ATTESTATION" = true ] || [ "$REQUIRE_REVOCATION_SLO" = true ]; then
     REQUIRE_SIGNED_MANIFEST=true
 fi
 
@@ -403,6 +431,58 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
         fi
     fi
 
+    if [ "$REQUIRE_TRUST_POLICY_ATTESTATION" = true ]; then
+        if [ ! -f "$TRUST_POLICY_ATTESTATION_FILE" ]; then
+            echo "Missing trust-policy attestation file: $TRUST_POLICY_ATTESTATION_FILE" >&2
+            exit 1
+        fi
+
+        if [ ! -r "$TRUST_POLICY_ATTESTATION_FILE" ]; then
+            echo "Trust-policy attestation file is not readable: $TRUST_POLICY_ATTESTATION_FILE" >&2
+            exit 1
+        fi
+
+        ATTESTATION_DISTRIBUTION_ID=$(awk -F'=' '$1=="distribution_id" { print $2; exit }' "$TRUST_POLICY_ATTESTATION_FILE" | tr -d '\r[:space:]')
+        ATTESTATION_PUBLISHED_AT=$(awk -F'=' '$1=="published_at" { print $2; exit }' "$TRUST_POLICY_ATTESTATION_FILE" | tr -d '\r[:space:]')
+        ATTESTATION_STATUS=$(awk -F'=' '$1=="attestation_status" { print $2; exit }' "$TRUST_POLICY_ATTESTATION_FILE" | tr -d '\r[:space:]')
+        ATTESTATION_SIGNER=$(awk -F'=' '$1=="signer" { print $2; exit }' "$TRUST_POLICY_ATTESTATION_FILE" | tr -d '\r[:space:]')
+        ATTESTATION_ARTIFACT_DIGEST=$(awk -F'=' '$1=="artifact_digest" { print $2; exit }' "$TRUST_POLICY_ATTESTATION_FILE" | tr -d '\r[:space:]')
+
+        if [ -z "$ATTESTATION_DISTRIBUTION_ID" ] || [ -z "$ATTESTATION_PUBLISHED_AT" ] || [ -z "$ATTESTATION_STATUS" ] || [ -z "$ATTESTATION_SIGNER" ] || [ -z "$ATTESTATION_ARTIFACT_DIGEST" ]; then
+            echo "Malformed trust-policy attestation file: required fields missing in $TRUST_POLICY_ATTESTATION_FILE" >&2
+            exit 1
+        fi
+
+        if [ "$ATTESTATION_STATUS" != "published" ] && [ "$ATTESTATION_STATUS" != "verified" ]; then
+            echo "Trust-policy attestation status invalid: expected published|verified in $TRUST_POLICY_ATTESTATION_FILE" >&2
+            exit 1
+        fi
+
+        if [ -n "$TRUST_POLICY_DISTRIBUTION_ID" ] && [ "$ATTESTATION_DISTRIBUTION_ID" != "$TRUST_POLICY_DISTRIBUTION_ID" ]; then
+            echo "Trust-policy attestation mismatch: distribution_id '$ATTESTATION_DISTRIBUTION_ID' does not match trust policy '$TRUST_POLICY_DISTRIBUTION_ID'" >&2
+            exit 1
+        fi
+
+        if ! [[ "$ATTESTATION_ARTIFACT_DIGEST" =~ ^[A-Fa-f0-9]{64}$ ]]; then
+            echo "Malformed trust-policy attestation file: artifact_digest must be 64-char hex" >&2
+            exit 1
+        fi
+
+        if command -v sha256sum >/dev/null 2>&1; then
+            ACTUAL_TRUST_POLICY_SHA256=$(sha256sum "$TRUST_POLICY_FILE" | awk '{print $1}')
+        elif command -v shasum >/dev/null 2>&1; then
+            ACTUAL_TRUST_POLICY_SHA256=$(shasum -a 256 "$TRUST_POLICY_FILE" | awk '{print $1}')
+        else
+            echo "Unable to verify trust-policy attestation digest: sha256 tool not available" >&2
+            exit 1
+        fi
+
+        if [ "${ACTUAL_TRUST_POLICY_SHA256,,}" != "${ATTESTATION_ARTIFACT_DIGEST,,}" ]; then
+            echo "Trust-policy attestation digest mismatch for $TRUST_POLICY_FILE" >&2
+            exit 1
+        fi
+    fi
+
     if [ "$REQUIRE_TRUST_POLICY" = true ]; then
         if [ ! -f "$TRUST_POLICY_FILE" ]; then
             echo "Missing trust-policy file: $TRUST_POLICY_FILE" >&2
@@ -478,6 +558,51 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
         REVOKED_ROW=$(awk -F',' -v key="$MANIFEST_KEY_ID" 'NR > 1 && $1 == key && tolower($2) == "revoked" { print $0; exit }' "$REVOCATION_LIST_FILE")
         if [ -n "$REVOKED_ROW" ]; then
             echo "Revocation check failed: key_id '$MANIFEST_KEY_ID' is revoked in $REVOCATION_LIST_FILE" >&2
+            exit 1
+        fi
+    fi
+
+    if [ "$REQUIRE_REVOCATION_SLO" = true ]; then
+        if [ ! -f "$REVOCATION_SLO_FILE" ]; then
+            echo "Missing revocation SLO file: $REVOCATION_SLO_FILE" >&2
+            exit 1
+        fi
+
+        if [ ! -r "$REVOCATION_SLO_FILE" ]; then
+            echo "Revocation SLO file is not readable: $REVOCATION_SLO_FILE" >&2
+            exit 1
+        fi
+
+        REVOCATION_SLO_MAX_HOURS=$(awk -F'=' '$1=="max_propagation_hours" { print $2; exit }' "$REVOCATION_SLO_FILE" | tr -d '\r[:space:]')
+        REVOCATION_SLO_LAST_CHECK_AT=$(awk -F'=' '$1=="last_propagation_check_at" { print $2; exit }' "$REVOCATION_SLO_FILE" | tr -d '\r[:space:]')
+        REVOCATION_SLO_STATUS=$(awk -F'=' '$1=="status" { print $2; exit }' "$REVOCATION_SLO_FILE" | tr -d '\r[:space:]')
+
+        if [ -z "$REVOCATION_SLO_MAX_HOURS" ] || [ -z "$REVOCATION_SLO_LAST_CHECK_AT" ] || [ -z "$REVOCATION_SLO_STATUS" ]; then
+            echo "Malformed revocation SLO file: required fields missing in $REVOCATION_SLO_FILE" >&2
+            exit 1
+        fi
+
+        if ! [[ "$REVOCATION_SLO_MAX_HOURS" =~ ^[0-9]+$ ]]; then
+            echo "Malformed revocation SLO file: max_propagation_hours must be numeric in $REVOCATION_SLO_FILE" >&2
+            exit 1
+        fi
+
+        if [ "$REVOCATION_SLO_STATUS" != "healthy" ] && [ "$REVOCATION_SLO_STATUS" != "warning" ]; then
+            echo "Revocation SLO status invalid: expected healthy|warning in $REVOCATION_SLO_FILE" >&2
+            exit 1
+        fi
+
+        if ! date -u -d "$REVOCATION_SLO_LAST_CHECK_AT" +%s >/dev/null 2>&1; then
+            echo "Malformed revocation SLO file: last_propagation_check_at is not RFC3339-compatible in $REVOCATION_SLO_FILE" >&2
+            exit 1
+        fi
+
+        LAST_CHECK_EPOCH=$(date -u -d "$REVOCATION_SLO_LAST_CHECK_AT" +%s)
+        NOW_EPOCH=$(date -u +%s)
+        SLO_AGE_HOURS=$(( (NOW_EPOCH - LAST_CHECK_EPOCH) / 3600 ))
+
+        if [ "$SLO_AGE_HOURS" -gt "$REVOCATION_SLO_MAX_HOURS" ]; then
+            echo "Revocation propagation SLO breach: age $SLO_AGE_HOURS hours exceeds $REVOCATION_SLO_MAX_HOURS in $REVOCATION_SLO_FILE" >&2
             exit 1
         fi
     fi
@@ -717,8 +842,19 @@ $RECOMMENDATION
 - Trust Policy Active Key Count: ${TRUST_POLICY_ACTIVE_KEY_COUNT:-0}
 - Trust Policy Revoked Key Count: ${TRUST_POLICY_REVOKED_KEY_COUNT:-0}
 - Trust Policy Gate: ${REQUIRE_TRUST_POLICY}
+- Trust Policy Attestation Source: ${TRUST_POLICY_ATTESTATION_FILE}
+- Trust Policy Attestation Distribution Id: ${ATTESTATION_DISTRIBUTION_ID:-not-verified}
+- Trust Policy Attestation Published At: ${ATTESTATION_PUBLISHED_AT:-not-verified}
+- Trust Policy Attestation Status: ${ATTESTATION_STATUS:-not-verified}
+- Trust Policy Attestation Signer: ${ATTESTATION_SIGNER:-not-verified}
+- Trust Policy Attestation Gate: ${REQUIRE_TRUST_POLICY_ATTESTATION}
 - Revocation List Source: ${REVOCATION_LIST_FILE}
 - Revocation Check Gate: ${REQUIRE_REVOCATION_CHECK}
+- Revocation SLO Source: ${REVOCATION_SLO_FILE}
+- Revocation SLO Max Hours: ${REVOCATION_SLO_MAX_HOURS:-not-verified}
+- Revocation SLO Last Check At: ${REVOCATION_SLO_LAST_CHECK_AT:-not-verified}
+- Revocation SLO Status: ${REVOCATION_SLO_STATUS:-not-verified}
+- Revocation SLO Gate: ${REQUIRE_REVOCATION_SLO}
 - Weight Inputs:
   - fail-base=$FAIL_BASE_SCORE
   - pass-base=$PASS_BASE_SCORE

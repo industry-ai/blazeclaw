@@ -228,6 +228,11 @@ Outage promoter inputs now require tenant and rollout phase context:
   - `--require-trust-policy`
   - `--revocation-file <path>`
   - `--require-revocation-check`
+- Optional trust-policy publication attestation and revocation SLO checks:
+  - `--trust-policy-attestation-file <path>`
+  - `--require-trust-policy-attestation`
+  - `--revocation-slo-file <path>`
+  - `--require-revocation-slo`
 
 Fail-fast validation gates:
 
@@ -248,6 +253,11 @@ Fail-fast validation gates:
   metadata causes immediate script failure.
 - When `--require-revocation-check` is enabled, missing revocation list
   or revoked key usage causes immediate script failure.
+- When `--require-trust-policy-attestation` is enabled, missing
+  attestation metadata or digest mismatch causes immediate script failure.
+- When `--require-revocation-slo` is enabled, missing SLO policy,
+  invalid status, or propagation freshness breach causes immediate script
+  failure.
 
 Default profile weights are provided in:
 
@@ -261,3 +271,7 @@ Default signed manifest artifacts are provided in:
 - `assets/policy-profile-trust-policy.template.conf`
 - `assets/policy-profile-key-revocations.csv`
 - `assets/policy-profile-key-revocations.template.csv`
+- `assets/policy-profile-trust-policy.attestation`
+- `assets/policy-profile-trust-policy.attestation.template`
+- `assets/policy-profile-revocation-slo.conf`
+- `assets/policy-profile-revocation-slo.template.conf`

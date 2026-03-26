@@ -38,6 +38,8 @@ Log learnings and errors to markdown files for continuous improvement. Important
 - `blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest.template`
 - `blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf`
 - `blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv`
+- `blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.attestation`
+- `blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.conf`
 
 ## Outage Simulation Outcome Workflow
 
@@ -81,6 +83,14 @@ Capture outage drill outcomes and translate them into reusable guidance.
      - `--revocation-file` (defaults to
        `assets/policy-profile-key-revocations.csv`)
      - `--require-revocation-check`
+   - optional trust-policy publication attestation and revocation SLO
+     alert gates:
+     - `--trust-policy-attestation-file` (defaults to
+       `assets/policy-profile-trust-policy.attestation`)
+     - `--require-trust-policy-attestation`
+     - `--revocation-slo-file` (defaults to
+       `assets/policy-profile-revocation-slo.conf`)
+     - `--require-revocation-slo`
 3. Script outputs:
    - learning promotion candidate appended to `.learnings/LEARNINGS.md`
    - policy tuning recommendation appended to
@@ -102,6 +112,10 @@ Capture outage drill outcomes and translate them into reusable guidance.
      unauthorized key usage
    - optional fail-fast revocation-list errors when manifest key is
      revoked
+   - optional fail-fast trust-policy attestation errors when publication
+     metadata is missing or digest mismatches
+   - optional fail-fast revocation propagation SLO errors when freshness
+     thresholds are exceeded
 4. Promote proven recommendations into governance guidance files:
    - `AGENTS.md`
    - `TOOLS.md`
@@ -155,6 +169,7 @@ When a pattern is proven, promote it to:
   - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-004 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --strict-schema-version v1 --require-signed-manifest --manifest-file blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --signature-verification-mode kms --kms-public-key-file ./keys/org-governance-public.pem --dependency registry --result pass --evidence-path reports/drills/sample-registry.json`
   - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-005 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --require-signed-manifest --manifest-file blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --signature-verification-mode sigstore --sigstore-certificate-file ./keys/org-governance-cert.pem --sigstore-certificate-identity governance-signing-service@example.com --sigstore-oidc-issuer https://token.actions.githubusercontent.com --dependency registry --result pass --evidence-path reports/drills/sample-registry.json`
   - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-006 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --require-signed-manifest --manifest-file blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --require-trust-policy --trust-policy-file blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf --require-revocation-check --revocation-file blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv --dependency registry --result pass --evidence-path reports/drills/sample-registry.json`
+  - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-007 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --require-signed-manifest --manifest-file blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --require-trust-policy --trust-policy-file blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf --require-revocation-check --revocation-file blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv --require-trust-policy-attestation --trust-policy-attestation-file blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.attestation --require-revocation-slo --revocation-slo-file blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.conf --dependency registry --result pass --evidence-path reports/drills/sample-registry.json`
   - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-001 --tenant-id tenant-a --rollout-phase r2 --policy-profile missing-profile --dependency registry --result pass --evidence-path reports/drills/sample-registry.json` (expect fail-fast error)
   - `scripts/extract-skill.sh --dry-run`
   - `scripts/extract-skill.ps1 --dry-run`
@@ -179,4 +194,4 @@ None in current self-evolving runtime scope.
 
 ## Follow-Up Enhancements
 
-- Add automated trust-policy publication attestations and revocation propagation SLO alerts.
+- Add tenant-scoped trust-policy attestation aggregation dashboards with anomaly trend baselines.

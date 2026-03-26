@@ -34,6 +34,8 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
 - [ ] Cryptographic verification mode policy decided (`none|kms|sigstore`)
 - [ ] Trust-policy distribution gate policy decided for this rollout
 - [ ] Revocation registry gate policy decided for this rollout
+- [ ] Trust-policy attestation gate policy decided for this rollout
+- [ ] Revocation propagation SLO gate policy decided for this rollout
 
 ## 3) Environment Matrix
 
@@ -173,6 +175,8 @@ Approval gate checklist:
 - [ ] required verifier dependencies (`openssl`/`cosign`) are available in rollout environment
 - [ ] trust-policy freshness violations are zero when trust-policy gate is enabled
 - [ ] revoked-key violations are zero when revocation gate is enabled
+- [ ] trust-policy attestation failures are zero when attestation gate is enabled
+- [ ] revocation propagation SLO breaches are zero when SLO gate is enabled
 
 ## 6) Rollback Plan
 

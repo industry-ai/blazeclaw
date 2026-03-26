@@ -126,6 +126,10 @@ Federation-level aggregates:
   `blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf`
 - Key revocation list path:
   `blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv`
+- Trust-policy attestation path:
+  `blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.attestation`
+- Revocation propagation SLO policy path:
+  `blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.conf`
 - Recommendations generated in window: `<n>`
 - Recommendations accepted: `<n>`
 - Recommendations deferred: `<n>`
@@ -145,6 +149,8 @@ Federation-level aggregates:
 - Active signature verification modes observed: `<none|kms|sigstore mix>`
 - Trust-policy freshness violations: `<n>`
 - Revoked-key enforcement violations: `<n>`
+- Trust-policy attestation failures: `<n>`
+- Revocation propagation SLO breaches: `<n>`
 - Highest-impact accepted tuning:
   `<short summary with control reference>`
 
