@@ -177,6 +177,8 @@ Approval gate checklist:
 - [ ] revoked-key violations are zero when revocation gate is enabled
 - [ ] trust-policy attestation failures are zero when attestation gate is enabled
 - [ ] revocation propagation SLO breaches are zero when SLO gate is enabled
+- [ ] tenant attestation anomaly baseline breaches are zero when baseline gate is enabled
+- [ ] tenant attestation dashboard and trend history artifacts are generated per phase
 
 ## 6) Rollback Plan
 

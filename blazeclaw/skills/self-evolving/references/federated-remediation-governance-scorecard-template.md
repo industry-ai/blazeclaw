@@ -130,6 +130,10 @@ Federation-level aggregates:
   `blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.attestation`
 - Revocation propagation SLO policy path:
   `blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.conf`
+- Tenant attestation dashboard path:
+  `blazeclaw/skills/self-evolving/.learnings/TENANT_TRUST_POLICY_ATTESTATION_DASHBOARD.md`
+- Tenant attestation trend history path:
+  `blazeclaw/skills/self-evolving/.learnings/TENANT_TRUST_POLICY_ATTESTATION_HISTORY.csv`
 - Recommendations generated in window: `<n>`
 - Recommendations accepted: `<n>`
 - Recommendations deferred: `<n>`
@@ -151,6 +155,8 @@ Federation-level aggregates:
 - Revoked-key enforcement violations: `<n>`
 - Trust-policy attestation failures: `<n>`
 - Revocation propagation SLO breaches: `<n>`
+- Tenant anomaly baseline breaches: `<n>`
+- Tenant anomaly trend baseline p95: `<percent>`
 - Highest-impact accepted tuning:
   `<short summary with control reference>`
 

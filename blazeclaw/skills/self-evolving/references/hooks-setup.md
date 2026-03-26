@@ -233,6 +233,13 @@ Outage promoter inputs now require tenant and rollout phase context:
   - `--require-trust-policy-attestation`
   - `--revocation-slo-file <path>`
   - `--require-revocation-slo`
+- Optional tenant attestation aggregation dashboard controls:
+  - `--attestation-dashboard-file <path>`
+  - `--attestation-history-file <path>`
+  - `--attestation-baseline-window <n>`
+  - `--attestation-anomaly-threshold-percent <0-100>`
+  - `--require-attestation-baseline-gate`
+  - `--disable-attestation-dashboard`
 
 Fail-fast validation gates:
 
@@ -258,6 +265,8 @@ Fail-fast validation gates:
 - When `--require-revocation-slo` is enabled, missing SLO policy,
   invalid status, or propagation freshness breach causes immediate script
   failure.
+- When `--require-attestation-baseline-gate` is enabled, tenant anomaly
+  baseline percent above threshold causes immediate script failure.
 
 Default profile weights are provided in:
 
@@ -275,3 +284,5 @@ Default signed manifest artifacts are provided in:
 - `assets/policy-profile-trust-policy.attestation.template`
 - `assets/policy-profile-revocation-slo.conf`
 - `assets/policy-profile-revocation-slo.template.conf`
+- `.learnings/TENANT_TRUST_POLICY_ATTESTATION_DASHBOARD.md`
+- `.learnings/TENANT_TRUST_POLICY_ATTESTATION_HISTORY.csv`

@@ -265,6 +265,10 @@ Outage outcome recommendation controls:
   `blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.attestation`
 - Revocation propagation SLO policy path:
   `blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.conf`
+- Tenant attestation dashboard path:
+  `blazeclaw/skills/self-evolving/.learnings/TENANT_TRUST_POLICY_ATTESTATION_DASHBOARD.md`
+- Tenant attestation trend history path:
+  `blazeclaw/skills/self-evolving/.learnings/TENANT_TRUST_POLICY_ATTESTATION_HISTORY.csv`
 - Default trend window size: `<n>`
 - Trend segmentation mode: `tenant + dependency class`
 - Required promoter inputs: `tenant-id`, `rollout-phase`, `policy-profile`
@@ -276,6 +280,8 @@ Outage outcome recommendation controls:
 - Optional revocation registry pin: `require-revocation-check`
 - Optional trust-policy attestation pin: `require-trust-policy-attestation`
 - Optional revocation propagation SLO pin: `require-revocation-slo`
+- Optional tenant anomaly baseline gate pin:
+  `require-attestation-baseline-gate`
 - KMS verifier dependency requirement: `openssl`
 - Sigstore verifier dependency requirement: `cosign`
 - Recommendation review SLA: `<duration>`
@@ -295,6 +301,7 @@ Outage outcome recommendation controls:
   - trust-policy attestation metadata/digest failure (when enabled):
     `deny rollout gate`
   - revocation propagation SLO breach (when enabled): `deny rollout gate`
+  - tenant anomaly baseline breach (when enabled): `deny rollout gate`
 - Recommendation severity gating:
   - `critical|high` in `r3|r4` requires explicit hold or remediation approval
   - `medium` requires owner review before phase promotion

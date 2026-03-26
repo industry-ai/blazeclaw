@@ -211,6 +211,14 @@ phase promotion.
 - Revocation SLO Last Check At: 2026-03-26T00:00:00Z
 - Revocation SLO Status: healthy
 - Revocation SLO Gate: true
+- Attestation Dashboard Source: .learnings/TENANT_TRUST_POLICY_ATTESTATION_DASHBOARD.md
+- Attestation Trend History Source: .learnings/TENANT_TRUST_POLICY_ATTESTATION_HISTORY.csv
+- Attestation Baseline Window: 20
+- Attestation Anomaly Threshold Percent: 25
+- Attestation Baseline Samples: 12
+- Attestation Baseline Alert Count: 2
+- Attestation Anomaly Percent: 16%
+- Attestation Baseline Gate: true
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode
@@ -253,6 +261,11 @@ Missing trust-policy file: ./blazeclaw/skills/self-evolving/assets/missing-trust
 ```text
 $ scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-007 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --require-signed-manifest --manifest-file ./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --require-trust-policy --trust-policy-file ./blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf --require-revocation-check --revocation-file ./blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv --require-trust-policy-attestation --trust-policy-attestation-file ./blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.attestation --require-revocation-slo --revocation-slo-file ./blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.stale.conf --dependency registry --result pass --evidence-path reports/drills/sim-reg-007.json
 Revocation propagation SLO breach: age 240 hours exceeds 24 in ./blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.stale.conf
+```
+
+```text
+$ scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-008 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --require-signed-manifest --manifest-file ./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --require-trust-policy --trust-policy-file ./blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf --require-revocation-check --revocation-file ./blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv --require-trust-policy-attestation --trust-policy-attestation-file ./blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.attestation --require-revocation-slo --revocation-slo-file ./blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.conf --attestation-baseline-window 20 --attestation-anomaly-threshold-percent 10 --require-attestation-baseline-gate --dependency registry --result pass --evidence-path reports/drills/sim-reg-008.json
+Attestation anomaly baseline breach: 16% exceeds 10% for tenant tenant-a
 ```
 
 ## Learning: Knowledge Gap (Resolved)

@@ -14,6 +14,8 @@ TRUST_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-trust-
 REVOCATION_LIST_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv"
 TRUST_POLICY_ATTESTATION_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.attestation"
 REVOCATION_SLO_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.conf"
+ATTESTATION_DASHBOARD_FILE="./blazeclaw/skills/self-evolving/.learnings/TENANT_TRUST_POLICY_ATTESTATION_DASHBOARD.md"
+ATTESTATION_TREND_HISTORY_FILE="./blazeclaw/skills/self-evolving/.learnings/TENANT_TRUST_POLICY_ATTESTATION_HISTORY.csv"
 
 SIMULATION_ID=""
 TENANT_ID=""
@@ -25,6 +27,10 @@ REQUIRE_TRUST_POLICY=false
 REQUIRE_REVOCATION_CHECK=false
 REQUIRE_TRUST_POLICY_ATTESTATION=false
 REQUIRE_REVOCATION_SLO=false
+ENABLE_ATTESTATION_DASHBOARD=true
+ATTESTATION_BASELINE_WINDOW=20
+ATTESTATION_ANOMALY_THRESHOLD_PERCENT=25
+REQUIRE_ATTESTATION_BASELINE_GATE=false
 MANIFEST_FILE_EXPLICIT=false
 SIGNATURE_VERIFICATION_MODE="none"
 KMS_PUBLIC_KEY_FILE=""
@@ -72,6 +78,12 @@ Optional:
   --require-trust-policy-attestation Enforce trust-policy publication attestation checks
   --revocation-slo-file Revocation propagation SLO policy file
   --require-revocation-slo Enforce revocation propagation SLO checks
+  --attestation-dashboard-file Tenant attestation dashboard markdown output
+  --attestation-history-file Tenant attestation trend history CSV output
+  --attestation-baseline-window Baseline sample window size (default: 20)
+  --attestation-anomaly-threshold-percent Anomaly threshold percent (default: 25)
+  --require-attestation-baseline-gate Fail-fast on tenant anomaly threshold breach
+  --disable-attestation-dashboard Skip dashboard/trend file writes
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -177,6 +189,30 @@ while [[ $# -gt 0 ]]; do
             REQUIRE_REVOCATION_SLO=true
             shift
             ;;
+        --attestation-dashboard-file)
+            ATTESTATION_DASHBOARD_FILE="${2:-}"
+            shift 2
+            ;;
+        --attestation-history-file)
+            ATTESTATION_TREND_HISTORY_FILE="${2:-}"
+            shift 2
+            ;;
+        --attestation-baseline-window)
+            ATTESTATION_BASELINE_WINDOW="${2:-}"
+            shift 2
+            ;;
+        --attestation-anomaly-threshold-percent)
+            ATTESTATION_ANOMALY_THRESHOLD_PERCENT="${2:-}"
+            shift 2
+            ;;
+        --require-attestation-baseline-gate)
+            REQUIRE_ATTESTATION_BASELINE_GATE=true
+            shift
+            ;;
+        --disable-attestation-dashboard)
+            ENABLE_ATTESTATION_DASHBOARD=false
+            shift
+            ;;
         --signature-verification-mode)
             SIGNATURE_VERIFICATION_MODE="${2:-}"
             shift 2
@@ -255,6 +291,16 @@ if ! [[ "$TREND_WINDOW_SIZE" =~ ^[0-9]+$ ]] || [ "$TREND_WINDOW_SIZE" -le 0 ]; t
     exit 1
 fi
 
+if ! [[ "$ATTESTATION_BASELINE_WINDOW" =~ ^[0-9]+$ ]] || [ "$ATTESTATION_BASELINE_WINDOW" -le 0 ]; then
+    echo "--attestation-baseline-window must be a positive integer" >&2
+    exit 1
+fi
+
+if ! [[ "$ATTESTATION_ANOMALY_THRESHOLD_PERCENT" =~ ^[0-9]+$ ]] || [ "$ATTESTATION_ANOMALY_THRESHOLD_PERCENT" -lt 0 ] || [ "$ATTESTATION_ANOMALY_THRESHOLD_PERCENT" -gt 100 ]; then
+    echo "--attestation-anomaly-threshold-percent must be an integer between 0 and 100" >&2
+    exit 1
+fi
+
 if [ -z "$POLICY_PROFILE" ]; then
     echo "--policy-profile cannot be empty" >&2
     exit 1
@@ -281,6 +327,10 @@ fi
 
 if [ ! -f "$TREND_HISTORY_FILE" ]; then
     printf "%s\n" "timestamp,tenant_id,rollout_phase,dependency,result,simulation_id" > "$TREND_HISTORY_FILE"
+fi
+
+if [ "$ENABLE_ATTESTATION_DASHBOARD" = true ] && [ ! -f "$ATTESTATION_TREND_HISTORY_FILE" ]; then
+    printf "%s\n" "timestamp,tenant_id,distribution_id,attestation_status,revocation_slo_status,slo_age_hours,simulation_id" > "$ATTESTATION_TREND_HISTORY_FILE"
 fi
 
 TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -606,6 +656,70 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
             exit 1
         fi
     fi
+
+    if [ "$ENABLE_ATTESTATION_DASHBOARD" = true ]; then
+        if [ ! -f "$ATTESTATION_TREND_HISTORY_FILE" ]; then
+            printf "%s\n" "timestamp,tenant_id,distribution_id,attestation_status,revocation_slo_status,slo_age_hours,simulation_id" > "$ATTESTATION_TREND_HISTORY_FILE"
+        fi
+
+        ATTESTATION_STATUS_VALUE="${ATTESTATION_STATUS:-unknown}"
+        SLO_STATUS_VALUE="${REVOCATION_SLO_STATUS:-unknown}"
+        SLO_AGE_VALUE="${SLO_AGE_HOURS:-0}"
+        DISTRIBUTION_VALUE="${ATTESTATION_DISTRIBUTION_ID:-${TRUST_POLICY_DISTRIBUTION_ID:-unknown}}"
+
+        TENANT_ATTESTATION_HISTORY=$(awk -F',' -v tenant="$TENANT_ID" 'NR > 1 && $2 == tenant { print $0 }' "$ATTESTATION_TREND_HISTORY_FILE" | tail -n "$ATTESTATION_BASELINE_WINDOW")
+        ATTESTATION_BASELINE_TOTAL=$(printf "%s\n" "$TENANT_ATTESTATION_HISTORY" | sed '/^$/d' | wc -l | tr -d ' ')
+        ATTESTATION_BASELINE_ALERT_COUNT=$(printf "%s\n" "$TENANT_ATTESTATION_HISTORY" | awk -F',' 'NF > 0 && ($4 != "verified" || $5 == "warning") { c++ } END { print c + 0 }')
+
+        ATTESTATION_ANOMALY_PERCENT=0
+        if [ "$ATTESTATION_BASELINE_TOTAL" -gt 0 ]; then
+            ATTESTATION_ANOMALY_PERCENT=$(( ATTESTATION_BASELINE_ALERT_COUNT * 100 / ATTESTATION_BASELINE_TOTAL ))
+        fi
+
+        if [ "$REQUIRE_ATTESTATION_BASELINE_GATE" = true ] && [ "$ATTESTATION_ANOMALY_PERCENT" -gt "$ATTESTATION_ANOMALY_THRESHOLD_PERCENT" ]; then
+            echo "Attestation anomaly baseline breach: $ATTESTATION_ANOMALY_PERCENT% exceeds $ATTESTATION_ANOMALY_THRESHOLD_PERCENT% for tenant $TENANT_ID" >&2
+            exit 1
+        fi
+
+        ATTESTATION_TREND_RECORD="$TIMESTAMP,$TENANT_ID,$DISTRIBUTION_VALUE,$ATTESTATION_STATUS_VALUE,$SLO_STATUS_VALUE,$SLO_AGE_VALUE,$SIMULATION_ID"
+
+        if [ "$DRY_RUN" = true ]; then
+            echo "[DRY-RUN] Would append attestation trend record to $ATTESTATION_TREND_HISTORY_FILE:"
+            echo "$ATTESTATION_TREND_RECORD"
+        else
+            printf "%s\n" "$ATTESTATION_TREND_RECORD" >> "$ATTESTATION_TREND_HISTORY_FILE"
+        fi
+
+        DASHBOARD_ENTRY=$(cat << EOF
+## [ATTN-$ENTRY_ID] tenant_attestation_dashboard
+
+**Logged**: $TIMESTAMP
+**Tenant ID**: $TENANT_ID
+**Distribution ID**: $DISTRIBUTION_VALUE
+**Attestation Status**: $ATTESTATION_STATUS_VALUE
+**Revocation SLO Status**: $SLO_STATUS_VALUE
+**Revocation SLO Age Hours**: $SLO_AGE_VALUE
+**Baseline Window**: $ATTESTATION_BASELINE_WINDOW
+**Baseline Samples**: $ATTESTATION_BASELINE_TOTAL
+**Baseline Alert Count**: $ATTESTATION_BASELINE_ALERT_COUNT
+**Anomaly Percent**: $ATTESTATION_ANOMALY_PERCENT%
+**Anomaly Threshold Percent**: $ATTESTATION_ANOMALY_THRESHOLD_PERCENT%
+**Anomaly Gate Enabled**: $REQUIRE_ATTESTATION_BASELINE_GATE
+
+---
+EOF
+)
+
+        if [ "$DRY_RUN" = true ]; then
+            echo "[DRY-RUN] Would append tenant attestation dashboard entry to $ATTESTATION_DASHBOARD_FILE:"
+            echo "$DASHBOARD_ENTRY"
+        else
+            if [ ! -f "$ATTESTATION_DASHBOARD_FILE" ]; then
+                printf "%s\n\n" "# Tenant Trust-Policy Attestation Dashboard" > "$ATTESTATION_DASHBOARD_FILE"
+            fi
+            printf "%s\n" "$DASHBOARD_ENTRY" >> "$ATTESTATION_DASHBOARD_FILE"
+        fi
+    fi
 fi
 
 PROFILE_ROW=$(awk -F',' -v profile="$POLICY_PROFILE" 'NR > 1 && $1 == profile { print $0; exit }' "$PROFILE_WEIGHTS_FILE")
@@ -855,6 +969,14 @@ $RECOMMENDATION
 - Revocation SLO Last Check At: ${REVOCATION_SLO_LAST_CHECK_AT:-not-verified}
 - Revocation SLO Status: ${REVOCATION_SLO_STATUS:-not-verified}
 - Revocation SLO Gate: ${REQUIRE_REVOCATION_SLO}
+- Attestation Dashboard Source: ${ATTESTATION_DASHBOARD_FILE}
+- Attestation Trend History Source: ${ATTESTATION_TREND_HISTORY_FILE}
+- Attestation Baseline Window: ${ATTESTATION_BASELINE_WINDOW}
+- Attestation Anomaly Threshold Percent: ${ATTESTATION_ANOMALY_THRESHOLD_PERCENT}
+- Attestation Baseline Samples: ${ATTESTATION_BASELINE_TOTAL:-0}
+- Attestation Baseline Alert Count: ${ATTESTATION_BASELINE_ALERT_COUNT:-0}
+- Attestation Anomaly Percent: ${ATTESTATION_ANOMALY_PERCENT:-0}%
+- Attestation Baseline Gate: ${REQUIRE_ATTESTATION_BASELINE_GATE}
 - Weight Inputs:
   - fail-base=$FAIL_BASE_SCORE
   - pass-base=$PASS_BASE_SCORE
@@ -913,3 +1035,7 @@ printf "%s\n" "$TREND_RECORD" >> "$TREND_HISTORY_FILE"
 echo "Appended outage simulation learning entry to $LEARNINGS_FILE"
 echo "Appended policy tuning recommendation to $POLICY_TUNING_FILE"
 echo "Appended tenant trend record to $TREND_HISTORY_FILE"
+if [ "$ENABLE_ATTESTATION_DASHBOARD" = true ]; then
+    echo "Updated tenant attestation trend history at $ATTESTATION_TREND_HISTORY_FILE"
+    echo "Updated tenant attestation dashboard at $ATTESTATION_DASHBOARD_FILE"
+fi

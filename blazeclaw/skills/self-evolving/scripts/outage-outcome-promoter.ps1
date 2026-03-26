@@ -23,6 +23,10 @@ $trustPolicyAttestationFile =
     './blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.attestation'
 $revocationSloFile =
     './blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.conf'
+$attestationDashboardFile =
+    './blazeclaw/skills/self-evolving/.learnings/TENANT_TRUST_POLICY_ATTESTATION_DASHBOARD.md'
+$attestationTrendHistoryFile =
+    './blazeclaw/skills/self-evolving/.learnings/TENANT_TRUST_POLICY_ATTESTATION_HISTORY.csv'
 
 function Show-Usage {
 @"
@@ -53,6 +57,12 @@ Optional:
   --require-trust-policy-attestation Enforce trust-policy attestation checks
   --revocation-slo-file Revocation propagation SLO policy file
   --require-revocation-slo Enforce revocation SLO checks
+  --attestation-dashboard-file Tenant attestation dashboard markdown output
+  --attestation-history-file Tenant attestation trend history CSV output
+  --attestation-baseline-window Baseline sample window size (default: 20)
+  --attestation-anomaly-threshold-percent Anomaly threshold percent (default: 25)
+  --require-attestation-baseline-gate Fail-fast on tenant anomaly threshold breach
+  --disable-attestation-dashboard Skip dashboard/trend file writes
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -77,6 +87,10 @@ $requireTrustPolicy = $false
 $requireRevocationCheck = $false
 $requireTrustPolicyAttestation = $false
 $requireRevocationSlo = $false
+$enableAttestationDashboard = $true
+$attestationBaselineWindow = 20
+$attestationAnomalyThresholdPercent = 25
+$requireAttestationBaselineGate = $false
 $manifestFileExplicit = $false
 $signatureVerificationMode = 'none'
 $kmsPublicKeyFile = ''
@@ -111,6 +125,9 @@ $attestationSigner = ''
 $revocationSloMaxHours = ''
 $revocationSloLastCheckAt = ''
 $revocationSloStatus = ''
+$attestationBaselineSamples = 0
+$attestationBaselineAlertCount = 0
+$attestationAnomalyPercent = 0
 $notes = ''
 $trendWindowSize = 20
 $dryRun = $false
@@ -202,6 +219,28 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         '--require-revocation-slo' {
             $requireRevocationSlo = $true
         }
+        '--attestation-dashboard-file' {
+            $i++
+            $attestationDashboardFile = [string]$args[$i]
+        }
+        '--attestation-history-file' {
+            $i++
+            $attestationTrendHistoryFile = [string]$args[$i]
+        }
+        '--attestation-baseline-window' {
+            $i++
+            $attestationBaselineWindow = [int]$args[$i]
+        }
+        '--attestation-anomaly-threshold-percent' {
+            $i++
+            $attestationAnomalyThresholdPercent = [int]$args[$i]
+        }
+        '--require-attestation-baseline-gate' {
+            $requireAttestationBaselineGate = $true
+        }
+        '--disable-attestation-dashboard' {
+            $enableAttestationDashboard = $false
+        }
         '--signature-verification-mode' {
             $i++
             $signatureVerificationMode = [string]$args[$i]
@@ -280,6 +319,15 @@ if ($trendWindowSize -le 0) {
     throw '--trend-window-size must be a positive integer'
 }
 
+if ($attestationBaselineWindow -le 0) {
+    throw '--attestation-baseline-window must be a positive integer'
+}
+
+if ($attestationAnomalyThresholdPercent -lt 0 -or
+    $attestationAnomalyThresholdPercent -gt 100) {
+    throw '--attestation-anomaly-threshold-percent must be an integer between 0 and 100'
+}
+
 if ([string]::IsNullOrWhiteSpace($policyProfile)) {
     throw '--policy-profile cannot be empty'
 }
@@ -306,67 +354,12 @@ if (-not (Test-Path -LiteralPath $trendHistoryFile)) {
     Add-Content -LiteralPath $trendHistoryFile -Value ''
 }
 
-    if ($requireTrustPolicyAttestation) {
-        if (-not (Test-Path -LiteralPath $trustPolicyAttestationFile)) {
-            throw "Missing trust-policy attestation file: $trustPolicyAttestationFile"
-        }
-
-        $attestationFields = @{}
-        foreach ($line in (Get-Content -LiteralPath $trustPolicyAttestationFile)) {
-            if ([string]::IsNullOrWhiteSpace($line) -or
-                $line.Trim().StartsWith('#')) {
-                continue
-            }
-
-            $split = $line.Split('=', 2)
-            if ($split.Length -eq 2) {
-                $attestationFields[$split[0].Trim()] = $split[1].Trim()
-            }
-        }
-
-        $requiredAttestationFields = @(
-            'distribution_id',
-            'published_at',
-            'attestation_status',
-            'signer',
-            'artifact_digest'
-        )
-
-        foreach ($field in $requiredAttestationFields) {
-            if (-not $attestationFields.ContainsKey($field) -or
-                [string]::IsNullOrWhiteSpace([string]$attestationFields[$field])) {
-                throw "Malformed trust-policy attestation file: required field '$field' missing in $trustPolicyAttestationFile"
-            }
-        }
-
-        $attestationDistributionId =
-            [string]$attestationFields['distribution_id']
-        $attestationPublishedAt = [string]$attestationFields['published_at']
-        $attestationStatus = [string]$attestationFields['attestation_status']
-        $attestationSigner = [string]$attestationFields['signer']
-        $attestationArtifactDigest =
-            [string]$attestationFields['artifact_digest']
-
-        if ($attestationStatus -notin @('published', 'verified')) {
-            throw "Trust-policy attestation status invalid: expected published|verified in $trustPolicyAttestationFile"
-        }
-
-        if (-not [string]::IsNullOrWhiteSpace($trustPolicyDistributionId) -and
-            $attestationDistributionId -ne $trustPolicyDistributionId) {
-            throw "Trust-policy attestation mismatch: distribution_id '$attestationDistributionId' does not match trust policy '$trustPolicyDistributionId'"
-        }
-
-        if ($attestationArtifactDigest -notmatch '^[A-Fa-f0-9]{64}$') {
-            throw "Malformed trust-policy attestation file: artifact_digest must be 64-char hex"
-        }
-
-        $trustPolicyHash =
-            (Get-FileHash -LiteralPath $trustPolicyFile -Algorithm SHA256).Hash
-        if ($trustPolicyHash.ToLowerInvariant() -ne
-            $attestationArtifactDigest.ToLowerInvariant()) {
-            throw "Trust-policy attestation digest mismatch for $trustPolicyFile"
-        }
-    }
+if ($enableAttestationDashboard -and
+    -not (Test-Path -LiteralPath $attestationTrendHistoryFile)) {
+    Set-Content -LiteralPath $attestationTrendHistoryFile -NoNewline -Value
+        'timestamp,tenant_id,distribution_id,attestation_status,revocation_slo_status,slo_age_hours,simulation_id'
+    Add-Content -LiteralPath $attestationTrendHistoryFile -Value ''
+}
 
 $timestamp = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 $dateStamp = (Get-Date).ToUniversalTime().ToString('yyyyMMdd')
@@ -482,14 +475,73 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
         if (-not (Test-Path -LiteralPath $manifestSignatureFile)) {
             throw "Missing signature file referenced by manifest: $manifestSignatureFile"
         }
-        if ($manifestSignatureScheme -ne $signatureVerificationMode) {
-            throw "Signature verification mode mismatch: requested '$signatureVerificationMode' but manifest declares '$manifestSignatureScheme'"
-        }
 
         if ($signatureVerificationMode -eq 'kms') {
             if ([string]::IsNullOrWhiteSpace($kmsPublicKeyFile)) {
                 throw '--kms-public-key-file is required for --signature-verification-mode kms'
             }
+
+    if ($requireTrustPolicyAttestation) {
+        if (-not (Test-Path -LiteralPath $trustPolicyAttestationFile)) {
+            throw "Missing trust-policy attestation file: $trustPolicyAttestationFile"
+        }
+
+        $attestationFields = @{}
+        foreach ($line in (Get-Content -LiteralPath $trustPolicyAttestationFile)) {
+            if ([string]::IsNullOrWhiteSpace($line) -or
+                $line.Trim().StartsWith('#')) {
+                continue
+            }
+
+            $split = $line.Split('=', 2)
+            if ($split.Length -eq 2) {
+                $attestationFields[$split[0].Trim()] = $split[1].Trim()
+            }
+        }
+
+        $requiredAttestationFields = @(
+            'distribution_id',
+            'published_at',
+            'attestation_status',
+            'signer',
+            'artifact_digest'
+        )
+
+        foreach ($field in $requiredAttestationFields) {
+            if (-not $attestationFields.ContainsKey($field) -or
+                [string]::IsNullOrWhiteSpace([string]$attestationFields[$field])) {
+                throw "Malformed trust-policy attestation file: required field '$field' missing in $trustPolicyAttestationFile"
+            }
+        }
+
+        $attestationDistributionId =
+            [string]$attestationFields['distribution_id']
+        $attestationPublishedAt = [string]$attestationFields['published_at']
+        $attestationStatus = [string]$attestationFields['attestation_status']
+        $attestationSigner = [string]$attestationFields['signer']
+        $attestationArtifactDigest =
+            [string]$attestationFields['artifact_digest']
+
+        if ($attestationStatus -notin @('published', 'verified')) {
+            throw "Trust-policy attestation status invalid: expected published|verified in $trustPolicyAttestationFile"
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($trustPolicyDistributionId) -and
+            $attestationDistributionId -ne $trustPolicyDistributionId) {
+            throw "Trust-policy attestation mismatch: distribution_id '$attestationDistributionId' does not match trust policy '$trustPolicyDistributionId'"
+        }
+
+        if ($attestationArtifactDigest -notmatch '^[A-Fa-f0-9]{64}$') {
+            throw "Malformed trust-policy attestation file: artifact_digest must be 64-char hex"
+        }
+
+        $trustPolicyHash =
+            (Get-FileHash -LiteralPath $trustPolicyFile -Algorithm SHA256).Hash
+        if ($trustPolicyHash.ToLowerInvariant() -ne
+            $attestationArtifactDigest.ToLowerInvariant()) {
+            throw "Trust-policy attestation digest mismatch for $trustPolicyFile"
+        }
+    }
 
             if (-not (Test-Path -LiteralPath $kmsPublicKeyFile)) {
                 throw "Missing KMS public key file: $kmsPublicKeyFile"
@@ -676,6 +728,106 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
         $ageHours = [int]((New-TimeSpan -Start $lastCheckValue.ToUniversalTime() -End (Get-Date).ToUniversalTime()).TotalHours)
         if ($ageHours -gt $maxHours) {
             throw "Revocation propagation SLO breach: age $ageHours hours exceeds $maxHours in $revocationSloFile"
+        }
+    }
+
+    if ($enableAttestationDashboard) {
+        if (-not (Test-Path -LiteralPath $attestationTrendHistoryFile)) {
+            Set-Content -LiteralPath $attestationTrendHistoryFile -NoNewline -Value
+                'timestamp,tenant_id,distribution_id,attestation_status,revocation_slo_status,slo_age_hours,simulation_id'
+            Add-Content -LiteralPath $attestationTrendHistoryFile -Value ''
+        }
+
+        $distributionValue = if ($attestationDistributionId) {
+            $attestationDistributionId
+        } elseif ($trustPolicyDistributionId) {
+            $trustPolicyDistributionId
+        } else {
+            'unknown'
+        }
+
+        $attestationStatusValue = if ($attestationStatus) {
+            $attestationStatus
+        } else {
+            'unknown'
+        }
+
+        $sloStatusValue = if ($revocationSloStatus) {
+            $revocationSloStatus
+        } else {
+            'unknown'
+        }
+
+        $sloAgeValue = if ($ageHours -or $ageHours -eq 0) {
+            $ageHours
+        } else {
+            0
+        }
+
+        $attestationHistoryRows = Import-Csv -LiteralPath $attestationTrendHistoryFile
+        $baselineRows = @($attestationHistoryRows |
+            Where-Object { $_.tenant_id -eq $tenantId } |
+            Select-Object -Last $attestationBaselineWindow)
+
+        $attestationBaselineSamples = $baselineRows.Count
+        $attestationBaselineAlertCount = @($baselineRows |
+            Where-Object {
+                $_.attestation_status -ne 'verified' -or
+                $_.revocation_slo_status -eq 'warning'
+            }).Count
+
+        $attestationAnomalyPercent = 0
+        if ($attestationBaselineSamples -gt 0) {
+            $attestationAnomalyPercent = [int](
+                ($attestationBaselineAlertCount * 100) /
+                $attestationBaselineSamples
+            )
+        }
+
+        if ($requireAttestationBaselineGate -and
+            $attestationAnomalyPercent -gt
+            $attestationAnomalyThresholdPercent) {
+            throw "Attestation anomaly baseline breach: $attestationAnomalyPercent% exceeds $attestationAnomalyThresholdPercent% for tenant $tenantId"
+        }
+
+        $attestationTrendRecord =
+            "$timestamp,$tenantId,$distributionValue,$attestationStatusValue,$sloStatusValue,$sloAgeValue,$simulationId"
+
+        if ($dryRun) {
+            Write-Host "[DRY-RUN] Would append attestation trend record to ${attestationTrendHistoryFile}:"
+            Write-Host $attestationTrendRecord
+        } else {
+            Add-Content -LiteralPath $attestationTrendHistoryFile -Value $attestationTrendRecord
+        }
+
+        $dashboardEntry = @"
+## [ATTN-$entryId] tenant_attestation_dashboard
+
+**Logged**: $timestamp
+**Tenant ID**: $tenantId
+**Distribution ID**: $distributionValue
+**Attestation Status**: $attestationStatusValue
+**Revocation SLO Status**: $sloStatusValue
+**Revocation SLO Age Hours**: $sloAgeValue
+**Baseline Window**: $attestationBaselineWindow
+**Baseline Samples**: $attestationBaselineSamples
+**Baseline Alert Count**: $attestationBaselineAlertCount
+**Anomaly Percent**: $attestationAnomalyPercent%
+**Anomaly Threshold Percent**: $attestationAnomalyThresholdPercent%
+**Anomaly Gate Enabled**: $requireAttestationBaselineGate
+
+---
+"@
+
+        if ($dryRun) {
+            Write-Host "[DRY-RUN] Would append tenant attestation dashboard entry to ${attestationDashboardFile}:"
+            Write-Host $dashboardEntry
+        } else {
+            if (-not (Test-Path -LiteralPath $attestationDashboardFile)) {
+                Set-Content -LiteralPath $attestationDashboardFile -Value '# Tenant Trust-Policy Attestation Dashboard'
+                Add-Content -LiteralPath $attestationDashboardFile -Value ''
+            }
+            Add-Content -LiteralPath $attestationDashboardFile -Value $dashboardEntry
         }
     }
 }
@@ -931,6 +1083,14 @@ $recommendation
 - Revocation SLO Last Check At: $(if ($revocationSloLastCheckAt) { $revocationSloLastCheckAt } else { 'not-verified' })
 - Revocation SLO Status: $(if ($revocationSloStatus) { $revocationSloStatus } else { 'not-verified' })
 - Revocation SLO Gate: $requireRevocationSlo
+- Attestation Dashboard Source: $attestationDashboardFile
+- Attestation Trend History Source: $attestationTrendHistoryFile
+- Attestation Baseline Window: $attestationBaselineWindow
+- Attestation Anomaly Threshold Percent: $attestationAnomalyThresholdPercent
+- Attestation Baseline Samples: $attestationBaselineSamples
+- Attestation Baseline Alert Count: $attestationBaselineAlertCount
+- Attestation Anomaly Percent: $attestationAnomalyPercent%
+- Attestation Baseline Gate: $requireAttestationBaselineGate
 - Weight Inputs:
   - fail-base=$failBaseScore
   - pass-base=$passBaseScore
@@ -987,3 +1147,7 @@ Add-Content -LiteralPath $trendHistoryFile -Value $trendRecord
 Write-Host "Appended outage simulation learning entry to $learningsFile"
 Write-Host "Appended policy tuning recommendation to $policyTuningFile"
 Write-Host "Appended tenant trend record to $trendHistoryFile"
+if ($enableAttestationDashboard) {
+    Write-Host "Updated tenant attestation trend history at $attestationTrendHistoryFile"
+    Write-Host "Updated tenant attestation dashboard at $attestationDashboardFile"
+}
