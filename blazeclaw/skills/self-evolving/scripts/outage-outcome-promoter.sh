@@ -24,6 +24,9 @@ TIME_DECAY_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anom
 RECURRENCE_TUNING_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-recurrence-tuning-policy.conf"
 SEASONAL_DECOMPOSITION_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-seasonal-decomposition-policy.conf"
 SEASONAL_OVERLAY_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-seasonal-overlay-policy.csv"
+CAUSAL_CLUSTERING_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-causal-clustering-policy.conf"
+CAUSAL_HISTORY_FILE="./blazeclaw/skills/self-evolving/.learnings/ANOMALY_CAUSAL_HISTORY.csv"
+OVERLAY_CANDIDATE_FILE="./blazeclaw/skills/self-evolving/.learnings/SEASONAL_OVERLAY_CANDIDATES.md"
 
 SIMULATION_ID=""
 TENANT_ID=""
@@ -52,6 +55,8 @@ REPORTING_CYCLE_LENGTH=12
 REQUIRE_SEASONAL_DECOMPOSITION_POLICY=false
 ENABLE_SEASONAL_OVERLAY_TUNING=true
 REQUIRE_SEASONAL_OVERLAY_POLICY=false
+ENABLE_CAUSAL_CLUSTERING=true
+REQUIRE_CAUSAL_CLUSTERING_POLICY=false
 MANIFEST_FILE_EXPLICIT=false
 SIGNATURE_VERIFICATION_MODE="none"
 KMS_PUBLIC_KEY_FILE=""
@@ -126,6 +131,10 @@ Optional:
   --seasonal-overlay-policy-file Seasonal overlay CSV for holiday/event multipliers
   --disable-seasonal-overlay-tuning Disable cross-cycle holiday/event overlay tuning
   --require-seasonal-overlay-policy Fail-fast when seasonal overlay policy cannot be resolved
+  --causal-clustering-policy-file Causal clustering policy file
+  --overlay-candidate-file Suggested overlay output markdown file
+  --disable-causal-clustering Disable anomaly-causal clustering suggestions
+  --require-causal-clustering-policy Fail-fast when causal clustering policy cannot be resolved
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -339,6 +348,22 @@ while [[ $# -gt 0 ]]; do
             REQUIRE_SEASONAL_OVERLAY_POLICY=true
             shift
             ;;
+        --causal-clustering-policy-file)
+            CAUSAL_CLUSTERING_POLICY_FILE="${2:-}"
+            shift 2
+            ;;
+        --overlay-candidate-file)
+            OVERLAY_CANDIDATE_FILE="${2:-}"
+            shift 2
+            ;;
+        --disable-causal-clustering)
+            ENABLE_CAUSAL_CLUSTERING=false
+            shift
+            ;;
+        --require-causal-clustering-policy)
+            REQUIRE_CAUSAL_CLUSTERING_POLICY=true
+            shift
+            ;;
         --signature-verification-mode)
             SIGNATURE_VERIFICATION_MODE="${2:-}"
             shift 2
@@ -463,6 +488,10 @@ fi
 
 if [ ! -f "$TREND_HISTORY_FILE" ]; then
     printf "%s\n" "timestamp,tenant_id,rollout_phase,dependency,result,simulation_id" > "$TREND_HISTORY_FILE"
+fi
+
+if [ ! -f "$CAUSAL_HISTORY_FILE" ]; then
+    printf "%s\n" "timestamp,tenant_id,rollout_phase,dependency,failure_mode,result,simulation_id" > "$CAUSAL_HISTORY_FILE"
 fi
 
 if [ "$ENABLE_ATTESTATION_DASHBOARD" = true ] && [ ! -f "$ATTESTATION_TREND_HISTORY_FILE" ]; then
@@ -826,6 +855,13 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
         SEASONAL_OVERLAY_NAME="none"
         SEASONAL_OVERLAY_MULTIPLIER=1.0
         SEASONAL_OVERLAY_SOURCE="disabled"
+        CAUSAL_CLUSTER_KEY="none"
+        CAUSAL_CLUSTER_SAMPLE_COUNT=0
+        CAUSAL_CLUSTER_FAIL_COUNT=0
+        CAUSAL_CLUSTER_FAIL_PERCENT=0
+        CAUSAL_CLUSTER_SUGGESTED_OVERLAY="none"
+        CAUSAL_CLUSTER_SUGGESTED_MULTIPLIER=1.00
+        CAUSAL_CLUSTER_SOURCE="disabled"
 
         if [ "$ENABLE_TIME_DECAY_WEIGHTING" = true ]; then
             TIME_DECAY_SOURCE="cli"
@@ -848,6 +884,40 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
                         echo "Recurrence tuning policy failed: min_half_life_samples missing/invalid in $RECURRENCE_TUNING_POLICY_FILE" >&2
                         exit 1
                     fi
+
+            if [ "$ENABLE_CAUSAL_CLUSTERING" = true ]; then
+                CAUSAL_CLUSTER_SOURCE="static"
+                CLUSTER_MIN_SAMPLES=3
+                CLUSTER_FAIL_THRESHOLD_PERCENT=50
+                CLUSTER_HIGH_MULTIPLIER=1.15
+
+                if [ -f "$CAUSAL_CLUSTERING_POLICY_FILE" ] && [ -r "$CAUSAL_CLUSTERING_POLICY_FILE" ]; then
+                    P_MIN=$(awk -F'=' '$1=="min_samples" { print $2; exit }' "$CAUSAL_CLUSTERING_POLICY_FILE" | tr -d '\r[:space:]')
+                    P_FAIL=$(awk -F'=' '$1=="fail_threshold_percent" { print $2; exit }' "$CAUSAL_CLUSTERING_POLICY_FILE" | tr -d '\r[:space:]')
+                    P_MULT=$(awk -F'=' '$1=="high_impact_multiplier" { print $2; exit }' "$CAUSAL_CLUSTERING_POLICY_FILE" | tr -d '\r[:space:]')
+                    [ -n "$P_MIN" ] && [[ "$P_MIN" =~ ^[0-9]+$ ]] && [ "$P_MIN" -gt 0 ] && CLUSTER_MIN_SAMPLES="$P_MIN"
+                    [ -n "$P_FAIL" ] && [[ "$P_FAIL" =~ ^[0-9]+$ ]] && [ "$P_FAIL" -ge 0 ] && [ "$P_FAIL" -le 100 ] && CLUSTER_FAIL_THRESHOLD_PERCENT="$P_FAIL"
+                    [ -n "$P_MULT" ] && awk -v v="$P_MULT" 'BEGIN { exit !(v+0>0) }' && CLUSTER_HIGH_MULTIPLIER="$P_MULT"
+                    CAUSAL_CLUSTER_SOURCE="policy"
+                elif [ "$REQUIRE_CAUSAL_CLUSTERING_POLICY" = true ]; then
+                    echo "Causal clustering policy failed: missing file $CAUSAL_CLUSTERING_POLICY_FILE" >&2
+                    exit 1
+                fi
+
+                EFFECTIVE_FAILURE_MODE="${FAILURE_MODE:-unspecified}"
+                CAUSAL_CLUSTER_KEY="$DEPENDENCY|$ROLLOUT_PHASE|$EFFECTIVE_FAILURE_MODE"
+                CLUSTER_ROWS=$(awk -F',' -v tenant="$TENANT_ID" -v dep="$DEPENDENCY" -v phase="$ROLLOUT_PHASE" -v mode="$EFFECTIVE_FAILURE_MODE" 'NR>1 && $2==tenant && $4==dep && $3==phase && $5==mode { print $0 }' "$CAUSAL_HISTORY_FILE" | tail -n "$ATTESTATION_BASELINE_WINDOW")
+                CAUSAL_CLUSTER_SAMPLE_COUNT=$(printf "%s\n" "$CLUSTER_ROWS" | sed '/^$/d' | wc -l | tr -d ' ')
+                CAUSAL_CLUSTER_FAIL_COUNT=$(printf "%s\n" "$CLUSTER_ROWS" | awk -F',' 'NF>0 && $6=="fail" { c++ } END { print c + 0 }')
+                if [ "$CAUSAL_CLUSTER_SAMPLE_COUNT" -gt 0 ]; then
+                    CAUSAL_CLUSTER_FAIL_PERCENT=$(( CAUSAL_CLUSTER_FAIL_COUNT * 100 / CAUSAL_CLUSTER_SAMPLE_COUNT ))
+                fi
+
+                if [ "$CAUSAL_CLUSTER_SAMPLE_COUNT" -ge "$CLUSTER_MIN_SAMPLES" ] && [ "$CAUSAL_CLUSTER_FAIL_PERCENT" -ge "$CLUSTER_FAIL_THRESHOLD_PERCENT" ]; then
+                    CAUSAL_CLUSTER_SUGGESTED_OVERLAY="suggested-$DEPENDENCY-$ROLLOUT_PHASE"
+                    CAUSAL_CLUSTER_SUGGESTED_MULTIPLIER="$CLUSTER_HIGH_MULTIPLIER"
+                fi
+            fi
 
                     if [ -n "$POLICY_MAX" ] && [[ "$POLICY_MAX" =~ ^[0-9]+$ ]] && [ "$POLICY_MAX" -ge "$RECURRENCE_TUNING_MIN" ]; then
                         RECURRENCE_TUNING_MAX="$POLICY_MAX"
@@ -1078,6 +1148,14 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
 **Seasonal Overlay Multiplier**: $SEASONAL_OVERLAY_MULTIPLIER
 **Seasonal Overlay Source**: $SEASONAL_OVERLAY_SOURCE
 **Seasonal Overlay Tuning Enabled**: $ENABLE_SEASONAL_OVERLAY_TUNING
+**Causal Cluster Key**: $CAUSAL_CLUSTER_KEY
+**Causal Cluster Sample Count**: $CAUSAL_CLUSTER_SAMPLE_COUNT
+**Causal Cluster Fail Count**: $CAUSAL_CLUSTER_FAIL_COUNT
+**Causal Cluster Fail Percent**: $CAUSAL_CLUSTER_FAIL_PERCENT%
+**Suggested Overlay Candidate**: $CAUSAL_CLUSTER_SUGGESTED_OVERLAY
+**Suggested Overlay Multiplier**: $CAUSAL_CLUSTER_SUGGESTED_MULTIPLIER
+**Causal Clustering Source**: $CAUSAL_CLUSTER_SOURCE
+**Causal Clustering Enabled**: $ENABLE_CAUSAL_CLUSTERING
 **Anomaly Gate Enabled**: $REQUIRE_ATTESTATION_BASELINE_GATE
 
 ---
@@ -1452,6 +1530,14 @@ $RECOMMENDATION
 - Seasonal Overlay Multiplier: ${SEASONAL_OVERLAY_MULTIPLIER:-1.0}
 - Seasonal Overlay Source: ${SEASONAL_OVERLAY_SOURCE:-disabled}
 - Seasonal Overlay Tuning Enabled: ${ENABLE_SEASONAL_OVERLAY_TUNING}
+- Causal Cluster Key: ${CAUSAL_CLUSTER_KEY:-none}
+- Causal Cluster Sample Count: ${CAUSAL_CLUSTER_SAMPLE_COUNT:-0}
+- Causal Cluster Fail Count: ${CAUSAL_CLUSTER_FAIL_COUNT:-0}
+- Causal Cluster Fail Percent: ${CAUSAL_CLUSTER_FAIL_PERCENT:-0}%
+- Suggested Overlay Candidate: ${CAUSAL_CLUSTER_SUGGESTED_OVERLAY:-none}
+- Suggested Overlay Multiplier: ${CAUSAL_CLUSTER_SUGGESTED_MULTIPLIER:-1.00}
+- Causal Clustering Source: ${CAUSAL_CLUSTER_SOURCE:-disabled}
+- Causal Clustering Enabled: ${ENABLE_CAUSAL_CLUSTERING}
 - Attestation Baseline Gate: ${REQUIRE_ATTESTATION_BASELINE_GATE}
 - Cross-Tenant Heatmap Source: ${CROSS_TENANT_HEATMAP_FILE}
 - Auto-Remediation Routing Source: ${AUTO_REMEDIATION_ROUTING_FILE}
@@ -1486,6 +1572,23 @@ EOF
 )
 
 TREND_RECORD="$TIMESTAMP,$TENANT_ID,$ROLLOUT_PHASE,$DEPENDENCY,$RESULT,$SIMULATION_ID"
+CAUSAL_HISTORY_RECORD="$TIMESTAMP,$TENANT_ID,$ROLLOUT_PHASE,$DEPENDENCY,${FAILURE_MODE:-unspecified},$RESULT,$SIMULATION_ID"
+OVERLAY_CANDIDATE_ENTRY=$(cat << EOF
+## [OVR-$ENTRY_ID] overlay_candidate
+
+**Logged**: $TIMESTAMP
+**Tenant ID**: $TENANT_ID
+**Cluster Key**: ${CAUSAL_CLUSTER_KEY:-none}
+**Sample Count**: ${CAUSAL_CLUSTER_SAMPLE_COUNT:-0}
+**Fail Count**: ${CAUSAL_CLUSTER_FAIL_COUNT:-0}
+**Fail Percent**: ${CAUSAL_CLUSTER_FAIL_PERCENT:-0}%
+**Suggested Overlay Name**: ${CAUSAL_CLUSTER_SUGGESTED_OVERLAY:-none}
+**Suggested Overlay Multiplier**: ${CAUSAL_CLUSTER_SUGGESTED_MULTIPLIER:-1.00}
+**Source**: ${CAUSAL_CLUSTER_SOURCE:-disabled}
+
+---
+EOF
+)
 
 if [ "$DRY_RUN" = true ]; then
     echo "[DRY-RUN] Would append to $LEARNINGS_FILE:"
@@ -1494,6 +1597,10 @@ if [ "$DRY_RUN" = true ]; then
     echo "$POLICY_ENTRY"
     echo "[DRY-RUN] Would append trend record to $TREND_HISTORY_FILE:"
     echo "$TREND_RECORD"
+    echo "[DRY-RUN] Would append causal history record to $CAUSAL_HISTORY_FILE:"
+    echo "$CAUSAL_HISTORY_RECORD"
+    echo "[DRY-RUN] Would append overlay candidate suggestion to $OVERLAY_CANDIDATE_FILE:"
+    echo "$OVERLAY_CANDIDATE_ENTRY"
     exit 0
 fi
 
@@ -1510,6 +1617,11 @@ fi
 printf "%s\n" "$LEARNING_ENTRY" >> "$LEARNINGS_FILE"
 printf "%s\n" "$POLICY_ENTRY" >> "$POLICY_TUNING_FILE"
 printf "%s\n" "$TREND_RECORD" >> "$TREND_HISTORY_FILE"
+printf "%s\n" "$CAUSAL_HISTORY_RECORD" >> "$CAUSAL_HISTORY_FILE"
+if [ ! -f "$OVERLAY_CANDIDATE_FILE" ]; then
+    printf "%s\n\n" "# Seasonal Overlay Candidate Suggestions" > "$OVERLAY_CANDIDATE_FILE"
+fi
+printf "%s\n" "$OVERLAY_CANDIDATE_ENTRY" >> "$OVERLAY_CANDIDATE_FILE"
 
 echo "Appended outage simulation learning entry to $LEARNINGS_FILE"
 echo "Appended policy tuning recommendation to $POLICY_TUNING_FILE"

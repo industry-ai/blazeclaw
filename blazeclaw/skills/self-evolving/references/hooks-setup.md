@@ -267,6 +267,11 @@ Outage promoter inputs now require tenant and rollout phase context:
   - `--seasonal-overlay-policy-file <path>`
   - `--disable-seasonal-overlay-tuning`
   - `--require-seasonal-overlay-policy`
+- Optional anomaly-causal clustering controls:
+  - `--causal-clustering-policy-file <path>`
+  - `--overlay-candidate-file <path>`
+  - `--disable-causal-clustering`
+  - `--require-causal-clustering-policy`
 
 Fail-fast validation gates:
 
@@ -306,6 +311,8 @@ Fail-fast validation gates:
   cycle phase multipliers (cycle_start|cycle_mid|cycle_end).
 - Holiday/event overlays apply cross-cycle multiplier adjustments on top
   of seasonal phase multipliers.
+- Anomaly-causal clustering derives ranked overlay candidates from
+  recurrence clusters by dependency, phase, and failure mode.
 
 Default profile weights are provided in:
 
@@ -339,3 +346,7 @@ Default signed manifest artifacts are provided in:
 - `assets/attestation-anomaly-seasonal-decomposition-policy.template.conf`
 - `assets/attestation-anomaly-seasonal-overlay-policy.csv`
 - `assets/attestation-anomaly-seasonal-overlay-policy.template.csv`
+- `assets/attestation-anomaly-causal-clustering-policy.conf`
+- `assets/attestation-anomaly-causal-clustering-policy.template.conf`
+- `.learnings/ANOMALY_CAUSAL_HISTORY.csv`
+- `.learnings/SEASONAL_OVERLAY_CANDIDATES.md`

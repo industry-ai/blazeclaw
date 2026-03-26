@@ -285,6 +285,10 @@ Outage outcome recommendation controls:
   `blazeclaw/skills/self-evolving/assets/attestation-anomaly-seasonal-decomposition-policy.conf`
 - Seasonal overlay policy path:
   `blazeclaw/skills/self-evolving/assets/attestation-anomaly-seasonal-overlay-policy.csv`
+- Causal clustering policy path:
+  `blazeclaw/skills/self-evolving/assets/attestation-anomaly-causal-clustering-policy.conf`
+- Overlay candidate suggestion path:
+  `blazeclaw/skills/self-evolving/.learnings/SEASONAL_OVERLAY_CANDIDATES.md`
 - Default trend window size: `<n>`
 - Trend segmentation mode: `tenant + dependency class`
 - Required promoter inputs: `tenant-id`, `rollout-phase`, `policy-profile`
@@ -309,6 +313,8 @@ Outage outcome recommendation controls:
   `require-seasonal-decomposition-policy`
 - Optional seasonal overlay policy pin:
   `require-seasonal-overlay-policy`
+- Optional causal clustering policy pin:
+  `require-causal-clustering-policy`
 - KMS verifier dependency requirement: `openssl`
 - Sigstore verifier dependency requirement: `cosign`
 - Recommendation review SLA: `<duration>`
@@ -339,6 +345,8 @@ Outage outcome recommendation controls:
   - seasonal decomposition policy missing/invalid when required:
     `deny rollout gate`
   - seasonal overlay policy missing/invalid when required:
+    `deny rollout gate`
+  - causal clustering policy missing/invalid when required:
     `deny rollout gate`
 - Recommendation severity gating:
   - `critical|high` in `r3|r4` requires explicit hold or remediation approval

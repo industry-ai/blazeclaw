@@ -243,6 +243,14 @@ phase promotion.
 - Seasonal Overlay Multiplier: 1.15
 - Seasonal Overlay Source: policy
 - Seasonal Overlay Tuning Enabled: true
+- Causal Cluster Key: registry|r2|certificate-expiry
+- Causal Cluster Sample Count: 8
+- Causal Cluster Fail Count: 5
+- Causal Cluster Fail Percent: 62%
+- Suggested Overlay Candidate: suggested-registry-r2
+- Suggested Overlay Multiplier: 1.15
+- Causal Clustering Source: policy
+- Causal Clustering Enabled: true
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode

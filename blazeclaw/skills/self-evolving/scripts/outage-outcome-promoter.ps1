@@ -43,6 +43,12 @@ $seasonalDecompositionPolicyFile =
     './blazeclaw/skills/self-evolving/assets/attestation-anomaly-seasonal-decomposition-policy.conf'
 $seasonalOverlayPolicyFile =
     './blazeclaw/skills/self-evolving/assets/attestation-anomaly-seasonal-overlay-policy.csv'
+$causalClusteringPolicyFile =
+    './blazeclaw/skills/self-evolving/assets/attestation-anomaly-causal-clustering-policy.conf'
+$causalHistoryFile =
+    './blazeclaw/skills/self-evolving/.learnings/ANOMALY_CAUSAL_HISTORY.csv'
+$overlayCandidateFile =
+    './blazeclaw/skills/self-evolving/.learnings/SEASONAL_OVERLAY_CANDIDATES.md'
 
 function Show-Usage {
 @"
@@ -100,6 +106,10 @@ Optional:
   --seasonal-overlay-policy-file Seasonal overlay CSV for holiday/event multipliers
   --disable-seasonal-overlay-tuning Disable cross-cycle holiday/event overlay tuning
   --require-seasonal-overlay-policy Fail-fast when seasonal overlay policy cannot be resolved
+  --causal-clustering-policy-file Causal clustering policy file
+  --overlay-candidate-file Suggested overlay output markdown file
+  --disable-causal-clustering Disable anomaly-causal clustering suggestions
+  --require-causal-clustering-policy Fail-fast when causal clustering policy cannot be resolved
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -141,6 +151,8 @@ $reportingCycleLength = 12
 $requireSeasonalDecompositionPolicy = $false
 $enableSeasonalOverlayTuning = $true
 $requireSeasonalOverlayPolicy = $false
+$enableCausalClustering = $true
+$requireCausalClusteringPolicy = $false
 $manifestFileExplicit = $false
 $signatureVerificationMode = 'none'
 $kmsPublicKeyFile = ''
@@ -194,6 +206,13 @@ $seasonalDecompositionSource = 'disabled'
 $seasonalOverlayName = 'none'
 $seasonalOverlayMultiplier = 1.0
 $seasonalOverlaySource = 'disabled'
+$causalClusterKey = 'none'
+$causalClusterSampleCount = 0
+$causalClusterFailCount = 0
+$causalClusterFailPercent = 0
+$causalClusterSuggestedOverlay = 'none'
+$causalClusterSuggestedMultiplier = 1.00
+$causalClusterSource = 'disabled'
 $notes = ''
 $trendWindowSize = 20
 $dryRun = $false
@@ -380,10 +399,30 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         '--require-seasonal-overlay-policy' {
             $requireSeasonalOverlayPolicy = $true
         }
+        '--causal-clustering-policy-file' {
+            $i++
+            $causalClusteringPolicyFile = [string]$args[$i]
+        }
+        '--overlay-candidate-file' {
+            $i++
+            $overlayCandidateFile = [string]$args[$i]
+        }
+        '--disable-causal-clustering' {
+            $enableCausalClustering = $false
+        }
+        '--require-causal-clustering-policy' {
+            $requireCausalClusteringPolicy = $true
+        }
         '--signature-verification-mode' {
             $i++
             $signatureVerificationMode = [string]$args[$i]
         }
+
+if (-not (Test-Path -LiteralPath $causalHistoryFile)) {
+    Set-Content -LiteralPath $causalHistoryFile -NoNewline -Value
+        'timestamp,tenant_id,rollout_phase,dependency,failure_mode,result,simulation_id'
+    Add-Content -LiteralPath $causalHistoryFile -Value ''
+}
         '--kms-public-key-file' {
             $i++
             $kmsPublicKeyFile = [string]$args[$i]
@@ -944,6 +983,13 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
         $seasonalOverlayName = 'none'
         $seasonalOverlayMultiplier = 1.0
         $seasonalOverlaySource = 'disabled'
+        $causalClusterKey = 'none'
+        $causalClusterSampleCount = 0
+        $causalClusterFailCount = 0
+        $causalClusterFailPercent = 0
+        $causalClusterSuggestedOverlay = 'none'
+        $causalClusterSuggestedMultiplier = 1.00
+        $causalClusterSource = 'disabled'
 
         if ($enableTimeDecayWeighting) {
             $timeDecaySource = 'cli'
@@ -1214,6 +1260,74 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
                         [int](($weightedAlertSum * 100) / $weightedTotalSum)
                 }
             }
+
+            if ($enableCausalClustering) {
+                $causalClusterSource = 'static'
+                [int]$clusterMinSamples = 3
+                [int]$clusterFailThresholdPercent = 50
+                [double]$clusterHighMultiplier = 1.15
+
+                if (Test-Path -LiteralPath $causalClusteringPolicyFile) {
+                    $clusterFields = @{}
+                    foreach ($line in (Get-Content -LiteralPath $causalClusteringPolicyFile)) {
+                        if ([string]::IsNullOrWhiteSpace($line) -or
+                            $line.Trim().StartsWith('#')) {
+                            continue
+                        }
+                        $split = $line.Split('=', 2)
+                        if ($split.Length -eq 2) {
+                            $clusterFields[$split[0].Trim()] = $split[1].Trim()
+                        }
+                    }
+
+                    [int]$tmpMin = 0
+                    [int]$tmpFail = 0
+                    [double]$tmpMult = 0
+                    if ($clusterFields.ContainsKey('min_samples') -and
+                        [int]::TryParse([string]$clusterFields['min_samples'], [ref]$tmpMin) -and
+                        $tmpMin -gt 0) {
+                        $clusterMinSamples = $tmpMin
+                    }
+                    if ($clusterFields.ContainsKey('fail_threshold_percent') -and
+                        [int]::TryParse([string]$clusterFields['fail_threshold_percent'], [ref]$tmpFail) -and
+                        $tmpFail -ge 0 -and $tmpFail -le 100) {
+                        $clusterFailThresholdPercent = $tmpFail
+                    }
+                    if ($clusterFields.ContainsKey('high_impact_multiplier') -and
+                        [double]::TryParse([string]$clusterFields['high_impact_multiplier'], [ref]$tmpMult) -and
+                        $tmpMult -gt 0) {
+                        $clusterHighMultiplier = $tmpMult
+                    }
+                    $causalClusterSource = 'policy'
+                } elseif ($requireCausalClusteringPolicy) {
+                    throw "Causal clustering policy failed: missing file $causalClusteringPolicyFile"
+                }
+
+                $effectiveFailureMode = if ([string]::IsNullOrWhiteSpace($failureMode)) { 'unspecified' } else { $failureMode }
+                $causalClusterKey = "$dependency|$rolloutPhase|$effectiveFailureMode"
+
+                $causalRows = Import-Csv -LiteralPath $causalHistoryFile |
+                    Where-Object {
+                        $_.tenant_id -eq $tenantId -and
+                        $_.dependency -eq $dependency -and
+                        $_.rollout_phase -eq $rolloutPhase -and
+                        $_.failure_mode -eq $effectiveFailureMode
+                    } |
+                    Select-Object -Last $attestationBaselineWindow
+
+                $causalClusterSampleCount = @($causalRows).Count
+                $causalClusterFailCount = @($causalRows | Where-Object { $_.result -eq 'fail' }).Count
+                if ($causalClusterSampleCount -gt 0) {
+                    $causalClusterFailPercent =
+                        [int](($causalClusterFailCount * 100) / $causalClusterSampleCount)
+                }
+
+                if ($causalClusterSampleCount -ge $clusterMinSamples -and
+                    $causalClusterFailPercent -ge $clusterFailThresholdPercent) {
+                    $causalClusterSuggestedOverlay = "suggested-$dependency-$rolloutPhase"
+                    $causalClusterSuggestedMultiplier = $clusterHighMultiplier
+                }
+            }
         }
 
         $calibratedAttestationThresholdPercent =
@@ -1324,6 +1438,14 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
 **Seasonal Overlay Multiplier**: $seasonalOverlayMultiplier
 **Seasonal Overlay Source**: $seasonalOverlaySource
 **Seasonal Overlay Tuning Enabled**: $enableSeasonalOverlayTuning
+**Causal Cluster Key**: $causalClusterKey
+**Causal Cluster Sample Count**: $causalClusterSampleCount
+**Causal Cluster Fail Count**: $causalClusterFailCount
+**Causal Cluster Fail Percent**: $causalClusterFailPercent%
+**Suggested Overlay Candidate**: $causalClusterSuggestedOverlay
+**Suggested Overlay Multiplier**: $causalClusterSuggestedMultiplier
+**Causal Clustering Source**: $causalClusterSource
+**Causal Clustering Enabled**: $enableCausalClustering
 **Anomaly Gate Enabled**: $requireAttestationBaselineGate
 
 ---
@@ -1716,6 +1838,14 @@ $recommendation
 - Seasonal Overlay Multiplier: $seasonalOverlayMultiplier
 - Seasonal Overlay Source: $seasonalOverlaySource
 - Seasonal Overlay Tuning Enabled: $enableSeasonalOverlayTuning
+- Causal Cluster Key: $causalClusterKey
+- Causal Cluster Sample Count: $causalClusterSampleCount
+- Causal Cluster Fail Count: $causalClusterFailCount
+- Causal Cluster Fail Percent: $causalClusterFailPercent%
+- Suggested Overlay Candidate: $causalClusterSuggestedOverlay
+- Suggested Overlay Multiplier: $causalClusterSuggestedMultiplier
+- Causal Clustering Source: $causalClusterSource
+- Causal Clustering Enabled: $enableCausalClustering
 - Attestation Baseline Gate: $requireAttestationBaselineGate
 - Cross-Tenant Heatmap Source: $crossTenantHeatmapFile
 - Auto-Remediation Routing Source: $autoRemediationRoutingFile
@@ -1750,6 +1880,23 @@ $(if ($notes) { $notes } else { 'none' })
 
 $trendRecord =
     "$timestamp,$tenantId,$rolloutPhase,$dependency,$result,$simulationId"
+$causalHistoryRecord =
+    "$timestamp,$tenantId,$rolloutPhase,$dependency,$(if ($failureMode) { $failureMode } else { 'unspecified' }),$result,$simulationId"
+$overlayCandidateEntry = @"
+## [OVR-$entryId] overlay_candidate
+
+**Logged**: $timestamp
+**Tenant ID**: $tenantId
+**Cluster Key**: $causalClusterKey
+**Sample Count**: $causalClusterSampleCount
+**Fail Count**: $causalClusterFailCount
+**Fail Percent**: $causalClusterFailPercent%
+**Suggested Overlay Name**: $causalClusterSuggestedOverlay
+**Suggested Overlay Multiplier**: $causalClusterSuggestedMultiplier
+**Source**: $causalClusterSource
+
+---
+"@
 
 if ($dryRun) {
     Write-Host "[DRY-RUN] Would append to ${learningsFile}:"
@@ -1758,6 +1905,10 @@ if ($dryRun) {
     Write-Host $policyEntry
     Write-Host "[DRY-RUN] Would append trend record to ${trendHistoryFile}:"
     Write-Host $trendRecord
+    Write-Host "[DRY-RUN] Would append causal history record to ${causalHistoryFile}:"
+    Write-Host $causalHistoryRecord
+    Write-Host "[DRY-RUN] Would append overlay candidate suggestion to ${overlayCandidateFile}:"
+    Write-Host $overlayCandidateEntry
     exit 0
 }
 
@@ -1772,6 +1923,12 @@ if (-not (Test-Path -LiteralPath $policyTuningFile)) {
 Add-Content -LiteralPath $learningsFile -Value $learningEntry
 Add-Content -LiteralPath $policyTuningFile -Value $policyEntry
 Add-Content -LiteralPath $trendHistoryFile -Value $trendRecord
+Add-Content -LiteralPath $causalHistoryFile -Value $causalHistoryRecord
+if (-not (Test-Path -LiteralPath $overlayCandidateFile)) {
+    Set-Content -LiteralPath $overlayCandidateFile -Value '# Seasonal Overlay Candidate Suggestions'
+    Add-Content -LiteralPath $overlayCandidateFile -Value ''
+}
+Add-Content -LiteralPath $overlayCandidateFile -Value $overlayCandidateEntry
 
 Write-Host "Appended outage simulation learning entry to $learningsFile"
 Write-Host "Appended policy tuning recommendation to $policyTuningFile"
