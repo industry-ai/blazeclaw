@@ -16,7 +16,7 @@ Log learnings and errors to markdown files for continuous improvement. Important
 | User wants missing feature | Log to `.learnings/FEATURE_REQUESTS.md` |
 | Knowledge was outdated | Log to `.learnings/LEARNINGS.md` with category `knowledge_gap` |
 | Found better approach | Log to `.learnings/LEARNINGS.md` with category `best_practice` |
-| Outage simulation drill completes | Run `scripts/outage-outcome-promoter.*` to log learnings and policy tuning recommendations |
+| Outage simulation drill completes | Run `scripts/outage-outcome-promoter.*` with tenant + phase inputs to log scored recommendations |
 
 ## Skill Layout
 
@@ -32,6 +32,7 @@ Log learnings and errors to markdown files for continuous improvement. Important
 - `blazeclaw/skills/self-evolving/.learnings/ERRORS.md`
 - `blazeclaw/skills/self-evolving/.learnings/FEATURE_REQUESTS.md`
 - `blazeclaw/skills/self-evolving/.learnings/POLICY_TUNING_RECOMMENDATIONS.md`
+- `blazeclaw/skills/self-evolving/.learnings/OUTAGE_TREND_HISTORY.csv`
 
 ## Outage Simulation Outcome Workflow
 
@@ -42,13 +43,19 @@ Capture outage drill outcomes and translate them into reusable guidance.
    - `scripts/outage-outcome-promoter.ps1`
 2. Provide required metadata:
    - simulation id
+   - tenant id
+   - rollout phase (`r1|r2|r3|r4`)
    - dependency (`registry` or `authority`)
    - result (`pass` or `fail`)
    - evidence path
+   - optional trend window size (`--trend-window-size`, default `20`)
 3. Script outputs:
    - learning promotion candidate appended to `.learnings/LEARNINGS.md`
    - policy tuning recommendation appended to
      `.learnings/POLICY_TUNING_RECOMMENDATIONS.md`
+   - tenant-scoped trend history appended to
+     `.learnings/OUTAGE_TREND_HISTORY.csv`
+   - phase-aware recommendation score and severity in output entries
 4. Promote proven recommendations into governance guidance files:
    - `AGENTS.md`
    - `TOOLS.md`
@@ -95,8 +102,8 @@ When a pattern is proven, promote it to:
   - `scripts/activator.ps1`
   - `scripts/error-detector.sh`
   - `scripts/error-detector.ps1`
-  - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-001 --dependency registry --result pass --evidence-path reports/drills/sample-registry.json`
-  - `scripts/outage-outcome-promoter.ps1 --dry-run --simulation-id SIM-AUTH-001 --dependency authority --result fail --evidence-path reports/drills/sample-authority.json`
+  - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-001 --tenant-id tenant-a --rollout-phase r2 --dependency registry --result pass --evidence-path reports/drills/sample-registry.json`
+  - `scripts/outage-outcome-promoter.ps1 --dry-run --simulation-id SIM-AUTH-001 --tenant-id tenant-a --rollout-phase r3 --dependency authority --result fail --evidence-path reports/drills/sample-authority.json`
   - `scripts/extract-skill.sh --dry-run`
   - `scripts/extract-skill.ps1 --dry-run`
 - Verify policy-as-code rollout controls are mapped in
@@ -120,4 +127,4 @@ None in current self-evolving runtime scope.
 
 ## Follow-Up Enhancements
 
-- Expand outage outcome promoter logic with tenant-scoped trend analysis and phase-aware recommendation scoring.
+- Add configurable scoring weights per organization policy profile and support trend windows segmented by dependency class.

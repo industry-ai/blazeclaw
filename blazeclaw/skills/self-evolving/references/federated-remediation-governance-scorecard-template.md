@@ -116,10 +116,18 @@ Federation-level aggregates:
 
 - Recommendation source path:
   `blazeclaw/skills/self-evolving/.learnings/POLICY_TUNING_RECOMMENDATIONS.md`
+- Trend history source path:
+  `blazeclaw/skills/self-evolving/.learnings/OUTAGE_TREND_HISTORY.csv`
 - Recommendations generated in window: `<n>`
 - Recommendations accepted: `<n>`
 - Recommendations deferred: `<n>`
 - Recommendations rejected: `<n>`
+- Recommendations by severity:
+  - critical: `<n>`
+  - high: `<n>`
+  - medium: `<n>`
+  - low: `<n>`
+- Tenant trend fail-rate p95: `<percent>`
 - Highest-impact accepted tuning:
   `<short summary with control reference>`
 

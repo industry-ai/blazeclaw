@@ -251,8 +251,16 @@ Outage outcome recommendation controls:
   `blazeclaw/skills/self-evolving/.learnings/LEARNINGS.md`
 - Policy tuning recommendation path:
   `blazeclaw/skills/self-evolving/.learnings/POLICY_TUNING_RECOMMENDATIONS.md`
+- Trend history path:
+  `blazeclaw/skills/self-evolving/.learnings/OUTAGE_TREND_HISTORY.csv`
+- Default trend window size: `<n>`
+- Required promoter inputs: `tenant-id`, `rollout-phase`
 - Recommendation review SLA: `<duration>`
 - Recommendation promotion approvers: `<engineering|security|operations>`
+- Recommendation severity gating:
+  - `critical|high` in `r3|r4` requires explicit hold or remediation approval
+  - `medium` requires owner review before phase promotion
+  - `low` can be auto-queued for routine follow-up
 
 ## 8) Compliance and Audit
 

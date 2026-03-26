@@ -106,9 +106,12 @@ Outcome promotion controls:
 - Policy tuning output path:
   `blazeclaw/skills/self-evolving/.learnings/POLICY_TUNING_RECOMMENDATIONS.md`
 - Automation command (shell):
-  `scripts/outage-outcome-promoter.sh --simulation-id <id> --dependency <registry|authority> --result <pass|fail> --evidence-path <path>`
+  `scripts/outage-outcome-promoter.sh --simulation-id <id> --tenant-id <tenant-id> --rollout-phase <r1|r2|r3|r4> --dependency <registry|authority> --result <pass|fail> --evidence-path <path>`
 - Automation command (powershell):
-  `scripts/outage-outcome-promoter.ps1 --simulation-id <id> --dependency <registry|authority> --result <pass|fail> --evidence-path <path>`
+  `scripts/outage-outcome-promoter.ps1 --simulation-id <id> --tenant-id <tenant-id> --rollout-phase <r1|r2|r3|r4> --dependency <registry|authority> --result <pass|fail> --evidence-path <path>`
+- Trend history output path:
+  `blazeclaw/skills/self-evolving/.learnings/OUTAGE_TREND_HISTORY.csv`
+- Recommended trend window size: `<n>` (default `20`)
 
 ## 3.3) Outcome-to-Tuning Mapping
 
@@ -118,6 +121,14 @@ Outcome promotion controls:
 | policy registry | fail | enforce fallback bundle pin validation before promotion | `POLICY_TUNING_RECOMMENDATIONS.md` |
 | attestation authority | pass | reduce tolerated verification latency in rollout policy | `AGENTS.md`, governance scorecard commentary |
 | attestation authority | fail | enforce strict trust-chain checks and block publication until recovered | `POLICY_TUNING_RECOMMENDATIONS.md` |
+
+Scoring guidance:
+
+- Recommendation score band: `<0-100>`
+- Severity mapping: `low (0-34)`, `medium (35-59)`, `high (60-79)`,
+  `critical (80-100)`
+- Phase override: fail outcomes in `r3` and `r4` should default to
+  promotion hold until remediation evidence is verified.
 
 Pipeline stages:
 

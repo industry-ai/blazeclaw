@@ -202,3 +202,10 @@ Federated governance scorecard workflow:
    candidates and policy tuning recommendations:
    - `.learnings/LEARNINGS.md`
    - `.learnings/POLICY_TUNING_RECOMMENDATIONS.md`
+   - `.learnings/OUTAGE_TREND_HISTORY.csv`
+
+Outage promoter inputs now require tenant and rollout phase context:
+
+- `--tenant-id <tenant-id>`
+- `--rollout-phase <r1|r2|r3|r4>`
+- Optional `--trend-window-size <n>` for tenant trend scoring windows.

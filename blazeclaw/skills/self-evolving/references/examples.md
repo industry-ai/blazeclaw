@@ -123,6 +123,8 @@ Authority outage simulation SIM-AUTH-001 failed trust-chain validation fallback
 
 ### Details
 - Simulation ID: SIM-AUTH-001
+- Tenant ID: tenant-a
+- Rollout Phase: r3
 - Dependency: authority
 - Result: fail
 - Failure Mode: trust-anchor mismatch
@@ -130,6 +132,11 @@ Authority outage simulation SIM-AUTH-001 failed trust-chain validation fallback
 - Evidence Path: reports/drills/sim-auth-001.json
 - Automated Failover Triggered: yes
 - Automated Failback Completed: no
+- Trend Window Size: 20
+- Trend Sample Count: 14
+- Trend Fail Count: 6
+- Trend Pass Count: 8
+- Trend Fail Rate: 42%
 
 ### Suggested Action
 Enforce strict trust-chain validation and block scorecard publication
@@ -145,6 +152,8 @@ until failover authority verification passes.
 
 **Logged**: 2025-01-15T20:10:00Z
 **Source Simulation**: SIM-AUTH-001
+**Tenant ID**: tenant-a
+**Rollout Phase**: r3
 **Dependency**: authority
 **Outcome**: fail
 **Status**: suggested
@@ -154,6 +163,15 @@ Set `hooks.engine.attestationRevocationMode=strict`, keep
 `hooks.engine.authorityOutageSimulationEnabled=true`, and require
 validated `hooks.engine.authorityFailoverRunbookId` evidence before
 phase promotion.
+
+### Scoring
+- Recommendation Score: 80
+- Severity: critical
+- Trend Window Size: 20
+- Trend Sample Count: 14
+- Trend Fail Count: 6
+- Trend Pass Count: 8
+- Trend Fail Rate: 42%
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode
