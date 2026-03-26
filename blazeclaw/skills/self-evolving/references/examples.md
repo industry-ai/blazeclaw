@@ -230,6 +230,10 @@ phase promotion.
 - Time-Decay Half-Life Samples: 5
 - Time-Decay Source: policy
 - Time-Decay Weighting Enabled: true
+- Recurrence Ratio Percent: 40%
+- Recurrence Tuned Half-Life Samples: 9
+- Recurrence Auto-Tuning Source: policy
+- Recurrence Auto-Tuning Enabled: true
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode

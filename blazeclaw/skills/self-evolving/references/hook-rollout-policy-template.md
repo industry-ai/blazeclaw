@@ -184,6 +184,7 @@ Approval gate checklist:
 - [ ] tenant criticality tier mappings are reviewed for rollout scope
 - [ ] adaptive threshold policy mappings are validated for criticality tiers
 - [ ] time-decay anomaly policy is validated for rollout baseline windows
+- [ ] recurrence auto-tuning policy is validated for tenant baseline tuning bounds
 
 ## 6) Rollback Plan
 

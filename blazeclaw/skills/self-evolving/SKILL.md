@@ -47,6 +47,7 @@ Log learnings and errors to markdown files for continuous improvement. Important
 - `blazeclaw/skills/self-evolving/assets/tenant-criticality-tiers.csv`
 - `blazeclaw/skills/self-evolving/assets/attestation-anomaly-threshold-tiers.csv`
 - `blazeclaw/skills/self-evolving/assets/attestation-anomaly-time-decay-policy.conf`
+- `blazeclaw/skills/self-evolving/assets/attestation-anomaly-recurrence-tuning-policy.conf`
 
 ## Outage Simulation Outcome Workflow
 
@@ -126,6 +127,11 @@ Capture outage drill outcomes and translate them into reusable guidance.
      - `--time-decay-half-life` (default `5`)
      - `--disable-time-decay-weighting`
      - `--require-time-decay-policy`
+   - optional recurrence auto-tuning controls:
+     - `--recurrence-tuning-policy-file` (defaults to
+       `assets/attestation-anomaly-recurrence-tuning-policy.conf`)
+     - `--disable-recurrence-auto-tuning`
+     - `--require-recurrence-tuning-policy`
 3. Script outputs:
    - learning promotion candidate appended to `.learnings/LEARNINGS.md`
    - policy tuning recommendation appended to
@@ -161,6 +167,8 @@ Capture outage drill outcomes and translate them into reusable guidance.
      criticality tiers
    - optional time-decay weighted anomaly outputs for drift-sensitive
      tenant baselines
+   - optional auto-tuned decay-factor outputs derived from tenant
+     incident recurrence patterns
 4. Promote proven recommendations into governance guidance files:
    - `AGENTS.md`
    - `TOOLS.md`
@@ -219,6 +227,7 @@ When a pattern is proven, promote it to:
   - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-009 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --require-signed-manifest --manifest-file blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --require-trust-policy --trust-policy-file blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf --require-revocation-check --revocation-file blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv --require-trust-policy-attestation --trust-policy-attestation-file blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.attestation --require-revocation-slo --revocation-slo-file blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.conf --attestation-baseline-window 20 --attestation-anomaly-threshold-percent 25 --require-attestation-baseline-gate --cross-tenant-heatmap-file blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_ATTESTATION_ANOMALY_HEATMAP.md --auto-remediation-routing-file blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_AUTO_REMEDIATION_ROUTING.md --dependency registry --result pass --evidence-path reports/drills/sample-registry.json`
   - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-010 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --require-signed-manifest --manifest-file blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --require-trust-policy --trust-policy-file blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf --require-revocation-check --revocation-file blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv --require-trust-policy-attestation --trust-policy-attestation-file blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.attestation --require-revocation-slo --revocation-slo-file blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.conf --attestation-baseline-window 20 --attestation-anomaly-threshold-percent 25 --require-attestation-baseline-gate --tenant-criticality-file blazeclaw/skills/self-evolving/assets/tenant-criticality-tiers.csv --adaptive-threshold-policy-file blazeclaw/skills/self-evolving/assets/attestation-anomaly-threshold-tiers.csv --require-adaptive-threshold-policy --cross-tenant-heatmap-file blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_ATTESTATION_ANOMALY_HEATMAP.md --auto-remediation-routing-file blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_AUTO_REMEDIATION_ROUTING.md --dependency registry --result pass --evidence-path reports/drills/sample-registry.json`
   - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-011 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --require-signed-manifest --manifest-file blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --require-trust-policy --trust-policy-file blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf --require-revocation-check --revocation-file blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv --require-trust-policy-attestation --trust-policy-attestation-file blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.attestation --require-revocation-slo --revocation-slo-file blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.conf --attestation-baseline-window 20 --attestation-anomaly-threshold-percent 25 --require-attestation-baseline-gate --tenant-criticality-file blazeclaw/skills/self-evolving/assets/tenant-criticality-tiers.csv --adaptive-threshold-policy-file blazeclaw/skills/self-evolving/assets/attestation-anomaly-threshold-tiers.csv --require-adaptive-threshold-policy --time-decay-policy-file blazeclaw/skills/self-evolving/assets/attestation-anomaly-time-decay-policy.conf --time-decay-half-life 5 --require-time-decay-policy --cross-tenant-heatmap-file blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_ATTESTATION_ANOMALY_HEATMAP.md --auto-remediation-routing-file blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_AUTO_REMEDIATION_ROUTING.md --dependency registry --result pass --evidence-path reports/drills/sample-registry.json`
+  - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-012 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --require-signed-manifest --manifest-file blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --require-trust-policy --trust-policy-file blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf --require-revocation-check --revocation-file blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv --require-trust-policy-attestation --trust-policy-attestation-file blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.attestation --require-revocation-slo --revocation-slo-file blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.conf --attestation-baseline-window 20 --attestation-anomaly-threshold-percent 25 --require-attestation-baseline-gate --tenant-criticality-file blazeclaw/skills/self-evolving/assets/tenant-criticality-tiers.csv --adaptive-threshold-policy-file blazeclaw/skills/self-evolving/assets/attestation-anomaly-threshold-tiers.csv --require-adaptive-threshold-policy --time-decay-policy-file blazeclaw/skills/self-evolving/assets/attestation-anomaly-time-decay-policy.conf --require-time-decay-policy --recurrence-tuning-policy-file blazeclaw/skills/self-evolving/assets/attestation-anomaly-recurrence-tuning-policy.conf --require-recurrence-tuning-policy --cross-tenant-heatmap-file blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_ATTESTATION_ANOMALY_HEATMAP.md --auto-remediation-routing-file blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_AUTO_REMEDIATION_ROUTING.md --dependency registry --result pass --evidence-path reports/drills/sample-registry.json`
   - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-001 --tenant-id tenant-a --rollout-phase r2 --policy-profile missing-profile --dependency registry --result pass --evidence-path reports/drills/sample-registry.json` (expect fail-fast error)
   - `scripts/extract-skill.sh --dry-run`
   - `scripts/extract-skill.ps1 --dry-run`
@@ -243,4 +252,4 @@ None in current self-evolving runtime scope.
 
 ## Follow-Up Enhancements
 
-- Add auto-tuned decay factors derived from tenant incident recurrence patterns.
+- Add seasonal recurrence decomposition to tune decay factors by reporting cycle.

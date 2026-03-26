@@ -21,6 +21,7 @@ AUTO_REMEDIATION_ROUTING_FILE="./blazeclaw/skills/self-evolving/.learnings/CROSS
 TENANT_CRITICALITY_FILE="./blazeclaw/skills/self-evolving/assets/tenant-criticality-tiers.csv"
 ADAPTIVE_THRESHOLD_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-threshold-tiers.csv"
 TIME_DECAY_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-time-decay-policy.conf"
+RECURRENCE_TUNING_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-recurrence-tuning-policy.conf"
 
 SIMULATION_ID=""
 TENANT_ID=""
@@ -42,6 +43,8 @@ REQUIRE_ADAPTIVE_THRESHOLD_POLICY=false
 ENABLE_TIME_DECAY_WEIGHTING=true
 TIME_DECAY_HALF_LIFE=5
 REQUIRE_TIME_DECAY_POLICY=false
+ENABLE_RECURRENCE_AUTO_TUNING=true
+REQUIRE_RECURRENCE_TUNING_POLICY=false
 MANIFEST_FILE_EXPLICIT=false
 SIGNATURE_VERIFICATION_MODE="none"
 KMS_PUBLIC_KEY_FILE=""
@@ -106,6 +109,9 @@ Optional:
   --time-decay-half-life Baseline half-life in samples for recency decay (default: 5)
   --disable-time-decay-weighting Use unweighted anomaly percentage
   --require-time-decay-policy Fail-fast when time-decay policy cannot be resolved
+  --recurrence-tuning-policy-file Recurrence auto-tuning policy file
+  --disable-recurrence-auto-tuning Disable recurrence-based half-life tuning
+  --require-recurrence-tuning-policy Fail-fast when recurrence tuning policy cannot be resolved
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -277,6 +283,18 @@ while [[ $# -gt 0 ]]; do
             ;;
         --require-time-decay-policy)
             REQUIRE_TIME_DECAY_POLICY=true
+            shift
+            ;;
+        --recurrence-tuning-policy-file)
+            RECURRENCE_TUNING_POLICY_FILE="${2:-}"
+            shift 2
+            ;;
+        --disable-recurrence-auto-tuning)
+            ENABLE_RECURRENCE_AUTO_TUNING=false
+            shift
+            ;;
+        --require-recurrence-tuning-policy)
+            REQUIRE_RECURRENCE_TUNING_POLICY=true
             shift
             ;;
         --signature-verification-mode)
@@ -751,10 +769,61 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
         WEIGHTED_TOTAL_SUM=0
         WEIGHTED_ANOMALY_PERCENT="$ATTESTATION_ANOMALY_PERCENT"
         TIME_DECAY_SOURCE="disabled"
+        RECURRENCE_RATIO_PERCENT=0
+        RECURRENCE_TUNED_HALF_LIFE="$TIME_DECAY_HALF_LIFE"
+        RECURRENCE_TUNING_SOURCE="disabled"
 
         if [ "$ENABLE_TIME_DECAY_WEIGHTING" = true ]; then
             TIME_DECAY_SOURCE="cli"
             DECAY_HALF_LIFE_EFFECTIVE="$TIME_DECAY_HALF_LIFE"
+
+            if [ "$ENABLE_RECURRENCE_AUTO_TUNING" = true ]; then
+                RECURRENCE_TUNING_SOURCE="static"
+                RECURRENCE_TUNING_MIN=2
+                RECURRENCE_TUNING_MAX=20
+                RECURRENCE_TUNING_FAIL_MULTIPLIER=2.0
+
+                if [ -f "$RECURRENCE_TUNING_POLICY_FILE" ] && [ -r "$RECURRENCE_TUNING_POLICY_FILE" ]; then
+                    POLICY_MIN=$(awk -F'=' '$1=="min_half_life_samples" { print $2; exit }' "$RECURRENCE_TUNING_POLICY_FILE" | tr -d '\r[:space:]')
+                    POLICY_MAX=$(awk -F'=' '$1=="max_half_life_samples" { print $2; exit }' "$RECURRENCE_TUNING_POLICY_FILE" | tr -d '\r[:space:]')
+                    POLICY_MULT=$(awk -F'=' '$1=="fail_multiplier" { print $2; exit }' "$RECURRENCE_TUNING_POLICY_FILE" | tr -d '\r[:space:]')
+
+                    if [ -n "$POLICY_MIN" ] && [[ "$POLICY_MIN" =~ ^[0-9]+$ ]] && [ "$POLICY_MIN" -gt 0 ]; then
+                        RECURRENCE_TUNING_MIN="$POLICY_MIN"
+                    elif [ "$REQUIRE_RECURRENCE_TUNING_POLICY" = true ]; then
+                        echo "Recurrence tuning policy failed: min_half_life_samples missing/invalid in $RECURRENCE_TUNING_POLICY_FILE" >&2
+                        exit 1
+                    fi
+
+                    if [ -n "$POLICY_MAX" ] && [[ "$POLICY_MAX" =~ ^[0-9]+$ ]] && [ "$POLICY_MAX" -ge "$RECURRENCE_TUNING_MIN" ]; then
+                        RECURRENCE_TUNING_MAX="$POLICY_MAX"
+                    elif [ "$REQUIRE_RECURRENCE_TUNING_POLICY" = true ]; then
+                        echo "Recurrence tuning policy failed: max_half_life_samples missing/invalid in $RECURRENCE_TUNING_POLICY_FILE" >&2
+                        exit 1
+                    fi
+
+                    if [ -n "$POLICY_MULT" ] && awk -v v="$POLICY_MULT" 'BEGIN { exit !(v+0>0) }'; then
+                        RECURRENCE_TUNING_FAIL_MULTIPLIER="$POLICY_MULT"
+                    elif [ "$REQUIRE_RECURRENCE_TUNING_POLICY" = true ]; then
+                        echo "Recurrence tuning policy failed: fail_multiplier missing/invalid in $RECURRENCE_TUNING_POLICY_FILE" >&2
+                        exit 1
+                    fi
+
+                    RECURRENCE_TUNING_SOURCE="policy"
+                elif [ "$REQUIRE_RECURRENCE_TUNING_POLICY" = true ]; then
+                    echo "Recurrence tuning policy failed: missing file $RECURRENCE_TUNING_POLICY_FILE" >&2
+                    exit 1
+                fi
+
+                FAIL_COUNT=$(printf "%s\n" "$TENANT_ATTESTATION_HISTORY" | awk -F',' 'NF>0 && ($4!="verified" || $5=="warning") { c++ } END { print c + 0 }')
+                if [ "$ATTESTATION_BASELINE_TOTAL" -gt 0 ]; then
+                    RECURRENCE_RATIO_PERCENT=$(( FAIL_COUNT * 100 / ATTESTATION_BASELINE_TOTAL ))
+                fi
+
+                TUNED=$(awk -v base="$DECAY_HALF_LIFE_EFFECTIVE" -v ratio="$RECURRENCE_RATIO_PERCENT" -v mult="$RECURRENCE_TUNING_FAIL_MULTIPLIER" -v minv="$RECURRENCE_TUNING_MIN" -v maxv="$RECURRENCE_TUNING_MAX" 'BEGIN { v = base + ((ratio/100.0) * mult * base); if (v < minv) v=minv; if (v > maxv) v=maxv; printf "%d", v }')
+                DECAY_HALF_LIFE_EFFECTIVE="$TUNED"
+                RECURRENCE_TUNED_HALF_LIFE="$TUNED"
+            fi
 
             if [ -f "$TIME_DECAY_POLICY_FILE" ] && [ -r "$TIME_DECAY_POLICY_FILE" ]; then
                 POLICY_HALF_LIFE=$(awk -F'=' '$1=="half_life_samples" { print $2; exit }' "$TIME_DECAY_POLICY_FILE" | tr -d '\r[:space:]')
@@ -863,6 +932,10 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
 **Time-Decay Half-Life Samples**: $DECAY_HALF_LIFE_EFFECTIVE
 **Time-Decay Source**: $TIME_DECAY_SOURCE
 **Time-Decay Weighting Enabled**: $ENABLE_TIME_DECAY_WEIGHTING
+**Recurrence Ratio Percent**: $RECURRENCE_RATIO_PERCENT%
+**Recurrence Tuned Half-Life Samples**: $RECURRENCE_TUNED_HALF_LIFE
+**Recurrence Auto-Tuning Source**: $RECURRENCE_TUNING_SOURCE
+**Recurrence Auto-Tuning Enabled**: $ENABLE_RECURRENCE_AUTO_TUNING
 **Anomaly Gate Enabled**: $REQUIRE_ATTESTATION_BASELINE_GATE
 
 ---
@@ -1224,6 +1297,10 @@ $RECOMMENDATION
 - Time-Decay Half-Life Samples: ${DECAY_HALF_LIFE_EFFECTIVE:-$TIME_DECAY_HALF_LIFE}
 - Time-Decay Source: ${TIME_DECAY_SOURCE:-disabled}
 - Time-Decay Weighting Enabled: ${ENABLE_TIME_DECAY_WEIGHTING}
+- Recurrence Ratio Percent: ${RECURRENCE_RATIO_PERCENT:-0}%
+- Recurrence Tuned Half-Life Samples: ${RECURRENCE_TUNED_HALF_LIFE:-$TIME_DECAY_HALF_LIFE}
+- Recurrence Auto-Tuning Source: ${RECURRENCE_TUNING_SOURCE:-disabled}
+- Recurrence Auto-Tuning Enabled: ${ENABLE_RECURRENCE_AUTO_TUNING}
 - Attestation Baseline Gate: ${REQUIRE_ATTESTATION_BASELINE_GATE}
 - Cross-Tenant Heatmap Source: ${CROSS_TENANT_HEATMAP_FILE}
 - Auto-Remediation Routing Source: ${AUTO_REMEDIATION_ROUTING_FILE}

@@ -279,6 +279,8 @@ Outage outcome recommendation controls:
   `blazeclaw/skills/self-evolving/assets/attestation-anomaly-threshold-tiers.csv`
 - Time-decay anomaly policy path:
   `blazeclaw/skills/self-evolving/assets/attestation-anomaly-time-decay-policy.conf`
+- Recurrence tuning policy path:
+  `blazeclaw/skills/self-evolving/assets/attestation-anomaly-recurrence-tuning-policy.conf`
 - Default trend window size: `<n>`
 - Trend segmentation mode: `tenant + dependency class`
 - Required promoter inputs: `tenant-id`, `rollout-phase`, `policy-profile`
@@ -297,6 +299,8 @@ Outage outcome recommendation controls:
 - Optional adaptive threshold policy pin:
   `require-adaptive-threshold-policy`
 - Optional time-decay policy pin: `require-time-decay-policy`
+- Optional recurrence tuning policy pin:
+  `require-recurrence-tuning-policy`
 - KMS verifier dependency requirement: `openssl`
 - Sigstore verifier dependency requirement: `cosign`
 - Recommendation review SLA: `<duration>`
@@ -322,6 +326,8 @@ Outage outcome recommendation controls:
   - adaptive threshold policy unresolved for tenant criticality (when
     required): `deny rollout gate`
   - time-decay policy missing/invalid when required: `deny rollout gate`
+  - recurrence tuning policy missing/invalid when required:
+    `deny rollout gate`
 - Recommendation severity gating:
   - `critical|high` in `r3|r4` requires explicit hold or remediation approval
   - `medium` requires owner review before phase promotion

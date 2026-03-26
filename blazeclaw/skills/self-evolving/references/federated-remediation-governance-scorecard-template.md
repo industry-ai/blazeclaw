@@ -144,6 +144,8 @@ Federation-level aggregates:
   `blazeclaw/skills/self-evolving/assets/attestation-anomaly-threshold-tiers.csv`
 - Time-decay anomaly policy path:
   `blazeclaw/skills/self-evolving/assets/attestation-anomaly-time-decay-policy.conf`
+- Recurrence tuning policy path:
+  `blazeclaw/skills/self-evolving/assets/attestation-anomaly-recurrence-tuning-policy.conf`
 - Recommendations generated in window: `<n>`
 - Recommendations accepted: `<n>`
 - Recommendations deferred: `<n>`
@@ -173,6 +175,8 @@ Federation-level aggregates:
 - Critical-tier anomaly p95 versus calibrated threshold: `<percent>`
 - Time-decay weighted anomaly p95: `<percent>`
 - Weighted-versus-unweighted anomaly delta p95: `<percent>`
+- Recurrence auto-tuned half-life p95: `<samples>`
+- Recurrence ratio p95: `<percent>`
 - Highest-impact accepted tuning:
   `<short summary with control reference>`
 

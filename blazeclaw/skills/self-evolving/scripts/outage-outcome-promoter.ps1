@@ -37,6 +37,8 @@ $adaptiveThresholdPolicyFile =
     './blazeclaw/skills/self-evolving/assets/attestation-anomaly-threshold-tiers.csv'
 $timeDecayPolicyFile =
     './blazeclaw/skills/self-evolving/assets/attestation-anomaly-time-decay-policy.conf'
+$recurrenceTuningPolicyFile =
+    './blazeclaw/skills/self-evolving/assets/attestation-anomaly-recurrence-tuning-policy.conf'
 
 function Show-Usage {
 @"
@@ -84,6 +86,9 @@ Optional:
   --time-decay-half-life Baseline half-life in samples for recency decay (default: 5)
   --disable-time-decay-weighting Use unweighted anomaly percentage
   --require-time-decay-policy Fail-fast when time-decay policy cannot be resolved
+  --recurrence-tuning-policy-file Recurrence auto-tuning policy file
+  --disable-recurrence-auto-tuning Disable recurrence-based half-life tuning
+  --require-recurrence-tuning-policy Fail-fast when recurrence tuning policy cannot be resolved
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -118,6 +123,8 @@ $requireAdaptiveThresholdPolicy = $false
 $enableTimeDecayWeighting = $true
 $timeDecayHalfLife = 5
 $requireTimeDecayPolicy = $false
+$enableRecurrenceAutoTuning = $true
+$requireRecurrenceTuningPolicy = $false
 $manifestFileExplicit = $false
 $signatureVerificationMode = 'none'
 $kmsPublicKeyFile = ''
@@ -161,6 +168,9 @@ $adaptiveThresholdSource = 'static'
 $weightedAnomalyPercent = 0
 $timeDecayHalfLifeEffective = 5
 $timeDecaySource = 'disabled'
+$recurrenceRatioPercent = 0
+$recurrenceTunedHalfLife = 5
+$recurrenceTuningSource = 'disabled'
 $notes = ''
 $trendWindowSize = 20
 $dryRun = $false
@@ -312,6 +322,16 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         }
         '--require-time-decay-policy' {
             $requireTimeDecayPolicy = $true
+        }
+        '--recurrence-tuning-policy-file' {
+            $i++
+            $recurrenceTuningPolicyFile = [string]$args[$i]
+        }
+        '--disable-recurrence-auto-tuning' {
+            $enableRecurrenceAutoTuning = $false
+        }
+        '--require-recurrence-tuning-policy' {
+            $requireRecurrenceTuningPolicy = $true
         }
         '--signature-verification-mode' {
             $i++
@@ -863,6 +883,9 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
         $weightedAnomalyPercent = $attestationAnomalyPercent
         $timeDecayHalfLifeEffective = $timeDecayHalfLife
         $timeDecaySource = 'disabled'
+        $recurrenceRatioPercent = 0
+        $recurrenceTunedHalfLife = $timeDecayHalfLife
+        $recurrenceTuningSource = 'disabled'
 
         if ($enableTimeDecayWeighting) {
             $timeDecaySource = 'cli'
@@ -897,6 +920,84 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
                 }
             } elseif ($requireTimeDecayPolicy) {
                 throw "Time-decay policy failed: missing file $timeDecayPolicyFile"
+            }
+
+            if ($enableRecurrenceAutoTuning) {
+                $recurrenceTuningSource = 'static'
+                [int]$recurrenceMin = 2
+                [int]$recurrenceMax = 20
+                [double]$recurrenceMultiplier = 2.0
+
+                if (Test-Path -LiteralPath $recurrenceTuningPolicyFile) {
+                    $recFields = @{}
+                    foreach ($line in (Get-Content -LiteralPath $recurrenceTuningPolicyFile)) {
+                        if ([string]::IsNullOrWhiteSpace($line) -or
+                            $line.Trim().StartsWith('#')) {
+                            continue
+                        }
+
+                        $split = $line.Split('=', 2)
+                        if ($split.Length -eq 2) {
+                            $recFields[$split[0].Trim()] = $split[1].Trim()
+                        }
+                    }
+
+                    [int]$tmpMin = 0
+                    [int]$tmpMax = 0
+                    [double]$tmpMult = 0
+
+                    if ($recFields.ContainsKey('min_half_life_samples') -and
+                        [int]::TryParse(
+                            [string]$recFields['min_half_life_samples'],
+                            [ref]$tmpMin) -and
+                        $tmpMin -gt 0) {
+                        $recurrenceMin = $tmpMin
+                    } elseif ($requireRecurrenceTuningPolicy) {
+                        throw "Recurrence tuning policy failed: min_half_life_samples missing/invalid in $recurrenceTuningPolicyFile"
+                    }
+
+                    if ($recFields.ContainsKey('max_half_life_samples') -and
+                        [int]::TryParse(
+                            [string]$recFields['max_half_life_samples'],
+                            [ref]$tmpMax) -and
+                        $tmpMax -ge $recurrenceMin) {
+                        $recurrenceMax = $tmpMax
+                    } elseif ($requireRecurrenceTuningPolicy) {
+                        throw "Recurrence tuning policy failed: max_half_life_samples missing/invalid in $recurrenceTuningPolicyFile"
+                    }
+
+                    if ($recFields.ContainsKey('fail_multiplier') -and
+                        [double]::TryParse(
+                            [string]$recFields['fail_multiplier'],
+                            [ref]$tmpMult) -and
+                        $tmpMult -gt 0) {
+                        $recurrenceMultiplier = $tmpMult
+                    } elseif ($requireRecurrenceTuningPolicy) {
+                        throw "Recurrence tuning policy failed: fail_multiplier missing/invalid in $recurrenceTuningPolicyFile"
+                    }
+
+                    $recurrenceTuningSource = 'policy'
+                } elseif ($requireRecurrenceTuningPolicy) {
+                    throw "Recurrence tuning policy failed: missing file $recurrenceTuningPolicyFile"
+                }
+
+                if ($attestationBaselineSamples -gt 0) {
+                    $recurrenceAlerts = @($baselineRows | Where-Object {
+                            $_.attestation_status -ne 'verified' -or
+                            $_.revocation_slo_status -eq 'warning'
+                        }).Count
+                    $recurrenceRatioPercent =
+                        [int](($recurrenceAlerts * 100) / $attestationBaselineSamples)
+                }
+
+                $tunedRaw =
+                    $timeDecayHalfLifeEffective +
+                    (($recurrenceRatioPercent / 100.0) *
+                        $recurrenceMultiplier * $timeDecayHalfLifeEffective)
+                $tunedBounded = [Math]::Max($recurrenceMin,
+                    [Math]::Min($recurrenceMax, [int]$tunedRaw))
+                $timeDecayHalfLifeEffective = $tunedBounded
+                $recurrenceTunedHalfLife = $tunedBounded
             }
 
             if ($attestationBaselineSamples -gt 0) {
@@ -1018,6 +1119,10 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
 **Time-Decay Half-Life Samples**: $timeDecayHalfLifeEffective
 **Time-Decay Source**: $timeDecaySource
 **Time-Decay Weighting Enabled**: $enableTimeDecayWeighting
+**Recurrence Ratio Percent**: $recurrenceRatioPercent%
+**Recurrence Tuned Half-Life Samples**: $recurrenceTunedHalfLife
+**Recurrence Auto-Tuning Source**: $recurrenceTuningSource
+**Recurrence Auto-Tuning Enabled**: $enableRecurrenceAutoTuning
 **Anomaly Gate Enabled**: $requireAttestationBaselineGate
 
 ---
@@ -1397,6 +1502,10 @@ $recommendation
 - Time-Decay Half-Life Samples: $timeDecayHalfLifeEffective
 - Time-Decay Source: $timeDecaySource
 - Time-Decay Weighting Enabled: $enableTimeDecayWeighting
+- Recurrence Ratio Percent: $recurrenceRatioPercent%
+- Recurrence Tuned Half-Life Samples: $recurrenceTunedHalfLife
+- Recurrence Auto-Tuning Source: $recurrenceTuningSource
+- Recurrence Auto-Tuning Enabled: $enableRecurrenceAutoTuning
 - Attestation Baseline Gate: $requireAttestationBaselineGate
 - Cross-Tenant Heatmap Source: $crossTenantHeatmapFile
 - Auto-Remediation Routing Source: $autoRemediationRoutingFile

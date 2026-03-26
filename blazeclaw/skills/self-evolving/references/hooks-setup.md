@@ -254,6 +254,10 @@ Outage promoter inputs now require tenant and rollout phase context:
   - `--time-decay-half-life <positive-int>`
   - `--disable-time-decay-weighting`
   - `--require-time-decay-policy`
+- Optional recurrence auto-tuning controls:
+  - `--recurrence-tuning-policy-file <path>`
+  - `--disable-recurrence-auto-tuning`
+  - `--require-recurrence-tuning-policy`
 
 Fail-fast validation gates:
 
@@ -287,6 +291,8 @@ Fail-fast validation gates:
   applies tier-specific anomaly thresholds before gate evaluation.
 - Time-decay weighting applies recency-weighted anomaly percentages for
   drift-sensitive baseline gate evaluation.
+- Recurrence auto-tuning adjusts decay half-life from tenant incident
+  recurrence ratio within policy-defined bounds.
 
 Default profile weights are provided in:
 
@@ -314,3 +320,5 @@ Default signed manifest artifacts are provided in:
 - `assets/attestation-anomaly-threshold-tiers.template.csv`
 - `assets/attestation-anomaly-time-decay-policy.conf`
 - `assets/attestation-anomaly-time-decay-policy.template.conf`
+- `assets/attestation-anomaly-recurrence-tuning-policy.conf`
+- `assets/attestation-anomaly-recurrence-tuning-policy.template.conf`
