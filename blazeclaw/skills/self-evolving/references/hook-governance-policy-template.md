@@ -321,6 +321,8 @@ Outage outcome recommendation controls:
   `require-causal-clustering-policy`
 - Optional causal graphing policy pin:
   `require-causal-graphing-policy`
+- Optional graph edge persistence pin:
+  `disable-graph-edge-persistence` should be blocked in protected rollout phases
 - KMS verifier dependency requirement: `openssl`
 - Sigstore verifier dependency requirement: `cosign`
 - Recommendation review SLA: `<duration>`
@@ -356,6 +358,8 @@ Outage outcome recommendation controls:
     `deny rollout gate`
   - causal graphing policy missing/invalid when required:
     `deny rollout gate`
+  - graph temporal decay controls missing when confidence graphing is
+    required: `deny rollout gate`
 - Recommendation severity gating:
   - `critical|high` in `r3|r4` requires explicit hold or remediation approval
   - `medium` requires owner review before phase promotion

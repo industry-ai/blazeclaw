@@ -187,6 +187,8 @@ Federation-level aggregates:
 - Overlay activation coverage by cycle phase: `<percentages>`
 - Causal confidence score p95: `<score>`
 - Confidence-qualified overlay candidate rate: `<percent>`
+- Edge persistence score p95: `<score>`
+- Temporal-decay weighted persistence trend: `<increasing|stable|decreasing>`
 - Highest-impact accepted tuning:
   `<short summary with control reference>`
 

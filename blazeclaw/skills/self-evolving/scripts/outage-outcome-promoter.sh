@@ -61,6 +61,9 @@ ENABLE_CAUSAL_CLUSTERING=true
 REQUIRE_CAUSAL_CLUSTERING_POLICY=false
 ENABLE_CONFIDENCE_CAUSAL_GRAPHING=true
 REQUIRE_CAUSAL_GRAPHING_POLICY=false
+ENABLE_GRAPH_EDGE_PERSISTENCE=true
+GRAPH_COHORT_WINDOW=30
+GRAPH_TEMPORAL_DECAY_RATE=0.15
 MANIFEST_FILE_EXPLICIT=false
 SIGNATURE_VERIFICATION_MODE="none"
 KMS_PUBLIC_KEY_FILE=""
@@ -143,6 +146,9 @@ Optional:
   --causal-graph-file Confidence-weighted causal graph markdown output
   --disable-confidence-causal-graphing Disable confidence-weighted causal graphing
   --require-causal-graphing-policy Fail-fast when causal graphing policy cannot be resolved
+  --graph-cohort-window Causal graph cohort sample window (default: 30)
+  --graph-temporal-decay-rate Temporal decay rate for graph edge persistence (default: 0.15)
+  --disable-graph-edge-persistence Disable graph edge persistence scoring
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -388,6 +394,18 @@ while [[ $# -gt 0 ]]; do
             REQUIRE_CAUSAL_GRAPHING_POLICY=true
             shift
             ;;
+        --graph-cohort-window)
+            GRAPH_COHORT_WINDOW="${2:-}"
+            shift 2
+            ;;
+        --graph-temporal-decay-rate)
+            GRAPH_TEMPORAL_DECAY_RATE="${2:-}"
+            shift 2
+            ;;
+        --disable-graph-edge-persistence)
+            ENABLE_GRAPH_EDGE_PERSISTENCE=false
+            shift
+            ;;
         --signature-verification-mode)
             SIGNATURE_VERIFICATION_MODE="${2:-}"
             shift 2
@@ -483,6 +501,16 @@ fi
 
 if ! [[ "$REPORTING_CYCLE_LENGTH" =~ ^[0-9]+$ ]] || [ "$REPORTING_CYCLE_LENGTH" -le 0 ]; then
     echo "--reporting-cycle-length must be a positive integer" >&2
+    exit 1
+fi
+
+if ! [[ "$GRAPH_COHORT_WINDOW" =~ ^[0-9]+$ ]] || [ "$GRAPH_COHORT_WINDOW" -le 0 ]; then
+    echo "--graph-cohort-window must be a positive integer" >&2
+    exit 1
+fi
+
+if ! awk -v v="$GRAPH_TEMPORAL_DECAY_RATE" 'BEGIN { exit !(v+0>=0) }'; then
+    echo "--graph-temporal-decay-rate must be a non-negative number" >&2
     exit 1
 fi
 
@@ -914,89 +942,6 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
                         exit 1
                     fi
 
-            if [ "$ENABLE_CAUSAL_CLUSTERING" = true ]; then
-                CAUSAL_CLUSTER_SOURCE="static"
-                CLUSTER_MIN_SAMPLES=3
-                CLUSTER_FAIL_THRESHOLD_PERCENT=50
-                CLUSTER_HIGH_MULTIPLIER=1.15
-
-                if [ -f "$CAUSAL_CLUSTERING_POLICY_FILE" ] && [ -r "$CAUSAL_CLUSTERING_POLICY_FILE" ]; then
-                    P_MIN=$(awk -F'=' '$1=="min_samples" { print $2; exit }' "$CAUSAL_CLUSTERING_POLICY_FILE" | tr -d '\r[:space:]')
-                    P_FAIL=$(awk -F'=' '$1=="fail_threshold_percent" { print $2; exit }' "$CAUSAL_CLUSTERING_POLICY_FILE" | tr -d '\r[:space:]')
-                    P_MULT=$(awk -F'=' '$1=="high_impact_multiplier" { print $2; exit }' "$CAUSAL_CLUSTERING_POLICY_FILE" | tr -d '\r[:space:]')
-                    [ -n "$P_MIN" ] && [[ "$P_MIN" =~ ^[0-9]+$ ]] && [ "$P_MIN" -gt 0 ] && CLUSTER_MIN_SAMPLES="$P_MIN"
-                    [ -n "$P_FAIL" ] && [[ "$P_FAIL" =~ ^[0-9]+$ ]] && [ "$P_FAIL" -ge 0 ] && [ "$P_FAIL" -le 100 ] && CLUSTER_FAIL_THRESHOLD_PERCENT="$P_FAIL"
-                    [ -n "$P_MULT" ] && awk -v v="$P_MULT" 'BEGIN { exit !(v+0>0) }' && CLUSTER_HIGH_MULTIPLIER="$P_MULT"
-                    CAUSAL_CLUSTER_SOURCE="policy"
-                elif [ "$REQUIRE_CAUSAL_CLUSTERING_POLICY" = true ]; then
-                    echo "Causal clustering policy failed: missing file $CAUSAL_CLUSTERING_POLICY_FILE" >&2
-                    exit 1
-                fi
-
-                EFFECTIVE_FAILURE_MODE="${FAILURE_MODE:-unspecified}"
-                CAUSAL_CLUSTER_KEY="$DEPENDENCY|$ROLLOUT_PHASE|$EFFECTIVE_FAILURE_MODE"
-                CLUSTER_ROWS=$(awk -F',' -v tenant="$TENANT_ID" -v dep="$DEPENDENCY" -v phase="$ROLLOUT_PHASE" -v mode="$EFFECTIVE_FAILURE_MODE" 'NR>1 && $2==tenant && $4==dep && $3==phase && $5==mode { print $0 }' "$CAUSAL_HISTORY_FILE" | tail -n "$ATTESTATION_BASELINE_WINDOW")
-                CAUSAL_CLUSTER_SAMPLE_COUNT=$(printf "%s\n" "$CLUSTER_ROWS" | sed '/^$/d' | wc -l | tr -d ' ')
-                CAUSAL_CLUSTER_FAIL_COUNT=$(printf "%s\n" "$CLUSTER_ROWS" | awk -F',' 'NF>0 && $6=="fail" { c++ } END { print c + 0 }')
-                if [ "$CAUSAL_CLUSTER_SAMPLE_COUNT" -gt 0 ]; then
-                    CAUSAL_CLUSTER_FAIL_PERCENT=$(( CAUSAL_CLUSTER_FAIL_COUNT * 100 / CAUSAL_CLUSTER_SAMPLE_COUNT ))
-                fi
-
-                if [ "$CAUSAL_CLUSTER_SAMPLE_COUNT" -ge "$CLUSTER_MIN_SAMPLES" ] && [ "$CAUSAL_CLUSTER_FAIL_PERCENT" -ge "$CLUSTER_FAIL_THRESHOLD_PERCENT" ]; then
-                    CAUSAL_CLUSTER_SUGGESTED_OVERLAY="suggested-$DEPENDENCY-$ROLLOUT_PHASE"
-                    CAUSAL_CLUSTER_SUGGESTED_MULTIPLIER="$CLUSTER_HIGH_MULTIPLIER"
-                fi
-
-                if [ "$ENABLE_CONFIDENCE_CAUSAL_GRAPHING" = true ]; then
-                    CAUSAL_CONFIDENCE_SOURCE="static"
-                    CONF_SAMPLE_WEIGHT=0.4
-                    CONF_FAIL_WEIGHT=0.5
-                    CONF_CONTEXT_WEIGHT=0.1
-                    CAUSAL_CONFIDENCE_THRESHOLD=60
-
-                    if [ -f "$CAUSAL_GRAPHING_POLICY_FILE" ] && [ -r "$CAUSAL_GRAPHING_POLICY_FILE" ]; then
-                        P_SW=$(awk -F'=' '$1=="sample_weight" { print $2; exit }' "$CAUSAL_GRAPHING_POLICY_FILE" | tr -d '\r[:space:]')
-                        P_FW=$(awk -F'=' '$1=="fail_weight" { print $2; exit }' "$CAUSAL_GRAPHING_POLICY_FILE" | tr -d '\r[:space:]')
-                        P_CW=$(awk -F'=' '$1=="context_weight" { print $2; exit }' "$CAUSAL_GRAPHING_POLICY_FILE" | tr -d '\r[:space:]')
-                        P_TH=$(awk -F'=' '$1=="recommendation_threshold" { print $2; exit }' "$CAUSAL_GRAPHING_POLICY_FILE" | tr -d '\r[:space:]')
-
-                        [ -n "$P_SW" ] && awk -v v="$P_SW" 'BEGIN { exit !(v+0>=0) }' && CONF_SAMPLE_WEIGHT="$P_SW"
-                        [ -n "$P_FW" ] && awk -v v="$P_FW" 'BEGIN { exit !(v+0>=0) }' && CONF_FAIL_WEIGHT="$P_FW"
-                        [ -n "$P_CW" ] && awk -v v="$P_CW" 'BEGIN { exit !(v+0>=0) }' && CONF_CONTEXT_WEIGHT="$P_CW"
-                        [ -n "$P_TH" ] && [[ "$P_TH" =~ ^[0-9]+$ ]] && [ "$P_TH" -ge 0 ] && [ "$P_TH" -le 100 ] && CAUSAL_CONFIDENCE_THRESHOLD="$P_TH"
-                        CAUSAL_CONFIDENCE_SOURCE="policy"
-                    elif [ "$REQUIRE_CAUSAL_GRAPHING_POLICY" = true ]; then
-                        echo "Causal graphing policy failed: missing file $CAUSAL_GRAPHING_POLICY_FILE" >&2
-                        exit 1
-                    fi
-
-                    SAMPLE_CONFIDENCE=0
-                    if [ "$ATTESTATION_BASELINE_WINDOW" -gt 0 ]; then
-                        SAMPLE_CONFIDENCE=$(( CAUSAL_CLUSTER_SAMPLE_COUNT * 100 / ATTESTATION_BASELINE_WINDOW ))
-                    fi
-                    [ "$SAMPLE_CONFIDENCE" -gt 100 ] && SAMPLE_CONFIDENCE=100
-
-                    CONTEXT_SCORE=0
-                    if [ "$SEASONAL_OVERLAY_SOURCE" = "policy" ]; then
-                        CONTEXT_SCORE=100
-                    elif [ "$SEASONAL_DECOMPOSITION_SOURCE" = "policy" ]; then
-                        CONTEXT_SCORE=70
-                    elif [ "$TIME_DECAY_SOURCE" = "policy" ]; then
-                        CONTEXT_SCORE=40
-                    fi
-
-                    CAUSAL_CONFIDENCE_SCORE=$(awk -v s="$SAMPLE_CONFIDENCE" -v f="$CAUSAL_CLUSTER_FAIL_PERCENT" -v c="$CONTEXT_SCORE" -v sw="$CONF_SAMPLE_WEIGHT" -v fw="$CONF_FAIL_WEIGHT" -v cw="$CONF_CONTEXT_WEIGHT" 'BEGIN { v=(s*sw)+(f*fw)+(c*cw); if (v>100) v=100; if (v<0) v=0; printf "%d", v }')
-                    CAUSAL_GRAPH_NODE="$CAUSAL_CLUSTER_KEY|confidence=$CAUSAL_CONFIDENCE_SCORE"
-
-                    if [ "$CAUSAL_CONFIDENCE_SCORE" -lt "$CAUSAL_CONFIDENCE_THRESHOLD" ]; then
-                        CAUSAL_CLUSTER_SUGGESTED_OVERLAY="none"
-                        CAUSAL_CLUSTER_SUGGESTED_MULTIPLIER=1.00
-                    fi
-
-                    CAUSAL_GRAPH_EDGE="$CAUSAL_CLUSTER_KEY -> ${CAUSAL_CLUSTER_SUGGESTED_OVERLAY:-none} (score=$CAUSAL_CONFIDENCE_SCORE)"
-                fi
-            fi
-
                     if [ -n "$POLICY_MAX" ] && [[ "$POLICY_MAX" =~ ^[0-9]+$ ]] && [ "$POLICY_MAX" -ge "$RECURRENCE_TUNING_MIN" ]; then
                         RECURRENCE_TUNING_MAX="$POLICY_MAX"
                     elif [ "$REQUIRE_RECURRENCE_TUNING_POLICY" = true ]; then
@@ -1138,6 +1083,108 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
                     WEIGHTED_ANOMALY_PERCENT=$(awk -v alert="$WEIGHTED_ALERT_SUM" -v total="$WEIGHTED_TOTAL_SUM" 'BEGIN { printf "%d", (alert*100)/total }')
                 fi
             fi
+
+            if [ "$ENABLE_CAUSAL_CLUSTERING" = true ]; then
+                CAUSAL_CLUSTER_SOURCE="static"
+                CLUSTER_MIN_SAMPLES=3
+                CLUSTER_FAIL_THRESHOLD_PERCENT=50
+                CLUSTER_HIGH_MULTIPLIER=1.15
+
+                if [ -f "$CAUSAL_CLUSTERING_POLICY_FILE" ] && [ -r "$CAUSAL_CLUSTERING_POLICY_FILE" ]; then
+                    P_MIN=$(awk -F'=' '$1=="min_samples" { print $2; exit }' "$CAUSAL_CLUSTERING_POLICY_FILE" | tr -d '\r[:space:]')
+                    P_FAIL=$(awk -F'=' '$1=="fail_threshold_percent" { print $2; exit }' "$CAUSAL_CLUSTERING_POLICY_FILE" | tr -d '\r[:space:]')
+                    P_MULT=$(awk -F'=' '$1=="high_impact_multiplier" { print $2; exit }' "$CAUSAL_CLUSTERING_POLICY_FILE" | tr -d '\r[:space:]')
+                    [ -n "$P_MIN" ] && [[ "$P_MIN" =~ ^[0-9]+$ ]] && [ "$P_MIN" -gt 0 ] && CLUSTER_MIN_SAMPLES="$P_MIN"
+                    [ -n "$P_FAIL" ] && [[ "$P_FAIL" =~ ^[0-9]+$ ]] && [ "$P_FAIL" -ge 0 ] && [ "$P_FAIL" -le 100 ] && CLUSTER_FAIL_THRESHOLD_PERCENT="$P_FAIL"
+                    [ -n "$P_MULT" ] && awk -v v="$P_MULT" 'BEGIN { exit !(v+0>0) }' && CLUSTER_HIGH_MULTIPLIER="$P_MULT"
+                    CAUSAL_CLUSTER_SOURCE="policy"
+                elif [ "$REQUIRE_CAUSAL_CLUSTERING_POLICY" = true ]; then
+                    echo "Causal clustering policy failed: missing file $CAUSAL_CLUSTERING_POLICY_FILE" >&2
+                    exit 1
+                fi
+
+                EFFECTIVE_FAILURE_MODE="${FAILURE_MODE:-unspecified}"
+                CAUSAL_CLUSTER_KEY="$DEPENDENCY|$ROLLOUT_PHASE|$EFFECTIVE_FAILURE_MODE"
+                CLUSTER_ROWS=$(awk -F',' -v tenant="$TENANT_ID" -v dep="$DEPENDENCY" -v phase="$ROLLOUT_PHASE" -v mode="$EFFECTIVE_FAILURE_MODE" 'NR>1 && $2==tenant && $4==dep && $3==phase && $5==mode { print $0 }' "$CAUSAL_HISTORY_FILE" | tail -n "$ATTESTATION_BASELINE_WINDOW")
+                CAUSAL_CLUSTER_SAMPLE_COUNT=$(printf "%s\n" "$CLUSTER_ROWS" | sed '/^$/d' | wc -l | tr -d ' ')
+                CAUSAL_CLUSTER_FAIL_COUNT=$(printf "%s\n" "$CLUSTER_ROWS" | awk -F',' 'NF>0 && $6=="fail" { c++ } END { print c + 0 }')
+                if [ "$CAUSAL_CLUSTER_SAMPLE_COUNT" -gt 0 ]; then
+                    CAUSAL_CLUSTER_FAIL_PERCENT=$(( CAUSAL_CLUSTER_FAIL_COUNT * 100 / CAUSAL_CLUSTER_SAMPLE_COUNT ))
+                fi
+
+                if [ "$CAUSAL_CLUSTER_SAMPLE_COUNT" -ge "$CLUSTER_MIN_SAMPLES" ] && [ "$CAUSAL_CLUSTER_FAIL_PERCENT" -ge "$CLUSTER_FAIL_THRESHOLD_PERCENT" ]; then
+                    CAUSAL_CLUSTER_SUGGESTED_OVERLAY="suggested-$DEPENDENCY-$ROLLOUT_PHASE"
+                    CAUSAL_CLUSTER_SUGGESTED_MULTIPLIER="$CLUSTER_HIGH_MULTIPLIER"
+                fi
+
+                if [ "$ENABLE_CONFIDENCE_CAUSAL_GRAPHING" = true ]; then
+                    CAUSAL_CONFIDENCE_SOURCE="static"
+                    CONF_SAMPLE_WEIGHT=0.4
+                    CONF_FAIL_WEIGHT=0.5
+                    CONF_CONTEXT_WEIGHT=0.1
+                    CONF_PERSIST_WEIGHT=0.2
+                    CAUSAL_CONFIDENCE_THRESHOLD=60
+                    EDGE_PERSISTENCE_PERCENT=0
+                    EDGE_PERSISTENCE_SCORE=0
+                    GRAPH_TEMPORAL_SOURCE="static"
+
+                    if [ -f "$CAUSAL_GRAPHING_POLICY_FILE" ] && [ -r "$CAUSAL_GRAPHING_POLICY_FILE" ]; then
+                        P_SW=$(awk -F'=' '$1=="sample_weight" { print $2; exit }' "$CAUSAL_GRAPHING_POLICY_FILE" | tr -d '\r[:space:]')
+                        P_FW=$(awk -F'=' '$1=="fail_weight" { print $2; exit }' "$CAUSAL_GRAPHING_POLICY_FILE" | tr -d '\r[:space:]')
+                        P_CW=$(awk -F'=' '$1=="context_weight" { print $2; exit }' "$CAUSAL_GRAPHING_POLICY_FILE" | tr -d '\r[:space:]')
+                        P_PW=$(awk -F'=' '$1=="edge_persistence_weight" { print $2; exit }' "$CAUSAL_GRAPHING_POLICY_FILE" | tr -d '\r[:space:]')
+                        P_TH=$(awk -F'=' '$1=="recommendation_threshold" { print $2; exit }' "$CAUSAL_GRAPHING_POLICY_FILE" | tr -d '\r[:space:]')
+                        P_GW=$(awk -F'=' '$1=="cohort_window" { print $2; exit }' "$CAUSAL_GRAPHING_POLICY_FILE" | tr -d '\r[:space:]')
+                        P_GD=$(awk -F'=' '$1=="temporal_decay_rate" { print $2; exit }' "$CAUSAL_GRAPHING_POLICY_FILE" | tr -d '\r[:space:]')
+
+                        [ -n "$P_SW" ] && awk -v v="$P_SW" 'BEGIN { exit !(v+0>=0) }' && CONF_SAMPLE_WEIGHT="$P_SW"
+                        [ -n "$P_FW" ] && awk -v v="$P_FW" 'BEGIN { exit !(v+0>=0) }' && CONF_FAIL_WEIGHT="$P_FW"
+                        [ -n "$P_CW" ] && awk -v v="$P_CW" 'BEGIN { exit !(v+0>=0) }' && CONF_CONTEXT_WEIGHT="$P_CW"
+                        [ -n "$P_PW" ] && awk -v v="$P_PW" 'BEGIN { exit !(v+0>=0) }' && CONF_PERSIST_WEIGHT="$P_PW"
+                        [ -n "$P_TH" ] && [[ "$P_TH" =~ ^[0-9]+$ ]] && [ "$P_TH" -ge 0 ] && [ "$P_TH" -le 100 ] && CAUSAL_CONFIDENCE_THRESHOLD="$P_TH"
+                        [ -n "$P_GW" ] && [[ "$P_GW" =~ ^[0-9]+$ ]] && [ "$P_GW" -gt 0 ] && GRAPH_COHORT_WINDOW="$P_GW"
+                        [ -n "$P_GD" ] && awk -v v="$P_GD" 'BEGIN { exit !(v+0>=0) }' && GRAPH_TEMPORAL_DECAY_RATE="$P_GD"
+                        CAUSAL_CONFIDENCE_SOURCE="policy"
+                        GRAPH_TEMPORAL_SOURCE="policy"
+                    elif [ "$REQUIRE_CAUSAL_GRAPHING_POLICY" = true ]; then
+                        echo "Causal graphing policy failed: missing file $CAUSAL_GRAPHING_POLICY_FILE" >&2
+                        exit 1
+                    fi
+
+                    SAMPLE_CONFIDENCE=0
+                    if [ "$ATTESTATION_BASELINE_WINDOW" -gt 0 ]; then
+                        SAMPLE_CONFIDENCE=$(( CAUSAL_CLUSTER_SAMPLE_COUNT * 100 / ATTESTATION_BASELINE_WINDOW ))
+                    fi
+                    [ "$SAMPLE_CONFIDENCE" -gt 100 ] && SAMPLE_CONFIDENCE=100
+
+                    CONTEXT_SCORE=0
+                    if [ "$SEASONAL_OVERLAY_SOURCE" = "policy" ]; then
+                        CONTEXT_SCORE=100
+                    elif [ "$SEASONAL_DECOMPOSITION_SOURCE" = "policy" ]; then
+                        CONTEXT_SCORE=70
+                    elif [ "$TIME_DECAY_SOURCE" = "policy" ]; then
+                        CONTEXT_SCORE=40
+                    fi
+
+                    if [ "$ENABLE_GRAPH_EDGE_PERSISTENCE" = true ]; then
+                        PERSIST_ROWS=$(awk -F',' -v tenant="$TENANT_ID" -v dep="$DEPENDENCY" -v phase="$ROLLOUT_PHASE" -v mode="$EFFECTIVE_FAILURE_MODE" 'NR>1 && $2==tenant && $4==dep && $3==phase && $5==mode { print $0 }' "$CAUSAL_HISTORY_FILE" | tail -n "$GRAPH_COHORT_WINDOW")
+                        EDGE_PERSISTENCE_PERCENT=$(printf "%s\n" "$PERSIST_ROWS" | awk -F',' -v d="$GRAPH_TEMPORAL_DECAY_RATE" 'NF>0 { n++; age=n-1; w=exp(-1*d*age); tw+=w; if($6=="fail") fw+=w } END { if(tw>0) printf "%d", (fw*100)/tw; else print 0 }')
+                        EDGE_PERSISTENCE_SCORE="$EDGE_PERSISTENCE_PERCENT"
+                    else
+                        GRAPH_TEMPORAL_SOURCE="disabled"
+                    fi
+
+                    CAUSAL_CONFIDENCE_SCORE=$(awk -v s="$SAMPLE_CONFIDENCE" -v f="$CAUSAL_CLUSTER_FAIL_PERCENT" -v c="$CONTEXT_SCORE" -v p="$EDGE_PERSISTENCE_SCORE" -v sw="$CONF_SAMPLE_WEIGHT" -v fw="$CONF_FAIL_WEIGHT" -v cw="$CONF_CONTEXT_WEIGHT" -v pw="$CONF_PERSIST_WEIGHT" 'BEGIN { v=(s*sw)+(f*fw)+(c*cw)+(p*pw); if (v>100) v=100; if (v<0) v=0; printf "%d", v }')
+                    CAUSAL_GRAPH_NODE="$CAUSAL_CLUSTER_KEY|confidence=$CAUSAL_CONFIDENCE_SCORE"
+
+                    if [ "$CAUSAL_CONFIDENCE_SCORE" -lt "$CAUSAL_CONFIDENCE_THRESHOLD" ]; then
+                        CAUSAL_CLUSTER_SUGGESTED_OVERLAY="none"
+                        CAUSAL_CLUSTER_SUGGESTED_MULTIPLIER=1.00
+                    fi
+
+                    CAUSAL_GRAPH_EDGE="$CAUSAL_CLUSTER_KEY -> ${CAUSAL_CLUSTER_SUGGESTED_OVERLAY:-none} (score=$CAUSAL_CONFIDENCE_SCORE,persistence=$EDGE_PERSISTENCE_SCORE)"
+                fi
+            fi
         fi
 
         CALIBRATED_ATTESTATION_THRESHOLD_PERCENT="$ATTESTATION_ANOMALY_THRESHOLD_PERCENT"
@@ -1237,6 +1284,12 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
 **Causal Confidence Score**: $CAUSAL_CONFIDENCE_SCORE
 **Causal Confidence Threshold**: $CAUSAL_CONFIDENCE_THRESHOLD
 **Causal Confidence Source**: $CAUSAL_CONFIDENCE_SOURCE
+**Graph Cohort Window**: $GRAPH_COHORT_WINDOW
+**Graph Temporal Decay Rate**: $GRAPH_TEMPORAL_DECAY_RATE
+**Graph Temporal Source**: ${GRAPH_TEMPORAL_SOURCE:-disabled}
+**Edge Persistence Percent**: ${EDGE_PERSISTENCE_PERCENT:-0}%
+**Edge Persistence Score**: ${EDGE_PERSISTENCE_SCORE:-0}
+**Graph Edge Persistence Enabled**: $ENABLE_GRAPH_EDGE_PERSISTENCE
 **Causal Graph Node**: $CAUSAL_GRAPH_NODE
 **Causal Graph Edge**: $CAUSAL_GRAPH_EDGE
 **Anomaly Gate Enabled**: $REQUIRE_ATTESTATION_BASELINE_GATE
@@ -1638,6 +1691,12 @@ $RECOMMENDATION
 - Causal Confidence Score: ${CAUSAL_CONFIDENCE_SCORE:-0}
 - Causal Confidence Threshold: ${CAUSAL_CONFIDENCE_THRESHOLD:-60}
 - Causal Confidence Source: ${CAUSAL_CONFIDENCE_SOURCE:-disabled}
+- Graph Cohort Window: ${GRAPH_COHORT_WINDOW}
+- Graph Temporal Decay Rate: ${GRAPH_TEMPORAL_DECAY_RATE}
+- Graph Temporal Source: ${GRAPH_TEMPORAL_SOURCE:-disabled}
+- Edge Persistence Percent: ${EDGE_PERSISTENCE_PERCENT:-0}%
+- Edge Persistence Score: ${EDGE_PERSISTENCE_SCORE:-0}
+- Graph Edge Persistence Enabled: ${ENABLE_GRAPH_EDGE_PERSISTENCE}
 - Causal Graph Node: ${CAUSAL_GRAPH_NODE:-none}
 - Causal Graph Edge: ${CAUSAL_GRAPH_EDGE:-none}
 - Attestation Baseline Gate: ${REQUIRE_ATTESTATION_BASELINE_GATE}

@@ -188,6 +188,7 @@ Approval gate checklist:
 - [ ] seasonal decomposition policy is validated for reporting-cycle multipliers
 - [ ] holiday/event overlay policy is validated for cycle-phase exceptions
 - [ ] confidence-weighted causal graphing policy is validated for recommendation thresholds
+- [ ] temporal decay and edge persistence parameters are validated for cohort graph scoring
 
 ## 6) Rollback Plan
 

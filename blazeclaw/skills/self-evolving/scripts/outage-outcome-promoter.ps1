@@ -118,6 +118,9 @@ Optional:
   --causal-graph-file Confidence-weighted causal graph markdown output
   --disable-confidence-causal-graphing Disable confidence-weighted causal graphing
   --require-causal-graphing-policy Fail-fast when causal graphing policy cannot be resolved
+  --graph-cohort-window Causal graph cohort sample window (default: 30)
+  --graph-temporal-decay-rate Temporal decay rate for graph edge persistence (default: 0.15)
+  --disable-graph-edge-persistence Disable graph edge persistence scoring
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -163,6 +166,9 @@ $enableCausalClustering = $true
 $requireCausalClusteringPolicy = $false
 $enableConfidenceCausalGraphing = $true
 $requireCausalGraphingPolicy = $false
+$enableGraphEdgePersistence = $true
+$graphCohortWindow = 30
+$graphTemporalDecayRate = 0.15
 $manifestFileExplicit = $false
 $signatureVerificationMode = 'none'
 $kmsPublicKeyFile = ''
@@ -228,6 +234,12 @@ $causalConfidenceThreshold = 60
 $causalConfidenceSource = 'disabled'
 $causalGraphNode = 'none'
 $causalGraphEdge = 'none'
+        $edgePersistenceScore = 0
+        $edgePersistencePercent = 0
+        $graphTemporalSource = 'disabled'
+$edgePersistenceScore = 0
+$edgePersistencePercent = 0
+$graphTemporalSource = 'disabled'
 $notes = ''
 $trendWindowSize = 20
 $dryRun = $false
@@ -442,6 +454,17 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         '--require-causal-graphing-policy' {
             $requireCausalGraphingPolicy = $true
         }
+        '--graph-cohort-window' {
+            $i++
+            $graphCohortWindow = [int]$args[$i]
+        }
+        '--graph-temporal-decay-rate' {
+            $i++
+            $graphTemporalDecayRate = [double]$args[$i]
+        }
+        '--disable-graph-edge-persistence' {
+            $enableGraphEdgePersistence = $false
+        }
         '--signature-verification-mode' {
             $i++
             $signatureVerificationMode = [string]$args[$i]
@@ -535,6 +558,14 @@ if ($timeDecayHalfLife -le 0) {
 
 if ($reportingCycleLength -le 0) {
     throw '--reporting-cycle-length must be a positive integer'
+}
+
+if ($graphCohortWindow -le 0) {
+    throw '--graph-cohort-window must be a positive integer'
+}
+
+if ($graphTemporalDecayRate -lt 0) {
+    throw '--graph-temporal-decay-rate must be a non-negative number'
 }
 
 if ([string]::IsNullOrWhiteSpace($policyProfile)) {
@@ -1367,7 +1398,11 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
                     [double]$sampleWeight = 0.4
                     [double]$failWeight = 0.5
                     [double]$contextWeight = 0.1
+                    [double]$edgePersistenceWeight = 0.2
                     [int]$causalConfidenceThreshold = 60
+                    $edgePersistenceScore = 0
+                    $edgePersistencePercent = 0
+                    $graphTemporalSource = 'static'
 
                     if (Test-Path -LiteralPath $causalGraphingPolicyFile) {
                         $graphFields = @{}
@@ -1385,7 +1420,10 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
                         [double]$tmpSw = 0
                         [double]$tmpFw = 0
                         [double]$tmpCw = 0
+                        [double]$tmpPw = 0
                         [int]$tmpTh = 0
+                        [int]$tmpGw = 0
+                        [double]$tmpGd = 0
                         if ($graphFields.ContainsKey('sample_weight') -and
                             [double]::TryParse([string]$graphFields['sample_weight'], [ref]$tmpSw) -and
                             $tmpSw -ge 0) { $sampleWeight = $tmpSw }
@@ -1395,10 +1433,20 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
                         if ($graphFields.ContainsKey('context_weight') -and
                             [double]::TryParse([string]$graphFields['context_weight'], [ref]$tmpCw) -and
                             $tmpCw -ge 0) { $contextWeight = $tmpCw }
+                        if ($graphFields.ContainsKey('edge_persistence_weight') -and
+                            [double]::TryParse([string]$graphFields['edge_persistence_weight'], [ref]$tmpPw) -and
+                            $tmpPw -ge 0) { $edgePersistenceWeight = $tmpPw }
                         if ($graphFields.ContainsKey('recommendation_threshold') -and
                             [int]::TryParse([string]$graphFields['recommendation_threshold'], [ref]$tmpTh) -and
                             $tmpTh -ge 0 -and $tmpTh -le 100) { $causalConfidenceThreshold = $tmpTh }
+                        if ($graphFields.ContainsKey('cohort_window') -and
+                            [int]::TryParse([string]$graphFields['cohort_window'], [ref]$tmpGw) -and
+                            $tmpGw -gt 0) { $graphCohortWindow = $tmpGw }
+                        if ($graphFields.ContainsKey('temporal_decay_rate') -and
+                            [double]::TryParse([string]$graphFields['temporal_decay_rate'], [ref]$tmpGd) -and
+                            $tmpGd -ge 0) { $graphTemporalDecayRate = $tmpGd }
                         $causalConfidenceSource = 'policy'
+                        $graphTemporalSource = 'policy'
                     } elseif ($requireCausalGraphingPolicy) {
                         throw "Causal graphing policy failed: missing file $causalGraphingPolicyFile"
                     }
@@ -1418,9 +1466,41 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
                         $contextScore = 40
                     }
 
+                    if ($enableGraphEdgePersistence) {
+                        $persistRows = Import-Csv -LiteralPath $causalHistoryFile |
+                            Where-Object {
+                                $_.tenant_id -eq $tenantId -and
+                                $_.dependency -eq $dependency -and
+                                $_.rollout_phase -eq $rolloutPhase -and
+                                $_.failure_mode -eq $effectiveFailureMode
+                            } |
+                            Select-Object -Last $graphCohortWindow
+
+                        [double]$persistWeightedTotal = 0
+                        [double]$persistWeightedFail = 0
+                        $pIndex = 0
+                        foreach ($row in $persistRows) {
+                            $pWeight = [Math]::Exp(-1 * $graphTemporalDecayRate * $pIndex)
+                            $persistWeightedTotal += $pWeight
+                            if ($row.result -eq 'fail') {
+                                $persistWeightedFail += $pWeight
+                            }
+                            $pIndex++
+                        }
+
+                        if ($persistWeightedTotal -gt 0) {
+                            $edgePersistencePercent =
+                                [int](($persistWeightedFail * 100) / $persistWeightedTotal)
+                        }
+                        $edgePersistenceScore = $edgePersistencePercent
+                    } else {
+                        $graphTemporalSource = 'disabled'
+                    }
+
                     $rawScore = ($sampleConfidence * $sampleWeight) +
                         ($causalClusterFailPercent * $failWeight) +
-                        ($contextScore * $contextWeight)
+                        ($contextScore * $contextWeight) +
+                        ($edgePersistenceScore * $edgePersistenceWeight)
                     $causalConfidenceScore =
                         [int]([Math]::Max(0, [Math]::Min(100, $rawScore)))
                     $causalGraphNode = "$causalClusterKey|confidence=$causalConfidenceScore"
@@ -1430,7 +1510,7 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
                         $causalClusterSuggestedMultiplier = 1.00
                     }
 
-                    $causalGraphEdge = "$causalClusterKey -> $causalClusterSuggestedOverlay (score=$causalConfidenceScore)"
+                    $causalGraphEdge = "$causalClusterKey -> $causalClusterSuggestedOverlay (score=$causalConfidenceScore,persistence=$edgePersistenceScore)"
                 }
             }
         }
@@ -1554,6 +1634,12 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
 **Causal Confidence Score**: $causalConfidenceScore
 **Causal Confidence Threshold**: $causalConfidenceThreshold
 **Causal Confidence Source**: $causalConfidenceSource
+**Graph Cohort Window**: $graphCohortWindow
+**Graph Temporal Decay Rate**: $graphTemporalDecayRate
+**Graph Temporal Source**: $graphTemporalSource
+**Edge Persistence Percent**: $edgePersistencePercent%
+**Edge Persistence Score**: $edgePersistenceScore
+**Graph Edge Persistence Enabled**: $enableGraphEdgePersistence
 **Causal Graph Node**: $causalGraphNode
 **Causal Graph Edge**: $causalGraphEdge
 **Anomaly Gate Enabled**: $requireAttestationBaselineGate
@@ -1959,6 +2045,12 @@ $recommendation
 - Causal Confidence Score: $causalConfidenceScore
 - Causal Confidence Threshold: $causalConfidenceThreshold
 - Causal Confidence Source: $causalConfidenceSource
+- Graph Cohort Window: $graphCohortWindow
+- Graph Temporal Decay Rate: $graphTemporalDecayRate
+- Graph Temporal Source: $graphTemporalSource
+- Edge Persistence Percent: $edgePersistencePercent%
+- Edge Persistence Score: $edgePersistenceScore
+- Graph Edge Persistence Enabled: $enableGraphEdgePersistence
 - Causal Graph Node: $causalGraphNode
 - Causal Graph Edge: $causalGraphEdge
 - Attestation Baseline Gate: $requireAttestationBaselineGate
@@ -2002,6 +2094,12 @@ $causalGraphEntry = @"
 **Confidence Score**: $causalConfidenceScore
 **Confidence Threshold**: $causalConfidenceThreshold
 **Confidence Source**: $causalConfidenceSource
+**Graph Cohort Window**: $graphCohortWindow
+**Graph Temporal Decay Rate**: $graphTemporalDecayRate
+**Graph Temporal Source**: $graphTemporalSource
+**Edge Persistence Percent**: $edgePersistencePercent%
+**Edge Persistence Score**: $edgePersistenceScore
+**Graph Edge Persistence Enabled**: $enableGraphEdgePersistence
 
 ---
 "@

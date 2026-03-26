@@ -277,6 +277,9 @@ Outage promoter inputs now require tenant and rollout phase context:
   - `--causal-graph-file <path>`
   - `--disable-confidence-causal-graphing`
   - `--require-causal-graphing-policy`
+  - `--graph-cohort-window <positive-int>`
+  - `--graph-temporal-decay-rate <non-negative-number>`
+  - `--disable-graph-edge-persistence`
 
 Fail-fast validation gates:
 
@@ -320,6 +323,8 @@ Fail-fast validation gates:
   recurrence clusters by dependency, phase, and failure mode.
 - Confidence-weighted causal graphing scores multi-factor causal paths
   and emits thresholded overlay recommendations.
+- Temporal decay and edge persistence scoring provide cohort-aware graph
+  confidence stabilization across drill sequences.
 
 Default profile weights are provided in:
 

@@ -256,6 +256,12 @@ phase promotion.
 - Causal Confidence Source: policy
 - Causal Graph Node: registry|r2|certificate-expiry|confidence=74
 - Causal Graph Edge: registry|r2|certificate-expiry -> suggested-registry-r2 (score=74)
+- Graph Cohort Window: 30
+- Graph Temporal Decay Rate: 0.15
+- Graph Temporal Source: policy
+- Edge Persistence Percent: 68%
+- Edge Persistence Score: 68
+- Graph Edge Persistence Enabled: true
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode
