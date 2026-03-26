@@ -212,6 +212,13 @@ Outage promoter inputs now require tenant and rollout phase context:
 - Optional `--weights-file <path>` for custom profile weight definitions.
 - Optional `--trend-window-size <n>` for tenant trend scoring windows.
 
+Fail-fast validation gates:
+
+- Missing weights file causes immediate script failure.
+- Missing `--policy-profile` row in weights CSV causes immediate script failure.
+- Malformed weight fields (non-numeric or invalid divisors) cause immediate
+  script failure.
+
 Default profile weights are provided in:
 
 - `assets/policy-profile-scoring-weights.csv`

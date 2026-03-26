@@ -186,45 +186,64 @@ DEPENDENCY_AUTHORITY_WEIGHT=12
 TREND_FAIL_DIVISOR=5
 TREND_PASS_DIVISOR=10
 
-if [ -f "$PROFILE_WEIGHTS_FILE" ]; then
-    PROFILE_ROW=$(awk -F',' -v profile="$POLICY_PROFILE" 'NR > 1 && $1 == profile { print $0; exit }' "$PROFILE_WEIGHTS_FILE")
-    if [ -n "$PROFILE_ROW" ]; then
-        IFS=',' read -r _p _fail _pass _r1 _r2 _r3 _r4 _reg _auth _tfd _tpd <<< "$PROFILE_ROW"
-
-        _fail=$(echo "$_fail" | tr -d '\r[:space:]')
-        _pass=$(echo "$_pass" | tr -d '\r[:space:]')
-        _r1=$(echo "$_r1" | tr -d '\r[:space:]')
-        _r2=$(echo "$_r2" | tr -d '\r[:space:]')
-        _r3=$(echo "$_r3" | tr -d '\r[:space:]')
-        _r4=$(echo "$_r4" | tr -d '\r[:space:]')
-        _reg=$(echo "$_reg" | tr -d '\r[:space:]')
-        _auth=$(echo "$_auth" | tr -d '\r[:space:]')
-        _tfd=$(echo "$_tfd" | tr -d '\r[:space:]')
-        _tpd=$(echo "$_tpd" | tr -d '\r[:space:]')
-
-        CANDIDATES=("$_fail" "$_pass" "$_r1" "$_r2" "$_r3" "$_r4" "$_reg" "$_auth" "$_tfd" "$_tpd")
-        VALID=true
-        for v in "${CANDIDATES[@]}"; do
-            if ! [[ "$v" =~ ^[0-9]+$ ]]; then
-                VALID=false
-                break
-            fi
-        done
-
-        if [ "$VALID" = true ] && [ "$_tfd" -gt 0 ] && [ "$_tpd" -gt 0 ]; then
-            FAIL_BASE_SCORE=$_fail
-            PASS_BASE_SCORE=$_pass
-            PHASE_R1_WEIGHT=$_r1
-            PHASE_R2_WEIGHT=$_r2
-            PHASE_R3_WEIGHT=$_r3
-            PHASE_R4_WEIGHT=$_r4
-            DEPENDENCY_REGISTRY_WEIGHT=$_reg
-            DEPENDENCY_AUTHORITY_WEIGHT=$_auth
-            TREND_FAIL_DIVISOR=$_tfd
-            TREND_PASS_DIVISOR=$_tpd
-        fi
-    fi
+if [ ! -f "$PROFILE_WEIGHTS_FILE" ]; then
+    echo "Missing required profile weights file: $PROFILE_WEIGHTS_FILE" >&2
+    exit 1
 fi
+
+if [ ! -r "$PROFILE_WEIGHTS_FILE" ]; then
+    echo "Profile weights file is not readable: $PROFILE_WEIGHTS_FILE" >&2
+    exit 1
+fi
+
+PROFILE_ROW=$(awk -F',' -v profile="$POLICY_PROFILE" 'NR > 1 && $1 == profile { print $0; exit }' "$PROFILE_WEIGHTS_FILE")
+if [ -z "$PROFILE_ROW" ]; then
+    echo "Missing required policy profile '$POLICY_PROFILE' in: $PROFILE_WEIGHTS_FILE" >&2
+    exit 1
+fi
+
+IFS=',' read -r _p _fail _pass _r1 _r2 _r3 _r4 _reg _auth _tfd _tpd <<< "$PROFILE_ROW"
+
+_fail=$(echo "$_fail" | tr -d '\r[:space:]')
+_pass=$(echo "$_pass" | tr -d '\r[:space:]')
+_r1=$(echo "$_r1" | tr -d '\r[:space:]')
+_r2=$(echo "$_r2" | tr -d '\r[:space:]')
+_r3=$(echo "$_r3" | tr -d '\r[:space:]')
+_r4=$(echo "$_r4" | tr -d '\r[:space:]')
+_reg=$(echo "$_reg" | tr -d '\r[:space:]')
+_auth=$(echo "$_auth" | tr -d '\r[:space:]')
+_tfd=$(echo "$_tfd" | tr -d '\r[:space:]')
+_tpd=$(echo "$_tpd" | tr -d '\r[:space:]')
+
+CANDIDATES=("$_fail" "$_pass" "$_r1" "$_r2" "$_r3" "$_r4" "$_reg" "$_auth" "$_tfd" "$_tpd")
+VALID=true
+for v in "${CANDIDATES[@]}"; do
+    if ! [[ "$v" =~ ^[0-9]+$ ]]; then
+        VALID=false
+        break
+    fi
+done
+
+if [ "$VALID" != true ]; then
+    echo "Malformed profile '$POLICY_PROFILE': expected numeric weights in $PROFILE_WEIGHTS_FILE" >&2
+    exit 1
+fi
+
+if [ "$_tfd" -le 0 ] || [ "$_tpd" -le 0 ]; then
+    echo "Malformed profile '$POLICY_PROFILE': trend divisors must be > 0 in $PROFILE_WEIGHTS_FILE" >&2
+    exit 1
+fi
+
+FAIL_BASE_SCORE=$_fail
+PASS_BASE_SCORE=$_pass
+PHASE_R1_WEIGHT=$_r1
+PHASE_R2_WEIGHT=$_r2
+PHASE_R3_WEIGHT=$_r3
+PHASE_R4_WEIGHT=$_r4
+DEPENDENCY_REGISTRY_WEIGHT=$_reg
+DEPENDENCY_AUTHORITY_WEIGHT=$_auth
+TREND_FAIL_DIVISOR=$_tfd
+TREND_PASS_DIVISOR=$_tpd
 
 PHASE_WEIGHT=0
 case "$ROLLOUT_PHASE" in

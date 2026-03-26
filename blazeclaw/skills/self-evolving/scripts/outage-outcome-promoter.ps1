@@ -203,52 +203,60 @@ $dependencyAuthorityWeight = 12
 $trendFailDivisor = 5
 $trendPassDivisor = 10
 
-if (Test-Path -LiteralPath $profileWeightsFile) {
-    $profileRow = Import-Csv -LiteralPath $profileWeightsFile |
-        Where-Object { $_.profile -eq $policyProfile } |
-        Select-Object -First 1
-
-    if ($profileRow) {
-        $numericFields = @(
-            'fail_base',
-            'pass_base',
-            'phase_r1',
-            'phase_r2',
-            'phase_r3',
-            'phase_r4',
-            'dependency_registry',
-            'dependency_authority',
-            'trend_fail_divisor',
-            'trend_pass_divisor'
-        )
-
-        $parsed = @{}
-        $valid = $true
-        foreach ($field in $numericFields) {
-            [int]$value = 0
-            if (-not [int]::TryParse([string]$profileRow.$field, [ref]$value)) {
-                $valid = $false
-                break
-            }
-            $parsed[$field] = $value
-        }
-
-        if ($valid -and
-            $parsed['trend_fail_divisor'] -gt 0 -and
-            $parsed['trend_pass_divisor'] -gt 0) {
-            $failBaseScore = $parsed['fail_base']
-            $passBaseScore = $parsed['pass_base']
-            $phaseR1Weight = $parsed['phase_r1']
-            $phaseR2Weight = $parsed['phase_r2']
-            $phaseR3Weight = $parsed['phase_r3']
-            $phaseR4Weight = $parsed['phase_r4']
-            $dependencyRegistryWeight = $parsed['dependency_registry']
-            $dependencyAuthorityWeight = $parsed['dependency_authority']
-            $trendFailDivisor = $parsed['trend_fail_divisor']
-            $trendPassDivisor = $parsed['trend_pass_divisor']
-        }
-    }
+if (-not (Test-Path -LiteralPath $profileWeightsFile)) {
+    throw "Missing required profile weights file: $profileWeightsFile"
 }
+
+$profileRows = Import-Csv -LiteralPath $profileWeightsFile
+if (-not $profileRows) {
+    throw "Malformed profile weights file (empty or invalid CSV): $profileWeightsFile"
+}
+
+$profileRow = $profileRows |
+    Where-Object { $_.profile -eq $policyProfile } |
+    Select-Object -First 1
+
+if (-not $profileRow) {
+    throw "Missing required policy profile '$policyProfile' in: $profileWeightsFile"
+}
+
+$numericFields = @(
+    'fail_base',
+    'pass_base',
+    'phase_r1',
+    'phase_r2',
+    'phase_r3',
+    'phase_r4',
+    'dependency_registry',
+    'dependency_authority',
+    'trend_fail_divisor',
+    'trend_pass_divisor'
+)
+
+$parsed = @{}
+foreach ($field in $numericFields) {
+    [int]$value = 0
+    if (-not [int]::TryParse([string]$profileRow.$field, [ref]$value)) {
+        throw "Malformed profile '$policyProfile': field '$field' must be numeric in $profileWeightsFile"
+    }
+    $parsed[$field] = $value
+}
+
+if ($parsed['trend_fail_divisor'] -le 0 -or
+    $parsed['trend_pass_divisor'] -le 0) {
+    throw "Malformed profile '$policyProfile': trend divisors must be > 0 in $profileWeightsFile"
+}
+
+$failBaseScore = $parsed['fail_base']
+$passBaseScore = $parsed['pass_base']
+$phaseR1Weight = $parsed['phase_r1']
+$phaseR2Weight = $parsed['phase_r2']
+$phaseR3Weight = $parsed['phase_r3']
+$phaseR4Weight = $parsed['phase_r4']
+$dependencyRegistryWeight = $parsed['dependency_registry']
+$dependencyAuthorityWeight = $parsed['dependency_authority']
+$trendFailDivisor = $parsed['trend_fail_divisor']
+$trendPassDivisor = $parsed['trend_pass_divisor']
 
 $phaseWeight = switch ($rolloutPhase) {
     'r1' { $phaseR1Weight }

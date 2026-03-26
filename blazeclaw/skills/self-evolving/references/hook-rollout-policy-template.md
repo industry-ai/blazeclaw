@@ -28,6 +28,7 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
 - [ ] Outage outcome promoter scripts executed and outputs reviewed
 - [ ] Tenant trend history updated and recommendation score bands reviewed
 - [ ] Policy profile weight file reviewed for rollout scope
+- [ ] Fail-fast profile validation checks passed (no missing/malformed profile configuration)
 
 ## 3) Environment Matrix
 
@@ -160,6 +161,7 @@ Approval gate checklist:
 - [ ] recommendation score distribution reviewed for in-phase tenants
 - [ ] high/critical score recommendations have closure or approved hold
 - [ ] active policy profiles mapped to approved scoring weight definitions
+- [ ] profile validation gate failures are zero for current phase
 
 ## 6) Rollback Plan
 

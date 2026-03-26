@@ -189,6 +189,13 @@ phase promotion.
 ---
 ```
 
+## Validation Gate Failure Example
+
+```text
+$ scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-001 --tenant-id tenant-a --rollout-phase r2 --policy-profile missing-profile --dependency registry --result pass --evidence-path reports/drills/sim-reg-001.json
+Missing required policy profile 'missing-profile' in: ./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv
+```
+
 ## Learning: Knowledge Gap (Resolved)
 
 ```markdown

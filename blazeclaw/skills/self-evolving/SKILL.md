@@ -62,6 +62,8 @@ Capture outage drill outcomes and translate them into reusable guidance.
    - dependency-segmented trend window metrics for each tenant
    - phase-aware recommendation score and severity using policy profile
      scoring weights
+   - fail-fast validation errors when weights file or profile is missing
+     or malformed
 4. Promote proven recommendations into governance guidance files:
    - `AGENTS.md`
    - `TOOLS.md`
@@ -110,6 +112,7 @@ When a pattern is proven, promote it to:
   - `scripts/error-detector.ps1`
   - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-001 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --dependency registry --result pass --evidence-path reports/drills/sample-registry.json`
   - `scripts/outage-outcome-promoter.ps1 --dry-run --simulation-id SIM-AUTH-001 --tenant-id tenant-a --rollout-phase r3 --policy-profile org-dr-sentinel --dependency authority --result fail --evidence-path reports/drills/sample-authority.json`
+  - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-001 --tenant-id tenant-a --rollout-phase r2 --policy-profile missing-profile --dependency registry --result pass --evidence-path reports/drills/sample-registry.json` (expect fail-fast error)
   - `scripts/extract-skill.sh --dry-run`
   - `scripts/extract-skill.ps1 --dry-run`
 - Verify policy-as-code rollout controls are mapped in
@@ -133,4 +136,4 @@ None in current self-evolving runtime scope.
 
 ## Follow-Up Enhancements
 
-- Add policy-profile validation gates that fail fast when required scoring profiles are missing or malformed.
+- Add optional strict schema versioning for profile weight files to prevent drift across teams.

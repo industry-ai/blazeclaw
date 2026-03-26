@@ -133,6 +133,8 @@ Scoring guidance:
   `tenant + dependency class`.
 - Phase override: fail outcomes in `r3` and `r4` should default to
   promotion hold until remediation evidence is verified.
+- Validation gate rule: missing profile, missing weights file, or malformed
+  score fields must fail fast and block phase promotion.
 
 Pipeline stages:
 
