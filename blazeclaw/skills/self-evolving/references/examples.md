@@ -226,6 +226,10 @@ phase promotion.
 - Tenant Criticality Tier: critical
 - Adaptive Threshold Source: tier-policy
 - Adaptive Threshold Calibration Enabled: true
+- Attestation Weighted Anomaly Percent: 12%
+- Time-Decay Half-Life Samples: 5
+- Time-Decay Source: policy
+- Time-Decay Weighting Enabled: true
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode

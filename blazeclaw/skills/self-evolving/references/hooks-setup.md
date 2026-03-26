@@ -249,6 +249,11 @@ Outage promoter inputs now require tenant and rollout phase context:
   - `--adaptive-threshold-policy-file <path>`
   - `--disable-adaptive-threshold-calibration`
   - `--require-adaptive-threshold-policy`
+- Optional time-decay anomaly weighting controls:
+  - `--time-decay-policy-file <path>`
+  - `--time-decay-half-life <positive-int>`
+  - `--disable-time-decay-weighting`
+  - `--require-time-decay-policy`
 
 Fail-fast validation gates:
 
@@ -280,6 +285,8 @@ Fail-fast validation gates:
   recommendations for centralized remediation planning.
 - Adaptive threshold calibration resolves tenant criticality tiers and
   applies tier-specific anomaly thresholds before gate evaluation.
+- Time-decay weighting applies recency-weighted anomaly percentages for
+  drift-sensitive baseline gate evaluation.
 
 Default profile weights are provided in:
 
@@ -305,3 +312,5 @@ Default signed manifest artifacts are provided in:
 - `assets/tenant-criticality-tiers.template.csv`
 - `assets/attestation-anomaly-threshold-tiers.csv`
 - `assets/attestation-anomaly-threshold-tiers.template.csv`
+- `assets/attestation-anomaly-time-decay-policy.conf`
+- `assets/attestation-anomaly-time-decay-policy.template.conf`

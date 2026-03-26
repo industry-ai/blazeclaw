@@ -20,6 +20,7 @@ CROSS_TENANT_HEATMAP_FILE="./blazeclaw/skills/self-evolving/.learnings/CROSS_TEN
 AUTO_REMEDIATION_ROUTING_FILE="./blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_AUTO_REMEDIATION_ROUTING.md"
 TENANT_CRITICALITY_FILE="./blazeclaw/skills/self-evolving/assets/tenant-criticality-tiers.csv"
 ADAPTIVE_THRESHOLD_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-threshold-tiers.csv"
+TIME_DECAY_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-time-decay-policy.conf"
 
 SIMULATION_ID=""
 TENANT_ID=""
@@ -38,6 +39,9 @@ ATTESTATION_ANOMALY_THRESHOLD_PERCENT=25
 REQUIRE_ATTESTATION_BASELINE_GATE=false
 ENABLE_ADAPTIVE_THRESHOLD_CALIBRATION=true
 REQUIRE_ADAPTIVE_THRESHOLD_POLICY=false
+ENABLE_TIME_DECAY_WEIGHTING=true
+TIME_DECAY_HALF_LIFE=5
+REQUIRE_TIME_DECAY_POLICY=false
 MANIFEST_FILE_EXPLICIT=false
 SIGNATURE_VERIFICATION_MODE="none"
 KMS_PUBLIC_KEY_FILE=""
@@ -98,6 +102,10 @@ Optional:
   --adaptive-threshold-policy-file Tier-to-threshold mapping CSV
   --disable-adaptive-threshold-calibration Use static threshold only
   --require-adaptive-threshold-policy Fail-fast when adaptive tier policy cannot be resolved
+  --time-decay-policy-file Time-decay policy file for weighted anomaly model
+  --time-decay-half-life Baseline half-life in samples for recency decay (default: 5)
+  --disable-time-decay-weighting Use unweighted anomaly percentage
+  --require-time-decay-policy Fail-fast when time-decay policy cannot be resolved
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -255,6 +263,22 @@ while [[ $# -gt 0 ]]; do
             REQUIRE_ADAPTIVE_THRESHOLD_POLICY=true
             shift
             ;;
+        --time-decay-policy-file)
+            TIME_DECAY_POLICY_FILE="${2:-}"
+            shift 2
+            ;;
+        --time-decay-half-life)
+            TIME_DECAY_HALF_LIFE="${2:-}"
+            shift 2
+            ;;
+        --disable-time-decay-weighting)
+            ENABLE_TIME_DECAY_WEIGHTING=false
+            shift
+            ;;
+        --require-time-decay-policy)
+            REQUIRE_TIME_DECAY_POLICY=true
+            shift
+            ;;
         --signature-verification-mode)
             SIGNATURE_VERIFICATION_MODE="${2:-}"
             shift 2
@@ -340,6 +364,11 @@ fi
 
 if ! [[ "$ATTESTATION_ANOMALY_THRESHOLD_PERCENT" =~ ^[0-9]+$ ]] || [ "$ATTESTATION_ANOMALY_THRESHOLD_PERCENT" -lt 0 ] || [ "$ATTESTATION_ANOMALY_THRESHOLD_PERCENT" -gt 100 ]; then
     echo "--attestation-anomaly-threshold-percent must be an integer between 0 and 100" >&2
+    exit 1
+fi
+
+if ! [[ "$TIME_DECAY_HALF_LIFE" =~ ^[0-9]+$ ]] || [ "$TIME_DECAY_HALF_LIFE" -le 0 ]; then
+    echo "--time-decay-half-life must be a positive integer" >&2
     exit 1
 fi
 
@@ -718,6 +747,49 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
             ATTESTATION_ANOMALY_PERCENT=$(( ATTESTATION_BASELINE_ALERT_COUNT * 100 / ATTESTATION_BASELINE_TOTAL ))
         fi
 
+        WEIGHTED_ALERT_SUM=0
+        WEIGHTED_TOTAL_SUM=0
+        WEIGHTED_ANOMALY_PERCENT="$ATTESTATION_ANOMALY_PERCENT"
+        TIME_DECAY_SOURCE="disabled"
+
+        if [ "$ENABLE_TIME_DECAY_WEIGHTING" = true ]; then
+            TIME_DECAY_SOURCE="cli"
+            DECAY_HALF_LIFE_EFFECTIVE="$TIME_DECAY_HALF_LIFE"
+
+            if [ -f "$TIME_DECAY_POLICY_FILE" ] && [ -r "$TIME_DECAY_POLICY_FILE" ]; then
+                POLICY_HALF_LIFE=$(awk -F'=' '$1=="half_life_samples" { print $2; exit }' "$TIME_DECAY_POLICY_FILE" | tr -d '\r[:space:]')
+                if [ -n "$POLICY_HALF_LIFE" ] && [[ "$POLICY_HALF_LIFE" =~ ^[0-9]+$ ]] && [ "$POLICY_HALF_LIFE" -gt 0 ]; then
+                    DECAY_HALF_LIFE_EFFECTIVE="$POLICY_HALF_LIFE"
+                    TIME_DECAY_SOURCE="policy"
+                elif [ "$REQUIRE_TIME_DECAY_POLICY" = true ]; then
+                    echo "Time-decay policy failed: half_life_samples missing or invalid in $TIME_DECAY_POLICY_FILE" >&2
+                    exit 1
+                fi
+            elif [ "$REQUIRE_TIME_DECAY_POLICY" = true ]; then
+                echo "Time-decay policy failed: missing file $TIME_DECAY_POLICY_FILE" >&2
+                exit 1
+            fi
+
+            if [ "$ATTESTATION_BASELINE_TOTAL" -gt 0 ]; then
+                INDEX=0
+                while IFS=',' read -r ts tenant dist attStatus sloStatus sloAge sim; do
+                    [ -z "$tenant" ] && continue
+                    INDEX=$((INDEX + 1))
+                    AGE=$((ATTESTATION_BASELINE_TOTAL - INDEX))
+                    WEIGHT=$(awk -v age="$AGE" -v hl="$DECAY_HALF_LIFE_EFFECTIVE" 'BEGIN { if (hl<=0) { print 1 } else { printf "%.6f", exp(log(0.5)*age/hl) } }')
+                    WEIGHTED_TOTAL_SUM=$(awk -v a="$WEIGHTED_TOTAL_SUM" -v b="$WEIGHT" 'BEGIN { printf "%.6f", a + b }')
+
+                    if [ "$attStatus" != "verified" ] || [ "$sloStatus" = "warning" ]; then
+                        WEIGHTED_ALERT_SUM=$(awk -v a="$WEIGHTED_ALERT_SUM" -v b="$WEIGHT" 'BEGIN { printf "%.6f", a + b }')
+                    fi
+                done <<< "$TENANT_ATTESTATION_HISTORY"
+
+                if awk -v total="$WEIGHTED_TOTAL_SUM" 'BEGIN { exit !(total > 0) }'; then
+                    WEIGHTED_ANOMALY_PERCENT=$(awk -v alert="$WEIGHTED_ALERT_SUM" -v total="$WEIGHTED_TOTAL_SUM" 'BEGIN { printf "%d", (alert*100)/total }')
+                fi
+            fi
+        fi
+
         CALIBRATED_ATTESTATION_THRESHOLD_PERCENT="$ATTESTATION_ANOMALY_THRESHOLD_PERCENT"
         TENANT_CRITICALITY_TIER="not-configured"
         ADAPTIVE_THRESHOLD_SOURCE="static"
@@ -751,8 +823,13 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
             fi
         fi
 
-        if [ "$REQUIRE_ATTESTATION_BASELINE_GATE" = true ] && [ "$ATTESTATION_ANOMALY_PERCENT" -gt "$CALIBRATED_ATTESTATION_THRESHOLD_PERCENT" ]; then
-            echo "Attestation anomaly baseline breach: $ATTESTATION_ANOMALY_PERCENT% exceeds $CALIBRATED_ATTESTATION_THRESHOLD_PERCENT% for tenant $TENANT_ID" >&2
+        EFFECTIVE_ANOMALY_PERCENT="$ATTESTATION_ANOMALY_PERCENT"
+        if [ "$ENABLE_TIME_DECAY_WEIGHTING" = true ]; then
+            EFFECTIVE_ANOMALY_PERCENT="$WEIGHTED_ANOMALY_PERCENT"
+        fi
+
+        if [ "$REQUIRE_ATTESTATION_BASELINE_GATE" = true ] && [ "$EFFECTIVE_ANOMALY_PERCENT" -gt "$CALIBRATED_ATTESTATION_THRESHOLD_PERCENT" ]; then
+            echo "Attestation anomaly baseline breach: $EFFECTIVE_ANOMALY_PERCENT% exceeds $CALIBRATED_ATTESTATION_THRESHOLD_PERCENT% for tenant $TENANT_ID" >&2
             exit 1
         fi
 
@@ -778,10 +855,14 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
 **Baseline Samples**: $ATTESTATION_BASELINE_TOTAL
 **Baseline Alert Count**: $ATTESTATION_BASELINE_ALERT_COUNT
 **Anomaly Percent**: $ATTESTATION_ANOMALY_PERCENT%
+**Weighted Anomaly Percent**: $WEIGHTED_ANOMALY_PERCENT%
 **Anomaly Threshold Percent**: $ATTESTATION_ANOMALY_THRESHOLD_PERCENT%
 **Calibrated Threshold Percent**: $CALIBRATED_ATTESTATION_THRESHOLD_PERCENT%
 **Tenant Criticality Tier**: $TENANT_CRITICALITY_TIER
 **Adaptive Threshold Source**: $ADAPTIVE_THRESHOLD_SOURCE
+**Time-Decay Half-Life Samples**: $DECAY_HALF_LIFE_EFFECTIVE
+**Time-Decay Source**: $TIME_DECAY_SOURCE
+**Time-Decay Weighting Enabled**: $ENABLE_TIME_DECAY_WEIGHTING
 **Anomaly Gate Enabled**: $REQUIRE_ATTESTATION_BASELINE_GATE
 
 ---
@@ -1135,10 +1216,14 @@ $RECOMMENDATION
 - Attestation Baseline Samples: ${ATTESTATION_BASELINE_TOTAL:-0}
 - Attestation Baseline Alert Count: ${ATTESTATION_BASELINE_ALERT_COUNT:-0}
 - Attestation Anomaly Percent: ${ATTESTATION_ANOMALY_PERCENT:-0}%
+- Attestation Weighted Anomaly Percent: ${WEIGHTED_ANOMALY_PERCENT:-$ATTESTATION_ANOMALY_PERCENT}%
 - Attestation Calibrated Threshold Percent: ${CALIBRATED_ATTESTATION_THRESHOLD_PERCENT:-$ATTESTATION_ANOMALY_THRESHOLD_PERCENT}
 - Tenant Criticality Tier: ${TENANT_CRITICALITY_TIER:-not-configured}
 - Adaptive Threshold Source: ${ADAPTIVE_THRESHOLD_SOURCE:-static}
 - Adaptive Threshold Calibration Enabled: ${ENABLE_ADAPTIVE_THRESHOLD_CALIBRATION}
+- Time-Decay Half-Life Samples: ${DECAY_HALF_LIFE_EFFECTIVE:-$TIME_DECAY_HALF_LIFE}
+- Time-Decay Source: ${TIME_DECAY_SOURCE:-disabled}
+- Time-Decay Weighting Enabled: ${ENABLE_TIME_DECAY_WEIGHTING}
 - Attestation Baseline Gate: ${REQUIRE_ATTESTATION_BASELINE_GATE}
 - Cross-Tenant Heatmap Source: ${CROSS_TENANT_HEATMAP_FILE}
 - Auto-Remediation Routing Source: ${AUTO_REMEDIATION_ROUTING_FILE}

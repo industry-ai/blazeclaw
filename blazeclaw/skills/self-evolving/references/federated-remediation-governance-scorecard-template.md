@@ -142,6 +142,8 @@ Federation-level aggregates:
   `blazeclaw/skills/self-evolving/assets/tenant-criticality-tiers.csv`
 - Adaptive threshold tier policy path:
   `blazeclaw/skills/self-evolving/assets/attestation-anomaly-threshold-tiers.csv`
+- Time-decay anomaly policy path:
+  `blazeclaw/skills/self-evolving/assets/attestation-anomaly-time-decay-policy.conf`
 - Recommendations generated in window: `<n>`
 - Recommendations accepted: `<n>`
 - Recommendations deferred: `<n>`
@@ -169,6 +171,8 @@ Federation-level aggregates:
 - Auto-remediation routing coverage: `<percent>`
 - Tier-calibrated threshold breaches: `<n>`
 - Critical-tier anomaly p95 versus calibrated threshold: `<percent>`
+- Time-decay weighted anomaly p95: `<percent>`
+- Weighted-versus-unweighted anomaly delta p95: `<percent>`
 - Highest-impact accepted tuning:
   `<short summary with control reference>`
 

@@ -35,6 +35,8 @@ $tenantCriticalityFile =
     './blazeclaw/skills/self-evolving/assets/tenant-criticality-tiers.csv'
 $adaptiveThresholdPolicyFile =
     './blazeclaw/skills/self-evolving/assets/attestation-anomaly-threshold-tiers.csv'
+$timeDecayPolicyFile =
+    './blazeclaw/skills/self-evolving/assets/attestation-anomaly-time-decay-policy.conf'
 
 function Show-Usage {
 @"
@@ -78,6 +80,10 @@ Optional:
   --adaptive-threshold-policy-file Tier-to-threshold mapping CSV
   --disable-adaptive-threshold-calibration Use static threshold only
   --require-adaptive-threshold-policy Fail-fast when adaptive tier policy cannot be resolved
+  --time-decay-policy-file Time-decay policy file for weighted anomaly model
+  --time-decay-half-life Baseline half-life in samples for recency decay (default: 5)
+  --disable-time-decay-weighting Use unweighted anomaly percentage
+  --require-time-decay-policy Fail-fast when time-decay policy cannot be resolved
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -109,6 +115,9 @@ $attestationAnomalyThresholdPercent = 25
 $requireAttestationBaselineGate = $false
 $enableAdaptiveThresholdCalibration = $true
 $requireAdaptiveThresholdPolicy = $false
+$enableTimeDecayWeighting = $true
+$timeDecayHalfLife = 5
+$requireTimeDecayPolicy = $false
 $manifestFileExplicit = $false
 $signatureVerificationMode = 'none'
 $kmsPublicKeyFile = ''
@@ -149,6 +158,9 @@ $attestationAnomalyPercent = 0
 $calibratedAttestationThresholdPercent = 25
 $tenantCriticalityTier = 'not-configured'
 $adaptiveThresholdSource = 'static'
+$weightedAnomalyPercent = 0
+$timeDecayHalfLifeEffective = 5
+$timeDecaySource = 'disabled'
 $notes = ''
 $trendWindowSize = 20
 $dryRun = $false
@@ -287,6 +299,20 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         '--require-adaptive-threshold-policy' {
             $requireAdaptiveThresholdPolicy = $true
         }
+        '--time-decay-policy-file' {
+            $i++
+            $timeDecayPolicyFile = [string]$args[$i]
+        }
+        '--time-decay-half-life' {
+            $i++
+            $timeDecayHalfLife = [int]$args[$i]
+        }
+        '--disable-time-decay-weighting' {
+            $enableTimeDecayWeighting = $false
+        }
+        '--require-time-decay-policy' {
+            $requireTimeDecayPolicy = $true
+        }
         '--signature-verification-mode' {
             $i++
             $signatureVerificationMode = [string]$args[$i]
@@ -372,6 +398,10 @@ if ($attestationBaselineWindow -le 0) {
 if ($attestationAnomalyThresholdPercent -lt 0 -or
     $attestationAnomalyThresholdPercent -gt 100) {
     throw '--attestation-anomaly-threshold-percent must be an integer between 0 and 100'
+}
+
+if ($timeDecayHalfLife -le 0) {
+    throw '--time-decay-half-life must be a positive integer'
 }
 
 if ([string]::IsNullOrWhiteSpace($policyProfile)) {
@@ -830,6 +860,69 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
             )
         }
 
+        $weightedAnomalyPercent = $attestationAnomalyPercent
+        $timeDecayHalfLifeEffective = $timeDecayHalfLife
+        $timeDecaySource = 'disabled'
+
+        if ($enableTimeDecayWeighting) {
+            $timeDecaySource = 'cli'
+
+            if (Test-Path -LiteralPath $timeDecayPolicyFile) {
+                $decayFields = @{}
+                foreach ($line in (Get-Content -LiteralPath $timeDecayPolicyFile)) {
+                    if ([string]::IsNullOrWhiteSpace($line) -or
+                        $line.Trim().StartsWith('#')) {
+                        continue
+                    }
+
+                    $split = $line.Split('=', 2)
+                    if ($split.Length -eq 2) {
+                        $decayFields[$split[0].Trim()] = $split[1].Trim()
+                    }
+                }
+
+                if ($decayFields.ContainsKey('half_life_samples')) {
+                    [int]$policyHalfLife = 0
+                    if ([int]::TryParse(
+                            [string]$decayFields['half_life_samples'],
+                            [ref]$policyHalfLife) -and
+                        $policyHalfLife -gt 0) {
+                        $timeDecayHalfLifeEffective = $policyHalfLife
+                        $timeDecaySource = 'policy'
+                    } elseif ($requireTimeDecayPolicy) {
+                        throw "Time-decay policy failed: half_life_samples missing or invalid in $timeDecayPolicyFile"
+                    }
+                } elseif ($requireTimeDecayPolicy) {
+                    throw "Time-decay policy failed: half_life_samples missing or invalid in $timeDecayPolicyFile"
+                }
+            } elseif ($requireTimeDecayPolicy) {
+                throw "Time-decay policy failed: missing file $timeDecayPolicyFile"
+            }
+
+            if ($attestationBaselineSamples -gt 0) {
+                [double]$weightedAlertSum = 0
+                [double]$weightedTotalSum = 0
+                $index = 0
+                foreach ($row in $baselineRows) {
+                    $age = $attestationBaselineSamples - $index - 1
+                    $weight = [Math]::Pow(0.5,
+                        ([double]$age / [double]$timeDecayHalfLifeEffective))
+
+                    $weightedTotalSum += $weight
+                    if ($row.attestation_status -ne 'verified' -or
+                        $row.revocation_slo_status -eq 'warning') {
+                        $weightedAlertSum += $weight
+                    }
+                    $index++
+                }
+
+                if ($weightedTotalSum -gt 0) {
+                    $weightedAnomalyPercent =
+                        [int](($weightedAlertSum * 100) / $weightedTotalSum)
+                }
+            }
+        }
+
         $calibratedAttestationThresholdPercent =
             $attestationAnomalyThresholdPercent
         $tenantCriticalityTier = 'not-configured'
@@ -882,10 +975,16 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
             }
         }
 
+        $effectiveAnomalyPercent = if ($enableTimeDecayWeighting) {
+            $weightedAnomalyPercent
+        } else {
+            $attestationAnomalyPercent
+        }
+
         if ($requireAttestationBaselineGate -and
-            $attestationAnomalyPercent -gt
+            $effectiveAnomalyPercent -gt
             $calibratedAttestationThresholdPercent) {
-            throw "Attestation anomaly baseline breach: $attestationAnomalyPercent% exceeds $calibratedAttestationThresholdPercent% for tenant $tenantId"
+            throw "Attestation anomaly baseline breach: $effectiveAnomalyPercent% exceeds $calibratedAttestationThresholdPercent% for tenant $tenantId"
         }
 
         $attestationTrendRecord =
@@ -911,10 +1010,14 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
 **Baseline Samples**: $attestationBaselineSamples
 **Baseline Alert Count**: $attestationBaselineAlertCount
 **Anomaly Percent**: $attestationAnomalyPercent%
+**Weighted Anomaly Percent**: $weightedAnomalyPercent%
 **Anomaly Threshold Percent**: $attestationAnomalyThresholdPercent%
 **Calibrated Threshold Percent**: $calibratedAttestationThresholdPercent%
 **Tenant Criticality Tier**: $tenantCriticalityTier
 **Adaptive Threshold Source**: $adaptiveThresholdSource
+**Time-Decay Half-Life Samples**: $timeDecayHalfLifeEffective
+**Time-Decay Source**: $timeDecaySource
+**Time-Decay Weighting Enabled**: $enableTimeDecayWeighting
 **Anomaly Gate Enabled**: $requireAttestationBaselineGate
 
 ---
@@ -1286,10 +1389,14 @@ $recommendation
 - Attestation Baseline Samples: $attestationBaselineSamples
 - Attestation Baseline Alert Count: $attestationBaselineAlertCount
 - Attestation Anomaly Percent: $attestationAnomalyPercent%
+- Attestation Weighted Anomaly Percent: $weightedAnomalyPercent%
 - Attestation Calibrated Threshold Percent: $calibratedAttestationThresholdPercent
 - Tenant Criticality Tier: $tenantCriticalityTier
 - Adaptive Threshold Source: $adaptiveThresholdSource
 - Adaptive Threshold Calibration Enabled: $enableAdaptiveThresholdCalibration
+- Time-Decay Half-Life Samples: $timeDecayHalfLifeEffective
+- Time-Decay Source: $timeDecaySource
+- Time-Decay Weighting Enabled: $enableTimeDecayWeighting
 - Attestation Baseline Gate: $requireAttestationBaselineGate
 - Cross-Tenant Heatmap Source: $crossTenantHeatmapFile
 - Auto-Remediation Routing Source: $autoRemediationRoutingFile
