@@ -215,6 +215,14 @@ Outage promoter inputs now require tenant and rollout phase context:
   compatibility.
 - Optional `--manifest-file <path>` and `--require-signed-manifest` to
   enforce signed-manifest integrity verification.
+- Optional `--signature-verification-mode <none|kms|sigstore>` to enforce
+  cryptographic signature verification.
+- KMS mode requires `--kms-public-key-file <path>`.
+- Sigstore mode requires:
+  - `--sigstore-certificate-file <path>`
+  - `--sigstore-certificate-identity <identity>`
+  - `--sigstore-oidc-issuer <issuer>`
+  - optional `--cosign-path <path>`.
 
 Fail-fast validation gates:
 
@@ -227,6 +235,9 @@ Fail-fast validation gates:
 - When `--require-signed-manifest` is enabled, missing manifest,
   malformed manifest fields, or digest mismatch causes immediate script
   failure.
+- When `--signature-verification-mode` is enabled, missing verifier
+  artifacts, mode mismatch, or cryptographic verification failure causes
+  immediate script failure.
 
 Default profile weights are provided in:
 

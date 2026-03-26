@@ -35,6 +35,7 @@ Log learnings and errors to markdown files for continuous improvement. Important
 - `blazeclaw/skills/self-evolving/.learnings/OUTAGE_TREND_HISTORY.csv`
 - `blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv`
 - `blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest`
+- `blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest.template`
 
 ## Outage Simulation Outcome Workflow
 
@@ -60,6 +61,14 @@ Capture outage drill outcomes and translate them into reusable guidance.
        `assets/policy-profile-scoring-weights.manifest`)
      - `--require-signed-manifest` (fail-fast if verification cannot be
        completed)
+   - optional cryptographic signature verification mode:
+     - `--signature-verification-mode none|kms|sigstore`
+     - KMS mode: `--kms-public-key-file <path>`
+     - Sigstore mode:
+       - `--sigstore-certificate-file <path>`
+       - `--sigstore-certificate-identity <identity>`
+       - `--sigstore-oidc-issuer <issuer>`
+       - optional `--cosign-path <path>`
 3. Script outputs:
    - learning promotion candidate appended to `.learnings/LEARNINGS.md`
    - policy tuning recommendation appended to
@@ -75,6 +84,8 @@ Capture outage drill outcomes and translate them into reusable guidance.
      enabled
    - optional fail-fast signed-manifest integrity errors when manifest
      metadata is missing or weight digest mismatches
+   - optional fail-fast cryptographic signature verification errors for
+     KMS/Sigstore integration when mode-specific checks fail
 4. Promote proven recommendations into governance guidance files:
    - `AGENTS.md`
    - `TOOLS.md`
@@ -125,6 +136,7 @@ When a pattern is proven, promote it to:
   - `scripts/outage-outcome-promoter.ps1 --dry-run --simulation-id SIM-AUTH-001 --tenant-id tenant-a --rollout-phase r3 --policy-profile org-dr-sentinel --dependency authority --result fail --evidence-path reports/drills/sample-authority.json`
   - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-002 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --strict-schema-version v1 --dependency registry --result pass --evidence-path reports/drills/sample-registry.json`
   - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-003 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --strict-schema-version v1 --require-signed-manifest --manifest-file blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --dependency registry --result pass --evidence-path reports/drills/sample-registry.json`
+  - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-004 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --strict-schema-version v1 --require-signed-manifest --manifest-file blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --signature-verification-mode kms --kms-public-key-file ./keys/org-governance-public.pem --dependency registry --result pass --evidence-path reports/drills/sample-registry.json`
   - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-001 --tenant-id tenant-a --rollout-phase r2 --policy-profile missing-profile --dependency registry --result pass --evidence-path reports/drills/sample-registry.json` (expect fail-fast error)
   - `scripts/extract-skill.sh --dry-run`
   - `scripts/extract-skill.ps1 --dry-run`

@@ -17,6 +17,13 @@ ROLLOUT_PHASE=""
 POLICY_PROFILE="default"
 STRICT_SCHEMA_VERSION=""
 REQUIRE_SIGNED_MANIFEST=false
+MANIFEST_FILE_EXPLICIT=false
+SIGNATURE_VERIFICATION_MODE="none"
+KMS_PUBLIC_KEY_FILE=""
+SIGSTORE_CERTIFICATE_FILE=""
+SIGSTORE_CERTIFICATE_IDENTITY=""
+SIGSTORE_OIDC_ISSUER=""
+COSIGN_PATH="cosign"
 DEPENDENCY=""
 RESULT=""
 EVIDENCE_PATH=""
@@ -49,6 +56,12 @@ Optional:
   --weights-file        CSV file of per-profile scoring weights
   --manifest-file       Signed manifest for weight-file integrity verification
   --require-signed-manifest Enforce signed manifest verification gates
+  --signature-verification-mode Cryptographic mode: none|kms|sigstore
+  --kms-public-key-file Public key file for kms signature verification
+  --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
+  --sigstore-certificate-identity Expected sigstore certificate identity
+  --sigstore-oidc-issuer Expected sigstore OIDC issuer
+  --cosign-path         Optional cosign binary path (default: cosign)
   --strict-schema-version Required schema version when strict validation is enabled
   --trend-window-size   Number of recent tenant outcomes to analyze (default: 20)
   --notes               Additional context
@@ -109,11 +122,36 @@ while [[ $# -gt 0 ]]; do
             ;;
         --manifest-file)
             PROFILE_MANIFEST_FILE="${2:-}"
+            MANIFEST_FILE_EXPLICIT=true
             shift 2
             ;;
         --require-signed-manifest)
             REQUIRE_SIGNED_MANIFEST=true
             shift
+            ;;
+        --signature-verification-mode)
+            SIGNATURE_VERIFICATION_MODE="${2:-}"
+            shift 2
+            ;;
+        --kms-public-key-file)
+            KMS_PUBLIC_KEY_FILE="${2:-}"
+            shift 2
+            ;;
+        --sigstore-certificate-file)
+            SIGSTORE_CERTIFICATE_FILE="${2:-}"
+            shift 2
+            ;;
+        --sigstore-certificate-identity)
+            SIGSTORE_CERTIFICATE_IDENTITY="${2:-}"
+            shift 2
+            ;;
+        --sigstore-oidc-issuer)
+            SIGSTORE_OIDC_ISSUER="${2:-}"
+            shift 2
+            ;;
+        --cosign-path)
+            COSIGN_PATH="${2:-}"
+            shift 2
             ;;
         --strict-schema-version)
             STRICT_SCHEMA_VERSION="${2:-}"
@@ -174,6 +212,17 @@ if [ -z "$POLICY_PROFILE" ]; then
     exit 1
 fi
 
+if [[ "$SIGNATURE_VERIFICATION_MODE" != "none" &&
+      "$SIGNATURE_VERIFICATION_MODE" != "kms" &&
+      "$SIGNATURE_VERIFICATION_MODE" != "sigstore" ]]; then
+    echo "--signature-verification-mode must be one of: none, kms, sigstore" >&2
+    exit 1
+fi
+
+if [ "$SIGNATURE_VERIFICATION_MODE" != "none" ]; then
+    REQUIRE_SIGNED_MANIFEST=true
+fi
+
 if [ ! -f "$TREND_HISTORY_FILE" ]; then
     printf "%s\n" "timestamp,tenant_id,rollout_phase,dependency,result,simulation_id" > "$TREND_HISTORY_FILE"
 fi
@@ -214,7 +263,7 @@ if [ ! -r "$PROFILE_WEIGHTS_FILE" ]; then
     exit 1
 fi
 
-if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ -n "$PROFILE_MANIFEST_FILE" ]; then
+if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]; then
     if [ ! -f "$PROFILE_MANIFEST_FILE" ]; then
         echo "Missing required signed manifest file: $PROFILE_MANIFEST_FILE" >&2
         exit 1
@@ -232,6 +281,9 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ -n "$PROFILE_MANIFEST_FILE" ]; the
     MANIFEST_SIGNED_BY=$(awk -F'=' '$1=="signed_by" { print $2; exit }' "$PROFILE_MANIFEST_FILE" | tr -d '\r')
     MANIFEST_SIGNED_AT=$(awk -F'=' '$1=="signed_at" { print $2; exit }' "$PROFILE_MANIFEST_FILE" | tr -d '\r[:space:]')
     MANIFEST_KEY_ID=$(awk -F'=' '$1=="key_id" { print $2; exit }' "$PROFILE_MANIFEST_FILE" | tr -d '\r[:space:]')
+    MANIFEST_SIGNATURE_SCHEME=$(awk -F'=' '$1=="signature_scheme" { print $2; exit }' "$PROFILE_MANIFEST_FILE" | tr -d '\r[:space:]')
+    MANIFEST_SIGNATURE_FILE=$(awk -F'=' '$1=="signature_file" { print $2; exit }' "$PROFILE_MANIFEST_FILE" | tr -d '\r')
+    MANIFEST_CERTIFICATE_FILE=$(awk -F'=' '$1=="certificate_file" { print $2; exit }' "$PROFILE_MANIFEST_FILE" | tr -d '\r')
 
     if [ -z "$MANIFEST_VERSION" ] || [ -z "$MANIFEST_WEIGHTS_FILE" ] || [ -z "$MANIFEST_WEIGHTS_SHA256" ] || [ -z "$MANIFEST_SIGNATURE" ] || [ -z "$MANIFEST_SIGNED_BY" ] || [ -z "$MANIFEST_SIGNED_AT" ] || [ -z "$MANIFEST_KEY_ID" ]; then
         echo "Malformed signed manifest: required fields missing in $PROFILE_MANIFEST_FILE" >&2
@@ -260,6 +312,67 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ -n "$PROFILE_MANIFEST_FILE" ]; the
     if [ "${ACTUAL_WEIGHTS_SHA256,,}" != "${MANIFEST_WEIGHTS_SHA256,,}" ]; then
         echo "Signed manifest integrity failure: weights_sha256 mismatch for $PROFILE_WEIGHTS_FILE" >&2
         exit 1
+    fi
+
+    if [ "$SIGNATURE_VERIFICATION_MODE" != "none" ]; then
+        if [ -z "$MANIFEST_SIGNATURE_SCHEME" ] || [ -z "$MANIFEST_SIGNATURE_FILE" ]; then
+            echo "Malformed signed manifest: signature_scheme and signature_file are required for cryptographic verification" >&2
+            exit 1
+        fi
+
+        if [ ! -f "$MANIFEST_SIGNATURE_FILE" ]; then
+            echo "Missing signature file referenced by manifest: $MANIFEST_SIGNATURE_FILE" >&2
+            exit 1
+        fi
+
+        if [ "$SIGNATURE_VERIFICATION_MODE" != "$MANIFEST_SIGNATURE_SCHEME" ]; then
+            echo "Signature verification mode mismatch: requested '$SIGNATURE_VERIFICATION_MODE' but manifest declares '$MANIFEST_SIGNATURE_SCHEME'" >&2
+            exit 1
+        fi
+
+        if [ "$SIGNATURE_VERIFICATION_MODE" = "kms" ]; then
+            if [ -z "$KMS_PUBLIC_KEY_FILE" ]; then
+                echo "--kms-public-key-file is required for --signature-verification-mode kms" >&2
+                exit 1
+            fi
+
+            if [ ! -f "$KMS_PUBLIC_KEY_FILE" ]; then
+                echo "Missing KMS public key file: $KMS_PUBLIC_KEY_FILE" >&2
+                exit 1
+            fi
+
+            if ! command -v openssl >/dev/null 2>&1; then
+                echo "Unable to verify kms signature: openssl not available" >&2
+                exit 1
+            fi
+
+            if ! openssl dgst -sha256 -verify "$KMS_PUBLIC_KEY_FILE" -signature "$MANIFEST_SIGNATURE_FILE" "$PROFILE_WEIGHTS_FILE" >/dev/null 2>&1; then
+                echo "Cryptographic signature verification failed for kms mode" >&2
+                exit 1
+            fi
+        fi
+
+        if [ "$SIGNATURE_VERIFICATION_MODE" = "sigstore" ]; then
+            if [ -z "$SIGSTORE_CERTIFICATE_FILE" ] || [ -z "$SIGSTORE_CERTIFICATE_IDENTITY" ] || [ -z "$SIGSTORE_OIDC_ISSUER" ]; then
+                echo "--sigstore-certificate-file, --sigstore-certificate-identity, and --sigstore-oidc-issuer are required for sigstore mode" >&2
+                exit 1
+            fi
+
+            if [ ! -f "$SIGSTORE_CERTIFICATE_FILE" ]; then
+                echo "Missing sigstore certificate file: $SIGSTORE_CERTIFICATE_FILE" >&2
+                exit 1
+            fi
+
+            if ! command -v "$COSIGN_PATH" >/dev/null 2>&1; then
+                echo "Unable to verify sigstore signature: cosign not available at '$COSIGN_PATH'" >&2
+                exit 1
+            fi
+
+            if ! "$COSIGN_PATH" verify-blob --signature "$MANIFEST_SIGNATURE_FILE" --certificate "$SIGSTORE_CERTIFICATE_FILE" --certificate-identity "$SIGSTORE_CERTIFICATE_IDENTITY" --certificate-oidc-issuer "$SIGSTORE_OIDC_ISSUER" "$PROFILE_WEIGHTS_FILE" >/dev/null 2>&1; then
+                echo "Cryptographic signature verification failed for sigstore mode" >&2
+                exit 1
+            fi
+        fi
     fi
 fi
 
@@ -483,9 +596,13 @@ $RECOMMENDATION
 - Signed At: ${MANIFEST_SIGNED_AT:-not-verified}
 - Key Id: ${MANIFEST_KEY_ID:-not-verified}
 - Manifest Signature: ${MANIFEST_SIGNATURE:-not-verified}
+- Manifest Signature Scheme: ${MANIFEST_SIGNATURE_SCHEME:-not-verified}
+- Manifest Signature File: ${MANIFEST_SIGNATURE_FILE:-not-verified}
+- Manifest Certificate File: ${MANIFEST_CERTIFICATE_FILE:-not-verified}
 - Weight Schema Version: ${_schema:-not-declared}
 - Strict Schema Gate: ${STRICT_SCHEMA_VERSION:-disabled}
 - Strict Manifest Gate: ${REQUIRE_SIGNED_MANIFEST}
+- Signature Verification Mode: ${SIGNATURE_VERIFICATION_MODE}
 - Weight Inputs:
   - fail-base=$FAIL_BASE_SCORE
   - pass-base=$PASS_BASE_SCORE

@@ -37,6 +37,12 @@ Optional:
   --weights-file        CSV file of per-profile scoring weights
   --manifest-file       Signed manifest for weight-file integrity verification
   --require-signed-manifest Enforce signed manifest verification gates
+  --signature-verification-mode Cryptographic mode: none|kms|sigstore
+  --kms-public-key-file Public key file for kms signature verification
+  --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
+  --sigstore-certificate-identity Expected sigstore certificate identity
+  --sigstore-oidc-issuer Expected sigstore OIDC issuer
+  --cosign-path         Optional cosign binary path (default: cosign)
   --strict-schema-version Required schema version when strict validation is enabled
   --trend-window-size   Number of recent tenant outcomes to analyze (default: 20)
   --notes               Additional context
@@ -51,6 +57,13 @@ $rolloutPhase = ''
 $policyProfile = 'default'
 $strictSchemaVersion = ''
 $requireSignedManifest = $false
+$manifestFileExplicit = $false
+$signatureVerificationMode = 'none'
+$kmsPublicKeyFile = ''
+$sigstoreCertificateFile = ''
+$sigstoreCertificateIdentity = ''
+$sigstoreOidcIssuer = ''
+$cosignPath = 'cosign'
 $dependency = ''
 $result = ''
 $evidencePath = ''
@@ -63,6 +76,9 @@ $manifestSignedBy = ''
 $manifestSignedAt = ''
 $manifestKeyId = ''
 $manifestSignature = ''
+$manifestSignatureScheme = ''
+$manifestSignatureFile = ''
+$manifestCertificateFile = ''
 $notes = ''
 $trendWindowSize = 20
 $dryRun = $false
@@ -121,9 +137,34 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         '--manifest-file' {
             $i++
             $profileManifestFile = [string]$args[$i]
+            $manifestFileExplicit = $true
         }
         '--require-signed-manifest' {
             $requireSignedManifest = $true
+        }
+        '--signature-verification-mode' {
+            $i++
+            $signatureVerificationMode = [string]$args[$i]
+        }
+        '--kms-public-key-file' {
+            $i++
+            $kmsPublicKeyFile = [string]$args[$i]
+        }
+        '--sigstore-certificate-file' {
+            $i++
+            $sigstoreCertificateFile = [string]$args[$i]
+        }
+        '--sigstore-certificate-identity' {
+            $i++
+            $sigstoreCertificateIdentity = [string]$args[$i]
+        }
+        '--sigstore-oidc-issuer' {
+            $i++
+            $sigstoreOidcIssuer = [string]$args[$i]
+        }
+        '--cosign-path' {
+            $i++
+            $cosignPath = [string]$args[$i]
         }
         '--strict-schema-version' {
             $i++
@@ -183,6 +224,14 @@ if ([string]::IsNullOrWhiteSpace($policyProfile)) {
     throw '--policy-profile cannot be empty'
 }
 
+if ($signatureVerificationMode -notin @('none', 'kms', 'sigstore')) {
+    throw '--signature-verification-mode must be one of: none, kms, sigstore'
+}
+
+if ($signatureVerificationMode -ne 'none') {
+    $requireSignedManifest = $true
+}
+
 if (-not (Test-Path -LiteralPath $trendHistoryFile)) {
     Set-Content -LiteralPath $trendHistoryFile -NoNewline -Value
         'timestamp,tenant_id,rollout_phase,dependency,result,simulation_id'
@@ -230,8 +279,7 @@ if (-not (Test-Path -LiteralPath $profileWeightsFile)) {
     throw "Missing required profile weights file: $profileWeightsFile"
 }
 
-if ($requireSignedManifest -or
-    -not [string]::IsNullOrWhiteSpace($profileManifestFile)) {
+if ($requireSignedManifest -or $manifestFileExplicit) {
     if (-not (Test-Path -LiteralPath $profileManifestFile)) {
         throw "Missing required signed manifest file: $profileManifestFile"
     }
@@ -272,6 +320,9 @@ if ($requireSignedManifest -or
     $manifestSignedBy = [string]$manifestFields['signed_by']
     $manifestSignedAt = [string]$manifestFields['signed_at']
     $manifestKeyId = [string]$manifestFields['key_id']
+    $manifestSignatureScheme = [string]($manifestFields['signature_scheme'])
+    $manifestSignatureFile = [string]($manifestFields['signature_file'])
+    $manifestCertificateFile = [string]($manifestFields['certificate_file'])
 
     if ($manifestWeightsSha256 -notmatch '^[A-Fa-f0-9]{64}$') {
         throw "Malformed signed manifest: weights_sha256 must be 64-char hex in $profileManifestFile"
@@ -286,6 +337,57 @@ if ($requireSignedManifest -or
     if ($weightsHash.ToLowerInvariant() -ne
         $manifestWeightsSha256.ToLowerInvariant()) {
         throw "Signed manifest integrity failure: weights_sha256 mismatch for $profileWeightsFile"
+    }
+
+    if ($signatureVerificationMode -ne 'none') {
+        if ([string]::IsNullOrWhiteSpace($manifestSignatureScheme) -or
+            [string]::IsNullOrWhiteSpace($manifestSignatureFile)) {
+            throw "Malformed signed manifest: signature_scheme and signature_file are required for cryptographic verification"
+        }
+
+        if (-not (Test-Path -LiteralPath $manifestSignatureFile)) {
+            throw "Missing signature file referenced by manifest: $manifestSignatureFile"
+        }
+
+        if ($manifestSignatureScheme -ne $signatureVerificationMode) {
+            throw "Signature verification mode mismatch: requested '$signatureVerificationMode' but manifest declares '$manifestSignatureScheme'"
+        }
+
+        if ($signatureVerificationMode -eq 'kms') {
+            if ([string]::IsNullOrWhiteSpace($kmsPublicKeyFile)) {
+                throw '--kms-public-key-file is required for --signature-verification-mode kms'
+            }
+
+            if (-not (Test-Path -LiteralPath $kmsPublicKeyFile)) {
+                throw "Missing KMS public key file: $kmsPublicKeyFile"
+            }
+
+            $kmsCommand =
+                "openssl dgst -sha256 -verify `"$kmsPublicKeyFile`" -signature `"$manifestSignatureFile`" `"$profileWeightsFile`""
+            $kmsOutput = Invoke-Expression $kmsCommand 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                throw "Cryptographic signature verification failed for kms mode: $kmsOutput"
+            }
+        }
+
+        if ($signatureVerificationMode -eq 'sigstore') {
+            if ([string]::IsNullOrWhiteSpace($sigstoreCertificateFile) -or
+                [string]::IsNullOrWhiteSpace($sigstoreCertificateIdentity) -or
+                [string]::IsNullOrWhiteSpace($sigstoreOidcIssuer)) {
+                throw '--sigstore-certificate-file, --sigstore-certificate-identity, and --sigstore-oidc-issuer are required for sigstore mode'
+            }
+
+            if (-not (Test-Path -LiteralPath $sigstoreCertificateFile)) {
+                throw "Missing sigstore certificate file: $sigstoreCertificateFile"
+            }
+
+            $sigstoreCommand =
+                "$cosignPath verify-blob --signature `"$manifestSignatureFile`" --certificate `"$sigstoreCertificateFile`" --certificate-identity `"$sigstoreCertificateIdentity`" --certificate-oidc-issuer `"$sigstoreOidcIssuer`" `"$profileWeightsFile`""
+            $sigstoreOutput = Invoke-Expression $sigstoreCommand 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                throw "Cryptographic signature verification failed for sigstore mode: $sigstoreOutput"
+            }
+        }
     }
 }
 
@@ -513,9 +615,13 @@ $recommendation
 - Signed At: $(if ($manifestSignedAt) { $manifestSignedAt } else { 'not-verified' })
 - Key Id: $(if ($manifestKeyId) { $manifestKeyId } else { 'not-verified' })
 - Manifest Signature: $(if ($manifestSignature) { $manifestSignature } else { 'not-verified' })
+- Manifest Signature Scheme: $(if ($manifestSignatureScheme) { $manifestSignatureScheme } else { 'not-verified' })
+- Manifest Signature File: $(if ($manifestSignatureFile) { $manifestSignatureFile } else { 'not-verified' })
+- Manifest Certificate File: $(if ($manifestCertificateFile) { $manifestCertificateFile } else { 'not-verified' })
 - Weight Schema Version: $(if ($profileSchemaVersion) { $profileSchemaVersion } else { 'not-declared' })
 - Strict Schema Gate: $(if ($strictSchemaVersion) { $strictSchemaVersion } else { 'disabled' })
 - Strict Manifest Gate: $requireSignedManifest
+- Signature Verification Mode: $signatureVerificationMode
 - Weight Inputs:
   - fail-base=$failBaseScore
   - pass-base=$passBaseScore

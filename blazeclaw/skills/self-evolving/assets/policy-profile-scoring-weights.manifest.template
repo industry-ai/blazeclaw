@@ -8,3 +8,6 @@ signature=<signature-or-attestation-id>
 signed_by=<signing-identity>
 signed_at=<yyyy-mm-ddThh:mm:ssZ>
 key_id=<key-identifier>
+signature_scheme=<none|kms|sigstore>
+signature_file=<detached-signature-file-path>
+certificate_file=<sigstore-certificate-path-or-empty>
