@@ -258,12 +258,14 @@ Outage outcome recommendation controls:
 - Default trend window size: `<n>`
 - Trend segmentation mode: `tenant + dependency class`
 - Required promoter inputs: `tenant-id`, `rollout-phase`, `policy-profile`
+- Optional strict schema pin: `strict-schema-version`
 - Recommendation review SLA: `<duration>`
 - Recommendation promotion approvers: `<engineering|security|operations>`
 - Fail-fast validation policy:
   - missing profile weights file: `deny rollout gate`
   - missing profile row: `deny rollout gate`
   - malformed numeric weights/divisors: `deny rollout gate`
+  - strict schema mismatch (when enabled): `deny rollout gate`
 - Recommendation severity gating:
   - `critical|high` in `r3|r4` requires explicit hold or remediation approval
   - `medium` requires owner review before phase promotion

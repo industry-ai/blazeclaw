@@ -14,6 +14,7 @@ SIMULATION_ID=""
 TENANT_ID=""
 ROLLOUT_PHASE=""
 POLICY_PROFILE="default"
+STRICT_SCHEMA_VERSION=""
 DEPENDENCY=""
 RESULT=""
 EVIDENCE_PATH=""
@@ -44,6 +45,7 @@ Optional:
   --failover-triggered  Automated failover status (yes|no)
   --failback-completed  Automated failback status (yes|no)
   --weights-file        CSV file of per-profile scoring weights
+  --strict-schema-version Required schema version when strict validation is enabled
   --trend-window-size   Number of recent tenant outcomes to analyze (default: 20)
   --notes               Additional context
   --dry-run             Print entries without writing files
@@ -99,6 +101,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --weights-file)
             PROFILE_WEIGHTS_FILE="${2:-}"
+            shift 2
+            ;;
+        --strict-schema-version)
+            STRICT_SCHEMA_VERSION="${2:-}"
             shift 2
             ;;
         --trend-window-size)
@@ -202,8 +208,20 @@ if [ -z "$PROFILE_ROW" ]; then
     exit 1
 fi
 
-IFS=',' read -r _p _fail _pass _r1 _r2 _r3 _r4 _reg _auth _tfd _tpd <<< "$PROFILE_ROW"
+HEADER_LINE=$(head -n 1 "$PROFILE_WEIGHTS_FILE" | tr -d '\r')
+HAS_SCHEMA_COLUMN=false
+if printf "%s" "$HEADER_LINE" | grep -Eq '(^|,)schema_version(,|$)'; then
+    HAS_SCHEMA_COLUMN=true
+fi
 
+_schema=""
+if [ "$HAS_SCHEMA_COLUMN" = true ]; then
+    IFS=',' read -r _p _schema _fail _pass _r1 _r2 _r3 _r4 _reg _auth _tfd _tpd <<< "$PROFILE_ROW"
+else
+    IFS=',' read -r _p _fail _pass _r1 _r2 _r3 _r4 _reg _auth _tfd _tpd <<< "$PROFILE_ROW"
+fi
+
+_schema=$(echo "$_schema" | tr -d '\r[:space:]')
 _fail=$(echo "$_fail" | tr -d '\r[:space:]')
 _pass=$(echo "$_pass" | tr -d '\r[:space:]')
 _r1=$(echo "$_r1" | tr -d '\r[:space:]')
@@ -227,6 +245,23 @@ done
 if [ "$VALID" != true ]; then
     echo "Malformed profile '$POLICY_PROFILE': expected numeric weights in $PROFILE_WEIGHTS_FILE" >&2
     exit 1
+fi
+
+if [ -n "$STRICT_SCHEMA_VERSION" ]; then
+    if [ "$HAS_SCHEMA_COLUMN" != true ]; then
+        echo "Malformed profile weights file: schema_version column is required for --strict-schema-version in $PROFILE_WEIGHTS_FILE" >&2
+        exit 1
+    fi
+
+    if [ -z "$_schema" ]; then
+        echo "Malformed profile '$POLICY_PROFILE': schema_version value is required for --strict-schema-version in $PROFILE_WEIGHTS_FILE" >&2
+        exit 1
+    fi
+
+    if [ "$_schema" != "$STRICT_SCHEMA_VERSION" ]; then
+        echo "Schema version mismatch for profile '$POLICY_PROFILE': expected '$STRICT_SCHEMA_VERSION' but found '$_schema' in $PROFILE_WEIGHTS_FILE" >&2
+        exit 1
+    fi
 fi
 
 if [ "$_tfd" -le 0 ] || [ "$_tpd" -le 0 ]; then
@@ -329,6 +364,7 @@ Outage simulation $SIMULATION_ID reported $RESULT for $DEPENDENCY dependency in 
 - Tenant ID: $TENANT_ID
 - Rollout Phase: $ROLLOUT_PHASE
 - Policy Profile: $POLICY_PROFILE
+- Policy Profile Schema Version: ${_schema:-not-declared}
 - Dependency: $DEPENDENCY
 - Result: $RESULT
 - Failure Mode: ${FAILURE_MODE:-not-provided}
@@ -380,6 +416,8 @@ $RECOMMENDATION
 - Trend Pass Count: $TREND_PASS_COUNT
 - Trend Fail Rate: ${TREND_FAIL_RATE}%
 - Weight Source: $PROFILE_WEIGHTS_FILE
+- Weight Schema Version: ${_schema:-not-declared}
+- Strict Schema Gate: ${STRICT_SCHEMA_VERSION:-disabled}
 - Weight Inputs:
   - fail-base=$FAIL_BASE_SCORE
   - pass-base=$PASS_BASE_SCORE

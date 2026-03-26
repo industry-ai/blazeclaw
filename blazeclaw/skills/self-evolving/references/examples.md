@@ -126,6 +126,7 @@ Authority outage simulation SIM-AUTH-001 failed trust-chain validation fallback
 - Tenant ID: tenant-a
 - Rollout Phase: r3
 - Policy Profile: org-dr-sentinel
+- Policy Profile Schema Version: v1
 - Dependency: authority
 - Result: fail
 - Failure Mode: trust-anchor mismatch
@@ -177,6 +178,8 @@ phase promotion.
 - Trend Pass Count: 8
 - Trend Fail Rate: 42%
 - Weight Source: assets/policy-profile-scoring-weights.csv
+- Weight Schema Version: v1
+- Strict Schema Gate: v1
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode
@@ -194,6 +197,11 @@ phase promotion.
 ```text
 $ scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-001 --tenant-id tenant-a --rollout-phase r2 --policy-profile missing-profile --dependency registry --result pass --evidence-path reports/drills/sim-reg-001.json
 Missing required policy profile 'missing-profile' in: ./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv
+```
+
+```text
+$ scripts/outage-outcome-promoter.ps1 --dry-run --simulation-id SIM-AUTH-002 --tenant-id tenant-a --rollout-phase r3 --policy-profile org-dr-sentinel --strict-schema-version v2 --dependency authority --result fail --evidence-path reports/drills/sim-auth-002.json
+Schema version mismatch for profile 'org-dr-sentinel': expected 'v2' but found 'v1' in ./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv
 ```
 
 ## Learning: Knowledge Gap (Resolved)

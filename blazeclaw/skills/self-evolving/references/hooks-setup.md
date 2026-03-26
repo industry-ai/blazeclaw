@@ -211,6 +211,8 @@ Outage promoter inputs now require tenant and rollout phase context:
 - `--policy-profile <profile-id>` (`default` if not provided)
 - Optional `--weights-file <path>` for custom profile weight definitions.
 - Optional `--trend-window-size <n>` for tenant trend scoring windows.
+- Optional `--strict-schema-version <version>` to enforce profile schema
+  compatibility.
 
 Fail-fast validation gates:
 
@@ -218,6 +220,8 @@ Fail-fast validation gates:
 - Missing `--policy-profile` row in weights CSV causes immediate script failure.
 - Malformed weight fields (non-numeric or invalid divisors) cause immediate
   script failure.
+- When `--strict-schema-version` is set, missing schema column/value or
+  version mismatch causes immediate script failure.
 
 Default profile weights are provided in:
 

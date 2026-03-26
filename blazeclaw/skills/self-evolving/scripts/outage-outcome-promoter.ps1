@@ -33,6 +33,7 @@ Optional:
   --failover-triggered  Automated failover status (yes|no)
   --failback-completed  Automated failback status (yes|no)
   --weights-file        CSV file of per-profile scoring weights
+  --strict-schema-version Required schema version when strict validation is enabled
   --trend-window-size   Number of recent tenant outcomes to analyze (default: 20)
   --notes               Additional context
   --dry-run             Print entries without writing files
@@ -44,6 +45,7 @@ $simulationId = ''
 $tenantId = ''
 $rolloutPhase = ''
 $policyProfile = 'default'
+$strictSchemaVersion = ''
 $dependency = ''
 $result = ''
 $evidencePath = ''
@@ -105,6 +107,10 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         '--weights-file' {
             $i++
             $profileWeightsFile = [string]$args[$i]
+        }
+        '--strict-schema-version' {
+            $i++
+            $strictSchemaVersion = [string]$args[$i]
         }
         '--trend-window-size' {
             $i++
@@ -218,6 +224,27 @@ $profileRow = $profileRows |
 
 if (-not $profileRow) {
     throw "Missing required policy profile '$policyProfile' in: $profileWeightsFile"
+}
+
+$profileSchemaVersion = ''
+$schemaColumnPresent =
+    ($profileRow.PSObject.Properties.Name -contains 'schema_version')
+if ($schemaColumnPresent) {
+    $profileSchemaVersion = [string]$profileRow.schema_version
+}
+
+if (-not [string]::IsNullOrWhiteSpace($strictSchemaVersion)) {
+    if (-not $schemaColumnPresent) {
+        throw "Malformed profile weights file: schema_version column is required for --strict-schema-version in $profileWeightsFile"
+    }
+
+    if ([string]::IsNullOrWhiteSpace($profileSchemaVersion)) {
+        throw "Malformed profile '$policyProfile': schema_version value is required for --strict-schema-version in $profileWeightsFile"
+    }
+
+    if ($profileSchemaVersion -ne $strictSchemaVersion) {
+        throw "Schema version mismatch for profile '$policyProfile': expected '$strictSchemaVersion' but found '$profileSchemaVersion' in $profileWeightsFile"
+    }
 }
 
 $numericFields = @(
@@ -353,6 +380,7 @@ Outage simulation $simulationId reported $result for $dependency dependency in t
 - Tenant ID: $tenantId
 - Rollout Phase: $rolloutPhase
 - Policy Profile: $policyProfile
+- Policy Profile Schema Version: $(if ($profileSchemaVersion) { $profileSchemaVersion } else { 'not-declared' })
 - Dependency: $dependency
 - Result: $result
 - Failure Mode: $(if ($failureMode) { $failureMode } else { 'not-provided' })
@@ -403,6 +431,8 @@ $recommendation
 - Trend Pass Count: $trendPassCount
 - Trend Fail Rate: $trendFailRate%
 - Weight Source: $profileWeightsFile
+- Weight Schema Version: $(if ($profileSchemaVersion) { $profileSchemaVersion } else { 'not-declared' })
+- Strict Schema Gate: $(if ($strictSchemaVersion) { $strictSchemaVersion } else { 'disabled' })
 - Weight Inputs:
   - fail-base=$failBaseScore
   - pass-base=$passBaseScore
