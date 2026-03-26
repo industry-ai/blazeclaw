@@ -2,6 +2,7 @@
 
 Automated recommendations derived from outage simulation outcomes.
 
-Entries include tenant-scoped trend metrics and phase-aware scoring.
+Entries include tenant-scoped, dependency-segmented trend metrics,
+phase-aware scoring, and policy-profile weight metadata.
 
 ---

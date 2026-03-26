@@ -125,6 +125,7 @@ Authority outage simulation SIM-AUTH-001 failed trust-chain validation fallback
 - Simulation ID: SIM-AUTH-001
 - Tenant ID: tenant-a
 - Rollout Phase: r3
+- Policy Profile: org-dr-sentinel
 - Dependency: authority
 - Result: fail
 - Failure Mode: trust-anchor mismatch
@@ -133,6 +134,7 @@ Authority outage simulation SIM-AUTH-001 failed trust-chain validation fallback
 - Automated Failover Triggered: yes
 - Automated Failback Completed: no
 - Trend Window Size: 20
+- Trend Segment: tenant=tenant-a, dependency=authority
 - Trend Sample Count: 14
 - Trend Fail Count: 6
 - Trend Pass Count: 8
@@ -154,6 +156,7 @@ until failover authority verification passes.
 **Source Simulation**: SIM-AUTH-001
 **Tenant ID**: tenant-a
 **Rollout Phase**: r3
+**Policy Profile**: org-dr-sentinel
 **Dependency**: authority
 **Outcome**: fail
 **Status**: suggested
@@ -168,10 +171,12 @@ phase promotion.
 - Recommendation Score: 80
 - Severity: critical
 - Trend Window Size: 20
+- Trend Segment: tenant=tenant-a, dependency=authority
 - Trend Sample Count: 14
 - Trend Fail Count: 6
 - Trend Pass Count: 8
 - Trend Fail Rate: 42%
+- Weight Source: assets/policy-profile-scoring-weights.csv
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode

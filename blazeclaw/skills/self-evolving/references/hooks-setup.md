@@ -208,4 +208,10 @@ Outage promoter inputs now require tenant and rollout phase context:
 
 - `--tenant-id <tenant-id>`
 - `--rollout-phase <r1|r2|r3|r4>`
+- `--policy-profile <profile-id>` (`default` if not provided)
+- Optional `--weights-file <path>` for custom profile weight definitions.
 - Optional `--trend-window-size <n>` for tenant trend scoring windows.
+
+Default profile weights are provided in:
+
+- `assets/policy-profile-scoring-weights.csv`

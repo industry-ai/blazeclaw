@@ -27,6 +27,7 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
 - [ ] Automated failover runbooks validated in target environment
 - [ ] Outage outcome promoter scripts executed and outputs reviewed
 - [ ] Tenant trend history updated and recommendation score bands reviewed
+- [ ] Policy profile weight file reviewed for rollout scope
 
 ## 3) Environment Matrix
 
@@ -100,7 +101,7 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
 | R1 | Tenant-level controls, registry mapping, and registry outage drill snapshot | `<engineering owner>` |
 | R2 | Remediation posture, attestation evidence, authority validation, authority drill results, and promoted tuning recommendations | `<operations owner>` |
 | R3 | Cross-tenant compliance trend with failover execution, publication status, recommendation adoption status, and score-severity review | `<security owner>` |
-| R4 | Final federated scorecard with failback approval, publication verification, and critical-score closure evidence | `<engineering + security + operations>` |
+| R4 | Final federated scorecard with dependency-segmented trend review, failback approval, publication verification, and critical-score closure evidence | `<engineering + security + operations>` |
 
 ## 5) Monitoring Plan
 
@@ -158,6 +159,7 @@ Approval gate checklist:
 - [ ] automated failover and failback audit logs attached
 - [ ] recommendation score distribution reviewed for in-phase tenants
 - [ ] high/critical score recommendations have closure or approved hold
+- [ ] active policy profiles mapped to approved scoring weight definitions
 
 ## 6) Rollback Plan
 

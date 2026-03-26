@@ -253,8 +253,11 @@ Outage outcome recommendation controls:
   `blazeclaw/skills/self-evolving/.learnings/POLICY_TUNING_RECOMMENDATIONS.md`
 - Trend history path:
   `blazeclaw/skills/self-evolving/.learnings/OUTAGE_TREND_HISTORY.csv`
+- Profile scoring weights path:
+  `blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv`
 - Default trend window size: `<n>`
-- Required promoter inputs: `tenant-id`, `rollout-phase`
+- Trend segmentation mode: `tenant + dependency class`
+- Required promoter inputs: `tenant-id`, `rollout-phase`, `policy-profile`
 - Recommendation review SLA: `<duration>`
 - Recommendation promotion approvers: `<engineering|security|operations>`
 - Recommendation severity gating:

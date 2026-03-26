@@ -11,6 +11,8 @@ $policyTuningFile =
     './blazeclaw/skills/self-evolving/.learnings/POLICY_TUNING_RECOMMENDATIONS.md'
 $trendHistoryFile =
     './blazeclaw/skills/self-evolving/.learnings/OUTAGE_TREND_HISTORY.csv'
+$profileWeightsFile =
+    './blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv'
 
 function Show-Usage {
 @"
@@ -20,6 +22,7 @@ Required:
   --simulation-id       Outage simulation identifier (example: SIM-REG-001)
   --tenant-id           Tenant identifier for trend analysis
   --rollout-phase       Rollout phase (r1|r2|r3|r4)
+  --policy-profile      Policy profile for configurable score weights
   --dependency          Target dependency (registry|authority)
   --result              Simulation result (pass|fail)
   --evidence-path       Path to drill evidence artifact
@@ -29,6 +32,7 @@ Optional:
   --failure-mode        Failure mode exercised during drill
   --failover-triggered  Automated failover status (yes|no)
   --failback-completed  Automated failback status (yes|no)
+  --weights-file        CSV file of per-profile scoring weights
   --trend-window-size   Number of recent tenant outcomes to analyze (default: 20)
   --notes               Additional context
   --dry-run             Print entries without writing files
@@ -39,6 +43,7 @@ Optional:
 $simulationId = ''
 $tenantId = ''
 $rolloutPhase = ''
+$policyProfile = 'default'
 $dependency = ''
 $result = ''
 $evidencePath = ''
@@ -64,6 +69,10 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         '--rollout-phase' {
             $i++
             $rolloutPhase = [string]$args[$i]
+        }
+        '--policy-profile' {
+            $i++
+            $policyProfile = [string]$args[$i]
         }
         '--dependency' {
             $i++
@@ -92,6 +101,10 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         '--failback-completed' {
             $i++
             $failbackCompleted = [string]$args[$i]
+        }
+        '--weights-file' {
+            $i++
+            $profileWeightsFile = [string]$args[$i]
         }
         '--trend-window-size' {
             $i++
@@ -143,6 +156,10 @@ if ($trendWindowSize -le 0) {
     throw '--trend-window-size must be a positive integer'
 }
 
+if ([string]::IsNullOrWhiteSpace($policyProfile)) {
+    throw '--policy-profile cannot be empty'
+}
+
 if (-not (Test-Path -LiteralPath $trendHistoryFile)) {
     Set-Content -LiteralPath $trendHistoryFile -NoNewline -Value
         'timestamp,tenant_id,rollout_phase,dependency,result,simulation_id'
@@ -158,7 +175,10 @@ $tenantHistory = @()
 $historyRows = Import-Csv -LiteralPath $trendHistoryFile
 if ($historyRows) {
     $tenantHistory = $historyRows |
-        Where-Object { $_.tenant_id -eq $tenantId } |
+        Where-Object {
+            $_.tenant_id -eq $tenantId -and
+            $_.dependency -eq $dependency
+        } |
         Select-Object -Last $trendWindowSize
 }
 
@@ -172,20 +192,84 @@ if ($trendTotal -gt 0) {
     $trendFailRate = [int](($trendFailCount * 100) / $trendTotal)
 }
 
-$phaseWeight = switch ($rolloutPhase) {
-    'r1' { 5 }
-    'r2' { 10 }
-    'r3' { 15 }
-    'r4' { 20 }
+$failBaseScore = 45
+$passBaseScore = 10
+$phaseR1Weight = 5
+$phaseR2Weight = 10
+$phaseR3Weight = 15
+$phaseR4Weight = 20
+$dependencyRegistryWeight = 8
+$dependencyAuthorityWeight = 12
+$trendFailDivisor = 5
+$trendPassDivisor = 10
+
+if (Test-Path -LiteralPath $profileWeightsFile) {
+    $profileRow = Import-Csv -LiteralPath $profileWeightsFile |
+        Where-Object { $_.profile -eq $policyProfile } |
+        Select-Object -First 1
+
+    if ($profileRow) {
+        $numericFields = @(
+            'fail_base',
+            'pass_base',
+            'phase_r1',
+            'phase_r2',
+            'phase_r3',
+            'phase_r4',
+            'dependency_registry',
+            'dependency_authority',
+            'trend_fail_divisor',
+            'trend_pass_divisor'
+        )
+
+        $parsed = @{}
+        $valid = $true
+        foreach ($field in $numericFields) {
+            [int]$value = 0
+            if (-not [int]::TryParse([string]$profileRow.$field, [ref]$value)) {
+                $valid = $false
+                break
+            }
+            $parsed[$field] = $value
+        }
+
+        if ($valid -and
+            $parsed['trend_fail_divisor'] -gt 0 -and
+            $parsed['trend_pass_divisor'] -gt 0) {
+            $failBaseScore = $parsed['fail_base']
+            $passBaseScore = $parsed['pass_base']
+            $phaseR1Weight = $parsed['phase_r1']
+            $phaseR2Weight = $parsed['phase_r2']
+            $phaseR3Weight = $parsed['phase_r3']
+            $phaseR4Weight = $parsed['phase_r4']
+            $dependencyRegistryWeight = $parsed['dependency_registry']
+            $dependencyAuthorityWeight = $parsed['dependency_authority']
+            $trendFailDivisor = $parsed['trend_fail_divisor']
+            $trendPassDivisor = $parsed['trend_pass_divisor']
+        }
+    }
 }
 
-$dependencyWeight = if ($dependency -eq 'authority') { 12 } else { 8 }
+$phaseWeight = switch ($rolloutPhase) {
+    'r1' { $phaseR1Weight }
+    'r2' { $phaseR2Weight }
+    'r3' { $phaseR3Weight }
+    'r4' { $phaseR4Weight }
+}
+
+$dependencyWeight = if ($dependency -eq 'authority') {
+    $dependencyAuthorityWeight
+} else {
+    $dependencyRegistryWeight
+}
 
 $recommendationScore = if ($result -eq 'fail') {
-    45 + $phaseWeight + $dependencyWeight + [int]($trendFailRate / 5)
+    $failBaseScore + $phaseWeight + $dependencyWeight +
+        [int]($trendFailRate / $trendFailDivisor)
 } else {
-    10 + [int]($phaseWeight / 2) +
-        [int]($dependencyWeight / 2) + [int]($trendFailRate / 10)
+    $passBaseScore + [int]($phaseWeight / 2) +
+        [int]($dependencyWeight / 2) +
+        [int]($trendFailRate / $trendPassDivisor)
 }
 
 if ($recommendationScore -gt 100) {
@@ -260,6 +344,7 @@ Outage simulation $simulationId reported $result for $dependency dependency in t
 - Simulation ID: $simulationId
 - Tenant ID: $tenantId
 - Rollout Phase: $rolloutPhase
+- Policy Profile: $policyProfile
 - Dependency: $dependency
 - Result: $result
 - Failure Mode: $(if ($failureMode) { $failureMode } else { 'not-provided' })
@@ -268,6 +353,7 @@ Outage simulation $simulationId reported $result for $dependency dependency in t
 - Automated Failover Triggered: $(if ($failoverTriggered) { $failoverTriggered } else { 'not-provided' })
 - Automated Failback Completed: $(if ($failbackCompleted) { $failbackCompleted } else { 'not-provided' })
 - Trend Window Size: $trendWindowSize
+- Trend Segment: tenant=$tenantId, dependency=$dependency
 - Trend Sample Count: $trendTotal
 - Trend Fail Count: $trendFailCount
 - Trend Pass Count: $trendPassCount
@@ -279,7 +365,7 @@ $recommendation
 ### Metadata
 - Source: outage_simulation
 - Related Files: references/enterprise-policy-attestation-publication-template.md, references/hook-rollout-policy-template.md
-- Tags: outage-simulation, failover, policy-tuning, governance, tenant-scoped, phase-aware
+- Tags: outage-simulation, failover, policy-tuning, governance, tenant-scoped, phase-aware, profile-weighted
 
 ---
 "@
@@ -291,6 +377,7 @@ $policyEntry = @"
 **Source Simulation**: $simulationId
 **Tenant ID**: $tenantId
 **Rollout Phase**: $rolloutPhase
+**Policy Profile**: $policyProfile
 **Dependency**: $dependency
 **Outcome**: $result
 **Status**: suggested
@@ -302,10 +389,23 @@ $recommendation
 - Recommendation Score: $recommendationScore
 - Severity: $severity
 - Trend Window Size: $trendWindowSize
+- Trend Segment: tenant=$tenantId, dependency=$dependency
 - Trend Sample Count: $trendTotal
 - Trend Fail Count: $trendFailCount
 - Trend Pass Count: $trendPassCount
 - Trend Fail Rate: $trendFailRate%
+- Weight Source: $profileWeightsFile
+- Weight Inputs:
+  - fail-base=$failBaseScore
+  - pass-base=$passBaseScore
+  - phase-r1=$phaseR1Weight
+  - phase-r2=$phaseR2Weight
+  - phase-r3=$phaseR3Weight
+  - phase-r4=$phaseR4Weight
+  - dependency-registry=$dependencyRegistryWeight
+  - dependency-authority=$dependencyAuthorityWeight
+  - trend-fail-divisor=$trendFailDivisor
+  - trend-pass-divisor=$trendPassDivisor
 
 ### Target Controls
 - $controlKeys

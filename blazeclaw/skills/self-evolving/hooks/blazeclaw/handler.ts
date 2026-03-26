@@ -34,7 +34,7 @@ After completing tasks, evaluate if any learnings should be captured:
 - User wants missing capability → \`.learnings/FEATURE_REQUESTS.md\`
 - You discover your knowledge was wrong → \`.learnings/LEARNINGS.md\`
 - You find a better approach → \`.learnings/LEARNINGS.md\`
-- Outage simulation drill finishes → run \`scripts/outage-outcome-promoter.*\` with tenant + rollout phase
+- Outage simulation drill finishes → run \`scripts/outage-outcome-promoter.*\` with tenant, rollout phase, and policy profile
 
 **Promote when pattern is proven:**
 - Behavioral patterns → \`SOUL.md\`

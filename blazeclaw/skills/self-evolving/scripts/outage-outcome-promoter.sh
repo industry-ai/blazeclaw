@@ -8,10 +8,12 @@ set -e
 LEARNINGS_FILE="./blazeclaw/skills/self-evolving/.learnings/LEARNINGS.md"
 POLICY_TUNING_FILE="./blazeclaw/skills/self-evolving/.learnings/POLICY_TUNING_RECOMMENDATIONS.md"
 TREND_HISTORY_FILE="./blazeclaw/skills/self-evolving/.learnings/OUTAGE_TREND_HISTORY.csv"
+PROFILE_WEIGHTS_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv"
 
 SIMULATION_ID=""
 TENANT_ID=""
 ROLLOUT_PHASE=""
+POLICY_PROFILE="default"
 DEPENDENCY=""
 RESULT=""
 EVIDENCE_PATH=""
@@ -31,6 +33,7 @@ Required:
   --simulation-id       Outage simulation identifier (example: SIM-REG-001)
   --tenant-id           Tenant identifier for trend analysis
   --rollout-phase       Rollout phase (r1|r2|r3|r4)
+  --policy-profile      Policy profile for configurable score weights
   --dependency          Target dependency (registry|authority)
   --result              Simulation result (pass|fail)
   --evidence-path       Path to drill evidence artifact
@@ -40,6 +43,7 @@ Optional:
   --failure-mode        Failure mode exercised during drill
   --failover-triggered  Automated failover status (yes|no)
   --failback-completed  Automated failback status (yes|no)
+  --weights-file        CSV file of per-profile scoring weights
   --trend-window-size   Number of recent tenant outcomes to analyze (default: 20)
   --notes               Additional context
   --dry-run             Print entries without writing files
@@ -59,6 +63,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --rollout-phase)
             ROLLOUT_PHASE="${2:-}"
+            shift 2
+            ;;
+        --policy-profile)
+            POLICY_PROFILE="${2:-}"
             shift 2
             ;;
         --dependency)
@@ -87,6 +95,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --failback-completed)
             FAILBACK_COMPLETED="${2:-}"
+            shift 2
+            ;;
+        --weights-file)
+            PROFILE_WEIGHTS_FILE="${2:-}"
             shift 2
             ;;
         --trend-window-size)
@@ -139,6 +151,11 @@ if ! [[ "$TREND_WINDOW_SIZE" =~ ^[0-9]+$ ]] || [ "$TREND_WINDOW_SIZE" -le 0 ]; t
     exit 1
 fi
 
+if [ -z "$POLICY_PROFILE" ]; then
+    echo "--policy-profile cannot be empty" >&2
+    exit 1
+fi
+
 if [ ! -f "$TREND_HISTORY_FILE" ]; then
     printf "%s\n" "timestamp,tenant_id,rollout_phase,dependency,result,simulation_id" > "$TREND_HISTORY_FILE"
 fi
@@ -148,7 +165,7 @@ DATE_STAMP="$(date -u +"%Y%m%d")"
 SANITIZED_SIM_ID="$(echo "$SIMULATION_ID" | tr -cd 'A-Za-z0-9')"
 ENTRY_ID="OUT-$DATE_STAMP-$SANITIZED_SIM_ID"
 
-TENANT_HISTORY=$(awk -F',' -v tenant="$TENANT_ID" 'NR > 1 && $2 == tenant { print $0 }' "$TREND_HISTORY_FILE" | tail -n "$TREND_WINDOW_SIZE")
+TENANT_HISTORY=$(awk -F',' -v tenant="$TENANT_ID" -v dep="$DEPENDENCY" 'NR > 1 && $2 == tenant && $4 == dep { print $0 }' "$TREND_HISTORY_FILE" | tail -n "$TREND_WINDOW_SIZE")
 TREND_TOTAL=$(printf "%s\n" "$TENANT_HISTORY" | sed '/^$/d' | wc -l | tr -d ' ')
 TREND_FAIL_COUNT=$(printf "%s\n" "$TENANT_HISTORY" | awk -F',' 'NF > 0 && $5 == "fail" { c++ } END { print c + 0 }')
 TREND_PASS_COUNT=$(printf "%s\n" "$TENANT_HISTORY" | awk -F',' 'NF > 0 && $5 == "pass" { c++ } END { print c + 0 }')
@@ -158,24 +175,75 @@ if [ "$TREND_TOTAL" -gt 0 ]; then
     TREND_FAIL_RATE=$(( TREND_FAIL_COUNT * 100 / TREND_TOTAL ))
 fi
 
+FAIL_BASE_SCORE=45
+PASS_BASE_SCORE=10
+PHASE_R1_WEIGHT=5
+PHASE_R2_WEIGHT=10
+PHASE_R3_WEIGHT=15
+PHASE_R4_WEIGHT=20
+DEPENDENCY_REGISTRY_WEIGHT=8
+DEPENDENCY_AUTHORITY_WEIGHT=12
+TREND_FAIL_DIVISOR=5
+TREND_PASS_DIVISOR=10
+
+if [ -f "$PROFILE_WEIGHTS_FILE" ]; then
+    PROFILE_ROW=$(awk -F',' -v profile="$POLICY_PROFILE" 'NR > 1 && $1 == profile { print $0; exit }' "$PROFILE_WEIGHTS_FILE")
+    if [ -n "$PROFILE_ROW" ]; then
+        IFS=',' read -r _p _fail _pass _r1 _r2 _r3 _r4 _reg _auth _tfd _tpd <<< "$PROFILE_ROW"
+
+        _fail=$(echo "$_fail" | tr -d '\r[:space:]')
+        _pass=$(echo "$_pass" | tr -d '\r[:space:]')
+        _r1=$(echo "$_r1" | tr -d '\r[:space:]')
+        _r2=$(echo "$_r2" | tr -d '\r[:space:]')
+        _r3=$(echo "$_r3" | tr -d '\r[:space:]')
+        _r4=$(echo "$_r4" | tr -d '\r[:space:]')
+        _reg=$(echo "$_reg" | tr -d '\r[:space:]')
+        _auth=$(echo "$_auth" | tr -d '\r[:space:]')
+        _tfd=$(echo "$_tfd" | tr -d '\r[:space:]')
+        _tpd=$(echo "$_tpd" | tr -d '\r[:space:]')
+
+        CANDIDATES=("$_fail" "$_pass" "$_r1" "$_r2" "$_r3" "$_r4" "$_reg" "$_auth" "$_tfd" "$_tpd")
+        VALID=true
+        for v in "${CANDIDATES[@]}"; do
+            if ! [[ "$v" =~ ^[0-9]+$ ]]; then
+                VALID=false
+                break
+            fi
+        done
+
+        if [ "$VALID" = true ] && [ "$_tfd" -gt 0 ] && [ "$_tpd" -gt 0 ]; then
+            FAIL_BASE_SCORE=$_fail
+            PASS_BASE_SCORE=$_pass
+            PHASE_R1_WEIGHT=$_r1
+            PHASE_R2_WEIGHT=$_r2
+            PHASE_R3_WEIGHT=$_r3
+            PHASE_R4_WEIGHT=$_r4
+            DEPENDENCY_REGISTRY_WEIGHT=$_reg
+            DEPENDENCY_AUTHORITY_WEIGHT=$_auth
+            TREND_FAIL_DIVISOR=$_tfd
+            TREND_PASS_DIVISOR=$_tpd
+        fi
+    fi
+fi
+
 PHASE_WEIGHT=0
 case "$ROLLOUT_PHASE" in
-    r1) PHASE_WEIGHT=5 ;;
-    r2) PHASE_WEIGHT=10 ;;
-    r3) PHASE_WEIGHT=15 ;;
-    r4) PHASE_WEIGHT=20 ;;
+    r1) PHASE_WEIGHT=$PHASE_R1_WEIGHT ;;
+    r2) PHASE_WEIGHT=$PHASE_R2_WEIGHT ;;
+    r3) PHASE_WEIGHT=$PHASE_R3_WEIGHT ;;
+    r4) PHASE_WEIGHT=$PHASE_R4_WEIGHT ;;
 esac
 
-DEPENDENCY_WEIGHT=8
+DEPENDENCY_WEIGHT=$DEPENDENCY_REGISTRY_WEIGHT
 if [ "$DEPENDENCY" = "authority" ]; then
-    DEPENDENCY_WEIGHT=12
+    DEPENDENCY_WEIGHT=$DEPENDENCY_AUTHORITY_WEIGHT
 fi
 
 RECOMMENDATION_SCORE=0
 if [ "$RESULT" = "fail" ]; then
-    RECOMMENDATION_SCORE=$(( 45 + PHASE_WEIGHT + DEPENDENCY_WEIGHT + (TREND_FAIL_RATE / 5) ))
+    RECOMMENDATION_SCORE=$(( FAIL_BASE_SCORE + PHASE_WEIGHT + DEPENDENCY_WEIGHT + (TREND_FAIL_RATE / TREND_FAIL_DIVISOR) ))
 else
-    RECOMMENDATION_SCORE=$(( 10 + (PHASE_WEIGHT / 2) + (DEPENDENCY_WEIGHT / 2) + (TREND_FAIL_RATE / 10) ))
+    RECOMMENDATION_SCORE=$(( PASS_BASE_SCORE + (PHASE_WEIGHT / 2) + (DEPENDENCY_WEIGHT / 2) + (TREND_FAIL_RATE / TREND_PASS_DIVISOR) ))
 fi
 
 if [ "$RECOMMENDATION_SCORE" -gt 100 ]; then
@@ -241,6 +309,7 @@ Outage simulation $SIMULATION_ID reported $RESULT for $DEPENDENCY dependency in 
 - Simulation ID: $SIMULATION_ID
 - Tenant ID: $TENANT_ID
 - Rollout Phase: $ROLLOUT_PHASE
+- Policy Profile: $POLICY_PROFILE
 - Dependency: $DEPENDENCY
 - Result: $RESULT
 - Failure Mode: ${FAILURE_MODE:-not-provided}
@@ -249,6 +318,7 @@ Outage simulation $SIMULATION_ID reported $RESULT for $DEPENDENCY dependency in 
 - Automated Failover Triggered: ${FAILOVER_TRIGGERED:-not-provided}
 - Automated Failback Completed: ${FAILBACK_COMPLETED:-not-provided}
 - Trend Window Size: $TREND_WINDOW_SIZE
+- Trend Segment: tenant=$TENANT_ID, dependency=$DEPENDENCY
 - Trend Sample Count: $TREND_TOTAL
 - Trend Fail Count: $TREND_FAIL_COUNT
 - Trend Pass Count: $TREND_PASS_COUNT
@@ -260,7 +330,7 @@ $RECOMMENDATION
 ### Metadata
 - Source: outage_simulation
 - Related Files: references/enterprise-policy-attestation-publication-template.md, references/hook-rollout-policy-template.md
-- Tags: outage-simulation, failover, policy-tuning, governance, tenant-scoped, phase-aware
+- Tags: outage-simulation, failover, policy-tuning, governance, tenant-scoped, phase-aware, profile-weighted
 
 ---
 EOF
@@ -273,6 +343,7 @@ POLICY_ENTRY=$(cat << EOF
 **Source Simulation**: $SIMULATION_ID
 **Tenant ID**: $TENANT_ID
 **Rollout Phase**: $ROLLOUT_PHASE
+**Policy Profile**: $POLICY_PROFILE
 **Dependency**: $DEPENDENCY
 **Outcome**: $RESULT
 **Status**: suggested
@@ -284,10 +355,23 @@ $RECOMMENDATION
 - Recommendation Score: $RECOMMENDATION_SCORE
 - Severity: $SEVERITY
 - Trend Window Size: $TREND_WINDOW_SIZE
+- Trend Segment: tenant=$TENANT_ID, dependency=$DEPENDENCY
 - Trend Sample Count: $TREND_TOTAL
 - Trend Fail Count: $TREND_FAIL_COUNT
 - Trend Pass Count: $TREND_PASS_COUNT
 - Trend Fail Rate: ${TREND_FAIL_RATE}%
+- Weight Source: $PROFILE_WEIGHTS_FILE
+- Weight Inputs:
+  - fail-base=$FAIL_BASE_SCORE
+  - pass-base=$PASS_BASE_SCORE
+  - phase-r1=$PHASE_R1_WEIGHT
+  - phase-r2=$PHASE_R2_WEIGHT
+  - phase-r3=$PHASE_R3_WEIGHT
+  - phase-r4=$PHASE_R4_WEIGHT
+  - dependency-registry=$DEPENDENCY_REGISTRY_WEIGHT
+  - dependency-authority=$DEPENDENCY_AUTHORITY_WEIGHT
+  - trend-fail-divisor=$TREND_FAIL_DIVISOR
+  - trend-pass-divisor=$TREND_PASS_DIVISOR
 
 ### Target Controls
 - $CONTROL_KEYS
