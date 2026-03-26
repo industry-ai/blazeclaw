@@ -134,6 +134,10 @@ Federation-level aggregates:
   `blazeclaw/skills/self-evolving/.learnings/TENANT_TRUST_POLICY_ATTESTATION_DASHBOARD.md`
 - Tenant attestation trend history path:
   `blazeclaw/skills/self-evolving/.learnings/TENANT_TRUST_POLICY_ATTESTATION_HISTORY.csv`
+- Cross-tenant attestation anomaly heatmap path:
+  `blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_ATTESTATION_ANOMALY_HEATMAP.md`
+- Cross-tenant auto-remediation routing path:
+  `blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_AUTO_REMEDIATION_ROUTING.md`
 - Recommendations generated in window: `<n>`
 - Recommendations accepted: `<n>`
 - Recommendations deferred: `<n>`
@@ -157,6 +161,8 @@ Federation-level aggregates:
 - Revocation propagation SLO breaches: `<n>`
 - Tenant anomaly baseline breaches: `<n>`
 - Tenant anomaly trend baseline p95: `<percent>`
+- Cross-tenant heatmap high/critical tenants: `<n>`
+- Auto-remediation routing coverage: `<percent>`
 - Highest-impact accepted tuning:
   `<short summary with control reference>`
 

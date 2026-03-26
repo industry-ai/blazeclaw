@@ -16,6 +16,8 @@ TRUST_POLICY_ATTESTATION_FILE="./blazeclaw/skills/self-evolving/assets/policy-pr
 REVOCATION_SLO_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.conf"
 ATTESTATION_DASHBOARD_FILE="./blazeclaw/skills/self-evolving/.learnings/TENANT_TRUST_POLICY_ATTESTATION_DASHBOARD.md"
 ATTESTATION_TREND_HISTORY_FILE="./blazeclaw/skills/self-evolving/.learnings/TENANT_TRUST_POLICY_ATTESTATION_HISTORY.csv"
+CROSS_TENANT_HEATMAP_FILE="./blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_ATTESTATION_ANOMALY_HEATMAP.md"
+AUTO_REMEDIATION_ROUTING_FILE="./blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_AUTO_REMEDIATION_ROUTING.md"
 
 SIMULATION_ID=""
 TENANT_ID=""
@@ -28,6 +30,7 @@ REQUIRE_REVOCATION_CHECK=false
 REQUIRE_TRUST_POLICY_ATTESTATION=false
 REQUIRE_REVOCATION_SLO=false
 ENABLE_ATTESTATION_DASHBOARD=true
+ENABLE_CROSS_TENANT_HEATMAP=true
 ATTESTATION_BASELINE_WINDOW=20
 ATTESTATION_ANOMALY_THRESHOLD_PERCENT=25
 REQUIRE_ATTESTATION_BASELINE_GATE=false
@@ -84,6 +87,9 @@ Optional:
   --attestation-anomaly-threshold-percent Anomaly threshold percent (default: 25)
   --require-attestation-baseline-gate Fail-fast on tenant anomaly threshold breach
   --disable-attestation-dashboard Skip dashboard/trend file writes
+  --cross-tenant-heatmap-file Cross-tenant anomaly heatmap markdown output
+  --auto-remediation-routing-file Cross-tenant remediation routing markdown output
+  --disable-cross-tenant-heatmap Skip cross-tenant heatmap and routing writes
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -211,6 +217,18 @@ while [[ $# -gt 0 ]]; do
             ;;
         --disable-attestation-dashboard)
             ENABLE_ATTESTATION_DASHBOARD=false
+            shift
+            ;;
+        --cross-tenant-heatmap-file)
+            CROSS_TENANT_HEATMAP_FILE="${2:-}"
+            shift 2
+            ;;
+        --auto-remediation-routing-file)
+            AUTO_REMEDIATION_ROUTING_FILE="${2:-}"
+            shift 2
+            ;;
+        --disable-cross-tenant-heatmap)
+            ENABLE_CROSS_TENANT_HEATMAP=false
             shift
             ;;
         --signature-verification-mode)
@@ -719,6 +737,87 @@ EOF
             fi
             printf "%s\n" "$DASHBOARD_ENTRY" >> "$ATTESTATION_DASHBOARD_FILE"
         fi
+
+        if [ "$ENABLE_CROSS_TENANT_HEATMAP" = true ]; then
+            CROSS_TENANT_HISTORY=$(awk -F',' 'NR > 1 { print $0 }' "$ATTESTATION_TREND_HISTORY_FILE" | tail -n "$ATTESTATION_BASELINE_WINDOW")
+            UNIQUE_TENANTS=$(printf "%s\n" "$CROSS_TENANT_HISTORY" | awk -F',' 'NF > 0 { print $2 }' | sed '/^$/d' | sort -u)
+
+            if [ -z "$UNIQUE_TENANTS" ]; then
+                CROSS_TENANT_HEATMAP_LINES="- tenant: none, anomaly-percent: 0, severity: low"
+            else
+                CROSS_TENANT_HEATMAP_LINES=""
+                while IFS= read -r tenant; do
+                    [ -z "$tenant" ] && continue
+                    TENANT_ROWS=$(printf "%s\n" "$CROSS_TENANT_HISTORY" | awk -F',' -v t="$tenant" 'NF > 0 && $2 == t { print $0 }')
+                    TENANT_SAMPLES=$(printf "%s\n" "$TENANT_ROWS" | sed '/^$/d' | wc -l | tr -d ' ')
+                    TENANT_ALERTS=$(printf "%s\n" "$TENANT_ROWS" | awk -F',' 'NF > 0 && ($4 != "verified" || $5 == "warning") { c++ } END { print c + 0 }')
+                    TENANT_PERCENT=0
+                    if [ "$TENANT_SAMPLES" -gt 0 ]; then
+                        TENANT_PERCENT=$(( TENANT_ALERTS * 100 / TENANT_SAMPLES ))
+                    fi
+
+                    TENANT_SEVERITY="low"
+                    TENANT_ROUTE="monitor"
+                    if [ "$TENANT_PERCENT" -ge 80 ]; then
+                        TENANT_SEVERITY="critical"
+                        TENANT_ROUTE="auto-remediation"
+                    elif [ "$TENANT_PERCENT" -ge 60 ]; then
+                        TENANT_SEVERITY="high"
+                        TENANT_ROUTE="incident-review"
+                    elif [ "$TENANT_PERCENT" -ge 35 ]; then
+                        TENANT_SEVERITY="medium"
+                        TENANT_ROUTE="owner-review"
+                    fi
+
+                    CROSS_TENANT_HEATMAP_LINES+="- tenant: $tenant, anomaly-percent: $TENANT_PERCENT, severity: $TENANT_SEVERITY, route: $TENANT_ROUTE"$'\n'
+                done <<< "$UNIQUE_TENANTS"
+            fi
+
+            HEATMAP_ENTRY=$(cat << EOF
+## [HEATMAP-$ENTRY_ID] cross_tenant_attestation_anomaly
+
+**Logged**: $TIMESTAMP
+**Baseline Window**: $ATTESTATION_BASELINE_WINDOW
+**Anomaly Threshold Percent**: $ATTESTATION_ANOMALY_THRESHOLD_PERCENT
+
+### Tenant Heatmap
+$CROSS_TENANT_HEATMAP_LINES
+
+---
+EOF
+)
+
+            ROUTING_ENTRY=$(cat << EOF
+## [ROUTE-$ENTRY_ID] cross_tenant_auto_remediation_routing
+
+**Logged**: $TIMESTAMP
+**Source Simulation**: $SIMULATION_ID
+**Tenant ID**: $TENANT_ID
+**Anomaly Percent**: ${ATTESTATION_ANOMALY_PERCENT:-0}%
+**Routing Recommendation**: $(if [ "${ATTESTATION_ANOMALY_PERCENT:-0}" -ge 80 ]; then echo "auto-remediation"; elif [ "${ATTESTATION_ANOMALY_PERCENT:-0}" -ge 60 ]; then echo "incident-review"; elif [ "${ATTESTATION_ANOMALY_PERCENT:-0}" -ge 35 ]; then echo "owner-review"; else echo "monitor"; fi)
+**Target Endpoint**: gateway.runtime.governance.remediationPlan
+**Routing Policy**: tenant anomaly severity bands
+
+---
+EOF
+)
+
+            if [ "$DRY_RUN" = true ]; then
+                echo "[DRY-RUN] Would append cross-tenant heatmap entry to $CROSS_TENANT_HEATMAP_FILE:"
+                echo "$HEATMAP_ENTRY"
+                echo "[DRY-RUN] Would append auto-remediation routing entry to $AUTO_REMEDIATION_ROUTING_FILE:"
+                echo "$ROUTING_ENTRY"
+            else
+                if [ ! -f "$CROSS_TENANT_HEATMAP_FILE" ]; then
+                    printf "%s\n\n" "# Cross-Tenant Attestation Anomaly Heatmap" > "$CROSS_TENANT_HEATMAP_FILE"
+                fi
+                if [ ! -f "$AUTO_REMEDIATION_ROUTING_FILE" ]; then
+                    printf "%s\n\n" "# Cross-Tenant Auto-Remediation Recommendation Routing" > "$AUTO_REMEDIATION_ROUTING_FILE"
+                fi
+                printf "%s\n" "$HEATMAP_ENTRY" >> "$CROSS_TENANT_HEATMAP_FILE"
+                printf "%s\n" "$ROUTING_ENTRY" >> "$AUTO_REMEDIATION_ROUTING_FILE"
+            fi
+        fi
     fi
 fi
 
@@ -977,6 +1076,9 @@ $RECOMMENDATION
 - Attestation Baseline Alert Count: ${ATTESTATION_BASELINE_ALERT_COUNT:-0}
 - Attestation Anomaly Percent: ${ATTESTATION_ANOMALY_PERCENT:-0}%
 - Attestation Baseline Gate: ${REQUIRE_ATTESTATION_BASELINE_GATE}
+- Cross-Tenant Heatmap Source: ${CROSS_TENANT_HEATMAP_FILE}
+- Auto-Remediation Routing Source: ${AUTO_REMEDIATION_ROUTING_FILE}
+- Cross-Tenant Heatmap Enabled: ${ENABLE_CROSS_TENANT_HEATMAP}
 - Weight Inputs:
   - fail-base=$FAIL_BASE_SCORE
   - pass-base=$PASS_BASE_SCORE
@@ -1038,4 +1140,8 @@ echo "Appended tenant trend record to $TREND_HISTORY_FILE"
 if [ "$ENABLE_ATTESTATION_DASHBOARD" = true ]; then
     echo "Updated tenant attestation trend history at $ATTESTATION_TREND_HISTORY_FILE"
     echo "Updated tenant attestation dashboard at $ATTESTATION_DASHBOARD_FILE"
+    if [ "$ENABLE_CROSS_TENANT_HEATMAP" = true ]; then
+        echo "Updated cross-tenant anomaly heatmap at $CROSS_TENANT_HEATMAP_FILE"
+        echo "Updated auto-remediation routing at $AUTO_REMEDIATION_ROUTING_FILE"
+    fi
 fi

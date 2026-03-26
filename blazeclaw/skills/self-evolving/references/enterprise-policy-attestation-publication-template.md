@@ -106,9 +106,9 @@ Outcome promotion controls:
 - Policy tuning output path:
   `blazeclaw/skills/self-evolving/.learnings/POLICY_TUNING_RECOMMENDATIONS.md`
 - Automation command (shell):
-  `scripts/outage-outcome-promoter.sh --simulation-id <id> --tenant-id <tenant-id> --rollout-phase <r1|r2|r3|r4> --policy-profile <profile-id> --strict-schema-version <version-optional> --require-signed-manifest --manifest-file <manifest-path-optional> --signature-verification-mode <none|kms|sigstore> --require-trust-policy --trust-policy-file <trust-policy-path-optional> --require-revocation-check --revocation-file <revocation-path-optional> --require-trust-policy-attestation --trust-policy-attestation-file <attestation-path-optional> --require-revocation-slo --revocation-slo-file <revocation-slo-path-optional> --attestation-baseline-window <n> --attestation-anomaly-threshold-percent <0-100> --require-attestation-baseline-gate --attestation-dashboard-file <dashboard-path-optional> --attestation-history-file <history-path-optional> --dependency <registry|authority> --result <pass|fail> --evidence-path <path>`
+  `scripts/outage-outcome-promoter.sh --simulation-id <id> --tenant-id <tenant-id> --rollout-phase <r1|r2|r3|r4> --policy-profile <profile-id> --strict-schema-version <version-optional> --require-signed-manifest --manifest-file <manifest-path-optional> --signature-verification-mode <none|kms|sigstore> --require-trust-policy --trust-policy-file <trust-policy-path-optional> --require-revocation-check --revocation-file <revocation-path-optional> --require-trust-policy-attestation --trust-policy-attestation-file <attestation-path-optional> --require-revocation-slo --revocation-slo-file <revocation-slo-path-optional> --attestation-baseline-window <n> --attestation-anomaly-threshold-percent <0-100> --require-attestation-baseline-gate --attestation-dashboard-file <dashboard-path-optional> --attestation-history-file <history-path-optional> --cross-tenant-heatmap-file <heatmap-path-optional> --auto-remediation-routing-file <routing-path-optional> --dependency <registry|authority> --result <pass|fail> --evidence-path <path>`
 - Automation command (powershell):
-  `scripts/outage-outcome-promoter.ps1 --simulation-id <id> --tenant-id <tenant-id> --rollout-phase <r1|r2|r3|r4> --policy-profile <profile-id> --strict-schema-version <version-optional> --require-signed-manifest --manifest-file <manifest-path-optional> --signature-verification-mode <none|kms|sigstore> --require-trust-policy --trust-policy-file <trust-policy-path-optional> --require-revocation-check --revocation-file <revocation-path-optional> --require-trust-policy-attestation --trust-policy-attestation-file <attestation-path-optional> --require-revocation-slo --revocation-slo-file <revocation-slo-path-optional> --attestation-baseline-window <n> --attestation-anomaly-threshold-percent <0-100> --require-attestation-baseline-gate --attestation-dashboard-file <dashboard-path-optional> --attestation-history-file <history-path-optional> --dependency <registry|authority> --result <pass|fail> --evidence-path <path>`
+  `scripts/outage-outcome-promoter.ps1 --simulation-id <id> --tenant-id <tenant-id> --rollout-phase <r1|r2|r3|r4> --policy-profile <profile-id> --strict-schema-version <version-optional> --require-signed-manifest --manifest-file <manifest-path-optional> --signature-verification-mode <none|kms|sigstore> --require-trust-policy --trust-policy-file <trust-policy-path-optional> --require-revocation-check --revocation-file <revocation-path-optional> --require-trust-policy-attestation --trust-policy-attestation-file <attestation-path-optional> --require-revocation-slo --revocation-slo-file <revocation-slo-path-optional> --attestation-baseline-window <n> --attestation-anomaly-threshold-percent <0-100> --require-attestation-baseline-gate --attestation-dashboard-file <dashboard-path-optional> --attestation-history-file <history-path-optional> --cross-tenant-heatmap-file <heatmap-path-optional> --auto-remediation-routing-file <routing-path-optional> --dependency <registry|authority> --result <pass|fail> --evidence-path <path>`
 - Trend history output path:
   `blazeclaw/skills/self-evolving/.learnings/OUTAGE_TREND_HISTORY.csv`
 - Scoring profile weights path:
@@ -127,6 +127,10 @@ Outcome promotion controls:
   `blazeclaw/skills/self-evolving/.learnings/TENANT_TRUST_POLICY_ATTESTATION_DASHBOARD.md`
 - Tenant attestation trend history path:
   `blazeclaw/skills/self-evolving/.learnings/TENANT_TRUST_POLICY_ATTESTATION_HISTORY.csv`
+- Cross-tenant attestation anomaly heatmap path:
+  `blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_ATTESTATION_ANOMALY_HEATMAP.md`
+- Cross-tenant auto-remediation routing path:
+  `blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_AUTO_REMEDIATION_ROUTING.md`
 - Detached signature artifact path: `<signature-path>`
 - Signature certificate artifact path (sigstore): `<certificate-path>`
 - KMS verifier dependency: `openssl`
@@ -171,6 +175,8 @@ Scoring guidance:
   stay within threshold or promotion is blocked.
 - Tenant anomaly baseline rule: when enabled, tenant attestation anomaly
   percent must remain within threshold or promotion is blocked.
+- Cross-tenant routing rule: heatmap severity bands should drive remediation
+  routing targets for federated operations triage.
 
 Pipeline stages:
 

@@ -269,6 +269,10 @@ Outage outcome recommendation controls:
   `blazeclaw/skills/self-evolving/.learnings/TENANT_TRUST_POLICY_ATTESTATION_DASHBOARD.md`
 - Tenant attestation trend history path:
   `blazeclaw/skills/self-evolving/.learnings/TENANT_TRUST_POLICY_ATTESTATION_HISTORY.csv`
+- Cross-tenant attestation anomaly heatmap path:
+  `blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_ATTESTATION_ANOMALY_HEATMAP.md`
+- Cross-tenant auto-remediation routing path:
+  `blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_AUTO_REMEDIATION_ROUTING.md`
 - Default trend window size: `<n>`
 - Trend segmentation mode: `tenant + dependency class`
 - Required promoter inputs: `tenant-id`, `rollout-phase`, `policy-profile`
@@ -282,6 +286,8 @@ Outage outcome recommendation controls:
 - Optional revocation propagation SLO pin: `require-revocation-slo`
 - Optional tenant anomaly baseline gate pin:
   `require-attestation-baseline-gate`
+- Optional cross-tenant heatmap control pin:
+  `disable-cross-tenant-heatmap (default: enabled)`
 - KMS verifier dependency requirement: `openssl`
 - Sigstore verifier dependency requirement: `cosign`
 - Recommendation review SLA: `<duration>`
@@ -302,6 +308,8 @@ Outage outcome recommendation controls:
     `deny rollout gate`
   - revocation propagation SLO breach (when enabled): `deny rollout gate`
   - tenant anomaly baseline breach (when enabled): `deny rollout gate`
+  - cross-tenant remediation routing missing for high/critical heatmap
+    bands: `deny rollout gate`
 - Recommendation severity gating:
   - `critical|high` in `r3|r4` requires explicit hold or remediation approval
   - `medium` requires owner review before phase promotion

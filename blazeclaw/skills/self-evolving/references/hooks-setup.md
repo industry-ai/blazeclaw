@@ -240,6 +240,10 @@ Outage promoter inputs now require tenant and rollout phase context:
   - `--attestation-anomaly-threshold-percent <0-100>`
   - `--require-attestation-baseline-gate`
   - `--disable-attestation-dashboard`
+- Optional cross-tenant heatmap and routing controls:
+  - `--cross-tenant-heatmap-file <path>`
+  - `--auto-remediation-routing-file <path>`
+  - `--disable-cross-tenant-heatmap`
 
 Fail-fast validation gates:
 
@@ -267,6 +271,8 @@ Fail-fast validation gates:
   failure.
 - When `--require-attestation-baseline-gate` is enabled, tenant anomaly
   baseline percent above threshold causes immediate script failure.
+- Cross-tenant heatmap and routing outputs provide severity-band
+  recommendations for centralized remediation planning.
 
 Default profile weights are provided in:
 
@@ -286,3 +292,5 @@ Default signed manifest artifacts are provided in:
 - `assets/policy-profile-revocation-slo.template.conf`
 - `.learnings/TENANT_TRUST_POLICY_ATTESTATION_DASHBOARD.md`
 - `.learnings/TENANT_TRUST_POLICY_ATTESTATION_HISTORY.csv`
+- `.learnings/CROSS_TENANT_ATTESTATION_ANOMALY_HEATMAP.md`
+- `.learnings/CROSS_TENANT_AUTO_REMEDIATION_ROUTING.md`

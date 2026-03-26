@@ -27,6 +27,10 @@ $attestationDashboardFile =
     './blazeclaw/skills/self-evolving/.learnings/TENANT_TRUST_POLICY_ATTESTATION_DASHBOARD.md'
 $attestationTrendHistoryFile =
     './blazeclaw/skills/self-evolving/.learnings/TENANT_TRUST_POLICY_ATTESTATION_HISTORY.csv'
+$crossTenantHeatmapFile =
+    './blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_ATTESTATION_ANOMALY_HEATMAP.md'
+$autoRemediationRoutingFile =
+    './blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_AUTO_REMEDIATION_ROUTING.md'
 
 function Show-Usage {
 @"
@@ -63,6 +67,9 @@ Optional:
   --attestation-anomaly-threshold-percent Anomaly threshold percent (default: 25)
   --require-attestation-baseline-gate Fail-fast on tenant anomaly threshold breach
   --disable-attestation-dashboard Skip dashboard/trend file writes
+  --cross-tenant-heatmap-file Cross-tenant anomaly heatmap markdown output
+  --auto-remediation-routing-file Cross-tenant remediation routing markdown output
+  --disable-cross-tenant-heatmap Skip cross-tenant heatmap and routing writes
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -88,6 +95,7 @@ $requireRevocationCheck = $false
 $requireTrustPolicyAttestation = $false
 $requireRevocationSlo = $false
 $enableAttestationDashboard = $true
+$enableCrossTenantHeatmap = $true
 $attestationBaselineWindow = 20
 $attestationAnomalyThresholdPercent = 25
 $requireAttestationBaselineGate = $false
@@ -240,6 +248,17 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         }
         '--disable-attestation-dashboard' {
             $enableAttestationDashboard = $false
+        }
+        '--cross-tenant-heatmap-file' {
+            $i++
+            $crossTenantHeatmapFile = [string]$args[$i]
+        }
+        '--auto-remediation-routing-file' {
+            $i++
+            $autoRemediationRoutingFile = [string]$args[$i]
+        }
+        '--disable-cross-tenant-heatmap' {
+            $enableCrossTenantHeatmap = $false
         }
         '--signature-verification-mode' {
             $i++
@@ -481,6 +500,38 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
                 throw '--kms-public-key-file is required for --signature-verification-mode kms'
             }
 
+            if (-not (Test-Path -LiteralPath $kmsPublicKeyFile)) {
+                throw "Missing KMS public key file: $kmsPublicKeyFile"
+            }
+
+            $kmsCommand =
+                "openssl dgst -sha256 -verify `"$kmsPublicKeyFile`" -signature `"$manifestSignatureFile`" `"$profileWeightsFile`""
+            $kmsOutput = Invoke-Expression $kmsCommand 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                throw "Cryptographic signature verification failed for kms mode: $kmsOutput"
+            }
+        }
+
+        if ($signatureVerificationMode -eq 'sigstore') {
+            if ([string]::IsNullOrWhiteSpace($sigstoreCertificateFile) -or
+                [string]::IsNullOrWhiteSpace($sigstoreCertificateIdentity) -or
+                [string]::IsNullOrWhiteSpace($sigstoreOidcIssuer)) {
+                throw '--sigstore-certificate-file, --sigstore-certificate-identity, and --sigstore-oidc-issuer are required for sigstore mode'
+            }
+
+            if (-not (Test-Path -LiteralPath $sigstoreCertificateFile)) {
+                throw "Missing sigstore certificate file: $sigstoreCertificateFile"
+            }
+
+            $sigstoreCommand =
+                "$cosignPath verify-blob --signature `"$manifestSignatureFile`" --certificate `"$sigstoreCertificateFile`" --certificate-identity `"$sigstoreCertificateIdentity`" --certificate-oidc-issuer `"$sigstoreOidcIssuer`" `"$profileWeightsFile`""
+            $sigstoreOutput = Invoke-Expression $sigstoreCommand 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                throw "Cryptographic signature verification failed for sigstore mode: $sigstoreOutput"
+            }
+        }
+    }
+
     if ($requireTrustPolicyAttestation) {
         if (-not (Test-Path -LiteralPath $trustPolicyAttestationFile)) {
             throw "Missing trust-policy attestation file: $trustPolicyAttestationFile"
@@ -540,38 +591,6 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
         if ($trustPolicyHash.ToLowerInvariant() -ne
             $attestationArtifactDigest.ToLowerInvariant()) {
             throw "Trust-policy attestation digest mismatch for $trustPolicyFile"
-        }
-    }
-
-            if (-not (Test-Path -LiteralPath $kmsPublicKeyFile)) {
-                throw "Missing KMS public key file: $kmsPublicKeyFile"
-            }
-
-            $kmsCommand =
-                "openssl dgst -sha256 -verify `"$kmsPublicKeyFile`" -signature `"$manifestSignatureFile`" `"$profileWeightsFile`""
-            $kmsOutput = Invoke-Expression $kmsCommand 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                throw "Cryptographic signature verification failed for kms mode: $kmsOutput"
-            }
-        }
-
-        if ($signatureVerificationMode -eq 'sigstore') {
-            if ([string]::IsNullOrWhiteSpace($sigstoreCertificateFile) -or
-                [string]::IsNullOrWhiteSpace($sigstoreCertificateIdentity) -or
-                [string]::IsNullOrWhiteSpace($sigstoreOidcIssuer)) {
-                throw '--sigstore-certificate-file, --sigstore-certificate-identity, and --sigstore-oidc-issuer are required for sigstore mode'
-            }
-
-            if (-not (Test-Path -LiteralPath $sigstoreCertificateFile)) {
-                throw "Missing sigstore certificate file: $sigstoreCertificateFile"
-            }
-
-            $sigstoreCommand =
-                "$cosignPath verify-blob --signature `"$manifestSignatureFile`" --certificate `"$sigstoreCertificateFile`" --certificate-identity `"$sigstoreCertificateIdentity`" --certificate-oidc-issuer `"$sigstoreOidcIssuer`" `"$profileWeightsFile`""
-            $sigstoreOutput = Invoke-Expression $sigstoreCommand 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                throw "Cryptographic signature verification failed for sigstore mode: $sigstoreOutput"
-            }
         }
     }
 
@@ -828,6 +847,101 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
                 Add-Content -LiteralPath $attestationDashboardFile -Value ''
             }
             Add-Content -LiteralPath $attestationDashboardFile -Value $dashboardEntry
+        }
+
+        if ($enableCrossTenantHeatmap) {
+            $crossRows = Import-Csv -LiteralPath $attestationTrendHistoryFile |
+                Select-Object -Last $attestationBaselineWindow
+            $tenantGroups = $crossRows | Group-Object tenant_id
+
+            $heatmapLines = @()
+            foreach ($group in $tenantGroups) {
+                $tenantSamples = $group.Count
+                $tenantAlerts = @($group.Group | Where-Object {
+                        $_.attestation_status -ne 'verified' -or
+                        $_.revocation_slo_status -eq 'warning'
+                    }).Count
+
+                $tenantPercent = 0
+                if ($tenantSamples -gt 0) {
+                    $tenantPercent = [int](($tenantAlerts * 100) / $tenantSamples)
+                }
+
+                $tenantSeverity = 'low'
+                $tenantRoute = 'monitor'
+                if ($tenantPercent -ge 80) {
+                    $tenantSeverity = 'critical'
+                    $tenantRoute = 'auto-remediation'
+                } elseif ($tenantPercent -ge 60) {
+                    $tenantSeverity = 'high'
+                    $tenantRoute = 'incident-review'
+                } elseif ($tenantPercent -ge 35) {
+                    $tenantSeverity = 'medium'
+                    $tenantRoute = 'owner-review'
+                }
+
+                $heatmapLines +=
+                    "- tenant: $($group.Name), anomaly-percent: $tenantPercent, severity: $tenantSeverity, route: $tenantRoute"
+            }
+
+            if ($heatmapLines.Count -eq 0) {
+                $heatmapLines += '- tenant: none, anomaly-percent: 0, severity: low'
+            }
+
+            $heatmapEntry = @"
+## [HEATMAP-$entryId] cross_tenant_attestation_anomaly
+
+**Logged**: $timestamp
+**Baseline Window**: $attestationBaselineWindow
+**Anomaly Threshold Percent**: $attestationAnomalyThresholdPercent
+
+### Tenant Heatmap
+$($heatmapLines -join "`n")
+
+---
+"@
+
+            $routingRecommendation = if ($attestationAnomalyPercent -ge 80) {
+                'auto-remediation'
+            } elseif ($attestationAnomalyPercent -ge 60) {
+                'incident-review'
+            } elseif ($attestationAnomalyPercent -ge 35) {
+                'owner-review'
+            } else {
+                'monitor'
+            }
+
+            $routingEntry = @"
+## [ROUTE-$entryId] cross_tenant_auto_remediation_routing
+
+**Logged**: $timestamp
+**Source Simulation**: $simulationId
+**Tenant ID**: $tenantId
+**Anomaly Percent**: $attestationAnomalyPercent%
+**Routing Recommendation**: $routingRecommendation
+**Target Endpoint**: gateway.runtime.governance.remediationPlan
+**Routing Policy**: tenant anomaly severity bands
+
+---
+"@
+
+            if ($dryRun) {
+                Write-Host "[DRY-RUN] Would append cross-tenant heatmap entry to ${crossTenantHeatmapFile}:"
+                Write-Host $heatmapEntry
+                Write-Host "[DRY-RUN] Would append auto-remediation routing entry to ${autoRemediationRoutingFile}:"
+                Write-Host $routingEntry
+            } else {
+                if (-not (Test-Path -LiteralPath $crossTenantHeatmapFile)) {
+                    Set-Content -LiteralPath $crossTenantHeatmapFile -Value '# Cross-Tenant Attestation Anomaly Heatmap'
+                    Add-Content -LiteralPath $crossTenantHeatmapFile -Value ''
+                }
+                if (-not (Test-Path -LiteralPath $autoRemediationRoutingFile)) {
+                    Set-Content -LiteralPath $autoRemediationRoutingFile -Value '# Cross-Tenant Auto-Remediation Recommendation Routing'
+                    Add-Content -LiteralPath $autoRemediationRoutingFile -Value ''
+                }
+                Add-Content -LiteralPath $crossTenantHeatmapFile -Value $heatmapEntry
+                Add-Content -LiteralPath $autoRemediationRoutingFile -Value $routingEntry
+            }
         }
     }
 }
@@ -1091,6 +1205,9 @@ $recommendation
 - Attestation Baseline Alert Count: $attestationBaselineAlertCount
 - Attestation Anomaly Percent: $attestationAnomalyPercent%
 - Attestation Baseline Gate: $requireAttestationBaselineGate
+- Cross-Tenant Heatmap Source: $crossTenantHeatmapFile
+- Auto-Remediation Routing Source: $autoRemediationRoutingFile
+- Cross-Tenant Heatmap Enabled: $enableCrossTenantHeatmap
 - Weight Inputs:
   - fail-base=$failBaseScore
   - pass-base=$passBaseScore
@@ -1150,4 +1267,8 @@ Write-Host "Appended tenant trend record to $trendHistoryFile"
 if ($enableAttestationDashboard) {
     Write-Host "Updated tenant attestation trend history at $attestationTrendHistoryFile"
     Write-Host "Updated tenant attestation dashboard at $attestationDashboardFile"
+    if ($enableCrossTenantHeatmap) {
+        Write-Host "Updated cross-tenant anomaly heatmap at $crossTenantHeatmapFile"
+        Write-Host "Updated auto-remediation routing at $autoRemediationRoutingFile"
+    }
 }

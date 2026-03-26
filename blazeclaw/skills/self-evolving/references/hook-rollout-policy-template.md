@@ -179,6 +179,8 @@ Approval gate checklist:
 - [ ] revocation propagation SLO breaches are zero when SLO gate is enabled
 - [ ] tenant attestation anomaly baseline breaches are zero when baseline gate is enabled
 - [ ] tenant attestation dashboard and trend history artifacts are generated per phase
+- [ ] cross-tenant anomaly heatmap is generated for current phase window
+- [ ] high/critical heatmap tenants have auto-remediation routing recommendations
 
 ## 6) Rollback Plan
 

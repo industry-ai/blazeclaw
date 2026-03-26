@@ -219,6 +219,9 @@ phase promotion.
 - Attestation Baseline Alert Count: 2
 - Attestation Anomaly Percent: 16%
 - Attestation Baseline Gate: true
+- Cross-Tenant Heatmap Source: .learnings/CROSS_TENANT_ATTESTATION_ANOMALY_HEATMAP.md
+- Auto-Remediation Routing Source: .learnings/CROSS_TENANT_AUTO_REMEDIATION_ROUTING.md
+- Cross-Tenant Heatmap Enabled: true
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode
