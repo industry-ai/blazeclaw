@@ -213,6 +213,8 @@ Outage promoter inputs now require tenant and rollout phase context:
 - Optional `--trend-window-size <n>` for tenant trend scoring windows.
 - Optional `--strict-schema-version <version>` to enforce profile schema
   compatibility.
+- Optional `--manifest-file <path>` and `--require-signed-manifest` to
+  enforce signed-manifest integrity verification.
 
 Fail-fast validation gates:
 
@@ -222,7 +224,15 @@ Fail-fast validation gates:
   script failure.
 - When `--strict-schema-version` is set, missing schema column/value or
   version mismatch causes immediate script failure.
+- When `--require-signed-manifest` is enabled, missing manifest,
+  malformed manifest fields, or digest mismatch causes immediate script
+  failure.
 
 Default profile weights are provided in:
 
 - `assets/policy-profile-scoring-weights.csv`
+
+Default signed manifest artifacts are provided in:
+
+- `assets/policy-profile-scoring-weights.manifest`
+- `assets/policy-profile-scoring-weights.manifest.template`

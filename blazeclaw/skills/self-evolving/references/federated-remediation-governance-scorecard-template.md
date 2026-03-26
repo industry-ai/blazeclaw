@@ -120,6 +120,8 @@ Federation-level aggregates:
   `blazeclaw/skills/self-evolving/.learnings/OUTAGE_TREND_HISTORY.csv`
 - Profile scoring weights path:
   `blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv`
+- Signed manifest path:
+  `blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest`
 - Recommendations generated in window: `<n>`
 - Recommendations accepted: `<n>`
 - Recommendations deferred: `<n>`
@@ -134,6 +136,7 @@ Federation-level aggregates:
   - registry: `<percent>`
   - authority: `<percent>`
 - Active policy profiles evaluated: `<profile-list>`
+- Strict manifest gate failures: `<n>`
 - Highest-impact accepted tuning:
   `<short summary with control reference>`
 

@@ -255,10 +255,13 @@ Outage outcome recommendation controls:
   `blazeclaw/skills/self-evolving/.learnings/OUTAGE_TREND_HISTORY.csv`
 - Profile scoring weights path:
   `blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv`
+- Signed profile manifest path:
+  `blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest`
 - Default trend window size: `<n>`
 - Trend segmentation mode: `tenant + dependency class`
 - Required promoter inputs: `tenant-id`, `rollout-phase`, `policy-profile`
 - Optional strict schema pin: `strict-schema-version`
+- Optional strict signed-manifest pin: `require-signed-manifest`
 - Recommendation review SLA: `<duration>`
 - Recommendation promotion approvers: `<engineering|security|operations>`
 - Fail-fast validation policy:
@@ -266,6 +269,7 @@ Outage outcome recommendation controls:
   - missing profile row: `deny rollout gate`
   - malformed numeric weights/divisors: `deny rollout gate`
   - strict schema mismatch (when enabled): `deny rollout gate`
+  - signed manifest missing/malformed/digest mismatch (when enabled): `deny rollout gate`
 - Recommendation severity gating:
   - `critical|high` in `r3|r4` requires explicit hold or remediation approval
   - `medium` requires owner review before phase promotion

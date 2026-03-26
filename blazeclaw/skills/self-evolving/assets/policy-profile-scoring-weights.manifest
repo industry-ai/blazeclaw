@@ -1,0 +1,7 @@
+manifest_version=1
+weights_file=./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv
+weights_sha256=32fd5e049ab870f3eafe1a3fd4dc6ea9b7a80c7559f8413f8076e9f5be7481d5
+signature=attest:v1:org-governance-ca:2026-03-26
+signed_by=governance-signing-service
+signed_at=2026-03-26T00:00:00Z
+key_id=org-governance-key-v1

@@ -30,6 +30,7 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
 - [ ] Policy profile weight file reviewed for rollout scope
 - [ ] Fail-fast profile validation checks passed (no missing/malformed profile configuration)
 - [ ] Strict schema version gate policy decided and verified for this rollout
+- [ ] Signed manifest gate policy decided and verified for this rollout
 
 ## 3) Environment Matrix
 
@@ -164,6 +165,7 @@ Approval gate checklist:
 - [ ] active policy profiles mapped to approved scoring weight definitions
 - [ ] profile validation gate failures are zero for current phase
 - [ ] strict schema mismatch failures are zero when strict schema pin is enabled
+- [ ] signed manifest verification failures are zero when manifest gate is enabled
 
 ## 6) Rollback Plan
 

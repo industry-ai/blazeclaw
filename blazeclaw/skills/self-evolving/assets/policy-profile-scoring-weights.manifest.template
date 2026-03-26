@@ -1,0 +1,10 @@
+# Signed policy-profile weights manifest template
+# Fill all values before enabling strict manifest validation.
+
+manifest_version=<manifest-version>
+weights_file=./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv
+weights_sha256=<sha256-of-weights-file>
+signature=<signature-or-attestation-id>
+signed_by=<signing-identity>
+signed_at=<yyyy-mm-ddThh:mm:ssZ>
+key_id=<key-identifier>

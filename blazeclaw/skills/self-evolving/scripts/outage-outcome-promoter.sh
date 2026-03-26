@@ -9,12 +9,14 @@ LEARNINGS_FILE="./blazeclaw/skills/self-evolving/.learnings/LEARNINGS.md"
 POLICY_TUNING_FILE="./blazeclaw/skills/self-evolving/.learnings/POLICY_TUNING_RECOMMENDATIONS.md"
 TREND_HISTORY_FILE="./blazeclaw/skills/self-evolving/.learnings/OUTAGE_TREND_HISTORY.csv"
 PROFILE_WEIGHTS_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv"
+PROFILE_MANIFEST_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest"
 
 SIMULATION_ID=""
 TENANT_ID=""
 ROLLOUT_PHASE=""
 POLICY_PROFILE="default"
 STRICT_SCHEMA_VERSION=""
+REQUIRE_SIGNED_MANIFEST=false
 DEPENDENCY=""
 RESULT=""
 EVIDENCE_PATH=""
@@ -45,6 +47,8 @@ Optional:
   --failover-triggered  Automated failover status (yes|no)
   --failback-completed  Automated failback status (yes|no)
   --weights-file        CSV file of per-profile scoring weights
+  --manifest-file       Signed manifest for weight-file integrity verification
+  --require-signed-manifest Enforce signed manifest verification gates
   --strict-schema-version Required schema version when strict validation is enabled
   --trend-window-size   Number of recent tenant outcomes to analyze (default: 20)
   --notes               Additional context
@@ -102,6 +106,14 @@ while [[ $# -gt 0 ]]; do
         --weights-file)
             PROFILE_WEIGHTS_FILE="${2:-}"
             shift 2
+            ;;
+        --manifest-file)
+            PROFILE_MANIFEST_FILE="${2:-}"
+            shift 2
+            ;;
+        --require-signed-manifest)
+            REQUIRE_SIGNED_MANIFEST=true
+            shift
             ;;
         --strict-schema-version)
             STRICT_SCHEMA_VERSION="${2:-}"
@@ -200,6 +212,55 @@ fi
 if [ ! -r "$PROFILE_WEIGHTS_FILE" ]; then
     echo "Profile weights file is not readable: $PROFILE_WEIGHTS_FILE" >&2
     exit 1
+fi
+
+if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ -n "$PROFILE_MANIFEST_FILE" ]; then
+    if [ ! -f "$PROFILE_MANIFEST_FILE" ]; then
+        echo "Missing required signed manifest file: $PROFILE_MANIFEST_FILE" >&2
+        exit 1
+    fi
+
+    if [ ! -r "$PROFILE_MANIFEST_FILE" ]; then
+        echo "Signed manifest file is not readable: $PROFILE_MANIFEST_FILE" >&2
+        exit 1
+    fi
+
+    MANIFEST_VERSION=$(awk -F'=' '$1=="manifest_version" { print $2; exit }' "$PROFILE_MANIFEST_FILE" | tr -d '\r[:space:]')
+    MANIFEST_WEIGHTS_FILE=$(awk -F'=' '$1=="weights_file" { print $2; exit }' "$PROFILE_MANIFEST_FILE" | tr -d '\r')
+    MANIFEST_WEIGHTS_SHA256=$(awk -F'=' '$1=="weights_sha256" { print $2; exit }' "$PROFILE_MANIFEST_FILE" | tr -d '\r[:space:]')
+    MANIFEST_SIGNATURE=$(awk -F'=' '$1=="signature" { print $2; exit }' "$PROFILE_MANIFEST_FILE" | tr -d '\r[:space:]')
+    MANIFEST_SIGNED_BY=$(awk -F'=' '$1=="signed_by" { print $2; exit }' "$PROFILE_MANIFEST_FILE" | tr -d '\r')
+    MANIFEST_SIGNED_AT=$(awk -F'=' '$1=="signed_at" { print $2; exit }' "$PROFILE_MANIFEST_FILE" | tr -d '\r[:space:]')
+    MANIFEST_KEY_ID=$(awk -F'=' '$1=="key_id" { print $2; exit }' "$PROFILE_MANIFEST_FILE" | tr -d '\r[:space:]')
+
+    if [ -z "$MANIFEST_VERSION" ] || [ -z "$MANIFEST_WEIGHTS_FILE" ] || [ -z "$MANIFEST_WEIGHTS_SHA256" ] || [ -z "$MANIFEST_SIGNATURE" ] || [ -z "$MANIFEST_SIGNED_BY" ] || [ -z "$MANIFEST_SIGNED_AT" ] || [ -z "$MANIFEST_KEY_ID" ]; then
+        echo "Malformed signed manifest: required fields missing in $PROFILE_MANIFEST_FILE" >&2
+        exit 1
+    fi
+
+    if ! [[ "$MANIFEST_WEIGHTS_SHA256" =~ ^[A-Fa-f0-9]{64}$ ]]; then
+        echo "Malformed signed manifest: weights_sha256 must be 64-char hex in $PROFILE_MANIFEST_FILE" >&2
+        exit 1
+    fi
+
+    if [ "$MANIFEST_WEIGHTS_FILE" != "$PROFILE_WEIGHTS_FILE" ]; then
+        echo "Signed manifest mismatch: weights_file '$MANIFEST_WEIGHTS_FILE' does not match selected file '$PROFILE_WEIGHTS_FILE'" >&2
+        exit 1
+    fi
+
+    if command -v sha256sum >/dev/null 2>&1; then
+        ACTUAL_WEIGHTS_SHA256=$(sha256sum "$PROFILE_WEIGHTS_FILE" | awk '{print $1}')
+    elif command -v shasum >/dev/null 2>&1; then
+        ACTUAL_WEIGHTS_SHA256=$(shasum -a 256 "$PROFILE_WEIGHTS_FILE" | awk '{print $1}')
+    else
+        echo "Unable to verify signed manifest: sha256 tool not available" >&2
+        exit 1
+    fi
+
+    if [ "${ACTUAL_WEIGHTS_SHA256,,}" != "${MANIFEST_WEIGHTS_SHA256,,}" ]; then
+        echo "Signed manifest integrity failure: weights_sha256 mismatch for $PROFILE_WEIGHTS_FILE" >&2
+        exit 1
+    fi
 fi
 
 PROFILE_ROW=$(awk -F',' -v profile="$POLICY_PROFILE" 'NR > 1 && $1 == profile { print $0; exit }' "$PROFILE_WEIGHTS_FILE")
@@ -416,8 +477,15 @@ $RECOMMENDATION
 - Trend Pass Count: $TREND_PASS_COUNT
 - Trend Fail Rate: ${TREND_FAIL_RATE}%
 - Weight Source: $PROFILE_WEIGHTS_FILE
+- Manifest Source: $PROFILE_MANIFEST_FILE
+- Manifest Version: ${MANIFEST_VERSION:-not-verified}
+- Signed By: ${MANIFEST_SIGNED_BY:-not-verified}
+- Signed At: ${MANIFEST_SIGNED_AT:-not-verified}
+- Key Id: ${MANIFEST_KEY_ID:-not-verified}
+- Manifest Signature: ${MANIFEST_SIGNATURE:-not-verified}
 - Weight Schema Version: ${_schema:-not-declared}
 - Strict Schema Gate: ${STRICT_SCHEMA_VERSION:-disabled}
+- Strict Manifest Gate: ${REQUIRE_SIGNED_MANIFEST}
 - Weight Inputs:
   - fail-base=$FAIL_BASE_SCORE
   - pass-base=$PASS_BASE_SCORE

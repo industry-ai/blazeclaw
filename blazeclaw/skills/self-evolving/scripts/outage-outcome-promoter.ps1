@@ -13,6 +13,8 @@ $trendHistoryFile =
     './blazeclaw/skills/self-evolving/.learnings/OUTAGE_TREND_HISTORY.csv'
 $profileWeightsFile =
     './blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv'
+$profileManifestFile =
+    './blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest'
 
 function Show-Usage {
 @"
@@ -33,6 +35,8 @@ Optional:
   --failover-triggered  Automated failover status (yes|no)
   --failback-completed  Automated failback status (yes|no)
   --weights-file        CSV file of per-profile scoring weights
+  --manifest-file       Signed manifest for weight-file integrity verification
+  --require-signed-manifest Enforce signed manifest verification gates
   --strict-schema-version Required schema version when strict validation is enabled
   --trend-window-size   Number of recent tenant outcomes to analyze (default: 20)
   --notes               Additional context
@@ -46,6 +50,7 @@ $tenantId = ''
 $rolloutPhase = ''
 $policyProfile = 'default'
 $strictSchemaVersion = ''
+$requireSignedManifest = $false
 $dependency = ''
 $result = ''
 $evidencePath = ''
@@ -53,6 +58,11 @@ $drillWindow = ''
 $failureMode = ''
 $failoverTriggered = ''
 $failbackCompleted = ''
+$manifestVersion = ''
+$manifestSignedBy = ''
+$manifestSignedAt = ''
+$manifestKeyId = ''
+$manifestSignature = ''
 $notes = ''
 $trendWindowSize = 20
 $dryRun = $false
@@ -107,6 +117,13 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         '--weights-file' {
             $i++
             $profileWeightsFile = [string]$args[$i]
+        }
+        '--manifest-file' {
+            $i++
+            $profileManifestFile = [string]$args[$i]
+        }
+        '--require-signed-manifest' {
+            $requireSignedManifest = $true
         }
         '--strict-schema-version' {
             $i++
@@ -211,6 +228,65 @@ $trendPassDivisor = 10
 
 if (-not (Test-Path -LiteralPath $profileWeightsFile)) {
     throw "Missing required profile weights file: $profileWeightsFile"
+}
+
+if ($requireSignedManifest -or
+    -not [string]::IsNullOrWhiteSpace($profileManifestFile)) {
+    if (-not (Test-Path -LiteralPath $profileManifestFile)) {
+        throw "Missing required signed manifest file: $profileManifestFile"
+    }
+
+    $manifestFields = @{}
+    foreach ($line in (Get-Content -LiteralPath $profileManifestFile)) {
+        if ([string]::IsNullOrWhiteSpace($line) -or $line.Trim().StartsWith('#')) {
+            continue
+        }
+
+        $split = $line.Split('=', 2)
+        if ($split.Length -eq 2) {
+            $manifestFields[$split[0].Trim()] = $split[1].Trim()
+        }
+    }
+
+    $requiredManifestFields = @(
+        'manifest_version',
+        'weights_file',
+        'weights_sha256',
+        'signature',
+        'signed_by',
+        'signed_at',
+        'key_id'
+    )
+
+    foreach ($field in $requiredManifestFields) {
+        if (-not $manifestFields.ContainsKey($field) -or
+            [string]::IsNullOrWhiteSpace([string]$manifestFields[$field])) {
+            throw "Malformed signed manifest: required field '$field' missing in $profileManifestFile"
+        }
+    }
+
+    $manifestVersion = [string]$manifestFields['manifest_version']
+    $manifestWeightsFile = [string]$manifestFields['weights_file']
+    $manifestWeightsSha256 = [string]$manifestFields['weights_sha256']
+    $manifestSignature = [string]$manifestFields['signature']
+    $manifestSignedBy = [string]$manifestFields['signed_by']
+    $manifestSignedAt = [string]$manifestFields['signed_at']
+    $manifestKeyId = [string]$manifestFields['key_id']
+
+    if ($manifestWeightsSha256 -notmatch '^[A-Fa-f0-9]{64}$') {
+        throw "Malformed signed manifest: weights_sha256 must be 64-char hex in $profileManifestFile"
+    }
+
+    if ($manifestWeightsFile -ne $profileWeightsFile) {
+        throw "Signed manifest mismatch: weights_file '$manifestWeightsFile' does not match selected file '$profileWeightsFile'"
+    }
+
+    $weightsHash =
+        (Get-FileHash -LiteralPath $profileWeightsFile -Algorithm SHA256).Hash
+    if ($weightsHash.ToLowerInvariant() -ne
+        $manifestWeightsSha256.ToLowerInvariant()) {
+        throw "Signed manifest integrity failure: weights_sha256 mismatch for $profileWeightsFile"
+    }
 }
 
 $profileRows = Import-Csv -LiteralPath $profileWeightsFile
@@ -431,8 +507,15 @@ $recommendation
 - Trend Pass Count: $trendPassCount
 - Trend Fail Rate: $trendFailRate%
 - Weight Source: $profileWeightsFile
+- Manifest Source: $profileManifestFile
+- Manifest Version: $(if ($manifestVersion) { $manifestVersion } else { 'not-verified' })
+- Signed By: $(if ($manifestSignedBy) { $manifestSignedBy } else { 'not-verified' })
+- Signed At: $(if ($manifestSignedAt) { $manifestSignedAt } else { 'not-verified' })
+- Key Id: $(if ($manifestKeyId) { $manifestKeyId } else { 'not-verified' })
+- Manifest Signature: $(if ($manifestSignature) { $manifestSignature } else { 'not-verified' })
 - Weight Schema Version: $(if ($profileSchemaVersion) { $profileSchemaVersion } else { 'not-declared' })
 - Strict Schema Gate: $(if ($strictSchemaVersion) { $strictSchemaVersion } else { 'disabled' })
+- Strict Manifest Gate: $requireSignedManifest
 - Weight Inputs:
   - fail-base=$failBaseScore
   - pass-base=$passBaseScore

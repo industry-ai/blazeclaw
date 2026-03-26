@@ -180,6 +180,13 @@ phase promotion.
 - Weight Source: assets/policy-profile-scoring-weights.csv
 - Weight Schema Version: v1
 - Strict Schema Gate: v1
+- Manifest Source: assets/policy-profile-scoring-weights.manifest
+- Manifest Version: 1
+- Signed By: governance-signing-service
+- Signed At: 2026-03-26T00:00:00Z
+- Key Id: org-governance-key-v1
+- Manifest Signature: attest:v1:org-governance-ca:2026-03-26
+- Strict Manifest Gate: true
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode
@@ -202,6 +209,11 @@ Missing required policy profile 'missing-profile' in: ./blazeclaw/skills/self-ev
 ```text
 $ scripts/outage-outcome-promoter.ps1 --dry-run --simulation-id SIM-AUTH-002 --tenant-id tenant-a --rollout-phase r3 --policy-profile org-dr-sentinel --strict-schema-version v2 --dependency authority --result fail --evidence-path reports/drills/sim-auth-002.json
 Schema version mismatch for profile 'org-dr-sentinel': expected 'v2' but found 'v1' in ./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv
+```
+
+```text
+$ scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-003 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --require-signed-manifest --manifest-file ./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --dependency registry --result pass --evidence-path reports/drills/sim-reg-003.json
+Signed manifest integrity failure: weights_sha256 mismatch for ./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv
 ```
 
 ## Learning: Knowledge Gap (Resolved)

@@ -106,13 +106,15 @@ Outcome promotion controls:
 - Policy tuning output path:
   `blazeclaw/skills/self-evolving/.learnings/POLICY_TUNING_RECOMMENDATIONS.md`
 - Automation command (shell):
-  `scripts/outage-outcome-promoter.sh --simulation-id <id> --tenant-id <tenant-id> --rollout-phase <r1|r2|r3|r4> --policy-profile <profile-id> --strict-schema-version <version-optional> --dependency <registry|authority> --result <pass|fail> --evidence-path <path>`
+  `scripts/outage-outcome-promoter.sh --simulation-id <id> --tenant-id <tenant-id> --rollout-phase <r1|r2|r3|r4> --policy-profile <profile-id> --strict-schema-version <version-optional> --require-signed-manifest --manifest-file <manifest-path-optional> --dependency <registry|authority> --result <pass|fail> --evidence-path <path>`
 - Automation command (powershell):
-  `scripts/outage-outcome-promoter.ps1 --simulation-id <id> --tenant-id <tenant-id> --rollout-phase <r1|r2|r3|r4> --policy-profile <profile-id> --strict-schema-version <version-optional> --dependency <registry|authority> --result <pass|fail> --evidence-path <path>`
+  `scripts/outage-outcome-promoter.ps1 --simulation-id <id> --tenant-id <tenant-id> --rollout-phase <r1|r2|r3|r4> --policy-profile <profile-id> --strict-schema-version <version-optional> --require-signed-manifest --manifest-file <manifest-path-optional> --dependency <registry|authority> --result <pass|fail> --evidence-path <path>`
 - Trend history output path:
   `blazeclaw/skills/self-evolving/.learnings/OUTAGE_TREND_HISTORY.csv`
 - Scoring profile weights path:
   `blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv`
+- Signed profile manifest path:
+  `blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest`
 - Recommended trend window size: `<n>` (default `20`)
 
 ## 3.3) Outcome-to-Tuning Mapping
@@ -137,6 +139,8 @@ Scoring guidance:
   score fields must fail fast and block phase promotion.
 - Strict schema rule: when schema gate is enabled, schema column/value must
   exist and match expected version or promotion is blocked.
+- Signed manifest rule: when manifest gate is enabled, manifest fields and
+  weight digest verification must pass or promotion is blocked.
 
 Pipeline stages:
 
