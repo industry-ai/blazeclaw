@@ -251,6 +251,11 @@ phase promotion.
 - Suggested Overlay Multiplier: 1.15
 - Causal Clustering Source: policy
 - Causal Clustering Enabled: true
+- Causal Confidence Score: 74
+- Causal Confidence Threshold: 60
+- Causal Confidence Source: policy
+- Causal Graph Node: registry|r2|certificate-expiry|confidence=74
+- Causal Graph Edge: registry|r2|certificate-expiry -> suggested-registry-r2 (score=74)
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode

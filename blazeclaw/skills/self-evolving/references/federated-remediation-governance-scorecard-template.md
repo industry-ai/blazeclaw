@@ -185,6 +185,8 @@ Federation-level aggregates:
 - Seasonal tuned half-life p95: `<samples>`
 - Overlay-adjusted seasonal multiplier p95: `<multiplier>`
 - Overlay activation coverage by cycle phase: `<percentages>`
+- Causal confidence score p95: `<score>`
+- Confidence-qualified overlay candidate rate: `<percent>`
 - Highest-impact accepted tuning:
   `<short summary with control reference>`
 

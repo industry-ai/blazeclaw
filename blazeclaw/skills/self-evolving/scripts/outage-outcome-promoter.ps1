@@ -49,6 +49,10 @@ $causalHistoryFile =
     './blazeclaw/skills/self-evolving/.learnings/ANOMALY_CAUSAL_HISTORY.csv'
 $overlayCandidateFile =
     './blazeclaw/skills/self-evolving/.learnings/SEASONAL_OVERLAY_CANDIDATES.md'
+$causalGraphingPolicyFile =
+    './blazeclaw/skills/self-evolving/assets/attestation-anomaly-causal-graphing-policy.conf'
+$causalGraphFile =
+    './blazeclaw/skills/self-evolving/.learnings/CAUSAL_CONFIDENCE_GRAPH.md'
 
 function Show-Usage {
 @"
@@ -110,6 +114,10 @@ Optional:
   --overlay-candidate-file Suggested overlay output markdown file
   --disable-causal-clustering Disable anomaly-causal clustering suggestions
   --require-causal-clustering-policy Fail-fast when causal clustering policy cannot be resolved
+  --causal-graphing-policy-file Confidence-weighted causal graphing policy file
+  --causal-graph-file Confidence-weighted causal graph markdown output
+  --disable-confidence-causal-graphing Disable confidence-weighted causal graphing
+  --require-causal-graphing-policy Fail-fast when causal graphing policy cannot be resolved
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -153,6 +161,8 @@ $enableSeasonalOverlayTuning = $true
 $requireSeasonalOverlayPolicy = $false
 $enableCausalClustering = $true
 $requireCausalClusteringPolicy = $false
+$enableConfidenceCausalGraphing = $true
+$requireCausalGraphingPolicy = $false
 $manifestFileExplicit = $false
 $signatureVerificationMode = 'none'
 $kmsPublicKeyFile = ''
@@ -213,6 +223,11 @@ $causalClusterFailPercent = 0
 $causalClusterSuggestedOverlay = 'none'
 $causalClusterSuggestedMultiplier = 1.00
 $causalClusterSource = 'disabled'
+$causalConfidenceScore = 0
+$causalConfidenceThreshold = 60
+$causalConfidenceSource = 'disabled'
+$causalGraphNode = 'none'
+$causalGraphEdge = 'none'
 $notes = ''
 $trendWindowSize = 20
 $dryRun = $false
@@ -413,16 +428,24 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         '--require-causal-clustering-policy' {
             $requireCausalClusteringPolicy = $true
         }
+        '--causal-graphing-policy-file' {
+            $i++
+            $causalGraphingPolicyFile = [string]$args[$i]
+        }
+        '--causal-graph-file' {
+            $i++
+            $causalGraphFile = [string]$args[$i]
+        }
+        '--disable-confidence-causal-graphing' {
+            $enableConfidenceCausalGraphing = $false
+        }
+        '--require-causal-graphing-policy' {
+            $requireCausalGraphingPolicy = $true
+        }
         '--signature-verification-mode' {
             $i++
             $signatureVerificationMode = [string]$args[$i]
         }
-
-if (-not (Test-Path -LiteralPath $causalHistoryFile)) {
-    Set-Content -LiteralPath $causalHistoryFile -NoNewline -Value
-        'timestamp,tenant_id,rollout_phase,dependency,failure_mode,result,simulation_id'
-    Add-Content -LiteralPath $causalHistoryFile -Value ''
-}
         '--kms-public-key-file' {
             $i++
             $kmsPublicKeyFile = [string]$args[$i]
@@ -538,6 +561,12 @@ if (-not (Test-Path -LiteralPath $trendHistoryFile)) {
     Set-Content -LiteralPath $trendHistoryFile -NoNewline -Value
         'timestamp,tenant_id,rollout_phase,dependency,result,simulation_id'
     Add-Content -LiteralPath $trendHistoryFile -Value ''
+}
+
+if (-not (Test-Path -LiteralPath $causalHistoryFile)) {
+    Set-Content -LiteralPath $causalHistoryFile -NoNewline -Value
+        'timestamp,tenant_id,rollout_phase,dependency,failure_mode,result,simulation_id'
+    Add-Content -LiteralPath $causalHistoryFile -Value ''
 }
 
 if ($enableAttestationDashboard -and
@@ -990,6 +1019,11 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
         $causalClusterSuggestedOverlay = 'none'
         $causalClusterSuggestedMultiplier = 1.00
         $causalClusterSource = 'disabled'
+        $causalConfidenceScore = 0
+        $causalConfidenceThreshold = 60
+        $causalConfidenceSource = 'disabled'
+        $causalGraphNode = 'none'
+        $causalGraphEdge = 'none'
 
         if ($enableTimeDecayWeighting) {
             $timeDecaySource = 'cli'
@@ -1327,6 +1361,77 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
                     $causalClusterSuggestedOverlay = "suggested-$dependency-$rolloutPhase"
                     $causalClusterSuggestedMultiplier = $clusterHighMultiplier
                 }
+
+                if ($enableConfidenceCausalGraphing) {
+                    $causalConfidenceSource = 'static'
+                    [double]$sampleWeight = 0.4
+                    [double]$failWeight = 0.5
+                    [double]$contextWeight = 0.1
+                    [int]$causalConfidenceThreshold = 60
+
+                    if (Test-Path -LiteralPath $causalGraphingPolicyFile) {
+                        $graphFields = @{}
+                        foreach ($line in (Get-Content -LiteralPath $causalGraphingPolicyFile)) {
+                            if ([string]::IsNullOrWhiteSpace($line) -or
+                                $line.Trim().StartsWith('#')) {
+                                continue
+                            }
+                            $split = $line.Split('=', 2)
+                            if ($split.Length -eq 2) {
+                                $graphFields[$split[0].Trim()] = $split[1].Trim()
+                            }
+                        }
+
+                        [double]$tmpSw = 0
+                        [double]$tmpFw = 0
+                        [double]$tmpCw = 0
+                        [int]$tmpTh = 0
+                        if ($graphFields.ContainsKey('sample_weight') -and
+                            [double]::TryParse([string]$graphFields['sample_weight'], [ref]$tmpSw) -and
+                            $tmpSw -ge 0) { $sampleWeight = $tmpSw }
+                        if ($graphFields.ContainsKey('fail_weight') -and
+                            [double]::TryParse([string]$graphFields['fail_weight'], [ref]$tmpFw) -and
+                            $tmpFw -ge 0) { $failWeight = $tmpFw }
+                        if ($graphFields.ContainsKey('context_weight') -and
+                            [double]::TryParse([string]$graphFields['context_weight'], [ref]$tmpCw) -and
+                            $tmpCw -ge 0) { $contextWeight = $tmpCw }
+                        if ($graphFields.ContainsKey('recommendation_threshold') -and
+                            [int]::TryParse([string]$graphFields['recommendation_threshold'], [ref]$tmpTh) -and
+                            $tmpTh -ge 0 -and $tmpTh -le 100) { $causalConfidenceThreshold = $tmpTh }
+                        $causalConfidenceSource = 'policy'
+                    } elseif ($requireCausalGraphingPolicy) {
+                        throw "Causal graphing policy failed: missing file $causalGraphingPolicyFile"
+                    }
+
+                    $sampleConfidence = 0
+                    if ($attestationBaselineWindow -gt 0) {
+                        $sampleConfidence = [int](($causalClusterSampleCount * 100) / $attestationBaselineWindow)
+                    }
+                    if ($sampleConfidence -gt 100) { $sampleConfidence = 100 }
+
+                    $contextScore = 0
+                    if ($seasonalOverlaySource -eq 'policy') {
+                        $contextScore = 100
+                    } elseif ($seasonalDecompositionSource -eq 'policy') {
+                        $contextScore = 70
+                    } elseif ($timeDecaySource -eq 'policy') {
+                        $contextScore = 40
+                    }
+
+                    $rawScore = ($sampleConfidence * $sampleWeight) +
+                        ($causalClusterFailPercent * $failWeight) +
+                        ($contextScore * $contextWeight)
+                    $causalConfidenceScore =
+                        [int]([Math]::Max(0, [Math]::Min(100, $rawScore)))
+                    $causalGraphNode = "$causalClusterKey|confidence=$causalConfidenceScore"
+
+                    if ($causalConfidenceScore -lt $causalConfidenceThreshold) {
+                        $causalClusterSuggestedOverlay = 'none'
+                        $causalClusterSuggestedMultiplier = 1.00
+                    }
+
+                    $causalGraphEdge = "$causalClusterKey -> $causalClusterSuggestedOverlay (score=$causalConfidenceScore)"
+                }
             }
         }
 
@@ -1446,6 +1551,11 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
 **Suggested Overlay Multiplier**: $causalClusterSuggestedMultiplier
 **Causal Clustering Source**: $causalClusterSource
 **Causal Clustering Enabled**: $enableCausalClustering
+**Causal Confidence Score**: $causalConfidenceScore
+**Causal Confidence Threshold**: $causalConfidenceThreshold
+**Causal Confidence Source**: $causalConfidenceSource
+**Causal Graph Node**: $causalGraphNode
+**Causal Graph Edge**: $causalGraphEdge
 **Anomaly Gate Enabled**: $requireAttestationBaselineGate
 
 ---
@@ -1846,6 +1956,11 @@ $recommendation
 - Suggested Overlay Multiplier: $causalClusterSuggestedMultiplier
 - Causal Clustering Source: $causalClusterSource
 - Causal Clustering Enabled: $enableCausalClustering
+- Causal Confidence Score: $causalConfidenceScore
+- Causal Confidence Threshold: $causalConfidenceThreshold
+- Causal Confidence Source: $causalConfidenceSource
+- Causal Graph Node: $causalGraphNode
+- Causal Graph Edge: $causalGraphEdge
 - Attestation Baseline Gate: $requireAttestationBaselineGate
 - Cross-Tenant Heatmap Source: $crossTenantHeatmapFile
 - Auto-Remediation Routing Source: $autoRemediationRoutingFile
@@ -1874,6 +1989,19 @@ $recommendation
 
 ### Notes
 $(if ($notes) { $notes } else { 'none' })
+
+---
+"@
+$causalGraphEntry = @"
+## [GRAPH-$entryId] confidence_weighted_causal_graph
+
+**Logged**: $timestamp
+**Tenant ID**: $tenantId
+**Node**: $causalGraphNode
+**Edge**: $causalGraphEdge
+**Confidence Score**: $causalConfidenceScore
+**Confidence Threshold**: $causalConfidenceThreshold
+**Confidence Source**: $causalConfidenceSource
 
 ---
 "@
@@ -1909,6 +2037,8 @@ if ($dryRun) {
     Write-Host $causalHistoryRecord
     Write-Host "[DRY-RUN] Would append overlay candidate suggestion to ${overlayCandidateFile}:"
     Write-Host $overlayCandidateEntry
+    Write-Host "[DRY-RUN] Would append causal confidence graph entry to ${causalGraphFile}:"
+    Write-Host $causalGraphEntry
     exit 0
 }
 
@@ -1929,6 +2059,11 @@ if (-not (Test-Path -LiteralPath $overlayCandidateFile)) {
     Add-Content -LiteralPath $overlayCandidateFile -Value ''
 }
 Add-Content -LiteralPath $overlayCandidateFile -Value $overlayCandidateEntry
+if (-not (Test-Path -LiteralPath $causalGraphFile)) {
+    Set-Content -LiteralPath $causalGraphFile -Value '# Confidence-Weighted Causal Graph'
+    Add-Content -LiteralPath $causalGraphFile -Value ''
+}
+Add-Content -LiteralPath $causalGraphFile -Value $causalGraphEntry
 
 Write-Host "Appended outage simulation learning entry to $learningsFile"
 Write-Host "Appended policy tuning recommendation to $policyTuningFile"

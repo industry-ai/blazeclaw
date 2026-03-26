@@ -27,6 +27,8 @@ SEASONAL_OVERLAY_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestatio
 CAUSAL_CLUSTERING_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-causal-clustering-policy.conf"
 CAUSAL_HISTORY_FILE="./blazeclaw/skills/self-evolving/.learnings/ANOMALY_CAUSAL_HISTORY.csv"
 OVERLAY_CANDIDATE_FILE="./blazeclaw/skills/self-evolving/.learnings/SEASONAL_OVERLAY_CANDIDATES.md"
+CAUSAL_GRAPHING_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-causal-graphing-policy.conf"
+CAUSAL_GRAPH_FILE="./blazeclaw/skills/self-evolving/.learnings/CAUSAL_CONFIDENCE_GRAPH.md"
 
 SIMULATION_ID=""
 TENANT_ID=""
@@ -57,6 +59,8 @@ ENABLE_SEASONAL_OVERLAY_TUNING=true
 REQUIRE_SEASONAL_OVERLAY_POLICY=false
 ENABLE_CAUSAL_CLUSTERING=true
 REQUIRE_CAUSAL_CLUSTERING_POLICY=false
+ENABLE_CONFIDENCE_CAUSAL_GRAPHING=true
+REQUIRE_CAUSAL_GRAPHING_POLICY=false
 MANIFEST_FILE_EXPLICIT=false
 SIGNATURE_VERIFICATION_MODE="none"
 KMS_PUBLIC_KEY_FILE=""
@@ -135,6 +139,10 @@ Optional:
   --overlay-candidate-file Suggested overlay output markdown file
   --disable-causal-clustering Disable anomaly-causal clustering suggestions
   --require-causal-clustering-policy Fail-fast when causal clustering policy cannot be resolved
+  --causal-graphing-policy-file Confidence-weighted causal graphing policy file
+  --causal-graph-file Confidence-weighted causal graph markdown output
+  --disable-confidence-causal-graphing Disable confidence-weighted causal graphing
+  --require-causal-graphing-policy Fail-fast when causal graphing policy cannot be resolved
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -362,6 +370,22 @@ while [[ $# -gt 0 ]]; do
             ;;
         --require-causal-clustering-policy)
             REQUIRE_CAUSAL_CLUSTERING_POLICY=true
+            shift
+            ;;
+        --causal-graphing-policy-file)
+            CAUSAL_GRAPHING_POLICY_FILE="${2:-}"
+            shift 2
+            ;;
+        --causal-graph-file)
+            CAUSAL_GRAPH_FILE="${2:-}"
+            shift 2
+            ;;
+        --disable-confidence-causal-graphing)
+            ENABLE_CONFIDENCE_CAUSAL_GRAPHING=false
+            shift
+            ;;
+        --require-causal-graphing-policy)
+            REQUIRE_CAUSAL_GRAPHING_POLICY=true
             shift
             ;;
         --signature-verification-mode)
@@ -862,6 +886,11 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
         CAUSAL_CLUSTER_SUGGESTED_OVERLAY="none"
         CAUSAL_CLUSTER_SUGGESTED_MULTIPLIER=1.00
         CAUSAL_CLUSTER_SOURCE="disabled"
+        CAUSAL_CONFIDENCE_SCORE=0
+        CAUSAL_CONFIDENCE_THRESHOLD=60
+        CAUSAL_CONFIDENCE_SOURCE="disabled"
+        CAUSAL_GRAPH_NODE="none"
+        CAUSAL_GRAPH_EDGE="none"
 
         if [ "$ENABLE_TIME_DECAY_WEIGHTING" = true ]; then
             TIME_DECAY_SOURCE="cli"
@@ -916,6 +945,55 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
                 if [ "$CAUSAL_CLUSTER_SAMPLE_COUNT" -ge "$CLUSTER_MIN_SAMPLES" ] && [ "$CAUSAL_CLUSTER_FAIL_PERCENT" -ge "$CLUSTER_FAIL_THRESHOLD_PERCENT" ]; then
                     CAUSAL_CLUSTER_SUGGESTED_OVERLAY="suggested-$DEPENDENCY-$ROLLOUT_PHASE"
                     CAUSAL_CLUSTER_SUGGESTED_MULTIPLIER="$CLUSTER_HIGH_MULTIPLIER"
+                fi
+
+                if [ "$ENABLE_CONFIDENCE_CAUSAL_GRAPHING" = true ]; then
+                    CAUSAL_CONFIDENCE_SOURCE="static"
+                    CONF_SAMPLE_WEIGHT=0.4
+                    CONF_FAIL_WEIGHT=0.5
+                    CONF_CONTEXT_WEIGHT=0.1
+                    CAUSAL_CONFIDENCE_THRESHOLD=60
+
+                    if [ -f "$CAUSAL_GRAPHING_POLICY_FILE" ] && [ -r "$CAUSAL_GRAPHING_POLICY_FILE" ]; then
+                        P_SW=$(awk -F'=' '$1=="sample_weight" { print $2; exit }' "$CAUSAL_GRAPHING_POLICY_FILE" | tr -d '\r[:space:]')
+                        P_FW=$(awk -F'=' '$1=="fail_weight" { print $2; exit }' "$CAUSAL_GRAPHING_POLICY_FILE" | tr -d '\r[:space:]')
+                        P_CW=$(awk -F'=' '$1=="context_weight" { print $2; exit }' "$CAUSAL_GRAPHING_POLICY_FILE" | tr -d '\r[:space:]')
+                        P_TH=$(awk -F'=' '$1=="recommendation_threshold" { print $2; exit }' "$CAUSAL_GRAPHING_POLICY_FILE" | tr -d '\r[:space:]')
+
+                        [ -n "$P_SW" ] && awk -v v="$P_SW" 'BEGIN { exit !(v+0>=0) }' && CONF_SAMPLE_WEIGHT="$P_SW"
+                        [ -n "$P_FW" ] && awk -v v="$P_FW" 'BEGIN { exit !(v+0>=0) }' && CONF_FAIL_WEIGHT="$P_FW"
+                        [ -n "$P_CW" ] && awk -v v="$P_CW" 'BEGIN { exit !(v+0>=0) }' && CONF_CONTEXT_WEIGHT="$P_CW"
+                        [ -n "$P_TH" ] && [[ "$P_TH" =~ ^[0-9]+$ ]] && [ "$P_TH" -ge 0 ] && [ "$P_TH" -le 100 ] && CAUSAL_CONFIDENCE_THRESHOLD="$P_TH"
+                        CAUSAL_CONFIDENCE_SOURCE="policy"
+                    elif [ "$REQUIRE_CAUSAL_GRAPHING_POLICY" = true ]; then
+                        echo "Causal graphing policy failed: missing file $CAUSAL_GRAPHING_POLICY_FILE" >&2
+                        exit 1
+                    fi
+
+                    SAMPLE_CONFIDENCE=0
+                    if [ "$ATTESTATION_BASELINE_WINDOW" -gt 0 ]; then
+                        SAMPLE_CONFIDENCE=$(( CAUSAL_CLUSTER_SAMPLE_COUNT * 100 / ATTESTATION_BASELINE_WINDOW ))
+                    fi
+                    [ "$SAMPLE_CONFIDENCE" -gt 100 ] && SAMPLE_CONFIDENCE=100
+
+                    CONTEXT_SCORE=0
+                    if [ "$SEASONAL_OVERLAY_SOURCE" = "policy" ]; then
+                        CONTEXT_SCORE=100
+                    elif [ "$SEASONAL_DECOMPOSITION_SOURCE" = "policy" ]; then
+                        CONTEXT_SCORE=70
+                    elif [ "$TIME_DECAY_SOURCE" = "policy" ]; then
+                        CONTEXT_SCORE=40
+                    fi
+
+                    CAUSAL_CONFIDENCE_SCORE=$(awk -v s="$SAMPLE_CONFIDENCE" -v f="$CAUSAL_CLUSTER_FAIL_PERCENT" -v c="$CONTEXT_SCORE" -v sw="$CONF_SAMPLE_WEIGHT" -v fw="$CONF_FAIL_WEIGHT" -v cw="$CONF_CONTEXT_WEIGHT" 'BEGIN { v=(s*sw)+(f*fw)+(c*cw); if (v>100) v=100; if (v<0) v=0; printf "%d", v }')
+                    CAUSAL_GRAPH_NODE="$CAUSAL_CLUSTER_KEY|confidence=$CAUSAL_CONFIDENCE_SCORE"
+
+                    if [ "$CAUSAL_CONFIDENCE_SCORE" -lt "$CAUSAL_CONFIDENCE_THRESHOLD" ]; then
+                        CAUSAL_CLUSTER_SUGGESTED_OVERLAY="none"
+                        CAUSAL_CLUSTER_SUGGESTED_MULTIPLIER=1.00
+                    fi
+
+                    CAUSAL_GRAPH_EDGE="$CAUSAL_CLUSTER_KEY -> ${CAUSAL_CLUSTER_SUGGESTED_OVERLAY:-none} (score=$CAUSAL_CONFIDENCE_SCORE)"
                 fi
             fi
 
@@ -1156,7 +1234,26 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
 **Suggested Overlay Multiplier**: $CAUSAL_CLUSTER_SUGGESTED_MULTIPLIER
 **Causal Clustering Source**: $CAUSAL_CLUSTER_SOURCE
 **Causal Clustering Enabled**: $ENABLE_CAUSAL_CLUSTERING
+**Causal Confidence Score**: $CAUSAL_CONFIDENCE_SCORE
+**Causal Confidence Threshold**: $CAUSAL_CONFIDENCE_THRESHOLD
+**Causal Confidence Source**: $CAUSAL_CONFIDENCE_SOURCE
+**Causal Graph Node**: $CAUSAL_GRAPH_NODE
+**Causal Graph Edge**: $CAUSAL_GRAPH_EDGE
 **Anomaly Gate Enabled**: $REQUIRE_ATTESTATION_BASELINE_GATE
+
+---
+EOF
+)
+CAUSAL_GRAPH_ENTRY=$(cat << EOF
+## [GRAPH-$ENTRY_ID] confidence_weighted_causal_graph
+
+**Logged**: $TIMESTAMP
+**Tenant ID**: $TENANT_ID
+**Node**: ${CAUSAL_GRAPH_NODE:-none}
+**Edge**: ${CAUSAL_GRAPH_EDGE:-none}
+**Confidence Score**: ${CAUSAL_CONFIDENCE_SCORE:-0}
+**Confidence Threshold**: ${CAUSAL_CONFIDENCE_THRESHOLD:-60}
+**Confidence Source**: ${CAUSAL_CONFIDENCE_SOURCE:-disabled}
 
 ---
 EOF
@@ -1538,6 +1635,11 @@ $RECOMMENDATION
 - Suggested Overlay Multiplier: ${CAUSAL_CLUSTER_SUGGESTED_MULTIPLIER:-1.00}
 - Causal Clustering Source: ${CAUSAL_CLUSTER_SOURCE:-disabled}
 - Causal Clustering Enabled: ${ENABLE_CAUSAL_CLUSTERING}
+- Causal Confidence Score: ${CAUSAL_CONFIDENCE_SCORE:-0}
+- Causal Confidence Threshold: ${CAUSAL_CONFIDENCE_THRESHOLD:-60}
+- Causal Confidence Source: ${CAUSAL_CONFIDENCE_SOURCE:-disabled}
+- Causal Graph Node: ${CAUSAL_GRAPH_NODE:-none}
+- Causal Graph Edge: ${CAUSAL_GRAPH_EDGE:-none}
 - Attestation Baseline Gate: ${REQUIRE_ATTESTATION_BASELINE_GATE}
 - Cross-Tenant Heatmap Source: ${CROSS_TENANT_HEATMAP_FILE}
 - Auto-Remediation Routing Source: ${AUTO_REMEDIATION_ROUTING_FILE}
@@ -1601,6 +1703,8 @@ if [ "$DRY_RUN" = true ]; then
     echo "$CAUSAL_HISTORY_RECORD"
     echo "[DRY-RUN] Would append overlay candidate suggestion to $OVERLAY_CANDIDATE_FILE:"
     echo "$OVERLAY_CANDIDATE_ENTRY"
+    echo "[DRY-RUN] Would append causal confidence graph entry to $CAUSAL_GRAPH_FILE:"
+    echo "$CAUSAL_GRAPH_ENTRY"
     exit 0
 fi
 
@@ -1622,6 +1726,10 @@ if [ ! -f "$OVERLAY_CANDIDATE_FILE" ]; then
     printf "%s\n\n" "# Seasonal Overlay Candidate Suggestions" > "$OVERLAY_CANDIDATE_FILE"
 fi
 printf "%s\n" "$OVERLAY_CANDIDATE_ENTRY" >> "$OVERLAY_CANDIDATE_FILE"
+if [ ! -f "$CAUSAL_GRAPH_FILE" ]; then
+    printf "%s\n\n" "# Confidence-Weighted Causal Graph" > "$CAUSAL_GRAPH_FILE"
+fi
+printf "%s\n" "$CAUSAL_GRAPH_ENTRY" >> "$CAUSAL_GRAPH_FILE"
 
 echo "Appended outage simulation learning entry to $LEARNINGS_FILE"
 echo "Appended policy tuning recommendation to $POLICY_TUNING_FILE"

@@ -272,6 +272,11 @@ Outage promoter inputs now require tenant and rollout phase context:
   - `--overlay-candidate-file <path>`
   - `--disable-causal-clustering`
   - `--require-causal-clustering-policy`
+- Optional confidence-weighted causal graphing controls:
+  - `--causal-graphing-policy-file <path>`
+  - `--causal-graph-file <path>`
+  - `--disable-confidence-causal-graphing`
+  - `--require-causal-graphing-policy`
 
 Fail-fast validation gates:
 
@@ -313,6 +318,8 @@ Fail-fast validation gates:
   of seasonal phase multipliers.
 - Anomaly-causal clustering derives ranked overlay candidates from
   recurrence clusters by dependency, phase, and failure mode.
+- Confidence-weighted causal graphing scores multi-factor causal paths
+  and emits thresholded overlay recommendations.
 
 Default profile weights are provided in:
 
@@ -350,3 +357,6 @@ Default signed manifest artifacts are provided in:
 - `assets/attestation-anomaly-causal-clustering-policy.template.conf`
 - `.learnings/ANOMALY_CAUSAL_HISTORY.csv`
 - `.learnings/SEASONAL_OVERLAY_CANDIDATES.md`
+- `assets/attestation-anomaly-causal-graphing-policy.conf`
+- `assets/attestation-anomaly-causal-graphing-policy.template.conf`
+- `.learnings/CAUSAL_CONFIDENCE_GRAPH.md`

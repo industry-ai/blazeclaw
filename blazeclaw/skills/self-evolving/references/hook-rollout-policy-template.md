@@ -187,6 +187,7 @@ Approval gate checklist:
 - [ ] recurrence auto-tuning policy is validated for tenant baseline tuning bounds
 - [ ] seasonal decomposition policy is validated for reporting-cycle multipliers
 - [ ] holiday/event overlay policy is validated for cycle-phase exceptions
+- [ ] confidence-weighted causal graphing policy is validated for recommendation thresholds
 
 ## 6) Rollback Plan
 
