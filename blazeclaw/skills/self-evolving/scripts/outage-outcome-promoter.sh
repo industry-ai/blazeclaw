@@ -18,6 +18,8 @@ ATTESTATION_DASHBOARD_FILE="./blazeclaw/skills/self-evolving/.learnings/TENANT_T
 ATTESTATION_TREND_HISTORY_FILE="./blazeclaw/skills/self-evolving/.learnings/TENANT_TRUST_POLICY_ATTESTATION_HISTORY.csv"
 CROSS_TENANT_HEATMAP_FILE="./blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_ATTESTATION_ANOMALY_HEATMAP.md"
 AUTO_REMEDIATION_ROUTING_FILE="./blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_AUTO_REMEDIATION_ROUTING.md"
+TENANT_CRITICALITY_FILE="./blazeclaw/skills/self-evolving/assets/tenant-criticality-tiers.csv"
+ADAPTIVE_THRESHOLD_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-threshold-tiers.csv"
 
 SIMULATION_ID=""
 TENANT_ID=""
@@ -34,6 +36,8 @@ ENABLE_CROSS_TENANT_HEATMAP=true
 ATTESTATION_BASELINE_WINDOW=20
 ATTESTATION_ANOMALY_THRESHOLD_PERCENT=25
 REQUIRE_ATTESTATION_BASELINE_GATE=false
+ENABLE_ADAPTIVE_THRESHOLD_CALIBRATION=true
+REQUIRE_ADAPTIVE_THRESHOLD_POLICY=false
 MANIFEST_FILE_EXPLICIT=false
 SIGNATURE_VERIFICATION_MODE="none"
 KMS_PUBLIC_KEY_FILE=""
@@ -90,6 +94,10 @@ Optional:
   --cross-tenant-heatmap-file Cross-tenant anomaly heatmap markdown output
   --auto-remediation-routing-file Cross-tenant remediation routing markdown output
   --disable-cross-tenant-heatmap Skip cross-tenant heatmap and routing writes
+  --tenant-criticality-file Tenant criticality tier mapping CSV
+  --adaptive-threshold-policy-file Tier-to-threshold mapping CSV
+  --disable-adaptive-threshold-calibration Use static threshold only
+  --require-adaptive-threshold-policy Fail-fast when adaptive tier policy cannot be resolved
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -229,6 +237,22 @@ while [[ $# -gt 0 ]]; do
             ;;
         --disable-cross-tenant-heatmap)
             ENABLE_CROSS_TENANT_HEATMAP=false
+            shift
+            ;;
+        --tenant-criticality-file)
+            TENANT_CRITICALITY_FILE="${2:-}"
+            shift 2
+            ;;
+        --adaptive-threshold-policy-file)
+            ADAPTIVE_THRESHOLD_POLICY_FILE="${2:-}"
+            shift 2
+            ;;
+        --disable-adaptive-threshold-calibration)
+            ENABLE_ADAPTIVE_THRESHOLD_CALIBRATION=false
+            shift
+            ;;
+        --require-adaptive-threshold-policy)
+            REQUIRE_ADAPTIVE_THRESHOLD_POLICY=true
             shift
             ;;
         --signature-verification-mode)
@@ -694,8 +718,41 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
             ATTESTATION_ANOMALY_PERCENT=$(( ATTESTATION_BASELINE_ALERT_COUNT * 100 / ATTESTATION_BASELINE_TOTAL ))
         fi
 
-        if [ "$REQUIRE_ATTESTATION_BASELINE_GATE" = true ] && [ "$ATTESTATION_ANOMALY_PERCENT" -gt "$ATTESTATION_ANOMALY_THRESHOLD_PERCENT" ]; then
-            echo "Attestation anomaly baseline breach: $ATTESTATION_ANOMALY_PERCENT% exceeds $ATTESTATION_ANOMALY_THRESHOLD_PERCENT% for tenant $TENANT_ID" >&2
+        CALIBRATED_ATTESTATION_THRESHOLD_PERCENT="$ATTESTATION_ANOMALY_THRESHOLD_PERCENT"
+        TENANT_CRITICALITY_TIER="not-configured"
+        ADAPTIVE_THRESHOLD_SOURCE="static"
+
+        if [ "$ENABLE_ADAPTIVE_THRESHOLD_CALIBRATION" = true ]; then
+            if [ ! -f "$TENANT_CRITICALITY_FILE" ] || [ ! -r "$TENANT_CRITICALITY_FILE" ]; then
+                if [ "$REQUIRE_ADAPTIVE_THRESHOLD_POLICY" = true ]; then
+                    echo "Adaptive threshold calibration failed: missing tenant criticality file $TENANT_CRITICALITY_FILE" >&2
+                    exit 1
+                fi
+            elif [ ! -f "$ADAPTIVE_THRESHOLD_POLICY_FILE" ] || [ ! -r "$ADAPTIVE_THRESHOLD_POLICY_FILE" ]; then
+                if [ "$REQUIRE_ADAPTIVE_THRESHOLD_POLICY" = true ]; then
+                    echo "Adaptive threshold calibration failed: missing threshold policy file $ADAPTIVE_THRESHOLD_POLICY_FILE" >&2
+                    exit 1
+                fi
+            else
+                TENANT_CRITICALITY_TIER=$(awk -F',' -v tenant="$TENANT_ID" 'NR > 1 && $1 == tenant { print $2; exit }' "$TENANT_CRITICALITY_FILE" | tr -d '\r[:space:]')
+                if [ -n "$TENANT_CRITICALITY_TIER" ]; then
+                    TIER_THRESHOLD_VALUE=$(awk -F',' -v tier="$TENANT_CRITICALITY_TIER" 'NR > 1 && $1 == tier { print $2; exit }' "$ADAPTIVE_THRESHOLD_POLICY_FILE" | tr -d '\r[:space:]')
+                    if [ -n "$TIER_THRESHOLD_VALUE" ] && [[ "$TIER_THRESHOLD_VALUE" =~ ^[0-9]+$ ]]; then
+                        CALIBRATED_ATTESTATION_THRESHOLD_PERCENT="$TIER_THRESHOLD_VALUE"
+                        ADAPTIVE_THRESHOLD_SOURCE="tier-policy"
+                    elif [ "$REQUIRE_ADAPTIVE_THRESHOLD_POLICY" = true ]; then
+                        echo "Adaptive threshold calibration failed: unresolved threshold for tier '$TENANT_CRITICALITY_TIER'" >&2
+                        exit 1
+                    fi
+                elif [ "$REQUIRE_ADAPTIVE_THRESHOLD_POLICY" = true ]; then
+                    echo "Adaptive threshold calibration failed: unresolved tenant criticality tier for '$TENANT_ID'" >&2
+                    exit 1
+                fi
+            fi
+        fi
+
+        if [ "$REQUIRE_ATTESTATION_BASELINE_GATE" = true ] && [ "$ATTESTATION_ANOMALY_PERCENT" -gt "$CALIBRATED_ATTESTATION_THRESHOLD_PERCENT" ]; then
+            echo "Attestation anomaly baseline breach: $ATTESTATION_ANOMALY_PERCENT% exceeds $CALIBRATED_ATTESTATION_THRESHOLD_PERCENT% for tenant $TENANT_ID" >&2
             exit 1
         fi
 
@@ -722,6 +779,9 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
 **Baseline Alert Count**: $ATTESTATION_BASELINE_ALERT_COUNT
 **Anomaly Percent**: $ATTESTATION_ANOMALY_PERCENT%
 **Anomaly Threshold Percent**: $ATTESTATION_ANOMALY_THRESHOLD_PERCENT%
+**Calibrated Threshold Percent**: $CALIBRATED_ATTESTATION_THRESHOLD_PERCENT%
+**Tenant Criticality Tier**: $TENANT_CRITICALITY_TIER
+**Adaptive Threshold Source**: $ADAPTIVE_THRESHOLD_SOURCE
 **Anomaly Gate Enabled**: $REQUIRE_ATTESTATION_BASELINE_GATE
 
 ---
@@ -1075,6 +1135,10 @@ $RECOMMENDATION
 - Attestation Baseline Samples: ${ATTESTATION_BASELINE_TOTAL:-0}
 - Attestation Baseline Alert Count: ${ATTESTATION_BASELINE_ALERT_COUNT:-0}
 - Attestation Anomaly Percent: ${ATTESTATION_ANOMALY_PERCENT:-0}%
+- Attestation Calibrated Threshold Percent: ${CALIBRATED_ATTESTATION_THRESHOLD_PERCENT:-$ATTESTATION_ANOMALY_THRESHOLD_PERCENT}
+- Tenant Criticality Tier: ${TENANT_CRITICALITY_TIER:-not-configured}
+- Adaptive Threshold Source: ${ADAPTIVE_THRESHOLD_SOURCE:-static}
+- Adaptive Threshold Calibration Enabled: ${ENABLE_ADAPTIVE_THRESHOLD_CALIBRATION}
 - Attestation Baseline Gate: ${REQUIRE_ATTESTATION_BASELINE_GATE}
 - Cross-Tenant Heatmap Source: ${CROSS_TENANT_HEATMAP_FILE}
 - Auto-Remediation Routing Source: ${AUTO_REMEDIATION_ROUTING_FILE}

@@ -222,6 +222,10 @@ phase promotion.
 - Cross-Tenant Heatmap Source: .learnings/CROSS_TENANT_ATTESTATION_ANOMALY_HEATMAP.md
 - Auto-Remediation Routing Source: .learnings/CROSS_TENANT_AUTO_REMEDIATION_ROUTING.md
 - Cross-Tenant Heatmap Enabled: true
+- Attestation Calibrated Threshold Percent: 10
+- Tenant Criticality Tier: critical
+- Adaptive Threshold Source: tier-policy
+- Adaptive Threshold Calibration Enabled: true
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode

@@ -138,6 +138,10 @@ Federation-level aggregates:
   `blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_ATTESTATION_ANOMALY_HEATMAP.md`
 - Cross-tenant auto-remediation routing path:
   `blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_AUTO_REMEDIATION_ROUTING.md`
+- Tenant criticality tier mapping path:
+  `blazeclaw/skills/self-evolving/assets/tenant-criticality-tiers.csv`
+- Adaptive threshold tier policy path:
+  `blazeclaw/skills/self-evolving/assets/attestation-anomaly-threshold-tiers.csv`
 - Recommendations generated in window: `<n>`
 - Recommendations accepted: `<n>`
 - Recommendations deferred: `<n>`
@@ -163,6 +167,8 @@ Federation-level aggregates:
 - Tenant anomaly trend baseline p95: `<percent>`
 - Cross-tenant heatmap high/critical tenants: `<n>`
 - Auto-remediation routing coverage: `<percent>`
+- Tier-calibrated threshold breaches: `<n>`
+- Critical-tier anomaly p95 versus calibrated threshold: `<percent>`
 - Highest-impact accepted tuning:
   `<short summary with control reference>`
 

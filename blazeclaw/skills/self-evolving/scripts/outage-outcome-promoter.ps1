@@ -31,6 +31,10 @@ $crossTenantHeatmapFile =
     './blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_ATTESTATION_ANOMALY_HEATMAP.md'
 $autoRemediationRoutingFile =
     './blazeclaw/skills/self-evolving/.learnings/CROSS_TENANT_AUTO_REMEDIATION_ROUTING.md'
+$tenantCriticalityFile =
+    './blazeclaw/skills/self-evolving/assets/tenant-criticality-tiers.csv'
+$adaptiveThresholdPolicyFile =
+    './blazeclaw/skills/self-evolving/assets/attestation-anomaly-threshold-tiers.csv'
 
 function Show-Usage {
 @"
@@ -70,6 +74,10 @@ Optional:
   --cross-tenant-heatmap-file Cross-tenant anomaly heatmap markdown output
   --auto-remediation-routing-file Cross-tenant remediation routing markdown output
   --disable-cross-tenant-heatmap Skip cross-tenant heatmap and routing writes
+  --tenant-criticality-file Tenant criticality tier mapping CSV
+  --adaptive-threshold-policy-file Tier-to-threshold mapping CSV
+  --disable-adaptive-threshold-calibration Use static threshold only
+  --require-adaptive-threshold-policy Fail-fast when adaptive tier policy cannot be resolved
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -99,6 +107,8 @@ $enableCrossTenantHeatmap = $true
 $attestationBaselineWindow = 20
 $attestationAnomalyThresholdPercent = 25
 $requireAttestationBaselineGate = $false
+$enableAdaptiveThresholdCalibration = $true
+$requireAdaptiveThresholdPolicy = $false
 $manifestFileExplicit = $false
 $signatureVerificationMode = 'none'
 $kmsPublicKeyFile = ''
@@ -136,6 +146,9 @@ $revocationSloStatus = ''
 $attestationBaselineSamples = 0
 $attestationBaselineAlertCount = 0
 $attestationAnomalyPercent = 0
+$calibratedAttestationThresholdPercent = 25
+$tenantCriticalityTier = 'not-configured'
+$adaptiveThresholdSource = 'static'
 $notes = ''
 $trendWindowSize = 20
 $dryRun = $false
@@ -259,6 +272,20 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         }
         '--disable-cross-tenant-heatmap' {
             $enableCrossTenantHeatmap = $false
+        }
+        '--tenant-criticality-file' {
+            $i++
+            $tenantCriticalityFile = [string]$args[$i]
+        }
+        '--adaptive-threshold-policy-file' {
+            $i++
+            $adaptiveThresholdPolicyFile = [string]$args[$i]
+        }
+        '--disable-adaptive-threshold-calibration' {
+            $enableAdaptiveThresholdCalibration = $false
+        }
+        '--require-adaptive-threshold-policy' {
+            $requireAdaptiveThresholdPolicy = $true
         }
         '--signature-verification-mode' {
             $i++
@@ -803,10 +830,62 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
             )
         }
 
+        $calibratedAttestationThresholdPercent =
+            $attestationAnomalyThresholdPercent
+        $tenantCriticalityTier = 'not-configured'
+        $adaptiveThresholdSource = 'static'
+
+        if ($enableAdaptiveThresholdCalibration) {
+            if (-not (Test-Path -LiteralPath $tenantCriticalityFile)) {
+                if ($requireAdaptiveThresholdPolicy) {
+                    throw "Adaptive threshold calibration failed: missing tenant criticality file $tenantCriticalityFile"
+                }
+            } elseif (-not (Test-Path -LiteralPath $adaptiveThresholdPolicyFile)) {
+                if ($requireAdaptiveThresholdPolicy) {
+                    throw "Adaptive threshold calibration failed: missing threshold policy file $adaptiveThresholdPolicyFile"
+                }
+            } else {
+                $tierRows = Import-Csv -LiteralPath $tenantCriticalityFile
+                $tenantTierRow = $tierRows |
+                    Where-Object { $_.tenant_id -eq $tenantId } |
+                    Select-Object -First 1
+
+                if ($tenantTierRow) {
+                    $tenantCriticalityTier =
+                        [string]$tenantTierRow.criticality_tier
+
+                    $policyRows =
+                        Import-Csv -LiteralPath $adaptiveThresholdPolicyFile
+                    $tierPolicy = $policyRows |
+                        Where-Object {
+                            $_.criticality_tier -eq $tenantCriticalityTier
+                        } |
+                        Select-Object -First 1
+
+                    if ($tierPolicy) {
+                        [int]$tierThreshold = 0
+                        if ([int]::TryParse(
+                                [string]$tierPolicy.anomaly_threshold_percent,
+                                [ref]$tierThreshold)) {
+                            $calibratedAttestationThresholdPercent =
+                                $tierThreshold
+                            $adaptiveThresholdSource = 'tier-policy'
+                        } elseif ($requireAdaptiveThresholdPolicy) {
+                            throw "Adaptive threshold calibration failed: non-numeric threshold for tier '$tenantCriticalityTier'"
+                        }
+                    } elseif ($requireAdaptiveThresholdPolicy) {
+                        throw "Adaptive threshold calibration failed: unresolved threshold for tier '$tenantCriticalityTier'"
+                    }
+                } elseif ($requireAdaptiveThresholdPolicy) {
+                    throw "Adaptive threshold calibration failed: unresolved tenant criticality tier for '$tenantId'"
+                }
+            }
+        }
+
         if ($requireAttestationBaselineGate -and
             $attestationAnomalyPercent -gt
-            $attestationAnomalyThresholdPercent) {
-            throw "Attestation anomaly baseline breach: $attestationAnomalyPercent% exceeds $attestationAnomalyThresholdPercent% for tenant $tenantId"
+            $calibratedAttestationThresholdPercent) {
+            throw "Attestation anomaly baseline breach: $attestationAnomalyPercent% exceeds $calibratedAttestationThresholdPercent% for tenant $tenantId"
         }
 
         $attestationTrendRecord =
@@ -833,6 +912,9 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
 **Baseline Alert Count**: $attestationBaselineAlertCount
 **Anomaly Percent**: $attestationAnomalyPercent%
 **Anomaly Threshold Percent**: $attestationAnomalyThresholdPercent%
+**Calibrated Threshold Percent**: $calibratedAttestationThresholdPercent%
+**Tenant Criticality Tier**: $tenantCriticalityTier
+**Adaptive Threshold Source**: $adaptiveThresholdSource
 **Anomaly Gate Enabled**: $requireAttestationBaselineGate
 
 ---
@@ -1204,6 +1286,10 @@ $recommendation
 - Attestation Baseline Samples: $attestationBaselineSamples
 - Attestation Baseline Alert Count: $attestationBaselineAlertCount
 - Attestation Anomaly Percent: $attestationAnomalyPercent%
+- Attestation Calibrated Threshold Percent: $calibratedAttestationThresholdPercent
+- Tenant Criticality Tier: $tenantCriticalityTier
+- Adaptive Threshold Source: $adaptiveThresholdSource
+- Adaptive Threshold Calibration Enabled: $enableAdaptiveThresholdCalibration
 - Attestation Baseline Gate: $requireAttestationBaselineGate
 - Cross-Tenant Heatmap Source: $crossTenantHeatmapFile
 - Auto-Remediation Routing Source: $autoRemediationRoutingFile

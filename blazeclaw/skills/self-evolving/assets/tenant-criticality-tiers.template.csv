@@ -1,0 +1,2 @@
+tenant_id,criticality_tier,owner
+<tenant-id>,<critical|high|medium|low>,<team-or-service>

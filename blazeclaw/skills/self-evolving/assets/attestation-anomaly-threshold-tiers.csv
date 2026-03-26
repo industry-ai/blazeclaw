@@ -1,0 +1,5 @@
+criticality_tier,anomaly_threshold_percent
+critical,10
+high,15
+medium,25
+low,35

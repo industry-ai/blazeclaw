@@ -181,6 +181,8 @@ Approval gate checklist:
 - [ ] tenant attestation dashboard and trend history artifacts are generated per phase
 - [ ] cross-tenant anomaly heatmap is generated for current phase window
 - [ ] high/critical heatmap tenants have auto-remediation routing recommendations
+- [ ] tenant criticality tier mappings are reviewed for rollout scope
+- [ ] adaptive threshold policy mappings are validated for criticality tiers
 
 ## 6) Rollback Plan
 

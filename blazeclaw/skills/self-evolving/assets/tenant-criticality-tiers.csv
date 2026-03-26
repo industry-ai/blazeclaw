@@ -1,0 +1,5 @@
+tenant_id,criticality_tier,owner
+tenant-a,critical,governance-operations
+tenant-b,high,governance-operations
+tenant-c,medium,governance-operations
+tenant-d,low,governance-operations

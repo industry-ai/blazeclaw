@@ -244,6 +244,11 @@ Outage promoter inputs now require tenant and rollout phase context:
   - `--cross-tenant-heatmap-file <path>`
   - `--auto-remediation-routing-file <path>`
   - `--disable-cross-tenant-heatmap`
+- Optional adaptive anomaly threshold calibration controls:
+  - `--tenant-criticality-file <path>`
+  - `--adaptive-threshold-policy-file <path>`
+  - `--disable-adaptive-threshold-calibration`
+  - `--require-adaptive-threshold-policy`
 
 Fail-fast validation gates:
 
@@ -273,6 +278,8 @@ Fail-fast validation gates:
   baseline percent above threshold causes immediate script failure.
 - Cross-tenant heatmap and routing outputs provide severity-band
   recommendations for centralized remediation planning.
+- Adaptive threshold calibration resolves tenant criticality tiers and
+  applies tier-specific anomaly thresholds before gate evaluation.
 
 Default profile weights are provided in:
 
@@ -294,3 +301,7 @@ Default signed manifest artifacts are provided in:
 - `.learnings/TENANT_TRUST_POLICY_ATTESTATION_HISTORY.csv`
 - `.learnings/CROSS_TENANT_ATTESTATION_ANOMALY_HEATMAP.md`
 - `.learnings/CROSS_TENANT_AUTO_REMEDIATION_ROUTING.md`
+- `assets/tenant-criticality-tiers.csv`
+- `assets/tenant-criticality-tiers.template.csv`
+- `assets/attestation-anomaly-threshold-tiers.csv`
+- `assets/attestation-anomaly-threshold-tiers.template.csv`
