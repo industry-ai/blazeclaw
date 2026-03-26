@@ -22,6 +22,7 @@ TENANT_CRITICALITY_FILE="./blazeclaw/skills/self-evolving/assets/tenant-critical
 ADAPTIVE_THRESHOLD_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-threshold-tiers.csv"
 TIME_DECAY_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-time-decay-policy.conf"
 RECURRENCE_TUNING_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-recurrence-tuning-policy.conf"
+SEASONAL_DECOMPOSITION_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-seasonal-decomposition-policy.conf"
 
 SIMULATION_ID=""
 TENANT_ID=""
@@ -45,6 +46,9 @@ TIME_DECAY_HALF_LIFE=5
 REQUIRE_TIME_DECAY_POLICY=false
 ENABLE_RECURRENCE_AUTO_TUNING=true
 REQUIRE_RECURRENCE_TUNING_POLICY=false
+ENABLE_SEASONAL_RECURRENCE_DECOMPOSITION=true
+REPORTING_CYCLE_LENGTH=12
+REQUIRE_SEASONAL_DECOMPOSITION_POLICY=false
 MANIFEST_FILE_EXPLICIT=false
 SIGNATURE_VERIFICATION_MODE="none"
 KMS_PUBLIC_KEY_FILE=""
@@ -112,6 +116,10 @@ Optional:
   --recurrence-tuning-policy-file Recurrence auto-tuning policy file
   --disable-recurrence-auto-tuning Disable recurrence-based half-life tuning
   --require-recurrence-tuning-policy Fail-fast when recurrence tuning policy cannot be resolved
+  --seasonal-decomposition-policy-file Seasonal decomposition tuning policy file
+  --reporting-cycle-length Reporting cycle length in samples (default: 12)
+  --disable-seasonal-recurrence-decomposition Disable seasonal decomposition tuning
+  --require-seasonal-decomposition-policy Fail-fast when seasonal decomposition policy cannot be resolved
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -297,6 +305,22 @@ while [[ $# -gt 0 ]]; do
             REQUIRE_RECURRENCE_TUNING_POLICY=true
             shift
             ;;
+        --seasonal-decomposition-policy-file)
+            SEASONAL_DECOMPOSITION_POLICY_FILE="${2:-}"
+            shift 2
+            ;;
+        --reporting-cycle-length)
+            REPORTING_CYCLE_LENGTH="${2:-}"
+            shift 2
+            ;;
+        --disable-seasonal-recurrence-decomposition)
+            ENABLE_SEASONAL_RECURRENCE_DECOMPOSITION=false
+            shift
+            ;;
+        --require-seasonal-decomposition-policy)
+            REQUIRE_SEASONAL_DECOMPOSITION_POLICY=true
+            shift
+            ;;
         --signature-verification-mode)
             SIGNATURE_VERIFICATION_MODE="${2:-}"
             shift 2
@@ -387,6 +411,11 @@ fi
 
 if ! [[ "$TIME_DECAY_HALF_LIFE" =~ ^[0-9]+$ ]] || [ "$TIME_DECAY_HALF_LIFE" -le 0 ]; then
     echo "--time-decay-half-life must be a positive integer" >&2
+    exit 1
+fi
+
+if ! [[ "$REPORTING_CYCLE_LENGTH" =~ ^[0-9]+$ ]] || [ "$REPORTING_CYCLE_LENGTH" -le 0 ]; then
+    echo "--reporting-cycle-length must be a positive integer" >&2
     exit 1
 fi
 
@@ -772,6 +801,10 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
         RECURRENCE_RATIO_PERCENT=0
         RECURRENCE_TUNED_HALF_LIFE="$TIME_DECAY_HALF_LIFE"
         RECURRENCE_TUNING_SOURCE="disabled"
+        SEASONAL_PHASE="not-applied"
+        SEASONAL_MULTIPLIER=1.0
+        SEASONAL_TUNED_HALF_LIFE="$TIME_DECAY_HALF_LIFE"
+        SEASONAL_DECOMPOSITION_SOURCE="disabled"
 
         if [ "$ENABLE_TIME_DECAY_WEIGHTING" = true ]; then
             TIME_DECAY_SOURCE="cli"
@@ -837,6 +870,59 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
             elif [ "$REQUIRE_TIME_DECAY_POLICY" = true ]; then
                 echo "Time-decay policy failed: missing file $TIME_DECAY_POLICY_FILE" >&2
                 exit 1
+            fi
+
+            if [ "$ENABLE_RECURRENCE_AUTO_TUNING" = true ]; then
+                TUNED=$(awk -v base="$DECAY_HALF_LIFE_EFFECTIVE" -v ratio="$RECURRENCE_RATIO_PERCENT" -v mult="$RECURRENCE_TUNING_FAIL_MULTIPLIER" -v minv="$RECURRENCE_TUNING_MIN" -v maxv="$RECURRENCE_TUNING_MAX" 'BEGIN { v = base + ((ratio/100.0) * mult * base); if (v < minv) v=minv; if (v > maxv) v=maxv; printf "%d", v }')
+                DECAY_HALF_LIFE_EFFECTIVE="$TUNED"
+                RECURRENCE_TUNED_HALF_LIFE="$TUNED"
+            fi
+
+            if [ "$ENABLE_SEASONAL_RECURRENCE_DECOMPOSITION" = true ]; then
+                SEASONAL_DECOMPOSITION_SOURCE="static"
+                CYCLE_LENGTH_EFFECTIVE="$REPORTING_CYCLE_LENGTH"
+                SEASONAL_START_MULT=1.20
+                SEASONAL_MID_MULT=1.00
+                SEASONAL_END_MULT=0.85
+                SEASONAL_MIN_HALF_LIFE=2
+                SEASONAL_MAX_HALF_LIFE=30
+
+                if [ -f "$SEASONAL_DECOMPOSITION_POLICY_FILE" ] && [ -r "$SEASONAL_DECOMPOSITION_POLICY_FILE" ]; then
+                    POLICY_CYCLE=$(awk -F'=' '$1=="reporting_cycle_length" { print $2; exit }' "$SEASONAL_DECOMPOSITION_POLICY_FILE" | tr -d '\r[:space:]')
+                    POLICY_START=$(awk -F'=' '$1=="cycle_start_multiplier" { print $2; exit }' "$SEASONAL_DECOMPOSITION_POLICY_FILE" | tr -d '\r[:space:]')
+                    POLICY_MID=$(awk -F'=' '$1=="cycle_mid_multiplier" { print $2; exit }' "$SEASONAL_DECOMPOSITION_POLICY_FILE" | tr -d '\r[:space:]')
+                    POLICY_END=$(awk -F'=' '$1=="cycle_end_multiplier" { print $2; exit }' "$SEASONAL_DECOMPOSITION_POLICY_FILE" | tr -d '\r[:space:]')
+                    POLICY_MIN_HALF=$(awk -F'=' '$1=="seasonal_min_half_life_samples" { print $2; exit }' "$SEASONAL_DECOMPOSITION_POLICY_FILE" | tr -d '\r[:space:]')
+                    POLICY_MAX_HALF=$(awk -F'=' '$1=="seasonal_max_half_life_samples" { print $2; exit }' "$SEASONAL_DECOMPOSITION_POLICY_FILE" | tr -d '\r[:space:]')
+
+                    [ -n "$POLICY_CYCLE" ] && [[ "$POLICY_CYCLE" =~ ^[0-9]+$ ]] && [ "$POLICY_CYCLE" -gt 0 ] && CYCLE_LENGTH_EFFECTIVE="$POLICY_CYCLE"
+                    [ -n "$POLICY_START" ] && awk -v v="$POLICY_START" 'BEGIN { exit !(v+0>0) }' && SEASONAL_START_MULT="$POLICY_START"
+                    [ -n "$POLICY_MID" ] && awk -v v="$POLICY_MID" 'BEGIN { exit !(v+0>0) }' && SEASONAL_MID_MULT="$POLICY_MID"
+                    [ -n "$POLICY_END" ] && awk -v v="$POLICY_END" 'BEGIN { exit !(v+0>0) }' && SEASONAL_END_MULT="$POLICY_END"
+                    [ -n "$POLICY_MIN_HALF" ] && [[ "$POLICY_MIN_HALF" =~ ^[0-9]+$ ]] && [ "$POLICY_MIN_HALF" -gt 0 ] && SEASONAL_MIN_HALF_LIFE="$POLICY_MIN_HALF"
+                    [ -n "$POLICY_MAX_HALF" ] && [[ "$POLICY_MAX_HALF" =~ ^[0-9]+$ ]] && [ "$POLICY_MAX_HALF" -ge "$SEASONAL_MIN_HALF_LIFE" ] && SEASONAL_MAX_HALF_LIFE="$POLICY_MAX_HALF"
+                    SEASONAL_DECOMPOSITION_SOURCE="policy"
+                elif [ "$REQUIRE_SEASONAL_DECOMPOSITION_POLICY" = true ]; then
+                    echo "Seasonal decomposition policy failed: missing file $SEASONAL_DECOMPOSITION_POLICY_FILE" >&2
+                    exit 1
+                fi
+
+                CYCLE_POSITION=$(( ATTESTATION_BASELINE_TOTAL % CYCLE_LENGTH_EFFECTIVE ))
+                CYCLE_THIRD=$(( CYCLE_LENGTH_EFFECTIVE / 3 ))
+                [ "$CYCLE_THIRD" -le 0 ] && CYCLE_THIRD=1
+                if [ "$CYCLE_POSITION" -lt "$CYCLE_THIRD" ]; then
+                    SEASONAL_PHASE="cycle_start"
+                    SEASONAL_MULTIPLIER="$SEASONAL_START_MULT"
+                elif [ "$CYCLE_POSITION" -lt $(( CYCLE_THIRD * 2 )) ]; then
+                    SEASONAL_PHASE="cycle_mid"
+                    SEASONAL_MULTIPLIER="$SEASONAL_MID_MULT"
+                else
+                    SEASONAL_PHASE="cycle_end"
+                    SEASONAL_MULTIPLIER="$SEASONAL_END_MULT"
+                fi
+
+                SEASONAL_TUNED_HALF_LIFE=$(awk -v base="$DECAY_HALF_LIFE_EFFECTIVE" -v mult="$SEASONAL_MULTIPLIER" -v minv="$SEASONAL_MIN_HALF_LIFE" -v maxv="$SEASONAL_MAX_HALF_LIFE" 'BEGIN { v = base * mult; if (v < minv) v=minv; if (v > maxv) v=maxv; printf "%d", v }')
+                DECAY_HALF_LIFE_EFFECTIVE="$SEASONAL_TUNED_HALF_LIFE"
             fi
 
             if [ "$ATTESTATION_BASELINE_TOTAL" -gt 0 ]; then
@@ -936,6 +1022,11 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
 **Recurrence Tuned Half-Life Samples**: $RECURRENCE_TUNED_HALF_LIFE
 **Recurrence Auto-Tuning Source**: $RECURRENCE_TUNING_SOURCE
 **Recurrence Auto-Tuning Enabled**: $ENABLE_RECURRENCE_AUTO_TUNING
+**Seasonal Phase**: $SEASONAL_PHASE
+**Seasonal Multiplier**: $SEASONAL_MULTIPLIER
+**Seasonal Tuned Half-Life Samples**: $SEASONAL_TUNED_HALF_LIFE
+**Seasonal Decomposition Source**: $SEASONAL_DECOMPOSITION_SOURCE
+**Seasonal Decomposition Enabled**: $ENABLE_SEASONAL_RECURRENCE_DECOMPOSITION
 **Anomaly Gate Enabled**: $REQUIRE_ATTESTATION_BASELINE_GATE
 
 ---
@@ -1301,6 +1392,11 @@ $RECOMMENDATION
 - Recurrence Tuned Half-Life Samples: ${RECURRENCE_TUNED_HALF_LIFE:-$TIME_DECAY_HALF_LIFE}
 - Recurrence Auto-Tuning Source: ${RECURRENCE_TUNING_SOURCE:-disabled}
 - Recurrence Auto-Tuning Enabled: ${ENABLE_RECURRENCE_AUTO_TUNING}
+- Seasonal Phase: ${SEASONAL_PHASE:-not-applied}
+- Seasonal Multiplier: ${SEASONAL_MULTIPLIER:-1.0}
+- Seasonal Tuned Half-Life Samples: ${SEASONAL_TUNED_HALF_LIFE:-$TIME_DECAY_HALF_LIFE}
+- Seasonal Decomposition Source: ${SEASONAL_DECOMPOSITION_SOURCE:-disabled}
+- Seasonal Decomposition Enabled: ${ENABLE_SEASONAL_RECURRENCE_DECOMPOSITION}
 - Attestation Baseline Gate: ${REQUIRE_ATTESTATION_BASELINE_GATE}
 - Cross-Tenant Heatmap Source: ${CROSS_TENANT_HEATMAP_FILE}
 - Auto-Remediation Routing Source: ${AUTO_REMEDIATION_ROUTING_FILE}

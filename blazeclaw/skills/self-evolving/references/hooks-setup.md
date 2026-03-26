@@ -258,6 +258,11 @@ Outage promoter inputs now require tenant and rollout phase context:
   - `--recurrence-tuning-policy-file <path>`
   - `--disable-recurrence-auto-tuning`
   - `--require-recurrence-tuning-policy`
+- Optional seasonal recurrence decomposition controls:
+  - `--seasonal-decomposition-policy-file <path>`
+  - `--reporting-cycle-length <positive-int>`
+  - `--disable-seasonal-recurrence-decomposition`
+  - `--require-seasonal-decomposition-policy`
 
 Fail-fast validation gates:
 
@@ -293,6 +298,8 @@ Fail-fast validation gates:
   drift-sensitive baseline gate evaluation.
 - Recurrence auto-tuning adjusts decay half-life from tenant incident
   recurrence ratio within policy-defined bounds.
+- Seasonal decomposition adjusts recurrence-tuned half-life by reporting
+  cycle phase multipliers (cycle_start|cycle_mid|cycle_end).
 
 Default profile weights are provided in:
 
@@ -322,3 +329,5 @@ Default signed manifest artifacts are provided in:
 - `assets/attestation-anomaly-time-decay-policy.template.conf`
 - `assets/attestation-anomaly-recurrence-tuning-policy.conf`
 - `assets/attestation-anomaly-recurrence-tuning-policy.template.conf`
+- `assets/attestation-anomaly-seasonal-decomposition-policy.conf`
+- `assets/attestation-anomaly-seasonal-decomposition-policy.template.conf`

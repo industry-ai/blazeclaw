@@ -234,6 +234,11 @@ phase promotion.
 - Recurrence Tuned Half-Life Samples: 9
 - Recurrence Auto-Tuning Source: policy
 - Recurrence Auto-Tuning Enabled: true
+- Seasonal Phase: cycle_start
+- Seasonal Multiplier: 1.2
+- Seasonal Tuned Half-Life Samples: 10
+- Seasonal Decomposition Source: policy
+- Seasonal Decomposition Enabled: true
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode

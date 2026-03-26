@@ -185,6 +185,7 @@ Approval gate checklist:
 - [ ] adaptive threshold policy mappings are validated for criticality tiers
 - [ ] time-decay anomaly policy is validated for rollout baseline windows
 - [ ] recurrence auto-tuning policy is validated for tenant baseline tuning bounds
+- [ ] seasonal decomposition policy is validated for reporting-cycle multipliers
 
 ## 6) Rollback Plan
 

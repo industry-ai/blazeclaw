@@ -146,6 +146,8 @@ Federation-level aggregates:
   `blazeclaw/skills/self-evolving/assets/attestation-anomaly-time-decay-policy.conf`
 - Recurrence tuning policy path:
   `blazeclaw/skills/self-evolving/assets/attestation-anomaly-recurrence-tuning-policy.conf`
+- Seasonal decomposition policy path:
+  `blazeclaw/skills/self-evolving/assets/attestation-anomaly-seasonal-decomposition-policy.conf`
 - Recommendations generated in window: `<n>`
 - Recommendations accepted: `<n>`
 - Recommendations deferred: `<n>`
@@ -177,6 +179,8 @@ Federation-level aggregates:
 - Weighted-versus-unweighted anomaly delta p95: `<percent>`
 - Recurrence auto-tuned half-life p95: `<samples>`
 - Recurrence ratio p95: `<percent>`
+- Seasonal cycle-phase distribution: `<start|mid|end percentages>`
+- Seasonal tuned half-life p95: `<samples>`
 - Highest-impact accepted tuning:
   `<short summary with control reference>`
 

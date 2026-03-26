@@ -39,6 +39,8 @@ $timeDecayPolicyFile =
     './blazeclaw/skills/self-evolving/assets/attestation-anomaly-time-decay-policy.conf'
 $recurrenceTuningPolicyFile =
     './blazeclaw/skills/self-evolving/assets/attestation-anomaly-recurrence-tuning-policy.conf'
+$seasonalDecompositionPolicyFile =
+    './blazeclaw/skills/self-evolving/assets/attestation-anomaly-seasonal-decomposition-policy.conf'
 
 function Show-Usage {
 @"
@@ -89,6 +91,10 @@ Optional:
   --recurrence-tuning-policy-file Recurrence auto-tuning policy file
   --disable-recurrence-auto-tuning Disable recurrence-based half-life tuning
   --require-recurrence-tuning-policy Fail-fast when recurrence tuning policy cannot be resolved
+  --seasonal-decomposition-policy-file Seasonal decomposition tuning policy file
+  --reporting-cycle-length Reporting cycle length in samples (default: 12)
+  --disable-seasonal-recurrence-decomposition Disable seasonal decomposition tuning
+  --require-seasonal-decomposition-policy Fail-fast when seasonal decomposition policy cannot be resolved
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -125,6 +131,9 @@ $timeDecayHalfLife = 5
 $requireTimeDecayPolicy = $false
 $enableRecurrenceAutoTuning = $true
 $requireRecurrenceTuningPolicy = $false
+$enableSeasonalRecurrenceDecomposition = $true
+$reportingCycleLength = 12
+$requireSeasonalDecompositionPolicy = $false
 $manifestFileExplicit = $false
 $signatureVerificationMode = 'none'
 $kmsPublicKeyFile = ''
@@ -171,6 +180,10 @@ $timeDecaySource = 'disabled'
 $recurrenceRatioPercent = 0
 $recurrenceTunedHalfLife = 5
 $recurrenceTuningSource = 'disabled'
+$seasonalPhase = 'not-applied'
+$seasonalMultiplier = 1.0
+$seasonalTunedHalfLife = 5
+$seasonalDecompositionSource = 'disabled'
 $notes = ''
 $trendWindowSize = 20
 $dryRun = $false
@@ -333,6 +346,20 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         '--require-recurrence-tuning-policy' {
             $requireRecurrenceTuningPolicy = $true
         }
+        '--seasonal-decomposition-policy-file' {
+            $i++
+            $seasonalDecompositionPolicyFile = [string]$args[$i]
+        }
+        '--reporting-cycle-length' {
+            $i++
+            $reportingCycleLength = [int]$args[$i]
+        }
+        '--disable-seasonal-recurrence-decomposition' {
+            $enableSeasonalRecurrenceDecomposition = $false
+        }
+        '--require-seasonal-decomposition-policy' {
+            $requireSeasonalDecompositionPolicy = $true
+        }
         '--signature-verification-mode' {
             $i++
             $signatureVerificationMode = [string]$args[$i]
@@ -422,6 +449,10 @@ if ($attestationAnomalyThresholdPercent -lt 0 -or
 
 if ($timeDecayHalfLife -le 0) {
     throw '--time-decay-half-life must be a positive integer'
+}
+
+if ($reportingCycleLength -le 0) {
+    throw '--reporting-cycle-length must be a positive integer'
 }
 
 if ([string]::IsNullOrWhiteSpace($policyProfile)) {
@@ -886,6 +917,10 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
         $recurrenceRatioPercent = 0
         $recurrenceTunedHalfLife = $timeDecayHalfLife
         $recurrenceTuningSource = 'disabled'
+        $seasonalPhase = 'not-applied'
+        $seasonalMultiplier = 1.0
+        $seasonalTunedHalfLife = $timeDecayHalfLife
+        $seasonalDecompositionSource = 'disabled'
 
         if ($enableTimeDecayWeighting) {
             $timeDecaySource = 'cli'
@@ -998,6 +1033,112 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
                     [Math]::Min($recurrenceMax, [int]$tunedRaw))
                 $timeDecayHalfLifeEffective = $tunedBounded
                 $recurrenceTunedHalfLife = $tunedBounded
+            }
+
+            if ($enableSeasonalRecurrenceDecomposition) {
+                $seasonalDecompositionSource = 'static'
+                [int]$cycleLengthEffective = $reportingCycleLength
+                [double]$cycleStartMultiplier = 1.20
+                [double]$cycleMidMultiplier = 1.00
+                [double]$cycleEndMultiplier = 0.85
+                [int]$seasonalMinHalfLife = 2
+                [int]$seasonalMaxHalfLife = 30
+
+                if (Test-Path -LiteralPath $seasonalDecompositionPolicyFile) {
+                    $seasonalFields = @{}
+                    foreach ($line in (Get-Content -LiteralPath $seasonalDecompositionPolicyFile)) {
+                        if ([string]::IsNullOrWhiteSpace($line) -or
+                            $line.Trim().StartsWith('#')) {
+                            continue
+                        }
+                        $split = $line.Split('=', 2)
+                        if ($split.Length -eq 2) {
+                            $seasonalFields[$split[0].Trim()] = $split[1].Trim()
+                        }
+                    }
+
+                    [int]$tmpCycle = 0
+                    [double]$tmpStart = 0
+                    [double]$tmpMid = 0
+                    [double]$tmpEnd = 0
+                    [int]$tmpMinHalf = 0
+                    [int]$tmpMaxHalf = 0
+
+                    if ($seasonalFields.ContainsKey('reporting_cycle_length') -and
+                        [int]::TryParse([string]$seasonalFields['reporting_cycle_length'], [ref]$tmpCycle) -and
+                        $tmpCycle -gt 0) {
+                        $cycleLengthEffective = $tmpCycle
+                    } elseif ($requireSeasonalDecompositionPolicy) {
+                        throw "Seasonal decomposition policy failed: reporting_cycle_length missing/invalid in $seasonalDecompositionPolicyFile"
+                    }
+
+                    if ($seasonalFields.ContainsKey('cycle_start_multiplier') -and
+                        [double]::TryParse([string]$seasonalFields['cycle_start_multiplier'], [ref]$tmpStart) -and
+                        $tmpStart -gt 0) {
+                        $cycleStartMultiplier = $tmpStart
+                    } elseif ($requireSeasonalDecompositionPolicy) {
+                        throw "Seasonal decomposition policy failed: cycle_start_multiplier missing/invalid in $seasonalDecompositionPolicyFile"
+                    }
+
+                    if ($seasonalFields.ContainsKey('cycle_mid_multiplier') -and
+                        [double]::TryParse([string]$seasonalFields['cycle_mid_multiplier'], [ref]$tmpMid) -and
+                        $tmpMid -gt 0) {
+                        $cycleMidMultiplier = $tmpMid
+                    } elseif ($requireSeasonalDecompositionPolicy) {
+                        throw "Seasonal decomposition policy failed: cycle_mid_multiplier missing/invalid in $seasonalDecompositionPolicyFile"
+                    }
+
+                    if ($seasonalFields.ContainsKey('cycle_end_multiplier') -and
+                        [double]::TryParse([string]$seasonalFields['cycle_end_multiplier'], [ref]$tmpEnd) -and
+                        $tmpEnd -gt 0) {
+                        $cycleEndMultiplier = $tmpEnd
+                    } elseif ($requireSeasonalDecompositionPolicy) {
+                        throw "Seasonal decomposition policy failed: cycle_end_multiplier missing/invalid in $seasonalDecompositionPolicyFile"
+                    }
+
+                    if ($seasonalFields.ContainsKey('seasonal_min_half_life_samples') -and
+                        [int]::TryParse([string]$seasonalFields['seasonal_min_half_life_samples'], [ref]$tmpMinHalf) -and
+                        $tmpMinHalf -gt 0) {
+                        $seasonalMinHalfLife = $tmpMinHalf
+                    } elseif ($requireSeasonalDecompositionPolicy) {
+                        throw "Seasonal decomposition policy failed: seasonal_min_half_life_samples missing/invalid in $seasonalDecompositionPolicyFile"
+                    }
+
+                    if ($seasonalFields.ContainsKey('seasonal_max_half_life_samples') -and
+                        [int]::TryParse([string]$seasonalFields['seasonal_max_half_life_samples'], [ref]$tmpMaxHalf) -and
+                        $tmpMaxHalf -ge $seasonalMinHalfLife) {
+                        $seasonalMaxHalfLife = $tmpMaxHalf
+                    } elseif ($requireSeasonalDecompositionPolicy) {
+                        throw "Seasonal decomposition policy failed: seasonal_max_half_life_samples missing/invalid in $seasonalDecompositionPolicyFile"
+                    }
+
+                    $seasonalDecompositionSource = 'policy'
+                } elseif ($requireSeasonalDecompositionPolicy) {
+                    throw "Seasonal decomposition policy failed: missing file $seasonalDecompositionPolicyFile"
+                }
+
+                $cyclePosition = 0
+                if ($cycleLengthEffective -gt 0) {
+                    $cyclePosition = $attestationBaselineSamples % $cycleLengthEffective
+                }
+                $cycleThird = [Math]::Max(1, [int]($cycleLengthEffective / 3))
+
+                if ($cyclePosition -lt $cycleThird) {
+                    $seasonalPhase = 'cycle_start'
+                    $seasonalMultiplier = $cycleStartMultiplier
+                } elseif ($cyclePosition -lt ($cycleThird * 2)) {
+                    $seasonalPhase = 'cycle_mid'
+                    $seasonalMultiplier = $cycleMidMultiplier
+                } else {
+                    $seasonalPhase = 'cycle_end'
+                    $seasonalMultiplier = $cycleEndMultiplier
+                }
+
+                $seasonalRaw = $timeDecayHalfLifeEffective * $seasonalMultiplier
+                $seasonalBounded = [Math]::Max($seasonalMinHalfLife,
+                    [Math]::Min($seasonalMaxHalfLife, [int]$seasonalRaw))
+                $timeDecayHalfLifeEffective = $seasonalBounded
+                $seasonalTunedHalfLife = $seasonalBounded
             }
 
             if ($attestationBaselineSamples -gt 0) {
@@ -1123,6 +1264,11 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
 **Recurrence Tuned Half-Life Samples**: $recurrenceTunedHalfLife
 **Recurrence Auto-Tuning Source**: $recurrenceTuningSource
 **Recurrence Auto-Tuning Enabled**: $enableRecurrenceAutoTuning
+**Seasonal Phase**: $seasonalPhase
+**Seasonal Multiplier**: $seasonalMultiplier
+**Seasonal Tuned Half-Life Samples**: $seasonalTunedHalfLife
+**Seasonal Decomposition Source**: $seasonalDecompositionSource
+**Seasonal Decomposition Enabled**: $enableSeasonalRecurrenceDecomposition
 **Anomaly Gate Enabled**: $requireAttestationBaselineGate
 
 ---
@@ -1506,6 +1652,11 @@ $recommendation
 - Recurrence Tuned Half-Life Samples: $recurrenceTunedHalfLife
 - Recurrence Auto-Tuning Source: $recurrenceTuningSource
 - Recurrence Auto-Tuning Enabled: $enableRecurrenceAutoTuning
+- Seasonal Phase: $seasonalPhase
+- Seasonal Multiplier: $seasonalMultiplier
+- Seasonal Tuned Half-Life Samples: $seasonalTunedHalfLife
+- Seasonal Decomposition Source: $seasonalDecompositionSource
+- Seasonal Decomposition Enabled: $enableSeasonalRecurrenceDecomposition
 - Attestation Baseline Gate: $requireAttestationBaselineGate
 - Cross-Tenant Heatmap Source: $crossTenantHeatmapFile
 - Auto-Remediation Routing Source: $autoRemediationRoutingFile
