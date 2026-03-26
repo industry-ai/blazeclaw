@@ -137,6 +137,8 @@ Federation-level aggregates:
   - authority: `<percent>`
 - Active policy profiles evaluated: `<profile-list>`
 - Strict manifest gate failures: `<n>`
+- Cryptographic verification failures: `<n>`
+- Active signature verification modes observed: `<none|kms|sigstore mix>`
 - Highest-impact accepted tuning:
   `<short summary with control reference>`
 

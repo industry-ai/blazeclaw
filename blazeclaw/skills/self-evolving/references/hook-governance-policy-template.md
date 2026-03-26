@@ -262,6 +262,10 @@ Outage outcome recommendation controls:
 - Required promoter inputs: `tenant-id`, `rollout-phase`, `policy-profile`
 - Optional strict schema pin: `strict-schema-version`
 - Optional strict signed-manifest pin: `require-signed-manifest`
+- Optional cryptographic verification mode pin:
+  `signature-verification-mode (none|kms|sigstore)`
+- KMS verifier dependency requirement: `openssl`
+- Sigstore verifier dependency requirement: `cosign`
 - Recommendation review SLA: `<duration>`
 - Recommendation promotion approvers: `<engineering|security|operations>`
 - Fail-fast validation policy:
@@ -270,6 +274,8 @@ Outage outcome recommendation controls:
   - malformed numeric weights/divisors: `deny rollout gate`
   - strict schema mismatch (when enabled): `deny rollout gate`
   - signed manifest missing/malformed/digest mismatch (when enabled): `deny rollout gate`
+  - signature mode mismatch or cryptographic verification failure (when
+    enabled): `deny rollout gate`
 - Recommendation severity gating:
   - `critical|high` in `r3|r4` requires explicit hold or remediation approval
   - `medium` requires owner review before phase promotion

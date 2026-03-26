@@ -31,6 +31,7 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
 - [ ] Fail-fast profile validation checks passed (no missing/malformed profile configuration)
 - [ ] Strict schema version gate policy decided and verified for this rollout
 - [ ] Signed manifest gate policy decided and verified for this rollout
+- [ ] Cryptographic verification mode policy decided (`none|kms|sigstore`)
 
 ## 3) Environment Matrix
 
@@ -166,6 +167,8 @@ Approval gate checklist:
 - [ ] profile validation gate failures are zero for current phase
 - [ ] strict schema mismatch failures are zero when strict schema pin is enabled
 - [ ] signed manifest verification failures are zero when manifest gate is enabled
+- [ ] cryptographic verification failures are zero when kms/sigstore mode is enabled
+- [ ] required verifier dependencies (`openssl`/`cosign`) are available in rollout environment
 
 ## 6) Rollback Plan
 

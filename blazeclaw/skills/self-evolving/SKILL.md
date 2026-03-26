@@ -69,6 +69,9 @@ Capture outage drill outcomes and translate them into reusable guidance.
        - `--sigstore-certificate-identity <identity>`
        - `--sigstore-oidc-issuer <issuer>`
        - optional `--cosign-path <path>`
+     - tool dependencies:
+       - KMS mode: `openssl`
+       - Sigstore mode: `cosign`
 3. Script outputs:
    - learning promotion candidate appended to `.learnings/LEARNINGS.md`
    - policy tuning recommendation appended to
@@ -137,6 +140,7 @@ When a pattern is proven, promote it to:
   - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-002 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --strict-schema-version v1 --dependency registry --result pass --evidence-path reports/drills/sample-registry.json`
   - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-003 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --strict-schema-version v1 --require-signed-manifest --manifest-file blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --dependency registry --result pass --evidence-path reports/drills/sample-registry.json`
   - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-004 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --strict-schema-version v1 --require-signed-manifest --manifest-file blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --signature-verification-mode kms --kms-public-key-file ./keys/org-governance-public.pem --dependency registry --result pass --evidence-path reports/drills/sample-registry.json`
+  - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-005 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --require-signed-manifest --manifest-file blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --signature-verification-mode sigstore --sigstore-certificate-file ./keys/org-governance-cert.pem --sigstore-certificate-identity governance-signing-service@example.com --sigstore-oidc-issuer https://token.actions.githubusercontent.com --dependency registry --result pass --evidence-path reports/drills/sample-registry.json`
   - `scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-001 --tenant-id tenant-a --rollout-phase r2 --policy-profile missing-profile --dependency registry --result pass --evidence-path reports/drills/sample-registry.json` (expect fail-fast error)
   - `scripts/extract-skill.sh --dry-run`
   - `scripts/extract-skill.ps1 --dry-run`
@@ -161,4 +165,4 @@ None in current self-evolving runtime scope.
 
 ## Follow-Up Enhancements
 
-- Add cryptographic signature verification integration (KMS/Sigstore) for signed manifests.
+- Add manifest revocation and trust-policy distribution workflow for key rotation across federated environments.

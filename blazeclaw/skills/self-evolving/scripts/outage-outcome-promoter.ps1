@@ -345,10 +345,13 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
             throw "Malformed signed manifest: signature_scheme and signature_file are required for cryptographic verification"
         }
 
+        if ($manifestSignatureScheme -ne $signatureVerificationMode) {
+            throw "Signature verification mode mismatch: requested '$signatureVerificationMode' but manifest declares '$manifestSignatureScheme'"
+        }
+
         if (-not (Test-Path -LiteralPath $manifestSignatureFile)) {
             throw "Missing signature file referenced by manifest: $manifestSignatureFile"
         }
-
         if ($manifestSignatureScheme -ne $signatureVerificationMode) {
             throw "Signature verification mode mismatch: requested '$signatureVerificationMode' but manifest declares '$manifestSignatureScheme'"
         }

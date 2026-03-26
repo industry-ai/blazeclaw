@@ -186,7 +186,11 @@ phase promotion.
 - Signed At: 2026-03-26T00:00:00Z
 - Key Id: org-governance-key-v1
 - Manifest Signature: attest:v1:org-governance-ca:2026-03-26
+- Manifest Signature Scheme: kms
+- Manifest Signature File: assets/policy-profile-scoring-weights.sig
+- Manifest Certificate File: not-required
 - Strict Manifest Gate: true
+- Signature Verification Mode: kms
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode
@@ -214,6 +218,11 @@ Schema version mismatch for profile 'org-dr-sentinel': expected 'v2' but found '
 ```text
 $ scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-003 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --require-signed-manifest --manifest-file ./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --dependency registry --result pass --evidence-path reports/drills/sim-reg-003.json
 Signed manifest integrity failure: weights_sha256 mismatch for ./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv
+```
+
+```text
+$ scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-004 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --require-signed-manifest --manifest-file ./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --signature-verification-mode sigstore --sigstore-certificate-file ./keys/org-governance-cert.pem --sigstore-certificate-identity governance-signing-service@example.com --sigstore-oidc-issuer https://token.actions.githubusercontent.com --dependency registry --result pass --evidence-path reports/drills/sim-reg-004.json
+Signature verification mode mismatch: requested 'sigstore' but manifest declares 'kms'
 ```
 
 ## Learning: Knowledge Gap (Resolved)

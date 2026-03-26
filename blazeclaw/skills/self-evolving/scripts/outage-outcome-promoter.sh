@@ -320,6 +320,11 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
             exit 1
         fi
 
+        if [ "$SIGNATURE_VERIFICATION_MODE" != "$MANIFEST_SIGNATURE_SCHEME" ]; then
+            echo "Signature verification mode mismatch: requested '$SIGNATURE_VERIFICATION_MODE' but manifest declares '$MANIFEST_SIGNATURE_SCHEME'" >&2
+            exit 1
+        fi
+
         if [ ! -f "$MANIFEST_SIGNATURE_FILE" ]; then
             echo "Missing signature file referenced by manifest: $MANIFEST_SIGNATURE_FILE" >&2
             exit 1
