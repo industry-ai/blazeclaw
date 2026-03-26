@@ -1,0 +1,4 @@
+key_id,status,revoked_at,reason
+org-governance-key-v0,revoked,2026-01-15T00:00:00Z,rotation-retired
+org-governance-key-v1,active,,current-primary
+org-governance-key-v2,active,,current-secondary

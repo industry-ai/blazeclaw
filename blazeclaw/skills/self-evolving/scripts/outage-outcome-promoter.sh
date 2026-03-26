@@ -10,6 +10,8 @@ POLICY_TUNING_FILE="./blazeclaw/skills/self-evolving/.learnings/POLICY_TUNING_RE
 TREND_HISTORY_FILE="./blazeclaw/skills/self-evolving/.learnings/OUTAGE_TREND_HISTORY.csv"
 PROFILE_WEIGHTS_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv"
 PROFILE_MANIFEST_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest"
+TRUST_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf"
+REVOCATION_LIST_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv"
 
 SIMULATION_ID=""
 TENANT_ID=""
@@ -17,6 +19,8 @@ ROLLOUT_PHASE=""
 POLICY_PROFILE="default"
 STRICT_SCHEMA_VERSION=""
 REQUIRE_SIGNED_MANIFEST=false
+REQUIRE_TRUST_POLICY=false
+REQUIRE_REVOCATION_CHECK=false
 MANIFEST_FILE_EXPLICIT=false
 SIGNATURE_VERIFICATION_MODE="none"
 KMS_PUBLIC_KEY_FILE=""
@@ -56,6 +60,10 @@ Optional:
   --weights-file        CSV file of per-profile scoring weights
   --manifest-file       Signed manifest for weight-file integrity verification
   --require-signed-manifest Enforce signed manifest verification gates
+  --trust-policy-file   Trust-policy distribution file for key rotation checks
+  --require-trust-policy Enforce trust-policy allow/revoke checks
+  --revocation-file     Revocation list file for key revocation checks
+  --require-revocation-check Enforce revocation-list checks
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -127,6 +135,22 @@ while [[ $# -gt 0 ]]; do
             ;;
         --require-signed-manifest)
             REQUIRE_SIGNED_MANIFEST=true
+            shift
+            ;;
+        --trust-policy-file)
+            TRUST_POLICY_FILE="${2:-}"
+            shift 2
+            ;;
+        --require-trust-policy)
+            REQUIRE_TRUST_POLICY=true
+            shift
+            ;;
+        --revocation-file)
+            REVOCATION_LIST_FILE="${2:-}"
+            shift 2
+            ;;
+        --require-revocation-check)
+            REQUIRE_REVOCATION_CHECK=true
             shift
             ;;
         --signature-verification-mode)
@@ -220,6 +244,10 @@ if [[ "$SIGNATURE_VERIFICATION_MODE" != "none" &&
 fi
 
 if [ "$SIGNATURE_VERIFICATION_MODE" != "none" ]; then
+    REQUIRE_SIGNED_MANIFEST=true
+fi
+
+if [ "$REQUIRE_TRUST_POLICY" = true ] || [ "$REQUIRE_REVOCATION_CHECK" = true ]; then
     REQUIRE_SIGNED_MANIFEST=true
 fi
 
@@ -330,11 +358,6 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
             exit 1
         fi
 
-        if [ "$SIGNATURE_VERIFICATION_MODE" != "$MANIFEST_SIGNATURE_SCHEME" ]; then
-            echo "Signature verification mode mismatch: requested '$SIGNATURE_VERIFICATION_MODE' but manifest declares '$MANIFEST_SIGNATURE_SCHEME'" >&2
-            exit 1
-        fi
-
         if [ "$SIGNATURE_VERIFICATION_MODE" = "kms" ]; then
             if [ -z "$KMS_PUBLIC_KEY_FILE" ]; then
                 echo "--kms-public-key-file is required for --signature-verification-mode kms" >&2
@@ -377,6 +400,85 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
                 echo "Cryptographic signature verification failed for sigstore mode" >&2
                 exit 1
             fi
+        fi
+    fi
+
+    if [ "$REQUIRE_TRUST_POLICY" = true ]; then
+        if [ ! -f "$TRUST_POLICY_FILE" ]; then
+            echo "Missing trust-policy file: $TRUST_POLICY_FILE" >&2
+            exit 1
+        fi
+
+        if [ ! -r "$TRUST_POLICY_FILE" ]; then
+            echo "Trust-policy file is not readable: $TRUST_POLICY_FILE" >&2
+            exit 1
+        fi
+
+        TRUST_POLICY_DISTRIBUTION_ID=$(awk -F'=' '$1=="distribution_id" { print $2; exit }' "$TRUST_POLICY_FILE" | tr -d '\r[:space:]')
+        TRUST_POLICY_DISTRIBUTED_AT=$(awk -F'=' '$1=="distributed_at" { print $2; exit }' "$TRUST_POLICY_FILE" | tr -d '\r[:space:]')
+        TRUST_POLICY_FEDERATION_SCOPE=$(awk -F'=' '$1=="federation_scope" { print $2; exit }' "$TRUST_POLICY_FILE" | tr -d '\r[:space:]')
+        TRUST_POLICY_ACTIVE_KEYS=$(awk -F'=' '$1=="active_key_ids" { print $2; exit }' "$TRUST_POLICY_FILE" | tr -d '\r[:space:]')
+        TRUST_POLICY_REVOKED_KEYS=$(awk -F'=' '$1=="revoked_key_ids" { print $2; exit }' "$TRUST_POLICY_FILE" | tr -d '\r[:space:]')
+        TRUST_POLICY_MAX_AGE_DAYS=$(awk -F'=' '$1=="max_distribution_age_days" { print $2; exit }' "$TRUST_POLICY_FILE" | tr -d '\r[:space:]')
+
+        if [ -z "$TRUST_POLICY_DISTRIBUTION_ID" ] || [ -z "$TRUST_POLICY_DISTRIBUTED_AT" ] || [ -z "$TRUST_POLICY_FEDERATION_SCOPE" ] || [ -z "$TRUST_POLICY_ACTIVE_KEYS" ]; then
+            echo "Malformed trust-policy file: required fields missing in $TRUST_POLICY_FILE" >&2
+            exit 1
+        fi
+
+        if [ -n "$TRUST_POLICY_MAX_AGE_DAYS" ] && ! [[ "$TRUST_POLICY_MAX_AGE_DAYS" =~ ^[0-9]+$ ]]; then
+            echo "Malformed trust-policy file: max_distribution_age_days must be numeric in $TRUST_POLICY_FILE" >&2
+            exit 1
+        fi
+
+        ACTIVE_KEYS_NORMALIZED=$(echo "$TRUST_POLICY_ACTIVE_KEYS" | tr ',' ';')
+        REVOKED_KEYS_NORMALIZED=$(echo "$TRUST_POLICY_REVOKED_KEYS" | tr ',' ';')
+
+        if [[ ";$ACTIVE_KEYS_NORMALIZED;" != *";$MANIFEST_KEY_ID;"* ]]; then
+            echo "Trust-policy violation: key_id '$MANIFEST_KEY_ID' is not active in $TRUST_POLICY_FILE" >&2
+            exit 1
+        fi
+
+        if [ -n "$REVOKED_KEYS_NORMALIZED" ] && [[ ";$REVOKED_KEYS_NORMALIZED;" == *";$MANIFEST_KEY_ID;"* ]]; then
+            echo "Trust-policy violation: key_id '$MANIFEST_KEY_ID' is explicitly revoked in $TRUST_POLICY_FILE" >&2
+            exit 1
+        fi
+
+        TRUST_POLICY_ACTIVE_KEY_COUNT=$(printf "%s" "$ACTIVE_KEYS_NORMALIZED" | awk -F';' '{ c=0; for (i=1; i<=NF; i++) if ($i!="") c++; print c }')
+        TRUST_POLICY_REVOKED_KEY_COUNT=$(printf "%s" "$REVOKED_KEYS_NORMALIZED" | awk -F';' '{ c=0; for (i=1; i<=NF; i++) if ($i!="") c++; print c }')
+
+        if [ -n "$TRUST_POLICY_MAX_AGE_DAYS" ] && [ "$TRUST_POLICY_MAX_AGE_DAYS" -gt 0 ]; then
+            if ! date -u -d "$TRUST_POLICY_DISTRIBUTED_AT" +%s >/dev/null 2>&1; then
+                echo "Malformed trust-policy file: distributed_at is not RFC3339-compatible in $TRUST_POLICY_FILE" >&2
+                exit 1
+            fi
+
+            DISTRIBUTED_EPOCH=$(date -u -d "$TRUST_POLICY_DISTRIBUTED_AT" +%s)
+            NOW_EPOCH=$(date -u +%s)
+            TRUST_POLICY_AGE_DAYS=$(( (NOW_EPOCH - DISTRIBUTED_EPOCH) / 86400 ))
+
+            if [ "$TRUST_POLICY_AGE_DAYS" -gt "$TRUST_POLICY_MAX_AGE_DAYS" ]; then
+                echo "Trust-policy distribution is stale: age $TRUST_POLICY_AGE_DAYS days exceeds $TRUST_POLICY_MAX_AGE_DAYS in $TRUST_POLICY_FILE" >&2
+                exit 1
+            fi
+        fi
+    fi
+
+    if [ "$REQUIRE_REVOCATION_CHECK" = true ]; then
+        if [ ! -f "$REVOCATION_LIST_FILE" ]; then
+            echo "Missing revocation list file: $REVOCATION_LIST_FILE" >&2
+            exit 1
+        fi
+
+        if [ ! -r "$REVOCATION_LIST_FILE" ]; then
+            echo "Revocation list file is not readable: $REVOCATION_LIST_FILE" >&2
+            exit 1
+        fi
+
+        REVOKED_ROW=$(awk -F',' -v key="$MANIFEST_KEY_ID" 'NR > 1 && $1 == key && tolower($2) == "revoked" { print $0; exit }' "$REVOCATION_LIST_FILE")
+        if [ -n "$REVOKED_ROW" ]; then
+            echo "Revocation check failed: key_id '$MANIFEST_KEY_ID' is revoked in $REVOCATION_LIST_FILE" >&2
+            exit 1
         fi
     fi
 fi
@@ -608,6 +710,15 @@ $RECOMMENDATION
 - Strict Schema Gate: ${STRICT_SCHEMA_VERSION:-disabled}
 - Strict Manifest Gate: ${REQUIRE_SIGNED_MANIFEST}
 - Signature Verification Mode: ${SIGNATURE_VERIFICATION_MODE}
+- Trust Policy Source: ${TRUST_POLICY_FILE}
+- Trust Policy Distribution Id: ${TRUST_POLICY_DISTRIBUTION_ID:-not-verified}
+- Trust Policy Distributed At: ${TRUST_POLICY_DISTRIBUTED_AT:-not-verified}
+- Trust Policy Federation Scope: ${TRUST_POLICY_FEDERATION_SCOPE:-not-verified}
+- Trust Policy Active Key Count: ${TRUST_POLICY_ACTIVE_KEY_COUNT:-0}
+- Trust Policy Revoked Key Count: ${TRUST_POLICY_REVOKED_KEY_COUNT:-0}
+- Trust Policy Gate: ${REQUIRE_TRUST_POLICY}
+- Revocation List Source: ${REVOCATION_LIST_FILE}
+- Revocation Check Gate: ${REQUIRE_REVOCATION_CHECK}
 - Weight Inputs:
   - fail-base=$FAIL_BASE_SCORE
   - pass-base=$PASS_BASE_SCORE

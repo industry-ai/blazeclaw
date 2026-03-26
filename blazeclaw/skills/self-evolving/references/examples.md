@@ -191,6 +191,15 @@ phase promotion.
 - Manifest Certificate File: not-required
 - Strict Manifest Gate: true
 - Signature Verification Mode: kms
+- Trust Policy Source: assets/policy-profile-trust-policy.conf
+- Trust Policy Distribution Id: fed-dist-2026-03-26-001
+- Trust Policy Distributed At: 2026-03-26T00:00:00Z
+- Trust Policy Federation Scope: global
+- Trust Policy Active Key Count: 2
+- Trust Policy Revoked Key Count: 1
+- Trust Policy Gate: true
+- Revocation List Source: assets/policy-profile-key-revocations.csv
+- Revocation Check Gate: true
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode
@@ -223,6 +232,11 @@ Signed manifest integrity failure: weights_sha256 mismatch for ./blazeclaw/skill
 ```text
 $ scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-004 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --require-signed-manifest --manifest-file ./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --signature-verification-mode sigstore --sigstore-certificate-file ./keys/org-governance-cert.pem --sigstore-certificate-identity governance-signing-service@example.com --sigstore-oidc-issuer https://token.actions.githubusercontent.com --dependency registry --result pass --evidence-path reports/drills/sim-reg-004.json
 Signature verification mode mismatch: requested 'sigstore' but manifest declares 'kms'
+```
+
+```text
+$ scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-006 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --require-signed-manifest --manifest-file ./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --require-trust-policy --trust-policy-file ./blazeclaw/skills/self-evolving/assets/missing-trust-policy.conf --require-revocation-check --revocation-file ./blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv --dependency registry --result pass --evidence-path reports/drills/sim-reg-006.json
+Missing trust-policy file: ./blazeclaw/skills/self-evolving/assets/missing-trust-policy.conf
 ```
 
 ## Learning: Knowledge Gap (Resolved)

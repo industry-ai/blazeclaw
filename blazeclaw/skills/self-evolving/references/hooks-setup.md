@@ -223,6 +223,11 @@ Outage promoter inputs now require tenant and rollout phase context:
   - `--sigstore-certificate-identity <identity>`
   - `--sigstore-oidc-issuer <issuer>`
   - optional `--cosign-path <path>`.
+- Optional trust-policy distribution and revocation checks:
+  - `--trust-policy-file <path>`
+  - `--require-trust-policy`
+  - `--revocation-file <path>`
+  - `--require-revocation-check`
 
 Fail-fast validation gates:
 
@@ -238,6 +243,11 @@ Fail-fast validation gates:
 - When `--signature-verification-mode` is enabled, missing verifier
   artifacts, mode mismatch, or cryptographic verification failure causes
   immediate script failure.
+- When `--require-trust-policy` is enabled, missing trust policy,
+  inactive key usage, explicit key revocation, or stale distribution
+  metadata causes immediate script failure.
+- When `--require-revocation-check` is enabled, missing revocation list
+  or revoked key usage causes immediate script failure.
 
 Default profile weights are provided in:
 
@@ -247,3 +257,7 @@ Default signed manifest artifacts are provided in:
 
 - `assets/policy-profile-scoring-weights.manifest`
 - `assets/policy-profile-scoring-weights.manifest.template`
+- `assets/policy-profile-trust-policy.conf`
+- `assets/policy-profile-trust-policy.template.conf`
+- `assets/policy-profile-key-revocations.csv`
+- `assets/policy-profile-key-revocations.template.csv`

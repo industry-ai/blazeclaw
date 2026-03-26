@@ -15,6 +15,10 @@ $profileWeightsFile =
     './blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv'
 $profileManifestFile =
     './blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest'
+$trustPolicyFile =
+    './blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf'
+$revocationListFile =
+    './blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv'
 
 function Show-Usage {
 @"
@@ -37,6 +41,10 @@ Optional:
   --weights-file        CSV file of per-profile scoring weights
   --manifest-file       Signed manifest for weight-file integrity verification
   --require-signed-manifest Enforce signed manifest verification gates
+  --trust-policy-file   Trust-policy distribution file for key rotation checks
+  --require-trust-policy Enforce trust-policy allow/revoke checks
+  --revocation-file     Revocation list file for key revocation checks
+  --require-revocation-check Enforce revocation-list checks
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -57,6 +65,8 @@ $rolloutPhase = ''
 $policyProfile = 'default'
 $strictSchemaVersion = ''
 $requireSignedManifest = $false
+$requireTrustPolicy = $false
+$requireRevocationCheck = $false
 $manifestFileExplicit = $false
 $signatureVerificationMode = 'none'
 $kmsPublicKeyFile = ''
@@ -79,6 +89,11 @@ $manifestSignature = ''
 $manifestSignatureScheme = ''
 $manifestSignatureFile = ''
 $manifestCertificateFile = ''
+$trustPolicyDistributionId = ''
+$trustPolicyDistributedAt = ''
+$trustPolicyFederationScope = ''
+$trustPolicyActiveKeyCount = 0
+$trustPolicyRevokedKeyCount = 0
 $notes = ''
 $trendWindowSize = 20
 $dryRun = $false
@@ -141,6 +156,20 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         }
         '--require-signed-manifest' {
             $requireSignedManifest = $true
+        }
+        '--trust-policy-file' {
+            $i++
+            $trustPolicyFile = [string]$args[$i]
+        }
+        '--require-trust-policy' {
+            $requireTrustPolicy = $true
+        }
+        '--revocation-file' {
+            $i++
+            $revocationListFile = [string]$args[$i]
+        }
+        '--require-revocation-check' {
+            $requireRevocationCheck = $true
         }
         '--signature-verification-mode' {
             $i++
@@ -229,6 +258,10 @@ if ($signatureVerificationMode -notin @('none', 'kms', 'sigstore')) {
 }
 
 if ($signatureVerificationMode -ne 'none') {
+    $requireSignedManifest = $true
+}
+
+if ($requireTrustPolicy -or $requireRevocationCheck) {
     $requireSignedManifest = $true
 }
 
@@ -390,6 +423,105 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
             if ($LASTEXITCODE -ne 0) {
                 throw "Cryptographic signature verification failed for sigstore mode: $sigstoreOutput"
             }
+        }
+    }
+
+    if ($requireTrustPolicy) {
+        if (-not (Test-Path -LiteralPath $trustPolicyFile)) {
+            throw "Missing trust-policy file: $trustPolicyFile"
+        }
+
+        $trustFields = @{}
+        foreach ($line in (Get-Content -LiteralPath $trustPolicyFile)) {
+            if ([string]::IsNullOrWhiteSpace($line) -or
+                $line.Trim().StartsWith('#')) {
+                continue
+            }
+
+            $split = $line.Split('=', 2)
+            if ($split.Length -eq 2) {
+                $trustFields[$split[0].Trim()] = $split[1].Trim()
+            }
+        }
+
+        $requiredTrustFields = @(
+            'distribution_id',
+            'distributed_at',
+            'federation_scope',
+            'active_key_ids'
+        )
+
+        foreach ($field in $requiredTrustFields) {
+            if (-not $trustFields.ContainsKey($field) -or
+                [string]::IsNullOrWhiteSpace([string]$trustFields[$field])) {
+                throw "Malformed trust-policy file: required field '$field' missing in $trustPolicyFile"
+            }
+        }
+
+        $trustPolicyDistributionId = [string]$trustFields['distribution_id']
+        $trustPolicyDistributedAt = [string]$trustFields['distributed_at']
+        $trustPolicyFederationScope = [string]$trustFields['federation_scope']
+        $activeKeysRaw = [string]$trustFields['active_key_ids']
+        $revokedKeysRaw = [string]($trustFields['revoked_key_ids'])
+        $maxAgeDaysRaw = [string]($trustFields['max_distribution_age_days'])
+
+        $activeKeys = @($activeKeysRaw -split '[,;]' |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        $revokedKeys = @($revokedKeysRaw -split '[,;]' |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+
+        $trustPolicyActiveKeyCount = $activeKeys.Count
+        $trustPolicyRevokedKeyCount = $revokedKeys.Count
+
+        if ($manifestKeyId -notin $activeKeys) {
+            throw "Trust-policy violation: key_id '$manifestKeyId' is not active in $trustPolicyFile"
+        }
+
+        if ($manifestKeyId -in $revokedKeys) {
+            throw "Trust-policy violation: key_id '$manifestKeyId' is explicitly revoked in $trustPolicyFile"
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($maxAgeDaysRaw)) {
+            [int]$maxAgeDays = 0
+            if (-not [int]::TryParse($maxAgeDaysRaw, [ref]$maxAgeDays)) {
+                throw "Malformed trust-policy file: max_distribution_age_days must be numeric in $trustPolicyFile"
+            }
+
+            if ($maxAgeDays -gt 0) {
+                [DateTime]$distributedAtValue = [DateTime]::MinValue
+                if (-not [DateTime]::TryParse($trustPolicyDistributedAt, [ref]$distributedAtValue)) {
+                    throw "Malformed trust-policy file: distributed_at is invalid in $trustPolicyFile"
+                }
+
+                $ageDays = [int]((New-TimeSpan -Start $distributedAtValue.ToUniversalTime() -End (Get-Date).ToUniversalTime()).TotalDays)
+                if ($ageDays -gt $maxAgeDays) {
+                    throw "Trust-policy distribution is stale: age $ageDays days exceeds $maxAgeDays in $trustPolicyFile"
+                }
+            }
+        }
+    }
+
+    if ($requireRevocationCheck) {
+        if (-not (Test-Path -LiteralPath $revocationListFile)) {
+            throw "Missing revocation list file: $revocationListFile"
+        }
+
+        $revocationRows = Import-Csv -LiteralPath $revocationListFile
+        if (-not $revocationRows) {
+            throw "Malformed revocation list file (empty or invalid CSV): $revocationListFile"
+        }
+
+        $revokedEntry = $revocationRows |
+            Where-Object {
+                $_.key_id -eq $manifestKeyId -and
+                ([string]$_.status).ToLowerInvariant() -eq 'revoked'
+            } |
+            Select-Object -First 1
+
+        if ($revokedEntry) {
+            throw "Revocation check failed: key_id '$manifestKeyId' is revoked in $revocationListFile"
         }
     }
 }
@@ -625,6 +757,15 @@ $recommendation
 - Strict Schema Gate: $(if ($strictSchemaVersion) { $strictSchemaVersion } else { 'disabled' })
 - Strict Manifest Gate: $requireSignedManifest
 - Signature Verification Mode: $signatureVerificationMode
+- Trust Policy Source: $trustPolicyFile
+- Trust Policy Distribution Id: $(if ($trustPolicyDistributionId) { $trustPolicyDistributionId } else { 'not-verified' })
+- Trust Policy Distributed At: $(if ($trustPolicyDistributedAt) { $trustPolicyDistributedAt } else { 'not-verified' })
+- Trust Policy Federation Scope: $(if ($trustPolicyFederationScope) { $trustPolicyFederationScope } else { 'not-verified' })
+- Trust Policy Active Key Count: $trustPolicyActiveKeyCount
+- Trust Policy Revoked Key Count: $trustPolicyRevokedKeyCount
+- Trust Policy Gate: $requireTrustPolicy
+- Revocation List Source: $revocationListFile
+- Revocation Check Gate: $requireRevocationCheck
 - Weight Inputs:
   - fail-base=$failBaseScore
   - pass-base=$passBaseScore

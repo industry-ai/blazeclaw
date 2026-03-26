@@ -1,0 +1,2 @@
+key_id,status,revoked_at,reason
+<key-id>,<active|revoked>,<yyyy-mm-ddThh:mm:ssZ optional>,<reason>

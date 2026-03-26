@@ -257,6 +257,10 @@ Outage outcome recommendation controls:
   `blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv`
 - Signed profile manifest path:
   `blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest`
+- Trust-policy distribution path:
+  `blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf`
+- Key revocation list path:
+  `blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv`
 - Default trend window size: `<n>`
 - Trend segmentation mode: `tenant + dependency class`
 - Required promoter inputs: `tenant-id`, `rollout-phase`, `policy-profile`
@@ -264,6 +268,8 @@ Outage outcome recommendation controls:
 - Optional strict signed-manifest pin: `require-signed-manifest`
 - Optional cryptographic verification mode pin:
   `signature-verification-mode (none|kms|sigstore)`
+- Optional trust-policy distribution pin: `require-trust-policy`
+- Optional revocation registry pin: `require-revocation-check`
 - KMS verifier dependency requirement: `openssl`
 - Sigstore verifier dependency requirement: `cosign`
 - Recommendation review SLA: `<duration>`
@@ -276,6 +282,10 @@ Outage outcome recommendation controls:
   - signed manifest missing/malformed/digest mismatch (when enabled): `deny rollout gate`
   - signature mode mismatch or cryptographic verification failure (when
     enabled): `deny rollout gate`
+  - trust-policy stale/inactive/revoked key violations (when enabled):
+    `deny rollout gate`
+  - revocation list indicates key revoked (when enabled):
+    `deny rollout gate`
 - Recommendation severity gating:
   - `critical|high` in `r3|r4` requires explicit hold or remediation approval
   - `medium` requires owner review before phase promotion

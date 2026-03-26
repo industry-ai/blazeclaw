@@ -122,6 +122,10 @@ Federation-level aggregates:
   `blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv`
 - Signed manifest path:
   `blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest`
+- Trust-policy distribution path:
+  `blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf`
+- Key revocation list path:
+  `blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv`
 - Recommendations generated in window: `<n>`
 - Recommendations accepted: `<n>`
 - Recommendations deferred: `<n>`
@@ -139,6 +143,8 @@ Federation-level aggregates:
 - Strict manifest gate failures: `<n>`
 - Cryptographic verification failures: `<n>`
 - Active signature verification modes observed: `<none|kms|sigstore mix>`
+- Trust-policy freshness violations: `<n>`
+- Revoked-key enforcement violations: `<n>`
 - Highest-impact accepted tuning:
   `<short summary with control reference>`
 
