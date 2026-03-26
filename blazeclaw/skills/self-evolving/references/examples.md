@@ -239,6 +239,10 @@ phase promotion.
 - Seasonal Tuned Half-Life Samples: 10
 - Seasonal Decomposition Source: policy
 - Seasonal Decomposition Enabled: true
+- Seasonal Overlay Name: year-end-change-freeze
+- Seasonal Overlay Multiplier: 1.15
+- Seasonal Overlay Source: policy
+- Seasonal Overlay Tuning Enabled: true
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode

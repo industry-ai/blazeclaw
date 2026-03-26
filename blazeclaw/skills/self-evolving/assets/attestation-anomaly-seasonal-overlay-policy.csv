@@ -1,0 +1,5 @@
+cycle_phase,cycle_index,overlay_name,overlay_multiplier
+cycle_start,0,year-end-change-freeze,1.15
+cycle_mid,*,routine-operations,1.00
+cycle_end,11,holiday-release-window,0.90
+*,*,default-overlay,1.00

@@ -41,6 +41,8 @@ $recurrenceTuningPolicyFile =
     './blazeclaw/skills/self-evolving/assets/attestation-anomaly-recurrence-tuning-policy.conf'
 $seasonalDecompositionPolicyFile =
     './blazeclaw/skills/self-evolving/assets/attestation-anomaly-seasonal-decomposition-policy.conf'
+$seasonalOverlayPolicyFile =
+    './blazeclaw/skills/self-evolving/assets/attestation-anomaly-seasonal-overlay-policy.csv'
 
 function Show-Usage {
 @"
@@ -95,6 +97,9 @@ Optional:
   --reporting-cycle-length Reporting cycle length in samples (default: 12)
   --disable-seasonal-recurrence-decomposition Disable seasonal decomposition tuning
   --require-seasonal-decomposition-policy Fail-fast when seasonal decomposition policy cannot be resolved
+  --seasonal-overlay-policy-file Seasonal overlay CSV for holiday/event multipliers
+  --disable-seasonal-overlay-tuning Disable cross-cycle holiday/event overlay tuning
+  --require-seasonal-overlay-policy Fail-fast when seasonal overlay policy cannot be resolved
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -134,6 +139,8 @@ $requireRecurrenceTuningPolicy = $false
 $enableSeasonalRecurrenceDecomposition = $true
 $reportingCycleLength = 12
 $requireSeasonalDecompositionPolicy = $false
+$enableSeasonalOverlayTuning = $true
+$requireSeasonalOverlayPolicy = $false
 $manifestFileExplicit = $false
 $signatureVerificationMode = 'none'
 $kmsPublicKeyFile = ''
@@ -184,6 +191,9 @@ $seasonalPhase = 'not-applied'
 $seasonalMultiplier = 1.0
 $seasonalTunedHalfLife = 5
 $seasonalDecompositionSource = 'disabled'
+$seasonalOverlayName = 'none'
+$seasonalOverlayMultiplier = 1.0
+$seasonalOverlaySource = 'disabled'
 $notes = ''
 $trendWindowSize = 20
 $dryRun = $false
@@ -359,6 +369,16 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         }
         '--require-seasonal-decomposition-policy' {
             $requireSeasonalDecompositionPolicy = $true
+        }
+        '--seasonal-overlay-policy-file' {
+            $i++
+            $seasonalOverlayPolicyFile = [string]$args[$i]
+        }
+        '--disable-seasonal-overlay-tuning' {
+            $enableSeasonalOverlayTuning = $false
+        }
+        '--require-seasonal-overlay-policy' {
+            $requireSeasonalOverlayPolicy = $true
         }
         '--signature-verification-mode' {
             $i++
@@ -921,6 +941,9 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
         $seasonalMultiplier = 1.0
         $seasonalTunedHalfLife = $timeDecayHalfLife
         $seasonalDecompositionSource = 'disabled'
+        $seasonalOverlayName = 'none'
+        $seasonalOverlayMultiplier = 1.0
+        $seasonalOverlaySource = 'disabled'
 
         if ($enableTimeDecayWeighting) {
             $timeDecaySource = 'cli'
@@ -1134,6 +1157,34 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
                     $seasonalMultiplier = $cycleEndMultiplier
                 }
 
+                if ($enableSeasonalOverlayTuning) {
+                    $seasonalOverlaySource = 'static'
+                    if (Test-Path -LiteralPath $seasonalOverlayPolicyFile) {
+                        $overlayRows = Import-Csv -LiteralPath $seasonalOverlayPolicyFile
+                        $overlayRow = $overlayRows | Where-Object {
+                            ($_.cycle_phase -eq $seasonalPhase -or $_.cycle_phase -eq '*') -and
+                            ($_.cycle_index -eq [string]$cyclePosition -or $_.cycle_index -eq '*')
+                        } | Select-Object -First 1
+
+                        if ($overlayRow) {
+                            [double]$overlayValue = 0
+                            if ([double]::TryParse([string]$overlayRow.overlay_multiplier, [ref]$overlayValue) -and
+                                $overlayValue -gt 0) {
+                                $seasonalOverlayName = if ([string]::IsNullOrWhiteSpace([string]$overlayRow.overlay_name)) { 'unnamed-overlay' } else { [string]$overlayRow.overlay_name }
+                                $seasonalOverlayMultiplier = $overlayValue
+                                $seasonalOverlaySource = 'policy'
+                                $seasonalMultiplier = $seasonalMultiplier * $seasonalOverlayMultiplier
+                            } elseif ($requireSeasonalOverlayPolicy) {
+                                throw "Seasonal overlay policy failed: invalid overlay multiplier in $seasonalOverlayPolicyFile"
+                            }
+                        } elseif ($requireSeasonalOverlayPolicy) {
+                            throw "Seasonal overlay policy failed: no overlay match for phase=$seasonalPhase cycle_index=$cyclePosition in $seasonalOverlayPolicyFile"
+                        }
+                    } elseif ($requireSeasonalOverlayPolicy) {
+                        throw "Seasonal overlay policy failed: missing file $seasonalOverlayPolicyFile"
+                    }
+                }
+
                 $seasonalRaw = $timeDecayHalfLifeEffective * $seasonalMultiplier
                 $seasonalBounded = [Math]::Max($seasonalMinHalfLife,
                     [Math]::Min($seasonalMaxHalfLife, [int]$seasonalRaw))
@@ -1269,6 +1320,10 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
 **Seasonal Tuned Half-Life Samples**: $seasonalTunedHalfLife
 **Seasonal Decomposition Source**: $seasonalDecompositionSource
 **Seasonal Decomposition Enabled**: $enableSeasonalRecurrenceDecomposition
+**Seasonal Overlay Name**: $seasonalOverlayName
+**Seasonal Overlay Multiplier**: $seasonalOverlayMultiplier
+**Seasonal Overlay Source**: $seasonalOverlaySource
+**Seasonal Overlay Tuning Enabled**: $enableSeasonalOverlayTuning
 **Anomaly Gate Enabled**: $requireAttestationBaselineGate
 
 ---
@@ -1657,6 +1712,10 @@ $recommendation
 - Seasonal Tuned Half-Life Samples: $seasonalTunedHalfLife
 - Seasonal Decomposition Source: $seasonalDecompositionSource
 - Seasonal Decomposition Enabled: $enableSeasonalRecurrenceDecomposition
+- Seasonal Overlay Name: $seasonalOverlayName
+- Seasonal Overlay Multiplier: $seasonalOverlayMultiplier
+- Seasonal Overlay Source: $seasonalOverlaySource
+- Seasonal Overlay Tuning Enabled: $enableSeasonalOverlayTuning
 - Attestation Baseline Gate: $requireAttestationBaselineGate
 - Cross-Tenant Heatmap Source: $crossTenantHeatmapFile
 - Auto-Remediation Routing Source: $autoRemediationRoutingFile

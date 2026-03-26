@@ -1,0 +1,2 @@
+cycle_phase,cycle_index,overlay_name,overlay_multiplier
+<cycle_start|cycle_mid|cycle_end|*>,<0-based-index|*>,<overlay-name>,<positive-number>

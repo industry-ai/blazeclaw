@@ -186,6 +186,7 @@ Approval gate checklist:
 - [ ] time-decay anomaly policy is validated for rollout baseline windows
 - [ ] recurrence auto-tuning policy is validated for tenant baseline tuning bounds
 - [ ] seasonal decomposition policy is validated for reporting-cycle multipliers
+- [ ] holiday/event overlay policy is validated for cycle-phase exceptions
 
 ## 6) Rollback Plan
 

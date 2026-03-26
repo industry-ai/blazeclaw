@@ -263,6 +263,10 @@ Outage promoter inputs now require tenant and rollout phase context:
   - `--reporting-cycle-length <positive-int>`
   - `--disable-seasonal-recurrence-decomposition`
   - `--require-seasonal-decomposition-policy`
+- Optional holiday/event overlay controls:
+  - `--seasonal-overlay-policy-file <path>`
+  - `--disable-seasonal-overlay-tuning`
+  - `--require-seasonal-overlay-policy`
 
 Fail-fast validation gates:
 
@@ -300,6 +304,8 @@ Fail-fast validation gates:
   recurrence ratio within policy-defined bounds.
 - Seasonal decomposition adjusts recurrence-tuned half-life by reporting
   cycle phase multipliers (cycle_start|cycle_mid|cycle_end).
+- Holiday/event overlays apply cross-cycle multiplier adjustments on top
+  of seasonal phase multipliers.
 
 Default profile weights are provided in:
 
@@ -331,3 +337,5 @@ Default signed manifest artifacts are provided in:
 - `assets/attestation-anomaly-recurrence-tuning-policy.template.conf`
 - `assets/attestation-anomaly-seasonal-decomposition-policy.conf`
 - `assets/attestation-anomaly-seasonal-decomposition-policy.template.conf`
+- `assets/attestation-anomaly-seasonal-overlay-policy.csv`
+- `assets/attestation-anomaly-seasonal-overlay-policy.template.csv`

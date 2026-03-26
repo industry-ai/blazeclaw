@@ -23,6 +23,7 @@ ADAPTIVE_THRESHOLD_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestat
 TIME_DECAY_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-time-decay-policy.conf"
 RECURRENCE_TUNING_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-recurrence-tuning-policy.conf"
 SEASONAL_DECOMPOSITION_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-seasonal-decomposition-policy.conf"
+SEASONAL_OVERLAY_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-seasonal-overlay-policy.csv"
 
 SIMULATION_ID=""
 TENANT_ID=""
@@ -49,6 +50,8 @@ REQUIRE_RECURRENCE_TUNING_POLICY=false
 ENABLE_SEASONAL_RECURRENCE_DECOMPOSITION=true
 REPORTING_CYCLE_LENGTH=12
 REQUIRE_SEASONAL_DECOMPOSITION_POLICY=false
+ENABLE_SEASONAL_OVERLAY_TUNING=true
+REQUIRE_SEASONAL_OVERLAY_POLICY=false
 MANIFEST_FILE_EXPLICIT=false
 SIGNATURE_VERIFICATION_MODE="none"
 KMS_PUBLIC_KEY_FILE=""
@@ -120,6 +123,9 @@ Optional:
   --reporting-cycle-length Reporting cycle length in samples (default: 12)
   --disable-seasonal-recurrence-decomposition Disable seasonal decomposition tuning
   --require-seasonal-decomposition-policy Fail-fast when seasonal decomposition policy cannot be resolved
+  --seasonal-overlay-policy-file Seasonal overlay CSV for holiday/event multipliers
+  --disable-seasonal-overlay-tuning Disable cross-cycle holiday/event overlay tuning
+  --require-seasonal-overlay-policy Fail-fast when seasonal overlay policy cannot be resolved
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -319,6 +325,18 @@ while [[ $# -gt 0 ]]; do
             ;;
         --require-seasonal-decomposition-policy)
             REQUIRE_SEASONAL_DECOMPOSITION_POLICY=true
+            shift
+            ;;
+        --seasonal-overlay-policy-file)
+            SEASONAL_OVERLAY_POLICY_FILE="${2:-}"
+            shift 2
+            ;;
+        --disable-seasonal-overlay-tuning)
+            ENABLE_SEASONAL_OVERLAY_TUNING=false
+            shift
+            ;;
+        --require-seasonal-overlay-policy)
+            REQUIRE_SEASONAL_OVERLAY_POLICY=true
             shift
             ;;
         --signature-verification-mode)
@@ -805,6 +823,9 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
         SEASONAL_MULTIPLIER=1.0
         SEASONAL_TUNED_HALF_LIFE="$TIME_DECAY_HALF_LIFE"
         SEASONAL_DECOMPOSITION_SOURCE="disabled"
+        SEASONAL_OVERLAY_NAME="none"
+        SEASONAL_OVERLAY_MULTIPLIER=1.0
+        SEASONAL_OVERLAY_SOURCE="disabled"
 
         if [ "$ENABLE_TIME_DECAY_WEIGHTING" = true ]; then
             TIME_DECAY_SOURCE="cli"
@@ -921,6 +942,32 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
                     SEASONAL_MULTIPLIER="$SEASONAL_END_MULT"
                 fi
 
+                if [ "$ENABLE_SEASONAL_OVERLAY_TUNING" = true ]; then
+                    SEASONAL_OVERLAY_SOURCE="static"
+                    if [ -f "$SEASONAL_OVERLAY_POLICY_FILE" ] && [ -r "$SEASONAL_OVERLAY_POLICY_FILE" ]; then
+                        OVERLAY_ROW=$(awk -F',' -v phase="$SEASONAL_PHASE" -v idx="$CYCLE_POSITION" 'NR>1 && (($1==phase || $1=="*") && ($2==idx || $2=="*")) { print $0; exit }' "$SEASONAL_OVERLAY_POLICY_FILE")
+                        if [ -n "$OVERLAY_ROW" ]; then
+                            OVERLAY_NAME=$(printf "%s" "$OVERLAY_ROW" | awk -F',' '{print $3}' | tr -d '\r')
+                            OVERLAY_MULT=$(printf "%s" "$OVERLAY_ROW" | awk -F',' '{print $4}' | tr -d '\r[:space:]')
+                            if [ -n "$OVERLAY_MULT" ] && awk -v v="$OVERLAY_MULT" 'BEGIN { exit !(v+0>0) }'; then
+                                SEASONAL_OVERLAY_NAME="${OVERLAY_NAME:-unnamed-overlay}"
+                                SEASONAL_OVERLAY_MULTIPLIER="$OVERLAY_MULT"
+                                SEASONAL_OVERLAY_SOURCE="policy"
+                                SEASONAL_MULTIPLIER=$(awk -v a="$SEASONAL_MULTIPLIER" -v b="$SEASONAL_OVERLAY_MULTIPLIER" 'BEGIN { printf "%.6f", a*b }')
+                            elif [ "$REQUIRE_SEASONAL_OVERLAY_POLICY" = true ]; then
+                                echo "Seasonal overlay policy failed: invalid overlay multiplier in $SEASONAL_OVERLAY_POLICY_FILE" >&2
+                                exit 1
+                            fi
+                        elif [ "$REQUIRE_SEASONAL_OVERLAY_POLICY" = true ]; then
+                            echo "Seasonal overlay policy failed: no overlay match for phase=$SEASONAL_PHASE cycle_index=$CYCLE_POSITION in $SEASONAL_OVERLAY_POLICY_FILE" >&2
+                            exit 1
+                        fi
+                    elif [ "$REQUIRE_SEASONAL_OVERLAY_POLICY" = true ]; then
+                        echo "Seasonal overlay policy failed: missing file $SEASONAL_OVERLAY_POLICY_FILE" >&2
+                        exit 1
+                    fi
+                fi
+
                 SEASONAL_TUNED_HALF_LIFE=$(awk -v base="$DECAY_HALF_LIFE_EFFECTIVE" -v mult="$SEASONAL_MULTIPLIER" -v minv="$SEASONAL_MIN_HALF_LIFE" -v maxv="$SEASONAL_MAX_HALF_LIFE" 'BEGIN { v = base * mult; if (v < minv) v=minv; if (v > maxv) v=maxv; printf "%d", v }')
                 DECAY_HALF_LIFE_EFFECTIVE="$SEASONAL_TUNED_HALF_LIFE"
             fi
@@ -1027,6 +1074,10 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
 **Seasonal Tuned Half-Life Samples**: $SEASONAL_TUNED_HALF_LIFE
 **Seasonal Decomposition Source**: $SEASONAL_DECOMPOSITION_SOURCE
 **Seasonal Decomposition Enabled**: $ENABLE_SEASONAL_RECURRENCE_DECOMPOSITION
+**Seasonal Overlay Name**: $SEASONAL_OVERLAY_NAME
+**Seasonal Overlay Multiplier**: $SEASONAL_OVERLAY_MULTIPLIER
+**Seasonal Overlay Source**: $SEASONAL_OVERLAY_SOURCE
+**Seasonal Overlay Tuning Enabled**: $ENABLE_SEASONAL_OVERLAY_TUNING
 **Anomaly Gate Enabled**: $REQUIRE_ATTESTATION_BASELINE_GATE
 
 ---
@@ -1397,6 +1448,10 @@ $RECOMMENDATION
 - Seasonal Tuned Half-Life Samples: ${SEASONAL_TUNED_HALF_LIFE:-$TIME_DECAY_HALF_LIFE}
 - Seasonal Decomposition Source: ${SEASONAL_DECOMPOSITION_SOURCE:-disabled}
 - Seasonal Decomposition Enabled: ${ENABLE_SEASONAL_RECURRENCE_DECOMPOSITION}
+- Seasonal Overlay Name: ${SEASONAL_OVERLAY_NAME:-none}
+- Seasonal Overlay Multiplier: ${SEASONAL_OVERLAY_MULTIPLIER:-1.0}
+- Seasonal Overlay Source: ${SEASONAL_OVERLAY_SOURCE:-disabled}
+- Seasonal Overlay Tuning Enabled: ${ENABLE_SEASONAL_OVERLAY_TUNING}
 - Attestation Baseline Gate: ${REQUIRE_ATTESTATION_BASELINE_GATE}
 - Cross-Tenant Heatmap Source: ${CROSS_TENANT_HEATMAP_FILE}
 - Auto-Remediation Routing Source: ${AUTO_REMEDIATION_ROUTING_FILE}
