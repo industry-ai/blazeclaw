@@ -374,6 +374,8 @@ Outage outcome recommendation controls:
     audit phases: `deny rollout gate`
   - probabilistic confidence bounds omitted when drift narratives are
     required: `deny rollout gate`
+  - Bayesian posterior prior assumptions omitted when Bayesian interval
+    mode is enabled: `deny rollout gate`
 - Recommendation severity gating:
   - `critical|high` in `r3|r4` requires explicit hold or remediation approval
   - `medium` requires owner review before phase promotion

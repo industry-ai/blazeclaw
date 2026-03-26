@@ -277,6 +277,7 @@ phase promotion.
 - Dominant Factor Delta: 9
 - Narrative: Fail-impact contribution shifted most, indicating failure prevalence changed between consecutive cohorts.
 - Confidence Interval: Approximate 95% confidence interval for fail-impact signal is [12.44%, 58.73%] using z=1.96 and n=12.
+- Bayesian Posterior: Posterior mean is 37.50% with approximate interval [18.02%, 56.98%] using prior alpha=1, beta=1.
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode

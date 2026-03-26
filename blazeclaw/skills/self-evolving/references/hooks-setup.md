@@ -288,6 +288,9 @@ Outage promoter inputs now require tenant and rollout phase context:
   - `--disable-drift-root-cause-synthesis`
   - `--disable-probabilistic-confidence-bounds`
   - `--confidence-bound-zscore <positive-number>`
+  - `--disable-bayesian-posterior-confidence`
+  - `--bayes-prior-alpha <positive-number>`
+  - `--bayes-prior-beta <positive-number>`
 
 Fail-fast validation gates:
 
@@ -341,6 +344,8 @@ Fail-fast validation gates:
   for flagged cohort transitions.
 - Probabilistic confidence bounds can be embedded in drift narratives
   to quantify evidence uncertainty.
+- Bayesian posterior updates can enrich confidence intervals using
+  explicit prior assumptions for drift narratives.
 
 Default profile weights are provided in:
 

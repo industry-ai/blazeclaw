@@ -197,6 +197,8 @@ Federation-level aggregates:
 - Dominant-factor concentration for drift narratives: `<distribution>`
 - Confidence-bound evidence coverage for drift narratives: `<percent>`
 - Mean confidence-interval width in drift narratives: `<percent>`
+- Bayesian posterior evidence coverage for drift narratives: `<percent>`
+- Posterior-prior assumption disclosure compliance: `<percent>`
 - Highest-impact accepted tuning:
   `<short summary with control reference>`
 

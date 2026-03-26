@@ -187,6 +187,9 @@ $explainerDriftThreshold = 15
 $enableDriftRootCauseSynthesis = $true
 $enableProbabilisticConfidenceBounds = $true
 $confidenceBoundZScore = 1.96
+$enableBayesianPosteriorConfidence = $true
+$bayesPriorAlpha = 1.0
+$bayesPriorBeta = 1.0
 $manifestFileExplicit = $false
 $signatureVerificationMode = 'none'
 $kmsPublicKeyFile = ''
@@ -517,6 +520,17 @@ for ($i = 0; $i -lt $args.Length; $i++) {
             $i++
             $confidenceBoundZScore = [double]$args[$i]
         }
+        '--disable-bayesian-posterior-confidence' {
+            $enableBayesianPosteriorConfidence = $false
+        }
+        '--bayes-prior-alpha' {
+            $i++
+            $bayesPriorAlpha = [double]$args[$i]
+        }
+        '--bayes-prior-beta' {
+            $i++
+            $bayesPriorBeta = [double]$args[$i]
+        }
         '--signature-verification-mode' {
             $i++
             $signatureVerificationMode = [string]$args[$i]
@@ -626,6 +640,14 @@ if ($explainerDriftThreshold -lt 0) {
 
 if ($confidenceBoundZScore -le 0) {
     throw '--confidence-bound-zscore must be a positive number'
+}
+
+if ($bayesPriorAlpha -le 0) {
+    throw '--bayes-prior-alpha must be a positive number'
+}
+
+if ($bayesPriorBeta -le 0) {
+    throw '--bayes-prior-beta must be a positive number'
 }
 
 if ([string]::IsNullOrWhiteSpace($policyProfile)) {
@@ -1801,6 +1823,22 @@ if ($enableExplainerDiffing) {
                 $high = [Math]::Min(1.0, $p + $margin)
                 $confidenceLevel = if ($confidenceBoundZScore -ge 2.57) { '99%' } elseif ($confidenceBoundZScore -ge 1.96) { '95%' } elseif ($confidenceBoundZScore -ge 1.64) { '90%' } else { 'custom' }
                 $confidenceBoundsStatement = "Approximate $confidenceLevel confidence interval for fail-impact signal is [$([Math]::Round($low * 100, 2))%, $([Math]::Round($high * 100, 2))%] using z=$confidenceBoundZScore and n=$effectiveN."
+
+                if ($enableBayesianPosteriorConfidence) {
+                    $bayesFailCount = [Math]::Max(0, [int]$causalClusterFailCount)
+                    $bayesTotalCount = [Math]::Max(0, [int]$causalClusterSampleCount)
+                    $bayesNonFail = [Math]::Max(0, $bayesTotalCount - $bayesFailCount)
+                    $posteriorAlpha = [double]$bayesPriorAlpha + $bayesFailCount
+                    $posteriorBeta = [double]$bayesPriorBeta + $bayesNonFail
+                    $posteriorMean = if (($posteriorAlpha + $posteriorBeta) -gt 0) { $posteriorAlpha / ($posteriorAlpha + $posteriorBeta) } else { 0.0 }
+                    $posteriorVarDenom = ($posteriorAlpha + $posteriorBeta) * ($posteriorAlpha + $posteriorBeta) * ($posteriorAlpha + $posteriorBeta + 1)
+                    $posteriorVar = if ($posteriorVarDenom -gt 0) { ($posteriorAlpha * $posteriorBeta) / $posteriorVarDenom } else { 0.0 }
+                    $posteriorStd = if ($posteriorVar -gt 0) { [Math]::Sqrt($posteriorVar) } else { 0.0 }
+                    $posteriorMargin = $confidenceBoundZScore * $posteriorStd
+                    $posteriorLow = [Math]::Max(0.0, $posteriorMean - $posteriorMargin)
+                    $posteriorHigh = [Math]::Min(1.0, $posteriorMean + $posteriorMargin)
+                    $confidenceBoundsStatement = "$confidenceBoundsStatement Bayesian posterior mean is $([Math]::Round($posteriorMean * 100, 2))% with approximate interval [$([Math]::Round($posteriorLow * 100, 2))%, $([Math]::Round($posteriorHigh * 100, 2))%] using prior alpha=$bayesPriorAlpha, beta=$bayesPriorBeta."
+                }
             }
 
             $driftRootCauseEntry = @"

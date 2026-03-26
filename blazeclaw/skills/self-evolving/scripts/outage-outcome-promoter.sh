@@ -73,6 +73,9 @@ EXPLAINER_DRIFT_THRESHOLD=15
 ENABLE_DRIFT_ROOT_CAUSE_SYNTHESIS=true
 ENABLE_PROBABILISTIC_CONFIDENCE_BOUNDS=true
 CONFIDENCE_BOUND_ZSCORE=1.96
+ENABLE_BAYESIAN_POSTERIOR_CONFIDENCE=true
+BAYES_PRIOR_ALPHA=1
+BAYES_PRIOR_BETA=1
 MANIFEST_FILE_EXPLICIT=false
 SIGNATURE_VERIFICATION_MODE="none"
 KMS_PUBLIC_KEY_FILE=""
@@ -166,6 +169,9 @@ Optional:
   --disable-drift-root-cause-synthesis Disable root-cause narrative synthesis for flagged drift
   --disable-probabilistic-confidence-bounds Disable probabilistic confidence bounds in narrative evidence
   --confidence-bound-zscore Z-score used for confidence bounds (default: 1.96)
+  --disable-bayesian-posterior-confidence Disable Bayesian posterior interval updates in narrative evidence
+  --bayes-prior-alpha Bayesian prior alpha parameter (default: 1)
+  --bayes-prior-beta Bayesian prior beta parameter (default: 1)
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -455,6 +461,18 @@ while [[ $# -gt 0 ]]; do
             CONFIDENCE_BOUND_ZSCORE="${2:-}"
             shift 2
             ;;
+        --disable-bayesian-posterior-confidence)
+            ENABLE_BAYESIAN_POSTERIOR_CONFIDENCE=false
+            shift
+            ;;
+        --bayes-prior-alpha)
+            BAYES_PRIOR_ALPHA="${2:-}"
+            shift 2
+            ;;
+        --bayes-prior-beta)
+            BAYES_PRIOR_BETA="${2:-}"
+            shift 2
+            ;;
         --signature-verification-mode)
             SIGNATURE_VERIFICATION_MODE="${2:-}"
             shift 2
@@ -570,6 +588,16 @@ fi
 
 if ! awk -v v="$CONFIDENCE_BOUND_ZSCORE" 'BEGIN { exit !(v+0>0) }'; then
     echo "--confidence-bound-zscore must be a positive number" >&2
+    exit 1
+fi
+
+if ! awk -v v="$BAYES_PRIOR_ALPHA" 'BEGIN { exit !(v+0>0) }'; then
+    echo "--bayes-prior-alpha must be a positive number" >&2
+    exit 1
+fi
+
+if ! awk -v v="$BAYES_PRIOR_BETA" 'BEGIN { exit !(v+0>0) }'; then
+    echo "--bayes-prior-beta must be a positive number" >&2
     exit 1
 fi
 
@@ -1444,6 +1472,26 @@ EOF
                 PB_HIGH=$(awk -v p="$PB_CENTER" -v m="$PB_MARGIN" 'BEGIN { v=p+m; if (v>1) v=1; printf "%.2f", v*100 }')
                 PB_LEVEL=$(awk -v z="$PB_Z" 'BEGIN { if (z>=2.57) print "99%"; else if (z>=1.96) print "95%"; else if (z>=1.64) print "90%"; else print "custom" }')
                 CONF_BOUNDS_STATEMENT="Approximate $PB_LEVEL confidence interval for fail-impact signal is [$PB_LOW%, $PB_HIGH%] using z=$PB_Z and n=$EFFECTIVE_N."
+
+                if [ "$ENABLE_BAYESIAN_POSTERIOR_CONFIDENCE" = true ]; then
+                    BAYES_FAIL_COUNT="$CAUSAL_CLUSTER_FAIL_COUNT"
+                    [ -z "$BAYES_FAIL_COUNT" ] && BAYES_FAIL_COUNT=0
+                    BAYES_TOTAL_COUNT="$CAUSAL_CLUSTER_SAMPLE_COUNT"
+                    [ -z "$BAYES_TOTAL_COUNT" ] && BAYES_TOTAL_COUNT=0
+                    BAYES_NON_FAIL=$(( BAYES_TOTAL_COUNT - BAYES_FAIL_COUNT ))
+                    [ "$BAYES_NON_FAIL" -lt 0 ] && BAYES_NON_FAIL=0
+
+                    POST_ALPHA=$(awk -v a="$BAYES_PRIOR_ALPHA" -v f="$BAYES_FAIL_COUNT" 'BEGIN { print a+f }')
+                    POST_BETA=$(awk -v b="$BAYES_PRIOR_BETA" -v nf="$BAYES_NON_FAIL" 'BEGIN { print b+nf }')
+                    POST_MEAN=$(awk -v a="$POST_ALPHA" -v b="$POST_BETA" 'BEGIN { if ((a+b)>0) print a/(a+b); else print 0 }')
+                    POST_VAR=$(awk -v a="$POST_ALPHA" -v b="$POST_BETA" 'BEGIN { d=(a+b)*(a+b)*(a+b+1); if (d>0) print (a*b)/d; else print 0 }')
+                    POST_STD=$(awk -v v="$POST_VAR" 'BEGIN { if (v>0) print sqrt(v); else print 0 }')
+                    POST_MARGIN=$(awk -v z="$PB_Z" -v s="$POST_STD" 'BEGIN { m=z*s; if (m<0) m=0; print m }')
+                    POST_LOW=$(awk -v m="$POST_MEAN" -v d="$POST_MARGIN" 'BEGIN { v=m-d; if (v<0) v=0; printf "%.2f", v*100 }')
+                    POST_HIGH=$(awk -v m="$POST_MEAN" -v d="$POST_MARGIN" 'BEGIN { v=m+d; if (v>1) v=1; printf "%.2f", v*100 }')
+                    POST_MEAN_PCT=$(awk -v m="$POST_MEAN" 'BEGIN { printf "%.2f", m*100 }')
+                    CONF_BOUNDS_STATEMENT="$CONF_BOUNDS_STATEMENT Bayesian posterior mean is $POST_MEAN_PCT% with approximate interval [$POST_LOW%, $POST_HIGH%] using prior alpha=$BAYES_PRIOR_ALPHA, beta=$BAYES_PRIOR_BETA."
+                fi
             fi
 
             DRIFT_ROOT_CAUSE_ENTRY=$(cat << EOF
