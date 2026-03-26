@@ -29,6 +29,7 @@ CAUSAL_HISTORY_FILE="./blazeclaw/skills/self-evolving/.learnings/ANOMALY_CAUSAL_
 OVERLAY_CANDIDATE_FILE="./blazeclaw/skills/self-evolving/.learnings/SEASONAL_OVERLAY_CANDIDATES.md"
 CAUSAL_GRAPHING_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation-anomaly-causal-graphing-policy.conf"
 CAUSAL_GRAPH_FILE="./blazeclaw/skills/self-evolving/.learnings/CAUSAL_CONFIDENCE_GRAPH.md"
+GRAPH_EXPLAINABILITY_FILE="./blazeclaw/skills/self-evolving/.learnings/CAUSAL_GRAPH_EXPLAINABILITY_TRACES.md"
 
 SIMULATION_ID=""
 TENANT_ID=""
@@ -64,6 +65,7 @@ REQUIRE_CAUSAL_GRAPHING_POLICY=false
 ENABLE_GRAPH_EDGE_PERSISTENCE=true
 GRAPH_COHORT_WINDOW=30
 GRAPH_TEMPORAL_DECAY_RATE=0.15
+ENABLE_GRAPH_EXPLAINABILITY_TRACES=true
 MANIFEST_FILE_EXPLICIT=false
 SIGNATURE_VERIFICATION_MODE="none"
 KMS_PUBLIC_KEY_FILE=""
@@ -149,6 +151,8 @@ Optional:
   --graph-cohort-window Causal graph cohort sample window (default: 30)
   --graph-temporal-decay-rate Temporal decay rate for graph edge persistence (default: 0.15)
   --disable-graph-edge-persistence Disable graph edge persistence scoring
+  --graph-explainability-file Cohort-aware explainability trace markdown output
+  --disable-graph-explainability-traces Disable explainability trace output
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -404,6 +408,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --disable-graph-edge-persistence)
             ENABLE_GRAPH_EDGE_PERSISTENCE=false
+            shift
+            ;;
+        --graph-explainability-file)
+            GRAPH_EXPLAINABILITY_FILE="${2:-}"
+            shift 2
+            ;;
+        --disable-graph-explainability-traces)
+            ENABLE_GRAPH_EXPLAINABILITY_TRACES=false
             shift
             ;;
         --signature-verification-mode)
@@ -919,6 +931,15 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
         CAUSAL_CONFIDENCE_SOURCE="disabled"
         CAUSAL_GRAPH_NODE="none"
         CAUSAL_GRAPH_EDGE="none"
+        SAMPLE_CONFIDENCE=0
+        CONTEXT_SCORE=0
+        EDGE_PERSISTENCE_PERCENT=0
+        EDGE_PERSISTENCE_SCORE=0
+        EXPLAIN_SAMPLE_CONTRIB=0
+        EXPLAIN_FAIL_CONTRIB=0
+        EXPLAIN_CONTEXT_CONTRIB=0
+        EXPLAIN_PERSIST_CONTRIB=0
+        GRAPH_TEMPORAL_SOURCE="disabled"
 
         if [ "$ENABLE_TIME_DECAY_WEIGHTING" = true ]; then
             TIME_DECAY_SOURCE="cli"
@@ -1175,6 +1196,10 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
                     fi
 
                     CAUSAL_CONFIDENCE_SCORE=$(awk -v s="$SAMPLE_CONFIDENCE" -v f="$CAUSAL_CLUSTER_FAIL_PERCENT" -v c="$CONTEXT_SCORE" -v p="$EDGE_PERSISTENCE_SCORE" -v sw="$CONF_SAMPLE_WEIGHT" -v fw="$CONF_FAIL_WEIGHT" -v cw="$CONF_CONTEXT_WEIGHT" -v pw="$CONF_PERSIST_WEIGHT" 'BEGIN { v=(s*sw)+(f*fw)+(c*cw)+(p*pw); if (v>100) v=100; if (v<0) v=0; printf "%d", v }')
+                    EXPLAIN_SAMPLE_CONTRIB=$(awk -v v="$SAMPLE_CONFIDENCE" -v w="$CONF_SAMPLE_WEIGHT" 'BEGIN { printf "%d", v*w }')
+                    EXPLAIN_FAIL_CONTRIB=$(awk -v v="$CAUSAL_CLUSTER_FAIL_PERCENT" -v w="$CONF_FAIL_WEIGHT" 'BEGIN { printf "%d", v*w }')
+                    EXPLAIN_CONTEXT_CONTRIB=$(awk -v v="$CONTEXT_SCORE" -v w="$CONF_CONTEXT_WEIGHT" 'BEGIN { printf "%d", v*w }')
+                    EXPLAIN_PERSIST_CONTRIB=$(awk -v v="$EDGE_PERSISTENCE_SCORE" -v w="$CONF_PERSIST_WEIGHT" 'BEGIN { printf "%d", v*w }')
                     CAUSAL_GRAPH_NODE="$CAUSAL_CLUSTER_KEY|confidence=$CAUSAL_CONFIDENCE_SCORE"
 
                     if [ "$CAUSAL_CONFIDENCE_SCORE" -lt "$CAUSAL_CONFIDENCE_THRESHOLD" ]; then
@@ -1293,6 +1318,31 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
 **Causal Graph Node**: $CAUSAL_GRAPH_NODE
 **Causal Graph Edge**: $CAUSAL_GRAPH_EDGE
 **Anomaly Gate Enabled**: $REQUIRE_ATTESTATION_BASELINE_GATE
+
+---
+EOF
+)
+GRAPH_EXPLAINABILITY_ENTRY=$(cat << EOF
+## [XPL-$ENTRY_ID] cohort_aware_graph_explainability
+
+**Logged**: $TIMESTAMP
+**Tenant ID**: $TENANT_ID
+**Cluster Key**: ${CAUSAL_CLUSTER_KEY:-none}
+**Cohort Window**: ${GRAPH_COHORT_WINDOW}
+**Temporal Decay Rate**: ${GRAPH_TEMPORAL_DECAY_RATE}
+**Temporal Source**: ${GRAPH_TEMPORAL_SOURCE:-disabled}
+**Sample Confidence Percent**: ${SAMPLE_CONFIDENCE:-0}%
+**Fail Impact Percent**: ${CAUSAL_CLUSTER_FAIL_PERCENT:-0}%
+**Context Score**: ${CONTEXT_SCORE:-0}
+**Edge Persistence Percent**: ${EDGE_PERSISTENCE_PERCENT:-0}%
+**Sample Contribution**: ${EXPLAIN_SAMPLE_CONTRIB:-0}
+**Fail Contribution**: ${EXPLAIN_FAIL_CONTRIB:-0}
+**Context Contribution**: ${EXPLAIN_CONTEXT_CONTRIB:-0}
+**Persistence Contribution**: ${EXPLAIN_PERSIST_CONTRIB:-0}
+**Confidence Score**: ${CAUSAL_CONFIDENCE_SCORE:-0}
+**Confidence Threshold**: ${CAUSAL_CONFIDENCE_THRESHOLD:-60}
+**Recommended Overlay**: ${CAUSAL_CLUSTER_SUGGESTED_OVERLAY:-none}
+**Recommendation Decision**: $(if [ "${CAUSAL_CLUSTER_SUGGESTED_OVERLAY:-none}" = "none" ]; then echo "below-threshold-or-no-signal"; else echo "qualified"; fi)
 
 ---
 EOF
@@ -1764,6 +1814,10 @@ if [ "$DRY_RUN" = true ]; then
     echo "$OVERLAY_CANDIDATE_ENTRY"
     echo "[DRY-RUN] Would append causal confidence graph entry to $CAUSAL_GRAPH_FILE:"
     echo "$CAUSAL_GRAPH_ENTRY"
+    if [ "$ENABLE_GRAPH_EXPLAINABILITY_TRACES" = true ]; then
+        echo "[DRY-RUN] Would append cohort explainability trace entry to $GRAPH_EXPLAINABILITY_FILE:"
+        echo "$GRAPH_EXPLAINABILITY_ENTRY"
+    fi
     exit 0
 fi
 
@@ -1789,6 +1843,12 @@ if [ ! -f "$CAUSAL_GRAPH_FILE" ]; then
     printf "%s\n\n" "# Confidence-Weighted Causal Graph" > "$CAUSAL_GRAPH_FILE"
 fi
 printf "%s\n" "$CAUSAL_GRAPH_ENTRY" >> "$CAUSAL_GRAPH_FILE"
+if [ "$ENABLE_GRAPH_EXPLAINABILITY_TRACES" = true ]; then
+    if [ ! -f "$GRAPH_EXPLAINABILITY_FILE" ]; then
+        printf "%s\n\n" "# Cohort-Aware Causal Graph Explainability Traces" > "$GRAPH_EXPLAINABILITY_FILE"
+    fi
+    printf "%s\n" "$GRAPH_EXPLAINABILITY_ENTRY" >> "$GRAPH_EXPLAINABILITY_FILE"
+fi
 
 echo "Appended outage simulation learning entry to $LEARNINGS_FILE"
 echo "Appended policy tuning recommendation to $POLICY_TUNING_FILE"

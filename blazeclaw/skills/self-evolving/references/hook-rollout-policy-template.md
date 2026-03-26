@@ -189,6 +189,7 @@ Approval gate checklist:
 - [ ] holiday/event overlay policy is validated for cycle-phase exceptions
 - [ ] confidence-weighted causal graphing policy is validated for recommendation thresholds
 - [ ] temporal decay and edge persistence parameters are validated for cohort graph scoring
+- [ ] explainability trace outputs are validated for recommendation audit evidence
 
 ## 6) Rollback Plan
 

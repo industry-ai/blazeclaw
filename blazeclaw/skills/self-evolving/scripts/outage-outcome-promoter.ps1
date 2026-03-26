@@ -53,6 +53,8 @@ $causalGraphingPolicyFile =
     './blazeclaw/skills/self-evolving/assets/attestation-anomaly-causal-graphing-policy.conf'
 $causalGraphFile =
     './blazeclaw/skills/self-evolving/.learnings/CAUSAL_CONFIDENCE_GRAPH.md'
+$graphExplainabilityFile =
+    './blazeclaw/skills/self-evolving/.learnings/CAUSAL_GRAPH_EXPLAINABILITY_TRACES.md'
 
 function Show-Usage {
 @"
@@ -121,6 +123,8 @@ Optional:
   --graph-cohort-window Causal graph cohort sample window (default: 30)
   --graph-temporal-decay-rate Temporal decay rate for graph edge persistence (default: 0.15)
   --disable-graph-edge-persistence Disable graph edge persistence scoring
+  --graph-explainability-file Cohort-aware explainability trace markdown output
+  --disable-graph-explainability-traces Disable explainability trace output
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -169,6 +173,7 @@ $requireCausalGraphingPolicy = $false
 $enableGraphEdgePersistence = $true
 $graphCohortWindow = 30
 $graphTemporalDecayRate = 0.15
+$enableGraphExplainabilityTraces = $true
 $manifestFileExplicit = $false
 $signatureVerificationMode = 'none'
 $kmsPublicKeyFile = ''
@@ -237,6 +242,12 @@ $causalGraphEdge = 'none'
         $edgePersistenceScore = 0
         $edgePersistencePercent = 0
         $graphTemporalSource = 'disabled'
+[int]$sampleConfidence = 0
+[int]$contextScore = 0
+[int]$explainSampleContrib = 0
+[int]$explainFailContrib = 0
+[int]$explainContextContrib = 0
+[int]$explainPersistContrib = 0
 $edgePersistenceScore = 0
 $edgePersistencePercent = 0
 $graphTemporalSource = 'disabled'
@@ -464,6 +475,13 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         }
         '--disable-graph-edge-persistence' {
             $enableGraphEdgePersistence = $false
+        }
+        '--graph-explainability-file' {
+            $i++
+            $graphExplainabilityFile = [string]$args[$i]
+        }
+        '--disable-graph-explainability-traces' {
+            $enableGraphExplainabilityTraces = $false
         }
         '--signature-verification-mode' {
             $i++
@@ -1501,6 +1519,10 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
                         ($causalClusterFailPercent * $failWeight) +
                         ($contextScore * $contextWeight) +
                         ($edgePersistenceScore * $edgePersistenceWeight)
+                    $explainSampleContrib = [int]($sampleConfidence * $sampleWeight)
+                    $explainFailContrib = [int]($causalClusterFailPercent * $failWeight)
+                    $explainContextContrib = [int]($contextScore * $contextWeight)
+                    $explainPersistContrib = [int]($edgePersistenceScore * $edgePersistenceWeight)
                     $causalConfidenceScore =
                         [int]([Math]::Max(0, [Math]::Min(100, $rawScore)))
                     $causalGraphNode = "$causalClusterKey|confidence=$causalConfidenceScore"
@@ -1643,6 +1665,30 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
 **Causal Graph Node**: $causalGraphNode
 **Causal Graph Edge**: $causalGraphEdge
 **Anomaly Gate Enabled**: $requireAttestationBaselineGate
+
+---
+"@
+$graphExplainabilityEntry = @"
+## [XPL-$entryId] cohort_aware_graph_explainability
+
+**Logged**: $timestamp
+**Tenant ID**: $tenantId
+**Cluster Key**: $causalClusterKey
+**Cohort Window**: $graphCohortWindow
+**Temporal Decay Rate**: $graphTemporalDecayRate
+**Temporal Source**: $graphTemporalSource
+**Sample Confidence Percent**: $sampleConfidence%
+**Fail Impact Percent**: $causalClusterFailPercent%
+**Context Score**: $contextScore
+**Edge Persistence Percent**: $edgePersistencePercent%
+**Sample Contribution**: $explainSampleContrib
+**Fail Contribution**: $explainFailContrib
+**Context Contribution**: $explainContextContrib
+**Persistence Contribution**: $explainPersistContrib
+**Confidence Score**: $causalConfidenceScore
+**Confidence Threshold**: $causalConfidenceThreshold
+**Recommended Overlay**: $causalClusterSuggestedOverlay
+**Recommendation Decision**: $(if ($causalClusterSuggestedOverlay -eq 'none') { 'below-threshold-or-no-signal' } else { 'qualified' })
 
 ---
 "@
@@ -2137,6 +2183,10 @@ if ($dryRun) {
     Write-Host $overlayCandidateEntry
     Write-Host "[DRY-RUN] Would append causal confidence graph entry to ${causalGraphFile}:"
     Write-Host $causalGraphEntry
+    if ($enableGraphExplainabilityTraces) {
+        Write-Host "[DRY-RUN] Would append cohort explainability trace entry to ${graphExplainabilityFile}:"
+        Write-Host $graphExplainabilityEntry
+    }
     exit 0
 }
 
@@ -2162,6 +2212,13 @@ if (-not (Test-Path -LiteralPath $causalGraphFile)) {
     Add-Content -LiteralPath $causalGraphFile -Value ''
 }
 Add-Content -LiteralPath $causalGraphFile -Value $causalGraphEntry
+if ($enableGraphExplainabilityTraces) {
+    if (-not (Test-Path -LiteralPath $graphExplainabilityFile)) {
+        Set-Content -LiteralPath $graphExplainabilityFile -Value '# Cohort-Aware Causal Graph Explainability Traces'
+        Add-Content -LiteralPath $graphExplainabilityFile -Value ''
+    }
+    Add-Content -LiteralPath $graphExplainabilityFile -Value $graphExplainabilityEntry
+}
 
 Write-Host "Appended outage simulation learning entry to $learningsFile"
 Write-Host "Appended policy tuning recommendation to $policyTuningFile"

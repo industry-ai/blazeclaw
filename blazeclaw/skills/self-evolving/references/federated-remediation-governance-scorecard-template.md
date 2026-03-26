@@ -189,6 +189,8 @@ Federation-level aggregates:
 - Confidence-qualified overlay candidate rate: `<percent>`
 - Edge persistence score p95: `<score>`
 - Temporal-decay weighted persistence trend: `<increasing|stable|decreasing>`
+- Explainability trace coverage rate: `<percent of recommendations with trace>`
+- Explainability factor drift count across cohorts: `<count>`
 - Highest-impact accepted tuning:
   `<short summary with control reference>`
 

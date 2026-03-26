@@ -262,6 +262,11 @@ phase promotion.
 - Edge Persistence Percent: 68%
 - Edge Persistence Score: 68
 - Graph Edge Persistence Enabled: true
+- Sample Contribution: 8
+- Fail Contribution: 31
+- Context Contribution: 10
+- Persistence Contribution: 13
+- Recommendation Decision: qualified
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode

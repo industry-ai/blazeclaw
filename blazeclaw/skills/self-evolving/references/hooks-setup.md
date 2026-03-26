@@ -280,6 +280,8 @@ Outage promoter inputs now require tenant and rollout phase context:
   - `--graph-cohort-window <positive-int>`
   - `--graph-temporal-decay-rate <non-negative-number>`
   - `--disable-graph-edge-persistence`
+  - `--graph-explainability-file <path>`
+  - `--disable-graph-explainability-traces`
 
 Fail-fast validation gates:
 
@@ -325,6 +327,8 @@ Fail-fast validation gates:
   and emits thresholded overlay recommendations.
 - Temporal decay and edge persistence scoring provide cohort-aware graph
   confidence stabilization across drill sequences.
+- Cohort-aware explainability traces capture weighted factor
+  contributions and recommendation rationale for audit workflows.
 
 Default profile weights are provided in:
 
@@ -365,3 +369,4 @@ Default signed manifest artifacts are provided in:
 - `assets/attestation-anomaly-causal-graphing-policy.conf`
 - `assets/attestation-anomaly-causal-graphing-policy.template.conf`
 - `.learnings/CAUSAL_CONFIDENCE_GRAPH.md`
+- `.learnings/CAUSAL_GRAPH_EXPLAINABILITY_TRACES.md`
