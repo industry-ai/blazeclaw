@@ -286,6 +286,8 @@ Outage promoter inputs now require tenant and rollout phase context:
   - `--explainer-drift-threshold <non-negative-int>`
   - `--drift-root-cause-file <path>`
   - `--disable-drift-root-cause-synthesis`
+  - `--disable-probabilistic-confidence-bounds`
+  - `--confidence-bound-zscore <positive-number>`
 
 Fail-fast validation gates:
 
@@ -337,6 +339,8 @@ Fail-fast validation gates:
   confidence deltas for audit drift detection.
 - Root-cause narrative synthesis explains dominant causal-factor drift
   for flagged cohort transitions.
+- Probabilistic confidence bounds can be embedded in drift narratives
+  to quantify evidence uncertainty.
 
 Default profile weights are provided in:
 

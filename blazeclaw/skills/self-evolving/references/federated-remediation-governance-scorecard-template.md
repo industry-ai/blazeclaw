@@ -195,6 +195,8 @@ Federation-level aggregates:
 - Median confidence delta between cohorts: `<delta>`
 - Root-cause narrative coverage for drift alerts: `<percent>`
 - Dominant-factor concentration for drift narratives: `<distribution>`
+- Confidence-bound evidence coverage for drift narratives: `<percent>`
+- Mean confidence-interval width in drift narratives: `<percent>`
 - Highest-impact accepted tuning:
   `<short summary with control reference>`
 

@@ -276,6 +276,7 @@ phase promotion.
 - Dominant Factor: fail
 - Dominant Factor Delta: 9
 - Narrative: Fail-impact contribution shifted most, indicating failure prevalence changed between consecutive cohorts.
+- Confidence Interval: Approximate 95% confidence interval for fail-impact signal is [12.44%, 58.73%] using z=1.96 and n=12.
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode

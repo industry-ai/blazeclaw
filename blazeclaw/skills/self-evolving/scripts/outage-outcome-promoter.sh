@@ -71,6 +71,8 @@ ENABLE_GRAPH_EXPLAINABILITY_TRACES=true
 ENABLE_EXPLAINER_DIFFING=true
 EXPLAINER_DRIFT_THRESHOLD=15
 ENABLE_DRIFT_ROOT_CAUSE_SYNTHESIS=true
+ENABLE_PROBABILISTIC_CONFIDENCE_BOUNDS=true
+CONFIDENCE_BOUND_ZSCORE=1.96
 MANIFEST_FILE_EXPLICIT=false
 SIGNATURE_VERIFICATION_MODE="none"
 KMS_PUBLIC_KEY_FILE=""
@@ -162,6 +164,8 @@ Optional:
   --explainer-drift-threshold Drift threshold for audit diff alerts (default: 15)
   --drift-root-cause-file Root-cause narrative markdown output for flagged drift
   --disable-drift-root-cause-synthesis Disable root-cause narrative synthesis for flagged drift
+  --disable-probabilistic-confidence-bounds Disable probabilistic confidence bounds in narrative evidence
+  --confidence-bound-zscore Z-score used for confidence bounds (default: 1.96)
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -443,6 +447,14 @@ while [[ $# -gt 0 ]]; do
             ENABLE_DRIFT_ROOT_CAUSE_SYNTHESIS=false
             shift
             ;;
+        --disable-probabilistic-confidence-bounds)
+            ENABLE_PROBABILISTIC_CONFIDENCE_BOUNDS=false
+            shift
+            ;;
+        --confidence-bound-zscore)
+            CONFIDENCE_BOUND_ZSCORE="${2:-}"
+            shift 2
+            ;;
         --signature-verification-mode)
             SIGNATURE_VERIFICATION_MODE="${2:-}"
             shift 2
@@ -553,6 +565,11 @@ fi
 
 if ! [[ "$EXPLAINER_DRIFT_THRESHOLD" =~ ^[0-9]+$ ]]; then
     echo "--explainer-drift-threshold must be a non-negative integer" >&2
+    exit 1
+fi
+
+if ! awk -v v="$CONFIDENCE_BOUND_ZSCORE" 'BEGIN { exit !(v+0>0) }'; then
+    echo "--confidence-bound-zscore must be a positive number" >&2
     exit 1
 fi
 
@@ -1414,6 +1431,21 @@ EOF
                 persistence) FACTOR_REASON="Persistence contribution shifted most, indicating temporal persistence behavior changed between cohorts." ;;
             esac
 
+            CONF_BOUNDS_STATEMENT="Confidence bounds disabled."
+            if [ "$ENABLE_PROBABILISTIC_CONFIDENCE_BOUNDS" = true ]; then
+                EFFECTIVE_N="$CAUSAL_CLUSTER_SAMPLE_COUNT"
+                if [ -z "$EFFECTIVE_N" ] || [ "$EFFECTIVE_N" -le 0 ]; then
+                    EFFECTIVE_N=1
+                fi
+                PB_CENTER=$(awk -v p="${CAUSAL_CLUSTER_FAIL_PERCENT:-0}" 'BEGIN { print p/100.0 }')
+                PB_Z="$CONFIDENCE_BOUND_ZSCORE"
+                PB_MARGIN=$(awk -v p="$PB_CENTER" -v n="$EFFECTIVE_N" -v z="$PB_Z" 'BEGIN { m=z*sqrt((p*(1-p))/n); if (m<0) m=0; print m }')
+                PB_LOW=$(awk -v p="$PB_CENTER" -v m="$PB_MARGIN" 'BEGIN { v=p-m; if (v<0) v=0; printf "%.2f", v*100 }')
+                PB_HIGH=$(awk -v p="$PB_CENTER" -v m="$PB_MARGIN" 'BEGIN { v=p+m; if (v>1) v=1; printf "%.2f", v*100 }')
+                PB_LEVEL=$(awk -v z="$PB_Z" 'BEGIN { if (z>=2.57) print "99%"; else if (z>=1.96) print "95%"; else if (z>=1.64) print "90%"; else print "custom" }')
+                CONF_BOUNDS_STATEMENT="Approximate $PB_LEVEL confidence interval for fail-impact signal is [$PB_LOW%, $PB_HIGH%] using z=$PB_Z and n=$EFFECTIVE_N."
+            fi
+
             DRIFT_ROOT_CAUSE_ENTRY=$(cat << EOF
 ## [RCAUSE-$ENTRY_ID] drift_root_cause_narrative
 
@@ -1426,7 +1458,7 @@ EOF
 **Dominant Factor Delta**: $TOP_DELTA
 
 ### Narrative
-$FACTOR_REASON Confidence changed by $DIFF_CONF points versus the prior cohort and exceeded the drift threshold of $EXPLAINER_DRIFT_THRESHOLD.
+$FACTOR_REASON Confidence changed by $DIFF_CONF points versus the prior cohort and exceeded the drift threshold of $EXPLAINER_DRIFT_THRESHOLD. $CONF_BOUNDS_STATEMENT
 
 ---
 EOF

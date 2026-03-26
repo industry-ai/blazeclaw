@@ -372,6 +372,8 @@ Outage outcome recommendation controls:
     audit phases: `deny rollout gate`
   - root-cause synthesis disabled for drift-flagged cohorts in required
     audit phases: `deny rollout gate`
+  - probabilistic confidence bounds omitted when drift narratives are
+    required: `deny rollout gate`
 - Recommendation severity gating:
   - `critical|high` in `r3|r4` requires explicit hold or remediation approval
   - `medium` requires owner review before phase promotion

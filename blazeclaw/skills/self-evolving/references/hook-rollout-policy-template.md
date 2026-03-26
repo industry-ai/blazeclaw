@@ -192,6 +192,7 @@ Approval gate checklist:
 - [ ] explainability trace outputs are validated for recommendation audit evidence
 - [ ] consecutive cohort explainer diff outputs are validated for drift detection alerts
 - [ ] drift root-cause narratives are validated for flagged cohort transitions
+- [ ] probabilistic confidence-bound statements are validated in drift narratives
 
 ## 6) Rollback Plan
 

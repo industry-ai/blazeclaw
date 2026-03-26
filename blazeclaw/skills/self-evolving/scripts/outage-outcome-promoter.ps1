@@ -185,6 +185,8 @@ $enableGraphExplainabilityTraces = $true
 $enableExplainerDiffing = $true
 $explainerDriftThreshold = 15
 $enableDriftRootCauseSynthesis = $true
+$enableProbabilisticConfidenceBounds = $true
+$confidenceBoundZScore = 1.96
 $manifestFileExplicit = $false
 $signatureVerificationMode = 'none'
 $kmsPublicKeyFile = ''
@@ -508,6 +510,13 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         '--disable-drift-root-cause-synthesis' {
             $enableDriftRootCauseSynthesis = $false
         }
+        '--disable-probabilistic-confidence-bounds' {
+            $enableProbabilisticConfidenceBounds = $false
+        }
+        '--confidence-bound-zscore' {
+            $i++
+            $confidenceBoundZScore = [double]$args[$i]
+        }
         '--signature-verification-mode' {
             $i++
             $signatureVerificationMode = [string]$args[$i]
@@ -613,6 +622,10 @@ if ($graphTemporalDecayRate -lt 0) {
 
 if ($explainerDriftThreshold -lt 0) {
     throw '--explainer-drift-threshold must be a non-negative integer'
+}
+
+if ($confidenceBoundZScore -le 0) {
+    throw '--confidence-bound-zscore must be a positive number'
 }
 
 if ([string]::IsNullOrWhiteSpace($policyProfile)) {
@@ -1779,6 +1792,17 @@ if ($enableExplainerDiffing) {
                 default { 'Contribution shifts indicate mixed-factor drift across cohorts.' }
             }
 
+            $confidenceBoundsStatement = 'Confidence bounds disabled.'
+            if ($enableProbabilisticConfidenceBounds) {
+                $effectiveN = [Math]::Max(1, [int]$causalClusterSampleCount)
+                $p = [Math]::Max(0.0, [Math]::Min(1.0, ([double]$causalClusterFailPercent / 100.0)))
+                $margin = $confidenceBoundZScore * [Math]::Sqrt(($p * (1 - $p)) / $effectiveN)
+                $low = [Math]::Max(0.0, $p - $margin)
+                $high = [Math]::Min(1.0, $p + $margin)
+                $confidenceLevel = if ($confidenceBoundZScore -ge 2.57) { '99%' } elseif ($confidenceBoundZScore -ge 1.96) { '95%' } elseif ($confidenceBoundZScore -ge 1.64) { '90%' } else { 'custom' }
+                $confidenceBoundsStatement = "Approximate $confidenceLevel confidence interval for fail-impact signal is [$([Math]::Round($low * 100, 2))%, $([Math]::Round($high * 100, 2))%] using z=$confidenceBoundZScore and n=$effectiveN."
+            }
+
             $driftRootCauseEntry = @"
 ## [RCAUSE-$entryId] drift_root_cause_narrative
 
@@ -1791,7 +1815,7 @@ if ($enableExplainerDiffing) {
 **Dominant Factor Delta**: $dominantDelta
 
 ### Narrative
-$factorReason Confidence changed by $deltaConfidence points versus the prior cohort and exceeded the drift threshold of $explainerDriftThreshold.
+$factorReason Confidence changed by $deltaConfidence points versus the prior cohort and exceeded the drift threshold of $explainerDriftThreshold. $confidenceBoundsStatement
 
 ---
 "@
