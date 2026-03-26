@@ -25,6 +25,7 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
 - [ ] Centralized attestation authority trust chain validated
 - [ ] Outage simulation drills executed for registry and authority
 - [ ] Automated failover runbooks validated in target environment
+- [ ] Outage outcome promoter scripts executed and outputs reviewed
 
 ## 3) Environment Matrix
 
@@ -96,8 +97,8 @@ Use this template to stage rollout safely across tenants/workspaces for multi-pa
 | Phase | Required Scorecard Evidence | Gate Owner |
 |---|---|---|
 | R1 | Tenant-level controls, registry mapping, and registry outage drill snapshot | `<engineering owner>` |
-| R2 | Remediation posture, attestation evidence, authority validation, and authority drill results | `<operations owner>` |
-| R3 | Cross-tenant compliance trend with failover execution and publication status | `<security owner>` |
+| R2 | Remediation posture, attestation evidence, authority validation, authority drill results, and promoted tuning recommendations | `<operations owner>` |
+| R3 | Cross-tenant compliance trend with failover execution, publication status, and recommendation adoption status | `<security owner>` |
 | R4 | Final federated scorecard with failback approval and publication verification | `<engineering + security + operations>` |
 
 ## 5) Monitoring Plan

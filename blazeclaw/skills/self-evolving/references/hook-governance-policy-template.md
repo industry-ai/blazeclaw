@@ -244,6 +244,16 @@ Federated scorecard controls:
 - Cross-tenant policy compliance threshold: `<percent>`
 - Scorecard review cadence: `<weekly|monthly|quarterly>`
 
+Outage outcome recommendation controls:
+
+- Outage outcome promoter automation enabled: `<true|false>`
+- Learning promotion target path:
+  `blazeclaw/skills/self-evolving/.learnings/LEARNINGS.md`
+- Policy tuning recommendation path:
+  `blazeclaw/skills/self-evolving/.learnings/POLICY_TUNING_RECOMMENDATIONS.md`
+- Recommendation review SLA: `<duration>`
+- Recommendation promotion approvers: `<engineering|security|operations>`
+
 ## 8) Compliance and Audit
 
 - Audit artifacts retained:

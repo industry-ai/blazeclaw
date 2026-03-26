@@ -40,6 +40,8 @@ If your local CLI supports shell hooks, point them to scripts under:
 - `blazeclaw/skills/self-evolving/scripts/error-detector.sh`
 - `blazeclaw/skills/self-evolving/scripts/activator.ps1`
 - `blazeclaw/skills/self-evolving/scripts/error-detector.ps1`
+- `blazeclaw/skills/self-evolving/scripts/outage-outcome-promoter.sh`
+- `blazeclaw/skills/self-evolving/scripts/outage-outcome-promoter.ps1`
 
 (These scripts are ported in Phase 4.)
 
@@ -196,3 +198,7 @@ Federated governance scorecard workflow:
 6. Execute outage simulations and validate automated failover/failback
    runbooks using
    `enterprise-policy-attestation-publication-template.md`.
+7. Run outage outcome promoter scripts to append learning promotion
+   candidates and policy tuning recommendations:
+   - `.learnings/LEARNINGS.md`
+   - `.learnings/POLICY_TUNING_RECOMMENDATIONS.md`

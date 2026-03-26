@@ -99,6 +99,26 @@ Simulation scheduling controls:
 - Mandatory observers: `<engineering|security|operations>`
 - Drill evidence output path: `<path>`
 
+Outcome promotion controls:
+
+- Learning promotion output path:
+  `blazeclaw/skills/self-evolving/.learnings/LEARNINGS.md`
+- Policy tuning output path:
+  `blazeclaw/skills/self-evolving/.learnings/POLICY_TUNING_RECOMMENDATIONS.md`
+- Automation command (shell):
+  `scripts/outage-outcome-promoter.sh --simulation-id <id> --dependency <registry|authority> --result <pass|fail> --evidence-path <path>`
+- Automation command (powershell):
+  `scripts/outage-outcome-promoter.ps1 --simulation-id <id> --dependency <registry|authority> --result <pass|fail> --evidence-path <path>`
+
+## 3.3) Outcome-to-Tuning Mapping
+
+| Dependency | Outcome | Recommended Tuning | Promotion Target |
+|---|---|---|---|
+| policy registry | pass | tighten registry sync alert thresholds; keep failover runbook validation | `AGENTS.md`, rollout gate notes |
+| policy registry | fail | enforce fallback bundle pin validation before promotion | `POLICY_TUNING_RECOMMENDATIONS.md` |
+| attestation authority | pass | reduce tolerated verification latency in rollout policy | `AGENTS.md`, governance scorecard commentary |
+| attestation authority | fail | enforce strict trust-chain checks and block publication until recovered | `POLICY_TUNING_RECOMMENDATIONS.md` |
+
 Pipeline stages:
 
 1. Collect governance and remediation artifacts.

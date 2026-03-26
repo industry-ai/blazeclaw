@@ -108,6 +108,64 @@ Hold promotion from R2 to R3 until policy-block incidents are reduced below thre
 ---
 ```
 
+## Outage Simulation Outcome Promotion + Policy Tuning
+
+```markdown
+## [LRN-OUT-20250115-SIMAUTH001] knowledge_gap
+
+**Logged**: 2025-01-15T20:10:00Z
+**Priority**: high
+**Status**: pending
+**Area**: infra
+
+### Summary
+Authority outage simulation SIM-AUTH-001 failed trust-chain validation fallback
+
+### Details
+- Simulation ID: SIM-AUTH-001
+- Dependency: authority
+- Result: fail
+- Failure Mode: trust-anchor mismatch
+- Drill Window: 2025-01-15T19:40:00Z..2025-01-15T20:00:00Z
+- Evidence Path: reports/drills/sim-auth-001.json
+- Automated Failover Triggered: yes
+- Automated Failback Completed: no
+
+### Suggested Action
+Enforce strict trust-chain validation and block scorecard publication
+until failover authority verification passes.
+
+### Metadata
+- Source: outage_simulation
+- Tags: outage-simulation, authority, policy-tuning
+
+---
+
+## [REC-OUT-20250115-SIMAUTH001] policy_tuning
+
+**Logged**: 2025-01-15T20:10:00Z
+**Source Simulation**: SIM-AUTH-001
+**Dependency**: authority
+**Outcome**: fail
+**Status**: suggested
+
+### Recommendation
+Set `hooks.engine.attestationRevocationMode=strict`, keep
+`hooks.engine.authorityOutageSimulationEnabled=true`, and require
+validated `hooks.engine.authorityFailoverRunbookId` evidence before
+phase promotion.
+
+### Target Controls
+- hooks.engine.attestationRevocationMode
+- hooks.engine.authorityOutageSimulationEnabled
+- hooks.engine.authorityFailoverRunbookId
+
+### Evidence
+- Drill Report: reports/drills/sim-auth-001.json
+
+---
+```
+
 ## Learning: Knowledge Gap (Resolved)
 
 ```markdown

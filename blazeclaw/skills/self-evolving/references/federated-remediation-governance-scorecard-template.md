@@ -112,6 +112,17 @@ Federation-level aggregates:
 - Failover decision log path: `<path>`
 - Recovery validation status: `<pass|fail>`
 
+## 6.5) Policy Tuning Recommendation Outcomes
+
+- Recommendation source path:
+  `blazeclaw/skills/self-evolving/.learnings/POLICY_TUNING_RECOMMENDATIONS.md`
+- Recommendations generated in window: `<n>`
+- Recommendations accepted: `<n>`
+- Recommendations deferred: `<n>`
+- Recommendations rejected: `<n>`
+- Highest-impact accepted tuning:
+  `<short summary with control reference>`
+
 ## 7) Review and Sign-off
 
 - Engineering Approval: `<name/date/status>`
