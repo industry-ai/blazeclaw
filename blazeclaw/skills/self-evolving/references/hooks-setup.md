@@ -284,6 +284,8 @@ Outage promoter inputs now require tenant and rollout phase context:
   - `--disable-graph-explainability-traces`
   - `--disable-explainer-diffing`
   - `--explainer-drift-threshold <non-negative-int>`
+  - `--drift-root-cause-file <path>`
+  - `--disable-drift-root-cause-synthesis`
 
 Fail-fast validation gates:
 
@@ -333,6 +335,8 @@ Fail-fast validation gates:
   contributions and recommendation rationale for audit workflows.
 - Consecutive cohort explainer diffing highlights contribution drift and
   confidence deltas for audit drift detection.
+- Root-cause narrative synthesis explains dominant causal-factor drift
+  for flagged cohort transitions.
 
 Default profile weights are provided in:
 
@@ -375,3 +379,4 @@ Default signed manifest artifacts are provided in:
 - `.learnings/CAUSAL_CONFIDENCE_GRAPH.md`
 - `.learnings/CAUSAL_GRAPH_EXPLAINABILITY_TRACES.md`
 - `.learnings/CAUSAL_GRAPH_EXPLAINABILITY_HISTORY.csv`
+- `.learnings/CAUSAL_DRIFT_ROOT_CAUSE_NARRATIVES.md`

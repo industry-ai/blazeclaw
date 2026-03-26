@@ -193,6 +193,8 @@ Federation-level aggregates:
 - Explainability factor drift count across cohorts: `<count>`
 - Consecutive cohort explainer drift alert rate: `<percent>`
 - Median confidence delta between cohorts: `<delta>`
+- Root-cause narrative coverage for drift alerts: `<percent>`
+- Dominant-factor concentration for drift narratives: `<distribution>`
 - Highest-impact accepted tuning:
   `<short summary with control reference>`
 

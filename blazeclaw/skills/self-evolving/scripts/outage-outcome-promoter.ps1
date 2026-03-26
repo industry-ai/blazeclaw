@@ -57,6 +57,8 @@ $graphExplainabilityFile =
     './blazeclaw/skills/self-evolving/.learnings/CAUSAL_GRAPH_EXPLAINABILITY_TRACES.md'
 $explainabilityHistoryFile =
     './blazeclaw/skills/self-evolving/.learnings/CAUSAL_GRAPH_EXPLAINABILITY_HISTORY.csv'
+$driftRootCauseFile =
+    './blazeclaw/skills/self-evolving/.learnings/CAUSAL_DRIFT_ROOT_CAUSE_NARRATIVES.md'
 
 function Show-Usage {
 @"
@@ -129,6 +131,8 @@ Optional:
   --disable-graph-explainability-traces Disable explainability trace output
   --disable-explainer-diffing Disable consecutive cohort explainer diffing
   --explainer-drift-threshold Drift threshold for audit diff alerts (default: 15)
+  --drift-root-cause-file Root-cause narrative markdown output for flagged drift
+  --disable-drift-root-cause-synthesis Disable root-cause narrative synthesis for flagged drift
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -180,6 +184,7 @@ $graphTemporalDecayRate = 0.15
 $enableGraphExplainabilityTraces = $true
 $enableExplainerDiffing = $true
 $explainerDriftThreshold = 15
+$enableDriftRootCauseSynthesis = $true
 $manifestFileExplicit = $false
 $signatureVerificationMode = 'none'
 $kmsPublicKeyFile = ''
@@ -495,6 +500,13 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         '--explainer-drift-threshold' {
             $i++
             $explainerDriftThreshold = [int]$args[$i]
+        }
+        '--drift-root-cause-file' {
+            $i++
+            $driftRootCauseFile = [string]$args[$i]
+        }
+        '--disable-drift-root-cause-synthesis' {
+            $enableDriftRootCauseSynthesis = $false
         }
         '--signature-verification-mode' {
             $i++
@@ -1694,6 +1706,7 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
 $explainabilityHistoryRecord =
     "$timestamp,$tenantId,$rolloutPhase,$dependency,$(if ($failureMode) { $failureMode } else { 'unspecified' }),$explainSampleContrib,$explainFailContrib,$explainContextContrib,$explainPersistContrib,$causalConfidenceScore,$causalClusterSuggestedOverlay,$(if ($causalClusterSuggestedOverlay -eq 'none') { 'below-threshold-or-no-signal' } else { 'qualified' })"
 $explainerDiffEntry = ''
+$driftRootCauseEntry = ''
 if ($enableExplainerDiffing) {
     $effectiveFailureModeForDiff = if ($failureMode) { $failureMode } else { 'unspecified' }
     $prevExplainRow = Import-Csv -LiteralPath $explainabilityHistoryFile |
@@ -1738,6 +1751,51 @@ if ($enableExplainerDiffing) {
 
 ---
 "@
+
+        if ($driftState -eq 'drift-detected' -and $enableDriftRootCauseSynthesis) {
+            $factorDeltas = @{
+                sample = $deltaSample
+                fail = $deltaFail
+                context = $deltaContext
+                persistence = $deltaPersist
+            }
+            $dominantFactor = 'sample'
+            $dominantDelta = $deltaSample
+            $maxAbs = [Math]::Abs($deltaSample)
+            foreach ($k in $factorDeltas.Keys) {
+                $candidate = [int]$factorDeltas[$k]
+                if ([Math]::Abs($candidate) -gt $maxAbs) {
+                    $maxAbs = [Math]::Abs($candidate)
+                    $dominantFactor = $k
+                    $dominantDelta = $candidate
+                }
+            }
+
+            $factorReason = switch ($dominantFactor) {
+                'sample' { 'Cohort sample-confidence changed most, indicating evidence volume or recency changed between cohorts.' }
+                'fail' { 'Fail-impact contribution shifted most, indicating failure prevalence changed between consecutive cohorts.' }
+                'context' { 'Context contribution shifted most, indicating policy-context inputs changed between cohorts.' }
+                'persistence' { 'Persistence contribution shifted most, indicating temporal persistence behavior changed between cohorts.' }
+                default { 'Contribution shifts indicate mixed-factor drift across cohorts.' }
+            }
+
+            $driftRootCauseEntry = @"
+## [RCAUSE-$entryId] drift_root_cause_narrative
+
+**Logged**: $timestamp
+**Tenant ID**: $tenantId
+**Cluster Key**: $causalClusterKey
+**Drift State**: $driftState
+**Confidence Delta**: $deltaConfidence
+**Dominant Factor**: $dominantFactor
+**Dominant Factor Delta**: $dominantDelta
+
+### Narrative
+$factorReason Confidence changed by $deltaConfidence points versus the prior cohort and exceeded the drift threshold of $explainerDriftThreshold.
+
+---
+"@
+        }
     }
 }
 $graphExplainabilityEntry = @"
@@ -2263,6 +2321,10 @@ if ($dryRun) {
         if (-not [string]::IsNullOrWhiteSpace($explainerDiffEntry)) {
             Write-Host "[DRY-RUN] Would append explainer diff entry to ${graphExplainabilityFile}:"
             Write-Host $explainerDiffEntry
+            if (-not [string]::IsNullOrWhiteSpace($driftRootCauseEntry)) {
+                Write-Host "[DRY-RUN] Would append drift root-cause narrative entry to ${driftRootCauseFile}:"
+                Write-Host $driftRootCauseEntry
+            }
         }
     }
     exit 0
@@ -2299,6 +2361,13 @@ if ($enableGraphExplainabilityTraces) {
     Add-Content -LiteralPath $explainabilityHistoryFile -Value $explainabilityHistoryRecord
     if (-not [string]::IsNullOrWhiteSpace($explainerDiffEntry)) {
         Add-Content -LiteralPath $graphExplainabilityFile -Value $explainerDiffEntry
+        if (-not [string]::IsNullOrWhiteSpace($driftRootCauseEntry)) {
+            if (-not (Test-Path -LiteralPath $driftRootCauseFile)) {
+                Set-Content -LiteralPath $driftRootCauseFile -Value '# Causal Drift Root-Cause Narratives'
+                Add-Content -LiteralPath $driftRootCauseFile -Value ''
+            }
+            Add-Content -LiteralPath $driftRootCauseFile -Value $driftRootCauseEntry
+        }
     }
 }
 

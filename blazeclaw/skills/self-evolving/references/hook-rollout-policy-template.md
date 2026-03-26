@@ -191,6 +191,7 @@ Approval gate checklist:
 - [ ] temporal decay and edge persistence parameters are validated for cohort graph scoring
 - [ ] explainability trace outputs are validated for recommendation audit evidence
 - [ ] consecutive cohort explainer diff outputs are validated for drift detection alerts
+- [ ] drift root-cause narratives are validated for flagged cohort transitions
 
 ## 6) Rollback Plan
 

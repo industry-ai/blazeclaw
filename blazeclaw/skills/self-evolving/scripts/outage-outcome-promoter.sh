@@ -31,6 +31,7 @@ CAUSAL_GRAPHING_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/attestation
 CAUSAL_GRAPH_FILE="./blazeclaw/skills/self-evolving/.learnings/CAUSAL_CONFIDENCE_GRAPH.md"
 GRAPH_EXPLAINABILITY_FILE="./blazeclaw/skills/self-evolving/.learnings/CAUSAL_GRAPH_EXPLAINABILITY_TRACES.md"
 EXPLAINABILITY_HISTORY_FILE="./blazeclaw/skills/self-evolving/.learnings/CAUSAL_GRAPH_EXPLAINABILITY_HISTORY.csv"
+DRIFT_ROOT_CAUSE_FILE="./blazeclaw/skills/self-evolving/.learnings/CAUSAL_DRIFT_ROOT_CAUSE_NARRATIVES.md"
 
 SIMULATION_ID=""
 TENANT_ID=""
@@ -69,6 +70,7 @@ GRAPH_TEMPORAL_DECAY_RATE=0.15
 ENABLE_GRAPH_EXPLAINABILITY_TRACES=true
 ENABLE_EXPLAINER_DIFFING=true
 EXPLAINER_DRIFT_THRESHOLD=15
+ENABLE_DRIFT_ROOT_CAUSE_SYNTHESIS=true
 MANIFEST_FILE_EXPLICIT=false
 SIGNATURE_VERIFICATION_MODE="none"
 KMS_PUBLIC_KEY_FILE=""
@@ -158,6 +160,8 @@ Optional:
   --disable-graph-explainability-traces Disable explainability trace output
   --disable-explainer-diffing Disable consecutive cohort explainer diffing
   --explainer-drift-threshold Drift threshold for audit diff alerts (default: 15)
+  --drift-root-cause-file Root-cause narrative markdown output for flagged drift
+  --disable-drift-root-cause-synthesis Disable root-cause narrative synthesis for flagged drift
   --signature-verification-mode Cryptographic mode: none|kms|sigstore
   --kms-public-key-file Public key file for kms signature verification
   --sigstore-certificate-file Fulcio certificate file for sigstore verify-blob
@@ -430,6 +434,14 @@ while [[ $# -gt 0 ]]; do
         --explainer-drift-threshold)
             EXPLAINER_DRIFT_THRESHOLD="${2:-}"
             shift 2
+            ;;
+        --drift-root-cause-file)
+            DRIFT_ROOT_CAUSE_FILE="${2:-}"
+            shift 2
+            ;;
+        --disable-drift-root-cause-synthesis)
+            ENABLE_DRIFT_ROOT_CAUSE_SYNTHESIS=false
+            shift
             ;;
         --signature-verification-mode)
             SIGNATURE_VERIFICATION_MODE="${2:-}"
@@ -1347,6 +1359,7 @@ EOF
 EXPLAINABILITY_HISTORY_RECORD="$TIMESTAMP,$TENANT_ID,$ROLLOUT_PHASE,$DEPENDENCY,${FAILURE_MODE:-unspecified},${EXPLAIN_SAMPLE_CONTRIB:-0},${EXPLAIN_FAIL_CONTRIB:-0},${EXPLAIN_CONTEXT_CONTRIB:-0},${EXPLAIN_PERSIST_CONTRIB:-0},${CAUSAL_CONFIDENCE_SCORE:-0},${CAUSAL_CLUSTER_SUGGESTED_OVERLAY:-none},$(if [ "${CAUSAL_CLUSTER_SUGGESTED_OVERLAY:-none}" = "none" ]; then echo "below-threshold-or-no-signal"; else echo "qualified"; fi)"
 
 EXPLAINER_DIFF_ENTRY=""
+DRIFT_ROOT_CAUSE_ENTRY=""
 if [ "$ENABLE_EXPLAINER_DIFFING" = true ]; then
     PREV_ROW=$(awk -F',' -v t="$TENANT_ID" -v p="$ROLLOUT_PHASE" -v d="$DEPENDENCY" -v f="${FAILURE_MODE:-unspecified}" 'NR>1 && $2==t && $3==p && $4==d && $5==f { row=$0 } END { print row }' "$EXPLAINABILITY_HISTORY_FILE")
     if [ -n "$PREV_ROW" ]; then
@@ -1381,6 +1394,44 @@ if [ "$ENABLE_EXPLAINER_DIFFING" = true ]; then
 ---
 EOF
 )
+
+        if [ "$DRIFT_STATE" = "drift-detected" ] && [ "$ENABLE_DRIFT_ROOT_CAUSE_SYNTHESIS" = true ]; then
+            TOP_FACTOR="sample"
+            TOP_DELTA="$DIFF_SAMPLE"
+            TOP_ABS=${DIFF_SAMPLE#-}
+            CAND_ABS=${DIFF_FAIL#-}
+            if [ "$CAND_ABS" -gt "$TOP_ABS" ]; then TOP_FACTOR="fail"; TOP_DELTA="$DIFF_FAIL"; TOP_ABS=$CAND_ABS; fi
+            CAND_ABS=${DIFF_CONTEXT#-}
+            if [ "$CAND_ABS" -gt "$TOP_ABS" ]; then TOP_FACTOR="context"; TOP_DELTA="$DIFF_CONTEXT"; TOP_ABS=$CAND_ABS; fi
+            CAND_ABS=${DIFF_PERSIST#-}
+            if [ "$CAND_ABS" -gt "$TOP_ABS" ]; then TOP_FACTOR="persistence"; TOP_DELTA="$DIFF_PERSIST"; TOP_ABS=$CAND_ABS; fi
+
+            FACTOR_REASON=""
+            case "$TOP_FACTOR" in
+                sample) FACTOR_REASON="Cohort sample-confidence changed most, indicating evidence volume or recency changed between cohorts." ;;
+                fail) FACTOR_REASON="Fail-impact contribution shifted most, indicating failure prevalence changed between consecutive cohorts." ;;
+                context) FACTOR_REASON="Context contribution shifted most, indicating policy-context inputs changed between cohorts." ;;
+                persistence) FACTOR_REASON="Persistence contribution shifted most, indicating temporal persistence behavior changed between cohorts." ;;
+            esac
+
+            DRIFT_ROOT_CAUSE_ENTRY=$(cat << EOF
+## [RCAUSE-$ENTRY_ID] drift_root_cause_narrative
+
+**Logged**: $TIMESTAMP
+**Tenant ID**: $TENANT_ID
+**Cluster Key**: ${CAUSAL_CLUSTER_KEY:-none}
+**Drift State**: $DRIFT_STATE
+**Confidence Delta**: $DIFF_CONF
+**Dominant Factor**: $TOP_FACTOR
+**Dominant Factor Delta**: $TOP_DELTA
+
+### Narrative
+$FACTOR_REASON Confidence changed by $DIFF_CONF points versus the prior cohort and exceeded the drift threshold of $EXPLAINER_DRIFT_THRESHOLD.
+
+---
+EOF
+)
+        fi
     fi
 fi
 GRAPH_EXPLAINABILITY_ENTRY=$(cat << EOF
@@ -1883,6 +1934,10 @@ if [ "$DRY_RUN" = true ]; then
         if [ -n "$EXPLAINER_DIFF_ENTRY" ]; then
             echo "[DRY-RUN] Would append explainer diff entry to $GRAPH_EXPLAINABILITY_FILE:"
             echo "$EXPLAINER_DIFF_ENTRY"
+            if [ -n "$DRIFT_ROOT_CAUSE_ENTRY" ]; then
+                echo "[DRY-RUN] Would append drift root-cause narrative entry to $DRIFT_ROOT_CAUSE_FILE:"
+                echo "$DRIFT_ROOT_CAUSE_ENTRY"
+            fi
         fi
     fi
     exit 0
@@ -1918,6 +1973,12 @@ if [ "$ENABLE_GRAPH_EXPLAINABILITY_TRACES" = true ]; then
     printf "%s\n" "$EXPLAINABILITY_HISTORY_RECORD" >> "$EXPLAINABILITY_HISTORY_FILE"
     if [ -n "$EXPLAINER_DIFF_ENTRY" ]; then
         printf "%s\n" "$EXPLAINER_DIFF_ENTRY" >> "$GRAPH_EXPLAINABILITY_FILE"
+        if [ -n "$DRIFT_ROOT_CAUSE_ENTRY" ]; then
+            if [ ! -f "$DRIFT_ROOT_CAUSE_FILE" ]; then
+                printf "%s\n\n" "# Causal Drift Root-Cause Narratives" > "$DRIFT_ROOT_CAUSE_FILE"
+            fi
+            printf "%s\n" "$DRIFT_ROOT_CAUSE_ENTRY" >> "$DRIFT_ROOT_CAUSE_FILE"
+        fi
     fi
 fi
 

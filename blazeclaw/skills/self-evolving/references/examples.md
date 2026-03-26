@@ -273,6 +273,9 @@ phase promotion.
 - Context Contribution Delta: 0
 - Persistence Contribution Delta: 6
 - Drift State: drift-detected
+- Dominant Factor: fail
+- Dominant Factor Delta: 9
+- Narrative: Fail-impact contribution shifted most, indicating failure prevalence changed between consecutive cohorts.
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode
