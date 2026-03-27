@@ -277,7 +277,11 @@ phase promotion.
 - Dominant Factor Delta: 9
 - Narrative: Fail-impact contribution shifted most, indicating failure prevalence changed between consecutive cohorts.
 - Confidence Interval: Approximate 95% confidence interval for fail-impact signal is [12.44%, 58.73%] using z=1.96 and n=12.
-- Bayesian Posterior: Posterior mean is 37.50% with approximate interval [18.02%, 56.98%] using prior alpha=1, beta=1.
+- Conjugate Prior Policy Source: policy-profile
+- Dependency-Specific Posterior Tuning Enabled: true
+- Resolved Bayesian Prior Alpha: 1.5
+- Resolved Bayesian Prior Beta: 0.8
+- Bayesian Posterior: Posterior mean is 42.11% with approximate interval [21.77%, 62.45%] using dependency-scoped prior alpha=1.5, beta=0.8.
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode
@@ -325,6 +329,11 @@ Revocation propagation SLO breach: age 240 hours exceeds 24 in ./blazeclaw/skill
 ```text
 $ scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-008 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --require-signed-manifest --manifest-file ./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest --require-trust-policy --trust-policy-file ./blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf --require-revocation-check --revocation-file ./blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv --require-trust-policy-attestation --trust-policy-attestation-file ./blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.attestation --require-revocation-slo --revocation-slo-file ./blazeclaw/skills/self-evolving/assets/policy-profile-revocation-slo.conf --attestation-baseline-window 20 --attestation-anomaly-threshold-percent 10 --require-attestation-baseline-gate --dependency registry --result pass --evidence-path reports/drills/sim-reg-008.json
 Attestation anomaly baseline breach: 16% exceeds 10% for tenant tenant-a
+```
+
+```text
+$ scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-009 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --conjugate-prior-policy-file ./blazeclaw/skills/self-evolving/assets/policy-profile-conjugate-priors.csv --require-conjugate-prior-policy --dependency authority --result fail --failure-mode certificate-expiry --evidence-path reports/drills/sim-reg-009.json
+Conjugate-prior policy failed: missing profile 'org-prod-opa' dependency 'authority' in ./blazeclaw/skills/self-evolving/assets/policy-profile-conjugate-priors.csv
 ```
 
 ## Learning: Knowledge Gap (Resolved)

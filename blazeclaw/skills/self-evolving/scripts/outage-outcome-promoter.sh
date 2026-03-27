@@ -9,6 +9,7 @@ LEARNINGS_FILE="./blazeclaw/skills/self-evolving/.learnings/LEARNINGS.md"
 POLICY_TUNING_FILE="./blazeclaw/skills/self-evolving/.learnings/POLICY_TUNING_RECOMMENDATIONS.md"
 TREND_HISTORY_FILE="./blazeclaw/skills/self-evolving/.learnings/OUTAGE_TREND_HISTORY.csv"
 PROFILE_WEIGHTS_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv"
+CONJUGATE_PRIOR_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-conjugate-priors.csv"
 PROFILE_MANIFEST_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest"
 TRUST_POLICY_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-trust-policy.conf"
 REVOCATION_LIST_FILE="./blazeclaw/skills/self-evolving/assets/policy-profile-key-revocations.csv"
@@ -76,6 +77,11 @@ CONFIDENCE_BOUND_ZSCORE=1.96
 ENABLE_BAYESIAN_POSTERIOR_CONFIDENCE=true
 BAYES_PRIOR_ALPHA=1
 BAYES_PRIOR_BETA=1
+ENABLE_DEPENDENCY_POSTERIOR_TUNING=true
+REQUIRE_CONJUGATE_PRIOR_POLICY=false
+RESOLVED_BAYES_PRIOR_ALPHA="$BAYES_PRIOR_ALPHA"
+RESOLVED_BAYES_PRIOR_BETA="$BAYES_PRIOR_BETA"
+CONJUGATE_PRIOR_SOURCE="cli"
 MANIFEST_FILE_EXPLICIT=false
 SIGNATURE_VERIFICATION_MODE="none"
 KMS_PUBLIC_KEY_FILE=""
@@ -113,6 +119,9 @@ Optional:
   --failover-triggered  Automated failover status (yes|no)
   --failback-completed  Automated failback status (yes|no)
   --weights-file        CSV file of per-profile scoring weights
+  --conjugate-prior-policy-file CSV file of dependency-scoped conjugate priors
+  --disable-dependency-specific-posterior-tuning Disable dependency-specific prior resolution and use CLI priors
+  --require-conjugate-prior-policy Fail-fast when conjugate-prior profile cannot be resolved
   --manifest-file       Signed manifest for weight-file integrity verification
   --require-signed-manifest Enforce signed manifest verification gates
   --trust-policy-file   Trust-policy distribution file for key rotation checks
@@ -235,6 +244,18 @@ while [[ $# -gt 0 ]]; do
         --weights-file)
             PROFILE_WEIGHTS_FILE="${2:-}"
             shift 2
+            ;;
+        --conjugate-prior-policy-file)
+            CONJUGATE_PRIOR_POLICY_FILE="${2:-}"
+            shift 2
+            ;;
+        --disable-dependency-specific-posterior-tuning)
+            ENABLE_DEPENDENCY_POSTERIOR_TUNING=false
+            shift
+            ;;
+        --require-conjugate-prior-policy)
+            REQUIRE_CONJUGATE_PRIOR_POLICY=true
+            shift
             ;;
         --manifest-file)
             PROFILE_MANIFEST_FILE="${2:-}"
@@ -604,6 +625,47 @@ fi
 if [ -z "$POLICY_PROFILE" ]; then
     echo "--policy-profile cannot be empty" >&2
     exit 1
+fi
+
+if [ "$ENABLE_DEPENDENCY_POSTERIOR_TUNING" = true ]; then
+    if [ -f "$CONJUGATE_PRIOR_POLICY_FILE" ] && [ -r "$CONJUGATE_PRIOR_POLICY_FILE" ]; then
+        PRIOR_ROW=$(awk -F',' -v profile="$POLICY_PROFILE" -v dep="$DEPENDENCY" 'NR > 1 && $1 == profile && $2 == dep { print $0; exit }' "$CONJUGATE_PRIOR_POLICY_FILE")
+        if [ -z "$PRIOR_ROW" ]; then
+            PRIOR_ROW=$(awk -F',' -v profile="$POLICY_PROFILE" 'NR > 1 && $1 == profile && $2 == "*" { print $0; exit }' "$CONJUGATE_PRIOR_POLICY_FILE")
+        fi
+
+        if [ -n "$PRIOR_ROW" ]; then
+            IFS=',' read -r _priorProfile _priorDependency _priorAlpha _priorBeta _priorNotes <<< "$PRIOR_ROW"
+            _priorAlpha=$(echo "$_priorAlpha" | tr -d '\r[:space:]')
+            _priorBeta=$(echo "$_priorBeta" | tr -d '\r[:space:]')
+
+            if ! awk -v v="$_priorAlpha" 'BEGIN { exit !(v+0>0) }'; then
+                echo "Conjugate-prior policy failed: prior_alpha must be a positive number for profile '$POLICY_PROFILE' dependency '${_priorDependency:-$DEPENDENCY}' in $CONJUGATE_PRIOR_POLICY_FILE" >&2
+                exit 1
+            fi
+
+            if ! awk -v v="$_priorBeta" 'BEGIN { exit !(v+0>0) }'; then
+                echo "Conjugate-prior policy failed: prior_beta must be a positive number for profile '$POLICY_PROFILE' dependency '${_priorDependency:-$DEPENDENCY}' in $CONJUGATE_PRIOR_POLICY_FILE" >&2
+                exit 1
+            fi
+
+            RESOLVED_BAYES_PRIOR_ALPHA="$_priorAlpha"
+            RESOLVED_BAYES_PRIOR_BETA="$_priorBeta"
+            CONJUGATE_PRIOR_SOURCE="policy-profile"
+        elif [ "$REQUIRE_CONJUGATE_PRIOR_POLICY" = true ]; then
+            echo "Conjugate-prior policy failed: missing profile '$POLICY_PROFILE' dependency '$DEPENDENCY' in $CONJUGATE_PRIOR_POLICY_FILE" >&2
+            exit 1
+        else
+            CONJUGATE_PRIOR_SOURCE="cli-fallback"
+        fi
+    elif [ "$REQUIRE_CONJUGATE_PRIOR_POLICY" = true ]; then
+        echo "Conjugate-prior policy failed: missing or unreadable file $CONJUGATE_PRIOR_POLICY_FILE" >&2
+        exit 1
+    else
+        CONJUGATE_PRIOR_SOURCE="cli-fallback"
+    fi
+else
+    CONJUGATE_PRIOR_SOURCE="cli-disabled"
 fi
 
 if [[ "$SIGNATURE_VERIFICATION_MODE" != "none" &&
@@ -1394,6 +1456,10 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
 **Edge Persistence Percent**: ${EDGE_PERSISTENCE_PERCENT:-0}%
 **Edge Persistence Score**: ${EDGE_PERSISTENCE_SCORE:-0}
 **Graph Edge Persistence Enabled**: $ENABLE_GRAPH_EDGE_PERSISTENCE
+**Dependency-Specific Posterior Tuning Enabled**: $ENABLE_DEPENDENCY_POSTERIOR_TUNING
+**Conjugate Prior Source**: $CONJUGATE_PRIOR_SOURCE
+**Resolved Bayesian Prior Alpha**: $RESOLVED_BAYES_PRIOR_ALPHA
+**Resolved Bayesian Prior Beta**: $RESOLVED_BAYES_PRIOR_BETA
 **Causal Graph Node**: $CAUSAL_GRAPH_NODE
 **Causal Graph Edge**: $CAUSAL_GRAPH_EDGE
 **Anomaly Gate Enabled**: $REQUIRE_ATTESTATION_BASELINE_GATE
@@ -1481,8 +1547,8 @@ EOF
                     BAYES_NON_FAIL=$(( BAYES_TOTAL_COUNT - BAYES_FAIL_COUNT ))
                     [ "$BAYES_NON_FAIL" -lt 0 ] && BAYES_NON_FAIL=0
 
-                    POST_ALPHA=$(awk -v a="$BAYES_PRIOR_ALPHA" -v f="$BAYES_FAIL_COUNT" 'BEGIN { print a+f }')
-                    POST_BETA=$(awk -v b="$BAYES_PRIOR_BETA" -v nf="$BAYES_NON_FAIL" 'BEGIN { print b+nf }')
+                    POST_ALPHA=$(awk -v a="$RESOLVED_BAYES_PRIOR_ALPHA" -v f="$BAYES_FAIL_COUNT" 'BEGIN { print a+f }')
+                    POST_BETA=$(awk -v b="$RESOLVED_BAYES_PRIOR_BETA" -v nf="$BAYES_NON_FAIL" 'BEGIN { print b+nf }')
                     POST_MEAN=$(awk -v a="$POST_ALPHA" -v b="$POST_BETA" 'BEGIN { if ((a+b)>0) print a/(a+b); else print 0 }')
                     POST_VAR=$(awk -v a="$POST_ALPHA" -v b="$POST_BETA" 'BEGIN { d=(a+b)*(a+b)*(a+b+1); if (d>0) print (a*b)/d; else print 0 }')
                     POST_STD=$(awk -v v="$POST_VAR" 'BEGIN { if (v>0) print sqrt(v); else print 0 }')
@@ -1490,7 +1556,7 @@ EOF
                     POST_LOW=$(awk -v m="$POST_MEAN" -v d="$POST_MARGIN" 'BEGIN { v=m-d; if (v<0) v=0; printf "%.2f", v*100 }')
                     POST_HIGH=$(awk -v m="$POST_MEAN" -v d="$POST_MARGIN" 'BEGIN { v=m+d; if (v>1) v=1; printf "%.2f", v*100 }')
                     POST_MEAN_PCT=$(awk -v m="$POST_MEAN" 'BEGIN { printf "%.2f", m*100 }')
-                    CONF_BOUNDS_STATEMENT="$CONF_BOUNDS_STATEMENT Bayesian posterior mean is $POST_MEAN_PCT% with approximate interval [$POST_LOW%, $POST_HIGH%] using prior alpha=$BAYES_PRIOR_ALPHA, beta=$BAYES_PRIOR_BETA."
+                    CONF_BOUNDS_STATEMENT="$CONF_BOUNDS_STATEMENT Bayesian posterior mean is $POST_MEAN_PCT% with approximate interval [$POST_LOW%, $POST_HIGH%] using prior alpha=$RESOLVED_BAYES_PRIOR_ALPHA, beta=$RESOLVED_BAYES_PRIOR_BETA (source: $CONJUGATE_PRIOR_SOURCE)."
                 fi
             fi
 
@@ -1939,6 +2005,12 @@ $RECOMMENDATION
 - Edge Persistence Percent: ${EDGE_PERSISTENCE_PERCENT:-0}%
 - Edge Persistence Score: ${EDGE_PERSISTENCE_SCORE:-0}
 - Graph Edge Persistence Enabled: ${ENABLE_GRAPH_EDGE_PERSISTENCE}
+- Conjugate Prior Policy Source: ${CONJUGATE_PRIOR_SOURCE}
+- Conjugate Prior Policy File: ${CONJUGATE_PRIOR_POLICY_FILE}
+- Dependency-Specific Posterior Tuning Enabled: ${ENABLE_DEPENDENCY_POSTERIOR_TUNING}
+- Dependency-Specific Posterior Tuning Gate: ${REQUIRE_CONJUGATE_PRIOR_POLICY}
+- Resolved Bayesian Prior Alpha: ${RESOLVED_BAYES_PRIOR_ALPHA}
+- Resolved Bayesian Prior Beta: ${RESOLVED_BAYES_PRIOR_BETA}
 - Causal Graph Node: ${CAUSAL_GRAPH_NODE:-none}
 - Causal Graph Edge: ${CAUSAL_GRAPH_EDGE:-none}
 - Attestation Baseline Gate: ${REQUIRE_ATTESTATION_BASELINE_GATE}

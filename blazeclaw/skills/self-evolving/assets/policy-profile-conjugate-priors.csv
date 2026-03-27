@@ -1,0 +1,7 @@
+profile,dependency,prior_alpha,prior_beta,notes
+default,registry,1.2,1.0,balanced registry prior
+default,authority,1.4,0.9,slightly fail-sensitive authority prior
+org-prod-opa,registry,1.0,1.3,strong confidence in stable registry failover
+org-prod-opa,authority,1.5,0.8,authority chain risk-sensitive prior
+org-dr-sentinel,registry,1.3,1.1,disaster-recovery registry stress prior
+org-dr-sentinel,authority,1.8,0.7,disaster-recovery authority strict prior

@@ -13,6 +13,8 @@ $trendHistoryFile =
     './blazeclaw/skills/self-evolving/.learnings/OUTAGE_TREND_HISTORY.csv'
 $profileWeightsFile =
     './blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.csv'
+$conjugatePriorPolicyFile =
+    './blazeclaw/skills/self-evolving/assets/policy-profile-conjugate-priors.csv'
 $profileManifestFile =
     './blazeclaw/skills/self-evolving/assets/policy-profile-scoring-weights.manifest'
 $trustPolicyFile =
@@ -79,6 +81,9 @@ Optional:
   --failover-triggered  Automated failover status (yes|no)
   --failback-completed  Automated failback status (yes|no)
   --weights-file        CSV file of per-profile scoring weights
+  --conjugate-prior-policy-file CSV file of dependency-scoped conjugate priors
+  --disable-dependency-specific-posterior-tuning Disable dependency-specific prior resolution and use CLI priors
+  --require-conjugate-prior-policy Fail-fast when conjugate-prior profile cannot be resolved
   --manifest-file       Signed manifest for weight-file integrity verification
   --require-signed-manifest Enforce signed manifest verification gates
   --trust-policy-file   Trust-policy distribution file for key rotation checks
@@ -190,6 +195,11 @@ $confidenceBoundZScore = 1.96
 $enableBayesianPosteriorConfidence = $true
 $bayesPriorAlpha = 1.0
 $bayesPriorBeta = 1.0
+$enableDependencyPosteriorTuning = $true
+$requireConjugatePriorPolicy = $false
+$resolvedBayesPriorAlpha = $bayesPriorAlpha
+$resolvedBayesPriorBeta = $bayesPriorBeta
+$conjugatePriorSource = 'cli'
 $manifestFileExplicit = $false
 $signatureVerificationMode = 'none'
 $kmsPublicKeyFile = ''
@@ -270,6 +280,10 @@ $graphTemporalSource = 'disabled'
 $notes = ''
 $trendWindowSize = 20
 $dryRun = $false
+$graphExplainabilityEntry = ''
+$explainabilityHistoryRecord = ''
+$explainerDiffEntry = ''
+$driftRootCauseEntry = ''
 
 for ($i = 0; $i -lt $args.Length; $i++) {
     $arg = [string]$args[$i]
@@ -321,6 +335,16 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         '--weights-file' {
             $i++
             $profileWeightsFile = [string]$args[$i]
+        }
+        '--conjugate-prior-policy-file' {
+            $i++
+            $conjugatePriorPolicyFile = [string]$args[$i]
+        }
+        '--disable-dependency-specific-posterior-tuning' {
+            $enableDependencyPosteriorTuning = $false
+        }
+        '--require-conjugate-prior-policy' {
+            $requireConjugatePriorPolicy = $true
         }
         '--manifest-file' {
             $i++
@@ -652,6 +676,63 @@ if ($bayesPriorBeta -le 0) {
 
 if ([string]::IsNullOrWhiteSpace($policyProfile)) {
     throw '--policy-profile cannot be empty'
+}
+
+if ($enableDependencyPosteriorTuning) {
+    if (Test-Path -LiteralPath $conjugatePriorPolicyFile) {
+        $priorRows = Import-Csv -LiteralPath $conjugatePriorPolicyFile
+        if (-not $priorRows) {
+            if ($requireConjugatePriorPolicy) {
+                throw "Conjugate-prior policy failed: malformed or empty CSV at $conjugatePriorPolicyFile"
+            }
+            $conjugatePriorSource = 'cli-fallback'
+        } else {
+            $priorRow = $priorRows |
+                Where-Object {
+                    $_.profile -eq $policyProfile -and
+                    $_.dependency -eq $dependency
+                } |
+                Select-Object -First 1
+
+            if (-not $priorRow) {
+                $priorRow = $priorRows |
+                    Where-Object {
+                        $_.profile -eq $policyProfile -and
+                        $_.dependency -eq '*'
+                    } |
+                    Select-Object -First 1
+            }
+
+            if ($priorRow) {
+                [double]$parsedPriorAlpha = 0
+                [double]$parsedPriorBeta = 0
+
+                if (-not [double]::TryParse([string]$priorRow.prior_alpha,
+                        [ref]$parsedPriorAlpha) -or $parsedPriorAlpha -le 0) {
+                    throw "Conjugate-prior policy failed: prior_alpha must be positive for profile '$policyProfile' dependency '$($priorRow.dependency)' in $conjugatePriorPolicyFile"
+                }
+
+                if (-not [double]::TryParse([string]$priorRow.prior_beta,
+                        [ref]$parsedPriorBeta) -or $parsedPriorBeta -le 0) {
+                    throw "Conjugate-prior policy failed: prior_beta must be positive for profile '$policyProfile' dependency '$($priorRow.dependency)' in $conjugatePriorPolicyFile"
+                }
+
+                $resolvedBayesPriorAlpha = $parsedPriorAlpha
+                $resolvedBayesPriorBeta = $parsedPriorBeta
+                $conjugatePriorSource = 'policy-profile'
+            } elseif ($requireConjugatePriorPolicy) {
+                throw "Conjugate-prior policy failed: missing profile '$policyProfile' dependency '$dependency' in $conjugatePriorPolicyFile"
+            } else {
+                $conjugatePriorSource = 'cli-fallback'
+            }
+        }
+    } elseif ($requireConjugatePriorPolicy) {
+        throw "Conjugate-prior policy failed: missing file $conjugatePriorPolicyFile"
+    } else {
+        $conjugatePriorSource = 'cli-fallback'
+    }
+} else {
+    $conjugatePriorSource = 'cli-disabled'
 }
 
 if (-not (Test-Path -LiteralPath $explainabilityHistoryFile)) {
@@ -1732,6 +1813,10 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
 **Edge Persistence Percent**: $edgePersistencePercent%
 **Edge Persistence Score**: $edgePersistenceScore
 **Graph Edge Persistence Enabled**: $enableGraphEdgePersistence
+**Dependency-Specific Posterior Tuning Enabled**: $enableDependencyPosteriorTuning
+**Conjugate Prior Source**: $conjugatePriorSource
+**Resolved Bayesian Prior Alpha**: $resolvedBayesPriorAlpha
+**Resolved Bayesian Prior Beta**: $resolvedBayesPriorBeta
 **Causal Graph Node**: $causalGraphNode
 **Causal Graph Edge**: $causalGraphEdge
 **Anomaly Gate Enabled**: $requireAttestationBaselineGate
@@ -1742,6 +1827,7 @@ $explainabilityHistoryRecord =
     "$timestamp,$tenantId,$rolloutPhase,$dependency,$(if ($failureMode) { $failureMode } else { 'unspecified' }),$explainSampleContrib,$explainFailContrib,$explainContextContrib,$explainPersistContrib,$causalConfidenceScore,$causalClusterSuggestedOverlay,$(if ($causalClusterSuggestedOverlay -eq 'none') { 'below-threshold-or-no-signal' } else { 'qualified' })"
 $explainerDiffEntry = ''
 $driftRootCauseEntry = ''
+$graphExplainabilityEntry = ''
 if ($enableExplainerDiffing) {
     $effectiveFailureModeForDiff = if ($failureMode) { $failureMode } else { 'unspecified' }
     $prevExplainRow = Import-Csv -LiteralPath $explainabilityHistoryFile |
@@ -1828,8 +1914,8 @@ if ($enableExplainerDiffing) {
                     $bayesFailCount = [Math]::Max(0, [int]$causalClusterFailCount)
                     $bayesTotalCount = [Math]::Max(0, [int]$causalClusterSampleCount)
                     $bayesNonFail = [Math]::Max(0, $bayesTotalCount - $bayesFailCount)
-                    $posteriorAlpha = [double]$bayesPriorAlpha + $bayesFailCount
-                    $posteriorBeta = [double]$bayesPriorBeta + $bayesNonFail
+                    $posteriorAlpha = [double]$resolvedBayesPriorAlpha + $bayesFailCount
+                    $posteriorBeta = [double]$resolvedBayesPriorBeta + $bayesNonFail
                     $posteriorMean = if (($posteriorAlpha + $posteriorBeta) -gt 0) { $posteriorAlpha / ($posteriorAlpha + $posteriorBeta) } else { 0.0 }
                     $posteriorVarDenom = ($posteriorAlpha + $posteriorBeta) * ($posteriorAlpha + $posteriorBeta) * ($posteriorAlpha + $posteriorBeta + 1)
                     $posteriorVar = if ($posteriorVarDenom -gt 0) { ($posteriorAlpha * $posteriorBeta) / $posteriorVarDenom } else { 0.0 }
@@ -1837,7 +1923,7 @@ if ($enableExplainerDiffing) {
                     $posteriorMargin = $confidenceBoundZScore * $posteriorStd
                     $posteriorLow = [Math]::Max(0.0, $posteriorMean - $posteriorMargin)
                     $posteriorHigh = [Math]::Min(1.0, $posteriorMean + $posteriorMargin)
-                    $confidenceBoundsStatement = "$confidenceBoundsStatement Bayesian posterior mean is $([Math]::Round($posteriorMean * 100, 2))% with approximate interval [$([Math]::Round($posteriorLow * 100, 2))%, $([Math]::Round($posteriorHigh * 100, 2))%] using prior alpha=$bayesPriorAlpha, beta=$bayesPriorBeta."
+                    $confidenceBoundsStatement = "$confidenceBoundsStatement Bayesian posterior mean is $([Math]::Round($posteriorMean * 100, 2))% with approximate interval [$([Math]::Round($posteriorLow * 100, 2))%, $([Math]::Round($posteriorHigh * 100, 2))%] using prior alpha=$resolvedBayesPriorAlpha, beta=$resolvedBayesPriorBeta (source: $conjugatePriorSource)."
                 }
             }
 
@@ -2289,6 +2375,12 @@ $recommendation
 - Edge Persistence Percent: $edgePersistencePercent%
 - Edge Persistence Score: $edgePersistenceScore
 - Graph Edge Persistence Enabled: $enableGraphEdgePersistence
+- Conjugate Prior Policy Source: $conjugatePriorSource
+- Conjugate Prior Policy File: $conjugatePriorPolicyFile
+- Dependency-Specific Posterior Tuning Enabled: $enableDependencyPosteriorTuning
+- Dependency-Specific Posterior Tuning Gate: $requireConjugatePriorPolicy
+- Resolved Bayesian Prior Alpha: $resolvedBayesPriorAlpha
+- Resolved Bayesian Prior Beta: $resolvedBayesPriorBeta
 - Causal Graph Node: $causalGraphNode
 - Causal Graph Edge: $causalGraphEdge
 - Attestation Baseline Gate: $requireAttestationBaselineGate
