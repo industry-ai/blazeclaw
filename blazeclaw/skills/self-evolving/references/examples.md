@@ -126,6 +126,7 @@ Authority outage simulation SIM-AUTH-001 failed trust-chain validation fallback
 - Tenant ID: tenant-a
 - Rollout Phase: r3
 - Policy Profile: org-dr-sentinel
+- Environment: prod
 - Policy Profile Schema Version: v1
 - Dependency: authority
 - Result: fail
@@ -277,11 +278,14 @@ phase promotion.
 - Dominant Factor Delta: 9
 - Narrative: Fail-impact contribution shifted most, indicating failure prevalence changed between consecutive cohorts.
 - Confidence Interval: Approximate 95% confidence interval for fail-impact signal is [12.44%, 58.73%] using z=1.96 and n=12.
-- Conjugate Prior Policy Source: policy-profile
+- Conjugate Prior Policy Source: policy-profile-hierarchy
 - Dependency-Specific Posterior Tuning Enabled: true
+- Resolved Prior Environment Match: prod
+- Resolved Prior Tenant Match: tenant-a
+- Resolved Prior Dependency Match: authority
 - Resolved Bayesian Prior Alpha: 1.5
 - Resolved Bayesian Prior Beta: 0.8
-- Bayesian Posterior: Posterior mean is 42.11% with approximate interval [21.77%, 62.45%] using dependency-scoped prior alpha=1.5, beta=0.8.
+- Bayesian Posterior: Posterior mean is 42.11% with approximate interval [21.77%, 62.45%] using hierarchical prior alpha=1.5, beta=0.8.
 
 ### Target Controls
 - hooks.engine.attestationRevocationMode
@@ -332,8 +336,8 @@ Attestation anomaly baseline breach: 16% exceeds 10% for tenant tenant-a
 ```
 
 ```text
-$ scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-009 --tenant-id tenant-a --rollout-phase r2 --policy-profile org-prod-opa --conjugate-prior-policy-file ./blazeclaw/skills/self-evolving/assets/policy-profile-conjugate-priors.csv --require-conjugate-prior-policy --dependency authority --result fail --failure-mode certificate-expiry --evidence-path reports/drills/sim-reg-009.json
-Conjugate-prior policy failed: missing profile 'org-prod-opa' dependency 'authority' in ./blazeclaw/skills/self-evolving/assets/policy-profile-conjugate-priors.csv
+$ scripts/outage-outcome-promoter.sh --dry-run --simulation-id SIM-REG-009 --tenant-id tenant-z --rollout-phase r2 --policy-profile org-dr-sentinel --environment dev --conjugate-prior-policy-file ./blazeclaw/skills/self-evolving/assets/policy-profile-conjugate-priors.csv --require-conjugate-prior-policy --dependency authority --result fail --failure-mode certificate-expiry --evidence-path reports/drills/sim-reg-009.json
+Conjugate-prior policy failed: missing profile 'org-dr-sentinel' environment 'dev' tenant 'tenant-z' dependency 'authority' in ./blazeclaw/skills/self-evolving/assets/policy-profile-conjugate-priors.csv
 ```
 
 ## Learning: Knowledge Gap (Resolved)

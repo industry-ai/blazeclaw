@@ -1,4 +1,7 @@
-profile,dependency,prior_alpha,prior_beta,notes
-<policy-profile>,registry,<positive-number>,<positive-number>,<optional-note>
-<policy-profile>,authority,<positive-number>,<positive-number>,<optional-note>
-<policy-profile>,*,<positive-number>,<positive-number>,fallback-for-all-dependencies
+profile,environment,tenant_id,dependency,prior_alpha,prior_beta,notes
+<policy-profile>,prod,<tenant-id>,registry,<positive-number>,<positive-number>,tenant-specific prod override
+<policy-profile>,prod,<tenant-id>,authority,<positive-number>,<positive-number>,tenant-specific prod override
+<policy-profile>,prod,*,registry,<positive-number>,<positive-number>,environment fallback for registry
+<policy-profile>,stage,*,authority,<positive-number>,<positive-number>,environment fallback for authority
+<policy-profile>,dev,*,*,<positive-number>,<positive-number>,environment fallback for all dependencies
+<policy-profile>,*,*,*,<positive-number>,<positive-number>,global fallback

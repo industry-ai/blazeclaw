@@ -38,6 +38,7 @@ SIMULATION_ID=""
 TENANT_ID=""
 ROLLOUT_PHASE=""
 POLICY_PROFILE="default"
+ENVIRONMENT="prod"
 STRICT_SCHEMA_VERSION=""
 REQUIRE_SIGNED_MANIFEST=false
 REQUIRE_TRUST_POLICY=false
@@ -82,6 +83,9 @@ REQUIRE_CONJUGATE_PRIOR_POLICY=false
 RESOLVED_BAYES_PRIOR_ALPHA="$BAYES_PRIOR_ALPHA"
 RESOLVED_BAYES_PRIOR_BETA="$BAYES_PRIOR_BETA"
 CONJUGATE_PRIOR_SOURCE="cli"
+RESOLVED_PRIOR_ENVIRONMENT="*"
+RESOLVED_PRIOR_TENANT="*"
+RESOLVED_PRIOR_DEPENDENCY="*"
 MANIFEST_FILE_EXPLICIT=false
 SIGNATURE_VERIFICATION_MODE="none"
 KMS_PUBLIC_KEY_FILE=""
@@ -109,6 +113,7 @@ Required:
   --tenant-id           Tenant identifier for trend analysis
   --rollout-phase       Rollout phase (r1|r2|r3|r4)
   --policy-profile      Policy profile for configurable score weights
+  --environment         Environment for hierarchical prior overrides (dev|stage|prod, default: prod)
   --dependency          Target dependency (registry|authority)
   --result              Simulation result (pass|fail)
   --evidence-path       Path to drill evidence artifact
@@ -211,6 +216,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --policy-profile)
             POLICY_PROFILE="${2:-}"
+            shift 2
+            ;;
+        --environment)
+            ENVIRONMENT="${2:-}"
             shift 2
             ;;
         --dependency)
@@ -627,33 +636,67 @@ if [ -z "$POLICY_PROFILE" ]; then
     exit 1
 fi
 
+if [[ "$ENVIRONMENT" != "dev" && "$ENVIRONMENT" != "stage" && "$ENVIRONMENT" != "prod" ]]; then
+    echo "--environment must be one of: dev, stage, prod" >&2
+    exit 1
+fi
+
 if [ "$ENABLE_DEPENDENCY_POSTERIOR_TUNING" = true ]; then
     if [ -f "$CONJUGATE_PRIOR_POLICY_FILE" ] && [ -r "$CONJUGATE_PRIOR_POLICY_FILE" ]; then
-        PRIOR_ROW=$(awk -F',' -v profile="$POLICY_PROFILE" -v dep="$DEPENDENCY" 'NR > 1 && $1 == profile && $2 == dep { print $0; exit }' "$CONJUGATE_PRIOR_POLICY_FILE")
-        if [ -z "$PRIOR_ROW" ]; then
-            PRIOR_ROW=$(awk -F',' -v profile="$POLICY_PROFILE" 'NR > 1 && $1 == profile && $2 == "*" { print $0; exit }' "$CONJUGATE_PRIOR_POLICY_FILE")
-        fi
+        PRIOR_ROW=$(awk -F',' -v profile="$POLICY_PROFILE" -v env="$ENVIRONMENT" -v tenant="$TENANT_ID" -v dep="$DEPENDENCY" '
+            NR == 1 { next }
+            $1 != profile { next }
+            {
+                envRow=tolower($2);
+                tenantRow=tolower($3);
+                depRow=tolower($4);
+                envInput=tolower(env);
+                tenantInput=tolower(tenant);
+                depInput=tolower(dep);
+
+                envScore=(envRow==envInput)?2:((envRow=="*"||envRow=="all")?1:0);
+                tenantScore=(tenantRow==tenantInput)?2:((tenantRow=="*"||tenantRow=="all")?1:0);
+                depScore=(depRow==depInput)?2:((depRow=="*"||depRow=="all")?1:0);
+
+                if (envScore==0 || tenantScore==0 || depScore==0) {
+                    next;
+                }
+
+                score=(envScore*100)+(tenantScore*10)+depScore;
+                if (score > bestScore) {
+                    bestScore=score;
+                    bestRow=$0;
+                }
+            }
+            END { print bestRow }
+        ' "$CONJUGATE_PRIOR_POLICY_FILE")
 
         if [ -n "$PRIOR_ROW" ]; then
-            IFS=',' read -r _priorProfile _priorDependency _priorAlpha _priorBeta _priorNotes <<< "$PRIOR_ROW"
+            IFS=',' read -r _priorProfile _priorEnvironment _priorTenant _priorDependency _priorAlpha _priorBeta _priorNotes <<< "$PRIOR_ROW"
             _priorAlpha=$(echo "$_priorAlpha" | tr -d '\r[:space:]')
             _priorBeta=$(echo "$_priorBeta" | tr -d '\r[:space:]')
+            _priorEnvironment=$(echo "$_priorEnvironment" | tr -d '\r[:space:]')
+            _priorTenant=$(echo "$_priorTenant" | tr -d '\r[:space:]')
+            _priorDependency=$(echo "$_priorDependency" | tr -d '\r[:space:]')
 
             if ! awk -v v="$_priorAlpha" 'BEGIN { exit !(v+0>0) }'; then
-                echo "Conjugate-prior policy failed: prior_alpha must be a positive number for profile '$POLICY_PROFILE' dependency '${_priorDependency:-$DEPENDENCY}' in $CONJUGATE_PRIOR_POLICY_FILE" >&2
+                echo "Conjugate-prior policy failed: prior_alpha must be a positive number for profile '$POLICY_PROFILE' environment '${_priorEnvironment:-$ENVIRONMENT}' tenant '${_priorTenant:-$TENANT_ID}' dependency '${_priorDependency:-$DEPENDENCY}' in $CONJUGATE_PRIOR_POLICY_FILE" >&2
                 exit 1
             fi
 
             if ! awk -v v="$_priorBeta" 'BEGIN { exit !(v+0>0) }'; then
-                echo "Conjugate-prior policy failed: prior_beta must be a positive number for profile '$POLICY_PROFILE' dependency '${_priorDependency:-$DEPENDENCY}' in $CONJUGATE_PRIOR_POLICY_FILE" >&2
+                echo "Conjugate-prior policy failed: prior_beta must be a positive number for profile '$POLICY_PROFILE' environment '${_priorEnvironment:-$ENVIRONMENT}' tenant '${_priorTenant:-$TENANT_ID}' dependency '${_priorDependency:-$DEPENDENCY}' in $CONJUGATE_PRIOR_POLICY_FILE" >&2
                 exit 1
             fi
 
             RESOLVED_BAYES_PRIOR_ALPHA="$_priorAlpha"
             RESOLVED_BAYES_PRIOR_BETA="$_priorBeta"
-            CONJUGATE_PRIOR_SOURCE="policy-profile"
+            RESOLVED_PRIOR_ENVIRONMENT="${_priorEnvironment:-*}"
+            RESOLVED_PRIOR_TENANT="${_priorTenant:-*}"
+            RESOLVED_PRIOR_DEPENDENCY="${_priorDependency:-*}"
+            CONJUGATE_PRIOR_SOURCE="policy-profile-hierarchy"
         elif [ "$REQUIRE_CONJUGATE_PRIOR_POLICY" = true ]; then
-            echo "Conjugate-prior policy failed: missing profile '$POLICY_PROFILE' dependency '$DEPENDENCY' in $CONJUGATE_PRIOR_POLICY_FILE" >&2
+            echo "Conjugate-prior policy failed: missing profile '$POLICY_PROFILE' environment '$ENVIRONMENT' tenant '$TENANT_ID' dependency '$DEPENDENCY' in $CONJUGATE_PRIOR_POLICY_FILE" >&2
             exit 1
         else
             CONJUGATE_PRIOR_SOURCE="cli-fallback"
@@ -1458,6 +1501,9 @@ if [ "$REQUIRE_SIGNED_MANIFEST" = true ] || [ "$MANIFEST_FILE_EXPLICIT" = true ]
 **Graph Edge Persistence Enabled**: $ENABLE_GRAPH_EDGE_PERSISTENCE
 **Dependency-Specific Posterior Tuning Enabled**: $ENABLE_DEPENDENCY_POSTERIOR_TUNING
 **Conjugate Prior Source**: $CONJUGATE_PRIOR_SOURCE
+**Resolved Prior Environment Match**: $RESOLVED_PRIOR_ENVIRONMENT
+**Resolved Prior Tenant Match**: $RESOLVED_PRIOR_TENANT
+**Resolved Prior Dependency Match**: $RESOLVED_PRIOR_DEPENDENCY
 **Resolved Bayesian Prior Alpha**: $RESOLVED_BAYES_PRIOR_ALPHA
 **Resolved Bayesian Prior Beta**: $RESOLVED_BAYES_PRIOR_BETA
 **Causal Graph Node**: $CAUSAL_GRAPH_NODE
@@ -1875,6 +1921,7 @@ Outage simulation $SIMULATION_ID reported $RESULT for $DEPENDENCY dependency in 
 - Tenant ID: $TENANT_ID
 - Rollout Phase: $ROLLOUT_PHASE
 - Policy Profile: $POLICY_PROFILE
+- Environment: $ENVIRONMENT
 - Policy Profile Schema Version: ${_schema:-not-declared}
 - Dependency: $DEPENDENCY
 - Result: $RESULT
@@ -1910,6 +1957,7 @@ POLICY_ENTRY=$(cat << EOF
 **Tenant ID**: $TENANT_ID
 **Rollout Phase**: $ROLLOUT_PHASE
 **Policy Profile**: $POLICY_PROFILE
+**Environment**: $ENVIRONMENT
 **Dependency**: $DEPENDENCY
 **Outcome**: $RESULT
 **Status**: suggested
@@ -2007,6 +2055,9 @@ $RECOMMENDATION
 - Graph Edge Persistence Enabled: ${ENABLE_GRAPH_EDGE_PERSISTENCE}
 - Conjugate Prior Policy Source: ${CONJUGATE_PRIOR_SOURCE}
 - Conjugate Prior Policy File: ${CONJUGATE_PRIOR_POLICY_FILE}
+- Resolved Prior Environment Match: ${RESOLVED_PRIOR_ENVIRONMENT}
+- Resolved Prior Tenant Match: ${RESOLVED_PRIOR_TENANT}
+- Resolved Prior Dependency Match: ${RESOLVED_PRIOR_DEPENDENCY}
 - Dependency-Specific Posterior Tuning Enabled: ${ENABLE_DEPENDENCY_POSTERIOR_TUNING}
 - Dependency-Specific Posterior Tuning Gate: ${REQUIRE_CONJUGATE_PRIOR_POLICY}
 - Resolved Bayesian Prior Alpha: ${RESOLVED_BAYES_PRIOR_ALPHA}

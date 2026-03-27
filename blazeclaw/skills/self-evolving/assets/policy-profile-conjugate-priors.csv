@@ -1,7 +1,13 @@
-profile,dependency,prior_alpha,prior_beta,notes
-default,registry,1.2,1.0,balanced registry prior
-default,authority,1.4,0.9,slightly fail-sensitive authority prior
-org-prod-opa,registry,1.0,1.3,strong confidence in stable registry failover
-org-prod-opa,authority,1.5,0.8,authority chain risk-sensitive prior
-org-dr-sentinel,registry,1.3,1.1,disaster-recovery registry stress prior
-org-dr-sentinel,authority,1.8,0.7,disaster-recovery authority strict prior
+profile,environment,tenant_id,dependency,prior_alpha,prior_beta,notes
+default,*,*,registry,1.2,1.0,global balanced registry prior
+default,*,*,authority,1.4,0.9,global slightly fail-sensitive authority prior
+org-prod-opa,prod,tenant-a,registry,0.9,1.5,tenant-a prod registry stable baseline
+org-prod-opa,prod,tenant-a,authority,1.6,0.7,tenant-a prod authority strict baseline
+org-prod-opa,prod,*,registry,1.0,1.3,prod-wide registry fallback
+org-prod-opa,prod,*,authority,1.5,0.8,prod-wide authority fallback
+org-prod-opa,stage,*,registry,1.2,1.1,stage registry moderate fail sensitivity
+org-prod-opa,stage,*,authority,1.4,0.9,stage authority moderate fail sensitivity
+org-prod-opa,dev,*,*,1.0,1.0,dev neutral fallback for all dependencies
+org-dr-sentinel,prod,*,registry,1.3,1.1,disaster-recovery registry stress prior
+org-dr-sentinel,prod,*,authority,1.8,0.7,disaster-recovery authority strict prior
+org-dr-sentinel,stage,*,*,1.4,0.9,dr sentinel stage-wide fallback

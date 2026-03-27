@@ -71,6 +71,7 @@ Required:
   --tenant-id           Tenant identifier for trend analysis
   --rollout-phase       Rollout phase (r1|r2|r3|r4)
   --policy-profile      Policy profile for configurable score weights
+  --environment         Environment for hierarchical prior overrides (dev|stage|prod, default: prod)
   --dependency          Target dependency (registry|authority)
   --result              Simulation result (pass|fail)
   --evidence-path       Path to drill evidence artifact
@@ -156,6 +157,7 @@ $simulationId = ''
 $tenantId = ''
 $rolloutPhase = ''
 $policyProfile = 'default'
+$environment = 'prod'
 $strictSchemaVersion = ''
 $requireSignedManifest = $false
 $requireTrustPolicy = $false
@@ -200,6 +202,9 @@ $requireConjugatePriorPolicy = $false
 $resolvedBayesPriorAlpha = $bayesPriorAlpha
 $resolvedBayesPriorBeta = $bayesPriorBeta
 $conjugatePriorSource = 'cli'
+$resolvedPriorEnvironment = '*'
+$resolvedPriorTenant = '*'
+$resolvedPriorDependency = '*'
 $manifestFileExplicit = $false
 $signatureVerificationMode = 'none'
 $kmsPublicKeyFile = ''
@@ -303,6 +308,10 @@ for ($i = 0; $i -lt $args.Length; $i++) {
         '--policy-profile' {
             $i++
             $policyProfile = [string]$args[$i]
+        }
+        '--environment' {
+            $i++
+            $environment = [string]$args[$i]
         }
         '--dependency' {
             $i++
@@ -678,6 +687,10 @@ if ([string]::IsNullOrWhiteSpace($policyProfile)) {
     throw '--policy-profile cannot be empty'
 }
 
+if ($environment -notin @('dev', 'stage', 'prod')) {
+    throw '--environment must be one of: dev, stage, prod'
+}
+
 if ($enableDependencyPosteriorTuning) {
     if (Test-Path -LiteralPath $conjugatePriorPolicyFile) {
         $priorRows = Import-Csv -LiteralPath $conjugatePriorPolicyFile
@@ -689,39 +702,83 @@ if ($enableDependencyPosteriorTuning) {
         } else {
             $priorRow = $priorRows |
                 Where-Object {
-                    $_.profile -eq $policyProfile -and
-                    $_.dependency -eq $dependency
+                    if ($_.profile -ne $policyProfile) {
+                        return $false
+                    }
+
+                    $rowEnvironment = ([string]$_.environment).ToLowerInvariant()
+                    if ([string]::IsNullOrWhiteSpace($rowEnvironment)) {
+                        $rowEnvironment = '*'
+                    }
+
+                    $rowTenant = ([string]$_.tenant_id).ToLowerInvariant()
+                    if ([string]::IsNullOrWhiteSpace($rowTenant)) {
+                        $rowTenant = '*'
+                    }
+
+                    $rowDependency = ([string]$_.dependency).ToLowerInvariant()
+                    if ([string]::IsNullOrWhiteSpace($rowDependency)) {
+                        $rowDependency = '*'
+                    }
+
+                    $envMatch = ($rowEnvironment -eq $environment) -or ($rowEnvironment -eq '*') -or ($rowEnvironment -eq 'all')
+                    $tenantMatch = ($rowTenant -eq $tenantId.ToLowerInvariant()) -or ($rowTenant -eq '*') -or ($rowTenant -eq 'all')
+                    $dependencyMatch = ($rowDependency -eq $dependency) -or ($rowDependency -eq '*') -or ($rowDependency -eq 'all')
+
+                    return $envMatch -and $tenantMatch -and $dependencyMatch
+                } |
+                Sort-Object -Descending -Property @{
+                    Expression = {
+                        $rowEnvironment = ([string]$_.environment).ToLowerInvariant()
+                        if ([string]::IsNullOrWhiteSpace($rowEnvironment)) {
+                            $rowEnvironment = '*'
+                        }
+
+                        $rowTenant = ([string]$_.tenant_id).ToLowerInvariant()
+                        if ([string]::IsNullOrWhiteSpace($rowTenant)) {
+                            $rowTenant = '*'
+                        }
+
+                        $rowDependency = ([string]$_.dependency).ToLowerInvariant()
+                        if ([string]::IsNullOrWhiteSpace($rowDependency)) {
+                            $rowDependency = '*'
+                        }
+
+                        $envScore = if ($rowEnvironment -eq $environment) { 2 } elseif ($rowEnvironment -in @('*', 'all')) { 1 } else { 0 }
+                        $tenantScore = if ($rowTenant -eq $tenantId.ToLowerInvariant()) { 2 } elseif ($rowTenant -in @('*', 'all')) { 1 } else { 0 }
+                        $dependencyScore = if ($rowDependency -eq $dependency) { 2 } elseif ($rowDependency -in @('*', 'all')) { 1 } else { 0 }
+
+                        return ($envScore * 100) + ($tenantScore * 10) + $dependencyScore
+                    }
                 } |
                 Select-Object -First 1
-
-            if (-not $priorRow) {
-                $priorRow = $priorRows |
-                    Where-Object {
-                        $_.profile -eq $policyProfile -and
-                        $_.dependency -eq '*'
-                    } |
-                    Select-Object -First 1
-            }
 
             if ($priorRow) {
                 [double]$parsedPriorAlpha = 0
                 [double]$parsedPriorBeta = 0
 
+                $priorEnvironmentValue = if ([string]::IsNullOrWhiteSpace([string]$priorRow.environment)) { '*' } else { [string]$priorRow.environment }
+                $priorTenantValue = if ([string]::IsNullOrWhiteSpace([string]$priorRow.tenant_id)) { '*' } else { [string]$priorRow.tenant_id }
+                $priorDependencyValue = if ([string]::IsNullOrWhiteSpace([string]$priorRow.dependency)) { '*' } else { [string]$priorRow.dependency }
+
                 if (-not [double]::TryParse([string]$priorRow.prior_alpha,
                         [ref]$parsedPriorAlpha) -or $parsedPriorAlpha -le 0) {
-                    throw "Conjugate-prior policy failed: prior_alpha must be positive for profile '$policyProfile' dependency '$($priorRow.dependency)' in $conjugatePriorPolicyFile"
+                    throw "Conjugate-prior policy failed: prior_alpha must be positive for profile '$policyProfile' environment '$priorEnvironmentValue' tenant '$priorTenantValue' dependency '$priorDependencyValue' in $conjugatePriorPolicyFile"
                 }
 
                 if (-not [double]::TryParse([string]$priorRow.prior_beta,
                         [ref]$parsedPriorBeta) -or $parsedPriorBeta -le 0) {
-                    throw "Conjugate-prior policy failed: prior_beta must be positive for profile '$policyProfile' dependency '$($priorRow.dependency)' in $conjugatePriorPolicyFile"
+                    throw "Conjugate-prior policy failed: prior_beta must be positive for profile '$policyProfile' environment '$priorEnvironmentValue' tenant '$priorTenantValue' dependency '$priorDependencyValue' in $conjugatePriorPolicyFile"
                 }
 
                 $resolvedBayesPriorAlpha = $parsedPriorAlpha
                 $resolvedBayesPriorBeta = $parsedPriorBeta
-                $conjugatePriorSource = 'policy-profile'
+                $resolvedPriorEnvironment = $priorEnvironmentValue
+                $resolvedPriorTenant = $priorTenantValue
+                $resolvedPriorDependency = $priorDependencyValue
+                $conjugatePriorSource = 'policy-profile-hierarchy'
             } elseif ($requireConjugatePriorPolicy) {
-                throw "Conjugate-prior policy failed: missing profile '$policyProfile' dependency '$dependency' in $conjugatePriorPolicyFile"
+                throw "Conjugate-prior policy failed: missing profile '$policyProfile' environment '$environment' tenant '$tenantId' dependency '$dependency' in $conjugatePriorPolicyFile"
             } else {
                 $conjugatePriorSource = 'cli-fallback'
             }
@@ -1815,6 +1872,9 @@ if ($requireSignedManifest -or $manifestFileExplicit) {
 **Graph Edge Persistence Enabled**: $enableGraphEdgePersistence
 **Dependency-Specific Posterior Tuning Enabled**: $enableDependencyPosteriorTuning
 **Conjugate Prior Source**: $conjugatePriorSource
+**Resolved Prior Environment Match**: $resolvedPriorEnvironment
+**Resolved Prior Tenant Match**: $resolvedPriorTenant
+**Resolved Prior Dependency Match**: $resolvedPriorDependency
 **Resolved Bayesian Prior Alpha**: $resolvedBayesPriorAlpha
 **Resolved Bayesian Prior Beta**: $resolvedBayesPriorBeta
 **Causal Graph Node**: $causalGraphNode
@@ -2246,6 +2306,7 @@ Outage simulation $simulationId reported $result for $dependency dependency in t
 - Tenant ID: $tenantId
 - Rollout Phase: $rolloutPhase
 - Policy Profile: $policyProfile
+- Environment: $environment
 - Policy Profile Schema Version: $(if ($profileSchemaVersion) { $profileSchemaVersion } else { 'not-declared' })
 - Dependency: $dependency
 - Result: $result
@@ -2280,6 +2341,7 @@ $policyEntry = @"
 **Tenant ID**: $tenantId
 **Rollout Phase**: $rolloutPhase
 **Policy Profile**: $policyProfile
+**Environment**: $environment
 **Dependency**: $dependency
 **Outcome**: $result
 **Status**: suggested
@@ -2377,6 +2439,9 @@ $recommendation
 - Graph Edge Persistence Enabled: $enableGraphEdgePersistence
 - Conjugate Prior Policy Source: $conjugatePriorSource
 - Conjugate Prior Policy File: $conjugatePriorPolicyFile
+- Resolved Prior Environment Match: $resolvedPriorEnvironment
+- Resolved Prior Tenant Match: $resolvedPriorTenant
+- Resolved Prior Dependency Match: $resolvedPriorDependency
 - Dependency-Specific Posterior Tuning Enabled: $enableDependencyPosteriorTuning
 - Dependency-Specific Posterior Tuning Gate: $requireConjugatePriorPolicy
 - Resolved Bayesian Prior Alpha: $resolvedBayesPriorAlpha
