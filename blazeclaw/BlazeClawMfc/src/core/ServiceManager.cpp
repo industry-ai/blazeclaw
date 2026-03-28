@@ -3,6 +3,7 @@
 #include "../app/CredentialStore.h"
 
 #include "../gateway/GatewayProtocolModels.h"
+#include "../gateway/GatewayJsonUtils.h"
 
 #include <cctype>
 #include <chrono>
@@ -13,6 +14,9 @@
 #include <sstream>
 #include <unordered_map>
 #include <Windows.h>
+#include <winhttp.h>
+
+#pragma comment(lib, "Winhttp.lib")
 
 namespace blazeclaw::core {
 
@@ -27,6 +31,106 @@ std::string ToNarrow(const std::wstring& value) {
   }
 
   return output;
+}
+
+std::wstring ToWide(const std::string& value) {
+  if (value.empty()) {
+    return {};
+  }
+
+  const int needed = MultiByteToWideChar(
+      CP_UTF8,
+      0,
+      value.c_str(),
+      static_cast<int>(value.size()),
+      nullptr,
+      0);
+  if (needed <= 0) {
+    return {};
+  }
+
+  std::wstring output(static_cast<std::size_t>(needed), L'\0');
+  MultiByteToWideChar(
+      CP_UTF8,
+      0,
+      value.c_str(),
+      static_cast<int>(value.size()),
+      output.data(),
+      needed);
+  return output;
+}
+
+std::string EscapeJsonUtf8(const std::string& value) {
+  std::string escaped;
+  escaped.reserve(value.size() + 8);
+  for (const char ch : value) {
+    switch (ch) {
+    case '"':
+      escaped += "\\\"";
+      break;
+    case '\\':
+      escaped += "\\\\";
+      break;
+    case '\n':
+      escaped += "\\n";
+      break;
+    case '\r':
+      escaped += "\\r";
+      break;
+    case '\t':
+      escaped += "\\t";
+      break;
+    default:
+      escaped.push_back(ch);
+      break;
+    }
+  }
+
+  return escaped;
+}
+
+std::optional<std::string> ParseHttpsUrl(
+    const std::string& url,
+    std::wstring& host,
+    std::wstring& path,
+    INTERNET_PORT& port,
+    bool& secure) {
+  host.clear();
+  path.clear();
+  port = INTERNET_DEFAULT_HTTPS_PORT;
+  secure = true;
+
+  const std::wstring urlW = ToWide(url);
+  if (urlW.empty()) {
+    return std::string("invalid_url");
+  }
+
+  URL_COMPONENTSW components{};
+  components.dwStructSize = sizeof(components);
+  components.dwHostNameLength = static_cast<DWORD>(-1);
+  components.dwUrlPathLength = static_cast<DWORD>(-1);
+  components.dwExtraInfoLength = static_cast<DWORD>(-1);
+
+  if (!WinHttpCrackUrl(urlW.c_str(), 0, 0, &components)) {
+    return std::string("invalid_url");
+  }
+
+  if (components.nScheme != INTERNET_SCHEME_HTTPS) {
+    return std::string("deepseek_https_required");
+  }
+
+  secure = true;
+  port = components.nPort;
+  host.assign(components.lpszHostName, components.dwHostNameLength);
+  path.assign(components.lpszUrlPath, components.dwUrlPathLength);
+  if (components.dwExtraInfoLength > 0 && components.lpszExtraInfo != nullptr) {
+    path.append(components.lpszExtraInfo, components.dwExtraInfoLength);
+  }
+  if (path.empty()) {
+    path = L"/";
+  }
+
+  return std::nullopt;
 }
 
 std::wstring Trim(const std::wstring& value) {
@@ -845,17 +949,6 @@ void EmitRemediationTelemetryAndAuditIfNeeded(
         L"hooks-remediation audit emission failed",
         inOutWarnings);
   }
-}
-
-std::wstring ToWide(const std::string& value) {
-  std::wstring output;
-  output.reserve(value.size());
-  for (const char ch : value) {
-    output.push_back(
-        static_cast<wchar_t>(static_cast<unsigned char>(ch)));
-  }
-
-  return output;
 }
 
 std::uint64_t CurrentEpochMs() {
@@ -1942,6 +2035,7 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
         request.sessionKey.empty() ? "main" : request.sessionKey;
 
     if (m_activeChatProvider == "deepseek") {
+      ClearDeepSeekRunCancelled(request.runId);
       if (!HasDeepSeekCredential()) {
         return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
             .ok = false,
@@ -1955,17 +2049,19 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
 
       const std::string effectiveModel =
           m_activeChatModel.empty() ? "deepseek/deepseek-chat" : m_activeChatModel;
-      const std::string assistantText = request.message.empty()
-          ? ("DeepSeek(" + effectiveModel + "): Received image attachment.")
-          : ("DeepSeek(" + effectiveModel + "): " + request.message);
+      const auto apiKey = ResolveDeepSeekCredentialUtf8();
+      if (!apiKey.has_value() || apiKey->empty()) {
+        return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+            .ok = false,
+            .assistantText = {},
+            .modelId = effectiveModel,
+            .errorCode = "deepseek_api_key_missing",
+            .errorMessage =
+                "DeepSeek API key missing. Configure DeepSeek extension first.",
+        };
+      }
 
-      return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-          .ok = true,
-          .assistantText = assistantText,
-          .modelId = effectiveModel,
-          .errorCode = {},
-          .errorMessage = {},
-      };
+      return InvokeDeepSeekRemoteChat(request, effectiveModel, apiKey.value());
     }
 
     if (m_localModelActivationEnabled) {
@@ -2200,6 +2296,11 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
 
   m_gatewayHost.SetChatAbortCallback([this](
       const blazeclaw::gateway::GatewayHost::ChatAbortRequest& request) {
+    if (m_activeChatProvider == "deepseek") {
+      MarkDeepSeekRunCancelled(request.runId);
+      return true;
+    }
+
     if (!m_localModelActivationEnabled) {
       return false;
     }
@@ -2662,6 +2763,327 @@ std::optional<std::string> ServiceManager::ResolveDeepSeekCredentialUtf8() const
 bool ServiceManager::HasDeepSeekCredential() const {
   const auto cred = ResolveDeepSeekCredentialUtf8();
   return cred.has_value() && !cred->empty();
+}
+
+bool ServiceManager::IsDeepSeekRunCancelled(const std::string& runId) const {
+  std::scoped_lock lock(m_deepSeekCancelMutex);
+  const auto it = m_deepSeekCancelledRuns.find(runId);
+  return it != m_deepSeekCancelledRuns.end() && it->second;
+}
+
+void ServiceManager::MarkDeepSeekRunCancelled(const std::string& runId) {
+  if (runId.empty()) {
+    return;
+  }
+
+  std::scoped_lock lock(m_deepSeekCancelMutex);
+  m_deepSeekCancelledRuns.insert_or_assign(runId, true);
+}
+
+void ServiceManager::ClearDeepSeekRunCancelled(const std::string& runId) {
+  if (runId.empty()) {
+    return;
+  }
+
+  std::scoped_lock lock(m_deepSeekCancelMutex);
+  m_deepSeekCancelledRuns.erase(runId);
+}
+
+std::optional<std::string> ServiceManager::ExtractDeepSeekAssistantText(
+    const std::string& responseJson) const {
+  std::string choicesRaw;
+  if (!blazeclaw::gateway::json::FindRawField(responseJson, "choices", choicesRaw)) {
+    return std::nullopt;
+  }
+
+  const std::string contentKey = "\"content\":\"";
+  const auto contentPos = choicesRaw.find(contentKey);
+  if (contentPos == std::string::npos) {
+    return std::nullopt;
+  }
+
+  const std::size_t start = contentPos + contentKey.size();
+  std::string text;
+  text.reserve(256);
+  bool escaping = false;
+  for (std::size_t i = start; i < choicesRaw.size(); ++i) {
+    const char ch = choicesRaw[i];
+    if (escaping) {
+      switch (ch) {
+      case 'n':
+        text.push_back('\n');
+        break;
+      case 'r':
+        text.push_back('\r');
+        break;
+      case 't':
+        text.push_back('\t');
+        break;
+      case '"':
+      case '\\':
+      case '/':
+        text.push_back(ch);
+        break;
+      default:
+        text.push_back(ch);
+        break;
+      }
+      escaping = false;
+      continue;
+    }
+
+    if (ch == '\\') {
+      escaping = true;
+      continue;
+    }
+
+    if (ch == '"') {
+      break;
+    }
+
+    text.push_back(ch);
+  }
+
+  if (text.empty()) {
+    return std::nullopt;
+  }
+
+  return text;
+}
+
+std::optional<std::string> ServiceManager::ExtractDeepSeekErrorMessage(
+    const std::string& responseJson) const {
+  std::string errorRaw;
+  if (!blazeclaw::gateway::json::FindRawField(responseJson, "error", errorRaw)) {
+    return std::nullopt;
+  }
+
+  std::string message;
+  if (blazeclaw::gateway::json::FindStringField(errorRaw, "message", message) &&
+      !message.empty()) {
+    return message;
+  }
+
+  return std::string("DeepSeek request failed.");
+}
+
+blazeclaw::gateway::GatewayHost::ChatRuntimeResult
+ServiceManager::InvokeDeepSeekRemoteChat(
+    const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
+    const std::string& modelId,
+    const std::string& apiKey) const {
+  const std::string deepSeekBaseUrl = "https://api.deepseek.com";
+  const std::string endpoint = deepSeekBaseUrl + "/chat/completions";
+
+  std::wstring host;
+  std::wstring path;
+  INTERNET_PORT port = INTERNET_DEFAULT_HTTPS_PORT;
+  bool secure = true;
+  if (const auto parseError = ParseHttpsUrl(endpoint, host, path, port, secure);
+      parseError.has_value()) {
+    return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+        .ok = false,
+        .assistantText = {},
+        .modelId = modelId,
+        .errorCode = parseError.value(),
+        .errorMessage = "DeepSeek endpoint URL is invalid.",
+    };
+  }
+
+  HINTERNET session = WinHttpOpen(
+      L"BlazeClaw/1.0",
+      WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+      WINHTTP_NO_PROXY_NAME,
+      WINHTTP_NO_PROXY_BYPASS,
+      0);
+  if (session == nullptr) {
+    return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+        .ok = false,
+        .assistantText = {},
+        .modelId = modelId,
+        .errorCode = "deepseek_http_open_failed",
+        .errorMessage = "Failed to initialize DeepSeek HTTP session.",
+    };
+  }
+
+  auto closeSession = [&session]() {
+    if (session != nullptr) {
+      WinHttpCloseHandle(session);
+      session = nullptr;
+    }
+  };
+
+  HINTERNET connection = WinHttpConnect(session, host.c_str(), port, 0);
+  if (connection == nullptr) {
+    closeSession();
+    return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+        .ok = false,
+        .assistantText = {},
+        .modelId = modelId,
+        .errorCode = "deepseek_http_connect_failed",
+        .errorMessage = "Failed to connect to DeepSeek endpoint.",
+    };
+  }
+
+  auto closeConnection = [&connection]() {
+    if (connection != nullptr) {
+      WinHttpCloseHandle(connection);
+      connection = nullptr;
+    }
+  };
+
+  HINTERNET requestHandle = WinHttpOpenRequest(
+      connection,
+      L"POST",
+      path.c_str(),
+      nullptr,
+      WINHTTP_NO_REFERER,
+      WINHTTP_DEFAULT_ACCEPT_TYPES,
+      secure ? WINHTTP_FLAG_SECURE : 0);
+  if (requestHandle == nullptr) {
+    closeConnection();
+    closeSession();
+    return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+        .ok = false,
+        .assistantText = {},
+        .modelId = modelId,
+        .errorCode = "deepseek_http_request_failed",
+        .errorMessage = "Failed to create DeepSeek request.",
+    };
+  }
+
+  auto closeRequest = [&requestHandle]() {
+    if (requestHandle != nullptr) {
+      WinHttpCloseHandle(requestHandle);
+      requestHandle = nullptr;
+    }
+  };
+
+  const std::wstring authHeaderW =
+      L"Authorization: Bearer " + ToWide(apiKey) + L"\r\n";
+  const std::wstring contentTypeW =
+      L"Content-Type: application/json\r\n";
+  const std::wstring allHeadersW = authHeaderW + contentTypeW;
+
+  const std::string escapedMessage = EscapeJsonUtf8(request.message);
+  const std::string payload =
+      std::string("{\"model\":\"") + modelId +
+      "\",\"stream\":false,\"messages\":[{\"role\":\"user\",\"content\":\"" +
+      escapedMessage + "\"}]}";
+
+  if (!WinHttpSendRequest(
+          requestHandle,
+          allHeadersW.c_str(),
+          static_cast<DWORD>(allHeadersW.size()),
+          (LPVOID)payload.data(),
+          static_cast<DWORD>(payload.size()),
+          static_cast<DWORD>(payload.size()),
+          0)) {
+    closeRequest();
+    closeConnection();
+    closeSession();
+    return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+        .ok = false,
+        .assistantText = {},
+        .modelId = modelId,
+        .errorCode = "deepseek_http_send_failed",
+        .errorMessage = "DeepSeek request transmission failed.",
+    };
+  }
+
+  if (!WinHttpReceiveResponse(requestHandle, nullptr)) {
+    closeRequest();
+    closeConnection();
+    closeSession();
+    return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+        .ok = false,
+        .assistantText = {},
+        .modelId = modelId,
+        .errorCode = "deepseek_http_receive_failed",
+        .errorMessage = "DeepSeek response reception failed.",
+    };
+  }
+
+  DWORD statusCode = 0;
+  DWORD statusCodeSize = sizeof(statusCode);
+  WinHttpQueryHeaders(
+      requestHandle,
+      WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+      WINHTTP_HEADER_NAME_BY_INDEX,
+      &statusCode,
+      &statusCodeSize,
+      WINHTTP_NO_HEADER_INDEX);
+
+  std::string responseBody;
+  while (true) {
+    if (IsDeepSeekRunCancelled(request.runId)) {
+      closeRequest();
+      closeConnection();
+      closeSession();
+      return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+          .ok = false,
+          .assistantText = {},
+          .modelId = modelId,
+          .errorCode = "deepseek_request_cancelled",
+          .errorMessage = "DeepSeek request cancelled.",
+      };
+    }
+
+    DWORD available = 0;
+    if (!WinHttpQueryDataAvailable(requestHandle, &available)) {
+      break;
+    }
+    if (available == 0) {
+      break;
+    }
+
+    std::string chunk(static_cast<std::size_t>(available), '\0');
+    DWORD downloaded = 0;
+    if (!WinHttpReadData(
+            requestHandle,
+            chunk.data(),
+            available,
+            &downloaded)) {
+      break;
+    }
+
+    responseBody.append(chunk.data(), static_cast<std::size_t>(downloaded));
+  }
+
+  closeRequest();
+  closeConnection();
+  closeSession();
+
+  if (statusCode < 200 || statusCode >= 300) {
+    const std::string errorMessage = ExtractDeepSeekErrorMessage(responseBody)
+        .value_or("DeepSeek service returned an error.");
+    return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+        .ok = false,
+        .assistantText = {},
+        .modelId = modelId,
+        .errorCode = "deepseek_http_status_error",
+        .errorMessage = errorMessage,
+    };
+  }
+
+  const auto assistantText = ExtractDeepSeekAssistantText(responseBody);
+  if (!assistantText.has_value() || assistantText->empty()) {
+    return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+        .ok = false,
+        .assistantText = {},
+        .modelId = modelId,
+        .errorCode = "deepseek_invalid_response",
+        .errorMessage = "DeepSeek response did not contain assistant text.",
+    };
+  }
+
+  return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+      .ok = true,
+      .assistantText = assistantText.value(),
+      .modelId = modelId,
+      .errorCode = {},
+      .errorMessage = {},
+  };
 }
 
 const SkillsCatalogSnapshot& ServiceManager::SkillsCatalog() const noexcept {

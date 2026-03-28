@@ -29,7 +29,10 @@
 #include "SkillsSyncService.h"
 #include "SkillsWatchService.h"
 #include "runtime/LocalModel/OnnxTextGenerationRuntime.h"
+#include <atomic>
+#include <mutex>
 #include <optional>
+#include <unordered_map>
 
 namespace blazeclaw::core {
 
@@ -184,6 +187,21 @@ private:
   blazeclaw::gateway::GatewayHost m_gatewayHost;
 
   [[nodiscard]] std::optional<std::string> ResolveDeepSeekCredentialUtf8() const;
+  [[nodiscard]] blazeclaw::gateway::GatewayHost::ChatRuntimeResult
+  InvokeDeepSeekRemoteChat(
+      const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
+      const std::string& modelId,
+      const std::string& apiKey) const;
+  [[nodiscard]] std::optional<std::string> ExtractDeepSeekAssistantText(
+      const std::string& responseJson) const;
+  [[nodiscard]] std::optional<std::string> ExtractDeepSeekErrorMessage(
+      const std::string& responseJson) const;
+  [[nodiscard]] bool IsDeepSeekRunCancelled(const std::string& runId) const;
+  void MarkDeepSeekRunCancelled(const std::string& runId);
+  void ClearDeepSeekRunCancelled(const std::string& runId);
+
+  mutable std::mutex m_deepSeekCancelMutex;
+  mutable std::unordered_map<std::string, bool> m_deepSeekCancelledRuns;
 };
 
 } // namespace blazeclaw::core
