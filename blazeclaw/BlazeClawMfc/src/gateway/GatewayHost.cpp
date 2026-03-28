@@ -7,9 +7,107 @@
 #include "generated/GatewayHandlerCatalog.Generated.h"
 
 #include <chrono>
+#include <cstdlib>
 
 namespace blazeclaw::gateway {
 	namespace {
+     std::string EscapeJson(const std::string& value);
+
+		constexpr const char* kSeedProviderId = "seed";
+		constexpr const char* kDeepSeekProviderId = "deepseek";
+		constexpr const char* kDefaultModelId = "default";
+		constexpr const char* kReasonerModelId = "reasoner";
+		constexpr const char* kDeepSeekChatModelId = "deepseek/deepseek-chat";
+		constexpr const char* kDeepSeekReasonerModelId = "deepseek/deepseek-reasoner";
+
+		std::string ReadEnvironmentVariable(const char* name) {
+			if (name == nullptr) {
+				return {};
+			}
+
+			char* raw = nullptr;
+			size_t size = 0;
+			if (_dupenv_s(&raw, &size, name) != 0 || raw == nullptr) {
+				return {};
+			}
+
+			std::string value(raw);
+			free(raw);
+			return value;
+		}
+
+		std::string MaskSecret(const std::string& value) {
+			if (value.empty()) {
+				return {};
+			}
+
+			if (value.size() <= 6) {
+				return "***";
+			}
+
+			return value.substr(0, 3) + "***" + value.substr(value.size() - 2);
+		}
+
+		bool IsDeepSeekModelId(const std::string& modelId) {
+			return modelId == kDeepSeekChatModelId ||
+				modelId == kDeepSeekReasonerModelId ||
+				modelId == kDeepSeekProviderId;
+		}
+
+		std::string NormalizeModelId(const std::string& modelId) {
+			if (modelId == kDeepSeekProviderId) {
+				return kDeepSeekChatModelId;
+			}
+
+			return modelId.empty() ? kDefaultModelId : modelId;
+		}
+
+		std::string ResolveModelProvider(const std::string& modelId) {
+			return IsDeepSeekModelId(modelId) ? kDeepSeekProviderId : kSeedProviderId;
+		}
+
+		std::string ResolveModelDisplayName(const std::string& modelId) {
+			if (modelId == kReasonerModelId) {
+				return "Reasoner Model";
+			}
+
+			if (modelId == kDeepSeekChatModelId || modelId == kDeepSeekProviderId) {
+				return "DeepSeek Chat";
+			}
+
+			if (modelId == kDeepSeekReasonerModelId) {
+				return "DeepSeek Reasoner";
+			}
+
+			return "Default Model";
+		}
+
+		bool ResolveModelStreaming(const std::string& modelId) {
+			if (modelId == kReasonerModelId) {
+				return false;
+			}
+
+			return true;
+		}
+
+		std::string BuildModelJson(const std::string& requestedModelId) {
+			const std::string modelId = NormalizeModelId(requestedModelId);
+			return "{\"id\":\"" + EscapeJson(modelId) +
+				"\",\"provider\":\"" + EscapeJson(ResolveModelProvider(modelId)) +
+				"\",\"displayName\":\"" + EscapeJson(ResolveModelDisplayName(modelId)) +
+				"\",\"streaming\":" +
+				std::string(ResolveModelStreaming(modelId) ? "true" : "false") + "}";
+		}
+
+		std::string BuildDeepSeekConfigJson(
+			const std::string& apiKey,
+			const std::string& baseUrl,
+			const std::string& defaultModel) {
+			return "{\"configured\":" + std::string(!apiKey.empty() ? "true" : "false") +
+				",\"apiKeyMasked\":\"" + EscapeJson(MaskSecret(apiKey)) +
+				"\",\"baseUrl\":\"" + EscapeJson(baseUrl) +
+				"\",\"defaultModel\":\"" + EscapeJson(defaultModel) + "\"}";
+		}
 
 		std::string ToNarrow(const std::wstring& value) {
 			std::string result;
@@ -248,6 +346,19 @@ namespace blazeclaw::gateway {
 		m_port = config.port;
 		m_runtimeGatewayBind = m_bindAddress;
 		m_runtimeGatewayPort = m_port;
+      m_runtimeDeepSeekApiKey = ReadEnvironmentVariable("DEEPSEEK_API_KEY");
+		const std::string deepSeekBaseUrl =
+			ReadEnvironmentVariable("DEEPSEEK_BASE_URL");
+		if (!deepSeekBaseUrl.empty()) {
+			m_runtimeDeepSeekBaseUrl = deepSeekBaseUrl;
+		}
+
+		if (!m_runtimeDeepSeekApiKey.empty() &&
+			(m_runtimeAgentModel == kDefaultModelId ||
+				m_runtimeAgentModel == kReasonerModelId)) {
+			m_runtimeAgentModel = m_runtimeDeepSeekDefaultModel;
+		}
+
 		RegisterDefaultHandlers();
 
 		std::string fixtureError;
@@ -712,7 +823,14 @@ namespace blazeclaw::gateway {
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-				.payloadJson = "{\"gateway\":{\"bind\":\"" + EscapeJson(m_runtimeGatewayBind) + "\",\"port\":" + std::to_string(m_runtimeGatewayPort) + "},\"agent\":{\"model\":\"" + EscapeJson(m_runtimeAgentModel) + "\",\"streaming\":" + std::string(m_runtimeAgentStreaming ? "true" : "false") + "}}",
+               .payloadJson = "{\"gateway\":{\"bind\":\"" + EscapeJson(m_runtimeGatewayBind) +
+					"\",\"port\":" + std::to_string(m_runtimeGatewayPort) + "},\"agent\":{\"model\":\"" +
+					EscapeJson(m_runtimeAgentModel) + "\",\"streaming\":" +
+					std::string(m_runtimeAgentStreaming ? "true" : "false") + "},\"deepseek\":" +
+					BuildDeepSeekConfigJson(
+						m_runtimeDeepSeekApiKey,
+						m_runtimeDeepSeekBaseUrl,
+						m_runtimeDeepSeekDefaultModel) + "}",
 				.error = std::nullopt,
 			};
 			});
@@ -820,6 +938,12 @@ namespace blazeclaw::gateway {
 			if (resolved == "agent") {
 				sectionJson = "{\"model\":\"" + EscapeJson(m_runtimeAgentModel) + "\",\"streaming\":" + std::string(m_runtimeAgentStreaming ? "true" : "false") + "}";
 			}
+			else if (resolved == "deepseek") {
+				sectionJson = BuildDeepSeekConfigJson(
+					m_runtimeDeepSeekApiKey,
+					m_runtimeDeepSeekBaseUrl,
+					m_runtimeDeepSeekDefaultModel);
+			}
 
 			return protocol::ResponseFrame{
 				.id = request.id,
@@ -871,15 +995,12 @@ namespace blazeclaw::gateway {
 
 		m_dispatcher.Register("gateway.models.get", [](const protocol::RequestFrame& request) {
 			const std::string modelId = ExtractStringParam(request.paramsJson, "modelId");
-			const bool reasoner = modelId == "reasoner";
-			const std::string resolvedId = modelId.empty() ? "default" : modelId;
+            const std::string resolvedId = NormalizeModelId(modelId);
 
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-				.payloadJson = "{\"model\":{\"id\":\"" + EscapeJson(resolvedId) +
-					"\",\"provider\":\"seed\",\"displayName\":\"" + EscapeJson(reasoner ? "Reasoner Model" : "Default Model") +
-					"\",\"streaming\":" + std::string(reasoner ? "false" : "true") + "}}",
+               .payloadJson = "{\"model\":" + BuildModelJson(resolvedId) + "}",
 				.error = std::nullopt,
 			};
 			});
@@ -914,6 +1035,15 @@ namespace blazeclaw::gateway {
 			}
 			else if (key == "agent.streaming") {
 				value = m_runtimeAgentStreaming ? "true" : "false";
+			}
+			else if (key == "deepseek.apiKey") {
+				value = MaskSecret(m_runtimeDeepSeekApiKey);
+			}
+			else if (key == "deepseek.baseUrl") {
+				value = m_runtimeDeepSeekBaseUrl;
+			}
+			else if (key == "deepseek.defaultModel") {
+				value = m_runtimeDeepSeekDefaultModel;
 			}
 
 			return protocol::ResponseFrame{
@@ -1144,7 +1274,11 @@ namespace blazeclaw::gateway {
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-             .payloadJson = "{\"models\":[{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true},{\"id\":\"reasoner\",\"provider\":\"seed\",\"displayName\":\"Reasoner Model\",\"streaming\":false},{\"id\":\"deepseek/deepseek-chat\",\"provider\":\"deepseek\",\"displayName\":\"DeepSeek Chat\",\"streaming\":true}]}",
+             .payloadJson = "{\"models\":[" +
+					BuildModelJson(kDefaultModelId) + "," +
+					BuildModelJson(kReasonerModelId) + "," +
+					BuildModelJson(kDeepSeekChatModelId) + "," +
+					BuildModelJson(kDeepSeekReasonerModelId) + "]}",
 				.error = std::nullopt,
 			};
 			});
@@ -1690,10 +1824,14 @@ namespace blazeclaw::gateway {
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-		.payloadJson = "{\"gateway\":{\"bind\":\"" + EscapeJson(m_runtimeGatewayBind) +
+     .payloadJson = "{\"gateway\":{\"bind\":\"" + EscapeJson(m_runtimeGatewayBind) +
 			"\",\"port\":" + std::to_string(m_runtimeGatewayPort) +
 			"},\"agent\":{\"model\":\"" + EscapeJson(m_runtimeAgentModel) +
-			"\",\"streaming\":" + std::string(m_runtimeAgentStreaming ? "true" : "false") + "}}",
+			"\",\"streaming\":" + std::string(m_runtimeAgentStreaming ? "true" : "false") +
+			"},\"deepseek\":" + BuildDeepSeekConfigJson(
+				m_runtimeDeepSeekApiKey,
+				m_runtimeDeepSeekBaseUrl,
+				m_runtimeDeepSeekDefaultModel) + "}",
 				.error = std::nullopt,
 			};
 			});
@@ -1703,6 +1841,8 @@ namespace blazeclaw::gateway {
 			const std::optional<std::size_t> port = ExtractNumericParam(request.paramsJson, "port");
 			const std::string model = ExtractStringParam(request.paramsJson, "model");
 			const std::optional<bool> streaming = ExtractBooleanParam(request.paramsJson, "streaming");
+			const std::string deepSeekApiKey = ExtractStringParam(request.paramsJson, "deepseekApiKey");
+			const std::string deepSeekBaseUrl = ExtractStringParam(request.paramsJson, "deepseekBaseUrl");
 
 			if (!bind.empty()) {
 				m_runtimeGatewayBind = bind;
@@ -1713,11 +1853,25 @@ namespace blazeclaw::gateway {
 			}
 
 			if (!model.empty()) {
-				m_runtimeAgentModel = model;
+                m_runtimeAgentModel = NormalizeModelId(model);
 			}
 
 			if (streaming.has_value()) {
 				m_runtimeAgentStreaming = streaming.value();
+			}
+
+			if (!deepSeekApiKey.empty()) {
+				m_runtimeDeepSeekApiKey = deepSeekApiKey;
+			}
+
+			if (!deepSeekBaseUrl.empty()) {
+				m_runtimeDeepSeekBaseUrl = deepSeekBaseUrl;
+			}
+
+			if (model.empty() && !deepSeekApiKey.empty() &&
+				(m_runtimeAgentModel == kDefaultModelId ||
+					m_runtimeAgentModel == kReasonerModelId)) {
+				m_runtimeAgentModel = m_runtimeDeepSeekDefaultModel;
 			}
 
 			return protocol::ResponseFrame{
@@ -1727,7 +1881,11 @@ namespace blazeclaw::gateway {
 					"\",\"port\":" + std::to_string(m_runtimeGatewayPort) +
 					"},\"agent\":{\"model\":\"" + EscapeJson(m_runtimeAgentModel) +
 					"\",\"streaming\":" + std::string(m_runtimeAgentStreaming ? "true" : "false") +
-					"},\"updated\":true}",
+                  "},\"deepseek\":" + BuildDeepSeekConfigJson(
+						m_runtimeDeepSeekApiKey,
+						m_runtimeDeepSeekBaseUrl,
+						m_runtimeDeepSeekDefaultModel) +
+					",\"updated\":true}",
 				.error = std::nullopt,
 			};
 			});
@@ -2099,8 +2257,8 @@ namespace blazeclaw::gateway {
 			std::string modelsJson = "[";
 			std::size_t count = 0;
 			if (includeSeed) {
-				modelsJson += "{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true}";
-				modelsJson += ",{\"id\":\"reasoner\",\"provider\":\"seed\",\"displayName\":\"Reasoner Model\",\"streaming\":false}";
+                modelsJson += BuildModelJson(kDefaultModelId);
+				modelsJson += "," + BuildModelJson(kReasonerModelId);
 				count += 2;
 			}
 
@@ -2109,8 +2267,9 @@ namespace blazeclaw::gateway {
 					modelsJson += ",";
 				}
 
-				modelsJson += "{\"id\":\"deepseek/deepseek-chat\",\"provider\":\"deepseek\",\"displayName\":\"DeepSeek Chat\",\"streaming\":true}";
-				count += 1;
+             modelsJson += BuildModelJson(kDeepSeekChatModelId);
+				modelsJson += "," + BuildModelJson(kDeepSeekReasonerModelId);
+				count += 2;
 			}
 
 			modelsJson += "]";

@@ -11,6 +11,12 @@
       "model": "default",
       "streaming": true
     },
+    "deepseek": {
+      "configured": false,
+      "apiKeyMasked": "",
+      "baseUrl": "https://api.deepseek.com",
+      "defaultModel": "deepseek/deepseek-chat"
+    },
     "updated": true
   }
 }

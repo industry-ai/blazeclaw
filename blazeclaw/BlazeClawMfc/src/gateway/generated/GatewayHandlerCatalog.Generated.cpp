@@ -228,7 +228,7 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-		m_dispatcher.Register("gateway.config.keys", [payload = std::string("{\"keys\":[\"gateway.bind\",\"gateway.port\",\"agent.model\",\"agent.streaming\"],\"count\":4}")](const protocol::RequestFrame& request) {
+		m_dispatcher.Register("gateway.config.keys", [payload = std::string("{\"keys\":[\"gateway.bind\",\"gateway.port\",\"agent.model\",\"agent.streaming\",\"deepseek.apiKey\",\"deepseek.baseUrl\",\"deepseek.defaultModel\"],\"count\":7}")](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
@@ -462,7 +462,7 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-		m_dispatcher.Register("gateway.config.schema", [payload = std::string("{\"gateway\":{\"bind\":\"string\",\"port\":\"number\"},\"agent\":{\"model\":\"string\",\"streaming\":\"boolean\"}}")](const protocol::RequestFrame& request) {
+		m_dispatcher.Register("gateway.config.schema", [payload = std::string("{\"gateway\":{\"bind\":\"string\",\"port\":\"number\"},\"agent\":{\"model\":\"string\",\"streaming\":\"boolean\"},\"deepseek\":{\"apiKey\":\"string\",\"baseUrl\":\"string\",\"defaultModel\":\"string\"}}")](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
@@ -471,7 +471,7 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-		m_dispatcher.Register("gateway.config.sections", [payload = std::string("{\"sections\":[\"gateway\",\"agent\"],\"count\":2}")](const protocol::RequestFrame& request) {
+		m_dispatcher.Register("gateway.config.sections", [payload = std::string("{\"sections\":[\"gateway\",\"agent\",\"deepseek\"],\"count\":3}")](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,

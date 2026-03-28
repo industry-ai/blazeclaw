@@ -16,7 +16,7 @@
     {
       "name": "gateway.config.keys",
       "kind": "static",
-      "payload": "{\"keys\":[\"gateway.bind\",\"gateway.port\",\"agent.model\",\"agent.streaming\"],\"count\":4}",
+      "payload": "{\"keys\":[\"gateway.bind\",\"gateway.port\",\"agent.model\",\"agent.streaming\",\"deepseek.apiKey\",\"deepseek.baseUrl\",\"deepseek.defaultModel\"],\"count\":7}",
       "domain": "config"
     },
     {
@@ -172,13 +172,13 @@
     {
       "name": "gateway.config.schema",
       "kind": "static",
-      "payload": "{\"gateway\":{\"bind\":\"string\",\"port\":\"number\"},\"agent\":{\"model\":\"string\",\"streaming\":\"boolean\"}}",
+      "payload": "{\"gateway\":{\"bind\":\"string\",\"port\":\"number\"},\"agent\":{\"model\":\"string\",\"streaming\":\"boolean\"},\"deepseek\":{\"apiKey\":\"string\",\"baseUrl\":\"string\",\"defaultModel\":\"string\"}}",
       "domain": "config"
     },
     {
       "name": "gateway.config.sections",
       "kind": "static",
-      "payload": "{\"sections\":[\"gateway\",\"agent\"],\"count\":2}",
+      "payload": "{\"sections\":[\"gateway\",\"agent\",\"deepseek\"],\"count\":3}",
       "domain": "config"
     },
     {

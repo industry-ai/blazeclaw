@@ -3,7 +3,7 @@
   "id": "req-97",
   "ok": true,
   "payload": {
-    "providers": [ "seed" ],
-    "count": 1
+    "providers": [ "seed", "deepseek" ],
+    "count": 2
   }
 }

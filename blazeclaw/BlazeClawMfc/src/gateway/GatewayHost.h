@@ -236,6 +236,9 @@ namespace blazeclaw::gateway {
 		std::uint16_t m_runtimeGatewayPort = 18789;
 		std::string m_runtimeAgentModel = "default";
 		bool m_runtimeAgentStreaming = true;
+      std::string m_runtimeDeepSeekApiKey;
+		std::string m_runtimeDeepSeekBaseUrl = "https://api.deepseek.com";
+		std::string m_runtimeDeepSeekDefaultModel = "deepseek/deepseek-chat";
       std::string m_runtimeAssignedSessionId = "main";
 		std::string m_runtimeAssignedAgentId = "default";
 		std::size_t m_runtimeQueueDepth = 0;

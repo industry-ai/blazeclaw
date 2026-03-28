@@ -15,6 +15,18 @@
         "provider": "seed",
         "displayName": "Reasoner Model",
         "streaming": false
+      },
+      {
+        "id": "deepseek/deepseek-chat",
+        "provider": "deepseek",
+        "displayName": "DeepSeek Chat",
+        "streaming": true
+      },
+      {
+        "id": "deepseek/deepseek-reasoner",
+        "provider": "deepseek",
+        "displayName": "DeepSeek Reasoner",
+        "streaming": true
       }
     ]
   }
