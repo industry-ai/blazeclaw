@@ -1,8 +1,11 @@
 
 .vs/
 docs/
+
 bin/
 obj/
+/blazeclaw/x64/Debug
+/blazeclaw/BlazeClawShim/x64/Debug
 
 packages/
 
@@ -19,4 +22,4 @@ model.onnx.data
 /blazeclaw/third_party/onnxruntime-gpu/runtimes/win-x64/native
 
 .blazeclaw/
-/blazeclaw/fixtures/agents/a3-registry/.blazeclaw/subagents.state
+#/blazeclaw/fixtures/agents/a3-registry/.blazeclaw/subagents.state

@@ -237,7 +237,7 @@ namespace blazeclaw::gateway {
 			};
 			});
 
-		m_dispatcher.Register("gateway.models.providers", [payload = std::string("{\"providers\":[\"seed\"],\"count\":1}")](const protocol::RequestFrame& request) {
+		m_dispatcher.Register("gateway.models.providers", [payload = std::string("{\"providers\":[\"seed\",\"deepseek\"],\"count\":2}")](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,

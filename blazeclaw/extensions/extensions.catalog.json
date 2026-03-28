@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "extensions": [
+    {
+      "id": "deepseek",
+      "path": "deepseek/blazeclaw.extension.json",
+      "enabled": true,
+      "kind": "provider"
+    }
+  ]
+}

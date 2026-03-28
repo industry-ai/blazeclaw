@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "provider": "deepseek",
+  "api": "openai-completions",
+  "baseUrlEnv": "DEEPSEEK_BASE_URL",
+  "models": [
+    {
+      "id": "deepseek/deepseek-chat",
+      "provider": "deepseek",
+      "displayName": "DeepSeek Chat",
+      "streaming": true,
+      "default": true
+    },
+    {
+      "id": "deepseek/deepseek-reasoner",
+      "provider": "deepseek",
+      "displayName": "DeepSeek Reasoner",
+      "streaming": true,
+      "default": false
+    }
+  ]
+}

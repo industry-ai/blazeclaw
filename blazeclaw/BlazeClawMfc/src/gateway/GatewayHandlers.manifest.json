@@ -22,7 +22,7 @@
     {
       "name": "gateway.models.providers",
       "kind": "static",
-      "payload": "{\"providers\":[\"seed\"],\"count\":1}",
+      "payload": "{\"providers\":[\"seed\",\"deepseek\"],\"count\":2}",
       "domain": "models"
     },
     {

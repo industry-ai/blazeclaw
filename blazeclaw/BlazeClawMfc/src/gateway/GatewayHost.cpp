@@ -1144,7 +1144,7 @@ namespace blazeclaw::gateway {
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-				.payloadJson = "{\"models\":[{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true},{\"id\":\"reasoner\",\"provider\":\"seed\",\"displayName\":\"Reasoner Model\",\"streaming\":false}]}",
+             .payloadJson = "{\"models\":[{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true},{\"id\":\"reasoner\",\"provider\":\"seed\",\"displayName\":\"Reasoner Model\",\"streaming\":false},{\"id\":\"deepseek/deepseek-chat\",\"provider\":\"deepseek\",\"displayName\":\"DeepSeek Chat\",\"streaming\":true}]}",
 				.error = std::nullopt,
 			};
 			});
@@ -2092,11 +2092,28 @@ namespace blazeclaw::gateway {
 
 		m_dispatcher.Register("gateway.models.listByProvider", [](const protocol::RequestFrame& request) {
 			const std::string provider = ExtractStringParam(request.paramsJson, "provider");
-			const bool includeAll = provider.empty() || provider == "seed";
-			const std::string modelsJson = includeAll
-				? "[{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true},{\"id\":\"reasoner\",\"provider\":\"seed\",\"displayName\":\"Reasoner Model\",\"streaming\":false}]"
-				: "[]";
-			const std::size_t count = includeAll ? 2 : 0;
+         const bool includeAll = provider.empty();
+			const bool includeSeed = includeAll || provider == "seed";
+			const bool includeDeepSeek = includeAll || provider == "deepseek";
+
+			std::string modelsJson = "[";
+			std::size_t count = 0;
+			if (includeSeed) {
+				modelsJson += "{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true}";
+				modelsJson += ",{\"id\":\"reasoner\",\"provider\":\"seed\",\"displayName\":\"Reasoner Model\",\"streaming\":false}";
+				count += 2;
+			}
+
+			if (includeDeepSeek) {
+				if (count > 0) {
+					modelsJson += ",";
+				}
+
+				modelsJson += "{\"id\":\"deepseek/deepseek-chat\",\"provider\":\"deepseek\",\"displayName\":\"DeepSeek Chat\",\"streaming\":true}";
+				count += 1;
+			}
+
+			modelsJson += "]";
 
 			return protocol::ResponseFrame{
 				.id = request.id,
