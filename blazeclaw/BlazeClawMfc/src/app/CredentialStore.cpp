@@ -1,5 +1,5 @@
-﻿#include  pch.h
-#include CredentialStore.h
+﻿#include "pch.h"
+#include "CredentialStore.h"
 
 #include <Windows.h>
 #include <wincred.h>
@@ -8,8 +8,8 @@
 #include <fstream>
 #include <iterator>
 
-#pragma comment(lib, \Advapi32.lib\)
-#pragma comment(lib, \Credui.lib\)
+#pragma comment(lib, "Advapi32.lib")
+#pragma comment(lib, "Credui.lib")
 
 namespace blazeclaw::app {
 

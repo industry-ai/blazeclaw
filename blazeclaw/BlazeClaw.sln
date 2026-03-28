@@ -4,6 +4,8 @@ VisualStudioVersion = 18.5.11612.153
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BlazeClawMfc", "BlazeClawMfc\BlazeClawMfc.vcxproj", "{6DA8E1E9-1B7B-4DEB-95AE-2E59D5B53EA8}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BlazeClawAppUtils", "BlazeClawAppUtils\BlazeClawAppUtils.vcxproj", "{94A7E212-8F31-43D4-BD08-6B40C95D5A11}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -14,6 +16,10 @@ Global
 		{6DA8E1E9-1B7B-4DEB-95AE-2E59D5B53EA8}.Debug|x64.Build.0 = Debug|x64
 		{6DA8E1E9-1B7B-4DEB-95AE-2E59D5B53EA8}.Release|x64.ActiveCfg = Release|x64
 		{6DA8E1E9-1B7B-4DEB-95AE-2E59D5B53EA8}.Release|x64.Build.0 = Release|x64
+		{94A7E212-8F31-43D4-BD08-6B40C95D5A11}.Debug|x64.ActiveCfg = Debug|x64
+		{94A7E212-8F31-43D4-BD08-6B40C95D5A11}.Debug|x64.Build.0 = Debug|x64
+		{94A7E212-8F31-43D4-BD08-6B40C95D5A11}.Release|x64.ActiveCfg = Release|x64
+		{94A7E212-8F31-43D4-BD08-6B40C95D5A11}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

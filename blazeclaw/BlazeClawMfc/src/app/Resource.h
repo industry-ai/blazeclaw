@@ -118,6 +118,7 @@
 #define IDD_TASK_DIALOG                 314
 #define IDD_SKILL_DIALOG                315
 #define IDD_LOG_DIALOG                  316
+#define IDD_DIALOG1                     317
 #define IDC_STATIC_TITLE                1000
 #define IDC_STATIC_DESCRIPTION          1001
 #define IDC_GROUP_GATEWAY               1002
@@ -315,18 +316,18 @@
 #define ID_EDIT_INST                    32783
 #define ID_EDIT_CHANNEL                 32784
 #define ID_EXTENSION_DEEPSEEK           40101
-#define IDD_APIKEY_DIALOG                41000
-#define IDC_EDIT_APIKEY                  41001
-// Localization strings
-#define IDS_DEEPSEEK_DIALOG_TITLE        42000
-#define IDS_DEEPSEEK_DIALOG_LABEL        42001
-#define IDS_DEEPSEEK_STORED_MARKER       42002
+#define IDD_APIKEY_DIALOG               41000
+#define IDC_EDIT_APIKEY                 41001
+#define IDC_STATIC_APIKEY_LABEL         41002
+#define IDS_DEEPSEEK_DIALOG_TITLE       42000
+#define IDS_DEEPSEEK_DIALOG_LABEL       42001
+#define IDS_DEEPSEEK_STORED_MARKER      42002
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        317
+#define _APS_NEXT_RESOURCE_VALUE        319
 #define _APS_NEXT_COMMAND_VALUE         32786
 #define _APS_NEXT_CONTROL_VALUE         1178
 #define _APS_NEXT_SYMED_VALUE           317

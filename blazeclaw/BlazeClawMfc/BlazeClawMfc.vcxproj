@@ -163,6 +163,12 @@
     <ClInclude Include="src\gateway\generated\GatewaySchemaCatalog.Generated.h" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\BlazeClawAppUtils\BlazeClawAppUtils.vcxproj">
+      <Project>{94A7E212-8F31-43D4-BD08-6B40C95D5A11}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
     <ClCompile Include="src\app\BlazeClawMFCApp.cpp" />
     <ClCompile Include="src\app\BlazeClawMFCDoc.cpp" />
     <ClCompile Include="src\app\BlazeClawMFCView.cpp" />
@@ -174,6 +180,7 @@
     <ClCompile Include="src\app\FileView.cpp" />
     <ClCompile Include="src\app\MainFrame.cpp" />
     <ClCompile Include="src\app\ApiKeyDialog.cpp" />
+    <!-- CredentialStore is built in BlazeClawAppUtils -->
     <ClCompile Include="src\app\OutputWnd.cpp" />
     <ClCompile Include="src\app\pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>

@@ -392,10 +392,10 @@ void CMainFrame::OnUiParityAdminConfigAgent() {
 }
 
 void CMainFrame::OnUiParityDeepSeekExtension() {
-	ShowParityResult(
-		L"DeepSeek Extension",
-		"gateway.models.listByProvider",
-		std::optional<std::string>("{\"provider\":\"deepseek\"}"));
+	//ShowParityResult(
+	//	L"DeepSeek Extension",
+	//	"gateway.models.listByProvider",
+	//	std::optional<std::string>("{\"provider\":\"deepseek\"}"));
 }
 
 void CMainFrame::OnUiParitySessionList() {
@@ -918,7 +918,9 @@ void CMainFrame::OnExtensionDeepseek()
 		// Try DPAPI per-user file fallback
 		wchar_t appdataBuf[MAX_PATH];
 		if (GetEnvironmentVariableW(L"APPDATA", appdataBuf, (DWORD)std::size(appdataBuf)) > 0) {
-			std::wstring dpPath = std::wstring(appdataBuf) + L"\\BlazeClaw\\deepseek.key";
+            std::wstring dpPath =
+				std::wstring(appdataBuf) +
+				L"\\BlazeClaw\\deepseek.key";
 			if (const auto dp = blazeclaw::app::CredentialStore::LoadCredentialDPAPI(dpPath); dp.has_value()) {
 				const std::string s = *dp;
 				int needed = ::MultiByteToWideChar(CP_UTF8, 0, s.c_str(), static_cast<int>(s.size()), nullptr, 0);
@@ -937,7 +939,15 @@ void CMainFrame::OnExtensionDeepseek()
 					dlg.m_apiKey = tempCfg.deepseekApiKey.c_str();
 					// migrate to credential store and DPAPI
 					std::wstring wk = tempCfg.deepseekApiKey;
-					int needed = ::WideCharToMultiByte(CP_UTF8, 0, wk.c_str(), -1, nullptr, 0, nullptr, nullptr);
+                    int needed = ::WideCharToMultiByte(
+						CP_UTF8,
+						0,
+						wk.c_str(),
+						-1,
+						nullptr,
+						0,
+						nullptr,
+						nullptr);
 					if (needed > 0) {
 						std::vector<char> buf(static_cast<size_t>(needed));
 						::WideCharToMultiByte(CP_UTF8, 0, wk.c_str(), -1, buf.data(), needed, nullptr, nullptr);
