@@ -111,6 +111,10 @@ protected:
 	CMFCOutlookBarPane* m_pCurrOutlookPage;
 
 private:
+  void LogDeepSeekDiagnostic(
+		const char* stage,
+		const std::string& detail);
+
 	void ShowParityResult(
 		const wchar_t* title,
 		const std::string& method,

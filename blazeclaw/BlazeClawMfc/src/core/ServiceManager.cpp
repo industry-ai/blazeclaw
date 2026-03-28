@@ -89,6 +89,36 @@ std::string EscapeJsonUtf8(const std::string& value) {
   return escaped;
 }
 
+void EmitDeepSeekDiagnostic(
+    const char* stage,
+    const std::string& detail) {
+  const std::string safeStage =
+      (stage == nullptr || std::string(stage).empty())
+      ? "unknown"
+      : std::string(stage);
+  TRACE(
+      "[DeepSeek][%s] %s\n",
+      safeStage.c_str(),
+      detail.c_str());
+}
+
+std::string NormalizeDeepSeekApiModelId(
+    const std::string& modelId) {
+  if (modelId.empty() || modelId == "deepseek") {
+    return "deepseek-chat";
+  }
+
+  if (modelId == "deepseek/deepseek-chat") {
+    return "deepseek-chat";
+  }
+
+  if (modelId == "deepseek/deepseek-reasoner") {
+    return "deepseek-reasoner";
+  }
+
+  return modelId;
+}
+
 std::optional<std::string> ParseHttpsUrl(
     const std::string& url,
     std::wstring& host,
@@ -2047,8 +2077,8 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
         };
       }
 
-      const std::string effectiveModel =
-          m_activeChatModel.empty() ? "deepseek/deepseek-chat" : m_activeChatModel;
+      const std::string effectiveModel = NormalizeDeepSeekApiModelId(
+          m_activeChatModel.empty() ? "deepseek-chat" : m_activeChatModel);
       const auto apiKey = ResolveDeepSeekCredentialUtf8();
       if (!apiKey.has_value() || apiKey->empty()) {
         return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
@@ -2776,6 +2806,10 @@ void ServiceManager::MarkDeepSeekRunCancelled(const std::string& runId) {
     return;
   }
 
+  EmitDeepSeekDiagnostic(
+      "cancel",
+      std::string("mark cancelled runId=") + runId);
+
   std::scoped_lock lock(m_deepSeekCancelMutex);
   m_deepSeekCancelledRuns.insert_or_assign(runId, true);
 }
@@ -2961,8 +2995,20 @@ ServiceManager::InvokeDeepSeekRemoteChat(
     const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
     const std::string& modelId,
     const std::string& apiKey) const {
+  const auto startedAt = std::chrono::steady_clock::now();
   const std::string deepSeekBaseUrl = "https://api.deepseek.com";
   const std::string endpoint = deepSeekBaseUrl + "/chat/completions";
+
+  EmitDeepSeekDiagnostic(
+      "connect",
+      std::string("begin runId=") +
+          request.runId +
+          " session=" +
+          request.sessionKey +
+          " model=" +
+          modelId +
+          " stream=true endpoint=" +
+          endpoint);
 
   std::wstring host;
   std::wstring path;
@@ -2970,6 +3016,12 @@ ServiceManager::InvokeDeepSeekRemoteChat(
   bool secure = true;
   if (const auto parseError = ParseHttpsUrl(endpoint, host, path, port, secure);
       parseError.has_value()) {
+    EmitDeepSeekDiagnostic(
+        "error",
+        std::string("invalid endpoint runId=") +
+            request.runId +
+            " code=" +
+            parseError.value());
     return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
         .ok = false,
         .assistantText = {},
@@ -2986,6 +3038,9 @@ ServiceManager::InvokeDeepSeekRemoteChat(
       WINHTTP_NO_PROXY_BYPASS,
       0);
   if (session == nullptr) {
+    EmitDeepSeekDiagnostic(
+        "error",
+        std::string("WinHttpOpen failed runId=") + request.runId);
     return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
         .ok = false,
         .assistantText = {},
@@ -3004,6 +3059,9 @@ ServiceManager::InvokeDeepSeekRemoteChat(
 
   HINTERNET connection = WinHttpConnect(session, host.c_str(), port, 0);
   if (connection == nullptr) {
+    EmitDeepSeekDiagnostic(
+        "error",
+        std::string("WinHttpConnect failed runId=") + request.runId);
     closeSession();
     return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
         .ok = false,
@@ -3030,6 +3088,9 @@ ServiceManager::InvokeDeepSeekRemoteChat(
       WINHTTP_DEFAULT_ACCEPT_TYPES,
       secure ? WINHTTP_FLAG_SECURE : 0);
   if (requestHandle == nullptr) {
+    EmitDeepSeekDiagnostic(
+        "error",
+        std::string("WinHttpOpenRequest failed runId=") + request.runId);
     closeConnection();
     closeSession();
     return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
@@ -3068,6 +3129,9 @@ ServiceManager::InvokeDeepSeekRemoteChat(
           static_cast<DWORD>(payload.size()),
           static_cast<DWORD>(payload.size()),
           0)) {
+    EmitDeepSeekDiagnostic(
+        "error",
+        std::string("WinHttpSendRequest failed runId=") + request.runId);
     closeRequest();
     closeConnection();
     closeSession();
@@ -3081,6 +3145,9 @@ ServiceManager::InvokeDeepSeekRemoteChat(
   }
 
   if (!WinHttpReceiveResponse(requestHandle, nullptr)) {
+    EmitDeepSeekDiagnostic(
+        "error",
+        std::string("WinHttpReceiveResponse failed runId=") + request.runId);
     closeRequest();
     closeConnection();
     closeSession();
@@ -3102,10 +3169,20 @@ ServiceManager::InvokeDeepSeekRemoteChat(
       &statusCode,
       &statusCodeSize,
       WINHTTP_NO_HEADER_INDEX);
+  EmitDeepSeekDiagnostic(
+      "connect",
+      std::string("response headers runId=") +
+          request.runId +
+          " status=" +
+          std::to_string(statusCode));
 
   std::string responseBody;
+  std::size_t chunkCount = 0;
   while (true) {
     if (IsDeepSeekRunCancelled(request.runId)) {
+      EmitDeepSeekDiagnostic(
+          "cancel",
+          std::string("cancel observed runId=") + request.runId);
       closeRequest();
       closeConnection();
       closeSession();
@@ -3133,11 +3210,24 @@ ServiceManager::InvokeDeepSeekRemoteChat(
             chunk.data(),
             available,
             &downloaded)) {
+      EmitDeepSeekDiagnostic(
+          "error",
+          std::string("WinHttpReadData failed runId=") + request.runId);
       break;
     }
 
     responseBody.append(chunk.data(), static_cast<std::size_t>(downloaded));
+    ++chunkCount;
   }
+
+  EmitDeepSeekDiagnostic(
+      "stream",
+      std::string("read completed runId=") +
+          request.runId +
+          " chunks=" +
+          std::to_string(chunkCount) +
+          " bytes=" +
+          std::to_string(responseBody.size()));
 
   closeRequest();
   closeConnection();
@@ -3146,6 +3236,14 @@ ServiceManager::InvokeDeepSeekRemoteChat(
   if (statusCode < 200 || statusCode >= 300) {
     const std::string errorMessage = ExtractDeepSeekErrorMessage(responseBody)
         .value_or("DeepSeek service returned an error.");
+    EmitDeepSeekDiagnostic(
+        "error",
+        std::string("status error runId=") +
+            request.runId +
+            " status=" +
+            std::to_string(statusCode) +
+            " message=" +
+            errorMessage);
     return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
         .ok = false,
         .assistantText = {},
@@ -3160,7 +3258,19 @@ ServiceManager::InvokeDeepSeekRemoteChat(
       ? std::string()
       : assistantDeltas.back();
 
+  EmitDeepSeekDiagnostic(
+      "stream",
+      std::string("delta parsed runId=") +
+          request.runId +
+          " snapshots=" +
+          std::to_string(assistantDeltas.size()) +
+          " finalChars=" +
+          std::to_string(assistantText.size()));
+
   if (assistantText.empty()) {
+    EmitDeepSeekDiagnostic(
+        "error",
+        std::string("invalid response runId=") + request.runId);
     return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
         .ok = false,
         .assistantText = {},
@@ -3170,6 +3280,18 @@ ServiceManager::InvokeDeepSeekRemoteChat(
         .errorMessage = "DeepSeek response did not contain assistant text.",
     };
   }
+
+  const auto latencyMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - startedAt)
+      .count();
+  EmitDeepSeekDiagnostic(
+      "final",
+      std::string("completed runId=") +
+          request.runId +
+          " latencyMs=" +
+          std::to_string(latencyMs) +
+          " finalChars=" +
+          std::to_string(assistantText.size()));
 
   return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
       .ok = true,

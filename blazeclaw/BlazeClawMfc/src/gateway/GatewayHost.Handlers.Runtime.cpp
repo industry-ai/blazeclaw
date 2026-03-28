@@ -2,7 +2,10 @@
 #include "GatewayHost.h"
 #include "GatewayJsonUtils.h"
 
+#include <algorithm>
+#include <cctype>
 #include <chrono>
+#include <cstdlib>
 #include <sstream>
 
 namespace blazeclaw::gateway {
@@ -242,6 +245,55 @@ namespace blazeclaw::gateway {
 
             payload += "}";
             return payload;
+        }
+
+        bool IsDeepSeekDiagnosticsVerboseEnabled() {
+            static const bool enabled = []() {
+                char* raw = nullptr;
+                std::size_t size = 0;
+                if (_dupenv_s(
+                        &raw,
+                        &size,
+                        "BLAZECLAW_DEEPSEEK_DEBUG_TELEMETRY") != 0 ||
+                    raw == nullptr) {
+                    return false;
+                }
+
+                std::string value(raw);
+                free(raw);
+                std::transform(
+                    value.begin(),
+                    value.end(),
+                    value.begin(),
+                    [](unsigned char ch) {
+                        return static_cast<char>(std::tolower(ch));
+                    });
+
+                return value == "1" ||
+                    value == "true" ||
+                    value == "yes" ||
+                    value == "on";
+            }();
+
+            return enabled;
+        }
+
+        void EmitDeepSeekGatewayDiagnostic(
+            const char* stage,
+            const std::string& detail,
+            const bool verboseOnly = true) {
+            if (verboseOnly && !IsDeepSeekDiagnosticsVerboseEnabled()) {
+                return;
+            }
+
+            const std::string safeStage =
+                (stage == nullptr || std::string(stage).empty())
+                ? "unknown"
+                : std::string(stage);
+            TRACE(
+                "[DeepSeek][%s] %s\n",
+                safeStage.c_str(),
+                detail.c_str());
         }
 
         bool IsSilentReplyText(const std::string& text) {
@@ -1081,6 +1133,14 @@ namespace blazeclaw::gateway {
                             .errorMessage = std::nullopt,
                             .timestampMs = nowMs,
                             });
+                        EmitDeepSeekGatewayDiagnostic(
+                            "event.enqueue",
+                            std::string("state=delta runId=") +
+                                runId +
+                                " session=" +
+                                sessionKey +
+                                " queueSize=" +
+                                std::to_string(sessionEvents.size()));
                     }
                 }
 
@@ -1195,6 +1255,14 @@ namespace blazeclaw::gateway {
                     .errorMessage = std::nullopt,
                     .timestampMs = nowMs,
                     });
+                EmitDeepSeekGatewayDiagnostic(
+                    "event.enqueue",
+                    std::string("state=aborted runId=") +
+                        runIt->second.runId +
+                        " session=" +
+                        sessionKey +
+                        " queueSize=" +
+                        std::to_string(queue.size()));
 
                 runIt->second.active = false;
                 runIt->second.streamCursor = runIt->second.assistantText.size();
@@ -1268,6 +1336,14 @@ namespace blazeclaw::gateway {
                             .errorMessage = std::nullopt,
                             .timestampMs = nowMs,
                             });
+                        EmitDeepSeekGatewayDiagnostic(
+                            "event.enqueue",
+                            std::string("state=delta runId=") +
+                                run.runId +
+                                " session=" +
+                                run.sessionKey +
+                                " queueSize=" +
+                                std::to_string(queue.size()));
                     }
 
                     const bool streamCompleted =
@@ -1290,6 +1366,16 @@ namespace blazeclaw::gateway {
                                 : std::nullopt,
                             .timestampMs = nowMs,
                             });
+                        EmitDeepSeekGatewayDiagnostic(
+                            "event.enqueue",
+                            std::string("state=") +
+                                (run.failed ? "error" : "final") +
+                                " runId=" +
+                                run.runId +
+                                " session=" +
+                                run.sessionKey +
+                                " queueSize=" +
+                                std::to_string(queue.size()));
 
                         run.active = false;
                     }
@@ -1301,6 +1387,19 @@ namespace blazeclaw::gateway {
                     while (emitted < limit && !queue.empty()) {
                         const ChatEventState eventState = queue.front();
                         queue.pop_front();
+
+                        EmitDeepSeekGatewayDiagnostic(
+                            "event.dequeue",
+                            std::string("state=") +
+                                eventState.state +
+                                " runId=" +
+                                eventState.runId +
+                                " session=" +
+                                eventState.sessionKey +
+                                " emitted=" +
+                                std::to_string(emitted + 1) +
+                                " queueRemaining=" +
+                                std::to_string(queue.size()));
 
                         if (emitted > 0) {
                             eventsJson += ",";
@@ -1341,6 +1440,14 @@ namespace blazeclaw::gateway {
                 }
 
                 eventsJson += "]";
+                EmitDeepSeekGatewayDiagnostic(
+                    "event.dequeue",
+                    std::string("poll complete session=") +
+                        sessionKey +
+                        " emitted=" +
+                        std::to_string(emitted) +
+                        " queueRemaining=" +
+                        std::to_string(queue.size()));
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,

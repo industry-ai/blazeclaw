@@ -2,6 +2,7 @@
 #include "framework.h"
 #include "ChatView.h"
 #include "BlazeClawMFCApp.h"
+#include "MainFrame.h"
 
 #include "../gateway/GatewayJsonUtils.h"
 
@@ -237,6 +238,22 @@ namespace {
 
 		blazeclaw::gateway::json::FindStringField(contentRaw, "text", text);
 		return text;
+	}
+
+	CString BuildDeepSeekDiagnosticLine(
+		const char* stage,
+		const std::string& detail)
+	{
+		const std::string safeStage =
+			(stage == nullptr || std::string(stage).empty())
+			? "unknown"
+			: std::string(stage);
+		const std::string line =
+			std::string("[DeepSeek][") +
+			safeStage +
+			"] " +
+			detail;
+		return CString(CA2W(line.c_str(), CP_UTF8));
 	}
 }
 
@@ -553,11 +570,33 @@ void CChatView::SendChatMessageNative(const std::string& message)
 	const bool hasAttachments = !m_chatState.chatAttachments.empty();
 	if ((trimmed.empty() && !hasAttachments) || !IsGatewayConnected())
 	{
+     if (!IsGatewayConnected())
+		{
+           if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+			{
+				frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
+					"send",
+					"chat.send skipped because gateway is disconnected."));
+			}
+		}
 		return;
 	}
 
 	const std::string runId =
 		"native-run-" + std::to_string(CurrentEpochMs());
+  if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+	{
+		frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
+			"send",
+			std::string("submit runId=") +
+			runId +
+			" session=" +
+			m_chatState.sessionKey +
+			" promptChars=" +
+			std::to_string(trimmed.size()) +
+			" attachments=" +
+			std::to_string(m_chatState.chatAttachments.size())));
+	}
 	m_chatState.chatSending = true;
 	m_chatState.chatRunId = runId;
 	m_chatState.chatStream = std::string();
@@ -629,6 +668,17 @@ void CChatView::SendChatMessageNative(const std::string& message)
 	blazeclaw::gateway::protocol::ResponseFrame response;
 	if (!RequestGateway("chat.send", params, response) || !response.ok)
 	{
+      std::string err = "chat.send failed";
+		if (response.error.has_value())
+		{
+			err = response.error->code + ":" + response.error->message;
+		}
+       if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+		{
+			frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
+				"send",
+				std::string("chat.send error runId=") + runId + " detail=" + err));
+		}
 		m_chatState.chatRunId.reset();
 		m_chatState.chatStream.reset();
 		m_chatState.chatStreamStartedAt.reset();
@@ -636,6 +686,12 @@ void CChatView::SendChatMessageNative(const std::string& message)
 	}
 	else
 	{
+       if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+		{
+			frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
+				"send",
+				std::string("chat.send accepted runId=") + runId));
+		}
 		m_chatState.chatAttachments.clear();
 	}
 
@@ -648,7 +704,23 @@ void CChatView::AbortChatRunNative()
 {
 	if (!IsGatewayConnected())
 	{
+   if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+		{
+			frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
+				"cancel",
+				"abort skipped because gateway is disconnected."));
+		}
 		return;
+	}
+
+   if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+	{
+		frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
+			"cancel",
+			std::string("abort requested session=") +
+			m_chatState.sessionKey +
+			" runId=" +
+			m_chatState.chatRunId.value_or("none")));
 	}
 
 	std::string params =
@@ -664,7 +736,22 @@ void CChatView::AbortChatRunNative()
 	blazeclaw::gateway::protocol::ResponseFrame response;
 	if (!RequestGateway("chat.abort", params, response) || !response.ok)
 	{
+       if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+		{
+			frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
+				"cancel",
+				"chat.abort failed."));
+		}
 		m_chatState.lastError = "chat.abort failed";
+	}
+	else
+	{
+       if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+		{
+			frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
+				"cancel",
+				"chat.abort accepted."));
+		}
 	}
 
 	SyncItemsFromState();
