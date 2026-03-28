@@ -1033,6 +1033,11 @@ void CMainFrame::OnExtensionDeepseek()
 
 	ShowParityResult(L"Configure DeepSeek", "gateway.config.set", std::optional<std::string>(params));
 
+	// Activate provider/model for chat pipeline at app runtime level
+	if (auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp()); app != nullptr) {
+		app->Services().SetActiveChatProvider("deepseek", "deepseek/deepseek-chat");
+	}
+
 	// Show masked response and an action to remove/rotate the stored key
 	const std::string display = std::string("Requested: gateway.config.set\nParams: ") + maskedParams +
 		"\n\nThe API key is stored securely in Windows Credential Manager under 'blazeclaw.deepseek'.";

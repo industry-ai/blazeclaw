@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "ServiceManager.h"
+#include "../app/CredentialStore.h"
 
 #include "../gateway/GatewayProtocolModels.h"
 
@@ -11,6 +12,7 @@
 #include <fstream>
 #include <sstream>
 #include <unordered_map>
+#include <Windows.h>
 
 namespace blazeclaw::core {
 
@@ -1939,6 +1941,33 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
     const std::string sessionId =
         request.sessionKey.empty() ? "main" : request.sessionKey;
 
+    if (m_activeChatProvider == "deepseek") {
+      if (!HasDeepSeekCredential()) {
+        return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+            .ok = false,
+            .assistantText = {},
+            .modelId = m_activeChatModel,
+            .errorCode = "deepseek_api_key_missing",
+            .errorMessage =
+                "DeepSeek API key missing. Configure DeepSeek extension first.",
+        };
+      }
+
+      const std::string effectiveModel =
+          m_activeChatModel.empty() ? "deepseek/deepseek-chat" : m_activeChatModel;
+      const std::string assistantText = request.message.empty()
+          ? ("DeepSeek(" + effectiveModel + "): Received image attachment.")
+          : ("DeepSeek(" + effectiveModel + "): " + request.message);
+
+      return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+          .ok = true,
+          .assistantText = assistantText,
+          .modelId = effectiveModel,
+          .errorCode = {},
+          .errorMessage = {},
+      };
+    }
+
     if (m_localModelActivationEnabled) {
       const std::string prompt = BuildLocalModelPrompt(request);
       TRACE(
@@ -2589,6 +2618,50 @@ std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
       "\"}}";
 
   return report;
+}
+
+void ServiceManager::SetActiveChatProvider(
+    const std::string& provider,
+    const std::string& model) {
+  m_activeChatProvider = provider.empty() ? "local" : provider;
+  m_activeChatModel = model.empty() ? "default" : model;
+}
+
+const std::string& ServiceManager::ActiveChatProvider() const noexcept {
+  return m_activeChatProvider;
+}
+
+const std::string& ServiceManager::ActiveChatModel() const noexcept {
+  return m_activeChatModel;
+}
+
+std::optional<std::string> ServiceManager::ResolveDeepSeekCredentialUtf8() const {
+  if (const auto cred = blazeclaw::app::CredentialStore::LoadCredential(
+          L"blazeclaw.deepseek");
+      cred.has_value() && !cred->empty()) {
+    return cred;
+  }
+
+  wchar_t appdataBuf[MAX_PATH];
+  if (GetEnvironmentVariableW(
+          L"APPDATA",
+          appdataBuf,
+          static_cast<DWORD>(std::size(appdataBuf))) > 0) {
+    const std::wstring dpPath =
+        std::wstring(appdataBuf) + L"\\BlazeClaw\\deepseek.key";
+    if (const auto dp = blazeclaw::app::CredentialStore::LoadCredentialDPAPI(
+            dpPath);
+        dp.has_value() && !dp->empty()) {
+      return dp;
+    }
+  }
+
+  return std::nullopt;
+}
+
+bool ServiceManager::HasDeepSeekCredential() const {
+  const auto cred = ResolveDeepSeekCredentialUtf8();
+  return cred.has_value() && !cred->empty();
 }
 
 const SkillsCatalogSnapshot& ServiceManager::SkillsCatalog() const noexcept {

@@ -29,6 +29,7 @@
 #include "SkillsSyncService.h"
 #include "SkillsWatchService.h"
 #include "runtime/LocalModel/OnnxTextGenerationRuntime.h"
+#include <optional>
 
 namespace blazeclaw::core {
 
@@ -58,6 +59,12 @@ public:
   [[nodiscard]] const std::string& LocalModelActivationReason() const noexcept;
   [[nodiscard]] const RetrievalMemorySnapshot& RetrievalMemory() const noexcept;
   [[nodiscard]] std::string BuildOperatorDiagnosticsReport() const;
+  void SetActiveChatProvider(
+      const std::string& provider,
+      const std::string& model);
+  [[nodiscard]] const std::string& ActiveChatProvider() const noexcept;
+  [[nodiscard]] const std::string& ActiveChatModel() const noexcept;
+  [[nodiscard]] bool HasDeepSeekCredential() const;
   [[nodiscard]] const SkillsCatalogSnapshot& SkillsCatalog() const noexcept;
   [[nodiscard]] const SkillsEligibilitySnapshot& SkillsEligibility() const noexcept;
   [[nodiscard]] const SkillsPromptSnapshot& SkillsPrompt() const noexcept;
@@ -78,6 +85,8 @@ private:
       const std::wstring& reason);
 
   bool m_running = false;
+  std::string m_activeChatProvider = "local";
+  std::string m_activeChatModel = "default";
   blazeclaw::config::AppConfig m_activeConfig;
   FeatureRegistry m_registry;
   AgentsCatalogService m_agentsCatalogService;
@@ -173,6 +182,8 @@ private:
   SkillsWatchService m_skillsWatchService;
   SkillsWatchSnapshot m_skillsWatch;
   blazeclaw::gateway::GatewayHost m_gatewayHost;
+
+  [[nodiscard]] std::optional<std::string> ResolveDeepSeekCredentialUtf8() const;
 };
 
 } // namespace blazeclaw::core
