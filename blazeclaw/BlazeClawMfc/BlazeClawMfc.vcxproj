@@ -241,6 +241,7 @@
     <ResourceCompile Include="src\app\BlazeClawMFC.rc" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="src\app\res\ribbon.mfcribbon-ms" />
     <None Include="src\config\blazeclaw.conf" />
     <None Include="web\chat\index.html" />
     <None Include="web\chat\dist\index.html" />
@@ -260,6 +261,45 @@
   </ItemGroup>
   <ItemGroup>
     <BlazeClawEmbeddingModelAssets Include="$(ProjectDir)models\embeddings\**\*.*" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="src\app\res\BlazeClaw.MFC.ico" />
+    <Image Include="src\app\res\BlazeClaw.MFCDoc.ico" />
+    <Image Include="src\app\res\buttons.bmp" />
+    <Image Include="src\app\res\classview.bmp" />
+    <Image Include="src\app\res\classview_hc.bmp" />
+    <Image Include="src\app\res\class_view.ico" />
+    <Image Include="src\app\res\class_view_hc.ico" />
+    <Image Include="src\app\res\explorer.bmp" />
+    <Image Include="src\app\res\explorer_hc.bmp" />
+    <Image Include="src\app\res\filelarge.bmp" />
+    <Image Include="src\app\res\filesmall.bmp" />
+    <Image Include="src\app\res\fileview.bmp" />
+    <Image Include="src\app\res\fileview_hc.bmp" />
+    <Image Include="src\app\res\file_view.ico" />
+    <Image Include="src\app\res\file_view_hc.ico" />
+    <Image Include="src\app\res\info.bmp" />
+    <Image Include="src\app\res\main.bmp" />
+    <Image Include="src\app\res\menuimages.bmp" />
+    <Image Include="src\app\res\menuimages_hc.bmp" />
+    <Image Include="src\app\res\nav_large.bmp" />
+    <Image Include="src\app\res\nav_large_hc.bmp" />
+    <Image Include="src\app\res\output_wnd.ico" />
+    <Image Include="src\app\res\output_wnd_hc.ico" />
+    <Image Include="src\app\res\pages.bmp" />
+    <Image Include="src\app\res\pages_hc.bmp" />
+    <Image Include="src\app\res\pages_small.bmp" />
+    <Image Include="src\app\res\pages_small_hc.bmp" />
+    <Image Include="src\app\res\properties.bmp" />
+    <Image Include="src\app\res\properties_hc.bmp" />
+    <Image Include="src\app\res\properties_wnd.ico" />
+    <Image Include="src\app\res\properties_wnd_hc.ico" />
+    <Image Include="src\app\res\sort.bmp" />
+    <Image Include="src\app\res\sort_hc.bmp" />
+    <Image Include="src\app\res\Toolbar.bmp" />
+    <Image Include="src\app\res\Toolbar256.bmp" />
+    <Image Include="src\app\res\writelarge.bmp" />
+    <Image Include="src\app\res\writesmall.bmp" />
   </ItemGroup>
   <PropertyGroup>
     <GatewayCodegenMode Condition="'$(GatewayCodegenMode)'==''">verify</GatewayCodegenMode>

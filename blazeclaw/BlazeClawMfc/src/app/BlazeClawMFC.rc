@@ -1017,6 +1017,11 @@ BEGIN
     IDS_CAPTION_IMAGE_TEXT  "Here is an informational message for the user."
 END
 
+STRINGTABLE
+BEGIN
+    ID_EXTENSION_DEEPSEEK   "Use deepseek as default model\ndeepseek"
+END
+
 #endif    // English (United States) resources
 /////////////////////////////////////////////////////////////////////////////
 
@@ -1034,6 +1039,7 @@ END
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
 LANGUAGE 9, 1
 #include "res\BlazeClawMFC.rc2"  // non-Microsoft Visual C++ edited resources
+#include "ApiKeyDialog.rc"
 #include "afxres.rc"      // Standard components
 #include "afxprint.rc"    // printing/print preview resources
 #if !defined(_AFXDLL)

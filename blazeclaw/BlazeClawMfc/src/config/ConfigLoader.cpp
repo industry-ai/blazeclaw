@@ -507,6 +507,11 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
       continue;
     }
 
+    if (trimmedLine.rfind(L"deepseek.apiKey=", 0) == 0) {
+      outConfig.deepseekApiKey = Trim(trimmedLine.substr(std::wstring(L"deepseek.apiKey=").size()));
+      continue;
+    }
+
     if (trimmedLine.rfind(L"auth.order=", 0) == 0) {
       const auto value = Trim(trimmedLine.substr(11));
       if (!value.empty()) {

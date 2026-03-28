@@ -314,13 +314,16 @@
 #define ID_EDIT_SESSION                 32782
 #define ID_EDIT_INST                    32783
 #define ID_EDIT_CHANNEL                 32784
+#define ID_EXTENSION_DEEPSEEK           40101
+#define IDD_APIKEY_DIALOG                41000
+#define IDC_EDIT_APIKEY                  41001
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        317
-#define _APS_NEXT_COMMAND_VALUE         32785
+#define _APS_NEXT_COMMAND_VALUE         32786
 #define _APS_NEXT_CONTROL_VALUE         1178
 #define _APS_NEXT_SYMED_VALUE           317
 #endif

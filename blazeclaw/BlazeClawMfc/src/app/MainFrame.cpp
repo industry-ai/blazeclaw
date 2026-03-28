@@ -3,6 +3,14 @@
 #include "framework.h"
 
 #include "BlazeClawMfcApp.h"
+#include <atlconv.h>
+#include <optional>
+#include <algorithm>
+#include <cwctype>
+#include "../config/ConfigLoader.h"
+#include <fstream>
+#include <vector>
+#include <string>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -13,7 +21,7 @@ namespace {
 	constexpr UINT kIdUiParityAdminSnapshot = 0x8102;
 	constexpr UINT kIdUiParityAdminPolicyGet = 0x8103;
 	constexpr UINT kIdUiParityAdminConfigAgent = 0x8104;
- constexpr UINT kIdUiParityDeepSeekExtension = 0x810A;
+	constexpr UINT kIdUiParityDeepSeekExtension = 0x810A;
 	constexpr UINT kIdUiParitySessionList = 0x8105;
 	constexpr UINT kIdUiParitySessionActivate = 0x8106;
 	constexpr UINT kIdUiParityRuntimeStatus = 0x8107;
@@ -29,17 +37,45 @@ namespace {
 	constexpr UINT kIdUiParityOperatorDiagnosticsReport = 0x8117;
 	constexpr UINT kIdUiParityOperatorPromotionReadiness = 0x8118;
 
-	std::wstring ToWide(const std::string& value) {
-		std::wstring output;
-		output.reserve(value.size());
-
-		for (const char ch : value) {
-			output.push_back(static_cast<wchar_t>(
-				static_cast<unsigned char>(ch)));
-		}
-
-		return output;
+static std::wstring TrimMain(const std::wstring& value) {
+	const auto first = std::find_if_not(
+		value.begin(), value.end(), [](wchar_t ch) { return std::iswspace(ch) != 0; });
+	const auto last = std::find_if_not(
+		value.rbegin(), value.rend(), [](wchar_t ch) { return std::iswspace(ch) != 0; }).base();
+	if (first >= last) {
+		return {};
 	}
+	return std::wstring(first, last);
+}
+
+std::wstring ToWide(const std::string& value) {
+	std::wstring output;
+	output.reserve(value.size());
+
+	for (const char ch : value) {
+		output.push_back(static_cast<wchar_t>(
+			static_cast<unsigned char>(ch)));
+	}
+
+	return output;
+}
+
+// Simple modal input dialog for API keys (defined at file scope)
+class CApiKeyDialog : public CDialogEx {
+public:
+	CApiKeyDialog(CWnd* pParent = nullptr) : CDialogEx(IDD_APIKEY_DIALOG, pParent) {}
+	CString m_apiKey;
+protected:
+	virtual BOOL OnInitDialog() override {
+		CDialogEx::OnInitDialog();
+		SetDlgItemText(IDC_EDIT_APIKEY, m_apiKey);
+		return TRUE;
+	}
+	virtual void DoDataExchange(CDataExchange* pDX) override {
+		CDialogEx::DoDataExchange(pDX);
+		DDX_Text(pDX, IDC_EDIT_APIKEY, m_apiKey);
+	}
+};
 } // namespace
 
 IMPLEMENT_DYNAMIC(CMainFrame, CMDIFrameWndEx)
@@ -60,13 +96,15 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWndEx)
 	ON_UPDATE_COMMAND_UI(ID_VIEW_OUTPUTWND, &CMainFrame::OnUpdateViewOutputWindow)
 	ON_COMMAND(ID_VIEW_PROPERTIESWND, &CMainFrame::OnViewPropertiesWindow)
 	ON_UPDATE_COMMAND_UI(ID_VIEW_PROPERTIESWND, &CMainFrame::OnUpdateViewPropertiesWindow)
+	ON_COMMAND(ID_EXTENSION_DEEPSEEK, &CMainFrame::OnExtensionDeepseek)
+	ON_UPDATE_COMMAND_UI(ID_EXTENSION_DEEPSEEK, &CMainFrame::OnUpdateExtensionDeepseek)
 	ON_WM_SETTINGCHANGE()
 
 	ON_COMMAND(kIdUiParityActionFormProbe, &CMainFrame::OnUiParityActionFormProbe)
 	ON_COMMAND(kIdUiParityAdminSnapshot, &CMainFrame::OnUiParityAdminSnapshot)
 	ON_COMMAND(kIdUiParityAdminPolicyGet, &CMainFrame::OnUiParityAdminPolicyGet)
 	ON_COMMAND(kIdUiParityAdminConfigAgent, &CMainFrame::OnUiParityAdminConfigAgent)
-  ON_COMMAND(kIdUiParityDeepSeekExtension, &CMainFrame::OnUiParityDeepSeekExtension)
+	ON_COMMAND(kIdUiParityDeepSeekExtension, &CMainFrame::OnUiParityDeepSeekExtension)
 	ON_COMMAND(kIdUiParitySessionList, &CMainFrame::OnUiParitySessionList)
 	ON_COMMAND(kIdUiParitySessionActivate, &CMainFrame::OnUiParitySessionActivate)
 	ON_COMMAND(kIdUiParityRuntimeStatus, &CMainFrame::OnUiParityRuntimeStatus)
@@ -86,13 +124,12 @@ END_MESSAGE_MAP()
 CMainFrame::CMainFrame() noexcept
 {
 	theApp.m_nAppLook = theApp.GetInt(_T("ApplicationLook"), ID_VIEW_APPLOOK_VS_2008);
-	
+
 	//Create(nullptr, _T("BlazeClaw - OpenClaw C++ Port"), WS_OVERLAPPEDWINDOW, CRect(100, 100, 1280, 800));
 }
 
 CMainFrame::~CMainFrame()
-{
-}
+{}
 
 void CMainFrame::AddChatStatusLine(const CString& line)
 {
@@ -211,7 +248,7 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 		MF_STRING,
 		kIdUiParityAdminConfigAgent,
 		_T("Admin Config Agent"));
-    m_parityMenu.AppendMenu(
+	m_parityMenu.AppendMenu(
 		MF_STRING,
 		kIdUiParityDeepSeekExtension,
 		_T("DeepSeek Extension"));
@@ -305,6 +342,19 @@ void CMainFrame::ShowParityResult(
 	//	body.c_str(),
 	//	MB_OK | MB_ICONINFORMATION,
 	//	0);
+    const auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	if (app == nullptr) {
+		AfxMessageBox(_T("App context unavailable."));
+		return;
+	}
+
+	const std::string result = app->Services().InvokeGatewayMethod(method, paramsJson);
+	const std::wstring body = L"Method: " + ToWide(method) + L"\n\nResult:\n" + ToWide(result);
+
+	AfxMessageBox(
+		body.c_str(),
+		MB_OK | MB_ICONINFORMATION,
+		0);
 }
 
 void CMainFrame::OnUiParityActionFormProbe() {
@@ -490,13 +540,13 @@ void CMainFrame::OnUiParityOperatorPromotionReadiness()
 
 BOOL CMainFrame::PreCreateWindow(CREATESTRUCT& cs)
 {
-	if( !CMDIFrameWndEx::PreCreateWindow(cs) )
+	if (!CMDIFrameWndEx::PreCreateWindow(cs))
 		return FALSE;
 	// TODO: Modify the Window class or styles here by modifying
 	//  the CREATESTRUCT cs
 
 	cs.style = WS_OVERLAPPED | WS_CAPTION | FWS_ADDTOTITLE
-		 | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_MAXIMIZE | WS_SYSMENU;
+		| WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_MAXIMIZE | WS_SYSMENU;
 
 	return TRUE;
 }
@@ -519,7 +569,7 @@ BOOL CMainFrame::CreateDockingWindows()
 	CString strFileView;
 	bNameValid = strFileView.LoadString(IDS_FILE_VIEW);
 	ASSERT(bNameValid);
-	if (!m_wndFileView.Create(strFileView, this, CRect(0, 0, 200, 200), TRUE, ID_VIEW_FILEVIEW, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_LEFT| CBRS_FLOAT_MULTI))
+	if (!m_wndFileView.Create(strFileView, this, CRect(0, 0, 200, 200), TRUE, ID_VIEW_FILEVIEW, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBRS_LEFT | CBRS_FLOAT_MULTI))
 	{
 		TRACE0("Failed to create File View window\n");
 		return FALSE; // failed to create
@@ -772,7 +822,7 @@ void CMainFrame::OnUpdateViewCaptionBar(CCmdUI* pCmdUI)
 
 void CMainFrame::OnOptions()
 {
-	CMFCRibbonCustomizeDialog *pOptionsDlg = new CMFCRibbonCustomizeDialog(this, &m_wndRibbonBar);
+	CMFCRibbonCustomizeDialog* pOptionsDlg = new CMFCRibbonCustomizeDialog(this, &m_wndRibbonBar);
 	ASSERT(pOptionsDlg != nullptr);
 
 	pOptionsDlg->DoModal();
@@ -836,4 +886,99 @@ void CMainFrame::OnSettingChange(UINT uFlags, LPCTSTR lpszSection)
 {
 	CMDIFrameWndEx::OnSettingChange(uFlags, lpszSection);
 	m_wndOutput.UpdateFonts();
+}
+
+void CMainFrame::OnExtensionDeepseek()
+{
+    // Show modal API key input dialog (prefill from saved config if available)
+	CApiKeyDialog dlg(this);
+	// Load existing key from app config if present
+    // Load existing key from app config via Services() if available
+	const auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	if (app != nullptr) {
+		const auto& cfg = app->Services();
+		// Use ServiceManager's loaded config indirectly: access ConfigLoader not directly here.
+		// We can retrieve saved key by reloading from file.
+		blazeclaw::config::AppConfig tempCfg;
+		blazeclaw::config::ConfigLoader loader;
+		if (loader.LoadFromFile(L"blazeclaw.conf", tempCfg) && !tempCfg.deepseekApiKey.empty()) {
+			dlg.m_apiKey = tempCfg.deepseekApiKey.c_str();
+		}
+	}
+
+	if (dlg.DoModal() != IDOK) {
+		OnUiParityDeepSeekExtension();
+		return;
+	}
+
+	const CString apiKeyCs = dlg.m_apiKey;
+	if (apiKeyCs.IsEmpty()) {
+		OnUiParityDeepSeekExtension();
+		return;
+	}
+
+	// Convert wide string (CString) to UTF-8
+	const std::wstring apiKeyW(apiKeyCs);
+	int needed = ::WideCharToMultiByte(CP_UTF8, 0, apiKeyW.c_str(), -1, nullptr, 0, nullptr, nullptr);
+	std::string apiKey;
+	if (needed > 0) {
+		std::vector<char> buf(static_cast<size_t>(needed));
+		::WideCharToMultiByte(CP_UTF8, 0, apiKeyW.c_str(), -1, buf.data(), needed, nullptr, nullptr);
+		apiKey.assign(buf.data());
+	}
+
+	const std::string params = std::string("{\"model\":\"deepseek/deepseek-chat\",\"deepseekApiKey\":\"") +
+		apiKey + "\"}";
+
+    // Persist the API key to blazeclaw.conf for next runs using ConfigLoader conventions
+	const std::wstring configPath = L"blazeclaw.conf";
+	std::vector<std::wstring> lines;
+	std::wifstream infile(configPath);
+	bool updated = false;
+    if (infile.is_open()) {
+		std::wstring line;
+		while (std::getline(infile, line)) {
+			const std::wstring t = TrimMain(line);
+			if (t.rfind(L"deepseek.apiKey=", 0) == 0) {
+				lines.push_back(std::wstring(L"deepseek.apiKey=") + apiKeyW);
+				updated = true;
+			} else {
+				lines.push_back(line);
+			}
+		}
+		infile.close();
+	}
+
+	if (!updated) {
+		lines.push_back(std::wstring(L"deepseek.apiKey=") + apiKeyW);
+	}
+
+	std::wofstream outfile(configPath, std::ios::trunc);
+	if (outfile.is_open()) {
+		for (const auto& l : lines) {
+			outfile << l << L"\n";
+		}
+		outfile.close();
+	}
+
+	// Mask the API key for display
+	std::string masked(apiKey.size(), '*');
+	if (apiKey.size() > 6) {
+		// keep last 4 characters visible
+		masked.replace(masked.size() - 4, 4, apiKey.substr(apiKey.size() - 4));
+	}
+
+	const std::string maskedParams = std::string("{\"model\":\"deepseek/deepseek-chat\",\"deepseekApiKey\":\"") +
+		masked + "\"}";
+
+	ShowParityResult(L"Configure DeepSeek", "gateway.config.set", std::optional<std::string>(params));
+
+	// Show masked response
+	const std::string display = std::string("Requested: gateway.config.set\nParams: ") + maskedParams;
+	AfxMessageBox(CA2W(display.c_str()), MB_OK | MB_ICONINFORMATION);
+}
+
+void CMainFrame::OnUpdateExtensionDeepseek(CCmdUI* pCmdUI)
+{
+	pCmdUI->Enable(TRUE);
 }

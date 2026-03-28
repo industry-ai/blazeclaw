@@ -230,6 +230,8 @@ struct AppConfig {
   TranscriptSafetyConfig transcript;
   SkillsConfig skills;
   HooksConfig hooks;
+  // DeepSeek provider API key (kept out of source control; loaded from blazeclaw.conf)
+  std::wstring deepseekApiKey;
   std::vector<std::wstring> enabledChannels;
 };
 

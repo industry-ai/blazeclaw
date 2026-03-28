@@ -20,18 +20,18 @@ class CMainFrame final : public CMDIFrameWndEx
 public:
 	CMainFrame() noexcept;
 
-// Attributes
+	// Attributes
 public:
 
-// Operations
+	// Operations
 public:
 	void AddChatStatusLine(const CString& line);
 
-// Overrides
+	// Overrides
 public:
 	virtual BOOL PreCreateWindow(CREATESTRUCT& cs);
 
-// Implementation
+	// Implementation
 public:
 	virtual ~CMainFrame();
 #ifdef _DEBUG
@@ -54,7 +54,7 @@ protected:  // control bar embedded members
 	CCalendarBar      m_wndCalendar;
 	CMFCCaptionBar    m_wndCaptionBar;
 
-// Generated message map functions
+	// Generated message map functions
 protected:
 	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
 	afx_msg void OnWindowManager();
@@ -73,11 +73,15 @@ protected:
 	afx_msg void OnOptions();
 	afx_msg void OnSettingChange(UINT uFlags, LPCTSTR lpszSection);
 
+	// extension commands
+	afx_msg void OnExtensionDeepseek();
+	afx_msg void OnUpdateExtensionDeepseek(CCmdUI* pCmdUI);
+
 	afx_msg void OnUiParityActionFormProbe();
 	afx_msg void OnUiParityAdminSnapshot();
 	afx_msg void OnUiParityAdminPolicyGet();
 	afx_msg void OnUiParityAdminConfigAgent();
-   afx_msg void OnUiParityDeepSeekExtension();
+	afx_msg void OnUiParityDeepSeekExtension();
 	afx_msg void OnUiParitySessionList();
 	afx_msg void OnUiParitySessionActivate();
 	afx_msg void OnUiParityRuntimeStatus();
@@ -104,7 +108,7 @@ protected:
 
 	CMFCOutlookBarTabCtrl* FindOutlookParent(CWnd* pWnd);
 	CMFCOutlookBarTabCtrl* m_pCurrOutlookWnd;
-	CMFCOutlookBarPane*    m_pCurrOutlookPage;
+	CMFCOutlookBarPane* m_pCurrOutlookPage;
 
 private:
 	void ShowParityResult(
@@ -114,4 +118,5 @@ private:
 
 	CMenu m_menuBar;
 	CMenu m_parityMenu;
+public:
 };
