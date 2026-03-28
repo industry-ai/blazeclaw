@@ -173,6 +173,7 @@
     <ClCompile Include="src\app\ClassView.cpp" />
     <ClCompile Include="src\app\FileView.cpp" />
     <ClCompile Include="src\app\MainFrame.cpp" />
+    <ClCompile Include="src\app\CredentialStore.cpp" />
     <ClCompile Include="src\app\OutputWnd.cpp" />
     <ClCompile Include="src\app\pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>

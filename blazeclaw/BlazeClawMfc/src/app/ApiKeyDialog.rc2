@@ -1,0 +1,12 @@
+#include "resource.h"
+
+#ifdef APSTUDIO_INVOKED
+#error this file is not editable by Microsoft Visual C++
+#endif //APSTUDIO_INVOKED
+
+STRINGTABLE
+BEGIN
+    IDS_DEEPSEEK_DIALOG_TITLE "DeepSeek API Key"
+    IDS_DEEPSEEK_DIALOG_LABEL "API Key:"
+    IDS_DEEPSEEK_STORED_MARKER "stored-in-windows-credential-manager"
+END

@@ -317,6 +317,10 @@
 #define ID_EXTENSION_DEEPSEEK           40101
 #define IDD_APIKEY_DIALOG                41000
 #define IDC_EDIT_APIKEY                  41001
+// Localization strings
+#define IDS_DEEPSEEK_DIALOG_TITLE        42000
+#define IDS_DEEPSEEK_DIALOG_LABEL        42001
+#define IDS_DEEPSEEK_STORED_MARKER       42002
 
 // Next default values for new objects
 // 

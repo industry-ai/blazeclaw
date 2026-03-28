@@ -11,6 +11,7 @@
 #include <fstream>
 #include <vector>
 #include <string>
+#include "CredentialStore.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -60,22 +61,8 @@ std::wstring ToWide(const std::string& value) {
 	return output;
 }
 
-// Simple modal input dialog for API keys (defined at file scope)
-class CApiKeyDialog : public CDialogEx {
-public:
-	CApiKeyDialog(CWnd* pParent = nullptr) : CDialogEx(IDD_APIKEY_DIALOG, pParent) {}
-	CString m_apiKey;
-protected:
-	virtual BOOL OnInitDialog() override {
-		CDialogEx::OnInitDialog();
-		SetDlgItemText(IDC_EDIT_APIKEY, m_apiKey);
-		return TRUE;
-	}
-	virtual void DoDataExchange(CDataExchange* pDX) override {
-		CDialogEx::DoDataExchange(pDX);
-		DDX_Text(pDX, IDC_EDIT_APIKEY, m_apiKey);
-	}
-};
+// ApiKey dialog declared in its own files
+#include "ApiKeyDialog.h"
 } // namespace
 
 IMPLEMENT_DYNAMIC(CMainFrame, CMDIFrameWndEx)
@@ -348,8 +335,27 @@ void CMainFrame::ShowParityResult(
 		return;
 	}
 
-	const std::string result = app->Services().InvokeGatewayMethod(method, paramsJson);
-	const std::wstring body = L"Method: " + ToWide(method) + L"\n\nResult:\n" + ToWide(result);
+    const std::string result = app->Services().InvokeGatewayMethod(method, paramsJson);
+
+	// Mask deepseekApiKey in returned JSON for UI safety
+	std::string maskedResult = result;
+	const std::string keyField = "\"deepseekApiKey\":\"";
+	std::size_t pos = 0;
+	while ((pos = maskedResult.find(keyField, pos)) != std::string::npos) {
+		const std::size_t start = pos + keyField.size();
+		const std::size_t end = maskedResult.find('\"', start);
+		if (end == std::string::npos) break;
+		const std::size_t len = end - start;
+		std::string masked(len, '*');
+		if (len > 6) {
+			// keep last 4 chars visible
+			masked.replace(masked.size() - 4, 4, maskedResult.substr(end - 4, 4));
+		}
+		maskedResult.replace(start, len, masked);
+		pos = end + 1;
+	}
+
+	const std::wstring body = L"Method: " + ToWide(method) + L"\n\nResult:\n" + ToWide(maskedResult);
 
 	AfxMessageBox(
 		body.c_str(),
@@ -893,16 +899,30 @@ void CMainFrame::OnExtensionDeepseek()
     // Show modal API key input dialog (prefill from saved config if available)
 	CApiKeyDialog dlg(this);
 	// Load existing key from app config if present
-    // Load existing key from app config via Services() if available
-	const auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
-	if (app != nullptr) {
-		const auto& cfg = app->Services();
-		// Use ServiceManager's loaded config indirectly: access ConfigLoader not directly here.
-		// We can retrieve saved key by reloading from file.
+    // Load existing key from Windows Credential Manager if available
+	if (const auto stored = blazeclaw::app::CredentialStore::LoadCredential(L"blazeclaw.deepseek"); stored.has_value()) {
+		// stored contains UTF-8 bytes
+		const std::string s = *stored;
+		int needed = ::MultiByteToWideChar(CP_UTF8, 0, s.c_str(), static_cast<int>(s.size()), nullptr, 0);
+		if (needed > 0) {
+			std::vector<wchar_t> buf(static_cast<size_t>(needed) + 1);
+			::MultiByteToWideChar(CP_UTF8, 0, s.c_str(), static_cast<int>(s.size()), buf.data(), needed);
+			dlg.m_apiKey = buf.data();
+		}
+	} else {
+		// Fallback: if config contains a plaintext key (older installs), load that and then migrate it
 		blazeclaw::config::AppConfig tempCfg;
 		blazeclaw::config::ConfigLoader loader;
 		if (loader.LoadFromFile(L"blazeclaw.conf", tempCfg) && !tempCfg.deepseekApiKey.empty()) {
 			dlg.m_apiKey = tempCfg.deepseekApiKey.c_str();
+			// migrate to credential store
+			std::wstring wk = tempCfg.deepseekApiKey;
+			int needed = ::WideCharToMultiByte(CP_UTF8, 0, wk.c_str(), -1, nullptr, 0, nullptr, nullptr);
+			if (needed > 0) {
+				std::vector<char> buf(static_cast<size_t>(needed));
+				::WideCharToMultiByte(CP_UTF8, 0, wk.c_str(), -1, buf.data(), needed, nullptr, nullptr);
+				blazeclaw::app::CredentialStore::SaveCredential(L"blazeclaw.deepseek", std::string(buf.data()));
+			}
 		}
 	}
 
@@ -927,20 +947,26 @@ void CMainFrame::OnExtensionDeepseek()
 		apiKey.assign(buf.data());
 	}
 
-	const std::string params = std::string("{\"model\":\"deepseek/deepseek-chat\",\"deepseekApiKey\":\"") +
+    const std::string params = std::string("{\"model\":\"deepseek/deepseek-chat\",\"deepseekApiKey\":\"") +
 		apiKey + "\"}";
 
-    // Persist the API key to blazeclaw.conf for next runs using ConfigLoader conventions
+	// Save the API key into Windows Credential Manager instead of plain config file
+	const std::wstring credTarget = L"blazeclaw.deepseek";
+	blazeclaw::app::CredentialStore::SaveCredential(credTarget, apiKey);
+
+    // Remove any plaintext persistence from config file. We will store the key encrypted in
+	// Windows Credential Manager instead. Optionally keep a marker in the config file.
 	const std::wstring configPath = L"blazeclaw.conf";
 	std::vector<std::wstring> lines;
 	std::wifstream infile(configPath);
 	bool updated = false;
-    if (infile.is_open()) {
+	if (infile.is_open()) {
 		std::wstring line;
 		while (std::getline(infile, line)) {
 			const std::wstring t = TrimMain(line);
 			if (t.rfind(L"deepseek.apiKey=", 0) == 0) {
-				lines.push_back(std::wstring(L"deepseek.apiKey=") + apiKeyW);
+				// replace with a marker only
+				lines.push_back(std::wstring(L"deepseek.apiKey=stored-in-windows-credential-manager"));
 				updated = true;
 			} else {
 				lines.push_back(line);
@@ -950,7 +976,7 @@ void CMainFrame::OnExtensionDeepseek()
 	}
 
 	if (!updated) {
-		lines.push_back(std::wstring(L"deepseek.apiKey=") + apiKeyW);
+		lines.push_back(std::wstring(L"deepseek.apiKey=stored-in-windows-credential-manager"));
 	}
 
 	std::wofstream outfile(configPath, std::ios::trunc);
@@ -961,7 +987,7 @@ void CMainFrame::OnExtensionDeepseek()
 		outfile.close();
 	}
 
-	// Mask the API key for display
+    // Mask the API key for display
 	std::string masked(apiKey.size(), '*');
 	if (apiKey.size() > 6) {
 		// keep last 4 characters visible
@@ -973,9 +999,32 @@ void CMainFrame::OnExtensionDeepseek()
 
 	ShowParityResult(L"Configure DeepSeek", "gateway.config.set", std::optional<std::string>(params));
 
-	// Show masked response
-	const std::string display = std::string("Requested: gateway.config.set\nParams: ") + maskedParams;
-	AfxMessageBox(CA2W(display.c_str()), MB_OK | MB_ICONINFORMATION);
+	// Show masked response and an action to remove/rotate the stored key
+	const std::string display = std::string("Requested: gateway.config.set\nParams: ") + maskedParams +
+		"\n\nThe API key is stored securely in Windows Credential Manager under 'blazeclaw.deepseek'.";
+    // Offer rotate (Yes), remove (No), or close (Cancel)
+	const int msgRes = AfxMessageBox(CA2W(display.c_str()), MB_YESNOCANCEL | MB_ICONINFORMATION);
+	if (msgRes == IDYES) {
+		// Rotate: reopen dialog to enter new key
+		CApiKeyDialog dlg2(this);
+		if (dlg2.DoModal() == IDOK && !dlg2.m_apiKey.IsEmpty()) {
+			const std::wstring newKeyW(dlg2.m_apiKey);
+			int needed2 = ::WideCharToMultiByte(CP_UTF8, 0, newKeyW.c_str(), -1, nullptr, 0, nullptr, nullptr);
+			if (needed2 > 0) {
+				std::vector<char> buf2(static_cast<size_t>(needed2));
+				::WideCharToMultiByte(CP_UTF8, 0, newKeyW.c_str(), -1, buf2.data(), needed2, nullptr, nullptr);
+				blazeclaw::app::CredentialStore::SaveCredential(L"blazeclaw.deepseek", std::string(buf2.data()));
+				AfxMessageBox(_T("DeepSeek API key rotated and stored."), MB_OK | MB_ICONINFORMATION);
+			}
+		}
+	} else if (msgRes == IDNO) {
+		// Remove the stored credential
+		if (blazeclaw::app::CredentialStore::DeleteCredential(L"blazeclaw.deepseek")) {
+			AfxMessageBox(_T("DeepSeek API key removed."), MB_OK | MB_ICONINFORMATION);
+		} else {
+			AfxMessageBox(_T("No stored DeepSeek API key found."), MB_OK | MB_ICONINFORMATION);
+		}
+	}
 }
 
 void CMainFrame::OnUpdateExtensionDeepseek(CCmdUI* pCmdUI)
