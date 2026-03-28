@@ -12,6 +12,7 @@
 #include <vector>
 #include <string>
 #include "CredentialStore.h"
+#include "ApiKeyDialog.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -61,9 +62,9 @@ std::wstring ToWide(const std::string& value) {
 	return output;
 }
 
-// ApiKey dialog declared in its own files
-#include "ApiKeyDialog.h"
 } // namespace
+// ApiKey dialog declared in its own files
+
 
 IMPLEMENT_DYNAMIC(CMainFrame, CMDIFrameWndEx)
 
