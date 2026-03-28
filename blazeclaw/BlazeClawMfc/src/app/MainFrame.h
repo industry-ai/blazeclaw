@@ -77,6 +77,7 @@ protected:
 	afx_msg void OnUiParityAdminSnapshot();
 	afx_msg void OnUiParityAdminPolicyGet();
 	afx_msg void OnUiParityAdminConfigAgent();
+   afx_msg void OnUiParityDeepSeekExtension();
 	afx_msg void OnUiParitySessionList();
 	afx_msg void OnUiParitySessionActivate();
 	afx_msg void OnUiParityRuntimeStatus();

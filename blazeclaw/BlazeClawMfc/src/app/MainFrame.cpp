@@ -13,6 +13,7 @@ namespace {
 	constexpr UINT kIdUiParityAdminSnapshot = 0x8102;
 	constexpr UINT kIdUiParityAdminPolicyGet = 0x8103;
 	constexpr UINT kIdUiParityAdminConfigAgent = 0x8104;
+ constexpr UINT kIdUiParityDeepSeekExtension = 0x810A;
 	constexpr UINT kIdUiParitySessionList = 0x8105;
 	constexpr UINT kIdUiParitySessionActivate = 0x8106;
 	constexpr UINT kIdUiParityRuntimeStatus = 0x8107;
@@ -65,6 +66,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWndEx)
 	ON_COMMAND(kIdUiParityAdminSnapshot, &CMainFrame::OnUiParityAdminSnapshot)
 	ON_COMMAND(kIdUiParityAdminPolicyGet, &CMainFrame::OnUiParityAdminPolicyGet)
 	ON_COMMAND(kIdUiParityAdminConfigAgent, &CMainFrame::OnUiParityAdminConfigAgent)
+  ON_COMMAND(kIdUiParityDeepSeekExtension, &CMainFrame::OnUiParityDeepSeekExtension)
 	ON_COMMAND(kIdUiParitySessionList, &CMainFrame::OnUiParitySessionList)
 	ON_COMMAND(kIdUiParitySessionActivate, &CMainFrame::OnUiParitySessionActivate)
 	ON_COMMAND(kIdUiParityRuntimeStatus, &CMainFrame::OnUiParityRuntimeStatus)
@@ -209,6 +211,10 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 		MF_STRING,
 		kIdUiParityAdminConfigAgent,
 		_T("Admin Config Agent"));
+    m_parityMenu.AppendMenu(
+		MF_STRING,
+		kIdUiParityDeepSeekExtension,
+		_T("DeepSeek Extension"));
 	m_parityMenu.AppendMenu(
 		MF_STRING,
 		kIdUiParitySessionList,
@@ -326,6 +332,13 @@ void CMainFrame::OnUiParityAdminConfigAgent() {
 		L"Admin Config Agent",
 		"gateway.config.getSection",
 		std::optional<std::string>("{\"section\":\"agent\"}"));
+}
+
+void CMainFrame::OnUiParityDeepSeekExtension() {
+	ShowParityResult(
+		L"DeepSeek Extension",
+		"gateway.models.listByProvider",
+		std::optional<std::string>("{\"provider\":\"deepseek\"}"));
 }
 
 void CMainFrame::OnUiParitySessionList() {
