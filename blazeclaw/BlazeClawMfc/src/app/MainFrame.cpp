@@ -901,6 +901,7 @@ void CMainFrame::OnExtensionDeepseek()
 	CApiKeyDialog dlg(this);
 	// Load existing key from app config if present
     // Load existing key from Windows Credential Manager if available
+	bool loadedFromAny = false;
 	if (const auto stored = blazeclaw::app::CredentialStore::LoadCredential(L"blazeclaw.deepseek"); stored.has_value()) {
 		// stored contains UTF-8 bytes
 		const std::string s = *stored;
@@ -909,20 +910,46 @@ void CMainFrame::OnExtensionDeepseek()
 			std::vector<wchar_t> buf(static_cast<size_t>(needed) + 1);
 			::MultiByteToWideChar(CP_UTF8, 0, s.c_str(), static_cast<int>(s.size()), buf.data(), needed);
 			dlg.m_apiKey = buf.data();
-		}
-	} else {
-		// Fallback: if config contains a plaintext key (older installs), load that and then migrate it
-		blazeclaw::config::AppConfig tempCfg;
-		blazeclaw::config::ConfigLoader loader;
-		if (loader.LoadFromFile(L"blazeclaw.conf", tempCfg) && !tempCfg.deepseekApiKey.empty()) {
-			dlg.m_apiKey = tempCfg.deepseekApiKey.c_str();
-			// migrate to credential store
-			std::wstring wk = tempCfg.deepseekApiKey;
-			int needed = ::WideCharToMultiByte(CP_UTF8, 0, wk.c_str(), -1, nullptr, 0, nullptr, nullptr);
-			if (needed > 0) {
-				std::vector<char> buf(static_cast<size_t>(needed));
-				::WideCharToMultiByte(CP_UTF8, 0, wk.c_str(), -1, buf.data(), needed, nullptr, nullptr);
-				blazeclaw::app::CredentialStore::SaveCredential(L"blazeclaw.deepseek", std::string(buf.data()));
+        }
+		loadedFromAny = true;
+	}
+
+	if (!loadedFromAny) {
+		// Try DPAPI per-user file fallback
+		wchar_t appdataBuf[MAX_PATH];
+		if (GetEnvironmentVariableW(L"APPDATA", appdataBuf, (DWORD)std::size(appdataBuf)) > 0) {
+			std::wstring dpPath = std::wstring(appdataBuf) + L"\\BlazeClaw\\deepseek.key";
+			if (const auto dp = blazeclaw::app::CredentialStore::LoadCredentialDPAPI(dpPath); dp.has_value()) {
+				const std::string s = *dp;
+				int needed = ::MultiByteToWideChar(CP_UTF8, 0, s.c_str(), static_cast<int>(s.size()), nullptr, 0);
+				if (needed > 0) {
+					std::vector<wchar_t> buf(static_cast<size_t>(needed) + 1);
+					::MultiByteToWideChar(CP_UTF8, 0, s.c_str(), static_cast<int>(s.size()), buf.data(), needed);
+					dlg.m_apiKey = buf.data();
+					// attempt to migrate back to Credential Manager
+					blazeclaw::app::CredentialStore::SaveCredential(L"blazeclaw.deepseek", s);
+				}
+			} else {
+				// Fallback: if config contains a plaintext key (older installs), load that and then migrate it
+				blazeclaw::config::AppConfig tempCfg;
+				blazeclaw::config::ConfigLoader loader;
+				if (loader.LoadFromFile(L"blazeclaw.conf", tempCfg) && !tempCfg.deepseekApiKey.empty()) {
+					dlg.m_apiKey = tempCfg.deepseekApiKey.c_str();
+					// migrate to credential store and DPAPI
+					std::wstring wk = tempCfg.deepseekApiKey;
+					int needed = ::WideCharToMultiByte(CP_UTF8, 0, wk.c_str(), -1, nullptr, 0, nullptr, nullptr);
+					if (needed > 0) {
+						std::vector<char> buf(static_cast<size_t>(needed));
+						::WideCharToMultiByte(CP_UTF8, 0, wk.c_str(), -1, buf.data(), needed, nullptr, nullptr);
+						const std::string utf8(buf.data());
+						blazeclaw::app::CredentialStore::SaveCredential(L"blazeclaw.deepseek", utf8);
+						// ensure dpapi directory exists and save
+						std::wstring dir = std::wstring(appdataBuf) + L"\\BlazeClaw";
+						CreateDirectoryW(dir.c_str(), nullptr);
+						std::wstring dpPath2 = dir + L"\\deepseek.key";
+						blazeclaw::app::CredentialStore::SaveCredentialDPAPI(dpPath2, utf8);
+					}
+				}
 			}
 		}
 	}
@@ -955,8 +982,7 @@ void CMainFrame::OnExtensionDeepseek()
 	const std::wstring credTarget = L"blazeclaw.deepseek";
 	blazeclaw::app::CredentialStore::SaveCredential(credTarget, apiKey);
 
-    // Remove any plaintext persistence from config file. We will store the key encrypted in
-	// Windows Credential Manager instead. Optionally keep a marker in the config file.
+    // Remove any plaintext deepseek.apiKey lines from config file entirely
 	const std::wstring configPath = L"blazeclaw.conf";
 	std::vector<std::wstring> lines;
 	std::wifstream infile(configPath);
@@ -966,26 +992,23 @@ void CMainFrame::OnExtensionDeepseek()
 		while (std::getline(infile, line)) {
 			const std::wstring t = TrimMain(line);
 			if (t.rfind(L"deepseek.apiKey=", 0) == 0) {
-				// replace with a marker only
-				lines.push_back(std::wstring(L"deepseek.apiKey=stored-in-windows-credential-manager"));
+				// drop the line entirely
 				updated = true;
-			} else {
-				lines.push_back(line);
+				continue;
 			}
+			lines.push_back(line);
 		}
 		infile.close();
 	}
 
-	if (!updated) {
-		lines.push_back(std::wstring(L"deepseek.apiKey=stored-in-windows-credential-manager"));
-	}
-
-	std::wofstream outfile(configPath, std::ios::trunc);
-	if (outfile.is_open()) {
-		for (const auto& l : lines) {
-			outfile << l << L"\n";
+	if (updated) {
+		std::wofstream outfile(configPath, std::ios::trunc);
+		if (outfile.is_open()) {
+			for (const auto& l : lines) {
+				outfile << l << L"\n";
+			}
+			outfile.close();
 		}
-		outfile.close();
 	}
 
     // Mask the API key for display
