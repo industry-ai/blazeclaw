@@ -107,6 +107,7 @@ namespace blazeclaw::gateway {
 	 struct ChatRuntimeResult {
 		 bool ok = false;
 		 std::string assistantText;
+        std::vector<std::string> assistantDeltas;
 		 std::string modelId;
 		 std::string errorCode;
 		 std::string errorMessage;
@@ -202,6 +203,8 @@ namespace blazeclaw::gateway {
 			std::string idempotencyKey;
 			std::string userMessage;
 			std::string assistantText;
+         std::vector<std::string> providerDeltas;
+			std::size_t providerDeltaCursor = 0;
           std::size_t streamCursor = 0;
 			std::uint64_t lastEmitMs = 0;
 			bool failed = false;

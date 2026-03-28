@@ -2851,6 +2851,95 @@ std::optional<std::string> ServiceManager::ExtractDeepSeekAssistantText(
   return text;
 }
 
+std::vector<std::string> ServiceManager::ExtractDeepSeekAssistantDeltas(
+    const std::string& responseBody) const {
+  std::vector<std::string> deltas;
+  std::string cumulative;
+
+  std::size_t cursor = 0;
+  while (cursor < responseBody.size()) {
+    const std::size_t lineEnd = responseBody.find('\n', cursor);
+    const std::size_t end = lineEnd == std::string::npos ? responseBody.size() : lineEnd;
+    std::string line = responseBody.substr(cursor, end - cursor);
+    cursor = lineEnd == std::string::npos ? responseBody.size() : lineEnd + 1;
+
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
+
+    const std::string prefix = "data:";
+    if (line.rfind(prefix, 0) != 0) {
+      continue;
+    }
+
+    std::string payload = blazeclaw::gateway::json::Trim(line.substr(prefix.size()));
+    if (payload.empty() || payload == "[DONE]") {
+      continue;
+    }
+
+    std::string choicesRaw;
+    if (!blazeclaw::gateway::json::FindRawField(payload, "choices", choicesRaw)) {
+      continue;
+    }
+
+    const std::string contentKey = "\"content\":\"";
+    const auto contentPos = choicesRaw.find(contentKey);
+    if (contentPos == std::string::npos) {
+      continue;
+    }
+
+    const std::size_t start = contentPos + contentKey.size();
+    std::string piece;
+    bool escaping = false;
+    for (std::size_t i = start; i < choicesRaw.size(); ++i) {
+      const char ch = choicesRaw[i];
+      if (escaping) {
+        switch (ch) {
+        case 'n':
+          piece.push_back('\n');
+          break;
+        case 'r':
+          piece.push_back('\r');
+          break;
+        case 't':
+          piece.push_back('\t');
+          break;
+        case '"':
+        case '\\':
+        case '/':
+          piece.push_back(ch);
+          break;
+        default:
+          piece.push_back(ch);
+          break;
+        }
+        escaping = false;
+        continue;
+      }
+
+      if (ch == '\\') {
+        escaping = true;
+        continue;
+      }
+
+      if (ch == '"') {
+        break;
+      }
+
+      piece.push_back(ch);
+    }
+
+    if (piece.empty()) {
+      continue;
+    }
+
+    cumulative += piece;
+    deltas.push_back(cumulative);
+  }
+
+  return deltas;
+}
+
 std::optional<std::string> ServiceManager::ExtractDeepSeekErrorMessage(
     const std::string& responseJson) const {
   std::string errorRaw;
@@ -2968,7 +3057,7 @@ ServiceManager::InvokeDeepSeekRemoteChat(
   const std::string escapedMessage = EscapeJsonUtf8(request.message);
   const std::string payload =
       std::string("{\"model\":\"") + modelId +
-      "\",\"stream\":false,\"messages\":[{\"role\":\"user\",\"content\":\"" +
+      "\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"" +
       escapedMessage + "\"}]}";
 
   if (!WinHttpSendRequest(
@@ -3066,11 +3155,16 @@ ServiceManager::InvokeDeepSeekRemoteChat(
     };
   }
 
-  const auto assistantText = ExtractDeepSeekAssistantText(responseBody);
-  if (!assistantText.has_value() || assistantText->empty()) {
+  const auto assistantDeltas = ExtractDeepSeekAssistantDeltas(responseBody);
+  const std::string assistantText = assistantDeltas.empty()
+      ? std::string()
+      : assistantDeltas.back();
+
+  if (assistantText.empty()) {
     return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
         .ok = false,
         .assistantText = {},
+        .assistantDeltas = {},
         .modelId = modelId,
         .errorCode = "deepseek_invalid_response",
         .errorMessage = "DeepSeek response did not contain assistant text.",
@@ -3079,7 +3173,8 @@ ServiceManager::InvokeDeepSeekRemoteChat(
 
   return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
       .ok = true,
-      .assistantText = assistantText.value(),
+      .assistantText = assistantText,
+      .assistantDeltas = assistantDeltas,
       .modelId = modelId,
       .errorCode = {},
       .errorMessage = {},

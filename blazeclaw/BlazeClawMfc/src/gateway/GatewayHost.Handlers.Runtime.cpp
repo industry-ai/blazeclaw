@@ -1019,6 +1019,34 @@ namespace blazeclaw::gateway {
                         if (!runtimeResult.assistantText.empty()) {
                             assistantText = runtimeResult.assistantText;
                         }
+
+                        if (!runtimeResult.assistantDeltas.empty()) {
+                            assistantText = runtimeResult.assistantDeltas.back();
+                        }
+
+                        std::vector<std::string> providerDeltas =
+                            runtimeResult.assistantDeltas;
+                        if (providerDeltas.empty() && !assistantText.empty()) {
+                            providerDeltas.push_back(assistantText);
+                        }
+
+                        m_chatRunsById.insert_or_assign(
+                            runId,
+                            ChatRunState{
+                                .runId = runId,
+                                .sessionKey = sessionKey,
+                                .idempotencyKey = idempotencyKey,
+                                .userMessage = message,
+                                .assistantText = assistantText,
+                                .providerDeltas = providerDeltas,
+                                .providerDeltaCursor = 0,
+                                .streamCursor = 0,
+                                .lastEmitMs = nowMs,
+                                .failed = failed,
+                                .errorMessage = backendErrorMessage,
+                                .startedAtMs = nowMs,
+                                .active = true,
+                            });
                     }
                     else {
                         failed = true;
@@ -1056,21 +1084,25 @@ namespace blazeclaw::gateway {
                     }
                 }
 
-                m_chatRunsById.insert_or_assign(
-                    runId,
-                    ChatRunState{
-                        .runId = runId,
-                        .sessionKey = sessionKey,
-                        .idempotencyKey = idempotencyKey,
-                        .userMessage = message,
-                        .assistantText = assistantText,
-                        .streamCursor = streamCursor,
-                        .lastEmitMs = nowMs,
-                        .failed = failed,
-                        .errorMessage = backendErrorMessage,
-                        .startedAtMs = nowMs,
-                        .active = true,
-                    });
+                if (m_chatRunsById.find(runId) == m_chatRunsById.end()) {
+                    m_chatRunsById.insert_or_assign(
+                        runId,
+                        ChatRunState{
+                            .runId = runId,
+                            .sessionKey = sessionKey,
+                            .idempotencyKey = idempotencyKey,
+                            .userMessage = message,
+                            .assistantText = assistantText,
+                            .providerDeltas = {},
+                            .providerDeltaCursor = 0,
+                            .streamCursor = streamCursor,
+                            .lastEmitMs = nowMs,
+                            .failed = failed,
+                            .errorMessage = backendErrorMessage,
+                            .startedAtMs = nowMs,
+                            .active = true,
+                        });
+                }
 
                 if (!idempotencyKey.empty()) {
                     m_chatRunByIdempotency.insert_or_assign(idempotencyKey, runId);
@@ -1210,26 +1242,38 @@ namespace blazeclaw::gateway {
                         run.lastEmitMs == 0 || (nowMs - run.lastEmitMs) >= 180;
 
                     if (!run.failed && !silentAssistantReply &&
-                        run.streamCursor < run.assistantText.size() &&
+                        ((run.providerDeltaCursor < run.providerDeltas.size()) ||
+                         (run.streamCursor < run.assistantText.size())) &&
                         enoughTimeElapsed) {
-                        const std::size_t nextCursor =
-                            (std::min)(run.assistantText.size(), run.streamCursor + std::size_t{ 8 });
-                        run.streamCursor = nextCursor;
+                        std::string deltaText;
+                        if (run.providerDeltaCursor < run.providerDeltas.size()) {
+                            deltaText = run.providerDeltas[run.providerDeltaCursor];
+                            ++run.providerDeltaCursor;
+                            run.streamCursor = deltaText.size();
+                        }
+                        else {
+                            const std::size_t nextCursor =
+                                (std::min)(run.assistantText.size(), run.streamCursor + std::size_t{ 8 });
+                            run.streamCursor = nextCursor;
+                            deltaText = run.assistantText.substr(0, run.streamCursor);
+                        }
+
                         run.lastEmitMs = nowMs;
 
                         queue.push_back(ChatEventState{
                             .runId = run.runId,
                             .sessionKey = run.sessionKey,
                             .state = "delta",
-                            .messageJson = BuildAssistantDeltaMessageJson(
-                                run.assistantText.substr(0, run.streamCursor)),
+                            .messageJson = BuildAssistantDeltaMessageJson(deltaText),
                             .errorMessage = std::nullopt,
                             .timestampMs = nowMs,
                             });
                     }
 
                     const bool streamCompleted =
-                        silentAssistantReply || run.streamCursor >= run.assistantText.size();
+                        silentAssistantReply ||
+                        (run.providerDeltaCursor >= run.providerDeltas.size() &&
+                            run.streamCursor >= run.assistantText.size());
                     if (streamCompleted) {
                         queue.push_back(ChatEventState{
                             .runId = run.runId,

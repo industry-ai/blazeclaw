@@ -194,6 +194,8 @@ private:
       const std::string& apiKey) const;
   [[nodiscard]] std::optional<std::string> ExtractDeepSeekAssistantText(
       const std::string& responseJson) const;
+  [[nodiscard]] std::vector<std::string> ExtractDeepSeekAssistantDeltas(
+      const std::string& responseBody) const;
   [[nodiscard]] std::optional<std::string> ExtractDeepSeekErrorMessage(
       const std::string& responseJson) const;
   [[nodiscard]] bool IsDeepSeekRunCancelled(const std::string& runId) const;
