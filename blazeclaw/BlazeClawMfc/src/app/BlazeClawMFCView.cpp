@@ -39,650 +39,650 @@
 
 namespace {
 
-constexpr UINT_PTR kBridgeLifecycleTimerId = 0x4A21;
-constexpr UINT kBridgeLifecycleTimerMs = 1000;
-constexpr std::uint64_t kBridgeTraceFlushIntervalMs = 1000;
+	constexpr UINT_PTR kBridgeLifecycleTimerId = 0x4A21;
+	constexpr UINT kBridgeLifecycleTimerMs = 1000;
+	constexpr std::uint64_t kBridgeTraceFlushIntervalMs = 1000;
 
-std::string ToNarrow(const std::wstring& value)
-{
- if (value.empty())
+	std::string ToNarrow(const std::wstring& value)
 	{
-		return {};
-	}
-
-	const int sizeNeeded = WideCharToMultiByte(
-		CP_UTF8,
-		0,
-		value.c_str(),
-		static_cast<int>(value.size()),
-		nullptr,
-		0,
-		nullptr,
-		nullptr);
-	if (sizeNeeded <= 0)
-	{
-		std::string fallback;
-		fallback.reserve(value.size());
-		for (const wchar_t ch : value)
+		if (value.empty())
 		{
-			fallback.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
+			return {};
 		}
-		return fallback;
+
+		const int sizeNeeded = WideCharToMultiByte(
+			CP_UTF8,
+			0,
+			value.c_str(),
+			static_cast<int>(value.size()),
+			nullptr,
+			0,
+			nullptr,
+			nullptr);
+		if (sizeNeeded <= 0)
+		{
+			std::string fallback;
+			fallback.reserve(value.size());
+			for (const wchar_t ch : value)
+			{
+				fallback.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
+			}
+			return fallback;
+		}
+
+		std::string output(sizeNeeded, '\0');
+		const int written = WideCharToMultiByte(
+			CP_UTF8,
+			0,
+			value.c_str(),
+			static_cast<int>(value.size()),
+			output.data(),
+			sizeNeeded,
+			nullptr,
+			nullptr);
+		if (written <= 0)
+		{
+			return {};
+		}
+
+		return output;
 	}
 
-	std::string output(sizeNeeded, '\0');
-	const int written = WideCharToMultiByte(
-		CP_UTF8,
-		0,
-		value.c_str(),
-		static_cast<int>(value.size()),
-		output.data(),
-		sizeNeeded,
-		nullptr,
-		nullptr);
-	if (written <= 0)
+	void AppendChatProcedureStatusLine(const CString& line)
 	{
-		return {};
+		auto* mainFrame =
+			dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+		if (mainFrame == nullptr)
+		{
+			return;
+		}
+
+		mainFrame->AddChatStatusLine(line);
 	}
 
-	return output;
-}
-
-void AppendChatProcedureStatusLine(const CString& line)
-{
-	auto* mainFrame =
-		dynamic_cast<CMainFrame*>(AfxGetMainWnd());
-	if (mainFrame == nullptr)
+	void AppendChatProcedureStatusLine(const wchar_t* stage)
 	{
-		return;
+		if (stage == nullptr)
+		{
+			return;
+		}
+
+		CString line;
+		line.Format(L"[Chat] %s", stage);
+		AppendChatProcedureStatusLine(line);
 	}
 
-	mainFrame->AddChatStatusLine(line);
-}
-
-void AppendChatProcedureStatusLine(const wchar_t* stage)
-{
-	if (stage == nullptr)
+	void AppendChatProcedureStatusLine(
+		const wchar_t* stage,
+		const std::string& detail)
 	{
-		return;
+		CStringW detailW(CA2W(detail.c_str(), CP_UTF8));
+		CString line;
+		line.Format(
+			L"[Chat] %s - %s",
+			(stage != nullptr ? stage : L"stage"),
+			detailW.GetString());
+		AppendChatProcedureStatusLine(line);
 	}
 
-	CString line;
-	line.Format(L"[Chat] %s", stage);
-	AppendChatProcedureStatusLine(line);
-}
-
-void AppendChatProcedureStatusLine(
-	const wchar_t* stage,
-	const std::string& detail)
-{
-	CStringW detailW(CA2W(detail.c_str(), CP_UTF8));
-	CString line;
-	line.Format(
-		L"[Chat] %s - %s",
-		(stage != nullptr ? stage : L"stage"),
-		detailW.GetString());
-	AppendChatProcedureStatusLine(line);
-}
-
-std::wstring ToWide(const std::string& value)
-{
-    if (value.empty())
+	std::wstring ToWide(const std::string& value)
 	{
-		return {};
+		if (value.empty())
+		{
+			return {};
+		}
+
+		const int sizeNeeded = MultiByteToWideChar(
+			CP_UTF8,
+			0,
+			value.c_str(),
+			static_cast<int>(value.size()),
+			nullptr,
+			0);
+		if (sizeNeeded <= 0)
+		{
+			std::wstring fallback;
+			fallback.reserve(value.size());
+			for (const char ch : value)
+			{
+				fallback.push_back(static_cast<wchar_t>(
+					static_cast<unsigned char>(ch)));
+			}
+			return fallback;
+		}
+
+		std::wstring output(sizeNeeded, L'\0');
+		const int written = MultiByteToWideChar(
+			CP_UTF8,
+			0,
+			value.c_str(),
+			static_cast<int>(value.size()),
+			output.data(),
+			sizeNeeded);
+		if (written <= 0)
+		{
+			return {};
+		}
+
+		return output;
 	}
 
-	const int sizeNeeded = MultiByteToWideChar(
-		CP_UTF8,
-		0,
-		value.c_str(),
-		static_cast<int>(value.size()),
-		nullptr,
-		0);
-	if (sizeNeeded <= 0)
+	std::string EscapeJson(const std::string& value)
 	{
-		std::wstring fallback;
-		fallback.reserve(value.size());
+		std::string escaped;
+		escaped.reserve(value.size() + 8);
 		for (const char ch : value)
-		{
-			fallback.push_back(static_cast<wchar_t>(
-				static_cast<unsigned char>(ch)));
-		}
-		return fallback;
-	}
-
-	std::wstring output(sizeNeeded, L'\0');
-	const int written = MultiByteToWideChar(
-		CP_UTF8,
-		0,
-		value.c_str(),
-		static_cast<int>(value.size()),
-		output.data(),
-		sizeNeeded);
-	if (written <= 0)
-	{
-		return {};
-	}
-
-	return output;
-}
-
-std::string EscapeJson(const std::string& value)
-{
-	std::string escaped;
-	escaped.reserve(value.size() + 8);
-	for (const char ch : value)
-	{
-		switch (ch)
-		{
-		case '"':
-			escaped += "\\\"";
-			break;
-		case '\\':
-			escaped += "\\\\";
-			break;
-		case '\n':
-			escaped += "\\n";
-			break;
-		case '\r':
-			escaped += "\\r";
-			break;
-		case '\t':
-			escaped += "\\t";
-			break;
-		default:
-			escaped.push_back(ch);
-			break;
-		}
-	}
-	return escaped;
-}
-
-bool TryExtractJsonStringAfterKey(
-	const std::string& json,
-	const std::size_t start,
-	const std::string& key,
-	std::string& outValue)
-{
-	outValue.clear();
-	if (start >= json.size())
-	{
-		return false;
-	}
-
-	const std::string token = "\"" + key + "\":\"";
-	const std::size_t keyPos = json.find(token, start);
-	if (keyPos == std::string::npos)
-	{
-		return false;
-	}
-
-	std::size_t cursor = keyPos + token.size();
-	bool escaping = false;
-	while (cursor < json.size())
-	{
-		const char ch = json[cursor++];
-		if (escaping)
 		{
 			switch (ch)
 			{
-			case 'n':
-				outValue.push_back('\n');
-				break;
-			case 'r':
-				outValue.push_back('\r');
-				break;
-			case 't':
-				outValue.push_back('\t');
+			case '"':
+				escaped += "\\\"";
 				break;
 			case '\\':
-			case '"':
-				outValue.push_back(ch);
+				escaped += "\\\\";
+				break;
+			case '\n':
+				escaped += "\\n";
+				break;
+			case '\r':
+				escaped += "\\r";
+				break;
+			case '\t':
+				escaped += "\\t";
 				break;
 			default:
-				outValue.push_back(ch);
+				escaped.push_back(ch);
 				break;
 			}
-			escaping = false;
-			continue;
 		}
-
-		if (ch == '\\')
-		{
-			escaping = true;
-			continue;
-		}
-
-		if (ch == '"')
-		{
-			return true;
-		}
-
-		outValue.push_back(ch);
+		return escaped;
 	}
 
-	return false;
-}
-
-std::string TryExtractFinalAssistantText(
-	const std::string& eventsRaw)
-{
-	const std::size_t finalPos =
-		eventsRaw.find("\"state\":\"final\"");
-	if (finalPos == std::string::npos)
+	bool TryExtractJsonStringAfterKey(
+		const std::string& json,
+		const std::size_t start,
+		const std::string& key,
+		std::string& outValue)
 	{
-		return {};
+		outValue.clear();
+		if (start >= json.size())
+		{
+			return false;
+		}
+
+		const std::string token = "\"" + key + "\":\"";
+		const std::size_t keyPos = json.find(token, start);
+		if (keyPos == std::string::npos)
+		{
+			return false;
+		}
+
+		std::size_t cursor = keyPos + token.size();
+		bool escaping = false;
+		while (cursor < json.size())
+		{
+			const char ch = json[cursor++];
+			if (escaping)
+			{
+				switch (ch)
+				{
+				case 'n':
+					outValue.push_back('\n');
+					break;
+				case 'r':
+					outValue.push_back('\r');
+					break;
+				case 't':
+					outValue.push_back('\t');
+					break;
+				case '\\':
+				case '"':
+					outValue.push_back(ch);
+					break;
+				default:
+					outValue.push_back(ch);
+					break;
+				}
+				escaping = false;
+				continue;
+			}
+
+			if (ch == '\\')
+			{
+				escaping = true;
+				continue;
+			}
+
+			if (ch == '"')
+			{
+				return true;
+			}
+
+			outValue.push_back(ch);
+		}
+
+		return false;
 	}
 
-	std::string extracted;
-	if (TryExtractJsonStringAfterKey(
+	std::string TryExtractFinalAssistantText(
+		const std::string& eventsRaw)
+	{
+		const std::size_t finalPos =
+			eventsRaw.find("\"state\":\"final\"");
+		if (finalPos == std::string::npos)
+		{
+			return {};
+		}
+
+		std::string extracted;
+		if (TryExtractJsonStringAfterKey(
 			eventsRaw,
 			finalPos,
 			"text",
 			extracted))
-	{
-		return extracted;
+		{
+			return extracted;
+		}
+
+		return {};
 	}
 
-	return {};
-}
-
-std::string JsonString(const std::string& value)
-{
-	return std::string("\"") + EscapeJson(value) + "\"";
-}
-
-std::string BuildBridgeRpcResultJson(
-	const blazeclaw::gateway::protocol::ResponseFrame& response,
-	const std::string& correlationId)
-{
-	std::string json =
-		"{\"channel\":\"blazeclaw.gateway.rpc.result\",\"id\":" +
-		JsonString(correlationId) +
-		",\"ok\":" +
-		(response.ok ? "true" : "false");
-
-	if (response.ok)
+	std::string JsonString(const std::string& value)
 	{
-		if (response.payloadJson.has_value())
-		{
-			json += ",\"payload\":" + response.payloadJson.value();
-		}
-		else
-		{
-			json += ",\"payload\":null";
-		}
+		return std::string("\"") + EscapeJson(value) + "\"";
 	}
-	else
+
+	std::string BuildBridgeRpcResultJson(
+		const blazeclaw::gateway::protocol::ResponseFrame& response,
+		const std::string& correlationId)
 	{
-		json += ",\"error\":";
-		if (response.error.has_value())
+		std::string json =
+			"{\"channel\":\"blazeclaw.gateway.rpc.result\",\"id\":" +
+			JsonString(correlationId) +
+			",\"ok\":" +
+			(response.ok ? "true" : "false");
+
+		if (response.ok)
 		{
-			const auto& error = response.error.value();
-			json += "{";
-			json += "\"code\":" + JsonString(error.code);
-			json += ",\"message\":" + JsonString(error.message);
-			if (error.detailsJson.has_value())
+			if (response.payloadJson.has_value())
 			{
-				json += ",\"details\":" + error.detailsJson.value();
+				json += ",\"payload\":" + response.payloadJson.value();
 			}
-			json += "}";
+			else
+			{
+				json += ",\"payload\":null";
+			}
 		}
 		else
 		{
-			json +=
-				"{\"code\":\"error_unknown\",\"message\":\"Gateway request failed.\"}";
+			json += ",\"error\":";
+			if (response.error.has_value())
+			{
+				const auto& error = response.error.value();
+				json += "{";
+				json += "\"code\":" + JsonString(error.code);
+				json += ",\"message\":" + JsonString(error.message);
+				if (error.detailsJson.has_value())
+				{
+					json += ",\"details\":" + error.detailsJson.value();
+				}
+				json += "}";
+			}
+			else
+			{
+				json +=
+					"{\"code\":\"error_unknown\",\"message\":\"Gateway request failed.\"}";
+			}
 		}
+
+		json += "}";
+		return json;
 	}
 
-	json += "}";
-	return json;
-}
-
-bool IsToolExecuteMethod(const std::string& method)
-{
-	return method == "gateway.tools.call.execute";
-}
-
-std::string BuildToolStartDetail(
-	const std::optional<std::string>& paramsJson)
-{
-	if (!paramsJson.has_value())
+	bool IsToolExecuteMethod(const std::string& method)
 	{
-		return "tool=unknown";
+		return method == "gateway.tools.call.execute";
 	}
 
-	std::string tool;
-	blazeclaw::gateway::json::FindStringField(
-		paramsJson.value(),
-		"tool",
-		tool);
-	if (tool.empty())
+	std::string BuildToolStartDetail(
+		const std::optional<std::string>& paramsJson)
 	{
-		tool = "unknown";
-	}
+		if (!paramsJson.has_value())
+		{
+			return "tool=unknown";
+		}
 
-	std::string detail = "tool=" + tool;
+		std::string tool;
+		blazeclaw::gateway::json::FindStringField(
+			paramsJson.value(),
+			"tool",
+			tool);
+		if (tool.empty())
+		{
+			tool = "unknown";
+		}
 
-	std::string argsRaw;
-	if (blazeclaw::gateway::json::FindRawField(
+		std::string detail = "tool=" + tool;
+
+		std::string argsRaw;
+		if (blazeclaw::gateway::json::FindRawField(
 			paramsJson.value(),
 			"args",
 			argsRaw))
-	{
-		std::string action;
-		if (blazeclaw::gateway::json::FindStringField(
+		{
+			std::string action;
+			if (blazeclaw::gateway::json::FindStringField(
 				argsRaw,
 				"action",
 				action) &&
-			!action.empty())
-		{
-			detail += " action=" + action;
-		}
-	}
-
-	return detail;
-}
-
-std::string BuildToolResultDetail(
-	const blazeclaw::gateway::protocol::ResponseFrame& response)
-{
-	if (!response.ok)
-	{
-		if (response.error.has_value())
-		{
-			return "status=error code=" +
-				response.error->code;
-		}
-
-		return "status=error code=unknown";
-	}
-
-	if (!response.payloadJson.has_value())
-	{
-		return "status=ok tool=unknown";
-	}
-
-	const std::string& payload = response.payloadJson.value();
-	std::string tool;
-	std::string status;
-	bool executed = false;
-	blazeclaw::gateway::json::FindStringField(payload, "tool", tool);
-	blazeclaw::gateway::json::FindStringField(payload, "status", status);
-	blazeclaw::gateway::json::FindBoolField(payload, "executed", executed);
-
-	if (tool.empty())
-	{
-		tool = "unknown";
-	}
-	if (status.empty())
-	{
-		status = "ok";
-	}
-
-	std::string detail =
-		"tool=" + tool +
-		" status=" + status +
-		" executed=" + (executed ? "true" : "false");
-
-	return detail;
-}
-
-std::string BuildOpenClawWsResponseFrameJson(
-	const blazeclaw::gateway::protocol::ResponseFrame& response,
-	const std::string& correlationId)
-{
-	std::string frame =
-		"{\"type\":\"res\",\"id\":" +
-		JsonString(correlationId) +
-		",\"ok\":" +
-		(response.ok ? "true" : "false");
-
-	if (response.ok)
-	{
-		if (response.payloadJson.has_value())
-		{
-			frame += ",\"payload\":" + response.payloadJson.value();
-		}
-	}
-	else
-	{
-		frame += ",\"error\":";
-		if (response.error.has_value())
-		{
-			const auto& error = response.error.value();
-			frame += "{";
-			frame += "\"code\":" + JsonString(error.code);
-			frame += ",\"message\":" + JsonString(error.message);
-			if (error.detailsJson.has_value())
+				!action.empty())
 			{
-				frame += ",\"details\":" + error.detailsJson.value();
+				detail += " action=" + action;
 			}
-			frame += "}";
+		}
+
+		return detail;
+	}
+
+	std::string BuildToolResultDetail(
+		const blazeclaw::gateway::protocol::ResponseFrame& response)
+	{
+		if (!response.ok)
+		{
+			if (response.error.has_value())
+			{
+				return "status=error code=" +
+					response.error->code;
+			}
+
+			return "status=error code=unknown";
+		}
+
+		if (!response.payloadJson.has_value())
+		{
+			return "status=ok tool=unknown";
+		}
+
+		const std::string& payload = response.payloadJson.value();
+		std::string tool;
+		std::string status;
+		bool executed = false;
+		blazeclaw::gateway::json::FindStringField(payload, "tool", tool);
+		blazeclaw::gateway::json::FindStringField(payload, "status", status);
+		blazeclaw::gateway::json::FindBoolField(payload, "executed", executed);
+
+		if (tool.empty())
+		{
+			tool = "unknown";
+		}
+		if (status.empty())
+		{
+			status = "ok";
+		}
+
+		std::string detail =
+			"tool=" + tool +
+			" status=" + status +
+			" executed=" + (executed ? "true" : "false");
+
+		return detail;
+	}
+
+	std::string BuildOpenClawWsResponseFrameJson(
+		const blazeclaw::gateway::protocol::ResponseFrame& response,
+		const std::string& correlationId)
+	{
+		std::string frame =
+			"{\"type\":\"res\",\"id\":" +
+			JsonString(correlationId) +
+			",\"ok\":" +
+			(response.ok ? "true" : "false");
+
+		if (response.ok)
+		{
+			if (response.payloadJson.has_value())
+			{
+				frame += ",\"payload\":" + response.payloadJson.value();
+			}
 		}
 		else
 		{
-			frame +=
-				"{\"code\":\"UNAVAILABLE\",\"message\":\"request failed\"}";
+			frame += ",\"error\":";
+			if (response.error.has_value())
+			{
+				const auto& error = response.error.value();
+				frame += "{";
+				frame += "\"code\":" + JsonString(error.code);
+				frame += ",\"message\":" + JsonString(error.message);
+				if (error.detailsJson.has_value())
+				{
+					frame += ",\"details\":" + error.detailsJson.value();
+				}
+				frame += "}";
+			}
+			else
+			{
+				frame +=
+					"{\"code\":\"UNAVAILABLE\",\"message\":\"request failed\"}";
+			}
 		}
+
+		frame += "}";
+		return frame;
 	}
 
-	frame += "}";
-	return frame;
-}
-
-std::string BuildOpenClawHelloPayloadJson()
-{
-	return
-		"{"
-		"\"type\":\"hello-ok\"," 
-		"\"protocol\":3,"
-		"\"server\":{\"version\":\"blazeclaw-mfc\",\"connId\":\"webview2-bridge\"},"
-		"\"features\":{"
-		"\"methods\":[\"chat.history\",\"chat.send\",\"chat.abort\",\"chat.events.poll\"],"
-		"\"events\":[\"chat\"]"
-		"},"
-		"\"snapshot\":{},"
-		"\"policy\":{\"tickIntervalMs\":1000}"
-		"}";
-}
-
-std::optional<std::wstring> GetEnvValue(const wchar_t* name)
-{
-	if (name == nullptr || *name == L'\0')
+	std::string BuildOpenClawHelloPayloadJson()
 	{
+		return
+			"{"
+			"\"type\":\"hello-ok\","
+			"\"protocol\":3,"
+			"\"server\":{\"version\":\"blazeclaw-mfc\",\"connId\":\"webview2-bridge\"},"
+			"\"features\":{"
+			"\"methods\":[\"chat.history\",\"chat.send\",\"chat.abort\",\"chat.events.poll\"],"
+			"\"events\":[\"chat\"]"
+			"},"
+			"\"snapshot\":{},"
+			"\"policy\":{\"tickIntervalMs\":1000}"
+			"}";
+	}
+
+	std::optional<std::wstring> GetEnvValue(const wchar_t* name)
+	{
+		if (name == nullptr || *name == L'\0')
+		{
+			return std::nullopt;
+		}
+
+		size_t valueLength = 0;
+		wchar_t* rawValue = nullptr;
+		if (_wdupenv_s(&rawValue, &valueLength, name) != 0 || rawValue == nullptr)
+		{
+			return std::nullopt;
+		}
+
+		std::wstring value(rawValue);
+		free(rawValue);
+		if (value.empty())
+		{
+			return std::nullopt;
+		}
+
+		return value;
+	}
+
+	std::wstring TrimCopy(std::wstring value)
+	{
+		auto isSpace = [](wchar_t ch)
+			{
+				return ::iswspace(ch) != 0;
+			};
+
+		while (!value.empty() && isSpace(value.front()))
+		{
+			value.erase(value.begin());
+		}
+
+		while (!value.empty() && isSpace(value.back()))
+		{
+			value.pop_back();
+		}
+
+		return value;
+	}
+
+	std::wstring BuildFileUrl(const std::filesystem::path& filePath)
+	{
+		std::wstring genericPath = filePath.lexically_normal().generic_wstring();
+		if (!genericPath.empty() && genericPath.front() != L'/')
+		{
+			genericPath.insert(genericPath.begin(), L'/');
+		}
+
+		std::wstring escaped;
+		escaped.reserve(genericPath.size() + 8);
+		for (const wchar_t ch : genericPath)
+		{
+			switch (ch)
+			{
+			case L' ':
+				escaped += L"%20";
+				break;
+			case L'#':
+				escaped += L"%23";
+				break;
+			default:
+				escaped.push_back(ch);
+				break;
+			}
+		}
+
+		return L"file://" + escaped;
+	}
+
+	std::optional<std::filesystem::path> FindOpenClawUiIndex(const std::filesystem::path& start)
+	{
+		std::filesystem::path cursor = start;
+		while (!cursor.empty())
+		{
+			const auto dist =
+				cursor /
+				L"blazeclaw" /
+				L"BlazeClawMfc" /
+				L"web" /
+				L"chat" /
+				L"dist" /
+				L"index.html";
+			if (std::filesystem::exists(dist))
+			{
+				return dist;
+			}
+
+			const auto direct =
+				cursor /
+				L"blazeclaw" /
+				L"BlazeClawMfc" /
+				L"web" /
+				L"chat" /
+				L"index.html";
+			if (std::filesystem::exists(direct))
+			{
+				return direct;
+			}
+
+			if (!cursor.has_parent_path())
+			{
+				break;
+			}
+
+			auto parent = cursor.parent_path();
+			if (parent == cursor)
+			{
+				break;
+			}
+
+			cursor = parent;
+		}
+
 		return std::nullopt;
 	}
 
-	size_t valueLength = 0;
-	wchar_t* rawValue = nullptr;
-	if (_wdupenv_s(&rawValue, &valueLength, name) != 0 || rawValue == nullptr)
+	std::wstring ResolveChatStartupUrl()
 	{
-		return std::nullopt;
-	}
-
-	std::wstring value(rawValue);
-	free(rawValue);
-	if (value.empty())
-	{
-		return std::nullopt;
-	}
-
-	return value;
-}
-
-std::wstring TrimCopy(std::wstring value)
-{
-	auto isSpace = [](wchar_t ch)
-	{
-      return ::iswspace(ch) != 0;
-	};
-
-	while (!value.empty() && isSpace(value.front()))
-	{
-		value.erase(value.begin());
-	}
-
-	while (!value.empty() && isSpace(value.back()))
-	{
-		value.pop_back();
-	}
-
-	return value;
-}
-
-std::wstring BuildFileUrl(const std::filesystem::path& filePath)
-{
-	std::wstring genericPath = filePath.lexically_normal().generic_wstring();
-	if (!genericPath.empty() && genericPath.front() != L'/')
-	{
-		genericPath.insert(genericPath.begin(), L'/');
-	}
-
-	std::wstring escaped;
-	escaped.reserve(genericPath.size() + 8);
-	for (const wchar_t ch : genericPath)
-	{
-		switch (ch)
+		if (const auto envUrl = GetEnvValue(L"OPENCLAW_UI_DEV_URL"); envUrl.has_value())
 		{
-		case L' ':
-			escaped += L"%20";
-			break;
-		case L'#':
-			escaped += L"%23";
-			break;
-		default:
-			escaped.push_back(ch);
-			break;
-		}
-	}
-
-	return L"file://" + escaped;
-}
-
-std::optional<std::filesystem::path> FindOpenClawUiIndex(const std::filesystem::path& start)
-{
-	std::filesystem::path cursor = start;
-	while (!cursor.empty())
-	{
-       const auto dist =
-			cursor /
-			L"blazeclaw" /
-			L"BlazeClawMfc" /
-			L"web" /
-			L"chat" /
-			L"dist" /
-			L"index.html";
-		if (std::filesystem::exists(dist))
-		{
-			return dist;
+			const std::wstring value = TrimCopy(envUrl.value());
+			if (!value.empty())
+			{
+				return value;
+			}
 		}
 
-       const auto direct =
-			cursor /
-			L"blazeclaw" /
-			L"BlazeClawMfc" /
-			L"web" /
-			L"chat" /
-			L"index.html";
-		if (std::filesystem::exists(direct))
+		if (const auto envUrl = GetEnvValue(L"BLAZECLAW_CHAT_DEV_URL"); envUrl.has_value())
 		{
-			return direct;
+			const std::wstring value = TrimCopy(envUrl.value());
+			if (!value.empty())
+			{
+				return value;
+			}
 		}
 
-		if (!cursor.has_parent_path())
+		const auto mode = GetEnvValue(L"BLAZECLAW_CHAT_UI_MODE");
+		if (mode.has_value())
 		{
-			break;
+			std::wstring normalized = TrimCopy(mode.value());
+			for (wchar_t& ch : normalized)
+			{
+				ch = static_cast<wchar_t>(::towlower(ch));
+			}
+
+			if (normalized == L"dev")
+			{
+				return L"http://127.0.0.1:5173";
+			}
 		}
 
-		auto parent = cursor.parent_path();
-		if (parent == cursor)
+		std::vector<std::filesystem::path> roots;
+		roots.push_back(std::filesystem::current_path());
+
+		wchar_t modulePath[MAX_PATH]{};
+		if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) > 0)
 		{
-			break;
+			roots.push_back(std::filesystem::path(modulePath).parent_path());
 		}
 
-		cursor = parent;
+		for (const auto& root : roots)
+		{
+			if (const auto found = FindOpenClawUiIndex(root); found.has_value())
+			{
+				return BuildFileUrl(found.value());
+			}
+		}
+
+		return {};
 	}
 
-	return std::nullopt;
-}
-
-std::wstring ResolveChatStartupUrl()
-{
-	if (const auto envUrl = GetEnvValue(L"OPENCLAW_UI_DEV_URL"); envUrl.has_value())
+	void ShowChatStartupError(
+		ICoreWebView2* webView,
+		const wchar_t* title,
+		const wchar_t* details)
 	{
-		const std::wstring value = TrimCopy(envUrl.value());
-		if (!value.empty())
+		if (webView == nullptr)
 		{
-			return value;
-		}
-	}
-
-	if (const auto envUrl = GetEnvValue(L"BLAZECLAW_CHAT_DEV_URL"); envUrl.has_value())
-	{
-		const std::wstring value = TrimCopy(envUrl.value());
-		if (!value.empty())
-		{
-			return value;
-		}
-	}
-
-	const auto mode = GetEnvValue(L"BLAZECLAW_CHAT_UI_MODE");
-	if (mode.has_value())
-	{
-		std::wstring normalized = TrimCopy(mode.value());
-		for (wchar_t& ch : normalized)
-		{
-           ch = static_cast<wchar_t>(::towlower(ch));
+			return;
 		}
 
-		if (normalized == L"dev")
-		{
-			return L"http://127.0.0.1:5173";
-		}
+		std::wstring html =
+			L"<html><body style='font-family:Segoe UI;padding:20px;'>"
+			L"<h2>BlazeClaw Chat Startup Error</h2>"
+			L"<p><strong>";
+		html += (title != nullptr ? title : L"Unable to load chat UI");
+		html += L"</strong></p><p>";
+		html += (details != nullptr ? details : L"");
+		html += L"</p></body></html>";
+
+		webView->NavigateToString(html.c_str());
 	}
-
-	std::vector<std::filesystem::path> roots;
-	roots.push_back(std::filesystem::current_path());
-
-	wchar_t modulePath[MAX_PATH]{};
-	if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) > 0)
-	{
-		roots.push_back(std::filesystem::path(modulePath).parent_path());
-	}
-
-	for (const auto& root : roots)
-	{
-		if (const auto found = FindOpenClawUiIndex(root); found.has_value())
-		{
-			return BuildFileUrl(found.value());
-		}
-	}
-
-	return {};
-}
-
-void ShowChatStartupError(
-	ICoreWebView2* webView,
-	const wchar_t* title,
-	const wchar_t* details)
-{
-	if (webView == nullptr)
-	{
-		return;
-	}
-
-	std::wstring html =
-		L"<html><body style='font-family:Segoe UI;padding:20px;'>"
-		L"<h2>BlazeClaw Chat Startup Error</h2>"
-		L"<p><strong>";
-	html += (title != nullptr ? title : L"Unable to load chat UI");
-	html += L"</strong></p><p>";
-	html += (details != nullptr ? details : L"");
-	html += L"</p></body></html>";
-
-	webView->NavigateToString(html.c_str());
-}
 
 } // namespace
 
@@ -700,7 +700,7 @@ BEGIN_MESSAGE_MAP(CBlazeClawMFCView, CView)
 	ON_WM_RBUTTONUP()
 	ON_WM_SIZE()
 	ON_WM_DESTROY()
-   ON_WM_TIMER()
+	ON_WM_TIMER()
 END_MESSAGE_MAP()
 
 // CBlazeClawMFCView construction/destruction
@@ -711,8 +711,7 @@ CBlazeClawMFCView::CBlazeClawMFCView() noexcept
 }
 
 CBlazeClawMFCView::~CBlazeClawMFCView()
-{
-}
+{}
 
 BOOL CBlazeClawMFCView::PreCreateWindow(CREATESTRUCT& cs)
 {
@@ -825,13 +824,13 @@ void CBlazeClawMFCView::PostOpenClawWsFrameJson(const std::string& frameJson)
 	{
 		++m_bridgeTraceResCount;
 		TraceBridgeTraffic("ws.res", frameJson);
-       AppendChatProcedureStatusLine(L"bridge.ws.res");
+		AppendChatProcedureStatusLine(L"bridge.ws.res");
 	}
 	else if (frameType == "event")
 	{
 		++m_bridgeTraceEventCount;
 		TraceBridgeTraffic("ws.event", frameJson);
-       AppendChatProcedureStatusLine(L"bridge.ws.event");
+		AppendChatProcedureStatusLine(L"bridge.ws.event");
 	}
 
 	FlushBridgeTraceIfNeeded();
@@ -848,11 +847,11 @@ void CBlazeClawMFCView::PostOpenClawWsClose(
 	const std::uint16_t code,
 	const char* reason)
 {
-   TraceBridgeTraffic(
+	TraceBridgeTraffic(
 		"ws.close",
 		std::string("code=") + std::to_string(code) +
 		",reason=" + (reason != nullptr ? reason : "closed"));
- AppendChatProcedureStatusLine(L"bridge.ws.close");
+	AppendChatProcedureStatusLine(L"bridge.ws.close");
 	FlushBridgeTraceIfNeeded();
 
 	const std::string closeJson =
@@ -1125,7 +1124,7 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 
 	if (!m_bridgeLifecycleSent)
 	{
-       AppendChatProcedureStatusLine(
+		AppendChatProcedureStatusLine(
 			connected ? L"lifecycle.connected" : L"lifecycle.disconnected");
 		PostBridgeLifecycleEvent(
 			connected ? L"connected" : L"disconnected",
@@ -1135,16 +1134,16 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 	}
 	else if (connected != m_bridgeLastConnected)
 	{
-     if (connected)
+		if (connected)
 		{
-         AppendChatProcedureStatusLine(L"lifecycle.reconnected");
+			AppendChatProcedureStatusLine(L"lifecycle.reconnected");
 			PostBridgeLifecycleEvent(L"reconnected", L"service-ready");
 		}
 		else
 		{
-          AppendChatProcedureStatusLine(L"lifecycle.service-stopped");
+			AppendChatProcedureStatusLine(L"lifecycle.service-stopped");
 			PostBridgeLifecycleEvent(L"disconnected", L"service-stopped");
-           PostOpenClawWsClose(1001, "gateway disconnected");
+			PostOpenClawWsClose(1001, "gateway disconnected");
 		}
 
 		m_bridgeLastConnected = connected;
@@ -1167,15 +1166,15 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 	const auto pollResponse = app->Services().RouteGatewayRequest(pollRequest);
 	if (!pollResponse.ok || !pollResponse.payloadJson.has_value())
 	{
-     AppendChatProcedureStatusLine(L"events.poll.failed");
+		AppendChatProcedureStatusLine(L"events.poll.failed");
 		return;
 	}
 
 	std::string eventsRaw;
 	if (!blazeclaw::gateway::json::FindRawField(
-			pollResponse.payloadJson.value(),
-			"events",
-			eventsRaw))
+		pollResponse.payloadJson.value(),
+		"events",
+		eventsRaw))
 	{
 		return;
 	}
@@ -1203,7 +1202,7 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 		eventsRaw +
 		"}";
 	PostBridgeMessageJson(ToWide(envelope));
-   EmitOpenClawChatEvents(eventsRaw);
+	EmitOpenClawChatEvents(eventsRaw);
 }
 
 void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
@@ -1231,15 +1230,15 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 
 	if (channel == "openclaw.ws.req")
 	{
-       ++m_bridgeTraceReqCount;
+		++m_bridgeTraceReqCount;
 		TraceBridgeTraffic("ws.req.channel", message);
-     AppendChatProcedureStatusLine(L"bridge.ws.req");
+		AppendChatProcedureStatusLine(L"bridge.ws.req");
 		FlushBridgeTraceIfNeeded();
 
 		std::string frameRaw;
 		if (!blazeclaw::gateway::json::FindRawField(message, "frame", frameRaw))
 		{
-         TraceBridgeTraffic("ws.req.invalid", "missing frame field");
+			TraceBridgeTraffic("ws.req.invalid", "missing frame field");
 			return;
 		}
 
@@ -1247,7 +1246,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		blazeclaw::gateway::json::FindStringField(frameRaw, "type", frameType);
 		if (frameType != "req")
 		{
-         TraceBridgeTraffic("ws.req.ignored", frameType);
+			TraceBridgeTraffic("ws.req.ignored", frameType);
 			FlushBridgeTraceIfNeeded();
 			return;
 		}
@@ -1264,8 +1263,8 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		blazeclaw::gateway::json::FindStringField(frameRaw, "method", method);
 		if (method.empty())
 		{
-            TraceBridgeTraffic("ws.req.invalid", "missing method");
-            AppendChatProcedureStatusLine(L"bridge.ws.req.invalid");
+			TraceBridgeTraffic("ws.req.invalid", "missing method");
+			AppendChatProcedureStatusLine(L"bridge.ws.req.invalid");
 			const blazeclaw::gateway::protocol::ResponseFrame errorResponse{
 				.id = correlationId,
 				.ok = false,
@@ -1285,9 +1284,9 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 
 		if (method == "connect.challenge")
 		{
-         TraceBridgeTraffic("ws.req.challenge", correlationId);
-         AppendChatProcedureStatusLine(L"bridge.connect.challenge");
-         AppendChatProcedureStatusLine(
+			TraceBridgeTraffic("ws.req.challenge", correlationId);
+			AppendChatProcedureStatusLine(L"bridge.connect.challenge");
+			AppendChatProcedureStatusLine(
 				L"runtime.handshake",
 				"connect.challenge handled");
 			++m_bridgeEventSeq;
@@ -1303,9 +1302,9 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 
 		if (method == "connect")
 		{
-            TraceBridgeTraffic("ws.req.connect", correlationId);
-            AppendChatProcedureStatusLine(L"bridge.connect");
-            AppendChatProcedureStatusLine(
+			TraceBridgeTraffic("ws.req.connect", correlationId);
+			AppendChatProcedureStatusLine(L"bridge.connect");
+			AppendChatProcedureStatusLine(
 				L"runtime.handshake",
 				"connect handled");
 			const blazeclaw::gateway::protocol::ResponseFrame helloResponse{
@@ -1336,9 +1335,9 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
 		if (app == nullptr)
 		{
-            TraceBridgeTraffic("ws.req.error", "app unavailable");
-            AppendChatProcedureStatusLine(L"bridge.req.app_unavailable");
-            if (IsToolExecuteMethod(method))
+			TraceBridgeTraffic("ws.req.error", "app unavailable");
+			AppendChatProcedureStatusLine(L"bridge.req.app_unavailable");
+			if (IsToolExecuteMethod(method))
 			{
 				AppendChatProcedureStatusLine(
 					L"tools.execute.error",
@@ -1367,14 +1366,14 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			.paramsJson = paramsJson,
 		};
 		const auto response = app->Services().RouteGatewayRequest(request);
-        TraceBridgeTraffic("ws.req.route", method);
-        AppendChatProcedureStatusLine(L"bridge.req.route", method);
-        if (IsToolExecuteMethod(method))
+		TraceBridgeTraffic("ws.req.route", method);
+		AppendChatProcedureStatusLine(L"bridge.req.route", method);
+		if (IsToolExecuteMethod(method))
 		{
 			AppendChatProcedureStatusLine(
 				response.ok
-					? L"tools.execute.result"
-					: L"tools.execute.error",
+				? L"tools.execute.result"
+				: L"tools.execute.error",
 				BuildToolResultDetail(response));
 		}
 		PostOpenClawWsFrameJson(
@@ -1413,7 +1412,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
 	if (app == nullptr)
 	{
-       if (IsToolExecuteMethod(method))
+		if (IsToolExecuteMethod(method))
 		{
 			AppendChatProcedureStatusLine(
 				L"tools.execute.error",
@@ -1433,12 +1432,12 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		.paramsJson = paramsJson,
 	};
 	const auto response = app->Services().RouteGatewayRequest(request);
- if (IsToolExecuteMethod(method))
+	if (IsToolExecuteMethod(method))
 	{
 		AppendChatProcedureStatusLine(
 			response.ok
-				? L"tools.execute.result"
-				: L"tools.execute.error",
+			? L"tools.execute.result"
+			: L"tools.execute.error",
 			BuildToolResultDetail(response));
 	}
 	const std::string responseJson = BuildBridgeRpcResultJson(response, correlationId);
@@ -1490,7 +1489,7 @@ void CBlazeClawMFCView::InitializeWebViewBridge()
 				HandleWebMessageJson(jsonMessage);
 				return S_OK;
 			}).Get(),
-		&m_webMessageToken);
+				&m_webMessageToken);
 
 	if (m_bridgeTimerId == 0)
 	{
@@ -1498,7 +1497,7 @@ void CBlazeClawMFCView::InitializeWebViewBridge()
 			kBridgeLifecycleTimerId,
 			kBridgeLifecycleTimerMs,
 			nullptr);
-       AppendChatProcedureStatusLine(
+		AppendChatProcedureStatusLine(
 			L"startup.timer",
 			"bridge lifecycle timer started");
 	}
@@ -1542,7 +1541,7 @@ void CBlazeClawMFCView::OnInitialUpdate()
 							// Navigate to default URL
 							if (m_webView)
 							{
-                              m_webView->add_NavigationCompleted(
+								m_webView->add_NavigationCompleted(
 									Microsoft::WRL::Callback<ICoreWebView2NavigationCompletedEventHandler>(
 										[this](
 											ICoreWebView2* sender,
@@ -1564,21 +1563,21 @@ void CBlazeClawMFCView::OnInitialUpdate()
 
 											return S_OK;
 										}).Get(),
-									nullptr);
+											nullptr);
 
 								const std::wstring startupUrl = ResolveChatStartupUrl();
-                             AppendChatProcedureStatusLine(
+								AppendChatProcedureStatusLine(
 									L"startup.url",
 									ToNarrow(startupUrl));
 								if (startupUrl.empty())
 								{
-                                   AppendChatProcedureStatusLine(
+									AppendChatProcedureStatusLine(
 										L"warning.startup.asset.missing",
 										"No BlazeClaw web/chat startup asset resolved");
 									ShowChatStartupError(
 										m_webView.Get(),
 										L"No startup URL resolved",
-                   L"Set BLAZECLAW_CHAT_DEV_URL or provide blazeclaw/BlazeClawMfc/web/chat assets.");
+										L"Set BLAZECLAW_CHAT_DEV_URL or provide blazeclaw/BlazeClawMfc/web/chat assets.");
 								}
 								else
 								{
@@ -1667,7 +1666,7 @@ void CBlazeClawMFCView::OnSize(UINT nType, int cx, int cy)
 void CBlazeClawMFCView::OnDestroy()
 {
 #ifdef HAVE_WEBVIEW2_HEADER
-    if (m_bridgeTimerId != 0)
+	if (m_bridgeTimerId != 0)
 	{
 		KillTimer(m_bridgeTimerId);
 		m_bridgeTimerId = 0;

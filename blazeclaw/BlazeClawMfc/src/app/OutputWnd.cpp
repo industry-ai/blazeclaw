@@ -26,12 +26,10 @@ static char THIS_FILE[] = __FILE__;
 // COutputBar
 
 COutputWnd::COutputWnd() noexcept
-{
-}
+{}
 
 COutputWnd::~COutputWnd()
-{
-}
+{}
 
 BEGIN_MESSAGE_MAP(COutputWnd, CDockablePane)
 	ON_WM_CREATE()
@@ -54,7 +52,7 @@ int COutputWnd::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	}
 
 	// Create output panes:
-   const DWORD dwStyle =
+	const DWORD dwStyle =
 		LBS_NOINTEGRALHEIGHT |
 		LBS_EXTENDEDSEL |
 		WS_CHILD |
@@ -86,7 +84,7 @@ int COutputWnd::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	ASSERT(bNameValid);
 	m_wndTabs.AddTab(&m_wndOutputFind, strTabName, (UINT)2);
 
-   // Fill output tabs with some dummy text (nothing magic here)
+	// Fill output tabs with some dummy text (nothing magic here)
 	FillBuildWindow();
 	FillDebugWindow();
 	FillFindWindow();
@@ -102,7 +100,7 @@ void COutputWnd::OnSize(UINT nType, int cx, int cy)
 	CDockablePane::OnSize(nType, cx, cy);
 
 	// Tab control should cover the whole client area:
-	m_wndTabs.SetWindowPos (nullptr, -1, -1, cx, cy, SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER);
+	m_wndTabs.SetWindowPos(nullptr, -1, -1, cx, cy, SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER);
 }
 
 void COutputWnd::AdjustHorzScroll(CListBox& wndListBox)
@@ -112,7 +110,7 @@ void COutputWnd::AdjustHorzScroll(CListBox& wndListBox)
 
 	int cxExtentMax = 0;
 
-	for (int i = 0; i < wndListBox.GetCount(); i ++)
+	for (int i = 0; i < wndListBox.GetCount(); i++)
 	{
 		CString strItem;
 		wndListBox.GetText(i, strItem);
@@ -166,8 +164,7 @@ void COutputWnd::AddChatStatusLine(const CString& line)
 // COutputList1
 
 COutputList::COutputList() noexcept
-{
-}
+{}
 
 void COutputList::AppendLine(const CString& line)
 {
@@ -184,12 +181,11 @@ void COutputList::AppendLine(const CString& line)
 }
 
 COutputList::~COutputList()
-{
-}
+{}
 
 BEGIN_MESSAGE_MAP(COutputList, CListBox)
 	ON_WM_CONTEXTMENU()
-    ON_COMMAND(ID_EDIT_SELECT_ALL, OnEditSelectAll)
+	ON_COMMAND(ID_EDIT_SELECT_ALL, OnEditSelectAll)
 	ON_COMMAND(ID_EDIT_COPY, OnEditCopy)
 	ON_COMMAND(ID_EDIT_CLEAR, OnEditClear)
 	ON_COMMAND(ID_VIEW_OUTPUTWND, OnViewOutput)
@@ -232,7 +228,7 @@ void COutputList::OnEditSelectAll()
 
 void COutputList::OnEditCopy()
 {
-  CString combined;
+	CString combined;
 	const int count = GetCount();
 	for (int i = 0; i < count; ++i)
 	{
