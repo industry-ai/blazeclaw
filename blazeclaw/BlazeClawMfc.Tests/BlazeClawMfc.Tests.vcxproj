@@ -35,6 +35,7 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayPersistencePaths.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayJsonUtils.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\executors\LobsterExecutor.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.h" />

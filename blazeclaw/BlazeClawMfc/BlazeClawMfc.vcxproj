@@ -240,7 +240,6 @@
     <ClCompile Include="src\gateway\GatewayJsonUtils.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Request.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Event.cpp" />
-    <ClCompile Include="src\gateway\executors\LobsterExecutor.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Response.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Shared.cpp" />
     <ClCompile Include="src\gateway\generated\GatewayHandlerCatalog.Generated.cpp" />
