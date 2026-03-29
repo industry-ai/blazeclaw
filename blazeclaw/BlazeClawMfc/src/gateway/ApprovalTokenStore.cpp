@@ -61,7 +61,7 @@ static std::unordered_map<std::string, std::string> ParseTopLevelObject(const st
     while (i + 1 < trimmed.size()) {
         while (i < trimmed.size() && (std::isspace(static_cast<unsigned char>(trimmed[i])) || trimmed[i] == ',')) ++i;
         if (i >= trimmed.size() || trimmed[i] != '"') break;
-        std::string key;
+        std::string key; 
         if (!json::ParseJsonStringAt(trimmed, i, key)) break;
         while (i < trimmed.size() && std::isspace(static_cast<unsigned char>(trimmed[i]))) ++i;
         if (i >= trimmed.size() || trimmed[i] != ':') break;
@@ -70,12 +70,13 @@ static std::unordered_map<std::string, std::string> ParseTopLevelObject(const st
         const std::size_t valBegin = i;
         char start = trimmed[i];
         if (start == '{' || start == '[') {
-            int depth = 0; bool inString = false;
+            int depth = 1; bool inString = false;
+            ++i; // consume opening
             for (; i < trimmed.size(); ++i) {
                 char ch = trimmed[i];
                 if (inString) {
-                    if (ch == '\\') ++i;
-                    else if (ch == '"') inString = false;
+                    if (ch == '\\') { ++i; continue; }
+                    if (ch == '"') inString = false;
                     continue;
                 }
                 if (ch == '"') { inString = true; continue; }
@@ -84,6 +85,17 @@ static std::unordered_map<std::string, std::string> ParseTopLevelObject(const st
             }
         }
         else if (start == '"') {
+            // use JSON string parser to handle escapes correctly
+            std::string sval;
+            std::size_t idx = i;
+            if (json::ParseJsonStringAt(trimmed, idx, sval)) {
+                // reconstruct as JSON string
+                std::string raw = '"' + EscapeJsonString(sval) + '"';
+                out.emplace(std::move(key), std::move(raw));
+                i = idx;
+                continue;
+            }
+            // fallback: naive skip
             ++i; while (i < trimmed.size()) { char ch = trimmed[i]; if (ch == '\\') { i += 2; continue; } if (ch == '"') { ++i; break; } ++i; }
         }
         else {
@@ -91,7 +103,7 @@ static std::unordered_map<std::string, std::string> ParseTopLevelObject(const st
         }
         const std::size_t valEnd = i;
         if (valEnd > valBegin) {
-            out.emplace(key, trimmed.substr(valBegin, valEnd - valBegin));
+            out.emplace(key, trimmed.substr(valBegin, valEnd - valBegin)); 
         }
     }
     return out;

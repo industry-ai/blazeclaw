@@ -247,6 +247,7 @@
     <ClCompile Include="src\gateway\ApprovalTokenStore.cpp" />
     <ClCompile Include="src\gateway\ExtensionLifecycleManager.cpp" />
     <ClCompile Include="src\gateway\GatewayWebSocketTransport.cpp" />
+    <ClCompile Include="tests\ApprovalTokenStoreTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="src\app\BlazeClawMFC.rc" />
