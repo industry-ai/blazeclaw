@@ -114,21 +114,6 @@ namespace blazeclaw::gateway {
 			return text;
 		}
 
-		std::string ExtractStringField(
-			const std::optional<std::string>& json,
-			const std::string& fieldName) {
-			if (!json.has_value()) {
-				return {};
-			}
-
-			std::string value;
-			if (!json::FindStringField(json.value(), fieldName, value)) {
-				return {};
-			}
-
-			return value;
-		}
-
 		bool ExtractBoolField(
 			const std::string& jsonText,
 			const std::string& fieldName,
@@ -142,24 +127,7 @@ namespace blazeclaw::gateway {
 		}
 	}
 
-	GatewayToolRegistry::GatewayToolRegistry() {
-		m_tools.insert_or_assign(
-			"chat.send",
-			ToolCatalogEntry{
-				.id = "chat.send",
-				.label = "Chat Send",
-				.category = "messaging",
-				.enabled = true,
-			});
-		m_tools.insert_or_assign(
-			"memory.search",
-			ToolCatalogEntry{
-				.id = "memory.search",
-				.label = "Memory Search",
-				.category = "knowledge",
-				.enabled = true,
-			});
-	}
+    GatewayToolRegistry::GatewayToolRegistry() = default;
 
 	std::vector<ToolCatalogEntry> GatewayToolRegistry::List() const {
 		std::vector<ToolCatalogEntry> output;
@@ -238,49 +206,14 @@ namespace blazeclaw::gateway {
 			return runtimeResult;
 		}
 
-		if (preview.tool == "chat.send") {
-			const std::string message = ExtractStringField(argsJson, "message");
-			if (message.empty()) {
-               const ToolExecuteResult invalid = ToolExecuteResult{
-					.tool = preview.tool,
-					.executed = false,
-					.status = "invalid_args",
-					.output = "missing_message",
-				};
-               recordExecution(invalid);
-				return invalid;
-			}
-
-           const ToolExecuteResult sent = ToolExecuteResult{
-				.tool = preview.tool,
-				.executed = true,
-				.status = "ok",
-				.output = "sent:" + message,
-			};
-           recordExecution(sent);
-			return sent;
-		}
-
-		if (preview.tool == "memory.search") {
-			const std::string query = ExtractStringField(argsJson, "query");
-           const ToolExecuteResult searched = ToolExecuteResult{
-				.tool = preview.tool,
-				.executed = true,
-				.status = "ok",
-				.output = query.empty() ? "results:seeded" : "results:seeded:" + query,
-			};
-           recordExecution(searched);
-			return searched;
-		}
-
-       const ToolExecuteResult fallback = ToolExecuteResult{
+		const ToolExecuteResult unavailableRuntime = ToolExecuteResult{
 			.tool = preview.tool,
-			.executed = true,
-			.status = "ok",
-			.output = "seeded_execution_v1",
+			.executed = false,
+			.status = "unavailable_runtime",
+			.output = "runtime_executor_missing",
 		};
-       recordExecution(fallback);
-		return fallback;
+		recordExecution(unavailableRuntime);
+		return unavailableRuntime;
 	}
 
 	void GatewayToolRegistry::RegisterRuntimeTool(

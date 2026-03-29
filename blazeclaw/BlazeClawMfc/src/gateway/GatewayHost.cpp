@@ -415,6 +415,49 @@ namespace blazeclaw::gateway {
 				"\",\"scheduled\":true,\"engine\":\"blazeclaw.email.scheduler.v1\"}}],\"requiresApproval\":null}";
 		}
 
+		std::string ToLowerCopy(std::string value) {
+			std::transform(
+				value.begin(),
+				value.end(),
+				value.begin(),
+				[](unsigned char ch) {
+					return static_cast<char>(std::tolower(ch));
+				});
+			return value;
+		}
+
+		std::string TruncateForMatch(const std::string& text, std::size_t maxChars) {
+			if (text.size() <= maxChars) {
+				return text;
+			}
+
+			return text.substr(0, maxChars) + "...";
+		}
+
+		std::string BuildMemorySearchEnvelope(
+			const std::string& sessionKey,
+			const std::vector<std::string>& matches) {
+			std::string matchesJson = "[";
+			for (std::size_t i = 0; i < matches.size(); ++i) {
+				if (i > 0) {
+					matchesJson += ",";
+				}
+
+				matchesJson += "{\"text\":\"" +
+					EscapeJson(matches[i]) +
+					"\"}";
+			}
+			matchesJson += "]";
+
+			return std::string("{\"sessionKey\":\"") +
+				EscapeJson(sessionKey) +
+				"\",\"matches\":" +
+				matchesJson +
+				",\"count\":" +
+				std::to_string(matches.size()) +
+				"}";
+		}
+
 		bool IsUnsafeAgentFilePath(const std::string& path) {
 			if (path.empty()) {
 				return true;
@@ -498,6 +541,66 @@ namespace blazeclaw::gateway {
 					.executed = true,
 					.status = "ok",
 					.output = runtimeResponse.payloadJson.value_or("{}"),
+				};
+			});
+     m_toolRegistry.RegisterRuntimeTool(
+			ToolCatalogEntry{
+				.id = "memory.search",
+				.label = "Memory Search",
+				.category = "knowledge",
+				.enabled = true,
+			},
+			[this](const std::string& requestedTool, const std::optional<std::string>& argsJson) {
+				if (!argsJson.has_value()) {
+					return ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = false,
+						.status = "invalid_args",
+						.output = "missing_args",
+					};
+				}
+
+				std::string query;
+				std::string sessionKey;
+				json::FindStringField(argsJson.value(), "query", query);
+				json::FindStringField(argsJson.value(), "sessionKey", sessionKey);
+				if (json::Trim(query).empty()) {
+					return ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = false,
+						.status = "invalid_args",
+						.output = "query_required",
+					};
+				}
+
+				std::uint64_t requestedLimit = 3;
+				json::FindUInt64Field(argsJson.value(), "limit", requestedLimit);
+				const std::size_t limit = static_cast<std::size_t>((std::max)(std::uint64_t{ 1 }, (std::min)(requestedLimit, std::uint64_t{ 10 })));
+
+				const std::string normalizedSession =
+					json::Trim(sessionKey).empty() ? "main" : json::Trim(sessionKey);
+				const std::string loweredQuery = ToLowerCopy(query);
+
+				std::vector<std::string> matches;
+				const auto historyIt = m_chatHistoryBySession.find(normalizedSession);
+				if (historyIt != m_chatHistoryBySession.end()) {
+					for (const auto& messageJson : historyIt->second) {
+						if (ToLowerCopy(messageJson).find(loweredQuery) == std::string::npos) {
+							continue;
+						}
+
+						matches.push_back(TruncateForMatch(messageJson, 180));
+						if (matches.size() >= limit) {
+							break;
+						}
+					}
+				}
+
+				return ToolExecuteResult{
+					.tool = requestedTool,
+					.executed = true,
+					.status = "ok",
+					.output = BuildMemorySearchEnvelope(normalizedSession, matches),
 				};
 			});
 		m_toolRegistry.RegisterRuntimeTool(
@@ -2182,7 +2285,7 @@ namespace blazeclaw::gateway {
 					std::string(preview.allowed ? "true" : "false") + ",\"reason\":\"" +
 					EscapeJson(preview.reason) + "\",\"argsProvided\":" +
 					std::string(argsProvided ? "true" : "false") +
-					",\"policy\":\"seeded_preview_v1\"}",
+                   ",\"policy\":\"dynamic_runtime_preview_v1\"}",
 				.error = std::nullopt,
 			};
 			});
