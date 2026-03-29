@@ -20,7 +20,7 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\BlazeClawMfc\src;$(ProjectDir)..\BlazeClawMfc;$(ProjectDir)..\BlazeClawMfc\src\app;$(ProjectDir)..\BlazeClawMfc\third_party\catch2\single_include;$(ProjectDir)..\BlazeClawMfc\third_party\nlohmann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\BlazeClawMfc\src;$(ProjectDir)..\BlazeClawMfc;$(ProjectDir)..\BlazeClawMfc\src\app;$(ProjectDir)..\BlazeClawMfc\third_party\catch2\single_include;$(ProjectDir)..\BlazeClawMfc\third_party\nlohmann;$(VcpkgIncludeRoot);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <!-- No forced includes; test files include app/pch.h via AdditionalIncludeDirectories if needed -->

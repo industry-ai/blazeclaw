@@ -1,0 +1,41 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+  buildConfiguration: 'Debug'
+
+steps:
+- task: PowerShell@2
+  displayName: 'Bootstrap vcpkg'
+  inputs:
+    targetType: 'inline'
+    script: |
+      Write-Host "Ensure vcpkg is available"
+      if (-Not (Test-Path "vcpkg\vcpkg.exe")) {
+        Write-Host "vcpkg not found; please add vcpkg to repository or install on agent"
+        exit 0
+      }
+
+- task: PowerShell@2
+  displayName: 'Install vcpkg deps'
+  inputs:
+    targetType: 'inline'
+    script: |
+      .\vcpkg\vcpkg.exe install nlohmann-json catch2
+
+- task: VSBuild@1
+  inputs:
+    solution: 'blazeclaw/BlazeClaw.sln'
+    configuration: '$(buildConfiguration)'
+    msbuildArgs: '/p:Platform=x64'
+
+- task: PowerShell@2
+  displayName: 'Run tests'
+  inputs:
+    targetType: 'inline'
+    script: |
+      $testExe = 'blazeclaw\BlazeClawMfc.Tests\x64\Debug\BlazeClawMfc.Tests.exe'
+      if (Test-Path $testExe) { & $testExe; exit $LASTEXITCODE } else { Write-Error "Test exe not found: $testExe"; exit 1 }

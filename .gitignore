@@ -7,6 +7,7 @@ obj/
 /blazeclaw/x64/Debug
 /blazeclaw/BlazeClawMfc.Tests/x64/Debug
 /blazeclaw/BlazeClawShim/x64/Debug
+/blazeclaw/vcpkg_installed/
 
 packages/
 

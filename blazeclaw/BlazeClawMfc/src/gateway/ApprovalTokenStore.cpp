@@ -8,7 +8,7 @@
 #include <fstream>
 #include <sstream>
 #include <unordered_map>
-#include "../third_party/nlohmann/json.hpp"
+#include <nlohmann/json.hpp>
 
 namespace blazeclaw::gateway {
 

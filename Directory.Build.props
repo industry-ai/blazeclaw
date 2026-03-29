@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- Enable vcpkg manifest mode so MSBuild picks up dependencies from vcpkg.json -->
+    <VcpkgEnableManifest>true</VcpkgEnableManifest>
+  </PropertyGroup>
+</Project>
