@@ -49,6 +49,58 @@ TEST_CASE("ApprovalTokenStore handles escaped strings and nested objects", "[app
     REQUIRE(store.RemoveToken(token));
 }
 
+// LobsterExecutor unit tests
+#include "gateway/executors/LobsterExecutor.h"
+
+TEST_CASE("LobsterExecutor parse-suffix returns JSON-like suffix when present", "[lobster][parse]") {
+    // replicate parsing behavior used by LobsterExecutor
+    const std::string mixed = "Some logs\nMore logs\n{\"protocolVersion\":1,\"status\":\"ok\"}";
+
+    auto tryParseSuffix = [&](const std::string& text) -> std::optional<std::string> {
+        std::string trimmed = text;
+        while (!trimmed.empty() && isspace(static_cast<unsigned char>(trimmed.back()))) trimmed.pop_back();
+        auto pos = trimmed.find_last_of("[{\n");
+        if (pos == std::string::npos) return std::nullopt;
+        const std::string candidate = trimmed.substr(pos);
+        if (candidate.empty() || (candidate.front() != '{' && candidate.front() != '[')) return std::nullopt;
+        return candidate;
+    };
+
+    auto parsed = tryParseSuffix(mixed);
+    REQUIRE(parsed.has_value());
+    REQUIRE(parsed.value().find("protocolVersion") != std::string::npos);
+}
+
+TEST_CASE("LobsterExecutor argument validation: missing pipeline/resume token/approve", "[lobster][args]") {
+    const std::string execPath = "dummy";
+    auto executor = blazeclaw::gateway::executors::LobsterExecutor::Create(execPath);
+
+    // missing args
+    {
+        const std::optional<std::string> noArgs = std::nullopt;
+        auto res = executor("lobster", noArgs);
+        REQUIRE(!res.executed);
+        REQUIRE(res.status == std::string("invalid_args"));
+    }
+
+    // action run but missing pipeline
+    {
+        const std::string args = "{\"action\":\"run\"}";
+        auto res = executor("lobster", args);
+        REQUIRE(!res.executed);
+        REQUIRE(res.status == std::string("invalid_args"));
+        REQUIRE(res.output == std::string("pipeline_required"));
+    }
+
+    // action resume but missing token/approve
+    {
+        const std::string args = "{\"action\":\"resume\"}";
+        auto res = executor("lobster", args);
+        REQUIRE(!res.executed);
+        REQUIRE(res.status == std::string("invalid_args"));
+    }
+}
+
 int main(int argc, char** argv) {
     // Run Catch2 tests programmatically
     return Catch::Session().run(argc, argv);
