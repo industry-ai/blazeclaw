@@ -46,6 +46,9 @@ namespace blazeclaw::gateway {
 
 		GatewayToolRegistry();
 
+	// Allow external lifecycle manager to register tools in bulk
+	friend class ExtensionLifecycleManager;
+
 		std::vector<ToolCatalogEntry> List() const;
 		ToolPreviewResult Preview(const std::string& requestedTool) const;
       ToolExecuteResult Execute(
