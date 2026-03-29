@@ -31,6 +31,9 @@ public:
     // Activate extensions by registering their declared tools into the provided registry.
     void ActivateAll(GatewayToolRegistry& registry) const;
 
+    // Deactivate all previously activated tools from the registry.
+    void DeactivateAll(GatewayToolRegistry& registry) const;
+
     const std::vector<ExtensionManifest>& GetExtensions() const noexcept { return m_extensions; }
 
 private:

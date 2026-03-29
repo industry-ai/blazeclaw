@@ -57,6 +57,8 @@ namespace blazeclaw::gateway {
        void RegisterRuntimeTool(
 			const ToolCatalogEntry& tool,
 			RuntimeToolExecutor executor);
+
+	void UnregisterRuntimeTool(const std::string& toolId);
         std::size_t LoadExtensionToolsFromCatalog(const std::string& catalogPath);
 		std::vector<ToolExecutionEntry> ListExecutions(std::size_t limit = 20) const;
 		std::optional<ToolExecutionEntry> LatestExecution() const;

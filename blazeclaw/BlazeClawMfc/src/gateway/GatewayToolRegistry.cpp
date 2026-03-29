@@ -237,6 +237,15 @@ namespace blazeclaw::gateway {
 		}
 	}
 
+void GatewayToolRegistry::UnregisterRuntimeTool(const std::string& toolId) {
+	if (toolId.empty()) {
+		return;
+	}
+
+	m_runtimeExecutors.erase(toolId);
+	m_tools.erase(toolId);
+}
+
  std::size_t GatewayToolRegistry::LoadExtensionToolsFromCatalog(
 		const std::string& catalogPath) {
 		const std::string resolvedCatalog = catalogPath;

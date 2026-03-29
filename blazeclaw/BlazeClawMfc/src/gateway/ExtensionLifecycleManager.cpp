@@ -200,4 +200,12 @@ void ExtensionLifecycleManager::ActivateAll(GatewayToolRegistry& registry) const
     }
 }
 
+void ExtensionLifecycleManager::DeactivateAll(GatewayToolRegistry& registry) const {
+    for (const auto& manifest : m_extensions) {
+        for (const auto& tool : manifest.tools) {
+            registry.UnregisterRuntimeTool(tool.id);
+        }
+    }
+}
+
 } // namespace blazeclaw::gateway
