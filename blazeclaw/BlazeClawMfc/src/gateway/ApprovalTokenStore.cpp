@@ -2,11 +2,13 @@
 #include "ApprovalTokenStore.h"
 #include "GatewayPersistencePaths.h"
 #include "GatewayJsonUtils.h"
+#include <mutex>
 
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <unordered_map>
+#include "../third_party/nlohmann/json.hpp"
 
 namespace blazeclaw::gateway {
 
@@ -122,7 +124,9 @@ bool ApprovalTokenStore::Initialize(const std::string& filePath) {
 
     std::string existing;
     if (!ReadFileToString(m_filePath, existing) || json::Trim(existing).empty()) {
-        return WriteFileAtomic(m_filePath, "{}");
+        // write an empty JSON object
+        nlohmann::json j = nlohmann::json::object();
+        return WriteFileAtomic(m_filePath, j.dump());
     }
     return true;
 }
@@ -131,20 +135,21 @@ bool ApprovalTokenStore::SaveToken(const std::string& token, const std::string& 
     if (token.empty() || m_filePath.empty()) return false;
     try {
         std::string content; ReadFileToString(m_filePath, content);
-        auto map = ParseTopLevelObject(content);
-        map[token] = payload;
-        // Serialize
-        std::ostringstream ss; ss << "{";
-        bool first = true;
-        for (const auto& kv : map) {
-            if (!first) ss << ",";
-            first = false;
-            ss << '"' << EscapeJsonString(kv.first) << '"' << ':';
-            // payload may already be a JSON value; write raw
-            ss << kv.second;
+        nlohmann::json j = nlohmann::json::object();
+        try {
+            j = nlohmann::json::parse(content);
+            if (!j.is_object()) j = nlohmann::json::object();
+        } catch (...) { j = nlohmann::json::object(); }
+
+        // payload may be JSON or plain string. Try to parse payload as JSON value.
+        try {
+            nlohmann::json pv = nlohmann::json::parse(payload);
+            j[token] = pv;
+        } catch (...) {
+            j[token] = payload; // store as string
         }
-        ss << "}";
-        return WriteFileAtomic(m_filePath, ss.str());
+
+        return WriteFileAtomic(m_filePath, j.dump(2));
     } catch (...) { return false; }
 }
 
@@ -152,10 +157,12 @@ std::optional<std::string> ApprovalTokenStore::LoadToken(const std::string& toke
     if (token.empty() || m_filePath.empty()) return std::nullopt;
     try {
         std::string content; if (!ReadFileToString(m_filePath, content)) return std::nullopt;
-        auto map = ParseTopLevelObject(content);
-        const auto it = map.find(token);
-        if (it == map.end()) return std::nullopt;
-        return it->second;
+        nlohmann::json j;
+        try { j = nlohmann::json::parse(content); }
+        catch (...) { return std::nullopt; }
+
+        if (!j.contains(token)) return std::nullopt;
+        return j[token].dump();
     } catch (...) { return std::nullopt; }
 }
 
@@ -163,18 +170,12 @@ bool ApprovalTokenStore::RemoveToken(const std::string& token) {
     if (token.empty() || m_filePath.empty()) return false;
     try {
         std::string content; if (!ReadFileToString(m_filePath, content)) return false;
-        auto map = ParseTopLevelObject(content);
-        const auto it = map.find(token);
-        if (it == map.end()) return false;
-        map.erase(it);
-        std::ostringstream ss; ss << "{"; bool first = true;
-        for (const auto& kv : map) {
-            if (!first) ss << ",";
-            first = false;
-            ss << '"' << EscapeJsonString(kv.first) << '"' << ':' << kv.second;
-        }
-        ss << "}";
-        return WriteFileAtomic(m_filePath, ss.str());
+        nlohmann::json j;
+        try { j = nlohmann::json::parse(content); }
+        catch (...) { return false; }
+        if (!j.contains(token)) return false;
+        j.erase(token);
+        return WriteFileAtomic(m_filePath, j.dump(2));
     } catch (...) { return false; }
 }
 
