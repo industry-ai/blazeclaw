@@ -359,6 +359,42 @@ namespace blazeclaw::gateway {
 			m_runtimeAgentModel = m_runtimeDeepSeekDefaultModel;
 		}
 
+		m_toolRegistry.LoadExtensionToolsFromCatalog("blazeclaw/extensions/extensions.catalog.json");
+		m_toolRegistry.RegisterRuntimeTool(
+			ToolCatalogEntry{
+				.id = "chat.send",
+				.label = "Chat Send",
+				.category = "messaging",
+				.enabled = true,
+			},
+			[this](const std::string& requestedTool, const std::optional<std::string>& argsJson) {
+				const protocol::RequestFrame runtimeRequest{
+					.id = "tool-runtime-" + std::to_string(CurrentEpochMs()),
+					.method = requestedTool,
+					.paramsJson = argsJson,
+				};
+
+				const protocol::ResponseFrame runtimeResponse = RouteRequest(runtimeRequest);
+				if (!runtimeResponse.ok) {
+					const std::string detail = runtimeResponse.error.has_value()
+						? (runtimeResponse.error->code + ":" + runtimeResponse.error->message)
+						: "runtime_execution_failed";
+					return ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = false,
+						.status = "error",
+						.output = detail,
+					};
+				}
+
+				return ToolExecuteResult{
+					.tool = requestedTool,
+					.executed = true,
+					.status = "ok",
+					.output = runtimeResponse.payloadJson.value_or("{}"),
+				};
+			});
+
 		RegisterDefaultHandlers();
 
 		std::string fixtureError;

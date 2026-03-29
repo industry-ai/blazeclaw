@@ -40,6 +40,10 @@ namespace blazeclaw::gateway {
 
 	class GatewayToolRegistry {
 	public:
+      using RuntimeToolExecutor = std::function<ToolExecuteResult(
+			const std::string& requestedTool,
+			const std::optional<std::string>& argsJson)>;
+
 		GatewayToolRegistry();
 
 		std::vector<ToolCatalogEntry> List() const;
@@ -47,6 +51,10 @@ namespace blazeclaw::gateway {
       ToolExecuteResult Execute(
 			const std::string& requestedTool,
            const std::optional<std::string>& argsJson = std::nullopt);
+       void RegisterRuntimeTool(
+			const ToolCatalogEntry& tool,
+			RuntimeToolExecutor executor);
+        std::size_t LoadExtensionToolsFromCatalog(const std::string& catalogPath);
 		std::vector<ToolExecutionEntry> ListExecutions(std::size_t limit = 20) const;
 		std::optional<ToolExecutionEntry> LatestExecution() const;
 		ToolExecutionStats GetExecutionStats() const;
@@ -54,6 +62,7 @@ namespace blazeclaw::gateway {
 
 	private:
 		std::unordered_map<std::string, ToolCatalogEntry> m_tools;
+       std::unordered_map<std::string, RuntimeToolExecutor> m_runtimeExecutors;
       std::vector<ToolExecutionEntry> m_executionHistory;
 	};
 
