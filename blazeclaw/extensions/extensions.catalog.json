@@ -6,6 +6,12 @@
       "path": "deepseek/blazeclaw.extension.json",
       "enabled": true,
       "kind": "provider"
+    },
+    {
+      "id": "lobster",
+      "path": "lobster/blazeclaw.extension.json",
+      "enabled": true,
+      "kind": "workflow"
     }
   ]
 }

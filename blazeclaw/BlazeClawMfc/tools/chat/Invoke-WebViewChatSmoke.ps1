@@ -643,9 +643,70 @@ Invoke-FlowWithSocket -FlowName "forceError" -FlowBody {
 }
 }
 
+if (Should-RunFlow -FlowName "lobsterExecute") {
+Invoke-FlowWithSocket -FlowName "lobsterExecute" -FlowBody {
+    param($socket, [ref]$events)
+
+    $runReq = New-ReqFrame -Method "gateway.tools.call.execute" -Params @{
+        tool = "lobster"
+        args = @{
+            action = "run"
+            pipeline = "gog.gmail.search --query 'newer_than:1d' | email.triage | approve --prompt 'Process these?'"
+        }
+    }
+
+    Send-Req -Socket $socket -Frame $runReq
+    $runRes = Wait-Response -Socket $socket -RequestId $runReq.id -CapturedEvents ([ref]$events.Value)
+    if (-not $runRes.ok) {
+        throw "gateway.tools.call.execute lobster run failed"
+    }
+
+    if ([string]$runRes.payload.status -ne "needs_approval") {
+        throw "lobster run did not return needs_approval"
+    }
+
+    $runEnvelope = [string]$runRes.payload.output | ConvertFrom-Json
+    if ([string]$runEnvelope.status -ne "needs_approval") {
+        throw "lobster run output envelope mismatch"
+    }
+
+    $resumeToken = [string]$runEnvelope.requiresApproval.resumeToken
+    if ([string]::IsNullOrWhiteSpace($resumeToken)) {
+        throw "lobster run output missing resume token"
+    }
+
+    $resumeReq = New-ReqFrame -Method "gateway.tools.call.execute" -Params @{
+        tool = "lobster"
+        args = @{
+            action = "resume"
+            token = $resumeToken
+            approve = $true
+        }
+    }
+
+    Send-Req -Socket $socket -Frame $resumeReq
+    $resumeRes = Wait-Response -Socket $socket -RequestId $resumeReq.id -CapturedEvents ([ref]$events.Value)
+    if (-not $resumeRes.ok) {
+        throw "gateway.tools.call.execute lobster resume failed"
+    }
+
+    if ([string]$resumeRes.payload.status -ne "ok") {
+        throw "lobster resume did not return ok status"
+    }
+
+    $resumeEnvelope = [string]$resumeRes.payload.output | ConvertFrom-Json
+    if ([string]$resumeEnvelope.status -ne "ok") {
+        throw "lobster resume output envelope mismatch"
+    }
+
+    Write-Output "[PASS] lobster execute run/resume flow"
+}
+}
+
 Write-Output ""
 Write-Output "WebView smoke summary"
 Write-Output "- send/final: pass"
 Write-Output "- attachment: pass"
 Write-Output "- abort: pass"
 Write-Output "- forceError: pass"
+Write-Output "- lobsterExecute: pass"

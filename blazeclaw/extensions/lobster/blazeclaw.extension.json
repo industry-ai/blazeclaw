@@ -1,0 +1,20 @@
+{
+  "id": "lobster",
+  "name": "Lobster Workflow",
+  "description": "Deterministic workflow tool with resumable approvals.",
+  "version": 1,
+  "kind": "workflow",
+  "tools": [
+    {
+      "id": "lobster",
+      "label": "Lobster Workflow",
+      "category": "workflow",
+      "enabled": true
+    }
+  ],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

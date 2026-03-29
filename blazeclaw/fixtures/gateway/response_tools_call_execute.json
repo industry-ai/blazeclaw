@@ -3,10 +3,10 @@
   "id": "req-32",
   "ok": true,
   "payload": {
-    "tool": "chat.send",
+    "tool": "lobster",
     "executed": true,
-    "status": "ok",
-    "output": "seeded_execution_v1",
-    "argsProvided": false
+    "status": "needs_approval",
+    "output": "{\"protocolVersion\":1,\"ok\":true,\"status\":\"needs_approval\",\"output\":[],\"requiresApproval\":{\"type\":\"approval_request\",\"prompt\":\"Approve workflow execution?\",\"items\":[{\"pipeline\":\"gog.gmail.search --query 'newer_than:1d' | email.triage | approve --prompt 'Process these?'\"}],\"resumeToken\":\"lobster-token-fixture\"}}",
+    "argsProvided": true
   }
 }

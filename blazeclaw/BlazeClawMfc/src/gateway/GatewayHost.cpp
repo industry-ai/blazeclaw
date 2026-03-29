@@ -309,6 +309,50 @@ namespace blazeclaw::gateway {
 					.count());
 		}
 
+		bool PipelineNeedsApproval(const std::string& pipeline) {
+			const std::string lowered = [&pipeline]() {
+				std::string value = pipeline;
+				std::transform(
+					value.begin(),
+					value.end(),
+					value.begin(),
+					[](unsigned char ch) {
+						return static_cast<char>(std::tolower(ch));
+					});
+				return value;
+			}();
+
+			return lowered.find("| approve") != std::string::npos;
+		}
+
+		std::string BuildLobsterRunOkEnvelope(const std::string& pipeline) {
+			return std::string("{\"protocolVersion\":1,\"ok\":true,\"status\":\"ok\",\"output\":[{\"summary\":{\"pipeline\":\"") +
+				EscapeJson(pipeline) +
+				"\",\"engine\":\"blazeclaw.workflow.runtime.v1\"}}],\"requiresApproval\":null}";
+		}
+
+		std::string BuildLobsterNeedsApprovalEnvelope(
+			const std::string& pipeline,
+			const std::string& resumeToken) {
+			return std::string("{\"protocolVersion\":1,\"ok\":true,\"status\":\"needs_approval\",\"output\":[],\"requiresApproval\":{\"type\":\"approval_request\",\"prompt\":\"Approve workflow execution?\",\"items\":[{\"pipeline\":\"") +
+				EscapeJson(pipeline) +
+				"\"}],\"resumeToken\":\"" +
+				EscapeJson(resumeToken) +
+				"\"}}";
+		}
+
+		std::string BuildLobsterResumeEnvelope(
+			const std::string& pipeline,
+			const bool approved) {
+			if (!approved) {
+				return std::string("{\"protocolVersion\":1,\"ok\":true,\"status\":\"cancelled\",\"output\":[],\"requiresApproval\":null}");
+			}
+
+			return std::string("{\"protocolVersion\":1,\"ok\":true,\"status\":\"ok\",\"output\":[{\"summary\":{\"pipeline\":\"") +
+				EscapeJson(pipeline) +
+				"\",\"resumed\":true,\"engine\":\"blazeclaw.workflow.runtime.v1\"}}],\"requiresApproval\":null}";
+		}
+
 		bool IsUnsafeAgentFilePath(const std::string& path) {
 			if (path.empty()) {
 				return true;
@@ -394,6 +438,105 @@ namespace blazeclaw::gateway {
 					.output = runtimeResponse.payloadJson.value_or("{}"),
 				};
 			});
+		m_toolRegistry.RegisterRuntimeTool(
+			ToolCatalogEntry{
+				.id = "lobster",
+				.label = "Lobster Workflow",
+				.category = "workflow",
+				.enabled = true,
+			},
+			[this](const std::string& requestedTool, const std::optional<std::string>& argsJson) {
+				if (!argsJson.has_value()) {
+					return ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = false,
+						.status = "invalid_args",
+						.output = "missing_args",
+					};
+				}
+
+				std::string action;
+				json::FindStringField(argsJson.value(), "action", action);
+				if (action == "run") {
+					std::string pipeline;
+					json::FindStringField(argsJson.value(), "pipeline", pipeline);
+					if (json::Trim(pipeline).empty()) {
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = false,
+							.status = "invalid_args",
+							.output = "pipeline_required",
+						};
+					}
+
+					if (PipelineNeedsApproval(pipeline)) {
+						const std::string resumeToken =
+							"lobster-token-" + std::to_string(CurrentEpochMs()) +
+							"-" + std::to_string(m_workflowApprovalsByToken.size() + 1);
+						m_workflowApprovalsByToken.insert_or_assign(
+							resumeToken,
+							WorkflowApprovalState{
+								.pipeline = pipeline,
+								.createdAtMs = CurrentEpochMs(),
+							});
+
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = true,
+							.status = "needs_approval",
+							.output = BuildLobsterNeedsApprovalEnvelope(pipeline, resumeToken),
+						};
+					}
+
+					return ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = true,
+						.status = "ok",
+						.output = BuildLobsterRunOkEnvelope(pipeline),
+					};
+				}
+
+				if (action == "resume") {
+					std::string token;
+					json::FindStringField(argsJson.value(), "token", token);
+					bool approve = false;
+					if (!json::FindBoolField(argsJson.value(), "approve", approve)) {
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = false,
+							.status = "invalid_args",
+							.output = "approve_required",
+						};
+					}
+
+					const auto approvalIt = m_workflowApprovalsByToken.find(token);
+					if (approvalIt == m_workflowApprovalsByToken.end()) {
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = false,
+							.status = "invalid_args",
+							.output = "invalid_token",
+						};
+					}
+
+					const WorkflowApprovalState approval = approvalIt->second;
+					m_workflowApprovalsByToken.erase(approvalIt);
+
+					return ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = true,
+						.status = approve ? "ok" : "cancelled",
+						.output = BuildLobsterResumeEnvelope(approval.pipeline, approve),
+					};
+				}
+
+				return ToolExecuteResult{
+					.tool = requestedTool,
+					.executed = false,
+					.status = "invalid_args",
+					.output = "action_required",
+				};
+			});
 
 		RegisterDefaultHandlers();
 
@@ -423,6 +566,7 @@ namespace blazeclaw::gateway {
 
 	void GatewayHost::Stop() {
 		m_transport.Stop();
+      m_workflowApprovalsByToken.clear();
 		m_running = false;
 		m_bindAddress.clear();
 		m_port = 0;
