@@ -339,6 +339,95 @@ std::string BuildBridgeRpcResultJson(
 	return json;
 }
 
+bool IsToolExecuteMethod(const std::string& method)
+{
+	return method == "gateway.tools.call.execute";
+}
+
+std::string BuildToolStartDetail(
+	const std::optional<std::string>& paramsJson)
+{
+	if (!paramsJson.has_value())
+	{
+		return "tool=unknown";
+	}
+
+	std::string tool;
+	blazeclaw::gateway::json::FindStringField(
+		paramsJson.value(),
+		"tool",
+		tool);
+	if (tool.empty())
+	{
+		tool = "unknown";
+	}
+
+	std::string detail = "tool=" + tool;
+
+	std::string argsRaw;
+	if (blazeclaw::gateway::json::FindRawField(
+			paramsJson.value(),
+			"args",
+			argsRaw))
+	{
+		std::string action;
+		if (blazeclaw::gateway::json::FindStringField(
+				argsRaw,
+				"action",
+				action) &&
+			!action.empty())
+		{
+			detail += " action=" + action;
+		}
+	}
+
+	return detail;
+}
+
+std::string BuildToolResultDetail(
+	const blazeclaw::gateway::protocol::ResponseFrame& response)
+{
+	if (!response.ok)
+	{
+		if (response.error.has_value())
+		{
+			return "status=error code=" +
+				response.error->code;
+		}
+
+		return "status=error code=unknown";
+	}
+
+	if (!response.payloadJson.has_value())
+	{
+		return "status=ok tool=unknown";
+	}
+
+	const std::string& payload = response.payloadJson.value();
+	std::string tool;
+	std::string status;
+	bool executed = false;
+	blazeclaw::gateway::json::FindStringField(payload, "tool", tool);
+	blazeclaw::gateway::json::FindStringField(payload, "status", status);
+	blazeclaw::gateway::json::FindBoolField(payload, "executed", executed);
+
+	if (tool.empty())
+	{
+		tool = "unknown";
+	}
+	if (status.empty())
+	{
+		status = "ok";
+	}
+
+	std::string detail =
+		"tool=" + tool +
+		" status=" + status +
+		" executed=" + (executed ? "true" : "false");
+
+	return detail;
+}
+
 std::string BuildOpenClawWsResponseFrameJson(
 	const blazeclaw::gateway::protocol::ResponseFrame& response,
 	const std::string& correlationId)
@@ -1237,11 +1326,24 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			paramsJson = blazeclaw::gateway::json::Trim(paramsRaw);
 		}
 
+		if (IsToolExecuteMethod(method))
+		{
+			AppendChatProcedureStatusLine(
+				L"tools.execute.start",
+				BuildToolStartDetail(paramsJson));
+		}
+
 		auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
 		if (app == nullptr)
 		{
             TraceBridgeTraffic("ws.req.error", "app unavailable");
             AppendChatProcedureStatusLine(L"bridge.req.app_unavailable");
+            if (IsToolExecuteMethod(method))
+			{
+				AppendChatProcedureStatusLine(
+					L"tools.execute.error",
+					"status=error code=app_unavailable");
+			}
 			const blazeclaw::gateway::protocol::ResponseFrame errorResponse{
 				.id = correlationId,
 				.ok = false,
@@ -1267,6 +1369,14 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		const auto response = app->Services().RouteGatewayRequest(request);
         TraceBridgeTraffic("ws.req.route", method);
         AppendChatProcedureStatusLine(L"bridge.req.route", method);
+        if (IsToolExecuteMethod(method))
+		{
+			AppendChatProcedureStatusLine(
+				response.ok
+					? L"tools.execute.result"
+					: L"tools.execute.error",
+				BuildToolResultDetail(response));
+		}
 		PostOpenClawWsFrameJson(
 			BuildOpenClawWsResponseFrameJson(response, correlationId));
 		return;
@@ -1293,9 +1403,22 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		paramsJson = blazeclaw::gateway::json::Trim(paramsJsonRaw);
 	}
 
+	if (IsToolExecuteMethod(method))
+	{
+		AppendChatProcedureStatusLine(
+			L"tools.execute.start",
+			BuildToolStartDetail(paramsJson));
+	}
+
 	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
 	if (app == nullptr)
 	{
+       if (IsToolExecuteMethod(method))
+		{
+			AppendChatProcedureStatusLine(
+				L"tools.execute.error",
+				"status=error code=app_unavailable");
+		}
 		const std::string errorJson =
 			"{\"channel\":\"blazeclaw.gateway.rpc.result\",\"id\":" +
 			JsonString(correlationId) +
@@ -1310,6 +1433,14 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		.paramsJson = paramsJson,
 	};
 	const auto response = app->Services().RouteGatewayRequest(request);
+ if (IsToolExecuteMethod(method))
+	{
+		AppendChatProcedureStatusLine(
+			response.ok
+				? L"tools.execute.result"
+				: L"tools.execute.error",
+			BuildToolResultDetail(response));
+	}
 	const std::string responseJson = BuildBridgeRpcResultJson(response, correlationId);
 	PostBridgeMessageJson(ToWide(responseJson));
 #else
