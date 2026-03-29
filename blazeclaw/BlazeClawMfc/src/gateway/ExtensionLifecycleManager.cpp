@@ -2,6 +2,11 @@
 #include "ExtensionLifecycleManager.h"
 #include "GatewayJsonUtils.h"
 
+#include <filesystem>
+#include <windows.h>
+#include <string>
+#include <iostream>
+
 #include <algorithm>
 #include <fstream>
 
@@ -201,6 +206,17 @@ void ExtensionLifecycleManager::ActivateAll(GatewayToolRegistry& registry) const
 
         for (const auto& tool : manifest.tools) {
             registry.RegisterRuntimeTool(ToolCatalogEntry{tool.id, tool.label, tool.category, tool.enabled}, nullptr);
+
+            // Validate execPath presence if provided
+            if (!manifest.execPath.empty()) {
+                const char* p = manifest.execPath.c_str();
+                const DWORD attrs = GetFileAttributesA(p);
+                if (attrs == INVALID_FILE_ATTRIBUTES) {
+                    // Emit debug telemetry but continue activation
+                    std::string msg = "[ExtensionLifecycle] execPath missing for extension " + manifest.id + " -> " + manifest.execPath + "\n";
+                    OutputDebugStringA(msg.c_str());
+                }
+            }
         }
     }
 }
