@@ -227,6 +227,14 @@ namespace blazeclaw::gateway {
 			std::uint64_t createdAtMs = 0;
 		};
 
+		struct EmailApprovalState {
+			std::string recipient;
+			std::string subject;
+			std::string body;
+			std::string sendAt;
+			std::uint64_t createdAtMs = 0;
+		};
+
 		void RegisterDefaultHandlers();
       void RegisterChannelsHandlers();
      void RegisterEventHandlers();
@@ -282,6 +290,7 @@ namespace blazeclaw::gateway {
 	  std::unordered_map<std::string, ChatRunState> m_chatRunsById;
 	  std::unordered_map<std::string, std::string> m_chatRunByIdempotency;
    std::unordered_map<std::string, WorkflowApprovalState> m_workflowApprovalsByToken;
+   std::unordered_map<std::string, EmailApprovalState> m_emailApprovalsByToken;
         SkillsCatalogGatewayState m_skillsCatalogState;
       SkillsRefreshCallback m_skillsRefreshCallback;
       ChatRuntimeCallback m_chatRuntimeCallback;

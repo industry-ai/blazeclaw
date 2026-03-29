@@ -703,6 +703,88 @@ Invoke-FlowWithSocket -FlowName "lobsterExecute" -FlowBody {
 }
 }
 
+if (Should-RunFlow -FlowName "weatherEmailExecute") {
+Invoke-FlowWithSocket -FlowName "weatherEmailExecute" -FlowBody {
+    param($socket, [ref]$events)
+
+    $weatherReq = New-ReqFrame -Method "gateway.tools.call.execute" -Params @{
+        tool = "weather.lookup"
+        args = @{
+            city = "Wuhan"
+            date = "tomorrow"
+        }
+    }
+
+    Send-Req -Socket $socket -Frame $weatherReq
+    $weatherRes = Wait-Response -Socket $socket -RequestId $weatherReq.id -CapturedEvents ([ref]$events.Value)
+    if (-not $weatherRes.ok) {
+        throw "gateway.tools.call.execute weather.lookup failed"
+    }
+
+    if ([string]$weatherRes.payload.status -ne "ok") {
+        throw "weather.lookup did not return ok status"
+    }
+
+    $weatherEnvelope = [string]$weatherRes.payload.output | ConvertFrom-Json
+    if ([string]$weatherEnvelope.forecast.city -ne "Wuhan") {
+        throw "weather.lookup city mismatch"
+    }
+
+    $emailPrepareReq = New-ReqFrame -Method "gateway.tools.call.execute" -Params @{
+        tool = "email.schedule"
+        args = @{
+            action = "prepare"
+            to = "jicheng@whu.edu.cn"
+            subject = "Wuhan weather report"
+            body = "Tomorrow in Wuhan is expected to be cloudy around 20C."
+            sendAt = "13:00"
+        }
+    }
+
+    Send-Req -Socket $socket -Frame $emailPrepareReq
+    $emailPrepareRes = Wait-Response -Socket $socket -RequestId $emailPrepareReq.id -CapturedEvents ([ref]$events.Value)
+    if (-not $emailPrepareRes.ok) {
+        throw "gateway.tools.call.execute email.schedule prepare failed"
+    }
+
+    if ([string]$emailPrepareRes.payload.status -ne "needs_approval") {
+        throw "email.schedule prepare did not return needs_approval"
+    }
+
+    $emailPrepareEnvelope = [string]$emailPrepareRes.payload.output | ConvertFrom-Json
+    $approvalToken = [string]$emailPrepareEnvelope.requiresApproval.approvalToken
+    if ([string]::IsNullOrWhiteSpace($approvalToken)) {
+        throw "email.schedule prepare output missing approvalToken"
+    }
+
+    $emailApproveReq = New-ReqFrame -Method "gateway.tools.call.execute" -Params @{
+        tool = "email.schedule"
+        args = @{
+            action = "approve"
+            approvalToken = $approvalToken
+            approve = $true
+        }
+    }
+
+    Send-Req -Socket $socket -Frame $emailApproveReq
+    $emailApproveRes = Wait-Response -Socket $socket -RequestId $emailApproveReq.id -CapturedEvents ([ref]$events.Value)
+    if (-not $emailApproveRes.ok) {
+        throw "gateway.tools.call.execute email.schedule approve failed"
+    }
+
+    if ([string]$emailApproveRes.payload.status -ne "ok") {
+        throw "email.schedule approve did not return ok"
+    }
+
+    $emailApproveEnvelope = [string]$emailApproveRes.payload.output | ConvertFrom-Json
+    if ([string]$emailApproveEnvelope.status -ne "ok") {
+        throw "email.schedule approve output envelope mismatch"
+    }
+
+    Write-Output "[PASS] weather + email execute flow"
+}
+}
+
 Write-Output ""
 Write-Output "WebView smoke summary"
 Write-Output "- send/final: pass"
@@ -710,3 +792,4 @@ Write-Output "- attachment: pass"
 Write-Output "- abort: pass"
 Write-Output "- forceError: pass"
 Write-Output "- lobsterExecute: pass"
+Write-Output "- weatherEmailExecute: pass"

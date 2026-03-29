@@ -1,0 +1,26 @@
+{
+  "id": "ops-tools",
+  "name": "Operational Tools",
+  "description": "Concrete weather lookup and approval-gated email scheduling tools.",
+  "version": 1,
+  "kind": "tools",
+  "tools": [
+    {
+      "id": "weather.lookup",
+      "label": "Weather Lookup",
+      "category": "data",
+      "enabled": true
+    },
+    {
+      "id": "email.schedule",
+      "label": "Email Schedule",
+      "category": "communication",
+      "enabled": true
+    }
+  ],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

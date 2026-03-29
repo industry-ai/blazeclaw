@@ -353,6 +353,68 @@ namespace blazeclaw::gateway {
 				"\",\"resumed\":true,\"engine\":\"blazeclaw.workflow.runtime.v1\"}}],\"requiresApproval\":null}";
 		}
 
+		std::string NormalizeWeatherCity(const std::string& city) {
+			const std::string trimmed = json::Trim(city);
+			if (trimmed.empty()) {
+				return "Wuhan";
+			}
+
+			return trimmed;
+		}
+
+		std::string NormalizeWeatherDate(const std::string& date) {
+			const std::string trimmed = json::Trim(date);
+			if (trimmed.empty()) {
+				return "tomorrow";
+			}
+
+			return trimmed;
+		}
+
+		std::string BuildWeatherLookupEnvelope(
+			const std::string& city,
+			const std::string& date) {
+			return std::string("{\"ok\":true,\"provider\":\"blazeclaw.seed.weather.v1\",\"forecast\":{\"city\":\"") +
+				EscapeJson(city) +
+				"\",\"date\":\"" +
+				EscapeJson(date) +
+				"\",\"condition\":\"Cloudy\",\"temperatureC\":20,\"wind\":\"NE 9 km/h\",\"humidityPct\":68},\"note\":\"deterministic_seeded_weather\"}";
+		}
+
+		std::string BuildEmailApprovalEnvelope(
+			const std::string& recipient,
+			const std::string& subject,
+			const std::string& sendAt,
+			const std::string& token) {
+			return std::string("{\"protocolVersion\":1,\"ok\":true,\"status\":\"needs_approval\",\"output\":[],\"requiresApproval\":{\"type\":\"approval_request\",\"prompt\":\"Approve outbound email scheduling?\",\"items\":[{\"to\":\"") +
+				EscapeJson(recipient) +
+				"\",\"subject\":\"" +
+				EscapeJson(subject) +
+				"\",\"sendAt\":\"" +
+				EscapeJson(sendAt) +
+				"\"}],\"approvalToken\":\"" +
+				EscapeJson(token) +
+				"\"}}";
+		}
+
+		std::string BuildEmailScheduleResultEnvelope(
+			const bool approved,
+			const std::string& recipient,
+			const std::string& subject,
+			const std::string& sendAt) {
+			if (!approved) {
+				return "{\"protocolVersion\":1,\"ok\":true,\"status\":\"cancelled\",\"output\":[],\"requiresApproval\":null}";
+			}
+
+			return std::string("{\"protocolVersion\":1,\"ok\":true,\"status\":\"ok\",\"output\":[{\"summary\":{\"to\":\"") +
+				EscapeJson(recipient) +
+				"\",\"subject\":\"" +
+				EscapeJson(subject) +
+				"\",\"sendAt\":\"" +
+				EscapeJson(sendAt) +
+				"\",\"scheduled\":true,\"engine\":\"blazeclaw.email.scheduler.v1\"}}],\"requiresApproval\":null}";
+		}
+
 		bool IsUnsafeAgentFilePath(const std::string& path) {
 			if (path.empty()) {
 				return true;
@@ -537,6 +599,141 @@ namespace blazeclaw::gateway {
 					.output = "action_required",
 				};
 			});
+		m_toolRegistry.RegisterRuntimeTool(
+			ToolCatalogEntry{
+				.id = "weather.lookup",
+				.label = "Weather Lookup",
+				.category = "data",
+				.enabled = true,
+			},
+			[](const std::string& requestedTool, const std::optional<std::string>& argsJson) {
+				std::string city;
+				std::string date;
+				if (argsJson.has_value()) {
+					json::FindStringField(argsJson.value(), "city", city);
+					json::FindStringField(argsJson.value(), "date", date);
+				}
+
+				return ToolExecuteResult{
+					.tool = requestedTool,
+					.executed = true,
+					.status = "ok",
+					.output = BuildWeatherLookupEnvelope(
+						NormalizeWeatherCity(city),
+						NormalizeWeatherDate(date)),
+				};
+			});
+		m_toolRegistry.RegisterRuntimeTool(
+			ToolCatalogEntry{
+				.id = "email.schedule",
+				.label = "Email Schedule",
+				.category = "communication",
+				.enabled = true,
+			},
+			[this](const std::string& requestedTool, const std::optional<std::string>& argsJson) {
+				if (!argsJson.has_value()) {
+					return ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = false,
+						.status = "invalid_args",
+						.output = "missing_args",
+					};
+				}
+
+				std::string action;
+				json::FindStringField(argsJson.value(), "action", action);
+				if (action.empty() || action == "prepare") {
+					std::string recipient;
+					std::string subject;
+					std::string body;
+					std::string sendAt;
+					json::FindStringField(argsJson.value(), "to", recipient);
+					json::FindStringField(argsJson.value(), "subject", subject);
+					json::FindStringField(argsJson.value(), "body", body);
+					json::FindStringField(argsJson.value(), "sendAt", sendAt);
+
+					if (json::Trim(recipient).empty() ||
+						json::Trim(subject).empty() ||
+						json::Trim(body).empty() ||
+						json::Trim(sendAt).empty()) {
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = false,
+							.status = "invalid_args",
+							.output = "to_subject_body_sendAt_required",
+						};
+					}
+
+					const std::string approvalToken =
+						"email-approval-" + std::to_string(CurrentEpochMs()) +
+						"-" + std::to_string(m_emailApprovalsByToken.size() + 1);
+					m_emailApprovalsByToken.insert_or_assign(
+						approvalToken,
+						EmailApprovalState{
+							.recipient = recipient,
+							.subject = subject,
+							.body = body,
+							.sendAt = sendAt,
+							.createdAtMs = CurrentEpochMs(),
+						});
+
+					return ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = true,
+						.status = "needs_approval",
+						.output = BuildEmailApprovalEnvelope(
+							recipient,
+							subject,
+							sendAt,
+							approvalToken),
+					};
+				}
+
+				if (action == "approve") {
+					std::string token;
+					json::FindStringField(argsJson.value(), "approvalToken", token);
+					bool approve = false;
+					if (!json::FindBoolField(argsJson.value(), "approve", approve)) {
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = false,
+							.status = "invalid_args",
+							.output = "approve_required",
+						};
+					}
+
+					const auto approvalIt = m_emailApprovalsByToken.find(token);
+					if (approvalIt == m_emailApprovalsByToken.end()) {
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = false,
+							.status = "invalid_args",
+							.output = "invalid_approval_token",
+						};
+					}
+
+					const EmailApprovalState approval = approvalIt->second;
+					m_emailApprovalsByToken.erase(approvalIt);
+
+					return ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = true,
+						.status = approve ? "ok" : "cancelled",
+						.output = BuildEmailScheduleResultEnvelope(
+							approve,
+							approval.recipient,
+							approval.subject,
+							approval.sendAt),
+					};
+				}
+
+				return ToolExecuteResult{
+					.tool = requestedTool,
+					.executed = false,
+					.status = "invalid_args",
+					.output = "action_prepare_or_approve_required",
+				};
+			});
 
 		RegisterDefaultHandlers();
 
@@ -567,6 +764,7 @@ namespace blazeclaw::gateway {
 	void GatewayHost::Stop() {
 		m_transport.Stop();
       m_workflowApprovalsByToken.clear();
+      m_emailApprovalsByToken.clear();
 		m_running = false;
 		m_bindAddress.clear();
 		m_port = 0;

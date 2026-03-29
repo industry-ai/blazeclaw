@@ -12,6 +12,12 @@
       "path": "lobster/blazeclaw.extension.json",
       "enabled": true,
       "kind": "workflow"
+    },
+    {
+      "id": "ops-tools",
+      "path": "ops-tools/blazeclaw.extension.json",
+      "enabled": true,
+      "kind": "tools"
     }
   ]
 }
