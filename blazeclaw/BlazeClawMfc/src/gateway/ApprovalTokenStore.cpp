@@ -122,8 +122,9 @@ bool ApprovalTokenStore::Initialize(const std::string& filePath) {
         if (!dir.empty() && !std::filesystem::exists(dir)) std::filesystem::create_directories(dir);
     } catch (...) { return false; }
 
+    std::lock_guard<std::mutex> lock(m_mutex);
     std::string existing;
-    if (!ReadFileToString(m_filePath, existing) || json::Trim(existing).empty()) {
+    if (!ReadFileToString(m_filePath, existing) || gateway::json::Trim(existing).empty()) {
         // write an empty JSON object
         nlohmann::json j = nlohmann::json::object();
         return WriteFileAtomic(m_filePath, j.dump());
@@ -134,12 +135,11 @@ bool ApprovalTokenStore::Initialize(const std::string& filePath) {
 bool ApprovalTokenStore::SaveToken(const std::string& token, const std::string& payload) {
     if (token.empty() || m_filePath.empty()) return false;
     try {
+        std::lock_guard<std::mutex> lock(m_mutex);
         std::string content; ReadFileToString(m_filePath, content);
         nlohmann::json j = nlohmann::json::object();
-        try {
-            j = nlohmann::json::parse(content);
-            if (!j.is_object()) j = nlohmann::json::object();
-        } catch (...) { j = nlohmann::json::object(); }
+        try { j = nlohmann::json::parse(content); if (!j.is_object()) j = nlohmann::json::object(); }
+        catch (...) { j = nlohmann::json::object(); }
 
         // payload may be JSON or plain string. Try to parse payload as JSON value.
         try {
@@ -156,6 +156,7 @@ bool ApprovalTokenStore::SaveToken(const std::string& token, const std::string& 
 std::optional<std::string> ApprovalTokenStore::LoadToken(const std::string& token) const {
     if (token.empty() || m_filePath.empty()) return std::nullopt;
     try {
+        std::lock_guard<std::mutex> lock(m_mutex);
         std::string content; if (!ReadFileToString(m_filePath, content)) return std::nullopt;
         nlohmann::json j;
         try { j = nlohmann::json::parse(content); }
@@ -169,6 +170,7 @@ std::optional<std::string> ApprovalTokenStore::LoadToken(const std::string& toke
 bool ApprovalTokenStore::RemoveToken(const std::string& token) {
     if (token.empty() || m_filePath.empty()) return false;
     try {
+        std::lock_guard<std::mutex> lock(m_mutex);
         std::string content; if (!ReadFileToString(m_filePath, content)) return false;
         nlohmann::json j;
         try { j = nlohmann::json::parse(content); }

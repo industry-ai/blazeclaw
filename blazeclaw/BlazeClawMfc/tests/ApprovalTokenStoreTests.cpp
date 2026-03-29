@@ -53,7 +53,6 @@ int main(int argc, char** argv) {
     // Run Catch2 tests programmatically
     return Catch::Session().run(argc, argv);
 }
-
 TEST_CASE("ApprovalTokenStore stores non-json payload as string", "[approvalstore][edge]") {
     const std::string tmpDir = std::filesystem::temp_directory_path().string() + "\\blazeclaw_test_plain";
     std::filesystem::create_directories(tmpDir);
@@ -73,3 +72,4 @@ TEST_CASE("ApprovalTokenStore stores non-json payload as string", "[approvalstor
 
     REQUIRE(store.RemoveToken(token));
 }
+
