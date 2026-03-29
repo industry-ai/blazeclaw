@@ -158,6 +158,7 @@
     <ClInclude Include="src\gateway\GatewayProtocolSchemaValidator.Internal.h" />
     <ClInclude Include="src\gateway\GatewaySessionRegistry.h" />
     <ClInclude Include="src\gateway\GatewayToolRegistry.h" />
+    <!-- ApprovalTokenStore now provides inline implementations in header; no separate source file -->
     <ClInclude Include="src\gateway\GatewayWebSocketTransport.h" />
     <ClInclude Include="src\gateway\ExtensionLifecycleManager.h" />
     <ClInclude Include="src\gateway\generated\GatewayHandlerCatalog.Generated.h" />

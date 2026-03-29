@@ -4,6 +4,7 @@
   "description": "Deterministic workflow tool with resumable approvals.",
   "version": 1,
   "kind": "workflow",
+  "execPath": "lobster",
   "tools": [
     {
       "id": "lobster",

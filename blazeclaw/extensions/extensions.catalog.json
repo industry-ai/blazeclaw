@@ -11,7 +11,8 @@
       "id": "lobster",
       "path": "lobster/blazeclaw.extension.json",
       "enabled": true,
-      "kind": "workflow"
+      "kind": "workflow",
+      "execPath": "lobster"
     },
     {
       "id": "ops-tools",

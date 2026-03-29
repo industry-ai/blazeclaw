@@ -17,6 +17,7 @@ struct ExtensionManifest {
     std::string id;
     std::string path;
     std::string kind;
+    std::string execPath;
     bool enabled = true;
     std::vector<ExtensionToolManifest> tools;
 };

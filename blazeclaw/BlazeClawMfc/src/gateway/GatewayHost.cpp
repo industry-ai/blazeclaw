@@ -5,9 +5,13 @@
 #include "GatewayProtocolCodec.h"
 #include "GatewayProtocolSchemaValidator.h"
 #include "generated/GatewayHandlerCatalog.Generated.h"
+#include "GatewayPersistencePaths.h"
 
 #include <chrono>
 #include <cstdlib>
+#include <windows.h>
+#include <vector>
+#include <sstream>
 
 namespace blazeclaw::gateway {
 	namespace {
@@ -512,6 +516,9 @@ namespace blazeclaw::gateway {
      // Activate lifecycle-managed extensions (register tools without executors).
 		m_extensionLifecycle.LoadCatalog("blazeclaw/extensions/extensions.catalog.json");
 		m_extensionLifecycle.ActivateAll(m_toolRegistry);
+
+		// Initialize approval token store
+		m_approvalStore.Initialize(ResolveGatewayStateFilePath("approvals.txt").string());
 		m_toolRegistry.RegisterRuntimeTool(
 			ToolCatalogEntry{
 				.id = "chat.send",
@@ -606,6 +613,18 @@ namespace blazeclaw::gateway {
 					.output = BuildMemorySearchEnvelope(normalizedSession, matches),
 				};
 			});
+     // If an extension supplied an execPath for lobster, prefer that; otherwise use default 'lobster'
+        std::string lobsterExec = "lobster";
+		for (const auto& ext : m_extensionLifecycle.GetExtensions()) {
+			if (ext.id == "lobster" && !ext.execPath.empty()) {
+				lobsterExec = ext.execPath;
+				break;
+			}
+		}
+
+		// capture lobsterExec by value for use in the lambda
+		const std::string lobsterExecCaptured = lobsterExec;
+
 		m_toolRegistry.RegisterRuntimeTool(
 			ToolCatalogEntry{
 				.id = "lobster",
@@ -613,97 +632,201 @@ namespace blazeclaw::gateway {
 				.category = "workflow",
 				.enabled = true,
 			},
-			[this](const std::string& requestedTool, const std::optional<std::string>& argsJson) {
-				if (!argsJson.has_value()) {
-					return ToolExecuteResult{
-						.tool = requestedTool,
-						.executed = false,
-						.status = "invalid_args",
-						.output = "missing_args",
-					};
-				}
-
+            [this, lobsterExecCaptured](const std::string& requestedTool, const std::optional<std::string>& argsJson) {
+				// Build lobster argv based on argsJson
 				std::string action;
-				json::FindStringField(argsJson.value(), "action", action);
-				if (action == "run") {
-					std::string pipeline;
-					json::FindStringField(argsJson.value(), "pipeline", pipeline);
-					if (json::Trim(pipeline).empty()) {
-						return ToolExecuteResult{
-							.tool = requestedTool,
-							.executed = false,
-							.status = "invalid_args",
-							.output = "pipeline_required",
-						};
+				json::FindStringField(argsJson.value_or(std::string()), "action", action);
+				std::vector<std::string> argv;
+				try {
+					if (action == "run") {
+						std::string pipeline;
+						json::FindStringField(argsJson.value(), "pipeline", pipeline);
+						if (json::Trim(pipeline).empty()) {
+							return ToolExecuteResult{requestedTool, false, "invalid_args", "pipeline_required"};
+						}
+						argv.push_back("run");
+						argv.push_back("--mode");
+						argv.push_back("tool");
+						argv.push_back(pipeline);
 					}
-
-					if (PipelineNeedsApproval(pipeline)) {
-						const std::string resumeToken =
-							"lobster-token-" + std::to_string(CurrentEpochMs()) +
-							"-" + std::to_string(m_workflowApprovalsByToken.size() + 1);
-						m_workflowApprovalsByToken.insert_or_assign(
-							resumeToken,
-							WorkflowApprovalState{
-								.pipeline = pipeline,
-								.createdAtMs = CurrentEpochMs(),
-							});
-
-						return ToolExecuteResult{
-							.tool = requestedTool,
-							.executed = true,
-							.status = "needs_approval",
-							.output = BuildLobsterNeedsApprovalEnvelope(pipeline, resumeToken),
-						};
+					else if (action == "resume") {
+						std::string token;
+						bool approve = false;
+						json::FindStringField(argsJson.value(), "token", token);
+						if (token.empty()) {
+							return ToolExecuteResult{requestedTool, false, "invalid_args", "token_required"};
+						}
+						if (!json::FindBoolField(argsJson.value(), "approve", approve)) {
+							return ToolExecuteResult{requestedTool, false, "invalid_args", "approve_required"};
+						}
+						argv.push_back("resume");
+						argv.push_back("--token");
+						argv.push_back(token);
+						argv.push_back("--approve");
+						argv.push_back(approve ? "yes" : "no");
 					}
-
-					return ToolExecuteResult{
-						.tool = requestedTool,
-						.executed = true,
-						.status = "ok",
-						.output = BuildLobsterRunOkEnvelope(pipeline),
-					};
+					else {
+						return ToolExecuteResult{requestedTool, false, "invalid_args", "action_required"};
+					}
+				}
+				catch (const std::bad_optional_access&) {
+					return ToolExecuteResult{requestedTool, false, "invalid_args", "missing_args"};
 				}
 
-				if (action == "resume") {
-					std::string token;
-					json::FindStringField(argsJson.value(), "token", token);
-					bool approve = false;
-					if (!json::FindBoolField(argsJson.value(), "approve", approve)) {
-						return ToolExecuteResult{
-							.tool = requestedTool,
-							.executed = false,
-							.status = "invalid_args",
-							.output = "approve_required",
-						};
+                // Prepare process command and capture stdout
+				const std::string execPath = lobsterExecCaptured; // prefer configured execPath from extension manifest
+				const unsigned long timeoutMs = 20000;
+				const std::size_t maxStdoutBytes = 512000;
+
+				auto runProcess = [&](std::string& stdoutOut, int& exitCode) -> bool {
+					// Build command line
+					std::ostringstream cmd;
+					cmd << '"' << execPath << '"';
+					for (const auto& a : argv) {
+						cmd << ' ';
+						// naive quoting
+						if (a.find(' ') != std::string::npos) {
+							cmd << '"' << a << '"';
+						} else {
+							cmd << a;
+						}
 					}
 
-					const auto approvalIt = m_workflowApprovalsByToken.find(token);
-					if (approvalIt == m_workflowApprovalsByToken.end()) {
-						return ToolExecuteResult{
-							.tool = requestedTool,
-							.executed = false,
-							.status = "invalid_args",
-							.output = "invalid_token",
-						};
+					SECURITY_ATTRIBUTES saAttr{};
+					saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
+					saAttr.bInheritHandle = TRUE;
+					saAttr.lpSecurityDescriptor = NULL;
+
+					HANDLE hStdOutRead = NULL;
+					HANDLE hStdOutWrite = NULL;
+					if (!CreatePipe(&hStdOutRead, &hStdOutWrite, &saAttr, 0)) {
+						return false;
+					}
+					if (!SetHandleInformation(hStdOutRead, HANDLE_FLAG_INHERIT, 0)) {
+						CloseHandle(hStdOutRead);
+						CloseHandle(hStdOutWrite);
+						return false;
 					}
 
-					const WorkflowApprovalState approval = approvalIt->second;
-					m_workflowApprovalsByToken.erase(approvalIt);
+					STARTUPINFOA siStartInfo{};
+					PROCESS_INFORMATION piProcInfo{};
+					siStartInfo.cb = sizeof(STARTUPINFOA);
+					siStartInfo.hStdError = hStdOutWrite;
+					siStartInfo.hStdOutput = hStdOutWrite;
+					siStartInfo.dwFlags |= STARTF_USESTDHANDLES;
 
-					return ToolExecuteResult{
-						.tool = requestedTool,
-						.executed = true,
-						.status = approve ? "ok" : "cancelled",
-						.output = BuildLobsterResumeEnvelope(approval.pipeline, approve),
-					};
-				}
+					std::string cmdStr = cmd.str();
+					std::unique_ptr<char[]> cmdLine(new char[cmdStr.size() + 1]);
+					std::copy(cmdStr.begin(), cmdStr.end(), cmdLine.get());
+					cmdLine[cmdStr.size()] = '\0';
 
-				return ToolExecuteResult{
-					.tool = requestedTool,
-					.executed = false,
-					.status = "invalid_args",
-					.output = "action_required",
+					BOOL created = CreateProcessA(
+						execPath.c_str(),
+						cmdLine.get(),
+						NULL,
+						NULL,
+						TRUE,
+						CREATE_NO_WINDOW,
+						NULL,
+						NULL,
+						&siStartInfo,
+						&piProcInfo);
+
+					CloseHandle(hStdOutWrite);
+					if (!created) {
+						CloseHandle(hStdOutRead);
+						return false;
+					}
+
+					// Read stdout until process exits or we hit timeout/max bytes
+					DWORD start = GetTickCount();
+					std::string collected;
+					collected.reserve(4096);
+					char buffer[4096];
+					DWORD bytesRead = 0;
+					bool done = false;
+					while (!done) {
+						DWORD now = GetTickCount();
+						DWORD elapsed = now - start;
+						if (WaitForSingleObject(piProcInfo.hProcess, 0) == WAIT_OBJECT_0) {
+							// process exited, read remaining
+							while (true) {
+								BOOL ok = ReadFile(hStdOutRead, buffer, sizeof(buffer), &bytesRead, NULL);
+								if (!ok || bytesRead == 0) break;
+								collected.append(buffer, buffer + bytesRead);
+								if (collected.size() > maxStdoutBytes) {
+									TerminateProcess(piProcInfo.hProcess, 1);
+									break;
+								}
+							}
+							done = true;
+							break;
+						}
+
+						// read available data
+						BOOL ok = PeekNamedPipe(hStdOutRead, NULL, 0, NULL, &bytesRead, NULL);
+						if (ok && bytesRead > 0) {
+							DWORD toRead = (std::min)(bytesRead, static_cast<DWORD>(sizeof(buffer)));
+							if (ReadFile(hStdOutRead, buffer, toRead, &bytesRead, NULL) && bytesRead > 0) {
+								collected.append(buffer, buffer + bytesRead);
+								if (collected.size() > maxStdoutBytes) {
+									TerminateProcess(piProcInfo.hProcess, 1);
+									break;
+								}
+							}
+						}
+
+						if (elapsed > timeoutMs) {
+							TerminateProcess(piProcInfo.hProcess, 1);
+							done = true;
+							break;
+						}
+
+						Sleep(20);
+					}
+
+					// get exit code
+					DWORD code = 0;
+					GetExitCodeProcess(piProcInfo.hProcess, &code);
+					exitCode = static_cast<int>(code);
+					stdoutOut = std::move(collected);
+
+					CloseHandle(hStdOutRead);
+					CloseHandle(piProcInfo.hProcess);
+					CloseHandle(piProcInfo.hThread);
+
+					return true;
 				};
+
+				std::string procStdout;
+				int exitCode = -1;
+				if (!runProcess(procStdout, exitCode)) {
+					return ToolExecuteResult{requestedTool, false, "error", "executor_spawn_failed"};
+				}
+
+				// Parse last JSON-like suffix from stdout
+                auto tryParseSuffix = [&](const std::string& text) -> std::optional<std::string> {
+					std::string trimmed = text;
+					while (!trimmed.empty() && isspace(static_cast<unsigned char>(trimmed.back()))) trimmed.pop_back();
+					// find last { or [ and try parse
+					auto pos = trimmed.find_last_of("[{\n");
+					if (pos == std::string::npos) return std::nullopt;
+					const std::string candidate = trimmed.substr(pos);
+					// quick sanity: must start with { or [
+					if (candidate.empty() || (candidate.front() != '{' && candidate.front() != '[')) return std::nullopt;
+					// rely on host-side consumers to parse JSON if needed; return candidate
+					return candidate;
+				};
+
+				auto envelopeOpt = tryParseSuffix(procStdout);
+				if (!envelopeOpt.has_value()) {
+					// return raw stdout as output
+					return ToolExecuteResult{requestedTool, exitCode == 0, exitCode == 0 ? "ok" : "error", procStdout};
+				}
+
+				const std::string envelope = envelopeOpt.value();
+				// Return envelope as-is in output
+				return ToolExecuteResult{requestedTool, exitCode == 0, exitCode == 0 ? "ok" : "error", envelope};
 			});
 		m_toolRegistry.RegisterRuntimeTool(
 			ToolCatalogEntry{
@@ -773,7 +896,7 @@ namespace blazeclaw::gateway {
 					const std::string approvalToken =
 						"email-approval-" + std::to_string(CurrentEpochMs()) +
 						"-" + std::to_string(m_emailApprovalsByToken.size() + 1);
-					m_emailApprovalsByToken.insert_or_assign(
+                   m_emailApprovalsByToken.insert_or_assign(
 						approvalToken,
 						EmailApprovalState{
 							.recipient = recipient,
@@ -782,6 +905,13 @@ namespace blazeclaw::gateway {
 							.sendAt = sendAt,
 							.createdAtMs = CurrentEpochMs(),
 						});
+					// persist approval token to store
+					{
+                const std::string payload = std::string("{\"to\":\"") + EscapeJson(recipient) +
+					"\",\"subject\":\"" + EscapeJson(subject) + "\",\"body\":\"" +
+					EscapeJson(body) + "\",\"sendAt\":\"" + EscapeJson(sendAt) + "\"}";
+						m_approvalStore.SaveToken(approvalToken, payload);
+					}
 
 					return ToolExecuteResult{
 						.tool = requestedTool,
@@ -808,8 +938,12 @@ namespace blazeclaw::gateway {
 						};
 					}
 
-					const auto approvalIt = m_emailApprovalsByToken.find(token);
-					if (approvalIt == m_emailApprovalsByToken.end()) {
+				// try load persisted approval payload if missing in memory
+				EmailApprovalState approval;
+				auto it = m_emailApprovalsByToken.find(token);
+				if (it == m_emailApprovalsByToken.end()) {
+					const auto persisted = m_approvalStore.LoadToken(token);
+					if (!persisted.has_value()) {
 						return ToolExecuteResult{
 							.tool = requestedTool,
 							.executed = false,
@@ -817,9 +951,24 @@ namespace blazeclaw::gateway {
 							.output = "invalid_approval_token",
 						};
 					}
+					// parse persisted payload
+					std::string recipient;
+					std::string subject;
+					std::string body;
+					std::string sendAt;
+					json::FindStringField(persisted.value(), "to", recipient);
+					json::FindStringField(persisted.value(), "subject", subject);
+					json::FindStringField(persisted.value(), "body", body);
+					json::FindStringField(persisted.value(), "sendAt", sendAt);
+					approval = EmailApprovalState{recipient, subject, body, sendAt, CurrentEpochMs() };
+				}
+				else {
+					approval = it->second;
+					m_emailApprovalsByToken.erase(it);
+				}
 
-					const EmailApprovalState approval = approvalIt->second;
-					m_emailApprovalsByToken.erase(approvalIt);
+				// remove persisted token after consuming
+				m_approvalStore.RemoveToken(token);
 
 					return ToolExecuteResult{
 						.tool = requestedTool,
@@ -869,8 +1018,10 @@ namespace blazeclaw::gateway {
 
 	void GatewayHost::Stop() {
 		m_transport.Stop();
-      m_workflowApprovalsByToken.clear();
-      m_emailApprovalsByToken.clear();
+       // Deactivate registered extension tools and clear approval state
+		m_extensionLifecycle.DeactivateAll(m_toolRegistry);
+		m_workflowApprovalsByToken.clear();
+		m_emailApprovalsByToken.clear();
 		m_running = false;
 		m_bindAddress.clear();
 		m_port = 0;

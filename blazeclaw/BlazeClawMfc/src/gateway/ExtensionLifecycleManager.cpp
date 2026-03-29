@@ -155,6 +155,11 @@ std::size_t ExtensionLifecycleManager::LoadCatalog(const std::string& catalogPat
         manifest.path = JoinPath(catalogDirectory, path);
         manifest.enabled = enabled;
 
+        // optional execPath
+        std::string execPathVal;
+        json::FindStringField(entryJson, "execPath", execPathVal);
+        manifest.execPath = execPathVal;
+
         const std::string manifestText = ReadFileUtf8(manifest.path);
         if (manifestText.empty()) {
             continue;
