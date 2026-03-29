@@ -3,8 +3,66 @@
 #include "GatewayJsonUtils.h"
 
 #include <algorithm>
+#include <fstream>
 
 namespace blazeclaw::gateway {
+
+static std::string DirectoryName(const std::string& path) {
+    if (path.empty()) {
+        return {};
+    }
+
+    const std::size_t pos = path.find_last_of("/\\");
+    if (pos == std::string::npos) {
+        return {};
+    }
+
+    return path.substr(0, pos);
+}
+
+static std::string JoinPath(const std::string& left, const std::string& right) {
+    if (left.empty()) {
+        return right;
+    }
+
+    if (right.empty()) {
+        return left;
+    }
+
+    const bool leftEndsWithSeparator = left.back() == '/' || left.back() == '\\';
+    if (leftEndsWithSeparator) {
+        return left + right;
+    }
+
+    return left + "/" + right;
+}
+
+static std::string ReadFileUtf8(const std::string& filePath) {
+    std::ifstream input(filePath, std::ios::binary);
+    if (!input.is_open()) {
+        return {};
+    }
+
+    std::string text;
+    input.seekg(0, std::ios::end);
+    const auto size = input.tellg();
+    if (size > 0) {
+        text.resize(static_cast<std::size_t>(size));
+        input.seekg(0, std::ios::beg);
+        input.read(text.data(), static_cast<std::streamsize>(text.size()));
+    }
+
+    return text;
+}
+
+static bool ExtractBoolField(const std::string& jsonText, const std::string& fieldName, const bool fallback) {
+    bool value = fallback;
+    if (json::FindBoolField(jsonText, fieldName, value)) {
+        return value;
+    }
+
+    return fallback;
+}
 
 static std::vector<std::string> SplitTopLevelObjects(const std::string& arrayJson) {
     std::vector<std::string> objects;

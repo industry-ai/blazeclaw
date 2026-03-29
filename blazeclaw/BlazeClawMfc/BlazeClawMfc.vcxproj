@@ -159,6 +159,7 @@
     <ClInclude Include="src\gateway\GatewaySessionRegistry.h" />
     <ClInclude Include="src\gateway\GatewayToolRegistry.h" />
     <ClInclude Include="src\gateway\GatewayWebSocketTransport.h" />
+    <ClInclude Include="src\gateway\ExtensionLifecycleManager.h" />
     <ClInclude Include="src\gateway\generated\GatewayHandlerCatalog.Generated.h" />
     <ClInclude Include="src\gateway\generated\GatewaySchemaCatalog.Generated.h" />
   </ItemGroup>
@@ -243,6 +244,7 @@
     <ClCompile Include="src\gateway\generated\GatewaySchemaCatalog.Generated.cpp" />
     <ClCompile Include="src\gateway\GatewaySessionRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayToolRegistry.cpp" />
+    <ClCompile Include="src\gateway\ExtensionLifecycleManager.cpp" />
     <ClCompile Include="src\gateway\GatewayWebSocketTransport.cpp" />
   </ItemGroup>
   <ItemGroup>

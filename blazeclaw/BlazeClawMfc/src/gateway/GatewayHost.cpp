@@ -509,6 +509,9 @@ namespace blazeclaw::gateway {
 		}
 
 		m_toolRegistry.LoadExtensionToolsFromCatalog("blazeclaw/extensions/extensions.catalog.json");
+     // Activate lifecycle-managed extensions (register tools without executors).
+		m_extensionLifecycle.LoadCatalog("blazeclaw/extensions/extensions.catalog.json");
+		m_extensionLifecycle.ActivateAll(m_toolRegistry);
 		m_toolRegistry.RegisterRuntimeTool(
 			ToolCatalogEntry{
 				.id = "chat.send",
