@@ -344,25 +344,38 @@ namespace {
 		return method == "gateway.tools.call.execute";
 	}
 
-	std::string BuildToolStartDetail(
+	struct ToolLifecycleStartInfo
+	{
+		std::string tool = "unknown";
+		std::string action;
+	};
+
+	struct ToolLifecycleResultInfo
+	{
+		std::string tool = "unknown";
+		std::string status = "ok";
+		bool executed = false;
+		std::string phase = "result";
+		std::string code;
+	};
+
+	ToolLifecycleStartInfo ParseToolStartInfo(
 		const std::optional<std::string>& paramsJson)
 	{
+		ToolLifecycleStartInfo info;
 		if (!paramsJson.has_value())
 		{
-			return "tool=unknown";
+			return info;
 		}
 
-		std::string tool;
 		blazeclaw::gateway::json::FindStringField(
 			paramsJson.value(),
 			"tool",
-			tool);
-		if (tool.empty())
+			info.tool);
+		if (info.tool.empty())
 		{
-			tool = "unknown";
+			info.tool = "unknown";
 		}
-
-		std::string detail = "tool=" + tool;
 
 		std::string argsRaw;
 		if (blazeclaw::gateway::json::FindRawField(
@@ -370,62 +383,146 @@ namespace {
 			"args",
 			argsRaw))
 		{
-			std::string action;
-			if (blazeclaw::gateway::json::FindStringField(
+			blazeclaw::gateway::json::FindStringField(
 				argsRaw,
 				"action",
-				action) &&
-				!action.empty())
-			{
-				detail += " action=" + action;
-			}
+				info.action);
+		}
+
+		return info;
+	}
+
+	std::string BuildToolStartDetail(
+		const std::optional<std::string>& paramsJson)
+	{
+        const auto info = ParseToolStartInfo(paramsJson);
+		std::string detail = "tool=" + info.tool;
+		if (!info.action.empty())
+		{
+			detail += " action=" + info.action;
 		}
 
 		return detail;
 	}
 
-	std::string BuildToolResultDetail(
+	ToolLifecycleResultInfo ParseToolResultInfo(
 		const blazeclaw::gateway::protocol::ResponseFrame& response)
 	{
+		ToolLifecycleResultInfo info;
 		if (!response.ok)
 		{
+			info.phase = "error";
+			info.status = "error";
 			if (response.error.has_value())
 			{
-				return "status=error code=" +
-					response.error->code;
+				info.code = response.error->code;
 			}
-
-			return "status=error code=unknown";
+			return info;
 		}
 
 		if (!response.payloadJson.has_value())
 		{
-			return "status=ok tool=unknown";
+			return info;
 		}
 
 		const std::string& payload = response.payloadJson.value();
-		std::string tool;
-		std::string status;
-		bool executed = false;
-		blazeclaw::gateway::json::FindStringField(payload, "tool", tool);
-		blazeclaw::gateway::json::FindStringField(payload, "status", status);
-		blazeclaw::gateway::json::FindBoolField(payload, "executed", executed);
+		blazeclaw::gateway::json::FindStringField(payload, "tool", info.tool);
+		blazeclaw::gateway::json::FindStringField(payload, "status", info.status);
+		blazeclaw::gateway::json::FindBoolField(payload, "executed", info.executed);
 
-		if (tool.empty())
+		if (info.tool.empty())
 		{
-			tool = "unknown";
+			info.tool = "unknown";
 		}
-		if (status.empty())
+		if (info.status.empty())
 		{
-			status = "ok";
+			info.status = "ok";
+		}
+
+		if (info.status == "needs_approval")
+		{
+			info.phase = "approval-needed";
+		}
+		else if (info.status == "cancelled")
+		{
+			info.phase = "approval-resolved";
+		}
+		else if (info.status == "ok")
+		{
+			info.phase = "result";
+		}
+		else
+		{
+			info.phase = "error";
+		}
+
+		return info;
+	}
+
+	std::string BuildToolResultDetail(
+		const blazeclaw::gateway::protocol::ResponseFrame& response)
+	{
+       const auto info = ParseToolResultInfo(response);
+		if (info.phase == "error" && !info.code.empty())
+		{
+			return "status=error code=" + info.code;
 		}
 
 		std::string detail =
-			"tool=" + tool +
-			" status=" + status +
-			" executed=" + (executed ? "true" : "false");
+            "tool=" + info.tool +
+			" status=" + info.status +
+			" executed=" + (info.executed ? "true" : "false");
+
+		if (!info.phase.empty())
+		{
+			detail += " phase=" + info.phase;
+		}
 
 		return detail;
+	}
+
+	std::string BuildToolLifecycleStartJson(
+		const std::string& channel,
+		const std::string& requestId,
+		const std::optional<std::string>& paramsJson)
+	{
+		const auto info = ParseToolStartInfo(paramsJson);
+		std::string json =
+			"{\"channel\":\"blazeclaw.gateway.tools.lifecycle\",\"phase\":\"start\","
+			"\"source\":" + JsonString(channel) +
+			",\"id\":" + JsonString(requestId) +
+			",\"tool\":" + JsonString(info.tool);
+		if (!info.action.empty())
+		{
+			json += ",\"action\":" + JsonString(info.action);
+		}
+
+		json += "}";
+		return json;
+	}
+
+	std::string BuildToolLifecycleResultJson(
+		const std::string& channel,
+		const std::string& requestId,
+		const blazeclaw::gateway::protocol::ResponseFrame& response)
+	{
+		const auto info = ParseToolResultInfo(response);
+		std::string json =
+			"{\"channel\":\"blazeclaw.gateway.tools.lifecycle\",\"phase\":" +
+			JsonString(info.phase.empty() ? "result" : info.phase) +
+			",\"source\":" + JsonString(channel) +
+			",\"id\":" + JsonString(requestId) +
+			",\"tool\":" + JsonString(info.tool) +
+			",\"status\":" + JsonString(info.status) +
+			",\"executed\":" + std::string(info.executed ? "true" : "false");
+
+		if (!info.code.empty())
+		{
+			json += ",\"code\":" + JsonString(info.code);
+		}
+
+		json += "}";
+		return json;
 	}
 
 	std::string BuildOpenClawWsResponseFrameJson(
@@ -1330,6 +1427,11 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			AppendChatProcedureStatusLine(
 				L"tools.execute.start",
 				BuildToolStartDetail(paramsJson));
+           PostBridgeMessageJson(ToWide(
+				BuildToolLifecycleStartJson(
+					"openclaw.ws.req",
+					correlationId,
+					paramsJson)));
 		}
 
 		auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
@@ -1375,6 +1477,11 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 				? L"tools.execute.result"
 				: L"tools.execute.error",
 				BuildToolResultDetail(response));
+           PostBridgeMessageJson(ToWide(
+				BuildToolLifecycleResultJson(
+					"openclaw.ws.req",
+					correlationId,
+					response)));
 		}
 		PostOpenClawWsFrameJson(
 			BuildOpenClawWsResponseFrameJson(response, correlationId));
@@ -1407,6 +1514,11 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		AppendChatProcedureStatusLine(
 			L"tools.execute.start",
 			BuildToolStartDetail(paramsJson));
+       PostBridgeMessageJson(ToWide(
+			BuildToolLifecycleStartJson(
+				"blazeclaw.gateway.rpc",
+				correlationId,
+				paramsJson)));
 	}
 
 	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
@@ -1439,6 +1551,11 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			? L"tools.execute.result"
 			: L"tools.execute.error",
 			BuildToolResultDetail(response));
+       PostBridgeMessageJson(ToWide(
+			BuildToolLifecycleResultJson(
+				"blazeclaw.gateway.rpc",
+				correlationId,
+				response)));
 	}
 	const std::string responseJson = BuildBridgeRpcResultJson(response, correlationId);
 	PostBridgeMessageJson(ToWide(responseJson));

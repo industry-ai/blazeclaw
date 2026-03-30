@@ -40,6 +40,9 @@ Key points:
 - Chat runtime orchestration now routes weather+scheduled-email prompt class through
   tool execution chain (`weather.lookup` -> report -> `email.schedule prepare`) and
   preserves `chat.events.poll` delta/final semantics.
+- UI parity update: chat WebView now renders tool lifecycle timeline/cards from
+  `blazeclaw.gateway.tools.lifecycle` payloads (start/result/error/approval phases)
+  while retaining existing debug lifecycle status lines.
 
 How to test locally:
 - Build: msbuild blazeclaw/BlazeClaw.sln /p:Configuration=Debug /p:Platform=x64

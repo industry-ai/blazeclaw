@@ -56,6 +56,36 @@
       align-self: flex-start;
       background: #7a1f1f;
     }
+    .tool-timeline {
+      align-self: flex-start;
+      width: min(92%, 720px);
+      border: 1px solid #3a3a3a;
+      border-radius: 10px;
+      background: #242424;
+      padding: 8px 10px;
+      font-size: 12px;
+    }
+    .tool-timeline .title {
+      color: #d2e3ff;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .tool-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+      color: #d0d0d0;
+    }
+    .tool-phase {
+      min-width: 110px;
+      color: #8ec7ff;
+    }
+    .tool-phase.error {
+      color: #ff9494;
+    }
+    .tool-phase.approval {
+      color: #ffd48a;
+    }
     .composer {
       display: grid;
       grid-template-columns: 1fr auto auto auto auto;
@@ -111,6 +141,7 @@
       let runId = null;
       let streamText = "";
       let attachments = [];
+      const toolTimelineByRequest = new Map();
       const bridgeQueue = [];
       const pending = new Map();
 
@@ -141,6 +172,86 @@
         div.textContent = text;
         messagesEl.appendChild(div);
         scrollBottom();
+      }
+
+      function ensureToolTimelineCard(requestId) {
+        if (!requestId) {
+          return null;
+        }
+
+        let card = document.getElementById(`tool-card-${requestId}`);
+        if (card) {
+          return card;
+        }
+
+        card = document.createElement("div");
+        card.id = `tool-card-${requestId}`;
+        card.className = "tool-timeline";
+
+        const title = document.createElement("div");
+        title.className = "title";
+        title.textContent = `Tool timeline (${requestId})`;
+        card.appendChild(title);
+
+        const body = document.createElement("div");
+        body.className = "tool-body";
+        card.appendChild(body);
+
+        messagesEl.appendChild(card);
+        scrollBottom();
+        return card;
+      }
+
+      function appendToolLifecycleRow(payload) {
+        if (!payload || typeof payload !== "object") {
+          return;
+        }
+
+        const requestId = String(payload.id || "");
+        const card = ensureToolTimelineCard(requestId);
+        if (!card) {
+          return;
+        }
+
+        const body = card.querySelector(".tool-body");
+        if (!body) {
+          return;
+        }
+
+        const phase = String(payload.phase || "result");
+        const tool = String(payload.tool || "unknown");
+        const status = String(payload.status || "");
+        const code = String(payload.code || "");
+
+        const row = document.createElement("div");
+        row.className = "tool-row";
+
+        const phaseEl = document.createElement("span");
+        phaseEl.className = "tool-phase";
+        if (phase === "error") {
+          phaseEl.classList.add("error");
+        }
+        if (phase === "approval-needed" || phase === "approval-resolved") {
+          phaseEl.classList.add("approval");
+        }
+        phaseEl.textContent = phase;
+        row.appendChild(phaseEl);
+
+        const detailEl = document.createElement("span");
+        let detailText = `tool=${tool}`;
+        if (status) {
+          detailText += ` status=${status}`;
+        }
+        if (code) {
+          detailText += ` code=${code}`;
+        }
+        detailEl.textContent = detailText;
+        row.appendChild(detailEl);
+
+        body.appendChild(row);
+        scrollBottom();
+
+        toolTimelineByRequest.set(requestId, true);
       }
 
       function addOrReplaceStream(text) {
@@ -535,6 +646,11 @@
 
           if (msg.channel === "blazeclaw.gateway.chat.events") {
             handleChatEvents(msg.events);
+            return;
+          }
+
+          if (msg.channel === "blazeclaw.gateway.tools.lifecycle") {
+            appendToolLifecycleRow(msg);
           }
         });
 

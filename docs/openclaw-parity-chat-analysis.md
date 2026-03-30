@@ -146,6 +146,8 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
 - ✅ Hardened `LobsterExecutor` runtime guardrails with explicit settings (timeout/output cap/argument cap/cwd policy), deterministic process outcome mapping, and normalized envelope handling.
 - ✅ Added durable approval session persistence primitives in `ApprovalTokenStore` (typed session metadata + TTL validation + prune + restart-safe load) and integrated deterministic invalid/expired/orphaned approval token handling in governance remediation runtime flow.
 - ✅ Added `chat.send` orchestration path for weather+scheduled-email prompt class, executing weather lookup and email prepare tool chain with approval-aware assistant output and `chat.events.poll` event flow compatibility.
+- ✅ Added in-chat tool lifecycle rendering path in BlazeClaw chat WebView via
+  `blazeclaw.gateway.tools.lifecycle` events (start/result/error/approval phases).
 - ⚠️ Remaining for full parity: workflow-engine plugin runtime completeness and concrete non-seeded weather/email runtime backends (tracked in sections 2.1.2 and 2.3).
 
 [back to top](#index)
