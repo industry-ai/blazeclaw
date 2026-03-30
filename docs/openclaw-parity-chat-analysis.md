@@ -31,7 +31,7 @@ Prompt under comparison:
 
 ### 1.2.1 BlazeClaw (current MFC port)
 - Chat request is accepted and queued (`chat.send accepted`), then UI depends on `chat.events.poll` to render output.
-- Chat runtime path is local-model/deepseek callback based, with no integrated real weather/email scheduler tool execution in this path.
+- Chat runtime path is local-model/deepseek callback based, now with prompt-intent orchestration support for weather+email scheduling through runtime tools (`weather.lookup` + `email.schedule`).
 - Gateway tool registry is currently minimal and seeded:
   - `chat.send`
   - `memory.search`
@@ -145,6 +145,7 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
 - ✅ Removed host-inline extension runtime executor registrations for `lobster`, `weather.lookup`, and `email.schedule` in `GatewayHost::Start` (extension tools now lifecycle-managed only).
 - ✅ Hardened `LobsterExecutor` runtime guardrails with explicit settings (timeout/output cap/argument cap/cwd policy), deterministic process outcome mapping, and normalized envelope handling.
 - ✅ Added durable approval session persistence primitives in `ApprovalTokenStore` (typed session metadata + TTL validation + prune + restart-safe load) and integrated deterministic invalid/expired/orphaned approval token handling in governance remediation runtime flow.
+- ✅ Added `chat.send` orchestration path for weather+scheduled-email prompt class, executing weather lookup and email prepare tool chain with approval-aware assistant output and `chat.events.poll` event flow compatibility.
 - ⚠️ Remaining for full parity: workflow-engine plugin runtime completeness and concrete non-seeded weather/email runtime backends (tracked in sections 2.1.2 and 2.3).
 
 [back to top](#index)

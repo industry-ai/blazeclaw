@@ -377,6 +377,36 @@ namespace blazeclaw::gateway::protocol {
 			}
 		}
 
+		const ResponseFrame chatSendOrchestrationResponse{
+			.id = "chat-send-orch-1",
+			.ok = true,
+			.payloadJson =
+				"{\"runId\":\"chat-run-orch-1\",\"backendErrorCode\":null,\"queued\":true,\"deduped\":false}",
+			.error = std::nullopt,
+		};
+		if (!ValidateDecodedResponseCase(
+				root / "response_chat_send_orchestration.json",
+				"chat.send",
+				chatSendOrchestrationResponse,
+				error)) {
+			return false;
+		}
+
+		const ResponseFrame chatEventsOrchestrationPollResponse{
+			.id = "chat-poll-orch-1",
+			.ok = true,
+			.payloadJson =
+				"{\"sessionKey\":\"main\",\"events\":[{\"runId\":\"chat-run-orch-1\",\"sessionKey\":\"main\",\"state\":\"delta\",\"timestamp\":1,\"message\":{\"role\":\"assistant\",\"text\":\"tools.execute.start tool=weather.lookup\"}},{\"runId\":\"chat-run-orch-1\",\"sessionKey\":\"main\",\"state\":\"final\",\"timestamp\":2,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Email scheduling is pending approval.\"}],\"timestamp\":2}}],\"count\":2}",
+			.error = std::nullopt,
+		};
+		if (!ValidateDecodedResponseCase(
+				root / "response_chat_events_poll_orchestration.json",
+				"chat.events.poll",
+				chatEventsOrchestrationPollResponse,
+				error)) {
+			return false;
+		}
+
       const std::array<ResponseFrame, 356> negativeResponses = {
 			ResponseFrame{.id = "neg-1", .ok = true, .payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true}]}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-2", .ok = true, .payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true}", .error = std::nullopt },

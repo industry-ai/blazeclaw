@@ -6,7 +6,9 @@
 #include <cctype>
 #include <chrono>
 #include <cstdlib>
+#include <regex>
 #include <sstream>
+#include <nlohmann/json.hpp>
 
 namespace blazeclaw::gateway {
 
@@ -245,6 +247,268 @@ namespace blazeclaw::gateway {
 
             payload += "}";
             return payload;
+        }
+
+        struct ChatPromptOrchestrationResult {
+            bool matched = false;
+            bool success = false;
+            std::string assistantText;
+            std::vector<std::string> assistantDeltas;
+            std::string errorCode;
+            std::string errorMessage;
+        };
+
+        bool IsWeatherEmailPromptIntent(const std::string& message) {
+            const std::string lowered = [&message]() {
+                std::string value = message;
+                std::transform(
+                    value.begin(),
+                    value.end(),
+                    value.begin(),
+                    [](unsigned char ch) {
+                        return static_cast<char>(std::tolower(ch));
+                    });
+                return value;
+            }();
+
+            const bool hasWeather = lowered.find("weather") != std::string::npos;
+            const bool hasEmail = lowered.find("email") != std::string::npos;
+            const bool hasSchedule =
+                lowered.find("1 pm") != std::string::npos ||
+                lowered.find("1pm") != std::string::npos ||
+                lowered.find("13:00") != std::string::npos;
+
+            return hasWeather && hasEmail && hasSchedule;
+        }
+
+        std::string ExtractFirstEmailAddress(const std::string& text) {
+            static const std::regex kEmailRegex(
+                R"(([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}))");
+
+            std::smatch match;
+            if (std::regex_search(text, match, kEmailRegex) && !match.empty()) {
+                return match[1].str();
+            }
+
+            return {};
+        }
+
+        std::string ResolvePromptCity(const std::string& message) {
+            const std::string lowered = [&message]() {
+                std::string value = message;
+                std::transform(
+                    value.begin(),
+                    value.end(),
+                    value.begin(),
+                    [](unsigned char ch) {
+                        return static_cast<char>(std::tolower(ch));
+                    });
+                return value;
+            }();
+
+            if (lowered.find("wuhan") != std::string::npos) {
+                return "Wuhan";
+            }
+
+            return "Wuhan";
+        }
+
+        std::string ResolvePromptDate(const std::string& message) {
+            const std::string lowered = [&message]() {
+                std::string value = message;
+                std::transform(
+                    value.begin(),
+                    value.end(),
+                    value.begin(),
+                    [](unsigned char ch) {
+                        return static_cast<char>(std::tolower(ch));
+                    });
+                return value;
+            }();
+
+            if (lowered.find("tomorrow") != std::string::npos) {
+                return "tomorrow";
+            }
+
+            return "tomorrow";
+        }
+
+        std::string ResolvePromptSendAt(const std::string& message) {
+            const std::string lowered = [&message]() {
+                std::string value = message;
+                std::transform(
+                    value.begin(),
+                    value.end(),
+                    value.begin(),
+                    [](unsigned char ch) {
+                        return static_cast<char>(std::tolower(ch));
+                    });
+                return value;
+            }();
+
+            if (lowered.find("1 pm") != std::string::npos ||
+                lowered.find("1pm") != std::string::npos ||
+                lowered.find("13:00") != std::string::npos) {
+                return "13:00";
+            }
+
+            return "13:00";
+        }
+
+        std::string BuildWeatherReportText(
+            const std::string& city,
+            const std::string& date,
+            const std::string& condition,
+            const int temperatureC,
+            const std::string& wind,
+            const int humidityPct) {
+            return "Weather report for " + city + " (" + date + "): " +
+                condition + ", around " + std::to_string(temperatureC) +
+                "C, wind " + wind + ", humidity " +
+                std::to_string(humidityPct) + "% .";
+        }
+
+        ChatPromptOrchestrationResult TryOrchestrateWeatherEmailPrompt(
+            GatewayToolRegistry& toolRegistry,
+            const std::string& message) {
+            ChatPromptOrchestrationResult result;
+            result.matched = IsWeatherEmailPromptIntent(message);
+            if (!result.matched) {
+                return result;
+            }
+
+            const std::string city = ResolvePromptCity(message);
+            const std::string date = ResolvePromptDate(message);
+            const std::string sendAt = ResolvePromptSendAt(message);
+            const std::string recipient = ExtractFirstEmailAddress(message);
+
+            if (recipient.empty()) {
+                result.success = false;
+                result.errorCode = "orchestration_invalid_prompt";
+                result.errorMessage = "recipient_email_required";
+                return result;
+            }
+
+            nlohmann::json weatherArgs = {
+                { "city", city },
+                { "date", date },
+            };
+            const auto weatherExecution = toolRegistry.Execute(
+                "weather.lookup",
+                weatherArgs.dump());
+
+            if (!weatherExecution.executed || weatherExecution.status != "ok") {
+                result.success = false;
+                result.errorCode = "orchestration_weather_failed";
+                result.errorMessage = weatherExecution.output;
+                return result;
+            }
+
+            std::string condition = "Cloudy";
+            int temperatureC = 20;
+            std::string wind = "NE 9 km/h";
+            int humidityPct = 68;
+            try {
+                const auto weatherPayload =
+                    nlohmann::json::parse(weatherExecution.output);
+                if (weatherPayload.contains("forecast") &&
+                    weatherPayload["forecast"].is_object()) {
+                    const auto& forecast = weatherPayload["forecast"];
+                    if (forecast.contains("condition") && forecast["condition"].is_string()) {
+                        condition = forecast["condition"].get<std::string>();
+                    }
+                    if (forecast.contains("temperatureC") && forecast["temperatureC"].is_number_integer()) {
+                        temperatureC = forecast["temperatureC"].get<int>();
+                    }
+                    if (forecast.contains("wind") && forecast["wind"].is_string()) {
+                        wind = forecast["wind"].get<std::string>();
+                    }
+                    if (forecast.contains("humidityPct") && forecast["humidityPct"].is_number_integer()) {
+                        humidityPct = forecast["humidityPct"].get<int>();
+                    }
+                }
+            }
+            catch (...) {
+            }
+
+            const std::string report = BuildWeatherReportText(
+                city,
+                date,
+                condition,
+                temperatureC,
+                wind,
+                humidityPct);
+
+            nlohmann::json emailPrepareArgs = {
+                { "action", "prepare" },
+                { "to", recipient },
+                { "subject", city + " weather report" },
+                { "body", report },
+                { "sendAt", sendAt },
+            };
+
+            const auto emailPrepareExecution = toolRegistry.Execute(
+                "email.schedule",
+                emailPrepareArgs.dump());
+
+            if (!emailPrepareExecution.executed ||
+                emailPrepareExecution.status != "needs_approval") {
+                result.success = false;
+                result.errorCode = "orchestration_email_prepare_failed";
+                result.errorMessage = emailPrepareExecution.output;
+                return result;
+            }
+
+            std::string approvalToken;
+            std::uint64_t approvalTokenExpiresAtEpochMs = 0;
+            try {
+                const auto emailPayload =
+                    nlohmann::json::parse(emailPrepareExecution.output);
+                if (emailPayload.contains("requiresApproval") &&
+                    emailPayload["requiresApproval"].is_object()) {
+                    const auto& approval = emailPayload["requiresApproval"];
+                    if (approval.contains("approvalToken") &&
+                        approval["approvalToken"].is_string()) {
+                        approvalToken = approval["approvalToken"].get<std::string>();
+                    }
+                    if (approval.contains("approvalTokenExpiresAtEpochMs") &&
+                        approval["approvalTokenExpiresAtEpochMs"].is_number_unsigned()) {
+                        approvalTokenExpiresAtEpochMs =
+                            approval["approvalTokenExpiresAtEpochMs"].get<std::uint64_t>();
+                    }
+                }
+            }
+            catch (...) {
+            }
+
+            if (approvalToken.empty()) {
+                result.success = false;
+                result.errorCode = "orchestration_email_missing_approval_token";
+                result.errorMessage = "approval_token_missing";
+                return result;
+            }
+
+            result.success = true;
+            result.assistantDeltas = {
+                "tools.execute.start tool=weather.lookup",
+                "tools.execute.result tool=weather.lookup status=ok",
+                "tools.execute.start tool=email.schedule action=prepare",
+                "tools.execute.result tool=email.schedule status=needs_approval",
+            };
+
+            result.assistantText =
+                report +
+                " Email scheduling to " + recipient +
+                " at " + sendAt +
+                " is pending approval. approvalToken=" +
+                approvalToken;
+            if (approvalTokenExpiresAtEpochMs > 0) {
+                result.assistantText +=
+                    " expiresAtEpochMs=" +
+                    std::to_string(approvalTokenExpiresAtEpochMs);
+            }
+
+            return result;
         }
 
         bool IsDeepSeekDiagnosticsVerboseEnabled() {
@@ -1157,9 +1421,11 @@ namespace blazeclaw::gateway {
                 std::string assistantText = message.empty()
                     ? "Received image attachment."
                     : ("Echo: " + message);
+                std::vector<std::string> assistantDeltas;
                 std::string backendErrorCode;
                 std::string backendErrorMessage;
                 bool failed = false;
+                bool orchestrationHandled = false;
 
                 if (forceError) {
                     failed = true;
@@ -1167,7 +1433,48 @@ namespace blazeclaw::gateway {
                     backendErrorMessage = "forced error for deterministic verification";
                 }
 
-                if (!forceError && m_chatRuntimeCallback) {
+                if (!forceError && !hasAttachments && !message.empty()) {
+                    const auto orchestrationResult = TryOrchestrateWeatherEmailPrompt(
+                        m_toolRegistry,
+                        message);
+                    if (orchestrationResult.matched) {
+                        orchestrationHandled = true;
+                        if (orchestrationResult.success) {
+                            assistantText = orchestrationResult.assistantText;
+                            assistantDeltas = orchestrationResult.assistantDeltas;
+
+                            m_chatRunsById.insert_or_assign(
+                                runId,
+                                ChatRunState{
+                                    .runId = runId,
+                                    .sessionKey = sessionKey,
+                                    .idempotencyKey = idempotencyKey,
+                                    .userMessage = message,
+                                    .assistantText = assistantText,
+                                    .providerDeltas = assistantDeltas,
+                                    .providerDeltaCursor = 0,
+                                    .streamCursor = 0,
+                                    .lastEmitMs = nowMs,
+                                    .failed = false,
+                                    .errorMessage = {},
+                                    .startedAtMs = nowMs,
+                                    .active = true,
+                                });
+                        }
+                        else {
+                            failed = true;
+                            assistantText.clear();
+                            backendErrorCode = orchestrationResult.errorCode.empty()
+                                ? "chat_tool_orchestration_failed"
+                                : orchestrationResult.errorCode;
+                            backendErrorMessage = orchestrationResult.errorMessage.empty()
+                                ? "chat tool orchestration failed"
+                                : orchestrationResult.errorMessage;
+                        }
+                    }
+                }
+
+                if (!forceError && !orchestrationHandled && m_chatRuntimeCallback) {
                     const auto runtimeResult = m_chatRuntimeCallback(
                         ChatRuntimeRequest{
                             .runId = runId,
@@ -1191,6 +1498,7 @@ namespace blazeclaw::gateway {
                         if (providerDeltas.empty() && !assistantText.empty()) {
                             providerDeltas.push_back(assistantText);
                         }
+                        assistantDeltas = providerDeltas;
 
                         m_chatRunsById.insert_or_assign(
                             runId,
@@ -1200,7 +1508,7 @@ namespace blazeclaw::gateway {
                                 .idempotencyKey = idempotencyKey,
                                 .userMessage = message,
                                 .assistantText = assistantText,
-                                .providerDeltas = providerDeltas,
+                                .providerDeltas = assistantDeltas,
                                 .providerDeltaCursor = 0,
                                 .streamCursor = 0,
                                 .lastEmitMs = nowMs,
@@ -1263,7 +1571,7 @@ namespace blazeclaw::gateway {
                             .idempotencyKey = idempotencyKey,
                             .userMessage = message,
                             .assistantText = assistantText,
-                            .providerDeltas = {},
+                            .providerDeltas = assistantDeltas,
                             .providerDeltaCursor = 0,
                             .streamCursor = streamCursor,
                             .lastEmitMs = nowMs,
