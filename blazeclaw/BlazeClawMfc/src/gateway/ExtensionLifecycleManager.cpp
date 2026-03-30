@@ -460,6 +460,29 @@ std::vector<ExtensionLifecycleResult> ExtensionLifecycleManager::ActivateAll(
             continue;
         }
 
+        if (!resolvedExecPath.empty()) {
+            const auto loadResult =
+                PluginHostAdapter::LoadExtensionRuntime(manifest.id);
+            if (!loadResult.ok) {
+                SetState(
+                    manifest.id,
+                    ExtensionRuntimeState::failed,
+                    loadResult.code,
+                    loadResult.message);
+                result.success = false;
+                result.code = loadResult.code;
+                result.message = loadResult.message;
+                results.push_back(std::move(result));
+                continue;
+            }
+        }
+
+        std::vector<std::string> activatedToolIds;
+        activatedToolIds.reserve(manifest.tools.size());
+        bool executorResolutionFailed = false;
+        std::string executorErrorCode;
+        std::string executorErrorMessage;
+
         for (const auto& tool : manifest.tools) {
             if (!tool.enabled) {
                 continue;
@@ -467,12 +490,55 @@ std::vector<ExtensionLifecycleResult> ExtensionLifecycleManager::ActivateAll(
 
             GatewayToolRegistry::RuntimeToolExecutor executor = nullptr;
             if (!resolvedExecPath.empty()) {
-                executor = PluginHostAdapter::CreateExecutor(manifest.id, tool.id, resolvedExecPath);
+                const auto resolveResult =
+                    PluginHostAdapter::ResolveExecutor(
+                        manifest.id,
+                        tool.id,
+                        resolvedExecPath);
+                if (!resolveResult.resolved || !resolveResult.executor) {
+                    executorResolutionFailed = true;
+                    executorErrorCode = resolveResult.code;
+                    executorErrorMessage =
+                        resolveResult.message.empty()
+                        ? tool.id
+                        : resolveResult.message;
+                    break;
+                }
+
+                executor = resolveResult.executor;
             }
 
-            registry.RegisterRuntimeTool(ToolCatalogEntry{tool.id, tool.label, tool.category, tool.enabled}, executor);
+            registry.RegisterRuntimeTool(
+                ToolCatalogEntry{tool.id, tool.label, tool.category, tool.enabled},
+                executor);
             claimedToolIds.insert(tool.id);
+            activatedToolIds.push_back(tool.id);
             ++result.activatedTools;
+        }
+
+        if (executorResolutionFailed) {
+            for (const auto& toolId : activatedToolIds) {
+                registry.UnregisterRuntimeTool(toolId);
+                claimedToolIds.erase(toolId);
+            }
+
+            if (!resolvedExecPath.empty()) {
+                PluginHostAdapter::UnloadExtensionRuntime(manifest.id);
+            }
+
+            SetState(
+                manifest.id,
+                ExtensionRuntimeState::failed,
+                executorErrorCode.empty() ? "executor_resolution_failed" : executorErrorCode,
+                executorErrorMessage);
+            result.success = false;
+            result.activatedTools = 0;
+            result.code = executorErrorCode.empty()
+                ? "executor_resolution_failed"
+                : executorErrorCode;
+            result.message = executorErrorMessage;
+            results.push_back(std::move(result));
+            continue;
         }
 
         SetState(manifest.id, ExtensionRuntimeState::active, "activated", {});
@@ -500,6 +566,23 @@ std::vector<ExtensionLifecycleResult> ExtensionLifecycleManager::DeactivateAll(
             }
             registry.UnregisterRuntimeTool(tool.id);
             ++result.activatedTools;
+        }
+
+        if (!manifest.execPath.empty()) {
+            const auto unloadResult =
+                PluginHostAdapter::UnloadExtensionRuntime(manifest.id);
+            if (!unloadResult.ok) {
+                SetState(
+                    manifest.id,
+                    ExtensionRuntimeState::failed,
+                    unloadResult.code,
+                    unloadResult.message);
+                result.success = false;
+                result.code = unloadResult.code;
+                result.message = unloadResult.message;
+                results.push_back(std::move(result));
+                continue;
+            }
         }
 
         SetState(manifest.id, ExtensionRuntimeState::deactivated, "deactivated", {});

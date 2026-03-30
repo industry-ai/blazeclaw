@@ -11,11 +11,30 @@ using PluginExecutorFactory = std::function<GatewayToolRegistry::RuntimeToolExec
     const std::string& toolId,
     const std::string& execPath)>;
 
+struct PluginLoadResult {
+    bool ok = false;
+    std::string code;
+    std::string message;
+};
+
+struct PluginExecutorResolveResult {
+    GatewayToolRegistry::RuntimeToolExecutor executor;
+    bool resolved = false;
+    std::string code;
+    std::string message;
+};
+
 class PluginHostAdapter {
 public:
-    // Create a runtime executor for the given extension/tool if a known adapter exists.
-    // Returns nullptr when no adapter is available for the provided execPath/tool.
-    static GatewayToolRegistry::RuntimeToolExecutor CreateExecutor(
+    // Load runtime backend for an extension before resolving executors.
+    static PluginLoadResult LoadExtensionRuntime(const std::string& extensionId);
+
+    // Unload runtime backend for an extension.
+    static PluginLoadResult UnloadExtensionRuntime(const std::string& extensionId);
+
+    // Resolve a runtime executor for the given extension/tool.
+    // Returns deterministic code/message when resolution fails.
+    static PluginExecutorResolveResult ResolveExecutor(
         const std::string& extensionId,
         const std::string& toolId,
         const std::string& execPath);

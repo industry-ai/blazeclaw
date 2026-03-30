@@ -80,6 +80,50 @@ TEST_CASE("ActivateAll binds executor for allowed execPath", "[extensionlifecycl
     std::filesystem::remove_all(tmpRoot);
 }
 
+TEST_CASE("ActivateAll fails when runtime adapter is not registered", "[extensionlifecycle]") {
+    const auto tmpRoot = std::filesystem::temp_directory_path() /
+        ("blazeclaw_exttest_" + std::to_string(std::rand()));
+    std::filesystem::create_directories(tmpRoot);
+
+    const auto manifestDir = tmpRoot / "custom-runtime";
+    std::filesystem::create_directories(manifestDir);
+
+    {
+        std::ofstream out((manifestDir / "blazeclaw.extension.json").string());
+        out << "{\"tools\":[{\"id\":\"custom.tool\",\"label\":\"Custom\"}]}";
+    }
+
+    const auto dummyExe = manifestDir / "dummy.exe";
+    {
+        std::ofstream out(dummyExe.string());
+        out << "dummy";
+    }
+
+    const auto catalogPath = tmpRoot / "extensions.catalog.json";
+    {
+        std::ofstream out(catalogPath.string());
+        out << "{\"version\":1,\"extensions\":[{\"id\":\"custom-runtime\","
+               "\"path\":\"custom-runtime/blazeclaw.extension.json\","
+               "\"enabled\":true,\"execPath\":\"dummy.exe\"}]}";
+    }
+
+    ExtensionLifecycleManager mgr;
+    GatewayToolRegistry registry;
+
+    REQUIRE(mgr.LoadCatalog(catalogPath.string()) == 1);
+    const auto activationResults = mgr.ActivateAll(registry);
+    REQUIRE(activationResults.size() == 1);
+    REQUIRE_FALSE(activationResults.front().success);
+    REQUIRE(activationResults.front().code == "adapter_not_registered");
+
+    const auto extensionState = mgr.GetStateSnapshot("custom-runtime");
+    REQUIRE(extensionState.has_value());
+    REQUIRE(extensionState->state == kFailedState);
+    REQUIRE(extensionState->code == "adapter_not_registered");
+
+    std::filesystem::remove_all(tmpRoot);
+}
+
 TEST_CASE("ActivateAll fails extension for execPath outside allowed roots", "[extensionlifecycle]") {
     const auto tmpRoot = std::filesystem::temp_directory_path() / ("blazeclaw_exttest_" + std::to_string(std::rand()));
     std::filesystem::create_directories(tmpRoot);

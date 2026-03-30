@@ -24,7 +24,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <!-- No forced includes; test files include app/pch.h via AdditionalIncludeDirectories if needed -->
-      <PreprocessorDefinitions>_AFXDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;_AFXDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -32,7 +32,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\BlazeClawMfc\tests\ApprovalTokenStoreTests.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\tests\ExtensionLifecycleManagerTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\ExtensionLifecycleManager.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayToolRegistry.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\PluginHostAdapter.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayPersistencePaths.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayJsonUtils.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\executors\LobsterExecutor.cpp" />

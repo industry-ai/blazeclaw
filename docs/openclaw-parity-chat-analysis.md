@@ -140,7 +140,10 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
 - ✅ Added `LobsterExecutor` implementation and bound it during `ExtensionLifecycleManager::ActivateAll` when the lobster manifest provides an `execPath`.
 - ✅ Hardened execPath validation (canonicalization + allowed-roots) in `ExtensionLifecycleManager::ActivateAll` and added unit tests for ActivateAll behavior.
 - ✅ Implemented explicit extension lifecycle state machine (`discovered`/`loaded`/`active`/`failed`/`deactivated`) with deterministic activation order, reverse deactivation, duplicate tool-id conflict rejection, and lifecycle state/result query APIs.
-- ⚠️ Remaining for full parity: plugin runtime host bridge + workflow-engine plugin runtime equivalent to OpenClaw lobster stack (tracked in section 2.1.2).
+- ✅ Added plugin host load/unload + deterministic executor resolution contract in `PluginHostAdapter` and wired it through lifecycle activation/deactivation.
+- ✅ Removed hardcoded lobster fallback resolution path from plugin adapter runtime resolution.
+- ✅ Removed host-inline extension runtime executor registrations for `lobster`, `weather.lookup`, and `email.schedule` in `GatewayHost::Start` (extension tools now lifecycle-managed only).
+- ⚠️ Remaining for full parity: workflow-engine plugin runtime completeness and concrete non-seeded weather/email runtime backends (tracked in sections 2.1.2 and 2.3).
 
 [back to top](#index)
 
@@ -454,7 +457,8 @@ Manual memory search execute frame:
 - ✅ Added explicit `unavailable_runtime` outcome when runtime executor is missing.
 - ✅ Registered `memory.search` as a dynamic runtime executor in `GatewayHost::Start` (state-backed search over session chat history).
 - ✅ Updated preview policy marker to `dynamic_runtime_preview_v1`.
-- ⚠️ Remaining for full parity: pluggable lifecycle manager + externalized executor discovery without host-side registration code.
+- ✅ Extension runtime executors are now lifecycle-managed through plugin adapter load/resolve/unload flow.
+- ⚠️ Remaining for full parity: fully externalized runtime executor discovery/backends for concrete extension tools (weather/email/workflow runtime completeness).
 
 [back to top](#index)
 

@@ -3,35 +3,124 @@
 
 #include "executors/LobsterExecutor.h"
 #include <unordered_map>
+#include <unordered_set>
 #include <mutex>
-
-using namespace std::string_literals;
 
 namespace {
     std::unordered_map<std::string, blazeclaw::gateway::PluginExecutorFactory> g_extensionAdapters;
     std::unordered_map<std::string, blazeclaw::gateway::PluginExecutorFactory> g_toolAdapters;
+    std::unordered_set<std::string> g_loadedExtensions;
     std::mutex g_adapterMutex;
 }
 
 namespace blazeclaw::gateway {
 
-GatewayToolRegistry::RuntimeToolExecutor PluginHostAdapter::CreateExecutor(
+PluginLoadResult PluginHostAdapter::LoadExtensionRuntime(
+    const std::string& extensionId) {
+    if (extensionId.empty()) {
+        return PluginLoadResult{
+            .ok = false,
+            .code = "invalid_extension",
+            .message = "extension_id_required",
+        };
+    }
+
+    std::lock_guard<std::mutex> lock(g_adapterMutex);
+
+    if (g_loadedExtensions.find(extensionId) != g_loadedExtensions.end()) {
+        return PluginLoadResult{
+            .ok = true,
+            .code = "already_loaded",
+            .message = {},
+        };
+    }
+
+    if (g_extensionAdapters.find(extensionId) == g_extensionAdapters.end()) {
+        return PluginLoadResult{
+            .ok = false,
+            .code = "adapter_not_registered",
+            .message = extensionId,
+        };
+    }
+
+    g_loadedExtensions.insert(extensionId);
+    return PluginLoadResult{
+        .ok = true,
+        .code = "loaded",
+        .message = {},
+    };
+}
+
+PluginLoadResult PluginHostAdapter::UnloadExtensionRuntime(
+    const std::string& extensionId) {
+    if (extensionId.empty()) {
+        return PluginLoadResult{
+            .ok = false,
+            .code = "invalid_extension",
+            .message = "extension_id_required",
+        };
+    }
+
+    std::lock_guard<std::mutex> lock(g_adapterMutex);
+    const auto erased = g_loadedExtensions.erase(extensionId);
+    return PluginLoadResult{
+        .ok = true,
+        .code = erased > 0 ? "unloaded" : "not_loaded",
+        .message = {},
+    };
+}
+
+PluginExecutorResolveResult PluginHostAdapter::ResolveExecutor(
     const std::string& extensionId,
     const std::string& toolId,
     const std::string& execPath) {
     if (execPath.empty()) {
-        return nullptr;
+        return PluginExecutorResolveResult{
+            .executor = nullptr,
+            .resolved = false,
+            .code = "exec_path_missing",
+            .message = "exec_path_required",
+        };
     }
 
     std::lock_guard<std::mutex> lock(g_adapterMutex);
+
+    if (g_loadedExtensions.find(extensionId) == g_loadedExtensions.end()) {
+        return PluginExecutorResolveResult{
+            .executor = nullptr,
+            .resolved = false,
+            .code = "extension_not_loaded",
+            .message = extensionId,
+        };
+    }
 
     // Tool-specific adapters take precedence
     auto itTool = g_toolAdapters.find(toolId);
     if (itTool != g_toolAdapters.end() && itTool->second) {
         try {
-            return itTool->second(extensionId, toolId, execPath);
+            auto executor = itTool->second(extensionId, toolId, execPath);
+            if (!executor) {
+                return PluginExecutorResolveResult{
+                    .executor = nullptr,
+                    .resolved = false,
+                    .code = "tool_adapter_null_executor",
+                    .message = toolId,
+                };
+            }
+
+            return PluginExecutorResolveResult{
+                .executor = std::move(executor),
+                .resolved = true,
+                .code = "tool_adapter_resolved",
+                .message = {},
+            };
         } catch (...) {
-            return nullptr;
+            return PluginExecutorResolveResult{
+                .executor = nullptr,
+                .resolved = false,
+                .code = "tool_adapter_exception",
+                .message = toolId,
+            };
         }
     }
 
@@ -39,18 +128,38 @@ GatewayToolRegistry::RuntimeToolExecutor PluginHostAdapter::CreateExecutor(
     auto itExt = g_extensionAdapters.find(extensionId);
     if (itExt != g_extensionAdapters.end() && itExt->second) {
         try {
-            return itExt->second(extensionId, toolId, execPath);
+            auto executor = itExt->second(extensionId, toolId, execPath);
+            if (!executor) {
+                return PluginExecutorResolveResult{
+                    .executor = nullptr,
+                    .resolved = false,
+                    .code = "extension_adapter_null_executor",
+                    .message = extensionId,
+                };
+            }
+
+            return PluginExecutorResolveResult{
+                .executor = std::move(executor),
+                .resolved = true,
+                .code = "extension_adapter_resolved",
+                .message = {},
+            };
         } catch (...) {
-            return nullptr;
+            return PluginExecutorResolveResult{
+                .executor = nullptr,
+                .resolved = false,
+                .code = "extension_adapter_exception",
+                .message = extensionId,
+            };
         }
     }
 
-    // Fallback: built-in lobster handling for compatibility
-    if (extensionId == "lobster"s || toolId == "lobster"s) {
-        return blazeclaw::gateway::executors::LobsterExecutor::Create(execPath);
-    }
-
-    return nullptr;
+    return PluginExecutorResolveResult{
+        .executor = nullptr,
+        .resolved = false,
+        .code = "adapter_not_registered",
+        .message = extensionId,
+    };
 }
 
 void PluginHostAdapter::RegisterExtensionAdapter(const std::string& extensionId, PluginExecutorFactory factory) {
@@ -80,7 +189,9 @@ void PluginHostAdapter::UnregisterToolAdapter(const std::string& toolId) {
 // Register built-in adapters at static init
 struct PluginHostAdapterRegisterDefaults {
     PluginHostAdapterRegisterDefaults() {
-        PluginHostAdapter::RegisterExtensionAdapter("lobster", [](const std::string&, const std::string&, const std::string& execPath) {
+        PluginHostAdapter::RegisterExtensionAdapter(
+            "lobster",
+            [](const std::string&, const std::string&, const std::string& execPath) {
             return blazeclaw::gateway::executors::LobsterExecutor::Create(execPath);
         });
     }

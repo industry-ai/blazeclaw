@@ -5,8 +5,6 @@
 #include "GatewayProtocolCodec.h"
 #include "GatewayProtocolSchemaValidator.h"
 #include "generated/GatewayHandlerCatalog.Generated.h"
-#include "GatewayPersistencePaths.h"
-#include "executors/LobsterExecutor.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -314,112 +312,6 @@ namespace blazeclaw::gateway {
 					.count());
 		}
 
-		bool PipelineNeedsApproval(const std::string& pipeline) {
-			const std::string lowered = [&pipeline]() {
-				std::string value = pipeline;
-				std::transform(
-					value.begin(),
-					value.end(),
-					value.begin(),
-					[](unsigned char ch) {
-						return static_cast<char>(std::tolower(ch));
-					});
-				return value;
-			}();
-
-			return lowered.find("| approve") != std::string::npos;
-		}
-
-		std::string BuildLobsterRunOkEnvelope(const std::string& pipeline) {
-			return std::string("{\"protocolVersion\":1,\"ok\":true,\"status\":\"ok\",\"output\":[{\"summary\":{\"pipeline\":\"") +
-				EscapeJson(pipeline) +
-				"\",\"engine\":\"blazeclaw.workflow.runtime.v1\"}}],\"requiresApproval\":null}";
-		}
-
-		std::string BuildLobsterNeedsApprovalEnvelope(
-			const std::string& pipeline,
-			const std::string& resumeToken) {
-			return std::string("{\"protocolVersion\":1,\"ok\":true,\"status\":\"needs_approval\",\"output\":[],\"requiresApproval\":{\"type\":\"approval_request\",\"prompt\":\"Approve workflow execution?\",\"items\":[{\"pipeline\":\"") +
-				EscapeJson(pipeline) +
-				"\"}],\"resumeToken\":\"" +
-				EscapeJson(resumeToken) +
-				"\"}}";
-		}
-
-		std::string BuildLobsterResumeEnvelope(
-			const std::string& pipeline,
-			const bool approved) {
-			if (!approved) {
-				return std::string("{\"protocolVersion\":1,\"ok\":true,\"status\":\"cancelled\",\"output\":[],\"requiresApproval\":null}");
-			}
-
-			return std::string("{\"protocolVersion\":1,\"ok\":true,\"status\":\"ok\",\"output\":[{\"summary\":{\"pipeline\":\"") +
-				EscapeJson(pipeline) +
-				"\",\"resumed\":true,\"engine\":\"blazeclaw.workflow.runtime.v1\"}}],\"requiresApproval\":null}";
-		}
-
-		std::string NormalizeWeatherCity(const std::string& city) {
-			const std::string trimmed = json::Trim(city);
-			if (trimmed.empty()) {
-				return "Wuhan";
-			}
-
-			return trimmed;
-		}
-
-		std::string NormalizeWeatherDate(const std::string& date) {
-			const std::string trimmed = json::Trim(date);
-			if (trimmed.empty()) {
-				return "tomorrow";
-			}
-
-			return trimmed;
-		}
-
-		std::string BuildWeatherLookupEnvelope(
-			const std::string& city,
-			const std::string& date) {
-			return std::string("{\"ok\":true,\"provider\":\"blazeclaw.seed.weather.v1\",\"forecast\":{\"city\":\"") +
-				EscapeJson(city) +
-				"\",\"date\":\"" +
-				EscapeJson(date) +
-				"\",\"condition\":\"Cloudy\",\"temperatureC\":20,\"wind\":\"NE 9 km/h\",\"humidityPct\":68},\"note\":\"deterministic_seeded_weather\"}";
-		}
-
-		std::string BuildEmailApprovalEnvelope(
-			const std::string& recipient,
-			const std::string& subject,
-			const std::string& sendAt,
-			const std::string& token) {
-			return std::string("{\"protocolVersion\":1,\"ok\":true,\"status\":\"needs_approval\",\"output\":[],\"requiresApproval\":{\"type\":\"approval_request\",\"prompt\":\"Approve outbound email scheduling?\",\"items\":[{\"to\":\"") +
-				EscapeJson(recipient) +
-				"\",\"subject\":\"" +
-				EscapeJson(subject) +
-				"\",\"sendAt\":\"" +
-				EscapeJson(sendAt) +
-				"\"}],\"approvalToken\":\"" +
-				EscapeJson(token) +
-				"\"}}";
-		}
-
-		std::string BuildEmailScheduleResultEnvelope(
-			const bool approved,
-			const std::string& recipient,
-			const std::string& subject,
-			const std::string& sendAt) {
-			if (!approved) {
-				return "{\"protocolVersion\":1,\"ok\":true,\"status\":\"cancelled\",\"output\":[],\"requiresApproval\":null}";
-			}
-
-			return std::string("{\"protocolVersion\":1,\"ok\":true,\"status\":\"ok\",\"output\":[{\"summary\":{\"to\":\"") +
-				EscapeJson(recipient) +
-				"\",\"subject\":\"" +
-				EscapeJson(subject) +
-				"\",\"sendAt\":\"" +
-				EscapeJson(sendAt) +
-				"\",\"scheduled\":true,\"engine\":\"blazeclaw.email.scheduler.v1\"}}],\"requiresApproval\":null}";
-		}
-
 		std::string ToLowerCopy(std::string value) {
 			std::transform(
 				value.begin(),
@@ -517,9 +409,6 @@ namespace blazeclaw::gateway {
      // Activate lifecycle-managed extensions (register tools without executors).
 		m_extensionLifecycle.LoadCatalog("blazeclaw/extensions/extensions.catalog.json");
 		m_extensionLifecycle.ActivateAll(m_toolRegistry);
-
-		// Initialize approval token store
-		m_approvalStore.Initialize(ResolveGatewayStateFilePath("approvals.txt").string());
 		m_toolRegistry.RegisterRuntimeTool(
 			ToolCatalogEntry{
 				.id = "chat.send",
@@ -614,189 +503,6 @@ namespace blazeclaw::gateway {
 					.output = BuildMemorySearchEnvelope(normalizedSession, matches),
 				};
 			});
-     // If an extension supplied an execPath for lobster, prefer that; otherwise use default 'lobster'
-        std::string lobsterExec = "lobster";
-		for (const auto& ext : m_extensionLifecycle.GetExtensions()) {
-			if (ext.id == "lobster" && !ext.execPath.empty()) {
-				lobsterExec = ext.execPath;
-				break;
-			}
-		}
-
-        // register lobster executor using executors::LobsterExecutor
-		const std::string lobsterExecCaptured = lobsterExec;
-		m_toolRegistry.RegisterRuntimeTool(
-			ToolCatalogEntry{
-				.id = "lobster",
-				.label = "Lobster Workflow",
-				.category = "workflow",
-				.enabled = true,
-			},
-			executors::LobsterExecutor::Create(lobsterExecCaptured)
-		);
-
-        // Remove inline lobster handler: use m_toolRegistry.Execute when gateway handlers invoke the tool.
-		m_toolRegistry.RegisterRuntimeTool(
-			ToolCatalogEntry{
-				.id = "weather.lookup",
-				.label = "Weather Lookup",
-				.category = "data",
-				.enabled = true,
-			},
-			[](const std::string& requestedTool, const std::optional<std::string>& argsJson) {
-				std::string city;
-				std::string date;
-				if (argsJson.has_value()) {
-					json::FindStringField(argsJson.value(), "city", city);
-					json::FindStringField(argsJson.value(), "date", date);
-				}
-
-				return ToolExecuteResult{
-					.tool = requestedTool,
-					.executed = true,
-					.status = "ok",
-					.output = BuildWeatherLookupEnvelope(
-						NormalizeWeatherCity(city),
-						NormalizeWeatherDate(date)),
-				};
-			});
-		m_toolRegistry.RegisterRuntimeTool(
-			ToolCatalogEntry{
-				.id = "email.schedule",
-				.label = "Email Schedule",
-				.category = "communication",
-				.enabled = true,
-			},
-			[this](const std::string& requestedTool, const std::optional<std::string>& argsJson) {
-				if (!argsJson.has_value()) {
-					return ToolExecuteResult{
-						.tool = requestedTool,
-						.executed = false,
-						.status = "invalid_args",
-						.output = "missing_args",
-					};
-				}
-
-				std::string action;
-				json::FindStringField(argsJson.value(), "action", action);
-				if (action.empty() || action == "prepare") {
-					std::string recipient;
-					std::string subject;
-					std::string body;
-					std::string sendAt;
-					json::FindStringField(argsJson.value(), "to", recipient);
-					json::FindStringField(argsJson.value(), "subject", subject);
-					json::FindStringField(argsJson.value(), "body", body);
-					json::FindStringField(argsJson.value(), "sendAt", sendAt);
-
-					if (json::Trim(recipient).empty() ||
-						json::Trim(subject).empty() ||
-						json::Trim(body).empty() ||
-						json::Trim(sendAt).empty()) {
-						return ToolExecuteResult{
-							.tool = requestedTool,
-							.executed = false,
-							.status = "invalid_args",
-							.output = "to_subject_body_sendAt_required",
-						};
-					}
-
-					const std::string approvalToken =
-						"email-approval-" + std::to_string(CurrentEpochMs()) +
-						"-" + std::to_string(m_emailApprovalsByToken.size() + 1);
-                   m_emailApprovalsByToken.insert_or_assign(
-						approvalToken,
-						EmailApprovalState{
-							.recipient = recipient,
-							.subject = subject,
-							.body = body,
-							.sendAt = sendAt,
-							.createdAtMs = CurrentEpochMs(),
-						});
-					// persist approval token to store
-					{
-                const std::string payload = std::string("{\"to\":\"") + EscapeJson(recipient) +
-					"\",\"subject\":\"" + EscapeJson(subject) + "\",\"body\":\"" +
-					EscapeJson(body) + "\",\"sendAt\":\"" + EscapeJson(sendAt) + "\"}";
-						m_approvalStore.SaveToken(approvalToken, payload);
-					}
-
-					return ToolExecuteResult{
-						.tool = requestedTool,
-						.executed = true,
-						.status = "needs_approval",
-						.output = BuildEmailApprovalEnvelope(
-							recipient,
-							subject,
-							sendAt,
-							approvalToken),
-					};
-				}
-
-				if (action == "approve") {
-					std::string token;
-					json::FindStringField(argsJson.value(), "approvalToken", token);
-					bool approve = false;
-					if (!json::FindBoolField(argsJson.value(), "approve", approve)) {
-						return ToolExecuteResult{
-							.tool = requestedTool,
-							.executed = false,
-							.status = "invalid_args",
-							.output = "approve_required",
-						};
-					}
-
-				// try load persisted approval payload if missing in memory
-				EmailApprovalState approval;
-				auto it = m_emailApprovalsByToken.find(token);
-				if (it == m_emailApprovalsByToken.end()) {
-					const auto persisted = m_approvalStore.LoadToken(token);
-					if (!persisted.has_value()) {
-						return ToolExecuteResult{
-							.tool = requestedTool,
-							.executed = false,
-							.status = "invalid_args",
-							.output = "invalid_approval_token",
-						};
-					}
-					// parse persisted payload
-					std::string recipient;
-					std::string subject;
-					std::string body;
-					std::string sendAt;
-					json::FindStringField(persisted.value(), "to", recipient);
-					json::FindStringField(persisted.value(), "subject", subject);
-					json::FindStringField(persisted.value(), "body", body);
-					json::FindStringField(persisted.value(), "sendAt", sendAt);
-					approval = EmailApprovalState{recipient, subject, body, sendAt, CurrentEpochMs() };
-				}
-				else {
-					approval = it->second;
-					m_emailApprovalsByToken.erase(it);
-				}
-
-				// remove persisted token after consuming
-				m_approvalStore.RemoveToken(token);
-
-					return ToolExecuteResult{
-						.tool = requestedTool,
-						.executed = true,
-						.status = approve ? "ok" : "cancelled",
-						.output = BuildEmailScheduleResultEnvelope(
-							approve,
-							approval.recipient,
-							approval.subject,
-							approval.sendAt),
-					};
-				}
-
-				return ToolExecuteResult{
-					.tool = requestedTool,
-					.executed = false,
-					.status = "invalid_args",
-					.output = "action_prepare_or_approve_required",
-				};
-			});
 
 		RegisterDefaultHandlers();
 
@@ -828,8 +534,6 @@ namespace blazeclaw::gateway {
 		m_transport.Stop();
        // Deactivate registered extension tools and clear approval state
 		m_extensionLifecycle.DeactivateAll(m_toolRegistry);
-		m_workflowApprovalsByToken.clear();
-		m_emailApprovalsByToken.clear();
 		m_running = false;
 		m_bindAddress.clear();
 		m_port = 0;

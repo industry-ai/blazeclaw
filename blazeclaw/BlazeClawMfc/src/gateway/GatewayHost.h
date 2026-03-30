@@ -7,7 +7,6 @@
 #include "GatewaySessionRegistry.h"
 #include "GatewayToolRegistry.h"
 #include "ExtensionLifecycleManager.h"
-#include "ApprovalTokenStore.h"
 #include "GatewayWebSocketTransport.h"
 #include "GatewayProtocolContract.h"
 
@@ -224,19 +223,6 @@ namespace blazeclaw::gateway {
 			std::uint64_t timestampMs = 0;
 		};
 
-		struct WorkflowApprovalState {
-			std::string pipeline;
-			std::uint64_t createdAtMs = 0;
-		};
-
-		struct EmailApprovalState {
-			std::string recipient;
-			std::string subject;
-			std::string body;
-			std::string sendAt;
-			std::uint64_t createdAtMs = 0;
-		};
-
 		void RegisterDefaultHandlers();
       void RegisterChannelsHandlers();
      void RegisterEventHandlers();
@@ -285,7 +271,6 @@ namespace blazeclaw::gateway {
 		GatewaySessionRegistry m_sessionRegistry;
 		GatewayToolRegistry m_toolRegistry;
         ExtensionLifecycleManager m_extensionLifecycle;
-        ApprovalTokenStore m_approvalStore;
      std::unordered_map<std::string, AgentRunState> m_agentRuns;
 		std::unordered_map<std::string, std::string> m_agentRunByIdempotency;
 	  std::unordered_map<std::string, std::string> m_mutationPayloadByIdempotency;
@@ -293,8 +278,6 @@ namespace blazeclaw::gateway {
 	  std::unordered_map<std::string, std::deque<ChatEventState>> m_chatEventsBySession;
 	  std::unordered_map<std::string, ChatRunState> m_chatRunsById;
 	  std::unordered_map<std::string, std::string> m_chatRunByIdempotency;
-   std::unordered_map<std::string, WorkflowApprovalState> m_workflowApprovalsByToken;
-   std::unordered_map<std::string, EmailApprovalState> m_emailApprovalsByToken;
         SkillsCatalogGatewayState m_skillsCatalogState;
       SkillsRefreshCallback m_skillsRefreshCallback;
       ChatRuntimeCallback m_chatRuntimeCallback;
