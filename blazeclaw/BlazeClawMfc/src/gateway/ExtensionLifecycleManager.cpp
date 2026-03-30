@@ -3,6 +3,8 @@
 #include "GatewayJsonUtils.h"
 #include "GatewayPersistencePaths.h"
 
+#include "PluginHostAdapter.h"
+
 #include <filesystem>
 #include <windows.h>
 #include <string>
@@ -206,7 +208,13 @@ void ExtensionLifecycleManager::ActivateAll(GatewayToolRegistry& registry) const
         }
 
         for (const auto& tool : manifest.tools) {
-            registry.RegisterRuntimeTool(ToolCatalogEntry{tool.id, tool.label, tool.category, tool.enabled}, nullptr);
+            // Default to no executor; certain known extensions provide a runtime executor
+            // that can be bound at activation time (e.g., lobster workflow runner).
+            // Use plugin host adapter to create a runtime executor when available for this extension/tool
+            GatewayToolRegistry::RuntimeToolExecutor executor =
+                PluginHostAdapter::CreateExecutor(manifest.id, tool.id, manifest.execPath);
+
+            registry.RegisterRuntimeTool(ToolCatalogEntry{tool.id, tool.label, tool.category, tool.enabled}, executor);
 
             // Validate execPath if provided. Log structured telemetry when missing
             if (!manifest.execPath.empty()) {

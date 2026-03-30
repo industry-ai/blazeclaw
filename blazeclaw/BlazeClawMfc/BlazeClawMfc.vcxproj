@@ -157,6 +157,7 @@
     <ClInclude Include="src\gateway\GatewayProtocolSchemaValidator.h" />
     <ClInclude Include="src\gateway\GatewayProtocolSchemaValidator.Internal.h" />
     <ClInclude Include="src\gateway\executors\LobsterExecutor.h" />
+    <ClInclude Include="src\gateway\PluginHostAdapter.h" />
     <ClInclude Include="src\gateway\GatewaySessionRegistry.h" />
     <ClInclude Include="src\gateway\GatewayToolRegistry.h" />
     <ClInclude Include="src\gateway\GatewayWebSocketTransport.h" />
@@ -232,6 +233,7 @@
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Transport.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Tools.cpp" />
     <ClCompile Include="src\gateway\executors\LobsterExecutor.cpp" />
+    <ClCompile Include="src\gateway\PluginHostAdapter.cpp" />
     <ClCompile Include="src\gateway\GatewayMethodDispatcher.cpp" />
     <ClCompile Include="src\gateway\GatewayPersistencePaths.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolCodec.cpp" />
