@@ -2,12 +2,10 @@
 #include "ApprovalTokenStore.h"
 #include "GatewayPersistencePaths.h"
 #include "GatewayJsonUtils.h"
-#include <mutex>
 
 #include <filesystem>
 #include <fstream>
-#include <sstream>
-#include <unordered_map>
+#include <vector>
 #include <nlohmann/json.hpp>
 
 namespace blazeclaw::gateway {
@@ -38,77 +36,67 @@ static bool WriteFileAtomic(const std::string& path, const std::string& content)
     catch (...) { return false; }
 }
 
-static std::string EscapeJsonString(const std::string& v) {
-    std::string out;
-    out.reserve(v.size() + 8);
-    for (char ch : v) {
-        switch (ch) {
-        case '"': out += "\\\""; break;
-        case '\\': out += "\\\\"; break;
-        case '\n': out += "\\n"; break;
-        case '\r': out += "\\r"; break;
-        case '\t': out += "\\t"; break;
-        default: out.push_back(ch); break;
-        }
+static nlohmann::json ReadStoreJson(const std::string& path) {
+    std::string content;
+    if (!ReadFileToString(path, content) || gateway::json::Trim(content).empty()) {
+        return nlohmann::json::object();
     }
-    return out;
+
+    try {
+        auto parsed = nlohmann::json::parse(content);
+        if (!parsed.is_object()) {
+            return nlohmann::json::object();
+        }
+
+        return parsed;
+    }
+    catch (...) {
+        return nlohmann::json::object();
+    }
 }
 
-// Parse a top-level JSON object into a map of key->raw value (value substring preserved)
-static std::unordered_map<std::string, std::string> ParseTopLevelObject(const std::string& text) {
-    std::unordered_map<std::string, std::string> out;
-    const std::string trimmed = json::Trim(text);
-    if (trimmed.size() < 2 || trimmed.front() != '{' || trimmed.back() != '}') return out;
-    std::size_t i = 1;
-    while (i + 1 < trimmed.size()) {
-        while (i < trimmed.size() && (std::isspace(static_cast<unsigned char>(trimmed[i])) || trimmed[i] == ',')) ++i;
-        if (i >= trimmed.size() || trimmed[i] != '"') break;
-        std::string key; 
-        if (!json::ParseJsonStringAt(trimmed, i, key)) break;
-        while (i < trimmed.size() && std::isspace(static_cast<unsigned char>(trimmed[i]))) ++i;
-        if (i >= trimmed.size() || trimmed[i] != ':') break;
-        ++i; while (i < trimmed.size() && std::isspace(static_cast<unsigned char>(trimmed[i]))) ++i;
-        if (i >= trimmed.size()) break;
-        const std::size_t valBegin = i;
-        char start = trimmed[i];
-        if (start == '{' || start == '[') {
-            int depth = 1; bool inString = false;
-            ++i; // consume opening
-            for (; i < trimmed.size(); ++i) {
-                char ch = trimmed[i];
-                if (inString) {
-                    if (ch == '\\') { ++i; continue; }
-                    if (ch == '"') inString = false;
-                    continue;
-                }
-                if (ch == '"') { inString = true; continue; }
-                if (ch == '{' || ch == '[') ++depth;
-                else if (ch == '}' || ch == ']') { --depth; if (depth == 0) { ++i; break; } }
-            }
-        }
-        else if (start == '"') {
-            // use JSON string parser to handle escapes correctly
-            std::string sval;
-            std::size_t idx = i;
-            if (json::ParseJsonStringAt(trimmed, idx, sval)) {
-                // reconstruct as JSON string
-                std::string raw = '"' + EscapeJsonString(sval) + '"';
-                out.emplace(std::move(key), std::move(raw));
-                i = idx;
-                continue;
-            }
-            // fallback: naive skip
-            ++i; while (i < trimmed.size()) { char ch = trimmed[i]; if (ch == '\\') { i += 2; continue; } if (ch == '"') { ++i; break; } ++i; }
-        }
-        else {
-            while (i < trimmed.size() && trimmed[i] != ',' && trimmed[i] != '}') ++i;
-        }
-        const std::size_t valEnd = i;
-        if (valEnd > valBegin) {
-            out.emplace(key, trimmed.substr(valBegin, valEnd - valBegin)); 
-        }
+static bool WriteStoreJson(const std::string& path, const nlohmann::json& root) {
+    try {
+        return WriteFileAtomic(path, root.dump(2));
     }
-    return out;
+    catch (...) {
+        return false;
+    }
+}
+
+static std::optional<ApprovalSessionRecord> ParseSessionRecord(
+    const std::string& token,
+    const nlohmann::json& value) {
+    if (token.empty()) {
+        return std::nullopt;
+    }
+
+    ApprovalSessionRecord session;
+    session.token = token;
+
+    if (value.is_object() && value.contains("payload")) {
+        const auto& payload = value["payload"];
+        session.payloadJson = payload.dump();
+
+        if (value.contains("type") && value["type"].is_string()) {
+            session.type = value["type"].get<std::string>();
+        }
+
+        if (value.contains("createdAtEpochMs") &&
+            value["createdAtEpochMs"].is_number_unsigned()) {
+            session.createdAtEpochMs = value["createdAtEpochMs"].get<std::uint64_t>();
+        }
+
+        if (value.contains("expiresAtEpochMs") &&
+            value["expiresAtEpochMs"].is_number_unsigned()) {
+            session.expiresAtEpochMs = value["expiresAtEpochMs"].get<std::uint64_t>();
+        }
+
+        return session;
+    }
+
+    session.payloadJson = value.dump();
+    return session;
 }
 
 bool ApprovalTokenStore::Initialize(const std::string& filePath) {
@@ -125,60 +113,186 @@ bool ApprovalTokenStore::Initialize(const std::string& filePath) {
     std::lock_guard<std::mutex> lock(m_mutex);
     std::string existing;
     if (!ReadFileToString(m_filePath, existing) || gateway::json::Trim(existing).empty()) {
-        // write an empty JSON object
         nlohmann::json j = nlohmann::json::object();
-        return WriteFileAtomic(m_filePath, j.dump());
+        return WriteStoreJson(m_filePath, j);
     }
+
+    auto parsed = ReadStoreJson(m_filePath);
+    return WriteStoreJson(m_filePath, parsed);
+}
+
+bool ApprovalTokenStore::SaveSession(const ApprovalSessionRecord& session) {
+    if (session.token.empty() || m_filePath.empty()) {
+        return false;
+    }
+
+    try {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        auto root = ReadStoreJson(m_filePath);
+
+        nlohmann::json payload = nullptr;
+        try {
+            payload = nlohmann::json::parse(session.payloadJson);
+        }
+        catch (...) {
+            payload = session.payloadJson;
+        }
+
+        root[session.token] = nlohmann::json::object({
+            { "payload", payload },
+            { "type", session.type },
+            { "createdAtEpochMs", session.createdAtEpochMs },
+            { "expiresAtEpochMs", session.expiresAtEpochMs },
+        });
+
+        return WriteStoreJson(m_filePath, root);
+    }
+    catch (...) {
+        return false;
+    }
+}
+
+std::optional<ApprovalSessionRecord> ApprovalTokenStore::LoadSession(
+    const std::string& token) const {
+    if (token.empty() || m_filePath.empty()) {
+        return std::nullopt;
+    }
+
+    try {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        const auto root = ReadStoreJson(m_filePath);
+        if (!root.contains(token)) {
+            return std::nullopt;
+        }
+
+        return ParseSessionRecord(token, root[token]);
+    }
+    catch (...) {
+        return std::nullopt;
+    }
+}
+
+bool ApprovalTokenStore::IsTokenValid(
+    const std::string& token,
+    const std::uint64_t nowEpochMs,
+    ApprovalSessionRecord* outSession) const {
+    const auto session = LoadSession(token);
+    if (!session.has_value()) {
+        return false;
+    }
+
+    if (session->expiresAtEpochMs > 0 && nowEpochMs >= session->expiresAtEpochMs) {
+        return false;
+    }
+
+    if (outSession != nullptr) {
+        *outSession = session.value();
+    }
+
     return true;
 }
 
 bool ApprovalTokenStore::SaveToken(const std::string& token, const std::string& payload) {
-    if (token.empty() || m_filePath.empty()) return false;
+    if (token.empty() || m_filePath.empty()) {
+        return false;
+    }
+
     try {
         std::lock_guard<std::mutex> lock(m_mutex);
-        std::string content; ReadFileToString(m_filePath, content);
-        nlohmann::json j = nlohmann::json::object();
-        try { j = nlohmann::json::parse(content); if (!j.is_object()) j = nlohmann::json::object(); }
-        catch (...) { j = nlohmann::json::object(); }
+        auto root = ReadStoreJson(m_filePath);
 
-        // payload may be JSON or plain string. Try to parse payload as JSON value.
         try {
             nlohmann::json pv = nlohmann::json::parse(payload);
-            j[token] = pv;
+            root[token] = pv;
         } catch (...) {
-            j[token] = payload; // store as string
+            root[token] = payload;
         }
 
-        return WriteFileAtomic(m_filePath, j.dump(2));
-    } catch (...) { return false; }
+        return WriteStoreJson(m_filePath, root);
+    }
+    catch (...) {
+        return false;
+    }
 }
 
 std::optional<std::string> ApprovalTokenStore::LoadToken(const std::string& token) const {
-    if (token.empty() || m_filePath.empty()) return std::nullopt;
+    if (token.empty() || m_filePath.empty()) {
+        return std::nullopt;
+    }
+
     try {
         std::lock_guard<std::mutex> lock(m_mutex);
-        std::string content; if (!ReadFileToString(m_filePath, content)) return std::nullopt;
-        nlohmann::json j;
-        try { j = nlohmann::json::parse(content); }
-        catch (...) { return std::nullopt; }
+        const auto root = ReadStoreJson(m_filePath);
 
-        if (!j.contains(token)) return std::nullopt;
-        return j[token].dump();
-    } catch (...) { return std::nullopt; }
+        if (!root.contains(token)) {
+            return std::nullopt;
+        }
+
+        if (root[token].is_object() && root[token].contains("payload")) {
+            return root[token]["payload"].dump();
+        }
+
+        return root[token].dump();
+    }
+    catch (...) {
+        return std::nullopt;
+    }
+}
+
+std::size_t ApprovalTokenStore::PruneExpired(const std::uint64_t nowEpochMs) {
+    if (m_filePath.empty()) {
+        return 0;
+    }
+
+    try {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        auto root = ReadStoreJson(m_filePath);
+
+        std::vector<std::string> expiredTokens;
+        for (auto it = root.begin(); it != root.end(); ++it) {
+            const auto parsed = ParseSessionRecord(it.key(), it.value());
+            if (!parsed.has_value()) {
+                continue;
+            }
+
+            if (parsed->expiresAtEpochMs > 0 && nowEpochMs >= parsed->expiresAtEpochMs) {
+                expiredTokens.push_back(it.key());
+            }
+        }
+
+        for (const auto& token : expiredTokens) {
+            root.erase(token);
+        }
+
+        if (!expiredTokens.empty()) {
+            WriteStoreJson(m_filePath, root);
+        }
+
+        return expiredTokens.size();
+    }
+    catch (...) {
+        return 0;
+    }
 }
 
 bool ApprovalTokenStore::RemoveToken(const std::string& token) {
-    if (token.empty() || m_filePath.empty()) return false;
+    if (token.empty() || m_filePath.empty()) {
+        return false;
+    }
+
     try {
         std::lock_guard<std::mutex> lock(m_mutex);
-        std::string content; if (!ReadFileToString(m_filePath, content)) return false;
-        nlohmann::json j;
-        try { j = nlohmann::json::parse(content); }
-        catch (...) { return false; }
-        if (!j.contains(token)) return false;
-        j.erase(token);
-        return WriteFileAtomic(m_filePath, j.dump(2));
-    } catch (...) { return false; }
+        auto root = ReadStoreJson(m_filePath);
+        if (!root.contains(token)) {
+            return false;
+        }
+
+        root.erase(token);
+        return WriteStoreJson(m_filePath, root);
+    }
+    catch (...) {
+        return false;
+    }
 }
 
 } // namespace blazeclaw::gateway

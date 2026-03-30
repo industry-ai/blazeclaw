@@ -3,8 +3,17 @@
 #include <string>
 #include <optional>
 #include <mutex>
+#include <cstdint>
 
 namespace blazeclaw::gateway {
+
+struct ApprovalSessionRecord {
+    std::string token;
+    std::string type;
+    std::string payloadJson;
+    std::uint64_t createdAtEpochMs = 0;
+    std::uint64_t expiresAtEpochMs = 0;
+};
 
 class ApprovalTokenStore {
 public:
@@ -19,10 +28,25 @@ public:
     // plain string. Returns true on success.
     bool SaveToken(const std::string& token, const std::string& payload);
 
+    // Persist a typed approval session with deterministic created/expiry metadata.
+    bool SaveSession(const ApprovalSessionRecord& session);
+
     // Load a token payload. Returns nullopt if not found. The returned string
     // is a JSON textual representation when the stored value was JSON, or a
     // JSON string when a plain string was stored.
     std::optional<std::string> LoadToken(const std::string& token) const;
+
+    // Load full session metadata. Returns nullopt if not found.
+    std::optional<ApprovalSessionRecord> LoadSession(const std::string& token) const;
+
+    // Check if token exists and is valid for the provided timestamp.
+    bool IsTokenValid(
+        const std::string& token,
+        std::uint64_t nowEpochMs,
+        ApprovalSessionRecord* outSession = nullptr) const;
+
+    // Remove expired sessions and return prune count.
+    std::size_t PruneExpired(std::uint64_t nowEpochMs);
 
     // Remove token mapping
     bool RemoveToken(const std::string& token);

@@ -640,6 +640,45 @@ namespace blazeclaw::gateway {
                         "review package allowlist policy and blocked package changes";
                 }
 
+                const std::uint64_t nowEpochMs = CurrentEpochMsLocal();
+                const std::uint64_t ttlMinutes =
+                    state.autoRemediationTokenMaxAgeMinutes > 0
+                    ? static_cast<std::uint64_t>(state.autoRemediationTokenMaxAgeMinutes)
+                    : std::uint64_t{ 60 };
+                const std::uint64_t expiresAtEpochMs =
+                    nowEpochMs + (ttlMinutes * std::uint64_t{ 60000 });
+
+                std::string issuedApprovalToken;
+                if (state.autoRemediationRequiresApproval &&
+                    state.autoRemediationEnabled) {
+                    issuedApprovalToken =
+                        "remediation-approval-" + std::to_string(nowEpochMs) +
+                        "-" + std::to_string(state.driftDetectedCount + state.policyBlockedCount + 1);
+
+                    const std::string payload =
+                        "{\"tenantId\":\"" +
+                        EscapeJsonLocal(state.autoRemediationTenantId) +
+                        "\",\"recommendedAction\":\"" +
+                        EscapeJsonLocal(recommendedAction) +
+                        "\",\"reportPath\":\"" +
+                        EscapeJsonLocal(state.lastGovernanceReportPath) +
+                        "\"}";
+
+                    const ApprovalSessionRecord session{
+                        .token = issuedApprovalToken,
+                        .type = "governance.remediation",
+                        .payloadJson = payload,
+                        .createdAtEpochMs = nowEpochMs,
+                        .expiresAtEpochMs = expiresAtEpochMs,
+                    };
+
+                    if (!m_approvalStore.SaveSession(session)) {
+                        issuedApprovalToken.clear();
+                    }
+
+                    m_approvalStore.PruneExpired(nowEpochMs);
+                }
+
                 return protocol::ResponseFrame{
                     .id = request.id,
                     .ok = true,
@@ -655,6 +694,12 @@ namespace blazeclaw::gateway {
                         std::string(state.autoRemediationEnabled ? "true" : "false") +
                         ",\"autoRemediationRequiresApproval\":" +
                         std::string(state.autoRemediationRequiresApproval ? "true" : "false") +
+                        ",\"approvalToken\":\"" +
+                        EscapeJsonLocal(issuedApprovalToken) +
+                        "\",\"approvalTokenExpiresAtEpochMs\":" +
+                        std::to_string(expiresAtEpochMs) +
+                        ",\"tokenMaxAgeMinutes\":" +
+                        std::to_string(ttlMinutes) +
                         ",\"reportPath\":\"" +
                         EscapeJsonLocal(state.lastGovernanceReportPath) +
                         "\"}",
@@ -705,6 +750,67 @@ namespace blazeclaw::gateway {
                             },
                         };
                     }
+
+                    const std::uint64_t nowEpochMs = CurrentEpochMsLocal();
+                    ApprovalSessionRecord approvalSession;
+                    if (!m_approvalStore.IsTokenValid(
+                            approvalToken,
+                            nowEpochMs,
+                            &approvalSession)) {
+                        const auto existing = m_approvalStore.LoadSession(approvalToken);
+                        return protocol::ResponseFrame{
+                            .id = request.id,
+                            .ok = false,
+                            .payloadJson = std::nullopt,
+                            .error = protocol::ErrorShape{
+                                .code = existing.has_value()
+                                    ? "approval_token_expired"
+                                    : "approval_token_invalid",
+                                .message = existing.has_value()
+                                    ? "Approval token expired. Request a new remediation plan token."
+                                    : "Approval token not found.",
+                                .detailsJson = std::nullopt,
+                                .retryable = false,
+                                .retryAfterMs = std::nullopt,
+                            },
+                        };
+                    }
+
+                    if (approvalSession.type != "governance.remediation") {
+                        return protocol::ResponseFrame{
+                            .id = request.id,
+                            .ok = false,
+                            .payloadJson = std::nullopt,
+                            .error = protocol::ErrorShape{
+                                .code = "approval_token_orphaned",
+                                .message = "Approval token type mismatch for remediation execution.",
+                                .detailsJson = std::nullopt,
+                                .retryable = false,
+                                .retryAfterMs = std::nullopt,
+                            },
+                        };
+                    }
+
+                    std::string tokenTenantId;
+                    json::FindStringField(
+                        approvalSession.payloadJson,
+                        "tenantId",
+                        tokenTenantId);
+                    if (!tokenTenantId.empty() &&
+                        tokenTenantId != state.autoRemediationTenantId) {
+                        return protocol::ResponseFrame{
+                            .id = request.id,
+                            .ok = false,
+                            .payloadJson = std::nullopt,
+                            .error = protocol::ErrorShape{
+                                .code = "approval_token_orphaned",
+                                .message = "Approval token tenant mismatch for remediation execution.",
+                                .detailsJson = std::nullopt,
+                                .retryable = false,
+                                .retryAfterMs = std::nullopt,
+                            },
+                        };
+                    }
                 }
 
                 std::string action = "monitor";
@@ -712,6 +818,10 @@ namespace blazeclaw::gateway {
                     action = "enable_strict_policy";
                 } else if (state.policyBlockedCount > 0) {
                     action = "refresh_allowlist_review";
+                }
+
+                if (state.autoRemediationRequiresApproval && !approvalToken.empty()) {
+                    m_approvalStore.RemoveToken(approvalToken);
                 }
 
                 return protocol::ResponseFrame{

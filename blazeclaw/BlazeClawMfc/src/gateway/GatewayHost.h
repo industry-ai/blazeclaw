@@ -7,6 +7,7 @@
 #include "GatewaySessionRegistry.h"
 #include "GatewayToolRegistry.h"
 #include "ExtensionLifecycleManager.h"
+#include "ApprovalTokenStore.h"
 #include "GatewayWebSocketTransport.h"
 #include "GatewayProtocolContract.h"
 
@@ -271,6 +272,7 @@ namespace blazeclaw::gateway {
 		GatewaySessionRegistry m_sessionRegistry;
 		GatewayToolRegistry m_toolRegistry;
         ExtensionLifecycleManager m_extensionLifecycle;
+        ApprovalTokenStore m_approvalStore;
      std::unordered_map<std::string, AgentRunState> m_agentRuns;
 		std::unordered_map<std::string, std::string> m_agentRunByIdempotency;
 	  std::unordered_map<std::string, std::string> m_mutationPayloadByIdempotency;

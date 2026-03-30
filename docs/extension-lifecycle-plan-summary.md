@@ -32,13 +32,15 @@ Key points:
 - Lobster workflow runtime hardening: `LobsterExecutor` now uses explicit runtime settings
   (timeout/output cap/argument cap/cwd policy), deterministic process outcome mapping,
   and normalized envelope handling with robust parseable-JSON suffix extraction.
+- Approval persistence hardening: `ApprovalTokenStore` now supports typed sessions with TTL
+  metadata and restart-safe recovery checks; governance remediation flow issues persisted
+  approval tokens and validates invalid/expired/orphaned token outcomes deterministically.
 
 How to test locally:
 - Build: msbuild blazeclaw/BlazeClaw.sln /p:Configuration=Debug /p:Platform=x64
 - Run and inspect gateway state directory for extension_execpath_issues.log when missing execPath present.
 
 Next steps:
-- Add restart-safe approval token/session recovery for `resume`.
 - Integrate telemetry into structured app telemetry pipeline.
 - Add further validation for executables (permissions, probes).
 

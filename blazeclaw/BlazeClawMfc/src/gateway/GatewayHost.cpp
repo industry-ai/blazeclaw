@@ -2,6 +2,7 @@
 #include "GatewayHost.h"
 
 #include "GatewayJsonUtils.h"
+#include "GatewayPersistencePaths.h"
 #include "GatewayProtocolCodec.h"
 #include "GatewayProtocolSchemaValidator.h"
 #include "generated/GatewayHandlerCatalog.Generated.h"
@@ -409,6 +410,7 @@ namespace blazeclaw::gateway {
      // Activate lifecycle-managed extensions (register tools without executors).
 		m_extensionLifecycle.LoadCatalog("blazeclaw/extensions/extensions.catalog.json");
 		m_extensionLifecycle.ActivateAll(m_toolRegistry);
+     m_approvalStore.Initialize(ResolveGatewayStateFilePath("approvals.json").string());
 		m_toolRegistry.RegisterRuntimeTool(
 			ToolCatalogEntry{
 				.id = "chat.send",
