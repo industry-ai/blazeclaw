@@ -143,6 +143,7 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
 - ✅ Added plugin host load/unload + deterministic executor resolution contract in `PluginHostAdapter` and wired it through lifecycle activation/deactivation.
 - ✅ Removed hardcoded lobster fallback resolution path from plugin adapter runtime resolution.
 - ✅ Removed host-inline extension runtime executor registrations for `lobster`, `weather.lookup`, and `email.schedule` in `GatewayHost::Start` (extension tools now lifecycle-managed only).
+- ✅ Hardened `LobsterExecutor` runtime guardrails with explicit settings (timeout/output cap/argument cap/cwd policy), deterministic process outcome mapping, and normalized envelope handling.
 - ⚠️ Remaining for full parity: workflow-engine plugin runtime completeness and concrete non-seeded weather/email runtime backends (tracked in sections 2.1.2 and 2.3).
 
 [back to top](#index)
@@ -288,7 +289,8 @@ Then send resume using `resumeToken` from run output:
 - ✅ Added shutdown cleanup for in-memory approval token state.
 - ✅ Added smoke flow `lobsterExecute` in `Invoke-WebViewChatSmoke.ps1` for execute run/resume verification.
 - ✅ Added fixture update for `response_tools_call_execute.json` representing lobster run approval envelope.
-- ⚠️ Remaining for full OpenClaw parity: subprocess/plugin lifecycle and full Lobster command execution backend.
+- ✅ Added deterministic subprocess guardrails in `LobsterExecutor` (timeout, output cap, exit outcome mapping, cwd policy checks).
+- ⚠️ Remaining for full OpenClaw parity: deeper workflow-engine backend semantics and restart-safe approval/session recovery alignment.
 
 [back to top](#index)
 

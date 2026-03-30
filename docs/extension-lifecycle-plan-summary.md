@@ -29,13 +29,15 @@ Key points:
 - Plugin host/runtime abstraction parity: lifecycle activation now calls explicit runtime
   load/resolve operations via `PluginHostAdapter`; deactivation unloads extension runtimes,
   and host-inline extension registrations were removed from `GatewayHost` for lobster/weather/email.
+- Lobster workflow runtime hardening: `LobsterExecutor` now uses explicit runtime settings
+  (timeout/output cap/argument cap/cwd policy), deterministic process outcome mapping,
+  and normalized envelope handling with robust parseable-JSON suffix extraction.
 
 How to test locally:
 - Build: msbuild blazeclaw/BlazeClaw.sln /p:Configuration=Debug /p:Platform=x64
 - Run and inspect gateway state directory for extension_execpath_issues.log when missing execPath present.
 
 Next steps:
-- Move Lobster-class workflow execution to plugin runtime boundaries.
 - Add restart-safe approval token/session recovery for `resume`.
 - Integrate telemetry into structured app telemetry pipeline.
 - Add further validation for executables (permissions, probes).
