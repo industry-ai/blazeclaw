@@ -460,7 +460,14 @@ std::vector<ExtensionLifecycleResult> ExtensionLifecycleManager::ActivateAll(
             continue;
         }
 
-        if (!resolvedExecPath.empty()) {
+        const bool hasEnabledTools = std::any_of(
+            manifest.tools.begin(),
+            manifest.tools.end(),
+            [](const ExtensionToolManifest& tool) {
+                return tool.enabled;
+            });
+
+        if (hasEnabledTools) {
             const auto loadResult =
                 PluginHostAdapter::LoadExtensionRuntime(manifest.id);
             if (!loadResult.ok) {
@@ -488,25 +495,22 @@ std::vector<ExtensionLifecycleResult> ExtensionLifecycleManager::ActivateAll(
                 continue;
             }
 
-            GatewayToolRegistry::RuntimeToolExecutor executor = nullptr;
-            if (!resolvedExecPath.empty()) {
-                const auto resolveResult =
-                    PluginHostAdapter::ResolveExecutor(
-                        manifest.id,
-                        tool.id,
-                        resolvedExecPath);
-                if (!resolveResult.resolved || !resolveResult.executor) {
-                    executorResolutionFailed = true;
-                    executorErrorCode = resolveResult.code;
-                    executorErrorMessage =
-                        resolveResult.message.empty()
-                        ? tool.id
-                        : resolveResult.message;
-                    break;
-                }
-
-                executor = resolveResult.executor;
+            const auto resolveResult =
+                PluginHostAdapter::ResolveExecutor(
+                    manifest.id,
+                    tool.id,
+                    resolvedExecPath);
+            if (!resolveResult.resolved || !resolveResult.executor) {
+                executorResolutionFailed = true;
+                executorErrorCode = resolveResult.code;
+                executorErrorMessage =
+                    resolveResult.message.empty()
+                    ? tool.id
+                    : resolveResult.message;
+                break;
             }
+
+            GatewayToolRegistry::RuntimeToolExecutor executor = resolveResult.executor;
 
             registry.RegisterRuntimeTool(
                 ToolCatalogEntry{tool.id, tool.label, tool.category, tool.enabled},
@@ -522,7 +526,7 @@ std::vector<ExtensionLifecycleResult> ExtensionLifecycleManager::ActivateAll(
                 claimedToolIds.erase(toolId);
             }
 
-            if (!resolvedExecPath.empty()) {
+            if (hasEnabledTools) {
                 PluginHostAdapter::UnloadExtensionRuntime(manifest.id);
             }
 
@@ -568,7 +572,14 @@ std::vector<ExtensionLifecycleResult> ExtensionLifecycleManager::DeactivateAll(
             ++result.activatedTools;
         }
 
-        if (!manifest.execPath.empty()) {
+        const bool hasEnabledTools = std::any_of(
+            manifest.tools.begin(),
+            manifest.tools.end(),
+            [](const ExtensionToolManifest& tool) {
+                return tool.enabled;
+            });
+
+        if (hasEnabledTools) {
             const auto unloadResult =
                 PluginHostAdapter::UnloadExtensionRuntime(manifest.id);
             if (!unloadResult.ok) {

@@ -232,7 +232,9 @@
     <ClCompile Include="src\gateway\GatewayHost.Handlers.ScopeCluster.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Transport.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Tools.cpp" />
+    <ClCompile Include="src\gateway\executors\EmailScheduleExecutor.cpp" />
     <ClCompile Include="src\gateway\executors\LobsterExecutor.cpp" />
+    <ClCompile Include="src\gateway\executors\WeatherLookupExecutor.cpp" />
     <ClCompile Include="src\gateway\PluginHostAdapter.cpp" />
     <ClCompile Include="src\gateway\GatewayMethodDispatcher.cpp" />
     <ClCompile Include="src\gateway\GatewayPersistencePaths.cpp" />

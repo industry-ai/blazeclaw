@@ -35,6 +35,8 @@ Key points:
 - Approval persistence hardening: `ApprovalTokenStore` now supports typed sessions with TTL
   metadata and restart-safe recovery checks; governance remediation flow issues persisted
   approval tokens and validates invalid/expired/orphaned token outcomes deterministically.
+- Concrete ops-tools runtime executors are now adapter-backed via lifecycle activation
+  (`weather.lookup`, `email.schedule`) instead of host-inline registrations.
 
 How to test locally:
 - Build: msbuild blazeclaw/BlazeClaw.sln /p:Configuration=Debug /p:Platform=x64

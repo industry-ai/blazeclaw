@@ -21,6 +21,24 @@
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
-    "properties": {}
+    "properties": {
+      "weatherProvider": {
+        "type": "string",
+        "description": "Weather backend provider identifier.",
+        "default": "blazeclaw.weather.provider.v1"
+      },
+      "emailScheduler": {
+        "type": "string",
+        "description": "Email scheduling backend identifier.",
+        "default": "blazeclaw.email.scheduler.backend.v1"
+      },
+      "approvalTokenMaxAgeMinutes": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1440,
+        "default": 60,
+        "description": "Approval token TTL for outbound email scheduling."
+      }
+    }
   }
 }

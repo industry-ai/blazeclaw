@@ -393,12 +393,13 @@ Then approve with returned `approvalToken`:
   - `blazeclaw/extensions/ops-tools/blazeclaw.extension.json`
   - `blazeclaw/extensions/ops-tools/README.md`
 - ✅ Registered `ops-tools` extension in `blazeclaw/extensions/extensions.catalog.json`.
-- ✅ Implemented deterministic runtime executor `weather.lookup`.
-- ✅ Implemented approval-gated runtime executor `email.schedule` with:
+- ✅ Implemented concrete runtime adapters `weather.lookup` and `email.schedule`
+  through plugin host tool-adapter resolution (no host-inline registration).
+- ✅ Implemented approval-gated runtime executor `email.schedule` with persisted approval sessions:
   - `action=prepare` (issues `approvalToken` and returns `needs_approval` envelope)
-  - `action=approve` (commits or cancels scheduling deterministically)
+  - `action=approve` (commits/cancels scheduling with invalid/expired/orphaned token handling)
 - ✅ Added smoke flow `weatherEmailExecute` in `Invoke-WebViewChatSmoke.ps1`.
-- ⚠️ Remaining for full parity: real external weather provider integration and real outbound email scheduler backend.
+- ⚠️ Remaining for full parity: external provider integration depth (live weather API + real outbound scheduler service semantics).
 
 [back to top](#index)
 

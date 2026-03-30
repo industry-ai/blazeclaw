@@ -217,6 +217,15 @@ TEST_CASE("ActivateAll marks duplicate tool extension as failed", "[extensionlif
     ExtensionLifecycleManager mgr;
     GatewayToolRegistry registry;
 
+    PluginHostAdapter::RegisterExtensionAdapter(
+        "alpha",
+        [](const std::string&, const std::string&, const std::string&) {
+            return GatewayToolRegistry::RuntimeToolExecutor(
+                [](const std::string& requestedTool, const std::optional<std::string>&) {
+                    return ToolExecuteResult{ requestedTool, true, "ok", "alpha" };
+                });
+        });
+
     REQUIRE(mgr.LoadCatalog(catalogPath.string()) == 2);
     const auto activationResults = mgr.ActivateAll(registry);
     REQUIRE(activationResults.size() == 2);
@@ -233,6 +242,8 @@ TEST_CASE("ActivateAll marks duplicate tool extension as failed", "[extensionlif
     REQUIRE(betaState->state == kFailedState);
     REQUIRE(betaState->code == "duplicate_tool_id");
     REQUIRE(betaState->message == "weather.lookup");
+
+    PluginHostAdapter::UnregisterExtensionAdapter("alpha");
 
     std::filesystem::remove_all(tmpRoot);
 }

@@ -1,7 +1,9 @@
 #include "pch.h"
 #include "PluginHostAdapter.h"
 
+#include "executors/EmailScheduleExecutor.h"
 #include "executors/LobsterExecutor.h"
+#include "executors/WeatherLookupExecutor.h"
 #include <unordered_map>
 #include <unordered_set>
 #include <mutex>
@@ -74,15 +76,6 @@ PluginExecutorResolveResult PluginHostAdapter::ResolveExecutor(
     const std::string& extensionId,
     const std::string& toolId,
     const std::string& execPath) {
-    if (execPath.empty()) {
-        return PluginExecutorResolveResult{
-            .executor = nullptr,
-            .resolved = false,
-            .code = "exec_path_missing",
-            .message = "exec_path_required",
-        };
-    }
-
     std::lock_guard<std::mutex> lock(g_adapterMutex);
 
     if (g_loadedExtensions.find(extensionId) == g_loadedExtensions.end()) {
@@ -194,6 +187,24 @@ struct PluginHostAdapterRegisterDefaults {
             [](const std::string&, const std::string&, const std::string& execPath) {
             return blazeclaw::gateway::executors::LobsterExecutor::Create(execPath);
         });
+
+        PluginHostAdapter::RegisterExtensionAdapter(
+            "ops-tools",
+            [](const std::string&, const std::string&, const std::string&) {
+                return GatewayToolRegistry::RuntimeToolExecutor{};
+            });
+
+        PluginHostAdapter::RegisterToolAdapter(
+            "weather.lookup",
+            [](const std::string&, const std::string&, const std::string&) {
+                return blazeclaw::gateway::executors::WeatherLookupExecutor::Create();
+            });
+
+        PluginHostAdapter::RegisterToolAdapter(
+            "email.schedule",
+            [](const std::string&, const std::string&, const std::string&) {
+                return blazeclaw::gateway::executors::EmailScheduleExecutor::Create();
+            });
     }
 };
 
