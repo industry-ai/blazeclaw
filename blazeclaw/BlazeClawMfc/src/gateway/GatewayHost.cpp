@@ -6,6 +6,7 @@
 #include "GatewayProtocolCodec.h"
 #include "GatewayProtocolSchemaValidator.h"
 #include "generated/GatewayHandlerCatalog.Generated.h"
+#include "Telemetry.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -514,6 +515,12 @@ namespace blazeclaw::gateway {
 		}
 		else {
 			m_lastWarning.clear();
+		}
+
+		// Emit telemetry about startup configuration (mask sensitive values)
+		{
+			const std::string payload = "{\"bind\":" + JsonString(m_runtimeGatewayBind) + ",\"port\":" + std::to_string(m_runtimeGatewayPort) + ",\"agentModel\":" + JsonString(m_runtimeAgentModel) + "}";
+			EmitTelemetryEvent("gateway.startup.config", payload);
 		}
 
 		std::string transportError;
@@ -1435,9 +1442,21 @@ namespace blazeclaw::gateway {
 		m_dispatcher.Register("gateway.tools.call.execute", [this](const protocol::RequestFrame& request) {
 			const std::string requestedTool = ExtractStringParam(request.paramsJson, "tool");
           const std::optional<std::string> argsJson = ExtractObjectParam(request.paramsJson, "args");
-			const ToolExecuteResult execution = m_toolRegistry.Execute(requestedTool, argsJson);
+            const ToolExecuteResult execution = m_toolRegistry.Execute(requestedTool, argsJson);
+
+			// Emit telemetry for tool execution result
+			{
+				const std::string resultPayload = "{\"tool\":" + JsonString(execution.tool) + ",\"executed\":" + std::string(execution.executed ? "true" : "false") + ",\"status\":" + JsonString(execution.status) + "}";
+				EmitTelemetryEvent("gateway.tool.result", resultPayload);
+			}
 			const bool argsProvided = request.paramsJson.has_value() &&
 				request.paramsJson.value().find("\"args\"") != std::string::npos;
+
+			// Emit telemetry for tool invocation attempt
+			{
+				const std::string payload = "{\"tool\":" + JsonString(requestedTool) + ",\"argsProvided\":" + std::string(argsProvided ? "true" : "false") + "}";
+				EmitTelemetryEvent("gateway.tool.invoke", payload);
+			}
 
 			return protocol::ResponseFrame{
 				.id = request.id,

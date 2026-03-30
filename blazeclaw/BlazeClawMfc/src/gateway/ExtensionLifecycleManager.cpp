@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include "Telemetry.h"
 
 namespace blazeclaw::gateway {
 
@@ -289,6 +290,10 @@ void ExtensionLifecycleManager::SetState(
         snapshot.code,
         snapshot.message);
     OutputDebugStringA(logLine.c_str());
+
+    // Emit structured telemetry event for lifecycle transition
+    const std::string payload = "{\"extensionId\":" + JsonString(extensionId) + ",\"state\":" + JsonString(ToStateName(state)) + ",\"code\":" + JsonString(snapshot.code) + ",\"message\":" + JsonString(snapshot.message) + "}";
+    EmitTelemetryEvent("extension.lifecycle.transition", payload);
 }
 
 std::size_t ExtensionLifecycleManager::LoadCatalog(const std::string& catalogPath) {

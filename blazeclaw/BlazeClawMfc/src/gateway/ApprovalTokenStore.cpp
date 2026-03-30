@@ -2,6 +2,7 @@
 #include "ApprovalTokenStore.h"
 #include "GatewayPersistencePaths.h"
 #include "GatewayJsonUtils.h"
+#include "Telemetry.h"
 
 #include <filesystem>
 #include <fstream>
@@ -145,6 +146,14 @@ bool ApprovalTokenStore::SaveSession(const ApprovalSessionRecord& session) {
             { "expiresAtEpochMs", session.expiresAtEpochMs },
         });
 
+        // Emit telemetry for session save
+        try {
+            const std::string payloadJson = "{\"token\":\"" + session.token + "\",\"type\":" + JsonString(session.type) + ",\"createdAtEpochMs\":" + std::to_string(session.createdAtEpochMs) + ",\"expiresAtEpochMs\":" + std::to_string(session.expiresAtEpochMs) + "}";
+            EmitTelemetryEvent("approval.session.save", payloadJson);
+        } catch (...) {
+            // ignore telemetry failures
+        }
+
         return WriteStoreJson(m_filePath, root);
     }
     catch (...) {
@@ -164,6 +173,12 @@ std::optional<ApprovalSessionRecord> ApprovalTokenStore::LoadSession(
         if (!root.contains(token)) {
             return std::nullopt;
         }
+
+        // Emit telemetry for session load
+        try {
+            const std::string payloadJson = "{\"token\":\"" + token + "\"}";
+            EmitTelemetryEvent("approval.session.load", payloadJson);
+        } catch (...) {}
 
         return ParseSessionRecord(token, root[token]);
     }
