@@ -208,37 +208,82 @@ void ExtensionLifecycleManager::ActivateAll(GatewayToolRegistry& registry) const
         }
 
         for (const auto& tool : manifest.tools) {
-            // Default to no executor; certain known extensions provide a runtime executor
-            // that can be bound at activation time (e.g., lobster workflow runner).
-            // Use plugin host adapter to create a runtime executor when available for this extension/tool
-            GatewayToolRegistry::RuntimeToolExecutor executor =
-                PluginHostAdapter::CreateExecutor(manifest.id, tool.id, manifest.execPath);
-
-            registry.RegisterRuntimeTool(ToolCatalogEntry{tool.id, tool.label, tool.category, tool.enabled}, executor);
-
-            // Validate execPath if provided. Log structured telemetry when missing
+            // Harden execPath validation: canonicalize and allow only execPaths under manifest directory
+            // or under the gateway state directory. If validation passes, create an executor via the
+            // PluginHostAdapter; otherwise register the tool without an executor.
+            std::string resolvedExecPath;
             if (!manifest.execPath.empty()) {
-                const std::string exec = manifest.execPath;
-                const DWORD attrs = GetFileAttributesA(exec.c_str());
-                if (attrs == INVALID_FILE_ATTRIBUTES) {
-                    // Log to OutputDebugString and also write a lightweight event file for diagnostics
-                    std::string msg = "[ExtensionLifecycle] execPath missing for extension " + manifest.id + " -> " + exec + "\n";
-                    OutputDebugStringA(msg.c_str());
+                try {
+                    const std::filesystem::path manifestDir = std::filesystem::weakly_canonical(std::filesystem::path(DirectoryName(manifest.path)));
+                    std::filesystem::path candidate = std::filesystem::path(manifest.execPath);
+                    if (!candidate.is_absolute()) {
+                        candidate = manifestDir / candidate;
+                    }
 
-                    // write a small telemetry entry next to gateway state directory (non-fatal)
+                    std::filesystem::path canonicalExec;
+                    bool exists = false;
                     try {
-                        const auto p = ResolveGatewayStateDirectory();
-                        const auto telemetryPath = (p / std::string("extension_execpath_issues.log")).string();
-                        std::ofstream out(telemetryPath, std::ios::app);
-                        if (out.is_open()) {
-                            out << manifest.id << ": missing execPath -> " << exec << "\n";
-                            out.close();
+                        canonicalExec = std::filesystem::canonical(candidate);
+                        exists = true;
+                    }
+                    catch (...) {
+                        canonicalExec = std::filesystem::weakly_canonical(candidate);
+                        exists = std::filesystem::exists(candidate);
+                    }
+
+                    const std::filesystem::path stateDir = std::filesystem::weakly_canonical(ResolveGatewayStateDirectory());
+
+                    auto starts_with = [](const std::filesystem::path& p, const std::filesystem::path& root) {
+                        auto pstr = p.string();
+                        auto rstr = root.string();
+                        if (!rstr.empty() && rstr.back() != std::filesystem::path::preferred_separator) rstr.push_back(std::filesystem::path::preferred_separator);
+                        return pstr.rfind(rstr, 0) == 0;
+                    };
+
+                    bool allowed = false;
+                    try {
+                        if (starts_with(canonicalExec, manifestDir) || starts_with(canonicalExec, stateDir)) {
+                            allowed = true;
                         }
-                    } catch (...) {
-                        // ignore failures writing telemetry
+                    }
+                    catch (...) {
+                        allowed = false;
+                    }
+
+                    if (allowed && exists && std::filesystem::is_regular_file(canonicalExec)) {
+                        resolvedExecPath = canonicalExec.string();
+                    }
+                    else {
+                        // Log invalid execPath for diagnostics
+                        std::string msg = "[ExtensionLifecycle] execPath invalid or outside allowed roots for extension " + manifest.id + " -> " + candidate.string() + "\n";
+                        OutputDebugStringA(msg.c_str());
+                        try {
+                            const auto p = ResolveGatewayStateDirectory();
+                            const auto telemetryPath = (p / std::string("extension_execpath_issues.log")).string();
+                            std::ofstream out(telemetryPath, std::ios::app);
+                            if (out.is_open()) {
+                                out << manifest.id << ": execPath_invalid -> " << candidate.string() << "\n";
+                                out.close();
+                            }
+                        } catch (...) {
+                            // ignore failures writing telemetry
+                        }
+                        resolvedExecPath.clear();
                     }
                 }
+                catch (...) {
+                    // conservative fallback: do not bind executor
+                    resolvedExecPath.clear();
+                }
             }
+
+            // Use plugin host adapter to create a runtime executor when available for this extension/tool
+            GatewayToolRegistry::RuntimeToolExecutor executor = nullptr;
+            if (!resolvedExecPath.empty()) {
+                executor = PluginHostAdapter::CreateExecutor(manifest.id, tool.id, resolvedExecPath);
+            }
+
+            registry.RegisterRuntimeTool(ToolCatalogEntry{tool.id, tool.label, tool.category, tool.enabled}, executor);
         }
     }
 }
