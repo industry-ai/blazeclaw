@@ -21,12 +21,17 @@ Key points:
 - Unit tests: Added Catch2 unit tests exercising `ExtensionLifecycleManager::ActivateAll` to verify
   correct binding behavior for allowed and disallowed execPath cases.
 
+- Lifecycle state machine completion: `ExtensionLifecycleManager` now tracks explicit states
+  (`discovered`, `loaded`, `active`, `failed`, `deactivated`), returns activation/deactivation
+  result records, enforces deterministic activation order, and deactivates in reverse order.
+- Activation conflict handling: duplicate enabled tool ids across extensions are now rejected at
+  activation time; the conflicting extension is moved to `failed` with code `duplicate_tool_id`.
+
 How to test locally:
 - Build: msbuild blazeclaw/BlazeClaw.sln /p:Configuration=Debug /p:Platform=x64
 - Run and inspect gateway state directory for extension_execpath_issues.log when missing execPath present.
 
 Next steps:
-- Implement lifecycle state machine completion (`loaded`/`active`/`failed`/`deactivated`).
 - Add plugin runtime host bridge so runtime executors bind on activation.
 - Move Lobster-class workflow execution to plugin runtime boundaries.
 - Add restart-safe approval token/session recovery for `resume`.

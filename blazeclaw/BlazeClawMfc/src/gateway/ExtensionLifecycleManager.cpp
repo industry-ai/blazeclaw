@@ -9,6 +9,7 @@
 #include <windows.h>
 #include <string>
 #include <iostream>
+#include <unordered_set>
 
 #include <algorithm>
 #include <fstream>
@@ -130,8 +131,170 @@ static std::vector<std::string> SplitTopLevelObjects(const std::string& arrayJso
     return objects;
 }
 
+static const char* ToStateName(const ExtensionRuntimeState state) {
+    switch (state) {
+    case ExtensionRuntimeState::discovered:
+        return "discovered";
+    case ExtensionRuntimeState::loaded:
+        return "loaded";
+    case ExtensionRuntimeState::active:
+        return "active";
+    case ExtensionRuntimeState::failed:
+        return "failed";
+    case ExtensionRuntimeState::deactivated:
+        return "deactivated";
+    default:
+        return "unknown";
+    }
+}
+
+static std::string BuildLifecycleLogLine(
+    const std::string& extensionId,
+    const ExtensionRuntimeState state,
+    const std::string& code,
+    const std::string& message) {
+    std::string line = std::string("[ExtensionLifecycle] extension=") + extensionId +
+        " state=" + ToStateName(state);
+    if (!code.empty()) {
+        line += " code=" + code;
+    }
+    if (!message.empty()) {
+        line += " message=" + message;
+    }
+    line += "\n";
+    return line;
+}
+
+static bool IsAllowedToolId(const std::string& toolId) {
+    if (toolId.empty()) {
+        return false;
+    }
+
+    bool previousDot = false;
+    for (const char ch : toolId) {
+        if (ch == '.') {
+            if (previousDot) {
+                return false;
+            }
+            previousDot = true;
+            continue;
+        }
+
+        previousDot = false;
+        if ((ch >= 'a' && ch <= 'z') ||
+            (ch >= '0' && ch <= '9') ||
+            ch == '_' ||
+            ch == '-') {
+            continue;
+        }
+
+        return false;
+    }
+
+    return toolId.front() != '.' && toolId.back() != '.';
+}
+
+static bool ResolveExecPathForManifest(
+    const ExtensionManifest& manifest,
+    std::string& resolvedExecPath,
+    std::string& errorCode,
+    std::string& errorMessage) {
+    resolvedExecPath.clear();
+    errorCode.clear();
+    errorMessage.clear();
+
+    if (manifest.execPath.empty()) {
+        return true;
+    }
+
+    try {
+        const std::filesystem::path manifestDir =
+            std::filesystem::weakly_canonical(
+                std::filesystem::path(DirectoryName(manifest.path)));
+        std::filesystem::path candidate = std::filesystem::path(manifest.execPath);
+        if (!candidate.is_absolute()) {
+            candidate = manifestDir / candidate;
+        }
+
+        std::filesystem::path canonicalExec;
+        bool exists = false;
+        try {
+            canonicalExec = std::filesystem::canonical(candidate);
+            exists = true;
+        }
+        catch (...) {
+            canonicalExec = std::filesystem::weakly_canonical(candidate);
+            exists = std::filesystem::exists(candidate);
+        }
+
+        const std::filesystem::path stateDir =
+            std::filesystem::weakly_canonical(ResolveGatewayStateDirectory());
+
+        auto startsWithRoot = [](
+            const std::filesystem::path& path,
+            const std::filesystem::path& root) {
+                std::string pathText = path.string();
+                std::string rootText = root.string();
+                if (!rootText.empty() &&
+                    rootText.back() != std::filesystem::path::preferred_separator) {
+                    rootText.push_back(std::filesystem::path::preferred_separator);
+                }
+                return pathText.rfind(rootText, 0) == 0;
+            };
+
+        const bool allowed =
+            startsWithRoot(canonicalExec, manifestDir) ||
+            startsWithRoot(canonicalExec, stateDir);
+        if (!allowed) {
+            errorCode = "exec_path_outside_allowed_roots";
+            errorMessage = candidate.string();
+            return false;
+        }
+
+        if (!exists || !std::filesystem::is_regular_file(canonicalExec)) {
+            errorCode = "exec_path_missing";
+            errorMessage = candidate.string();
+            return false;
+        }
+
+        resolvedExecPath = canonicalExec.string();
+        return true;
+    }
+    catch (...) {
+        errorCode = "exec_path_resolution_failed";
+        errorMessage = manifest.execPath;
+        return false;
+    }
+}
+
+void ExtensionLifecycleManager::SetState(
+    const std::string& extensionId,
+    const ExtensionRuntimeState state,
+    std::string code,
+    std::string message) {
+    if (extensionId.empty()) {
+        return;
+    }
+
+    ExtensionStateSnapshot snapshot;
+    snapshot.extensionId = extensionId;
+    snapshot.state = state;
+    snapshot.code = std::move(code);
+    snapshot.message = std::move(message);
+    m_states.insert_or_assign(extensionId, snapshot);
+
+    const std::string logLine = BuildLifecycleLogLine(
+        extensionId,
+        state,
+        snapshot.code,
+        snapshot.message);
+    OutputDebugStringA(logLine.c_str());
+}
+
 std::size_t ExtensionLifecycleManager::LoadCatalog(const std::string& catalogPath) {
     m_extensions.clear();
+    m_states.clear();
+
     const std::string catalogText = ReadFileUtf8(catalogPath);
     if (catalogText.empty()) {
         return 0;
@@ -162,6 +325,7 @@ std::size_t ExtensionLifecycleManager::LoadCatalog(const std::string& catalogPat
         manifest.id = id;
         manifest.path = JoinPath(catalogDirectory, path);
         manifest.enabled = enabled;
+        SetState(manifest.id, ExtensionRuntimeState::discovered, "catalog_entry_loaded", {});
 
         // optional execPath
         std::string execPathVal;
@@ -170,6 +334,12 @@ std::size_t ExtensionLifecycleManager::LoadCatalog(const std::string& catalogPat
 
         const std::string manifestText = ReadFileUtf8(manifest.path);
         if (manifestText.empty()) {
+            SetState(
+                manifest.id,
+                ExtensionRuntimeState::failed,
+                "manifest_unreadable",
+                manifest.path);
+            m_extensions.push_back(std::move(manifest));
             continue;
         }
 
@@ -195,105 +365,177 @@ std::size_t ExtensionLifecycleManager::LoadCatalog(const std::string& catalogPat
             ++registered;
         }
 
+        SetState(manifest.id, ExtensionRuntimeState::loaded, "manifest_loaded", {});
         m_extensions.push_back(std::move(manifest));
     }
 
     return registered;
 }
 
-void ExtensionLifecycleManager::ActivateAll(GatewayToolRegistry& registry) const {
+std::vector<ExtensionLifecycleResult> ExtensionLifecycleManager::ActivateAll(
+    GatewayToolRegistry& registry) {
+    std::vector<ExtensionLifecycleResult> results;
+    results.reserve(m_extensions.size());
+
+    std::unordered_set<std::string> claimedToolIds;
+
     for (const auto& manifest : m_extensions) {
+        ExtensionLifecycleResult result;
+        result.extensionId = manifest.id;
+
         if (!manifest.enabled) {
+            SetState(manifest.id, ExtensionRuntimeState::deactivated, "extension_disabled", {});
+            result.success = true;
+            result.code = "extension_disabled";
+            results.push_back(std::move(result));
+            continue;
+        }
+
+        const auto stateIt = m_states.find(manifest.id);
+        if (stateIt != m_states.end() && stateIt->second.state == ExtensionRuntimeState::failed) {
+            result.success = false;
+            result.code = stateIt->second.code;
+            result.message = stateIt->second.message;
+            results.push_back(std::move(result));
+            continue;
+        }
+
+        bool duplicateConflict = false;
+        std::string duplicateToolId;
+        for (const auto& tool : manifest.tools) {
+            if (!tool.enabled) {
+                continue;
+            }
+
+            if (!IsAllowedToolId(tool.id)) {
+                SetState(
+                    manifest.id,
+                    ExtensionRuntimeState::failed,
+                    "invalid_tool_id",
+                    tool.id);
+                duplicateConflict = true;
+                break;
+            }
+
+            if (claimedToolIds.find(tool.id) != claimedToolIds.end()) {
+                duplicateConflict = true;
+                duplicateToolId = tool.id;
+                break;
+            }
+        }
+
+        if (duplicateConflict) {
+            if (!duplicateToolId.empty()) {
+                SetState(
+                    manifest.id,
+                    ExtensionRuntimeState::failed,
+                    "duplicate_tool_id",
+                    duplicateToolId);
+            }
+
+            result.success = false;
+            result.code = m_states[manifest.id].code;
+            result.message = m_states[manifest.id].message;
+            results.push_back(std::move(result));
+            continue;
+        }
+
+        std::string resolvedExecPath;
+        std::string execErrorCode;
+        std::string execErrorMessage;
+        if (!ResolveExecPathForManifest(
+                manifest,
+                resolvedExecPath,
+                execErrorCode,
+                execErrorMessage)) {
+            SetState(
+                manifest.id,
+                ExtensionRuntimeState::failed,
+                execErrorCode,
+                execErrorMessage);
+            result.success = false;
+            result.code = execErrorCode;
+            result.message = execErrorMessage;
+            results.push_back(std::move(result));
             continue;
         }
 
         for (const auto& tool : manifest.tools) {
-            // Harden execPath validation: canonicalize and allow only execPaths under manifest directory
-            // or under the gateway state directory. If validation passes, create an executor via the
-            // PluginHostAdapter; otherwise register the tool without an executor.
-            std::string resolvedExecPath;
-            if (!manifest.execPath.empty()) {
-                try {
-                    const std::filesystem::path manifestDir = std::filesystem::weakly_canonical(std::filesystem::path(DirectoryName(manifest.path)));
-                    std::filesystem::path candidate = std::filesystem::path(manifest.execPath);
-                    if (!candidate.is_absolute()) {
-                        candidate = manifestDir / candidate;
-                    }
-
-                    std::filesystem::path canonicalExec;
-                    bool exists = false;
-                    try {
-                        canonicalExec = std::filesystem::canonical(candidate);
-                        exists = true;
-                    }
-                    catch (...) {
-                        canonicalExec = std::filesystem::weakly_canonical(candidate);
-                        exists = std::filesystem::exists(candidate);
-                    }
-
-                    const std::filesystem::path stateDir = std::filesystem::weakly_canonical(ResolveGatewayStateDirectory());
-
-                    auto starts_with = [](const std::filesystem::path& p, const std::filesystem::path& root) {
-                        auto pstr = p.string();
-                        auto rstr = root.string();
-                        if (!rstr.empty() && rstr.back() != std::filesystem::path::preferred_separator) rstr.push_back(std::filesystem::path::preferred_separator);
-                        return pstr.rfind(rstr, 0) == 0;
-                    };
-
-                    bool allowed = false;
-                    try {
-                        if (starts_with(canonicalExec, manifestDir) || starts_with(canonicalExec, stateDir)) {
-                            allowed = true;
-                        }
-                    }
-                    catch (...) {
-                        allowed = false;
-                    }
-
-                    if (allowed && exists && std::filesystem::is_regular_file(canonicalExec)) {
-                        resolvedExecPath = canonicalExec.string();
-                    }
-                    else {
-                        // Log invalid execPath for diagnostics
-                        std::string msg = "[ExtensionLifecycle] execPath invalid or outside allowed roots for extension " + manifest.id + " -> " + candidate.string() + "\n";
-                        OutputDebugStringA(msg.c_str());
-                        try {
-                            const auto p = ResolveGatewayStateDirectory();
-                            const auto telemetryPath = (p / std::string("extension_execpath_issues.log")).string();
-                            std::ofstream out(telemetryPath, std::ios::app);
-                            if (out.is_open()) {
-                                out << manifest.id << ": execPath_invalid -> " << candidate.string() << "\n";
-                                out.close();
-                            }
-                        } catch (...) {
-                            // ignore failures writing telemetry
-                        }
-                        resolvedExecPath.clear();
-                    }
-                }
-                catch (...) {
-                    // conservative fallback: do not bind executor
-                    resolvedExecPath.clear();
-                }
+            if (!tool.enabled) {
+                continue;
             }
 
-            // Use plugin host adapter to create a runtime executor when available for this extension/tool
             GatewayToolRegistry::RuntimeToolExecutor executor = nullptr;
             if (!resolvedExecPath.empty()) {
                 executor = PluginHostAdapter::CreateExecutor(manifest.id, tool.id, resolvedExecPath);
             }
 
             registry.RegisterRuntimeTool(ToolCatalogEntry{tool.id, tool.label, tool.category, tool.enabled}, executor);
+            claimedToolIds.insert(tool.id);
+            ++result.activatedTools;
         }
+
+        SetState(manifest.id, ExtensionRuntimeState::active, "activated", {});
+        result.success = true;
+        result.code = "activated";
+        results.push_back(std::move(result));
     }
+
+    return results;
 }
 
-void ExtensionLifecycleManager::DeactivateAll(GatewayToolRegistry& registry) const {
-    for (const auto& manifest : m_extensions) {
+std::vector<ExtensionLifecycleResult> ExtensionLifecycleManager::DeactivateAll(
+    GatewayToolRegistry& registry) {
+    std::vector<ExtensionLifecycleResult> results;
+    results.reserve(m_extensions.size());
+
+    for (auto it = m_extensions.rbegin(); it != m_extensions.rend(); ++it) {
+        const auto& manifest = *it;
+        ExtensionLifecycleResult result;
+        result.extensionId = manifest.id;
+
         for (const auto& tool : manifest.tools) {
+            if (!tool.enabled) {
+                continue;
+            }
             registry.UnregisterRuntimeTool(tool.id);
+            ++result.activatedTools;
         }
+
+        SetState(manifest.id, ExtensionRuntimeState::deactivated, "deactivated", {});
+        result.success = true;
+        result.code = "deactivated";
+        results.push_back(std::move(result));
     }
+
+    return results;
+}
+
+std::vector<ExtensionStateSnapshot> ExtensionLifecycleManager::GetStateSnapshots() const {
+    std::vector<ExtensionStateSnapshot> snapshots;
+    snapshots.reserve(m_states.size());
+    for (const auto& [_, snapshot] : m_states) {
+        snapshots.push_back(snapshot);
+    }
+
+    std::sort(
+        snapshots.begin(),
+        snapshots.end(),
+        [](const ExtensionStateSnapshot& left, const ExtensionStateSnapshot& right) {
+            return left.extensionId < right.extensionId;
+        });
+
+    return snapshots;
+}
+
+std::optional<ExtensionStateSnapshot> ExtensionLifecycleManager::GetStateSnapshot(
+    const std::string& extensionId) const {
+    const auto it = m_states.find(extensionId);
+    if (it == m_states.end()) {
+        return std::nullopt;
+    }
+
+    return it->second;
 }
 
 } // namespace blazeclaw::gateway

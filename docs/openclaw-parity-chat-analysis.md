@@ -139,7 +139,8 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
 - ✅ Switched `chat.send` tool execution path to runtime-backed gateway routing (real `chat.send` handler invocation) instead of seeded-only output.
 - ✅ Added `LobsterExecutor` implementation and bound it during `ExtensionLifecycleManager::ActivateAll` when the lobster manifest provides an `execPath`.
 - ✅ Hardened execPath validation (canonicalization + allowed-roots) in `ExtensionLifecycleManager::ActivateAll` and added unit tests for ActivateAll behavior.
-- ⚠️ Remaining for full parity: extension lifecycle manager and workflow-engine plugin runtime equivalent to OpenClaw lobster stack (tracked in section 2.1.2).
+- ✅ Implemented explicit extension lifecycle state machine (`discovered`/`loaded`/`active`/`failed`/`deactivated`) with deterministic activation order, reverse deactivation, duplicate tool-id conflict rejection, and lifecycle state/result query APIs.
+- ⚠️ Remaining for full parity: plugin runtime host bridge + workflow-engine plugin runtime equivalent to OpenClaw lobster stack (tracked in section 2.1.2).
 
 [back to top](#index)
 
