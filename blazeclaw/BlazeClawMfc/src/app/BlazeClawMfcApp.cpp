@@ -422,6 +422,8 @@ BOOL CBlazeClawMFCApp::InitInstance() {
   AppendStartupLocalModelStatus(m_config, m_serviceManager);
 	AppendStartupEmbeddingsStatus(m_config, m_serviceManager);
 
+	m_bStartupComplete = TRUE;
+
 	return TRUE;
 }
 
@@ -454,11 +456,15 @@ blazeclaw::core::ServiceManager& CBlazeClawMFCApp::Services() noexcept {
 
 void CBlazeClawMFCApp::OnFileNew()
 {
-	// Block CWinAppEx::OnFileNew (would show multi-template dialog).
-	// Forward to CMainFrame::OnWindowNew which shows the tab-type selection.
+	// Do nothing until InitInstance finishes. Early calls (e.g. shell / framework during load)
+	// would otherwise open WebView+Chat here while CreateTwoTabbedGroups also runs → three tabs.
+	if (!m_bStartupComplete)
+		return;
+
+	// With an active MDI child, MFC routes ID_FILE_NEW to CWinApp::OnCmdMsg before the main frame.
 	CMainFrame* pMain = DYNAMIC_DOWNCAST(CMainFrame, m_pMainWnd);
-	if (pMain)
-		pMain->PostMessage(WM_COMMAND, ID_WINDOW_NEW_WEBVIEW);
+	if (pMain != nullptr)
+		pMain->OpenNewTabWithChoiceDialog();
 }
 
 const blazeclaw::core::ServiceManager& CBlazeClawMFCApp::Services() const noexcept {

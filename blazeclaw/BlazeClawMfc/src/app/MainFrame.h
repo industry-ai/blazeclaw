@@ -81,6 +81,13 @@ protected:
 	// New tab creation commands
 	afx_msg void OnWindowNew();
 	afx_msg void OnUpdateWindowNewWebViewOnly(CCmdUI* pCmdUI);
+
+public:
+	// Called by app to open a tab without showing dialog
+	void OpenDefaultTab() { OpenWebViewPlusChatTab(); }
+	// File / Ribbon "New" — MDI routes ID_FILE_NEW to CWinApp while a child is active, so the app calls this too.
+	void OpenNewTabWithChoiceDialog();
+
 private:
 	void OpenWebViewOnlyTab();
 	void OpenWebViewPlusChatTab();

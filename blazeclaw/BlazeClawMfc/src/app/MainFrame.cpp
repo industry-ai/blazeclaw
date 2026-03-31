@@ -14,8 +14,6 @@
 #include "CredentialStore.h"
 #include "ApiKeyDialog.h"
 #include "NewTabDialog.h"
-#include "ChildFrm.h"
-#include "ChatView.h"
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -150,15 +148,13 @@ void CMainFrame::CreateTwoTabbedGroups()
 {
 	// MDI Tabbed Groups already enabled in OnCreate via EnableMDITabbedGroups.
 
-	// Create first WebView-only tab
+	// Default startup: two side-by-side groups, each with a single WebView-only tab.
 	OpenWebViewOnlyTab();
-
-	// Create second WebView-only tab
-	OpenWebViewPlusChatTab();
+	OpenWebViewOnlyTab();
 
 	RecalcLayout(FALSE);
 
-	// Move the newly created (active) tab to a new group for side-by-side layout
+	// Move the active (second) tab into a new group for side-by-side layout
 	MDITabNewGroup(TRUE);
 	RecalcLayout(FALSE);
 }
@@ -1169,31 +1165,28 @@ void CMainFrame::OnUpdateExtensionDeepseek(CCmdUI* pCmdUI)
 	pCmdUI->Enable(TRUE);
 }
 
-void CMainFrame::OnWindowNew()
+void CMainFrame::OpenNewTabWithChoiceDialog()
 {
-	/*CNewTabDialog dlg(this);
-	TRACE(_T("[CMainFrame::OnWindowNew] dialog created, showing modal\n"));
-	int nResult = dlg.DoModal();
-	TRACE(_T("[CMainFrame::OnWindowNew] dialog returned %d, selected type=%d\n"),
-		nResult, static_cast<int>(dlg.GetSelectedTabType()));
-	if (nResult != IDOK)
+	CNewTabDialog dlg(this);
+	if (dlg.DoModal() != IDOK)
 		return;
 
-	if (dlg.GetSelectedTabType() == NewTabType::WebViewOnly) {
-		TRACE(_T("[CMainFrame::OnWindowNew] opening WebView-only tab\n"));
+	if (dlg.GetSelectedTabType() == NewTabType::WebViewOnly)
 		OpenWebViewOnlyTab();
-	} else {
-		TRACE(_T("[CMainFrame::OnWindowNew] opening WebView+Chat tab\n"));
+	else
 		OpenWebViewPlusChatTab();
-	}*/
-	OpenWebViewOnlyTab();
+}
+
+void CMainFrame::OnWindowNew()
+{
+	OpenNewTabWithChoiceDialog();
 }
 
 void CMainFrame::OpenWebViewOnlyTab()
 {
 	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
 	auto* tpl = app ? app->GetWebViewOnlyDocTemplate() : nullptr;
-	TRACE(_T("[CMainFrame::OpenWebViewOnlyTab] app=%p template=%p\n"), app, tpl);
+	TRACE(_T("[CMainFrame::OpenWebViewOnlyTab] app=%p tpl=%p\n"), app, tpl);
 	if (!app || !tpl)
 		return;
 
@@ -1209,7 +1202,7 @@ void CMainFrame::OpenWebViewPlusChatTab()
 {
 	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
 	auto* tpl = app ? app->GetChatDocTemplate() : nullptr;
-	TRACE(_T("[CMainFrame::OpenWebViewPlusChatTab] app=%p template=%p\n"), app, tpl);
+	TRACE(_T("[CMainFrame::OpenWebViewPlusChatTab] app=%p tpl=%p\n"), app, tpl);
 	if (!tpl)
 		return;
 

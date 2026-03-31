@@ -25,6 +25,9 @@ public:
 // Implementation
 	UINT  m_nAppLook;
 	BOOL  m_bHiColorIcons;
+	// TRUE after InitInstance completes. OnFileNew is a no-op until then so startup
+	// only creates the two WebView-only groups from CreateTwoTabbedGroups.
+	BOOL  m_bStartupComplete = FALSE;
 
 	virtual void PreLoadState();
 	virtual void LoadCustomState();

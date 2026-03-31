@@ -5,7 +5,6 @@
 #include "framework.h"
 #include "BlazeClawMFCApp.h"
 #include "WebViewOnlyChildFrame.h"
-#include "BlazeClawMFCView.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -36,27 +35,9 @@ BOOL CWebViewOnlyChildFrame::PreCreateWindow(CREATESTRUCT& cs)
 	return TRUE;
 }
 
-BOOL CWebViewOnlyChildFrame::OnCreateClient(LPCREATESTRUCT* /*lpcs*/, CCreateContext* pContext)
-{
-	// Create a single view pane that fills the entire client area - pure WebView mode
-	if (!m_wndSplitter.CreateStatic(this, 1, 1))
-	{
-		TRACE0("Failed to create static splitter for WebView-only mode\n");
-		return FALSE;
-	}
-
-	// Single pane: WebView (full window)
-	if (!m_wndSplitter.CreateView(0, 0, RUNTIME_CLASS(CBlazeClawMFCView), CSize(100, 100), pContext))
-	{
-		TRACE0("Failed to create WebView-only pane\n");
-		return FALSE;
-	}
-
-	m_wndSplitter.SetColumnInfo(0, 800, 100);
-	m_wndSplitter.RecalcLayout();
-
-	return TRUE;
-}
+// No OnCreateClient override: CMultiDocTemplate already pairs this frame with CBlazeClawMFCView.
+// CMDIChildWndEx::OnCreateClient creates that single view. A CSplitterWnd cannot be 1x1 — MFC
+// asserts (CreateStatic requires at least two panes).
 
 // CWebViewOnlyChildFrame diagnostics
 
@@ -71,4 +52,3 @@ void CWebViewOnlyChildFrame::Dump(CDumpContext& dc) const
 	CMDIChildWndEx::Dump(dc);
 }
 #endif //_DEBUG
-
