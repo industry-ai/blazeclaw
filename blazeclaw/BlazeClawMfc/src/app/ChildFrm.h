@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <afxext.h>
+
 class CChildFrame : public CMDIChildWndEx
 {
 	DECLARE_DYNCREATE(CChildFrame)
@@ -30,7 +32,7 @@ public:
 
 // Overrides
 	virtual BOOL PreCreateWindow(CREATESTRUCT& cs);
-	virtual BOOL OnCreateClient(LPCREATESTRUCT lpcs, CCreateContext* pContext);
+	virtual BOOL OnCreateClient(LPCREATESTRUCT* lpcs, CCreateContext* pContext);
 
 // Implementation
 public:

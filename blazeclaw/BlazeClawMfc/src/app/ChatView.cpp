@@ -284,6 +284,7 @@ void CChatView::OnDraw(CDC* /*pDC*/)
 
 int CChatView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 {
+	TRACE(_T("[CChatView::OnCreate] this=0x%p\n"), this);
 	if (CView::OnCreate(lpCreateStruct) == -1)
 		return -1;
 
@@ -297,6 +298,7 @@ int CChatView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 		TRACE0("Failed to create message list\n");
 		return -1;
 	}
+	TRACE(_T("  m_wndMsgList created HWND=0x%p VISIBLE\n"), m_wndMsgList.m_hWnd);
 
 	// 输入框
 	if (!m_wndInput.Create(WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL |

@@ -19,6 +19,7 @@
 #include "ChildFrm.h"
 #include "BlazeClawMFCView.h"
 #include "ChatView.h"
+#include "WebViewOnlyChildFrame.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -39,7 +40,7 @@ END_MESSAGE_MAP()
 
 CChildFrame::CChildFrame() noexcept
 {
-	// TODO: add member initialization code here
+	TRACE(_T("[CChildFrame::CChildFrame] CONSTRUCTOR called\n"));
 }
 
 CChildFrame::~CChildFrame()
@@ -49,15 +50,29 @@ CChildFrame::~CChildFrame()
 
 BOOL CChildFrame::PreCreateWindow(CREATESTRUCT& cs)
 {
+	TRACE(_T("[CChildFrame::PreCreateWindow] ENTER\n"));
 	// TODO: Modify the Window class or styles here by modifying the CREATESTRUCT cs
-	if( !CMDIChildWndEx::PreCreateWindow(cs) )
+	if( !CMDIChildWndEx::PreCreateWindow(cs) ) {
+		TRACE(_T("[CChildFrame::PreCreateWindow] FAILED - CMDIChildWndEx::PreCreateWindow returned FALSE\n"));
 		return FALSE;
-
+	}
+	TRACE(_T("[CChildFrame::PreCreateWindow] EXIT TRUE (style=0x%08X)\n"), cs.style);
 	return TRUE;
 }
 
-BOOL CChildFrame::OnCreateClient(LPCREATESTRUCT lpcs, CCreateContext* pContext)
+BOOL CChildFrame::OnCreateClient(LPCREATESTRUCT* /*lpcs*/, CCreateContext* pContext)
 {
+	TRACE(_T("[CChildFrame::OnCreateClient] pContext=0x%p\n"), pContext);
+	if (pContext)
+	{
+		TRACE(_T("  pContext->m_pNewViewClass=%p\n"), pContext->m_pNewViewClass);
+		if (pContext->m_pNewViewClass)
+		{
+			TRACE(_T("  pContext->m_pNewViewClass->m_lpszClassName=%hs\n"),
+				pContext->m_pNewViewClass->m_lpszClassName);
+		}
+	}
+
     // Create a static splitter with 1 row and 2 columns.
 	if (!m_wndSplitter.CreateStatic(this, 1, 2))
 	{
@@ -79,10 +94,11 @@ BOOL CChildFrame::OnCreateClient(LPCREATESTRUCT lpcs, CCreateContext* pContext)
 		return FALSE;
 	}
 
-	m_wndSplitter.SetColumnInfo(0, 1200, 20);
-	m_wndSplitter.SetColumnInfo(1, 300, 20);
+	m_wndSplitter.SetColumnInfo(0, 700, 100);
+	m_wndSplitter.SetColumnInfo(1, 300, 100);
 	m_wndSplitter.RecalcLayout();
 
+	TRACE(_T("[CChildFrame::OnCreateClient] succeeded\n"));
 	return TRUE;
 }
 

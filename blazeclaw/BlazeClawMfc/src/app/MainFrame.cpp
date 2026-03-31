@@ -13,7 +13,9 @@
 #include <string>
 #include "CredentialStore.h"
 #include "ApiKeyDialog.h"
-
+#include "NewTabDialog.h"
+#include "ChildFrm.h"
+#include "ChatView.h"
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -102,7 +104,10 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWndEx)
 	ON_UPDATE_COMMAND_UI(ID_VIEW_PROPERTIESWND, &CMainFrame::OnUpdateViewPropertiesWindow)
 	ON_COMMAND(ID_EXTENSION_DEEPSEEK, &CMainFrame::OnExtensionDeepseek)
 	ON_UPDATE_COMMAND_UI(ID_EXTENSION_DEEPSEEK, &CMainFrame::OnUpdateExtensionDeepseek)
+	ON_COMMAND(ID_WINDOW_NEW_WEBVIEW, &CMainFrame::OnWindowNew)
+	ON_UPDATE_COMMAND_UI(ID_WINDOW_NEW_WEBVIEW, &CMainFrame::OnUpdateWindowNewWebViewOnly)
 	ON_WM_SETTINGCHANGE()
+	ON_MESSAGE(kMsgCreateMdiGroup, &CMainFrame::OnCreateMdiGroup)
 
 	ON_COMMAND(kIdUiParityActionFormProbe, &CMainFrame::OnUiParityActionFormProbe)
 	ON_COMMAND(kIdUiParityAdminSnapshot, &CMainFrame::OnUiParityAdminSnapshot)
@@ -134,6 +139,29 @@ CMainFrame::CMainFrame() noexcept
 
 CMainFrame::~CMainFrame()
 {}
+
+LRESULT CMainFrame::OnCreateMdiGroup(WPARAM, LPARAM)
+{
+	CreateTwoTabbedGroups();
+	return 0;
+}
+
+void CMainFrame::CreateTwoTabbedGroups()
+{
+	// MDI Tabbed Groups already enabled in OnCreate via EnableMDITabbedGroups.
+
+	// Create first WebView-only tab
+	OpenWebViewOnlyTab();
+
+	// Create second WebView-only tab
+	OpenWebViewPlusChatTab();
+
+	RecalcLayout(FALSE);
+
+	// Move the newly created (active) tab to a new group for side-by-side layout
+	MDITabNewGroup(TRUE);
+	RecalcLayout(FALSE);
+}
 
 void CMainFrame::LogDeepSeekDiagnostic(
 	const char* stage,
@@ -1137,6 +1165,63 @@ void CMainFrame::OnExtensionDeepseek()
 }
 
 void CMainFrame::OnUpdateExtensionDeepseek(CCmdUI* pCmdUI)
+{
+	pCmdUI->Enable(TRUE);
+}
+
+void CMainFrame::OnWindowNew()
+{
+	/*CNewTabDialog dlg(this);
+	TRACE(_T("[CMainFrame::OnWindowNew] dialog created, showing modal\n"));
+	int nResult = dlg.DoModal();
+	TRACE(_T("[CMainFrame::OnWindowNew] dialog returned %d, selected type=%d\n"),
+		nResult, static_cast<int>(dlg.GetSelectedTabType()));
+	if (nResult != IDOK)
+		return;
+
+	if (dlg.GetSelectedTabType() == NewTabType::WebViewOnly) {
+		TRACE(_T("[CMainFrame::OnWindowNew] opening WebView-only tab\n"));
+		OpenWebViewOnlyTab();
+	} else {
+		TRACE(_T("[CMainFrame::OnWindowNew] opening WebView+Chat tab\n"));
+		OpenWebViewPlusChatTab();
+	}*/
+	OpenWebViewOnlyTab();
+}
+
+void CMainFrame::OpenWebViewOnlyTab()
+{
+	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	auto* tpl = app ? app->GetWebViewOnlyDocTemplate() : nullptr;
+	TRACE(_T("[CMainFrame::OpenWebViewOnlyTab] app=%p template=%p\n"), app, tpl);
+	if (!app || !tpl)
+		return;
+
+	CDocument* pDoc = tpl->OpenDocumentFile(nullptr);
+	TRACE(_T("[CMainFrame::OpenWebViewOnlyTab] pDoc=%p\n"), pDoc);
+	if (!pDoc)
+		return;
+
+	AddChatStatusLine(_T("[Tab] New WebView-only tab created."));
+}
+
+void CMainFrame::OpenWebViewPlusChatTab()
+{
+	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	auto* tpl = app ? app->GetChatDocTemplate() : nullptr;
+	TRACE(_T("[CMainFrame::OpenWebViewPlusChatTab] app=%p template=%p\n"), app, tpl);
+	if (!tpl)
+		return;
+
+	CDocument* pDoc = tpl->OpenDocumentFile(nullptr);
+	TRACE(_T("[CMainFrame::OpenWebViewPlusChatTab] pDoc=%p\n"), pDoc);
+	if (!pDoc)
+		return;
+
+	AddChatStatusLine(_T("[Tab] New WebView+Chat tab created."));
+}
+
+void CMainFrame::OnUpdateWindowNewWebViewOnly(CCmdUI* pCmdUI)
 {
 	pCmdUI->Enable(TRUE);
 }

@@ -119,6 +119,7 @@
 #define IDD_SKILL_DIALOG                315
 #define IDD_LOG_DIALOG                  316
 #define IDD_DIALOG1                     317
+#define IDD_NEWTAB_DIALOG              318
 #define IDC_STATIC_TITLE                1000
 #define IDC_STATIC_DESCRIPTION          1001
 #define IDC_GROUP_GATEWAY               1002
@@ -299,6 +300,10 @@
 #define IDC_BUTTON_TASK_ADVANCED        1175
 #define IDC_BUTTON_TASK_DELETE          1176
 #define IDC_EDIT1                       1177
+#define ID_NEW_TAB_WEBVIEW_ONLY         2001
+#define ID_NEW_TAB_WEBVIEW_CHAT         2002
+#define IDC_STATIC_WEBVIEW_ONLY_DESC    2003
+#define IDC_STATIC_WEBVIEW_CHAT_DESC    2004
 #define ID_WRITE_PASTEASHYPERLINK       32770
 #define ID_EDIT_DOC                     32771
 #define ID_EDIT_OVERVIEW                32772
@@ -316,6 +321,7 @@
 #define ID_EDIT_INST                    32783
 #define ID_EDIT_CHANNEL                 32784
 #define ID_EXTENSION_DEEPSEEK           40101
+#define ID_WINDOW_NEW_WEBVIEW           40102
 #define IDD_APIKEY_DIALOG               41000
 #define IDC_EDIT_APIKEY                 41001
 #define IDC_STATIC_APIKEY_LABEL         41002
