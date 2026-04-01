@@ -29,6 +29,7 @@
 IMPLEMENT_DYNCREATE(CChildFrame, CMDIChildWndEx)
 
 BEGIN_MESSAGE_MAP(CChildFrame, CMDIChildWndEx)
+	ON_WM_SIZE()
 	ON_COMMAND(ID_FILE_PRINT, &CChildFrame::OnFilePrint)
 	ON_COMMAND(ID_FILE_PRINT_DIRECT, &CChildFrame::OnFilePrint)
 	ON_COMMAND(ID_FILE_PRINT_PREVIEW, &CChildFrame::OnFilePrintPreview)
@@ -39,7 +40,6 @@ END_MESSAGE_MAP()
 
 CChildFrame::CChildFrame() noexcept
 {
-	// TODO: add member initialization code here
 }
 
 CChildFrame::~CChildFrame()
@@ -49,41 +49,87 @@ CChildFrame::~CChildFrame()
 
 BOOL CChildFrame::PreCreateWindow(CREATESTRUCT& cs)
 {
-	// TODO: Modify the Window class or styles here by modifying the CREATESTRUCT cs
-	if( !CMDIChildWndEx::PreCreateWindow(cs) )
+	TRACE(_T("[CChildFrame::PreCreateWindow] ENTER\n"));
+	if (!CMDIChildWndEx::PreCreateWindow(cs))
 		return FALSE;
 
+	TRACE(_T("[CChildFrame::PreCreateWindow] EXIT\n"));
 	return TRUE;
 }
 
-BOOL CChildFrame::OnCreateClient(LPCREATESTRUCT lpcs, CCreateContext* pContext)
+BOOL CChildFrame::OnCreateClient(LPCREATESTRUCT /*lpcs*/, CCreateContext* pContext)
 {
-    // Create a static splitter with 1 row and 2 columns.
+	// Must match CMDIChildWndEx::OnCreateClient(LPCREATESTRUCT, CCreateContext*) — not LPCREATESTRUCT*.
+	// Build the WebView + Chat layout here so the framework never creates a lone template view
+	// that we later destroy (that path crashes inside MFC doc/view / MDI activation).
+	if (pContext == nullptr || pContext->m_pCurrentDoc == nullptr)
+		return FALSE;
+
 	if (!m_wndSplitter.CreateStatic(this, 1, 2))
 	{
-		TRACE0("Failed to create static splitter\n");
+		TRACE0("[CChildFrame] OnCreateClient: CreateStatic failed\n");
 		return FALSE;
 	}
 
-  // Left pane: document view.
 	if (!m_wndSplitter.CreateView(0, 0, RUNTIME_CLASS(CBlazeClawMFCView), CSize(100, 100), pContext))
 	{
-		TRACE0("Failed to create left pane view\n");
+		TRACE0("[CChildFrame] OnCreateClient: CreateView(WebView) failed\n");
+		m_wndSplitter.DestroyWindow();
 		return FALSE;
 	}
 
-  // Right pane: chat view.
 	if (!m_wndSplitter.CreateView(0, 1, RUNTIME_CLASS(CChatView), CSize(100, 100), pContext))
 	{
-		TRACE0("Failed to create right pane view\n");
+		TRACE0("[CChildFrame] OnCreateClient: CreateView(Chat) failed\n");
+		m_wndSplitter.DestroyWindow();
 		return FALSE;
 	}
 
-	m_wndSplitter.SetColumnInfo(0, 1200, 20);
-	m_wndSplitter.SetColumnInfo(1, 300, 20);
-	m_wndSplitter.RecalcLayout();
-
+	m_wndSplitter.SetColumnInfo(0, 700, 100);
+	m_wndSplitter.SetColumnInfo(1, 320, 240);
+	// Do NOT call RecalcLayout here — it asserts inside winsplit.cpp (line 2350) when called
+	// during CreateView WM_SIZE re-entrancy before the splitter HWND is fully initialized.
+	// The framework calls MoveWindow on the client area after OnCreateClient returns, which
+	// triggers a proper RecalcLayout at that point.
+	m_bSplitterReady = TRUE;
 	return TRUE;
+}
+
+void CChildFrame::OnSize(UINT nType, int cx, int cy)
+{
+	TRACE(_T("[CChildFrame::OnSize] nType=%d cx=%d cy=%d\n"), nType, cx, cy);
+	CMDIChildWndEx::OnSize(nType, cx, cy);
+	if (nType == SIZE_MINIMIZED)
+		return;
+	// Guard against re-entrancy during OnCreateClient (splitter still being built) and
+	// against calls after the child frame is being destroyed (splitter HWND gone).
+	if (!m_bSplitterReady)
+		return;
+	if (cx <= 0)
+		return;
+	if (!::IsWindow(m_wndSplitter.m_hWnd))
+		return;
+	if (m_wndSplitter.GetPane(0, 0) == nullptr || m_wndSplitter.GetPane(0, 1) == nullptr)
+		return;
+
+	const int minWeb = 120;
+	const int minChat = 240;
+	int chatW = cx / 3;
+	if (chatW < minChat)
+		chatW = minChat;
+	if (chatW > cx - minWeb)
+		chatW = (cx > minWeb + minChat) ? (cx - minWeb) : minChat;
+	int webW = cx - chatW;
+	if (webW < minWeb)
+	{
+		webW = minWeb;
+		chatW = cx - webW;
+		if (chatW < minChat && cx >= minWeb + minChat)
+			chatW = minChat;
+	}
+	m_wndSplitter.SetColumnInfo(0, webW, minWeb);
+	m_wndSplitter.SetColumnInfo(1, chatW, minChat);
+	m_wndSplitter.RecalcLayout();
 }
 
 // CChildFrame diagnostics

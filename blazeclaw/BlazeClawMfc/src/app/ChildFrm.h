@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <afxext.h>
+
 class CChildFrame : public CMDIChildWndEx
 {
 	DECLARE_DYNCREATE(CChildFrame)
@@ -23,14 +25,12 @@ public:
 // Attributes
 protected:
 	CSplitterWndEx m_wndSplitter;
-public:
-
-// Operations
-public:
+	/// Set TRUE only after both splitter panes are created (avoids WM_SIZE re-entrancy during OnCreateClient).
+	BOOL m_bSplitterReady = FALSE;
 
 // Overrides
 	virtual BOOL PreCreateWindow(CREATESTRUCT& cs);
-	virtual BOOL OnCreateClient(LPCREATESTRUCT lpcs, CCreateContext* pContext);
+	BOOL OnCreateClient(LPCREATESTRUCT lpCreateStruct, CCreateContext* pContext) override;
 
 // Implementation
 public:
@@ -42,6 +42,7 @@ public:
 
 // Generated message map functions
 protected:
+	afx_msg void OnSize(UINT nType, int cx, int cy);
 	afx_msg void OnFilePrint();
 	afx_msg void OnFilePrintPreview();
 	afx_msg void OnUpdateFilePrintPreview(CCmdUI* pCmdUI);

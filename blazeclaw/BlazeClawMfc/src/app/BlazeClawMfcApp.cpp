@@ -10,6 +10,7 @@
 #include "BlazeClawMFCDoc.h"
 #include "BlazeClawMFCView.h"
 #include "ChatView.h"
+#include "WebViewOnlyChildFrame.h"
 
 #include "../core/runtime/LocalModel/TokenizerBridge.h"
 
@@ -265,8 +266,7 @@ namespace {
 
 BEGIN_MESSAGE_MAP(CBlazeClawMFCApp, CWinAppEx)
 	ON_COMMAND(ID_APP_ABOUT, &CBlazeClawMFCApp::OnAppAbout)
-	// Standard file based document commands
-	ON_COMMAND(ID_FILE_NEW, &CWinAppEx::OnFileNew)
+	ON_COMMAND(ID_FILE_NEW, &CBlazeClawMFCApp::OnFileNew)
 	ON_COMMAND(ID_FILE_OPEN, &CWinAppEx::OnFileOpen)
 	// Standard print setup command
 	ON_COMMAND(ID_FILE_PRINT_SETUP, &CWinAppEx::OnFilePrintSetup)
@@ -362,15 +362,20 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 
 	// Register the application's document templates.  Document templates
 	//  serve as the connection between documents, frame windows and views
-	CMultiDocTemplate* pDocTemplate;
-  CRuntimeClass* viewRuntimeClass = ResolveChatRuntimeViewClass(m_config);
-	pDocTemplate = new CMultiDocTemplate(IDR_BlazeClawMFCTYPE,
+	CRuntimeClass* viewRuntimeClass = ResolveChatRuntimeViewClass(m_config);
+	m_pChatDocTemplate = new CMultiDocTemplate(IDR_BlazeClawMFCTYPE,
 		RUNTIME_CLASS(CBlazeClawMFCDoc),
 		RUNTIME_CLASS(CChildFrame), // custom MDI child frame
-      viewRuntimeClass);
-	if (!pDocTemplate)
+		viewRuntimeClass);
+	if (!m_pChatDocTemplate)
 		return FALSE;
-	AddDocTemplate(pDocTemplate);
+	AddDocTemplate(m_pChatDocTemplate);
+
+	m_pWebViewOnlyDocTemplate = new CMultiDocTemplate(IDR_BlazeClawMFCTYPE,
+		RUNTIME_CLASS(CBlazeClawMFCDoc),
+		RUNTIME_CLASS(CWebViewOnlyChildFrame),
+		RUNTIME_CLASS(CBlazeClawMFCView));
+	AddDocTemplate(m_pWebViewOnlyDocTemplate);
 
 	//auto* frame = new CMainFrame();
 	//m_pMainWnd = frame;
@@ -400,6 +405,9 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 	//frame->ShowWindow(SW_SHOW);
 	//frame->UpdateWindow();
 
+	// 禁用默认的文档创建
+	cmdInfo.m_nShellCommand = CCommandLineInfo::FileNothing;
+	
 	// Dispatch commands specified on the command line.  Will return FALSE if
 	// app was launched with /RegServer, /Register, /Unregserver or /Unregister.
 	if (!ProcessShellCommand(cmdInfo))
@@ -407,9 +415,14 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 	// The main window has been initialized, so show and update it
 	pMainFrame->ShowWindow(SW_SHOWMAXIMIZED);
 	pMainFrame->UpdateWindow();
+	
+	pMainFrame->PostMessage(kMsgCreateMdiGroup);
+	
 	AppendStartupConfigStatus(m_config);
   AppendStartupLocalModelStatus(m_config, m_serviceManager);
 	AppendStartupEmbeddingsStatus(m_config, m_serviceManager);
+
+	m_bStartupComplete = TRUE;
 
 	return TRUE;
 }
@@ -439,6 +452,19 @@ BOOL CBlazeClawMFCApp::OnIdle(LONG lCount) {
 
 blazeclaw::core::ServiceManager& CBlazeClawMFCApp::Services() noexcept {
 	return m_serviceManager;
+}
+
+void CBlazeClawMFCApp::OnFileNew()
+{
+	// Do nothing until InitInstance finishes. Early calls (e.g. shell / framework during load)
+	// would otherwise open WebView+Chat here while CreateTwoTabbedGroups also runs → three tabs.
+	if (!m_bStartupComplete)
+		return;
+
+	// With an active MDI child, MFC routes ID_FILE_NEW to CWinApp::OnCmdMsg before the main frame.
+	CMainFrame* pMain = DYNAMIC_DOWNCAST(CMainFrame, m_pMainWnd);
+	if (pMain != nullptr)
+		pMain->OpenNewTabWithChoiceDialog();
 }
 
 const blazeclaw::core::ServiceManager& CBlazeClawMFCApp::Services() const noexcept {

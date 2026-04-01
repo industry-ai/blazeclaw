@@ -103,8 +103,10 @@
     <ClInclude Include="src\app\ChildFrm.h" />
     <ClInclude Include="src\app\ClassView.h" />
     <ClInclude Include="src\app\FileView.h" />
+    <ClInclude Include="src\app\WebViewOnlyChildFrame.h" />
     <ClInclude Include="src\app\framework.h" />
     <ClInclude Include="src\app\MainFrame.h" />
+    <ClInclude Include="src\app\NewTabDialog.h" />
     <ClInclude Include="src\app\OutputWnd.h" />
     <ClInclude Include="src\app\pch.h" />
     <ClInclude Include="src\app\PropertiesWnd.h" />
@@ -181,8 +183,10 @@
     <ClCompile Include="src\app\ChildFrm.cpp" />
     <ClCompile Include="src\app\ClassView.cpp" />
     <ClCompile Include="src\app\FileView.cpp" />
+    <ClCompile Include="src\app\WebViewOnlyChildFrame.cpp" />
     <ClCompile Include="src\app\MainFrame.cpp" />
     <ClCompile Include="src\app\ApiKeyDialog.cpp" />
+    <ClCompile Include="src\app\NewTabDialog.cpp" />
     <!-- CredentialStore is built in BlazeClawAppUtils -->
     <ClCompile Include="src\app\OutputWnd.cpp" />
     <ClCompile Include="src\app\pch.cpp">

@@ -14,6 +14,8 @@ class COutlookBar : public CMFCOutlookBar
 	virtual void GetPaneName(CString& strName) const { BOOL bNameValid = strName.LoadString(IDS_OUTLOOKBAR); ASSERT(bNameValid); if (!bNameValid) strName.Empty(); }
 };
 
+constexpr UINT kMsgCreateMdiGroup = WM_USER + 0x100;  // custom message for deferred tab split
+
 class CMainFrame final : public CMDIFrameWndEx
 {
 	DECLARE_DYNAMIC(CMainFrame)
@@ -30,6 +32,8 @@ public:
 	// Overrides
 public:
 	virtual BOOL PreCreateWindow(CREATESTRUCT& cs);
+protected:
+	afx_msg LRESULT OnCreateMdiGroup(WPARAM, LPARAM);
 
 	// Implementation
 public:
@@ -72,6 +76,21 @@ protected:
 	afx_msg void OnUpdateViewCaptionBar(CCmdUI* pCmdUI);
 	afx_msg void OnOptions();
 	afx_msg void OnSettingChange(UINT uFlags, LPCTSTR lpszSection);
+	afx_msg BOOL OnIdle(WPARAM wParam, LPARAM lParam);
+
+	// New tab creation commands
+	afx_msg void OnWindowNew();
+	afx_msg void OnUpdateWindowNewWebViewOnly(CCmdUI* pCmdUI);
+
+public:
+	// Called by app to open a tab without showing dialog
+	void OpenDefaultTab() { OpenWebViewPlusChatTab(); }
+	// File / Ribbon "New" — MDI routes ID_FILE_NEW to CWinApp while a child is active, so the app calls this too.
+	void OpenNewTabWithChoiceDialog();
+
+private:
+	void OpenWebViewOnlyTab();
+	void OpenWebViewPlusChatTab();
 
 	// extension commands
 	afx_msg void OnExtensionDeepseek();
@@ -123,4 +142,5 @@ private:
 	CMenu m_menuBar;
 	CMenu m_parityMenu;
 public:
+	void CreateTwoTabbedGroups();
 };
