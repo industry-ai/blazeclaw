@@ -6,6 +6,7 @@
 #include <cwctype>
 #include <fstream>
 #include <optional>
+#include <unordered_map>
 
 namespace {
 	constexpr wchar_t kConfigPath[] = L"blazeclaw.conf";
@@ -36,6 +37,32 @@ namespace {
 				static_cast<unsigned char>(ch)));
 		}
 		return output;
+	}
+
+	std::string ToNarrowAscii(const std::wstring& value)
+	{
+		std::string output;
+		output.reserve(value.size());
+		for (const wchar_t ch : value) {
+			output.push_back(static_cast<char>(
+				(ch <= 0x7F) ? ch : '?'));
+		}
+
+		return output;
+	}
+
+	bool ParseBoolW(const std::wstring& raw, const bool fallback)
+	{
+		const std::wstring value = TrimW(raw);
+		if (value == L"true" || value == L"1" || value == L"yes") {
+			return true;
+		}
+
+		if (value == L"false" || value == L"0" || value == L"no") {
+			return false;
+		}
+
+		return fallback;
 	}
 
 	void UpsertConfigEntry(
@@ -84,6 +111,54 @@ namespace {
 		}
 
 		return provider == activeProvider && model == activeModel;
+	}
+
+	void ReadModelConfigState(
+		std::unordered_map<std::string, bool>& outEnabledById,
+		std::string& outActiveProvider,
+		std::string& outActiveModel)
+	{
+		outEnabledById.clear();
+		outActiveProvider.clear();
+		outActiveModel.clear();
+
+		std::wifstream input(kConfigPath);
+		if (!input.is_open()) {
+			return;
+		}
+
+		std::wstring line;
+		while (std::getline(input, line)) {
+			const std::wstring trimmed = TrimW(line);
+			if (trimmed.empty() || trimmed.starts_with(L"#")) {
+				continue;
+			}
+
+			if (trimmed.rfind(L"chat.activeProvider=", 0) == 0) {
+				outActiveProvider = ToNarrowAscii(trimmed.substr(20));
+				continue;
+			}
+
+			if (trimmed.rfind(L"chat.activeModel=", 0) == 0) {
+				outActiveModel = ToNarrowAscii(trimmed.substr(17));
+				continue;
+			}
+
+			constexpr wchar_t kPrefix[] = L"chat.model.enabled.";
+			if (trimmed.rfind(kPrefix, 0) == 0) {
+				const std::size_t eqPos = trimmed.find(L'=');
+				if (eqPos == std::wstring::npos || eqPos <= wcslen(kPrefix)) {
+					continue;
+				}
+
+				const std::wstring modelIdW =
+					trimmed.substr(wcslen(kPrefix), eqPos - wcslen(kPrefix));
+				const std::wstring rawValue = trimmed.substr(eqPos + 1);
+				outEnabledById.insert_or_assign(
+					ToNarrowAscii(modelIdW),
+					ParseBoolW(rawValue, false));
+			}
+		}
 	}
 }
 
@@ -139,31 +214,31 @@ void CSettingsDialog::LoadModels()
 		 "default",
 		 "Default Model (Local ONNX)",
 		 "Seed",
-		 true
+        false
 		});
 	m_models.push_back({
 		"reasoner",
 		"Reasoner Model (Local ONNX)",
 		"Seed",
-		true
+        false
 		});
 	m_models.push_back({
 		"deepseek/deepseek-chat",
 		"DeepSeek Chat",
 		"DeepSeek",
-		true
+        false
 		});
 	m_models.push_back({
 		"deepseek/deepseek-reasoner",
 		"DeepSeek Reasoner",
 		"DeepSeek",
-		true
+        false
 		});
 	m_models.push_back({
 		"qwen3-local-onnx",
 		"Qwen3 Local ONNX",
 		"Local",
-		true
+        false
 		});
 
 	// Planned / not yet fully implemented model entries (disabled by default)
@@ -198,10 +273,42 @@ void CSettingsDialog::LoadModels()
 		false
 		});
 
-	// Load enabled state from config if available
-	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
-	if (app) {
-		// TODO: Load enabled models from config
+  // Load enabled state from config if available
+	std::unordered_map<std::string, bool> enabledById;
+	std::string activeProvider;
+	std::string activeModel;
+	ReadModelConfigState(enabledById, activeProvider, activeModel);
+
+	bool anyChecked = false;
+	for (auto& model : m_models) {
+		const auto it = enabledById.find(model.id);
+		if (it == enabledById.end()) {
+			continue;
+		}
+
+		model.enabled = it->second;
+		if (model.enabled) {
+			anyChecked = true;
+		}
+	}
+
+	if (!anyChecked) {
+		for (auto& model : m_models) {
+			if (MatchesActiveSelection(model, activeProvider, activeModel)) {
+				model.enabled = true;
+				anyChecked = true;
+				break;
+			}
+		}
+	}
+
+	if (!anyChecked) {
+		for (auto& model : m_models) {
+			if (model.id == "default") {
+				model.enabled = true;
+				break;
+			}
+		}
 	}
 
 	// Populate the list
@@ -347,6 +454,13 @@ void CSettingsDialog::OnOK()
 					lines,
 					L"chat.activeModel",
 					ToWideAscii(model));
+
+				for (const auto& item : m_models) {
+					UpsertConfigEntry(
+						lines,
+						L"chat.model.enabled." + ToWideAscii(item.id),
+						item.enabled ? L"true" : L"false");
+				}
 
 				std::wofstream output(kConfigPath, std::ios::trunc);
 				if (output.is_open()) {
