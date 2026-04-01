@@ -13,6 +13,7 @@
 #include <string>
 #include "CredentialStore.h"
 #include "ApiKeyDialog.h"
+#include "SettingsDialog.h"
 #include "NewTabDialog.h"
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -102,6 +103,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWndEx)
 	ON_UPDATE_COMMAND_UI(ID_VIEW_PROPERTIESWND, &CMainFrame::OnUpdateViewPropertiesWindow)
 	ON_COMMAND(ID_EXTENSION_DEEPSEEK, &CMainFrame::OnExtensionDeepseek)
 	ON_UPDATE_COMMAND_UI(ID_EXTENSION_DEEPSEEK, &CMainFrame::OnUpdateExtensionDeepseek)
+	ON_COMMAND(ID_EXTENSION_MODELSET, &CMainFrame::OnExtensionModelSet)
 	ON_COMMAND(ID_WINDOW_NEW_WEBVIEW, &CMainFrame::OnWindowNew)
 	ON_UPDATE_COMMAND_UI(ID_WINDOW_NEW_WEBVIEW, &CMainFrame::OnUpdateWindowNewWebViewOnly)
 	ON_WM_SETTINGCHANGE()
@@ -1166,6 +1168,23 @@ void CMainFrame::OnExtensionDeepseek()
 void CMainFrame::OnUpdateExtensionDeepseek(CCmdUI* pCmdUI)
 {
 	pCmdUI->Enable(TRUE);
+}
+
+void CMainFrame::OnExtensionModelSet()
+{
+	CSettingsDialog dlg(this);
+	if (dlg.DoModal() == IDOK) {
+		// Save enabled models configuration
+		const auto& models = dlg.GetEnabledModels();
+		std::vector<std::string> enabledIds;
+		for (const auto& m : models) {
+			if (m.enabled) {
+				enabledIds.push_back(m.id);
+			}
+		}
+		// TODO: Save enabled model IDs to config
+		(void)enabledIds;
+	}
 }
 
 void CMainFrame::OpenNewTabWithChoiceDialog()

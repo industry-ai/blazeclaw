@@ -95,6 +95,7 @@ private:
 	// extension commands
 	afx_msg void OnExtensionDeepseek();
 	afx_msg void OnUpdateExtensionDeepseek(CCmdUI* pCmdUI);
+	afx_msg void OnExtensionModelSet();
 
 	afx_msg void OnUiParityActionFormProbe();
 	afx_msg void OnUiParityAdminSnapshot();
