@@ -339,11 +339,6 @@
         });
       }
 
-      function parseTextFromMessage(message) {
-        if (!message || typeof message !== "object") {
-          return "";
-        }
-
       function normalizeFinalAssistantMessage(message) {
         if (!message || typeof message !== "object") {
           return null;
@@ -378,6 +373,12 @@
 
         return message;
       }
+
+      function parseTextFromMessage(message) {
+        if (!message || typeof message !== "object") {
+          return "";
+        }
+
         if (typeof message.text === "string") {
           return message.text;
         }
@@ -542,7 +543,7 @@
           .filter((x) => x !== null);
 
         try {
-          await request("chat.send", {
+          const sendResult = await request("chat.send", {
             sessionKey,
             message: msg,
             deliver: false,
@@ -550,6 +551,17 @@
             forceError,
             attachments: apiAttachments
           });
+
+          const serverRunId =
+            sendResult &&
+            sendResult.payload &&
+            typeof sendResult.payload.runId === "string"
+              ? sendResult.payload.runId
+              : "";
+          if (serverRunId) {
+            runId = serverRunId;
+          }
+
           attachments = [];
         } catch (err) {
           addMessage(`send error: ${String(err)}`, "error");
