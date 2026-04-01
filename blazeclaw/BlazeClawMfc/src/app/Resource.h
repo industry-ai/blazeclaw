@@ -300,6 +300,7 @@
 #define IDC_BUTTON_TASK_ADVANCED        1175
 #define IDC_BUTTON_TASK_DELETE          1176
 #define IDC_EDIT1                       1177
+#define IDC_PROGRESS1                   1179
 #define ID_NEW_TAB_WEBVIEW_ONLY         2001
 #define ID_NEW_TAB_WEBVIEW_CHAT         2002
 #define IDC_STATIC_WEBVIEW_ONLY_DESC    2003
@@ -331,11 +332,6 @@
 #define IDC_BUTTON_TEST_KEY             41006
 #define IDC_BUTTON_DELETE_KEY           41007
 #define IDC_STATIC_PROVIDER_LABEL       41008
-#define IDS_DEEPSEEK_DIALOG_TITLE       42000
-#define IDS_DEEPSEEK_DIALOG_LABEL       42001
-#define IDS_DEEPSEEK_STORED_MARKER      42002
-#define IDS_BTN_SHOW                    42012
-#define IDS_BTN_HIDE                    42013
 #define IDD_SETTINGS_DIALOG             41010
 #define IDC_LIST_MODELS                 41011
 #define IDC_STATIC_SETTINGS_TITLE       41012
@@ -343,14 +339,19 @@
 #define IDC_BUTTON_SELECT_ALL           41014
 #define IDC_BUTTON_DESELECT_ALL         41015
 #define IDC_STATIC_MODEL_COUNT          41016
+#define IDS_DEEPSEEK_DIALOG_TITLE       42000
+#define IDS_DEEPSEEK_DIALOG_LABEL       42001
+#define IDS_DEEPSEEK_STORED_MARKER      42002
+#define IDS_BTN_SHOW                    42012
+#define IDS_BTN_HIDE                    42013
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        319
+#define _APS_NEXT_RESOURCE_VALUE        320
 #define _APS_NEXT_COMMAND_VALUE         32787
-#define _APS_NEXT_CONTROL_VALUE         1178
+#define _APS_NEXT_CONTROL_VALUE         1180
 #define _APS_NEXT_SYMED_VALUE           317
 #endif
 #endif

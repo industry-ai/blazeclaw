@@ -42,4 +42,6 @@ private:
 
 	afx_msg void OnSelectAll();
 	afx_msg void OnDeselectAll();
+public:
+	CProgressCtrl m_progress;
 };
