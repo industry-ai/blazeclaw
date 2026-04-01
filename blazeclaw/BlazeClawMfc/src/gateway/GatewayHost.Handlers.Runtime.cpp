@@ -1,10 +1,12 @@
 #include "pch.h"
 #include "GatewayHost.h"
 #include "GatewayJsonUtils.h"
+#include "Telemetry.h"
 
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <ctime>
 #include <cstdlib>
 #include <iomanip>
 #include <regex>
@@ -257,6 +259,63 @@ namespace blazeclaw::gateway {
             std::vector<std::string> assistantDeltas;
             std::string errorCode;
             std::string errorMessage;
+            std::vector<std::string> missReasons;
+            std::string city;
+            std::string date;
+            std::string recipient;
+            std::string sendAt;
+            std::string scheduleKind;
+            std::size_t decompositionSteps = 0;
+        };
+
+        std::string ToLowerCopyLocal(const std::string& value) {
+            std::string lowered = value;
+            std::transform(
+                lowered.begin(),
+                lowered.end(),
+                lowered.begin(),
+                [](unsigned char ch) {
+                    return static_cast<char>(std::tolower(ch));
+                });
+            return lowered;
+        }
+
+        std::string SerializeStringArrayLocal(
+            const std::vector<std::string>& values) {
+            std::string json = "[";
+            for (std::size_t i = 0; i < values.size(); ++i) {
+                if (i > 0) {
+                    json += ",";
+                }
+
+                json += JsonString(values[i]);
+            }
+
+            json += "]";
+            return json;
+        }
+
+        std::string ResolveCurrentLocalTimeHHmm() {
+            std::time_t now = std::time(nullptr);
+            std::tm localTime = {};
+#if defined(_WIN32)
+            localtime_s(&localTime, &now);
+#else
+            localtime_r(&now, &localTime);
+#endif
+
+            std::ostringstream output;
+            output << std::setw(2) << std::setfill('0') << localTime.tm_hour
+                   << ":"
+                   << std::setw(2) << std::setfill('0') << localTime.tm_min;
+            return output.str();
+        }
+
+        struct PromptScheduleResolution {
+            bool hasSchedule = false;
+            bool immediate = false;
+            std::string sendAt;
+            std::string kind;
         };
 
         std::optional<std::string> TryParsePromptSendAt(
@@ -336,24 +395,54 @@ namespace blazeclaw::gateway {
             return std::nullopt;
         }
 
-        bool IsWeatherEmailPromptIntent(const std::string& message) {
-            const std::string lowered = [&message]() {
-                std::string value = message;
-                std::transform(
-                    value.begin(),
-                    value.end(),
-                    value.begin(),
-                    [](unsigned char ch) {
-                        return static_cast<char>(std::tolower(ch));
-                    });
-                return value;
-            }();
+        PromptScheduleResolution ResolvePromptSchedule(
+            const std::string& message,
+            const std::string& loweredMessage) {
+            PromptScheduleResolution schedule;
 
-            const bool hasWeather = lowered.find("weather") != std::string::npos;
-            const bool hasEmail = lowered.find("email") != std::string::npos;
-            const bool hasSchedule = TryParsePromptSendAt(message).has_value();
+            const auto parsedTime = TryParsePromptSendAt(message);
+            if (parsedTime.has_value()) {
+                schedule.hasSchedule = true;
+                schedule.sendAt = parsedTime.value();
+                schedule.kind = "clock_time";
+                return schedule;
+            }
 
-            return hasWeather && hasEmail && hasSchedule;
+            const bool immediateKeyword =
+                loweredMessage.find("right now") != std::string::npos ||
+                loweredMessage.find("immediately") != std::string::npos ||
+                loweredMessage.find(" as soon as possible") !=
+                    std::string::npos ||
+                loweredMessage.find(" now") != std::string::npos ||
+                loweredMessage.rfind("now", 0) == 0;
+            if (immediateKeyword) {
+                schedule.hasSchedule = true;
+                schedule.immediate = true;
+                schedule.sendAt = ResolveCurrentLocalTimeHHmm();
+                schedule.kind = "immediate_keyword";
+                return schedule;
+            }
+
+            schedule.hasSchedule = false;
+            schedule.immediate = false;
+            schedule.sendAt = "13:00";
+            schedule.kind = "default_fallback";
+            return schedule;
+        }
+
+        bool HasWeatherIntent(const std::string& loweredMessage) {
+            return loweredMessage.find("weather") != std::string::npos;
+        }
+
+        bool HasEmailIntent(const std::string& loweredMessage) {
+            return loweredMessage.find("email") != std::string::npos ||
+                loweredMessage.find("mail") != std::string::npos;
+        }
+
+        bool HasReportIntent(const std::string& loweredMessage) {
+            return loweredMessage.find("report") != std::string::npos ||
+                loweredMessage.find("summary") != std::string::npos ||
+                loweredMessage.find("write") != std::string::npos;
         }
 
         std::string ExtractFirstEmailAddress(const std::string& text) {
@@ -389,17 +478,11 @@ namespace blazeclaw::gateway {
         }
 
         std::string ResolvePromptDate(const std::string& message) {
-            const std::string lowered = [&message]() {
-                std::string value = message;
-                std::transform(
-                    value.begin(),
-                    value.end(),
-                    value.begin(),
-                    [](unsigned char ch) {
-                        return static_cast<char>(std::tolower(ch));
-                    });
-                return value;
-            }();
+            const std::string lowered = ToLowerCopyLocal(message);
+
+            if (lowered.find("today") != std::string::npos) {
+                return "today";
+            }
 
             if (lowered.find("tomorrow") != std::string::npos) {
                 return "tomorrow";
@@ -409,8 +492,9 @@ namespace blazeclaw::gateway {
         }
 
         std::string ResolvePromptSendAt(const std::string& message) {
-            const auto parsed = TryParsePromptSendAt(message);
-            return parsed.value_or("13:00");
+            const auto schedule =
+                ResolvePromptSchedule(message, ToLowerCopyLocal(message));
+            return schedule.sendAt;
         }
 
         std::string BuildWeatherReportText(
@@ -430,15 +514,30 @@ namespace blazeclaw::gateway {
             GatewayToolRegistry& toolRegistry,
             const std::string& message) {
             ChatPromptOrchestrationResult result;
-            result.matched = IsWeatherEmailPromptIntent(message);
+            const auto intent =
+                prompt::AnalyzeWeatherEmailPromptIntent(message);
+            result.matched = intent.matched;
+            result.missReasons = intent.missReasons;
+            result.scheduleKind = intent.scheduleKind;
+            result.city = intent.city;
+            result.date = intent.date;
+            result.recipient = intent.recipient;
+            result.sendAt = intent.sendAt;
+            result.decompositionSteps = intent.decompositionSteps;
             if (!result.matched) {
                 return result;
             }
 
-            const std::string city = ResolvePromptCity(message);
-            const std::string date = ResolvePromptDate(message);
-            const std::string sendAt = ResolvePromptSendAt(message);
-            const std::string recipient = ExtractFirstEmailAddress(message);
+            const std::string city = intent.city;
+            const std::string date = intent.date;
+            const std::string sendAt = intent.sendAt;
+            const std::string recipient = intent.recipient;
+            result.city = city;
+            result.date = date;
+            result.recipient = recipient;
+            result.sendAt = sendAt;
+            result.scheduleKind = intent.scheduleKind;
+            result.decompositionSteps = intent.decompositionSteps;
 
             if (recipient.empty()) {
                 result.success = false;
@@ -550,6 +649,8 @@ namespace blazeclaw::gateway {
             result.assistantDeltas = {
                 "tools.execute.start tool=weather.lookup",
                 "tools.execute.result tool=weather.lookup status=ok",
+                "task.execute.start task=report.compose",
+                "task.execute.result task=report.compose status=ok",
                 "tools.execute.start tool=email.schedule action=prepare",
                 "tools.execute.result tool=email.schedule status=needs_approval",
             };
@@ -1496,11 +1597,43 @@ namespace blazeclaw::gateway {
                     const auto orchestrationResult = TryOrchestrateWeatherEmailPrompt(
                         m_toolRegistry,
                         normalizedMessage);
+
+                    EmitTelemetryEvent(
+                        "gateway.chat.orchestration.intent",
+                        std::string("{\"runId\":") +
+                            JsonString(runId) +
+                            ",\"matched\":" +
+                            std::string(orchestrationResult.matched ? "true" : "false") +
+                            ",\"scheduleKind\":" +
+                            JsonString(orchestrationResult.scheduleKind) +
+                            ",\"city\":" +
+                            JsonString(orchestrationResult.city) +
+                            ",\"date\":" +
+                            JsonString(orchestrationResult.date) +
+                            ",\"recipient\":" +
+                            JsonString(orchestrationResult.recipient) +
+                            ",\"sendAt\":" +
+                            JsonString(orchestrationResult.sendAt) +
+                            ",\"missReasons\":" +
+                            SerializeStringArrayLocal(orchestrationResult.missReasons) +
+                            ",\"decompositionSteps\":" +
+                            std::to_string(orchestrationResult.decompositionSteps) +
+                            "}");
+
                     if (orchestrationResult.matched) {
                         orchestrationHandled = true;
                         if (orchestrationResult.success) {
                             assistantText = orchestrationResult.assistantText;
                             assistantDeltas = orchestrationResult.assistantDeltas;
+
+                            EmitTelemetryEvent(
+                                "gateway.chat.orchestration.execution",
+                                std::string("{\"runId\":") +
+                                    JsonString(runId) +
+                                    ",\"status\":\"success\",\"steps\":" +
+                                    std::to_string(
+                                        orchestrationResult.decompositionSteps) +
+                                    "}");
 
                             m_chatRunsById.insert_or_assign(
                                 runId,
@@ -1529,6 +1662,16 @@ namespace blazeclaw::gateway {
                             backendErrorMessage = orchestrationResult.errorMessage.empty()
                                 ? "chat tool orchestration failed"
                                 : orchestrationResult.errorMessage;
+
+                            EmitTelemetryEvent(
+                                "gateway.chat.orchestration.execution",
+                                std::string("{\"runId\":") +
+                                    JsonString(runId) +
+                                    ",\"status\":\"failed\",\"errorCode\":" +
+                                    JsonString(backendErrorCode) +
+                                    ",\"errorMessage\":" +
+                                    JsonString(backendErrorMessage) +
+                                    "}");
                         }
                     }
                 }

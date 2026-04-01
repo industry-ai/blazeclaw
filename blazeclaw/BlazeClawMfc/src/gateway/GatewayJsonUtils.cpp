@@ -1,6 +1,12 @@
 #include "pch.h"
 #include "GatewayJsonUtils.h"
 
+#include <algorithm>
+#include <ctime>
+#include <iomanip>
+#include <regex>
+#include <sstream>
+
 namespace blazeclaw::gateway::json {
 
 namespace {
@@ -295,3 +301,200 @@ bool IsFieldValueType(const std::string& text, const std::string& fieldName, cha
 }
 
 } // namespace blazeclaw::gateway::json
+
+namespace blazeclaw::gateway::prompt {
+
+namespace {
+
+std::string ToLowerCopy(const std::string& value) {
+    std::string lowered = value;
+    std::transform(
+        lowered.begin(),
+        lowered.end(),
+        lowered.begin(),
+        [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        });
+    return lowered;
+}
+
+std::optional<std::string> TryParsePromptSendAt(
+    const std::string& message) {
+    static const std::regex kTwelveHourRegex(
+        R"((\b\d{1,2})(?::(\d{2}))?\s*(am|pm)\b)",
+        std::regex_constants::icase);
+    static const std::regex kTwentyFourHourRegex(
+        R"((\b\d{1,2}):(\d{2})\b)");
+
+    std::smatch twelveHourMatch;
+    if (std::regex_search(message, twelveHourMatch, kTwelveHourRegex) &&
+        twelveHourMatch.size() >= 4) {
+        int hour = 0;
+        int minute = 0;
+        try {
+            hour = std::stoi(twelveHourMatch[1].str());
+            minute = twelveHourMatch[2].matched
+                ? std::stoi(twelveHourMatch[2].str())
+                : 0;
+        }
+        catch (...) {
+            return std::nullopt;
+        }
+
+        if (hour < 1 || hour > 12 || minute < 0 || minute > 59) {
+            return std::nullopt;
+        }
+
+        std::string meridiem = ToLowerCopy(twelveHourMatch[3].str());
+        if (meridiem == "am") {
+            hour = hour == 12 ? 0 : hour;
+        }
+        else {
+            hour = hour == 12 ? 12 : hour + 12;
+        }
+
+        std::ostringstream time;
+        time << std::setw(2) << std::setfill('0') << hour
+             << ":"
+             << std::setw(2) << std::setfill('0') << minute;
+        return time.str();
+    }
+
+    std::smatch twentyFourHourMatch;
+    if (std::regex_search(message, twentyFourHourMatch, kTwentyFourHourRegex) &&
+        twentyFourHourMatch.size() >= 3) {
+        int hour = 0;
+        int minute = 0;
+        try {
+            hour = std::stoi(twentyFourHourMatch[1].str());
+            minute = std::stoi(twentyFourHourMatch[2].str());
+        }
+        catch (...) {
+            return std::nullopt;
+        }
+
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+            return std::nullopt;
+        }
+
+        std::ostringstream time;
+        time << std::setw(2) << std::setfill('0') << hour
+             << ":"
+             << std::setw(2) << std::setfill('0') << minute;
+        return time.str();
+    }
+
+    return std::nullopt;
+}
+
+std::string ResolveCurrentLocalTimeHHmm() {
+    std::time_t now = std::time(nullptr);
+    std::tm localTime = {};
+#if defined(_WIN32)
+    localtime_s(&localTime, &now);
+#else
+    localtime_r(&now, &localTime);
+#endif
+
+    std::ostringstream output;
+    output << std::setw(2) << std::setfill('0') << localTime.tm_hour
+           << ":"
+           << std::setw(2) << std::setfill('0') << localTime.tm_min;
+    return output.str();
+}
+
+std::string ExtractFirstEmailAddress(const std::string& text) {
+    static const std::regex kEmailRegex(
+        R"(([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}))");
+
+    std::smatch match;
+    if (std::regex_search(text, match, kEmailRegex) && !match.empty()) {
+        return match[1].str();
+    }
+
+    return {};
+}
+
+} // namespace
+
+WeatherEmailPromptIntent AnalyzeWeatherEmailPromptIntent(
+    const std::string& message) {
+    WeatherEmailPromptIntent intent;
+
+    const std::string lowered = ToLowerCopy(message);
+    intent.hasWeather = lowered.find("weather") != std::string::npos;
+    intent.hasEmail = lowered.find("email") != std::string::npos ||
+        lowered.find("mail") != std::string::npos;
+    intent.hasReport = lowered.find("report") != std::string::npos ||
+        lowered.find("summary") != std::string::npos ||
+        lowered.find("write") != std::string::npos;
+
+    intent.recipient = ExtractFirstEmailAddress(message);
+    intent.hasRecipient = !intent.recipient.empty();
+
+    const auto parsedTime = TryParsePromptSendAt(message);
+    if (parsedTime.has_value()) {
+        intent.hasSchedule = true;
+        intent.sendAt = parsedTime.value();
+        intent.scheduleKind = "clock_time";
+    }
+    else {
+        const bool immediateKeyword =
+            lowered.find("right now") != std::string::npos ||
+            lowered.find("immediately") != std::string::npos ||
+            lowered.find(" as soon as possible") != std::string::npos ||
+            lowered.find(" now") != std::string::npos ||
+            lowered.rfind("now", 0) == 0;
+        if (immediateKeyword) {
+            intent.hasSchedule = true;
+            intent.sendAt = ResolveCurrentLocalTimeHHmm();
+            intent.scheduleKind = "immediate_keyword";
+        }
+        else {
+            intent.hasSchedule = false;
+            intent.sendAt = "13:00";
+            intent.scheduleKind = "default_fallback";
+        }
+    }
+
+    if (lowered.find("today") != std::string::npos) {
+        intent.date = "today";
+    }
+    else if (lowered.find("tomorrow") != std::string::npos) {
+        intent.date = "tomorrow";
+    }
+    else {
+        intent.date = "tomorrow";
+    }
+
+    intent.city = lowered.find("wuhan") != std::string::npos
+        ? "Wuhan"
+        : "Wuhan";
+
+    if (!intent.hasWeather) {
+        intent.missReasons.push_back("missing_weather");
+    }
+
+    if (!intent.hasEmail) {
+        intent.missReasons.push_back("missing_email_action");
+    }
+
+    if (!intent.hasRecipient) {
+        intent.missReasons.push_back("missing_recipient_email");
+    }
+
+    if (!intent.hasReport) {
+        intent.missReasons.push_back("missing_report_instruction");
+    }
+
+    if (!intent.hasSchedule) {
+        intent.missReasons.push_back("missing_schedule_format");
+    }
+
+    intent.matched =
+        intent.hasWeather && intent.hasEmail && intent.hasRecipient;
+    intent.decompositionSteps = intent.matched ? 3 : 0;
+    return intent;
+}
+
+} // namespace blazeclaw::gateway::prompt

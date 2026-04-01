@@ -1,9 +1,11 @@
 #include "gateway/ExtensionLifecycleManager.h"
+#include "gateway/GatewayJsonUtils.h"
 #include "gateway/GatewayToolRegistry.h"
 #include "gateway/PluginHostAdapter.h"
 #include "gateway/executors/EmailScheduleExecutor.h"
 
 #include <catch2/catch_all.hpp>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 
@@ -112,4 +114,53 @@ TEST_CASE("Parity coverage: tool call sequence supports approval prepare and app
 
     const auto unloaded = PluginHostAdapter::UnloadExtensionRuntime("ops-tools");
     REQUIRE(unloaded.ok);
+}
+
+TEST_CASE("Parity coverage: prompt intent parser handles now and today", "[parity][chat][orchestration]") {
+    const auto intent = prompt::AnalyzeWeatherEmailPromptIntent(
+        "Check today's weather in Wuhan, write a short report, and email it to jichengwhu@163.com now.");
+
+    REQUIRE(intent.matched);
+    REQUIRE(intent.hasWeather);
+    REQUIRE(intent.hasEmail);
+    REQUIRE(intent.hasReport);
+    REQUIRE(intent.hasRecipient);
+    REQUIRE(intent.hasSchedule);
+    REQUIRE(intent.date == "today");
+    REQUIRE(intent.scheduleKind == "immediate_keyword");
+    REQUIRE(intent.sendAt.size() == 5);
+    REQUIRE(intent.decompositionSteps == 3);
+}
+
+TEST_CASE("Parity coverage: prompt intent parser handles explicit time schedule", "[parity][chat][orchestration]") {
+    const auto intent = prompt::AnalyzeWeatherEmailPromptIntent(
+        "Check tomorrow weather in Wuhan and email it to jichengwhu@163.com at 3pm.");
+
+    REQUIRE(intent.matched);
+    REQUIRE(intent.hasWeather);
+    REQUIRE(intent.hasEmail);
+    REQUIRE(intent.hasRecipient);
+    REQUIRE(intent.date == "tomorrow");
+    REQUIRE(intent.hasSchedule);
+    REQUIRE(intent.scheduleKind == "clock_time");
+    REQUIRE(intent.sendAt == "15:00");
+}
+
+TEST_CASE("Parity coverage: prompt intent parser reports miss reasons", "[parity][chat][orchestration]") {
+    const auto intent = prompt::AnalyzeWeatherEmailPromptIntent(
+        "Please summarize today's traffic updates.");
+
+    REQUIRE_FALSE(intent.matched);
+    REQUIRE(std::find(
+        intent.missReasons.begin(),
+        intent.missReasons.end(),
+        "missing_weather") != intent.missReasons.end());
+    REQUIRE(std::find(
+        intent.missReasons.begin(),
+        intent.missReasons.end(),
+        "missing_email_action") != intent.missReasons.end());
+    REQUIRE(std::find(
+        intent.missReasons.begin(),
+        intent.missReasons.end(),
+        "missing_recipient_email") != intent.missReasons.end());
 }
