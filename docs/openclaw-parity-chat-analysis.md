@@ -150,6 +150,11 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
   `blazeclaw.gateway.tools.lifecycle` events (start/result/error/approval phases).
 - ✅ Added structured telemetry + diagnostics parity baseline with deterministic
   telemetry envelopes for lifecycle, tool, and approval token/session events.
+- ✅ Extended parity validation coverage with smoke + fixture + test updates:
+  - WebView smoke lifecycle/catalog checks
+  - prompt-level orchestration sequence checks (weather + email)
+  - protocol fixture additions for orchestration responses
+  - parity-oriented gateway test case for catalog/execute/lifecycle contract
 - ⚠️ Remaining for full parity: workflow-engine plugin runtime completeness and concrete non-seeded weather/email runtime backends (tracked in sections 2.1.2 and 2.3).
 
 [back to top](#index)

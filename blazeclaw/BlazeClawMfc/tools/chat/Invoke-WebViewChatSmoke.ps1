@@ -21,6 +21,36 @@ function Write-FlowTrace {
         return
     }
 
+function Get-ChatEventText {
+    param($Event)
+
+    if ($null -eq $Event) {
+        return ""
+    }
+
+    if ($null -eq $Event.message) {
+        return ""
+    }
+
+    if ($Event.message.PSObject.Properties.Name -contains "text") {
+        return [string]$Event.message.text
+    }
+
+    if ($Event.message.PSObject.Properties.Name -contains "content") {
+        $content = @($Event.message.content)
+        foreach ($item in $content) {
+            if (
+                $null -ne $item -and
+                $item.PSObject.Properties.Name -contains "text"
+            ) {
+                return [string]$item.text
+            }
+        }
+    }
+
+    return ""
+}
+
     if ([string]::IsNullOrWhiteSpace($script:CurrentFlow)) {
         return
     }
@@ -785,6 +815,95 @@ Invoke-FlowWithSocket -FlowName "weatherEmailExecute" -FlowBody {
 }
 }
 
+if (Should-RunFlow -FlowName "lifecycleCatalog") {
+Invoke-FlowWithSocket -FlowName "lifecycleCatalog" -FlowBody {
+    param($socket, [ref]$events)
+
+    $catalogReq = New-ReqFrame -Method "gateway.tools.catalog" -Params @{}
+    Send-Req -Socket $socket -Frame $catalogReq
+    $catalogRes = Wait-Response -Socket $socket -RequestId $catalogReq.id -CapturedEvents ([ref]$events.Value)
+    if (-not $catalogRes.ok) {
+        throw "gateway.tools.catalog failed"
+    }
+
+    $toolIds = @($catalogRes.payload.tools | ForEach-Object { [string]$_.id })
+    foreach ($requiredTool in @("chat.send", "memory.search", "lobster", "weather.lookup", "email.schedule")) {
+        if ($toolIds -notcontains $requiredTool) {
+            throw "gateway.tools.catalog missing required tool: $requiredTool"
+        }
+    }
+
+    $lifecycleReq = New-ReqFrame -Method "gateway.events.latestByType" -Params @{ type = "lifecycle" }
+    Send-Req -Socket $socket -Frame $lifecycleReq
+    $lifecycleRes = Wait-Response -Socket $socket -RequestId $lifecycleReq.id -CapturedEvents ([ref]$events.Value)
+    if (-not $lifecycleRes.ok) {
+        throw "gateway.events.latestByType lifecycle failed"
+    }
+
+    if ([string]$lifecycleRes.payload.event -ne "gateway.shutdown") {
+        throw "lifecycle latest event mismatch"
+    }
+
+    Write-Output "[PASS] lifecycle catalog activation coverage"
+}
+}
+
+if (Should-RunFlow -FlowName "orchestrationPrompt") {
+Invoke-FlowWithSocket -FlowName "orchestrationPrompt" -FlowBody {
+    param($socket, [ref]$events)
+
+    $flowSessionKey = New-SmokeSessionKey -FlowName "orchestrationPrompt"
+    $runKey = "web-smoke-orch-" + [guid]::NewGuid().ToString("N")
+    $prompt = "Check tomorrow's weather in Wuhan, write a short report, and email it to jicheng@whu.edu.cn at 1 PM."
+
+    $sendReq = New-ReqFrame -Method "chat.send" -Params @{
+        sessionKey = $flowSessionKey
+        message = $prompt
+        deliver = $false
+        idempotencyKey = $runKey
+        attachments = @()
+    }
+
+    Send-Req -Socket $socket -Frame $sendReq
+    $sendRes = Wait-Response -Socket $socket -RequestId $sendReq.id -CapturedEvents ([ref]$events.Value)
+    if (-not $sendRes.ok) {
+        throw "chat.send orchestration prompt failed"
+    }
+
+    $runId = [string]$sendRes.payload.runId
+    [void](Wait-RunTerminalState -Socket $socket -Session $flowSessionKey -RunId $runId -TargetStates @("final", "error") -CapturedEvents ([ref]$events.Value))
+
+    $aggregateText = ""
+    for ($i = 0; $i -lt 5; $i++) {
+        $poll = Poll-Events -Socket $socket -Session $flowSessionKey -CapturedEvents ([ref]$events.Value)
+        $polledEvents = @($poll.payload.events)
+        foreach ($evt in $polledEvents) {
+            if ([string]$evt.runId -ne $runId) {
+                continue
+            }
+
+            $aggregateText += " " + (Get-ChatEventText -Event $evt)
+        }
+
+        if ($aggregateText -like "*weather.lookup*" -and $aggregateText -like "*email.schedule*") {
+            break
+        }
+
+        Start-Sleep -Milliseconds 120
+    }
+
+    if ($aggregateText -notlike "*weather.lookup*") {
+        throw "orchestration event trace missing weather.lookup"
+    }
+
+    if ($aggregateText -notlike "*email.schedule*") {
+        throw "orchestration event trace missing email.schedule"
+    }
+
+    Write-Output "[PASS] orchestration prompt sequence coverage"
+}
+}
+
 Write-Output ""
 Write-Output "WebView smoke summary"
 Write-Output "- send/final: pass"
@@ -793,5 +912,7 @@ Write-Output "- abort: pass"
 Write-Output "- forceError: pass"
 Write-Output "- lobsterExecute: pass"
 Write-Output "- weatherEmailExecute: pass"
+Write-Output "- lifecycleCatalog: pass"
+Write-Output "- orchestrationPrompt: pass"
 Write-Output "- lobsterExecute: (verified when run)"
 Write-Output "- weatherEmailExecute: (verified when run)"

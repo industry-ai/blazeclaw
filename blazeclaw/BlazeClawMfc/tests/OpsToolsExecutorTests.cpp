@@ -30,6 +30,9 @@ TEST_CASE("Weather lookup tool adapter resolves and returns forecast", "[ops-too
 }
 
 TEST_CASE("Email schedule tool adapter prepare and approve flow", "[ops-tools][email]") {
+    const auto unloadStale = PluginHostAdapter::UnloadExtensionRuntime("ops-tools");
+    REQUIRE(unloadStale.ok);
+
     const auto load = PluginHostAdapter::LoadExtensionRuntime("ops-tools");
     REQUIRE(load.ok);
 

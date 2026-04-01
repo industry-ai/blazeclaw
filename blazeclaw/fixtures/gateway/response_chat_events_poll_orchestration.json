@@ -1,0 +1,37 @@
+{
+  "type": "res",
+  "id": "chat-poll-orch-1",
+  "ok": true,
+  "payload": {
+    "sessionKey": "main",
+    "events": [
+      {
+        "runId": "chat-run-orch-1",
+        "sessionKey": "main",
+        "state": "delta",
+        "timestamp": 1,
+        "message": {
+          "role": "assistant",
+          "text": "tools.execute.start tool=weather.lookup"
+        }
+      },
+      {
+        "runId": "chat-run-orch-1",
+        "sessionKey": "main",
+        "state": "final",
+        "timestamp": 2,
+        "message": {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Email scheduling is pending approval."
+            }
+          ],
+          "timestamp": 2
+        }
+      }
+    ],
+    "count": 2
+  }
+}

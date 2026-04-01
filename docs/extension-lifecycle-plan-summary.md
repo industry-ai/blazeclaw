@@ -46,6 +46,9 @@ Key points:
 - Telemetry parity update: gateway now emits structured telemetry envelopes for
   lifecycle transitions, tool invoke/complete flow, and approval session/token
   diagnostics (save/load/invalid/expire/resume/suspend) to deterministic debug sink.
+- Parity validation update: smoke/test/fixture coverage now includes lifecycle
+  activation catalog checks and prompt-level orchestration sequence validation
+  for weather+email flows.
 
 How to test locally:
 - Build: msbuild blazeclaw/BlazeClaw.sln /p:Configuration=Debug /p:Platform=x64
