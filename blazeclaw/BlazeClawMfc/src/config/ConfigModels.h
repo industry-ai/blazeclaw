@@ -195,6 +195,8 @@ struct HooksConfig {
 
 struct ChatUiConfig {
   std::wstring mode = L"webview2";
+  std::wstring activeProvider = L"local";
+  std::wstring activeModel = L"default";
 };
 
 struct LocalModelConfig {
