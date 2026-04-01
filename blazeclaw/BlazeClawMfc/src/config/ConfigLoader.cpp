@@ -313,7 +313,11 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
     if (trimmedLine.rfind(L"chat.localModel.maxTokens=", 0) == 0) {
       std::uint32_t value = 0;
       if (TryParseUInt(trimmedLine.substr(26), value) && value > 0) {
-        outConfig.localModel.maxTokens = value;
+        outConfig.localModel.maxTokens =
+            (std::clamp)(
+                value,
+                std::uint32_t{64},
+                std::uint32_t{4096});
       }
       continue;
     }
