@@ -1256,6 +1256,9 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 			runtimeKind);
 		m_bridgeLifecycleSent = true;
 		m_bridgeLastConnected = connected;
+       m_bridgeLastProvider = provider;
+		m_bridgeLastModel = model;
+		m_bridgeLastRuntimeKind = runtimeKind;
 	}
 	else if (connected != m_bridgeLastConnected)
 	{
@@ -1277,6 +1280,27 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 		}
 
 		m_bridgeLastConnected = connected;
+       m_bridgeLastProvider = connected ? provider : std::string();
+		m_bridgeLastModel = connected ? model : std::string();
+		m_bridgeLastRuntimeKind = connected ? runtimeKind : std::string();
+	}
+
+	if (connected &&
+		m_bridgeLifecycleSent &&
+		(provider != m_bridgeLastProvider ||
+		 model != m_bridgeLastModel ||
+		 runtimeKind != m_bridgeLastRuntimeKind))
+	{
+		AppendChatProcedureStatusLine(L"lifecycle.runtime-updated");
+		PostBridgeLifecycleEvent(
+			L"connected",
+			L"runtime-updated",
+			provider,
+			model,
+			runtimeKind);
+		m_bridgeLastProvider = provider;
+		m_bridgeLastModel = model;
+		m_bridgeLastRuntimeKind = runtimeKind;
 	}
 
 	if (!connected || app == nullptr)

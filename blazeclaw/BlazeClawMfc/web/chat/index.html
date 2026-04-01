@@ -633,6 +633,7 @@
           }
 
           if (msg.channel === "blazeclaw.gateway.lifecycle") {
+            const wasConnected = connected;
             connected = msg.state === "connected" || msg.state === "reconnected";
             let status = `gateway: ${msg.state}`;
             if (connected) {
@@ -654,7 +655,7 @@
               }
             }
             setStatus(status);
-            if (connected) {
+            if (connected && !wasConnected) {
               loadHistory();
             }
             updateComposerState();

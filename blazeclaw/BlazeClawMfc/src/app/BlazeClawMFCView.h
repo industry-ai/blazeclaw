@@ -86,6 +86,9 @@ protected:
 	std::uint64_t m_bridgeTraceResCount = 0;
 	std::uint64_t m_bridgeTraceEventCount = 0;
 	std::uint64_t m_bridgeTraceLastFlushTickMs = 0;
+	std::string m_bridgeLastProvider;
+	std::string m_bridgeLastModel;
+	std::string m_bridgeLastRuntimeKind;
 
 	void InitializeWebViewBridge();
 	void HandleWebMessageJson(const std::wstring& webMessageJson);
