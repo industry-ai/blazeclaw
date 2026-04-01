@@ -193,16 +193,38 @@ bool ApprovalTokenStore::IsTokenValid(
     ApprovalSessionRecord* outSession) const {
     const auto session = LoadSession(token);
     if (!session.has_value()) {
+        try {
+            EmitTelemetryEvent(
+                "approval.token.invalid",
+                std::string("{\"token\":") + JsonString(token) + "}");
+        }
+        catch (...) {}
         return false;
     }
 
     if (session->expiresAtEpochMs > 0 && nowEpochMs >= session->expiresAtEpochMs) {
+        try {
+            EmitTelemetryEvent(
+                "approval.token.expire",
+                std::string("{\"token\":") + JsonString(token) +
+                ",\"expiresAtEpochMs\":" +
+                std::to_string(session->expiresAtEpochMs) + "}");
+        }
+        catch (...) {}
         return false;
     }
 
     if (outSession != nullptr) {
         *outSession = session.value();
     }
+
+    try {
+        EmitTelemetryEvent(
+            "approval.token.resume",
+            std::string("{\"token\":") + JsonString(token) +
+            ",\"type\":" + JsonString(session->type) + "}");
+    }
+    catch (...) {}
 
     return true;
 }
@@ -303,6 +325,12 @@ bool ApprovalTokenStore::RemoveToken(const std::string& token) {
         }
 
         root.erase(token);
+        try {
+            EmitTelemetryEvent(
+                "approval.token.suspend",
+                std::string("{\"token\":") + JsonString(token) + "}");
+        }
+        catch (...) {}
         return WriteStoreJson(m_filePath, root);
     }
     catch (...) {

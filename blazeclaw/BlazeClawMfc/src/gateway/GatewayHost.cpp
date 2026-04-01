@@ -1442,20 +1442,27 @@ namespace blazeclaw::gateway {
 		m_dispatcher.Register("gateway.tools.call.execute", [this](const protocol::RequestFrame& request) {
 			const std::string requestedTool = ExtractStringParam(request.paramsJson, "tool");
           const std::optional<std::string> argsJson = ExtractObjectParam(request.paramsJson, "args");
-            const ToolExecuteResult execution = m_toolRegistry.Execute(requestedTool, argsJson);
-
-			// Emit telemetry for tool execution result
-			{
-				const std::string resultPayload = "{\"tool\":" + JsonString(execution.tool) + ",\"executed\":" + std::string(execution.executed ? "true" : "false") + ",\"status\":" + JsonString(execution.status) + "}";
-				EmitTelemetryEvent("gateway.tool.result", resultPayload);
-			}
-			const bool argsProvided = request.paramsJson.has_value() &&
+            const bool argsProvided = request.paramsJson.has_value() &&
 				request.paramsJson.value().find("\"args\"") != std::string::npos;
 
 			// Emit telemetry for tool invocation attempt
 			{
-				const std::string payload = "{\"tool\":" + JsonString(requestedTool) + ",\"argsProvided\":" + std::string(argsProvided ? "true" : "false") + "}";
-				EmitTelemetryEvent("gateway.tool.invoke", payload);
+				const std::string invokePayload =
+					"{\"tool\":" + JsonString(requestedTool) +
+					",\"argsProvided\":" + std::string(argsProvided ? "true" : "false") + "}";
+				EmitTelemetryEvent("gateway.tool.invoke", invokePayload);
+			}
+
+			const ToolExecuteResult execution = m_toolRegistry.Execute(requestedTool, argsJson);
+
+			// Emit telemetry for tool execution result
+			{
+				const std::string resultPayload =
+					"{\"tool\":" + JsonString(execution.tool) +
+					",\"executed\":" + std::string(execution.executed ? "true" : "false") +
+					",\"status\":" + JsonString(execution.status) +
+					",\"argsProvided\":" + std::string(argsProvided ? "true" : "false") + "}";
+				EmitTelemetryEvent("gateway.tool.complete", resultPayload);
 			}
 
 			return protocol::ResponseFrame{
