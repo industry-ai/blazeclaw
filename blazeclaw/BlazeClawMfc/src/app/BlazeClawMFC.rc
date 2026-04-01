@@ -71,14 +71,20 @@ END
 // Dialog
 //
 
-IDD_APIKEY_DIALOG DIALOGEX 0, 0, 309, 176
+IDD_APIKEY_DIALOG DIALOGEX 0, 0, 391, 210
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "Dialog"
+CAPTION "API Key Configuration"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    DEFPUSHBUTTON   "OK",IDOK,198,155,50,14
-    PUSHBUTTON      "Cancel",IDCANCEL,252,155,50,14
-    EDITTEXT        IDC_EDIT_APIKEY,106,47,180,14,ES_AUTOHSCROLL
+    LTEXT           "Provider:",IDC_STATIC_PROVIDER_LABEL,14,14,60,14
+    COMBOBOX        IDC_COMBO_PROVIDER,80,12,140,120,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "API Key:",IDC_STATIC_APIKEY_LABEL,14,44,60,14
+    EDITTEXT        IDC_EDIT_APIKEY,80,42,276,14,ES_AUTOHSCROLL
+    LTEXT           "",IDC_STATIC_APIKEY_STATUS,14,66,360,14
+    PUSHBUTTON      "Test",IDC_BUTTON_TEST_KEY,14,188,50,14
+    PUSHBUTTON      "Delete",IDC_BUTTON_DELETE_KEY,80,188,50,14
+    DEFPUSHBUTTON   "Save",IDOK,276,188,50,14
+    PUSHBUTTON      "Cancel",IDCANCEL,330,188,50,14
 END
 
 
@@ -93,7 +99,7 @@ BEGIN
     IDD_APIKEY_DIALOG, DIALOG
     BEGIN
         LEFTMARGIN, 7
-        RIGHTMARGIN, 302
+        RIGHTMARGIN, 380
         TOPMARGIN, 7
         BOTTOMMARGIN, 169
     END
@@ -111,12 +117,12 @@ BEGIN
     0
 END
 
-#endif    // Chinese (Simplified, China) resources
+#endif    // 中文(简体，中国) resources
 /////////////////////////////////////////////////////////////////////////////
 
 
 /////////////////////////////////////////////////////////////////////////////
-// English (United States) resources
+// 英语(美国) resources
 
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
 LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
@@ -477,7 +483,6 @@ END
 /////////////////////////////////////////////////////////////////////////////
 //
 // Dialog
-//
 
 IDD_ABOUTBOX DIALOGEX 0, 0, 170, 62
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU

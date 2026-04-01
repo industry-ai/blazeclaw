@@ -325,9 +325,16 @@
 #define IDD_APIKEY_DIALOG               41000
 #define IDC_EDIT_APIKEY                 41001
 #define IDC_STATIC_APIKEY_LABEL         41002
+#define IDC_STATIC_PROVIDER_LABEL       41008
+#define IDC_COMBO_PROVIDER              41003
+#define IDC_STATIC_APIKEY_STATUS        41005
+#define IDC_BUTTON_TEST_KEY             41006
+#define IDC_BUTTON_DELETE_KEY           41007
 #define IDS_DEEPSEEK_DIALOG_TITLE       42000
 #define IDS_DEEPSEEK_DIALOG_LABEL       42001
 #define IDS_DEEPSEEK_STORED_MARKER      42002
+#define IDS_BTN_SHOW                    42012
+#define IDS_BTN_HIDE                    42013
 
 // Next default values for new objects
 // 
