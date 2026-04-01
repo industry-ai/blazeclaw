@@ -6,6 +6,7 @@
 #include <cctype>
 #include <chrono>
 #include <cstdlib>
+#include <iomanip>
 #include <regex>
 #include <sstream>
 #include <nlohmann/json.hpp>
@@ -258,6 +259,83 @@ namespace blazeclaw::gateway {
             std::string errorMessage;
         };
 
+        std::optional<std::string> TryParsePromptSendAt(
+            const std::string& message) {
+            static const std::regex kTwelveHourRegex(
+                R"((\b\d{1,2})(?::(\d{2}))?\s*(am|pm)\b)",
+                std::regex_constants::icase);
+            static const std::regex kTwentyFourHourRegex(
+                R"((\b\d{1,2}):(\d{2})\b)");
+
+            std::smatch twelveHourMatch;
+            if (std::regex_search(message, twelveHourMatch, kTwelveHourRegex) &&
+                twelveHourMatch.size() >= 4) {
+                int hour = 0;
+                int minute = 0;
+                try {
+                    hour = std::stoi(twelveHourMatch[1].str());
+                    minute = twelveHourMatch[2].matched
+                        ? std::stoi(twelveHourMatch[2].str())
+                        : 0;
+                }
+                catch (...) {
+                    return std::nullopt;
+                }
+
+                if (hour < 1 || hour > 12 || minute < 0 || minute > 59) {
+                    return std::nullopt;
+                }
+
+                std::string meridiem = twelveHourMatch[3].str();
+                std::transform(
+                    meridiem.begin(),
+                    meridiem.end(),
+                    meridiem.begin(),
+                    [](unsigned char ch) {
+                        return static_cast<char>(std::tolower(ch));
+                    });
+
+                if (meridiem == "am") {
+                    hour = hour == 12 ? 0 : hour;
+                }
+                else {
+                    hour = hour == 12 ? 12 : hour + 12;
+                }
+
+                std::ostringstream time;
+                time << std::setw(2) << std::setfill('0') << hour
+                     << ":"
+                     << std::setw(2) << std::setfill('0') << minute;
+                return time.str();
+            }
+
+            std::smatch twentyFourHourMatch;
+            if (std::regex_search(message, twentyFourHourMatch, kTwentyFourHourRegex) &&
+                twentyFourHourMatch.size() >= 3) {
+                int hour = 0;
+                int minute = 0;
+                try {
+                    hour = std::stoi(twentyFourHourMatch[1].str());
+                    minute = std::stoi(twentyFourHourMatch[2].str());
+                }
+                catch (...) {
+                    return std::nullopt;
+                }
+
+                if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+                    return std::nullopt;
+                }
+
+                std::ostringstream time;
+                time << std::setw(2) << std::setfill('0') << hour
+                     << ":"
+                     << std::setw(2) << std::setfill('0') << minute;
+                return time.str();
+            }
+
+            return std::nullopt;
+        }
+
         bool IsWeatherEmailPromptIntent(const std::string& message) {
             const std::string lowered = [&message]() {
                 std::string value = message;
@@ -273,10 +351,7 @@ namespace blazeclaw::gateway {
 
             const bool hasWeather = lowered.find("weather") != std::string::npos;
             const bool hasEmail = lowered.find("email") != std::string::npos;
-            const bool hasSchedule =
-                lowered.find("1 pm") != std::string::npos ||
-                lowered.find("1pm") != std::string::npos ||
-                lowered.find("13:00") != std::string::npos;
+            const bool hasSchedule = TryParsePromptSendAt(message).has_value();
 
             return hasWeather && hasEmail && hasSchedule;
         }
@@ -334,25 +409,8 @@ namespace blazeclaw::gateway {
         }
 
         std::string ResolvePromptSendAt(const std::string& message) {
-            const std::string lowered = [&message]() {
-                std::string value = message;
-                std::transform(
-                    value.begin(),
-                    value.end(),
-                    value.begin(),
-                    [](unsigned char ch) {
-                        return static_cast<char>(std::tolower(ch));
-                    });
-                return value;
-            }();
-
-            if (lowered.find("1 pm") != std::string::npos ||
-                lowered.find("1pm") != std::string::npos ||
-                lowered.find("13:00") != std::string::npos) {
-                return "13:00";
-            }
-
-            return "13:00";
+            const auto parsed = TryParsePromptSendAt(message);
+            return parsed.value_or("13:00");
         }
 
         std::string BuildWeatherReportText(
