@@ -68,6 +68,20 @@ namespace blazeclaw::gateway {
     }
 
     void GatewayHost::RegisterTransportHandlers() {
+        m_dispatcher.Register("connect", [this](const protocol::RequestFrame& request) {
+            const std::string requestedAgent =
+                ExtractStringParamLocal(request.paramsJson, "agent");
+            return protocol::ResponseFrame{
+                .id = request.id,
+                .ok = true,
+                .payloadJson =
+                    "{\"accepted\":true,\"protocol\":3,\"agent\":\"" +
+                    EscapeJsonLocal(requestedAgent.empty() ? "unknown" : requestedAgent) +
+                    "\",\"gateway\":\"blazeclaw.gateway.v1\"}",
+                .error = std::nullopt,
+            };
+            });
+
         m_dispatcher.Register("gateway.transport.status", [this](const protocol::RequestFrame& request) {
             return protocol::ResponseFrame{
                 .id = request.id,

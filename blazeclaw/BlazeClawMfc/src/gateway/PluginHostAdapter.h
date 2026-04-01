@@ -49,6 +49,9 @@ public:
     // Unregister previously registered adapters.
     static void UnregisterExtensionAdapter(const std::string& extensionId);
     static void UnregisterToolAdapter(const std::string& toolId);
+
+    // Restore built-in default adapters used by runtime extensions.
+    static void EnsureDefaultAdaptersRegistered();
 };
 
 } // namespace blazeclaw::gateway

@@ -3,6 +3,26 @@
 
 namespace blazeclaw::gateway::json {
 
+namespace {
+
+int ParseHexDigit(const char ch) {
+    if (ch >= '0' && ch <= '9') {
+        return ch - '0';
+    }
+
+    if (ch >= 'a' && ch <= 'f') {
+        return 10 + (ch - 'a');
+    }
+
+    if (ch >= 'A' && ch <= 'F') {
+        return 10 + (ch - 'A');
+    }
+
+    return -1;
+}
+
+}
+
 std::size_t SkipWhitespace(const std::string& text, std::size_t index) {
     while (index < text.size() && std::isspace(static_cast<unsigned char>(text[index])) != 0) {
         ++index;
@@ -67,6 +87,26 @@ bool ParseJsonStringAt(const std::string& text, std::size_t& index, std::string&
             case 't':
                 outValue.push_back('\t');
                 break;
+            case 'u': {
+                if (index + 4 > text.size()) {
+                    return false;
+                }
+
+                std::uint32_t codepoint = 0;
+                for (int i = 0; i < 4; ++i) {
+                    const int hex = ParseHexDigit(text[index + i]);
+                    if (hex < 0) {
+                        return false;
+                    }
+
+                    codepoint = (codepoint << 4) | static_cast<std::uint32_t>(hex);
+                }
+
+                index += 4;
+                outValue.push_back(
+                    static_cast<char>(codepoint <= 0x7F ? codepoint : '?'));
+                break;
+            }
             default:
                 return false;
             }

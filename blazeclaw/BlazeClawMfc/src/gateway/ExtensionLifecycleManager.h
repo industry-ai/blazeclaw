@@ -50,6 +50,7 @@ struct ExtensionLifecycleResult {
 class ExtensionLifecycleManager {
 public:
     ExtensionLifecycleManager() = default;
+    explicit ExtensionLifecycleManager(bool tolerateMissingLobsterExecPath);
 
     // Load extension manifests from a catalog file. Returns number of tools discovered.
     std::size_t LoadCatalog(const std::string& catalogPath);
@@ -73,6 +74,7 @@ private:
 
     std::vector<ExtensionManifest> m_extensions;
     std::unordered_map<std::string, ExtensionStateSnapshot> m_states;
+    bool m_tolerateMissingLobsterExecPath = false;
 };
 
 } // namespace blazeclaw::gateway

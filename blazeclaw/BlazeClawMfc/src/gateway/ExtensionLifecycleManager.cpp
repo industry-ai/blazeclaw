@@ -197,6 +197,7 @@ static bool IsAllowedToolId(const std::string& toolId) {
 
 static bool ResolveExecPathForManifest(
     const ExtensionManifest& manifest,
+    const bool tolerateMissingLobsterExecPath,
     std::string& resolvedExecPath,
     std::string& errorCode,
     std::string& errorMessage) {
@@ -215,6 +216,15 @@ static bool ResolveExecPathForManifest(
         std::filesystem::path candidate = std::filesystem::path(manifest.execPath);
         if (!candidate.is_absolute()) {
             candidate = manifestDir / candidate;
+        }
+
+        if (tolerateMissingLobsterExecPath &&
+            manifest.id == "lobster" &&
+            !std::filesystem::exists(candidate)) {
+            // Keep other extensions activatable when lobster workflow binary
+            // is intentionally not present in local parity runs.
+            resolvedExecPath.clear();
+            return true;
         }
 
         std::filesystem::path canonicalExec;
@@ -266,6 +276,11 @@ static bool ResolveExecPathForManifest(
         errorMessage = manifest.execPath;
         return false;
     }
+}
+
+ExtensionLifecycleManager::ExtensionLifecycleManager(
+    const bool tolerateMissingLobsterExecPath)
+    : m_tolerateMissingLobsterExecPath(tolerateMissingLobsterExecPath) {
 }
 
 void ExtensionLifecycleManager::SetState(
@@ -450,6 +465,7 @@ std::vector<ExtensionLifecycleResult> ExtensionLifecycleManager::ActivateAll(
         std::string execErrorMessage;
         if (!ResolveExecPathForManifest(
                 manifest,
+                m_tolerateMissingLobsterExecPath,
                 resolvedExecPath,
                 execErrorCode,
                 execErrorMessage)) {

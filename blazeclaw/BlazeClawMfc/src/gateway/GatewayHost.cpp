@@ -5,11 +5,13 @@
 #include "GatewayPersistencePaths.h"
 #include "GatewayProtocolCodec.h"
 #include "GatewayProtocolSchemaValidator.h"
+#include "PluginHostAdapter.h"
 #include "generated/GatewayHandlerCatalog.Generated.h"
 #include "Telemetry.h"
 
 #include <chrono>
 #include <cstdlib>
+#include <filesystem>
 #include <windows.h>
 #include <vector>
 #include <sstream>
@@ -18,6 +20,88 @@ namespace blazeclaw::gateway {
 	namespace {
      std::string EscapeJson(const std::string& value);
 
+		void EnsureOpsToolsRuntimeRegistered(GatewayToolRegistry& registry) {
+			const ToolPreviewResult weatherPreview = registry.Preview("weather.lookup");
+			const ToolPreviewResult emailPreview = registry.Preview("email.schedule");
+			if (weatherPreview.allowed && emailPreview.allowed) {
+				return;
+			}
+
+			const auto loadResult = PluginHostAdapter::LoadExtensionRuntime("ops-tools");
+			if (!loadResult.ok) {
+				return;
+			}
+
+			const auto weatherResolve =
+				PluginHostAdapter::ResolveExecutor("ops-tools", "weather.lookup", "");
+			if (weatherResolve.resolved && weatherResolve.executor) {
+				registry.RegisterRuntimeTool(
+					ToolCatalogEntry{
+						.id = "weather.lookup",
+						.label = "Weather Lookup",
+						.category = "data",
+						.enabled = true,
+					},
+					weatherResolve.executor);
+			}
+
+			const auto emailResolve =
+				PluginHostAdapter::ResolveExecutor("ops-tools", "email.schedule", "");
+			if (emailResolve.resolved && emailResolve.executor) {
+				registry.RegisterRuntimeTool(
+					ToolCatalogEntry{
+						.id = "email.schedule",
+						.label = "Email Schedule",
+						.category = "communication",
+						.enabled = true,
+					},
+					emailResolve.executor);
+			}
+		}
+
+		std::string ResolveExtensionsCatalogPath() {
+			const std::filesystem::path preferred =
+				std::filesystem::path("blazeclaw") /
+				"extensions" /
+				"extensions.catalog.json";
+			if (std::filesystem::exists(preferred)) {
+				return preferred.string();
+			}
+
+			const std::filesystem::path fallback =
+				std::filesystem::path("extensions") /
+				"extensions.catalog.json";
+			if (std::filesystem::exists(fallback)) {
+				return fallback.string();
+			}
+
+			char modulePathBuffer[MAX_PATH] = {};
+			const DWORD moduleChars =
+				GetModuleFileNameA(nullptr, modulePathBuffer, MAX_PATH);
+			if (moduleChars == 0 || moduleChars >= MAX_PATH) {
+				return preferred.string();
+			}
+
+			const std::filesystem::path exeDir =
+				std::filesystem::path(modulePathBuffer).parent_path();
+
+			const std::vector<std::filesystem::path> relativeCandidates = {
+				std::filesystem::path("..") / ".." / "extensions" / "extensions.catalog.json",
+				std::filesystem::path("..") / ".." / ".." / "extensions" / "extensions.catalog.json",
+				std::filesystem::path("..") / "blazeclaw" / "extensions" / "extensions.catalog.json",
+			};
+
+			for (const auto& relativeCandidate : relativeCandidates) {
+				const std::filesystem::path candidate =
+					std::filesystem::weakly_canonical(exeDir / relativeCandidate);
+				if (std::filesystem::exists(candidate)) {
+					return candidate.string();
+				}
+			}
+
+			return preferred.string();
+		}
+
 		constexpr const char* kSeedProviderId = "seed";
 		constexpr const char* kDeepSeekProviderId = "deepseek";
 		constexpr const char* kDefaultModelId = "default";
@@ -25,7 +109,7 @@ namespace blazeclaw::gateway {
 		constexpr const char* kDeepSeekChatModelId = "deepseek/deepseek-chat";
 		constexpr const char* kDeepSeekReasonerModelId = "deepseek/deepseek-reasoner";
 
-		std::string ReadEnvironmentVariable(const char* name) {
+     std::string ReadEnvironmentVariable(const char* name) {
 			if (name == nullptr) {
 				return {};
 			}
@@ -394,6 +478,7 @@ namespace blazeclaw::gateway {
 		m_port = config.port;
 		m_runtimeGatewayBind = m_bindAddress;
 		m_runtimeGatewayPort = m_port;
+        PluginHostAdapter::EnsureDefaultAdaptersRegistered();
       m_runtimeDeepSeekApiKey = ReadEnvironmentVariable("DEEPSEEK_API_KEY");
 		const std::string deepSeekBaseUrl =
 			ReadEnvironmentVariable("DEEPSEEK_BASE_URL");
@@ -407,10 +492,12 @@ namespace blazeclaw::gateway {
 			m_runtimeAgentModel = m_runtimeDeepSeekDefaultModel;
 		}
 
-		m_toolRegistry.LoadExtensionToolsFromCatalog("blazeclaw/extensions/extensions.catalog.json");
+       const std::string catalogPath = ResolveExtensionsCatalogPath();
+		m_toolRegistry.LoadExtensionToolsFromCatalog(catalogPath);
      // Activate lifecycle-managed extensions (register tools without executors).
-		m_extensionLifecycle.LoadCatalog("blazeclaw/extensions/extensions.catalog.json");
+       m_extensionLifecycle.LoadCatalog(catalogPath);
 		m_extensionLifecycle.ActivateAll(m_toolRegistry);
+        EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
      m_approvalStore.Initialize(ResolveGatewayStateFilePath("approvals.json").string());
 		m_toolRegistry.RegisterRuntimeTool(
 			ToolCatalogEntry{

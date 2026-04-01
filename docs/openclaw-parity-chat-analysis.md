@@ -154,7 +154,7 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
   - WebView smoke lifecycle/catalog checks
   - prompt-level orchestration sequence checks (weather + email)
   - protocol fixture additions for orchestration responses
-  - parity-oriented gateway test case for catalog/execute/lifecycle contract
+  - parity-oriented gateway test case (`ParityCoverageTests.cpp`) for catalog/execute/lifecycle contract
 - ⚠️ Remaining for full parity: workflow-engine plugin runtime completeness and concrete non-seeded weather/email runtime backends (tracked in sections 2.1.2 and 2.3).
 
 [back to top](#index)

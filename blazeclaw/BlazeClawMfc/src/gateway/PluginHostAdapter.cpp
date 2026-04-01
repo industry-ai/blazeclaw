@@ -179,32 +179,36 @@ void PluginHostAdapter::UnregisterToolAdapter(const std::string& toolId) {
     g_toolAdapters.erase(toolId);
 }
 
-// Register built-in adapters at static init
-struct PluginHostAdapterRegisterDefaults {
-    PluginHostAdapterRegisterDefaults() {
-        PluginHostAdapter::RegisterExtensionAdapter(
-            "lobster",
-            [](const std::string&, const std::string&, const std::string& execPath) {
+void PluginHostAdapter::EnsureDefaultAdaptersRegistered() {
+    RegisterExtensionAdapter(
+        "lobster",
+        [](const std::string&, const std::string&, const std::string& execPath) {
             return blazeclaw::gateway::executors::LobsterExecutor::Create(execPath);
         });
 
-        PluginHostAdapter::RegisterExtensionAdapter(
-            "ops-tools",
-            [](const std::string&, const std::string&, const std::string&) {
-                return GatewayToolRegistry::RuntimeToolExecutor{};
-            });
+    RegisterExtensionAdapter(
+        "ops-tools",
+        [](const std::string&, const std::string&, const std::string&) {
+            return GatewayToolRegistry::RuntimeToolExecutor{};
+        });
 
-        PluginHostAdapter::RegisterToolAdapter(
-            "weather.lookup",
-            [](const std::string&, const std::string&, const std::string&) {
-                return blazeclaw::gateway::executors::WeatherLookupExecutor::Create();
-            });
+    RegisterToolAdapter(
+        "weather.lookup",
+        [](const std::string&, const std::string&, const std::string&) {
+            return blazeclaw::gateway::executors::WeatherLookupExecutor::Create();
+        });
 
-        PluginHostAdapter::RegisterToolAdapter(
-            "email.schedule",
-            [](const std::string&, const std::string&, const std::string&) {
-                return blazeclaw::gateway::executors::EmailScheduleExecutor::Create();
-            });
+    RegisterToolAdapter(
+        "email.schedule",
+        [](const std::string&, const std::string&, const std::string&) {
+            return blazeclaw::gateway::executors::EmailScheduleExecutor::Create();
+        });
+}
+
+// Register built-in adapters at static init
+struct PluginHostAdapterRegisterDefaults {
+    PluginHostAdapterRegisterDefaults() {
+        PluginHostAdapter::EnsureDefaultAdaptersRegistered();
     }
 };
 

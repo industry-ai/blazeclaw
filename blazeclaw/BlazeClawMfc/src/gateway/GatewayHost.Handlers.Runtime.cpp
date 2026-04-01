@@ -1351,6 +1351,7 @@ namespace blazeclaw::gateway {
                     requestedSessionKey.empty() ? "main" : requestedSessionKey;
                 const std::string message =
                     ExtractStringParam(request.paramsJson, "message");
+                const std::string normalizedMessage = json::Trim(message);
                 const std::string idempotencyKey =
                     ExtractStringParam(request.paramsJson, "idempotencyKey");
                 const bool forceError =
@@ -1378,7 +1379,7 @@ namespace blazeclaw::gateway {
                     };
                 }
 
-                if (message.empty() && !hasAttachments) {
+                if (normalizedMessage.empty() && !hasAttachments) {
                     return protocol::ResponseFrame{
                         .id = request.id,
                         .ok = false,
@@ -1433,10 +1434,10 @@ namespace blazeclaw::gateway {
                     backendErrorMessage = "forced error for deterministic verification";
                 }
 
-                if (!forceError && !hasAttachments && !message.empty()) {
+                if (!forceError && !hasAttachments && !normalizedMessage.empty()) {
                     const auto orchestrationResult = TryOrchestrateWeatherEmailPrompt(
                         m_toolRegistry,
-                        message);
+                        normalizedMessage);
                     if (orchestrationResult.matched) {
                         orchestrationHandled = true;
                         if (orchestrationResult.success) {
@@ -1479,7 +1480,7 @@ namespace blazeclaw::gateway {
                         ChatRuntimeRequest{
                             .runId = runId,
                             .sessionKey = sessionKey,
-                            .message = message,
+                            .message = normalizedMessage,
                             .hasAttachments = hasAttachments,
                             .attachmentMimeTypes = attachmentMimeTypes,
                         });
@@ -1535,7 +1536,7 @@ namespace blazeclaw::gateway {
                 auto& sessionHistory = m_chatHistoryBySession[sessionKey];
                 PushHistoryMessageIfNew(
                     sessionHistory,
-                    BuildUserMessageJson(message, hasAttachments, nowMs));
+                    BuildUserMessageJson(normalizedMessage, hasAttachments, nowMs));
 
                 auto& sessionEvents = m_chatEventsBySession[sessionKey];
                 std::size_t streamCursor = 0;

@@ -157,14 +157,23 @@ bool ValidateResponseEnvelope(const ResponseFrame& response, SchemaValidationIss
         return false;
     }
 
-    if (!response.ok) {
-        SetIssue(issue, "schema_invalid_response", "Expected success response (`ok=true`) for method fixture validation.");
-        return false;
+    if (response.ok) {
+        if (!response.payloadJson.has_value() || !IsJsonObjectShape(response.payloadJson.value())) {
+            SetIssue(issue, "schema_invalid_response", "Response `payload` must be a JSON object.");
+            return false;
+        }
     }
+    else {
+        if (!response.error.has_value()) {
+            SetIssue(issue, "schema_invalid_response", "Error response must include `error`.");
+            return false;
+        }
 
-    if (!response.payloadJson.has_value() || !IsJsonObjectShape(response.payloadJson.value())) {
-        SetIssue(issue, "schema_invalid_response", "Response `payload` must be a JSON object.");
-        return false;
+        const auto& errorShape = response.error.value();
+        if (errorShape.code.empty() || errorShape.message.empty()) {
+            SetIssue(issue, "schema_invalid_response", "Error response must include non-empty `error.code` and `error.message`.");
+            return false;
+        }
     }
 
     return true;

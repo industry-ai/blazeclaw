@@ -16,15 +16,6 @@ TEST_CASE("Parity coverage: lifecycle activation/deactivation updates tool catal
             return GatewayToolRegistry::RuntimeToolExecutor{};
         });
 
-    PluginHostAdapter::RegisterToolAdapter(
-        "weather.lookup",
-        [](const std::string&, const std::string&, const std::string&) {
-            return GatewayToolRegistry::RuntimeToolExecutor(
-                [](const std::string& requestedTool, const std::optional<std::string>&) {
-                    return ToolExecuteResult{ requestedTool, true, "ok", "fixture" };
-                });
-        });
-
     const auto tmpRoot = std::filesystem::temp_directory_path() /
         ("blazeclaw_parity_" + std::to_string(std::rand()));
     std::filesystem::create_directories(tmpRoot);
@@ -76,12 +67,6 @@ TEST_CASE("Parity coverage: tool call sequence supports approval prepare and app
         "ops-tools",
         [](const std::string&, const std::string&, const std::string&) {
             return GatewayToolRegistry::RuntimeToolExecutor{};
-        });
-
-    PluginHostAdapter::RegisterToolAdapter(
-        "email.schedule",
-        [](const std::string&, const std::string&, const std::string&) {
-            return blazeclaw::gateway::executors::EmailScheduleExecutor::Create();
         });
 
     const auto loaded = PluginHostAdapter::LoadExtensionRuntime("ops-tools");

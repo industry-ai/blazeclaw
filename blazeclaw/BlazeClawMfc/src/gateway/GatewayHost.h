@@ -270,8 +270,8 @@ namespace blazeclaw::gateway {
 		GatewayAgentRegistry m_agentRegistry;
 		GatewayChannelRegistry m_channelRegistry;
 		GatewaySessionRegistry m_sessionRegistry;
-		GatewayToolRegistry m_toolRegistry;
-        ExtensionLifecycleManager m_extensionLifecycle;
+     GatewayToolRegistry m_toolRegistry;
+		ExtensionLifecycleManager m_extensionLifecycle{ true };
         ApprovalTokenStore m_approvalStore;
      std::unordered_map<std::string, AgentRunState> m_agentRuns;
 		std::unordered_map<std::string, std::string> m_agentRunByIdempotency;
