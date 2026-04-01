@@ -1195,29 +1195,54 @@ void CBlazeClawMFCView::PostBridgeMessageJson(const std::wstring& jsonMessage)
 
 void CBlazeClawMFCView::PostBridgeLifecycleEvent(
 	const wchar_t* state,
-	const wchar_t* reason)
+	const wchar_t* reason,
+	const std::string& provider,
+	const std::string& model,
+	const std::string& runtimeKind)
 {
-	std::wstringstream stream;
-	stream
-		<< L"{\"channel\":\"blazeclaw.gateway.lifecycle\",\"sessionId\":\""
-		<< ToWide(m_bridgeSessionId)
-		<< L"\",\"state\":\""
-		<< (state != nullptr ? state : L"unknown")
-		<< L"\"";
+	std::string payload =
+		"{\"channel\":\"blazeclaw.gateway.lifecycle\",\"sessionId\":" +
+		JsonString(m_bridgeSessionId) +
+		",\"state\":" +
+		JsonString(state != nullptr ? ToNarrow(state) : std::string("unknown"));
 
 	if (reason != nullptr && *reason != L'\0')
 	{
-		stream << L",\"reason\":\"" << reason << L"\"";
+		payload += ",\"reason\":" + JsonString(ToNarrow(reason));
 	}
 
-	stream << L"}";
-	PostBridgeMessageJson(stream.str());
+	if (!provider.empty())
+	{
+		payload += ",\"provider\":" + JsonString(provider);
+	}
+
+	if (!model.empty())
+	{
+		payload += ",\"model\":" + JsonString(model);
+	}
+
+	if (!runtimeKind.empty())
+	{
+		payload += ",\"runtimeKind\":" + JsonString(runtimeKind);
+	}
+
+	payload += "}";
+	PostBridgeMessageJson(ToWide(payload));
 }
 
 void CBlazeClawMFCView::PumpBridgeLifecycle()
 {
 	const auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
 	const bool connected = app != nullptr && app->Services().IsRunning();
+	const std::string provider = (connected && app != nullptr)
+		? app->Services().ActiveChatProvider()
+		: std::string();
+	const std::string model = (connected && app != nullptr)
+		? app->Services().ActiveChatModel()
+		: std::string();
+	const std::string runtimeKind = provider == "deepseek"
+		? "remote"
+		: (provider.empty() ? std::string() : "local");
 
 	if (!m_bridgeLifecycleSent)
 	{
@@ -1225,7 +1250,10 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 			connected ? L"lifecycle.connected" : L"lifecycle.disconnected");
 		PostBridgeLifecycleEvent(
 			connected ? L"connected" : L"disconnected",
-			connected ? L"service-ready" : L"service-not-running");
+         connected ? L"service-ready" : L"service-not-running",
+			provider,
+			model,
+			runtimeKind);
 		m_bridgeLifecycleSent = true;
 		m_bridgeLastConnected = connected;
 	}
@@ -1234,7 +1262,12 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 		if (connected)
 		{
 			AppendChatProcedureStatusLine(L"lifecycle.reconnected");
-			PostBridgeLifecycleEvent(L"reconnected", L"service-ready");
+         PostBridgeLifecycleEvent(
+				L"reconnected",
+				L"service-ready",
+				provider,
+				model,
+				runtimeKind);
 		}
 		else
 		{

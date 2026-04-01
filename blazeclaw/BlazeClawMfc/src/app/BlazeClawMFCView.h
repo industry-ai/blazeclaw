@@ -98,7 +98,12 @@ protected:
 		const char* kind,
 		const std::string& detail = std::string());
 	void FlushBridgeTraceIfNeeded();
-	void PostBridgeLifecycleEvent(const wchar_t* state, const wchar_t* reason = nullptr);
+   void PostBridgeLifecycleEvent(
+		const wchar_t* state,
+		const wchar_t* reason = nullptr,
+		const std::string& provider = std::string(),
+		const std::string& model = std::string(),
+		const std::string& runtimeKind = std::string());
 	void PumpBridgeLifecycle();
 
 // Generated message map functions

@@ -634,7 +634,26 @@
 
           if (msg.channel === "blazeclaw.gateway.lifecycle") {
             connected = msg.state === "connected" || msg.state === "reconnected";
-            setStatus(`gateway: ${msg.state}`);
+            let status = `gateway: ${msg.state}`;
+            if (connected) {
+              const provider = typeof msg.provider === "string" ? msg.provider : "";
+              const model = typeof msg.model === "string" ? msg.model : "";
+              const runtimeKind = typeof msg.runtimeKind === "string" ? msg.runtimeKind : "";
+              const details = [];
+              if (runtimeKind) {
+                details.push(runtimeKind);
+              }
+              if (provider) {
+                details.push(provider);
+              }
+              if (model) {
+                details.push(model);
+              }
+              if (details.length > 0) {
+                status += ` (${details.join(" / ")})`;
+              }
+            }
+            setStatus(status);
             if (connected) {
               loadHistory();
             }
