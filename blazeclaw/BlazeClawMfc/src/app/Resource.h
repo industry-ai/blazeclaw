@@ -119,7 +119,7 @@
 #define IDD_SKILL_DIALOG                315
 #define IDD_LOG_DIALOG                  316
 #define IDD_DIALOG1                     317
-#define IDD_NEWTAB_DIALOG              318
+#define IDD_NEWTAB_DIALOG               318
 #define IDC_STATIC_TITLE                1000
 #define IDC_STATIC_DESCRIPTION          1001
 #define IDC_GROUP_GATEWAY               1002
@@ -320,21 +320,36 @@
 #define ID_EDIT_SESSION                 32782
 #define ID_EDIT_INST                    32783
 #define ID_EDIT_CHANNEL                 32784
+#define ID_EXTENSION_MODELSET           32786
 #define ID_EXTENSION_DEEPSEEK           40101
 #define ID_WINDOW_NEW_WEBVIEW           40102
 #define IDD_APIKEY_DIALOG               41000
 #define IDC_EDIT_APIKEY                 41001
 #define IDC_STATIC_APIKEY_LABEL         41002
+#define IDC_COMBO_PROVIDER              41003
+#define IDC_STATIC_APIKEY_STATUS        41005
+#define IDC_BUTTON_TEST_KEY             41006
+#define IDC_BUTTON_DELETE_KEY           41007
+#define IDC_STATIC_PROVIDER_LABEL       41008
 #define IDS_DEEPSEEK_DIALOG_TITLE       42000
 #define IDS_DEEPSEEK_DIALOG_LABEL       42001
 #define IDS_DEEPSEEK_STORED_MARKER      42002
+#define IDS_BTN_SHOW                    42012
+#define IDS_BTN_HIDE                    42013
+#define IDD_SETTINGS_DIALOG             41010
+#define IDC_LIST_MODELS                 41011
+#define IDC_STATIC_SETTINGS_TITLE       41012
+#define IDC_STATIC_SETTINGS_DESC        41013
+#define IDC_BUTTON_SELECT_ALL           41014
+#define IDC_BUTTON_DESELECT_ALL         41015
+#define IDC_STATIC_MODEL_COUNT          41016
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        319
-#define _APS_NEXT_COMMAND_VALUE         32786
+#define _APS_NEXT_COMMAND_VALUE         32787
 #define _APS_NEXT_CONTROL_VALUE         1178
 #define _APS_NEXT_SYMED_VALUE           317
 #endif
