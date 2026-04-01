@@ -1603,6 +1603,12 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
   }
 
   m_activeConfig = config;
+  m_activeChatProvider = config.chat.activeProvider.empty()
+      ? "local"
+      : ToNarrow(config.chat.activeProvider);
+  m_activeChatModel = config.chat.activeModel.empty()
+      ? "default"
+      : ToNarrow(config.chat.activeModel);
   m_hooksEngineEnabled = ResolveHooksEngineEnabled(m_activeConfig);
   m_hooksFallbackPromptInjection =
       ResolveHooksFallbackPromptInjection(m_activeConfig);

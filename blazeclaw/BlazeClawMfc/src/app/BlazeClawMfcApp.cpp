@@ -15,6 +15,10 @@
 #include "../core/runtime/LocalModel/TokenizerBridge.h"
 
 #include <filesystem>
+#include <fstream>
+#include <algorithm>
+#include <cwctype>
+#include <vector>
 #include <Windows.h>
 
 #ifdef _DEBUG
@@ -34,6 +38,69 @@ namespace {
 		}
 
 		return output;
+	}
+
+	std::wstring Trim(const std::wstring& value) {
+		const auto first = std::find_if_not(
+			value.begin(),
+			value.end(),
+			[](const wchar_t ch) { return std::iswspace(ch) != 0; });
+		const auto last = std::find_if_not(
+			value.rbegin(),
+			value.rend(),
+			[](const wchar_t ch) { return std::iswspace(ch) != 0; }).base();
+		if (first >= last) {
+			return {};
+		}
+
+		return std::wstring(first, last);
+	}
+
+	void UpsertConfigEntry(
+		std::vector<std::wstring>& lines,
+		const std::wstring& key,
+		const std::wstring& value) {
+		const std::wstring prefix = key + L"=";
+		for (std::wstring& line : lines) {
+			if (Trim(line).rfind(prefix, 0) == 0) {
+				line = prefix + value;
+				return;
+			}
+		}
+
+		lines.push_back(prefix + value);
+	}
+
+	void PersistActiveChatConnection(
+		const blazeclaw::core::ServiceManager& services) {
+		std::vector<std::wstring> lines;
+		{
+			std::wifstream input(kConfigPath);
+			std::wstring line;
+			while (std::getline(input, line)) {
+				lines.push_back(line);
+			}
+		}
+
+		const std::wstring provider = ToWide(services.ActiveChatProvider());
+		const std::wstring model = ToWide(services.ActiveChatModel());
+		UpsertConfigEntry(
+			lines,
+			L"chat.activeProvider",
+			provider.empty() ? L"local" : provider);
+		UpsertConfigEntry(
+			lines,
+			L"chat.activeModel",
+			model.empty() ? L"default" : model);
+
+		std::wofstream output(kConfigPath, std::ios::trunc);
+		if (!output.is_open()) {
+			return;
+		}
+
+		for (const auto& line : lines) {
+			output << line << L"\n";
+		}
 	}
 
 	void AppendMainFrameStatusLine(const CString& line) {
@@ -428,6 +495,7 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 }
 
 int CBlazeClawMFCApp::ExitInstance() {
+    PersistActiveChatConnection(m_serviceManager);
 	m_serviceManager.Stop();
 
 	AfxOleTerm(FALSE);

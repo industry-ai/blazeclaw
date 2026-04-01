@@ -254,6 +254,20 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
       continue;
     }
 
+    if (trimmedLine.rfind(L"chat.activeProvider=", 0) == 0) {
+      const std::wstring value = ToLowerTrim(trimmedLine.substr(20));
+      outConfig.chat.activeProvider =
+          value.empty() ? L"local" : value;
+      continue;
+    }
+
+    if (trimmedLine.rfind(L"chat.activeModel=", 0) == 0) {
+      const std::wstring value = Trim(trimmedLine.substr(17));
+      outConfig.chat.activeModel =
+          value.empty() ? L"default" : value;
+      continue;
+    }
+
     if (trimmedLine.rfind(L"chat.localModel.enabled=", 0) == 0) {
       outConfig.localModel.enabled = ParseBool(
           trimmedLine.substr(24),
@@ -313,7 +327,11 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
     if (trimmedLine.rfind(L"chat.localModel.maxTokens=", 0) == 0) {
       std::uint32_t value = 0;
       if (TryParseUInt(trimmedLine.substr(26), value) && value > 0) {
-        outConfig.localModel.maxTokens = value;
+        outConfig.localModel.maxTokens =
+            (std::clamp)(
+                value,
+                std::uint32_t{64},
+                std::uint32_t{4096});
       }
       continue;
     }

@@ -86,6 +86,9 @@ protected:
 	std::uint64_t m_bridgeTraceResCount = 0;
 	std::uint64_t m_bridgeTraceEventCount = 0;
 	std::uint64_t m_bridgeTraceLastFlushTickMs = 0;
+	std::string m_bridgeLastProvider;
+	std::string m_bridgeLastModel;
+	std::string m_bridgeLastRuntimeKind;
 
 	void InitializeWebViewBridge();
 	void HandleWebMessageJson(const std::wstring& webMessageJson);
@@ -98,7 +101,12 @@ protected:
 		const char* kind,
 		const std::string& detail = std::string());
 	void FlushBridgeTraceIfNeeded();
-	void PostBridgeLifecycleEvent(const wchar_t* state, const wchar_t* reason = nullptr);
+   void PostBridgeLifecycleEvent(
+		const wchar_t* state,
+		const wchar_t* reason = nullptr,
+		const std::string& provider = std::string(),
+		const std::string& model = std::string(),
+		const std::string& runtimeKind = std::string());
 	void PumpBridgeLifecycle();
 
 // Generated message map functions

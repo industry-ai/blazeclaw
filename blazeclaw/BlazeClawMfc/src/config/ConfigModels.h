@@ -195,6 +195,8 @@ struct HooksConfig {
 
 struct ChatUiConfig {
   std::wstring mode = L"webview2";
+  std::wstring activeProvider = L"local";
+  std::wstring activeModel = L"default";
 };
 
 struct LocalModelConfig {
@@ -207,7 +209,7 @@ struct LocalModelConfig {
   std::wstring modelSha256;
   std::wstring tokenizerPath;
   std::wstring tokenizerSha256;
-  std::uint32_t maxTokens = 256;
+  std::uint32_t maxTokens = 512;
   double temperature = 0.0;
   std::uint32_t intraThreads = 0;
   std::uint32_t interThreads = 0;

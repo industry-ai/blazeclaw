@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <regex>
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -415,6 +416,14 @@ std::string StripQwenThinkingAndControlTokens(
     const std::string& value) {
   std::string output = value;
 
+  static const std::regex kImControlTokenPattern(
+      R"(<\/?\|im_(?:start|end)\|\/?>)",
+      std::regex_constants::icase);
+  output = std::regex_replace(
+      output,
+      kImControlTokenPattern,
+      std::string());
+
   auto eraseAll = [&output](const std::string& token) {
     std::size_t pos = output.find(token);
     while (pos != std::string::npos) {
@@ -423,8 +432,6 @@ std::string StripQwenThinkingAndControlTokens(
     }
   };
 
-  eraseAll("<|im_start|>");
-  eraseAll("<|im_end|>");
   eraseAll("<think>");
   eraseAll("</think>");
 

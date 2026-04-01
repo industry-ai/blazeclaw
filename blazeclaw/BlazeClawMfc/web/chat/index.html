@@ -339,11 +339,6 @@
         });
       }
 
-      function parseTextFromMessage(message) {
-        if (!message || typeof message !== "object") {
-          return "";
-        }
-
       function normalizeFinalAssistantMessage(message) {
         if (!message || typeof message !== "object") {
           return null;
@@ -378,6 +373,12 @@
 
         return message;
       }
+
+      function parseTextFromMessage(message) {
+        if (!message || typeof message !== "object") {
+          return "";
+        }
+
         if (typeof message.text === "string") {
           return message.text;
         }
@@ -542,7 +543,7 @@
           .filter((x) => x !== null);
 
         try {
-          await request("chat.send", {
+          const sendResult = await request("chat.send", {
             sessionKey,
             message: msg,
             deliver: false,
@@ -550,6 +551,17 @@
             forceError,
             attachments: apiAttachments
           });
+
+          const serverRunId =
+            sendResult &&
+            sendResult.payload &&
+            typeof sendResult.payload.runId === "string"
+              ? sendResult.payload.runId
+              : "";
+          if (serverRunId) {
+            runId = serverRunId;
+          }
+
           attachments = [];
         } catch (err) {
           addMessage(`send error: ${String(err)}`, "error");
@@ -621,9 +633,29 @@
           }
 
           if (msg.channel === "blazeclaw.gateway.lifecycle") {
+            const wasConnected = connected;
             connected = msg.state === "connected" || msg.state === "reconnected";
-            setStatus(`gateway: ${msg.state}`);
+            let status = `gateway: ${msg.state}`;
             if (connected) {
+              const provider = typeof msg.provider === "string" ? msg.provider : "";
+              const model = typeof msg.model === "string" ? msg.model : "";
+              const runtimeKind = typeof msg.runtimeKind === "string" ? msg.runtimeKind : "";
+              const details = [];
+              if (runtimeKind) {
+                details.push(runtimeKind);
+              }
+              if (provider) {
+                details.push(provider);
+              }
+              if (model) {
+                details.push(model);
+              }
+              if (details.length > 0) {
+                status += ` (${details.join(" / ")})`;
+              }
+            }
+            setStatus(status);
+            if (connected && !wasConnected) {
               loadHistory();
             }
             updateComposerState();
