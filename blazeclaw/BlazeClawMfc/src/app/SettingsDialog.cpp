@@ -6,8 +6,7 @@ IMPLEMENT_DYNAMIC(CSettingsDialog, CDialogEx)
 
 CSettingsDialog::CSettingsDialog(CWnd* pParent)
 	: CDialogEx(IDD_SETTINGS_DIALOG, pParent)
-{
-}
+{}
 
 CSettingsDialog::~CSettingsDialog() = default;
 
@@ -48,12 +47,68 @@ void CSettingsDialog::LoadModels()
 	m_listModels.DeleteAllItems();
 
 	// Built-in models
-	m_models.push_back({"deepseek-chat", "DeepSeek Chat", "DeepSeek", true});
-	m_models.push_back({"deepseek-reasoner", "DeepSeek Reasoner", "DeepSeek", true});
-	m_models.push_back({"gpt-4o", "GPT-4o", "OpenAI", true});
-	m_models.push_back({"gpt-4o-mini", "GPT-4o Mini", "OpenAI", true});
-	m_models.push_back({"gpt-4-turbo", "GPT-4 Turbo", "OpenAI", false});
-	m_models.push_back({"gpt-3.5-turbo", "GPT-3.5 Turbo", "OpenAI", false});
+	m_models.push_back({
+		 "default",
+		 "Default Model (Local ONNX)",
+		 "Seed",
+		 true
+		});
+	m_models.push_back({
+		"reasoner",
+		"Reasoner Model (Local ONNX)",
+		"Seed",
+		true
+		});
+	m_models.push_back({
+		"deepseek/deepseek-chat",
+		"DeepSeek Chat",
+		"DeepSeek",
+		true
+		});
+	m_models.push_back({
+		"deepseek/deepseek-reasoner",
+		"DeepSeek Reasoner",
+		"DeepSeek",
+		true
+		});
+	m_models.push_back({
+		"qwen3-local-onnx",
+		"Qwen3 Local ONNX",
+		"Local",
+		true
+		});
+
+	// Planned / not yet fully implemented model entries (disabled by default)
+	m_models.push_back({
+		"qwen2.5-1.5b-instruct-onnx",
+		"Qwen2.5 1.5B Instruct (ONNX)",
+		"Local",
+		false
+		});
+	m_models.push_back({
+		"gpt-4o",
+		"GPT-4o",
+		"OpenAI",
+		false
+		});
+	m_models.push_back({
+		"gpt-4o-mini",
+		"GPT-4o Mini",
+		"OpenAI",
+		false
+		});
+	m_models.push_back({
+		"gpt-4-turbo",
+		"GPT-4 Turbo",
+		"OpenAI",
+		false
+		});
+	m_models.push_back({
+		"gpt-3.5-turbo",
+		"GPT-3.5 Turbo",
+		"OpenAI",
+		false
+		});
 
 	// Load enabled state from config if available
 	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
@@ -85,9 +140,9 @@ void CSettingsDialog::UpdateModelCount()
 
 void CSettingsDialog::SelectAll(BOOL select)
 {
-	for (size_t i = 0; i < (int)m_models.size(); ++i) {
+	for (int i = 0; i < static_cast<int>(m_models.size()); ++i) {
 		m_listModels.SetCheck(i, select);
-		m_models[i].enabled = (select != FALSE);
+		m_models[static_cast<size_t>(i)].enabled = (select != FALSE);
 	}
 	UpdateModelCount();
 }
