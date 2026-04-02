@@ -120,6 +120,9 @@ Immediate implementation progress:
 - Step 10 complete: generalized matrix and failure-mode fixtures now cover
   2/3/4-step tool combinations, transient retry recovery, hard failures,
   approval-gated execution states, and legacy metadata compatibility.
+- Step 11 complete: staged rollout now supports provider/session canary gating,
+  critical-failure fallback to existing runtime path, and rollout diagnostics
+  visibility in operator reports.
 
 ## Verification lanes
 

@@ -358,7 +358,7 @@ and Steps 6-10 must produce evidence for both lanes.
 - [x] Step 9 complete
 - [x] Step 9A complete
 - [x] Step 10 complete
-- [ ] Step 11 complete
+- [x] Step 11 complete
 - [ ] Step 12 complete
 
 ## Implementation Status Update
@@ -439,6 +439,12 @@ and Steps 6-10 must produce evidence for both lanes.
 - Added hard failure fixture scenario asserting deterministic terminal error code handling.
 - Added approval-gated scenario validation for `needs_approval` tool-result deltas and successful terminal completion.
 - Added legacy snapshot compatibility scenario validating execution when binding metadata (e.g., `argMode`) is missing.
+
+### Completed now: Step 11 (Staged Rollout)
+- Added canary rollout scope controls for embedded dynamic loop using provider/session targeting from environment lists.
+- Gated dynamic-loop activation on both feature flag and canary eligibility decisions.
+- Added fallback policy so critical embedded orchestration failures can continue through existing provider/local runtime path.
+- Added embedded rollout diagnostics fields (`dynamicLoopEnabled`, `canaryEligible`, `fallbackUsed`, `fallbackReason`) to operator report output.
 
 ## Primary File Targets (Expected)
 - `blazeclaw/BlazeClawMfc/src/core/PiEmbeddedService.h`

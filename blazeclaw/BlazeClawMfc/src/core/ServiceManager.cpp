@@ -213,6 +213,69 @@ namespace blazeclaw::core {
 			return fallback;
 		}
 
+		std::string ToLowerAscii(const std::string& value) {
+			std::string lowered = value;
+			std::transform(
+				lowered.begin(),
+				lowered.end(),
+				lowered.begin(),
+				[](const unsigned char ch) {
+					return static_cast<char>(std::tolower(ch));
+				});
+			return lowered;
+		}
+
+		std::vector<std::string> ParseCsvEnvValues(const wchar_t* key) {
+			std::vector<std::string> values;
+			wchar_t* env = nullptr;
+			std::size_t len = 0;
+			if (_wdupenv_s(&env, &len, key) != 0 || env == nullptr || len == 0) {
+				if (env != nullptr) {
+					free(env);
+				}
+				return values;
+			}
+
+			std::wstring token;
+			for (std::size_t i = 0; i < len && env[i] != L'\0'; ++i) {
+				if (env[i] == L',' || env[i] == L';') {
+					const auto trimmed = Trim(token);
+					if (!trimmed.empty()) {
+						values.push_back(ToNarrow(trimmed));
+					}
+					token.clear();
+					continue;
+				}
+
+				token.push_back(env[i]);
+			}
+
+			const auto trimmed = Trim(token);
+			if (!trimmed.empty()) {
+				values.push_back(ToNarrow(trimmed));
+			}
+
+			free(env);
+			return values;
+		}
+
+		bool ContainsCaseInsensitive(
+			const std::vector<std::string>& values,
+			const std::string& candidate) {
+			if (candidate.empty()) {
+				return false;
+			}
+
+			const std::string loweredCandidate = ToLowerAscii(candidate);
+			for (const auto& value : values) {
+				if (ToLowerAscii(value) == loweredCandidate) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
 		std::vector<std::wstring> ResolveHooksAllowedPackages(
 			const blazeclaw::config::AppConfig& config) {
 			std::vector<std::wstring> values;
@@ -1820,6 +1883,14 @@ namespace blazeclaw::core {
 		m_retrievalMemoryService.Configure(m_activeConfig);
 		m_retrievalMemory = m_retrievalMemoryService.Snapshot();
 		m_piEmbeddedService.Configure(m_activeConfig);
+		m_embeddedDynamicLoopCanaryProviders = ParseCsvEnvValues(
+			L"BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_CANARY_PROVIDERS");
+		m_embeddedDynamicLoopCanarySessions = ParseCsvEnvValues(
+			L"BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_CANARY_SESSIONS");
+		m_lastEmbeddedDynamicLoopEnabled = false;
+		m_lastEmbeddedCanaryEligible = false;
+		m_lastEmbeddedFallbackUsed = false;
+		m_lastEmbeddedFallbackReason.clear();
 		RefreshSkillsState(m_activeConfig, true, L"startup");
 
 		std::wstring hookEventError;
@@ -2143,6 +2214,16 @@ namespace blazeclaw::core {
 						});
 				}
 
+				const bool canaryEligible = IsEmbeddedDynamicLoopCanaryEligible(
+					m_activeChatProvider,
+					sessionId);
+				const bool enableEmbeddedDynamicLoop =
+					m_activeConfig.embedded.dynamicToolLoopEnabled && canaryEligible;
+				m_lastEmbeddedDynamicLoopEnabled = enableEmbeddedDynamicLoop;
+				m_lastEmbeddedCanaryEligible = canaryEligible;
+				m_lastEmbeddedFallbackUsed = false;
+				m_lastEmbeddedFallbackReason.clear();
+
 				const auto embeddedExecution = m_piEmbeddedService.ExecuteRun(
 					EmbeddedRuntimeExecutionRequest{
 						.run = EmbeddedRunRequest{
@@ -2153,8 +2234,7 @@ namespace blazeclaw::core {
 						.skillsPrompt = WideToNarrowAscii(m_skillsPrompt.prompt),
 						.toolBindings = std::move(toolBindings),
 						.runtimeTools = m_gatewayHost.ListRuntimeTools(),
-					 .enableDynamicToolLoop =
-							m_activeConfig.embedded.dynamicToolLoopEnabled,
+					   .enableDynamicToolLoop = enableEmbeddedDynamicLoop,
 					 .toolExecutorV2 = [this](
 							const blazeclaw::gateway::ToolExecuteRequestV2& executeRequest) {
 							return m_gatewayHost.ExecuteRuntimeToolV2(executeRequest);
@@ -2203,19 +2283,29 @@ namespace blazeclaw::core {
 					}
 
 					if (!embeddedExecution.success) {
-						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-							.ok = false,
-							.assistantText = {},
-							.assistantDeltas = embeddedExecution.assistantDeltas,
-						   .taskDeltas = std::move(runtimeDeltas),
-							.modelId = m_activeChatModel,
-							.errorCode = embeddedExecution.errorCode.empty()
-								? "embedded_tool_execution_failed"
-								: embeddedExecution.errorCode,
-							.errorMessage = embeddedExecution.errorMessage.empty()
-								? "embedded tool orchestration failed"
-								: embeddedExecution.errorMessage,
-						};
+						if (ShouldFallbackFromEmbeddedFailure(
+							embeddedExecution.errorCode,
+							embeddedExecution.reason)) {
+							m_lastEmbeddedFallbackUsed = true;
+							m_lastEmbeddedFallbackReason = embeddedExecution.errorCode.empty()
+								? embeddedExecution.reason
+								: embeddedExecution.errorCode;
+						}
+						else {
+							return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+								.ok = false,
+								.assistantText = {},
+								.assistantDeltas = embeddedExecution.assistantDeltas,
+								.taskDeltas = std::move(runtimeDeltas),
+								.modelId = m_activeChatModel,
+								.errorCode = embeddedExecution.errorCode.empty()
+									? "embedded_tool_execution_failed"
+									: embeddedExecution.errorCode,
+								.errorMessage = embeddedExecution.errorMessage.empty()
+									? "embedded tool orchestration failed"
+									: embeddedExecution.errorMessage,
+							};
+						}
 					}
 
 					return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
@@ -2703,7 +2793,14 @@ namespace blazeclaw::core {
 			"\"acp\":{\"lastAllowed\":" +
 			std::string(m_lastAcpDecision.allowed ? "true" : "false") +
 			",\"reason\":\"" + m_lastAcpDecision.reason + "\"},"
-			"\"embedded\":{\"activeRuns\":" + std::to_string(ActiveEmbeddedRuns()) + "},"
+			"\"embedded\":{\"activeRuns\":" + std::to_string(ActiveEmbeddedRuns()) +
+			",\"dynamicLoopEnabled\":" +
+			std::string(m_lastEmbeddedDynamicLoopEnabled ? "true" : "false") +
+			",\"canaryEligible\":" +
+			std::string(m_lastEmbeddedCanaryEligible ? "true" : "false") +
+			",\"fallbackUsed\":" +
+			std::string(m_lastEmbeddedFallbackUsed ? "true" : "false") +
+			",\"fallbackReason\":\"" + m_lastEmbeddedFallbackReason + "\"},"
 			"\"tools\":{\"policyEntries\":" + std::to_string(m_agentsToolPolicy.entries.size()) +
 			",\"shellProcesses\":" + std::to_string(ShellProcessCount()) + "},"
 			"\"modelAuth\":{\"primary\":\"" + routing.primaryModel +
@@ -3561,6 +3658,43 @@ namespace blazeclaw::core {
 		}
 
 		return true;
+	}
+
+	bool ServiceManager::IsEmbeddedDynamicLoopCanaryEligible(
+		const std::string& provider,
+		const std::string& sessionId) const {
+		if (!m_activeConfig.embedded.dynamicToolLoopEnabled) {
+			return false;
+		}
+
+		if (m_embeddedDynamicLoopCanaryProviders.empty() &&
+			m_embeddedDynamicLoopCanarySessions.empty()) {
+			return true;
+		}
+
+		const bool providerAllowed = m_embeddedDynamicLoopCanaryProviders.empty() ||
+			ContainsCaseInsensitive(m_embeddedDynamicLoopCanaryProviders, provider);
+		const bool sessionAllowed = m_embeddedDynamicLoopCanarySessions.empty() ||
+			ContainsCaseInsensitive(m_embeddedDynamicLoopCanarySessions, sessionId);
+		return providerAllowed && sessionAllowed;
+	}
+
+	bool ServiceManager::ShouldFallbackFromEmbeddedFailure(
+		const std::string& errorCode,
+		const std::string& reason) const {
+		const std::string normalizedError = ToLowerAscii(errorCode);
+		const std::string normalizedReason = ToLowerAscii(reason);
+
+		if (normalizedError == "embedded_deadline_exceeded" ||
+			normalizedError == "embedded_loop_detected" ||
+			normalizedError == "embedded_completion_failed" ||
+			normalizedError == "embedded_tool_execution_failed") {
+			return true;
+		}
+
+		return normalizedReason == "deadline_exceeded" ||
+			normalizedReason == "tool_execution_failed" ||
+			normalizedReason == "embedded_completion_failed";
 	}
 
 } // namespace blazeclaw::core
