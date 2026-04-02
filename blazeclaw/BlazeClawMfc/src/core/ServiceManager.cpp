@@ -2139,6 +2139,7 @@ namespace blazeclaw::core {
 						.commandName = WideToNarrowAscii(command.name),
 						.description = WideToNarrowAscii(command.description),
 						.toolName = WideToNarrowAscii(command.dispatch.toolName),
+					 .argMode = WideToNarrowAscii(command.dispatch.argMode),
 						});
 				}
 

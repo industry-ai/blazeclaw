@@ -104,6 +104,9 @@ Immediate implementation progress:
   retry policy, and approval metadata; gateway command payload now exposes these fields.
 - Step 5 complete: skills prompt upgraded with planner-oriented capability/precondition/
   side-effect context to better support model-driven decomposition within existing prompt limits.
+- Step 6 complete: embedded orchestration now performs dynamic decomposition over
+  skills prompt + command/runtime metadata with iterative tool calls and ordered
+  model-turn/task-delta tracking.
 
 ## Verification lanes
 

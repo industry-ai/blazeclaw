@@ -352,7 +352,7 @@ and Steps 6-10 must produce evidence for both lanes.
 - [x] Step 3 complete
 - [x] Step 4 complete
 - [x] Step 5 complete
-- [ ] Step 6 complete
+- [x] Step 6 complete
 - [ ] Step 7 complete
 - [ ] Step 8 complete
 - [ ] Step 9 complete
@@ -399,6 +399,12 @@ and Steps 6-10 must produce evidence for both lanes.
 - Parsed planner metadata from frontmatter with bounded fallback values and truncation safeguards.
 - Added planner-oriented prompt block generation (`## Planner Context`) while preserving existing prompt limits and compatibility behavior.
 - Extended S2 prompt fixture inputs and assertions to validate planner context parsing and rendering.
+
+### Completed now: Step 6 (LLM-Driven Decomposition Loop)
+- Replaced fixed legacy plan selection entrypoint with dynamic decomposition planning that derives ordered tool steps from `skillsPrompt + user message` and declared command/runtime metadata.
+- Added iterative step execution with per-step model-turn correlation (`model-turn-{index}`) and dynamic arg construction honoring binding `argMode`.
+- Preserved fallback behavior by retaining legacy alias-based argument defaults when richer metadata is unavailable.
+- Extended embedded fixture validation to assert deterministic dynamic tool-call order (`brave-search -> summarize -> notion.write`).
 
 ## Primary File Targets (Expected)
 - `blazeclaw/BlazeClawMfc/src/core/PiEmbeddedService.h`

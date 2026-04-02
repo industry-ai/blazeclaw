@@ -40,6 +40,7 @@ namespace blazeclaw::core {
 		std::string commandName;
 		std::string description;
 		std::string toolName;
+		std::string argMode;
 	};
 
 	struct EmbeddedRuntimeExecutionRequest {

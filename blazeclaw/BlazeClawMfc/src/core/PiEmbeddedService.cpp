@@ -5,6 +5,7 @@
 #include <chrono>
 #include <nlohmann/json.hpp>
 #include <regex>
+#include <set>
 
 namespace blazeclaw::core {
 
@@ -162,6 +163,125 @@ namespace blazeclaw::core {
 			return args;
 		}
 
+		std::string ResolveBindingArgMode(
+			const EmbeddedRuntimeExecutionRequest& request,
+			const std::string& toolName) {
+			for (const auto& binding : request.toolBindings) {
+				if (binding.toolName == toolName) {
+					return ToLowerCopy(binding.argMode);
+				}
+			}
+
+			return {};
+		}
+
+		std::optional<std::string> ResolveNextToolFromPromptWindow(
+			const EmbeddedRuntimeExecutionRequest& request,
+			const std::string& promptWindow,
+			const std::set<std::string>& visited) {
+			std::vector<std::pair<std::size_t, std::string>> rankedTools;
+			auto considerTool = [&](const std::string& candidateTool,
+				const std::string& sourceName) {
+					if (candidateTool.empty() ||
+						visited.find(candidateTool) != visited.end()) {
+						return;
+					}
+
+					const std::string loweredSource = ToLowerCopy(sourceName);
+					const std::size_t pos = promptWindow.find(loweredSource);
+					if (pos == std::string::npos) {
+						return;
+					}
+
+					rankedTools.push_back({ pos, candidateTool });
+				};
+
+			for (const auto& binding : request.toolBindings) {
+				considerTool(binding.toolName, binding.commandName);
+				considerTool(binding.toolName, binding.toolName);
+			}
+
+			for (const auto& runtimeTool : request.runtimeTools) {
+				considerTool(runtimeTool.id, runtimeTool.id);
+				considerTool(runtimeTool.id, runtimeTool.label);
+			}
+
+			if (rankedTools.empty()) {
+				return std::nullopt;
+			}
+
+			std::sort(
+				rankedTools.begin(),
+				rankedTools.end(),
+				[](const auto& left, const auto& right) {
+					return left.first < right.first;
+				});
+
+			return rankedTools.front().second;
+		}
+
+		std::vector<std::string> ResolveDynamicExecutionPlan(
+			const EmbeddedRuntimeExecutionRequest& request,
+			const std::size_t maxSteps) {
+			std::vector<std::string> plan;
+			if (maxSteps == 0) {
+				return plan;
+			}
+
+			const std::string promptWindow =
+				ToLowerCopy(request.skillsPrompt + "\n" + request.run.message);
+			std::set<std::string> visited;
+
+			for (std::size_t step = 0; step < maxSteps; ++step) {
+				const auto nextTool = ResolveNextToolFromPromptWindow(
+					request,
+					promptWindow,
+					visited);
+				if (!nextTool.has_value()) {
+					break;
+				}
+
+				visited.insert(nextTool.value());
+				plan.push_back(nextTool.value());
+			}
+
+			if (plan.empty()) {
+				plan = ResolveLegacyAliasExecutionPlan(request);
+			}
+
+			return plan;
+		}
+
+		nlohmann::json BuildDynamicToolArgs(
+			const EmbeddedRuntimeExecutionRequest& request,
+			const std::string& toolName,
+			const std::string& query,
+			const std::string& runMessage,
+			const std::string& lastOutput,
+			const std::size_t stepIndex) {
+			const std::string argMode = ResolveBindingArgMode(request, toolName);
+			if (argMode == "none") {
+				return nlohmann::json::object();
+			}
+
+			if (argMode == "text") {
+				nlohmann::json args = nlohmann::json::object();
+				args["text"] = lastOutput.empty() ? runMessage : lastOutput;
+				args["stepIndex"] = stepIndex;
+				return args;
+			}
+
+			nlohmann::json args = BuildLegacyToolArgs(
+				toolName,
+				query,
+				runMessage,
+				lastOutput);
+			args["stepIndex"] = stepIndex;
+			args["sessionKey"] =
+				request.run.sessionId.empty() ? "main" : request.run.sessionId;
+			return args;
+		}
+
 		blazeclaw::gateway::ToolExecuteResultV2 ExecuteToolWithCompatibility(
 			const EmbeddedRuntimeExecutionRequest& request,
 			const std::string& toolName,
@@ -315,7 +435,7 @@ namespace blazeclaw::core {
 		}
 
 		const std::vector<std::string> executionPlan =
-			ResolveLegacyAliasExecutionPlan(request);
+			ResolveDynamicExecutionPlan(request, 6);
 
 		if (executionPlan.empty()) {
 			result.accepted = true;
@@ -371,19 +491,23 @@ namespace blazeclaw::core {
 			TryExtractQuoted(request.run.message).value_or(request.run.message);
 		std::string lastOutput;
 
-		for (const auto& toolName : executionPlan) {
+		for (std::size_t stepIndex = 0; stepIndex < executionPlan.size(); ++stepIndex) {
+			const std::string& toolName = executionPlan[stepIndex];
 			result.assistantDeltas.push_back("tools.execute.start tool=" + toolName);
-			nlohmann::json args = BuildLegacyToolArgs(
+			nlohmann::json args = BuildDynamicToolArgs(
+				request,
 				toolName,
 				query,
 				request.run.message,
-				lastOutput);
+				lastOutput,
+				stepIndex);
 
 			appendDelta(EmbeddedTaskDelta{
 				.phase = "tool_call",
 				.toolName = toolName,
 				.argsJson = args.dump(),
 				.status = "requested",
+				.modelTurnId = "model-turn-" + std::to_string(stepIndex),
 				.stepLabel = "tool_request",
 				});
 
@@ -650,8 +774,28 @@ namespace blazeclaw::core {
 					.agentId = "default",
 					.message = "search news summarize and write to notion",
 					},
-				.skillsPrompt = "",
-				.toolBindings = {},
+			 .skillsPrompt =
+					"Use brave-search then summarize then notion.write for this request.",
+				.toolBindings = {
+					EmbeddedToolBinding{
+						.commandName = "brave-search",
+						.description = "search",
+						.toolName = "brave-search",
+						.argMode = "raw",
+					},
+					EmbeddedToolBinding{
+						.commandName = "summarize",
+						.description = "summarize",
+						.toolName = "summarize",
+						.argMode = "text",
+					},
+					EmbeddedToolBinding{
+						.commandName = "notion",
+						.description = "notion",
+						.toolName = "notion.write",
+						.argMode = "raw",
+					},
+				},
 				.runtimeTools = std::move(tools),
 				.enableDynamicToolLoop = true,
 				.toolExecutor = [](const std::string& requestedTool,
@@ -704,6 +848,28 @@ namespace blazeclaw::core {
 				outError = L"Fixture validation failed: expected ordered task delta indexes.";
 				return false;
 			}
+		}
+
+		const std::vector<std::string> toolCalls = {
+			"brave-search",
+			"summarize",
+			"notion.write",
+		};
+		std::size_t callIndex = 0;
+		for (const auto& delta : dynamicLoop.taskDeltas) {
+			if (delta.phase != "tool_call") {
+				continue;
+			}
+
+			if (callIndex >= toolCalls.size() || delta.toolName != toolCalls[callIndex]) {
+				outError = L"Fixture validation failed: expected dynamic decomposition tool order.";
+				return false;
+			}
+			++callIndex;
+		}
+		if (callIndex < toolCalls.size()) {
+			outError = L"Fixture validation failed: expected complete dynamic decomposition tool order.";
+			return false;
 		}
 
 		return true;
