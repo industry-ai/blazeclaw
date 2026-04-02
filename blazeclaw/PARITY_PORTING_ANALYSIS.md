@@ -102,6 +102,8 @@ Immediate implementation progress:
   timing/correlation metadata, and compatibility bridge from legacy executor path.
 - Step 4 complete: skills command schema hardened with arg/result schema, idempotency,
   retry policy, and approval metadata; gateway command payload now exposes these fields.
+- Step 5 complete: skills prompt upgraded with planner-oriented capability/precondition/
+  side-effect context to better support model-driven decomposition within existing prompt limits.
 
 ## Verification lanes
 

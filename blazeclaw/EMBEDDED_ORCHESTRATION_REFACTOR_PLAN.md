@@ -351,7 +351,7 @@ and Steps 6-10 must produce evidence for both lanes.
 - [x] Step 2 complete
 - [x] Step 3 complete
 - [x] Step 4 complete
-- [ ] Step 5 complete
+- [x] Step 5 complete
 - [ ] Step 6 complete
 - [ ] Step 7 complete
 - [ ] Step 8 complete
@@ -393,6 +393,12 @@ and Steps 6-10 must produce evidence for both lanes.
 - Parsed new metadata from skill frontmatter with backward-compatible defaults for legacy entries.
 - Extended fixture validation and fixture data to assert hardened metadata parsing and legacy fallback behavior.
 - Surfaced command metadata through gateway state and `gateway.skills.commands` response payload.
+
+### Completed now: Step 5 (Skills Prompt Planner Context Upgrade)
+- Extended prompt snapshot with planner context metadata per included skill (capability, preconditions, side effects, command tool hint).
+- Parsed planner metadata from frontmatter with bounded fallback values and truncation safeguards.
+- Added planner-oriented prompt block generation (`## Planner Context`) while preserving existing prompt limits and compatibility behavior.
+- Extended S2 prompt fixture inputs and assertions to validate planner context parsing and rendering.
 
 ## Primary File Targets (Expected)
 - `blazeclaw/BlazeClawMfc/src/core/PiEmbeddedService.h`
