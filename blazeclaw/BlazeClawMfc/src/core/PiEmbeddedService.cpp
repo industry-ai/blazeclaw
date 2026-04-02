@@ -1127,6 +1127,271 @@ namespace blazeclaw::core {
 			return false;
 		}
 
+		PiEmbeddedService parityService;
+		parityService.Configure(cfg);
+		std::vector<blazeclaw::gateway::ToolCatalogEntry> parityTools = {
+			blazeclaw::gateway::ToolCatalogEntry{
+				.id = "brave-search",
+				.label = "Brave Search",
+				.category = "search",
+				.enabled = true,
+				},
+			blazeclaw::gateway::ToolCatalogEntry{
+				.id = "summarize",
+				.label = "Summarize",
+				.category = "transform",
+				.enabled = true,
+				},
+			blazeclaw::gateway::ToolCatalogEntry{
+				.id = "notion.write",
+				.label = "Notion Write",
+				.category = "sink",
+				.enabled = true,
+				},
+		};
+
+		const std::string parityPrompt =
+			"使用 brave-search multi-search-engine搜索‘今日大模型行业最新动态’，"
+			"提取前 3 条核心新闻。接着用 Summarize 把它们浓缩成一段 100 字以内的摘要，"
+			"最后调用 Notion 技能，将摘要写入我的 Notion ‘每日早报’ 页面中。";
+
+		const auto parityResult = parityService.ExecuteRun(
+			EmbeddedRuntimeExecutionRequest{
+				.run = EmbeddedRunRequest{
+					.sessionId = "main",
+					.agentId = "default",
+					.message = parityPrompt,
+					},
+				.skillsPrompt =
+					"Use brave-search then summarize then notion.write for parity lane.",
+				.toolBindings = {
+					EmbeddedToolBinding{
+						.commandName = "brave-search",
+						.description = "search",
+						.toolName = "brave-search",
+						.argMode = "raw",
+					},
+					EmbeddedToolBinding{
+						.commandName = "summarize",
+						.description = "summarize",
+						.toolName = "summarize",
+						.argMode = "text",
+					},
+					EmbeddedToolBinding{
+						.commandName = "notion",
+						.description = "notion",
+						.toolName = "notion.write",
+						.argMode = "raw",
+					},
+				},
+				.runtimeTools = std::move(parityTools),
+				.enableDynamicToolLoop = true,
+				.toolExecutor = [](const std::string& requestedTool,
+					const std::optional<std::string>& argsJson) {
+					if (requestedTool == "brave-search") {
+						return blazeclaw::gateway::ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = true,
+							.status = "ok",
+							.output = "Top3: model A launch; model B benchmark; model C funding",
+						};
+					}
+
+					if (requestedTool == "summarize") {
+						return blazeclaw::gateway::ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = true,
+							.status = "ok",
+							.output = "今日大模型要闻：A发布新版本，B刷新评测，C完成融资。",
+						};
+					}
+
+					if (requestedTool == "notion.write") {
+						return blazeclaw::gateway::ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = true,
+							.status = "ok",
+							.output = "Notion write result confirming update to page '每日早报'.",
+						};
+					}
+
+					return blazeclaw::gateway::ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = true,
+						.status = "ok",
+						.output = argsJson.value_or("{}"),
+					};
+				},
+			});
+
+		if (!parityResult.success || parityResult.decompositionSteps < 3) {
+			outError = L"Fixture validation failed: expected parity decomposition steps >= 3.";
+			return false;
+		}
+
+		const std::vector<std::string> parityOrderedTools = {
+			"brave-search",
+			"summarize",
+			"notion.write",
+		};
+		std::size_t parityCallIndex = 0;
+		for (const auto& delta : parityResult.taskDeltas) {
+			if (delta.phase != "tool_call") {
+				continue;
+			}
+
+			if (parityCallIndex >= parityOrderedTools.size() ||
+				delta.toolName != parityOrderedTools[parityCallIndex]) {
+				outError = L"Fixture validation failed: expected parity tool call order brave-search -> summarize -> notion.write.";
+				return false;
+			}
+
+			++parityCallIndex;
+		}
+
+		if (parityCallIndex < parityOrderedTools.size()) {
+			outError = L"Fixture validation failed: expected complete parity tool call sequence.";
+			return false;
+		}
+
+		if (parityResult.assistantText.find("Notion write result confirming update to page '每日早报'.") == std::string::npos) {
+			outError = L"Fixture validation failed: expected final Notion write result evidence.";
+			return false;
+		}
+
+		PiEmbeddedService opsSmokeService;
+		opsSmokeService.Configure(cfg);
+		std::vector<blazeclaw::gateway::ToolCatalogEntry> opsTools = {
+			blazeclaw::gateway::ToolCatalogEntry{
+				.id = "weather.lookup",
+				.label = "Weather Lookup",
+				.category = "data",
+				.enabled = true,
+				},
+			blazeclaw::gateway::ToolCatalogEntry{
+				.id = "report.compose",
+				.label = "Report Compose",
+				.category = "transform",
+				.enabled = true,
+				},
+			blazeclaw::gateway::ToolCatalogEntry{
+				.id = "email.schedule",
+				.label = "Email Schedule",
+				.category = "communication",
+				.enabled = true,
+				},
+		};
+
+		const std::string opsPrompt =
+			"Check today's weather in Wuhan, write a short report, and email it to "
+			"jichengwhu@163.com now.";
+
+		const auto opsResult = opsSmokeService.ExecuteRun(
+			EmbeddedRuntimeExecutionRequest{
+				.run = EmbeddedRunRequest{
+					.sessionId = "main",
+					.agentId = "default",
+					.message = opsPrompt,
+					},
+				.skillsPrompt =
+					"Use weather.lookup then report.compose then email.schedule for immediate execution.",
+				.toolBindings = {
+					EmbeddedToolBinding{
+						.commandName = "weather",
+						.description = "weather lookup",
+						.toolName = "weather.lookup",
+						.argMode = "raw",
+					},
+					EmbeddedToolBinding{
+						.commandName = "report",
+						.description = "report compose",
+						.toolName = "report.compose",
+						.argMode = "text",
+					},
+					EmbeddedToolBinding{
+						.commandName = "email",
+						.description = "email schedule",
+						.toolName = "email.schedule",
+						.argMode = "raw",
+					},
+				},
+				.runtimeTools = std::move(opsTools),
+				.enableDynamicToolLoop = true,
+				.toolExecutor = [](const std::string& requestedTool,
+					const std::optional<std::string>& argsJson) {
+					if (requestedTool == "weather.lookup") {
+						return blazeclaw::gateway::ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = true,
+							.status = "ok",
+							.output = "Wuhan today: cloudy, 26C, light breeze",
+						};
+					}
+
+					if (requestedTool == "report.compose") {
+						return blazeclaw::gateway::ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = true,
+							.status = "ok",
+							.output = "Wuhan weather report: cloudy, 26C, light breeze. Suggested light outdoor plan.",
+						};
+					}
+
+					if (requestedTool == "email.schedule") {
+						return blazeclaw::gateway::ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = true,
+							.status = "ok",
+							.output = "Email scheduling/sending result for jichengwhu@163.com with report content.",
+						};
+					}
+
+					return blazeclaw::gateway::ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = true,
+						.status = "ok",
+						.output = argsJson.value_or("{}"),
+					};
+				},
+			});
+
+		if (!opsResult.success || opsResult.decompositionSteps < 3) {
+			outError = L"Fixture validation failed: expected operational decomposition steps >= 3.";
+			return false;
+		}
+
+		const std::vector<std::string> opsOrderedTools = {
+			"weather.lookup",
+			"report.compose",
+			"email.schedule",
+		};
+		std::size_t opsCallIndex = 0;
+		for (const auto& delta : opsResult.taskDeltas) {
+			if (delta.phase != "tool_call") {
+				continue;
+			}
+
+			if (opsCallIndex >= opsOrderedTools.size() ||
+				delta.toolName != opsOrderedTools[opsCallIndex]) {
+				outError = L"Fixture validation failed: expected operational tool call order weather.lookup -> report.compose -> email.schedule.";
+				return false;
+			}
+
+			++opsCallIndex;
+		}
+
+		if (opsCallIndex < opsOrderedTools.size()) {
+			outError = L"Fixture validation failed: expected complete operational tool call sequence.";
+			return false;
+		}
+
+		if (opsResult.assistantText.find(
+			"Email scheduling/sending result for jichengwhu@163.com with report content.") ==
+			std::string::npos) {
+			outError = L"Fixture validation failed: expected final email scheduling result evidence.";
+			return false;
+		}
+
 		return true;
 	}
 

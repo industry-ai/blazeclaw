@@ -111,6 +111,12 @@ Immediate implementation progress:
   loop detection, timeout deadlines, runtime tool allow checks, and transient retry handling.
 - Step 8 complete: gateway/runtime observability now exposes ordered task-delta
   retrieval and telemetry transitions for deterministic verification and replay diagnostics.
+- Step 9 complete: parity fixture now validates Chinese prompt decomposition,
+  ordered brave-search -> summarize -> notion.write task-delta sequence, and
+  final Notion write confirmation evidence.
+- Step 9A complete: operational smoke fixture now validates weather.lookup ->
+  report.compose -> email.schedule ordered task deltas and final email
+  scheduling/sending evidence for immediate execution semantics.
 
 ## Verification lanes
 

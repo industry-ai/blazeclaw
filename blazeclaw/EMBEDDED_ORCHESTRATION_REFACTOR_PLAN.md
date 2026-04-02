@@ -355,8 +355,8 @@ and Steps 6-10 must produce evidence for both lanes.
 - [x] Step 6 complete
 - [x] Step 7 complete
 - [x] Step 8 complete
-- [ ] Step 9 complete
-- [ ] Step 9A complete
+- [x] Step 9 complete
+- [x] Step 9A complete
 - [ ] Step 10 complete
 - [ ] Step 11 complete
 - [ ] Step 12 complete
@@ -420,6 +420,18 @@ and Steps 6-10 must produce evidence for both lanes.
 - Added runtime query endpoints:
   - `gateway.runtime.taskDeltas.get` (ordered retrieval by runId)
   - `gateway.runtime.taskDeltas.clear` (per-run or global cache clear)
+
+### Completed now: Step 9 (Parity Test Case for Brave→Summarize→Notion)
+- Added deterministic parity fixture scenario in embedded runtime validation using the target Chinese prompt.
+- Added assertions for `decompositionSteps >= 3` under dynamic loop mode.
+- Added ordered `tool_call` sequence assertions for `brave-search -> summarize -> notion.write`.
+- Added terminal output assertion ensuring final assistant text includes Notion write result evidence for page `每日早报`.
+
+### Completed now: Step 9A (Operational Smoke Test for Weather→Report→Email)
+- Added deterministic operational smoke fixture scenario using prompt: weather in Wuhan -> short report -> email now.
+- Added assertions for `decompositionSteps >= 3` under dynamic loop mode.
+- Added ordered `tool_call` sequence assertions for `weather.lookup -> report.compose -> email.schedule`.
+- Added terminal output assertion ensuring final assistant text includes email scheduling/sending result for `jichengwhu@163.com`.
 
 ## Primary File Targets (Expected)
 - `blazeclaw/BlazeClawMfc/src/core/PiEmbeddedService.h`
