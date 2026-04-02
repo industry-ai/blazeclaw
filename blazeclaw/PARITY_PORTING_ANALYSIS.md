@@ -98,6 +98,8 @@ Immediate implementation progress:
   `plan/tool_call/tool_result/final` delta emission and query helpers.
 - Step 2 complete: adapter concerns split into planning/execution/termination helpers
   without behavior changes, preparing safe migration to fully model-driven decomposition.
+- Step 3 complete: runtime tool execution API v2 introduced with versioned request/response,
+  timing/correlation metadata, and compatibility bridge from legacy executor path.
 
 ## Verification lanes
 

@@ -48,6 +48,8 @@ namespace blazeclaw::core {
 		std::vector<EmbeddedToolBinding> toolBindings;
 		std::vector<blazeclaw::gateway::ToolCatalogEntry> runtimeTools;
 		bool enableDynamicToolLoop = false;
+		std::function<blazeclaw::gateway::ToolExecuteResultV2(
+			const blazeclaw::gateway::ToolExecuteRequestV2&)> toolExecutorV2;
 		std::function<blazeclaw::gateway::ToolExecuteResult(
 			const std::string&,
 			const std::optional<std::string>&)> toolExecutor;

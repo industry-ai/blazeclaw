@@ -188,6 +188,8 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] ToolExecuteResult ExecuteRuntimeTool(
 			const std::string& tool,
 			const std::optional<std::string>& argsJson = std::nullopt);
+		[[nodiscard]] ToolExecuteResultV2 ExecuteRuntimeToolV2(
+			const ToolExecuteRequestV2& request);
 
 		[[nodiscard]] protocol::ResponseFrame RouteRequest(const protocol::RequestFrame& request) const;
 

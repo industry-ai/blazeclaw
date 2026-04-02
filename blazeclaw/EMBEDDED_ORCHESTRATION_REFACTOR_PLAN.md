@@ -349,7 +349,7 @@ and Steps 6-10 must produce evidence for both lanes.
 - [x] Step 0 complete
 - [x] Step 1 complete
 - [x] Step 2 complete
-- [ ] Step 3 complete
+- [x] Step 3 complete
 - [ ] Step 4 complete
 - [ ] Step 5 complete
 - [ ] Step 6 complete
@@ -381,6 +381,12 @@ and Steps 6-10 must produce evidence for both lanes.
 - Extracted tool argument construction into execution helper (`BuildLegacyToolArgs`).
 - Extracted termination state shaping into dedicated helper (`FinalizeExecutionResult`).
 - Preserved runtime behavior and task-delta semantics while splitting concerns for next dynamic-loop migration.
+
+### Completed now: Step 3 (Runtime Tool Execution API v2)
+- Added versioned tool execution request/response contract (`ToolExecuteRequestV2`, `ToolExecuteResultV2`) with correlation and timing metadata.
+- Implemented `GatewayToolRegistry::ExecuteV2(...)` with compatibility bridge to legacy `Execute(...)`.
+- Added host surface `GatewayHost::ExecuteRuntimeToolV2(...)` and wired ServiceManager embedded runtime callback to use v2.
+- Updated embedded orchestration execution path to consume v2 responses while preserving legacy fallback behavior.
 
 ## Primary File Targets (Expected)
 - `blazeclaw/BlazeClawMfc/src/core/PiEmbeddedService.h`

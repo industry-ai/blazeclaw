@@ -3,11 +3,45 @@
 #include "GatewayJsonUtils.h"
 
 #include <algorithm>
+#include <chrono>
 #include <fstream>
 
 namespace blazeclaw::gateway {
 	namespace {
-     std::vector<std::string> SplitTopLevelObjects(const std::string& arrayJson) {
+		std::uint64_t CurrentEpochMs() {
+			const auto now = std::chrono::system_clock::now();
+			return static_cast<std::uint64_t>(
+				std::chrono::duration_cast<std::chrono::milliseconds>(
+					now.time_since_epoch())
+				.count());
+		}
+
+		ToolExecuteResultV2 AdaptLegacyResultToV2(
+			const ToolExecuteResult& legacy,
+			const ToolExecuteRequestV2& request,
+			const std::uint64_t startedAtMs,
+			const std::uint64_t completedAtMs) {
+			ToolExecuteResultV2 v2;
+			v2.tool = legacy.tool;
+			v2.executed = legacy.executed;
+			v2.status = legacy.status;
+			v2.result = legacy.output;
+			v2.errorCode = (legacy.executed && legacy.status != "error")
+				? std::string()
+				: std::string("legacy_execution_failed");
+			v2.errorMessage = (legacy.executed && legacy.status != "error")
+				? std::string()
+				: legacy.output;
+			v2.startedAtMs = startedAtMs;
+			v2.completedAtMs = completedAtMs;
+			v2.latencyMs = completedAtMs >= startedAtMs
+				? (completedAtMs - startedAtMs)
+				: 0;
+			v2.correlationId = request.correlationId;
+			return v2;
+		}
+
+		std::vector<std::string> SplitTopLevelObjects(const std::string& arrayJson) {
 			std::vector<std::string> objects;
 			const std::string trimmed = json::Trim(arrayJson);
 			if (trimmed.size() < 2 || trimmed.front() != '[' || trimmed.back() != ']') {
@@ -65,7 +99,7 @@ namespace blazeclaw::gateway {
 			return objects;
 		}
 
-       std::string DirectoryName(const std::string& path) {
+		std::string DirectoryName(const std::string& path) {
 			if (path.empty()) {
 				return {};
 			}
@@ -127,7 +161,7 @@ namespace blazeclaw::gateway {
 		}
 	}
 
-    GatewayToolRegistry::GatewayToolRegistry() = default;
+	GatewayToolRegistry::GatewayToolRegistry() = default;
 
 	std::vector<ToolCatalogEntry> GatewayToolRegistry::List() const {
 		std::vector<ToolCatalogEntry> output;
@@ -170,7 +204,7 @@ namespace blazeclaw::gateway {
 		};
 	}
 
- ToolExecuteResult GatewayToolRegistry::Execute(
+	ToolExecuteResult GatewayToolRegistry::Execute(
 		const std::string& requestedTool,
 		const std::optional<std::string>& argsJson) {
 		auto recordExecution = [&](const ToolExecuteResult& result) {
@@ -180,22 +214,22 @@ namespace blazeclaw::gateway {
 				.status = result.status,
 				.output = result.output,
 				.argsProvided = argsJson.has_value(),
-			});
+				});
 
 			if (m_executionHistory.size() > 64) {
 				m_executionHistory.erase(m_executionHistory.begin());
 			}
-		};
+			};
 
 		const ToolPreviewResult preview = Preview(requestedTool);
 		if (!preview.allowed) {
-           const ToolExecuteResult blocked = ToolExecuteResult{
-				.tool = preview.tool,
-				.executed = false,
-				.status = "blocked",
-				.output = preview.reason,
+			const ToolExecuteResult blocked = ToolExecuteResult{
+				 .tool = preview.tool,
+				 .executed = false,
+				 .status = "blocked",
+				 .output = preview.reason,
 			};
-           recordExecution(blocked);
+			recordExecution(blocked);
 			return blocked;
 		}
 
@@ -214,6 +248,50 @@ namespace blazeclaw::gateway {
 		};
 		recordExecution(unavailableRuntime);
 		return unavailableRuntime;
+	}
+
+	ToolExecuteResultV2 GatewayToolRegistry::ExecuteV2(
+		const ToolExecuteRequestV2& request) {
+		const std::uint64_t startedAtMs = CurrentEpochMs();
+		const auto v2It = m_runtimeExecutorsV2.find(request.tool);
+		if (v2It != m_runtimeExecutorsV2.end() && v2It->second) {
+			ToolExecuteResultV2 result = v2It->second(request);
+			if (result.tool.empty()) {
+				result.tool = request.tool;
+			}
+			if (result.correlationId.empty()) {
+				result.correlationId = request.correlationId;
+			}
+			if (result.startedAtMs == 0) {
+				result.startedAtMs = startedAtMs;
+			}
+			if (result.completedAtMs == 0) {
+				result.completedAtMs = CurrentEpochMs();
+			}
+			result.latencyMs = result.completedAtMs >= result.startedAtMs
+				? (result.completedAtMs - result.startedAtMs)
+				: 0;
+
+			m_executionHistory.push_back(ToolExecutionEntry{
+				.tool = result.tool,
+				.executed = result.executed,
+				.status = result.status,
+				.output = result.result,
+				.argsProvided = request.argsJson.has_value(),
+				});
+			if (m_executionHistory.size() > 64) {
+				m_executionHistory.erase(m_executionHistory.begin());
+			}
+			return result;
+		}
+
+		const ToolExecuteResult legacy = Execute(request.tool, request.argsJson);
+		const std::uint64_t completedAtMs = CurrentEpochMs();
+		return AdaptLegacyResultToV2(
+			legacy,
+			request,
+			startedAtMs,
+			completedAtMs);
 	}
 
 	void GatewayToolRegistry::RegisterRuntimeTool(
@@ -237,16 +315,38 @@ namespace blazeclaw::gateway {
 		}
 	}
 
-void GatewayToolRegistry::UnregisterRuntimeTool(const std::string& toolId) {
-	if (toolId.empty()) {
-		return;
+	void GatewayToolRegistry::RegisterRuntimeToolV2(
+		const ToolCatalogEntry& tool,
+		RuntimeToolExecutorV2 executor) {
+		if (tool.id.empty()) {
+			return;
+		}
+
+		ToolCatalogEntry normalized = tool;
+		if (normalized.label.empty()) {
+			normalized.label = tool.id;
+		}
+		if (normalized.category.empty()) {
+			normalized.category = "extension";
+		}
+
+		m_tools.insert_or_assign(normalized.id, std::move(normalized));
+		if (executor) {
+			m_runtimeExecutorsV2.insert_or_assign(tool.id, std::move(executor));
+		}
 	}
 
-	m_runtimeExecutors.erase(toolId);
-	m_tools.erase(toolId);
-}
+	void GatewayToolRegistry::UnregisterRuntimeTool(const std::string& toolId) {
+		if (toolId.empty()) {
+			return;
+		}
 
- std::size_t GatewayToolRegistry::LoadExtensionToolsFromCatalog(
+		m_runtimeExecutors.erase(toolId);
+		m_runtimeExecutorsV2.erase(toolId);
+		m_tools.erase(toolId);
+	}
+
+	std::size_t GatewayToolRegistry::LoadExtensionToolsFromCatalog(
 		const std::string& catalogPath) {
 		const std::string resolvedCatalog = catalogPath;
 		const std::string catalogText = ReadFileUtf8(resolvedCatalog);
@@ -274,7 +374,7 @@ void GatewayToolRegistry::UnregisterRuntimeTool(const std::string& toolId) {
 				continue;
 			}
 
-           const std::string manifestPath =
+			const std::string manifestPath =
 				JoinPath(catalogDirectory, extensionPathValue);
 			const std::string manifestText = ReadFileUtf8(manifestPath);
 			if (manifestText.empty()) {

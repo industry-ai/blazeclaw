@@ -2128,8 +2128,12 @@ namespace blazeclaw::core {
 						.skillsPrompt = WideToNarrowAscii(m_skillsPrompt.prompt),
 						.toolBindings = std::move(toolBindings),
 						.runtimeTools = m_gatewayHost.ListRuntimeTools(),
-                     .enableDynamicToolLoop =
+					 .enableDynamicToolLoop =
 							m_activeConfig.embedded.dynamicToolLoopEnabled,
+					 .toolExecutorV2 = [this](
+							const blazeclaw::gateway::ToolExecuteRequestV2& executeRequest) {
+							return m_gatewayHost.ExecuteRuntimeToolV2(executeRequest);
+						},
 						.toolExecutor = [this](
 											const std::string& tool,
 											const std::optional<std::string>& argsJson) {

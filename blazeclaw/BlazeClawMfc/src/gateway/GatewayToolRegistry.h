@@ -24,6 +24,26 @@ namespace blazeclaw::gateway {
 		std::string output;
 	};
 
+	struct ToolExecuteRequestV2 {
+		std::string tool;
+		std::optional<std::string> argsJson;
+		std::string correlationId;
+		std::optional<std::uint64_t> deadlineEpochMs;
+	};
+
+	struct ToolExecuteResultV2 {
+		std::string tool;
+		bool executed = false;
+		std::string status;
+		std::string result;
+		std::string errorCode;
+		std::string errorMessage;
+		std::uint64_t startedAtMs = 0;
+		std::uint64_t completedAtMs = 0;
+		std::uint64_t latencyMs = 0;
+		std::string correlationId;
+	};
+
 	struct ToolExecutionEntry {
 		std::string tool;
 		bool executed = false;
@@ -40,26 +60,32 @@ namespace blazeclaw::gateway {
 
 	class GatewayToolRegistry {
 	public:
-      using RuntimeToolExecutor = std::function<ToolExecuteResult(
+		using RuntimeToolExecutor = std::function<ToolExecuteResult(
 			const std::string& requestedTool,
 			const std::optional<std::string>& argsJson)>;
+		using RuntimeToolExecutorV2 = std::function<ToolExecuteResultV2(
+			const ToolExecuteRequestV2& request)>;
 
 		GatewayToolRegistry();
 
-	// Allow external lifecycle manager to register tools in bulk
-	friend class ExtensionLifecycleManager;
+		// Allow external lifecycle manager to register tools in bulk
+		friend class ExtensionLifecycleManager;
 
 		std::vector<ToolCatalogEntry> List() const;
 		ToolPreviewResult Preview(const std::string& requestedTool) const;
-      ToolExecuteResult Execute(
+		ToolExecuteResult Execute(
 			const std::string& requestedTool,
-           const std::optional<std::string>& argsJson = std::nullopt);
-       void RegisterRuntimeTool(
+			const std::optional<std::string>& argsJson = std::nullopt);
+		ToolExecuteResultV2 ExecuteV2(const ToolExecuteRequestV2& request);
+		void RegisterRuntimeTool(
 			const ToolCatalogEntry& tool,
 			RuntimeToolExecutor executor);
+		void RegisterRuntimeToolV2(
+			const ToolCatalogEntry& tool,
+			RuntimeToolExecutorV2 executor);
 
-	void UnregisterRuntimeTool(const std::string& toolId);
-        std::size_t LoadExtensionToolsFromCatalog(const std::string& catalogPath);
+		void UnregisterRuntimeTool(const std::string& toolId);
+		std::size_t LoadExtensionToolsFromCatalog(const std::string& catalogPath);
 		std::vector<ToolExecutionEntry> ListExecutions(std::size_t limit = 20) const;
 		std::optional<ToolExecutionEntry> LatestExecution() const;
 		ToolExecutionStats GetExecutionStats() const;
@@ -67,8 +93,9 @@ namespace blazeclaw::gateway {
 
 	private:
 		std::unordered_map<std::string, ToolCatalogEntry> m_tools;
-       std::unordered_map<std::string, RuntimeToolExecutor> m_runtimeExecutors;
-      std::vector<ToolExecutionEntry> m_executionHistory;
+		std::unordered_map<std::string, RuntimeToolExecutor> m_runtimeExecutors;
+		std::unordered_map<std::string, RuntimeToolExecutorV2> m_runtimeExecutorsV2;
+		std::vector<ToolExecutionEntry> m_executionHistory;
 	};
 
 } // namespace blazeclaw::gateway

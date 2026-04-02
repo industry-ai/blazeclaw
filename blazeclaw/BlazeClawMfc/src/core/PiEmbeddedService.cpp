@@ -162,6 +162,80 @@ namespace blazeclaw::core {
 			return args;
 		}
 
+		blazeclaw::gateway::ToolExecuteResultV2 ExecuteToolWithCompatibility(
+			const EmbeddedRuntimeExecutionRequest& request,
+			const std::string& toolName,
+			const std::string& argsJson,
+			const std::string& correlationId) {
+			const std::uint64_t startedAtMs = CurrentEpochMs();
+			if (request.toolExecutorV2) {
+				blazeclaw::gateway::ToolExecuteResultV2 result = request.toolExecutorV2(
+					blazeclaw::gateway::ToolExecuteRequestV2{
+						.tool = toolName,
+						.argsJson = argsJson,
+						.correlationId = correlationId,
+						.deadlineEpochMs = std::nullopt,
+					});
+				if (result.tool.empty()) {
+					result.tool = toolName;
+				}
+				if (result.correlationId.empty()) {
+					result.correlationId = correlationId;
+				}
+				if (result.startedAtMs == 0) {
+					result.startedAtMs = startedAtMs;
+				}
+				if (result.completedAtMs == 0) {
+					result.completedAtMs = CurrentEpochMs();
+				}
+				result.latencyMs = result.completedAtMs >= result.startedAtMs
+					? (result.completedAtMs - result.startedAtMs)
+					: 0;
+				return result;
+			}
+
+			if (request.toolExecutor) {
+				const auto legacy = request.toolExecutor(toolName, argsJson);
+				const std::uint64_t completedAtMs = CurrentEpochMs();
+				return blazeclaw::gateway::ToolExecuteResultV2{
+					.tool = legacy.tool,
+					.executed = legacy.executed,
+					.status = legacy.status,
+					.result = legacy.output,
+					.errorCode =
+						(legacy.executed && legacy.status != "error")
+						? std::string()
+						: std::string("legacy_execution_failed"),
+					.errorMessage =
+						(legacy.executed && legacy.status != "error")
+						? std::string()
+						: legacy.output,
+					.startedAtMs = startedAtMs,
+					.completedAtMs = completedAtMs,
+					.latencyMs = completedAtMs >= startedAtMs
+						? (completedAtMs - startedAtMs)
+						: 0,
+					.correlationId = correlationId,
+				};
+			}
+
+			const std::uint64_t completedAtMs = CurrentEpochMs();
+			return blazeclaw::gateway::ToolExecuteResultV2{
+				.tool = toolName,
+				.executed = false,
+				.status = "unavailable_runtime",
+				.result = "runtime_executor_missing",
+				.errorCode = "runtime_executor_missing",
+				.errorMessage = "runtime executor missing",
+				.startedAtMs = startedAtMs,
+				.completedAtMs = completedAtMs,
+				.latencyMs = completedAtMs >= startedAtMs
+					? (completedAtMs - startedAtMs)
+					: 0,
+				.correlationId = correlationId,
+			};
+		}
+
 		void FinalizeExecutionResult(
 			EmbeddedRuntimeExecutionResult& result,
 			const std::string& status,
@@ -243,7 +317,7 @@ namespace blazeclaw::core {
 		const std::vector<std::string> executionPlan =
 			ResolveLegacyAliasExecutionPlan(request);
 
-		if (executionPlan.empty() || !request.toolExecutor) {
+		if (executionPlan.empty()) {
 			result.accepted = true;
 			result.handled = false;
 			result.success = true;
@@ -313,7 +387,13 @@ namespace blazeclaw::core {
 				.stepLabel = "tool_request",
 				});
 
-			const auto execution = request.toolExecutor(toolName, args.dump());
+			const std::string correlationId =
+				queued.runId + ":" + std::to_string(result.assistantDeltas.size());
+			const auto execution = ExecuteToolWithCompatibility(
+				request,
+				toolName,
+				args.dump(),
+				correlationId);
 			result.assistantDeltas.push_back(
 				"tools.execute.result tool=" +
 				toolName +
@@ -324,9 +404,17 @@ namespace blazeclaw::core {
 				.phase = "tool_result",
 				.toolName = toolName,
 				.argsJson = args.dump(),
-				.resultJson = execution.output,
+			 .resultJson = execution.result,
 				.status = execution.status,
-				.errorCode = execution.executed ? "" : "not_executed",
+			  .errorCode = execution.executed
+					? std::string()
+					: (execution.errorCode.empty()
+						? std::string("not_executed")
+						: execution.errorCode),
+				.startedAtMs = execution.startedAtMs,
+				.completedAtMs = execution.completedAtMs,
+				.latencyMs = execution.latencyMs,
+				.modelTurnId = execution.correlationId,
 				.stepLabel = "tool_result",
 				});
 
@@ -345,9 +433,9 @@ namespace blazeclaw::core {
 					"failed",
 					"tool_execution_failed",
 					"embedded_tool_execution_failed",
-					execution.output.empty()
+					execution.errorMessage.empty()
 					? "tool execution failed"
-					: execution.output,
+					: execution.errorMessage,
 					{});
 				appendDelta(EmbeddedTaskDelta{
 					.phase = "final",
@@ -360,7 +448,7 @@ namespace blazeclaw::core {
 				return result;
 			}
 
-			lastOutput = execution.output;
+			lastOutput = execution.result;
 		}
 
 		if (!CompleteRun(queued.runId, "completed", queued.startedAtMs + 1)) {
