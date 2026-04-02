@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 #include <regex>
 #include <set>
+#include <unordered_set>
 
 namespace blazeclaw::core {
 
@@ -282,11 +283,59 @@ namespace blazeclaw::core {
 			return args;
 		}
 
+		bool IsAllowedRuntimeTool(
+			const EmbeddedRuntimeExecutionRequest& request,
+			const std::string& toolName) {
+			return std::any_of(
+				request.runtimeTools.begin(),
+				request.runtimeTools.end(),
+				[&](const blazeclaw::gateway::ToolCatalogEntry& entry) {
+					return entry.enabled && entry.id == toolName;
+				});
+		}
+
+		bool ValidateArgsForArgMode(
+			const std::string& argMode,
+			const nlohmann::json& args) {
+			if (!args.is_object()) {
+				return false;
+			}
+
+			if (argMode == "none") {
+				return args.empty();
+			}
+
+			if (argMode == "text") {
+				return args.contains("text") && args["text"].is_string();
+			}
+
+			return true;
+		}
+
+		bool IsTransientExecutionFailure(
+			const blazeclaw::gateway::ToolExecuteResultV2& execution) {
+			const std::string status = ToLowerCopy(execution.status);
+			const std::string errorCode = ToLowerCopy(execution.errorCode);
+			return status == "timeout" ||
+				status == "temporary_error" ||
+				status == "throttled" ||
+				errorCode == "timeout" ||
+				errorCode == "network_error" ||
+				errorCode == "transient";
+		}
+
+		std::string BuildToolCallSignature(
+			const std::string& toolName,
+			const nlohmann::json& args) {
+			return toolName + "::" + args.dump();
+		}
+
 		blazeclaw::gateway::ToolExecuteResultV2 ExecuteToolWithCompatibility(
 			const EmbeddedRuntimeExecutionRequest& request,
 			const std::string& toolName,
 			const std::string& argsJson,
-			const std::string& correlationId) {
+			const std::string& correlationId,
+			const std::optional<std::uint64_t> deadlineEpochMs) {
 			const std::uint64_t startedAtMs = CurrentEpochMs();
 			if (request.toolExecutorV2) {
 				blazeclaw::gateway::ToolExecuteResultV2 result = request.toolExecutorV2(
@@ -294,7 +343,7 @@ namespace blazeclaw::core {
 						.tool = toolName,
 						.argsJson = argsJson,
 						.correlationId = correlationId,
-						.deadlineEpochMs = std::nullopt,
+						.deadlineEpochMs = deadlineEpochMs,
 					});
 				if (result.tool.empty()) {
 					result.tool = toolName;
@@ -461,6 +510,11 @@ namespace blazeclaw::core {
 
 		const std::string sessionId =
 			request.run.sessionId.empty() ? "main" : request.run.sessionId;
+		const std::uint64_t deadlineEpochMs =
+			queued.startedAtMs + static_cast<std::uint64_t>(m_config.embedded.runTimeoutMs);
+		const auto hasTimedOut = [&](const std::uint64_t nowMs) {
+			return nowMs >= deadlineEpochMs;
+			};
 		const auto appendDelta =
 			[this, &result, &queued, &sessionId](const EmbeddedTaskDelta& rawDelta) {
 			EmbeddedTaskDelta delta = rawDelta;
@@ -479,6 +533,26 @@ namespace blazeclaw::core {
 			};
 
 		result.handled = true;
+		static constexpr std::size_t kMaxPolicySteps = 6;
+		if (executionPlan.size() > kMaxPolicySteps) {
+			FinalizeExecutionResult(
+				result,
+				"failed",
+				"max_steps_exceeded",
+				"embedded_max_steps_exceeded",
+				"decomposition exceeded maximum policy steps",
+				{});
+			appendDelta(EmbeddedTaskDelta{
+				.phase = "final",
+				.resultJson = result.errorMessage,
+				.status = "failed",
+				.errorCode = result.errorCode,
+				.stepLabel = "run_terminal",
+				});
+			result.taskDeltas = GetTaskDeltas(queued.runId);
+			return result;
+		}
+
 		result.decompositionSteps = executionPlan.size();
 		appendDelta(EmbeddedTaskDelta{
 			.phase = "plan",
@@ -491,8 +565,28 @@ namespace blazeclaw::core {
 			TryExtractQuoted(request.run.message).value_or(request.run.message);
 		std::string lastOutput;
 
+		std::unordered_map<std::string, std::size_t> repeatCounts;
 		for (std::size_t stepIndex = 0; stepIndex < executionPlan.size(); ++stepIndex) {
 			const std::string& toolName = executionPlan[stepIndex];
+			if (hasTimedOut(CurrentEpochMs())) {
+				FinalizeExecutionResult(
+					result,
+					"failed",
+					"deadline_exceeded",
+					"embedded_deadline_exceeded",
+					"embedded run exceeded timeout",
+					{});
+				appendDelta(EmbeddedTaskDelta{
+					.phase = "final",
+					.resultJson = result.errorMessage,
+					.status = "failed",
+					.errorCode = result.errorCode,
+					.stepLabel = "run_terminal",
+					});
+				result.taskDeltas = GetTaskDeltas(queued.runId);
+				return result;
+			}
+
 			result.assistantDeltas.push_back("tools.execute.start tool=" + toolName);
 			nlohmann::json args = BuildDynamicToolArgs(
 				request,
@@ -501,6 +595,44 @@ namespace blazeclaw::core {
 				request.run.message,
 				lastOutput,
 				stepIndex);
+			const std::string argMode = ResolveBindingArgMode(request, toolName);
+			if (!ValidateArgsForArgMode(argMode, args)) {
+				FinalizeExecutionResult(
+					result,
+					"failed",
+					"invalid_args",
+					"embedded_invalid_args",
+					"tool args do not satisfy binding arg mode",
+					{});
+				appendDelta(EmbeddedTaskDelta{
+					.phase = "final",
+					.resultJson = result.errorMessage,
+					.status = "failed",
+					.errorCode = result.errorCode,
+					.stepLabel = "run_terminal",
+					});
+				result.taskDeltas = GetTaskDeltas(queued.runId);
+				return result;
+			}
+
+			if (!IsAllowedRuntimeTool(request, toolName)) {
+				FinalizeExecutionResult(
+					result,
+					"failed",
+					"tool_blocked",
+					"embedded_tool_blocked",
+					"tool is not enabled in runtime catalog",
+					{});
+				appendDelta(EmbeddedTaskDelta{
+					.phase = "final",
+					.resultJson = result.errorMessage,
+					.status = "failed",
+					.errorCode = result.errorCode,
+					.stepLabel = "run_terminal",
+					});
+				result.taskDeltas = GetTaskDeltas(queued.runId);
+				return result;
+			}
 
 			appendDelta(EmbeddedTaskDelta{
 				.phase = "tool_call",
@@ -513,11 +645,46 @@ namespace blazeclaw::core {
 
 			const std::string correlationId =
 				queued.runId + ":" + std::to_string(result.assistantDeltas.size());
-			const auto execution = ExecuteToolWithCompatibility(
-				request,
-				toolName,
-				args.dump(),
-				correlationId);
+			const std::string callSignature = BuildToolCallSignature(toolName, args);
+			static constexpr std::size_t kMaxRepeatCalls = 2;
+			auto repeatIt = repeatCounts.find(callSignature);
+			const std::size_t repeatCount = repeatIt == repeatCounts.end()
+				? 0
+				: repeatIt->second;
+			if (repeatCount >= kMaxRepeatCalls) {
+				FinalizeExecutionResult(
+					result,
+					"failed",
+					"loop_detected",
+					"embedded_loop_detected",
+					"repeated tool call signature exceeded limit",
+					{});
+				appendDelta(EmbeddedTaskDelta{
+					.phase = "final",
+					.resultJson = result.errorMessage,
+					.status = "failed",
+					.errorCode = result.errorCode,
+					.stepLabel = "run_terminal",
+					});
+				result.taskDeltas = GetTaskDeltas(queued.runId);
+				return result;
+			}
+			repeatCounts.insert_or_assign(callSignature, repeatCount + 1);
+
+			blazeclaw::gateway::ToolExecuteResultV2 execution{};
+			static constexpr std::size_t kMaxRetries = 2;
+			for (std::size_t attempt = 0; attempt < kMaxRetries; ++attempt) {
+				execution = ExecuteToolWithCompatibility(
+					request,
+					toolName,
+					args.dump(),
+					correlationId,
+					deadlineEpochMs);
+				if ((execution.executed && execution.status != "error") ||
+					!IsTransientExecutionFailure(execution)) {
+					break;
+				}
+			}
 			result.assistantDeltas.push_back(
 				"tools.execute.result tool=" +
 				toolName +
@@ -869,6 +1036,94 @@ namespace blazeclaw::core {
 		}
 		if (callIndex < toolCalls.size()) {
 			outError = L"Fixture validation failed: expected complete dynamic decomposition tool order.";
+			return false;
+		}
+
+		blazeclaw::config::AppConfig timeoutCfg = cfg;
+		timeoutCfg.embedded.runTimeoutMs = 0;
+		PiEmbeddedService timeoutService;
+		timeoutService.Configure(timeoutCfg);
+		const auto timeoutResult = timeoutService.ExecuteRun(
+			EmbeddedRuntimeExecutionRequest{
+				.run = EmbeddedRunRequest{
+					.sessionId = "main",
+					.agentId = "default",
+					.message = "search then summarize",
+					},
+				.skillsPrompt = "search summarize",
+				.toolBindings = {
+					EmbeddedToolBinding{
+						.commandName = "search",
+						.description = "search",
+						.toolName = "brave-search",
+						.argMode = "raw",
+					},
+				},
+				.runtimeTools = {
+					blazeclaw::gateway::ToolCatalogEntry{
+						.id = "brave-search",
+						.label = "Brave Search",
+						.category = "search",
+						.enabled = true,
+					},
+				},
+				.enableDynamicToolLoop = true,
+				.toolExecutor = [](const std::string& requestedTool,
+					const std::optional<std::string>& argsJson) {
+					return blazeclaw::gateway::ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = true,
+						.status = "ok",
+						.output = argsJson.value_or("{}"),
+					};
+				},
+			});
+		if (timeoutResult.success ||
+			timeoutResult.errorCode != "embedded_deadline_exceeded") {
+			outError = L"Fixture validation failed: expected deadline policy failure.";
+			return false;
+		}
+
+		PiEmbeddedService blockedToolService;
+		blockedToolService.Configure(cfg);
+		const auto blockedToolResult = blockedToolService.ExecuteRun(
+			EmbeddedRuntimeExecutionRequest{
+				.run = EmbeddedRunRequest{
+					.sessionId = "main",
+					.agentId = "default",
+					.message = "use blocked tool",
+					},
+				.skillsPrompt = "blocked",
+				.toolBindings = {
+					EmbeddedToolBinding{
+						.commandName = "blocked",
+						.description = "blocked",
+						.toolName = "blocked-tool",
+						.argMode = "raw",
+					},
+				},
+				.runtimeTools = {
+					blazeclaw::gateway::ToolCatalogEntry{
+						.id = "allowed-tool",
+						.label = "Allowed",
+						.category = "misc",
+						.enabled = true,
+					},
+				},
+				.enableDynamicToolLoop = true,
+				.toolExecutor = [](const std::string& requestedTool,
+					const std::optional<std::string>& argsJson) {
+					return blazeclaw::gateway::ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = true,
+						.status = "ok",
+						.output = argsJson.value_or("{}"),
+					};
+				},
+			});
+		if (blockedToolResult.success ||
+			blockedToolResult.errorCode != "embedded_tool_blocked") {
+			outError = L"Fixture validation failed: expected blocked tool policy failure.";
 			return false;
 		}
 

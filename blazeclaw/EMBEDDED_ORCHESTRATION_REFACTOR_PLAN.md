@@ -353,7 +353,7 @@ and Steps 6-10 must produce evidence for both lanes.
 - [x] Step 4 complete
 - [x] Step 5 complete
 - [x] Step 6 complete
-- [ ] Step 7 complete
+- [x] Step 7 complete
 - [ ] Step 8 complete
 - [ ] Step 9 complete
 - [ ] Step 9A complete
@@ -405,6 +405,13 @@ and Steps 6-10 must produce evidence for both lanes.
 - Added iterative step execution with per-step model-turn correlation (`model-turn-{index}`) and dynamic arg construction honoring binding `argMode`.
 - Preserved fallback behavior by retaining legacy alias-based argument defaults when richer metadata is unavailable.
 - Extended embedded fixture validation to assert deterministic dynamic tool-call order (`brave-search -> summarize -> notion.write`).
+
+### Completed now: Step 7 (Safety and Termination Policies)
+- Added runtime guardrails for max-step enforcement, repeated-call loop detection, runtime tool allow checks, and arg-mode validation.
+- Added timeout/deadline enforcement from `embedded.runTimeoutMs` and propagated deadlines to v2 tool execution requests.
+- Added bounded transient retry policy for tool execution failures using status/error heuristics.
+- Preserved deterministic failure handling by emitting terminal task deltas with stable error codes (`embedded_deadline_exceeded`, `embedded_tool_blocked`, etc.).
+- Extended fixture validations to cover timeout and blocked-tool policy failures.
 
 ## Primary File Targets (Expected)
 - `blazeclaw/BlazeClawMfc/src/core/PiEmbeddedService.h`

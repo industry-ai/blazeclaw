@@ -107,6 +107,8 @@ Immediate implementation progress:
 - Step 6 complete: embedded orchestration now performs dynamic decomposition over
   skills prompt + command/runtime metadata with iterative tool calls and ordered
   model-turn/task-delta tracking.
+- Step 7 complete: safety/termination policies are now enforced for max steps,
+  loop detection, timeout deadlines, runtime tool allow checks, and transient retry handling.
 
 ## Verification lanes
 
