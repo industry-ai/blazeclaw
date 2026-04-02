@@ -664,6 +664,16 @@ namespace blazeclaw::gateway {
 		m_embeddingsBatchCallback = std::move(callback);
 	}
 
+	std::vector<ToolCatalogEntry> GatewayHost::ListRuntimeTools() const {
+		return m_toolRegistry.List();
+	}
+
+	ToolExecuteResult GatewayHost::ExecuteRuntimeTool(
+		const std::string& tool,
+		const std::optional<std::string>& argsJson) {
+		return m_toolRegistry.Execute(tool, argsJson);
+	}
+
 	bool GatewayHost::IsRunning() const noexcept {
 		return m_running;
 	}

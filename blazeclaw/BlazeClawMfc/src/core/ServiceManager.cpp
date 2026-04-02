@@ -1137,6 +1137,32 @@ std::string WideToNarrowAscii(const std::wstring& value) {
   return output;
 }
 
+std::string BuildSkillsInjectedMessage(
+    const std::string& userMessage,
+    const std::wstring& skillsPrompt) {
+  if (skillsPrompt.empty()) {
+    return userMessage;
+  }
+
+  std::string narrowedPrompt = WideToNarrowAscii(skillsPrompt);
+  if (narrowedPrompt.empty()) {
+    return userMessage;
+  }
+
+  constexpr std::size_t kMaxPromptChars = 4000;
+  if (narrowedPrompt.size() > kMaxPromptChars) {
+    narrowedPrompt.resize(kMaxPromptChars);
+  }
+
+  std::string injected;
+  injected.reserve(userMessage.size() + narrowedPrompt.size() + 64);
+  injected += "[skills_prompt]\n";
+  injected += narrowedPrompt;
+  injected += "\n\n[user_message]\n";
+  injected += userMessage;
+  return injected;
+}
+
 bool IsOneOfChannels(
     const std::vector<std::wstring>& enabledChannels,
     const std::wstring& candidate) {
@@ -2069,9 +2095,85 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
     const std::string sessionId =
         request.sessionKey.empty() ? "main" : request.sessionKey;
+    const std::string runtimeMessage =
+        BuildSkillsInjectedMessage(request.message, m_skillsPrompt.prompt);
+
+    std::vector<EmbeddedToolBinding> toolBindings;
+    toolBindings.reserve(m_skillsCommands.commands.size());
+    for (const auto& command : m_skillsCommands.commands) {
+      if (!command.dispatch.enabled ||
+          _wcsicmp(command.dispatch.kind.c_str(), L"tool") != 0 ||
+          command.dispatch.toolName.empty()) {
+        continue;
+      }
+
+      toolBindings.push_back(EmbeddedToolBinding{
+          .commandName = WideToNarrowAscii(command.name),
+          .description = WideToNarrowAscii(command.description),
+          .toolName = WideToNarrowAscii(command.dispatch.toolName),
+      });
+    }
+
+    const auto embeddedExecution = m_piEmbeddedService.ExecuteRun(
+        EmbeddedRuntimeExecutionRequest{
+            .run = EmbeddedRunRequest{
+                .sessionId = sessionId,
+                .agentId = "default",
+                .message = request.message,
+            },
+            .skillsPrompt = WideToNarrowAscii(m_skillsPrompt.prompt),
+            .toolBindings = std::move(toolBindings),
+            .runtimeTools = m_gatewayHost.ListRuntimeTools(),
+            .toolExecutor = [this](
+                                const std::string& tool,
+                                const std::optional<std::string>& argsJson) {
+              return m_gatewayHost.ExecuteRuntimeTool(tool, argsJson);
+            },
+        });
+
+    if (!embeddedExecution.accepted) {
+      return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+          .ok = false,
+          .assistantText = {},
+          .modelId = m_activeChatModel,
+          .errorCode = "embedded_run_rejected",
+          .errorMessage = embeddedExecution.errorMessage.empty()
+              ? embeddedExecution.reason
+              : embeddedExecution.errorMessage,
+      };
+    }
+
+    if (embeddedExecution.handled) {
+      if (!embeddedExecution.success) {
+        return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+            .ok = false,
+            .assistantText = {},
+            .assistantDeltas = embeddedExecution.assistantDeltas,
+            .modelId = m_activeChatModel,
+            .errorCode = embeddedExecution.errorCode.empty()
+                ? "embedded_tool_execution_failed"
+                : embeddedExecution.errorCode,
+            .errorMessage = embeddedExecution.errorMessage.empty()
+                ? "embedded tool orchestration failed"
+                : embeddedExecution.errorMessage,
+        };
+      }
+
+      return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+          .ok = true,
+          .assistantText = embeddedExecution.assistantText,
+          .assistantDeltas = embeddedExecution.assistantDeltas,
+          .modelId = m_activeChatModel,
+          .errorCode = {},
+          .errorMessage = {},
+      };
+    }
+
+    auto providerRequest = request;
+    providerRequest.message = runtimeMessage;
 
     if (m_activeChatProvider == "deepseek") {
-      ClearDeepSeekRunCancelled(request.runId);
+      ClearDeepSeekRunCancelled(providerRequest.runId);
       if (!HasDeepSeekCredential()) {
         return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
             .ok = false,
@@ -2097,24 +2199,24 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
         };
       }
 
-      return InvokeDeepSeekRemoteChat(request, effectiveModel, apiKey.value());
+      return InvokeDeepSeekRemoteChat(providerRequest, effectiveModel, apiKey.value());
     }
 
     if (m_localModelActivationEnabled) {
-      const std::string prompt = BuildLocalModelPrompt(request);
+      const std::string prompt = BuildLocalModelPrompt(providerRequest);
       TRACE(
           "[LocalModel] request.enqueue runId=%s session=%s promptChars=%zu attachments=%s\n",
-          request.runId.c_str(),
+          providerRequest.runId.c_str(),
           sessionId.c_str(),
           prompt.size(),
-          request.hasAttachments ? "true" : "false");
+          providerRequest.hasAttachments ? "true" : "false");
       TRACE(
           "[LocalModel] request.start runId=%s\n",
-          request.runId.c_str());
+          providerRequest.runId.c_str());
 
       const auto localResult = m_localModelRuntime.GenerateStream(
           localmodel::TextGenerationRequest{
-              .runId = request.runId,
+              .runId = providerRequest.runId,
               .prompt = prompt,
               .maxTokens = std::nullopt,
               .temperature = std::nullopt,
@@ -2135,7 +2237,7 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
             : "local model generation failed";
         TRACE(
             "[LocalModel] request.terminal runId=%s state=%s latencyMs=%u tokens=%u reason=%s\n",
-            request.runId.c_str(),
+            providerRequest.runId.c_str(),
             localResult.cancelled ? "aborted" : "error",
             localResult.latencyMs,
             localResult.generatedTokens,
@@ -2156,11 +2258,11 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       if (IsLikelyEchoResponse(request.message, assistantText)) {
         TRACE(
             "[LocalModel] request.retry runId=%s reason=echo_detected\n",
-            request.runId.c_str());
-        const std::string retryPrompt = BuildLocalModelRetryPrompt(request);
+            providerRequest.runId.c_str());
+        const std::string retryPrompt = BuildLocalModelRetryPrompt(providerRequest);
         const auto retryResult = m_localModelRuntime.GenerateStream(
             localmodel::TextGenerationRequest{
-                .runId = request.runId + "-retry",
+                .runId = providerRequest.runId + "-retry",
                 .prompt = retryPrompt,
                 .maxTokens = std::nullopt,
                 .temperature = std::nullopt,
@@ -2180,7 +2282,7 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
       if (IsLikelyEchoResponse(request.message, assistantText)) {
         TRACE(
             "[LocalModel] request.terminal runId=%s state=error latencyMs=%u tokens=%u reason=echo_output_detected\n",
-            request.runId.c_str(),
+            providerRequest.runId.c_str(),
             latencyMs,
             generatedTokens);
         return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
@@ -2194,7 +2296,7 @@ bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
 
       TRACE(
           "[LocalModel] request.terminal runId=%s state=final latencyMs=%u tokens=%u\n",
-          request.runId.c_str(),
+          providerRequest.runId.c_str(),
           latencyMs,
           generatedTokens);
 

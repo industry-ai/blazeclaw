@@ -184,6 +184,10 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] std::string BuildSessionResetEventFrame(const std::string& sessionId, std::uint64_t seq) const;
 		[[nodiscard]] std::string BuildAgentUpdateEventFrame(const std::string& agentId, std::uint64_t seq) const;
 		[[nodiscard]] std::string BuildToolsCatalogUpdateEventFrame(std::uint64_t seq) const;
+		[[nodiscard]] std::vector<ToolCatalogEntry> ListRuntimeTools() const;
+		[[nodiscard]] ToolExecuteResult ExecuteRuntimeTool(
+			const std::string& tool,
+			const std::optional<std::string>& argsJson = std::nullopt);
 
 		[[nodiscard]] protocol::ResponseFrame RouteRequest(const protocol::RequestFrame& request) const;
 
