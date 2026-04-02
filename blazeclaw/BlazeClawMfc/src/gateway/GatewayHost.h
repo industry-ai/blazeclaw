@@ -15,16 +15,16 @@ namespace blazeclaw::gateway {
 
 	struct SkillsCatalogGatewayEntry {
 		std::string name;
-        std::string skillKey;
-        std::string commandName;
-        std::string installKind;
+		std::string skillKey;
+		std::string commandName;
+		std::string installKind;
 		std::string installCommand;
 		bool installExecutable = false;
 		std::string installReason;
 		std::string description;
 		std::string source;
 		std::int32_t precedence = 0;
-      bool eligible = false;
+		bool eligible = false;
 		bool disabled = false;
 		bool blockedByAllowlist = false;
 		bool disableModelInvocation = false;
@@ -39,50 +39,50 @@ namespace blazeclaw::gateway {
 		std::size_t oversizedSkillFiles = 0;
 		std::size_t invalidFrontmatterFiles = 0;
 		std::size_t warningCount = 0;
-      std::size_t eligibleCount = 0;
+		std::size_t eligibleCount = 0;
 		std::size_t disabledCount = 0;
 		std::size_t blockedByAllowlistCount = 0;
 		std::size_t missingRequirementsCount = 0;
 		std::size_t promptIncludedCount = 0;
 		std::size_t promptChars = 0;
 		bool promptTruncated = false;
-     std::uint64_t snapshotVersion = 0;
+		std::uint64_t snapshotVersion = 0;
 		bool watchEnabled = true;
 		std::uint32_t watchDebounceMs = 250;
 		std::string watchReason;
 		std::string prompt;
-      bool sandboxSyncOk = false;
+		bool sandboxSyncOk = false;
 		std::size_t sandboxSynced = 0;
 		std::size_t sandboxSkipped = 0;
 		std::size_t envAllowed = 0;
 		std::size_t envBlocked = 0;
-      std::size_t installExecutableCount = 0;
+		std::size_t installExecutableCount = 0;
 		std::size_t installBlockedCount = 0;
 		std::size_t scanInfoCount = 0;
 		std::size_t scanWarnCount = 0;
 		std::size_t scanCriticalCount = 0;
 		std::size_t scanScannedFiles = 0;
-      bool governanceReportingEnabled = false;
+		bool governanceReportingEnabled = false;
 		std::size_t governanceReportsGenerated = 0;
 		std::string lastGovernanceReportPath;
 		std::size_t policyBlockedCount = 0;
 		std::size_t driftDetectedCount = 0;
 		std::string lastDriftReason;
-      bool autoRemediationEnabled = false;
+		bool autoRemediationEnabled = false;
 		bool autoRemediationRequiresApproval = true;
 		std::size_t autoRemediationExecuted = 0;
 		std::string lastAutoRemediationStatus;
-      std::string autoRemediationTenantId;
+		std::string autoRemediationTenantId;
 		std::string lastAutoRemediationPlaybookPath;
 		std::size_t autoRemediationTokenMaxAgeMinutes = 0;
 		std::size_t autoRemediationTokenRotations = 0;
-      std::string lastRemediationTelemetryPath;
+		std::string lastRemediationTelemetryPath;
 		std::string lastRemediationAuditPath;
-      std::string remediationSloStatus;
+		std::string remediationSloStatus;
 		std::size_t remediationSloMaxDriftDetected = 0;
 		std::size_t remediationSloMaxPolicyBlocked = 0;
 		std::string lastComplianceAttestationPath;
-      std::string enterpriseSlaPolicyId;
+		std::string enterpriseSlaPolicyId;
 		bool crossTenantAttestationAggregationEnabled = false;
 		std::string crossTenantAttestationAggregationStatus;
 		std::size_t crossTenantAttestationAggregationCount = 0;
@@ -91,81 +91,81 @@ namespace blazeclaw::gateway {
 
 	class GatewayHost {
 	public:
-     using SkillsRefreshCallback = std::function<SkillsCatalogGatewayState()>;
+		using SkillsRefreshCallback = std::function<SkillsCatalogGatewayState()>;
 
-	 struct ChatRuntimeRequest {
-         std::string runId;
-		 std::string sessionKey;
-		 std::string message;
-		 bool hasAttachments = false;
-      std::vector<std::string> attachmentMimeTypes;
-	 };
+		struct ChatRuntimeRequest {
+			std::string runId;
+			std::string sessionKey;
+			std::string message;
+			bool hasAttachments = false;
+			std::vector<std::string> attachmentMimeTypes;
+		};
 
-	 struct ChatAbortRequest {
-		 std::string runId;
-		 std::string sessionKey;
-	 };
+		struct ChatAbortRequest {
+			std::string runId;
+			std::string sessionKey;
+		};
 
-	 struct ChatRuntimeResult {
-		 bool ok = false;
-		 std::string assistantText;
-        std::vector<std::string> assistantDeltas;
-		 std::string modelId;
-		 std::string errorCode;
-		 std::string errorMessage;
-	 };
+		struct ChatRuntimeResult {
+			bool ok = false;
+			std::string assistantText;
+			std::vector<std::string> assistantDeltas;
+			std::string modelId;
+			std::string errorCode;
+			std::string errorMessage;
+		};
 
-	 struct EmbeddingsGenerateRequest {
-		 std::string text;
-		 std::optional<bool> normalize;
-		 std::string model;
-		 std::string traceId;
-	 };
+		struct EmbeddingsGenerateRequest {
+			std::string text;
+			std::optional<bool> normalize;
+			std::string model;
+			std::string traceId;
+		};
 
-	 struct EmbeddingsGenerateResult {
-		 bool ok = false;
-		 std::vector<float> vector;
-		 std::size_t dimension = 0;
-		 std::string provider;
-		 std::string modelId;
-		 std::uint32_t latencyMs = 0;
-		 std::string status;
-		 std::string errorCode;
-		 std::string errorMessage;
-	 };
+		struct EmbeddingsGenerateResult {
+			bool ok = false;
+			std::vector<float> vector;
+			std::size_t dimension = 0;
+			std::string provider;
+			std::string modelId;
+			std::uint32_t latencyMs = 0;
+			std::string status;
+			std::string errorCode;
+			std::string errorMessage;
+		};
 
-	 struct EmbeddingsBatchRequest {
-		 std::vector<std::string> texts;
-		 std::optional<bool> normalize;
-		 std::string model;
-		 std::string traceId;
-	 };
+		struct EmbeddingsBatchRequest {
+			std::vector<std::string> texts;
+			std::optional<bool> normalize;
+			std::string model;
+			std::string traceId;
+		};
 
-	 struct EmbeddingsBatchResult {
-		 bool ok = false;
-		 std::vector<std::vector<float>> vectors;
-		 std::size_t dimension = 0;
-		 std::string provider;
-		 std::string modelId;
-		 std::uint32_t latencyMs = 0;
-		 std::string status;
-		 std::string errorCode;
-		 std::string errorMessage;
-	 };
+		struct EmbeddingsBatchResult {
+			bool ok = false;
+			std::vector<std::vector<float>> vectors;
+			std::size_t dimension = 0;
+			std::string provider;
+			std::string modelId;
+			std::uint32_t latencyMs = 0;
+			std::string status;
+			std::string errorCode;
+			std::string errorMessage;
+		};
 
-	 using ChatRuntimeCallback = std::function<ChatRuntimeResult(const ChatRuntimeRequest&)>;
-  using ChatAbortCallback = std::function<bool(const ChatAbortRequest&)>;
-	 using EmbeddingsGenerateCallback =
-		 std::function<EmbeddingsGenerateResult(const EmbeddingsGenerateRequest&)>;
-	 using EmbeddingsBatchCallback =
-		 std::function<EmbeddingsBatchResult(const EmbeddingsBatchRequest&)>;
+		using ChatRuntimeCallback = std::function<ChatRuntimeResult(const ChatRuntimeRequest&)>;
+		using ChatAbortCallback = std::function<bool(const ChatAbortRequest&)>;
+		using EmbeddingsGenerateCallback =
+			std::function<EmbeddingsGenerateResult(const EmbeddingsGenerateRequest&)>;
+		using EmbeddingsBatchCallback =
+			std::function<EmbeddingsBatchResult(const EmbeddingsBatchRequest&)>;
 
 		bool Start(const blazeclaw::config::GatewayConfig& config);
 		void Stop();
 		void SetSkillsCatalogState(SkillsCatalogGatewayState state);
 		void SetSkillsRefreshCallback(SkillsRefreshCallback callback);
 		void SetChatRuntimeCallback(ChatRuntimeCallback callback);
-        void SetChatAbortCallback(ChatAbortCallback callback);
+		void SetChatAbortCallback(ChatAbortCallback callback);
 		void SetEmbeddingsGenerateCallback(EmbeddingsGenerateCallback callback);
 		void SetEmbeddingsBatchCallback(EmbeddingsBatchCallback callback);
 
@@ -192,7 +192,7 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] protocol::ResponseFrame RouteRequest(const protocol::RequestFrame& request) const;
 
 	private:
-     struct AgentRunState {
+		struct AgentRunState {
 			std::string runId;
 			std::string agentId;
 			std::string sessionId;
@@ -209,9 +209,9 @@ namespace blazeclaw::gateway {
 			std::string idempotencyKey;
 			std::string userMessage;
 			std::string assistantText;
-         std::vector<std::string> providerDeltas;
+			std::vector<std::string> providerDeltas;
 			std::size_t providerDeltaCursor = 0;
-          std::size_t streamCursor = 0;
+			std::size_t streamCursor = 0;
 			std::uint64_t lastEmitMs = 0;
 			bool failed = false;
 			std::string errorMessage;
@@ -229,11 +229,11 @@ namespace blazeclaw::gateway {
 		};
 
 		void RegisterDefaultHandlers();
-      void RegisterChannelsHandlers();
-     void RegisterEventHandlers();
-     void RegisterToolsHandlers();
-     void RegisterScopeClusterHandlers();
-     void RegisterGeneratedScopeClusterHandlers();
+		void RegisterChannelsHandlers();
+		void RegisterEventHandlers();
+		void RegisterToolsHandlers();
+		void RegisterScopeClusterHandlers();
+		void RegisterGeneratedScopeClusterHandlers();
 		void RegisterSecurityOpsHandlers();
 		void RegisterRuntimeHandlers();
 		void RegisterTransportHandlers();
@@ -245,10 +245,10 @@ namespace blazeclaw::gateway {
 		std::uint16_t m_runtimeGatewayPort = 18789;
 		std::string m_runtimeAgentModel = "default";
 		bool m_runtimeAgentStreaming = true;
-      std::string m_runtimeDeepSeekApiKey;
+		std::string m_runtimeDeepSeekApiKey;
 		std::string m_runtimeDeepSeekBaseUrl = "https://api.deepseek.com";
 		std::string m_runtimeDeepSeekDefaultModel = "deepseek/deepseek-chat";
-      std::string m_runtimeAssignedSessionId = "main";
+		std::string m_runtimeAssignedSessionId = "main";
 		std::string m_runtimeAssignedAgentId = "default";
 		std::size_t m_runtimeQueueDepth = 0;
 		std::size_t m_runtimeRunningCount = 0;
@@ -256,7 +256,7 @@ namespace blazeclaw::gateway {
 		std::size_t m_runtimeAssignmentCount = 0;
 		std::size_t m_runtimeRebalanceCount = 0;
 		std::size_t m_runtimeDrainCount = 0;
-      std::size_t m_streamingBufferedFrames = 0;
+		std::size_t m_streamingBufferedFrames = 0;
 		std::size_t m_streamingBufferedBytes = 0;
 		std::size_t m_streamingHighWatermark = 16;
 		std::size_t m_streamingWindowMs = 5000;
@@ -274,22 +274,22 @@ namespace blazeclaw::gateway {
 		GatewayAgentRegistry m_agentRegistry;
 		GatewayChannelRegistry m_channelRegistry;
 		GatewaySessionRegistry m_sessionRegistry;
-     GatewayToolRegistry m_toolRegistry;
+		GatewayToolRegistry m_toolRegistry;
 		ExtensionLifecycleManager m_extensionLifecycle{ true };
-        ApprovalTokenStore m_approvalStore;
-     std::unordered_map<std::string, AgentRunState> m_agentRuns;
+		ApprovalTokenStore m_approvalStore;
+		std::unordered_map<std::string, AgentRunState> m_agentRuns;
 		std::unordered_map<std::string, std::string> m_agentRunByIdempotency;
-	  std::unordered_map<std::string, std::string> m_mutationPayloadByIdempotency;
-      std::unordered_map<std::string, std::vector<std::string>> m_chatHistoryBySession;
-	  std::unordered_map<std::string, std::deque<ChatEventState>> m_chatEventsBySession;
-	  std::unordered_map<std::string, ChatRunState> m_chatRunsById;
-	  std::unordered_map<std::string, std::string> m_chatRunByIdempotency;
-        SkillsCatalogGatewayState m_skillsCatalogState;
-      SkillsRefreshCallback m_skillsRefreshCallback;
-      ChatRuntimeCallback m_chatRuntimeCallback;
-      ChatAbortCallback m_chatAbortCallback;
-    EmbeddingsGenerateCallback m_embeddingsGenerateCallback;
-	  EmbeddingsBatchCallback m_embeddingsBatchCallback;
+		std::unordered_map<std::string, std::string> m_mutationPayloadByIdempotency;
+		std::unordered_map<std::string, std::vector<std::string>> m_chatHistoryBySession;
+		std::unordered_map<std::string, std::deque<ChatEventState>> m_chatEventsBySession;
+		std::unordered_map<std::string, ChatRunState> m_chatRunsById;
+		std::unordered_map<std::string, std::string> m_chatRunByIdempotency;
+		SkillsCatalogGatewayState m_skillsCatalogState;
+		SkillsRefreshCallback m_skillsRefreshCallback;
+		ChatRuntimeCallback m_chatRuntimeCallback;
+		ChatAbortCallback m_chatAbortCallback;
+		EmbeddingsGenerateCallback m_embeddingsGenerateCallback;
+		EmbeddingsBatchCallback m_embeddingsBatchCallback;
 	};
 
 } // namespace blazeclaw::gateway

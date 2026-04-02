@@ -77,6 +77,21 @@ Implemented in `blazeclaw/BlazeClawMfc`:
 
 Current state: Priority 1 runtime parity gap is closed at BlazeClaw runtime layer; Priority 2/3 items remain follow-up hardening/verification work.
 
+Each tool execution is a task delta with metadata (tool name, args, result) that can be observed in 
+order, so we can verify the execution order and results for brave-search -> summarize -> notion test 
+case. Each chat request is now routed through the embedded orchestration adapter first, so we can verify 
+that the multi-skill prompt is properly decomposed and executed rather than treated as one-shot. Please 
+refactor the new embedded orchestration adapter to be as task decomposition and tool execution agnostic 
+as possible, so it can be reused for future multi-skill flows without hardcoded patterns. The adapter 
+should be able to handle any arbitrary combination of skills/tools as long as they are properly declared 
+in the skills prompt and command snapshots. And also we will use llm to discover the decomposition steps 
+and tool execution order, so the adapter should be able to support dynamic tool calls rather than fixed 
+sequences. The above procedure is called task delta decomposition and it is a common pattern in agent-based 
+systems to enable complex multi-step reasoning and tool use. Please create a plan in markdown file to 
+track the refactoring and hardening work for the embedded orchestration adapter, including any necessary 
+changes to the skills prompt/command schema or runtime tool execution APIs.
+
+
 ### Priority 2 (behavioral parity)
 3. Move from specialized `TryOrchestrateWeatherEmailPrompt` to generic skill orchestration (or keep it as fast-path but fallback into generic tool loop).
 4. Wire `SkillsCommandSnapshot` + dispatch metadata into runtime execution (not only state reporting endpoint).
