@@ -17,6 +17,13 @@ namespace blazeclaw::gateway {
 		std::string name;
 		std::string skillKey;
 		std::string commandName;
+		std::string commandToolName;
+		std::string commandArgMode;
+		std::string commandArgSchema;
+		std::string commandResultSchema;
+		std::string commandIdempotencyHint;
+		std::string commandRetryPolicyHint;
+		bool commandRequiresApproval = false;
 		std::string installKind;
 		std::string installCommand;
 		bool installExecutable = false;

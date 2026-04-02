@@ -100,6 +100,8 @@ Immediate implementation progress:
   without behavior changes, preparing safe migration to fully model-driven decomposition.
 - Step 3 complete: runtime tool execution API v2 introduced with versioned request/response,
   timing/correlation metadata, and compatibility bridge from legacy executor path.
+- Step 4 complete: skills command schema hardened with arg/result schema, idempotency,
+  retry policy, and approval metadata; gateway command payload now exposes these fields.
 
 ## Verification lanes
 

@@ -1453,9 +1453,26 @@ namespace blazeclaw::core {
 			const bool hasEligibility = eligibilityIt != eligibilityByName.end();
 
 			std::string commandName;
+			std::string commandToolName;
+			std::string commandArgMode;
+			std::string commandArgSchema;
+			std::string commandResultSchema;
+			std::string commandIdempotencyHint;
+			std::string commandRetryPolicyHint;
+			bool commandRequiresApproval = false;
 			const auto commandIt = commandsBySkill.find(entry.skillName);
 			if (commandIt != commandsBySkill.end()) {
 				commandName = ToNarrow(commandIt->second.name);
+				commandToolName = ToNarrow(commandIt->second.dispatch.toolName);
+				commandArgMode = ToNarrow(commandIt->second.dispatch.argMode);
+				commandArgSchema = ToNarrow(commandIt->second.dispatch.argSchema);
+				commandResultSchema = ToNarrow(commandIt->second.dispatch.resultSchema);
+				commandIdempotencyHint =
+					ToNarrow(commandIt->second.dispatch.idempotencyHint);
+				commandRetryPolicyHint =
+					ToNarrow(commandIt->second.dispatch.retryPolicyHint);
+				commandRequiresApproval =
+					commandIt->second.dispatch.requiresApproval;
 			}
 
 			std::string installKind;
@@ -1476,6 +1493,13 @@ namespace blazeclaw::core {
 					.skillKey = hasEligibility ? ToNarrow(eligibilityIt->second.skillKey)
 											   : ToNarrow(entry.skillName),
 					.commandName = commandName,
+				 .commandToolName = commandToolName,
+					.commandArgMode = commandArgMode,
+					.commandArgSchema = commandArgSchema,
+					.commandResultSchema = commandResultSchema,
+					.commandIdempotencyHint = commandIdempotencyHint,
+					.commandRetryPolicyHint = commandRetryPolicyHint,
+					.commandRequiresApproval = commandRequiresApproval,
 					.installKind = installKind,
 					.installCommand = installCommand,
 					.installExecutable = installExecutable,
