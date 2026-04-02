@@ -123,6 +123,9 @@ Immediate implementation progress:
 - Step 11 complete: staged rollout now supports provider/session canary gating,
   critical-failure fallback to existing runtime path, and rollout diagnostics
   visibility in operator reports.
+- Step 12 complete: embedded dynamic loop is now default-on across runtime/config
+  defaults, obsolete legacy planning fallback was removed from core decomposition,
+  and compatibility fallback paths remain available for safe operations.
 
 ## Verification lanes
 

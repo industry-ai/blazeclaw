@@ -417,7 +417,7 @@ namespace blazeclaw::config {
 			if (trimmedLine.rfind(L"embedded.dynamicToolLoopEnabled=", 0) == 0) {
 				outConfig.embedded.dynamicToolLoopEnabled = ParseBool(
 					trimmedLine.substr(32),
-					false);
+					true);
 				continue;
 			}
 

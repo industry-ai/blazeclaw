@@ -359,7 +359,7 @@ and Steps 6-10 must produce evidence for both lanes.
 - [x] Step 9A complete
 - [x] Step 10 complete
 - [x] Step 11 complete
-- [ ] Step 12 complete
+- [x] Step 12 complete
 
 ## Implementation Status Update
 
@@ -445,6 +445,12 @@ and Steps 6-10 must produce evidence for both lanes.
 - Gated dynamic-loop activation on both feature flag and canary eligibility decisions.
 - Added fallback policy so critical embedded orchestration failures can continue through existing provider/local runtime path.
 - Added embedded rollout diagnostics fields (`dynamicLoopEnabled`, `canaryEligible`, `fallbackUsed`, `fallbackReason`) to operator report output.
+
+### Completed now: Step 12 (Default-On and Cleanup)
+- Flipped embedded dynamic loop defaults to enabled in runtime config model, config loader fallback parsing, and shipped config templates.
+- Removed obsolete legacy alias planning fallback from embedded decomposition core to keep planning metadata-driven.
+- Preserved optional compatibility behavior through execution bridge fallbacks and staged rollout fallback controls.
+- Finalized refactor checklist with dynamic task-delta orchestration as default behavior.
 
 ## Primary File Targets (Expected)
 - `blazeclaw/BlazeClawMfc/src/core/PiEmbeddedService.h`

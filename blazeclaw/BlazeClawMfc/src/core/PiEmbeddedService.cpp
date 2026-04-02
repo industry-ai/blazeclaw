@@ -246,10 +246,6 @@ namespace blazeclaw::core {
 				plan.push_back(nextTool.value());
 			}
 
-			if (plan.empty()) {
-				plan = ResolveLegacyAliasExecutionPlan(request);
-			}
-
 			return plan;
 		}
 
