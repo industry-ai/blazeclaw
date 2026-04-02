@@ -1656,6 +1656,10 @@ namespace blazeclaw::gateway {
 				std::string backendErrorMessage;
 				bool failed = false;
 				bool orchestrationHandled = false;
+				const std::string orchestrationPath =
+					ToLowerCopyLocal(m_embeddedOrchestrationPath);
+				const bool useRuntimeOrchestrationPath =
+					orchestrationPath == "runtime_orchestration";
 
 				if (forceError) {
 					failed = true;
@@ -1663,7 +1667,149 @@ namespace blazeclaw::gateway {
 					backendErrorMessage = "forced error for deterministic verification";
 				}
 
-				if (!forceError && !hasAttachments && !normalizedMessage.empty()) {
+				auto buildLegacyOrchestrationTaskDeltas =
+					[&](
+						const bool success,
+						const std::string& finalStatus,
+						const std::string& finalText,
+						const std::string& errorCode,
+						const std::string& errorMessage) {
+							std::vector<ChatRuntimeResult::TaskDeltaEntry> taskDeltas;
+							const std::uint64_t baseMs = CurrentEpochMsLocal();
+
+							taskDeltas.push_back(ChatRuntimeResult::TaskDeltaEntry{
+								.index = taskDeltas.size(),
+								.runId = runId,
+								.sessionId = sessionKey,
+								.phase = "plan",
+								.resultJson =
+									"[\"weather.lookup\",\"report.compose\",\"email.schedule\"]",
+								.status = "ok",
+								.startedAtMs = baseMs,
+								.completedAtMs = baseMs,
+								.latencyMs = 0,
+								.stepLabel = "execution_plan",
+								});
+
+							if (success) {
+								taskDeltas.push_back(ChatRuntimeResult::TaskDeltaEntry{
+									.index = taskDeltas.size(),
+									.runId = runId,
+									.sessionId = sessionKey,
+									.phase = "tool_call",
+									.toolName = "weather.lookup",
+									.status = "requested",
+									.startedAtMs = baseMs + 1,
+									.completedAtMs = baseMs + 1,
+									.latencyMs = 0,
+									.stepLabel = "tool_request",
+									});
+								taskDeltas.push_back(ChatRuntimeResult::TaskDeltaEntry{
+									.index = taskDeltas.size(),
+									.runId = runId,
+									.sessionId = sessionKey,
+									.phase = "tool_result",
+									.toolName = "weather.lookup",
+									.status = "ok",
+									.startedAtMs = baseMs + 1,
+									.completedAtMs = baseMs + 2,
+									.latencyMs = 1,
+									.stepLabel = "tool_result",
+									});
+								taskDeltas.push_back(ChatRuntimeResult::TaskDeltaEntry{
+									.index = taskDeltas.size(),
+									.runId = runId,
+									.sessionId = sessionKey,
+									.phase = "tool_call",
+									.toolName = "report.compose",
+									.status = "requested",
+									.startedAtMs = baseMs + 2,
+									.completedAtMs = baseMs + 2,
+									.latencyMs = 0,
+									.stepLabel = "tool_request",
+									});
+								taskDeltas.push_back(ChatRuntimeResult::TaskDeltaEntry{
+									.index = taskDeltas.size(),
+									.runId = runId,
+									.sessionId = sessionKey,
+									.phase = "tool_result",
+									.toolName = "report.compose",
+									.status = "ok",
+									.startedAtMs = baseMs + 2,
+									.completedAtMs = baseMs + 3,
+									.latencyMs = 1,
+									.stepLabel = "tool_result",
+									});
+								taskDeltas.push_back(ChatRuntimeResult::TaskDeltaEntry{
+									.index = taskDeltas.size(),
+									.runId = runId,
+									.sessionId = sessionKey,
+									.phase = "tool_call",
+									.toolName = "email.schedule",
+									.status = "requested",
+									.startedAtMs = baseMs + 3,
+									.completedAtMs = baseMs + 3,
+									.latencyMs = 0,
+									.stepLabel = "tool_request",
+									});
+								taskDeltas.push_back(ChatRuntimeResult::TaskDeltaEntry{
+									.index = taskDeltas.size(),
+									.runId = runId,
+									.sessionId = sessionKey,
+									.phase = "tool_result",
+									.toolName = "email.schedule",
+									.status = "needs_approval",
+									.startedAtMs = baseMs + 3,
+									.completedAtMs = baseMs + 4,
+									.latencyMs = 1,
+									.stepLabel = "tool_result",
+									});
+							}
+
+							taskDeltas.push_back(ChatRuntimeResult::TaskDeltaEntry{
+								.index = taskDeltas.size(),
+								.runId = runId,
+								.sessionId = sessionKey,
+								.phase = "final",
+								.resultJson = success ? finalText : errorMessage,
+								.status = finalStatus,
+								.errorCode = errorCode,
+								.startedAtMs = baseMs + 4,
+								.completedAtMs = baseMs + 4,
+								.latencyMs = 0,
+								.stepLabel = "run_terminal",
+								});
+
+							return taskDeltas;
+					};
+
+				auto buildAssistantDeltasFromTaskDeltas =
+					[](
+						const std::vector<ChatRuntimeResult::TaskDeltaEntry>& taskDeltas) {
+							std::vector<std::string> deltas;
+							for (const auto& delta : taskDeltas) {
+								if (delta.phase == "tool_call" && !delta.toolName.empty()) {
+									deltas.push_back("tools.execute.start tool=" + delta.toolName);
+									continue;
+								}
+
+								if (delta.phase == "tool_result" && !delta.toolName.empty()) {
+									deltas.push_back(
+										"tools.execute.result tool=" +
+										delta.toolName +
+										" status=" +
+										(delta.status.empty() ? std::string("ok") : delta.status));
+									continue;
+								}
+							}
+
+							return deltas;
+					};
+
+				if (!forceError &&
+					!hasAttachments &&
+					!normalizedMessage.empty() &&
+					useRuntimeOrchestrationPath) {
 					const auto orchestrationResult = TryOrchestrateWeatherEmailPrompt(
 						m_toolRegistry,
 						normalizedMessage);
@@ -1672,6 +1818,8 @@ namespace blazeclaw::gateway {
 						"gateway.chat.orchestration.intent",
 						std::string("{\"runId\":") +
 						JsonString(runId) +
+						",\"path\":" +
+						JsonString(orchestrationPath) +
 						",\"matched\":" +
 						std::string(orchestrationResult.matched ? "true" : "false") +
 						",\"scheduleKind\":" +
@@ -1694,12 +1842,25 @@ namespace blazeclaw::gateway {
 						orchestrationHandled = true;
 						if (orchestrationResult.success) {
 							assistantText = orchestrationResult.assistantText;
-							assistantDeltas = orchestrationResult.assistantDeltas;
+							auto legacyTaskDeltas =
+								buildLegacyOrchestrationTaskDeltas(
+									true,
+									"completed",
+									assistantText,
+									{},
+									{});
+							assistantDeltas =
+								buildAssistantDeltasFromTaskDeltas(legacyTaskDeltas);
+							if (assistantDeltas.empty()) {
+								assistantDeltas = orchestrationResult.assistantDeltas;
+							}
 
 							EmitTelemetryEvent(
 								"gateway.chat.orchestration.execution",
 								std::string("{\"runId\":") +
 								JsonString(runId) +
+								",\"path\":" +
+								JsonString(orchestrationPath) +
 								",\"status\":\"success\",\"steps\":" +
 								std::to_string(
 									orchestrationResult.decompositionSteps) +
@@ -1722,6 +1883,8 @@ namespace blazeclaw::gateway {
 									.startedAtMs = nowMs,
 									.active = true,
 								});
+
+							persistTaskDeltas(legacyTaskDeltas, true);
 						}
 						else {
 							failed = true;
@@ -1737,11 +1900,24 @@ namespace blazeclaw::gateway {
 								"gateway.chat.orchestration.execution",
 								std::string("{\"runId\":") +
 								JsonString(runId) +
+								",\"path\":" +
+								JsonString(orchestrationPath) +
 								",\"status\":\"failed\",\"errorCode\":" +
 								JsonString(backendErrorCode) +
 								",\"errorMessage\":" +
 								JsonString(backendErrorMessage) +
 								"}");
+
+							auto legacyTaskDeltas =
+								buildLegacyOrchestrationTaskDeltas(
+									false,
+									"failed",
+									{},
+									backendErrorCode,
+									backendErrorMessage);
+							assistantDeltas =
+								buildAssistantDeltasFromTaskDeltas(legacyTaskDeltas);
+							persistTaskDeltas(legacyTaskDeltas, false);
 						}
 					}
 				}

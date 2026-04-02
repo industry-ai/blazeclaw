@@ -189,6 +189,7 @@ namespace blazeclaw::gateway {
 		void Stop();
 		void SetSkillsCatalogState(SkillsCatalogGatewayState state);
 		void SetSkillsRefreshCallback(SkillsRefreshCallback callback);
+		void SetEmbeddedOrchestrationPath(const std::string& path);
 		void SetChatRuntimeCallback(ChatRuntimeCallback callback);
 		void SetChatAbortCallback(ChatAbortCallback callback);
 		void SetEmbeddingsGenerateCallback(EmbeddingsGenerateCallback callback);
@@ -275,6 +276,7 @@ namespace blazeclaw::gateway {
 		std::string m_runtimeDeepSeekApiKey;
 		std::string m_runtimeDeepSeekBaseUrl = "https://api.deepseek.com";
 		std::string m_runtimeDeepSeekDefaultModel = "deepseek/deepseek-chat";
+		std::string m_embeddedOrchestrationPath = "dynamic_task_delta";
 		std::string m_runtimeAssignedSessionId = "main";
 		std::string m_runtimeAssignedAgentId = "default";
 		std::size_t m_runtimeQueueDepth = 0;

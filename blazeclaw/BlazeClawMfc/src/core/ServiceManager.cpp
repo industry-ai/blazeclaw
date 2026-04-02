@@ -2189,6 +2189,8 @@ namespace blazeclaw::core {
 			RefreshSkillsState(m_activeConfig, true, L"manual-refresh");
 			return BuildGatewaySkillsState();
 			});
+		m_gatewayHost.SetEmbeddedOrchestrationPath(
+			ToNarrow(m_activeConfig.embedded.orchestrationPath));
 
 		m_gatewayHost.SetChatRuntimeCallback([this](
 			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {

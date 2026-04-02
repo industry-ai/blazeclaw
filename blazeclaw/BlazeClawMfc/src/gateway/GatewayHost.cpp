@@ -644,6 +644,17 @@ namespace blazeclaw::gateway {
 		m_skillsRefreshCallback = std::move(callback);
 	}
 
+	void GatewayHost::SetEmbeddedOrchestrationPath(
+		const std::string& path) {
+		const std::string normalized = ToLowerCopy(json::Trim(path));
+		if (normalized == "runtime_orchestration") {
+			m_embeddedOrchestrationPath = normalized;
+			return;
+		}
+
+		m_embeddedOrchestrationPath = "dynamic_task_delta";
+	}
+
 	void GatewayHost::SetChatRuntimeCallback(
 		ChatRuntimeCallback callback) {
 		m_chatRuntimeCallback = std::move(callback);

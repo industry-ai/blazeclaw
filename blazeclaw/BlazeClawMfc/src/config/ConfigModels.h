@@ -71,8 +71,8 @@ namespace blazeclaw::config {
 		bool enabled = true;
 		std::uint32_t runTimeoutMs = 120000;
 		std::uint32_t maxQueueDepth = 64;
-        bool dynamicToolLoopEnabled = true;
-      std::wstring orchestrationPath = L"dynamic_task_delta";
+		bool dynamicToolLoopEnabled = true;
+		std::wstring orchestrationPath = L"dynamic_task_delta";
 	};
 
 	struct ModelsRoutingConfig {
