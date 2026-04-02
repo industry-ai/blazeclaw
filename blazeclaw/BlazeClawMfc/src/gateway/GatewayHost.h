@@ -114,9 +114,27 @@ namespace blazeclaw::gateway {
 		};
 
 		struct ChatRuntimeResult {
+			struct TaskDeltaEntry {
+				std::size_t index = 0;
+				std::string runId;
+				std::string sessionId;
+				std::string phase;
+				std::string toolName;
+				std::string argsJson;
+				std::string resultJson;
+				std::string status;
+				std::string errorCode;
+				std::uint64_t startedAtMs = 0;
+				std::uint64_t completedAtMs = 0;
+				std::uint64_t latencyMs = 0;
+				std::string modelTurnId;
+				std::string stepLabel;
+			};
+
 			bool ok = false;
 			std::string assistantText;
 			std::vector<std::string> assistantDeltas;
+			std::vector<TaskDeltaEntry> taskDeltas;
 			std::string modelId;
 			std::string errorCode;
 			std::string errorMessage;
@@ -293,6 +311,7 @@ namespace blazeclaw::gateway {
 		std::unordered_map<std::string, std::deque<ChatEventState>> m_chatEventsBySession;
 		std::unordered_map<std::string, ChatRunState> m_chatRunsById;
 		std::unordered_map<std::string, std::string> m_chatRunByIdempotency;
+		std::unordered_map<std::string, std::vector<ChatRuntimeResult::TaskDeltaEntry>> m_taskDeltasByRunId;
 		SkillsCatalogGatewayState m_skillsCatalogState;
 		SkillsRefreshCallback m_skillsRefreshCallback;
 		ChatRuntimeCallback m_chatRuntimeCallback;

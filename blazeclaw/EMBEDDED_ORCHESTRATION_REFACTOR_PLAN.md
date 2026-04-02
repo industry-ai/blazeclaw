@@ -354,7 +354,7 @@ and Steps 6-10 must produce evidence for both lanes.
 - [x] Step 5 complete
 - [x] Step 6 complete
 - [x] Step 7 complete
-- [ ] Step 8 complete
+- [x] Step 8 complete
 - [ ] Step 9 complete
 - [ ] Step 9A complete
 - [ ] Step 10 complete
@@ -412,6 +412,14 @@ and Steps 6-10 must produce evidence for both lanes.
 - Added bounded transient retry policy for tool execution failures using status/error heuristics.
 - Preserved deterministic failure handling by emitting terminal task deltas with stable error codes (`embedded_deadline_exceeded`, `embedded_tool_blocked`, etc.).
 - Extended fixture validations to cover timeout and blocked-tool policy failures.
+
+### Completed now: Step 8 (Gateway/Runtime Observability Surface)
+- Extended runtime chat result contract to carry ordered task-delta entries from embedded execution to gateway runtime handlers.
+- Persisted run-scoped task deltas in gateway memory with bounded retention for diagnostics and verification queries.
+- Added telemetry emission for task-delta transitions and per-run task-delta summary metrics.
+- Added runtime query endpoints:
+  - `gateway.runtime.taskDeltas.get` (ordered retrieval by runId)
+  - `gateway.runtime.taskDeltas.clear` (per-run or global cache clear)
 
 ## Primary File Targets (Expected)
 - `blazeclaw/BlazeClawMfc/src/core/PiEmbeddedService.h`

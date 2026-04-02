@@ -252,6 +252,39 @@ namespace blazeclaw::gateway {
 			return payload;
 		}
 
+		std::string SerializeTaskDeltaEntryJson(
+			const GatewayHost::ChatRuntimeResult::TaskDeltaEntry& delta) {
+			return "{\"index\":" +
+				std::to_string(delta.index) +
+				",\"runId\":\"" +
+				EscapeJsonLocal(delta.runId) +
+				"\",\"sessionId\":\"" +
+				EscapeJsonLocal(delta.sessionId) +
+				"\",\"phase\":\"" +
+				EscapeJsonLocal(delta.phase) +
+				"\",\"toolName\":\"" +
+				EscapeJsonLocal(delta.toolName) +
+				"\",\"argsJson\":\"" +
+				EscapeJsonLocal(delta.argsJson) +
+				"\",\"resultJson\":\"" +
+				EscapeJsonLocal(delta.resultJson) +
+				"\",\"status\":\"" +
+				EscapeJsonLocal(delta.status) +
+				"\",\"errorCode\":\"" +
+				EscapeJsonLocal(delta.errorCode) +
+				"\",\"startedAtMs\":" +
+				std::to_string(delta.startedAtMs) +
+				",\"completedAtMs\":" +
+				std::to_string(delta.completedAtMs) +
+				",\"latencyMs\":" +
+				std::to_string(delta.latencyMs) +
+				",\"modelTurnId\":\"" +
+				EscapeJsonLocal(delta.modelTurnId) +
+				"\",\"stepLabel\":\"" +
+				EscapeJsonLocal(delta.stepLabel) +
+				"\"}";
+		}
+
 		struct ChatPromptOrchestrationResult {
 			bool matched = false;
 			bool success = false;
@@ -1580,6 +1613,41 @@ namespace blazeclaw::gateway {
 					: ("chat-run-" + std::to_string(nowMs) +
 						"-" + std::to_string(m_chatRunsById.size() + 1));
 
+				auto persistTaskDeltas =
+					[this, &runId](
+						const std::vector<ChatRuntimeResult::TaskDeltaEntry>& taskDeltas,
+						const bool success) {
+							if (taskDeltas.empty()) {
+								return;
+							}
+
+							m_taskDeltasByRunId.insert_or_assign(runId, taskDeltas);
+							for (const auto& delta : taskDeltas) {
+								EmitTelemetryEvent(
+									"gateway.taskdelta.transition",
+									std::string("{\"runId\":") +
+									JsonString(runId) +
+									",\"phase\":" + JsonString(delta.phase) +
+									",\"toolName\":" + JsonString(delta.toolName) +
+									",\"status\":" + JsonString(delta.status) +
+									",\"index\":" + std::to_string(delta.index) +
+									",\"latencyMs\":" + std::to_string(delta.latencyMs) +
+									"}");
+							}
+
+							EmitTelemetryEvent(
+								"gateway.taskdelta.runSummary",
+								std::string("{\"runId\":") +
+								JsonString(runId) +
+								",\"count\":" + std::to_string(taskDeltas.size()) +
+								",\"success\":" + (success ? std::string("true") : std::string("false")) +
+								"}");
+
+							if (m_taskDeltasByRunId.size() > 64) {
+								m_taskDeltasByRunId.erase(m_taskDeltasByRunId.begin());
+							}
+					};
+
 				std::string assistantText = message.empty()
 					? "Received image attachment."
 					: ("Echo: " + message);
@@ -1732,6 +1800,8 @@ namespace blazeclaw::gateway {
 							: runtimeResult.errorMessage;
 						assistantText.clear();
 					}
+
+					persistTaskDeltas(runtimeResult.taskDeltas, runtimeResult.ok);
 				}
 
 				const bool silentAssistantReply = IsSilentReplyText(assistantText);
@@ -1754,6 +1824,87 @@ namespace blazeclaw::gateway {
 								assistantText.substr(0, streamCursor)),
 							.errorMessage = std::nullopt,
 							.timestampMs = nowMs,
+							});
+
+						m_dispatcher.Register(
+							"gateway.runtime.taskDeltas.get",
+							[this](const protocol::RequestFrame& request) {
+								const std::string runId =
+									ExtractStringParam(request.paramsJson, "runId");
+								if (runId.empty()) {
+									return protocol::ResponseFrame{
+										.id = request.id,
+										.ok = false,
+										.payloadJson = std::nullopt,
+										.error = protocol::ErrorShape{
+											.code = "missing_run_id",
+											.message = "runId is required.",
+											.detailsJson = std::nullopt,
+											.retryable = false,
+											.retryAfterMs = std::nullopt,
+										},
+									};
+								}
+
+								const auto it = m_taskDeltasByRunId.find(runId);
+								if (it == m_taskDeltasByRunId.end()) {
+									return protocol::ResponseFrame{
+										.id = request.id,
+										.ok = true,
+										.payloadJson =
+											"{\"runId\":\"" + EscapeJsonLocal(runId) +
+											"\",\"taskDeltas\":[],\"count\":0}",
+										.error = std::nullopt,
+									};
+								}
+
+								std::string deltasJson = "[";
+								for (std::size_t i = 0; i < it->second.size(); ++i) {
+									if (i > 0) {
+										deltasJson += ",";
+									}
+									deltasJson += SerializeTaskDeltaEntryJson(it->second[i]);
+								}
+								deltasJson += "]";
+
+								return protocol::ResponseFrame{
+									.id = request.id,
+									.ok = true,
+									.payloadJson =
+										"{\"runId\":\"" + EscapeJsonLocal(runId) +
+										"\",\"taskDeltas\":" + deltasJson +
+										",\"count\":" + std::to_string(it->second.size()) + "}",
+									.error = std::nullopt,
+								};
+							});
+
+						m_dispatcher.Register(
+							"gateway.runtime.taskDeltas.clear",
+							[this](const protocol::RequestFrame& request) {
+								const std::string runId =
+									ExtractStringParam(request.paramsJson, "runId");
+								std::size_t cleared = 0;
+								if (runId.empty()) {
+									cleared = m_taskDeltasByRunId.size();
+									m_taskDeltasByRunId.clear();
+								}
+								else {
+									const auto it = m_taskDeltasByRunId.find(runId);
+									if (it != m_taskDeltasByRunId.end()) {
+										cleared = 1;
+										m_taskDeltasByRunId.erase(it);
+									}
+								}
+
+								return protocol::ResponseFrame{
+									.id = request.id,
+									.ok = true,
+									.payloadJson =
+										"{\"runId\":\"" + EscapeJsonLocal(runId.empty() ? "*" : runId) +
+										"\",\"cleared\":" + std::to_string(cleared) +
+										",\"remaining\":" + std::to_string(m_taskDeltasByRunId.size()) + "}",
+									.error = std::nullopt,
+								};
 							});
 						EmitDeepSeekGatewayDiagnostic(
 							"event.enqueue",

@@ -109,6 +109,8 @@ Immediate implementation progress:
   model-turn/task-delta tracking.
 - Step 7 complete: safety/termination policies are now enforced for max steps,
   loop detection, timeout deadlines, runtime tool allow checks, and transient retry handling.
+- Step 8 complete: gateway/runtime observability now exposes ordered task-delta
+  retrieval and telemetry transitions for deterministic verification and replay diagnostics.
 
 ## Verification lanes
 

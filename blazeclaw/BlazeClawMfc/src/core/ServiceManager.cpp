@@ -2179,11 +2179,35 @@ namespace blazeclaw::core {
 				}
 
 				if (embeddedExecution.handled) {
+					std::vector<blazeclaw::gateway::GatewayHost::ChatRuntimeResult::TaskDeltaEntry>
+						runtimeDeltas;
+					runtimeDeltas.reserve(embeddedExecution.taskDeltas.size());
+					for (const auto& delta : embeddedExecution.taskDeltas) {
+						runtimeDeltas.push_back(
+							blazeclaw::gateway::GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+								.index = delta.index,
+								.runId = delta.runId,
+								.sessionId = delta.sessionId,
+								.phase = delta.phase,
+								.toolName = delta.toolName,
+								.argsJson = delta.argsJson,
+								.resultJson = delta.resultJson,
+								.status = delta.status,
+								.errorCode = delta.errorCode,
+								.startedAtMs = delta.startedAtMs,
+								.completedAtMs = delta.completedAtMs,
+								.latencyMs = delta.latencyMs,
+								.modelTurnId = delta.modelTurnId,
+								.stepLabel = delta.stepLabel,
+							});
+					}
+
 					if (!embeddedExecution.success) {
 						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
 							.ok = false,
 							.assistantText = {},
 							.assistantDeltas = embeddedExecution.assistantDeltas,
+						   .taskDeltas = std::move(runtimeDeltas),
 							.modelId = m_activeChatModel,
 							.errorCode = embeddedExecution.errorCode.empty()
 								? "embedded_tool_execution_failed"
@@ -2198,6 +2222,7 @@ namespace blazeclaw::core {
 						.ok = true,
 						.assistantText = embeddedExecution.assistantText,
 						.assistantDeltas = embeddedExecution.assistantDeltas,
+					   .taskDeltas = std::move(runtimeDeltas),
 						.modelId = m_activeChatModel,
 						.errorCode = {},
 						.errorMessage = {},
