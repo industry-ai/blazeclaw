@@ -19,7 +19,7 @@ namespace blazeclaw::core {
 			return static_cast<std::uint64_t>(
 				std::chrono::duration_cast<std::chrono::milliseconds>(
 					now.time_since_epoch())
-					.count());
+				.count());
 		}
 
 		std::string ToLowerCopy(const std::string& value) {
@@ -85,6 +85,98 @@ namespace blazeclaw::core {
 			return std::nullopt;
 		}
 
+		std::vector<std::string> ResolveLegacyAliasExecutionPlan(
+			const EmbeddedRuntimeExecutionRequest& request) {
+			const std::string loweredMessage = ToLowerCopy(request.run.message);
+			const bool hasSearchIntent = ContainsAny(
+				loweredMessage,
+				{ "brave", "search", "搜索", "news", "动态" });
+			const bool hasSummarizeIntent = ContainsAny(
+				loweredMessage,
+				{ "summarize", "summary", "摘要", "浓缩" });
+			const bool hasNotionIntent = ContainsAny(
+				loweredMessage,
+				{ "notion", "每日早报", "页面", "写入" });
+
+			std::vector<std::string> executionPlan;
+			if (hasSearchIntent) {
+				if (const auto tool = FindToolByAlias(
+					request.runtimeTools,
+					request.toolBindings,
+					{ "brave", "search" });
+					tool.has_value()) {
+					executionPlan.push_back(tool.value());
+				}
+			}
+
+			if (hasSummarizeIntent) {
+				if (const auto tool = FindToolByAlias(
+					request.runtimeTools,
+					request.toolBindings,
+					{ "summarize", "summary", "摘要" });
+					tool.has_value()) {
+					executionPlan.push_back(tool.value());
+				}
+			}
+
+			if (hasNotionIntent) {
+				if (const auto tool = FindToolByAlias(
+					request.runtimeTools,
+					request.toolBindings,
+					{ "notion", "page", "write" });
+					tool.has_value()) {
+					executionPlan.push_back(tool.value());
+				}
+			}
+
+			executionPlan.erase(
+				std::unique(executionPlan.begin(), executionPlan.end()),
+				executionPlan.end());
+			return executionPlan;
+		}
+
+		nlohmann::json BuildLegacyToolArgs(
+			const std::string& toolName,
+			const std::string& query,
+			const std::string& runMessage,
+			const std::string& lastOutput) {
+			nlohmann::json args = nlohmann::json::object();
+			const std::string loweredTool = ToLowerCopy(toolName);
+			if (loweredTool.find("search") != std::string::npos ||
+				loweredTool.find("brave") != std::string::npos) {
+				args["query"] = query;
+				args["topK"] = 3;
+			}
+			else if (loweredTool.find("summ") != std::string::npos) {
+				args["text"] = lastOutput.empty() ? runMessage : lastOutput;
+				args["maxChars"] = 100;
+			}
+			else if (loweredTool.find("notion") != std::string::npos) {
+				args["page"] = "每日早报";
+				args["content"] = lastOutput.empty() ? runMessage : lastOutput;
+			}
+			else {
+				args["input"] = lastOutput.empty() ? runMessage : lastOutput;
+			}
+
+			return args;
+		}
+
+		void FinalizeExecutionResult(
+			EmbeddedRuntimeExecutionResult& result,
+			const std::string& status,
+			const std::string& reason,
+			const std::string& errorCode,
+			const std::string& errorMessage,
+			const std::string& assistantText) {
+			result.status = status;
+			result.reason = reason;
+			result.errorCode = errorCode;
+			result.errorMessage = errorMessage;
+			result.assistantText = assistantText;
+			result.success = status == "completed";
+		}
+
 	} // namespace
 
 	void PiEmbeddedService::Configure(const blazeclaw::config::AppConfig& appConfig) {
@@ -139,7 +231,7 @@ namespace blazeclaw::core {
 	EmbeddedRuntimeExecutionResult PiEmbeddedService::ExecuteRun(
 		const EmbeddedRuntimeExecutionRequest& request) {
 		EmbeddedRuntimeExecutionResult result;
-        if (!request.enableDynamicToolLoop) {
+		if (!request.enableDynamicToolLoop) {
 			result.accepted = true;
 			result.handled = false;
 			result.success = true;
@@ -148,51 +240,8 @@ namespace blazeclaw::core {
 			return result;
 		}
 
-		const std::string loweredMessage = ToLowerCopy(request.run.message);
-		const bool hasSearchIntent = ContainsAny(
-			loweredMessage,
-			{ "brave", "search", "搜索", "news", "动态" });
-		const bool hasSummarizeIntent = ContainsAny(
-			loweredMessage,
-			{ "summarize", "summary", "摘要", "浓缩" });
-		const bool hasNotionIntent = ContainsAny(
-			loweredMessage,
-			{ "notion", "每日早报", "页面", "写入" });
-
-		std::vector<std::string> executionPlan;
-		if (hasSearchIntent) {
-			if (const auto tool = FindToolByAlias(
-				request.runtimeTools,
-				request.toolBindings,
-				{ "brave", "search" });
-				tool.has_value()) {
-				executionPlan.push_back(tool.value());
-			}
-		}
-
-		if (hasSummarizeIntent) {
-			if (const auto tool = FindToolByAlias(
-				request.runtimeTools,
-				request.toolBindings,
-				{ "summarize", "summary", "摘要" });
-				tool.has_value()) {
-				executionPlan.push_back(tool.value());
-			}
-		}
-
-		if (hasNotionIntent) {
-			if (const auto tool = FindToolByAlias(
-				request.runtimeTools,
-				request.toolBindings,
-				{ "notion", "page", "write" });
-				tool.has_value()) {
-				executionPlan.push_back(tool.value());
-			}
-		}
-
-		executionPlan.erase(
-			std::unique(executionPlan.begin(), executionPlan.end()),
-			executionPlan.end());
+		const std::vector<std::string> executionPlan =
+			ResolveLegacyAliasExecutionPlan(request);
 
 		if (executionPlan.empty() || !request.toolExecutor) {
 			result.accepted = true;
@@ -220,19 +269,19 @@ namespace blazeclaw::core {
 			request.run.sessionId.empty() ? "main" : request.run.sessionId;
 		const auto appendDelta =
 			[this, &result, &queued, &sessionId](const EmbeddedTaskDelta& rawDelta) {
-				EmbeddedTaskDelta delta = rawDelta;
-				delta.runId = queued.runId;
-				delta.sessionId = sessionId;
-				if (delta.startedAtMs == 0) {
-					delta.startedAtMs = CurrentEpochMs();
-				}
-				if (delta.completedAtMs == 0) {
-					delta.completedAtMs = delta.startedAtMs;
-				}
-				delta.latencyMs = delta.completedAtMs >= delta.startedAtMs
-					? delta.completedAtMs - delta.startedAtMs
-					: 0;
-				AppendTaskDelta(queued.runId, delta);
+			EmbeddedTaskDelta delta = rawDelta;
+			delta.runId = queued.runId;
+			delta.sessionId = sessionId;
+			if (delta.startedAtMs == 0) {
+				delta.startedAtMs = CurrentEpochMs();
+			}
+			if (delta.completedAtMs == 0) {
+				delta.completedAtMs = delta.startedAtMs;
+			}
+			delta.latencyMs = delta.completedAtMs >= delta.startedAtMs
+				? delta.completedAtMs - delta.startedAtMs
+				: 0;
+			AppendTaskDelta(queued.runId, delta);
 			};
 
 		result.handled = true;
@@ -250,25 +299,11 @@ namespace blazeclaw::core {
 
 		for (const auto& toolName : executionPlan) {
 			result.assistantDeltas.push_back("tools.execute.start tool=" + toolName);
-
-			nlohmann::json args = nlohmann::json::object();
-			const std::string loweredTool = ToLowerCopy(toolName);
-			if (loweredTool.find("search") != std::string::npos ||
-				loweredTool.find("brave") != std::string::npos) {
-				args["query"] = query;
-				args["topK"] = 3;
-			}
-			else if (loweredTool.find("summ") != std::string::npos) {
-				args["text"] = lastOutput.empty() ? request.run.message : lastOutput;
-				args["maxChars"] = 100;
-			}
-			else if (loweredTool.find("notion") != std::string::npos) {
-				args["page"] = "每日早报";
-				args["content"] = lastOutput.empty() ? request.run.message : lastOutput;
-			}
-			else {
-				args["input"] = lastOutput.empty() ? request.run.message : lastOutput;
-			}
+			nlohmann::json args = BuildLegacyToolArgs(
+				toolName,
+				query,
+				request.run.message,
+				lastOutput);
 
 			appendDelta(EmbeddedTaskDelta{
 				.phase = "tool_call",
@@ -297,17 +332,24 @@ namespace blazeclaw::core {
 
 			if (!execution.executed || execution.status == "error") {
 				if (!CompleteRun(queued.runId, "failed", queued.startedAtMs + 1)) {
-					result.errorCode = "embedded_completion_failed";
-					result.errorMessage = "embedded completion failed";
+					FinalizeExecutionResult(
+						result,
+						"failed",
+						"embedded_completion_failed",
+						"embedded_completion_failed",
+						"embedded completion failed",
+						{});
 				}
-				result.success = false;
-				result.status = "failed";
-				result.reason = "tool_execution_failed";
-				result.errorCode = "embedded_tool_execution_failed";
-				result.errorMessage = execution.output.empty()
+				FinalizeExecutionResult(
+					result,
+					"failed",
+					"tool_execution_failed",
+					"embedded_tool_execution_failed",
+					execution.output.empty()
 					? "tool execution failed"
-					: execution.output;
-                appendDelta(EmbeddedTaskDelta{
+					: execution.output,
+					{});
+				appendDelta(EmbeddedTaskDelta{
 					.phase = "final",
 					.resultJson = result.errorMessage,
 					.status = "failed",
@@ -322,12 +364,14 @@ namespace blazeclaw::core {
 		}
 
 		if (!CompleteRun(queued.runId, "completed", queued.startedAtMs + 1)) {
-			result.success = false;
-			result.status = "failed";
-			result.reason = "embedded_completion_failed";
-			result.errorCode = "embedded_completion_failed";
-			result.errorMessage = "embedded completion failed";
-            appendDelta(EmbeddedTaskDelta{
+			FinalizeExecutionResult(
+				result,
+				"failed",
+				"embedded_completion_failed",
+				"embedded_completion_failed",
+				"embedded completion failed",
+				{});
+			appendDelta(EmbeddedTaskDelta{
 				.phase = "final",
 				.resultJson = result.errorMessage,
 				.status = "failed",
@@ -337,17 +381,20 @@ namespace blazeclaw::core {
 			result.taskDeltas = GetTaskDeltas(queued.runId);
 			return result;
 		}
-		result.success = true;
-		result.status = "completed";
-		result.reason = "orchestrated";
-		result.assistantText = lastOutput.empty()
+		FinalizeExecutionResult(
+			result,
+			"completed",
+			"orchestrated",
+			{},
+			{},
+			lastOutput.empty()
 			? "Embedded orchestration completed."
-			: lastOutput;
-      appendDelta(EmbeddedTaskDelta{
-			.phase = "final",
-			.resultJson = result.assistantText,
-			.status = "completed",
-			.stepLabel = "run_terminal",
+			: lastOutput);
+		appendDelta(EmbeddedTaskDelta{
+			  .phase = "final",
+			  .resultJson = result.assistantText,
+			  .status = "completed",
+			  .stepLabel = "run_terminal",
 			});
 		result.taskDeltas = GetTaskDeltas(queued.runId);
 		return result;
@@ -478,7 +525,7 @@ namespace blazeclaw::core {
 				.runtimeTools = {},
 				.enableDynamicToolLoop = false,
 				.toolExecutor = {},
-				});
+			});
 		if (disabledLoop.handled ||
 			disabledLoop.reason != "dynamic_tool_loop_disabled") {
 			outError = L"Fixture validation failed: expected dynamic loop disabled baseline path.";
@@ -528,7 +575,7 @@ namespace blazeclaw::core {
 						.output = argsJson.value_or("{}"),
 						};
 				},
-				});
+			});
 
 		if (!dynamicLoop.success || dynamicLoop.taskDeltas.empty()) {
 			outError = L"Fixture validation failed: expected dynamic loop task deltas.";

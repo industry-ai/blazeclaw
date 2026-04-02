@@ -47,28 +47,28 @@ namespace blazeclaw::core {
 		std::string skillsPrompt;
 		std::vector<EmbeddedToolBinding> toolBindings;
 		std::vector<blazeclaw::gateway::ToolCatalogEntry> runtimeTools;
-    bool enableDynamicToolLoop = false;
+		bool enableDynamicToolLoop = false;
 		std::function<blazeclaw::gateway::ToolExecuteResult(
 			const std::string&,
 			const std::optional<std::string>&)> toolExecutor;
 	};
 
-struct EmbeddedTaskDelta {
-	std::size_t index = 0;
-	std::string runId;
-	std::string sessionId;
-	std::string phase;
-	std::string toolName;
-	std::string argsJson;
-	std::string resultJson;
-	std::string status;
-	std::string errorCode;
-	std::uint64_t startedAtMs = 0;
-	std::uint64_t completedAtMs = 0;
-	std::uint64_t latencyMs = 0;
-	std::string modelTurnId;
-	std::string stepLabel;
-};
+	struct EmbeddedTaskDelta {
+		std::size_t index = 0;
+		std::string runId;
+		std::string sessionId;
+		std::string phase;
+		std::string toolName;
+		std::string argsJson;
+		std::string resultJson;
+		std::string status;
+		std::string errorCode;
+		std::uint64_t startedAtMs = 0;
+		std::uint64_t completedAtMs = 0;
+		std::uint64_t latencyMs = 0;
+		std::string modelTurnId;
+		std::string stepLabel;
+	};
 
 	struct EmbeddedRuntimeExecutionResult {
 		bool accepted = false;
@@ -83,7 +83,7 @@ struct EmbeddedTaskDelta {
 		std::string errorMessage;
 		std::size_t decompositionSteps = 0;
 		std::uint64_t startedAtMs = 0;
-  std::vector<EmbeddedTaskDelta> taskDeltas;
+		std::vector<EmbeddedTaskDelta> taskDeltas;
 	};
 
 	class PiEmbeddedService {
@@ -105,10 +105,10 @@ struct EmbeddedTaskDelta {
 		[[nodiscard]] std::optional<EmbeddedRunRecord> GetRun(
 			const std::string& runId) const;
 
-	[[nodiscard]] std::vector<EmbeddedTaskDelta> GetTaskDeltas(
-		const std::string& runId) const;
+		[[nodiscard]] std::vector<EmbeddedTaskDelta> GetTaskDeltas(
+			const std::string& runId) const;
 
-	void ClearTaskDeltas(const std::string& runId);
+		void ClearTaskDeltas(const std::string& runId);
 
 		[[nodiscard]] bool ValidateFixtureScenarios(
 			const std::filesystem::path& fixturesRoot,
@@ -117,12 +117,12 @@ struct EmbeddedTaskDelta {
 	private:
 		blazeclaw::config::AppConfig m_config;
 		std::unordered_map<std::string, EmbeddedRunRecord> m_runsById;
-  std::unordered_map<std::string, std::vector<EmbeddedTaskDelta>>
-		m_taskDeltasByRunId;
+		std::unordered_map<std::string, std::vector<EmbeddedTaskDelta>>
+			m_taskDeltasByRunId;
 
-	void AppendTaskDelta(
-		const std::string& runId,
-		const EmbeddedTaskDelta& delta);
+		void AppendTaskDelta(
+			const std::string& runId,
+			const EmbeddedTaskDelta& delta);
 	};
 
 } // namespace blazeclaw::core

@@ -348,7 +348,7 @@ and Steps 6-10 must produce evidence for both lanes.
 ## Execution Checklist (Tracking)
 - [x] Step 0 complete
 - [x] Step 1 complete
-- [ ] Step 2 complete
+- [x] Step 2 complete
 - [ ] Step 3 complete
 - [ ] Step 4 complete
 - [ ] Step 5 complete
@@ -375,6 +375,12 @@ and Steps 6-10 must produce evidence for both lanes.
 - Added fixture validations for:
   - dynamic loop disabled baseline path,
   - ordered task-delta index and phase coverage when dynamic loop is enabled.
+
+### Completed now: Step 2 (Adapter Layer Extraction)
+- Extracted planning concern into dedicated helper strategy (`ResolveLegacyAliasExecutionPlan`).
+- Extracted tool argument construction into execution helper (`BuildLegacyToolArgs`).
+- Extracted termination state shaping into dedicated helper (`FinalizeExecutionResult`).
+- Preserved runtime behavior and task-delta semantics while splitting concerns for next dynamic-loop migration.
 
 ## Primary File Targets (Expected)
 - `blazeclaw/BlazeClawMfc/src/core/PiEmbeddedService.h`

@@ -96,6 +96,8 @@ Immediate implementation progress:
   `embedded.dynamicToolLoopEnabled` and wired into runtime path.
 - Step 1 complete: task-delta core model added in `PiEmbeddedService` with ordered
   `plan/tool_call/tool_result/final` delta emission and query helpers.
+- Step 2 complete: adapter concerns split into planning/execution/termination helpers
+  without behavior changes, preparing safe migration to fully model-driven decomposition.
 
 ## Verification lanes
 
