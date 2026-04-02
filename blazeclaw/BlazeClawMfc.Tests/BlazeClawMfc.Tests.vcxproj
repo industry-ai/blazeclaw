@@ -27,11 +27,13 @@
       <AdditionalIncludeDirectories>$(ProjectDir)..\BlazeClawMfc\src;$(ProjectDir)..\BlazeClawMfc;$(ProjectDir)..\BlazeClawMfc\src\app;$(ProjectDir)..\BlazeClawMfc\third_party\catch2\single_include;$(ProjectDir)..\BlazeClawMfc\third_party\nlohmann;$(VcpkgIncludeRoot);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
       <!-- No forced includes; test files include app/pch.h via AdditionalIncludeDirectories if needed -->
       <PreprocessorDefinitions>NOMINMAX;_AFXDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
+      <AdditionalDependencies>Ws2_32.lib;Crypt32.lib;Advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -44,10 +46,32 @@
     <ClCompile Include="..\BlazeClawMfc\tests\TelemetryTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ExtensionLifecycleManager.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayAgentRegistry.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayChannelRegistry.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Channels.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Events.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.ScopeCluster.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.SecurityOps.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Tools.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Transport.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayMethodDispatcher.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayToolRegistry.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\PluginHostAdapter.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayPersistencePaths.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayProtocolCodec.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayProtocolContract.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayProtocolJson.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayProtocolSchemaValidator.Request.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayProtocolSchemaValidator.Event.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayProtocolSchemaValidator.Response.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayProtocolSchemaValidator.Shared.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewaySessionRegistry.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayWebSocketTransport.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayJsonUtils.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\generated\GatewayHandlerCatalog.Generated.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\generated\GatewaySchemaCatalog.Generated.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\config\ConfigLoader.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\executors\EmailScheduleExecutor.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\executors\LobsterExecutor.cpp" />
