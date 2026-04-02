@@ -117,6 +117,9 @@ Immediate implementation progress:
 - Step 9A complete: operational smoke fixture now validates weather.lookup ->
   report.compose -> email.schedule ordered task deltas and final email
   scheduling/sending evidence for immediate execution semantics.
+- Step 10 complete: generalized matrix and failure-mode fixtures now cover
+  2/3/4-step tool combinations, transient retry recovery, hard failures,
+  approval-gated execution states, and legacy metadata compatibility.
 
 ## Verification lanes
 

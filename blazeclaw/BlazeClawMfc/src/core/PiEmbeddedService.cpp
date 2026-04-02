@@ -1392,6 +1392,391 @@ namespace blazeclaw::core {
 			return false;
 		}
 
+		auto runMatrixCase = [&](const std::string& caseName,
+			const std::vector<std::string>& toolsInOrder,
+			const std::string& terminalText) -> bool {
+				PiEmbeddedService matrixService;
+				matrixService.Configure(cfg);
+
+				std::vector<blazeclaw::gateway::ToolCatalogEntry> runtimeTools;
+				runtimeTools.reserve(toolsInOrder.size());
+				std::vector<EmbeddedToolBinding> bindings;
+				bindings.reserve(toolsInOrder.size());
+				std::string skillsPrompt = "Use tools in this order:";
+
+				for (const auto& tool : toolsInOrder) {
+					runtimeTools.push_back(
+						blazeclaw::gateway::ToolCatalogEntry{
+							.id = tool,
+							.label = tool,
+							.category = "matrix",
+							.enabled = true,
+						});
+					bindings.push_back(
+						EmbeddedToolBinding{
+							.commandName = tool,
+							.description = "matrix",
+							.toolName = tool,
+							.argMode = "raw",
+						});
+					skillsPrompt += " " + tool;
+				}
+
+				const auto matrixResult = matrixService.ExecuteRun(
+					EmbeddedRuntimeExecutionRequest{
+						.run = EmbeddedRunRequest{
+							.sessionId = "main",
+							.agentId = "default",
+							.message = "matrix execution " + caseName,
+							},
+						.skillsPrompt = skillsPrompt,
+						.toolBindings = std::move(bindings),
+						.runtimeTools = std::move(runtimeTools),
+						.enableDynamicToolLoop = true,
+						.toolExecutor = [&](const std::string& requestedTool,
+							const std::optional<std::string>&) {
+							const bool isTerminal = requestedTool == toolsInOrder.back();
+							return blazeclaw::gateway::ToolExecuteResult{
+								.tool = requestedTool,
+								.executed = true,
+								.status = "ok",
+								.output = isTerminal
+									? terminalText
+									: ("ok:" + requestedTool),
+							};
+						},
+					});
+
+				if (!matrixResult.success ||
+					matrixResult.decompositionSteps < toolsInOrder.size()) {
+					outError = L"Fixture validation failed: matrix " +
+						std::wstring(caseName.begin(), caseName.end()) +
+						L" expected decomposition steps.";
+					return false;
+				}
+
+				std::size_t callIndex = 0;
+				for (const auto& delta : matrixResult.taskDeltas) {
+					if (delta.phase != "tool_call") {
+						continue;
+					}
+
+					if (callIndex >= toolsInOrder.size() ||
+						delta.toolName != toolsInOrder[callIndex]) {
+						outError = L"Fixture validation failed: matrix " +
+							std::wstring(caseName.begin(), caseName.end()) +
+							L" expected ordered tool calls.";
+						return false;
+					}
+
+					++callIndex;
+				}
+
+				if (callIndex < toolsInOrder.size()) {
+					outError = L"Fixture validation failed: matrix " +
+						std::wstring(caseName.begin(), caseName.end()) +
+						L" expected full tool-call sequence.";
+					return false;
+				}
+
+				if (matrixResult.assistantText.find(terminalText) == std::string::npos) {
+					outError = L"Fixture validation failed: matrix " +
+						std::wstring(caseName.begin(), caseName.end()) +
+						L" expected terminal evidence text.";
+					return false;
+				}
+
+				return true;
+			};
+
+		if (!runMatrixCase(
+			"two-step",
+			{ "matrix.fetch", "matrix.write" },
+			"matrix-two-step-complete")) {
+			return false;
+		}
+
+		if (!runMatrixCase(
+			"three-step",
+			{ "matrix.fetch", "matrix.summarize", "matrix.write" },
+			"matrix-three-step-complete")) {
+			return false;
+		}
+
+		if (!runMatrixCase(
+			"four-step",
+			{ "matrix.fetch", "matrix.transform", "matrix.validate", "matrix.publish" },
+			"matrix-four-step-complete")) {
+			return false;
+		}
+
+		PiEmbeddedService retryService;
+		retryService.Configure(cfg);
+		std::size_t transientAttempts = 0;
+		const auto retryResult = retryService.ExecuteRun(
+			EmbeddedRuntimeExecutionRequest{
+				.run = EmbeddedRunRequest{
+					.sessionId = "main",
+					.agentId = "default",
+					.message = "retry transient",
+					},
+				.skillsPrompt = "retry.fetch retry.finalize",
+				.toolBindings = {
+					EmbeddedToolBinding{
+						.commandName = "retry.fetch",
+						.description = "retry fetch",
+						.toolName = "retry.fetch",
+						.argMode = "raw",
+					},
+					EmbeddedToolBinding{
+						.commandName = "retry.finalize",
+						.description = "retry finalize",
+						.toolName = "retry.finalize",
+						.argMode = "raw",
+					},
+				},
+				.runtimeTools = {
+					blazeclaw::gateway::ToolCatalogEntry{
+						.id = "retry.fetch",
+						.label = "Retry Fetch",
+						.category = "retry",
+						.enabled = true,
+					},
+					blazeclaw::gateway::ToolCatalogEntry{
+						.id = "retry.finalize",
+						.label = "Retry Finalize",
+						.category = "retry",
+					 .enabled = true,
+					},
+				},
+			   .enableDynamicToolLoop = true,
+				.toolExecutorV2 = [&](const blazeclaw::gateway::ToolExecuteRequestV2& toolRequest) {
+					if (toolRequest.tool == "retry.fetch") {
+						++transientAttempts;
+						if (transientAttempts == 1) {
+							return blazeclaw::gateway::ToolExecuteResultV2{
+								.tool = toolRequest.tool,
+								.executed = false,
+								.status = "timeout",
+								.result = {},
+								.errorCode = "timeout",
+								.errorMessage = "temporary timeout",
+								.startedAtMs = CurrentEpochMs(),
+								.completedAtMs = CurrentEpochMs(),
+								.latencyMs = 0,
+								.correlationId = toolRequest.correlationId,
+							};
+						}
+
+						return blazeclaw::gateway::ToolExecuteResultV2{
+							.tool = toolRequest.tool,
+							.executed = true,
+							.status = "ok",
+							.result = "retry.fetch.ok",
+							.errorCode = {},
+							.errorMessage = {},
+							.startedAtMs = CurrentEpochMs(),
+							.completedAtMs = CurrentEpochMs(),
+							.latencyMs = 0,
+							.correlationId = toolRequest.correlationId,
+						};
+					}
+
+					return blazeclaw::gateway::ToolExecuteResultV2{
+						.tool = toolRequest.tool,
+						.executed = true,
+						.status = "ok",
+						.result = "retry-final-result",
+						.errorCode = {},
+						.errorMessage = {},
+						.startedAtMs = CurrentEpochMs(),
+						.completedAtMs = CurrentEpochMs(),
+						.latencyMs = 0,
+						.correlationId = toolRequest.correlationId,
+					};
+				},
+			});
+
+		if (!retryResult.success || transientAttempts < 2) {
+			outError = L"Fixture validation failed: expected transient retry to recover.";
+			return false;
+		}
+
+		PiEmbeddedService hardFailureService;
+		hardFailureService.Configure(cfg);
+		const auto hardFailureResult = hardFailureService.ExecuteRun(
+			EmbeddedRuntimeExecutionRequest{
+				.run = EmbeddedRunRequest{
+					.sessionId = "main",
+					.agentId = "default",
+					.message = "hard failure",
+					},
+				.skillsPrompt = "failure.tool",
+				.toolBindings = {
+					EmbeddedToolBinding{
+						.commandName = "failure.tool",
+						.description = "failure",
+						.toolName = "failure.tool",
+						.argMode = "raw",
+					},
+				},
+				.runtimeTools = {
+					blazeclaw::gateway::ToolCatalogEntry{
+						.id = "failure.tool",
+						.label = "Failure Tool",
+						.category = "failure",
+						.enabled = true,
+					},
+				},
+				.enableDynamicToolLoop = true,
+				.toolExecutor = [](const std::string& requestedTool,
+					const std::optional<std::string>&) {
+					return blazeclaw::gateway::ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = false,
+						.status = "error",
+						.output = "hard failure",
+					};
+				},
+			});
+
+		if (hardFailureResult.success ||
+			hardFailureResult.errorCode != "embedded_tool_execution_failed") {
+			outError = L"Fixture validation failed: expected deterministic hard failure code.";
+			return false;
+		}
+
+		PiEmbeddedService approvalService;
+		approvalService.Configure(cfg);
+		const auto approvalResult = approvalService.ExecuteRun(
+			EmbeddedRuntimeExecutionRequest{
+				.run = EmbeddedRunRequest{
+					.sessionId = "main",
+					.agentId = "default",
+					.message = "approval gated run",
+					},
+				.skillsPrompt = "approval.prepare approval.commit",
+				.toolBindings = {
+					EmbeddedToolBinding{
+						.commandName = "approval.prepare",
+						.description = "approval prepare",
+						.toolName = "approval.prepare",
+						.argMode = "raw",
+					},
+					EmbeddedToolBinding{
+						.commandName = "approval.commit",
+						.description = "approval commit",
+						.toolName = "approval.commit",
+						.argMode = "raw",
+					},
+				},
+				.runtimeTools = {
+					blazeclaw::gateway::ToolCatalogEntry{
+						.id = "approval.prepare",
+						.label = "Approval Prepare",
+						.category = "approval",
+						.enabled = true,
+					},
+					blazeclaw::gateway::ToolCatalogEntry{
+						.id = "approval.commit",
+						.label = "Approval Commit",
+						.category = "approval",
+						.enabled = true,
+					},
+				},
+				.enableDynamicToolLoop = true,
+				.toolExecutor = [](const std::string& requestedTool,
+					const std::optional<std::string>&) {
+					if (requestedTool == "approval.prepare") {
+						return blazeclaw::gateway::ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = true,
+							.status = "needs_approval",
+							.output = "approval token issued",
+						};
+					}
+
+					return blazeclaw::gateway::ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = true,
+						.status = "ok",
+						.output = "approval completed",
+					};
+				},
+			});
+
+		if (!approvalResult.success ||
+			approvalResult.assistantText.find("approval completed") == std::string::npos) {
+			outError = L"Fixture validation failed: expected approval-gated scenario to complete.";
+			return false;
+		}
+
+		const bool hasNeedsApprovalDelta = std::any_of(
+			approvalResult.taskDeltas.begin(),
+			approvalResult.taskDeltas.end(),
+			[](const EmbeddedTaskDelta& delta) {
+				return delta.phase == "tool_result" && delta.status == "needs_approval";
+			});
+		if (!hasNeedsApprovalDelta) {
+			outError = L"Fixture validation failed: expected needs_approval tool_result delta.";
+			return false;
+		}
+
+		PiEmbeddedService legacyCompatService;
+		legacyCompatService.Configure(cfg);
+		const auto legacyCompatResult = legacyCompatService.ExecuteRun(
+			EmbeddedRuntimeExecutionRequest{
+				.run = EmbeddedRunRequest{
+					.sessionId = "main",
+					.agentId = "default",
+					.message = "legacy compatibility",
+					},
+				.skillsPrompt = "legacy.tool",
+				.toolBindings = {
+					EmbeddedToolBinding{
+						.commandName = "legacy.tool",
+						.description = "legacy tool",
+						.toolName = "legacy.tool",
+						.argMode = {},
+					},
+				},
+				.runtimeTools = {
+					blazeclaw::gateway::ToolCatalogEntry{
+						.id = "legacy.tool",
+						.label = "Legacy Tool",
+						.category = "compat",
+						.enabled = true,
+					},
+				},
+				.enableDynamicToolLoop = true,
+				.toolExecutor = [](const std::string& requestedTool,
+					const std::optional<std::string>& argsJson) {
+					return blazeclaw::gateway::ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = true,
+						.status = "ok",
+						.output = argsJson.value_or("{}"),
+					};
+				},
+			});
+
+		if (!legacyCompatResult.success || legacyCompatResult.taskDeltas.empty()) {
+			outError = L"Fixture validation failed: expected legacy snapshot compatibility success.";
+			return false;
+		}
+
+		const auto legacyToolCallIt = std::find_if(
+			legacyCompatResult.taskDeltas.begin(),
+			legacyCompatResult.taskDeltas.end(),
+			[](const EmbeddedTaskDelta& delta) {
+				return delta.phase == "tool_call" && delta.toolName == "legacy.tool";
+			});
+		if (legacyToolCallIt == legacyCompatResult.taskDeltas.end() ||
+			legacyToolCallIt->argsJson.empty()) {
+			outError = L"Fixture validation failed: expected legacy tool_call args to be generated.";
+			return false;
+		}
+
 		return true;
 	}
 

@@ -357,7 +357,7 @@ and Steps 6-10 must produce evidence for both lanes.
 - [x] Step 8 complete
 - [x] Step 9 complete
 - [x] Step 9A complete
-- [ ] Step 10 complete
+- [x] Step 10 complete
 - [ ] Step 11 complete
 - [ ] Step 12 complete
 
@@ -432,6 +432,13 @@ and Steps 6-10 must produce evidence for both lanes.
 - Added assertions for `decompositionSteps >= 3` under dynamic loop mode.
 - Added ordered `tool_call` sequence assertions for `weather.lookup -> report.compose -> email.schedule`.
 - Added terminal output assertion ensuring final assistant text includes email scheduling/sending result for `jichengwhu@163.com`.
+
+### Completed now: Step 10 (Generic Matrix and Failure-Mode Tests)
+- Added generalized matrix fixture coverage for deterministic 2-step, 3-step, and 4-step tool combinations with ordered `tool_call` task-delta assertions.
+- Added transient failure retry fixture scenario verifying bounded retry recovery behavior.
+- Added hard failure fixture scenario asserting deterministic terminal error code handling.
+- Added approval-gated scenario validation for `needs_approval` tool-result deltas and successful terminal completion.
+- Added legacy snapshot compatibility scenario validating execution when binding metadata (e.g., `argMode`) is missing.
 
 ## Primary File Targets (Expected)
 - `blazeclaw/BlazeClawMfc/src/core/PiEmbeddedService.h`
