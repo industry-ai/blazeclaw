@@ -206,6 +206,20 @@ namespace blazeclaw::config {
 			return L"onnx";
 		}
 
+		std::wstring NormalizeEmbeddedOrchestrationPath(
+			const std::wstring& raw) {
+			const std::wstring normalized = ToLowerTrim(raw);
+			if (normalized == L"runtime_orchestration") {
+				return normalized;
+			}
+
+			if (normalized == L"dynamic_task_delta") {
+				return normalized;
+			}
+
+			return L"dynamic_task_delta";
+		}
+
 	} // namespace
 
 	bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) const {
@@ -418,6 +432,13 @@ namespace blazeclaw::config {
 				outConfig.embedded.dynamicToolLoopEnabled = ParseBool(
 					trimmedLine.substr(32),
 					true);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"embedded.orchestrationPath=", 0) == 0) {
+				outConfig.embedded.orchestrationPath =
+					NormalizeEmbeddedOrchestrationPath(
+						trimmedLine.substr(27));
 				continue;
 			}
 
