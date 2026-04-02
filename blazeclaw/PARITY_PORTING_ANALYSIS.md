@@ -77,19 +77,37 @@ Implemented in `blazeclaw/BlazeClawMfc`:
 
 Current state: Priority 1 runtime parity gap is closed at BlazeClaw runtime layer; Priority 2/3 items remain follow-up hardening/verification work.
 
-Each tool execution is a task delta with metadata (tool name, args, result) that can be observed in 
-order, so we can verify the execution order and results for brave-search -> summarize -> notion test 
-case. Each chat request is now routed through the embedded orchestration adapter first, so we can verify 
-that the multi-skill prompt is properly decomposed and executed rather than treated as one-shot. Please 
-refactor the new embedded orchestration adapter to be as task decomposition and tool execution agnostic 
-as possible, so it can be reused for future multi-skill flows without hardcoded patterns. The adapter 
-should be able to handle any arbitrary combination of skills/tools as long as they are properly declared 
-in the skills prompt and command snapshots. And also we will use llm to discover the decomposition steps 
-and tool execution order, so the adapter should be able to support dynamic tool calls rather than fixed 
-sequences. The above procedure is called task delta decomposition and it is a common pattern in agent-based 
-systems to enable complex multi-step reasoning and tool use. Please create a plan in markdown file to 
-track the refactoring and hardening work for the embedded orchestration adapter, including any necessary 
-changes to the skills prompt/command schema or runtime tool execution APIs.
+## Refactor direction (task-delta decomposition)
+
+Next implementation phase is focused on a fully generic task-delta orchestration loop:
+
+- tool execution emits ordered deltas with metadata (`toolName`, `args`, `result`, `status`, timing),
+- decomposition is LLM-driven from skills prompt + command snapshots,
+- adapter core avoids hardcoded flow-specific sequences,
+- runtime supports dynamic tool selection from registered tools.
+
+Detailed execution process is tracked in:
+
+- `blazeclaw/EMBEDDED_ORCHESTRATION_REFACTOR_PLAN.md`
+
+Immediate implementation progress:
+
+- Step 0 complete: dynamic loop feature flag scaffolded via
+  `embedded.dynamicToolLoopEnabled` and wired into runtime path.
+- Step 1 complete: task-delta core model added in `PiEmbeddedService` with ordered
+  `plan/tool_call/tool_result/final` delta emission and query helpers.
+
+## Verification lanes
+
+To reduce regression risk, validation is split into two smoke lanes:
+
+1. **Operational lane:**
+   - prompt: weather -> report -> email now,
+   - expected order: `weather.lookup -> report.compose -> email.schedule`.
+2. **Parity lane:**
+   - prompt: brave-search -> summarize -> notion,
+   - expected order: `brave-search -> summarize -> notion`,
+   - expected terminal evidence includes Notion write result.
 
 
 ### Priority 2 (behavioral parity)

@@ -129,10 +129,38 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
 
 ## Step-by-Step Implementation Process
 
+## Process Optimization (Smoke-Test-Driven)
+
+To reduce integration risk and speed up feedback, execute refactor work in two
+verification lanes that run throughout Steps 0-12:
+
+- **Lane A (Operational Smoke):**
+  `weather.lookup -> report.compose -> email.schedule`
+- **Lane B (Parity Smoke):**
+  `brave-search -> summarize -> notion`
+
+Each implementation step must produce task-delta evidence for at least one lane,
+and Steps 6-10 must produce evidence for both lanes.
+
+### Process Gates
+
+1. **Design Gate (before Step 3):**
+   Task-delta schema finalized (`plan|tool_call|tool_result|final`) with ordered
+   correlation fields.
+2. **Execution Gate (before Step 8):**
+   Dynamic loop supports arbitrary tool selection from command snapshots with no
+   hardcoded flow-specific branching in adapter core.
+3. **Parity Gate (before Step 11):**
+   Lane A and Lane B pass deterministic order assertions with expected terminal
+   outputs.
+4. **Rollout Gate (before Step 12):**
+   Feature-flagged canary passes and fallback strategy validated.
+
 ### Step 0 — Baseline and Guardrails
 **Implement**
 - Freeze current adapter behavior with baseline tests for existing paths (including weather/email).
 - Add feature flag scaffold: `embedded.orchestration.dynamicToolLoop.enabled` (default `false`).
+- Register two smoke fixtures as CI references (Lane A and Lane B).
 
 **Deliverables**
 - Baseline regression tests.
@@ -140,6 +168,7 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
 
 **Acceptance**
 - Existing runtime behavior unchanged when flag is off.
+- Smoke fixtures can run in baseline mode and produce comparable traces.
 
 ### Step 1 — Introduce Task Delta Core Model
 **Implement**
@@ -152,6 +181,7 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
 
 **Acceptance**
 - Adapter can emit `plan`, `tool_call`, `tool_result`, and `final` deltas in strict order.
+- Delta model can represent both Lane A and Lane B without schema changes.
 
 ### Step 2 — Extract Adapter Layers (No Behavior Change Yet)
 **Implement**
@@ -220,6 +250,7 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
 
 **Acceptance**
 - No hardcoded tool sequence in adapter core.
+- For both lanes, tool selection is produced by model turns + snapshot/tool metadata.
 
 ### Step 7 — Safety and Termination Policies
 **Implement**
@@ -247,6 +278,7 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
 
 **Acceptance**
 - External callers can verify tool execution order and results by run ID.
+- Smoke tests can query and assert task deltas without parsing freeform logs.
 
 ### Step 9 — Parity Test Case for Brave→Summarize→Notion
 **Implement**
@@ -262,6 +294,21 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
 **Acceptance**
 - Test passes under dynamic loop mode.
 
+### Step 9A — Operational Smoke Test for Weather→Report→Email
+**Implement**
+- Add fixture for:
+  `Check today's weather in Wuhan, write a short report, and email it to jichengwhu@163.com now.`
+- Assert:
+  - decomposition steps >= 3
+  - ordered deltas include weather.lookup -> report.compose -> email.schedule
+  - final output includes email scheduling/sending result
+
+**Deliverables**
+- Deterministic operational smoke test with ordered task-delta assertions.
+
+**Acceptance**
+- Test passes under dynamic loop mode with immediate execution semantics (`now`).
+
 ### Step 10 — Generic Matrix and Failure-Mode Tests
 **Implement**
 - Add matrix tests for arbitrary 2/3/4-step tool combinations.
@@ -273,6 +320,7 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
 
 **Acceptance**
 - Core behaviors are stable across generalized and failure scenarios.
+- Lane A and Lane B continue to pass as regression anchors.
 
 ### Step 11 — Staged Rollout
 **Implement**
@@ -298,8 +346,8 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
 - Dynamic task-delta decomposition is default behavior with maintained compatibility.
 
 ## Execution Checklist (Tracking)
-- [ ] Step 0 complete
-- [ ] Step 1 complete
+- [x] Step 0 complete
+- [x] Step 1 complete
 - [ ] Step 2 complete
 - [ ] Step 3 complete
 - [ ] Step 4 complete
@@ -308,9 +356,25 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
 - [ ] Step 7 complete
 - [ ] Step 8 complete
 - [ ] Step 9 complete
+- [ ] Step 9A complete
 - [ ] Step 10 complete
 - [ ] Step 11 complete
 - [ ] Step 12 complete
+
+## Implementation Status Update
+
+### Completed now: Step 0 (Baseline and Guardrails)
+- Added feature flag scaffold: `embedded.dynamicToolLoopEnabled` (default `false`) in runtime config model and loader.
+- Added corresponding entries to config templates (`blazeclaw.conf` variants) for controlled rollout.
+- Wired runtime to respect the flag before embedded dynamic orchestration handling.
+
+### Completed now: Step 1 (Task Delta Core Model)
+- Added unified in-memory task-delta structure in `PiEmbeddedService`.
+- Added ordered append/query helpers (`AppendTaskDelta`, `GetTaskDeltas`, `ClearTaskDeltas`).
+- Added delta emission phases: `plan`, `tool_call`, `tool_result`, `final`.
+- Added fixture validations for:
+  - dynamic loop disabled baseline path,
+  - ordered task-delta index and phase coverage when dynamic loop is enabled.
 
 ## Primary File Targets (Expected)
 - `blazeclaw/BlazeClawMfc/src/core/PiEmbeddedService.h`
@@ -346,3 +410,130 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
 - M3: Schema hardening + compatibility tests green.
 - M4: Brave-search/summarize/notion parity assertions green.
 - M5: Staged rollout enabled with diagnostics.
+
+
+# Smoke Test Prompts for Process Verification
+
+## Lane A: Operational smoke (weather/report/email)
+
+User prompt:
+```
+Check today's weather in Wuhan, write a short report, and email it to jichengwhu@163.com now.
+```
+
+Use LLM-driven decomposition and verify ordered runtime task deltas:
+
+Expected ordered tool execution:
+```
+weather.lookup -> report.compose -> email.schedule
+```
+
+Expected terminal output:
+```
+Email scheduling/sending result for jichengwhu@163.com with report content.
+```
+
+## Lane B: Parity smoke (brave/summarize/notion)
+
+User prompt:
+```
+使用 brave-search multi-search-engine搜索‘今日大模型行业最新动态’，提取前 3 条核心新闻。接着用 Summarize 把它们浓缩成一段 100 字以内的摘要，最后调用 Notion 技能，将摘要写入我的 Notion ‘每日早报’ 页面中。
+```
+
+Use LLM-driven decomposition and verify ordered runtime task deltas:
+
+Expected ordered tool execution:
+```
+brave-search -> summarize -> notion
+```
+
+Expected terminal output:
+```
+Notion write result confirming update to page '每日早报'.
+```
+
+## Decomposition Prompt Template (for both lanes)
+
+```
+Please split the following sentence into executable tasks with explicit tool calls,
+ordered dependencies, and completion criteria:
+`<USER_PROMPT>`
+```
+
+## Task-Delta Verification Requirements
+
+- Every tool execution must emit `tool_call` and `tool_result` deltas.
+- Deltas must include `toolName`, `argsJson`, `status`, and `resultJson`.
+- Order assertions must use task-delta indices, not freeform text logs.
+- Final assistant output must include lane-specific terminal success evidence.
+
+
+Task: Understand the full scope and sequence of activities.
+Output: A clear breakdown of three main action items.
+
+
+2. Check today’s weather in Wuhan
+
+
+Sub-task 2.1: Determine the current date and time (to confirm "today").
+Sub-task 2.2: Query a weather API or source for Wuhan’s weather data (e.g., temperature, conditions, forecast).
+Sub-task 2.3: Format the retrieved data into a human-readable summary.
+
+
+3. Write a short report
+
+
+Sub-task 3.1: Define report structure (e.g., date, location, weather summary, notable details).
+Sub-task 3.2: Insert the formatted weather data into the report.
+Sub-task 3.3: Review/edit for clarity and completeness.
+
+
+4. Email it to jichengwhu@163.com
+
+
+Sub-task 4.1: Validate recipient email format (jichengwhu@163.com).
+Sub-task 4.2: Prepare email details (subject, body, attachment if needed).
+Sub-task 4.3: Send the email using an SMTP service or email client automation.
+
+
+5. “Now” constraint
+
+
+Task: Ensure the entire workflow is triggered immediately, not scheduled for later.
+Note: This may require error handling and timeout rules if any step fails.
+
+
+Final grouped executable task list:
+
+1. Get Wuhan weather data for today  
+   • Fetch date  
+
+   • Call weather API for Wuhan  
+
+   • Parse and format result
+
+3. Generate weather report  
+   • Create report template  
+
+   • Populate with weather data  
+
+   • Finalize text
+
+5. Send email with report  
+   • Set email subject/body  
+
+   • Attach or embed report  
+
+   • Send to jichengwhu@163.com
+
+7. Log completion / handle errors  
+   • Confirm sent status  
+
+   • Notify if any step failed
+
+Would you like me to detail any of these tasks further, for example, with specific API examples or email automation code snippets?
+```
+
+Find out tools and skills needed for each step, and verify that the runtime executes them in the correct order with expected results. 
+
+Use the registered runtime tools and skills to accomplish task-delta and verify the results for each step, ensuring the final output includes the Notion write result.

@@ -2,6 +2,7 @@
 #include "PiEmbeddedService.h"
 
 #include <algorithm>
+#include <chrono>
 #include <nlohmann/json.hpp>
 #include <regex>
 
@@ -11,6 +12,14 @@ namespace blazeclaw::core {
 
 		std::uint64_t ResolveStartedAtMs(const std::size_t ordinal) {
 			return 1735689700000 + static_cast<std::uint64_t>(ordinal);
+		}
+
+		std::uint64_t CurrentEpochMs() {
+			const auto now = std::chrono::system_clock::now();
+			return static_cast<std::uint64_t>(
+				std::chrono::duration_cast<std::chrono::milliseconds>(
+					now.time_since_epoch())
+					.count());
 		}
 
 		std::string ToLowerCopy(const std::string& value) {
@@ -130,6 +139,15 @@ namespace blazeclaw::core {
 	EmbeddedRuntimeExecutionResult PiEmbeddedService::ExecuteRun(
 		const EmbeddedRuntimeExecutionRequest& request) {
 		EmbeddedRuntimeExecutionResult result;
+        if (!request.enableDynamicToolLoop) {
+			result.accepted = true;
+			result.handled = false;
+			result.success = true;
+			result.status = "completed";
+			result.reason = "dynamic_tool_loop_disabled";
+			return result;
+		}
+
 		const std::string loweredMessage = ToLowerCopy(request.run.message);
 		const bool hasSearchIntent = ContainsAny(
 			loweredMessage,
@@ -198,8 +216,33 @@ namespace blazeclaw::core {
 			return result;
 		}
 
+		const std::string sessionId =
+			request.run.sessionId.empty() ? "main" : request.run.sessionId;
+		const auto appendDelta =
+			[this, &result, &queued, &sessionId](const EmbeddedTaskDelta& rawDelta) {
+				EmbeddedTaskDelta delta = rawDelta;
+				delta.runId = queued.runId;
+				delta.sessionId = sessionId;
+				if (delta.startedAtMs == 0) {
+					delta.startedAtMs = CurrentEpochMs();
+				}
+				if (delta.completedAtMs == 0) {
+					delta.completedAtMs = delta.startedAtMs;
+				}
+				delta.latencyMs = delta.completedAtMs >= delta.startedAtMs
+					? delta.completedAtMs - delta.startedAtMs
+					: 0;
+				AppendTaskDelta(queued.runId, delta);
+			};
+
 		result.handled = true;
 		result.decompositionSteps = executionPlan.size();
+		appendDelta(EmbeddedTaskDelta{
+			.phase = "plan",
+			.resultJson = nlohmann::json(executionPlan).dump(),
+			.status = "ok",
+			.stepLabel = "execution_plan",
+			});
 
 		const std::string query =
 			TryExtractQuoted(request.run.message).value_or(request.run.message);
@@ -227,12 +270,30 @@ namespace blazeclaw::core {
 				args["input"] = lastOutput.empty() ? request.run.message : lastOutput;
 			}
 
+			appendDelta(EmbeddedTaskDelta{
+				.phase = "tool_call",
+				.toolName = toolName,
+				.argsJson = args.dump(),
+				.status = "requested",
+				.stepLabel = "tool_request",
+				});
+
 			const auto execution = request.toolExecutor(toolName, args.dump());
 			result.assistantDeltas.push_back(
 				"tools.execute.result tool=" +
 				toolName +
 				" status=" +
 				execution.status);
+
+			appendDelta(EmbeddedTaskDelta{
+				.phase = "tool_result",
+				.toolName = toolName,
+				.argsJson = args.dump(),
+				.resultJson = execution.output,
+				.status = execution.status,
+				.errorCode = execution.executed ? "" : "not_executed",
+				.stepLabel = "tool_result",
+				});
 
 			if (!execution.executed || execution.status == "error") {
 				if (!CompleteRun(queued.runId, "failed", queued.startedAtMs + 1)) {
@@ -246,6 +307,14 @@ namespace blazeclaw::core {
 				result.errorMessage = execution.output.empty()
 					? "tool execution failed"
 					: execution.output;
+                appendDelta(EmbeddedTaskDelta{
+					.phase = "final",
+					.resultJson = result.errorMessage,
+					.status = "failed",
+					.errorCode = result.errorCode,
+					.stepLabel = "run_terminal",
+					});
+				result.taskDeltas = GetTaskDeltas(queued.runId);
 				return result;
 			}
 
@@ -258,6 +327,14 @@ namespace blazeclaw::core {
 			result.reason = "embedded_completion_failed";
 			result.errorCode = "embedded_completion_failed";
 			result.errorMessage = "embedded completion failed";
+            appendDelta(EmbeddedTaskDelta{
+				.phase = "final",
+				.resultJson = result.errorMessage,
+				.status = "failed",
+				.errorCode = result.errorCode,
+				.stepLabel = "run_terminal",
+				});
+			result.taskDeltas = GetTaskDeltas(queued.runId);
 			return result;
 		}
 		result.success = true;
@@ -266,6 +343,13 @@ namespace blazeclaw::core {
 		result.assistantText = lastOutput.empty()
 			? "Embedded orchestration completed."
 			: lastOutput;
+      appendDelta(EmbeddedTaskDelta{
+			.phase = "final",
+			.resultJson = result.assistantText,
+			.status = "completed",
+			.stepLabel = "run_terminal",
+			});
+		result.taskDeltas = GetTaskDeltas(queued.runId);
 		return result;
 	}
 
@@ -304,6 +388,38 @@ namespace blazeclaw::core {
 		return it->second;
 	}
 
+	std::vector<EmbeddedTaskDelta> PiEmbeddedService::GetTaskDeltas(
+		const std::string& runId) const {
+		const auto it = m_taskDeltasByRunId.find(runId);
+		if (it == m_taskDeltasByRunId.end()) {
+			return {};
+		}
+
+		return it->second;
+	}
+
+	void PiEmbeddedService::ClearTaskDeltas(const std::string& runId) {
+		if (runId.empty()) {
+			m_taskDeltasByRunId.clear();
+			return;
+		}
+
+		m_taskDeltasByRunId.erase(runId);
+	}
+
+	void PiEmbeddedService::AppendTaskDelta(
+		const std::string& runId,
+		const EmbeddedTaskDelta& delta) {
+		if (runId.empty()) {
+			return;
+		}
+
+		auto& deltas = m_taskDeltasByRunId[runId];
+		EmbeddedTaskDelta normalized = delta;
+		normalized.index = deltas.size();
+		deltas.push_back(std::move(normalized));
+	}
+
 	bool PiEmbeddedService::ValidateFixtureScenarios(
 		const std::filesystem::path& /*fixturesRoot*/,
 		std::wstring& outError) const {
@@ -312,6 +428,7 @@ namespace blazeclaw::core {
 		blazeclaw::config::AppConfig cfg;
 		cfg.embedded.enabled = true;
 		cfg.embedded.maxQueueDepth = 1;
+		cfg.embedded.dynamicToolLoopEnabled = true;
 
 		PiEmbeddedService service;
 		service.Configure(cfg);
@@ -347,6 +464,111 @@ namespace blazeclaw::core {
 		if (!resolved.has_value() || resolved->status != "completed") {
 			outError = L"Fixture validation failed: expected completed embedded run status.";
 			return false;
+		}
+
+		const auto disabledLoop = service.ExecuteRun(
+			EmbeddedRuntimeExecutionRequest{
+				.run = EmbeddedRunRequest{
+					.sessionId = "main",
+					.agentId = "default",
+					.message = "search then summarize",
+					},
+				.skillsPrompt = "",
+				.toolBindings = {},
+				.runtimeTools = {},
+				.enableDynamicToolLoop = false,
+				.toolExecutor = {},
+				});
+		if (disabledLoop.handled ||
+			disabledLoop.reason != "dynamic_tool_loop_disabled") {
+			outError = L"Fixture validation failed: expected dynamic loop disabled baseline path.";
+			return false;
+		}
+
+		PiEmbeddedService deltaService;
+		deltaService.Configure(cfg);
+		std::vector<blazeclaw::gateway::ToolCatalogEntry> tools = {
+			blazeclaw::gateway::ToolCatalogEntry{
+				.id = "brave-search",
+				.label = "Brave Search",
+				.category = "search",
+				.enabled = true,
+				},
+			blazeclaw::gateway::ToolCatalogEntry{
+				.id = "summarize",
+				.label = "Summarize",
+				.category = "transform",
+				.enabled = true,
+				},
+			blazeclaw::gateway::ToolCatalogEntry{
+				.id = "notion.write",
+				.label = "Notion Write",
+				.category = "sink",
+				.enabled = true,
+				},
+		};
+
+		const auto dynamicLoop = deltaService.ExecuteRun(
+			EmbeddedRuntimeExecutionRequest{
+				.run = EmbeddedRunRequest{
+					.sessionId = "main",
+					.agentId = "default",
+					.message = "search news summarize and write to notion",
+					},
+				.skillsPrompt = "",
+				.toolBindings = {},
+				.runtimeTools = std::move(tools),
+				.enableDynamicToolLoop = true,
+				.toolExecutor = [](const std::string& requestedTool,
+					const std::optional<std::string>& argsJson) {
+					return blazeclaw::gateway::ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = true,
+						.status = "ok",
+						.output = argsJson.value_or("{}"),
+						};
+				},
+				});
+
+		if (!dynamicLoop.success || dynamicLoop.taskDeltas.empty()) {
+			outError = L"Fixture validation failed: expected dynamic loop task deltas.";
+			return false;
+		}
+
+		const bool hasPlan = std::any_of(
+			dynamicLoop.taskDeltas.begin(),
+			dynamicLoop.taskDeltas.end(),
+			[](const EmbeddedTaskDelta& delta) {
+				return delta.phase == "plan";
+			});
+		const bool hasToolCall = std::any_of(
+			dynamicLoop.taskDeltas.begin(),
+			dynamicLoop.taskDeltas.end(),
+			[](const EmbeddedTaskDelta& delta) {
+				return delta.phase == "tool_call";
+			});
+		const bool hasToolResult = std::any_of(
+			dynamicLoop.taskDeltas.begin(),
+			dynamicLoop.taskDeltas.end(),
+			[](const EmbeddedTaskDelta& delta) {
+				return delta.phase == "tool_result";
+			});
+		const bool hasFinal = std::any_of(
+			dynamicLoop.taskDeltas.begin(),
+			dynamicLoop.taskDeltas.end(),
+			[](const EmbeddedTaskDelta& delta) {
+				return delta.phase == "final";
+			});
+		if (!hasPlan || !hasToolCall || !hasToolResult || !hasFinal) {
+			outError = L"Fixture validation failed: expected plan/tool_call/tool_result/final phases.";
+			return false;
+		}
+
+		for (std::size_t i = 1; i < dynamicLoop.taskDeltas.size(); ++i) {
+			if (dynamicLoop.taskDeltas[i].index != i) {
+				outError = L"Fixture validation failed: expected ordered task delta indexes.";
+				return false;
+			}
 		}
 
 		return true;

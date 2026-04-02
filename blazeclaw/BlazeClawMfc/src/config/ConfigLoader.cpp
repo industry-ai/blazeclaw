@@ -411,6 +411,13 @@ bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) 
       continue;
     }
 
+    if (trimmedLine.rfind(L"embedded.dynamicToolLoopEnabled=", 0) == 0) {
+      outConfig.embedded.dynamicToolLoopEnabled = ParseBool(
+          trimmedLine.substr(32),
+          false);
+      continue;
+    }
+
     if (trimmedLine.rfind(L"models.primary=", 0) == 0) {
       outConfig.models.primary = Trim(trimmedLine.substr(13));
       continue;

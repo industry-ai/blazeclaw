@@ -71,6 +71,7 @@ struct EmbeddedRuntimeConfig {
   bool enabled = true;
   std::uint32_t runTimeoutMs = 120000;
   std::uint32_t maxQueueDepth = 64;
+  bool dynamicToolLoopEnabled = false;
 };
 
 struct ModelsRoutingConfig {

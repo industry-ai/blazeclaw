@@ -11,3 +11,6 @@ This directory contains the BlazeClaw-native extension assets for the DeepSeek p
 - Runtime model routing and auth application logic are implemented in later phases.
 - Chat runtime now executes embedded tool orchestration before provider fallback.
 - DeepSeek is used as model backend transport in fallback path with injected skills prompt context.
+- Refactor verification now follows task-delta smoke lanes:
+  - operational lane: weather/report/email
+  - parity lane: brave-search/summarize/notion
