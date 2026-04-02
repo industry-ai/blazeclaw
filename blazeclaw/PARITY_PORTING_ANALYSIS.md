@@ -139,6 +139,39 @@ To reduce regression risk, validation is split into two smoke lanes:
    - expected order: `brave-search -> summarize -> notion`,
    - expected terminal evidence includes Notion write result.
 
+## Refactor Procedure Review Summary
+
+### Overall parity status
+- Initial OpenClaw runtime-capability gap identified at analysis time has been closed
+  through Steps 0-12 implementation in BlazeClaw.
+- Runtime now supports metadata-driven decomposition and ordered tool execution
+  with deterministic task-delta verification paths.
+
+### Evidence confidence
+- Lane A operational smoke assertions are present and passing in fixture validation:
+  `weather.lookup -> report.compose -> email.schedule` + terminal email evidence.
+- Lane B parity smoke assertions are present and passing in fixture validation:
+  `brave-search -> summarize -> notion.write` + terminal Notion evidence.
+- Generic matrix and failure-mode fixtures cover 2/3/4-step paths, retry,
+  hard-failure determinism, approval-gated states, and legacy metadata compatibility.
+
+### Rollout and safety status
+- Dynamic loop is default-on in config/runtime defaults.
+- Canary scope controls and fallback behavior remain active operational safeguards.
+- Runtime diagnostics include embedded dynamic-loop enablement, canary eligibility,
+  fallback usage, and fallback reason for production triage.
+
+### Naming consistency note
+- Historical plan text references `embedded.orchestration.dynamicToolLoop.enabled`.
+- Implemented runtime/config key is `embedded.dynamicToolLoopEnabled`.
+- Current implementation and templates consistently use `embedded.dynamicToolLoopEnabled`.
+
+### Remaining follow-up topics (tracked, non-blocking)
+- Provider authority rules for decomposition turns in mixed-provider sessions.
+- Optional persistent storage policy for task deltas (beyond process lifetime).
+- Production strictness policy for universal arg-schema enforcement.
+- Explicit paused/resume lifecycle semantics for approval-gated tools.
+
 
 ### Priority 2 (behavioral parity)
 3. Move from specialized `TryOrchestrateWeatherEmailPrompt` to generic skill orchestration (or keep it as fast-path but fallback into generic tool loop).

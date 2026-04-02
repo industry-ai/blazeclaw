@@ -118,7 +118,7 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
 ### 7) Rollout and Risk Control
 **Objective:** Safely deploy refactor without breaking current runtime.
 
-- Feature flag: `embedded.orchestration.dynamicToolLoop.enabled`.
+- Feature flag/config key: `embedded.dynamicToolLoopEnabled`.
 - Canary rollout by provider/session scope.
 - Fallback path: provider one-shot or legacy orchestrator when critical failures occur.
 - Add runtime diagnostics summary for production triage.
@@ -159,7 +159,7 @@ and Steps 6-10 must produce evidence for both lanes.
 ### Step 0 — Baseline and Guardrails
 **Implement**
 - Freeze current adapter behavior with baseline tests for existing paths (including weather/email).
-- Add feature flag scaffold: `embedded.orchestration.dynamicToolLoop.enabled` (default `false`).
+- Add feature flag scaffold: `embedded.dynamicToolLoopEnabled` (default `false` at baseline stage).
 - Register two smoke fixtures as CI references (Lane A and Lane B).
 
 **Deliverables**
@@ -486,6 +486,82 @@ and Steps 6-10 must produce evidence for both lanes.
 - M3: Schema hardening + compatibility tests green.
 - M4: Brave-search/summarize/notion parity assertions green.
 - M5: Staged rollout enabled with diagnostics.
+
+## Post-Implementation Procedure Review
+
+### Review scope
+- Reviewed end-to-end execution across Steps 0-12.
+- Reviewed process gates (Design, Execution, Parity, Rollout).
+- Reviewed runtime behavior alignment with smoke lanes A/B.
+- Reviewed documentation consistency and residual action items.
+
+### Outcome summary by objective
+- **Architecture objective:** Met.
+  - Adapter concerns are split and dynamic decomposition is now the default planning path.
+- **Dynamic tool protocol objective:** Met.
+  - Runtime uses versioned execution contracts, policy guardrails, retry logic, and deterministic failure codes.
+- **Task-delta observability objective:** Met.
+  - Ordered deltas are emitted, surfaced via gateway query endpoints, and instrumented with telemetry.
+- **Schema hardening objective:** Met.
+  - Command/prompt metadata enriched with backward-compatible defaults.
+- **Parity objective (lane B):** Met.
+  - Brave -> summarize -> notion ordered assertions and final Notion evidence are covered.
+- **Operational smoke objective (lane A):** Met.
+  - Weather -> report -> email ordered assertions and final email evidence are covered.
+
+### Process-gate assessment
+- **Design Gate (before Step 3):** Passed.
+  - Task-delta schema and phases finalized and enforced in validation.
+- **Execution Gate (before Step 8):** Passed.
+  - Core dynamic loop no longer depends on flow-specific hardcoded planning branches.
+- **Parity Gate (before Step 11):** Passed.
+  - Lane A and Lane B deterministic order and terminal evidence checks are present.
+- **Rollout Gate (before Step 12):** Passed.
+  - Canary controls and fallback diagnostics implemented and exposed in runtime report.
+
+### Key decisions captured
+- Dynamic loop was promoted to default-on only after guardrails, observability, and parity coverage were in place.
+- Compatibility was preserved through execution-bridge fallback paths rather than keeping legacy planning in core.
+- Runtime/gateway observability was standardized around run-scoped ordered task-delta retrieval.
+
+### Residual follow-up items (non-blocking)
+- Define authoritative decomposition-provider policy for mixed-provider sessions.
+- Decide persistence strategy for task deltas beyond process lifetime (optional audit/replay durability).
+- Decide strictness profile for universal tool-argument schema validation in production.
+- Define paused/resume semantics for approval-gated tools in task-delta lifecycle model.
+
+### Final readiness statement
+The refactor procedure is complete and coherent against the original plan scope.
+Dynamic task-delta decomposition is now default behavior with staged-rollout controls,
+deterministic verification lanes, and compatibility-preserving fallback behavior.
+
+## Operator Runbook Checklist
+
+### 1) Canary environment variables
+- Set canary providers:
+  - `BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_CANARY_PROVIDERS=deepseek,local`
+- Set canary sessions:
+  - `BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_CANARY_SESSIONS=main,canary-session-1`
+- Runtime config key for dynamic loop:
+  - `embedded.dynamicToolLoopEnabled=true`
+
+### 2) Rollback trigger conditions
+- Trigger rollback/canary reduction when any of the following is sustained:
+  - rising `fallbackUsed=true` with repeated `fallbackReason` in diagnostics,
+  - repeated critical embedded failures (`embedded_deadline_exceeded`, `embedded_tool_execution_failed`, `embedded_loop_detected`),
+  - smoke-lane order regressions (Lane A or Lane B task-delta sequence mismatch),
+  - gateway task-delta query shows missing `tool_call/tool_result` transitions.
+
+### 3) Quick health queries
+- Runtime diagnostics snapshot (embedded rollout state):
+  - read `embedded.dynamicLoopEnabled`, `embedded.canaryEligible`, `embedded.fallbackUsed`, `embedded.fallbackReason` from operator diagnostics report.
+- Task-delta retrieval by run:
+  - `gateway.runtime.taskDeltas.get` with `runId`.
+- Task-delta cache maintenance:
+  - `gateway.runtime.taskDeltas.clear` with `runId` (or omit to clear all).
+- Skills/runtime sanity checks:
+  - `gateway.skills.status`
+  - `gateway.skills.commands`
 
 
 # Smoke Test Prompts for Process Verification
