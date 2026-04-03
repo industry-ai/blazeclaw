@@ -101,6 +101,19 @@ Upgrade the `dynamic_task_delta` path from decomposition-only behavior to a full
 2. Add validation pass before first tool call.
 3. Emit initial `plan` delta with full ordered tool list.
 
+### Phase 1 + Phase 2 implementation status
+
+- Completed in code:
+  - Added explicit embedded task-delta contract hardening helpers for required-field normalization.
+  - Added deterministic orchestration error-code constants for plan validation and execution policy failures.
+  - Added gateway task-delta payload normalization before persistence to lock `gateway.runtime.taskDeltas.get` field stability.
+  - Added normalized execution-plan step objects (`index/toolName/argMode/stepLabel`) before loop execution.
+  - Added pre-execution validation for:
+    - empty tool entries,
+    - unsupported arg mode,
+    - duplicate tool-signature loop risk.
+  - Updated `plan` delta emission to include ordered structured step metadata.
+
 ## Phase 3 — Execution loop completion
 
 1. Execute each planned delta via `toolExecutorV2` (fallback `toolExecutor`).

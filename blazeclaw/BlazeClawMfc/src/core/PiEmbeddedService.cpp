@@ -2,6 +2,7 @@
 #include "PiEmbeddedService.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <nlohmann/json.hpp>
 #include <regex>
@@ -11,6 +12,41 @@
 namespace blazeclaw::core {
 
 	namespace {
+		constexpr const char* kPhasePlan = "plan";
+		constexpr const char* kPhaseToolCall = "tool_call";
+		constexpr const char* kPhaseToolResult = "tool_result";
+		constexpr const char* kPhaseFinal = "final";
+
+		constexpr const char* kStatusPlanned = "planned";
+		constexpr const char* kStatusRequested = "requested";
+		constexpr const char* kStatusRunning = "running";
+		constexpr const char* kStatusCompleted = "completed";
+		constexpr const char* kStatusFailed = "failed";
+		constexpr const char* kStatusSkipped = "skipped";
+
+		constexpr const char* kErrorPlanEmptyTool = "embedded_plan_empty_tool";
+		constexpr const char* kErrorInvalidArgMode = "embedded_invalid_arg_mode";
+		constexpr const char* kErrorDuplicateLoopRisk = "embedded_duplicate_loop_risk";
+		constexpr const char* kErrorMaxStepsExceeded = "embedded_max_steps_exceeded";
+		constexpr const char* kErrorDeadlineExceeded = "embedded_deadline_exceeded";
+		constexpr const char* kErrorInvalidArgs = "embedded_invalid_args";
+		constexpr const char* kErrorToolBlocked = "embedded_tool_blocked";
+		constexpr const char* kErrorLoopDetected = "embedded_loop_detected";
+		constexpr const char* kErrorCompletionFailed = "embedded_completion_failed";
+		constexpr const char* kErrorToolExecutionFailed = "embedded_tool_execution_failed";
+
+		struct EmbeddedExecutionPlanStep {
+			std::size_t index = 0;
+			std::string toolName;
+			std::string argMode;
+			std::string stepLabel;
+		};
+
+		struct EmbeddedPlanValidationFailure {
+			std::string reason;
+			std::string errorCode;
+			std::string errorMessage;
+		};
 
 		std::uint64_t CurrentEpochMs() {
 			const auto now = std::chrono::system_clock::now();
@@ -18,6 +54,25 @@ namespace blazeclaw::core {
 				std::chrono::duration_cast<std::chrono::milliseconds>(
 					now.time_since_epoch())
 				.count());
+		}
+
+		bool IsSupportedArgMode(const std::string& argMode) {
+			if (argMode.empty()) {
+				return true;
+			}
+
+			static constexpr std::array<const char*, 3> kAllowedModes = {
+				"raw",
+				"text",
+				"none",
+			};
+
+			return std::any_of(
+				kAllowedModes.begin(),
+				kAllowedModes.end(),
+				[&](const char* mode) {
+					return argMode == mode;
+				});
 		}
 
 		std::string ToLowerCopy(const std::string& value) {
@@ -245,6 +300,61 @@ namespace blazeclaw::core {
 			return plan;
 		}
 
+		std::vector<EmbeddedExecutionPlanStep> BuildExecutionPlan(
+			const EmbeddedRuntimeExecutionRequest& request,
+			const std::size_t maxSteps) {
+			const auto toolPlan = ResolveDynamicExecutionPlan(request, maxSteps);
+			std::vector<EmbeddedExecutionPlanStep> plan;
+			plan.reserve(toolPlan.size());
+
+			for (std::size_t index = 0; index < toolPlan.size(); ++index) {
+				const std::string& toolName = toolPlan[index];
+				plan.push_back(EmbeddedExecutionPlanStep{
+					.index = index,
+					.toolName = toolName,
+					.argMode = ResolveBindingArgMode(request, toolName),
+					.stepLabel = "step-" + std::to_string(index + 1),
+					});
+			}
+
+			return plan;
+		}
+
+		std::optional<EmbeddedPlanValidationFailure> ValidateExecutionPlan(
+			const std::vector<EmbeddedExecutionPlanStep>& plan) {
+			std::unordered_set<std::string> signatures;
+			for (const auto& step : plan) {
+				if (step.toolName.empty()) {
+					return EmbeddedPlanValidationFailure{
+						.reason = "plan_validation_failed",
+						.errorCode = kErrorPlanEmptyTool,
+						.errorMessage = "execution plan contains an empty tool reference",
+					};
+				}
+
+				if (!IsSupportedArgMode(step.argMode)) {
+					return EmbeddedPlanValidationFailure{
+						.reason = "plan_validation_failed",
+						.errorCode = kErrorInvalidArgMode,
+						.errorMessage = "execution plan contains unsupported arg mode",
+					};
+				}
+
+				const std::string signature = step.toolName + "::" + step.argMode;
+				if (signatures.find(signature) != signatures.end()) {
+					return EmbeddedPlanValidationFailure{
+						.reason = "plan_validation_failed",
+						.errorCode = kErrorDuplicateLoopRisk,
+						.errorMessage = "execution plan contains duplicate tool-call signature risk",
+					};
+				}
+
+				signatures.insert(signature);
+			}
+
+			return std::nullopt;
+		}
+
 		nlohmann::json BuildDynamicToolArgs(
 			const EmbeddedRuntimeExecutionRequest& request,
 			const std::string& toolName,
@@ -412,6 +522,35 @@ namespace blazeclaw::core {
 			result.success = status == "completed";
 		}
 
+		void NormalizeTaskDeltaForContract(EmbeddedTaskDelta& delta) {
+			if (delta.phase.empty()) {
+				delta.phase = "unknown";
+			}
+
+			if (delta.status.empty()) {
+				if (delta.phase == kPhasePlan) {
+					delta.status = kStatusPlanned;
+				}
+				else if (delta.phase == kPhaseToolCall) {
+					delta.status = kStatusRequested;
+				}
+				else if (delta.phase == kPhaseFinal) {
+					delta.status = kStatusCompleted;
+				}
+				else {
+					delta.status = kStatusRunning;
+				}
+			}
+
+			if (delta.stepLabel.empty()) {
+				delta.stepLabel = delta.phase;
+			}
+
+			if (delta.completedAtMs < delta.startedAtMs) {
+				delta.completedAtMs = delta.startedAtMs;
+			}
+		}
+
 	} // namespace
 
 	void PiEmbeddedService::Configure(const blazeclaw::config::AppConfig& appConfig) {
@@ -486,8 +625,8 @@ namespace blazeclaw::core {
 			return result;
 		}
 
-		const std::vector<std::string> executionPlan =
-			ResolveDynamicExecutionPlan(request, 6);
+		const std::vector<EmbeddedExecutionPlanStep> executionPlan =
+			BuildExecutionPlan(request, 6);
 
 		if (executionPlan.empty()) {
 			result.accepted = true;
@@ -534,33 +673,67 @@ namespace blazeclaw::core {
 				: 0;
 			AppendTaskDelta(queued.runId, delta);
 			};
+		const auto finalizeFailure =
+			[this, &result, &queued, &appendDelta](
+				const std::string& reason,
+				const std::string& errorCode,
+				const std::string& errorMessage) {
+					const bool completed =
+						CompleteRun(queued.runId, kStatusFailed, CurrentEpochMs());
+					FinalizeExecutionResult(
+						result,
+						kStatusFailed,
+						completed ? reason : std::string("embedded_completion_failed"),
+						completed ? errorCode : std::string(kErrorCompletionFailed),
+						completed ? errorMessage : std::string("embedded completion failed"),
+						{});
+					appendDelta(EmbeddedTaskDelta{
+						.phase = kPhaseFinal,
+						.resultJson = result.errorMessage,
+						.status = kStatusFailed,
+						.errorCode = result.errorCode,
+						.stepLabel = "run_terminal",
+						});
+			};
 
 		result.handled = true;
 		static constexpr std::size_t kMaxPolicySteps = 6;
 		if (executionPlan.size() > kMaxPolicySteps) {
-			FinalizeExecutionResult(
-				result,
-				"failed",
+			finalizeFailure(
 				"max_steps_exceeded",
-				"embedded_max_steps_exceeded",
-				"decomposition exceeded maximum policy steps",
-				{});
-			appendDelta(EmbeddedTaskDelta{
-				.phase = "final",
-				.resultJson = result.errorMessage,
-				.status = "failed",
-				.errorCode = result.errorCode,
-				.stepLabel = "run_terminal",
-				});
+				kErrorMaxStepsExceeded,
+				"decomposition exceeded maximum policy steps");
+			result.taskDeltas = GetTaskDeltas(queued.runId);
+			return result;
+		}
+
+		if (const auto validationFailure = ValidateExecutionPlan(executionPlan);
+			validationFailure.has_value()) {
+			finalizeFailure(
+				validationFailure->reason,
+				validationFailure->errorCode,
+				validationFailure->errorMessage);
 			result.taskDeltas = GetTaskDeltas(queued.runId);
 			return result;
 		}
 
 		result.decompositionSteps = executionPlan.size();
+		nlohmann::json planJson = nlohmann::json::array();
+		for (const auto& step : executionPlan) {
+			planJson.push_back(
+				nlohmann::json{
+					{ "index", step.index },
+					{ "phase", kPhaseToolCall },
+					{ "toolName", step.toolName },
+					{ "argMode", step.argMode },
+					{ "status", kStatusPlanned },
+					{ "stepLabel", step.stepLabel },
+				});
+		}
 		appendDelta(EmbeddedTaskDelta{
-			.phase = "plan",
-			.resultJson = nlohmann::json(executionPlan).dump(),
-			.status = "ok",
+			.phase = kPhasePlan,
+			.resultJson = planJson.dump(),
+			.status = kStatusPlanned,
 			.stepLabel = "execution_plan",
 			});
 
@@ -569,23 +742,14 @@ namespace blazeclaw::core {
 		std::string lastOutput;
 
 		std::unordered_map<std::string, std::size_t> repeatCounts;
-		for (std::size_t stepIndex = 0; stepIndex < executionPlan.size(); ++stepIndex) {
-			const std::string& toolName = executionPlan[stepIndex];
+		for (const auto& step : executionPlan) {
+			const std::size_t stepIndex = step.index;
+			const std::string& toolName = step.toolName;
 			if (hasTimedOut(CurrentEpochMs())) {
-				FinalizeExecutionResult(
-					result,
-					"failed",
+				finalizeFailure(
 					"deadline_exceeded",
-					"embedded_deadline_exceeded",
-					"embedded run exceeded timeout",
-					{});
-				appendDelta(EmbeddedTaskDelta{
-					.phase = "final",
-					.resultJson = result.errorMessage,
-					.status = "failed",
-					.errorCode = result.errorCode,
-					.stepLabel = "run_terminal",
-					});
+					kErrorDeadlineExceeded,
+					"embedded run exceeded timeout");
 				result.taskDeltas = GetTaskDeltas(queued.runId);
 				return result;
 			}
@@ -655,20 +819,10 @@ namespace blazeclaw::core {
 				? 0
 				: repeatIt->second;
 			if (repeatCount >= kMaxRepeatCalls) {
-				FinalizeExecutionResult(
-					result,
-					"failed",
+				finalizeFailure(
 					"loop_detected",
-					"embedded_loop_detected",
-					"repeated tool call signature exceeded limit",
-					{});
-				appendDelta(EmbeddedTaskDelta{
-					.phase = "final",
-					.resultJson = result.errorMessage,
-					.status = "failed",
-					.errorCode = result.errorCode,
-					.stepLabel = "run_terminal",
-					});
+					kErrorLoopDetected,
+					"repeated tool call signature exceeded limit");
 				result.taskDeltas = GetTaskDeltas(queued.runId);
 				return result;
 			}
@@ -693,14 +847,18 @@ namespace blazeclaw::core {
 				toolName +
 				" status=" +
 				execution.status);
+			const std::string toolResultStatus =
+				execution.status.empty()
+				? (execution.executed ? kStatusCompleted : kStatusFailed)
+				: execution.status;
 
 			appendDelta(EmbeddedTaskDelta{
-				.phase = "tool_result",
+			 .phase = kPhaseToolResult,
 				.toolName = toolName,
 				.argsJson = args.dump(),
-			 .resultJson = execution.result,
-				.status = execution.status,
-			  .errorCode = execution.executed
+				.resultJson = execution.result,
+				.status = toolResultStatus,
+				.errorCode = execution.executed
 					? std::string()
 					: (execution.errorCode.empty()
 						? std::string("not_executed")
@@ -709,35 +867,16 @@ namespace blazeclaw::core {
 				.completedAtMs = execution.completedAtMs,
 				.latencyMs = execution.latencyMs,
 				.modelTurnId = execution.correlationId,
-				.stepLabel = "tool_result",
+			 .stepLabel = step.stepLabel,
 				});
 
 			if (!execution.executed || execution.status == "error") {
-				if (!CompleteRun(queued.runId, "failed", CurrentEpochMs())) {
-					FinalizeExecutionResult(
-						result,
-						"failed",
-						"embedded_completion_failed",
-						"embedded_completion_failed",
-						"embedded completion failed",
-						{});
-				}
-				FinalizeExecutionResult(
-					result,
-					"failed",
+				finalizeFailure(
 					"tool_execution_failed",
-					"embedded_tool_execution_failed",
+					kErrorToolExecutionFailed,
 					execution.errorMessage.empty()
 					? "tool execution failed"
-					: execution.errorMessage,
-					{});
-				appendDelta(EmbeddedTaskDelta{
-					.phase = "final",
-					.resultJson = result.errorMessage,
-					.status = "failed",
-					.errorCode = result.errorCode,
-					.stepLabel = "run_terminal",
-					});
+					: execution.errorMessage);
 				result.taskDeltas = GetTaskDeltas(queued.runId);
 				return result;
 			}
@@ -745,27 +884,17 @@ namespace blazeclaw::core {
 			lastOutput = execution.result;
 		}
 
-		if (!CompleteRun(queued.runId, "completed", CurrentEpochMs())) {
-			FinalizeExecutionResult(
-				result,
-				"failed",
+		if (!CompleteRun(queued.runId, kStatusCompleted, CurrentEpochMs())) {
+			finalizeFailure(
 				"embedded_completion_failed",
-				"embedded_completion_failed",
-				"embedded completion failed",
-				{});
-			appendDelta(EmbeddedTaskDelta{
-				.phase = "final",
-				.resultJson = result.errorMessage,
-				.status = "failed",
-				.errorCode = result.errorCode,
-				.stepLabel = "run_terminal",
-				});
+				kErrorCompletionFailed,
+				"embedded completion failed");
 			result.taskDeltas = GetTaskDeltas(queued.runId);
 			return result;
 		}
 		FinalizeExecutionResult(
 			result,
-			"completed",
+			kStatusCompleted,
 			"orchestrated",
 			{},
 			{},
@@ -773,10 +902,10 @@ namespace blazeclaw::core {
 			? "Embedded orchestration completed."
 			: lastOutput);
 		appendDelta(EmbeddedTaskDelta{
-			  .phase = "final",
-			  .resultJson = result.assistantText,
-			  .status = "completed",
-			  .stepLabel = "run_terminal",
+			 .phase = kPhaseFinal,
+				.resultJson = result.assistantText,
+				.status = kStatusCompleted,
+				.stepLabel = "run_terminal",
 			});
 		result.taskDeltas = GetTaskDeltas(queued.runId);
 		return result;
@@ -845,6 +974,7 @@ namespace blazeclaw::core {
 
 		auto& deltas = m_taskDeltasByRunId[runId];
 		EmbeddedTaskDelta normalized = delta;
+		NormalizeTaskDeltaForContract(normalized);
 		normalized.index = deltas.size();
 		deltas.push_back(std::move(normalized));
 	}

@@ -103,6 +103,54 @@ namespace blazeclaw::gateway {
 				"}";
 		}
 
+		GatewayHost::ChatRuntimeResult::TaskDeltaEntry NormalizeTaskDeltaEntry(
+			const GatewayHost::ChatRuntimeResult::TaskDeltaEntry& source,
+			const std::string& runId,
+			const std::string& sessionKey,
+			const std::size_t defaultIndex) {
+			GatewayHost::ChatRuntimeResult::TaskDeltaEntry normalized = source;
+			normalized.index = source.index == 0 && defaultIndex > 0
+				? defaultIndex
+				: source.index;
+			if (normalized.runId.empty()) {
+				normalized.runId = runId;
+			}
+
+			if (normalized.sessionId.empty()) {
+				normalized.sessionId = sessionKey;
+			}
+
+			if (normalized.phase.empty()) {
+				normalized.phase = "unknown";
+			}
+
+			if (normalized.status.empty()) {
+				normalized.status = normalized.phase == "final"
+					? "completed"
+					: "running";
+			}
+
+			if (normalized.stepLabel.empty()) {
+				normalized.stepLabel = normalized.phase;
+			}
+
+			if (normalized.startedAtMs == 0) {
+				normalized.startedAtMs = static_cast<std::uint64_t>(
+					std::chrono::duration_cast<std::chrono::milliseconds>(
+						std::chrono::system_clock::now().time_since_epoch())
+					.count());
+			}
+
+			if (normalized.completedAtMs == 0 ||
+				normalized.completedAtMs < normalized.startedAtMs) {
+				normalized.completedAtMs = normalized.startedAtMs;
+			}
+
+			normalized.latencyMs =
+				normalized.completedAtMs - normalized.startedAtMs;
+			return normalized;
+		}
+
 		std::optional<std::size_t> ExtractSizeParam(
 			const std::optional<std::string>& paramsJson,
 			const std::string& fieldName) {
@@ -1714,15 +1762,26 @@ namespace blazeclaw::gateway {
 						"-" + std::to_string(m_chatRunsById.size() + 1));
 
 				auto persistTaskDeltas =
-					[this, &runId](
+					[this, &runId, &sessionKey](
 						const std::vector<ChatRuntimeResult::TaskDeltaEntry>& taskDeltas,
 						const bool success) {
 							if (taskDeltas.empty()) {
 								return;
 							}
 
-							m_taskDeltasByRunId.insert_or_assign(runId, taskDeltas);
-							for (const auto& delta : taskDeltas) {
+							std::vector<ChatRuntimeResult::TaskDeltaEntry> normalizedTaskDeltas;
+							normalizedTaskDeltas.reserve(taskDeltas.size());
+							for (std::size_t index = 0; index < taskDeltas.size(); ++index) {
+								normalizedTaskDeltas.push_back(
+									NormalizeTaskDeltaEntry(
+										taskDeltas[index],
+										runId,
+										sessionKey,
+										index));
+							}
+
+							m_taskDeltasByRunId.insert_or_assign(runId, normalizedTaskDeltas);
+							for (const auto& delta : normalizedTaskDeltas) {
 								EmitTelemetryEvent(
 									"gateway.taskdelta.transition",
 									std::string("{\"runId\":") +
@@ -1739,7 +1798,7 @@ namespace blazeclaw::gateway {
 								"gateway.taskdelta.runSummary",
 								std::string("{\"runId\":") +
 								JsonString(runId) +
-								",\"count\":" + std::to_string(taskDeltas.size()) +
+								",\"count\":" + std::to_string(normalizedTaskDeltas.size()) +
 								",\"success\":" + (success ? std::string("true") : std::string("false")) +
 								"}");
 

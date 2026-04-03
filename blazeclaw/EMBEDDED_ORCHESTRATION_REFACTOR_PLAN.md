@@ -453,6 +453,13 @@ and Steps 6-10 must produce evidence for both lanes.
 - Preserved optional compatibility behavior through execution bridge fallbacks and staged rollout fallback controls.
 - Finalized refactor checklist with dynamic task-delta orchestration as default behavior.
 
+### Completed now: Dynamic Task-Delta Full Plan Phase 1 + Phase 2 follow-up
+- Added explicit execution-plan step model normalization (`index`, `toolName`, `argMode`, `stepLabel`) before the embedded loop.
+- Added pre-execution plan validation for empty tool entries, unsupported arg mode, and duplicate loop-signature risk.
+- Added deterministic orchestration error taxonomy constants for plan/policy failure classes.
+- Hardened embedded/gateway task-delta contract normalization to keep required fields and timing values stable for `gateway.runtime.taskDeltas.get` consumers.
+- Updated plan delta emission to publish structured ordered plan metadata instead of tool-name-only arrays.
+
 ### Completed now: Step 13 (Timestamp/Deadline Consistency)
 - Replaced synthetic embedded run start timestamps with real epoch timestamps from `CurrentEpochMs()`.
 - Aligned completion timestamps with real epoch values for both success and failure paths.
