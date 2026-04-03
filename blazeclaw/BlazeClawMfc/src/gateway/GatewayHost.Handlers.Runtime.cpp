@@ -336,6 +336,10 @@ namespace blazeclaw::gateway {
 			return payload;
 		}
 
+		bool IsTerminalChatState(const std::string& state) {
+			return state == "final" || state == "error" || state == "aborted";
+		}
+
 		std::string SerializeTaskDeltaEntryJson(
 			const GatewayHost::ChatRuntimeResult::TaskDeltaEntry& delta) {
 			return "{\"index\":" +
@@ -2130,7 +2134,8 @@ namespace blazeclaw::gateway {
 									.failed = false,
 									.errorMessage = {},
 									.startedAtMs = nowMs,
-									.active = true,
+								 .active = true,
+									.terminalEventEnqueued = false,
 								});
 
 							persistTaskDeltas(legacyTaskDeltas, true);
@@ -2212,7 +2217,8 @@ namespace blazeclaw::gateway {
 								.failed = failed,
 								.errorMessage = backendErrorMessage,
 								.startedAtMs = nowMs,
-								.active = true,
+								 .active = true,
+									.terminalEventEnqueued = false,
 							});
 					}
 					else {
@@ -2246,6 +2252,39 @@ namespace blazeclaw::gateway {
 					BuildUserMessageJson(normalizedMessage, hasAttachments, nowMs));
 
 				auto& sessionEvents = m_chatEventsBySession[sessionKey];
+				PushEventWithRetentionLimit(sessionEvents, ChatEventState{
+						.runId = runId,
+						.sessionKey = sessionKey,
+						.state = "queued",
+						.messageJson = std::nullopt,
+						.errorMessage = std::nullopt,
+						.timestampMs = nowMs,
+					});
+				PushEventWithRetentionLimit(sessionEvents, ChatEventState{
+					   .runId = runId,
+					   .sessionKey = sessionKey,
+					   .state = "started",
+					   .messageJson = std::nullopt,
+					   .errorMessage = std::nullopt,
+					   .timestampMs = nowMs,
+					});
+				EmitDeepSeekGatewayDiagnostic(
+					"event.enqueue",
+					std::string("state=queued runId=") +
+					runId +
+					" session=" +
+					sessionKey +
+					" queueSize=" +
+					std::to_string(sessionEvents.size()));
+				EmitDeepSeekGatewayDiagnostic(
+					"event.enqueue",
+					std::string("state=started runId=") +
+					runId +
+					" session=" +
+					sessionKey +
+					" queueSize=" +
+					std::to_string(sessionEvents.size()));
+
 				std::size_t streamCursor = 0;
 				if (!failed && !silentAssistantReply) {
 					streamCursor = (std::min)(assistantText.size(), std::size_t{ 6 });
@@ -2286,9 +2325,12 @@ namespace blazeclaw::gateway {
 							.failed = failed,
 							.errorMessage = backendErrorMessage,
 							.startedAtMs = nowMs,
-							.active = true,
+						 .active = true,
+							.terminalEventEnqueued = false,
 						});
 				}
+
+				m_chatTerminalDeliveredRunIds.erase(runId);
 
 				if (!idempotencyKey.empty()) {
 					m_chatRunByIdempotency.insert_or_assign(idempotencyKey, runId);
@@ -2381,6 +2423,7 @@ namespace blazeclaw::gateway {
 					   .errorMessage = std::nullopt,
 					   .timestampMs = nowMs,
 					});
+				runIt->second.terminalEventEnqueued = true;
 				EmitDeepSeekGatewayDiagnostic(
 					"event.enqueue",
 					std::string("state=aborted runId=") +
@@ -2432,21 +2475,6 @@ namespace blazeclaw::gateway {
 				if (runIt != m_chatRunsById.end()) {
 					auto& run = runIt->second;
 					const bool silentAssistantReply = IsSilentReplyText(run.assistantText);
-					const auto hasTerminalEventQueuedForRun =
-						[&queue, &run]() {
-						return std::any_of(
-							queue.begin(),
-							queue.end(),
-							[&](const ChatEventState& item) {
-								if (item.runId != run.runId) {
-									return false;
-								}
-
-								return item.state == "final" ||
-									item.state == "error" ||
-									item.state == "aborted";
-							});
-						};
 					const bool enoughTimeElapsed =
 						run.lastEmitMs == 0 || (nowMs - run.lastEmitMs) >= 180;
 
@@ -2491,7 +2519,7 @@ namespace blazeclaw::gateway {
 						silentAssistantReply ||
 						(run.providerDeltaCursor >= run.providerDeltas.size() &&
 							run.streamCursor >= run.assistantText.size());
-					if (streamCompleted && !hasTerminalEventQueuedForRun()) {
+					if (streamCompleted && !run.terminalEventEnqueued) {
 						PushEventWithRetentionLimit(queue, ChatEventState{
 							   .runId = run.runId,
 							   .sessionKey = run.sessionKey,
@@ -2507,6 +2535,7 @@ namespace blazeclaw::gateway {
 								   : std::nullopt,
 							   .timestampMs = nowMs,
 							});
+						run.terminalEventEnqueued = true;
 						EmitDeepSeekGatewayDiagnostic(
 							"event.enqueue",
 							std::string("state=") +
@@ -2524,10 +2553,24 @@ namespace blazeclaw::gateway {
 
 				std::string eventsJson = "[";
 				std::size_t emitted = 0;
+				std::unordered_set<std::string> terminalRunIdsSeenThisPoll;
 				if (!queue.empty()) {
 					while (emitted < limit && !queue.empty()) {
 						const ChatEventState eventState = queue.front();
 						queue.pop_front();
+
+						if (IsTerminalChatState(eventState.state)) {
+							if (m_chatTerminalDeliveredRunIds.find(eventState.runId) != m_chatTerminalDeliveredRunIds.end() ||
+								terminalRunIdsSeenThisPoll.find(eventState.runId) != terminalRunIdsSeenThisPoll.end()) {
+								continue;
+							}
+
+							terminalRunIdsSeenThisPoll.insert(eventState.runId);
+							m_chatTerminalDeliveredRunIds.insert(eventState.runId);
+							if (m_chatTerminalDeliveredRunIds.size() > 1024) {
+								m_chatTerminalDeliveredRunIds.clear();
+							}
+						}
 
 						EmitDeepSeekGatewayDiagnostic(
 							"event.dequeue",
@@ -2564,9 +2607,7 @@ namespace blazeclaw::gateway {
 								eventState.messageJson.value());
 						}
 
-						if (eventState.state == "final" ||
-							eventState.state == "aborted" ||
-							eventState.state == "error") {
+						if (IsTerminalChatState(eventState.state)) {
 							const auto runIt = m_chatRunsById.find(eventState.runId);
 							if (runIt != m_chatRunsById.end()) {
 								if (!runIt->second.idempotencyKey.empty()) {

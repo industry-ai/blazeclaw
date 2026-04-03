@@ -124,6 +124,7 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
    - Execution plan: `CHAT_RUNTIME_ASYNC_WORK_QUEUE_PLAN.md`
    - Status: Phase 1 (contract/state preparation) completed in code.
    - Status: Phase 2 (worker lifecycle + queued execution path) completed in code.
+   - Status: Phase 3 (completion/event integration and terminal dedup sequencing) completed in code.
 2. Switch chat UI updates to incremental append/update instead of full list rebuild.
 3. [Completed] Register dispatcher handlers once at startup, not inside `chat.send`.
 4. [Completed] Add retention limits for `m_chatHistoryBySession` and `m_chatEventsBySession`.

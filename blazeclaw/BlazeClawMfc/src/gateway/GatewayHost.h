@@ -11,6 +11,8 @@
 #include "GatewayWebSocketTransport.h"
 #include "GatewayProtocolContract.h"
 
+#include <unordered_set>
+
 namespace blazeclaw::gateway {
 
 	struct SkillsCatalogGatewayEntry {
@@ -245,6 +247,7 @@ namespace blazeclaw::gateway {
 			std::string errorMessage;
 			std::uint64_t startedAtMs = 0;
 			bool active = true;
+			bool terminalEventEnqueued = false;
 		};
 
 		struct ChatEventState {
@@ -315,6 +318,7 @@ namespace blazeclaw::gateway {
 		std::unordered_map<std::string, std::deque<ChatEventState>> m_chatEventsBySession;
 		std::unordered_map<std::string, ChatRunState> m_chatRunsById;
 		std::unordered_map<std::string, std::string> m_chatRunByIdempotency;
+		std::unordered_set<std::string> m_chatTerminalDeliveredRunIds;
 		std::unordered_map<std::string, std::vector<ChatRuntimeResult::TaskDeltaEntry>> m_taskDeltasByRunId;
 		std::size_t m_taskDeltasRetentionLimit = 64;
 		std::size_t m_taskDeltasMaxPayloadBytes = 1024 * 1024;

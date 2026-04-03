@@ -111,6 +111,15 @@ Move chat runtime execution (remote HTTP and local model inference) off the UI t
 2. Normalize terminal sequencing (`final`/`error`/`aborted`) and deduplicate terminal emission.
 3. Ensure UI updates consume completion state without blocking.
 
+### Phase 3 implementation status
+
+- Completed in code:
+  - Added lifecycle event emission on existing chat event surfaces for run `queued` and `started` states.
+  - Preserved completion publication via existing `chat.events.poll` terminal states (`final`/`error`/`aborted`).
+  - Added per-run terminal enqueue tracking to prevent duplicate terminal scheduling.
+  - Added terminal publication dedup safeguards during poll dequeue to avoid duplicate terminal delivery.
+  - Kept UI update consumption timer/poll compatible by continuing to use bounded event queues and non-blocking poll responses.
+
 ### Phase 4 — Cancellation and timeout hardening
 1. Wire `chat.abort` to queued and running request cancellation.
 2. Add timeout enforcement for queued wait + execution duration.
