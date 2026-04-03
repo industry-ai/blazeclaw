@@ -69,6 +69,14 @@ TEST_CASE("Parity coverage: lifecycle activation/deactivation updates tool catal
 TEST_CASE("Parity coverage: tool call sequence supports approval prepare and approve", "[parity][approval]") {
 	GatewayToolRegistry registry;
 
+	char* previousModeRaw = nullptr;
+	size_t previousModeLength = 0;
+	_dupenv_s(
+		&previousModeRaw,
+		&previousModeLength,
+		"BLAZECLAW_EMAIL_DELIVERY_MODE");
+	_putenv_s("BLAZECLAW_EMAIL_DELIVERY_MODE", "mock_success");
+
 	PluginHostAdapter::RegisterExtensionAdapter(
 		"ops-tools",
 		[](const std::string&, const std::string&, const std::string&) {
@@ -118,6 +126,17 @@ TEST_CASE("Parity coverage: tool call sequence supports approval prepare and app
 
 	const auto unloaded = PluginHostAdapter::UnloadExtensionRuntime("ops-tools");
 	REQUIRE(unloaded.ok);
+
+	if (previousModeRaw != nullptr && previousModeLength > 0) {
+		_putenv_s("BLAZECLAW_EMAIL_DELIVERY_MODE", previousModeRaw);
+		free(previousModeRaw);
+	}
+	else {
+		if (previousModeRaw != nullptr) {
+			free(previousModeRaw);
+		}
+		_putenv_s("BLAZECLAW_EMAIL_DELIVERY_MODE", "");
+	}
 }
 
 TEST_CASE("Parity coverage: prompt intent parser handles now and today", "[parity][chat][orchestration]") {

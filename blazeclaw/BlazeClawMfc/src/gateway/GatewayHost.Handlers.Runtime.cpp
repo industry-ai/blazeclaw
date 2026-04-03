@@ -766,6 +766,28 @@ namespace blazeclaw::gateway {
 				return result;
 			}
 
+			ToolExecuteResult emailApproveExecution;
+			const bool shouldAutoApprove =
+				intent.scheduleKind == "immediate_keyword";
+			if (shouldAutoApprove) {
+				nlohmann::json emailApproveArgs = {
+					{ "action", "approve" },
+					{ "approvalToken", approvalToken },
+					{ "approve", true },
+				};
+
+				emailApproveExecution = toolRegistry.Execute(
+					"email.schedule",
+					emailApproveArgs.dump());
+				if (!emailApproveExecution.executed ||
+					emailApproveExecution.status != "ok") {
+					result.success = false;
+					result.errorCode = "orchestration_email_approve_failed";
+					result.errorMessage = emailApproveExecution.output;
+					return result;
+				}
+			}
+
 			result.success = true;
 			result.assistantDeltas = {
 				"tools.execute.start tool=weather.lookup",
@@ -775,17 +797,32 @@ namespace blazeclaw::gateway {
 				"tools.execute.start tool=email.schedule action=prepare",
 				"tools.execute.result tool=email.schedule status=needs_approval",
 			};
+			if (shouldAutoApprove) {
+				result.assistantDeltas.push_back(
+					"tools.execute.start tool=email.schedule action=approve");
+				result.assistantDeltas.push_back(
+					"tools.execute.result tool=email.schedule status=ok");
+			}
 
-			result.assistantText =
-				report +
-				" Email scheduling to " + recipient +
-				" at " + sendAt +
-				" is pending approval. approvalToken=" +
-				approvalToken;
-			if (approvalTokenExpiresAtEpochMs > 0) {
-				result.assistantText +=
-					" expiresAtEpochMs=" +
-					std::to_string(approvalTokenExpiresAtEpochMs);
+			if (shouldAutoApprove) {
+				result.assistantText =
+					report +
+					" Email sent to " + recipient +
+					" at " + sendAt +
+					" via himalaya.";
+			}
+			else {
+				result.assistantText =
+					report +
+					" Email scheduling to " + recipient +
+					" at " + sendAt +
+					" is pending approval. approvalToken=" +
+					approvalToken;
+				if (approvalTokenExpiresAtEpochMs > 0) {
+					result.assistantText +=
+						" expiresAtEpochMs=" +
+						std::to_string(approvalTokenExpiresAtEpochMs);
+				}
 			}
 
 			return result;

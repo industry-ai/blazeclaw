@@ -1257,7 +1257,8 @@ namespace blazeclaw::core {
 
 		std::string BuildSkillsInjectedMessage(
 			const std::string& userMessage,
-			const std::wstring& skillsPrompt) {
+			const std::wstring& skillsPrompt,
+			const std::size_t maxPromptChars) {
 			if (skillsPrompt.empty()) {
 				return userMessage;
 			}
@@ -1267,9 +1268,8 @@ namespace blazeclaw::core {
 				return userMessage;
 			}
 
-			constexpr std::size_t kMaxPromptChars = 4000;
-			if (narrowedPrompt.size() > kMaxPromptChars) {
-				narrowedPrompt.resize(kMaxPromptChars);
+			if (maxPromptChars > 0 && narrowedPrompt.size() > maxPromptChars) {
+				narrowedPrompt.resize(maxPromptChars);
 			}
 
 			std::string injected;
@@ -2294,7 +2294,11 @@ namespace blazeclaw::core {
 				const std::string sessionId =
 					request.sessionKey.empty() ? "main" : request.sessionKey;
 				const std::string runtimeMessage =
-					BuildSkillsInjectedMessage(request.message, m_skillsPrompt.prompt);
+					BuildSkillsInjectedMessage(
+						request.message,
+						m_skillsPrompt.prompt,
+						static_cast<std::size_t>(
+							m_activeConfig.skills.limits.maxSkillsPromptChars));
 				const std::string activeProvider = m_activeChatProvider;
 				const std::string activeModel = m_activeChatModel;
 				auto executeRequest = [this,
