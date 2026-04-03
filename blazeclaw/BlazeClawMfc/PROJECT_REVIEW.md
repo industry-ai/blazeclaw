@@ -31,23 +31,25 @@ Overall, this is a modular monolith with a strong `ServiceManager + GatewayHost`
 
 ## 2) Threading Model
 
-Effective runtime model is mostly single-threaded at app level:
+Effective runtime model is now mixed (UI-thread driven + dedicated worker threads):
 
 - Gateway network pump is called from `CBlazeClawMFCApp::OnIdle` (`BlazeClawMfcApp.cpp:506-519`).
 - Chat polling is timer-driven on UI thread (`ChatView.cpp:468-477`, 500 ms interval).
-- No explicit `std::thread` / `CreateThread` usage was found in `BlazeClawMfc/src`.
+- Chat runtime async queue/worker is present in `ServiceManager` (`StartChatRuntimeWorker`, `ChatRuntimeWorkerLoop`, `StopChatRuntimeWorker`).
+- Transport/runtime internals also use background threading (e.g., WebSocket transport internals).
 
 Current behavior:
 
 - UI thread drives message loop.
-- UI thread also pumps gateway transport.
-- UI thread also issues chat requests.
+- UI thread still pumps gateway transport.
+- UI thread still issues synchronous `chat.send` gateway requests.
+- Heavy runtime execution (embedded/deepseek/local-model path) is executed via chat runtime worker when async queue is enabled.
 
 Consequences:
 
-- Heavy gateway callback work can stall UI responsiveness.
-- `chat.send` can synchronously invoke DeepSeek HTTP flow (`WinHttpSendRequest/ReceiveResponse/ReadData` in `ServiceManager.cpp`), which is blocking.
-- ONNX calls can block call sites when reached on UI-driven flows.
+- Runtime work no longer executes directly on the UI thread, which reduces direct UI contention.
+- UI still blocks waiting for `chat.send` completion because request/response remains synchronous at call site.
+- Gateway pump work remains on `OnIdle`, so expensive dispatch/transport cycles can still impact responsiveness.
 
 ## 3) Memory Characteristics
 
@@ -62,25 +64,24 @@ Consequences:
 ### Risk points
 
 - Chat history and event queues are now bounded per session, but retained payloads can still be large when message bodies are large.
+- Task-delta retention is bounded (`m_taskDeltasByRunId.size() > 64` eviction), but eviction is map-order based rather than strict recency.
 - Local-model cancel flags are now cleaned up via scoped terminal cleanup across success, error, and cancel paths.
 
 ## 4) Performance Issues and Hotspots
 
 ### A) UI-thread blocking
 
-Main issue: network pump + request routing + potential remote HTTP in UI-driven execution.
+Main residual issue: UI thread still synchronously issues `chat.send` and waits for completion, even though execution is offloaded to worker queue.
 
 Expected symptoms: typing lag, delayed repaint, temporary freeze under slow network/model conditions.
 
 ### B) Chat view redraw strategy
 
-`SyncItemsFromState()` clears and rebuilds full message list on update (`ChatView.cpp:882+`). With frequent polling, this causes repeated O(n) rebuild/redraw churn.
-
-Status update (latest change): `ChatView` now uses incremental append/update synchronization for history, stream, and error rows, with selective rebuild fallback only when source history shrinks or full history reload occurs.
+Status update (implemented): `ChatView` uses incremental append/update synchronization for history, stream, and error rows, with selective rebuild fallback only when source history shrinks or full history reload occurs.
 
 ### C) Streaming pipeline behavior
 
-DeepSeek response is fully read before delta extraction in `ServiceManager` (`responseBody` accumulation), then deltas are emitted from stored buffers. This increases time-to-first-token compared with true incremental streaming.
+Streaming behavior remains simulated/chunked at gateway chat-event layer; there is still no end-to-end true token-by-token transport from provider to UI event queue.
 
 ### D) Embeddings throughput serialization
 
@@ -115,10 +116,9 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 
 ### Weaknesses
 
-- Runtime execution is largely UI-thread-centric.
-- Chat/event/render loop has avoidable hot-path inefficiencies.
-- Some state containers are not retention-bounded.
-- Embedded orchestration has correctness/perf smells.
+- Request/response entrypoints remain UI-synchronous even after worker offload.
+- Startup path is broad and validation-heavy.
+- Some retention policies are bounded but not fully policy-optimized (e.g., map-order eviction).
 
 ## 6) Highest-Impact Improvements (Priority Order)
 
@@ -132,15 +132,27 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
    - Latest audit: `msbuild` Debug|x64 passed and parity chat regression suite (`[parity][chat]`) passed.
 2. [Completed] Switch chat UI updates to incremental append/update instead of full list rebuild.
    - Execution plan: `CHAT_UI_INCREMENTAL_RENDER_PLAN.md`
-   - Status: Incremental row synchronization implemented in `ChatView` (`SyncItemsFromState` + targeted item update/remove helpers).
+   - Status: Phases 1-4 completed (state tracking, incremental sync, item-level helpers, history reload consistency).
 3. [Completed] Register dispatcher handlers once at startup, not inside `chat.send`.
 4. [Completed] Add retention limits for `m_chatHistoryBySession` and `m_chatEventsBySession`.
 5. [Completed] Fix `PiEmbeddedService` started-at/deadline logic to use real current epoch consistently.
 6. [Completed] Ensure local-model cancel flags are erased across all terminal/error/cancel paths.
 7. [Completed] Optionally parallelize embeddings safely (separate sessions or lock partitioning).
 
+### Next recommended priorities
+
+1. Decouple UI request path from synchronous `chat.send` wait (true non-blocking UI submit + completion event delivery).
+2. Move gateway network pump off `OnIdle` into a dedicated pump thread or bounded work loop.
+3. Implement true provider-to-UI incremental streaming (avoid full-response-first staging before UI delta delivery).
+4. Reduce startup critical-path fixture validation cost (lazy/background validation or staged diagnostics pass).
+
 ## 7) Related Execution Planning Docs
 
 - `CHAT_RUNTIME_ASYNC_WORK_QUEUE_PLAN.md` — first-pass migration plan for moving chat runtime work off the UI thread with queue-based async execution and completion events.
 - `CHAT_UI_INCREMENTAL_RENDER_PLAN.md` — incremental chat UI append/update migration and completion audit.
 - `DYNAMIC_TASK_DELTA_FULL_EXECUTION_PLAN.md` — dynamic task-delta orchestration hardening and rollout plan/status.
+
+---
+
+Review date: **2026-04-03**  
+Commit hash: **abc96aa**
