@@ -762,52 +762,32 @@ namespace blazeclaw::core {
 				request.run.message,
 				lastOutput,
 				stepIndex);
-			const std::string argMode = ResolveBindingArgMode(request, toolName);
+			const std::string argMode = step.argMode;
 			if (!ValidateArgsForArgMode(argMode, args)) {
-				FinalizeExecutionResult(
-					result,
-					"failed",
+				finalizeFailure(
 					"invalid_args",
-					"embedded_invalid_args",
-					"tool args do not satisfy binding arg mode",
-					{});
-				appendDelta(EmbeddedTaskDelta{
-					.phase = "final",
-					.resultJson = result.errorMessage,
-					.status = "failed",
-					.errorCode = result.errorCode,
-					.stepLabel = "run_terminal",
-					});
+					kErrorInvalidArgs,
+					"tool args do not satisfy binding arg mode");
 				result.taskDeltas = GetTaskDeltas(queued.runId);
 				return result;
 			}
 
 			if (!IsAllowedRuntimeTool(request, toolName)) {
-				FinalizeExecutionResult(
-					result,
-					"failed",
+				finalizeFailure(
 					"tool_blocked",
-					"embedded_tool_blocked",
-					"tool is not enabled in runtime catalog",
-					{});
-				appendDelta(EmbeddedTaskDelta{
-					.phase = "final",
-					.resultJson = result.errorMessage,
-					.status = "failed",
-					.errorCode = result.errorCode,
-					.stepLabel = "run_terminal",
-					});
+					kErrorToolBlocked,
+					"tool is not enabled in runtime catalog");
 				result.taskDeltas = GetTaskDeltas(queued.runId);
 				return result;
 			}
 
 			appendDelta(EmbeddedTaskDelta{
-				.phase = "tool_call",
+			   .phase = kPhaseToolCall,
 				.toolName = toolName,
 				.argsJson = args.dump(),
-				.status = "requested",
+			  .status = kStatusRequested,
 				.modelTurnId = "model-turn-" + std::to_string(stepIndex),
-				.stepLabel = "tool_request",
+				.stepLabel = step.stepLabel,
 				});
 
 			const std::string correlationId =
@@ -1776,6 +1756,35 @@ namespace blazeclaw::core {
 		if (hardFailureResult.success ||
 			hardFailureResult.errorCode != "embedded_tool_execution_failed") {
 			outError = L"Fixture validation failed: expected deterministic hard failure code.";
+			return false;
+		}
+
+		const bool hasHardFailureToolCall = std::any_of(
+			hardFailureResult.taskDeltas.begin(),
+			hardFailureResult.taskDeltas.end(),
+			[](const EmbeddedTaskDelta& delta) {
+				return delta.phase == "tool_call" &&
+					delta.toolName == "failure.tool";
+			});
+		const bool hasHardFailureToolResult = std::any_of(
+			hardFailureResult.taskDeltas.begin(),
+			hardFailureResult.taskDeltas.end(),
+			[](const EmbeddedTaskDelta& delta) {
+				return delta.phase == "tool_result" &&
+					delta.toolName == "failure.tool";
+			});
+		const bool hasHardFailureTerminal = std::any_of(
+			hardFailureResult.taskDeltas.begin(),
+			hardFailureResult.taskDeltas.end(),
+			[](const EmbeddedTaskDelta& delta) {
+				return delta.phase == "final" &&
+					delta.status == "failed" &&
+					delta.errorCode == "embedded_tool_execution_failed";
+			});
+		if (!hasHardFailureToolCall ||
+			!hasHardFailureToolResult ||
+			!hasHardFailureTerminal) {
+			outError = L"Fixture validation failed: expected deterministic partial-failure task-delta chain with final terminal delta.";
 			return false;
 		}
 

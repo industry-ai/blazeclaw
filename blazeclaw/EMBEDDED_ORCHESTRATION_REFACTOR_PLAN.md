@@ -460,6 +460,12 @@ and Steps 6-10 must produce evidence for both lanes.
 - Hardened embedded/gateway task-delta contract normalization to keep required fields and timing values stable for `gateway.runtime.taskDeltas.get` consumers.
 - Updated plan delta emission to publish structured ordered plan metadata instead of tool-name-only arrays.
 
+### Completed now: Dynamic Task-Delta Full Plan Phase 3 follow-up
+- Hardened step execution in `PiEmbeddedService::ExecuteRun` so plan-step metadata directly drives arg-mode validation/invocation.
+- Unified step failure terminalization via deterministic final-delta path for invalid-args, blocked-tool, timeout, loop, and tool-execution failures.
+- Kept per-step execution on `toolExecutorV2` with compatibility fallback to legacy `toolExecutor`.
+- Added fixture assertions validating deterministic partial-failure delta chains (`plan -> tool_call -> tool_result -> final`).
+
 ### Completed now: Step 13 (Timestamp/Deadline Consistency)
 - Replaced synthetic embedded run start timestamps with real epoch timestamps from `CurrentEpochMs()`.
 - Aligned completion timestamps with real epoch values for both success and failure paths.

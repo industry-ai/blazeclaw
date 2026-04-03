@@ -120,6 +120,15 @@ Upgrade the `dynamic_task_delta` path from decomposition-only behavior to a full
 2. Emit `tool_call`/`tool_result` deltas for every step.
 3. Ensure partial-failure behavior is deterministic and terminalized.
 
+### Phase 3 implementation status
+
+- Completed in code:
+  - Hardened `ExecuteRun` loop to consume normalized plan-step arg mode metadata during invocation.
+  - Standardized step invocation failure handling through deterministic terminalization path.
+  - Kept execution path on `toolExecutorV2` with explicit fallback compatibility to `toolExecutor`.
+  - Normalized `tool_call` delta emission to stable contract constants and ordered step labels.
+  - Added fixture assertions verifying partial-failure chain determinism (`tool_call` + `tool_result` + terminal `final` failed delta).
+
 ## Phase 4 — Policy and safety enforcement
 
 1. Deadline and timeout propagation.
