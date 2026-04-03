@@ -22,4 +22,5 @@ Notes:
 BlazeClawMfc planning docs:
 - `blazeclaw/BlazeClawMfc/PROJECT_REVIEW.md`
 - `blazeclaw/BlazeClawMfc/CHAT_RUNTIME_ASYNC_WORK_QUEUE_PLAN.md`
+- `blazeclaw/BlazeClawMfc/CHAT_UI_INCREMENTAL_RENDER_PLAN.md`
 - `blazeclaw/BlazeClawMfc/DYNAMIC_TASK_DELTA_FULL_EXECUTION_PLAN.md`

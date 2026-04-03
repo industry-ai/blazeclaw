@@ -76,6 +76,8 @@ Expected symptoms: typing lag, delayed repaint, temporary freeze under slow netw
 
 `SyncItemsFromState()` clears and rebuilds full message list on update (`ChatView.cpp:882+`). With frequent polling, this causes repeated O(n) rebuild/redraw churn.
 
+Status update (latest change): `ChatView` now uses incremental append/update synchronization for history, stream, and error rows, with selective rebuild fallback only when source history shrinks or full history reload occurs.
+
 ### C) Streaming pipeline behavior
 
 DeepSeek response is fully read before delta extraction in `ServiceManager` (`responseBody` accumulation), then deltas are emitted from stored buffers. This increases time-to-first-token compared with true incremental streaming.
@@ -128,7 +130,9 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
    - Status: Phase 4 (cancellation + timeout hardening with terminal cleanup) completed in code.
    - Status: Phase 5 (validation/rollout gating + parity coverage extensions) completed in code.
    - Latest audit: `msbuild` Debug|x64 passed and parity chat regression suite (`[parity][chat]`) passed.
-2. Switch chat UI updates to incremental append/update instead of full list rebuild.
+2. [Completed] Switch chat UI updates to incremental append/update instead of full list rebuild.
+   - Execution plan: `CHAT_UI_INCREMENTAL_RENDER_PLAN.md`
+   - Status: Incremental row synchronization implemented in `ChatView` (`SyncItemsFromState` + targeted item update/remove helpers).
 3. [Completed] Register dispatcher handlers once at startup, not inside `chat.send`.
 4. [Completed] Add retention limits for `m_chatHistoryBySession` and `m_chatEventsBySession`.
 5. [Completed] Fix `PiEmbeddedService` started-at/deadline logic to use real current epoch consistently.
@@ -138,4 +142,5 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 ## 7) Related Execution Planning Docs
 
 - `CHAT_RUNTIME_ASYNC_WORK_QUEUE_PLAN.md` — first-pass migration plan for moving chat runtime work off the UI thread with queue-based async execution and completion events.
+- `CHAT_UI_INCREMENTAL_RENDER_PLAN.md` — incremental chat UI append/update migration and completion audit.
 - `DYNAMIC_TASK_DELTA_FULL_EXECUTION_PLAN.md` — dynamic task-delta orchestration hardening and rollout plan/status.

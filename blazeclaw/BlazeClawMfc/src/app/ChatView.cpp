@@ -560,7 +560,7 @@ void CChatView::LoadChatHistoryNative()
 	m_chatState.chatStream.reset();
 	m_chatState.chatStreamStartedAt.reset();
 	m_chatState.chatLoading = false;
-	SyncItemsFromState();
+   RebuildItemsFromState();
 	UpdateControlStates();
 }
 
@@ -881,11 +881,93 @@ void CChatView::PumpChatEventsNative()
 
 void CChatView::SyncItemsFromState()
 {
-	m_items.RemoveAll();
-	if (::IsWindow(m_wndMsgList.GetSafeHwnd()))
+    if (!::IsWindow(m_wndMsgList.GetSafeHwnd()))
 	{
-		m_wndMsgList.ResetContent();
+		return;
 	}
+
+	if (m_renderedMessageCount > m_chatState.chatMessages.size())
+	{
+		RebuildItemsFromState();
+		return;
+	}
+
+	auto appendJsonMessage = [this](const std::string& messageJson)
+		{
+			std::string role;
+			blazeclaw::gateway::json::FindStringField(messageJson, "role", role);
+			const std::string text = ExtractMessageText(messageJson);
+			if (text.empty())
+			{
+				return;
+			}
+
+			CStringW textWide(CA2W(text.c_str(), CP_UTF8));
+			AppendMessage(textWide, role == "user" ? TRUE : FALSE);
+		};
+
+	for (std::size_t i = m_renderedMessageCount;
+		i < m_chatState.chatMessages.size();
+		++i)
+	{
+		appendJsonMessage(m_chatState.chatMessages[i]);
+	}
+	m_renderedMessageCount = m_chatState.chatMessages.size();
+
+	const std::string streamText =
+		m_chatState.chatStream.has_value()
+		? blazeclaw::gateway::json::Trim(m_chatState.chatStream.value())
+		: std::string();
+	if (!streamText.empty())
+	{
+		CStringW streamWide(CA2W(streamText.c_str(), CP_UTF8));
+		if (m_streamItemIndex < 0)
+		{
+			m_streamItemIndex = AppendMessage(streamWide, FALSE);
+		}
+		else if (m_renderedStreamText != streamText)
+		{
+			UpdateItemAt(m_streamItemIndex, streamWide, FALSE);
+		}
+		m_renderedStreamText = streamText;
+	}
+	else if (m_streamItemIndex >= 0)
+	{
+		RemoveItemAt(m_streamItemIndex);
+		m_renderedStreamText.clear();
+	}
+
+	const std::string errorText =
+		(m_chatState.lastError.has_value() && !m_chatState.lastError->empty())
+		? m_chatState.lastError.value()
+		: std::string();
+	if (!errorText.empty())
+	{
+		CStringW errorWide(CA2W(errorText.c_str(), CP_UTF8));
+		CString line;
+		line.Format(L"[Error] %s", errorWide.GetString());
+		if (m_errorItemIndex < 0)
+		{
+			m_errorItemIndex = AppendMessage(line, FALSE);
+		}
+		else if (m_renderedErrorText != errorText)
+		{
+			UpdateItemAt(m_errorItemIndex, line, FALSE);
+		}
+		m_renderedErrorText = errorText;
+	}
+	else if (m_errorItemIndex >= 0)
+	{
+		RemoveItemAt(m_errorItemIndex);
+		m_renderedErrorText.clear();
+	}
+}
+
+void CChatView::RebuildItemsFromState()
+{
+	m_items.RemoveAll();
+	m_wndMsgList.ResetContent();
+	ResetRenderedItemsTracking();
 
 	auto appendJsonMessage = [this](const std::string& messageJson)
 		{
@@ -905,21 +987,94 @@ void CChatView::SyncItemsFromState()
 	{
 		appendJsonMessage(messageJson);
 	}
+	m_renderedMessageCount = m_chatState.chatMessages.size();
 
 	if (m_chatState.chatStream.has_value() &&
 		!blazeclaw::gateway::json::Trim(m_chatState.chatStream.value()).empty())
 	{
-		CStringW streamWide(CA2W(m_chatState.chatStream->c_str(), CP_UTF8));
-		AppendMessage(streamWide, FALSE);
+		m_renderedStreamText = blazeclaw::gateway::json::Trim(
+			m_chatState.chatStream.value());
+		CStringW streamWide(CA2W(m_renderedStreamText.c_str(), CP_UTF8));
+		m_streamItemIndex = AppendMessage(streamWide, FALSE);
 	}
 
 	if (m_chatState.lastError.has_value() && !m_chatState.lastError->empty())
 	{
-		CStringW errorWide(CA2W(m_chatState.lastError->c_str(), CP_UTF8));
+		m_renderedErrorText = m_chatState.lastError.value();
+		CStringW errorWide(CA2W(m_renderedErrorText.c_str(), CP_UTF8));
 		CString line;
 		line.Format(L"[Error] %s", errorWide.GetString());
-		AppendMessage(line, FALSE);
+		m_errorItemIndex = AppendMessage(line, FALSE);
 	}
+}
+
+void CChatView::ResetRenderedItemsTracking()
+{
+	m_renderedMessageCount = 0;
+	m_streamItemIndex = -1;
+	m_errorItemIndex = -1;
+	m_renderedStreamText.clear();
+	m_renderedErrorText.clear();
+}
+
+void CChatView::RemoveItemAt(int index)
+{
+	if (index < 0 || index >= m_items.GetSize())
+	{
+		return;
+	}
+
+	m_items.RemoveAt(index);
+	m_wndMsgList.DeleteString(index);
+
+	if (m_streamItemIndex == index)
+	{
+		m_streamItemIndex = -1;
+	}
+	else if (m_streamItemIndex > index)
+	{
+		--m_streamItemIndex;
+	}
+
+	if (m_errorItemIndex == index)
+	{
+		m_errorItemIndex = -1;
+	}
+	else if (m_errorItemIndex > index)
+	{
+		--m_errorItemIndex;
+	}
+
+	if (m_items.GetSize() > 0)
+	{
+        const int lastIndex = static_cast<int>(m_items.GetSize() - 1);
+		m_wndMsgList.SetCurSel(lastIndex);
+		m_wndMsgList.SetTopIndex(max(0, lastIndex - 1));
+	}
+
+	m_wndMsgList.Invalidate();
+	m_wndMsgList.UpdateWindow();
+}
+
+void CChatView::UpdateItemAt(int index, const CString& strText, BOOL bSelf)
+{
+	if (index < 0 || index >= m_items.GetSize())
+	{
+		return;
+	}
+
+	m_items[index].text = strText;
+	m_items[index].bSelf = bSelf;
+	m_wndMsgList.DeleteString(index);
+	const int inserted = m_wndMsgList.InsertString(index, _T(""));
+	if (inserted != LB_ERR && inserted != LB_ERRSPACE)
+	{
+		m_wndMsgList.SetCurSel(inserted);
+		m_wndMsgList.SetTopIndex(max(0, inserted - 1));
+	}
+
+	m_wndMsgList.Invalidate();
+	m_wndMsgList.UpdateWindow();
 }
 
 void CChatView::UpdateControlStates()
@@ -953,7 +1108,7 @@ void CChatView::AddStatusMessage(const CString& message)
 	AppendMessage(message, FALSE);
 }
 
-void CChatView::AppendMessage(const CString& strText, BOOL bSelf)
+int CChatView::AppendMessage(const CString& strText, BOOL bSelf)
 {
 	CHAT_ITEM item;
 	item.text = strText;
@@ -968,6 +1123,8 @@ void CChatView::AppendMessage(const CString& strText, BOOL bSelf)
 		m_wndMsgList.SetCurSel(nIndex);
 		m_wndMsgList.SetTopIndex(max(0, nIndex - 1));
 	}
+
+	return nIndex;
 }
 
 static void DrawBubble(CDC& dc, const CRect& rcBubble, bool bSelf)
