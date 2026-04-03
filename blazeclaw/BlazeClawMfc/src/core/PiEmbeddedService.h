@@ -6,9 +6,11 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace blazeclaw::core {
 
@@ -54,6 +56,7 @@ namespace blazeclaw::core {
 		std::function<blazeclaw::gateway::ToolExecuteResult(
 			const std::string&,
 			const std::optional<std::string>&)> toolExecutor;
+      std::function<bool()> isCancellationRequested;
 	};
 
 	struct EmbeddedTaskDelta {
@@ -111,6 +114,8 @@ namespace blazeclaw::core {
 		[[nodiscard]] std::vector<EmbeddedTaskDelta> GetTaskDeltas(
 			const std::string& runId) const;
 
+		void AbortRun(const std::string& runId);
+
 		void ClearTaskDeltas(const std::string& runId);
 
 		[[nodiscard]] bool ValidateFixtureScenarios(
@@ -119,6 +124,8 @@ namespace blazeclaw::core {
 
 	private:
 		blazeclaw::config::AppConfig m_config;
+      mutable std::mutex m_cancelMutex;
+		std::unordered_set<std::string> m_cancelledRunIds;
 		std::unordered_map<std::string, EmbeddedRunRecord> m_runsById;
 		std::unordered_map<std::string, std::vector<EmbeddedTaskDelta>>
 			m_taskDeltasByRunId;
@@ -126,6 +133,9 @@ namespace blazeclaw::core {
 		void AppendTaskDelta(
 			const std::string& runId,
 			const EmbeddedTaskDelta& delta);
+
+		[[nodiscard]] bool IsRunCancelled(const std::string& runId) const;
+		void ClearRunCancellation(const std::string& runId);
 	};
 
 } // namespace blazeclaw::core

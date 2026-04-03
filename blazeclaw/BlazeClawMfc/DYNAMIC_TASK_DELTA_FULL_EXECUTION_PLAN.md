@@ -152,6 +152,16 @@ Upgrade the `dynamic_task_delta` path from decomposition-only behavior to a full
 2. Emit cancellation terminal deltas consistently.
 3. Guarantee state cleanup for all terminal outcomes.
 
+### Phase 5 implementation status
+
+- Completed in code:
+  - Added cancellation callback signaling in embedded execution request contract.
+  - Added cancellation checks at execution-loop and retry boundaries.
+  - Added deterministic cancellation terminalization (`final` delta with `skipped` + `embedded_run_cancelled`).
+  - Added in-memory cancellation state tracking and cleanup in `PiEmbeddedService` terminal paths.
+  - Wired `chat.abort` path into embedded cancellation signaling via `ServiceManager`.
+  - Added fixture coverage for cancellation-aware stop behavior and terminal-delta normalization.
+
 ## Phase 6 — Gateway integration parity
 
 1. Ensure `chat.send` runtime path always reflects executed deltas.

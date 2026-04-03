@@ -473,6 +473,13 @@ and Steps 6-10 must produce evidence for both lanes.
 - Maintained allowlist and arg-mode validation gates before tool execution.
 - Added fixture validation for max-step policy failure (`embedded_max_steps_exceeded`).
 
+### Completed now: Dynamic Task-Delta Full Plan Phase 5 follow-up
+- Added embedded runtime cancellation signaling (`isCancellationRequested`) and run-level cancel markers.
+- Wired cancellation checks into execution and retry-loop boundaries.
+- Added deterministic cancellation terminalization with normalized final task delta (`status=skipped`, `errorCode=embedded_run_cancelled`).
+- Added cancellation-state cleanup on all terminal paths.
+- Mapped `chat.abort` to embedded cancellation tracking in `ServiceManager` and added cancellation fixture coverage.
+
 ### Completed now: Step 13 (Timestamp/Deadline Consistency)
 - Replaced synthetic embedded run start timestamps with real epoch timestamps from `CurrentEpochMs()`.
 - Aligned completion timestamps with real epoch values for both success and failure paths.

@@ -213,9 +213,14 @@ namespace blazeclaw::core {
 		[[nodiscard]] bool IsDeepSeekRunCancelled(const std::string& runId) const;
 		void MarkDeepSeekRunCancelled(const std::string& runId);
 		void ClearDeepSeekRunCancelled(const std::string& runId);
+		[[nodiscard]] bool IsEmbeddedRunCancelled(const std::string& runId) const;
+		void MarkEmbeddedRunCancelled(const std::string& runId);
+		void ClearEmbeddedRunCancelled(const std::string& runId);
 
 		mutable std::mutex m_deepSeekCancelMutex;
 		mutable std::unordered_map<std::string, bool> m_deepSeekCancelledRuns;
+      mutable std::mutex m_embeddedCancelMutex;
+		mutable std::unordered_map<std::string, bool> m_embeddedCancelledRuns;
 	};
 
 } // namespace blazeclaw::core

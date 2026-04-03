@@ -2246,7 +2246,11 @@ namespace blazeclaw::core {
 											const std::optional<std::string>& argsJson) {
 						  return m_gatewayHost.ExecuteRuntimeTool(tool, argsJson);
 						},
+					 .isCancellationRequested = [this, runId = request.runId]() {
+							return IsEmbeddedRunCancelled(runId);
+						},
 					});
+				ClearEmbeddedRunCancelled(request.runId);
 
 				if (!embeddedExecution.accepted) {
 					return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
@@ -2586,6 +2590,8 @@ namespace blazeclaw::core {
 
 		m_gatewayHost.SetChatAbortCallback([this](
 			const blazeclaw::gateway::GatewayHost::ChatAbortRequest& request) {
+				MarkEmbeddedRunCancelled(request.runId);
+
 				if (m_activeChatProvider == "deepseek") {
 					MarkDeepSeekRunCancelled(request.runId);
 					return true;
@@ -3088,6 +3094,30 @@ namespace blazeclaw::core {
 
 		std::scoped_lock lock(m_deepSeekCancelMutex);
 		m_deepSeekCancelledRuns.erase(runId);
+	}
+
+	bool ServiceManager::IsEmbeddedRunCancelled(const std::string& runId) const {
+		std::scoped_lock lock(m_embeddedCancelMutex);
+		const auto it = m_embeddedCancelledRuns.find(runId);
+		return it != m_embeddedCancelledRuns.end() && it->second;
+	}
+
+	void ServiceManager::MarkEmbeddedRunCancelled(const std::string& runId) {
+		if (runId.empty()) {
+			return;
+		}
+
+		std::scoped_lock lock(m_embeddedCancelMutex);
+		m_embeddedCancelledRuns.insert_or_assign(runId, true);
+	}
+
+	void ServiceManager::ClearEmbeddedRunCancelled(const std::string& runId) {
+		if (runId.empty()) {
+			return;
+		}
+
+		std::scoped_lock lock(m_embeddedCancelMutex);
+		m_embeddedCancelledRuns.erase(runId);
 	}
 
 	std::optional<std::string> ServiceManager::ExtractDeepSeekAssistantText(

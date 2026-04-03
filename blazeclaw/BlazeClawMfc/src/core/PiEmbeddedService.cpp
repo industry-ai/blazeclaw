@@ -34,6 +34,7 @@ namespace blazeclaw::core {
 		constexpr const char* kErrorLoopDetected = "embedded_loop_detected";
 		constexpr const char* kErrorCompletionFailed = "embedded_completion_failed";
 		constexpr const char* kErrorToolExecutionFailed = "embedded_tool_execution_failed";
+		constexpr const char* kErrorRunCancelled = "embedded_run_cancelled";
 		constexpr std::size_t kPlanningMaxSteps = 12;
 		constexpr std::size_t kMaxPolicySteps = 6;
 
@@ -697,6 +698,38 @@ namespace blazeclaw::core {
 						.stepLabel = "run_terminal",
 						});
 			};
+		const auto finalizeCancelled =
+			[this, &result, &queued, &appendDelta]() {
+			const bool completed =
+				CompleteRun(queued.runId, kStatusSkipped, CurrentEpochMs());
+			FinalizeExecutionResult(
+				result,
+				kStatusSkipped,
+				completed ? std::string("cancelled") : std::string("embedded_completion_failed"),
+				completed ? std::string(kErrorRunCancelled) : std::string(kErrorCompletionFailed),
+				completed ? std::string("embedded run cancelled") : std::string("embedded completion failed"),
+				{});
+			appendDelta(EmbeddedTaskDelta{
+				.phase = kPhaseFinal,
+				.resultJson = result.errorMessage,
+				.status = kStatusSkipped,
+				.errorCode = result.errorCode,
+				.stepLabel = "run_terminal",
+				});
+			};
+		const auto isCancelled =
+			[this, &request, &queued]() {
+			if (request.isCancellationRequested && request.isCancellationRequested()) {
+				return true;
+			}
+
+			return IsRunCancelled(queued.runId);
+			};
+		const auto completeWithSnapshot =
+			[this, &result, &queued]() {
+			ClearRunCancellation(queued.runId);
+			result.taskDeltas = GetTaskDeltas(queued.runId);
+			};
 
 		result.handled = true;
 		if (executionPlan.size() > kMaxPolicySteps) {
@@ -704,7 +737,7 @@ namespace blazeclaw::core {
 				"max_steps_exceeded",
 				kErrorMaxStepsExceeded,
 				"decomposition exceeded maximum policy steps");
-			result.taskDeltas = GetTaskDeltas(queued.runId);
+			completeWithSnapshot();
 			return result;
 		}
 
@@ -714,7 +747,7 @@ namespace blazeclaw::core {
 				validationFailure->reason,
 				validationFailure->errorCode,
 				validationFailure->errorMessage);
-			result.taskDeltas = GetTaskDeltas(queued.runId);
+			completeWithSnapshot();
 			return result;
 		}
 
@@ -744,6 +777,12 @@ namespace blazeclaw::core {
 
 		std::unordered_map<std::string, std::size_t> repeatCounts;
 		for (const auto& step : executionPlan) {
+			if (isCancelled()) {
+				finalizeCancelled();
+				completeWithSnapshot();
+				return result;
+			}
+
 			const std::size_t stepIndex = step.index;
 			const std::string& toolName = step.toolName;
 			if (hasTimedOut(CurrentEpochMs())) {
@@ -751,7 +790,7 @@ namespace blazeclaw::core {
 					"deadline_exceeded",
 					kErrorDeadlineExceeded,
 					"embedded run exceeded timeout");
-				result.taskDeltas = GetTaskDeltas(queued.runId);
+				completeWithSnapshot();
 				return result;
 			}
 
@@ -769,7 +808,7 @@ namespace blazeclaw::core {
 					"invalid_args",
 					kErrorInvalidArgs,
 					"tool args do not satisfy binding arg mode");
-				result.taskDeltas = GetTaskDeltas(queued.runId);
+				completeWithSnapshot();
 				return result;
 			}
 
@@ -778,7 +817,7 @@ namespace blazeclaw::core {
 					"tool_blocked",
 					kErrorToolBlocked,
 					"tool is not enabled in runtime catalog");
-				result.taskDeltas = GetTaskDeltas(queued.runId);
+				completeWithSnapshot();
 				return result;
 			}
 
@@ -804,7 +843,7 @@ namespace blazeclaw::core {
 					"loop_detected",
 					kErrorLoopDetected,
 					"repeated tool call signature exceeded limit");
-				result.taskDeltas = GetTaskDeltas(queued.runId);
+				completeWithSnapshot();
 				return result;
 			}
 			repeatCounts.insert_or_assign(callSignature, repeatCount + 1);
@@ -812,6 +851,10 @@ namespace blazeclaw::core {
 			blazeclaw::gateway::ToolExecuteResultV2 execution{};
 			static constexpr std::size_t kMaxRetries = 2;
 			for (std::size_t attempt = 0; attempt < kMaxRetries; ++attempt) {
+				if (isCancelled()) {
+					break;
+				}
+
 				if (hasTimedOut(CurrentEpochMs())) {
 					execution = blazeclaw::gateway::ToolExecuteResultV2{
 						.tool = toolName,
@@ -840,12 +883,18 @@ namespace blazeclaw::core {
 				}
 			}
 
+			if (isCancelled()) {
+				finalizeCancelled();
+				completeWithSnapshot();
+				return result;
+			}
+
 			if (hasTimedOut(CurrentEpochMs())) {
 				finalizeFailure(
 					"deadline_exceeded",
 					kErrorDeadlineExceeded,
 					"embedded run exceeded timeout");
-				result.taskDeltas = GetTaskDeltas(queued.runId);
+				completeWithSnapshot();
 				return result;
 			}
 			result.assistantDeltas.push_back(
@@ -883,7 +932,7 @@ namespace blazeclaw::core {
 					execution.errorMessage.empty()
 					? "tool execution failed"
 					: execution.errorMessage);
-				result.taskDeltas = GetTaskDeltas(queued.runId);
+				completeWithSnapshot();
 				return result;
 			}
 
@@ -895,7 +944,7 @@ namespace blazeclaw::core {
 				"embedded_completion_failed",
 				kErrorCompletionFailed,
 				"embedded completion failed");
-			result.taskDeltas = GetTaskDeltas(queued.runId);
+			completeWithSnapshot();
 			return result;
 		}
 		FinalizeExecutionResult(
@@ -913,7 +962,7 @@ namespace blazeclaw::core {
 				.status = kStatusCompleted,
 				.stepLabel = "run_terminal",
 			});
-		result.taskDeltas = GetTaskDeltas(queued.runId);
+		completeWithSnapshot();
 		return result;
 	}
 
@@ -962,6 +1011,15 @@ namespace blazeclaw::core {
 		return it->second;
 	}
 
+	void PiEmbeddedService::AbortRun(const std::string& runId) {
+		if (runId.empty()) {
+			return;
+		}
+
+		std::scoped_lock lock(m_cancelMutex);
+		m_cancelledRunIds.insert(runId);
+	}
+
 	void PiEmbeddedService::ClearTaskDeltas(const std::string& runId) {
 		if (runId.empty()) {
 			m_taskDeltasByRunId.clear();
@@ -983,6 +1041,24 @@ namespace blazeclaw::core {
 		NormalizeTaskDeltaForContract(normalized);
 		normalized.index = deltas.size();
 		deltas.push_back(std::move(normalized));
+	}
+
+	bool PiEmbeddedService::IsRunCancelled(const std::string& runId) const {
+		if (runId.empty()) {
+			return false;
+		}
+
+		std::scoped_lock lock(m_cancelMutex);
+		return m_cancelledRunIds.find(runId) != m_cancelledRunIds.end();
+	}
+
+	void PiEmbeddedService::ClearRunCancellation(const std::string& runId) {
+		if (runId.empty()) {
+			return;
+		}
+
+		std::scoped_lock lock(m_cancelMutex);
+		m_cancelledRunIds.erase(runId);
 	}
 
 	bool PiEmbeddedService::ValidateFixtureScenarios(
@@ -1310,6 +1386,83 @@ namespace blazeclaw::core {
 		if (maxStepResult.success ||
 			maxStepResult.errorCode != "embedded_max_steps_exceeded") {
 			outError = L"Fixture validation failed: expected max-step policy failure.";
+			return false;
+		}
+
+		PiEmbeddedService cancelledRunService;
+		cancelledRunService.Configure(cfg);
+		bool cancellationRequested = false;
+		std::size_t cancelExecutions = 0;
+		const auto cancelledResult = cancelledRunService.ExecuteRun(
+			EmbeddedRuntimeExecutionRequest{
+				.run = EmbeddedRunRequest{
+					.sessionId = "main",
+					.agentId = "default",
+					.message = "cancel after first tool",
+					},
+				.skillsPrompt = "cancel.step1 cancel.step2",
+				.toolBindings = {
+					EmbeddedToolBinding{
+						.commandName = "cancel.step1",
+						.description = "cancel step1",
+						.toolName = "cancel.step1",
+						.argMode = "raw",
+					},
+					EmbeddedToolBinding{
+						.commandName = "cancel.step2",
+						.description = "cancel step2",
+						.toolName = "cancel.step2",
+						.argMode = "raw",
+					},
+				},
+				.runtimeTools = {
+					blazeclaw::gateway::ToolCatalogEntry{
+						.id = "cancel.step1",
+						.label = "Cancel Step1",
+						.category = "cancel",
+						.enabled = true,
+					},
+					blazeclaw::gateway::ToolCatalogEntry{
+						.id = "cancel.step2",
+						.label = "Cancel Step2",
+						.category = "cancel",
+						.enabled = true,
+					},
+				},
+				.enableDynamicToolLoop = true,
+				.toolExecutor = [&](const std::string& requestedTool,
+					const std::optional<std::string>& argsJson) {
+					++cancelExecutions;
+					cancellationRequested = true;
+					return blazeclaw::gateway::ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = true,
+						.status = "ok",
+						.output = argsJson.value_or("{}"),
+					};
+				},
+				.isCancellationRequested = [&]() {
+					return cancellationRequested;
+				},
+			});
+
+		if (cancelledResult.success ||
+			cancelledResult.errorCode != "embedded_run_cancelled" ||
+			cancelExecutions != 1) {
+			outError = L"Fixture validation failed: expected cancellation to stop execution with deterministic cancelled terminal state.";
+			return false;
+		}
+
+		const bool hasCancelledTerminal = std::any_of(
+			cancelledResult.taskDeltas.begin(),
+			cancelledResult.taskDeltas.end(),
+			[](const EmbeddedTaskDelta& delta) {
+				return delta.phase == "final" &&
+					delta.status == "skipped" &&
+					delta.errorCode == "embedded_run_cancelled";
+			});
+		if (!hasCancelledTerminal) {
+			outError = L"Fixture validation failed: expected cancellation final delta normalization.";
 			return false;
 		}
 
