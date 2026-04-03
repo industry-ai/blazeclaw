@@ -499,11 +499,11 @@ and Steps 6-10 must produce evidence for both lanes.
 - Added startup-configurable promotion thresholds through environment variables and exposed readiness metrics in operator diagnostics.
 
 ### Verification audit update
-- Overall implementation status: **partially accomplished** (core phases implemented, final completion criteria not fully closed).
+- Overall implementation status: **fully accomplished** (core phases implemented and completion criteria closed).
 - Remaining closure work:
   - protocol contract/schema-validator registration parity for runtime task-delta methods has been completed,
   - explicit `BlazeClawMfc.Tests` unit/integration coverage for task-delta runtime and gateway event/retrieval parity has been completed,
-  - add optional task-delta filesystem persistence/replay hook beyond bounded in-memory retention.
+- optional task-delta filesystem persistence/replay hook beyond bounded in-memory retention has been completed.
 
 ### Completed now: Step 13 (Timestamp/Deadline Consistency)
 - Replaced synthetic embedded run start timestamps with real epoch timestamps from `CurrentEpochMs()`.

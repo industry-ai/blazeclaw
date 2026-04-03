@@ -226,7 +226,11 @@ Upgrade the `dynamic_task_delta` path from decomposition-only behavior to a full
      - `gateway.runtime.taskDeltas.clear` retention/clear behavior,
      - `chat.abort -> chat.events.poll` aborted terminal event parity and queue drain behavior.
 3. **Task-delta filesystem persistence hook is not implemented.**
-   - In-memory bounded retention exists, but optional replay/audit persistence for task deltas is not present.
+   - Filesystem persistence hook is now implemented in gateway runtime state path (`taskdeltas.state`) with:
+     - bounded in-memory retention,
+     - bounded persisted payload size control,
+     - load-on-start and save-on-update/save-on-stop replay behavior.
+   - Dedicated parity coverage now verifies task-delta replay across host restart in `BlazeClawMfc.Tests`.
 
 ## Candidate File Touchpoints
 
@@ -246,3 +250,11 @@ Upgrade the `dynamic_task_delta` path from decomposition-only behavior to a full
 - Cancellation, timeout, retries, and loop/policy failures are enforced and observable.
 - Gateway/API consumers can reliably retrieve and interpret run deltas.
 - Test suite covers core and failure paths with stable, repeatable assertions.
+
+### Completion criteria audit (latest)
+
+- ✅ Every `dynamic_task_delta` run executes planned deltas end-to-end.
+- ✅ Every run has deterministic terminal state with complete task-delta history.
+- ✅ Cancellation, timeout, retries, and loop/policy failures are enforced and observable.
+- ✅ Gateway/API consumers can reliably retrieve and interpret run deltas.
+- ✅ Test suite includes dedicated parity assertions for runtime task-delta retrieval, clear, abort/event parity, and persistence replay.

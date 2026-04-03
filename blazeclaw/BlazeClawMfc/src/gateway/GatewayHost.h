@@ -265,6 +265,8 @@ namespace blazeclaw::gateway {
 		void RegisterSecurityOpsHandlers();
 		void RegisterRuntimeHandlers();
 		void RegisterTransportHandlers();
+		void LoadPersistedTaskDeltas();
+		void PersistTaskDeltas() const;
 
 		bool m_running = false;
 		std::string m_bindAddress;
@@ -314,6 +316,8 @@ namespace blazeclaw::gateway {
 		std::unordered_map<std::string, ChatRunState> m_chatRunsById;
 		std::unordered_map<std::string, std::string> m_chatRunByIdempotency;
 		std::unordered_map<std::string, std::vector<ChatRuntimeResult::TaskDeltaEntry>> m_taskDeltasByRunId;
+		std::size_t m_taskDeltasRetentionLimit = 64;
+		std::size_t m_taskDeltasMaxPayloadBytes = 1024 * 1024;
 		std::uint64_t m_taskDeltaRunSuccessCount = 0;
 		std::uint64_t m_taskDeltaRunFailureCount = 0;
 		std::uint64_t m_taskDeltaRunTimeoutCount = 0;

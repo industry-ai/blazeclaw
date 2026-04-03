@@ -1824,6 +1824,7 @@ namespace blazeclaw::gateway {
 							}
 
 							m_taskDeltasByRunId.insert_or_assign(runId, normalizedTaskDeltas);
+							PersistTaskDeltas();
 							for (const auto& delta : normalizedTaskDeltas) {
 								EmitTelemetryEvent(
 									"gateway.taskdelta.transition",
@@ -1892,6 +1893,7 @@ namespace blazeclaw::gateway {
 
 							if (m_taskDeltasByRunId.size() > 64) {
 								m_taskDeltasByRunId.erase(m_taskDeltasByRunId.begin());
+								PersistTaskDeltas();
 							}
 					};
 

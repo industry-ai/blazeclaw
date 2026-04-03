@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <cstdlib>
 
 using namespace blazeclaw::gateway;
 
@@ -265,6 +266,103 @@ TEST_CASE(
 	REQUIRE(deltasResponse.payloadJson->find("\"toolName\":\"weather.lookup\"") != std::string::npos);
 
 	host.Stop();
+}
+
+TEST_CASE(
+	"Parity coverage: task-delta persistence survives host restart",
+	"[parity][chat][taskdeltas][persistence]") {
+	const auto tempStateRoot = std::filesystem::temp_directory_path() /
+		("blazeclaw_taskdelta_state_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(tempStateRoot);
+
+	char* previousLocalAppData = nullptr;
+	size_t previousLen = 0;
+	_dupenv_s(&previousLocalAppData, &previousLen, "LOCALAPPDATA");
+
+	const std::string localAppDataValue = tempStateRoot.string();
+	_putenv_s("LOCALAPPDATA", localAppDataValue.c_str());
+
+	{
+		GatewayHost host;
+		blazeclaw::config::GatewayConfig gatewayConfig;
+		REQUIRE(host.Start(gatewayConfig));
+
+		host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+		host.SetChatRuntimeCallback(
+			[](const GatewayHost::ChatRuntimeRequest& request) {
+				GatewayHost::ChatRuntimeResult result;
+				result.ok = true;
+				result.assistantText = "persist me";
+				result.assistantDeltas = { "persist me" };
+				result.taskDeltas = {
+					GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+						.index = 0,
+						.runId = request.runId,
+						.sessionId = request.sessionKey,
+						.phase = "plan",
+						.resultJson = "[\"weather.lookup\"]",
+						.status = "planned",
+						.stepLabel = "execution_plan",
+					},
+					GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+						.index = 1,
+						.runId = request.runId,
+						.sessionId = request.sessionKey,
+						.phase = "final",
+					  .resultJson = "persist me",
+						.status = "completed",
+						.stepLabel = "run_terminal",
+					},
+				};
+				result.modelId = "default";
+				return result;
+			});
+
+		const auto sendResponse = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = "chat-persist-1",
+				.method = "chat.send",
+				.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"persist task deltas\"}"),
+			});
+		REQUIRE(sendResponse.ok);
+		REQUIRE(sendResponse.payloadJson.has_value());
+
+		host.Stop();
+	}
+
+	{
+		GatewayHost host;
+		blazeclaw::config::GatewayConfig gatewayConfig;
+		REQUIRE(host.Start(gatewayConfig));
+
+		const auto getResponse = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = "chat-persist-1-get-after-restart",
+				.method = "gateway.runtime.taskDeltas.get",
+				.paramsJson = std::string("{\"runId\":\"chat-persist-1\"}"),
+			});
+
+		REQUIRE(getResponse.ok);
+		REQUIRE(getResponse.payloadJson.has_value());
+		REQUIRE(getResponse.payloadJson->find("\"count\":2") != std::string::npos);
+		REQUIRE(getResponse.payloadJson->find("\"phase\":\"plan\"") != std::string::npos);
+		REQUIRE(getResponse.payloadJson->find("\"phase\":\"final\"") != std::string::npos);
+
+		host.Stop();
+	}
+
+	if (previousLocalAppData != nullptr && previousLen > 0 && previousLocalAppData[0] != '\0') {
+		_putenv_s("LOCALAPPDATA", previousLocalAppData);
+	}
+	else {
+		_putenv_s("LOCALAPPDATA", "");
+	}
+
+	if (previousLocalAppData != nullptr) {
+		free(previousLocalAppData);
+	}
+
+	std::filesystem::remove_all(tempStateRoot);
 }
 
 TEST_CASE(

@@ -12,9 +12,11 @@
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <windows.h>
 #include <vector>
 #include <sstream>
+#include <nlohmann/json.hpp>
 
 namespace blazeclaw::gateway {
 	namespace {
@@ -319,6 +321,62 @@ namespace blazeclaw::gateway {
 				std::string(tool.enabled ? "true" : "false") + "}";
 		}
 
+		std::string SerializeTaskDeltaEntry(
+			const GatewayHost::ChatRuntimeResult::TaskDeltaEntry& delta) {
+			return "{\"index\":" + std::to_string(delta.index) +
+				",\"runId\":\"" + EscapeJson(delta.runId) +
+				"\",\"sessionId\":\"" + EscapeJson(delta.sessionId) +
+				"\",\"phase\":\"" + EscapeJson(delta.phase) +
+				"\",\"toolName\":\"" + EscapeJson(delta.toolName) +
+				"\",\"argsJson\":\"" + EscapeJson(delta.argsJson) +
+				"\",\"resultJson\":\"" + EscapeJson(delta.resultJson) +
+				"\",\"status\":\"" + EscapeJson(delta.status) +
+				"\",\"errorCode\":\"" + EscapeJson(delta.errorCode) +
+				"\",\"startedAtMs\":" + std::to_string(delta.startedAtMs) +
+				",\"completedAtMs\":" + std::to_string(delta.completedAtMs) +
+				",\"latencyMs\":" + std::to_string(delta.latencyMs) +
+				",\"modelTurnId\":\"" + EscapeJson(delta.modelTurnId) +
+				"\",\"stepLabel\":\"" + EscapeJson(delta.stepLabel) + "\"}";
+		}
+
+		std::string SerializeTaskDeltaState(
+			const std::unordered_map<std::string, std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry>>& state) {
+			std::vector<std::string> runIds;
+			runIds.reserve(state.size());
+			for (const auto& [runId, _] : state) {
+				runIds.push_back(runId);
+			}
+
+			std::sort(runIds.begin(), runIds.end());
+
+			std::string json = "{\"runs\":[";
+			bool firstRun = true;
+			for (const auto& runId : runIds) {
+				const auto it = state.find(runId);
+				if (it == state.end()) {
+					continue;
+				}
+
+				if (!firstRun) {
+					json += ",";
+				}
+				firstRun = false;
+
+				json += "{\"runId\":\"" + EscapeJson(runId) + "\",\"taskDeltas\":[";
+				for (std::size_t i = 0; i < it->second.size(); ++i) {
+					if (i > 0) {
+						json += ",";
+					}
+
+					json += SerializeTaskDeltaEntry(it->second[i]);
+				}
+				json += "]}";
+			}
+
+			json += "]}";
+			return json;
+		}
+
 		std::string SerializeToolExecution(const ToolExecutionEntry& execution) {
 			return "{\"tool\":\"" + EscapeJson(execution.tool) + "\",\"executed\":" +
 				std::string(execution.executed ? "true" : "false") +
@@ -499,6 +557,7 @@ namespace blazeclaw::gateway {
 		m_extensionLifecycle.ActivateAll(m_toolRegistry);
 		EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
 		m_approvalStore.Initialize(ResolveGatewayStateFilePath("approvals.json").string());
+		LoadPersistedTaskDeltas();
 		m_toolRegistry.RegisterRuntimeTool(
 			ToolCatalogEntry{
 				.id = "chat.send",
@@ -630,6 +689,7 @@ namespace blazeclaw::gateway {
 		m_transport.Stop();
 		// Deactivate registered extension tools and clear approval state
 		m_extensionLifecycle.DeactivateAll(m_toolRegistry);
+		PersistTaskDeltas();
 		m_running = false;
 		m_bindAddress.clear();
 		m_port = 0;
@@ -653,6 +713,113 @@ namespace blazeclaw::gateway {
 		}
 
 		m_embeddedOrchestrationPath = "dynamic_task_delta";
+	}
+
+	void GatewayHost::LoadPersistedTaskDeltas() {
+		const std::filesystem::path persistencePath =
+			ResolveGatewayStateFilePath("taskdeltas.state");
+		std::ifstream input(persistencePath, std::ios::in | std::ios::binary);
+		if (!input.is_open()) {
+			return;
+		}
+
+		std::ostringstream buffer;
+		buffer << input.rdbuf();
+		const std::string jsonState = buffer.str();
+		if (jsonState.empty()) {
+			return;
+		}
+
+		if (jsonState.size() > m_taskDeltasMaxPayloadBytes) {
+			return;
+		}
+
+		nlohmann::json root;
+		try {
+			root = nlohmann::json::parse(jsonState);
+		}
+		catch (...) {
+			return;
+		}
+
+		if (!root.is_object() || !root.contains("runs") || !root["runs"].is_array()) {
+			return;
+		}
+
+		m_taskDeltasByRunId.clear();
+		for (const auto& runNode : root["runs"]) {
+			if (!runNode.is_object() ||
+				!runNode.contains("runId") ||
+				!runNode["runId"].is_string() ||
+				!runNode.contains("taskDeltas") ||
+				!runNode["taskDeltas"].is_array()) {
+				continue;
+			}
+
+			const std::string runId = runNode["runId"].get<std::string>();
+			if (runId.empty()) {
+				continue;
+			}
+
+			auto& deltas = m_taskDeltasByRunId[runId];
+			for (const auto& deltaNode : runNode["taskDeltas"]) {
+				if (!deltaNode.is_object()) {
+					continue;
+				}
+
+				ChatRuntimeResult::TaskDeltaEntry delta;
+				delta.index = deltaNode.value("index", std::size_t{ 0 });
+				delta.runId = deltaNode.value("runId", runId);
+				delta.sessionId = deltaNode.value("sessionId", std::string{});
+				delta.phase = deltaNode.value("phase", std::string{});
+				delta.toolName = deltaNode.value("toolName", std::string{});
+				delta.argsJson = deltaNode.value("argsJson", std::string{});
+				delta.resultJson = deltaNode.value("resultJson", std::string{});
+				delta.status = deltaNode.value("status", std::string{});
+				delta.errorCode = deltaNode.value("errorCode", std::string{});
+				delta.startedAtMs = deltaNode.value("startedAtMs", std::uint64_t{ 0 });
+				delta.completedAtMs = deltaNode.value("completedAtMs", std::uint64_t{ 0 });
+				delta.latencyMs = deltaNode.value("latencyMs", std::uint64_t{ 0 });
+				delta.modelTurnId = deltaNode.value("modelTurnId", std::string{});
+				delta.stepLabel = deltaNode.value("stepLabel", std::string{});
+				deltas.push_back(std::move(delta));
+			}
+
+			std::sort(
+				deltas.begin(),
+				deltas.end(),
+				[](const ChatRuntimeResult::TaskDeltaEntry& left,
+					const ChatRuntimeResult::TaskDeltaEntry& right) {
+						return left.index < right.index;
+				});
+		}
+
+		if (m_taskDeltasByRunId.size() > m_taskDeltasRetentionLimit) {
+			while (m_taskDeltasByRunId.size() > m_taskDeltasRetentionLimit) {
+				m_taskDeltasByRunId.erase(m_taskDeltasByRunId.begin());
+			}
+		}
+	}
+
+	void GatewayHost::PersistTaskDeltas() const {
+		const std::filesystem::path persistencePath =
+			ResolveGatewayStateFilePath("taskdeltas.state");
+		std::error_code ec;
+		std::filesystem::create_directories(persistencePath.parent_path(), ec);
+
+		const std::string jsonState = SerializeTaskDeltaState(m_taskDeltasByRunId);
+		if (jsonState.size() > m_taskDeltasMaxPayloadBytes) {
+			return;
+		}
+
+		std::ofstream output(
+			persistencePath,
+			std::ios::out | std::ios::trunc | std::ios::binary);
+		if (!output.is_open()) {
+			return;
+		}
+
+		output.write(jsonState.data(), static_cast<std::streamsize>(jsonState.size()));
 	}
 
 	void GatewayHost::SetChatRuntimeCallback(
