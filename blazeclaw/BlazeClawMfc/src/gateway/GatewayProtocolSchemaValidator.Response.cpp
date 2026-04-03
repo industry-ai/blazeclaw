@@ -20,7 +20,7 @@ namespace blazeclaw::gateway::protocol {
 		constexpr const char* kChannelAdapterFieldTokens[] = { "id", "label", "defaultAccountId" };
 		constexpr const char* kFileFieldTokens[] = { "path", "size", "updatedMs", "content" };
 		constexpr const char* kFileListFieldTokens[] = { "path", "size", "updatedMs" };
-      bool PayloadContainsGeneratedRequiredEvents(const std::string& payload) {
+		bool PayloadContainsGeneratedRequiredEvents(const std::string& payload) {
 			for (const char* eventName : generated::GetSchemaRequiredEvents()) {
 				if (eventName == nullptr) {
 					continue;
@@ -33,6 +33,31 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			return true;
+		}
+
+		bool IsFieldNull(const std::string& json, const std::string& fieldName) {
+			std::size_t tokenPos = 0;
+			if (!ContainsFieldToken(json, fieldName, tokenPos)) {
+				return false;
+			}
+
+			std::size_t valuePos = json.find(':', tokenPos);
+			if (valuePos == std::string::npos) {
+				return false;
+			}
+
+			++valuePos;
+			while (valuePos < json.size() &&
+				std::isspace(static_cast<unsigned char>(json[valuePos])) != 0) {
+				++valuePos;
+			}
+
+			return json.compare(valuePos, 4, "null") == 0;
+		}
+
+		bool HasFieldToken(const std::string& json, const std::string& fieldName) {
+			std::size_t tokenPos = 0;
+			return ContainsFieldToken(json, fieldName, tokenPos);
 		}
 
 		bool PayloadContainsGeneratedMethodRules(const std::string& payload) {
@@ -328,7 +353,7 @@ namespace blazeclaw::gateway::protocol {
 		const std::string payload = response.payloadJson.value_or("{}");
 
 		const std::unordered_map<std::string, std::function<bool()>> groupedValidators = {
-            { "gateway.embeddings.generate", [&]() {
+			{ "gateway.embeddings.generate", [&]() {
 				if (!IsFieldValueType(payload, "vector", '[') ||
 					!IsFieldNumber(payload, "dimension") ||
 					!IsFieldValueType(payload, "provider", '"') ||
@@ -401,7 +426,7 @@ namespace blazeclaw::gateway::protocol {
 					issue,
 					"`gateway.channels.accounts.get` requires account fields `channel`, `accountId`, `label`, `active`, and `connected`.");
 			} },
-            { "gateway.tools.executions.list", [&]() {
+			{ "gateway.tools.executions.list", [&]() {
 				return ValidateArrayWithOptionalEntryTokens(
 					payload,
 					"executions",
@@ -409,7 +434,7 @@ namespace blazeclaw::gateway::protocol {
 					issue,
 					"`gateway.tools.executions.list` requires execution entries with `tool`, `executed`, `status`, `output`, and `argsProvided` fields.");
 			} },
-            { "gateway.tools.executions.count", [&]() {
+			{ "gateway.tools.executions.count", [&]() {
 				return ValidateNumericFields(
 					payload,
 					{ "count", "succeeded", "failed" },
@@ -441,6 +466,130 @@ namespace blazeclaw::gateway::protocol {
 					{ "cleared", "remaining" },
 					issue,
 					"`gateway.tools.executions.clear` requires numeric fields `cleared` and `remaining`.");
+			} },
+			{ "gateway.runtime.taskDeltas.get", [&]() {
+				if (!IsFieldValueType(payload, "runId", '"') ||
+					!IsFieldValueType(payload, "taskDeltas", '[') ||
+					!IsFieldNumber(payload, "count")) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`gateway.runtime.taskDeltas.get` requires `runId`, `taskDeltas`, and `count` fields.");
+					return false;
+				}
+
+				if (!IsArrayFieldExplicitlyEmpty(payload, "taskDeltas") &&
+					!PayloadContainsAllFieldTokens(
+						payload,
+						{ "index", "phase", "status", "stepLabel", "startedAtMs", "completedAtMs", "latencyMs" })) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`gateway.runtime.taskDeltas.get` entries require task-delta contract fields.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "gateway.runtime.taskDeltas.clear", [&]() {
+				if (!IsFieldValueType(payload, "runId", '"') ||
+					!IsFieldNumber(payload, "cleared") ||
+					!IsFieldNumber(payload, "remaining")) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`gateway.runtime.taskDeltas.clear` requires `runId`, `cleared`, and `remaining` fields.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "chat.send", [&]() {
+				if (!IsFieldValueType(payload, "runId", '"') ||
+					!(IsFieldNull(payload, "backendErrorCode") ||
+						IsFieldValueType(payload, "backendErrorCode", '"')) ||
+					!IsFieldBoolean(payload, "queued") ||
+					!IsFieldBoolean(payload, "deduped")) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`chat.send` requires `runId`, nullable/string `backendErrorCode`, `queued`, and `deduped` fields.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "chat.events.poll", [&]() {
+				if (!IsFieldValueType(payload, "sessionKey", '"') ||
+					!IsFieldValueType(payload, "events", '[') ||
+					!IsFieldNumber(payload, "count")) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`chat.events.poll` requires `sessionKey`, `events`, and `count` fields.");
+					return false;
+				}
+
+				if (!IsArrayFieldExplicitlyEmpty(payload, "events") &&
+					!PayloadContainsAllFieldTokens(
+						payload,
+						{ "runId", "sessionKey", "state", "timestamp" })) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`chat.events.poll` events require `runId`, `sessionKey`, `state`, and `timestamp` fields.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "chat.abort", [&]() {
+				if (!IsFieldBoolean(payload, "aborted") ||
+					!IsFieldValueType(payload, "sessionKey", '"')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`chat.abort` requires `aborted` and `sessionKey` fields.");
+					return false;
+				}
+
+				if (payload.find("\"aborted\":true") != std::string::npos &&
+					!IsFieldValueType(payload, "runId", '"')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`chat.abort` requires `runId` when `aborted=true`.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "gateway.runtime.orchestration.status", [&]() {
+				if (!IsFieldValueType(payload, "state", '"') ||
+					!IsFieldValueType(payload, "activeSession", '"') ||
+					!IsFieldValueType(payload, "activeAgent", '"') ||
+					!IsFieldNumber(payload, "queueDepth") ||
+					!IsFieldNumber(payload, "running") ||
+					!IsFieldNumber(payload, "capacity")) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`gateway.runtime.orchestration.status` requires state/session/agent and queue metrics fields.");
+					return false;
+				}
+
+			 if (HasFieldToken(payload, "dynamicLoopMetrics") &&
+					!PayloadContainsAllFieldTokens(
+						payload,
+						{ "success", "failure", "timeout", "cancelled", "fallback" })) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`gateway.runtime.orchestration.status.dynamicLoopMetrics` requires success/failure/timeout/cancelled/fallback fields.");
+					return false;
+				}
+
+				return true;
 			} },
 			{ "gateway.channels.status.get", [&]() {
 				return ValidateObjectWithTokens(
@@ -2187,209 +2336,209 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
-          { "gateway.models.failover.baseline", [&]() {
+		  { "gateway.models.failover.baseline", [&]() {
 				if (!IsFieldValueType(payload, "primary", '"') || !IsFieldValueType(payload, "secondary", '"') || !IsFieldNumber(payload, "confidence")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.baseline` requires `primary`, `secondary`, and `confidence` fields.");
 					return false;
 				}
 				return true;
 			} },
-          { "gateway.models.failover.forecast", [&]() {
+		  { "gateway.models.failover.forecast", [&]() {
 				if (!IsFieldNumber(payload, "windowSec") || !IsFieldNumber(payload, "projectedFallbacks") || !IsFieldValueType(payload, "risk", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.forecast` requires `windowSec`, `projectedFallbacks`, and `risk` fields.");
 					return false;
 				}
 				return true;
 			} },
-          { "gateway.models.failover.threshold", [&]() {
+		  { "gateway.models.failover.threshold", [&]() {
 				if (!IsFieldNumber(payload, "minSuccessRate") || !IsFieldNumber(payload, "maxFallbacks") || !IsFieldBoolean(payload, "active")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.threshold` requires `minSuccessRate`, `maxFallbacks`, and `active` fields.");
 					return false;
 				}
 				return true;
 			} },
-          { "gateway.models.failover.guardrail", [&]() {
+		  { "gateway.models.failover.guardrail", [&]() {
 				if (!IsFieldValueType(payload, "rule", '"') || !IsFieldNumber(payload, "limit") || !IsFieldBoolean(payload, "enforced")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.guardrail` requires `rule`, `limit`, and `enforced` fields.");
 					return false;
 				}
 				return true;
 			} },
-          { "gateway.models.failover.envelope", [&]() {
+		  { "gateway.models.failover.envelope", [&]() {
 				if (!IsFieldNumber(payload, "windowSec") || !IsFieldNumber(payload, "floor") || !IsFieldNumber(payload, "ceiling")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.envelope` requires `windowSec`, `floor`, and `ceiling` fields.");
 					return false;
 				}
 				return true;
 			} },
-          { "gateway.models.failover.margin", [&]() {
+		  { "gateway.models.failover.margin", [&]() {
 				if (!IsFieldNumber(payload, "headroom") || !IsFieldNumber(payload, "buffer") || !IsFieldBoolean(payload, "safe")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.margin` requires `headroom`, `buffer`, and `safe` fields.");
 					return false;
 				}
 				return true;
 			} },
-          { "gateway.models.failover.reserve", [&]() {
+		  { "gateway.models.failover.reserve", [&]() {
 				if (!IsFieldNumber(payload, "reserve") || !IsFieldBoolean(payload, "available") || !IsFieldNumber(payload, "priority")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.reserve` requires `reserve`, `available`, and `priority` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldValueType(payload, "model", '"') || !IsFieldValueType(payload, "reason", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override` requires `active`, `model`, and `reason` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.clear", [&]() {
 				if (!IsFieldBoolean(payload, "cleared") || !IsFieldBoolean(payload, "active") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.clear` requires `cleared`, `active`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.status", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldValueType(payload, "model", '"') || !IsFieldValueType(payload, "source", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.status` requires `active`, `model`, and `source` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.history", [&]() {
 				if (!IsFieldNumber(payload, "entries") || !IsFieldValueType(payload, "lastModel", '"') || !IsFieldBoolean(payload, "active")) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.history` requires `entries`, `lastModel`, and `active` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.metrics", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "switches") || !IsFieldValueType(payload, "lastModel", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.metrics` requires `active`, `switches`, and `lastModel` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.window", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "windowSec") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.window` requires `active`, `windowSec`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.digest", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldValueType(payload, "digest", '"') || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.digest` requires `active`, `digest`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.timeline", [&]() {
 				if (!IsFieldNumber(payload, "entries") || !IsFieldBoolean(payload, "active") || !IsFieldValueType(payload, "lastModel", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.timeline` requires `entries`, `active`, and `lastModel` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.catalog", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "count") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.catalog` requires `active`, `count`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.registry", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "entries") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.registry` requires `active`, `entries`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.matrix", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "rows") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.matrix` requires `active`, `rows`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.snapshot", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "revision") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.snapshot` requires `active`, `revision`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.pointer", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldValueType(payload, "pointer", '"') || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.pointer` requires `active`, `pointer`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.state", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldValueType(payload, "state", '"') || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.state` requires `active`, `state`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.profile", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldValueType(payload, "profile", '"') || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.profile` requires `active`, `profile`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.audit", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "entries") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.audit` requires `active`, `entries`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.checkpoint", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldValueType(payload, "checkpoint", '"') || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.checkpoint` requires `active`, `checkpoint`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.baseline", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldValueType(payload, "baseline", '"') || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.baseline` requires `active`, `baseline`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.manifest", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldValueType(payload, "manifest", '"') || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.manifest` requires `active`, `manifest`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.ledger", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "entries") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.ledger` requires `active`, `entries`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.snapshotIndex", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "index") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.snapshotIndex` requires `active`, `index`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.digestIndex", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "digestIndex") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.digestIndex` requires `active`, `digestIndex`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.cursor", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldValueType(payload, "cursor", '"') || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.cursor` requires `active`, `cursor`, and `model` fields.");
@@ -2417,294 +2566,294 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.biasEnvelope", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "biasEnvelope") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.biasEnvelope` requires `active`, `biasEnvelope`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.driftEnvelope", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "driftEnvelope") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.driftEnvelope` requires `active`, `driftEnvelope`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.envelopeDrift", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "envelopeDrift") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.envelopeDrift` requires `active`, `envelopeDrift`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.driftVector", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "driftVector") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.driftVector` requires `active`, `driftVector`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorEnvelope", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorEnvelope") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorEnvelope` requires `active`, `vectorEnvelope`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorContour", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorContour") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorContour` requires `active`, `vectorContour`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorRibbon", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorRibbon") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorRibbon` requires `active`, `vectorRibbon`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorSpiral", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorSpiral") || !IsFieldValueType(payload, "model", '"')) {
-                    SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorSpiral` requires `active`, `vectorSpiral`, and `model` fields.");
+					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorSpiral` requires `active`, `vectorSpiral`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorArc", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorArc") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorArc` requires `active`, `vectorArc`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorMesh", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorMesh") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorMesh` requires `active`, `vectorMesh`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorNode", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorNode") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorNode` requires `active`, `vectorNode`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorCore", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorCore") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorCore` requires `active`, `vectorCore`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorFrame", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorFrame") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorFrame` requires `active`, `vectorFrame`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorSpan", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorSpan") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorSpan` requires `active`, `vectorSpan`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorGrid", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorGrid") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorGrid` requires `active`, `vectorGrid`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorLane", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorLane") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorLane` requires `active`, `vectorLane`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorTrack", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorTrack") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorTrack` requires `active`, `vectorTrack`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorRail", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorRail") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorRail` requires `active`, `vectorRail`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorSpline", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorSpline") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorSpline` requires `active`, `vectorSpline`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorChain", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorChain") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorChain` requires `active`, `vectorChain`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorThread", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorThread") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorThread` requires `active`, `vectorThread`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorLink", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorLink") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorLink` requires `active`, `vectorLink`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorNode2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorNode2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorNode2` requires `active`, `vectorNode2`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorBridge", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorBridge") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorBridge` requires `active`, `vectorBridge`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorAnchor2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorAnchor2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorAnchor2` requires `active`, `vectorAnchor2`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorPortal", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorPortal") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorPortal` requires `active`, `vectorPortal`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorRelay2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorRelay2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorRelay2` requires `active`, `vectorRelay2`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorGate2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorGate2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorGate2` requires `active`, `vectorGate2`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorHub2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorHub2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorHub2` requires `active`, `vectorHub2`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorNode3", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorNode3") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorNode3` requires `active`, `vectorNode3`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorLink2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorLink2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorLink2` requires `active`, `vectorLink2`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorMesh2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorMesh2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorMesh2` requires `active`, `vectorMesh2`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorArc2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorArc2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorArc2` requires `active`, `vectorArc2`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorBand2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorBand2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorBand2` requires `active`, `vectorBand2`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorGrid2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorGrid2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorGrid2` requires `active`, `vectorGrid2`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorLane2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorLane2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorLane2` requires `active`, `vectorLane2`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorTrack2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorTrack2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorTrack2` requires `active`, `vectorTrack2`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorRail2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorRail2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorRail2` requires `active`, `vectorRail2`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorSpline2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorSpline2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorSpline2` requires `active`, `vectorSpline2`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorChain2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorChain2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorChain2` requires `active`, `vectorChain2`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 			{ "gateway.models.failover.override.vectorThread2", [&]() {
 				if (!IsFieldBoolean(payload, "active") || !IsFieldNumber(payload, "vectorThread2") || !IsFieldValueType(payload, "model", '"')) {
 					SetIssue(issue, "schema_invalid_response", "`gateway.models.failover.override.vectorThread2` requires `active`, `vectorThread2`, and `model` fields.");
 					return false;
 				}
 				return true;
-            } },
+			} },
 		};
 
 		if (const auto groupedIt = groupedValidators.find(method); groupedIt != groupedValidators.end()) {

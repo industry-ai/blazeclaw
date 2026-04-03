@@ -207,6 +207,24 @@ Upgrade the `dynamic_task_delta` path from decomposition-only behavior to a full
   - Embedded dynamic loop now enables when canary is eligible **or** promotion thresholds are satisfied.
   - Added operator diagnostics fields for promotion readiness, thresholds, total runs, and success rate.
 
+## Verification status (latest audit)
+
+**Current state: Partially accomplished (not fully complete yet).**
+
+### Confirmed accomplished
+- Core phased runtime behavior (planning, execution, policy enforcement, cancellation, gateway parity, telemetry, rollout gating) is implemented in active code paths.
+- Embedded fixture-based validation scenarios cover major happy-path and failure-path orchestration flows.
+
+### Remaining gaps to reach full completion criteria
+1. **Protocol contract/schema parity for task-delta methods is now addressed.**
+   - Added explicit request validators for `gateway.runtime.taskDeltas.get/clear` and runtime-chat methods (`chat.send`, `chat.abort`, `chat.events.poll`).
+   - Added explicit response validators for `gateway.runtime.taskDeltas.get/clear`, `chat.send`, `chat.abort`, `chat.events.poll`, and `gateway.runtime.orchestration.status`.
+   - Extended `GatewayProtocolContract` positive and negative parity cases to include the above runtime task-delta surfaces.
+2. **Dedicated test-project coverage is incomplete.**
+   - Coverage is currently fixture-driven in core service validation; explicit `BlazeClawMfc.Tests` unit/integration cases for task-delta runtime and gateway parity are still missing.
+3. **Task-delta filesystem persistence hook is not implemented.**
+   - In-memory bounded retention exists, but optional replay/audit persistence for task deltas is not present.
+
 ## Candidate File Touchpoints
 
 - `blazeclaw/BlazeClawMfc/src/core/PiEmbeddedService.h`

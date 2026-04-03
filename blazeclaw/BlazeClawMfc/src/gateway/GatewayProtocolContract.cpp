@@ -26,7 +26,7 @@ namespace blazeclaw::gateway::protocol {
 			return buffer.str();
 		}
 
-      std::string TrimBoundaryWhitespace(const std::string& value) {
+		std::string TrimBoundaryWhitespace(const std::string& value) {
 			return json::Trim(value);
 		}
 
@@ -308,6 +308,66 @@ namespace blazeclaw::gateway::protocol {
 			return false;
 		}
 
+		const ResponseFrame runtimeTaskDeltasGetResponse{
+			.id = "runtime-taskdeltas-get-1",
+			.ok = true,
+			.payloadJson =
+				"{\"runId\":\"chat-run-orch-1\",\"taskDeltas\":[{\"index\":0,\"runId\":\"chat-run-orch-1\",\"sessionId\":\"main\",\"phase\":\"plan\",\"toolName\":\"\",\"argsJson\":\"\",\"resultJson\":\"[]\",\"status\":\"planned\",\"errorCode\":\"\",\"startedAtMs\":1,\"completedAtMs\":1,\"latencyMs\":0,\"modelTurnId\":\"\",\"stepLabel\":\"execution_plan\"},{\"index\":1,\"runId\":\"chat-run-orch-1\",\"sessionId\":\"main\",\"phase\":\"final\",\"toolName\":\"\",\"argsJson\":\"\",\"resultJson\":\"done\",\"status\":\"completed\",\"errorCode\":\"\",\"startedAtMs\":2,\"completedAtMs\":2,\"latencyMs\":0,\"modelTurnId\":\"\",\"stepLabel\":\"run_terminal\"}],\"count\":2}",
+			.error = std::nullopt,
+		};
+		if (!ValidateDecodedResponseCase(
+			root / "response_gateway_runtime_taskDeltas_get.json",
+			"gateway.runtime.taskDeltas.get",
+			runtimeTaskDeltasGetResponse,
+			error)) {
+			return false;
+		}
+
+		const ResponseFrame runtimeTaskDeltasClearResponse{
+			.id = "runtime-taskdeltas-clear-1",
+			.ok = true,
+			.payloadJson =
+				"{\"runId\":\"chat-run-orch-1\",\"cleared\":1,\"remaining\":0}",
+			.error = std::nullopt,
+		};
+		if (!ValidateDecodedResponseCase(
+			root / "response_gateway_runtime_taskDeltas_clear.json",
+			"gateway.runtime.taskDeltas.clear",
+			runtimeTaskDeltasClearResponse,
+			error)) {
+			return false;
+		}
+
+		const ResponseFrame chatAbortResponse{
+			.id = "chat-abort-1",
+			.ok = true,
+			.payloadJson =
+				"{\"aborted\":true,\"runId\":\"chat-run-orch-1\",\"sessionKey\":\"main\"}",
+			.error = std::nullopt,
+		};
+		if (!ValidateDecodedResponseCase(
+			root / "response_chat_abort_orchestration.json",
+			"chat.abort",
+			chatAbortResponse,
+			error)) {
+			return false;
+		}
+
+		const ResponseFrame runtimeOrchestrationStatusResponse{
+			.id = "runtime-orch-status-1",
+			.ok = true,
+			.payloadJson =
+				"{\"state\":\"idle\",\"activeSession\":\"main\",\"activeAgent\":\"default\",\"queueDepth\":0,\"running\":0,\"capacity\":8,\"dynamicLoopMetrics\":{\"success\":1,\"failure\":0,\"timeout\":0,\"cancelled\":0,\"fallback\":0}}",
+			.error = std::nullopt,
+		};
+		if (!ValidateDecodedResponseCase(
+			root / "response_gateway_runtime_orchestration_status.json",
+			"gateway.runtime.orchestration.status",
+			runtimeOrchestrationStatusResponse,
+			error)) {
+			return false;
+		}
+
 		std::vector<std::filesystem::path> responseFixtures;
 		std::vector<std::filesystem::path> eventFixtures;
 		for (const auto& entry : std::filesystem::directory_iterator(root)) {
@@ -385,10 +445,10 @@ namespace blazeclaw::gateway::protocol {
 			.error = std::nullopt,
 		};
 		if (!ValidateDecodedResponseCase(
-				root / "response_chat_send_orchestration.json",
-				"chat.send",
-				chatSendOrchestrationResponse,
-				error)) {
+			root / "response_chat_send_orchestration.json",
+			"chat.send",
+			chatSendOrchestrationResponse,
+			error)) {
 			return false;
 		}
 
@@ -400,14 +460,14 @@ namespace blazeclaw::gateway::protocol {
 			.error = std::nullopt,
 		};
 		if (!ValidateDecodedResponseCase(
-				root / "response_chat_events_poll_orchestration.json",
-				"chat.events.poll",
-				chatEventsOrchestrationPollResponse,
-				error)) {
+			root / "response_chat_events_poll_orchestration.json",
+			"chat.events.poll",
+			chatEventsOrchestrationPollResponse,
+			error)) {
 			return false;
 		}
 
-      const std::array<ResponseFrame, 356> negativeResponses = {
+		const std::array<ResponseFrame, 360> negativeResponses = {
 			ResponseFrame{.id = "neg-1", .ok = true, .payloadJson = "{\"accounts\":[{\"channel\":\"telegram\",\"accountId\":\"telegram.default\",\"label\":\"Telegram Default\",\"active\":true}]}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-2", .ok = true, .payloadJson = "{\"session\":{\"id\":\"thread-1\",\"scope\":\"thread\",\"active\":false},\"deleted\":true}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-3", .ok = true, .payloadJson = "{\"tool\":\"chat.send\",\"executed\":true,\"status\":\"ok\",\"argsProvided\":false}", .error = std::nullopt },
@@ -594,172 +654,172 @@ namespace blazeclaw::gateway::protocol {
 			ResponseFrame{.id = "neg-184", .ok = true, .payloadJson = "{\"syncSpline\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-185", .ok = true, .payloadJson = "{\"bandSpline\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-186", .ok = true, .payloadJson = "{\"active\":false,\"vectorSpline\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-187", .ok = true, .payloadJson = "{\"phaseChain\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-187", .ok = true, .payloadJson = "{\"phaseChain\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-188", .ok = true, .payloadJson = "{\"vectorChain\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-189", .ok = true, .payloadJson = "{\"syncChain\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-190", .ok = true, .payloadJson = "{\"bandChain\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-191", .ok = true, .payloadJson = "{\"active\":false,\"vectorChain\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-192", .ok = true, .payloadJson = "{\"phaseThread\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-192", .ok = true, .payloadJson = "{\"phaseThread\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-193", .ok = true, .payloadJson = "{\"vectorThread\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-194", .ok = true, .payloadJson = "{\"syncThread\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-195", .ok = true, .payloadJson = "{\"bandThread\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-196", .ok = true, .payloadJson = "{\"active\":false,\"vectorThread\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-197", .ok = true, .payloadJson = "{\"phaseLink\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-197", .ok = true, .payloadJson = "{\"phaseLink\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-198", .ok = true, .payloadJson = "{\"vectorLink\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-199", .ok = true, .payloadJson = "{\"syncLink\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-200", .ok = true, .payloadJson = "{\"bandLink\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-201", .ok = true, .payloadJson = "{\"active\":false,\"vectorLink\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-202", .ok = true, .payloadJson = "{\"phaseNode\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-202", .ok = true, .payloadJson = "{\"phaseNode\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-203", .ok = true, .payloadJson = "{\"vectorNode2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-204", .ok = true, .payloadJson = "{\"syncNode2\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-205", .ok = true, .payloadJson = "{\"bandNode2\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-206", .ok = true, .payloadJson = "{\"active\":false,\"vectorNode2\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-207", .ok = true, .payloadJson = "{\"phaseBridge\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-207", .ok = true, .payloadJson = "{\"phaseBridge\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-208", .ok = true, .payloadJson = "{\"vectorBridge\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-209", .ok = true, .payloadJson = "{\"syncBridge\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-210", .ok = true, .payloadJson = "{\"bandBridge\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-211", .ok = true, .payloadJson = "{\"active\":false,\"vectorBridge\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-212", .ok = true, .payloadJson = "{\"phasePortal\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-212", .ok = true, .payloadJson = "{\"phasePortal\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-213", .ok = true, .payloadJson = "{\"vectorPortal\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-214", .ok = true, .payloadJson = "{\"syncPortal\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-215", .ok = true, .payloadJson = "{\"bandPortal\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-216", .ok = true, .payloadJson = "{\"active\":false,\"vectorPortal\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-217", .ok = true, .payloadJson = "{\"phaseRelay2\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-217", .ok = true, .payloadJson = "{\"phaseRelay2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-218", .ok = true, .payloadJson = "{\"vectorRelay2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-219", .ok = true, .payloadJson = "{\"syncRelay2\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-220", .ok = true, .payloadJson = "{\"bandRelay2\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-221", .ok = true, .payloadJson = "{\"active\":false,\"vectorRelay2\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-222", .ok = true, .payloadJson = "{\"phaseGate2\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-222", .ok = true, .payloadJson = "{\"phaseGate2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-223", .ok = true, .payloadJson = "{\"vectorGate2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-224", .ok = true, .payloadJson = "{\"syncGate2\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-225", .ok = true, .payloadJson = "{\"bandGate2\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-226", .ok = true, .payloadJson = "{\"active\":false,\"vectorGate2\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-227", .ok = true, .payloadJson = "{\"phaseHub2\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-227", .ok = true, .payloadJson = "{\"phaseHub2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-228", .ok = true, .payloadJson = "{\"vectorHub2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-229", .ok = true, .payloadJson = "{\"syncHub2\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-230", .ok = true, .payloadJson = "{\"bandHub2\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-231", .ok = true, .payloadJson = "{\"active\":false,\"vectorHub2\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-232", .ok = true, .payloadJson = "{\"phaseNode3\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-232", .ok = true, .payloadJson = "{\"phaseNode3\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-233", .ok = true, .payloadJson = "{\"vectorNode3\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-234", .ok = true, .payloadJson = "{\"syncNode3\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-235", .ok = true, .payloadJson = "{\"bandNode3\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-236", .ok = true, .payloadJson = "{\"active\":false,\"vectorNode3\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-237", .ok = true, .payloadJson = "{\"phaseLink2\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-237", .ok = true, .payloadJson = "{\"phaseLink2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-238", .ok = true, .payloadJson = "{\"vectorLink2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-239", .ok = true, .payloadJson = "{\"syncLink2\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-240", .ok = true, .payloadJson = "{\"bandLink2\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-241", .ok = true, .payloadJson = "{\"active\":false,\"vectorLink2\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-242", .ok = true, .payloadJson = "{\"phaseMesh2\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-242", .ok = true, .payloadJson = "{\"phaseMesh2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-243", .ok = true, .payloadJson = "{\"vectorMesh2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-244", .ok = true, .payloadJson = "{\"syncMesh2\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-245", .ok = true, .payloadJson = "{\"bandMesh2\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-246", .ok = true, .payloadJson = "{\"active\":false,\"vectorMesh2\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-247", .ok = true, .payloadJson = "{\"phaseArc2\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-247", .ok = true, .payloadJson = "{\"phaseArc2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-248", .ok = true, .payloadJson = "{\"vectorArc2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-249", .ok = true, .payloadJson = "{\"syncArc2\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-250", .ok = true, .payloadJson = "{\"bandArc2\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-251", .ok = true, .payloadJson = "{\"active\":false,\"vectorArc2\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-252", .ok = true, .payloadJson = "{\"phaseBand2\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-252", .ok = true, .payloadJson = "{\"phaseBand2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-253", .ok = true, .payloadJson = "{\"vectorBand2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-254", .ok = true, .payloadJson = "{\"syncBand2\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-255", .ok = true, .payloadJson = "{\"bandBand2\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-256", .ok = true, .payloadJson = "{\"active\":false,\"vectorBand2\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-257", .ok = true, .payloadJson = "{\"phaseGrid2\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-257", .ok = true, .payloadJson = "{\"phaseGrid2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-258", .ok = true, .payloadJson = "{\"vectorGrid2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-259", .ok = true, .payloadJson = "{\"syncGrid2\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-260", .ok = true, .payloadJson = "{\"bandGrid2\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-261", .ok = true, .payloadJson = "{\"active\":false,\"vectorGrid2\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-262", .ok = true, .payloadJson = "{\"phaseLane2\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-262", .ok = true, .payloadJson = "{\"phaseLane2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-263", .ok = true, .payloadJson = "{\"vectorLane2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-264", .ok = true, .payloadJson = "{\"syncLane2\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-265", .ok = true, .payloadJson = "{\"bandLane2\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-266", .ok = true, .payloadJson = "{\"active\":false,\"vectorLane2\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-267", .ok = true, .payloadJson = "{\"phaseTrack2\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-267", .ok = true, .payloadJson = "{\"phaseTrack2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-268", .ok = true, .payloadJson = "{\"vectorTrack2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-269", .ok = true, .payloadJson = "{\"syncTrack2\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-270", .ok = true, .payloadJson = "{\"bandTrack2\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-271", .ok = true, .payloadJson = "{\"active\":false,\"vectorTrack2\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-272", .ok = true, .payloadJson = "{\"phaseRail2\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-272", .ok = true, .payloadJson = "{\"phaseRail2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-273", .ok = true, .payloadJson = "{\"vectorRail2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-274", .ok = true, .payloadJson = "{\"syncRail2\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-275", .ok = true, .payloadJson = "{\"bandRail2\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-276", .ok = true, .payloadJson = "{\"active\":false,\"vectorRail2\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-277", .ok = true, .payloadJson = "{\"phaseSpline2\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-277", .ok = true, .payloadJson = "{\"phaseSpline2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-278", .ok = true, .payloadJson = "{\"vectorSpline2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-279", .ok = true, .payloadJson = "{\"syncSpline2\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-280", .ok = true, .payloadJson = "{\"bandSpline2\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-281", .ok = true, .payloadJson = "{\"active\":false,\"vectorSpline2\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-282", .ok = true, .payloadJson = "{\"phaseChain2\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-282", .ok = true, .payloadJson = "{\"phaseChain2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-283", .ok = true, .payloadJson = "{\"vectorChain2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-284", .ok = true, .payloadJson = "{\"syncChain2\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-285", .ok = true, .payloadJson = "{\"bandChain2\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-286", .ok = true, .payloadJson = "{\"active\":false,\"vectorChain2\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-287", .ok = true, .payloadJson = "{\"phaseThread2\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-287", .ok = true, .payloadJson = "{\"phaseThread2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-288", .ok = true, .payloadJson = "{\"vectorThread2\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-289", .ok = true, .payloadJson = "{\"syncThread2\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-290", .ok = true, .payloadJson = "{\"bandThread2\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-291", .ok = true, .payloadJson = "{\"active\":false,\"vectorThread2\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-292", .ok = true, .payloadJson = "{\"phaseLink3\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-292", .ok = true, .payloadJson = "{\"phaseLink3\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-293", .ok = true, .payloadJson = "{\"vectorLink3\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-294", .ok = true, .payloadJson = "{\"syncLink3\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-295", .ok = true, .payloadJson = "{\"bandLink3\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-296", .ok = true, .payloadJson = "{\"active\":false,\"vectorLink3\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-297", .ok = true, .payloadJson = "{\"phaseNode4\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-297", .ok = true, .payloadJson = "{\"phaseNode4\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-298", .ok = true, .payloadJson = "{\"vectorNode4\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-299", .ok = true, .payloadJson = "{\"syncNode4\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-300", .ok = true, .payloadJson = "{\"bandNode4\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-301", .ok = true, .payloadJson = "{\"active\":false,\"vectorNode4\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-302", .ok = true, .payloadJson = "{\"phaseMesh3\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-302", .ok = true, .payloadJson = "{\"phaseMesh3\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-303", .ok = true, .payloadJson = "{\"vectorMesh3\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-304", .ok = true, .payloadJson = "{\"syncMesh3\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-305", .ok = true, .payloadJson = "{\"bandMesh3\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-306", .ok = true, .payloadJson = "{\"active\":false,\"vectorMesh3\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-307", .ok = true, .payloadJson = "{\"phaseBridge3\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-307", .ok = true, .payloadJson = "{\"phaseBridge3\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-308", .ok = true, .payloadJson = "{\"vectorBridge3\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-309", .ok = true, .payloadJson = "{\"syncBridge3\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-310", .ok = true, .payloadJson = "{\"bandBridge3\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-311", .ok = true, .payloadJson = "{\"active\":false,\"vectorBridge3\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-312", .ok = true, .payloadJson = "{\"phasePortal3\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-312", .ok = true, .payloadJson = "{\"phasePortal3\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-313", .ok = true, .payloadJson = "{\"vectorPortal3\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-314", .ok = true, .payloadJson = "{\"syncPortal3\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-315", .ok = true, .payloadJson = "{\"bandPortal3\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-316", .ok = true, .payloadJson = "{\"active\":false,\"vectorPortal3\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-317", .ok = true, .payloadJson = "{\"phaseRelay3\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-317", .ok = true, .payloadJson = "{\"phaseRelay3\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-318", .ok = true, .payloadJson = "{\"vectorRelay3\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-319", .ok = true, .payloadJson = "{\"syncRelay3\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-320", .ok = true, .payloadJson = "{\"bandRelay3\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-321", .ok = true, .payloadJson = "{\"active\":false,\"vectorRelay3\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-322", .ok = true, .payloadJson = "{\"phaseGate3\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-322", .ok = true, .payloadJson = "{\"phaseGate3\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-323", .ok = true, .payloadJson = "{\"vectorGate3\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-324", .ok = true, .payloadJson = "{\"syncGate3\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-325", .ok = true, .payloadJson = "{\"bandGate3\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-326", .ok = true, .payloadJson = "{\"active\":false,\"vectorGate3\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-327", .ok = true, .payloadJson = "{\"phaseHub3\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-327", .ok = true, .payloadJson = "{\"phaseHub3\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-328", .ok = true, .payloadJson = "{\"vectorHub3\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-329", .ok = true, .payloadJson = "{\"syncHub3\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-330", .ok = true, .payloadJson = "{\"bandHub3\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-331", .ok = true, .payloadJson = "{\"active\":false,\"vectorHub3\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-332", .ok = true, .payloadJson = "{\"phaseNode5\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-332", .ok = true, .payloadJson = "{\"phaseNode5\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-333", .ok = true, .payloadJson = "{\"vectorNode5\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-334", .ok = true, .payloadJson = "{\"syncNode5\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-335", .ok = true, .payloadJson = "{\"bandNode5\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-336", .ok = true, .payloadJson = "{\"active\":false,\"vectorNode5\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-337", .ok = true, .payloadJson = "{\"phaseLink4\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-337", .ok = true, .payloadJson = "{\"phaseLink4\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-338", .ok = true, .payloadJson = "{\"vectorLink4\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-339", .ok = true, .payloadJson = "{\"syncLink4\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-340", .ok = true, .payloadJson = "{\"bandLink4\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-341", .ok = true, .payloadJson = "{\"active\":false,\"vectorLink4\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-342", .ok = true, .payloadJson = "{\"phaseBridge4\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-342", .ok = true, .payloadJson = "{\"phaseBridge4\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-343", .ok = true, .payloadJson = "{\"vectorBridge4\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-344", .ok = true, .payloadJson = "{\"syncBridge4\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-345", .ok = true, .payloadJson = "{\"bandBridge4\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-346", .ok = true, .payloadJson = "{\"active\":false,\"vectorBridge4\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-347", .ok = true, .payloadJson = "{\"phasePortal4\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-347", .ok = true, .payloadJson = "{\"phasePortal4\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-348", .ok = true, .payloadJson = "{\"vectorPortal4\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-349", .ok = true, .payloadJson = "{\"syncPortal4\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-350", .ok = true, .payloadJson = "{\"bandPortal4\":0,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-351", .ok = true, .payloadJson = "{\"active\":false,\"vectorPortal4\":0}", .error = std::nullopt },
-          ResponseFrame{.id = "neg-352", .ok = true, .payloadJson = "{\"phaseGate4\":0,\"windowMs\":1000}", .error = std::nullopt },
+		  ResponseFrame{.id = "neg-352", .ok = true, .payloadJson = "{\"phaseGate4\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-353", .ok = true, .payloadJson = "{\"vectorGate4\":0,\"windowMs\":1000}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-354", .ok = true, .payloadJson = "{\"syncGate4\":1,\"samples\":2}", .error = std::nullopt },
 			ResponseFrame{.id = "neg-355", .ok = true, .payloadJson = "{\"bandGate4\":0,\"samples\":2}", .error = std::nullopt },
@@ -951,177 +1011,181 @@ namespace blazeclaw::gateway::protocol {
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorSpline", negativeResponses[182], "gateway.runtime.orchestration.vectorSpline missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncSpline", negativeResponses[183], "gateway.runtime.streaming.syncSpline missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandSpline", negativeResponses[184], "gateway.runtime.streaming.bandSpline missing `stable`", error) ||
-           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorSpline", negativeResponses[185], "gateway.models.failover.override.vectorSpline missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorSpline", negativeResponses[185], "gateway.models.failover.override.vectorSpline missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseChain", negativeResponses[186], "gateway.runtime.orchestration.phaseChain missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorChain", negativeResponses[187], "gateway.runtime.orchestration.vectorChain missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncChain", negativeResponses[188], "gateway.runtime.streaming.syncChain missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandChain", negativeResponses[189], "gateway.runtime.streaming.bandChain missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorChain", negativeResponses[190], "gateway.models.failover.override.vectorChain missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorChain", negativeResponses[190], "gateway.models.failover.override.vectorChain missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseThread", negativeResponses[191], "gateway.runtime.orchestration.phaseThread missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorThread", negativeResponses[192], "gateway.runtime.orchestration.vectorThread missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncThread", negativeResponses[193], "gateway.runtime.streaming.syncThread missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandThread", negativeResponses[194], "gateway.runtime.streaming.bandThread missing `stable`", error) ||
-           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorThread", negativeResponses[195], "gateway.models.failover.override.vectorThread missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorThread", negativeResponses[195], "gateway.models.failover.override.vectorThread missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseLink", negativeResponses[196], "gateway.runtime.orchestration.phaseLink missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorLink", negativeResponses[197], "gateway.runtime.orchestration.vectorLink missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncLink", negativeResponses[198], "gateway.runtime.streaming.syncLink missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandLink", negativeResponses[199], "gateway.runtime.streaming.bandLink missing `stable`", error) ||
-           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorLink", negativeResponses[200], "gateway.models.failover.override.vectorLink missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorLink", negativeResponses[200], "gateway.models.failover.override.vectorLink missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseNode", negativeResponses[201], "gateway.runtime.orchestration.phaseNode missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorNode2", negativeResponses[202], "gateway.runtime.orchestration.vectorNode2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncNode2", negativeResponses[203], "gateway.runtime.streaming.syncNode2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandNode2", negativeResponses[204], "gateway.runtime.streaming.bandNode2 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorNode2", negativeResponses[205], "gateway.models.failover.override.vectorNode2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorNode2", negativeResponses[205], "gateway.models.failover.override.vectorNode2 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseBridge", negativeResponses[206], "gateway.runtime.orchestration.phaseBridge missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorBridge", negativeResponses[207], "gateway.runtime.orchestration.vectorBridge missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncBridge", negativeResponses[208], "gateway.runtime.streaming.syncBridge missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandBridge", negativeResponses[209], "gateway.runtime.streaming.bandBridge missing `stable`", error) ||
-           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorBridge", negativeResponses[210], "gateway.models.failover.override.vectorBridge missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorBridge", negativeResponses[210], "gateway.models.failover.override.vectorBridge missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phasePortal", negativeResponses[211], "gateway.runtime.orchestration.phasePortal missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorPortal", negativeResponses[212], "gateway.runtime.orchestration.vectorPortal missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncPortal", negativeResponses[213], "gateway.runtime.streaming.syncPortal missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandPortal", negativeResponses[214], "gateway.runtime.streaming.bandPortal missing `stable`", error) ||
-           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorPortal", negativeResponses[215], "gateway.models.failover.override.vectorPortal missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorPortal", negativeResponses[215], "gateway.models.failover.override.vectorPortal missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseRelay2", negativeResponses[216], "gateway.runtime.orchestration.phaseRelay2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorRelay2", negativeResponses[217], "gateway.runtime.orchestration.vectorRelay2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncRelay2", negativeResponses[218], "gateway.runtime.streaming.syncRelay2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandRelay2", negativeResponses[219], "gateway.runtime.streaming.bandRelay2 missing `stable`", error) ||
-           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorRelay2", negativeResponses[220], "gateway.models.failover.override.vectorRelay2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorRelay2", negativeResponses[220], "gateway.models.failover.override.vectorRelay2 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseGate2", negativeResponses[221], "gateway.runtime.orchestration.phaseGate2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorGate2", negativeResponses[222], "gateway.runtime.orchestration.vectorGate2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncGate2", negativeResponses[223], "gateway.runtime.streaming.syncGate2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandGate2", negativeResponses[224], "gateway.runtime.streaming.bandGate2 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorGate2", negativeResponses[225], "gateway.models.failover.override.vectorGate2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorGate2", negativeResponses[225], "gateway.models.failover.override.vectorGate2 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseHub2", negativeResponses[226], "gateway.runtime.orchestration.phaseHub2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorHub2", negativeResponses[227], "gateway.runtime.orchestration.vectorHub2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncHub2", negativeResponses[228], "gateway.runtime.streaming.syncHub2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandHub2", negativeResponses[229], "gateway.runtime.streaming.bandHub2 missing `stable`", error) ||
-           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorHub2", negativeResponses[230], "gateway.models.failover.override.vectorHub2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorHub2", negativeResponses[230], "gateway.models.failover.override.vectorHub2 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseNode3", negativeResponses[231], "gateway.runtime.orchestration.phaseNode3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorNode3", negativeResponses[232], "gateway.runtime.orchestration.vectorNode3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncNode3", negativeResponses[233], "gateway.runtime.streaming.syncNode3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandNode3", negativeResponses[234], "gateway.runtime.streaming.bandNode3 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorNode3", negativeResponses[235], "gateway.models.failover.override.vectorNode3 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorNode3", negativeResponses[235], "gateway.models.failover.override.vectorNode3 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseLink2", negativeResponses[236], "gateway.runtime.orchestration.phaseLink2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorLink2", negativeResponses[237], "gateway.runtime.orchestration.vectorLink2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncLink2", negativeResponses[238], "gateway.runtime.streaming.syncLink2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandLink2", negativeResponses[239], "gateway.runtime.streaming.bandLink2 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorLink2", negativeResponses[240], "gateway.models.failover.override.vectorLink2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorLink2", negativeResponses[240], "gateway.models.failover.override.vectorLink2 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseMesh2", negativeResponses[241], "gateway.runtime.orchestration.phaseMesh2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorMesh2", negativeResponses[242], "gateway.runtime.orchestration.vectorMesh2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncMesh2", negativeResponses[243], "gateway.runtime.streaming.syncMesh2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandMesh2", negativeResponses[244], "gateway.runtime.streaming.bandMesh2 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorMesh2", negativeResponses[245], "gateway.models.failover.override.vectorMesh2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorMesh2", negativeResponses[245], "gateway.models.failover.override.vectorMesh2 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseArc2", negativeResponses[246], "gateway.runtime.orchestration.phaseArc2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorArc2", negativeResponses[247], "gateway.runtime.orchestration.vectorArc2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncArc2", negativeResponses[248], "gateway.runtime.streaming.syncArc2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandArc2", negativeResponses[249], "gateway.runtime.streaming.bandArc2 missing `stable`", error) ||
-           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorArc2", negativeResponses[250], "gateway.models.failover.override.vectorArc2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorArc2", negativeResponses[250], "gateway.models.failover.override.vectorArc2 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseBand2", negativeResponses[251], "gateway.runtime.orchestration.phaseBand2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorBand2", negativeResponses[252], "gateway.runtime.orchestration.vectorBand2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncBand2", negativeResponses[253], "gateway.runtime.streaming.syncBand2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandBand2", negativeResponses[254], "gateway.runtime.streaming.bandBand2 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorBand2", negativeResponses[255], "gateway.models.failover.override.vectorBand2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorBand2", negativeResponses[255], "gateway.models.failover.override.vectorBand2 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseGrid2", negativeResponses[256], "gateway.runtime.orchestration.phaseGrid2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorGrid2", negativeResponses[257], "gateway.runtime.orchestration.vectorGrid2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncGrid2", negativeResponses[258], "gateway.runtime.streaming.syncGrid2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandGrid2", negativeResponses[259], "gateway.runtime.streaming.bandGrid2 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorGrid2", negativeResponses[260], "gateway.models.failover.override.vectorGrid2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorGrid2", negativeResponses[260], "gateway.models.failover.override.vectorGrid2 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseLane2", negativeResponses[261], "gateway.runtime.orchestration.phaseLane2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorLane2", negativeResponses[262], "gateway.runtime.orchestration.vectorLane2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncLane2", negativeResponses[263], "gateway.runtime.streaming.syncLane2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandLane2", negativeResponses[264], "gateway.runtime.streaming.bandLane2 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorLane2", negativeResponses[265], "gateway.models.failover.override.vectorLane2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorLane2", negativeResponses[265], "gateway.models.failover.override.vectorLane2 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseTrack2", negativeResponses[266], "gateway.runtime.orchestration.phaseTrack2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorTrack2", negativeResponses[267], "gateway.runtime.orchestration.vectorTrack2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncTrack2", negativeResponses[268], "gateway.runtime.streaming.syncTrack2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandTrack2", negativeResponses[269], "gateway.runtime.streaming.bandTrack2 missing `stable`", error) ||
-           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorTrack2", negativeResponses[270], "gateway.models.failover.override.vectorTrack2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorTrack2", negativeResponses[270], "gateway.models.failover.override.vectorTrack2 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseRail2", negativeResponses[271], "gateway.runtime.orchestration.phaseRail2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorRail2", negativeResponses[272], "gateway.runtime.orchestration.vectorRail2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncRail2", negativeResponses[273], "gateway.runtime.streaming.syncRail2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandRail2", negativeResponses[274], "gateway.runtime.streaming.bandRail2 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorRail2", negativeResponses[275], "gateway.models.failover.override.vectorRail2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorRail2", negativeResponses[275], "gateway.models.failover.override.vectorRail2 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseSpline2", negativeResponses[276], "gateway.runtime.orchestration.phaseSpline2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorSpline2", negativeResponses[277], "gateway.runtime.orchestration.vectorSpline2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncSpline2", negativeResponses[278], "gateway.runtime.streaming.syncSpline2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandSpline2", negativeResponses[279], "gateway.runtime.streaming.bandSpline2 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorSpline2", negativeResponses[280], "gateway.models.failover.override.vectorSpline2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorSpline2", negativeResponses[280], "gateway.models.failover.override.vectorSpline2 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseChain2", negativeResponses[281], "gateway.runtime.orchestration.phaseChain2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorChain2", negativeResponses[282], "gateway.runtime.orchestration.vectorChain2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncChain2", negativeResponses[283], "gateway.runtime.streaming.syncChain2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandChain2", negativeResponses[284], "gateway.runtime.streaming.bandChain2 missing `stable`", error) ||
-           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorChain2", negativeResponses[285], "gateway.models.failover.override.vectorChain2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorChain2", negativeResponses[285], "gateway.models.failover.override.vectorChain2 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseThread2", negativeResponses[286], "gateway.runtime.orchestration.phaseThread2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorThread2", negativeResponses[287], "gateway.runtime.orchestration.vectorThread2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncThread2", negativeResponses[288], "gateway.runtime.streaming.syncThread2 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandThread2", negativeResponses[289], "gateway.runtime.streaming.bandThread2 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorThread2", negativeResponses[290], "gateway.models.failover.override.vectorThread2 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorThread2", negativeResponses[290], "gateway.models.failover.override.vectorThread2 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseLink3", negativeResponses[291], "gateway.runtime.orchestration.phaseLink3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorLink3", negativeResponses[292], "gateway.runtime.orchestration.vectorLink3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncLink3", negativeResponses[293], "gateway.runtime.streaming.syncLink3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandLink3", negativeResponses[294], "gateway.runtime.streaming.bandLink3 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorLink3", negativeResponses[295], "gateway.models.failover.override.vectorLink3 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorLink3", negativeResponses[295], "gateway.models.failover.override.vectorLink3 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseNode4", negativeResponses[296], "gateway.runtime.orchestration.phaseNode4 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorNode4", negativeResponses[297], "gateway.runtime.orchestration.vectorNode4 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncNode4", negativeResponses[298], "gateway.runtime.streaming.syncNode4 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandNode4", negativeResponses[299], "gateway.runtime.streaming.bandNode4 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorNode4", negativeResponses[300], "gateway.models.failover.override.vectorNode4 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorNode4", negativeResponses[300], "gateway.models.failover.override.vectorNode4 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseMesh3", negativeResponses[301], "gateway.runtime.orchestration.phaseMesh3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorMesh3", negativeResponses[302], "gateway.runtime.orchestration.vectorMesh3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncMesh3", negativeResponses[303], "gateway.runtime.streaming.syncMesh3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandMesh3", negativeResponses[304], "gateway.runtime.streaming.bandMesh3 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorMesh3", negativeResponses[305], "gateway.models.failover.override.vectorMesh3 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorMesh3", negativeResponses[305], "gateway.models.failover.override.vectorMesh3 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseBridge3", negativeResponses[306], "gateway.runtime.orchestration.phaseBridge3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorBridge3", negativeResponses[307], "gateway.runtime.orchestration.vectorBridge3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncBridge3", negativeResponses[308], "gateway.runtime.streaming.syncBridge3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandBridge3", negativeResponses[309], "gateway.runtime.streaming.bandBridge3 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorBridge3", negativeResponses[310], "gateway.models.failover.override.vectorBridge3 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorBridge3", negativeResponses[310], "gateway.models.failover.override.vectorBridge3 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phasePortal3", negativeResponses[311], "gateway.runtime.orchestration.phasePortal3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorPortal3", negativeResponses[312], "gateway.runtime.orchestration.vectorPortal3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncPortal3", negativeResponses[313], "gateway.runtime.streaming.syncPortal3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandPortal3", negativeResponses[314], "gateway.runtime.streaming.bandPortal3 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorPortal3", negativeResponses[315], "gateway.models.failover.override.vectorPortal3 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorPortal3", negativeResponses[315], "gateway.models.failover.override.vectorPortal3 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseRelay3", negativeResponses[316], "gateway.runtime.orchestration.phaseRelay3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorRelay3", negativeResponses[317], "gateway.runtime.orchestration.vectorRelay3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncRelay3", negativeResponses[318], "gateway.runtime.streaming.syncRelay3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandRelay3", negativeResponses[319], "gateway.runtime.streaming.bandRelay3 missing `stable`", error) ||
-           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorRelay3", negativeResponses[320], "gateway.models.failover.override.vectorRelay3 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorRelay3", negativeResponses[320], "gateway.models.failover.override.vectorRelay3 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseGate3", negativeResponses[321], "gateway.runtime.orchestration.phaseGate3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorGate3", negativeResponses[322], "gateway.runtime.orchestration.vectorGate3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncGate3", negativeResponses[323], "gateway.runtime.streaming.syncGate3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandGate3", negativeResponses[324], "gateway.runtime.streaming.bandGate3 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorGate3", negativeResponses[325], "gateway.models.failover.override.vectorGate3 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorGate3", negativeResponses[325], "gateway.models.failover.override.vectorGate3 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseHub3", negativeResponses[326], "gateway.runtime.orchestration.phaseHub3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorHub3", negativeResponses[327], "gateway.runtime.orchestration.vectorHub3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncHub3", negativeResponses[328], "gateway.runtime.streaming.syncHub3 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandHub3", negativeResponses[329], "gateway.runtime.streaming.bandHub3 missing `stable`", error) ||
-           !ValidateNegativeResponseCase("gateway.models.failover.override.vectorHub3", negativeResponses[330], "gateway.models.failover.override.vectorHub3 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorHub3", negativeResponses[330], "gateway.models.failover.override.vectorHub3 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseNode5", negativeResponses[331], "gateway.runtime.orchestration.phaseNode5 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorNode5", negativeResponses[332], "gateway.runtime.orchestration.vectorNode5 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncNode5", negativeResponses[333], "gateway.runtime.streaming.syncNode5 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandNode5", negativeResponses[334], "gateway.runtime.streaming.bandNode5 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorNode5", negativeResponses[335], "gateway.models.failover.override.vectorNode5 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorNode5", negativeResponses[335], "gateway.models.failover.override.vectorNode5 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseLink4", negativeResponses[336], "gateway.runtime.orchestration.phaseLink4 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorLink4", negativeResponses[337], "gateway.runtime.orchestration.vectorLink4 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncLink4", negativeResponses[338], "gateway.runtime.streaming.syncLink4 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandLink4", negativeResponses[339], "gateway.runtime.streaming.bandLink4 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorLink4", negativeResponses[340], "gateway.models.failover.override.vectorLink4 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorLink4", negativeResponses[340], "gateway.models.failover.override.vectorLink4 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseBridge4", negativeResponses[341], "gateway.runtime.orchestration.phaseBridge4 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorBridge4", negativeResponses[342], "gateway.runtime.orchestration.vectorBridge4 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncBridge4", negativeResponses[343], "gateway.runtime.streaming.syncBridge4 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandBridge4", negativeResponses[344], "gateway.runtime.streaming.bandBridge4 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorBridge4", negativeResponses[345], "gateway.models.failover.override.vectorBridge4 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorBridge4", negativeResponses[345], "gateway.models.failover.override.vectorBridge4 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phasePortal4", negativeResponses[346], "gateway.runtime.orchestration.phasePortal4 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorPortal4", negativeResponses[347], "gateway.runtime.orchestration.vectorPortal4 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncPortal4", negativeResponses[348], "gateway.runtime.streaming.syncPortal4 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandPortal4", negativeResponses[349], "gateway.runtime.streaming.bandPortal4 missing `stable`", error) ||
-         !ValidateNegativeResponseCase("gateway.models.failover.override.vectorPortal4", negativeResponses[350], "gateway.models.failover.override.vectorPortal4 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorPortal4", negativeResponses[350], "gateway.models.failover.override.vectorPortal4 missing `model`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.phaseGate4", negativeResponses[351], "gateway.runtime.orchestration.phaseGate4 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.orchestration.vectorGate4", negativeResponses[352], "gateway.runtime.orchestration.vectorGate4 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.syncGate4", negativeResponses[353], "gateway.runtime.streaming.syncGate4 missing `stable`", error) ||
 			!ValidateNegativeResponseCase("gateway.runtime.streaming.bandGate4", negativeResponses[354], "gateway.runtime.streaming.bandGate4 missing `stable`", error) ||
-			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorGate4", negativeResponses[355], "gateway.models.failover.override.vectorGate4 missing `model`", error)) {
+			!ValidateNegativeResponseCase("gateway.models.failover.override.vectorGate4", negativeResponses[355], "gateway.models.failover.override.vectorGate4 missing `model`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.taskDeltas.get", negativeResponses[356], "gateway.runtime.taskDeltas.get missing `runId`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.taskDeltas.clear", negativeResponses[357], "gateway.runtime.taskDeltas.clear missing `cleared`", error) ||
+			!ValidateNegativeResponseCase("chat.send", negativeResponses[358], "chat.send missing `backendErrorCode`", error) ||
+			!ValidateNegativeResponseCase("gateway.runtime.orchestration.status", negativeResponses[359], "gateway.runtime.orchestration.status.dynamicLoopMetrics missing `fallback`", error)) {
 			return false;
 		}
 

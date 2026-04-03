@@ -1253,6 +1253,231 @@ namespace blazeclaw::gateway::protocol {
 				"boolean");
 		}
 
+		bool ValidateTaskDeltasGetParams(
+			const RequestFrame& request,
+			SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(
+				request,
+				issue,
+				"gateway.runtime.taskDeltas.get",
+				fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"runId",
+				JsonFieldKind::String,
+				issue,
+				"gateway.runtime.taskDeltas.get",
+				"a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "runId") {
+					continue;
+				}
+
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `gateway.runtime.taskDeltas.get` does not allow `params." +
+					field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateTaskDeltasClearParams(
+			const RequestFrame& request,
+			SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(
+				request,
+				issue,
+				"gateway.runtime.taskDeltas.clear",
+				fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"runId",
+				JsonFieldKind::String,
+				issue,
+				"gateway.runtime.taskDeltas.clear",
+				"a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "runId") {
+					continue;
+				}
+
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `gateway.runtime.taskDeltas.clear` does not allow `params." +
+					field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateChatSendParams(
+			const RequestFrame& request,
+			SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "chat.send", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"sessionKey",
+				JsonFieldKind::String,
+				issue,
+				"chat.send",
+				"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"message",
+					JsonFieldKind::String,
+					issue,
+					"chat.send",
+					"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"idempotencyKey",
+					JsonFieldKind::String,
+					issue,
+					"chat.send",
+					"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"forceError",
+					JsonFieldKind::Boolean,
+					issue,
+					"chat.send",
+					"boolean") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"attachments",
+					JsonFieldKind::Array,
+					issue,
+					"chat.send",
+					"an array")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "sessionKey" ||
+					field == "message" ||
+					field == "idempotencyKey" ||
+					field == "forceError" ||
+					field == "attachments") {
+					continue;
+				}
+
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `chat.send` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateChatAbortParams(
+			const RequestFrame& request,
+			SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "chat.abort", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"sessionKey",
+				JsonFieldKind::String,
+				issue,
+				"chat.abort",
+				"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"runId",
+					JsonFieldKind::String,
+					issue,
+					"chat.abort",
+					"a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "sessionKey" || field == "runId") {
+					continue;
+				}
+
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `chat.abort` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateChatEventsPollParams(
+			const RequestFrame& request,
+			SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(
+				request,
+				issue,
+				"chat.events.poll",
+				fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"sessionKey",
+				JsonFieldKind::String,
+				issue,
+				"chat.events.poll",
+				"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"limit",
+					JsonFieldKind::Number,
+					issue,
+					"chat.events.poll",
+					"numeric")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "sessionKey" || field == "limit") {
+					continue;
+				}
+
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `chat.events.poll` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		bool ValidateSessionsCountParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 			ParsedObjectFieldKinds fieldKinds;
 			if (!TryParseRequestParamsObject(request, issue, "gateway.sessions.count", fieldKinds)) {
@@ -1927,6 +2152,11 @@ namespace blazeclaw::gateway::protocol {
 
 		static const std::unordered_map<std::string, RequestValidator> directValidators = {
 			{ "gateway.ping", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidatePingParams(r, i); } },
+			{ "chat.send", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateChatSendParams(r, i); } },
+			{ "chat.abort", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateChatAbortParams(r, i); } },
+			{ "chat.events.poll", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateChatEventsPollParams(r, i); } },
+			{ "gateway.runtime.taskDeltas.get", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateTaskDeltasGetParams(r, i); } },
+			{ "gateway.runtime.taskDeltas.clear", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateTaskDeltasClearParams(r, i); } },
 			{ "gateway.logs.tail", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateLogsTailParams(r, i); } },
 			{ "gateway.logs.count", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateLogsCountParams(r, i); } },
 			{ "gateway.sessions.compact", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateSessionsCompactParams(r, i); } },
@@ -1985,7 +2215,7 @@ namespace blazeclaw::gateway::protocol {
 			return it->second(request, issue);
 		}
 
-        if (const char* generatedStringIdField = ResolveGeneratedStringIdField(request.method);
+		if (const char* generatedStringIdField = ResolveGeneratedStringIdField(request.method);
 			generatedStringIdField != nullptr && generatedStringIdField[0] != '\0') {
 			return ValidateStringIdParam(
 				request,
