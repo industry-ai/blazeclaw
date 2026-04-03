@@ -12,9 +12,9 @@
 // BlazeClaw.MFCDoc.h : interface of the CBlazeClawMFCDoc class
 //
 
-
 #pragma once
 
+constexpr UINT WM_DOC_MARKDOWN_UPDATE = WM_USER + 0x200;
 
 class CBlazeClawMFCDoc : public CDocument
 {
@@ -24,6 +24,8 @@ protected: // create from serialization only
 
 // Attributes
 public:
+	const std::wstring& GetMarkdownContent() const { return m_markdownContent; }
+	void SetMarkdownContent(const std::wstring& content);
 
 // Operations
 public:
@@ -46,6 +48,7 @@ public:
 #endif
 
 protected:
+	std::wstring m_markdownContent;
 
 // Generated message map functions
 protected:

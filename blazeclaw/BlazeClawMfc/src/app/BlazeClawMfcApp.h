@@ -10,6 +10,9 @@
 #include "../core/ServiceManager.h"
 
 class CMultiDocTemplate;
+class CBlazeClawMFCView;
+class CBlazeClawMarkdownView;
+class CSharedTabsDocTemplate;
 
 class CBlazeClawMFCApp final : public CWinAppEx {
 public:
@@ -44,16 +47,18 @@ public:
 	blazeclaw::core::ServiceManager& Services() noexcept;
 	const blazeclaw::core::ServiceManager& Services() const noexcept;
 
-	CMultiDocTemplate* GetWebViewOnlyDocTemplate() const noexcept { return m_pWebViewOnlyDocTemplate; }
 	CMultiDocTemplate* GetChatDocTemplate() const noexcept { return m_pChatDocTemplate; }
+	CSharedTabsDocTemplate* GetWebViewMarkdownSharedDocTemplate() const noexcept { return m_pWebViewMarkdownSharedDocTemplate; }
+	CRuntimeClass* GetWebViewMarkdownLeftViewClass() const;
+	CRuntimeClass* GetWebViewMarkdownRightViewClass() const;
 
 private:
 	blazeclaw::config::ConfigLoader m_configLoader;
 	blazeclaw::config::AppConfig m_config;
 	blazeclaw::core::ServiceManager m_serviceManager;
 
-	CMultiDocTemplate* m_pWebViewOnlyDocTemplate = nullptr;
 	CMultiDocTemplate* m_pChatDocTemplate = nullptr;
+	CSharedTabsDocTemplate* m_pWebViewMarkdownSharedDocTemplate = nullptr;
 };
 
 extern CBlazeClawMFCApp theApp;
