@@ -76,6 +76,7 @@ Integrate `llama.cpp` as a first-class local inference backend in BlazeClawMfc s
    - prompt formatting handoff
    - token generation loop
    - cancellation checks/timeouts
+   - align with current Onnx runtime behavior where cancel flags are cleared on all terminal paths (success/error/cancel)
 4. Add deterministic error mapping (load failure, OOM, invalid GGUF path, incompatible model).
 5. Keep logging/TRACE style consistent with current diagnostics.
 

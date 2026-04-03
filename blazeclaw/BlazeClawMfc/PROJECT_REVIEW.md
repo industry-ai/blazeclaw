@@ -62,7 +62,7 @@ Consequences:
 ### Risk points
 
 - Chat history and event queues are now bounded per session, but retained payloads can still be large when message bodies are large.
-- Local-model cancel flags may accumulate on early-return paths if not erased in all terminal branches.
+- Local-model cancel flags are now cleaned up via scoped terminal cleanup across success, error, and cancel paths.
 
 ## 4) Performance Issues and Hotspots
 
@@ -123,5 +123,5 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 3. [Completed] Register dispatcher handlers once at startup, not inside `chat.send`.
 4. [Completed] Add retention limits for `m_chatHistoryBySession` and `m_chatEventsBySession`.
 5. [Completed] Fix `PiEmbeddedService` started-at/deadline logic to use real current epoch consistently.
-6. Ensure local-model cancel flags are erased across all terminal/error/cancel paths.
+6. [Completed] Ensure local-model cancel flags are erased across all terminal/error/cancel paths.
 7. Optionally parallelize embeddings safely (separate sessions or lock partitioning).
