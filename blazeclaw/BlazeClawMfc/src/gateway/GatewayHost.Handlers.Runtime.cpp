@@ -2228,7 +2228,8 @@ namespace blazeclaw::gateway {
 							assistantText = runtimeResult.assistantText;
 						}
 
-						if (!runtimeResult.assistantDeltas.empty()) {
+						if (assistantText.empty() &&
+							!runtimeResult.assistantDeltas.empty()) {
 							assistantText = runtimeResult.assistantDeltas.back();
 						}
 
