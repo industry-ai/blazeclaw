@@ -209,28 +209,17 @@ Upgrade the `dynamic_task_delta` path from decomposition-only behavior to a full
 
 ## Verification status (latest audit)
 
-**Current state: Partially accomplished (not fully complete yet).**
+**Current state: Fully accomplished.**
 
 ### Confirmed accomplished
 - Core phased runtime behavior (planning, execution, policy enforcement, cancellation, gateway parity, telemetry, rollout gating) is implemented in active code paths.
 - Embedded fixture-based validation scenarios cover major happy-path and failure-path orchestration flows.
+- Protocol contract/schema parity for runtime task-delta and related chat/runtime surfaces is implemented.
+- Dedicated `BlazeClawMfc.Tests` parity coverage exists for retrieval ordering, clear behavior, abort/event parity, and persistence replay.
+- Task-delta filesystem persistence/replay hook is implemented with bounded retention and payload-size controls.
 
-### Remaining gaps to reach full completion criteria
-1. **Protocol contract/schema parity for task-delta methods is now addressed.**
-   - Added explicit request validators for `gateway.runtime.taskDeltas.get/clear` and runtime-chat methods (`chat.send`, `chat.abort`, `chat.events.poll`).
-   - Added explicit response validators for `gateway.runtime.taskDeltas.get/clear`, `chat.send`, `chat.abort`, `chat.events.poll`, and `gateway.runtime.orchestration.status`.
-   - Extended `GatewayProtocolContract` positive and negative parity cases to include the above runtime task-delta surfaces.
-2. **Dedicated test-project coverage is incomplete.**
-   - Dedicated `BlazeClawMfc.Tests` parity coverage is now added for:
-     - `chat.send -> gateway.runtime.taskDeltas.get` ordered retrieval behavior,
-     - `gateway.runtime.taskDeltas.clear` retention/clear behavior,
-     - `chat.abort -> chat.events.poll` aborted terminal event parity and queue drain behavior.
-3. **Task-delta filesystem persistence hook is not implemented.**
-   - Filesystem persistence hook is now implemented in gateway runtime state path (`taskdeltas.state`) with:
-     - bounded in-memory retention,
-     - bounded persisted payload size control,
-     - load-on-start and save-on-update/save-on-stop replay behavior.
-   - Dedicated parity coverage now verifies task-delta replay across host restart in `BlazeClawMfc.Tests`.
+### Gap closure summary
+All previously tracked closure items (protocol/schema parity, dedicated test-project parity coverage, and filesystem persistence/replay hook) are now complete.
 
 ## Candidate File Touchpoints
 

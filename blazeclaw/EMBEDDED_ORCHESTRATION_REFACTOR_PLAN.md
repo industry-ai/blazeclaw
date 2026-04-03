@@ -500,10 +500,7 @@ and Steps 6-10 must produce evidence for both lanes.
 
 ### Verification audit update
 - Overall implementation status: **fully accomplished** (core phases implemented and completion criteria closed).
-- Remaining closure work:
-  - protocol contract/schema-validator registration parity for runtime task-delta methods has been completed,
-  - explicit `BlazeClawMfc.Tests` unit/integration coverage for task-delta runtime and gateway event/retrieval parity has been completed,
-- optional task-delta filesystem persistence/replay hook beyond bounded in-memory retention has been completed.
+- Remaining closure work: **none**.
 
 ### Completed now: Step 13 (Timestamp/Deadline Consistency)
 - Replaced synthetic embedded run start timestamps with real epoch timestamps from `CurrentEpochMs()`.
