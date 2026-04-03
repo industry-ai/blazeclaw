@@ -80,6 +80,8 @@ protected:
 
 	// New tab creation commands
 	afx_msg void OnWindowNew();
+	afx_msg void OnWindowNewWebViewChat();
+	afx_msg void OnWindowNewWebViewMarkdown();
 	afx_msg void OnUpdateWindowNewWebViewOnly(CCmdUI* pCmdUI);
 
 public:
@@ -89,8 +91,8 @@ public:
 	void OpenNewTabWithChoiceDialog();
 
 private:
-	void OpenWebViewOnlyTab();
 	void OpenWebViewPlusChatTab();
+	void OpenWebViewMarkdownTab();
 
 	// extension commands
 	afx_msg void OnExtensionDeepseek();

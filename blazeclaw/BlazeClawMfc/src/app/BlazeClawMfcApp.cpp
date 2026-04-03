@@ -10,7 +10,10 @@
 #include "BlazeClawMFCDoc.h"
 #include "BlazeClawMFCView.h"
 #include "ChatView.h"
-#include "WebViewOnlyChildFrame.h"
+#include "BlazeClawMarkdownView.h"
+#include "SharedTabsDocTemplate.h"
+#include "SharedDocWebViewChildFrame.h"
+#include "SharedDocMarkdownChildFrame.h"
 
 #include "../core/runtime/LocalModel/TokenizerBridge.h"
 
@@ -438,11 +441,13 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 		return FALSE;
 	AddDocTemplate(m_pChatDocTemplate);
 
-	m_pWebViewOnlyDocTemplate = new CMultiDocTemplate(IDR_BlazeClawMFCTYPE,
+	// New template: Two MDI tabs (WebView + Markdown) sharing the same document
+	m_pWebViewMarkdownSharedDocTemplate = new CSharedTabsDocTemplate(
+		IDR_BlazeClawMFCTYPE,
 		RUNTIME_CLASS(CBlazeClawMFCDoc),
-		RUNTIME_CLASS(CWebViewOnlyChildFrame),
-		RUNTIME_CLASS(CBlazeClawMFCView));
-	AddDocTemplate(m_pWebViewOnlyDocTemplate);
+		RUNTIME_CLASS(CSharedDocWebViewChildFrame),
+		RUNTIME_CLASS(CSharedDocMarkdownChildFrame));
+	AddDocTemplate(m_pWebViewMarkdownSharedDocTemplate);
 
 	//auto* frame = new CMainFrame();
 	//m_pMainWnd = frame;
@@ -520,6 +525,14 @@ BOOL CBlazeClawMFCApp::OnIdle(LONG lCount) {
 
 blazeclaw::core::ServiceManager& CBlazeClawMFCApp::Services() noexcept {
 	return m_serviceManager;
+}
+
+CRuntimeClass* CBlazeClawMFCApp::GetWebViewMarkdownLeftViewClass() const {
+	return RUNTIME_CLASS(CBlazeClawMFCView);
+}
+
+CRuntimeClass* CBlazeClawMFCApp::GetWebViewMarkdownRightViewClass() const {
+	return RUNTIME_CLASS(CBlazeClawMarkdownView);
 }
 
 void CBlazeClawMFCApp::OnFileNew()

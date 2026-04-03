@@ -14,7 +14,9 @@
 #include "CredentialStore.h"
 #include "ApiKeyDialog.h"
 #include "SettingsDialog.h"
-#include "NewTabDialog.h"
+#include "BlazeClawMFCView.h"
+#include "BlazeClawMarkdownView.h"
+#include "SharedTabsDocTemplate.h"
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -106,6 +108,8 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWndEx)
 	ON_COMMAND(ID_EXTENSION_MODELSET, &CMainFrame::OnExtensionModelSet)
 	ON_COMMAND(ID_WINDOW_NEW_WEBVIEW, &CMainFrame::OnWindowNew)
 	ON_UPDATE_COMMAND_UI(ID_WINDOW_NEW_WEBVIEW, &CMainFrame::OnUpdateWindowNewWebViewOnly)
+	ON_COMMAND(ID_WINDOW_NEW_WEBVIEW_CHAT, &CMainFrame::OnWindowNewWebViewChat)
+	ON_COMMAND(ID_WINDOW_NEW_WEBVIEW_MARKDOWN, &CMainFrame::OnWindowNewWebViewMarkdown)
 	ON_WM_SETTINGCHANGE()
 	ON_MESSAGE(kMsgCreateMdiGroup, &CMainFrame::OnCreateMdiGroup)
 
@@ -150,14 +154,9 @@ void CMainFrame::CreateTwoTabbedGroups()
 {
 	// MDI Tabbed Groups already enabled in OnCreate via EnableMDITabbedGroups.
 
-	// Default startup: two side-by-side groups, each with a single WebView-only tab.
-	OpenWebViewOnlyTab();
-	OpenWebViewOnlyTab();
+	// Default startup: single WebView+Markdown shared tab
+	OpenWebViewMarkdownTab();
 
-	RecalcLayout(FALSE);
-
-	// Move the active (second) tab into a new group for side-by-side layout
-	MDITabNewGroup(TRUE);
 	RecalcLayout(FALSE);
 }
 
@@ -1189,14 +1188,7 @@ void CMainFrame::OnExtensionModelSet()
 
 void CMainFrame::OpenNewTabWithChoiceDialog()
 {
-	CNewTabDialog dlg(this);
-	if (dlg.DoModal() != IDOK)
-		return;
-
-	if (dlg.GetSelectedTabType() == NewTabType::WebViewOnly)
-		OpenWebViewOnlyTab();
-	else
-		OpenWebViewPlusChatTab();
+	OpenWebViewPlusChatTab();
 }
 
 void CMainFrame::OnWindowNew()
@@ -1204,20 +1196,14 @@ void CMainFrame::OnWindowNew()
 	OpenNewTabWithChoiceDialog();
 }
 
-void CMainFrame::OpenWebViewOnlyTab()
+void CMainFrame::OnWindowNewWebViewChat()
 {
-	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
-	auto* tpl = app ? app->GetWebViewOnlyDocTemplate() : nullptr;
-	TRACE(_T("[CMainFrame::OpenWebViewOnlyTab] app=%p tpl=%p\n"), app, tpl);
-	if (!app || !tpl)
-		return;
+	OpenWebViewPlusChatTab();
+}
 
-	CDocument* pDoc = tpl->OpenDocumentFile(nullptr);
-	TRACE(_T("[CMainFrame::OpenWebViewOnlyTab] pDoc=%p\n"), pDoc);
-	if (!pDoc)
-		return;
-
-	AddChatStatusLine(_T("[Tab] New WebView-only tab created."));
+void CMainFrame::OnWindowNewWebViewMarkdown()
+{
+	OpenWebViewMarkdownTab();
 }
 
 void CMainFrame::OpenWebViewPlusChatTab()
@@ -1234,6 +1220,21 @@ void CMainFrame::OpenWebViewPlusChatTab()
 		return;
 
 	AddChatStatusLine(_T("[Tab] New WebView+Chat tab created."));
+}
+
+void CMainFrame::OpenWebViewMarkdownTab()
+{
+	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	auto* tpl = app ? app->GetWebViewMarkdownSharedDocTemplate() : nullptr;
+	TRACE(_T("[CMainFrame::OpenWebViewMarkdownTab] app=%p tpl=%p\n"), app, tpl);
+	if (!app || !tpl)
+		return;
+
+	// CreateSharedTabs creates two MDI tabs (WebView + Markdown) sharing the same document
+	CDocument* pDoc = tpl->CreateSharedTabs(this, TRUE);
+	TRACE(_T("[CMainFrame::OpenWebViewMarkdownTab] pDoc=%p\n"), pDoc);
+
+	AddChatStatusLine(_T("[Tab] New WebView+Markdown shared tabs created."));
 }
 
 void CMainFrame::OnUpdateWindowNewWebViewOnly(CCmdUI* pCmdUI)

@@ -19,7 +19,7 @@
 #undef APSTUDIO_READONLY_SYMBOLS
 
 /////////////////////////////////////////////////////////////////////////////
-// Chinese (Simplified, China) resources
+// 中文(简体，中国) resources
 
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
@@ -94,21 +94,18 @@ FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
     LTEXT           "Model Selection",IDC_STATIC_SETTINGS_TITLE,14,14,360,14
     LTEXT           "Select the AI models you want to enable:",IDC_STATIC_SETTINGS_DESC,14,32,360,14
-    CONTROL         "",IDC_LIST_MODELS,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_NOCOLUMNHEADER | WS_BORDER | WS_TABSTOP,14,52,372,195
+    CONTROL         "",IDC_LIST_MODELS,"SysListView32",LVS_REPORT | LVS_SINGLESEL | WS_BORDER | WS_TABSTOP | LVS_NOCOLUMNHEADER,14,52,372,190
     PUSHBUTTON      "Select All",IDC_BUTTON_SELECT_ALL,14,255,60,14
     PUSHBUTTON      "Deselect All",IDC_BUTTON_DESELECT_ALL,80,255,70,14
     LTEXT           "",IDC_STATIC_MODEL_COUNT,160,258,120,14
     DEFPUSHBUTTON   "OK",IDOK,290,255,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,345,255,50,14
-    CONTROL         "",IDC_PROGRESS1,"msctls_progress32",WS_BORDER,7,289,386,22
 END
-
 
 /////////////////////////////////////////////////////////////////////////////
 //
 // DESIGNINFO
 //
-
 #ifdef APSTUDIO_INVOKED
 GUIDELINES DESIGNINFO
 BEGIN
@@ -125,6 +122,25 @@ END
 
 /////////////////////////////////////////////////////////////////////////////
 //
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO
+BEGIN
+    IDD_APIKEY_DIALOG, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 380
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 169
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
 // AFX_DIALOG_LAYOUT
 //
 
@@ -133,17 +149,12 @@ BEGIN
     0
 END
 
-IDD_SETTINGS_DIALOG AFX_DIALOG_LAYOUT
-BEGIN
-    0
-END
-
-#endif    // Chinese (Simplified, China) resources
+#endif    // 中文(简体，中国) resources
 /////////////////////////////////////////////////////////////////////////////
 
 
 /////////////////////////////////////////////////////////////////////////////
-// English (United States) resources
+// 英语(美国) resources
 
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
 LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
@@ -780,7 +791,8 @@ BEGIN
     POPUP "&Window"
     BEGIN
         MENUITEM "&New Window",                 ID_WINDOW_NEW
-        MENUITEM "New &WebView Tab",            ID_WINDOW_NEW_WEBVIEW
+        MENUITEM "New WebView+Chat Tab",        ID_WINDOW_NEW_WEBVIEW_CHAT
+        MENUITEM "New WebView+Markdown Tab",    ID_WINDOW_NEW_WEBVIEW_MARKDOWN
     END
     POPUP "&Help"
     BEGIN
@@ -1122,7 +1134,7 @@ BEGIN
     ID_EXTENSION_DEEPSEEK   "Use deepseek as default model\ndeepseek"
 END
 
-#endif    // English (United States) resources
+#endif    // 英语(美国) resources
 /////////////////////////////////////////////////////////////////////////////
 
 
