@@ -492,6 +492,12 @@ and Steps 6-10 must produce evidence for both lanes.
 - Added embedded dynamic-loop metrics fields in operator diagnostics report generation.
 - Surfaced dynamic-loop counters through `gateway.runtime.orchestration.status` for operator diagnostics parity.
 
+### Completed now: Dynamic Task-Delta Full Plan Phase 8 follow-up
+- Kept comprehensive validation-matrix fixture coverage active for success/failure/cancel/timeout/approval paths.
+- Preserved rollout gating via canary provider/session controls for dynamic loop activation.
+- Added threshold-based promotion readiness checks for default-path enablement using run-count and success-rate criteria.
+- Added startup-configurable promotion thresholds through environment variables and exposed readiness metrics in operator diagnostics.
+
 ### Completed now: Step 13 (Timestamp/Deadline Consistency)
 - Replaced synthetic embedded run start timestamps with real epoch timestamps from `CurrentEpochMs()`.
 - Aligned completion timestamps with real epoch values for both success and failure paths.

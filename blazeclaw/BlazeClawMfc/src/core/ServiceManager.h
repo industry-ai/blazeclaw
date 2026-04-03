@@ -83,6 +83,7 @@ namespace blazeclaw::core {
 		[[nodiscard]] bool IsEmbeddedDynamicLoopCanaryEligible(
 			const std::string& provider,
 			const std::string& sessionId) const;
+		[[nodiscard]] bool IsEmbeddedDynamicLoopPromotionReady() const;
 		[[nodiscard]] bool ShouldFallbackFromEmbeddedFailure(
 			const std::string& errorCode,
 			const std::string& reason) const;
@@ -128,11 +129,14 @@ namespace blazeclaw::core {
 		PiEmbeddedService m_piEmbeddedService;
 		std::vector<std::string> m_embeddedDynamicLoopCanaryProviders;
 		std::vector<std::string> m_embeddedDynamicLoopCanarySessions;
+		std::uint64_t m_embeddedDynamicLoopPromotionMinRuns = 20;
+		double m_embeddedDynamicLoopPromotionMinSuccessRate = 0.95;
 		bool m_lastEmbeddedDynamicLoopEnabled = false;
 		bool m_lastEmbeddedCanaryEligible = false;
+		bool m_lastEmbeddedPromotionReady = false;
 		bool m_lastEmbeddedFallbackUsed = false;
 		std::string m_lastEmbeddedFallbackReason;
-        std::uint64_t m_embeddedRunSuccessCount = 0;
+		std::uint64_t m_embeddedRunSuccessCount = 0;
 		std::uint64_t m_embeddedRunFailureCount = 0;
 		std::uint64_t m_embeddedRunTimeoutCount = 0;
 		std::uint64_t m_embeddedRunCancelledCount = 0;
@@ -225,7 +229,7 @@ namespace blazeclaw::core {
 
 		mutable std::mutex m_deepSeekCancelMutex;
 		mutable std::unordered_map<std::string, bool> m_deepSeekCancelledRuns;
-      mutable std::mutex m_embeddedCancelMutex;
+		mutable std::mutex m_embeddedCancelMutex;
 		mutable std::unordered_map<std::string, bool> m_embeddedCancelledRuns;
 	};
 

@@ -259,6 +259,60 @@ namespace blazeclaw::core {
 			return values;
 		}
 
+		std::uint64_t ParseUInt64EnvValue(
+			const wchar_t* key,
+			const std::uint64_t fallback) {
+			wchar_t* env = nullptr;
+			std::size_t len = 0;
+			if (_wdupenv_s(&env, &len, key) != 0 || env == nullptr || len == 0) {
+				if (env != nullptr) {
+					free(env);
+				}
+				return fallback;
+			}
+
+			const std::wstring rawValue(env);
+			free(env);
+
+			const std::wstring trimmed = Trim(rawValue);
+			if (trimmed.empty()) {
+				return fallback;
+			}
+
+			try {
+				return static_cast<std::uint64_t>(std::stoull(trimmed));
+			}
+			catch (...) {
+				return fallback;
+			}
+		}
+
+		double ParseDoubleEnvValue(const wchar_t* key, const double fallback) {
+			wchar_t* env = nullptr;
+			std::size_t len = 0;
+			if (_wdupenv_s(&env, &len, key) != 0 || env == nullptr || len == 0) {
+				if (env != nullptr) {
+					free(env);
+				}
+				return fallback;
+			}
+
+			const std::wstring rawValue(env);
+			free(env);
+
+			const std::wstring trimmed = Trim(rawValue);
+			if (trimmed.empty()) {
+				return fallback;
+			}
+
+			try {
+				return std::stod(trimmed);
+			}
+			catch (...) {
+				return fallback;
+			}
+		}
+
 		bool ContainsCaseInsensitive(
 			const std::vector<std::string>& values,
 			const std::string& candidate) {
@@ -1887,8 +1941,21 @@ namespace blazeclaw::core {
 			L"BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_CANARY_PROVIDERS");
 		m_embeddedDynamicLoopCanarySessions = ParseCsvEnvValues(
 			L"BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_CANARY_SESSIONS");
+		m_embeddedDynamicLoopPromotionMinRuns = ParseUInt64EnvValue(
+			L"BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_PROMOTION_MIN_RUNS",
+			20);
+		m_embeddedDynamicLoopPromotionMinSuccessRate = ParseDoubleEnvValue(
+			L"BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_PROMOTION_MIN_SUCCESS_RATE",
+			0.95);
+		m_embeddedRunSuccessCount = 0;
+		m_embeddedRunFailureCount = 0;
+		m_embeddedRunTimeoutCount = 0;
+		m_embeddedRunCancelledCount = 0;
+		m_embeddedRunFallbackCount = 0;
+		m_embeddedTaskDeltaTransitionCount = 0;
 		m_lastEmbeddedDynamicLoopEnabled = false;
 		m_lastEmbeddedCanaryEligible = false;
+		m_lastEmbeddedPromotionReady = false;
 		m_lastEmbeddedFallbackUsed = false;
 		m_lastEmbeddedFallbackReason.clear();
 		RefreshSkillsState(m_activeConfig, true, L"startup");
@@ -2219,10 +2286,13 @@ namespace blazeclaw::core {
 				const bool canaryEligible = IsEmbeddedDynamicLoopCanaryEligible(
 					m_activeChatProvider,
 					sessionId);
+				const bool promotionReady = IsEmbeddedDynamicLoopPromotionReady();
 				const bool enableEmbeddedDynamicLoop =
-					m_activeConfig.embedded.dynamicToolLoopEnabled && canaryEligible;
+					m_activeConfig.embedded.dynamicToolLoopEnabled &&
+					(canaryEligible || promotionReady);
 				m_lastEmbeddedDynamicLoopEnabled = enableEmbeddedDynamicLoop;
 				m_lastEmbeddedCanaryEligible = canaryEligible;
+				m_lastEmbeddedPromotionReady = promotionReady;
 				m_lastEmbeddedFallbackUsed = false;
 				m_lastEmbeddedFallbackReason.clear();
 
@@ -2805,6 +2875,12 @@ namespace blazeclaw::core {
 		const auto embeddings = Embeddings();
 		const auto localModel = LocalModelRuntime();
 		const auto retrieval = RetrievalMemory();
+		const std::uint64_t embeddedTotalRuns =
+			m_embeddedRunSuccessCount + m_embeddedRunFailureCount;
+		const double embeddedSuccessRate = embeddedTotalRuns == 0
+			? 0.0
+			: static_cast<double>(m_embeddedRunSuccessCount) /
+			static_cast<double>(embeddedTotalRuns);
 		const bool selfEvolvingReminderInjected =
 			m_skillsPrompt.prompt.find(L"## Self-Evolving Reminder") !=
 			std::wstring::npos;
@@ -2826,10 +2902,18 @@ namespace blazeclaw::core {
 			std::string(m_lastEmbeddedDynamicLoopEnabled ? "true" : "false") +
 			",\"canaryEligible\":" +
 			std::string(m_lastEmbeddedCanaryEligible ? "true" : "false") +
+			",\"promotionReady\":" +
+			std::string(m_lastEmbeddedPromotionReady ? "true" : "false") +
+			",\"promotionMinRuns\":" +
+			std::to_string(m_embeddedDynamicLoopPromotionMinRuns) +
+			",\"promotionMinSuccessRate\":" +
+			std::to_string(m_embeddedDynamicLoopPromotionMinSuccessRate) +
 			",\"fallbackUsed\":" +
 			std::string(m_lastEmbeddedFallbackUsed ? "true" : "false") +
 			",\"fallbackReason\":\"" + m_lastEmbeddedFallbackReason +
-			"\",\"runSuccess\":" + std::to_string(m_embeddedRunSuccessCount) +
+			"\",\"totalRuns\":" + std::to_string(embeddedTotalRuns) +
+			",\"successRate\":" + std::to_string(embeddedSuccessRate) +
+			",\"runSuccess\":" + std::to_string(m_embeddedRunSuccessCount) +
 			",\"runFailure\":" + std::to_string(m_embeddedRunFailureCount) +
 			",\"runTimeout\":" + std::to_string(m_embeddedRunTimeoutCount) +
 			",\"runCancelled\":" + std::to_string(m_embeddedRunCancelledCount) +
@@ -3736,6 +3820,23 @@ namespace blazeclaw::core {
 		const bool sessionAllowed = m_embeddedDynamicLoopCanarySessions.empty() ||
 			ContainsCaseInsensitive(m_embeddedDynamicLoopCanarySessions, sessionId);
 		return providerAllowed && sessionAllowed;
+	}
+
+	bool ServiceManager::IsEmbeddedDynamicLoopPromotionReady() const {
+		if (!m_activeConfig.embedded.dynamicToolLoopEnabled) {
+			return false;
+		}
+
+		const std::uint64_t totalRuns =
+			m_embeddedRunSuccessCount + m_embeddedRunFailureCount;
+		if (totalRuns < m_embeddedDynamicLoopPromotionMinRuns) {
+			return false;
+		}
+
+		const double successRate =
+			static_cast<double>(m_embeddedRunSuccessCount) /
+			static_cast<double>(totalRuns);
+		return successRate >= m_embeddedDynamicLoopPromotionMinSuccessRate;
 	}
 
 	bool ServiceManager::ShouldFallbackFromEmbeddedFailure(

@@ -196,6 +196,17 @@ Upgrade the `dynamic_task_delta` path from decomposition-only behavior to a full
 2. Gate rollout via canary provider/session controls.
 3. Promote to default path after parity and reliability thresholds pass.
 
+### Phase 8 implementation status
+
+- Completed in code:
+  - Validation matrix coverage remains active in embedded fixture scenarios for success/failure/cancel/timeout/approval and ordered task-delta assertions.
+  - Rollout gating remains enforced by provider/session canary controls (`BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_CANARY_PROVIDERS`, `BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_CANARY_SESSIONS`).
+  - Added promotion thresholds for default-path rollout via reliability checks:
+    - `BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_PROMOTION_MIN_RUNS`
+    - `BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_PROMOTION_MIN_SUCCESS_RATE`
+  - Embedded dynamic loop now enables when canary is eligible **or** promotion thresholds are satisfied.
+  - Added operator diagnostics fields for promotion readiness, thresholds, total runs, and success rate.
+
 ## Candidate File Touchpoints
 
 - `blazeclaw/BlazeClawMfc/src/core/PiEmbeddedService.h`
