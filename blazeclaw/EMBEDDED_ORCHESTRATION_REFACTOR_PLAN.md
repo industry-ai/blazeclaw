@@ -466,6 +466,13 @@ and Steps 6-10 must produce evidence for both lanes.
 - Kept per-step execution on `toolExecutorV2` with compatibility fallback to legacy `toolExecutor`.
 - Added fixture assertions validating deterministic partial-failure delta chains (`plan -> tool_call -> tool_result -> final`).
 
+### Completed now: Dynamic Task-Delta Full Plan Phase 4 follow-up
+- Strengthened timeout/deadline enforcement to cover retry boundaries and terminal timeout normalization.
+- Kept bounded transient retry classification and retry exit conditions deterministic.
+- Enforced max-step policy with a planning window larger than execution cap to make policy checks effective.
+- Maintained allowlist and arg-mode validation gates before tool execution.
+- Added fixture validation for max-step policy failure (`embedded_max_steps_exceeded`).
+
 ### Completed now: Step 13 (Timestamp/Deadline Consistency)
 - Replaced synthetic embedded run start timestamps with real epoch timestamps from `CurrentEpochMs()`.
 - Aligned completion timestamps with real epoch values for both success and failure paths.

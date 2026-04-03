@@ -136,6 +136,16 @@ Upgrade the `dynamic_task_delta` path from decomposition-only behavior to a full
 3. Loop detection and max-step enforcement.
 4. Tool allowlist and arg validation enforcement.
 
+### Phase 4 implementation status
+
+- Completed in code:
+  - Hardened timeout propagation to include retry boundaries and terminal timeout normalization.
+  - Kept bounded transient retry behavior with deterministic break conditions.
+  - Enforced max-step policy via dedicated planning window vs execution policy cap.
+  - Preserved repeated-call signature safeguards and deterministic loop/plan risk handling.
+  - Enforced runtime-tool allowlist and arg-mode validation gates before invocation.
+  - Added fixture coverage for explicit max-step policy failure.
+
 ## Phase 5 — Cancellation and cleanup
 
 1. Wire cancellation checks into execution loop boundaries.

@@ -34,6 +34,8 @@ namespace blazeclaw::core {
 		constexpr const char* kErrorLoopDetected = "embedded_loop_detected";
 		constexpr const char* kErrorCompletionFailed = "embedded_completion_failed";
 		constexpr const char* kErrorToolExecutionFailed = "embedded_tool_execution_failed";
+		constexpr std::size_t kPlanningMaxSteps = 12;
+		constexpr std::size_t kMaxPolicySteps = 6;
 
 		struct EmbeddedExecutionPlanStep {
 			std::size_t index = 0;
@@ -626,7 +628,7 @@ namespace blazeclaw::core {
 		}
 
 		const std::vector<EmbeddedExecutionPlanStep> executionPlan =
-			BuildExecutionPlan(request, 6);
+			BuildExecutionPlan(request, kPlanningMaxSteps);
 
 		if (executionPlan.empty()) {
 			result.accepted = true;
@@ -697,7 +699,6 @@ namespace blazeclaw::core {
 			};
 
 		result.handled = true;
-		static constexpr std::size_t kMaxPolicySteps = 6;
 		if (executionPlan.size() > kMaxPolicySteps) {
 			finalizeFailure(
 				"max_steps_exceeded",
@@ -811,6 +812,22 @@ namespace blazeclaw::core {
 			blazeclaw::gateway::ToolExecuteResultV2 execution{};
 			static constexpr std::size_t kMaxRetries = 2;
 			for (std::size_t attempt = 0; attempt < kMaxRetries; ++attempt) {
+				if (hasTimedOut(CurrentEpochMs())) {
+					execution = blazeclaw::gateway::ToolExecuteResultV2{
+						.tool = toolName,
+						.executed = false,
+						.status = "timeout",
+						.result = {},
+						.errorCode = "timeout",
+						.errorMessage = "embedded run exceeded timeout",
+						.startedAtMs = CurrentEpochMs(),
+						.completedAtMs = CurrentEpochMs(),
+						.latencyMs = 0,
+						.correlationId = correlationId,
+					};
+					break;
+				}
+
 				execution = ExecuteToolWithCompatibility(
 					request,
 					toolName,
@@ -821,6 +838,15 @@ namespace blazeclaw::core {
 					!IsTransientExecutionFailure(execution)) {
 					break;
 				}
+			}
+
+			if (hasTimedOut(CurrentEpochMs())) {
+				finalizeFailure(
+					"deadline_exceeded",
+					kErrorDeadlineExceeded,
+					"embedded run exceeded timeout");
+				result.taskDeltas = GetTaskDeltas(queued.runId);
+				return result;
 			}
 			result.assistantDeltas.push_back(
 				"tools.execute.result tool=" +
@@ -1237,6 +1263,53 @@ namespace blazeclaw::core {
 		if (blockedToolResult.success ||
 			blockedToolResult.errorCode != "embedded_tool_blocked") {
 			outError = L"Fixture validation failed: expected blocked tool policy failure.";
+			return false;
+		}
+
+		PiEmbeddedService maxStepService;
+		maxStepService.Configure(cfg);
+		const auto maxStepResult = maxStepService.ExecuteRun(
+			EmbeddedRuntimeExecutionRequest{
+				.run = EmbeddedRunRequest{
+					.sessionId = "main",
+					.agentId = "default",
+					.message = "run step1 step2 step3 step4 step5 step6 step7",
+					},
+				.skillsPrompt =
+					"Use step1 step2 step3 step4 step5 step6 step7 in strict order.",
+				.toolBindings = {
+					EmbeddedToolBinding{.commandName = "step1", .description = "s1", .toolName = "step1", .argMode = "raw" },
+					EmbeddedToolBinding{.commandName = "step2", .description = "s2", .toolName = "step2", .argMode = "raw" },
+					EmbeddedToolBinding{.commandName = "step3", .description = "s3", .toolName = "step3", .argMode = "raw" },
+					EmbeddedToolBinding{.commandName = "step4", .description = "s4", .toolName = "step4", .argMode = "raw" },
+					EmbeddedToolBinding{.commandName = "step5", .description = "s5", .toolName = "step5", .argMode = "raw" },
+					EmbeddedToolBinding{.commandName = "step6", .description = "s6", .toolName = "step6", .argMode = "raw" },
+					EmbeddedToolBinding{.commandName = "step7", .description = "s7", .toolName = "step7", .argMode = "raw" },
+				},
+				.runtimeTools = {
+					blazeclaw::gateway::ToolCatalogEntry{.id = "step1", .label = "Step1", .category = "policy", .enabled = true },
+					blazeclaw::gateway::ToolCatalogEntry{.id = "step2", .label = "Step2", .category = "policy", .enabled = true },
+					blazeclaw::gateway::ToolCatalogEntry{.id = "step3", .label = "Step3", .category = "policy", .enabled = true },
+					blazeclaw::gateway::ToolCatalogEntry{.id = "step4", .label = "Step4", .category = "policy", .enabled = true },
+					blazeclaw::gateway::ToolCatalogEntry{.id = "step5", .label = "Step5", .category = "policy", .enabled = true },
+					blazeclaw::gateway::ToolCatalogEntry{.id = "step6", .label = "Step6", .category = "policy", .enabled = true },
+					blazeclaw::gateway::ToolCatalogEntry{.id = "step7", .label = "Step7", .category = "policy", .enabled = true },
+				},
+				.enableDynamicToolLoop = true,
+				.toolExecutor = [](const std::string& requestedTool,
+					const std::optional<std::string>& argsJson) {
+					return blazeclaw::gateway::ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = true,
+						.status = "ok",
+						.output = argsJson.value_or("{}"),
+					};
+				},
+			});
+
+		if (maxStepResult.success ||
+			maxStepResult.errorCode != "embedded_max_steps_exceeded") {
+			outError = L"Fixture validation failed: expected max-step policy failure.";
 			return false;
 		}
 
