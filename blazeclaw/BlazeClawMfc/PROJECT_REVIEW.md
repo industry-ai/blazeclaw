@@ -54,13 +54,14 @@ Consequences:
 ### Positive controls
 
 - Transport has explicit limits (`kMaxReadBufferBytes`, outbound queue caps).
+- Chat history retention is now capped per session (`kMaxChatHistoryEntriesPerSession = 500`).
+- Chat event queue retention is now capped per session (`kMaxChatEventsPerSession = 200`).
 - Retrieval memory store is capped at 512 records (`RetrievalMemoryService.cpp:56-58`).
 - Task delta store has bounded retention intent (`m_taskDeltasByRunId.size() > 64`).
 
 ### Risk points
 
-- Chat history is unbounded per session in `m_chatHistoryBySession`.
-- Event queue may grow if `chat.events.poll` consumer lags (`m_chatEventsBySession`).
+- Chat history and event queues are now bounded per session, but retained payloads can still be large when message bodies are large.
 - Local-model cancel flags may accumulate on early-return paths if not erased in all terminal branches.
 
 ## 4) Performance Issues and Hotspots
@@ -118,7 +119,7 @@ This removes per-request dispatcher mutation and avoids unnecessary hot-path reg
 1. Move chat runtime execution (remote/local model) off UI thread using async work queue + completion events.
 2. Switch chat UI updates to incremental append/update instead of full list rebuild.
 3. [Completed] Register dispatcher handlers once at startup, not inside `chat.send`.
-4. Add retention limits for `m_chatHistoryBySession` and `m_chatEventsBySession`.
+4. [Completed] Add retention limits for `m_chatHistoryBySession` and `m_chatEventsBySession`.
 5. Fix `PiEmbeddedService` started-at/deadline logic to use real current epoch consistently.
 6. Ensure local-model cancel flags are erased across all terminal/error/cancel paths.
 7. Optionally parallelize embeddings safely (separate sessions or lock partitioning).

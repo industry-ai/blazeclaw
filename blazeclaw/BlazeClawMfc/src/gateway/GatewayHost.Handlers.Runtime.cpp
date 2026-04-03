@@ -17,6 +17,8 @@ namespace blazeclaw::gateway {
 
 	namespace {
 		constexpr char kSilentReplyToken[] = "NO_REPLY";
+		constexpr std::size_t kMaxChatHistoryEntriesPerSession = 500;
+		constexpr std::size_t kMaxChatEventsPerSession = 200;
 
 		std::string EscapeJsonLocal(const std::string& value) {
 			std::string escaped;
@@ -778,6 +780,23 @@ namespace blazeclaw::gateway {
 			}
 
 			history.push_back(messageJson);
+			if (history.size() > kMaxChatHistoryEntriesPerSession) {
+				const std::size_t overflow =
+					history.size() - kMaxChatHistoryEntriesPerSession;
+				history.erase(
+					history.begin(),
+					history.begin() + static_cast<std::ptrdiff_t>(overflow));
+			}
+		}
+
+		template <typename T>
+		void PushEventWithRetentionLimit(
+			std::deque<T>& queue,
+			T eventState) {
+			queue.push_back(std::move(eventState));
+			while (queue.size() > kMaxChatEventsPerSession) {
+				queue.pop_front();
+			}
 		}
 
 		bool ValidateAttachmentPayloadShape(
@@ -2073,14 +2092,14 @@ namespace blazeclaw::gateway {
 				if (!failed && !silentAssistantReply) {
 					streamCursor = (std::min)(assistantText.size(), std::size_t{ 6 });
 					if (streamCursor > 0) {
-						sessionEvents.push_back(ChatEventState{
-							.runId = runId,
-							.sessionKey = sessionKey,
-							.state = "delta",
-							.messageJson = BuildAssistantDeltaMessageJson(
-								assistantText.substr(0, streamCursor)),
-							.errorMessage = std::nullopt,
-							.timestampMs = nowMs,
+						PushEventWithRetentionLimit(sessionEvents, ChatEventState{
+							   .runId = runId,
+							   .sessionKey = sessionKey,
+							   .state = "delta",
+							   .messageJson = BuildAssistantDeltaMessageJson(
+								   assistantText.substr(0, streamCursor)),
+							   .errorMessage = std::nullopt,
+							   .timestampMs = nowMs,
 							});
 						EmitDeepSeekGatewayDiagnostic(
 							"event.enqueue",
@@ -2191,18 +2210,18 @@ namespace blazeclaw::gateway {
 				const std::uint64_t nowMs = CurrentEpochMsLocal();
 				const bool silentAssistantReply =
 					IsSilentReplyText(runIt->second.assistantText);
-				queue.push_back(ChatEventState{
-					.runId = runIt->second.runId,
-					.sessionKey = sessionKey,
-					.state = "aborted",
-					.messageJson = silentAssistantReply
-						? std::nullopt
-						: std::optional<std::string>(
-							BuildAssistantFinalMessageJson(
-								runIt->second.assistantText,
-								nowMs)),
-					.errorMessage = std::nullopt,
-					.timestampMs = nowMs,
+				PushEventWithRetentionLimit(queue, ChatEventState{
+					   .runId = runIt->second.runId,
+					   .sessionKey = sessionKey,
+					   .state = "aborted",
+					   .messageJson = silentAssistantReply
+						   ? std::nullopt
+						   : std::optional<std::string>(
+							   BuildAssistantFinalMessageJson(
+								   runIt->second.assistantText,
+								   nowMs)),
+					   .errorMessage = std::nullopt,
+					   .timestampMs = nowMs,
 					});
 				EmitDeepSeekGatewayDiagnostic(
 					"event.enqueue",
@@ -2277,13 +2296,13 @@ namespace blazeclaw::gateway {
 
 						run.lastEmitMs = nowMs;
 
-						queue.push_back(ChatEventState{
-							.runId = run.runId,
-							.sessionKey = run.sessionKey,
-							.state = "delta",
-							.messageJson = BuildAssistantDeltaMessageJson(deltaText),
-							.errorMessage = std::nullopt,
-							.timestampMs = nowMs,
+						PushEventWithRetentionLimit(queue, ChatEventState{
+							   .runId = run.runId,
+							   .sessionKey = run.sessionKey,
+							   .state = "delta",
+							   .messageJson = BuildAssistantDeltaMessageJson(deltaText),
+							   .errorMessage = std::nullopt,
+							   .timestampMs = nowMs,
 							});
 						EmitDeepSeekGatewayDiagnostic(
 							"event.enqueue",
@@ -2300,20 +2319,20 @@ namespace blazeclaw::gateway {
 						(run.providerDeltaCursor >= run.providerDeltas.size() &&
 							run.streamCursor >= run.assistantText.size());
 					if (streamCompleted) {
-						queue.push_back(ChatEventState{
-							.runId = run.runId,
-							.sessionKey = run.sessionKey,
-							.state = run.failed ? "error" : "final",
-							.messageJson = run.failed || silentAssistantReply
-								? std::nullopt
-								: std::optional<std::string>(
-									BuildAssistantFinalMessageJson(run.assistantText, nowMs)),
-							.errorMessage = run.failed
-								? std::optional<std::string>(run.errorMessage.empty()
-									? "chat error"
-									: run.errorMessage)
-								: std::nullopt,
-							.timestampMs = nowMs,
+						PushEventWithRetentionLimit(queue, ChatEventState{
+							   .runId = run.runId,
+							   .sessionKey = run.sessionKey,
+							   .state = run.failed ? "error" : "final",
+							   .messageJson = run.failed || silentAssistantReply
+								   ? std::nullopt
+								   : std::optional<std::string>(
+									   BuildAssistantFinalMessageJson(run.assistantText, nowMs)),
+							   .errorMessage = run.failed
+								   ? std::optional<std::string>(run.errorMessage.empty()
+									   ? "chat error"
+									   : run.errorMessage)
+								   : std::nullopt,
+							   .timestampMs = nowMs,
 							});
 						EmitDeepSeekGatewayDiagnostic(
 							"event.enqueue",
