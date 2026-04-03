@@ -79,6 +79,19 @@ Move chat runtime execution (remote HTTP and local model inference) off the UI t
 2. Add queue and run-state containers in service orchestration layer.
 3. Add deterministic error codes for queue-full, cancelled, timed-out, worker-unavailable.
 
+### Phase 1 implementation status
+
+- Completed in code:
+  - Added `ChatRuntimeJobLifecycleStatus` enum in `ServiceManager`.
+  - Added `ChatRuntimeJob` and `ChatRuntimeRunState` contract structures.
+  - Added bounded queue and run-state containers in `ServiceManager` (`m_chatRuntimeQueue`, `m_chatRuntimeRunsById`).
+  - Added deterministic error codes:
+    - `chat_runtime_queue_full`
+    - `chat_runtime_cancelled`
+    - `chat_runtime_timed_out`
+    - `chat_runtime_worker_unavailable`
+  - Added queue state reset on startup/shutdown and cancellation state normalization for abort requests.
+
 ### Phase 2 — Worker and enqueue path
 1. Add worker lifecycle start/stop tied to `ServiceManager` startup/shutdown.
 2. Move synchronous runtime execution from UI-driven path to queued execution.

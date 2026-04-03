@@ -120,8 +120,9 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 
 ## 6) Highest-Impact Improvements (Priority Order)
 
-1. [Planned] Move chat runtime execution (remote/local model) off UI thread using async work queue + completion events.
+1. [In Progress] Move chat runtime execution (remote/local model) off UI thread using async work queue + completion events.
    - Execution plan: `CHAT_RUNTIME_ASYNC_WORK_QUEUE_PLAN.md`
+   - Status: Phase 1 (contract/state preparation) completed in code.
 2. Switch chat UI updates to incremental append/update instead of full list rebuild.
 3. [Completed] Register dispatcher handlers once at startup, not inside `chat.send`.
 4. [Completed] Add retention limits for `m_chatHistoryBySession` and `m_chatEventsBySession`.

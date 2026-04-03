@@ -1958,6 +1958,12 @@ namespace blazeclaw::core {
 		m_lastEmbeddedPromotionReady = false;
 		m_lastEmbeddedFallbackUsed = false;
 		m_lastEmbeddedFallbackReason.clear();
+		{
+			std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
+			m_chatRuntimeQueue.clear();
+			m_chatRuntimeRunsById.clear();
+			m_chatRuntimeNextEnqueueSequence = 1;
+		}
 		RefreshSkillsState(m_activeConfig, true, L"startup");
 
 		std::wstring hookEventError;
@@ -2265,6 +2271,56 @@ namespace blazeclaw::core {
 					request.sessionKey.empty() ? "main" : request.sessionKey;
 				const std::string runtimeMessage =
 					BuildSkillsInjectedMessage(request.message, m_skillsPrompt.prompt);
+
+				const std::uint64_t enqueuedAtMs = CurrentEpochMs();
+				{
+					std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
+					if (m_chatRuntimeQueue.size() >= kChatRuntimeQueueCapacity) {
+						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+							.ok = false,
+							.assistantText = {},
+							.modelId = m_activeChatModel,
+							.errorCode = kChatRuntimeErrorQueueFull,
+							.errorMessage = "chat runtime queue capacity reached",
+						};
+					}
+
+					const std::uint64_t enqueueSequence =
+						m_chatRuntimeNextEnqueueSequence++;
+					m_chatRuntimeQueue.push_back(ChatRuntimeJob{
+						.enqueueSequence = enqueueSequence,
+						.enqueuedAtMs = enqueuedAtMs,
+						.status = ChatRuntimeJobLifecycleStatus::Queued,
+						.request = request,
+						.provider = m_activeChatProvider,
+						.model = m_activeChatModel,
+						});
+
+					m_chatRuntimeRunsById[request.runId] = ChatRuntimeRunState{
+						.runId = request.runId,
+						.sessionId = sessionId,
+						.provider = m_activeChatProvider,
+						.model = m_activeChatModel,
+						.enqueuedAtMs = enqueuedAtMs,
+						.startedAtMs = 0,
+						.completedAtMs = 0,
+						.status = ChatRuntimeJobLifecycleStatus::Queued,
+						.errorCode = {},
+					};
+				}
+
+				{
+					std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
+					if (!m_chatRuntimeQueue.empty()) {
+						m_chatRuntimeQueue.pop_front();
+					}
+
+					auto stateIt = m_chatRuntimeRunsById.find(request.runId);
+					if (stateIt != m_chatRuntimeRunsById.end()) {
+						stateIt->second.status = ChatRuntimeJobLifecycleStatus::Started;
+						stateIt->second.startedAtMs = CurrentEpochMs();
+					}
+				}
 
 				std::vector<EmbeddedToolBinding> toolBindings;
 				toolBindings.reserve(m_skillsCommands.commands.size());
@@ -2680,6 +2736,16 @@ namespace blazeclaw::core {
 
 		m_gatewayHost.SetChatAbortCallback([this](
 			const blazeclaw::gateway::GatewayHost::ChatAbortRequest& request) {
+				{
+					std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
+					auto stateIt = m_chatRuntimeRunsById.find(request.runId);
+					if (stateIt != m_chatRuntimeRunsById.end()) {
+						stateIt->second.status = ChatRuntimeJobLifecycleStatus::Cancelled;
+						stateIt->second.completedAtMs = CurrentEpochMs();
+						stateIt->second.errorCode = kChatRuntimeErrorCancelled;
+					}
+				}
+
 				MarkEmbeddedRunCancelled(request.runId);
 
 				if (m_activeChatProvider == "deepseek") {
@@ -2763,6 +2829,12 @@ namespace blazeclaw::core {
 
 	void ServiceManager::Stop() {
 		m_skillsEnvOverrideService.RevertAll();
+		{
+			std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
+			m_chatRuntimeQueue.clear();
+			m_chatRuntimeRunsById.clear();
+			m_chatRuntimeNextEnqueueSequence = 1;
+		}
 		m_gatewayHost.Stop();
 		m_running = false;
 	}

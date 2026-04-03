@@ -30,6 +30,8 @@
 #include "SkillsWatchService.h"
 #include "runtime/LocalModel/OnnxTextGenerationRuntime.h"
 #include <atomic>
+#include <cstdint>
+#include <deque>
 #include <mutex>
 #include <optional>
 #include <unordered_map>
@@ -79,6 +81,49 @@ namespace blazeclaw::core {
 		bool PumpGatewayNetworkOnce(std::string& error);
 
 	private:
+		enum class ChatRuntimeJobLifecycleStatus {
+			Queued,
+			Started,
+			Delta,
+			Completed,
+			Failed,
+			Cancelled,
+			TimedOut,
+		};
+
+		struct ChatRuntimeJob {
+			std::uint64_t enqueueSequence = 0;
+			std::uint64_t enqueuedAtMs = 0;
+			ChatRuntimeJobLifecycleStatus status =
+				ChatRuntimeJobLifecycleStatus::Queued;
+			blazeclaw::gateway::GatewayHost::ChatRuntimeRequest request;
+			std::string provider;
+			std::string model;
+		};
+
+		struct ChatRuntimeRunState {
+			std::string runId;
+			std::string sessionId;
+			std::string provider;
+			std::string model;
+			std::uint64_t enqueuedAtMs = 0;
+			std::uint64_t startedAtMs = 0;
+			std::uint64_t completedAtMs = 0;
+			ChatRuntimeJobLifecycleStatus status =
+				ChatRuntimeJobLifecycleStatus::Queued;
+			std::string errorCode;
+		};
+
+		static constexpr std::size_t kChatRuntimeQueueCapacity = 64;
+		static constexpr const char* kChatRuntimeErrorQueueFull =
+			"chat_runtime_queue_full";
+		static constexpr const char* kChatRuntimeErrorCancelled =
+			"chat_runtime_cancelled";
+		static constexpr const char* kChatRuntimeErrorTimedOut =
+			"chat_runtime_timed_out";
+		static constexpr const char* kChatRuntimeErrorWorkerUnavailable =
+			"chat_runtime_worker_unavailable";
+
 		[[nodiscard]] bool IsLocalModelRolloutEligible() const;
 		[[nodiscard]] bool IsEmbeddedDynamicLoopCanaryEligible(
 			const std::string& provider,
@@ -231,6 +276,11 @@ namespace blazeclaw::core {
 		mutable std::unordered_map<std::string, bool> m_deepSeekCancelledRuns;
 		mutable std::mutex m_embeddedCancelMutex;
 		mutable std::unordered_map<std::string, bool> m_embeddedCancelledRuns;
+		mutable std::mutex m_chatRuntimeQueueMutex;
+		std::deque<ChatRuntimeJob> m_chatRuntimeQueue;
+		std::unordered_map<std::string, ChatRuntimeRunState>
+			m_chatRuntimeRunsById;
+		std::uint64_t m_chatRuntimeNextEnqueueSequence = 1;
 	};
 
 } // namespace blazeclaw::core
