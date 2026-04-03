@@ -97,6 +97,15 @@ Move chat runtime execution (remote HTTP and local model inference) off the UI t
 2. Move synchronous runtime execution from UI-driven path to queued execution.
 3. Keep gateway response contract behavior stable for callers.
 
+### Phase 2 implementation status
+
+- Completed in code:
+  - Added dedicated chat runtime worker lifecycle in `ServiceManager` (`StartChatRuntimeWorker`, `StopChatRuntimeWorker`, `ChatRuntimeWorkerLoop`).
+  - Wired worker startup at service startup and worker drain/shutdown at service stop.
+  - Moved chat runtime provider execution to worker-queued jobs via executable job payloads.
+  - Preserved callback response contract by awaiting worker completion and returning the same `ChatRuntimeResult` shape.
+  - Added worker-unavailable terminal behavior for queued jobs during shutdown.
+
 ### Phase 3 — Completion and event integration
 1. Emit completion events through existing chat event surfaces.
 2. Normalize terminal sequencing (`final`/`error`/`aborted`) and deduplicate terminal emission.

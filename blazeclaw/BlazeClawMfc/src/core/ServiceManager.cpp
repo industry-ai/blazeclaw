@@ -1963,6 +1963,14 @@ namespace blazeclaw::core {
 			m_chatRuntimeQueue.clear();
 			m_chatRuntimeRunsById.clear();
 			m_chatRuntimeNextEnqueueSequence = 1;
+			m_chatRuntimeWorkerStopRequested = false;
+			m_chatRuntimeWorkerAvailable = false;
+		}
+		const bool chatRuntimeWorkerStarted = StartChatRuntimeWorker();
+		if (!chatRuntimeWorkerStarted) {
+			TRACE(
+				"[ChatRuntime] worker unavailable; callbacks will return %s\n",
+				kChatRuntimeErrorWorkerUnavailable);
 		}
 		RefreshSkillsState(m_activeConfig, true, L"startup");
 
@@ -2271,36 +2279,467 @@ namespace blazeclaw::core {
 					request.sessionKey.empty() ? "main" : request.sessionKey;
 				const std::string runtimeMessage =
 					BuildSkillsInjectedMessage(request.message, m_skillsPrompt.prompt);
+				const std::string activeProvider = m_activeChatProvider;
+				const std::string activeModel = m_activeChatModel;
+				auto executeRequest = [this,
+					request,
+					sessionId,
+					runtimeMessage,
+					activeProvider,
+					activeModel]() -> blazeclaw::gateway::GatewayHost::ChatRuntimeResult {
+
+					std::vector<EmbeddedToolBinding> toolBindings;
+					toolBindings.reserve(m_skillsCommands.commands.size());
+					for (const auto& command : m_skillsCommands.commands) {
+						if (!command.dispatch.enabled ||
+							_wcsicmp(command.dispatch.kind.c_str(), L"tool") != 0 ||
+							command.dispatch.toolName.empty()) {
+							continue;
+						}
+
+						toolBindings.push_back(EmbeddedToolBinding{
+							.commandName = WideToNarrowAscii(command.name),
+							.description = WideToNarrowAscii(command.description),
+							.toolName = WideToNarrowAscii(command.dispatch.toolName),
+						 .argMode = WideToNarrowAscii(command.dispatch.argMode),
+							});
+					}
+
+					const bool canaryEligible = IsEmbeddedDynamicLoopCanaryEligible(
+						activeProvider,
+						sessionId);
+					const bool promotionReady = IsEmbeddedDynamicLoopPromotionReady();
+					const bool enableEmbeddedDynamicLoop =
+						m_activeConfig.embedded.dynamicToolLoopEnabled &&
+						(canaryEligible || promotionReady);
+					m_lastEmbeddedDynamicLoopEnabled = enableEmbeddedDynamicLoop;
+					m_lastEmbeddedCanaryEligible = canaryEligible;
+					m_lastEmbeddedPromotionReady = promotionReady;
+					m_lastEmbeddedFallbackUsed = false;
+					m_lastEmbeddedFallbackReason.clear();
+
+					const auto embeddedExecution = m_piEmbeddedService.ExecuteRun(
+						EmbeddedRuntimeExecutionRequest{
+							.run = EmbeddedRunRequest{
+								.sessionId = sessionId,
+								.agentId = "default",
+								.message = request.message,
+							},
+							.skillsPrompt = WideToNarrowAscii(m_skillsPrompt.prompt),
+							.toolBindings = std::move(toolBindings),
+							.runtimeTools = m_gatewayHost.ListRuntimeTools(),
+						   .enableDynamicToolLoop = enableEmbeddedDynamicLoop,
+						 .toolExecutorV2 = [this](
+								const blazeclaw::gateway::ToolExecuteRequestV2& executeRequest) {
+								return m_gatewayHost.ExecuteRuntimeToolV2(executeRequest);
+							},
+							.toolExecutor = [this](
+												const std::string& tool,
+												const std::optional<std::string>& argsJson) {
+							  return m_gatewayHost.ExecuteRuntimeTool(tool, argsJson);
+							},
+						 .isCancellationRequested = [this, runId = request.runId]() {
+								return IsEmbeddedRunCancelled(runId);
+							},
+						});
+					ClearEmbeddedRunCancelled(request.runId);
+
+					if (!embeddedExecution.accepted) {
+						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+							.ok = false,
+							.assistantText = {},
+						   .modelId = activeModel,
+							.errorCode = "embedded_run_rejected",
+							.errorMessage = embeddedExecution.errorMessage.empty()
+								? embeddedExecution.reason
+								: embeddedExecution.errorMessage,
+						};
+					}
+
+					if (embeddedExecution.handled) {
+						std::vector<blazeclaw::gateway::GatewayHost::ChatRuntimeResult::TaskDeltaEntry>
+							runtimeDeltas;
+						runtimeDeltas.reserve(embeddedExecution.taskDeltas.size());
+						for (const auto& delta : embeddedExecution.taskDeltas) {
+							runtimeDeltas.push_back(
+								blazeclaw::gateway::GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+									.index = delta.index,
+									.runId = delta.runId,
+									.sessionId = delta.sessionId,
+									.phase = delta.phase,
+									.toolName = delta.toolName,
+									.argsJson = delta.argsJson,
+									.resultJson = delta.resultJson,
+									.status = delta.status,
+									.errorCode = delta.errorCode,
+									.startedAtMs = delta.startedAtMs,
+									.completedAtMs = delta.completedAtMs,
+									.latencyMs = delta.latencyMs,
+									.modelTurnId = delta.modelTurnId,
+									.stepLabel = delta.stepLabel,
+								});
+						}
+
+						m_embeddedTaskDeltaTransitionCount +=
+							static_cast<std::uint64_t>(embeddedExecution.taskDeltas.size());
+						if (embeddedExecution.success) {
+							++m_embeddedRunSuccessCount;
+						}
+						else {
+							++m_embeddedRunFailureCount;
+						}
+
+						const std::string normalizedEmbeddedError =
+							ToLowerAscii(embeddedExecution.errorCode);
+						if (normalizedEmbeddedError == "embedded_deadline_exceeded") {
+							++m_embeddedRunTimeoutCount;
+						}
+
+						if (normalizedEmbeddedError == "embedded_run_cancelled") {
+							++m_embeddedRunCancelledCount;
+						}
+
+						if (!embeddedExecution.success) {
+							if (ShouldFallbackFromEmbeddedFailure(
+								embeddedExecution.errorCode,
+								embeddedExecution.reason)) {
+								m_lastEmbeddedFallbackUsed = true;
+								++m_embeddedRunFallbackCount;
+								m_lastEmbeddedFallbackReason = embeddedExecution.errorCode.empty()
+									? embeddedExecution.reason
+									: embeddedExecution.errorCode;
+							}
+							else {
+								return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+									.ok = false,
+									.assistantText = {},
+									.assistantDeltas = embeddedExecution.assistantDeltas,
+									.taskDeltas = std::move(runtimeDeltas),
+								   .modelId = activeModel,
+									.errorCode = embeddedExecution.errorCode.empty()
+										? "embedded_tool_execution_failed"
+										: embeddedExecution.errorCode,
+									.errorMessage = embeddedExecution.errorMessage.empty()
+										? "embedded tool orchestration failed"
+										: embeddedExecution.errorMessage,
+								};
+							}
+						}
+
+						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+							.ok = true,
+							.assistantText = embeddedExecution.assistantText,
+							.assistantDeltas = embeddedExecution.assistantDeltas,
+						   .taskDeltas = std::move(runtimeDeltas),
+						   .modelId = activeModel,
+							.errorCode = {},
+							.errorMessage = {},
+						};
+					}
+
+					auto providerRequest = request;
+					providerRequest.message = runtimeMessage;
+
+					if (activeProvider == "deepseek") {
+						ClearDeepSeekRunCancelled(providerRequest.runId);
+						if (!HasDeepSeekCredential()) {
+							return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+								.ok = false,
+								.assistantText = {},
+							   .modelId = activeModel,
+								.errorCode = "deepseek_api_key_missing",
+								.errorMessage =
+									"DeepSeek API key missing. Configure DeepSeek extension first.",
+							};
+						}
+
+						const std::string effectiveModel = NormalizeDeepSeekApiModelId(
+							activeModel.empty() ? "deepseek-chat" : activeModel);
+						const auto apiKey = ResolveDeepSeekCredentialUtf8();
+						if (!apiKey.has_value() || apiKey->empty()) {
+							return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+								.ok = false,
+								.assistantText = {},
+								.modelId = effectiveModel,
+								.errorCode = "deepseek_api_key_missing",
+								.errorMessage =
+									"DeepSeek API key missing. Configure DeepSeek extension first.",
+							};
+						}
+
+						return InvokeDeepSeekRemoteChat(providerRequest, effectiveModel, apiKey.value());
+					}
+
+					if (m_localModelActivationEnabled) {
+						const std::string prompt = BuildLocalModelPrompt(providerRequest);
+						TRACE(
+							"[LocalModel] request.enqueue runId=%s session=%s promptChars=%zu attachments=%s\n",
+							providerRequest.runId.c_str(),
+							sessionId.c_str(),
+							prompt.size(),
+							providerRequest.hasAttachments ? "true" : "false");
+						TRACE(
+							"[LocalModel] request.start runId=%s\n",
+							providerRequest.runId.c_str());
+
+						const auto localResult = m_localModelRuntime.GenerateStream(
+							localmodel::TextGenerationRequest{
+								.runId = providerRequest.runId,
+								.prompt = prompt,
+								.maxTokens = std::nullopt,
+								.temperature = std::nullopt,
+							},
+							nullptr);
+						m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
+
+						if (!localResult.ok) {
+							const std::string errorCode =
+								localResult.error.has_value()
+								? localmodel::TextGenerationErrorCodeToString(
+									localResult.error->code)
+								: "chat_runtime_error";
+							const std::string errorMessage =
+								localResult.error.has_value() &&
+								!localResult.error->message.empty()
+								? localResult.error->message
+								: "local model generation failed";
+							TRACE(
+								"[LocalModel] request.terminal runId=%s state=%s latencyMs=%u tokens=%u reason=%s\n",
+								providerRequest.runId.c_str(),
+								localResult.cancelled ? "aborted" : "error",
+								localResult.latencyMs,
+								localResult.generatedTokens,
+								errorMessage.c_str());
+							return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+								.ok = false,
+								.assistantText = {},
+								.modelId = localResult.modelId,
+								.errorCode = errorCode,
+								.errorMessage = errorMessage,
+							};
+						}
+
+						std::string assistantText = localResult.text;
+						std::string modelId = localResult.modelId;
+						std::uint32_t latencyMs = localResult.latencyMs;
+						std::uint32_t generatedTokens = localResult.generatedTokens;
+						if (IsLikelyEchoResponse(request.message, assistantText)) {
+							TRACE(
+								"[LocalModel] request.retry runId=%s reason=echo_detected\n",
+								providerRequest.runId.c_str());
+							const std::string retryPrompt = BuildLocalModelRetryPrompt(providerRequest);
+							const auto retryResult = m_localModelRuntime.GenerateStream(
+								localmodel::TextGenerationRequest{
+									.runId = providerRequest.runId + "-retry",
+									.prompt = retryPrompt,
+									.maxTokens = std::nullopt,
+									.temperature = std::nullopt,
+								},
+								nullptr);
+							m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
+
+							if (retryResult.ok &&
+								!IsLikelyEchoResponse(request.message, retryResult.text)) {
+								assistantText = retryResult.text;
+								modelId = retryResult.modelId;
+								latencyMs = retryResult.latencyMs;
+								generatedTokens = retryResult.generatedTokens;
+							}
+						}
+
+						if (IsLikelyEchoResponse(request.message, assistantText)) {
+							TRACE(
+								"[LocalModel] request.terminal runId=%s state=error latencyMs=%u tokens=%u reason=echo_output_detected\n",
+								providerRequest.runId.c_str(),
+								latencyMs,
+								generatedTokens);
+							return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+								.ok = false,
+								.assistantText = {},
+								.modelId = modelId,
+								.errorCode = "local_model_echo_output",
+								.errorMessage = "local model echoed user input",
+							};
+						}
+
+						TRACE(
+							"[LocalModel] request.terminal runId=%s state=final latencyMs=%u tokens=%u\n",
+							providerRequest.runId.c_str(),
+							latencyMs,
+							generatedTokens);
+
+						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+							.ok = true,
+							.assistantText = assistantText,
+							.modelId = modelId,
+							.errorCode = {},
+							.errorMessage = {},
+						};
+					}
+
+					if (m_activeConfig.localModel.enabled &&
+						!m_localModelActivationEnabled) {
+						TRACE(
+							"[LocalModel] request.fallback runId=%s reason=%s rolloutEligible=%s status=%s\n",
+							request.runId.c_str(),
+							m_localModelActivationReason.c_str(),
+							m_localModelRolloutEligible ? "true" : "false",
+							m_localModelRuntimeSnapshot.status.c_str());
+					}
+
+					const auto modelSelection = m_agentsModelRoutingService.SelectModel(
+						m_activeConfig.agent.model.empty()
+						? std::string()
+						: ToNarrow(m_activeConfig.agent.model),
+						"chat.send");
+
+					std::string retrievalContext;
+					if (m_activeConfig.embeddings.enabled && !request.message.empty()) {
+						const auto userEmbedding = m_embeddingsService.EmbedText(
+							EmbeddingRequest{
+								.text = ToWide(request.message),
+								.normalize = true,
+								.traceId = "chat-retrieval-query",
+							});
+						if (userEmbedding.ok) {
+							const auto matches = m_retrievalMemoryService.Query(
+								sessionId,
+								userEmbedding.vector,
+								2);
+							if (!matches.empty()) {
+								retrievalContext = " [ctx:";
+								for (std::size_t i = 0; i < matches.size(); ++i) {
+									if (i > 0) {
+										retrievalContext += " | ";
+									}
+
+									retrievalContext += matches[i].text;
+								}
+
+								retrievalContext += "]";
+							}
+
+							m_retrievalMemoryService.Upsert(
+								sessionId,
+								"user",
+								request.message,
+								userEmbedding.vector,
+								CurrentEpochMs());
+							m_retrievalMemory = m_retrievalMemoryService.Snapshot();
+						}
+					}
+
+					const auto embeddedRun = m_piEmbeddedService.QueueRun(
+						EmbeddedRunRequest{
+							.sessionId = sessionId,
+							.agentId = "default",
+							.message = request.message,
+						});
+
+					if (!embeddedRun.accepted) {
+						m_agentsModelRoutingService.RecordFailover(
+							modelSelection.selectedModel,
+							embeddedRun.reason,
+							embeddedRun.startedAtMs == 0 ? 1735689800000 : embeddedRun.startedAtMs);
+						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+							.ok = false,
+							.assistantText = {},
+							.modelId = modelSelection.selectedModel,
+							.errorCode = "embedded_run_rejected",
+							.errorMessage = embeddedRun.reason,
+						};
+					}
+
+					const std::string assistantText = request.message.empty()
+						? "Received image attachment."
+						: ("Model(" + modelSelection.selectedModel + "): " +
+							request.message + retrievalContext);
+
+					if (m_activeConfig.embeddings.enabled && !assistantText.empty()) {
+						const auto assistantEmbedding = m_embeddingsService.EmbedText(
+							EmbeddingRequest{
+								.text = ToWide(assistantText),
+								.normalize = true,
+								.traceId = "chat-retrieval-index",
+							});
+						if (assistantEmbedding.ok) {
+							m_retrievalMemoryService.Upsert(
+								sessionId,
+								"assistant",
+								assistantText,
+								assistantEmbedding.vector,
+								CurrentEpochMs());
+							m_retrievalMemory = m_retrievalMemoryService.Snapshot();
+						}
+					}
+
+					const bool completed = m_piEmbeddedService.CompleteRun(
+						embeddedRun.runId,
+						"completed",
+						embeddedRun.startedAtMs + 1);
+					if (!completed) {
+						m_agentsModelRoutingService.RecordFailover(
+							modelSelection.selectedModel,
+							"embedded_completion_failed",
+							embeddedRun.startedAtMs + 1);
+						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+							.ok = false,
+							.assistantText = {},
+							.modelId = modelSelection.selectedModel,
+							.errorCode = "embedded_completion_failed",
+							.errorMessage = "embedded completion failed",
+						};
+					}
+
+					return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+						.ok = true,
+						.assistantText = assistantText,
+						.modelId = modelSelection.selectedModel,
+						.errorCode = {},
+						.errorMessage = {},
+					};
+					};
 
 				const std::uint64_t enqueuedAtMs = CurrentEpochMs();
+				auto job = std::make_shared<ChatRuntimeJob>();
 				{
 					std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
+					if (!m_chatRuntimeWorkerAvailable) {
+						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+							.ok = false,
+							.assistantText = {},
+							.modelId = activeModel,
+							.errorCode = kChatRuntimeErrorWorkerUnavailable,
+							.errorMessage = "chat runtime worker unavailable",
+						};
+					}
+
 					if (m_chatRuntimeQueue.size() >= kChatRuntimeQueueCapacity) {
 						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
 							.ok = false,
 							.assistantText = {},
-							.modelId = m_activeChatModel,
+							.modelId = activeModel,
 							.errorCode = kChatRuntimeErrorQueueFull,
 							.errorMessage = "chat runtime queue capacity reached",
 						};
 					}
 
-					const std::uint64_t enqueueSequence =
-						m_chatRuntimeNextEnqueueSequence++;
-					m_chatRuntimeQueue.push_back(ChatRuntimeJob{
-						.enqueueSequence = enqueueSequence,
-						.enqueuedAtMs = enqueuedAtMs,
-						.status = ChatRuntimeJobLifecycleStatus::Queued,
-						.request = request,
-						.provider = m_activeChatProvider,
-						.model = m_activeChatModel,
-						});
+					job->enqueueSequence = m_chatRuntimeNextEnqueueSequence++;
+					job->enqueuedAtMs = enqueuedAtMs;
+					job->status = ChatRuntimeJobLifecycleStatus::Queued;
+					job->request = request;
+					job->sessionId = sessionId;
+					job->runtimeMessage = runtimeMessage;
+					job->provider = activeProvider;
+					job->model = activeModel;
+					job->execute = std::move(executeRequest);
 
+					m_chatRuntimeQueue.push_back(job);
 					m_chatRuntimeRunsById[request.runId] = ChatRuntimeRunState{
 						.runId = request.runId,
 						.sessionId = sessionId,
-						.provider = m_activeChatProvider,
-						.model = m_activeChatModel,
+						.provider = activeProvider,
+						.model = activeModel,
 						.enqueuedAtMs = enqueuedAtMs,
 						.startedAtMs = 0,
 						.completedAtMs = 0,
@@ -2309,429 +2748,13 @@ namespace blazeclaw::core {
 					};
 				}
 
-				{
-					std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
-					if (!m_chatRuntimeQueue.empty()) {
-						m_chatRuntimeQueue.pop_front();
-					}
+				m_chatRuntimeQueueCv.notify_one();
 
-					auto stateIt = m_chatRuntimeRunsById.find(request.runId);
-					if (stateIt != m_chatRuntimeRunsById.end()) {
-						stateIt->second.status = ChatRuntimeJobLifecycleStatus::Started;
-						stateIt->second.startedAtMs = CurrentEpochMs();
-					}
-				}
-
-				std::vector<EmbeddedToolBinding> toolBindings;
-				toolBindings.reserve(m_skillsCommands.commands.size());
-				for (const auto& command : m_skillsCommands.commands) {
-					if (!command.dispatch.enabled ||
-						_wcsicmp(command.dispatch.kind.c_str(), L"tool") != 0 ||
-						command.dispatch.toolName.empty()) {
-						continue;
-					}
-
-					toolBindings.push_back(EmbeddedToolBinding{
-						.commandName = WideToNarrowAscii(command.name),
-						.description = WideToNarrowAscii(command.description),
-						.toolName = WideToNarrowAscii(command.dispatch.toolName),
-					 .argMode = WideToNarrowAscii(command.dispatch.argMode),
-						});
-				}
-
-				const bool canaryEligible = IsEmbeddedDynamicLoopCanaryEligible(
-					m_activeChatProvider,
-					sessionId);
-				const bool promotionReady = IsEmbeddedDynamicLoopPromotionReady();
-				const bool enableEmbeddedDynamicLoop =
-					m_activeConfig.embedded.dynamicToolLoopEnabled &&
-					(canaryEligible || promotionReady);
-				m_lastEmbeddedDynamicLoopEnabled = enableEmbeddedDynamicLoop;
-				m_lastEmbeddedCanaryEligible = canaryEligible;
-				m_lastEmbeddedPromotionReady = promotionReady;
-				m_lastEmbeddedFallbackUsed = false;
-				m_lastEmbeddedFallbackReason.clear();
-
-				const auto embeddedExecution = m_piEmbeddedService.ExecuteRun(
-					EmbeddedRuntimeExecutionRequest{
-						.run = EmbeddedRunRequest{
-							.sessionId = sessionId,
-							.agentId = "default",
-							.message = request.message,
-						},
-						.skillsPrompt = WideToNarrowAscii(m_skillsPrompt.prompt),
-						.toolBindings = std::move(toolBindings),
-						.runtimeTools = m_gatewayHost.ListRuntimeTools(),
-					   .enableDynamicToolLoop = enableEmbeddedDynamicLoop,
-					 .toolExecutorV2 = [this](
-							const blazeclaw::gateway::ToolExecuteRequestV2& executeRequest) {
-							return m_gatewayHost.ExecuteRuntimeToolV2(executeRequest);
-						},
-						.toolExecutor = [this](
-											const std::string& tool,
-											const std::optional<std::string>& argsJson) {
-						  return m_gatewayHost.ExecuteRuntimeTool(tool, argsJson);
-						},
-					 .isCancellationRequested = [this, runId = request.runId]() {
-							return IsEmbeddedRunCancelled(runId);
-						},
+				std::unique_lock<std::mutex> completionLock(job->completionMutex);
+				job->completionCv.wait(completionLock, [job]() {
+					return job->completed;
 					});
-				ClearEmbeddedRunCancelled(request.runId);
-
-				if (!embeddedExecution.accepted) {
-					return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-						.ok = false,
-						.assistantText = {},
-						.modelId = m_activeChatModel,
-						.errorCode = "embedded_run_rejected",
-						.errorMessage = embeddedExecution.errorMessage.empty()
-							? embeddedExecution.reason
-							: embeddedExecution.errorMessage,
-					};
-				}
-
-				if (embeddedExecution.handled) {
-					std::vector<blazeclaw::gateway::GatewayHost::ChatRuntimeResult::TaskDeltaEntry>
-						runtimeDeltas;
-					runtimeDeltas.reserve(embeddedExecution.taskDeltas.size());
-					for (const auto& delta : embeddedExecution.taskDeltas) {
-						runtimeDeltas.push_back(
-							blazeclaw::gateway::GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
-								.index = delta.index,
-								.runId = delta.runId,
-								.sessionId = delta.sessionId,
-								.phase = delta.phase,
-								.toolName = delta.toolName,
-								.argsJson = delta.argsJson,
-								.resultJson = delta.resultJson,
-								.status = delta.status,
-								.errorCode = delta.errorCode,
-								.startedAtMs = delta.startedAtMs,
-								.completedAtMs = delta.completedAtMs,
-								.latencyMs = delta.latencyMs,
-								.modelTurnId = delta.modelTurnId,
-								.stepLabel = delta.stepLabel,
-							});
-					}
-
-					m_embeddedTaskDeltaTransitionCount +=
-						static_cast<std::uint64_t>(embeddedExecution.taskDeltas.size());
-					if (embeddedExecution.success) {
-						++m_embeddedRunSuccessCount;
-					}
-					else {
-						++m_embeddedRunFailureCount;
-					}
-
-					const std::string normalizedEmbeddedError =
-						ToLowerAscii(embeddedExecution.errorCode);
-					if (normalizedEmbeddedError == "embedded_deadline_exceeded") {
-						++m_embeddedRunTimeoutCount;
-					}
-
-					if (normalizedEmbeddedError == "embedded_run_cancelled") {
-						++m_embeddedRunCancelledCount;
-					}
-
-					if (!embeddedExecution.success) {
-						if (ShouldFallbackFromEmbeddedFailure(
-							embeddedExecution.errorCode,
-							embeddedExecution.reason)) {
-							m_lastEmbeddedFallbackUsed = true;
-							++m_embeddedRunFallbackCount;
-							m_lastEmbeddedFallbackReason = embeddedExecution.errorCode.empty()
-								? embeddedExecution.reason
-								: embeddedExecution.errorCode;
-						}
-						else {
-							return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-								.ok = false,
-								.assistantText = {},
-								.assistantDeltas = embeddedExecution.assistantDeltas,
-								.taskDeltas = std::move(runtimeDeltas),
-								.modelId = m_activeChatModel,
-								.errorCode = embeddedExecution.errorCode.empty()
-									? "embedded_tool_execution_failed"
-									: embeddedExecution.errorCode,
-								.errorMessage = embeddedExecution.errorMessage.empty()
-									? "embedded tool orchestration failed"
-									: embeddedExecution.errorMessage,
-							};
-						}
-					}
-
-					return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-						.ok = true,
-						.assistantText = embeddedExecution.assistantText,
-						.assistantDeltas = embeddedExecution.assistantDeltas,
-					   .taskDeltas = std::move(runtimeDeltas),
-						.modelId = m_activeChatModel,
-						.errorCode = {},
-						.errorMessage = {},
-					};
-				}
-
-				auto providerRequest = request;
-				providerRequest.message = runtimeMessage;
-
-				if (m_activeChatProvider == "deepseek") {
-					ClearDeepSeekRunCancelled(providerRequest.runId);
-					if (!HasDeepSeekCredential()) {
-						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-							.ok = false,
-							.assistantText = {},
-							.modelId = m_activeChatModel,
-							.errorCode = "deepseek_api_key_missing",
-							.errorMessage =
-								"DeepSeek API key missing. Configure DeepSeek extension first.",
-						};
-					}
-
-					const std::string effectiveModel = NormalizeDeepSeekApiModelId(
-						m_activeChatModel.empty() ? "deepseek-chat" : m_activeChatModel);
-					const auto apiKey = ResolveDeepSeekCredentialUtf8();
-					if (!apiKey.has_value() || apiKey->empty()) {
-						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-							.ok = false,
-							.assistantText = {},
-							.modelId = effectiveModel,
-							.errorCode = "deepseek_api_key_missing",
-							.errorMessage =
-								"DeepSeek API key missing. Configure DeepSeek extension first.",
-						};
-					}
-
-					return InvokeDeepSeekRemoteChat(providerRequest, effectiveModel, apiKey.value());
-				}
-
-				if (m_localModelActivationEnabled) {
-					const std::string prompt = BuildLocalModelPrompt(providerRequest);
-					TRACE(
-						"[LocalModel] request.enqueue runId=%s session=%s promptChars=%zu attachments=%s\n",
-						providerRequest.runId.c_str(),
-						sessionId.c_str(),
-						prompt.size(),
-						providerRequest.hasAttachments ? "true" : "false");
-					TRACE(
-						"[LocalModel] request.start runId=%s\n",
-						providerRequest.runId.c_str());
-
-					const auto localResult = m_localModelRuntime.GenerateStream(
-						localmodel::TextGenerationRequest{
-							.runId = providerRequest.runId,
-							.prompt = prompt,
-							.maxTokens = std::nullopt,
-							.temperature = std::nullopt,
-						},
-						nullptr);
-					m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
-
-					if (!localResult.ok) {
-						const std::string errorCode =
-							localResult.error.has_value()
-							? localmodel::TextGenerationErrorCodeToString(
-								localResult.error->code)
-							: "chat_runtime_error";
-						const std::string errorMessage =
-							localResult.error.has_value() &&
-							!localResult.error->message.empty()
-							? localResult.error->message
-							: "local model generation failed";
-						TRACE(
-							"[LocalModel] request.terminal runId=%s state=%s latencyMs=%u tokens=%u reason=%s\n",
-							providerRequest.runId.c_str(),
-							localResult.cancelled ? "aborted" : "error",
-							localResult.latencyMs,
-							localResult.generatedTokens,
-							errorMessage.c_str());
-						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-							.ok = false,
-							.assistantText = {},
-							.modelId = localResult.modelId,
-							.errorCode = errorCode,
-							.errorMessage = errorMessage,
-						};
-					}
-
-					std::string assistantText = localResult.text;
-					std::string modelId = localResult.modelId;
-					std::uint32_t latencyMs = localResult.latencyMs;
-					std::uint32_t generatedTokens = localResult.generatedTokens;
-					if (IsLikelyEchoResponse(request.message, assistantText)) {
-						TRACE(
-							"[LocalModel] request.retry runId=%s reason=echo_detected\n",
-							providerRequest.runId.c_str());
-						const std::string retryPrompt = BuildLocalModelRetryPrompt(providerRequest);
-						const auto retryResult = m_localModelRuntime.GenerateStream(
-							localmodel::TextGenerationRequest{
-								.runId = providerRequest.runId + "-retry",
-								.prompt = retryPrompt,
-								.maxTokens = std::nullopt,
-								.temperature = std::nullopt,
-							},
-							nullptr);
-						m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
-
-						if (retryResult.ok &&
-							!IsLikelyEchoResponse(request.message, retryResult.text)) {
-							assistantText = retryResult.text;
-							modelId = retryResult.modelId;
-							latencyMs = retryResult.latencyMs;
-							generatedTokens = retryResult.generatedTokens;
-						}
-					}
-
-					if (IsLikelyEchoResponse(request.message, assistantText)) {
-						TRACE(
-							"[LocalModel] request.terminal runId=%s state=error latencyMs=%u tokens=%u reason=echo_output_detected\n",
-							providerRequest.runId.c_str(),
-							latencyMs,
-							generatedTokens);
-						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-							.ok = false,
-							.assistantText = {},
-							.modelId = modelId,
-							.errorCode = "local_model_echo_output",
-							.errorMessage = "local model echoed user input",
-						};
-					}
-
-					TRACE(
-						"[LocalModel] request.terminal runId=%s state=final latencyMs=%u tokens=%u\n",
-						providerRequest.runId.c_str(),
-						latencyMs,
-						generatedTokens);
-
-					return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-						.ok = true,
-						.assistantText = assistantText,
-						.modelId = modelId,
-						.errorCode = {},
-						.errorMessage = {},
-					};
-				}
-
-				if (m_activeConfig.localModel.enabled &&
-					!m_localModelActivationEnabled) {
-					TRACE(
-						"[LocalModel] request.fallback runId=%s reason=%s rolloutEligible=%s status=%s\n",
-						request.runId.c_str(),
-						m_localModelActivationReason.c_str(),
-						m_localModelRolloutEligible ? "true" : "false",
-						m_localModelRuntimeSnapshot.status.c_str());
-				}
-
-				const auto modelSelection = m_agentsModelRoutingService.SelectModel(
-					m_activeConfig.agent.model.empty()
-					? std::string()
-					: ToNarrow(m_activeConfig.agent.model),
-					"chat.send");
-
-				std::string retrievalContext;
-				if (m_activeConfig.embeddings.enabled && !request.message.empty()) {
-					const auto userEmbedding = m_embeddingsService.EmbedText(
-						EmbeddingRequest{
-							.text = ToWide(request.message),
-							.normalize = true,
-							.traceId = "chat-retrieval-query",
-						});
-					if (userEmbedding.ok) {
-						const auto matches = m_retrievalMemoryService.Query(
-							sessionId,
-							userEmbedding.vector,
-							2);
-						if (!matches.empty()) {
-							retrievalContext = " [ctx:";
-							for (std::size_t i = 0; i < matches.size(); ++i) {
-								if (i > 0) {
-									retrievalContext += " | ";
-								}
-
-								retrievalContext += matches[i].text;
-							}
-
-							retrievalContext += "]";
-						}
-
-						m_retrievalMemoryService.Upsert(
-							sessionId,
-							"user",
-							request.message,
-							userEmbedding.vector,
-							CurrentEpochMs());
-						m_retrievalMemory = m_retrievalMemoryService.Snapshot();
-					}
-				}
-
-				const auto embeddedRun = m_piEmbeddedService.QueueRun(
-					EmbeddedRunRequest{
-						.sessionId = sessionId,
-						.agentId = "default",
-						.message = request.message,
-					});
-
-				if (!embeddedRun.accepted) {
-					m_agentsModelRoutingService.RecordFailover(
-						modelSelection.selectedModel,
-						embeddedRun.reason,
-						embeddedRun.startedAtMs == 0 ? 1735689800000 : embeddedRun.startedAtMs);
-					return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-						.ok = false,
-						.assistantText = {},
-						.modelId = modelSelection.selectedModel,
-						.errorCode = "embedded_run_rejected",
-						.errorMessage = embeddedRun.reason,
-					};
-				}
-
-				const std::string assistantText = request.message.empty()
-					? "Received image attachment."
-					: ("Model(" + modelSelection.selectedModel + "): " +
-						request.message + retrievalContext);
-
-				if (m_activeConfig.embeddings.enabled && !assistantText.empty()) {
-					const auto assistantEmbedding = m_embeddingsService.EmbedText(
-						EmbeddingRequest{
-							.text = ToWide(assistantText),
-							.normalize = true,
-							.traceId = "chat-retrieval-index",
-						});
-					if (assistantEmbedding.ok) {
-						m_retrievalMemoryService.Upsert(
-							sessionId,
-							"assistant",
-							assistantText,
-							assistantEmbedding.vector,
-							CurrentEpochMs());
-						m_retrievalMemory = m_retrievalMemoryService.Snapshot();
-					}
-				}
-
-				const bool completed = m_piEmbeddedService.CompleteRun(
-					embeddedRun.runId,
-					"completed",
-					embeddedRun.startedAtMs + 1);
-				if (!completed) {
-					m_agentsModelRoutingService.RecordFailover(
-						modelSelection.selectedModel,
-						"embedded_completion_failed",
-						embeddedRun.startedAtMs + 1);
-					return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-						.ok = false,
-						.assistantText = {},
-						.modelId = modelSelection.selectedModel,
-						.errorCode = "embedded_completion_failed",
-						.errorMessage = "embedded completion failed",
-					};
-				}
-
-				return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-					.ok = true,
-					.assistantText = assistantText,
-					.modelId = modelSelection.selectedModel,
-					.errorCode = {},
-					.errorMessage = {},
-				};
+				return job->result;
 			});
 
 		m_gatewayHost.SetChatAbortCallback([this](
@@ -2829,14 +2852,140 @@ namespace blazeclaw::core {
 
 	void ServiceManager::Stop() {
 		m_skillsEnvOverrideService.RevertAll();
-		{
-			std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
-			m_chatRuntimeQueue.clear();
-			m_chatRuntimeRunsById.clear();
-			m_chatRuntimeNextEnqueueSequence = 1;
-		}
+		StopChatRuntimeWorker();
 		m_gatewayHost.Stop();
 		m_running = false;
+	}
+
+	bool ServiceManager::StartChatRuntimeWorker() {
+		std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
+		if (m_chatRuntimeWorkerThread.joinable()) {
+			m_chatRuntimeWorkerAvailable = true;
+			return true;
+		}
+
+		m_chatRuntimeWorkerStopRequested = false;
+		try {
+			m_chatRuntimeWorkerThread = std::thread([this]() {
+				ChatRuntimeWorkerLoop();
+				});
+			m_chatRuntimeWorkerAvailable = true;
+			return true;
+		}
+		catch (...) {
+			m_chatRuntimeWorkerAvailable = false;
+			return false;
+		}
+	}
+
+	void ServiceManager::StopChatRuntimeWorker() {
+		std::vector<std::shared_ptr<ChatRuntimeJob>> abandonedJobs;
+		{
+			std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
+			m_chatRuntimeWorkerStopRequested = true;
+			m_chatRuntimeWorkerAvailable = false;
+			abandonedJobs.assign(
+				m_chatRuntimeQueue.begin(),
+				m_chatRuntimeQueue.end());
+			m_chatRuntimeQueue.clear();
+			for (const auto& job : abandonedJobs) {
+				auto stateIt = m_chatRuntimeRunsById.find(job->request.runId);
+				if (stateIt != m_chatRuntimeRunsById.end()) {
+					stateIt->second.status = ChatRuntimeJobLifecycleStatus::Failed;
+					stateIt->second.completedAtMs = CurrentEpochMs();
+					stateIt->second.errorCode = kChatRuntimeErrorWorkerUnavailable;
+				}
+			}
+		}
+
+		m_chatRuntimeQueueCv.notify_all();
+
+		for (const auto& job : abandonedJobs) {
+			std::lock_guard<std::mutex> completionLock(job->completionMutex);
+			job->result = blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+				.ok = false,
+				.assistantText = {},
+				.modelId = job->model,
+				.errorCode = kChatRuntimeErrorWorkerUnavailable,
+				.errorMessage = "chat runtime worker unavailable",
+			};
+			job->completed = true;
+			job->completionCv.notify_all();
+		}
+
+		if (m_chatRuntimeWorkerThread.joinable()) {
+			m_chatRuntimeWorkerThread.join();
+		}
+
+		std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
+		m_chatRuntimeQueue.clear();
+		m_chatRuntimeRunsById.clear();
+		m_chatRuntimeNextEnqueueSequence = 1;
+		m_chatRuntimeWorkerStopRequested = false;
+	}
+
+	void ServiceManager::ChatRuntimeWorkerLoop() {
+		for (;;) {
+			std::shared_ptr<ChatRuntimeJob> job;
+			{
+				std::unique_lock<std::mutex> lock(m_chatRuntimeQueueMutex);
+				m_chatRuntimeQueueCv.wait(lock, [this]() {
+					return m_chatRuntimeWorkerStopRequested || !m_chatRuntimeQueue.empty();
+					});
+
+				if (m_chatRuntimeWorkerStopRequested && m_chatRuntimeQueue.empty()) {
+					break;
+				}
+
+				job = m_chatRuntimeQueue.front();
+				m_chatRuntimeQueue.pop_front();
+				auto stateIt = m_chatRuntimeRunsById.find(job->request.runId);
+				if (stateIt != m_chatRuntimeRunsById.end()) {
+					stateIt->second.status = ChatRuntimeJobLifecycleStatus::Started;
+					stateIt->second.startedAtMs = CurrentEpochMs();
+				}
+			}
+
+			blazeclaw::gateway::GatewayHost::ChatRuntimeResult result;
+			if (job->execute) {
+				result = job->execute();
+			}
+			else {
+				result = blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+					.ok = false,
+					.assistantText = {},
+					.modelId = job->model,
+					.errorCode = kChatRuntimeErrorWorkerUnavailable,
+					.errorMessage = "chat runtime worker unavailable",
+				};
+			}
+
+			{
+				std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
+				auto stateIt = m_chatRuntimeRunsById.find(job->request.runId);
+				if (stateIt != m_chatRuntimeRunsById.end()) {
+					stateIt->second.completedAtMs = CurrentEpochMs();
+					stateIt->second.errorCode = result.errorCode;
+					if (result.ok) {
+						stateIt->second.status = ChatRuntimeJobLifecycleStatus::Completed;
+					}
+					else if (result.errorCode == kChatRuntimeErrorCancelled) {
+						stateIt->second.status = ChatRuntimeJobLifecycleStatus::Cancelled;
+					}
+					else if (result.errorCode == kChatRuntimeErrorTimedOut) {
+						stateIt->second.status = ChatRuntimeJobLifecycleStatus::TimedOut;
+					}
+					else {
+						stateIt->second.status = ChatRuntimeJobLifecycleStatus::Failed;
+					}
+				}
+			}
+
+			std::lock_guard<std::mutex> completionLock(job->completionMutex);
+			job->result = std::move(result);
+			job->completed = true;
+			job->completionCv.notify_all();
+		}
 	}
 
 	bool ServiceManager::IsRunning() const noexcept {

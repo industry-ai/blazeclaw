@@ -30,10 +30,14 @@
 #include "SkillsWatchService.h"
 #include "runtime/LocalModel/OnnxTextGenerationRuntime.h"
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <deque>
+#include <functional>
+#include <memory>
 #include <mutex>
 #include <optional>
+#include <thread>
 #include <unordered_map>
 
 namespace blazeclaw::core {
@@ -97,8 +101,15 @@ namespace blazeclaw::core {
 			ChatRuntimeJobLifecycleStatus status =
 				ChatRuntimeJobLifecycleStatus::Queued;
 			blazeclaw::gateway::GatewayHost::ChatRuntimeRequest request;
+			std::string sessionId;
+			std::string runtimeMessage;
 			std::string provider;
 			std::string model;
+			std::function<blazeclaw::gateway::GatewayHost::ChatRuntimeResult()> execute;
+			blazeclaw::gateway::GatewayHost::ChatRuntimeResult result;
+			std::mutex completionMutex;
+			std::condition_variable completionCv;
+			bool completed = false;
 		};
 
 		struct ChatRuntimeRunState {
@@ -123,6 +134,10 @@ namespace blazeclaw::core {
 			"chat_runtime_timed_out";
 		static constexpr const char* kChatRuntimeErrorWorkerUnavailable =
 			"chat_runtime_worker_unavailable";
+
+		bool StartChatRuntimeWorker();
+		void StopChatRuntimeWorker();
+		void ChatRuntimeWorkerLoop();
 
 		[[nodiscard]] bool IsLocalModelRolloutEligible() const;
 		[[nodiscard]] bool IsEmbeddedDynamicLoopCanaryEligible(
@@ -277,10 +292,14 @@ namespace blazeclaw::core {
 		mutable std::mutex m_embeddedCancelMutex;
 		mutable std::unordered_map<std::string, bool> m_embeddedCancelledRuns;
 		mutable std::mutex m_chatRuntimeQueueMutex;
-		std::deque<ChatRuntimeJob> m_chatRuntimeQueue;
+		std::condition_variable m_chatRuntimeQueueCv;
+		std::deque<std::shared_ptr<ChatRuntimeJob>> m_chatRuntimeQueue;
 		std::unordered_map<std::string, ChatRuntimeRunState>
 			m_chatRuntimeRunsById;
 		std::uint64_t m_chatRuntimeNextEnqueueSequence = 1;
+		std::thread m_chatRuntimeWorkerThread;
+		bool m_chatRuntimeWorkerStopRequested = false;
+		bool m_chatRuntimeWorkerAvailable = false;
 	};
 
 } // namespace blazeclaw::core
