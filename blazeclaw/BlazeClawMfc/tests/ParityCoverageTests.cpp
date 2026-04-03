@@ -288,6 +288,171 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Parity coverage: chat.send immediate_keyword auto-approves and sends email end-to-end",
+	"[parity][chat][orchestration][e2e][runtime][immediate]") {
+	const auto tempStateRoot = std::filesystem::temp_directory_path() /
+		("blazeclaw_email_immediate_state_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(tempStateRoot);
+
+	char* previousLocalAppData = nullptr;
+	size_t previousLocalAppDataLen = 0;
+	_dupenv_s(&previousLocalAppData, &previousLocalAppDataLen, "LOCALAPPDATA");
+	_putenv_s("LOCALAPPDATA", tempStateRoot.string().c_str());
+
+	char* previousModeRaw = nullptr;
+	size_t previousModeLength = 0;
+	_dupenv_s(
+		&previousModeRaw,
+		&previousModeLength,
+		"BLAZECLAW_EMAIL_DELIVERY_MODE");
+	_putenv_s("BLAZECLAW_EMAIL_DELIVERY_MODE", "mock_success");
+
+	PluginHostAdapter::RegisterExtensionAdapter(
+		"ops-tools",
+		[](const std::string&, const std::string& toolName, const std::string&) {
+			if (toolName == "weather.lookup") {
+				return GatewayToolRegistry::RuntimeToolExecutor{
+					[](const std::string& requestedTool, const std::optional<std::string>&) {
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = true,
+							.status = "ok",
+							.output = "{\"ok\":true,\"forecast\":{\"condition\":\"Partly cloudy\",\"temperatureC\":19,\"wind\":\"NW 11 km/h\",\"humidityPct\":78}}",
+						};
+					} };
+			}
+
+			if (toolName == "email.schedule") {
+				return GatewayToolRegistry::RuntimeToolExecutor{
+					[](const std::string& requestedTool, const std::optional<std::string>& argsJson) {
+						std::string action;
+						if (argsJson.has_value()) {
+							blazeclaw::gateway::json::FindStringField(
+								argsJson.value(),
+								"action",
+								action);
+						}
+
+						if (action.empty() || action == "prepare") {
+							return ToolExecuteResult{
+								.tool = requestedTool,
+								.executed = true,
+								.status = "needs_approval",
+								.output = "{\"requiresApproval\":{\"approvalToken\":\"token-auto-approve\",\"approvalTokenExpiresAtEpochMs\":1735691000000}}",
+							};
+						}
+
+						if (action == "approve") {
+							return ToolExecuteResult{
+								.tool = requestedTool,
+								.executed = true,
+								.status = "ok",
+								.output = "{\"protocolVersion\":1,\"ok\":true,\"status\":\"ok\",\"output\":[{\"summary\":{\"to\":\"jichengwhu@163.com\",\"subject\":\"Wuhan weather report\",\"sendAt\":\"13:00\",\"scheduled\":true,\"delivered\":true,\"engine\":\"himalaya\",\"transportStatus\":\"sent\",\"transportOutput\":\"ok\"}}],\"requiresApproval\":null}",
+							};
+						}
+
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = false,
+							.status = "invalid_args",
+							.output = "unsupported_action",
+						};
+					} };
+			}
+
+			return GatewayToolRegistry::RuntimeToolExecutor{};
+		});
+
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.Start(gatewayConfig));
+
+	host.SetEmbeddedOrchestrationPath("runtime_orchestration");
+
+	std::size_t callbackCalls = 0;
+	host.SetChatRuntimeCallback(
+		[&](const GatewayHost::ChatRuntimeRequest&) {
+			++callbackCalls;
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "callback should not be invoked";
+			result.modelId = "default";
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-runtime-immediate-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"Check today's weather in Wuhan, write a short report, and email it to jichengwhu@163.com now.\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+	REQUIRE(callbackCalls == 0);
+
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		sendResponse.payloadJson.value(),
+		"runId",
+		runId));
+
+	const auto deltasResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-runtime-immediate-1-deltas",
+			.method = "gateway.runtime.taskDeltas.get",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+
+	REQUIRE(deltasResponse.ok);
+	REQUIRE(deltasResponse.payloadJson.has_value());
+	REQUIRE(deltasResponse.payloadJson->find("\"phase\":\"final\"") != std::string::npos);
+	REQUIRE(deltasResponse.payloadJson->find("\"toolName\":\"weather.lookup\"") != std::string::npos);
+	REQUIRE(deltasResponse.payloadJson->find("\"toolName\":\"email.schedule\"") != std::string::npos);
+
+	host.Stop();
+
+	const auto approvalsPath =
+		tempStateRoot /
+		"BlazeClaw" /
+		"state" /
+		"approvals.json";
+	if (std::filesystem::exists(approvalsPath)) {
+		std::ifstream in(approvalsPath.string());
+		std::string approvalsJson(
+			(std::istreambuf_iterator<char>(in)),
+			std::istreambuf_iterator<char>());
+		REQUIRE(approvalsJson.find("email-approval-") == std::string::npos);
+	}
+
+	if (previousModeRaw != nullptr && previousModeLength > 0) {
+		_putenv_s("BLAZECLAW_EMAIL_DELIVERY_MODE", previousModeRaw);
+		free(previousModeRaw);
+	}
+	else {
+		if (previousModeRaw != nullptr) {
+			free(previousModeRaw);
+		}
+		_putenv_s("BLAZECLAW_EMAIL_DELIVERY_MODE", "");
+	}
+
+	if (previousLocalAppData != nullptr &&
+		previousLocalAppDataLen > 0 &&
+		previousLocalAppData[0] != '\0') {
+		_putenv_s("LOCALAPPDATA", previousLocalAppData);
+	}
+	else {
+		_putenv_s("LOCALAPPDATA", "");
+	}
+
+	if (previousLocalAppData != nullptr) {
+		free(previousLocalAppData);
+	}
+
+	std::filesystem::remove_all(tempStateRoot);
+}
+
+TEST_CASE(
 	"Parity coverage: task-delta persistence survives host restart",
 	"[parity][chat][taskdeltas][persistence]") {
 	const auto tempStateRoot = std::filesystem::temp_directory_path() /
