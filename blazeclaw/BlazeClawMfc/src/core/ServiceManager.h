@@ -126,6 +126,8 @@ namespace blazeclaw::core {
 		};
 
 		static constexpr std::size_t kChatRuntimeQueueCapacity = 64;
+		static constexpr std::uint64_t kChatRuntimeQueueWaitTimeoutMs = 15000;
+		static constexpr std::uint64_t kChatRuntimeExecutionTimeoutMs = 120000;
 		static constexpr const char* kChatRuntimeErrorQueueFull =
 			"chat_runtime_queue_full";
 		static constexpr const char* kChatRuntimeErrorCancelled =
@@ -294,6 +296,8 @@ namespace blazeclaw::core {
 		mutable std::mutex m_chatRuntimeQueueMutex;
 		std::condition_variable m_chatRuntimeQueueCv;
 		std::deque<std::shared_ptr<ChatRuntimeJob>> m_chatRuntimeQueue;
+		std::unordered_map<std::string, std::shared_ptr<ChatRuntimeJob>>
+			m_chatRuntimeJobsByRunId;
 		std::unordered_map<std::string, ChatRuntimeRunState>
 			m_chatRuntimeRunsById;
 		std::uint64_t m_chatRuntimeNextEnqueueSequence = 1;

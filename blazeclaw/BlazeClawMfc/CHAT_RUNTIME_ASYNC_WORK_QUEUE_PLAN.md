@@ -125,6 +125,15 @@ Move chat runtime execution (remote HTTP and local model inference) off the UI t
 2. Add timeout enforcement for queued wait + execution duration.
 3. Guarantee cleanup of cancel flags and run-state records across all terminal paths.
 
+### Phase 4 implementation status
+
+- Completed in code:
+  - Wired `chat.abort` to cancel queued jobs before execution and notify waiting callers with deterministic `chat_runtime_cancelled` terminal results.
+  - Preserved running-request cancellation behavior for embedded, DeepSeek, and local-model paths.
+  - Added queue-wait timeout enforcement in worker dequeue path (`chat_runtime_timed_out` when wait exceeds threshold).
+  - Added execution-duration timeout enforcement for runtime execution path (`chat_runtime_timed_out` when runtime work exceeds threshold).
+  - Added terminal-path cleanup for cancellation flags (`DeepSeek`/`embedded`) and runtime run/job state containers.
+
 ### Phase 5 — Validation and rollout
 1. Add/extend tests for queueing, completion ordering, timeout, cancel, and queue-full behavior.
 2. Build and run targeted regression checks for existing DeepSeek/local flows.
