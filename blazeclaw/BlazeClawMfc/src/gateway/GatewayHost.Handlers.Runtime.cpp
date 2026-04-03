@@ -151,6 +151,40 @@ namespace blazeclaw::gateway {
 			return normalized;
 		}
 
+		std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry> EnsureRuntimeTaskDeltas(
+			const std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry>& taskDeltas,
+			const std::string& runId,
+			const std::string& sessionKey,
+			const bool success,
+			const std::string& assistantText,
+			const std::string& errorCode,
+			const std::string& errorMessage) {
+			if (!taskDeltas.empty()) {
+				return taskDeltas;
+			}
+
+			const std::uint64_t nowMs = static_cast<std::uint64_t>(
+				std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::system_clock::now().time_since_epoch())
+				.count());
+
+			return std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry>{
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = runId,
+					.sessionId = sessionKey,
+					.phase = "final",
+					.resultJson = success ? assistantText : errorMessage,
+					.status = success ? "completed" : "failed",
+					.errorCode = success ? std::string() : errorCode,
+					.startedAtMs = nowMs,
+					.completedAtMs = nowMs,
+					.latencyMs = 0,
+					.stepLabel = "run_terminal",
+				}
+			};
+		}
+
 		std::optional<std::size_t> ExtractSizeParam(
 			const std::optional<std::string>& paramsJson,
 			const std::string& fieldName) {
@@ -1589,12 +1623,21 @@ namespace blazeclaw::gateway {
 					};
 				}
 
+				auto orderedTaskDeltas = it->second;
+				std::sort(
+					orderedTaskDeltas.begin(),
+					orderedTaskDeltas.end(),
+					[](const ChatRuntimeResult::TaskDeltaEntry& left,
+						const ChatRuntimeResult::TaskDeltaEntry& right) {
+							return left.index < right.index;
+					});
+
 				std::string deltasJson = "[";
-				for (std::size_t i = 0; i < it->second.size(); ++i) {
+				for (std::size_t i = 0; i < orderedTaskDeltas.size(); ++i) {
 					if (i > 0) {
 						deltasJson += ",";
 					}
-					deltasJson += SerializeTaskDeltaEntryJson(it->second[i]);
+					deltasJson += SerializeTaskDeltaEntryJson(orderedTaskDeltas[i]);
 				}
 				deltasJson += "]";
 
@@ -1604,7 +1647,7 @@ namespace blazeclaw::gateway {
 					.payloadJson =
 						"{\"runId\":\"" + EscapeJsonLocal(runId) +
 						"\",\"taskDeltas\":" + deltasJson +
-						",\"count\":" + std::to_string(it->second.size()) + "}",
+						",\"count\":" + std::to_string(orderedTaskDeltas.size()) + "}",
 					.error = std::nullopt,
 				};
 			});
@@ -2136,7 +2179,16 @@ namespace blazeclaw::gateway {
 						assistantText.clear();
 					}
 
-					persistTaskDeltas(runtimeResult.taskDeltas, runtimeResult.ok);
+					persistTaskDeltas(
+						EnsureRuntimeTaskDeltas(
+							runtimeResult.taskDeltas,
+							runId,
+							sessionKey,
+							runtimeResult.ok,
+							assistantText,
+							backendErrorCode,
+							backendErrorMessage),
+						runtimeResult.ok);
 				}
 
 				const bool silentAssistantReply = IsSilentReplyText(assistantText);
@@ -2333,6 +2385,21 @@ namespace blazeclaw::gateway {
 				if (runIt != m_chatRunsById.end()) {
 					auto& run = runIt->second;
 					const bool silentAssistantReply = IsSilentReplyText(run.assistantText);
+					const auto hasTerminalEventQueuedForRun =
+						[&queue, &run]() {
+						return std::any_of(
+							queue.begin(),
+							queue.end(),
+							[&](const ChatEventState& item) {
+								if (item.runId != run.runId) {
+									return false;
+								}
+
+								return item.state == "final" ||
+									item.state == "error" ||
+									item.state == "aborted";
+							});
+						};
 					const bool enoughTimeElapsed =
 						run.lastEmitMs == 0 || (nowMs - run.lastEmitMs) >= 180;
 
@@ -2377,7 +2444,7 @@ namespace blazeclaw::gateway {
 						silentAssistantReply ||
 						(run.providerDeltaCursor >= run.providerDeltas.size() &&
 							run.streamCursor >= run.assistantText.size());
-					if (streamCompleted) {
+					if (streamCompleted && !hasTerminalEventQueuedForRun()) {
 						PushEventWithRetentionLimit(queue, ChatEventState{
 							   .runId = run.runId,
 							   .sessionKey = run.sessionKey,

@@ -480,6 +480,12 @@ and Steps 6-10 must produce evidence for both lanes.
 - Added cancellation-state cleanup on all terminal paths.
 - Mapped `chat.abort` to embedded cancellation tracking in `ServiceManager` and added cancellation fixture coverage.
 
+### Completed now: Dynamic Task-Delta Full Plan Phase 6 follow-up
+- Added gateway runtime fallback terminal task-delta generation so `chat.send` always reflects executed outcomes.
+- Normalized `gateway.runtime.taskDeltas.get` output ordering by explicit task-delta index sorting.
+- Added terminal-event de-duplication guard in `chat.events.poll` to keep deterministic `delta -> final|error|aborted` ordering.
+- Preserved compatibility for existing abort semantics while aligning terminal event sequencing.
+
 ### Completed now: Step 13 (Timestamp/Deadline Consistency)
 - Replaced synthetic embedded run start timestamps with real epoch timestamps from `CurrentEpochMs()`.
 - Aligned completion timestamps with real epoch values for both success and failure paths.

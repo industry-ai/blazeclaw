@@ -168,6 +168,14 @@ Upgrade the `dynamic_task_delta` path from decomposition-only behavior to a full
 2. Keep task-delta retrieval APIs aligned with new fields.
 3. Normalize event emission ordering (`delta`/`final`/`error`/`aborted`).
 
+### Phase 6 implementation status
+
+- Completed in code:
+  - Added runtime-path terminal delta fallback generation so `chat.send` always persists a deterministic task-delta record when execution returns without explicit deltas.
+  - Kept `gateway.runtime.taskDeltas.get` aligned by returning deterministic index-ordered task-delta history.
+  - Added terminal-event de-duplication guard in `chat.events.poll` to normalize ordering and prevent duplicate terminal states.
+  - Preserved existing `chat.abort` terminal behavior while normalizing terminal sequencing across `final`/`error`/`aborted`.
+
 ## Phase 7 — Telemetry and operator diagnostics
 
 1. Add transition and run-level telemetry events.
