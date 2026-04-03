@@ -558,6 +558,157 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Parity coverage: chat events include queued started delta final in order",
+	"[parity][chat][events][ordering]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.Start(gatewayConfig));
+
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest&) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "ordered lifecycle response";
+			result.modelId = "default";
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-events-order-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"ordering\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+
+	const auto eventsResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-events-order-1-poll",
+			.method = "chat.events.poll",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"limit\":20}"),
+		});
+
+	REQUIRE(eventsResponse.ok);
+	REQUIRE(eventsResponse.payloadJson.has_value());
+
+	std::string payload = eventsResponse.payloadJson.value();
+	for (int attempt = 0; attempt < 10; ++attempt) {
+		if (payload.find("\"state\":\"final\"") != std::string::npos ||
+			payload.find("\"state\":\"error\"") != std::string::npos ||
+			payload.find("\"state\":\"aborted\"") != std::string::npos) {
+			break;
+		}
+
+		const auto moreEvents = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = "chat-events-order-1-poll-more-" + std::to_string(attempt),
+				.method = "chat.events.poll",
+				.paramsJson = std::string("{\"sessionKey\":\"main\",\"limit\":20}"),
+			});
+
+		REQUIRE(moreEvents.ok);
+		REQUIRE(moreEvents.payloadJson.has_value());
+		payload += moreEvents.payloadJson.value();
+	}
+	const auto queuedPos = payload.find("\"state\":\"queued\"");
+	const auto startedPos = payload.find("\"state\":\"started\"");
+	const auto deltaPos = payload.find("\"state\":\"delta\"");
+	const auto finalPos = payload.find("\"state\":\"final\"");
+	REQUIRE(queuedPos != std::string::npos);
+	REQUIRE(startedPos != std::string::npos);
+	REQUIRE(deltaPos != std::string::npos);
+	REQUIRE(queuedPos < startedPos);
+	REQUIRE(startedPos < deltaPos);
+	if (finalPos != std::string::npos) {
+		REQUIRE(deltaPos < finalPos);
+	}
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Parity coverage: chat runtime timeout propagates backend error and error terminal",
+	"[parity][chat][events][timeout]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.Start(gatewayConfig));
+
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest&) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = false;
+			result.modelId = "default";
+			result.errorCode = "chat_runtime_timed_out";
+			result.errorMessage = "chat runtime timed out";
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-events-timeout-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"timeout\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+	REQUIRE(
+		sendResponse.payloadJson->find("\"backendErrorCode\":\"chat_runtime_timed_out\"") !=
+		std::string::npos);
+
+	const auto eventsResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-events-timeout-1-poll",
+			.method = "chat.events.poll",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"limit\":20}"),
+		});
+
+	REQUIRE(eventsResponse.ok);
+	REQUIRE(eventsResponse.payloadJson.has_value());
+	REQUIRE(eventsResponse.payloadJson->find("\"state\":\"error\"") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Parity coverage: chat runtime queue full propagates backend error",
+	"[parity][chat][events][queue]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.Start(gatewayConfig));
+
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest&) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = false;
+			result.modelId = "default";
+			result.errorCode = "chat_runtime_queue_full";
+			result.errorMessage = "chat runtime queue capacity reached";
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-events-queuefull-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"queue full\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+	REQUIRE(
+		sendResponse.payloadJson->find("\"backendErrorCode\":\"chat_runtime_queue_full\"") !=
+		std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
 	"Parity coverage: chat.send uses runtime orchestration shortcut when orchestrationPath=runtime_orchestration",
 	"[parity][chat][orchestration][e2e][runtime]") {
 	PluginHostAdapter::RegisterExtensionAdapter(

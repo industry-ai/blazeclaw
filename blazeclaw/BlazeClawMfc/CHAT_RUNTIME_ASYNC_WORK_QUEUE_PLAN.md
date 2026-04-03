@@ -139,6 +139,22 @@ Move chat runtime execution (remote HTTP and local model inference) off the UI t
 2. Build and run targeted regression checks for existing DeepSeek/local flows.
 3. Gate rollout behind feature flag and enable progressively.
 
+### Phase 5 implementation status
+
+- Completed in code:
+  - Added/extended parity coverage tests for:
+    - queue lifecycle ordering (`queued` -> `started` -> `delta` -> `final`),
+    - timeout terminal behavior (`chat_runtime_timed_out`),
+    - queue-full backend error propagation (`chat_runtime_queue_full`),
+    - existing abort/terminal parity remains covered.
+  - Added rollout gating feature flag for async queue path:
+    - `BLAZECLAW_CHAT_RUNTIME_ASYNC_QUEUE_ENABLED`.
+  - Added timeout override env controls for progressive validation and rollout tuning:
+    - `BLAZECLAW_CHAT_RUNTIME_QUEUE_WAIT_TIMEOUT_MS`
+    - `BLAZECLAW_CHAT_RUNTIME_EXECUTION_TIMEOUT_MS`
+  - Added synchronous fallback runtime path when async queue rollout flag is disabled.
+  - Validated end-to-end regression by building `BlazeClaw.sln` with `msbuild` (Debug|x64).
+
 ## Candidate File Touchpoints
 - `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h`
 - `blazeclaw/BlazeClawMfc/src/core/ServiceManager.cpp`

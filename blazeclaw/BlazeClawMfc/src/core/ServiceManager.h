@@ -304,6 +304,11 @@ namespace blazeclaw::core {
 		std::thread m_chatRuntimeWorkerThread;
 		bool m_chatRuntimeWorkerStopRequested = false;
 		bool m_chatRuntimeWorkerAvailable = false;
+		bool m_chatRuntimeAsyncQueueEnabled = true;
+		std::uint64_t m_chatRuntimeQueueWaitTimeoutMs =
+			kChatRuntimeQueueWaitTimeoutMs;
+		std::uint64_t m_chatRuntimeExecutionTimeoutMs =
+			kChatRuntimeExecutionTimeoutMs;
 	};
 
 } // namespace blazeclaw::core

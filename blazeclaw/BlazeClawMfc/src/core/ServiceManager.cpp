@@ -1958,6 +1958,15 @@ namespace blazeclaw::core {
 		m_lastEmbeddedPromotionReady = false;
 		m_lastEmbeddedFallbackUsed = false;
 		m_lastEmbeddedFallbackReason.clear();
+		m_chatRuntimeAsyncQueueEnabled = ReadBoolEnvOrDefault(
+			L"BLAZECLAW_CHAT_RUNTIME_ASYNC_QUEUE_ENABLED",
+			true);
+		m_chatRuntimeQueueWaitTimeoutMs = ParseUInt64EnvValue(
+			L"BLAZECLAW_CHAT_RUNTIME_QUEUE_WAIT_TIMEOUT_MS",
+			kChatRuntimeQueueWaitTimeoutMs);
+		m_chatRuntimeExecutionTimeoutMs = ParseUInt64EnvValue(
+			L"BLAZECLAW_CHAT_RUNTIME_EXECUTION_TIMEOUT_MS",
+			kChatRuntimeExecutionTimeoutMs);
 		{
 			std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
 			m_chatRuntimeQueue.clear();
@@ -1967,11 +1976,17 @@ namespace blazeclaw::core {
 			m_chatRuntimeWorkerStopRequested = false;
 			m_chatRuntimeWorkerAvailable = false;
 		}
-		const bool chatRuntimeWorkerStarted = StartChatRuntimeWorker();
-		if (!chatRuntimeWorkerStarted) {
+		if (m_chatRuntimeAsyncQueueEnabled) {
+			const bool chatRuntimeWorkerStarted = StartChatRuntimeWorker();
+			if (!chatRuntimeWorkerStarted) {
+				TRACE(
+					"[ChatRuntime] worker unavailable; callbacks will return %s\n",
+					kChatRuntimeErrorWorkerUnavailable);
+			}
+		}
+		else {
 			TRACE(
-				"[ChatRuntime] worker unavailable; callbacks will return %s\n",
-				kChatRuntimeErrorWorkerUnavailable);
+				"[ChatRuntime] async queue disabled by rollout flag; using synchronous runtime path\n");
 		}
 		RefreshSkillsState(m_activeConfig, true, L"startup");
 
@@ -2711,6 +2726,10 @@ namespace blazeclaw::core {
 					};
 					};
 
+				if (!m_chatRuntimeAsyncQueueEnabled) {
+					return executeRequest();
+				}
+
 				const std::uint64_t enqueuedAtMs = CurrentEpochMs();
 				auto job = std::make_shared<ChatRuntimeJob>();
 				{
@@ -2765,8 +2784,8 @@ namespace blazeclaw::core {
 				std::unique_lock<std::mutex> completionLock(job->completionMutex);
 				const auto waitBudget =
 					std::chrono::milliseconds(
-						kChatRuntimeQueueWaitTimeoutMs +
-						kChatRuntimeExecutionTimeoutMs +
+						m_chatRuntimeQueueWaitTimeoutMs +
+						m_chatRuntimeExecutionTimeoutMs +
 						1000);
 				if (!job->completionCv.wait_for(completionLock, waitBudget, [job]() {
 					return job->completed;
@@ -2931,7 +2950,9 @@ namespace blazeclaw::core {
 
 	void ServiceManager::Stop() {
 		m_skillsEnvOverrideService.RevertAll();
-		StopChatRuntimeWorker();
+		if (m_chatRuntimeAsyncQueueEnabled) {
+			StopChatRuntimeWorker();
+		}
 		m_gatewayHost.Stop();
 		m_running = false;
 	}
@@ -3030,7 +3051,7 @@ namespace blazeclaw::core {
 					timedOutBeforeExecution =
 						nowMs > stateIt->second.enqueuedAtMs &&
 						(nowMs - stateIt->second.enqueuedAtMs) >
-						kChatRuntimeQueueWaitTimeoutMs;
+						m_chatRuntimeQueueWaitTimeoutMs;
 					stateIt->second.status = ChatRuntimeJobLifecycleStatus::Started;
 					stateIt->second.startedAtMs = nowMs;
 				}
@@ -3061,7 +3082,7 @@ namespace blazeclaw::core {
 				const std::uint64_t executeCompletedAtMs = CurrentEpochMs();
 				if (executeCompletedAtMs > executeStartedAtMs &&
 					(executeCompletedAtMs - executeStartedAtMs) >
-					kChatRuntimeExecutionTimeoutMs) {
+					m_chatRuntimeExecutionTimeoutMs) {
 					result = blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
 						.ok = false,
 						.assistantText = {},
