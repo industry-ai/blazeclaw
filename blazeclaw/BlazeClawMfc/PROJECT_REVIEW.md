@@ -127,6 +127,7 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
    - Status: Phase 3 (completion/event integration and terminal dedup sequencing) completed in code.
    - Status: Phase 4 (cancellation + timeout hardening with terminal cleanup) completed in code.
    - Status: Phase 5 (validation/rollout gating + parity coverage extensions) completed in code.
+   - Latest audit: `msbuild` Debug|x64 passed and parity chat regression suite (`[parity][chat]`) passed.
 2. Switch chat UI updates to incremental append/update instead of full list rebuild.
 3. [Completed] Register dispatcher handlers once at startup, not inside `chat.send`.
 4. [Completed] Add retention limits for `m_chatHistoryBySession` and `m_chatEventsBySession`.

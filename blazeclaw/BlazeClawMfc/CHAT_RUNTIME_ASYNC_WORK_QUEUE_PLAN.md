@@ -186,3 +186,19 @@ Move chat runtime execution (remote HTTP and local model inference) off the UI t
 - `chat.abort` cancels queued and active runs consistently.
 - Queue-full path returns stable error payload.
 - DeepSeek and local model regression scenarios still pass.
+
+## Completion Audit (Latest)
+
+Current state: **fully accomplished**.
+
+- Verified in code:
+  - Phase 1 contract/state model and deterministic error-code baseline.
+  - Phase 2 worker lifecycle and queued execution migration.
+  - Phase 3 completion-event publication and terminal dedup sequencing.
+  - Phase 4 cancellation/timeout hardening and terminal-path cleanup.
+  - Phase 5 rollout gating + validation coverage.
+- Verified by validation run:
+  - Build: `msbuild blazeclaw/BlazeClaw.sln /t:Build /p:Configuration=Debug /p:Platform=x64` (pass).
+  - Regression tests: `blazeclaw/bin/Debug/BlazeClawMfc.Tests.exe "[parity][chat]"` (pass).
+
+The migration item "Move chat runtime execution off UI thread using async work queue + completion events" is complete for this planned scope.
