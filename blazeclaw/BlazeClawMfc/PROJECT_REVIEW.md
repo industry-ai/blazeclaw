@@ -82,7 +82,9 @@ DeepSeek response is fully read before delta extraction in `ServiceManager` (`re
 
 ### D) Embeddings throughput serialization
 
-`OnnxEmbeddingsService` uses a single mutex around work including ONNX run (`EmbedText`, `EmbedBatch`), reducing concurrent throughput.
+Status update (latest change): `OnnxEmbeddingsService::EmbedBatch` now supports optional parallel batch execution when `embeddings.executionMode=parallel`, while preserving safe initialization semantics.
+
+Sequential fallback remains in place when execution mode is not parallel or batch size is 1.
 
 ### E) Dispatcher mutation in request hot path
 
@@ -124,4 +126,4 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 4. [Completed] Add retention limits for `m_chatHistoryBySession` and `m_chatEventsBySession`.
 5. [Completed] Fix `PiEmbeddedService` started-at/deadline logic to use real current epoch consistently.
 6. [Completed] Ensure local-model cancel flags are erased across all terminal/error/cancel paths.
-7. Optionally parallelize embeddings safely (separate sessions or lock partitioning).
+7. [Completed] Optionally parallelize embeddings safely (separate sessions or lock partitioning).

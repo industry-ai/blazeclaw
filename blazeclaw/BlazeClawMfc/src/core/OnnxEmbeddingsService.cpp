@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cwctype>
 #include <filesystem>
+#include <future>
 #include <limits>
 #include <numeric>
 
@@ -509,7 +510,8 @@ namespace blazeclaw::core {
 	EmbeddingResult OnnxEmbeddingsService::EmbedSingleTextLocked(
 		const std::wstring& text,
 		const bool normalize,
-		const std::string& traceId) const {
+		const std::string& traceId,
+		const bool assumeInitialized) const {
 		(void)traceId;
 
 		const auto startedAt = std::chrono::steady_clock::now();
@@ -521,12 +523,25 @@ namespace blazeclaw::core {
 				"text input must not be empty");
 		}
 
-		EmbeddingError initError;
-		if (!EnsureInitializedLocked(initError)) {
+		if (!assumeInitialized) {
+			EmbeddingError initError;
+			if (!EnsureInitializedLocked(initError)) {
+				return BuildErrorResult(
+					m_snapshot,
+					initError.code,
+					initError.message);
+			}
+		}
+		else if (!m_sessionState ||
+			!m_sessionState->initialized
+#if BLAZECLAW_HAS_ONNXRUNTIME
+			|| !m_sessionState->session
+#endif
+			) {
 			return BuildErrorResult(
 				m_snapshot,
-				initError.code,
-				initError.message);
+				EmbeddingErrorCode::RuntimeUnavailable,
+				"embedding runtime is not initialized");
 		}
 
 		const std::size_t maxTokens =
@@ -930,29 +945,122 @@ namespace blazeclaw::core {
 		const bool normalize = request.normalize.value_or(
 			m_config.embeddings.normalize);
 
-		for (const auto& text : request.texts) {
-			auto single = EmbedSingleTextLocked(
-				text,
-				normalize,
-				request.traceId);
-			if (!single.ok) {
-				const auto endedAt = std::chrono::steady_clock::now();
-				const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-					endedAt - startedAt);
-				return EmbeddingBatchResult{
-					.ok = false,
-					.vectors = {},
-					.dimension = single.dimension,
-					.provider = single.provider,
-					.modelId = single.modelId,
-					.latencyMs = static_cast<std::uint32_t>((std::max)(
-						std::int64_t{0},
-						elapsed.count())),
-					.error = single.error,
-				};
+		EmbeddingError initError;
+		if (!EnsureInitializedLocked(initError)) {
+			const auto endedAt = std::chrono::steady_clock::now();
+			const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+				endedAt - startedAt);
+			return EmbeddingBatchResult{
+				.ok = false,
+				.vectors = {},
+				.dimension = static_cast<std::size_t>(
+					m_config.embeddings.dimension),
+				.provider = m_snapshot.provider,
+				.modelId = m_snapshot.modelPath,
+				.latencyMs = static_cast<std::uint32_t>((std::max)(
+					std::int64_t{ 0 },
+					elapsed.count())),
+				.error = initError,
+			};
+		}
+
+		const bool parallelBatchEnabled =
+			NormalizeExecutionMode(m_config.embeddings.executionMode) == "parallel" &&
+			request.texts.size() > 1;
+
+		if (parallelBatchEnabled) {
+			std::vector<std::future<EmbeddingResult>> futures;
+			futures.reserve(request.texts.size());
+
+			for (const auto& text : request.texts) {
+				futures.push_back(std::async(
+					std::launch::async,
+					[this,
+					text,
+					normalize,
+					traceId = request.traceId]() {
+						return EmbedSingleTextLocked(
+							text,
+							normalize,
+							traceId,
+							true);
+					}));
 			}
 
-			vectors.push_back(std::move(single.vector));
+			for (auto& future : futures) {
+				EmbeddingResult single;
+				try {
+					single = future.get();
+				}
+				catch (const std::exception& ex) {
+					const auto endedAt = std::chrono::steady_clock::now();
+					const auto elapsed =
+						std::chrono::duration_cast<std::chrono::milliseconds>(
+							endedAt - startedAt);
+					return EmbeddingBatchResult{
+						.ok = false,
+						.vectors = {},
+						.dimension = static_cast<std::size_t>(
+							m_config.embeddings.dimension),
+						.provider = m_snapshot.provider,
+						.modelId = m_snapshot.modelPath,
+						.latencyMs = static_cast<std::uint32_t>((std::max)(
+							std::int64_t{ 0 },
+							elapsed.count())),
+						.error = EmbeddingError{
+							.code = EmbeddingErrorCode::InferenceFailed,
+							.message = ex.what(),
+						},
+					};
+				}
+
+				if (!single.ok) {
+					const auto endedAt = std::chrono::steady_clock::now();
+					const auto elapsed =
+						std::chrono::duration_cast<std::chrono::milliseconds>(
+							endedAt - startedAt);
+					return EmbeddingBatchResult{
+						.ok = false,
+						.vectors = {},
+						.dimension = single.dimension,
+						.provider = single.provider,
+						.modelId = single.modelId,
+						.latencyMs = static_cast<std::uint32_t>((std::max)(
+							std::int64_t{ 0 },
+							elapsed.count())),
+						.error = single.error,
+					};
+				}
+
+				vectors.push_back(std::move(single.vector));
+			}
+		}
+		else {
+			for (const auto& text : request.texts) {
+				auto single = EmbedSingleTextLocked(
+					text,
+					normalize,
+					request.traceId,
+					true);
+				if (!single.ok) {
+					const auto endedAt = std::chrono::steady_clock::now();
+					const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+						endedAt - startedAt);
+					return EmbeddingBatchResult{
+						.ok = false,
+						.vectors = {},
+						.dimension = single.dimension,
+						.provider = single.provider,
+						.modelId = single.modelId,
+						.latencyMs = static_cast<std::uint32_t>((std::max)(
+							std::int64_t{ 0 },
+							elapsed.count())),
+						.error = single.error,
+					};
+				}
+
+				vectors.push_back(std::move(single.vector));
+			}
 		}
 
 		const auto endedAt = std::chrono::steady_clock::now();
