@@ -40,12 +40,16 @@ END_MESSAGE_MAP()
 
 CBlazeClawMFCDoc::CBlazeClawMFCDoc() noexcept
 {
-	// TODO: add one-time construction code here
-
 }
 
 CBlazeClawMFCDoc::~CBlazeClawMFCDoc()
 {
+}
+
+void CBlazeClawMFCDoc::SetMarkdownContent(const std::wstring& content)
+{
+	m_markdownContent = content;
+	UpdateAllViews(nullptr, WM_DOC_MARKDOWN_UPDATE, nullptr);
 }
 
 BOOL CBlazeClawMFCDoc::OnNewDocument()
