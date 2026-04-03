@@ -268,6 +268,198 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Parity coverage: task-delta retrieval is index ordered and clear removes run deltas",
+	"[parity][chat][taskdeltas][e2e]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.Start(gatewayConfig));
+
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "ordered task delta reply";
+			result.assistantDeltas = { "ordered task delta reply" };
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 2,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "tool_result",
+					.toolName = "weather.lookup",
+					.status = "ok",
+					.stepLabel = "tool_result",
+				},
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "plan",
+					.resultJson = "[\"weather.lookup\"]",
+					.status = "planned",
+					.stepLabel = "execution_plan",
+				},
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 1,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "tool_call",
+					.toolName = "weather.lookup",
+					.status = "requested",
+					.stepLabel = "tool_request",
+				},
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 3,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.resultJson = "ordered task delta reply",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			result.modelId = "default";
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-taskdeltas-order-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"run ordered deltas\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		sendResponse.payloadJson.value(),
+		"runId",
+		runId));
+	REQUIRE_FALSE(runId.empty());
+
+	const auto getResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-taskdeltas-order-1-get",
+			.method = "gateway.runtime.taskDeltas.get",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+
+	REQUIRE(getResponse.ok);
+	REQUIRE(getResponse.payloadJson.has_value());
+	const std::string payload = getResponse.payloadJson.value();
+	const auto planPos = payload.find("\"phase\":\"plan\"");
+	const auto callPos = payload.find("\"phase\":\"tool_call\"");
+	const auto resultPos = payload.find("\"phase\":\"tool_result\"");
+	const auto finalPos = payload.find("\"phase\":\"final\"");
+	REQUIRE(planPos != std::string::npos);
+	REQUIRE(callPos != std::string::npos);
+	REQUIRE(resultPos != std::string::npos);
+	REQUIRE(finalPos != std::string::npos);
+	REQUIRE(planPos < callPos);
+	REQUIRE(callPos < resultPos);
+	REQUIRE(resultPos < finalPos);
+
+	const auto clearResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-taskdeltas-order-1-clear",
+			.method = "gateway.runtime.taskDeltas.clear",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+
+	REQUIRE(clearResponse.ok);
+	REQUIRE(clearResponse.payloadJson.has_value());
+	REQUIRE(clearResponse.payloadJson->find("\"cleared\":1") != std::string::npos);
+
+	const auto afterClearResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-taskdeltas-order-1-get-after-clear",
+			.method = "gateway.runtime.taskDeltas.get",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+
+	REQUIRE(afterClearResponse.ok);
+	REQUIRE(afterClearResponse.payloadJson.has_value());
+	REQUIRE(afterClearResponse.payloadJson->find("\"count\":0") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Parity coverage: chat abort emits aborted terminal event and clears active run",
+	"[parity][chat][events][e2e]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.Start(gatewayConfig));
+
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest&) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText =
+				"This is a long assistant response used to exercise abort event emission ordering.";
+			result.modelId = "default";
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-abort-e2e-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"abort this run\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		sendResponse.payloadJson.value(),
+		"runId",
+		runId));
+
+	const auto abortResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-abort-e2e-1-abort",
+			.method = "chat.abort",
+			.paramsJson =
+				std::string("{\"sessionKey\":\"main\",\"runId\":\"") + runId + "\"}",
+		});
+
+	REQUIRE(abortResponse.ok);
+	REQUIRE(abortResponse.payloadJson.has_value());
+	REQUIRE(abortResponse.payloadJson->find("\"aborted\":true") != std::string::npos);
+
+	const auto eventsResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-abort-e2e-1-poll",
+			.method = "chat.events.poll",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"limit\":20}"),
+		});
+
+	REQUIRE(eventsResponse.ok);
+	REQUIRE(eventsResponse.payloadJson.has_value());
+	REQUIRE(eventsResponse.payloadJson->find("\"state\":\"aborted\"") != std::string::npos);
+	REQUIRE(eventsResponse.payloadJson->find("\"runId\":\"" + runId + "\"") != std::string::npos);
+
+	const auto secondPollResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-abort-e2e-1-poll-2",
+			.method = "chat.events.poll",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"limit\":20}"),
+		});
+
+	REQUIRE(secondPollResponse.ok);
+	REQUIRE(secondPollResponse.payloadJson.has_value());
+	REQUIRE(secondPollResponse.payloadJson->find("\"count\":0") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
 	"Parity coverage: chat.send uses runtime orchestration shortcut when orchestrationPath=runtime_orchestration",
 	"[parity][chat][orchestration][e2e][runtime]") {
 	PluginHostAdapter::RegisterExtensionAdapter(

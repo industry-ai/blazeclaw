@@ -502,7 +502,7 @@ and Steps 6-10 must produce evidence for both lanes.
 - Overall implementation status: **partially accomplished** (core phases implemented, final completion criteria not fully closed).
 - Remaining closure work:
   - protocol contract/schema-validator registration parity for runtime task-delta methods has been completed,
-  - add explicit `BlazeClawMfc.Tests` unit/integration coverage for task-delta runtime and gateway event/retrieval parity,
+  - explicit `BlazeClawMfc.Tests` unit/integration coverage for task-delta runtime and gateway event/retrieval parity has been completed,
   - add optional task-delta filesystem persistence/replay hook beyond bounded in-memory retention.
 
 ### Completed now: Step 13 (Timestamp/Deadline Consistency)

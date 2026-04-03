@@ -221,7 +221,10 @@ Upgrade the `dynamic_task_delta` path from decomposition-only behavior to a full
    - Added explicit response validators for `gateway.runtime.taskDeltas.get/clear`, `chat.send`, `chat.abort`, `chat.events.poll`, and `gateway.runtime.orchestration.status`.
    - Extended `GatewayProtocolContract` positive and negative parity cases to include the above runtime task-delta surfaces.
 2. **Dedicated test-project coverage is incomplete.**
-   - Coverage is currently fixture-driven in core service validation; explicit `BlazeClawMfc.Tests` unit/integration cases for task-delta runtime and gateway parity are still missing.
+   - Dedicated `BlazeClawMfc.Tests` parity coverage is now added for:
+     - `chat.send -> gateway.runtime.taskDeltas.get` ordered retrieval behavior,
+     - `gateway.runtime.taskDeltas.clear` retention/clear behavior,
+     - `chat.abort -> chat.events.poll` aborted terminal event parity and queue drain behavior.
 3. **Task-delta filesystem persistence hook is not implemented.**
    - In-memory bounded retention exists, but optional replay/audit persistence for task deltas is not present.
 
