@@ -486,6 +486,12 @@ and Steps 6-10 must produce evidence for both lanes.
 - Added terminal-event de-duplication guard in `chat.events.poll` to keep deterministic `delta -> final|error|aborted` ordering.
 - Preserved compatibility for existing abort semantics while aligning terminal event sequencing.
 
+### Completed now: Dynamic Task-Delta Full Plan Phase 7 follow-up
+- Extended gateway run-summary telemetry with terminal status and terminal error-code dimensions.
+- Added cumulative dynamic-loop counters for success/failure/timeout/cancel/fallback outcomes.
+- Added embedded dynamic-loop metrics fields in operator diagnostics report generation.
+- Surfaced dynamic-loop counters through `gateway.runtime.orchestration.status` for operator diagnostics parity.
+
 ### Completed now: Step 13 (Timestamp/Deadline Consistency)
 - Replaced synthetic embedded run start timestamps with real epoch timestamps from `CurrentEpochMs()`.
 - Aligned completion timestamps with real epoch values for both success and failure paths.

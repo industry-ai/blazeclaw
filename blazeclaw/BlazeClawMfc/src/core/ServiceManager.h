@@ -132,6 +132,12 @@ namespace blazeclaw::core {
 		bool m_lastEmbeddedCanaryEligible = false;
 		bool m_lastEmbeddedFallbackUsed = false;
 		std::string m_lastEmbeddedFallbackReason;
+        std::uint64_t m_embeddedRunSuccessCount = 0;
+		std::uint64_t m_embeddedRunFailureCount = 0;
+		std::uint64_t m_embeddedRunTimeoutCount = 0;
+		std::uint64_t m_embeddedRunCancelledCount = 0;
+		std::uint64_t m_embeddedRunFallbackCount = 0;
+		std::uint64_t m_embeddedTaskDeltaTransitionCount = 0;
 		HookCatalogService m_hookCatalogService;
 		HookCatalogSnapshot m_hookCatalog;
 		HookEventService m_hookEventService;

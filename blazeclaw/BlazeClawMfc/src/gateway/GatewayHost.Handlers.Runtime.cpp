@@ -1837,12 +1837,57 @@ namespace blazeclaw::gateway {
 									"}");
 							}
 
+							std::string terminalStatus = success ? "completed" : "failed";
+							std::string terminalErrorCode;
+							for (auto it = normalizedTaskDeltas.rbegin();
+								it != normalizedTaskDeltas.rend();
+								++it) {
+								if (it->phase != "final") {
+									continue;
+								}
+
+								if (!it->status.empty()) {
+									terminalStatus = it->status;
+								}
+
+								terminalErrorCode = it->errorCode;
+								break;
+							}
+
+							if (terminalStatus == "completed") {
+								++m_taskDeltaRunSuccessCount;
+							}
+							else {
+								++m_taskDeltaRunFailureCount;
+							}
+
+							if (terminalErrorCode == "embedded_deadline_exceeded") {
+								++m_taskDeltaRunTimeoutCount;
+							}
+
+							if (terminalErrorCode == "embedded_run_cancelled" ||
+								terminalStatus == "skipped") {
+								++m_taskDeltaRunCancelledCount;
+							}
+
+							if (terminalErrorCode.find("fallback") != std::string::npos ||
+								terminalStatus == "fallback") {
+								++m_taskDeltaRunFallbackCount;
+							}
+
 							EmitTelemetryEvent(
 								"gateway.taskdelta.runSummary",
 								std::string("{\"runId\":") +
 								JsonString(runId) +
 								",\"count\":" + std::to_string(normalizedTaskDeltas.size()) +
 								",\"success\":" + (success ? std::string("true") : std::string("false")) +
+								",\"terminalStatus\":" + JsonString(terminalStatus) +
+								",\"errorCode\":" + JsonString(terminalErrorCode) +
+								",\"totals\":{\"success\":" + std::to_string(m_taskDeltaRunSuccessCount) +
+								",\"failure\":" + std::to_string(m_taskDeltaRunFailureCount) +
+								",\"timeout\":" + std::to_string(m_taskDeltaRunTimeoutCount) +
+								",\"cancelled\":" + std::to_string(m_taskDeltaRunCancelledCount) +
+								",\"fallback\":" + std::to_string(m_taskDeltaRunFallbackCount) + "}" +
 								"}");
 
 							if (m_taskDeltasByRunId.size() > 64) {
@@ -3106,7 +3151,17 @@ namespace blazeclaw::gateway {
 					",\"running\":" +
 					std::to_string(m_runtimeRunningCount) +
 					",\"capacity\":" +
-					std::to_string(m_runtimeQueueCapacity) + "}",
+				   std::to_string(m_runtimeQueueCapacity) +
+					",\"dynamicLoopMetrics\":{\"success\":" +
+					std::to_string(m_taskDeltaRunSuccessCount) +
+					",\"failure\":" +
+					std::to_string(m_taskDeltaRunFailureCount) +
+					",\"timeout\":" +
+					std::to_string(m_taskDeltaRunTimeoutCount) +
+					",\"cancelled\":" +
+					std::to_string(m_taskDeltaRunCancelledCount) +
+					",\"fallback\":" +
+					std::to_string(m_taskDeltaRunFallbackCount) + "}}",
 				.error = std::nullopt,
 			};
 			});

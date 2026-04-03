@@ -182,6 +182,14 @@ Upgrade the `dynamic_task_delta` path from decomposition-only behavior to a full
 2. Add counters for success/failure/timeout/cancel/fallback.
 3. Surface rollout and health metrics in operator diagnostics.
 
+### Phase 7 implementation status
+
+- Completed in code:
+  - Extended task-delta run-summary telemetry payloads with terminal status and terminal error code.
+  - Added cumulative counters for dynamic task-delta outcomes (success/failure/timeout/cancel/fallback).
+  - Added embedded dynamic-loop counters in operator diagnostics report (`BuildOperatorDiagnosticsReport`).
+  - Added dynamic-loop metrics surface in `gateway.runtime.orchestration.status` for operator monitoring.
+
 ## Phase 8 — Validation and rollout
 
 1. Add test matrix for success/failure/cancel/timeout/approval flows.

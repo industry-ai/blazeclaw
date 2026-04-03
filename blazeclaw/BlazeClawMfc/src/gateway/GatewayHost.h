@@ -314,6 +314,11 @@ namespace blazeclaw::gateway {
 		std::unordered_map<std::string, ChatRunState> m_chatRunsById;
 		std::unordered_map<std::string, std::string> m_chatRunByIdempotency;
 		std::unordered_map<std::string, std::vector<ChatRuntimeResult::TaskDeltaEntry>> m_taskDeltasByRunId;
+		std::uint64_t m_taskDeltaRunSuccessCount = 0;
+		std::uint64_t m_taskDeltaRunFailureCount = 0;
+		std::uint64_t m_taskDeltaRunTimeoutCount = 0;
+		std::uint64_t m_taskDeltaRunCancelledCount = 0;
+		std::uint64_t m_taskDeltaRunFallbackCount = 0;
 		SkillsCatalogGatewayState m_skillsCatalogState;
 		SkillsRefreshCallback m_skillsRefreshCallback;
 		ChatRuntimeCallback m_chatRuntimeCallback;

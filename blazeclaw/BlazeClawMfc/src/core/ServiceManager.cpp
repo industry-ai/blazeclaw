@@ -2288,11 +2288,31 @@ namespace blazeclaw::core {
 							});
 					}
 
+					m_embeddedTaskDeltaTransitionCount +=
+						static_cast<std::uint64_t>(embeddedExecution.taskDeltas.size());
+					if (embeddedExecution.success) {
+						++m_embeddedRunSuccessCount;
+					}
+					else {
+						++m_embeddedRunFailureCount;
+					}
+
+					const std::string normalizedEmbeddedError =
+						ToLowerAscii(embeddedExecution.errorCode);
+					if (normalizedEmbeddedError == "embedded_deadline_exceeded") {
+						++m_embeddedRunTimeoutCount;
+					}
+
+					if (normalizedEmbeddedError == "embedded_run_cancelled") {
+						++m_embeddedRunCancelledCount;
+					}
+
 					if (!embeddedExecution.success) {
 						if (ShouldFallbackFromEmbeddedFailure(
 							embeddedExecution.errorCode,
 							embeddedExecution.reason)) {
 							m_lastEmbeddedFallbackUsed = true;
+							++m_embeddedRunFallbackCount;
 							m_lastEmbeddedFallbackReason = embeddedExecution.errorCode.empty()
 								? embeddedExecution.reason
 								: embeddedExecution.errorCode;
@@ -2808,7 +2828,14 @@ namespace blazeclaw::core {
 			std::string(m_lastEmbeddedCanaryEligible ? "true" : "false") +
 			",\"fallbackUsed\":" +
 			std::string(m_lastEmbeddedFallbackUsed ? "true" : "false") +
-			",\"fallbackReason\":\"" + m_lastEmbeddedFallbackReason + "\"},"
+			",\"fallbackReason\":\"" + m_lastEmbeddedFallbackReason +
+			"\",\"runSuccess\":" + std::to_string(m_embeddedRunSuccessCount) +
+			",\"runFailure\":" + std::to_string(m_embeddedRunFailureCount) +
+			",\"runTimeout\":" + std::to_string(m_embeddedRunTimeoutCount) +
+			",\"runCancelled\":" + std::to_string(m_embeddedRunCancelledCount) +
+			",\"runFallback\":" + std::to_string(m_embeddedRunFallbackCount) +
+			",\"taskDeltaTransitions\":" +
+			std::to_string(m_embeddedTaskDeltaTransitionCount) + "},"
 			"\"tools\":{\"policyEntries\":" + std::to_string(m_agentsToolPolicy.entries.size()) +
 			",\"shellProcesses\":" + std::to_string(ShellProcessCount()) + "},"
 			"\"modelAuth\":{\"primary\":\"" + routing.primaryModel +
