@@ -12,10 +12,6 @@ namespace blazeclaw::core {
 
 	namespace {
 
-		std::uint64_t ResolveStartedAtMs(const std::size_t ordinal) {
-			return 1735689700000 + static_cast<std::uint64_t>(ordinal);
-		}
-
 		std::uint64_t CurrentEpochMs() {
 			const auto now = std::chrono::system_clock::now();
 			return static_cast<std::uint64_t>(
@@ -443,10 +439,21 @@ namespace blazeclaw::core {
 			};
 		}
 
-		const std::uint64_t startedAtMs = ResolveStartedAtMs(m_runsById.size());
-		const std::string runId =
-			"embedded-" + std::to_string(startedAtMs) + "-" +
-			(request.agentId.empty() ? "default" : request.agentId);
+		const std::uint64_t startedAtMs = CurrentEpochMs();
+		const std::string agentId =
+			request.agentId.empty() ? "default" : request.agentId;
+		std::size_t runOrdinal = 0;
+		std::string runId;
+		do {
+			runId =
+				"embedded-" +
+				std::to_string(startedAtMs) +
+				"-" +
+				agentId +
+				"-" +
+				std::to_string(runOrdinal);
+			++runOrdinal;
+		} while (m_runsById.find(runId) != m_runsById.end());
 
 		EmbeddedRunRecord record;
 		record.runId = runId;
@@ -706,7 +713,7 @@ namespace blazeclaw::core {
 				});
 
 			if (!execution.executed || execution.status == "error") {
-				if (!CompleteRun(queued.runId, "failed", queued.startedAtMs + 1)) {
+				if (!CompleteRun(queued.runId, "failed", CurrentEpochMs())) {
 					FinalizeExecutionResult(
 						result,
 						"failed",
@@ -738,7 +745,7 @@ namespace blazeclaw::core {
 			lastOutput = execution.result;
 		}
 
-		if (!CompleteRun(queued.runId, "completed", queued.startedAtMs + 1)) {
+		if (!CompleteRun(queued.runId, "completed", CurrentEpochMs())) {
 			FinalizeExecutionResult(
 				result,
 				"failed",
@@ -877,7 +884,7 @@ namespace blazeclaw::core {
 			return false;
 		}
 
-		if (!service.CompleteRun(first.runId, "completed", first.startedAtMs + 1)) {
+		if (!service.CompleteRun(first.runId, "completed", CurrentEpochMs())) {
 			outError = L"Fixture validation failed: expected run completion success.";
 			return false;
 		}

@@ -453,6 +453,12 @@ and Steps 6-10 must produce evidence for both lanes.
 - Preserved optional compatibility behavior through execution bridge fallbacks and staged rollout fallback controls.
 - Finalized refactor checklist with dynamic task-delta orchestration as default behavior.
 
+### Completed now: Step 13 (Timestamp/Deadline Consistency)
+- Replaced synthetic embedded run start timestamps with real epoch timestamps from `CurrentEpochMs()`.
+- Aligned completion timestamps with real epoch values for both success and failure paths.
+- Kept deadline computation on the same epoch timeline to prevent immediate timeout false-positives.
+- Updated fixture completion path to use real epoch completion timestamps.
+
 ## Primary File Targets (Expected)
 - `blazeclaw/BlazeClawMfc/src/core/PiEmbeddedService.h`
 - `blazeclaw/BlazeClawMfc/src/core/PiEmbeddedService.cpp`

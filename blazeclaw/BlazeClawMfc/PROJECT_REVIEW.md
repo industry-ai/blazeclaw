@@ -96,7 +96,9 @@ This removes per-request dispatcher mutation and avoids unnecessary hot-path reg
 
 ### G) Embedded orchestration timeout semantics
 
-`ResolveStartedAtMs` in `PiEmbeddedService` uses a fixed epoch baseline; timeout logic compares against real current time, which can trigger incorrect immediate deadline behavior.
+Status update (latest change): `PiEmbeddedService` now uses `CurrentEpochMs()` for run start and completion timestamps, and deadline checks are evaluated against this real epoch timeline.
+
+This removes synthetic baseline time drift and prevents immediate/incorrect deadline triggering caused by mixed timestamp sources.
 
 ## 5) Architecture Summary
 
@@ -120,6 +122,6 @@ This removes per-request dispatcher mutation and avoids unnecessary hot-path reg
 2. Switch chat UI updates to incremental append/update instead of full list rebuild.
 3. [Completed] Register dispatcher handlers once at startup, not inside `chat.send`.
 4. [Completed] Add retention limits for `m_chatHistoryBySession` and `m_chatEventsBySession`.
-5. Fix `PiEmbeddedService` started-at/deadline logic to use real current epoch consistently.
+5. [Completed] Fix `PiEmbeddedService` started-at/deadline logic to use real current epoch consistently.
 6. Ensure local-model cancel flags are erased across all terminal/error/cancel paths.
 7. Optionally parallelize embeddings safely (separate sessions or lock partitioning).
