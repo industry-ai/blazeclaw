@@ -420,6 +420,7 @@ and Steps 6-10 must produce evidence for both lanes.
 - Added runtime query endpoints:
   - `gateway.runtime.taskDeltas.get` (ordered retrieval by runId)
   - `gateway.runtime.taskDeltas.clear` (per-run or global cache clear)
+- Registered task-delta query endpoints once during runtime handler startup to avoid per-`chat.send` dispatcher mutation.
 
 ### Completed now: Step 9 (Parity Test Case for Brave→Summarize→Notion)
 - Added deterministic parity fixture scenario in embedded runtime validation using the target Chinese prompt.

@@ -1,0 +1,124 @@
+# BlazeClawMfc Project Review
+
+## 1) Layering and Architecture
+
+Observed layer stack is clear and mostly consistent:
+
+- **UI layer (MFC)**  
+  `src/app/*` (`BlazeClawMfcApp`, `MainFrame`, `ChatView`)  
+  Handles windowing, chat controls, timers, and status output.
+
+- **Configuration layer**  
+  `src/config/ConfigModels.h`, `ConfigLoader.cpp`, `blazeclaw.conf`  
+  Strong feature-flag style config model (gateway, embedded, hooks, local model, embeddings, skills).
+
+- **Service orchestration layer**  
+  `src/core/ServiceManager.*`  
+  Central composition root. Wires agent services, embeddings, local model runtime, retrieval memory, embedded orchestration, hooks, and gateway callbacks.
+
+- **Gateway/runtime API layer**  
+  `src/gateway/*`  
+  Protocol + dispatcher + schema + transport. Handler split (`GatewayHost.Handlers.*`) is good for domain partitioning. Tool registry + extension lifecycle are integrated here.
+
+- **Model/runtime layer**  
+  `src/core/runtime/LocalModel/*`, `OnnxEmbeddingsService.*`  
+  ONNX runtimes for generation and embeddings.
+
+- **Extension/tooling layer**  
+  Extension catalog loading and runtime tool binding in `GatewayHost`.
+
+Overall, this is a modular monolith with a strong `ServiceManager + GatewayHost` core and good separation by concern.
+
+## 2) Threading Model
+
+Effective runtime model is mostly single-threaded at app level:
+
+- Gateway network pump is called from `CBlazeClawMFCApp::OnIdle` (`BlazeClawMfcApp.cpp:506-519`).
+- Chat polling is timer-driven on UI thread (`ChatView.cpp:468-477`, 500 ms interval).
+- No explicit `std::thread` / `CreateThread` usage was found in `BlazeClawMfc/src`.
+
+Current behavior:
+
+- UI thread drives message loop.
+- UI thread also pumps gateway transport.
+- UI thread also issues chat requests.
+
+Consequences:
+
+- Heavy gateway callback work can stall UI responsiveness.
+- `chat.send` can synchronously invoke DeepSeek HTTP flow (`WinHttpSendRequest/ReceiveResponse/ReadData` in `ServiceManager.cpp`), which is blocking.
+- ONNX calls can block call sites when reached on UI-driven flows.
+
+## 3) Memory Characteristics
+
+### Positive controls
+
+- Transport has explicit limits (`kMaxReadBufferBytes`, outbound queue caps).
+- Retrieval memory store is capped at 512 records (`RetrievalMemoryService.cpp:56-58`).
+- Task delta store has bounded retention intent (`m_taskDeltasByRunId.size() > 64`).
+
+### Risk points
+
+- Chat history is unbounded per session in `m_chatHistoryBySession`.
+- Event queue may grow if `chat.events.poll` consumer lags (`m_chatEventsBySession`).
+- Local-model cancel flags may accumulate on early-return paths if not erased in all terminal branches.
+
+## 4) Performance Issues and Hotspots
+
+### A) UI-thread blocking
+
+Main issue: network pump + request routing + potential remote HTTP in UI-driven execution.
+
+Expected symptoms: typing lag, delayed repaint, temporary freeze under slow network/model conditions.
+
+### B) Chat view redraw strategy
+
+`SyncItemsFromState()` clears and rebuilds full message list on update (`ChatView.cpp:882+`). With frequent polling, this causes repeated O(n) rebuild/redraw churn.
+
+### C) Streaming pipeline behavior
+
+DeepSeek response is fully read before delta extraction in `ServiceManager` (`responseBody` accumulation), then deltas are emitted from stored buffers. This increases time-to-first-token compared with true incremental streaming.
+
+### D) Embeddings throughput serialization
+
+`OnnxEmbeddingsService` uses a single mutex around work including ONNX run (`EmbedText`, `EmbedBatch`), reducing concurrent throughput.
+
+### E) Dispatcher mutation in request hot path
+
+Status update (latest change): `gateway.runtime.taskDeltas.get/clear` is now registered once during runtime handler initialization, not inside `chat.send`.
+
+This removes per-request dispatcher mutation and avoids unnecessary hot-path registration overhead.
+
+### F) Startup load is heavy
+
+`ServiceManager::Start` performs broad initialization and multiple fixture validations, increasing startup time.
+
+### G) Embedded orchestration timeout semantics
+
+`ResolveStartedAtMs` in `PiEmbeddedService` uses a fixed epoch baseline; timeout logic compares against real current time, which can trigger incorrect immediate deadline behavior.
+
+## 5) Architecture Summary
+
+### Strengths
+
+- Clear module boundaries.
+- Centralized config and rollout gating.
+- Solid protocol/tool abstraction.
+- Explicit path for local model and remote provider execution.
+
+### Weaknesses
+
+- Runtime execution is largely UI-thread-centric.
+- Chat/event/render loop has avoidable hot-path inefficiencies.
+- Some state containers are not retention-bounded.
+- Embedded orchestration has correctness/perf smells.
+
+## 6) Highest-Impact Improvements (Priority Order)
+
+1. Move chat runtime execution (remote/local model) off UI thread using async work queue + completion events.
+2. Switch chat UI updates to incremental append/update instead of full list rebuild.
+3. [Completed] Register dispatcher handlers once at startup, not inside `chat.send`.
+4. Add retention limits for `m_chatHistoryBySession` and `m_chatEventsBySession`.
+5. Fix `PiEmbeddedService` started-at/deadline logic to use real current epoch consistently.
+6. Ensure local-model cancel flags are erased across all terminal/error/cancel paths.
+7. Optionally parallelize embeddings safely (separate sessions or lock partitioning).
