@@ -258,7 +258,9 @@ namespace blazeclaw::gateway {
 		std::string BuildAssistantFinalMessageJson(
 			const std::string& text,
 			const std::uint64_t timestampMs) {
-			return "{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"" +
+			return "{\"role\":\"assistant\",\"text\":\"" +
+				EscapeJsonLocal(text) +
+				"\",\"content\":[{\"type\":\"text\",\"text\":\"" +
 				EscapeJsonLocal(text) +
 				"\"}],\"timestamp\":" +
 				std::to_string(timestampMs) +
