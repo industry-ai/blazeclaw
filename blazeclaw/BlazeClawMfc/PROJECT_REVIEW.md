@@ -120,10 +120,16 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 
 ## 6) Highest-Impact Improvements (Priority Order)
 
-1. Move chat runtime execution (remote/local model) off UI thread using async work queue + completion events.
+1. [Planned] Move chat runtime execution (remote/local model) off UI thread using async work queue + completion events.
+   - Execution plan: `CHAT_RUNTIME_ASYNC_WORK_QUEUE_PLAN.md`
 2. Switch chat UI updates to incremental append/update instead of full list rebuild.
 3. [Completed] Register dispatcher handlers once at startup, not inside `chat.send`.
 4. [Completed] Add retention limits for `m_chatHistoryBySession` and `m_chatEventsBySession`.
 5. [Completed] Fix `PiEmbeddedService` started-at/deadline logic to use real current epoch consistently.
 6. [Completed] Ensure local-model cancel flags are erased across all terminal/error/cancel paths.
 7. [Completed] Optionally parallelize embeddings safely (separate sessions or lock partitioning).
+
+## 7) Related Execution Planning Docs
+
+- `CHAT_RUNTIME_ASYNC_WORK_QUEUE_PLAN.md` — first-pass migration plan for moving chat runtime work off the UI thread with queue-based async execution and completion events.
+- `DYNAMIC_TASK_DELTA_FULL_EXECUTION_PLAN.md` — dynamic task-delta orchestration hardening and rollout plan/status.

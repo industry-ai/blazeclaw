@@ -18,3 +18,8 @@ Local setup example (PowerShell):
 Notes:
 - The project currently includes lightweight third_party stubs to ease local builds when vcpkg is not installed. It's recommended to use vcpkg as the source of truth and remove stubs once vcpkg is relied upon in CI.
 - The tests are executed as part of CI in the pipeline; the pipeline runs the produced test executable and returns its exit code.
+
+BlazeClawMfc planning docs:
+- `blazeclaw/BlazeClawMfc/PROJECT_REVIEW.md`
+- `blazeclaw/BlazeClawMfc/CHAT_RUNTIME_ASYNC_WORK_QUEUE_PLAN.md`
+- `blazeclaw/BlazeClawMfc/DYNAMIC_TASK_DELTA_FULL_EXECUTION_PLAN.md`
