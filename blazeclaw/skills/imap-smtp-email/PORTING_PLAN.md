@@ -104,10 +104,15 @@ Phase 3 artifact snapshot:
 - `blazeclaw/BlazeClawMfc/src/core/ServiceManager.cpp`
 
 ### Phase 4 - Integrate with Chat Agent Flow
-1. Wire tool-call path from `gateway.agents.run` to runtime tool execution.
-2. Emit task delta entries (`toolName`, `argsJson`, `resultJson`, status, timing) for each tool call.
-3. Ensure chat flow can interleave model output and tool results without breaking existing run lifecycle.
-4. Ensure idempotency behavior remains correct for repeated requests.
+Status: Completed
+
+- [x] Wire tool-call path from `gateway.agents.run` to runtime tool execution.
+- [x] Emit task delta entries (`toolName`, `argsJson`, `resultJson`, status, timing) for each tool call.
+- [x] Ensure chat flow can interleave model output and tool results without breaking existing run lifecycle.
+- [x] Ensure idempotency behavior remains correct for repeated requests.
+
+Phase 4 artifact snapshot:
+- `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp`
 
 ### Phase 5 - Configuration and Security Hardening
 1. Ensure `.env` lookup behavior works in BlazeClaw environment:
@@ -148,8 +153,8 @@ Phase 3 artifact snapshot:
 - [x] `CBlazeClawMFCView` can trigger email configuration and open a new chat document through `m_pChatDocTemplate`
 - [x] WebView2 form values are validated and persisted through `CBlazeClawMFCDoc`-associated config storage
 - [ ] BlazeClaw gateway can discover email tools in catalog
-- [ ] BlazeClaw runtime can execute IMAP/SMTP skill tools from chat
-- [ ] Tool-call deltas are persisted and observable
+- [x] BlazeClaw runtime can execute IMAP/SMTP skill tools from chat
+- [x] Tool-call deltas are persisted and observable
 - [ ] Security allowlist controls are enforced
 - [ ] Build and tests pass
 

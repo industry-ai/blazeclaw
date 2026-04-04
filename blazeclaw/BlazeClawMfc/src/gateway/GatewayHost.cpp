@@ -2036,37 +2036,87 @@ namespace blazeclaw::gateway {
 			const AgentEntry agent = m_agentRegistry.Get(requestedAgentId);
 			const SessionEntry session = m_sessionRegistry.Resolve(requestedSessionId);
 			const std::uint64_t startedAtMs = CurrentEpochMs();
-			const std::string runId = "run-" + std::to_string(startedAtMs) + "-" + agent.id;
+			const std::string runId =
+				"run-" + std::to_string(startedAtMs) + "-" + agent.id;
+
+			std::string chatParamsJson =
+				"{\"sessionKey\":\"" + EscapeJson(session.id) +
+				"\",\"message\":\"" + EscapeJson(message) + "\"";
+			if (!idempotencyKey.empty()) {
+				chatParamsJson +=
+					",\"idempotencyKey\":\"agents-run::" +
+					EscapeJson(idempotencyKey) + "\"";
+			}
+			chatParamsJson += "}";
+
+			const protocol::RequestFrame chatRequest{
+				.id = runId,
+				.method = "chat.send",
+				.paramsJson = chatParamsJson,
+			};
+			const protocol::ResponseFrame chatResponse =
+				RouteRequest(chatRequest);
+			if (!chatResponse.ok || !chatResponse.payloadJson.has_value()) {
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = false,
+					.payloadJson = std::nullopt,
+					.error = chatResponse.error.has_value()
+						? chatResponse.error
+						: std::optional<protocol::ErrorShape>(
+							protocol::ErrorShape{
+								.code = "chat_dispatch_failed",
+								.message = "Unable to start chat runtime flow.",
+								.detailsJson = std::nullopt,
+								.retryable = false,
+								.retryAfterMs = std::nullopt,
+							}),
+				};
+			}
+
+			std::string chatRunId;
+			json::FindStringField(
+				chatResponse.payloadJson.value(),
+				"runId",
+				chatRunId);
+			if (chatRunId.empty()) {
+				chatRunId = runId;
+			}
+
+			std::string backendErrorCode;
+			json::FindStringField(
+				chatResponse.payloadJson.value(),
+				"backendErrorCode",
+				backendErrorCode);
 
 			AgentRunState run{
-				.runId = runId,
+				.runId = chatRunId,
 				.agentId = agent.id,
 				.sessionId = session.id,
 				.message = message,
-				.status = "completed",
-				.summary = message.empty() ? "empty_message" : "completed",
+				.status = "queued",
+				.summary = backendErrorCode.empty() ? "queued" : backendErrorCode,
 				.startedAtMs = startedAtMs,
-				.completedAtMs = startedAtMs + 1,
+				.completedAtMs = std::nullopt,
 			};
 
-			m_agentRuns.insert_or_assign(runId, run);
+			m_agentRuns.insert_or_assign(chatRunId, run);
 			if (!idempotencyKey.empty()) {
-				m_agentRunByIdempotency.insert_or_assign(idempotencyKey, runId);
+				m_agentRunByIdempotency.insert_or_assign(idempotencyKey, chatRunId);
 			}
 
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
 				.payloadJson =
-					"{\"runId\":\"" + EscapeJson(run.runId) +
+				   "{\"runId\":\"" + EscapeJson(run.runId) +
 					"\",\"status\":\"" + EscapeJson(run.status) +
 					"\",\"agentId\":\"" + EscapeJson(run.agentId) +
 					"\",\"sessionId\":\"" + EscapeJson(run.sessionId) +
 					"\",\"summary\":\"" + EscapeJson(run.summary) +
 					"\",\"deduped\":false,\"startedAtMs\":" +
 					std::to_string(run.startedAtMs) +
-					",\"completedAtMs\":" +
-					std::to_string(run.completedAtMs.value_or(run.startedAtMs)) + "}",
+				 ",\"completedAtMs\":null}",
 				.error = std::nullopt,
 			};
 			});
@@ -2089,11 +2139,82 @@ namespace blazeclaw::gateway {
 				};
 			}
 
-			const auto& run = runIt->second;
+			auto& run = runIt->second;
+			const auto chatRunIt = m_chatRunsById.find(runId);
+			if (chatRunIt != m_chatRunsById.end()) {
+				const auto& chatRun = chatRunIt->second;
+				if (chatRun.failed) {
+					run.status = "failed";
+					run.summary = chatRun.errorMessage.empty()
+						? "chat_runtime_error"
+						: chatRun.errorMessage;
+				}
+				else if (chatRun.active) {
+					run.status = "running";
+					run.summary = "running";
+				}
+				else {
+					run.status = "completed";
+					run.summary = "completed";
+				}
+
+				if (!chatRun.active && !run.completedAtMs.has_value()) {
+					run.completedAtMs = CurrentEpochMs();
+				}
+			}
+			else {
+				const auto taskDeltasIt = m_taskDeltasByRunId.find(runId);
+				if (taskDeltasIt != m_taskDeltasByRunId.end() &&
+					!taskDeltasIt->second.empty()) {
+					auto orderedTaskDeltas = taskDeltasIt->second;
+					std::sort(
+						orderedTaskDeltas.begin(),
+						orderedTaskDeltas.end(),
+						[](const ChatRuntimeResult::TaskDeltaEntry& left,
+							const ChatRuntimeResult::TaskDeltaEntry& right) {
+								return left.index < right.index;
+						});
+
+					for (auto it = orderedTaskDeltas.rbegin();
+						it != orderedTaskDeltas.rend();
+						++it) {
+						if (it->phase != "final") {
+							continue;
+						}
+
+						run.status = it->status.empty() ? "completed" : it->status;
+						run.summary = (run.status == "failed")
+							? (it->errorCode.empty() ? "failed" : it->errorCode)
+							: "completed";
+						if (!run.completedAtMs.has_value()) {
+							run.completedAtMs = it->completedAtMs > 0
+								? it->completedAtMs
+								: CurrentEpochMs();
+						}
+						break;
+					}
+				}
+
+				if (m_chatTerminalDeliveredRunIds.find(runId) !=
+					m_chatTerminalDeliveredRunIds.end()) {
+					if (run.status == "queued" || run.status == "running") {
+						run.status = "completed";
+						run.summary = "completed";
+					}
+
+					if (!run.completedAtMs.has_value()) {
+						run.completedAtMs = CurrentEpochMs();
+					}
+				}
+			}
+
 			const std::string completedMsJson = run.completedAtMs.has_value()
 				? std::to_string(run.completedAtMs.value())
 				: "null";
-			const std::string terminal = (run.status == "completed" || run.status == "failed")
+			const std::string terminal = run.completedAtMs.has_value() ||
+				run.status == "completed" ||
+				run.status == "failed" ||
+				run.status == "aborted"
 				? "true"
 				: "false";
 

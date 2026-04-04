@@ -59,6 +59,14 @@ The native layer validates inputs and persists `.env` content via
 - Argument/launch failures map to structured error codes (for example:
   `invalid_arguments`, `invalid_args_json`, `process_start_failed`).
 
+## Chat Agent Flow Integration (Phase 4)
+
+- `gateway.agents.run` now routes into the `chat.send` runtime flow.
+- The resulting run lifecycle is surfaced through `gateway.agents.wait` by
+  tracking chat run state, terminal events, and persisted task deltas.
+- Tool-call task delta telemetry and persistence remain owned by the chat
+  runtime path, avoiding duplicate hardcoded orchestration branches.
+
 ## Namespace and Uniqueness
 
 - Namespace prefix is fixed: `imap_smtp_email.`
