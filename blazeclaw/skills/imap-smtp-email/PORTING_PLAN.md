@@ -169,6 +169,22 @@ Phase 7 artifact snapshot:
 - `blazeclaw/BlazeClawMfc/tests/ParityCoverageTests.cpp`
 - `blazeclaw/skills/imap-smtp-email/PHASE7_VALIDATION.md`
 
+### Phase 8 - Skill Catalog Navigation in CSkillView
+Status: Completed
+
+- [x] Populate `CSkillView::FillSkillView()` from real runtime-registered skill catalog (`gateway.skills.list`).
+- [x] Ensure implemented local skills under `blazeclaw/skills/*` are also visible in `CSkillView` even when runtime registration is incomplete.
+- [x] Group skill nodes by category in the tree view.
+- [x] Route selected skill metadata to `CBlazeClawMFCView` for property/configuration display.
+
+Phase 8 artifact snapshot:
+- `blazeclaw/BlazeClawMfc/src/app/SkillView.cpp`
+- `blazeclaw/BlazeClawMfc/src/app/SkillView.h`
+- `blazeclaw/BlazeClawMfc/src/app/MainFrame.cpp`
+- `blazeclaw/BlazeClawMfc/src/app/MainFrame.h`
+- `blazeclaw/BlazeClawMfc/src/app/BlazeClawMFCView.cpp`
+- `blazeclaw/BlazeClawMfc/src/app/BlazeClawMFCView.h`
+
 ## Deliverables Checklist
 - [x] `blazeclaw/skills/imap-smtp-email/` contains full skill artifacts (scripts/docs/meta/setup/package)
 - [x] BlazeClaw-compatible tool manifest is defined for IMAP/SMTP operations
@@ -176,8 +192,8 @@ Phase 7 artifact snapshot:
 - [x] `blazeclaw/skills/imap-smtp-email/config.html` is integrated into an MFC WebView2 configuration flow
 - [x] `CBlazeClawMFCView` can trigger email configuration and open a new chat document through `m_pChatDocTemplate`
 - [x] WebView2 form values are validated and persisted through `CBlazeClawMFCDoc`-associated config storage
-- [ ] `CSkillView::FillSkillView()` renders real registered skills grouped by category
-- [ ] Clicking a `CSkillView` skill item routes properties/configuration payload to `CBlazeClawMFCView`
+- [x] `CSkillView::FillSkillView()` renders real registered skills grouped by category
+- [x] Clicking a `CSkillView` skill item routes properties/configuration payload to `CBlazeClawMFCView`
 - [x] BlazeClaw gateway can discover email tools in catalog
 - [x] BlazeClaw runtime can execute IMAP/SMTP skill tools from chat
 - [x] Tool-call deltas are persisted and observable

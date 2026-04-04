@@ -17,7 +17,158 @@
 #include "BlazeClawMFCApp.h"
 #include "../gateway/GatewayJsonUtils.h"
 
+#include <filesystem>
+#include <fstream>
 #include <map>
+#include <set>
+#include <vector>
+
+namespace {
+	std::string EscapeJsonSkillView(const std::string& value)
+	{
+		std::string escaped;
+		escaped.reserve(value.size() + 8);
+		for (const char ch : value)
+		{
+			switch (ch)
+			{
+			case '"':
+				escaped += "\\\"";
+				break;
+			case '\\':
+				escaped += "\\\\";
+				break;
+			case '\n':
+				escaped += "\\n";
+				break;
+			case '\r':
+				escaped += "\\r";
+				break;
+			case '\t':
+				escaped += "\\t";
+				break;
+			default:
+				escaped.push_back(ch);
+				break;
+			}
+		}
+
+		return escaped;
+	}
+
+	std::vector<std::string> SplitTopLevelObjects(const std::string& arrayJson)
+	{
+		std::vector<std::string> objects;
+		const std::string trimmed = blazeclaw::gateway::json::Trim(arrayJson);
+		if (trimmed.size() < 2 || trimmed.front() != '[' || trimmed.back() != ']')
+		{
+			return objects;
+		}
+
+		std::size_t cursor = 1;
+		while (cursor + 1 < trimmed.size())
+		{
+			while (cursor + 1 < trimmed.size() &&
+				(std::isspace(static_cast<unsigned char>(trimmed[cursor])) != 0 ||
+					trimmed[cursor] == ','))
+			{
+				++cursor;
+			}
+
+			if (cursor + 1 >= trimmed.size() || trimmed[cursor] != '{')
+			{
+				break;
+			}
+
+			const std::size_t begin = cursor;
+			int depth = 0;
+			bool inString = false;
+			for (; cursor < trimmed.size(); ++cursor)
+			{
+				const char ch = trimmed[cursor];
+				if (inString)
+				{
+					if (ch == '\\')
+					{
+						++cursor;
+						continue;
+					}
+
+					if (ch == '"')
+					{
+						inString = false;
+					}
+					continue;
+				}
+
+				if (ch == '"')
+				{
+					inString = true;
+					continue;
+				}
+
+				if (ch == '{')
+				{
+					++depth;
+				}
+				else if (ch == '}')
+				{
+					--depth;
+					if (depth == 0)
+					{
+						objects.push_back(trimmed.substr(begin, cursor - begin + 1));
+						++cursor;
+						break;
+					}
+				}
+			}
+		}
+
+		return objects;
+	}
+
+	std::optional<std::filesystem::path> ResolveSkillsRoot()
+	{
+		std::error_code ec;
+		std::filesystem::path cursor = std::filesystem::current_path(ec);
+		if (ec)
+		{
+			return std::nullopt;
+		}
+
+		while (!cursor.empty())
+		{
+			const auto directSkills = cursor / "skills";
+			if (std::filesystem::exists(directSkills, ec) &&
+				std::filesystem::is_directory(directSkills, ec))
+			{
+				return directSkills;
+			}
+
+			const auto nestedSkills = cursor / "blazeclaw" / "skills";
+			if (std::filesystem::exists(nestedSkills, ec) &&
+				std::filesystem::is_directory(nestedSkills, ec))
+			{
+				return nestedSkills;
+			}
+
+			if (!cursor.has_parent_path())
+			{
+				break;
+			}
+
+			auto parent = cursor.parent_path();
+			if (parent == cursor)
+			{
+				break;
+			}
+
+			cursor = parent;
+		}
+
+		return std::nullopt;
+	}
+}
 
 class CSkillViewMenuButton : public CMFCToolBarMenuButton
 {
@@ -174,76 +325,10 @@ void CSkillView::FillSkillView()
 		return;
 	}
 
-	const std::string trimmed = blazeclaw::gateway::json::Trim(skillsRaw);
-	if (trimmed.size() < 2 || trimmed.front() != '[' || trimmed.back() != ']')
-	{
-		m_wndSkillView.InsertItem(_T("(invalid skills format)"), 4, 4, hRoot);
-		m_wndSkillView.Expand(hRoot, TVE_EXPAND);
-		return;
-	}
-
-	std::vector<std::string> skillEntries;
-	std::size_t cursor = 1;
-	while (cursor + 1 < trimmed.size())
-	{
-		while (cursor + 1 < trimmed.size() &&
-			(std::isspace(static_cast<unsigned char>(trimmed[cursor])) != 0 ||
-				trimmed[cursor] == ','))
-		{
-			++cursor;
-		}
-
-		if (cursor + 1 >= trimmed.size() || trimmed[cursor] != '{')
-		{
-			break;
-		}
-
-		const std::size_t begin = cursor;
-		int depth = 0;
-		bool inString = false;
-		for (; cursor < trimmed.size(); ++cursor)
-		{
-			const char ch = trimmed[cursor];
-			if (inString)
-			{
-				if (ch == '\\')
-				{
-					++cursor;
-					continue;
-				}
-
-				if (ch == '"')
-				{
-					inString = false;
-				}
-				continue;
-			}
-
-			if (ch == '"')
-			{
-				inString = true;
-				continue;
-			}
-
-			if (ch == '{')
-			{
-				++depth;
-			}
-			else if (ch == '}')
-			{
-				--depth;
-				if (depth == 0)
-				{
-					skillEntries.push_back(
-						trimmed.substr(begin, cursor - begin + 1));
-					++cursor;
-					break;
-				}
-			}
-		}
-	}
+	std::vector<std::string> skillEntries = SplitTopLevelObjects(skillsRaw);
 
 	std::map<std::string, HTREEITEM> categoryItems;
+	std::set<std::string> knownSkillKeys;
 	for (const auto& entryJson : skillEntries)
 	{
 		std::string skillKey;
@@ -256,6 +341,7 @@ void CSkillView::FillSkillView()
 		{
 			continue;
 		}
+		knownSkillKeys.insert(skillKey);
 
 		std::string category;
 		blazeclaw::gateway::json::FindStringField(entryJson, "installKind", category);
@@ -286,6 +372,88 @@ void CSkillView::FillSkillView()
 			2,
 			categoryNode);
 		m_skillItemPayloadByTreeItem.insert_or_assign(skillNode, entryJson);
+	}
+
+	const auto skillsRoot = ResolveSkillsRoot();
+	if (skillsRoot.has_value())
+	{
+		std::error_code ec;
+		for (const auto& entry : std::filesystem::directory_iterator(skillsRoot.value(), ec))
+		{
+			if (ec || !entry.is_directory())
+			{
+				continue;
+			}
+
+			const auto skillDir = entry.path();
+			const auto toolManifestPath = skillDir / "tool-manifest.json";
+			const auto skillDocPath = skillDir / "SKILL.md";
+			if (!std::filesystem::exists(toolManifestPath, ec) &&
+				!std::filesystem::exists(skillDocPath, ec))
+			{
+				continue;
+			}
+
+			std::string skillKey = skillDir.filename().string();
+			if (std::filesystem::exists(toolManifestPath, ec))
+			{
+				std::ifstream manifestIn(toolManifestPath, std::ios::binary);
+				if (manifestIn.is_open())
+				{
+					std::string manifestText(
+						(std::istreambuf_iterator<char>(manifestIn)),
+						std::istreambuf_iterator<char>());
+					std::string manifestNamespace;
+					if (blazeclaw::gateway::json::FindStringField(
+						manifestText,
+						"namespace",
+						manifestNamespace) &&
+						!manifestNamespace.empty())
+					{
+						skillKey = manifestNamespace;
+					}
+				}
+			}
+
+			if (knownSkillKeys.find(skillKey) != knownSkillKeys.end())
+			{
+				continue;
+			}
+
+			knownSkillKeys.insert(skillKey);
+			const std::string category = "implemented";
+			auto categoryIt = categoryItems.find(category);
+			HTREEITEM categoryNode = nullptr;
+			if (categoryIt == categoryItems.end())
+			{
+				categoryNode = m_wndSkillView.InsertItem(
+					_T("implemented"),
+					1,
+					1,
+					hRoot);
+				categoryItems.insert_or_assign(category, categoryNode);
+			}
+			else
+			{
+				categoryNode = categoryIt->second;
+			}
+
+			const HTREEITEM skillNode = m_wndSkillView.InsertItem(
+				CString(CA2W(skillKey.c_str(), CP_UTF8)),
+				2,
+				2,
+				categoryNode);
+			const std::string payload =
+				"{\"name\":\"" + EscapeJsonSkillView(skillDir.filename().string()) +
+				"\",\"skillKey\":\"" + EscapeJsonSkillView(skillKey) +
+				"\",\"installKind\":\"implemented\",\"source\":\"filesystem\",\"description\":\"Discovered from local skills directory\"}";
+			m_skillItemPayloadByTreeItem.insert_or_assign(skillNode, payload);
+		}
+	}
+
+	if (m_skillItemPayloadByTreeItem.empty())
+	{
+		m_wndSkillView.InsertItem(_T("(no registered or implemented skills found)"), 4, 4, hRoot);
 	}
 
 	for (const auto& categoryEntry : categoryItems)

@@ -101,6 +101,19 @@ The native layer validates inputs and persists `.env` content via
 - Build and regression validation command:
   - `msbuild BlazeClaw.sln`
 
+## Skill Catalog Navigation (CSkillView)
+
+- `CSkillView::FillSkillView()` consumes `gateway.skills.list` and renders
+  registered skills grouped by category.
+- `CSkillView` also discovers implemented local skills from
+  `blazeclaw/skills/*` (for example `imap-smtp-email`) so implemented skills
+  remain visible even before runtime registration completes.
+- Selecting a skill item routes its metadata payload to
+  `CBlazeClawMFCView::ShowSkillSelection`.
+- `CBlazeClawMFCView` surfaces selected skill properties/configuration through:
+  - multiline status block output
+  - bridge channel payload: `blazeclaw.skills.selection`
+
 ## Namespace and Uniqueness
 
 - Namespace prefix is fixed: `imap_smtp_email.`
