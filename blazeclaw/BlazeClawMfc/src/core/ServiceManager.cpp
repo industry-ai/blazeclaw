@@ -15,6 +15,7 @@
 #include <unordered_map>
 #include <Windows.h>
 #include <winhttp.h>
+#include <nlohmann/json.hpp>
 
 #pragma comment(lib, "Winhttp.lib")
 
@@ -1105,6 +1106,560 @@ namespace blazeclaw::core {
 				std::chrono::duration_cast<std::chrono::milliseconds>(
 					now.time_since_epoch())
 				.count());
+		}
+
+		struct ImapSmtpToolRuntimeSpec {
+			std::string id;
+			std::string label;
+			std::string script;
+			std::string command;
+		};
+
+		struct ChildProcessResult {
+			bool started = false;
+			bool timedOut = false;
+			DWORD exitCode = static_cast<DWORD>(-1);
+			std::string output;
+			std::string errorCode;
+			std::string errorMessage;
+		};
+
+		std::vector<ImapSmtpToolRuntimeSpec> BuildImapSmtpToolRuntimeSpecs() {
+			return {
+				{ "imap_smtp_email.imap.check", "IMAP Check", "scripts/imap.js", "check" },
+				{ "imap_smtp_email.imap.fetch", "IMAP Fetch", "scripts/imap.js", "fetch" },
+				{ "imap_smtp_email.imap.download", "IMAP Download Attachments", "scripts/imap.js", "download" },
+				{ "imap_smtp_email.imap.search", "IMAP Search", "scripts/imap.js", "search" },
+				{ "imap_smtp_email.imap.mark_read", "IMAP Mark Read", "scripts/imap.js", "mark-read" },
+				{ "imap_smtp_email.imap.mark_unread", "IMAP Mark Unread", "scripts/imap.js", "mark-unread" },
+				{ "imap_smtp_email.imap.list_mailboxes", "IMAP List Mailboxes", "scripts/imap.js", "list-mailboxes" },
+				{ "imap_smtp_email.imap.list_accounts", "IMAP List Accounts", "scripts/imap.js", "list-accounts" },
+				{ "imap_smtp_email.smtp.send", "SMTP Send", "scripts/smtp.js", "send" },
+				{ "imap_smtp_email.smtp.test", "SMTP Test", "scripts/smtp.js", "test" },
+				{ "imap_smtp_email.smtp.list_accounts", "SMTP List Accounts", "scripts/smtp.js", "list-accounts" },
+			};
+		}
+
+		std::wstring QuoteCommandToken(const std::wstring& token) {
+			if (token.find_first_of(L" \t\"") == std::wstring::npos) {
+				return token;
+			}
+
+			std::wstring quoted = L"\"";
+			for (const wchar_t ch : token) {
+				if (ch == L'\"') {
+					quoted += L"\\\"";
+				}
+				else {
+					quoted.push_back(ch);
+				}
+			}
+			quoted += L"\"";
+			return quoted;
+		}
+
+		std::wstring BuildCommandLine(const std::vector<std::wstring>& tokens) {
+			std::wstring commandLine;
+			for (std::size_t i = 0; i < tokens.size(); ++i) {
+				if (i > 0) {
+					commandLine += L" ";
+				}
+
+				commandLine += QuoteCommandToken(tokens[i]);
+			}
+
+			return commandLine;
+		}
+
+		std::string ReadPipeAll(HANDLE readPipe) {
+			std::string output;
+			if (readPipe == nullptr || readPipe == INVALID_HANDLE_VALUE) {
+				return output;
+			}
+
+			char buffer[4096]{};
+			DWORD bytesRead = 0;
+			while (ReadFile(readPipe, buffer, sizeof(buffer), &bytesRead, nullptr) &&
+				bytesRead > 0) {
+				output.append(buffer, buffer + bytesRead);
+			}
+
+			return output;
+		}
+
+		ChildProcessResult ExecuteNodeSkillProcess(
+			const std::filesystem::path& scriptPath,
+			const std::vector<std::string>& cliArgs,
+			const std::uint64_t timeoutMs) {
+			ChildProcessResult result;
+
+			SECURITY_ATTRIBUTES security{};
+			security.nLength = sizeof(security);
+			security.bInheritHandle = TRUE;
+			security.lpSecurityDescriptor = nullptr;
+
+			HANDLE outputRead = nullptr;
+			HANDLE outputWrite = nullptr;
+			if (!CreatePipe(&outputRead, &outputWrite, &security, 0)) {
+				result.errorCode = "pipe_create_failed";
+				result.errorMessage = "failed to create child process pipes";
+				return result;
+			}
+
+			SetHandleInformation(outputRead, HANDLE_FLAG_INHERIT, 0);
+
+			STARTUPINFOW startupInfo{};
+			startupInfo.cb = sizeof(startupInfo);
+			startupInfo.dwFlags = STARTF_USESTDHANDLES;
+			startupInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+			startupInfo.hStdOutput = outputWrite;
+			startupInfo.hStdError = outputWrite;
+
+			PROCESS_INFORMATION processInfo{};
+
+			std::vector<std::wstring> commandTokens;
+			commandTokens.push_back(L"node");
+			commandTokens.push_back(scriptPath.wstring());
+			for (const auto& arg : cliArgs) {
+				commandTokens.push_back(ToWide(arg));
+			}
+
+			std::wstring commandLine = BuildCommandLine(commandTokens);
+			std::vector<wchar_t> mutableCommand(commandLine.begin(), commandLine.end());
+			mutableCommand.push_back(L'\0');
+
+			const BOOL created = CreateProcessW(
+				nullptr,
+				mutableCommand.data(),
+				nullptr,
+				nullptr,
+				TRUE,
+				CREATE_NO_WINDOW,
+				nullptr,
+				nullptr,
+				&startupInfo,
+				&processInfo);
+
+			CloseHandle(outputWrite);
+
+			if (!created) {
+				result.errorCode = "process_start_failed";
+				result.errorMessage = "failed to start node process";
+				result.output = ReadPipeAll(outputRead);
+				CloseHandle(outputRead);
+				return result;
+			}
+
+			result.started = true;
+			const DWORD waitMs = timeoutMs > static_cast<std::uint64_t>(MAXDWORD)
+				? MAXDWORD
+				: static_cast<DWORD>(timeoutMs);
+			const DWORD waitResult = WaitForSingleObject(processInfo.hProcess, waitMs);
+
+			if (waitResult == WAIT_TIMEOUT) {
+				TerminateProcess(processInfo.hProcess, 124);
+				result.timedOut = true;
+				result.errorCode = "deadline_exceeded";
+				result.errorMessage = "tool process exceeded execution deadline";
+			}
+
+			GetExitCodeProcess(processInfo.hProcess, &result.exitCode);
+			result.output = ReadPipeAll(outputRead);
+
+			CloseHandle(outputRead);
+			CloseHandle(processInfo.hThread);
+			CloseHandle(processInfo.hProcess);
+
+			return result;
+		}
+
+		std::optional<std::filesystem::path> ResolveImapSmtpSkillRoot() {
+			std::vector<std::filesystem::path> candidates;
+			candidates.push_back(std::filesystem::current_path());
+
+			wchar_t modulePath[MAX_PATH]{};
+			if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) > 0) {
+				candidates.push_back(std::filesystem::path(modulePath).parent_path());
+			}
+
+			for (const auto& root : candidates) {
+				std::filesystem::path cursor = root;
+				while (!cursor.empty()) {
+					const auto candidate =
+						cursor /
+						L"blazeclaw" /
+						L"skills" /
+						L"imap-smtp-email";
+					if (std::filesystem::exists(candidate / L"scripts" / L"imap.js") &&
+						std::filesystem::exists(candidate / L"scripts" / L"smtp.js")) {
+						return candidate;
+					}
+
+					if (!cursor.has_parent_path()) {
+						break;
+					}
+
+					auto parent = cursor.parent_path();
+					if (parent == cursor) {
+						break;
+					}
+
+					cursor = parent;
+				}
+			}
+
+			return std::nullopt;
+		}
+
+		std::optional<std::string> JsonValueToCliString(const nlohmann::json& value) {
+			if (value.is_string()) {
+				return value.get<std::string>();
+			}
+
+			if (value.is_boolean()) {
+				return value.get<bool>() ? "true" : "false";
+			}
+
+			if (value.is_number_integer()) {
+				return std::to_string(value.get<long long>());
+			}
+
+			if (value.is_number_unsigned()) {
+				return std::to_string(value.get<unsigned long long>());
+			}
+
+			if (value.is_number_float()) {
+				std::ostringstream stream;
+				stream << value.get<double>();
+				return stream.str();
+			}
+
+			return std::nullopt;
+		}
+
+		void AppendFlagWithValue(
+			std::vector<std::string>& args,
+			const std::string& flag,
+			const std::optional<std::string>& value) {
+			if (!value.has_value() || value->empty()) {
+				return;
+			}
+
+			args.push_back("--" + flag);
+			args.push_back(value.value());
+		}
+
+		void AppendBoolAsValue(
+			std::vector<std::string>& args,
+			const std::string& flag,
+			const nlohmann::json& params) {
+			const auto it = params.find(flag);
+			if (it == params.end() || !it->is_boolean()) {
+				return;
+			}
+
+			args.push_back("--" + flag);
+			args.push_back(it->get<bool>() ? "true" : "false");
+		}
+
+		std::optional<std::vector<std::string>> BuildImapSmtpCliArgs(
+			const ImapSmtpToolRuntimeSpec& spec,
+			const nlohmann::json& params,
+			std::string& errorCode,
+			std::string& errorMessage) {
+			errorCode.clear();
+			errorMessage.clear();
+
+			std::vector<std::string> args;
+			if (const auto accountIt = params.find("account");
+				accountIt != params.end()) {
+				AppendFlagWithValue(args, "account", JsonValueToCliString(*accountIt));
+			}
+
+			args.push_back(spec.command);
+
+			if (spec.id == "imap_smtp_email.imap.fetch" ||
+				spec.id == "imap_smtp_email.imap.download") {
+				const auto uidIt = params.find("uid");
+				if (uidIt == params.end()) {
+					errorCode = "invalid_arguments";
+					errorMessage = "uid is required";
+					return std::nullopt;
+				}
+
+				const auto uid = JsonValueToCliString(*uidIt);
+				if (!uid.has_value() || uid->empty()) {
+					errorCode = "invalid_arguments";
+					errorMessage = "uid is invalid";
+					return std::nullopt;
+				}
+
+				args.push_back(uid.value());
+			}
+
+			if (spec.id == "imap_smtp_email.imap.mark_read" ||
+				spec.id == "imap_smtp_email.imap.mark_unread") {
+				const auto uidsIt = params.find("uids");
+				if (uidsIt == params.end() || !uidsIt->is_array() || uidsIt->empty()) {
+					errorCode = "invalid_arguments";
+					errorMessage = "uids array is required";
+					return std::nullopt;
+				}
+
+				for (const auto& uidNode : *uidsIt) {
+					const auto uid = JsonValueToCliString(uidNode);
+					if (uid.has_value() && !uid->empty()) {
+						args.push_back(uid.value());
+					}
+				}
+				if (args.back() == spec.command) {
+					errorCode = "invalid_arguments";
+					errorMessage = "uids array must contain at least one value";
+					return std::nullopt;
+				}
+			}
+
+			auto appendIfPresent = [&](const std::string& jsonKey, const std::string& cliFlag) {
+				const auto it = params.find(jsonKey);
+				if (it == params.end()) {
+					return;
+				}
+
+				AppendFlagWithValue(args, cliFlag, JsonValueToCliString(*it));
+				};
+
+			if (spec.id == "imap_smtp_email.imap.check") {
+				appendIfPresent("limit", "limit");
+				appendIfPresent("mailbox", "mailbox");
+				appendIfPresent("recent", "recent");
+				AppendBoolAsValue(args, "unseen", params);
+			}
+			else if (spec.id == "imap_smtp_email.imap.download") {
+				appendIfPresent("mailbox", "mailbox");
+				appendIfPresent("dir", "dir");
+				appendIfPresent("file", "file");
+			}
+			else if (spec.id == "imap_smtp_email.imap.search") {
+				appendIfPresent("from", "from");
+				appendIfPresent("subject", "subject");
+				appendIfPresent("recent", "recent");
+				appendIfPresent("since", "since");
+				appendIfPresent("before", "before");
+				appendIfPresent("limit", "limit");
+				appendIfPresent("mailbox", "mailbox");
+				AppendBoolAsValue(args, "unseen", params);
+				AppendBoolAsValue(args, "seen", params);
+			}
+			else if (spec.id == "imap_smtp_email.imap.fetch" ||
+				spec.id == "imap_smtp_email.imap.mark_read" ||
+				spec.id == "imap_smtp_email.imap.mark_unread") {
+				appendIfPresent("mailbox", "mailbox");
+			}
+			else if (spec.id == "imap_smtp_email.smtp.send") {
+				appendIfPresent("to", "to");
+				appendIfPresent("subject", "subject");
+				appendIfPresent("subjectFile", "subject-file");
+				appendIfPresent("body", "body");
+				appendIfPresent("bodyFile", "body-file");
+				appendIfPresent("htmlFile", "html-file");
+				appendIfPresent("cc", "cc");
+				appendIfPresent("bcc", "bcc");
+				appendIfPresent("from", "from");
+
+				const auto htmlIt = params.find("html");
+				if (htmlIt != params.end() && htmlIt->is_boolean() && htmlIt->get<bool>()) {
+					args.push_back("--html");
+					args.push_back("true");
+				}
+
+				const auto attachIt = params.find("attach");
+				if (attachIt != params.end()) {
+					if (attachIt->is_array()) {
+						std::string joined;
+						for (const auto& item : *attachIt) {
+							const auto value = JsonValueToCliString(item);
+							if (!value.has_value() || value->empty()) {
+								continue;
+							}
+
+							if (!joined.empty()) {
+								joined += ",";
+							}
+							joined += value.value();
+						}
+
+						if (!joined.empty()) {
+							args.push_back("--attach");
+							args.push_back(joined);
+						}
+					}
+					else {
+						appendIfPresent("attach", "attach");
+					}
+				}
+
+				const bool hasTo = params.contains("to");
+				const bool hasSubject = params.contains("subject") || params.contains("subjectFile");
+				if (!hasTo || !hasSubject) {
+					errorCode = "invalid_arguments";
+					errorMessage = "smtp.send requires to and subject or subjectFile";
+					return std::nullopt;
+				}
+			}
+
+			return args;
+		}
+
+		void RegisterImapSmtpRuntimeTools(blazeclaw::gateway::GatewayHost& host) {
+			const auto skillRoot = ResolveImapSmtpSkillRoot();
+			for (const auto& spec : BuildImapSmtpToolRuntimeSpecs()) {
+				host.RegisterRuntimeToolV2(
+					blazeclaw::gateway::ToolCatalogEntry{
+						.id = spec.id,
+						.label = spec.label,
+						.category = "email",
+						.enabled = true,
+					},
+					[spec, skillRoot](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
+						blazeclaw::gateway::ToolExecuteResultV2 result;
+						result.tool = request.tool.empty() ? spec.id : request.tool;
+						result.correlationId = request.correlationId;
+						result.startedAtMs = CurrentEpochMs();
+
+						if (!skillRoot.has_value()) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "skill_runtime_missing";
+							result.errorMessage = "imap-smtp-email skill root not found";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
+						const auto scriptPath = skillRoot.value() / ToWide(spec.script);
+						if (!std::filesystem::exists(scriptPath)) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "script_missing";
+							result.errorMessage = "tool script not found";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
+						nlohmann::json params = nlohmann::json::object();
+						if (request.argsJson.has_value() && !request.argsJson->empty()) {
+							try {
+								params = nlohmann::json::parse(request.argsJson.value());
+							}
+							catch (...) {
+								result.executed = false;
+								result.status = "error";
+								result.errorCode = "invalid_args_json";
+								result.errorMessage = "argsJson is not valid JSON";
+								result.completedAtMs = CurrentEpochMs();
+								result.latencyMs = result.completedAtMs - result.startedAtMs;
+								return result;
+							}
+						}
+
+						if (!params.is_object()) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "invalid_arguments";
+							result.errorMessage = "tool args must be a JSON object";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
+						std::string argsErrorCode;
+						std::string argsErrorMessage;
+						const auto cliArgs = BuildImapSmtpCliArgs(
+							spec,
+							params,
+							argsErrorCode,
+							argsErrorMessage);
+						if (!cliArgs.has_value()) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = argsErrorCode.empty() ? "invalid_arguments" : argsErrorCode;
+							result.errorMessage = argsErrorMessage.empty()
+								? "tool arguments are invalid"
+								: argsErrorMessage;
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
+						std::uint64_t timeoutMs = 120000;
+						if (request.deadlineEpochMs.has_value()) {
+							const std::uint64_t now = CurrentEpochMs();
+							if (request.deadlineEpochMs.value() <= now) {
+								result.executed = false;
+								result.status = "timed_out";
+								result.errorCode = "deadline_exceeded";
+								result.errorMessage = "request deadline already elapsed";
+								result.completedAtMs = now;
+								result.latencyMs = result.completedAtMs - result.startedAtMs;
+								return result;
+							}
+
+							timeoutMs = request.deadlineEpochMs.value() - now;
+						}
+
+						const auto process = ExecuteNodeSkillProcess(
+							scriptPath,
+							cliArgs.value(),
+							timeoutMs);
+
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+
+						if (!process.started) {
+							result.executed = false;
+							result.status = "error";
+							result.result = process.output;
+							result.errorCode = process.errorCode.empty()
+								? "process_start_failed"
+								: process.errorCode;
+							result.errorMessage = process.errorMessage.empty()
+								? "failed to start tool process"
+								: process.errorMessage;
+							return result;
+						}
+
+						if (process.timedOut) {
+							result.executed = false;
+							result.status = "timed_out";
+							result.result = process.output;
+							result.errorCode = process.errorCode.empty()
+								? "deadline_exceeded"
+								: process.errorCode;
+							result.errorMessage = process.errorMessage.empty()
+								? "tool execution timed out"
+								: process.errorMessage;
+							return result;
+						}
+
+						result.result = process.output;
+						if (process.exitCode == 0) {
+							result.executed = true;
+							result.status = "ok";
+							result.errorCode.clear();
+							result.errorMessage.clear();
+							return result;
+						}
+
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = "process_exit_nonzero";
+						result.errorMessage =
+							"tool process returned non-zero exit code " +
+							std::to_string(static_cast<unsigned long long>(process.exitCode));
+						return result;
+					});
+			}
 		}
 
 		std::string BuildAttachmentSummary(
@@ -2288,6 +2843,7 @@ namespace blazeclaw::core {
 			});
 		m_gatewayHost.SetEmbeddedOrchestrationPath(
 			ToNarrow(m_activeConfig.embedded.orchestrationPath));
+		RegisterImapSmtpRuntimeTools(m_gatewayHost);
 
 		m_gatewayHost.SetChatRuntimeCallback([this](
 			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {

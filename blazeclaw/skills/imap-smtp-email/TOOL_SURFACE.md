@@ -49,6 +49,16 @@ The WebView2 page `config.html` posts bridge events to the native MFC view.
 The native layer validates inputs and persists `.env` content via
 `CBlazeClawMFCDoc`-associated storage.
 
+## Runtime Execution Bridge (Phase 3)
+
+- Runtime executor bindings are registered at startup through `ServiceManager`.
+- `GatewayHost` now exposes runtime tool registration methods used by startup wiring.
+- Tool execution invokes `node <script> <command> ...` with normalized CLI args.
+- Process stdout/stderr is captured and returned through `ToolExecuteResultV2.result`.
+- Deadline-based timeout maps to `status=timed_out` and `errorCode=deadline_exceeded`.
+- Argument/launch failures map to structured error codes (for example:
+  `invalid_arguments`, `invalid_args_json`, `process_start_failed`).
+
 ## Namespace and Uniqueness
 
 - Namespace prefix is fixed: `imap_smtp_email.`

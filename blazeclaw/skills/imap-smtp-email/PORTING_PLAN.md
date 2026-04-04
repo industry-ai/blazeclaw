@@ -91,10 +91,17 @@ Phase 2.5 artifact snapshot:
 - `blazeclaw/BlazeClawMfc/src/app/BlazeClawMFCDoc.cpp`
 
 ### Phase 3 - Implement Runtime Execution Bridge
-1. Add runtime executor bindings so tool IDs map to process execution of skill scripts.
-2. Implement command argument normalization from gateway JSON into script CLI parameters.
-3. Capture stdout/stderr and convert to `ToolExecuteResult` / `ToolExecuteResultV2` with consistent status mapping.
-4. Add timeout, cancellation, and error-shape handling compatible with current gateway response format.
+Status: Completed
+
+- [x] Add runtime executor bindings so tool IDs map to process execution of skill scripts.
+- [x] Implement command argument normalization from gateway JSON into script CLI parameters.
+- [x] Capture stdout/stderr and convert to `ToolExecuteResult` / `ToolExecuteResultV2` with consistent status mapping.
+- [x] Add timeout, cancellation, and error-shape handling compatible with current gateway response format.
+
+Phase 3 artifact snapshot:
+- `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.h`
+- `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp`
+- `blazeclaw/BlazeClawMfc/src/core/ServiceManager.cpp`
 
 ### Phase 4 - Integrate with Chat Agent Flow
 1. Wire tool-call path from `gateway.agents.run` to runtime tool execution.

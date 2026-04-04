@@ -857,6 +857,18 @@ namespace blazeclaw::gateway {
 		return m_toolRegistry.ExecuteV2(request);
 	}
 
+	void GatewayHost::RegisterRuntimeTool(
+		const ToolCatalogEntry& tool,
+		GatewayToolRegistry::RuntimeToolExecutor executor) {
+		m_toolRegistry.RegisterRuntimeTool(tool, std::move(executor));
+	}
+
+	void GatewayHost::RegisterRuntimeToolV2(
+		const ToolCatalogEntry& tool,
+		GatewayToolRegistry::RuntimeToolExecutorV2 executor) {
+		m_toolRegistry.RegisterRuntimeToolV2(tool, std::move(executor));
+	}
+
 	bool GatewayHost::IsRunning() const noexcept {
 		return m_running;
 	}
