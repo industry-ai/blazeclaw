@@ -542,9 +542,8 @@ namespace blazeclaw::gateway::executors {
 				json::FindStringField(session.payloadJson, "sendAt", sendAt);
 				json::FindStringField(session.payloadJson, "account", account);
 
-				store.RemoveToken(token);
-
 				if (!approve) {
+					store.RemoveToken(token);
 					return ToolExecuteResult{
 						.tool = requestedTool,
 						.executed = true,
@@ -584,6 +583,8 @@ namespace blazeclaw::gateway::executors {
 							deliveryErrorMessage),
 					};
 				}
+
+				store.RemoveToken(token);
 
 				return ToolExecuteResult{
 					.tool = requestedTool,

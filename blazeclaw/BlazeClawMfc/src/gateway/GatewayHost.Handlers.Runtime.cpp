@@ -769,8 +769,9 @@ namespace blazeclaw::gateway {
 			}
 
 			ToolExecuteResult emailApproveExecution;
-			const bool shouldAutoApprove =
+			bool shouldAutoApprove =
 				intent.scheduleKind == "immediate_keyword";
+			bool autoApproveBackendMissing = false;
 			if (shouldAutoApprove) {
 				nlohmann::json emailApproveArgs = {
 					{ "action", "approve" },
@@ -783,10 +784,19 @@ namespace blazeclaw::gateway {
 					emailApproveArgs.dump());
 				if (!emailApproveExecution.executed ||
 					emailApproveExecution.status != "ok") {
-					result.success = false;
-					result.errorCode = "orchestration_email_approve_failed";
-					result.errorMessage = emailApproveExecution.output;
-					return result;
+					autoApproveBackendMissing =
+						emailApproveExecution.output.find("\"code\":\"himalaya_cli_missing\"") !=
+						std::string::npos ||
+						emailApproveExecution.output.find("himalaya_cli_missing") !=
+						std::string::npos;
+					if (!autoApproveBackendMissing) {
+						result.success = false;
+						result.errorCode = "orchestration_email_approve_failed";
+						result.errorMessage = emailApproveExecution.output;
+						return result;
+					}
+
+					shouldAutoApprove = false;
 				}
 			}
 
@@ -805,6 +815,12 @@ namespace blazeclaw::gateway {
 				result.assistantDeltas.push_back(
 					"tools.execute.result tool=email.schedule status=ok");
 			}
+			else if (autoApproveBackendMissing) {
+				result.assistantDeltas.push_back(
+					"tools.execute.start tool=email.schedule action=approve");
+				result.assistantDeltas.push_back(
+					"tools.execute.result tool=email.schedule status=needs_approval backend_missing=himalaya");
+			}
 
 			if (shouldAutoApprove) {
 				result.assistantText =
@@ -820,6 +836,10 @@ namespace blazeclaw::gateway {
 					" at " + sendAt +
 					" is pending approval. approvalToken=" +
 					approvalToken;
+				if (autoApproveBackendMissing) {
+					result.assistantText +=
+						" Delivery backend is unavailable (himalaya CLI missing). Install/configure himalaya and re-approve this token.";
+				}
 				if (approvalTokenExpiresAtEpochMs > 0) {
 					result.assistantText +=
 						" expiresAtEpochMs=" +
@@ -1950,8 +1970,9 @@ namespace blazeclaw::gateway {
 				bool orchestrationHandled = false;
 				const std::string orchestrationPath =
 					ToLowerCopyLocal(m_embeddedOrchestrationPath);
-				const bool useRuntimeOrchestrationPath =
-					orchestrationPath == "runtime_orchestration";
+				const bool allowPromptOrchestration =
+					orchestrationPath == "runtime_orchestration" ||
+					orchestrationPath == "dynamic_task_delta";
 
 				if (forceError) {
 					failed = true;
@@ -2101,7 +2122,7 @@ namespace blazeclaw::gateway {
 				if (!forceError &&
 					!hasAttachments &&
 					!normalizedMessage.empty() &&
-					useRuntimeOrchestrationPath) {
+					allowPromptOrchestration) {
 					const auto orchestrationResult = TryOrchestrateWeatherEmailPrompt(
 						m_toolRegistry,
 						normalizedMessage);

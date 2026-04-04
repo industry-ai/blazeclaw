@@ -260,7 +260,7 @@ TEST_CASE(
 		blazeclaw::gateway::protocol::RequestFrame{
 			.id = "chat-dynamic-1",
 			.method = "chat.send",
-			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"Check today's weather in Wuhan, write a short report, and email it to jichengwhu@163.com now.\"}"),
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"Summarize this short note about system status.\"}"),
 		});
 
 	REQUIRE(sendResponse.ok);
@@ -450,6 +450,114 @@ TEST_CASE(
 	}
 
 	std::filesystem::remove_all(tempStateRoot);
+}
+
+TEST_CASE(
+	"Parity coverage: immediate weather-email falls back to pending approval when himalaya is missing",
+	"[parity][chat][orchestration][e2e][runtime][immediate][fallback]") {
+	PluginHostAdapter::RegisterExtensionAdapter(
+		"ops-tools",
+		[](const std::string&, const std::string& toolName, const std::string&) {
+			if (toolName == "weather.lookup") {
+				return GatewayToolRegistry::RuntimeToolExecutor{
+					[](const std::string& requestedTool, const std::optional<std::string>&) {
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = true,
+							.status = "ok",
+							.output = "{\"ok\":true,\"forecast\":{\"condition\":\"Cloudy\",\"temperatureC\":20,\"wind\":\"NE 9 km/h\",\"humidityPct\":68}}",
+						};
+					} };
+			}
+
+			if (toolName == "email.schedule") {
+				return GatewayToolRegistry::RuntimeToolExecutor{
+					[](const std::string& requestedTool, const std::optional<std::string>& argsJson) {
+						std::string action;
+						if (argsJson.has_value()) {
+							blazeclaw::gateway::json::FindStringField(
+								argsJson.value(),
+								"action",
+								action);
+						}
+
+						if (action.empty() || action == "prepare") {
+							return ToolExecuteResult{
+								.tool = requestedTool,
+								.executed = true,
+								.status = "needs_approval",
+								.output = "{\"requiresApproval\":{\"approvalToken\":\"token-fallback\",\"approvalTokenExpiresAtEpochMs\":1735691000000}}",
+							};
+						}
+
+						if (action == "approve") {
+							return ToolExecuteResult{
+								.tool = requestedTool,
+								.executed = false,
+								.status = "error",
+								.output = "{\"protocolVersion\":1,\"ok\":false,\"status\":\"error\",\"output\":[],\"requiresApproval\":null,\"error\":{\"code\":\"himalaya_cli_missing\",\"message\":\"himalaya_cli_missing\"}}",
+							};
+						}
+
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = false,
+							.status = "invalid_args",
+							.output = "unsupported_action",
+						};
+					} };
+			}
+
+			return GatewayToolRegistry::RuntimeToolExecutor{};
+		});
+
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.Start(gatewayConfig));
+
+	host.SetEmbeddedOrchestrationPath("runtime_orchestration");
+
+	std::size_t callbackCalls = 0;
+	host.SetChatRuntimeCallback(
+		[&](const GatewayHost::ChatRuntimeRequest&) {
+			++callbackCalls;
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "callback should not be invoked";
+			result.modelId = "default";
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-runtime-fallback-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"Check tomorrow's weather in Wuhan, write a short report, and email it to jicheng@whu.edu.cn now.\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+	REQUIRE(callbackCalls == 0);
+	REQUIRE(sendResponse.payloadJson->find("\"backendErrorCode\":null") != std::string::npos);
+
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		sendResponse.payloadJson.value(),
+		"runId",
+		runId));
+
+	const auto deltasResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-runtime-fallback-1-deltas",
+			.method = "gateway.runtime.taskDeltas.get",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+
+	REQUIRE(deltasResponse.ok);
+	REQUIRE(deltasResponse.payloadJson.has_value());
+	REQUIRE(deltasResponse.payloadJson->find("\"status\":\"needs_approval\"") != std::string::npos);
+
+	host.Stop();
 }
 
 TEST_CASE(
