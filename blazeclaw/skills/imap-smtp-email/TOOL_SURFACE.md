@@ -77,6 +77,20 @@ The native layer validates inputs and persists `.env` content via
 - File allowlist checks for read/write operations use canonical path
   normalization to reduce symlink and traversal bypass risk.
 
+## Chat UX and Operability (Phase 6)
+
+- Chat bridge supports opening config UI through:
+  - channel: `blazeclaw.chat.email.config.open`
+  - rpc method: `email.config.open`
+- Tool lifecycle states continue emitting concise status lines (`start`,
+  `result`, `error`) with actionable detail.
+- Tool execution output can be appended as multiline chat status blocks for
+  better operator visibility.
+- Output pane now guards stability by:
+  - splitting multiline payloads into rows
+  - truncating oversized single-line entries
+  - trimming oldest rows when retention limit is exceeded
+
 ## Namespace and Uniqueness
 
 - Namespace prefix is fixed: `imap_smtp_email.`

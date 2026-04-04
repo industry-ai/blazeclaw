@@ -132,10 +132,19 @@ Phase 5 artifact snapshot:
 - `blazeclaw/skills/imap-smtp-email/scripts/smtp.js`
 
 ### Phase 6 - Chat UX and Operability
-1. Add/confirm chat-visible status lines for tool execution states (queued/running/success/error).
-2. Add UX entry point in chat for opening email configuration UI from `CBlazeClawMFCView`.
-3. Ensure tool errors are surfaced in concise, actionable format in chat output.
-4. Confirm output pane behavior remains stable for multiline/large payload responses.
+Status: Completed
+
+- [x] Add/confirm chat-visible status lines for tool execution states (queued/running/success/error).
+- [x] Add UX entry point in chat for opening email configuration UI from `CBlazeClawMFCView`.
+- [x] Ensure tool errors are surfaced in concise, actionable format in chat output.
+- [x] Confirm output pane behavior remains stable for multiline/large payload responses.
+
+Phase 6 artifact snapshot:
+- `blazeclaw/BlazeClawMfc/src/app/BlazeClawMFCView.cpp`
+- `blazeclaw/BlazeClawMfc/src/app/OutputWnd.h`
+- `blazeclaw/BlazeClawMfc/src/app/OutputWnd.cpp`
+- `blazeclaw/BlazeClawMfc/src/app/MainFrame.h`
+- `blazeclaw/BlazeClawMfc/src/app/MainFrame.cpp`
 
 ### Phase 7 - Testing and Validation
 1. Add unit/integration tests for:

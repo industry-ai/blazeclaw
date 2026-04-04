@@ -177,6 +177,16 @@ void CMainFrame::AddChatStatusLine(const CString& line)
 	m_wndOutput.AddChatStatusLine(line);
 }
 
+void CMainFrame::AddChatStatusBlock(const CString& text)
+{
+	if (!::IsWindow(m_hWnd))
+	{
+		return;
+	}
+
+	m_wndOutput.AddChatStatusBlock(text);
+}
+
 int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 {
 	if (CMDIFrameWndEx::OnCreate(lpCreateStruct) == -1)

@@ -160,6 +160,16 @@ void COutputWnd::AddChatStatusLine(const CString& line)
 	m_wndOutputDebug.AppendLine(line);
 }
 
+void COutputWnd::AddChatStatusBlock(const CString& text)
+{
+	if (!::IsWindow(m_wndTabs.GetSafeHwnd()))
+	{
+		return;
+	}
+
+	m_wndOutputDebug.AppendMultiline(text);
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // COutputList1
 
@@ -173,10 +183,48 @@ void COutputList::AppendLine(const CString& line)
 		return;
 	}
 
-	const int index = AddString(line);
+	CString normalized(line);
+	normalized.Replace(_T("\r"), _T(" "));
+	normalized.Replace(_T("\n"), _T(" "));
+	if (normalized.GetLength() > 768)
+	{
+		normalized = normalized.Left(768) + _T(" ...(truncated)");
+	}
+
+	const int index = AddString(normalized);
 	if (index >= 0)
 	{
 		SetTopIndex(index);
+	}
+
+	const int kMaxOutputRows = 1200;
+	while (GetCount() > kMaxOutputRows)
+	{
+		DeleteString(0);
+	}
+}
+
+void COutputList::AppendMultiline(const CString& line)
+{
+	CString remaining(line);
+	int offset = 0;
+	while (offset <= remaining.GetLength())
+	{
+		int nextBreak = remaining.Find(_T('\n'), offset);
+		CString segment;
+		if (nextBreak < 0)
+		{
+			segment = remaining.Mid(offset);
+			if (!segment.IsEmpty())
+			{
+				AppendLine(segment);
+			}
+			break;
+		}
+
+		segment = remaining.Mid(offset, nextBreak - offset);
+		AppendLine(segment);
+		offset = nextBreak + 1;
 	}
 }
 

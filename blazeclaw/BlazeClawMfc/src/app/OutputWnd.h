@@ -16,18 +16,19 @@
 
 class COutputList : public CListBox
 {
-// Construction
+	// Construction
 public:
 	COutputList() noexcept;
 	void AppendLine(const CString& line);
+	void AppendMultiline(const CString& line);
 
-// Implementation
+	// Implementation
 public:
 	virtual ~COutputList();
 
 protected:
 	afx_msg void OnContextMenu(CWnd* pWnd, CPoint point);
-  afx_msg void OnEditSelectAll();
+	afx_msg void OnEditSelectAll();
 	afx_msg void OnEditCopy();
 	afx_msg void OnEditClear();
 	afx_msg void OnViewOutput();
@@ -37,14 +38,15 @@ protected:
 
 class COutputWnd : public CDockablePane
 {
-// Construction
+	// Construction
 public:
 	COutputWnd() noexcept;
 
 	void UpdateFonts();
 	void AddChatStatusLine(const CString& line);
+	void AddChatStatusBlock(const CString& text);
 
-// Attributes
+	// Attributes
 protected:
 	CMFCTabCtrl	m_wndTabs;
 
@@ -59,7 +61,7 @@ protected:
 
 	void AdjustHorzScroll(CListBox& wndListBox);
 
-// Implementation
+	// Implementation
 public:
 	virtual ~COutputWnd();
 

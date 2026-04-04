@@ -28,6 +28,7 @@ public:
 	// Operations
 public:
 	void AddChatStatusLine(const CString& line);
+	void AddChatStatusBlock(const CString& text);
 
 	// Overrides
 public:
@@ -133,7 +134,7 @@ private:
 	CMFCOutlookBarPane* m_pCurrOutlookPage;
 
 private:
-  void LogDeepSeekDiagnostic(
+	void LogDeepSeekDiagnostic(
 		const char* stage,
 		const std::string& detail);
 

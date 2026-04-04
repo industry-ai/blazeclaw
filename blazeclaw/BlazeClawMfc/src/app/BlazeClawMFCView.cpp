@@ -175,6 +175,18 @@ namespace {
 		mainFrame->AddChatStatusLine(line);
 	}
 
+	void AppendChatProcedureStatusBlock(const std::string& text)
+	{
+		auto* mainFrame =
+			dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+		if (mainFrame == nullptr)
+		{
+			return;
+		}
+
+		mainFrame->AddChatStatusBlock(CString(CA2W(text.c_str(), CP_UTF8)));
+	}
+
 	void AppendChatProcedureStatusLine(const wchar_t* stage)
 	{
 		if (stage == nullptr)
@@ -551,6 +563,18 @@ namespace {
 		if (!info.phase.empty())
 		{
 			detail += " phase=" + info.phase;
+		}
+
+		if (response.ok && response.payloadJson.has_value())
+		{
+			std::string output;
+			if (blazeclaw::gateway::json::FindStringField(
+				response.payloadJson.value(),
+				"output",
+				output) && !output.empty())
+			{
+				detail += " output=" + output;
+			}
 		}
 
 		return detail;
@@ -1742,6 +1766,23 @@ bool CBlazeClawMFCView::HandleEmailConfigBridgeMessage(
 				? "}"
 				: ",\"error\":\"Failed to open email config document.\"}");
 		PostBridgeMessageJson(ToWide(json));
+		return true;
+	}
+
+	if (channel == "blazeclaw.chat.email.config.open")
+	{
+		const bool opened = OpenEmailConfigDocument();
+		const std::string json =
+			std::string("{\"channel\":\"blazeclaw.chat.email.config.opened\",\"ok\":") +
+			(opened ? "true" : "false") +
+			(opened
+				? "}"
+				: ",\"error\":\"Failed to open email config document.\"}");
+		PostBridgeMessageJson(ToWide(json));
+		AppendChatProcedureStatusLine(
+			opened
+			? L"email.config.chat.opened"
+			: L"email.config.chat.open.failed");
 		return true;
 	}
 
