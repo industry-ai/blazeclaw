@@ -86,6 +86,24 @@
         <h2>IMAP/SMTP Email Configuration</h2>
         <div class="row">
             <div class="field">
+                <label for="serverPreset">Common Email Server</label>
+                <select id="serverPreset" style="height:34px;border:1px solid #cfd6e4;border-radius:6px;padding:0 10px;">
+                    <option value="">Custom (manual input)</option>
+                    <option value="163.com">163.com</option>
+                    <option value="vip.163.com">vip.163.com</option>
+                    <option value="126.com">126.com</option>
+                    <option value="vip.126.com">vip.126.com</option>
+                    <option value="188.com">188.com</option>
+                    <option value="vip.188.com">vip.188.com</option>
+                    <option value="yeah.net">yeah.net</option>
+                    <option value="gmail.com">Gmail</option>
+                    <option value="outlook.com">Outlook (Office 365)</option>
+                    <option value="qq.com">QQ Mail</option>
+                </select>
+            </div>
+        </div>
+        <div class="row">
+            <div class="field">
                 <label for="smtpHost">SMTP Host</label>
                 <input id="smtpHost" placeholder="smtp.example.com" />
             </div>
@@ -138,6 +156,90 @@
 
     <script>
         const statusEl = document.getElementById('status');
+        const serverPresetEl = document.getElementById('serverPreset');
+
+        const commonServers = {
+            '163.com': {
+                imapHost: 'imap.163.com',
+                imapPort: '993',
+                smtpHost: 'smtp.163.com',
+                smtpPort: '465',
+                smtpSecure: true,
+                imapTls: true
+            },
+            'vip.163.com': {
+                imapHost: 'imap.vip.163.com',
+                imapPort: '993',
+                smtpHost: 'smtp.vip.163.com',
+                smtpPort: '465',
+                smtpSecure: true,
+                imapTls: true
+            },
+            '126.com': {
+                imapHost: 'imap.126.com',
+                imapPort: '993',
+                smtpHost: 'smtp.126.com',
+                smtpPort: '465',
+                smtpSecure: true,
+                imapTls: true
+            },
+            'vip.126.com': {
+                imapHost: 'imap.vip.126.com',
+                imapPort: '993',
+                smtpHost: 'smtp.vip.126.com',
+                smtpPort: '465',
+                smtpSecure: true,
+                imapTls: true
+            },
+            '188.com': {
+                imapHost: 'imap.188.com',
+                imapPort: '993',
+                smtpHost: 'smtp.188.com',
+                smtpPort: '465',
+                smtpSecure: true,
+                imapTls: true
+            },
+            'vip.188.com': {
+                imapHost: 'imap.vip.188.com',
+                imapPort: '993',
+                smtpHost: 'smtp.vip.188.com',
+                smtpPort: '465',
+                smtpSecure: true,
+                imapTls: true
+            },
+            'yeah.net': {
+                imapHost: 'imap.yeah.net',
+                imapPort: '993',
+                smtpHost: 'smtp.yeah.net',
+                smtpPort: '465',
+                smtpSecure: true,
+                imapTls: true
+            },
+            'gmail.com': {
+                imapHost: 'imap.gmail.com',
+                imapPort: '993',
+                smtpHost: 'smtp.gmail.com',
+                smtpPort: '587',
+                smtpSecure: false,
+                imapTls: true
+            },
+            'outlook.com': {
+                imapHost: 'outlook.office365.com',
+                imapPort: '993',
+                smtpHost: 'smtp.office365.com',
+                smtpPort: '587',
+                smtpSecure: false,
+                imapTls: true
+            },
+            'qq.com': {
+                imapHost: 'imap.qq.com',
+                imapPort: '993',
+                smtpHost: 'smtp.qq.com',
+                smtpPort: '587',
+                smtpSecure: false,
+                imapTls: true
+            }
+        };
 
         function setStatus(text) {
             statusEl.textContent = text;
@@ -149,6 +251,22 @@
                 return;
             }
             window.chrome.webview.postMessage(payload);
+        }
+
+        function applyServerPreset(key) {
+            const preset = commonServers[key];
+            if (!preset) {
+                return;
+            }
+
+            document.getElementById('smtpHost').value = preset.smtpHost;
+            document.getElementById('smtpPort').value = preset.smtpPort;
+            document.getElementById('imapHost').value = preset.imapHost;
+            document.getElementById('imapPort').value = preset.imapPort;
+            document.getElementById('smtpSecure').checked = !!preset.smtpSecure;
+            document.getElementById('imapTls').checked = !!preset.imapTls;
+
+            setStatus('Applied common server preset: ' + key);
         }
 
         function collectPayload() {
@@ -175,6 +293,16 @@
         document.getElementById('cancelBtn').addEventListener('click', () => {
             postMessage({ channel: 'blazeclaw.email.config.cancel' });
             setStatus('Cancelled.');
+        });
+
+        serverPresetEl.addEventListener('change', () => {
+            const key = serverPresetEl.value;
+            if (!key) {
+                setStatus('Custom mode: configure server manually.');
+                return;
+            }
+
+            applyServerPreset(key);
         });
 
         if (window.chrome && window.chrome.webview) {
