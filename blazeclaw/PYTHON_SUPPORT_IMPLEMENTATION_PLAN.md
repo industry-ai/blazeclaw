@@ -100,6 +100,27 @@ Implement external Python execution as the first production path using existing 
 - `blazeclaw/BlazeClawMfc/src/gateway/ExtensionLifecycleManager.*`
 - `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost*.cpp`
 
+### Phase 1 implementation status
+
+- Completed in code:
+  - Added `PythonProcessExecutor`:
+    - `blazeclaw/BlazeClawMfc/src/gateway/executors/PythonProcessExecutor.h`
+    - `blazeclaw/BlazeClawMfc/src/gateway/executors/PythonProcessExecutor.cpp`
+  - Registered runtime tool `python.script.run` in `GatewayHost::Start`.
+  - Added external interpreter policy controls:
+    - `BLAZECLAW_PYTHON_ALLOWED_INTERPRETERS`
+    - `BLAZECLAW_PYTHON_TRUSTED_SCRIPT_DIRS`
+    - `BLAZECLAW_PYTHON_ALLOWED_PROFILES`
+  - Added execution safety controls:
+    - timeout bounds,
+    - output-size bounds,
+    - trusted script-root path enforcement.
+  - Added normalized envelope output with `runtimeMode="external"` and protocol metadata.
+  - Added telemetry events for start/completion and terminal outcome codes.
+  - Wired new executor files into `BlazeClawMfc.vcxproj`.
+  - Validation:
+    - `msbuild blazeclaw/BlazeClaw.sln /t:Build /p:Configuration=Debug /p:Platform=x64` (pass).
+
 ---
 
 ## Phase 2 — Runtime Host Abstraction

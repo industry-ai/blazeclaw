@@ -102,5 +102,19 @@ Outcome: reduced process spawn overhead and deeper in-process extensibility.
   - strict/permissive fallback semantics,
   - initial error code taxonomy.
 
+## Phase 1 implementation snapshot
+- External Python runtime path is now implemented via:
+  - `blazeclaw/BlazeClawMfc/src/gateway/executors/PythonProcessExecutor.*`
+- Runtime registry now includes tool:
+  - `python.script.run`
+- Current policy and safety coverage:
+  - interpreter allowlist,
+  - trusted script-root enforcement,
+  - optional profile allowlist,
+  - timeout and output-size limits,
+  - telemetry for execution start/completion.
+- Validation status:
+  - `msbuild blazeclaw/BlazeClaw.sln /t:Build /p:Configuration=Debug /p:Platform=x64` passes after Phase 1 integration.
+
 ## Bottom line
 Adding Python support is a good strategic move for OpenClaw-to-BlazeClaw porting. Start with policy-driven external execution for immediate migration value, while designing an abstraction that can later host true Python C API embedding when operational cost is justified.

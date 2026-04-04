@@ -6,6 +6,7 @@
 #include "GatewayProtocolCodec.h"
 #include "GatewayProtocolSchemaValidator.h"
 #include "PluginHostAdapter.h"
+#include "executors/PythonProcessExecutor.h"
 #include "generated/GatewayHandlerCatalog.Generated.h"
 #include "Telemetry.h"
 
@@ -558,6 +559,14 @@ namespace blazeclaw::gateway {
 		EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
 		m_approvalStore.Initialize(ResolveGatewayStateFilePath("approvals.json").string());
 		LoadPersistedTaskDeltas();
+		m_toolRegistry.RegisterRuntimeTool(
+			ToolCatalogEntry{
+				.id = "python.script.run",
+				.label = "Python Script Run",
+				.category = "runtime",
+				.enabled = true,
+			},
+			executors::PythonProcessExecutor::Create());
 		m_toolRegistry.RegisterRuntimeTool(
 			ToolCatalogEntry{
 				.id = "chat.send",

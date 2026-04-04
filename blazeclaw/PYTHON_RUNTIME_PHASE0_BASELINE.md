@@ -99,3 +99,6 @@ Highest-precedence configured value wins:
 
 ## Status
 Phase 0 design baseline is documented and ready for Phase 1 implementation work.
+
+Phase 1 external runtime implementation has started and is tracked in:
+- `blazeclaw/PYTHON_SUPPORT_IMPLEMENTATION_PLAN.md`
