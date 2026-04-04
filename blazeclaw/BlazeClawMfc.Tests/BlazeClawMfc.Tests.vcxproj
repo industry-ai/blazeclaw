@@ -43,6 +43,7 @@
     <ClCompile Include="..\BlazeClawMfc\tests\LobsterExecutorTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\OpsToolsExecutorTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ParityCoverageTests.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\tests\PythonRuntimeTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\TelemetryTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ExtensionLifecycleManager.cpp" />

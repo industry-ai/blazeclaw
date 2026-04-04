@@ -184,3 +184,14 @@ Outcome: reduced process spawn overhead and deeper in-process extensibility.
 
 ## Bottom line
 Adding Python support is a good strategic move for OpenClaw-to-BlazeClaw porting. Start with policy-driven external execution for immediate migration value, while designing an abstraction that can later host true Python C API embedding when operational cost is justified.
+
+## Completion status
+Current status for this framework plan: **Phase 0-5 accomplished** for the defined scope,
+with build validation passing via:
+- `msbuild blazeclaw/BlazeClaw.sln /t:Build /p:Configuration=Debug /p:Platform=x64`
+
+Test coverage status:
+- Added runtime-focused coverage in:
+  - `blazeclaw/BlazeClawMfc/tests/PythonRuntimeTests.cpp`
+- Verified by running:
+  - `blazeclaw/bin/Debug/BlazeClawMfc.Tests.exe "[python][runtime]"`

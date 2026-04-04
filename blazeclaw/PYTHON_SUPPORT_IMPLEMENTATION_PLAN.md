@@ -301,6 +301,15 @@ Operationalize runtime selection and failures for maintainers and users.
 - Fallback behavior strict vs permissive.
 - Error code mapping.
 
+### Implemented test coverage
+- Added `blazeclaw/BlazeClawMfc/tests/PythonRuntimeTests.cpp` covering:
+  - runtime selector precedence (tool > extension > global),
+  - diagnostics runtime tool exposure (`python.runtime.health`),
+  - rollout flags behavior (`python_runtime_disabled`, `python_embedded_runtime_disabled`),
+  - policy gate blocking for network/env/origin restrictions.
+- Registered new tests in:
+  - `blazeclaw/BlazeClawMfc.Tests/BlazeClawMfc.Tests.vcxproj`
+
 ### Integration Tests
 - End-to-end tool run in external mode.
 - End-to-end tool run in embedded mode.
@@ -313,6 +322,12 @@ Operationalize runtime selection and failures for maintainers and users.
 
 ### Validation Command
 - `msbuild blazeclaw/BlazeClaw.sln /t:Build /p:Configuration=Debug /p:Platform=x64`
+
+### Validation results
+- Build:
+  - `msbuild blazeclaw/BlazeClaw.sln /t:Build /p:Configuration=Debug /p:Platform=x64` (pass).
+- Python runtime tests:
+  - `blazeclaw/bin/Debug/BlazeClawMfc.Tests.exe "[python][runtime]"` (pass).
 
 ---
 
@@ -337,6 +352,21 @@ Operationalize runtime selection and failures for maintainers and users.
 2. Should fallback to external be allowed by default?
 3. Which Python versions are officially supported on Windows for embedded mode?
 4. Should per-tool policy support import allowlists in Phase 1 or Phase 4?
+
+## Completion Audit (Current)
+
+Current state: **fully accomplished for planned Phase 0-5 scope**.
+
+- Verified in code:
+  - Phase 1 external runtime executor and safety policy controls.
+  - Phase 2 host abstraction and runtime selection dispatcher.
+  - Phase 3 embedded runtime load/init/execute path with GIL boundaries.
+  - Phase 4 centralized policy gate, approval hooks, and structured audit telemetry.
+  - Phase 5 diagnostics endpoint/tooling, embedded health probe, and rollout feature flags.
+- Verified by validation run:
+  - Build: `msbuild blazeclaw/BlazeClaw.sln /t:Build /p:Configuration=Debug /p:Platform=x64` (pass).
+
+The Python dual-mode support framework plan (Phase 0 through Phase 5) is complete for the currently defined implementation scope.
 
 ## Phase 0 completion audit
 
