@@ -186,7 +186,7 @@ namespace {
 	}
 
 	void AppendStartupLocalModelStatus(
-       const blazeclaw::config::AppConfig& config,
+		const blazeclaw::config::AppConfig& config,
 		const blazeclaw::core::ServiceManager& services) {
 		if (!config.localModel.enabled) {
 			AppendMainFrameStatusLine(
@@ -198,9 +198,9 @@ namespace {
 
 		CString localModelLine;
 		localModelLine.Format(
-          L"[Chat] startup.localModel.config - provider=%s stage=%s model=%s tokenizer=%s maxTokens=%u temperature=%.2f",
-         ToWide(runtime.provider).c_str(),
-          ToWide(runtime.rolloutStage).c_str(),
+			L"[Chat] startup.localModel.config - provider=%s stage=%s model=%s tokenizer=%s maxTokens=%u temperature=%.2f",
+			ToWide(runtime.provider).c_str(),
+			ToWide(runtime.rolloutStage).c_str(),
 			ToWide(runtime.modelPath).c_str(),
 			ToWide(runtime.tokenizerPath).c_str(),
 			runtime.maxTokens,
@@ -303,12 +303,13 @@ namespace {
 		}
 
 		if (runtime.ready) {
-         AppendMainFrameStatusLine(
+			AppendMainFrameStatusLine(
 				L"[Chat] startup.localModel.qwenContract - promptTemplate=qwen3-chat markers=<|im_start|>/<|im_end|> decodeStop=<|im_end|>");
-          if (services.LocalModelActivationEnabled()) {
+			if (services.LocalModelActivationEnabled()) {
 				AppendMainFrameStatusLine(
 					L"[Chat] startup.localModel.loaded - local ONNX runtime ready and active");
-			} else {
+			}
+			else {
 				AppendMainFrameStatusLine(
 					L"[Chat] startup.localModel.loaded - local ONNX runtime ready but fallback is active");
 			}
@@ -479,7 +480,7 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 
 	// 禁用默认的文档创建
 	cmdInfo.m_nShellCommand = CCommandLineInfo::FileNothing;
-	
+
 	// Dispatch commands specified on the command line.  Will return FALSE if
 	// app was launched with /RegServer, /Register, /Unregserver or /Unregister.
 	if (!ProcessShellCommand(cmdInfo))
@@ -487,11 +488,11 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 	// The main window has been initialized, so show and update it
 	pMainFrame->ShowWindow(SW_SHOWMAXIMIZED);
 	pMainFrame->UpdateWindow();
-	
+
 	pMainFrame->PostMessage(kMsgCreateMdiGroup);
-	
+
 	AppendStartupConfigStatus(m_config);
-  AppendStartupLocalModelStatus(m_config, m_serviceManager);
+	AppendStartupLocalModelStatus(m_config, m_serviceManager);
 	AppendStartupEmbeddingsStatus(m_config, m_serviceManager);
 
 	m_bStartupComplete = TRUE;
@@ -500,7 +501,7 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 }
 
 int CBlazeClawMFCApp::ExitInstance() {
-    PersistActiveChatConnection(m_serviceManager);
+	PersistActiveChatConnection(m_serviceManager);
 	m_serviceManager.Stop();
 
 	AfxOleTerm(FALSE);
@@ -562,7 +563,7 @@ class CAboutDlg : public CDialogEx
 public:
 	CAboutDlg() noexcept;
 
-// Dialog Data
+	// Dialog Data
 #ifdef AFX_DESIGN_TIME
 	enum { IDD = IDD_ABOUTBOX };
 #endif
@@ -570,14 +571,13 @@ public:
 protected:
 	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV support
 
-// Implementation
+	// Implementation
 protected:
 	DECLARE_MESSAGE_MAP()
 };
 
 CAboutDlg::CAboutDlg() noexcept : CDialogEx(IDD_ABOUTBOX)
-{
-}
+{}
 
 void CAboutDlg::DoDataExchange(CDataExchange* pDX)
 {
@@ -609,9 +609,7 @@ void CBlazeClawMFCApp::PreLoadState()
 }
 
 void CBlazeClawMFCApp::LoadCustomState()
-{
-}
+{}
 
 void CBlazeClawMFCApp::SaveCustomState()
-{
-}
+{}
