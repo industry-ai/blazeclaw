@@ -371,6 +371,81 @@ namespace blazeclaw::gateway::python {
 				",\"code\":" + JsonString(code) + "}";
 			EmitTelemetryEvent("python.runtime.selection", payload);
 		}
+
+		std::string BuildHealthStatus(
+			const bool runtimeEnabled,
+			const bool embeddedEnabled,
+			const bool embeddedAvailable) {
+			if (!runtimeEnabled) {
+				return "disabled";
+			}
+
+			if (embeddedEnabled && !embeddedAvailable) {
+				return "degraded";
+			}
+
+			return "ok";
+		}
+	}
+
+	std::string PythonRuntimeDispatcher::BuildRuntimeDiagnosticsJson() {
+		PythonRuntimeSelector selector;
+		const PythonRuntimeSelection selection = selector.Resolve(std::nullopt);
+		ExternalPythonRuntimeHost externalHost;
+		EmbeddedPythonRuntimeHost embeddedHost;
+		const EmbeddedPythonRuntimeHealth embeddedHealth =
+			EmbeddedPythonRuntimeHost::ProbeHealth();
+
+		const bool runtimeEnabled = selection.runtimeEnabled;
+		const bool embeddedEnabled = selection.embeddedEnabled;
+		const bool externalAvailable = externalHost.IsAvailable();
+		const bool embeddedAvailable = embeddedHost.IsAvailable() && embeddedHealth.available;
+		const std::string activeMode =
+			selection.resolved ? selection.mode : "external";
+		const std::string health = BuildHealthStatus(
+			runtimeEnabled,
+			embeddedEnabled,
+			embeddedAvailable);
+		const std::string lastErrorCode =
+			selection.resolved
+			? embeddedHealth.lastError
+			: selection.errorCode;
+
+		return std::string("{\"pythonRuntime\":{") +
+			"\"enabled\":" + (runtimeEnabled ? "true" : "false") +
+			",\"activeMode\":\"" + EscapeJson(activeMode) +
+			"\",\"modeSource\":\"" + EscapeJson(selection.modeSource) +
+			"\",\"strictMode\":" +
+			(selection.strictMode ? "true" : "false") +
+			",\"allowFallbackToExternal\":" +
+			(selection.allowFallbackToExternal ? "true" : "false") +
+			",\"runtimeAvailability\":{\"external\":" +
+			(externalAvailable ? "true" : "false") +
+			",\"embedded\":" +
+			(embeddedAvailable ? "true" : "false") +
+			",\"embeddedRuntimeLoaded\":" +
+			(embeddedHealth.runtimeLoaded ? "true" : "false") +
+			",\"embeddedInterpreterInitialized\":" +
+			(embeddedHealth.interpreterInitialized ? "true" : "false") +
+			",\"embeddedLoadedModule\":\"" +
+			EscapeJson(embeddedHealth.loadedModule) + "\"}" +
+			",\"embeddedEnabled\":" +
+			(embeddedEnabled ? "true" : "false") +
+			",\"health\":\"" + EscapeJson(health) + "\"" +
+			",\"lastError\":{\"code\":\"" +
+			EscapeJson(lastErrorCode) + "\"}}}";
+	}
+
+	GatewayToolRegistry::RuntimeToolExecutor PythonRuntimeDispatcher::CreateDiagnosticsExecutor() {
+		return [](const std::string& requestedTool, const std::optional<std::string>& argsJson) {
+			UNREFERENCED_PARAMETER(argsJson);
+			return ToolExecuteResult{
+				.tool = requestedTool,
+				.executed = true,
+				.status = "ok",
+				.output = BuildRuntimeDiagnosticsJson(),
+			};
+			};
 	}
 
 	GatewayToolRegistry::RuntimeToolExecutor PythonRuntimeDispatcher::CreateExecutor() {

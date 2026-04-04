@@ -111,6 +111,31 @@ namespace blazeclaw::gateway::python {
 			}
 		}
 
+		selection.runtimeEnabled = ParseEnvBool(
+			ReadEnvironmentVariable("BLAZECLAW_PYTHON_RUNTIME_ENABLED"),
+			true);
+		selection.embeddedEnabled = ParseEnvBool(
+			ReadEnvironmentVariable("BLAZECLAW_PYTHON_EMBEDDED_ENABLED"),
+			false);
+
+		const std::optional<bool> runtimeEnabledOverride =
+			TryReadNestedBool(argsRoot, { "runtime", "enabled" });
+		const std::optional<bool> embeddedEnabledOverride =
+			TryReadNestedBool(argsRoot, { "runtime", "embeddedEnabled" });
+		if (runtimeEnabledOverride.has_value()) {
+			selection.runtimeEnabled = runtimeEnabledOverride.value();
+		}
+		if (embeddedEnabledOverride.has_value()) {
+			selection.embeddedEnabled = embeddedEnabledOverride.value();
+		}
+
+		if (!selection.runtimeEnabled) {
+			selection.resolved = false;
+			selection.errorCode = "python_runtime_disabled";
+			selection.errorMessage = "python runtime is disabled by rollout flag";
+			return selection;
+		}
+
 		const std::optional<std::string> toolMode =
 			TryReadNestedString(argsRoot, { "runtime", "mode" });
 		const std::optional<std::string> extensionMode =
@@ -164,6 +189,13 @@ namespace blazeclaw::gateway::python {
 			selection.resolved = false;
 			selection.errorCode = "python_runtime_mode_invalid";
 			selection.errorMessage = selection.mode;
+			return selection;
+		}
+
+		if (selection.mode == "embedded" && !selection.embeddedEnabled) {
+			selection.resolved = false;
+			selection.errorCode = "python_embedded_runtime_disabled";
+			selection.errorMessage = "embedded runtime is disabled by rollout flag";
 			return selection;
 		}
 

@@ -268,6 +268,29 @@ Operationalize runtime selection and failures for maintainers and users.
    - opt-in extensions
    - broader defaulting
 
+### Phase 5 implementation status
+
+- Completed in code:
+  - Added diagnostics runtime endpoint tool:
+    - `python.runtime.health`
+    - registered in `GatewayHost::Start` via `PythonRuntimeDispatcher::CreateDiagnosticsExecutor()`.
+  - Added runtime diagnostics snapshot builder:
+    - `PythonRuntimeDispatcher::BuildRuntimeDiagnosticsJson()`
+    - reports runtime availability, active mode, rollout flags, and last error.
+  - Added embedded health probe contract:
+    - `EmbeddedPythonRuntimeHost::ProbeHealth()`
+    - includes runtime-loaded state, interpreter-initialized state, and loaded module metadata.
+  - Added rollout feature flags in selector:
+    - `BLAZECLAW_PYTHON_RUNTIME_ENABLED`
+    - `BLAZECLAW_PYTHON_EMBEDDED_ENABLED`
+    - optional request overrides under `args.runtime.enabled` and `args.runtime.embeddedEnabled`.
+  - Added deterministic disabled-mode error codes:
+    - `python_runtime_disabled`
+    - `python_embedded_runtime_disabled`
+  - Progressive rollout support now defaults to safer staged rollout behavior:
+    - runtime enabled by default,
+    - embedded disabled by default unless explicitly enabled.
+
 ---
 
 ## Testing Plan

@@ -165,5 +165,22 @@ Outcome: reduced process spawn overhead and deeper in-process extensibility.
 - Structured policy audit events now emit via:
   - `python.runtime.policy.audit`
 
+## Phase 5 implementation snapshot
+- Operational diagnostics endpoint is available as runtime tool:
+  - `python.runtime.health`
+- Diagnostics payload now includes:
+  - runtime availability,
+  - active mode,
+  - last error,
+  - embedded runtime load/init probe state.
+- Embedded interpreter health probe is now exposed via:
+  - `EmbeddedPythonRuntimeHost::ProbeHealth()`
+- Rollout feature flags are now enforced in runtime selection:
+  - `BLAZECLAW_PYTHON_RUNTIME_ENABLED`
+  - `BLAZECLAW_PYTHON_EMBEDDED_ENABLED`
+- Current staged rollout defaults are now:
+  - runtime enabled,
+  - embedded mode opt-in (disabled unless explicitly enabled).
+
 ## Bottom line
 Adding Python support is a good strategic move for OpenClaw-to-BlazeClaw porting. Start with policy-driven external execution for immediate migration value, while designing an abstraction that can later host true Python C API embedding when operational cost is justified.

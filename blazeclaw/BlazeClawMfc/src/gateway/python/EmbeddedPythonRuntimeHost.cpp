@@ -41,6 +41,7 @@ namespace blazeclaw::gateway::python {
 			bool loaded = false;
 			bool initialized = false;
 			std::string lastError;
+			std::string loadedModule;
 			std::mutex guard;
 		};
 
@@ -220,6 +221,7 @@ namespace blazeclaw::gateway::python {
 				}
 
 				api.loaded = true;
+				api.loadedModule = candidate;
 				api.lastError.clear();
 				error.clear();
 				return true;
@@ -521,6 +523,20 @@ namespace blazeclaw::gateway::python {
 	bool EmbeddedPythonRuntimeHost::IsAvailable() const {
 		std::string error;
 		return EnsureRuntimeLoaded(error);
+	}
+
+	EmbeddedPythonRuntimeHealth EmbeddedPythonRuntimeHost::ProbeHealth() {
+		EmbeddedPythonRuntimeHealth health;
+		std::string loadError;
+		health.available = EnsureRuntimeLoaded(loadError);
+
+		auto& api = SharedApi();
+		std::lock_guard<std::mutex> lock(api.guard);
+		health.runtimeLoaded = api.loaded;
+		health.interpreterInitialized = api.initialized;
+		health.lastError = api.lastError.empty() ? loadError : api.lastError;
+		health.loadedModule = api.loadedModule;
+		return health;
 	}
 
 	ToolExecuteResult EmbeddedPythonRuntimeHost::Execute(

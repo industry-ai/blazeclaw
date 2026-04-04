@@ -569,6 +569,14 @@ namespace blazeclaw::gateway {
 			python::PythonRuntimeDispatcher::CreateExecutor());
 		m_toolRegistry.RegisterRuntimeTool(
 			ToolCatalogEntry{
+				.id = "python.runtime.health",
+				.label = "Python Runtime Health",
+				.category = "runtime",
+				.enabled = true,
+			},
+			python::PythonRuntimeDispatcher::CreateDiagnosticsExecutor());
+		m_toolRegistry.RegisterRuntimeTool(
+			ToolCatalogEntry{
 				.id = "chat.send",
 				.label = "Chat Send",
 				.category = "messaging",

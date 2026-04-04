@@ -7,6 +7,8 @@ namespace blazeclaw::gateway::python {
 
 	struct PythonRuntimeSelection {
 		bool resolved = false;
+		bool runtimeEnabled = true;
+		bool embeddedEnabled = false;
 		std::string mode;
 		std::string modeSource;
 		bool strictMode = true;
