@@ -144,6 +144,26 @@ Introduce abstraction layer so both external and embedded runtimes share one exe
 - No gateway schema changes needed.
 - Runtime mode choice is observable in telemetry/logs.
 
+### Phase 2 implementation status
+
+- Completed in code:
+  - Added runtime host abstraction files:
+    - `blazeclaw/BlazeClawMfc/src/gateway/python/IPythonRuntimeHost.h`
+    - `blazeclaw/BlazeClawMfc/src/gateway/python/ExternalPythonRuntimeHost.*`
+    - `blazeclaw/BlazeClawMfc/src/gateway/python/EmbeddedPythonRuntimeHost.*`
+    - `blazeclaw/BlazeClawMfc/src/gateway/python/PythonRuntimeSelector.*`
+    - `blazeclaw/BlazeClawMfc/src/gateway/python/PythonRuntimeDispatcher.*`
+  - Added deterministic runtime selection precedence in selector:
+    - tool override (`args.runtime.mode`)
+    - extension override (`args.extension.runtime.mode`)
+    - global default (`BLAZECLAW_PYTHON_RUNTIME_MODE_DEFAULT`)
+  - Added fallback policy controls:
+    - `BLAZECLAW_PYTHON_RUNTIME_STRICT_MODE`
+    - `BLAZECLAW_PYTHON_RUNTIME_ALLOW_FALLBACK_TO_EXTERNAL`
+    - per-request overrides via `args.runtime.strictMode` and `args.runtime.allowFallbackToExternal`
+  - Integrated dispatcher into gateway runtime tool registration for `python.script.run`.
+  - Preserved existing gateway tool response schema (no protocol contract changes).
+
 ---
 
 ## Phase 3 — Embedded CPython Host

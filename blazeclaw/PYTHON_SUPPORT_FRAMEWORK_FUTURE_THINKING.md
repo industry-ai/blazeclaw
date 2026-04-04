@@ -116,5 +116,20 @@ Outcome: reduced process spawn overhead and deeper in-process extensibility.
 - Validation status:
   - `msbuild blazeclaw/BlazeClaw.sln /t:Build /p:Configuration=Debug /p:Platform=x64` passes after Phase 1 integration.
 
+## Phase 2 implementation snapshot
+- Host abstraction is now implemented under:
+  - `blazeclaw/BlazeClawMfc/src/gateway/python/*`
+- Runtime dispatch now routes `python.script.run` through selector + host dispatcher.
+- Current selector precedence in code:
+  1. `args.runtime.mode` (tool-level)
+  2. `args.extension.runtime.mode` (extension-level)
+  3. `BLAZECLAW_PYTHON_RUNTIME_MODE_DEFAULT` (global-level)
+- Current fallback controls:
+  - `BLAZECLAW_PYTHON_RUNTIME_STRICT_MODE`
+  - `BLAZECLAW_PYTHON_RUNTIME_ALLOW_FALLBACK_TO_EXTERNAL`
+  - request overrides under `args.runtime`
+- Embedded mode path is intentionally a deterministic unavailable stub in Phase 2,
+  with optional fallback to external mode when policy permits.
+
 ## Bottom line
 Adding Python support is a good strategic move for OpenClaw-to-BlazeClaw porting. Start with policy-driven external execution for immediate migration value, while designing an abstraction that can later host true Python C API embedding when operational cost is justified.

@@ -6,7 +6,7 @@
 #include "GatewayProtocolCodec.h"
 #include "GatewayProtocolSchemaValidator.h"
 #include "PluginHostAdapter.h"
-#include "executors/PythonProcessExecutor.h"
+#include "python/PythonRuntimeDispatcher.h"
 #include "generated/GatewayHandlerCatalog.Generated.h"
 #include "Telemetry.h"
 
@@ -566,7 +566,7 @@ namespace blazeclaw::gateway {
 				.category = "runtime",
 				.enabled = true,
 			},
-			executors::PythonProcessExecutor::Create());
+			python::PythonRuntimeDispatcher::CreateExecutor());
 		m_toolRegistry.RegisterRuntimeTool(
 			ToolCatalogEntry{
 				.id = "chat.send",

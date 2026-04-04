@@ -67,6 +67,10 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayProtocolSchemaValidator.Event.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayProtocolSchemaValidator.Response.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayProtocolSchemaValidator.Shared.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\python\EmbeddedPythonRuntimeHost.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\python\ExternalPythonRuntimeHost.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\python\PythonRuntimeDispatcher.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\python\PythonRuntimeSelector.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewaySessionRegistry.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayWebSocketTransport.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayJsonUtils.cpp" />
