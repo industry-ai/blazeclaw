@@ -176,6 +176,7 @@ Status: Completed
 - [x] Ensure implemented local skills under `blazeclaw/skills/*` are also visible in `CSkillView` even when runtime registration is incomplete.
 - [x] Group skill nodes by category in the tree view.
 - [x] Route selected skill metadata to `CBlazeClawMFCView` for property/configuration display.
+- [x] Trigger skill-specific `config.html` opening when a configurable skill item is clicked in `CSkillView`.
 
 Phase 8 artifact snapshot:
 - `blazeclaw/BlazeClawMfc/src/app/SkillView.cpp`
@@ -194,6 +195,7 @@ Phase 8 artifact snapshot:
 - [x] WebView2 form values are validated and persisted through `CBlazeClawMFCDoc`-associated config storage
 - [x] `CSkillView::FillSkillView()` renders real registered skills grouped by category
 - [x] Clicking a `CSkillView` skill item routes properties/configuration payload to `CBlazeClawMFCView`
+- [x] Clicking `imap-smtp-email` in `CSkillView` opens `blazeclaw/skills/imap-smtp-email/config.html` when available
 - [x] BlazeClaw gateway can discover email tools in catalog
 - [x] BlazeClaw runtime can execute IMAP/SMTP skill tools from chat
 - [x] Tool-call deltas are persisted and observable

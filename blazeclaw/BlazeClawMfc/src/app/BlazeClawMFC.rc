@@ -19,7 +19,7 @@
 #undef APSTUDIO_READONLY_SYMBOLS
 
 /////////////////////////////////////////////////////////////////////////////
-// 中文(简体，中国) resources
+// Chinese (Simplified, China) resources
 
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
@@ -94,7 +94,7 @@ FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
     LTEXT           "Model Selection",IDC_STATIC_SETTINGS_TITLE,14,14,360,14
     LTEXT           "Select the AI models you want to enable:",IDC_STATIC_SETTINGS_DESC,14,32,360,14
-    CONTROL         "",IDC_LIST_MODELS,"SysListView32",LVS_REPORT | LVS_SINGLESEL | WS_BORDER | WS_TABSTOP | LVS_NOCOLUMNHEADER,14,52,372,190
+    CONTROL         "",IDC_LIST_MODELS,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_NOCOLUMNHEADER | WS_BORDER | WS_TABSTOP,14,52,372,190
     PUSHBUTTON      "Select All",IDC_BUTTON_SELECT_ALL,14,255,60,14
     PUSHBUTTON      "Deselect All",IDC_BUTTON_DESELECT_ALL,80,255,70,14
     LTEXT           "",IDC_STATIC_MODEL_COUNT,160,258,120,14
@@ -102,10 +102,12 @@ BEGIN
     PUSHBUTTON      "Cancel",IDCANCEL,345,255,50,14
 END
 
+
 /////////////////////////////////////////////////////////////////////////////
 //
 // DESIGNINFO
 //
+
 #ifdef APSTUDIO_INVOKED
 GUIDELINES DESIGNINFO
 BEGIN
@@ -122,25 +124,6 @@ END
 
 /////////////////////////////////////////////////////////////////////////////
 //
-// DESIGNINFO
-//
-
-#ifdef APSTUDIO_INVOKED
-GUIDELINES DESIGNINFO
-BEGIN
-    IDD_APIKEY_DIALOG, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 380
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 169
-    END
-END
-#endif    // APSTUDIO_INVOKED
-
-
-/////////////////////////////////////////////////////////////////////////////
-//
 // AFX_DIALOG_LAYOUT
 //
 
@@ -149,12 +132,12 @@ BEGIN
     0
 END
 
-#endif    // 中文(简体，中国) resources
+#endif    // Chinese (Simplified, China) resources
 /////////////////////////////////////////////////////////////////////////////
 
 
 /////////////////////////////////////////////////////////////////////////////
-// 英语(美国) resources
+// English (United States) resources
 
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
 LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
@@ -1089,7 +1072,7 @@ END
 STRINGTABLE
 BEGIN
     IDS_FILE_VIEW           "File View"
-    IDS_CLASS_VIEW          "Class View"
+    IDS_CLASS_VIEW          "Skill View"
     IDS_OUTPUT_WND          "Output"
     IDS_PROPERTIES_WND      "Properties"
 END
@@ -1134,7 +1117,7 @@ BEGIN
     ID_EXTENSION_DEEPSEEK   "Use deepseek as default model\ndeepseek"
 END
 
-#endif    // 英语(美国) resources
+#endif    // English (United States) resources
 /////////////////////////////////////////////////////////////////////////////
 
 

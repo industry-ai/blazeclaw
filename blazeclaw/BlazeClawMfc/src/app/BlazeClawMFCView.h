@@ -51,6 +51,7 @@ public:
 	void ShowSkillSelection(
 		const std::string& skillKey,
 		const std::string& propertiesJson);
+	bool OpenSkillConfigDocument(const std::string& skillKey);
 
 	// Overrides
 public:

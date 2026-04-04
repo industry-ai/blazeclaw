@@ -39,6 +39,7 @@
 
 namespace {
 	std::wstring g_pendingStartupUrl;
+	std::wstring BuildFileUrl(const std::filesystem::path& filePath);
 
 	constexpr UINT_PTR kBridgeLifecycleTimerId = 0x4A21;
 	constexpr UINT kBridgeLifecycleTimerMs = 1000;
@@ -121,6 +122,91 @@ namespace {
 		}
 
 		return std::nullopt;
+	}
+
+	std::string NormalizeSkillKeyForPath(const std::string& skillKey)
+	{
+		std::string normalized;
+		normalized.reserve(skillKey.size());
+		for (const char ch : skillKey)
+		{
+			if (ch == '_')
+			{
+				normalized.push_back('-');
+				continue;
+			}
+
+			normalized.push_back(static_cast<char>(
+				std::tolower(static_cast<unsigned char>(ch))));
+		}
+
+		return normalized;
+	}
+
+	std::optional<std::filesystem::path> FindSkillConfigHtml(
+		const std::filesystem::path& start,
+		const std::string& skillKey)
+	{
+		const std::string normalizedSkillKey = NormalizeSkillKeyForPath(skillKey);
+		if (normalizedSkillKey.empty())
+		{
+			return std::nullopt;
+		}
+
+		std::filesystem::path cursor = start;
+		while (!cursor.empty())
+		{
+			const std::wstring skillDir(
+				normalizedSkillKey.begin(),
+				normalizedSkillKey.end());
+			const auto configHtml =
+				cursor /
+				L"blazeclaw" /
+				L"skills" /
+				std::filesystem::path(skillDir) /
+				L"config.html";
+			if (std::filesystem::exists(configHtml))
+			{
+				return configHtml;
+			}
+
+			if (!cursor.has_parent_path())
+			{
+				break;
+			}
+
+			auto parent = cursor.parent_path();
+			if (parent == cursor)
+			{
+				break;
+			}
+
+			cursor = parent;
+		}
+
+		return std::nullopt;
+	}
+
+	std::wstring ResolveSkillConfigStartupUrl(const std::string& skillKey)
+	{
+		std::vector<std::filesystem::path> roots;
+		roots.push_back(std::filesystem::current_path());
+
+		wchar_t modulePath[MAX_PATH]{};
+		if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) > 0)
+		{
+			roots.push_back(std::filesystem::path(modulePath).parent_path());
+		}
+
+		for (const auto& root : roots)
+		{
+			if (const auto found = FindSkillConfigHtml(root, skillKey); found.has_value())
+			{
+				return BuildFileUrl(found.value());
+			}
+		}
+
+		return {};
 	}
 
 	bool IsLikelyEmailAddress(const std::string& value)
@@ -2011,6 +2097,44 @@ void CBlazeClawMFCView::ShowSkillSelection(
 		(propertiesJson.empty() ? std::string("{}") : propertiesJson) +
 		"}";
 	PostBridgeMessageJson(ToWide(payload));
+
+	const bool opened = OpenSkillConfigDocument(normalizedSkillKey);
+	if (opened)
+	{
+		AppendChatProcedureStatusLine(
+			L"skills.config.opened",
+			normalizedSkillKey);
+	}
+}
+
+bool CBlazeClawMFCView::OpenSkillConfigDocument(const std::string& skillKey)
+{
+	if (blazeclaw::gateway::json::Trim(skillKey).empty())
+	{
+		return false;
+	}
+
+	const std::wstring configUrl = ResolveSkillConfigStartupUrl(skillKey);
+	if (configUrl.empty())
+	{
+		return false;
+	}
+
+	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	if (app == nullptr)
+	{
+		return false;
+	}
+
+	auto* chatTemplate = app->GetChatDocTemplate();
+	if (chatTemplate == nullptr)
+	{
+		return false;
+	}
+
+	SetPendingStartupUrl(configUrl);
+	CDocument* opened = chatTemplate->OpenDocumentFile(nullptr);
+	return opened != nullptr;
 }
 
 void CBlazeClawMFCView::InitializeWebViewBridge()

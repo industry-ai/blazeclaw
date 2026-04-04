@@ -191,6 +191,18 @@ void CMainFrame::ShowSkillSelectionInActiveView(
 	const std::string& skillKey,
 	const std::string& propertiesJson)
 {
+	auto routeToView = [&skillKey, &propertiesJson](CView* view) -> bool
+		{
+			auto* chatView = DYNAMIC_DOWNCAST(CBlazeClawMFCView, view);
+			if (chatView == nullptr)
+			{
+				return false;
+			}
+
+			chatView->ShowSkillSelection(skillKey, propertiesJson);
+			return true;
+		};
+
 	CMDIChildWndEx* activeChild =
 		DYNAMIC_DOWNCAST(CMDIChildWndEx, MDIGetActive());
 	if (activeChild == nullptr)
@@ -199,13 +211,18 @@ void CMainFrame::ShowSkillSelectionInActiveView(
 	}
 
 	CView* activeView = activeChild->GetActiveView();
-	auto* chatView = DYNAMIC_DOWNCAST(CBlazeClawMFCView, activeView);
-	if (chatView == nullptr)
+	if (routeToView(activeView))
 	{
 		return;
 	}
 
-	chatView->ShowSkillSelection(skillKey, propertiesJson);
+	OpenDefaultTab();
+	CMDIChildWndEx* newActiveChild =
+		DYNAMIC_DOWNCAST(CMDIChildWndEx, MDIGetActive());
+	if (newActiveChild != nullptr)
+	{
+		routeToView(newActiveChild->GetActiveView());
+	}
 }
 
 int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)

@@ -48,6 +48,8 @@ This document defines the BlazeClaw tool IDs, command mapping, and payload contr
 The WebView2 page `config.html` posts bridge events to the native MFC view.
 The native layer validates inputs and persists `.env` content via
 `CBlazeClawMFCDoc`-associated storage.
+Selecting the `imap-smtp-email` item in `CSkillView` also opens this
+`config.html` surface through `CBlazeClawMFCView` skill-selection routing.
 
 ## Runtime Execution Bridge (Phase 3)
 

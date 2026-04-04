@@ -226,6 +226,40 @@ namespace blazeclaw::core {
 			return lowered;
 		}
 
+		std::filesystem::path ResolveWorkspaceRootForSkills(
+			const std::filesystem::path& startPath) {
+			std::error_code ec;
+			auto cursor = std::filesystem::absolute(startPath, ec);
+			if (ec) {
+				return startPath;
+			}
+
+			while (!cursor.empty()) {
+				const auto directSkills = cursor / L"skills";
+				if (std::filesystem::is_directory(directSkills, ec) && !ec) {
+					return cursor;
+				}
+
+				const auto nestedSkills = cursor / L"blazeclaw" / L"skills";
+				if (std::filesystem::is_directory(nestedSkills, ec) && !ec) {
+					return cursor;
+				}
+
+				if (!cursor.has_parent_path()) {
+					break;
+				}
+
+				auto parent = cursor.parent_path();
+				if (parent == cursor) {
+					break;
+				}
+
+				cursor = parent;
+			}
+
+			return startPath;
+		}
+
 		std::vector<std::string> ParseCsvEnvValues(const wchar_t* key) {
 			std::vector<std::string> values;
 			wchar_t* env = nullptr;
@@ -2277,8 +2311,10 @@ namespace blazeclaw::core {
 		const blazeclaw::config::AppConfig& config,
 		const bool forceRefresh,
 		const std::wstring& reason) {
+		const auto workspaceRoot =
+			ResolveWorkspaceRootForSkills(std::filesystem::current_path());
 		m_skillsCatalog = m_skillsCatalogService.LoadCatalog(
-			std::filesystem::current_path(),
+			workspaceRoot,
 			config);
 		m_skillsEligibility = m_skillsEligibilityService.Evaluate(
 			m_skillsCatalog,
@@ -2296,7 +2332,7 @@ namespace blazeclaw::core {
 			m_skillsCatalog,
 			m_skillsEligibility);
 		m_skillsSync = m_skillsSyncService.SyncToSandbox(
-			std::filesystem::current_path(),
+			workspaceRoot,
 			m_skillsCatalog,
 			m_skillsEligibility,
 			config);

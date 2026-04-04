@@ -56,6 +56,25 @@ namespace {
 		return escaped;
 	}
 
+	std::string NormalizeSkillKeyForDedup(const std::string& value)
+	{
+		std::string normalized;
+		normalized.reserve(value.size());
+		for (const char ch : value)
+		{
+			if (ch == '-')
+			{
+				normalized.push_back('_');
+				continue;
+			}
+
+			normalized.push_back(static_cast<char>(
+				std::tolower(static_cast<unsigned char>(ch))));
+		}
+
+		return normalized;
+	}
+
 	std::vector<std::string> SplitTopLevelObjects(const std::string& arrayJson)
 	{
 		std::vector<std::string> objects;
@@ -241,7 +260,7 @@ int CSkillView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 
 	if (!m_wndSkillView.Create(dwViewStyle, rectDummy, this, 2))
 	{
-		TRACE0("Failed to create Class View\n");
+		TRACE0("Failed to create Skill View\n");
 		return -1;      // fail to create
 	}
 
@@ -307,22 +326,14 @@ void CSkillView::FillSkillView()
 	HTREEITEM hRoot = m_wndSkillView.InsertItem(_T("Registered skills"), 0, 0);
 	m_wndSkillView.SetItemState(hRoot, TVIS_BOLD, TVIS_BOLD);
 
-	if (!response.ok || !response.payloadJson.has_value())
-	{
-		m_wndSkillView.InsertItem(_T("(failed to load skills)"), 4, 4, hRoot);
-		m_wndSkillView.Expand(hRoot, TVE_EXPAND);
-		return;
-	}
-
 	std::string skillsRaw;
-	if (!blazeclaw::gateway::json::FindRawField(
-		response.payloadJson.value(),
-		"skills",
-		skillsRaw))
+	if (response.ok &&
+		response.payloadJson.has_value())
 	{
-		m_wndSkillView.InsertItem(_T("(no skills payload)"), 4, 4, hRoot);
-		m_wndSkillView.Expand(hRoot, TVE_EXPAND);
-		return;
+		blazeclaw::gateway::json::FindRawField(
+			response.payloadJson.value(),
+			"skills",
+			skillsRaw);
 	}
 
 	std::vector<std::string> skillEntries = SplitTopLevelObjects(skillsRaw);
@@ -341,7 +352,7 @@ void CSkillView::FillSkillView()
 		{
 			continue;
 		}
-		knownSkillKeys.insert(skillKey);
+		knownSkillKeys.insert(NormalizeSkillKeyForDedup(skillKey));
 
 		std::string category;
 		blazeclaw::gateway::json::FindStringField(entryJson, "installKind", category);
@@ -372,6 +383,78 @@ void CSkillView::FillSkillView()
 			2,
 			categoryNode);
 		m_skillItemPayloadByTreeItem.insert_or_assign(skillNode, entryJson);
+	}
+
+	const auto toolsResponse = app->Services().RouteGatewayRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "skill-view.tools.list",
+			.method = "gateway.tools.list",
+			.paramsJson = std::nullopt,
+		});
+	if (toolsResponse.ok && toolsResponse.payloadJson.has_value())
+	{
+		std::string toolsRaw;
+		if (blazeclaw::gateway::json::FindRawField(
+			toolsResponse.payloadJson.value(),
+			"tools",
+			toolsRaw))
+		{
+			for (const auto& toolJson : SplitTopLevelObjects(toolsRaw))
+			{
+				std::string toolId;
+				if (!blazeclaw::gateway::json::FindStringField(
+					toolJson,
+					"id",
+					toolId) ||
+					toolId.empty())
+				{
+					continue;
+				}
+
+				std::string skillKey = toolId;
+				const auto dot = toolId.find('.');
+				if (dot != std::string::npos && dot > 0)
+				{
+					skillKey = toolId.substr(0, dot);
+				}
+
+				const std::string dedupKey =
+					NormalizeSkillKeyForDedup(skillKey);
+				if (knownSkillKeys.find(dedupKey) != knownSkillKeys.end())
+				{
+					continue;
+				}
+
+				knownSkillKeys.insert(dedupKey);
+				const std::string category = "runtime-registered";
+				auto categoryIt = categoryItems.find(category);
+				HTREEITEM categoryNode = nullptr;
+				if (categoryIt == categoryItems.end())
+				{
+					categoryNode = m_wndSkillView.InsertItem(
+						_T("runtime-registered"),
+						1,
+						1,
+						hRoot);
+					categoryItems.insert_or_assign(category, categoryNode);
+				}
+				else
+				{
+					categoryNode = categoryIt->second;
+				}
+
+				const HTREEITEM skillNode = m_wndSkillView.InsertItem(
+					CString(CA2W(skillKey.c_str(), CP_UTF8)),
+					2,
+					2,
+					categoryNode);
+				const std::string payload =
+					"{\"name\":\"" + EscapeJsonSkillView(skillKey) +
+					"\",\"skillKey\":\"" + EscapeJsonSkillView(skillKey) +
+					"\",\"installKind\":\"runtime-registered\",\"source\":\"gateway.tools.list\",\"description\":\"Derived from runtime tool registry\"}";
+				m_skillItemPayloadByTreeItem.insert_or_assign(skillNode, payload);
+			}
+		}
 	}
 
 	const auto skillsRoot = ResolveSkillsRoot();
@@ -415,12 +498,12 @@ void CSkillView::FillSkillView()
 				}
 			}
 
-			if (knownSkillKeys.find(skillKey) != knownSkillKeys.end())
+			if (knownSkillKeys.find(NormalizeSkillKeyForDedup(skillKey)) != knownSkillKeys.end())
 			{
 				continue;
 			}
 
-			knownSkillKeys.insert(skillKey);
+			knownSkillKeys.insert(NormalizeSkillKeyForDedup(skillKey));
 			const std::string category = "implemented";
 			auto categoryIt = categoryItems.find(category);
 			HTREEITEM categoryNode = nullptr;
@@ -449,6 +532,15 @@ void CSkillView::FillSkillView()
 				"\",\"installKind\":\"implemented\",\"source\":\"filesystem\",\"description\":\"Discovered from local skills directory\"}";
 			m_skillItemPayloadByTreeItem.insert_or_assign(skillNode, payload);
 		}
+	}
+
+	if (!response.ok)
+	{
+		m_wndSkillView.InsertItem(
+			_T("(runtime skills unavailable; showing local skills only)"),
+			4,
+			4,
+			hRoot);
 	}
 
 	if (m_skillItemPayloadByTreeItem.empty())
