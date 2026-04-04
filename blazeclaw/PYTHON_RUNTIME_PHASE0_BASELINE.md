@@ -105,3 +105,6 @@ Phase 1 external runtime implementation has started and is tracked in:
 
 Phase 2 runtime host abstraction implementation is now tracked in:
 - `blazeclaw/PYTHON_SUPPORT_IMPLEMENTATION_PLAN.md`
+
+Phase 3 embedded runtime host implementation is now tracked in:
+- `blazeclaw/PYTHON_SUPPORT_IMPLEMENTATION_PLAN.md`

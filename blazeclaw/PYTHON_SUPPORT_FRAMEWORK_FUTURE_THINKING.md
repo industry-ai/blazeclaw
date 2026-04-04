@@ -131,5 +131,22 @@ Outcome: reduced process spawn overhead and deeper in-process extensibility.
 - Embedded mode path is intentionally a deterministic unavailable stub in Phase 2,
   with optional fallback to external mode when policy permits.
 
+## Phase 3 implementation snapshot
+- Embedded runtime host now executes scripts through dynamic CPython runtime loading:
+  - `blazeclaw/BlazeClawMfc/src/gateway/python/EmbeddedPythonRuntimeHost.cpp`
+- Embedded lifecycle and thread model in code now includes:
+  - one-time interpreter initialization,
+  - GIL acquisition/release around script execution,
+  - serialized execution lock for deterministic behavior.
+- Embedded policy controls now include:
+  - trusted script-root enforcement,
+  - restricted `sys.path` composition,
+  - import allowlist gating via `BLAZECLAW_PYTHON_EMBEDDED_ALLOWED_IMPORTS`.
+- Embedded runtime configuration controls currently include:
+  - `BLAZECLAW_PYTHON_EMBEDDED_DLL`
+  - `BLAZECLAW_PYTHON_EMBEDDED_SYS_PATH`
+- Runtime output now uses normalized embedded envelopes with stdout/stderr capture,
+  and emits `python.embedded.execute` telemetry events.
+
 ## Bottom line
 Adding Python support is a good strategic move for OpenClaw-to-BlazeClaw porting. Start with policy-driven external execution for immediate migration value, while designing an abstraction that can later host true Python C API embedding when operational cost is justified.

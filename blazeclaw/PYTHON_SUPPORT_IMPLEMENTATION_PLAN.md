@@ -183,6 +183,34 @@ Add optional embedded mode via Python C API behind abstraction.
 2. Add runtime dependency checks during startup diagnostics.
 3. Define version pinning/compatibility policy.
 
+### Phase 3 implementation status
+
+- Completed in code:
+  - Implemented embedded host execution path in:
+    - `blazeclaw/BlazeClawMfc/src/gateway/python/EmbeddedPythonRuntimeHost.cpp`
+  - Implemented runtime loading with dynamic CPython DLL resolution:
+    - explicit override via `BLAZECLAW_PYTHON_EMBEDDED_DLL`
+    - fallback candidates: `python313.dll`, `python312.dll`, `python311.dll`, `python310.dll`
+  - Implemented embedded interpreter lifecycle handling:
+    - one-time runtime load,
+    - one-time `Py_InitializeEx` initialization,
+    - shared guarded runtime state.
+  - Implemented GIL-safe execution boundaries:
+    - `PyGILState_Ensure` before execution,
+    - `PyGILState_Release` after execution,
+    - serialized execution mutex for deterministic embedded runtime behavior.
+  - Implemented policy restrictions for embedded mode:
+    - trusted script-root enforcement,
+    - restricted `sys.path` composition,
+    - import allowlist gate via `BLAZECLAW_PYTHON_EMBEDDED_ALLOWED_IMPORTS`.
+  - Implemented normalized embedded envelopes:
+    - success envelope includes `runtimeMode="embedded"`, stdout/stderr payload,
+    - error envelope uses deterministic embedded/runtime policy error codes.
+  - Implemented embedded telemetry event stream:
+    - `python.embedded.execute` with status/code fields.
+  - Added embedded sys.path runtime control:
+    - `BLAZECLAW_PYTHON_EMBEDDED_SYS_PATH`.
+
 ---
 
 ## Phase 4 — Policy & Security Hardening
