@@ -45,4 +45,19 @@ Observability telemetry:
 2. Runtime returns `needs_approval` with `approvalToken`.
 3. Call `email.schedule` with `action=approve`, token, and `approve=true|false`.
 
+### Delivery backend fallback behavior
+
+- `email.schedule` now supports backend-chain fallback in approve flow.
+- Default backend order:
+  1. `himalaya`
+  2. `imap-smtp-email` (Node SMTP CLI)
+- Override order with:
+  - `BLAZECLAW_EMAIL_DELIVERY_BACKENDS`
+  - values separated by comma/semicolon (example: `himalaya,imap-smtp-email`).
+- Existing mode control remains:
+  - `BLAZECLAW_EMAIL_DELIVERY_MODE=mock_success|mock_failure|auto`
+
+If a backend fails, the runtime attempts the next configured backend.
+The final response summary reports the selected backend in `engine`.
+
 This keeps outbound scheduling side effects gated by explicit approval.

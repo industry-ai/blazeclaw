@@ -368,6 +368,16 @@ Current state: **fully accomplished for planned Phase 0-5 scope**.
 
 The Python dual-mode support framework plan (Phase 0 through Phase 5) is complete for the currently defined implementation scope.
 
+## Runtime orchestration parity extension notes
+
+- Added gateway runtime parity behavior for outbound email backend fallback:
+  - `email.schedule` approve flow now tries backend chain in order.
+  - default chain: `himalaya` -> `imap-smtp-email`.
+  - backend order override via `BLAZECLAW_EMAIL_DELIVERY_BACKENDS`.
+- Added tests:
+  - `BlazeClawMfc/tests/EmailScheduleFallbackTests.cpp`
+  - updated `BlazeClawMfc/tests/OpsToolsExecutorTests.cpp` fallback coverage.
+
 ## Phase 0 completion audit
 
 Current state: **completed (design/docs baseline)**.

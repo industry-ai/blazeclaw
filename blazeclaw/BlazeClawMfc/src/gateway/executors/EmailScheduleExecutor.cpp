@@ -9,14 +9,17 @@
 #include <array>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
 #include <nlohmann/json.hpp>
+#include <optional>
+#include <vector>
+#include <windows.h>
 
 namespace blazeclaw::gateway::executors {
 	namespace {
-
 		std::string EscapeJson(const std::string& value) {
 			std::string escaped;
 			escaped.reserve(value.size() + 8);
@@ -59,7 +62,8 @@ namespace blazeclaw::gateway::executors {
 			static std::once_flag initFlag;
 
 			std::call_once(initFlag, []() {
-				store.Initialize(ResolveGatewayStateFilePath("approvals.json").string());
+				store.Initialize(
+					ResolveGatewayStateFilePath("approvals.json").string());
 				});
 
 			return store;
@@ -157,13 +161,143 @@ namespace blazeclaw::gateway::executors {
 			return lowered;
 		}
 
+		std::vector<std::string> SplitValues(const std::string& raw) {
+			std::vector<std::string> values;
+			std::string token;
+			for (const char ch : raw) {
+				if (ch == ',' || ch == ';') {
+					const std::string trimmed = json::Trim(token);
+					if (!trimmed.empty()) {
+						values.push_back(trimmed);
+					}
+					token.clear();
+					continue;
+				}
+
+				token.push_back(ch);
+			}
+
+			const std::string trimmed = json::Trim(token);
+			if (!trimmed.empty()) {
+				values.push_back(trimmed);
+			}
+
+			return values;
+		}
+
+		std::string QuoteArg(const std::string& value) {
+			if (value.find_first_of(" \t\"") == std::string::npos) {
+				return value;
+			}
+
+			std::string escaped = "\"";
+			for (const char ch : value) {
+				if (ch == '"') {
+					escaped += "\\\"";
+					continue;
+				}
+				escaped.push_back(ch);
+			}
+			escaped += "\"";
+			return escaped;
+		}
+
+		std::optional<std::string> ResolveExecutablePath(
+			const std::string& executable) {
+			const std::string trimmed = json::Trim(executable);
+			if (trimmed.empty()) {
+				return std::nullopt;
+			}
+
+			const bool directPath =
+				trimmed.find('\\') != std::string::npos ||
+				trimmed.find('/') != std::string::npos ||
+				trimmed.find(':') != std::string::npos;
+			if (directPath) {
+				std::error_code ec;
+				if (std::filesystem::exists(trimmed, ec) && !ec) {
+					const auto canonical = std::filesystem::weakly_canonical(
+						std::filesystem::path(trimmed),
+						ec);
+					if (!ec) {
+						return canonical.string();
+					}
+					return trimmed;
+				}
+				return std::nullopt;
+			}
+
+			char resolved[MAX_PATH] = {};
+			const DWORD chars = SearchPathA(
+				nullptr,
+				trimmed.c_str(),
+				nullptr,
+				MAX_PATH,
+				resolved,
+				nullptr);
+			if (chars == 0 || chars >= MAX_PATH) {
+				return std::nullopt;
+			}
+
+			std::error_code ec;
+			const auto canonical = std::filesystem::weakly_canonical(
+				std::filesystem::path(resolved),
+				ec);
+			if (!ec) {
+				return canonical.string();
+			}
+
+			return std::string(resolved);
+		}
+
 		std::string NormalizeMode() {
-			const auto mode = ToLowerCopy(json::Trim(ReadEnvVar("BLAZECLAW_EMAIL_DELIVERY_MODE")));
+			const auto mode =
+				ToLowerCopy(json::Trim(ReadEnvVar("BLAZECLAW_EMAIL_DELIVERY_MODE")));
 			if (mode == "mock_success" || mode == "mock_failure") {
 				return mode;
 			}
 
 			return "auto";
+		}
+
+		std::vector<std::string> ResolveEmailBackendChain() {
+			const std::string configured = ToLowerCopy(
+				json::Trim(ReadEnvVar("BLAZECLAW_EMAIL_DELIVERY_BACKENDS")));
+			std::vector<std::string> chain;
+			if (!configured.empty()) {
+				for (const auto& value : SplitValues(configured)) {
+					const std::string lowered = ToLowerCopy(json::Trim(value));
+					if (!lowered.empty()) {
+						chain.push_back(lowered);
+					}
+				}
+			}
+
+			if (chain.empty()) {
+				chain.push_back("himalaya");
+				chain.push_back("imap-smtp-email");
+			}
+
+			return chain;
+		}
+
+		std::string ResolveImapSmtpSkillRoot() {
+			const std::vector<std::filesystem::path> candidates = {
+				std::filesystem::path("blazeclaw") / "skills" / "imap-smtp-email",
+				std::filesystem::path("skills") / "imap-smtp-email",
+				std::filesystem::path("openclaw") / "skills" / "imap-smtp-email",
+			};
+
+			for (const auto& candidate : candidates) {
+				std::error_code ec;
+				if (std::filesystem::exists(candidate, ec) &&
+					std::filesystem::is_directory(candidate, ec) &&
+					!ec) {
+					return candidate.string();
+				}
+			}
+
+			return {};
 		}
 
 		bool HasHimalayaBinary() {
@@ -186,6 +320,22 @@ namespace blazeclaw::gateway::executors {
 				nullptr,
 				nullptr);
 			return plain > 0;
+		}
+
+		bool HasNodeBinary() {
+			return ResolveExecutablePath("node").has_value();
+		}
+
+		bool HasImapSmtpSkill() {
+			const std::string root = ResolveImapSmtpSkillRoot();
+			if (root.empty()) {
+				return false;
+			}
+
+			std::error_code ec;
+			const auto scriptPath =
+				std::filesystem::path(root) / "scripts" / "smtp.js";
+			return std::filesystem::exists(scriptPath, ec) && !ec;
 		}
 
 		bool IsSafeAccountName(const std::string& account) {
@@ -361,6 +511,149 @@ namespace blazeclaw::gateway::executors {
 			return true;
 		}
 
+		bool DeliverViaImapSmtpSkill(
+			const std::string& recipient,
+			const std::string& subject,
+			const std::string& body,
+			const std::string& account,
+			std::string& outStatus,
+			std::string& outOutput,
+			std::string& outErrorCode,
+			std::string& outErrorMessage) {
+			outStatus.clear();
+			outOutput.clear();
+			outErrorCode.clear();
+			outErrorMessage.clear();
+
+			if (!HasNodeBinary()) {
+				outErrorCode = "node_cli_missing";
+				outErrorMessage = "node_cli_missing";
+				return false;
+			}
+
+			const std::string skillRoot = ResolveImapSmtpSkillRoot();
+			if (skillRoot.empty() || !HasImapSmtpSkill()) {
+				outErrorCode = "imap_smtp_skill_missing";
+				outErrorMessage = "imap_smtp_skill_missing";
+				return false;
+			}
+
+			std::string command = "cmd /C \"node ";
+			command += QuoteArg(
+				(std::filesystem::path(skillRoot) / "scripts" / "smtp.js").string());
+			if (!json::Trim(account).empty()) {
+				command += " --account ";
+				command += QuoteArg(account);
+			}
+			command += " send";
+			command += " --to ";
+			command += QuoteArg(recipient);
+			command += " --subject ";
+			command += QuoteArg(subject);
+			command += " --body ";
+			command += QuoteArg(body);
+			command += " 2>&1\"";
+
+			int exitCode = -1;
+			std::string commandOutput;
+			const bool launched = RunCommandWithOutput(
+				command,
+				commandOutput,
+				exitCode);
+			if (!launched) {
+				outErrorCode = "imap_smtp_launch_failed";
+				outErrorMessage = "imap_smtp_launch_failed";
+				return false;
+			}
+
+			outOutput = json::Trim(commandOutput);
+			if (exitCode != 0) {
+				outErrorCode = "imap_smtp_send_failed";
+				outErrorMessage = outOutput.empty()
+					? "imap_smtp_send_failed"
+					: outOutput;
+				return false;
+			}
+
+			outStatus = "sent";
+			if (outOutput.empty()) {
+				outOutput = "ok";
+			}
+
+			return true;
+		}
+
+		bool DeliverEmailWithFallback(
+			const std::string& recipient,
+			const std::string& subject,
+			const std::string& body,
+			const std::string& account,
+			std::string& outBackend,
+			std::string& outStatus,
+			std::string& outOutput,
+			std::string& outErrorCode,
+			std::string& outErrorMessage) {
+			outBackend.clear();
+			outStatus.clear();
+			outOutput.clear();
+			outErrorCode.clear();
+			outErrorMessage.clear();
+
+			for (const auto& backend : ResolveEmailBackendChain()) {
+				std::string status;
+				std::string output;
+				std::string code;
+				std::string message;
+
+				bool delivered = false;
+				if (backend == "himalaya") {
+					delivered = DeliverViaHimalaya(
+						recipient,
+						subject,
+						body,
+						account,
+						status,
+						output,
+						code,
+						message);
+				}
+				else if (backend == "imap-smtp-email" ||
+					backend == "imap_smtp_email") {
+					delivered = DeliverViaImapSmtpSkill(
+						recipient,
+						subject,
+						body,
+						account,
+						status,
+						output,
+						code,
+						message);
+				}
+
+				if (delivered) {
+					outBackend = backend;
+					outStatus = status;
+					outOutput = output;
+					return true;
+				}
+
+				if (!code.empty()) {
+					outErrorCode = code;
+				}
+				if (!message.empty()) {
+					outErrorMessage = message;
+				}
+			}
+
+			if (outErrorCode.empty()) {
+				outErrorCode = "email_delivery_backends_exhausted";
+			}
+			if (outErrorMessage.empty()) {
+				outErrorMessage = "email_delivery_backends_exhausted";
+			}
+
+			return false;
+		}
 	} // namespace
 
 	GatewayToolRegistry::RuntimeToolExecutor EmailScheduleExecutor::Create() {
@@ -410,10 +703,13 @@ namespace blazeclaw::gateway::executors {
 
 				std::uint64_t ttlMinutes = 60;
 				json::FindUInt64Field(argsJson.value(), "ttlMinutes", ttlMinutes);
-				ttlMinutes = (std::max)(std::uint64_t{ 1 }, (std::min)(ttlMinutes, std::uint64_t{ 1440 }));
+				ttlMinutes = (std::max)(
+					std::uint64_t{ 1 },
+					(std::min)(ttlMinutes, std::uint64_t{ 1440 }));
 
 				const auto nowEpochMs = CurrentEpochMs();
-				const auto expiresAtEpochMs = nowEpochMs + ttlMinutes * std::uint64_t{ 60000 };
+				const auto expiresAtEpochMs =
+					nowEpochMs + ttlMinutes * std::uint64_t{ 60000 };
 				const std::string token =
 					"email-approval-" +
 					std::to_string(nowEpochMs) +
@@ -515,8 +811,12 @@ namespace blazeclaw::gateway::executors {
 						.executed = false,
 						.status = "invalid_args",
 						.output = BuildErrorEnvelope(
-							existing.has_value() ? "approval_token_expired" : "approval_token_invalid",
-							existing.has_value() ? "approval_token_expired" : "approval_token_invalid"),
+							existing.has_value()
+								? "approval_token_expired"
+								: "approval_token_invalid",
+							existing.has_value()
+								? "approval_token_expired"
+								: "approval_token_invalid"),
 					};
 				}
 
@@ -560,15 +860,17 @@ namespace blazeclaw::gateway::executors {
 					};
 				}
 
+				std::string transportBackend;
 				std::string transportStatus;
 				std::string transportOutput;
 				std::string deliveryErrorCode;
 				std::string deliveryErrorMessage;
-				const bool delivered = DeliverViaHimalaya(
+				const bool delivered = DeliverEmailWithFallback(
 					recipient,
 					subject,
 					body,
 					account,
+					transportBackend,
 					transportStatus,
 					transportOutput,
 					deliveryErrorCode,
@@ -596,7 +898,7 @@ namespace blazeclaw::gateway::executors {
 						recipient,
 						subject,
 						sendAt,
-						"himalaya",
+						transportBackend.empty() ? "himalaya" : transportBackend,
 						transportStatus,
 						transportOutput),
 				};
@@ -612,5 +914,4 @@ namespace blazeclaw::gateway::executors {
 			};
 			};
 	}
-
 } // namespace blazeclaw::gateway::executors

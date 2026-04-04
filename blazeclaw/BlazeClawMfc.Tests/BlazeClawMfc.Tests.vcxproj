@@ -39,6 +39,7 @@
   <ItemGroup>
     <ClCompile Include="..\BlazeClawMfc\tests\ApprovalTokenStoreTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ConfigLoaderTests.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\tests\EmailScheduleFallbackTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ExtensionLifecycleManagerTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\LobsterExecutorTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\OpsToolsExecutorTests.cpp" />
