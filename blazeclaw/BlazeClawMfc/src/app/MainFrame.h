@@ -2,7 +2,7 @@
 
 //#include "pch.h"
 #include "FileView.h"
-#include "ClassView.h"
+#include "SkillView.h"
 #include "OutputWnd.h"
 #include "PropertiesWnd.h"
 #include "CalendarBar.h"
@@ -51,7 +51,7 @@ protected:  // control bar embedded members
 	CMFCToolBarImages m_PanelImages;
 	CMFCRibbonStatusBar  m_wndStatusBar;
 	CFileView         m_wndFileView;
-	CClassView        m_wndClassView;
+	CSkillView        m_wndClassView;
 	COutputWnd        m_wndOutput;
 	CPropertiesWnd    m_wndProperties;
 	COutlookBar       m_wndNavigationBar;

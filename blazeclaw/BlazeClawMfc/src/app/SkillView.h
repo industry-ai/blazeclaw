@@ -17,17 +17,17 @@ class CClassToolBar : public CMFCToolBar
 {
 	virtual void OnUpdateCmdUI(CFrameWnd* /*pTarget*/, BOOL bDisableIfNoHndler)
 	{
-		CMFCToolBar::OnUpdateCmdUI((CFrameWnd*) GetOwner(), bDisableIfNoHndler);
+		CMFCToolBar::OnUpdateCmdUI((CFrameWnd*)GetOwner(), bDisableIfNoHndler);
 	}
 
 	virtual BOOL AllowShowOnList() const { return FALSE; }
 };
 
-class CClassView : public CDockablePane
+class CSkillView : public CDockablePane
 {
 public:
-	CClassView() noexcept;
-	virtual ~CClassView();
+	CSkillView() noexcept;
+	virtual ~CSkillView();
 
 	void AdjustLayout();
 	void OnChangeVisualStyle();
@@ -40,7 +40,7 @@ protected:
 
 	void FillClassView();
 
-// Overrides
+	// Overrides
 public:
 	virtual BOOL PreTranslateMessage(MSG* pMsg);
 
@@ -61,4 +61,3 @@ protected:
 
 	DECLARE_MESSAGE_MAP()
 };
-

@@ -102,7 +102,7 @@
     <ClInclude Include="src\app\ChatInputEdit.h" />
     <ClInclude Include="src\app\ChatView.h" />
     <ClInclude Include="src\app\ChildFrm.h" />
-    <ClInclude Include="src\app\ClassView.h" />
+    <ClInclude Include="src\app\SkillView.h" />
     <ClInclude Include="src\app\FileView.h" />
     <ClInclude Include="src\app\SettingsDialog.h" />
     <ClInclude Include="src\app\WebViewOnlyChildFrame.h" />
@@ -187,7 +187,7 @@
     <ClCompile Include="src\app\ChatInputEdit.cpp" />
     <ClCompile Include="src\app\ChatView.cpp" />
     <ClCompile Include="src\app\ChildFrm.cpp" />
-    <ClCompile Include="src\app\ClassView.cpp" />
+    <ClCompile Include="src\app\SkillView.cpp" />
     <ClCompile Include="src\app\FileView.cpp" />
     <ClCompile Include="src\app\WebViewOnlyChildFrame.cpp" />
     <ClCompile Include="src\app\SharedTabsDocTemplate.cpp" />

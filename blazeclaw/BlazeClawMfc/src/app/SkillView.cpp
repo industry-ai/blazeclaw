@@ -12,20 +12,19 @@
 #include "pch.h"
 #include "framework.h"
 #include "MainFrame.h"
-#include "ClassView.h"
+#include "SkillView.h"
 #include "Resource.h"
 #include "BlazeClawMFCApp.h"
 
-class CClassViewMenuButton : public CMFCToolBarMenuButton
+class CSkillViewMenuButton : public CMFCToolBarMenuButton
 {
-	friend class CClassView;
+	friend class CSkillView;
 
-	DECLARE_SERIAL(CClassViewMenuButton)
+	DECLARE_SERIAL(CSkillViewMenuButton)
 
 public:
-	CClassViewMenuButton(HMENU hMenu = nullptr) noexcept : CMFCToolBarMenuButton((UINT)-1, hMenu, -1)
-	{
-	}
+	CSkillViewMenuButton(HMENU hMenu = nullptr) noexcept : CMFCToolBarMenuButton((UINT)-1, hMenu, -1)
+	{}
 
 	virtual void OnDraw(CDC* pDC, const CRect& rect, CMFCToolBarImages* pImages, BOOL bHorz = TRUE,
 		BOOL bCustomizeMode = FALSE, BOOL bHighlight = FALSE, BOOL bDrawBorder = TRUE, BOOL bGrayDisabledButtons = TRUE)
@@ -41,22 +40,21 @@ public:
 	}
 };
 
-IMPLEMENT_SERIAL(CClassViewMenuButton, CMFCToolBarMenuButton, 1)
+IMPLEMENT_SERIAL(CSkillViewMenuButton, CMFCToolBarMenuButton, 1)
 
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
 
-CClassView::CClassView() noexcept
+CSkillView::CSkillView() noexcept
 {
 	m_nCurrSort = ID_SORTING_GROUPBYTYPE;
 }
 
-CClassView::~CClassView()
-{
-}
+CSkillView::~CSkillView()
+{}
 
-BEGIN_MESSAGE_MAP(CClassView, CDockablePane)
+BEGIN_MESSAGE_MAP(CSkillView, CDockablePane)
 	ON_WM_CREATE()
 	ON_WM_SIZE()
 	ON_WM_CONTEXTMENU()
@@ -72,9 +70,9 @@ BEGIN_MESSAGE_MAP(CClassView, CDockablePane)
 END_MESSAGE_MAP()
 
 /////////////////////////////////////////////////////////////////////////////
-// CClassView message handlers
+// CSkillView message handlers
 
-int CClassView::OnCreate(LPCREATESTRUCT lpCreateStruct)
+int CSkillView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 {
 	if (CDockablePane::OnCreate(lpCreateStruct) == -1)
 		return -1;
@@ -108,9 +106,9 @@ int CClassView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	CMenu menuSort;
 	menuSort.LoadMenu(IDR_POPUP_SORT);
 
-	m_wndToolBar.ReplaceButton(ID_SORT_MENU, CClassViewMenuButton(menuSort.GetSubMenu(0)->GetSafeHmenu()));
+	m_wndToolBar.ReplaceButton(ID_SORT_MENU, CSkillViewMenuButton(menuSort.GetSubMenu(0)->GetSafeHmenu()));
 
-	CClassViewMenuButton* pButton =  DYNAMIC_DOWNCAST(CClassViewMenuButton, m_wndToolBar.GetButton(0));
+	CSkillViewMenuButton* pButton = DYNAMIC_DOWNCAST(CSkillViewMenuButton, m_wndToolBar.GetButton(0));
 
 	if (pButton != nullptr)
 	{
@@ -126,13 +124,13 @@ int CClassView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	return 0;
 }
 
-void CClassView::OnSize(UINT nType, int cx, int cy)
+void CSkillView::OnSize(UINT nType, int cx, int cy)
 {
 	CDockablePane::OnSize(nType, cx, cy);
 	AdjustLayout();
 }
 
-void CClassView::FillClassView()
+void CSkillView::FillClassView()
 {
 	HTREEITEM hRoot = m_wndClassView.InsertItem(_T("FakeApp classes"), 0, 0);
 	m_wndClassView.SetItemState(hRoot, TVIS_BOLD, TVIS_BOLD);
@@ -170,7 +168,7 @@ void CClassView::FillClassView()
 	m_wndClassView.Expand(hClass, TVE_EXPAND);
 }
 
-void CClassView::OnContextMenu(CWnd* pWnd, CPoint point)
+void CSkillView::OnContextMenu(CWnd* pWnd, CPoint point)
 {
 	CTreeCtrl* pWndTree = (CTreeCtrl*)&m_wndClassView;
 	ASSERT_VALID(pWndTree);
@@ -213,7 +211,7 @@ void CClassView::OnContextMenu(CWnd* pWnd, CPoint point)
 	}
 }
 
-void CClassView::AdjustLayout()
+void CSkillView::AdjustLayout()
 {
 	if (GetSafeHwnd() == nullptr)
 	{
@@ -229,12 +227,12 @@ void CClassView::AdjustLayout()
 	m_wndClassView.SetWindowPos(nullptr, rectClient.left + 1, rectClient.top + cyTlb + 1, rectClient.Width() - 2, rectClient.Height() - cyTlb - 2, SWP_NOACTIVATE | SWP_NOZORDER);
 }
 
-BOOL CClassView::PreTranslateMessage(MSG* pMsg)
+BOOL CSkillView::PreTranslateMessage(MSG* pMsg)
 {
 	return CDockablePane::PreTranslateMessage(pMsg);
 }
 
-void CClassView::OnSort(UINT id)
+void CSkillView::OnSort(UINT id)
 {
 	if (m_nCurrSort == id)
 	{
@@ -243,7 +241,7 @@ void CClassView::OnSort(UINT id)
 
 	m_nCurrSort = id;
 
-	CClassViewMenuButton* pButton =  DYNAMIC_DOWNCAST(CClassViewMenuButton, m_wndToolBar.GetButton(0));
+	CSkillViewMenuButton* pButton = DYNAMIC_DOWNCAST(CSkillViewMenuButton, m_wndToolBar.GetButton(0));
 
 	if (pButton != nullptr)
 	{
@@ -253,37 +251,37 @@ void CClassView::OnSort(UINT id)
 	}
 }
 
-void CClassView::OnUpdateSort(CCmdUI* pCmdUI)
+void CSkillView::OnUpdateSort(CCmdUI* pCmdUI)
 {
 	pCmdUI->SetCheck(pCmdUI->m_nID == m_nCurrSort);
 }
 
-void CClassView::OnClassAddMemberFunction()
+void CSkillView::OnClassAddMemberFunction()
 {
 	AfxMessageBox(_T("Add member function..."));
 }
 
-void CClassView::OnClassAddMemberVariable()
+void CSkillView::OnClassAddMemberVariable()
 {
 	// TODO: Add your command handler code here
 }
 
-void CClassView::OnClassDefinition()
+void CSkillView::OnClassDefinition()
 {
 	// TODO: Add your command handler code here
 }
 
-void CClassView::OnClassProperties()
+void CSkillView::OnClassProperties()
 {
 	// TODO: Add your command handler code here
 }
 
-void CClassView::OnNewFolder()
+void CSkillView::OnNewFolder()
 {
 	AfxMessageBox(_T("New Folder..."));
 }
 
-void CClassView::OnPaint()
+void CSkillView::OnPaint()
 {
 	CPaintDC dc(this); // device context for painting
 
@@ -295,14 +293,14 @@ void CClassView::OnPaint()
 	dc.Draw3dRect(rectTree, ::GetSysColor(COLOR_3DSHADOW), ::GetSysColor(COLOR_3DSHADOW));
 }
 
-void CClassView::OnSetFocus(CWnd* pOldWnd)
+void CSkillView::OnSetFocus(CWnd* pOldWnd)
 {
 	CDockablePane::OnSetFocus(pOldWnd);
 
 	m_wndClassView.SetFocus();
 }
 
-void CClassView::OnChangeVisualStyle()
+void CSkillView::OnChangeVisualStyle()
 {
 	m_ClassViewImages.DeleteImageList();
 
