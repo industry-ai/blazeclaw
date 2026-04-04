@@ -93,5 +93,14 @@ Outcome: reduced process spawn overhead and deeper in-process extensibility.
 4. Add gateway diagnostics endpoint for Python runtime health and policy status.
 5. Add spike branch for `IPythonRuntimeHost` with placeholder embedded backend.
 
+## Phase 0 baseline artifact
+- Phase 0 (design/contracts) is now captured in:
+  - `blazeclaw/PYTHON_RUNTIME_PHASE0_BASELINE.md`
+- Baseline decisions recorded there include:
+  - dual-mode runtime model (`external` and `embedded`),
+  - precedence order (tool > extension > global),
+  - strict/permissive fallback semantics,
+  - initial error code taxonomy.
+
 ## Bottom line
 Adding Python support is a good strategic move for OpenClaw-to-BlazeClaw porting. Start with policy-driven external execution for immediate migration value, while designing an abstraction that can later host true Python C API embedding when operational cost is justified.

@@ -66,6 +66,17 @@ Implement a production-ready Python execution framework in BlazeClaw where each 
 - `python_execution_timeout`
 - `python_policy_blocked`
 
+### Phase 0 implementation status
+
+- Completed in docs:
+  - Added Phase 0 baseline contract document:
+    - `blazeclaw/PYTHON_RUNTIME_PHASE0_BASELINE.md`
+  - Finalized runtime resolution precedence:
+    - tool override > extension override > global default
+  - Finalized config schema draft for global/extension/tool runtime mode selection.
+  - Finalized strict/permissive fallback semantics and external fallback gating.
+  - Finalized initial error taxonomy for mode selection and runtime readiness failures.
+
 ---
 
 ## Phase 1 — External Runtime Path (MVP)
@@ -212,3 +223,15 @@ Operationalize runtime selection and failures for maintainers and users.
 2. Should fallback to external be allowed by default?
 3. Which Python versions are officially supported on Windows for embedded mode?
 4. Should per-tool policy support import allowlists in Phase 1 or Phase 4?
+
+## Phase 0 completion audit
+
+Current state: **completed (design/docs baseline)**.
+
+- Verified deliverables:
+  - Runtime mode model and deterministic resolution order.
+  - Config schema draft for global/extension/tool overrides.
+  - Error taxonomy for runtime selection and readiness failures.
+  - Fallback semantics for strict and permissive operation modes.
+- Tracking artifact:
+  - `blazeclaw/PYTHON_RUNTIME_PHASE0_BASELINE.md`
