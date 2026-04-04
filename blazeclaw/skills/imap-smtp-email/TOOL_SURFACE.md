@@ -67,6 +67,16 @@ The native layer validates inputs and persists `.env` content via
 - Tool-call task delta telemetry and persistence remain owned by the chat
   runtime path, avoiding duplicate hardcoded orchestration branches.
 
+## Configuration and Security Hardening (Phase 5)
+
+- Canonical runtime config path: `~/.config/imap-smtp-email/.env`
+- Fallback config path: skill-local `.env`
+- MFC WebView2 config save path now targets the canonical runtime location.
+- `--account` now enforces a safe account-name pattern.
+- Missing required IMAP/SMTP credentials fail fast for operational commands.
+- File allowlist checks for read/write operations use canonical path
+  normalization to reduce symlink and traversal bypass risk.
+
 ## Namespace and Uniqueness
 
 - Namespace prefix is fixed: `imap_smtp_email.`

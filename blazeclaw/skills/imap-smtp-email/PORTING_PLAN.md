@@ -115,13 +115,21 @@ Phase 4 artifact snapshot:
 - `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp`
 
 ### Phase 5 - Configuration and Security Hardening
-1. Ensure `.env` lookup behavior works in BlazeClaw environment:
-   - primary: `~/.config/imap-smtp-email/.env`
-   - fallback: skill-local `.env` (if retained)
-2. Ensure MFC WebView2 configuration UI writes to the same canonical config location used by runtime scripts.
-3. Preserve strict file access checks for body/attachment read and attachment write operations.
-4. Add defensive validation for missing credentials and invalid account names.
-5. Verify no secrets are logged in plain text through gateway/output panes.
+Status: Completed
+
+- [x] Ensure `.env` lookup behavior works in BlazeClaw environment:
+  - primary: `~/.config/imap-smtp-email/.env`
+  - fallback: skill-local `.env` (if retained)
+- [x] Ensure MFC WebView2 configuration UI writes to the same canonical config location used by runtime scripts.
+- [x] Preserve strict file access checks for body/attachment read and attachment write operations.
+- [x] Add defensive validation for missing credentials and invalid account names.
+- [x] Verify no secrets are logged in plain text through gateway/output panes.
+
+Phase 5 artifact snapshot:
+- `blazeclaw/BlazeClawMfc/src/app/BlazeClawMFCDoc.cpp`
+- `blazeclaw/skills/imap-smtp-email/scripts/config.js`
+- `blazeclaw/skills/imap-smtp-email/scripts/imap.js`
+- `blazeclaw/skills/imap-smtp-email/scripts/smtp.js`
 
 ### Phase 6 - Chat UX and Operability
 1. Add/confirm chat-visible status lines for tool execution states (queued/running/success/error).
@@ -155,7 +163,7 @@ Phase 4 artifact snapshot:
 - [ ] BlazeClaw gateway can discover email tools in catalog
 - [x] BlazeClaw runtime can execute IMAP/SMTP skill tools from chat
 - [x] Tool-call deltas are persisted and observable
-- [ ] Security allowlist controls are enforced
+- [x] Security allowlist controls are enforced
 - [ ] Build and tests pass
 
 ## Risks and Mitigations

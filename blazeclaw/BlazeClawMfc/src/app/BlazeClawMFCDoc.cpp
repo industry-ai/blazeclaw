@@ -35,31 +35,27 @@ namespace {
 
 	std::filesystem::path ResolveDocConfigRoot()
 	{
-		wchar_t localAppData[MAX_PATH]{};
+		wchar_t profilePath[MAX_PATH]{};
 		const DWORD chars = GetEnvironmentVariableW(
-			L"LOCALAPPDATA",
-			localAppData,
+			L"USERPROFILE",
+			profilePath,
 			MAX_PATH);
 		if (chars > 0 && chars < MAX_PATH)
 		{
-			return std::filesystem::path(localAppData) /
-				L"BlazeClaw" /
-				L"imap-smtp-email" /
-				L"docs";
+			return std::filesystem::path(profilePath) /
+				L".config" /
+				L"imap-smtp-email";
 		}
 
 		return std::filesystem::current_path() /
 			L"blazeclaw" /
-			L"BlazeClawMfc" /
-			L"state" /
-			L"imap-smtp-email" /
-			L"docs";
+			L"skills" /
+			L"imap-smtp-email";
 	}
 
 	std::wstring MakeDocConfigFileName()
 	{
-		const ULONGLONG tick = GetTickCount64();
-		return std::wstring(L"doc-") + std::to_wstring(tick) + L".env";
+		return L".env";
 	}
 
 }
