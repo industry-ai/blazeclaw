@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "skill": "imap-smtp-email",
+  "namespace": "imap_smtp_email",
+  "description": "BlazeClaw tool manifest for IMAP/SMTP email operations.",
+  "tools": [
+    {
+      "id": "imap_smtp_email.imap.check",
+      "label": "IMAP Check",
+      "category": "email",
+      "enabled": true,
+      "runtime": {
+        "type": "node-cli",
+        "entry": "scripts/imap.js",
+        "command": "check"
+      },
+      "inputSchemaRef": "tool-contracts.json#/contracts/imap_smtp_email.imap.check"
+    },
+    {
+      "id": "imap_smtp_email.imap.fetch",
+      "label": "IMAP Fetch",
+      "category": "email",
+      "enabled": true,
+      "runtime": {
+        "type": "node-cli",
+        "entry": "scripts/imap.js",
+        "command": "fetch"
+      },
+      "inputSchemaRef": "tool-contracts.json#/contracts/imap_smtp_email.imap.fetch"
+    },
+    {
+      "id": "imap_smtp_email.imap.download",
+      "label": "IMAP Download Attachments",
+      "category": "email",
+      "enabled": true,
+      "runtime": {
+        "type": "node-cli",
+        "entry": "scripts/imap.js",
+        "command": "download"
+      },
+      "inputSchemaRef": "tool-contracts.json#/contracts/imap_smtp_email.imap.download"
+    },
+    {
+      "id": "imap_smtp_email.imap.search",
+      "label": "IMAP Search",
+      "category": "email",
+      "enabled": true,
+      "runtime": {
+        "type": "node-cli",
+        "entry": "scripts/imap.js",
+        "command": "search"
+      },
+      "inputSchemaRef": "tool-contracts.json#/contracts/imap_smtp_email.imap.search"
+    },
+    {
+      "id": "imap_smtp_email.imap.mark_read",
+      "label": "IMAP Mark Read",
+      "category": "email",
+      "enabled": true,
+      "runtime": {
+        "type": "node-cli",
+        "entry": "scripts/imap.js",
+        "command": "mark-read"
+      },
+      "inputSchemaRef": "tool-contracts.json#/contracts/imap_smtp_email.imap.mark_read"
+    },
+    {
+      "id": "imap_smtp_email.imap.mark_unread",
+      "label": "IMAP Mark Unread",
+      "category": "email",
+      "enabled": true,
+      "runtime": {
+        "type": "node-cli",
+        "entry": "scripts/imap.js",
+        "command": "mark-unread"
+      },
+      "inputSchemaRef": "tool-contracts.json#/contracts/imap_smtp_email.imap.mark_unread"
+    },
+    {
+      "id": "imap_smtp_email.imap.list_mailboxes",
+      "label": "IMAP List Mailboxes",
+      "category": "email",
+      "enabled": true,
+      "runtime": {
+        "type": "node-cli",
+        "entry": "scripts/imap.js",
+        "command": "list-mailboxes"
+      },
+      "inputSchemaRef": "tool-contracts.json#/contracts/imap_smtp_email.imap.list_mailboxes"
+    },
+    {
+      "id": "imap_smtp_email.imap.list_accounts",
+      "label": "IMAP List Accounts",
+      "category": "email",
+      "enabled": true,
+      "runtime": {
+        "type": "node-cli",
+        "entry": "scripts/imap.js",
+        "command": "list-accounts"
+      },
+      "inputSchemaRef": "tool-contracts.json#/contracts/imap_smtp_email.imap.list_accounts"
+    },
+    {
+      "id": "imap_smtp_email.smtp.send",
+      "label": "SMTP Send",
+      "category": "email",
+      "enabled": true,
+      "runtime": {
+        "type": "node-cli",
+        "entry": "scripts/smtp.js",
+        "command": "send"
+      },
+      "inputSchemaRef": "tool-contracts.json#/contracts/imap_smtp_email.smtp.send"
+    },
+    {
+      "id": "imap_smtp_email.smtp.test",
+      "label": "SMTP Test",
+      "category": "email",
+      "enabled": true,
+      "runtime": {
+        "type": "node-cli",
+        "entry": "scripts/smtp.js",
+        "command": "test"
+      },
+      "inputSchemaRef": "tool-contracts.json#/contracts/imap_smtp_email.smtp.test"
+    },
+    {
+      "id": "imap_smtp_email.smtp.list_accounts",
+      "label": "SMTP List Accounts",
+      "category": "email",
+      "enabled": true,
+      "runtime": {
+        "type": "node-cli",
+        "entry": "scripts/smtp.js",
+        "command": "list-accounts"
+      },
+      "inputSchemaRef": "tool-contracts.json#/contracts/imap_smtp_email.smtp.list_accounts"
+    }
+  ]
+}

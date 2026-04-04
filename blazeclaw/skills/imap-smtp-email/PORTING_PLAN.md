@@ -59,11 +59,18 @@ Phase 1 artifact snapshot:
 - `blazeclaw/skills/imap-smtp-email/.clawhub/origin.json`
 
 ### Phase 2 - Align Skill Manifest and Tool Surface
-1. Define BlazeClaw-compatible skill/tool manifest for:
-   - IMAP commands (`check`, `fetch`, `search`, `download`, `mark-read`, `mark-unread`, `list-mailboxes`, `list-accounts`)
-   - SMTP commands (`send`, `test`, `list-accounts`)
-2. Confirm tool IDs are stable and unique in gateway tool registry.
-3. Define argument contracts (JSON payload schema) for each exposed tool operation.
+Status: Completed
+
+- [x] Define BlazeClaw-compatible skill/tool manifest for:
+  - IMAP commands (`check`, `fetch`, `search`, `download`, `mark-read`, `mark-unread`, `list-mailboxes`, `list-accounts`)
+  - SMTP commands (`send`, `test`, `list-accounts`)
+- [x] Confirm tool IDs are stable and unique in gateway tool registry.
+- [x] Define argument contracts (JSON payload schema) for each exposed tool operation.
+
+Phase 2 artifact snapshot:
+- `blazeclaw/skills/imap-smtp-email/tool-manifest.json`
+- `blazeclaw/skills/imap-smtp-email/tool-contracts.json`
+- `blazeclaw/skills/imap-smtp-email/TOOL_SURFACE.md`
 
 ### Phase 2.5 - Add MFC Email Configuration UI (WebView2)
 1. Add an email configuration event entry in `CBlazeClawMFCView` to launch the config flow.
@@ -119,6 +126,8 @@ Phase 1 artifact snapshot:
 
 ## Deliverables Checklist
 - [x] `blazeclaw/skills/imap-smtp-email/` contains full skill artifacts (scripts/docs/meta/setup/package)
+- [x] BlazeClaw-compatible tool manifest is defined for IMAP/SMTP operations
+- [x] JSON payload argument contracts are defined for all exposed tool operations
 - [ ] `blazeclaw/skills/imap-smtp-email/config.html` is integrated into an MFC WebView2 configuration flow
 - [ ] `CBlazeClawMFCView` can trigger email configuration and open a new chat document through `m_pChatDocTemplate`
 - [ ] WebView2 form values are validated and persisted through `CBlazeClawMFCDoc`-associated config storage

@@ -2,7 +2,7 @@
 name: imap-smtp-email
 description: Read and send email via IMAP/SMTP. Check for new/unread messages, fetch content, search mailboxes, mark as read/unread, and send emails with attachments. Supports multiple accounts. Works with any IMAP/SMTP server including Gmail, Outlook, 163.com, vip.163.com, 126.com, vip.126.com, 188.com, and vip.188.com.
 metadata:
-  openclaw:
+  blazeclaw:
     emoji: "📧"
     requires:
       bins:
@@ -13,6 +13,12 @@ metadata:
 # IMAP/SMTP Email Tool
 
 Read, search, and manage email via IMAP protocol. Send email via SMTP. Supports Gmail, Outlook, 163.com, vip.163.com, 126.com, vip.126.com, 188.com, vip.188.com, and any standard IMAP/SMTP server.
+
+## BlazeClaw Integration Artifacts
+
+- `tool-manifest.json`: BlazeClaw tool catalog entries for gateway registration.
+- `tool-contracts.json`: JSON payload schema contracts for tool arguments.
+- `TOOL_SURFACE.md`: stable tool IDs and JSON-to-CLI mapping notes.
 
 ## Configuration
 
