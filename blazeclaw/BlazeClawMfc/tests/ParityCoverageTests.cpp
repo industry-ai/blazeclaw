@@ -288,6 +288,142 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Parity coverage: runtime orchestration reflects fallback backend when himalaya is unavailable",
+	"[parity][chat][orchestration][e2e][runtime][fallback][backend]") {
+	char* previousModeRaw = nullptr;
+	size_t previousModeLength = 0;
+	_dupenv_s(
+		&previousModeRaw,
+		&previousModeLength,
+		"BLAZECLAW_EMAIL_DELIVERY_MODE");
+
+	char* previousImapModeRaw = nullptr;
+	size_t previousImapModeLength = 0;
+	_dupenv_s(
+		&previousImapModeRaw,
+		&previousImapModeLength,
+		"BLAZECLAW_EMAIL_IMAP_SMTP_MODE");
+
+	char* previousBackendsRaw = nullptr;
+	size_t previousBackendsLength = 0;
+	_dupenv_s(
+		&previousBackendsRaw,
+		&previousBackendsLength,
+		"BLAZECLAW_EMAIL_DELIVERY_BACKENDS");
+
+	_putenv_s("BLAZECLAW_EMAIL_DELIVERY_MODE", "mock_failure");
+	_putenv_s("BLAZECLAW_EMAIL_IMAP_SMTP_MODE", "mock_success");
+	_putenv_s("BLAZECLAW_EMAIL_DELIVERY_BACKENDS", "himalaya,imap-smtp-email");
+
+	PluginHostAdapter::RegisterExtensionAdapter(
+		"ops-tools",
+		[](const std::string&, const std::string& toolName, const std::string&) {
+			if (toolName == "weather.lookup") {
+				return GatewayToolRegistry::RuntimeToolExecutor{
+					[](const std::string& requestedTool, const std::optional<std::string>&) {
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = true,
+							.status = "ok",
+							.output = "{\"ok\":true,\"forecast\":{\"condition\":\"Sunny\",\"temperatureC\":25,\"wind\":\"SE 12 km/h\",\"humidityPct\":44}}",
+						};
+					} };
+			}
+
+			return GatewayToolRegistry::RuntimeToolExecutor{};
+		});
+
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.Start(gatewayConfig));
+	host.SetEmbeddedOrchestrationPath("runtime_orchestration");
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-runtime-fallback-backend-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"Check tomorrow's weather in Wuhan, write a short report, and email it to jicheng@whu.edu.cn now.\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		sendResponse.payloadJson.value(),
+		"runId",
+		runId));
+
+	const auto deltasResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-runtime-fallback-backend-1-deltas",
+			.method = "gateway.runtime.taskDeltas.get",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+
+	REQUIRE(deltasResponse.ok);
+	REQUIRE(deltasResponse.payloadJson.has_value());
+
+	std::string eventsPayload;
+	for (int attempt = 0; attempt < 4; ++attempt) {
+		const auto eventsResponse = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = std::string("chat-runtime-fallback-backend-1-events-") +
+					std::to_string(attempt),
+				.method = "chat.events.poll",
+				.paramsJson = std::string("{\"sessionKey\":\"main\",\"limit\":50}"),
+			});
+		REQUIRE(eventsResponse.ok);
+		REQUIRE(eventsResponse.payloadJson.has_value());
+		eventsPayload += eventsResponse.payloadJson.value();
+
+		if (eventsPayload.find("\"state\":\"final\"") != std::string::npos &&
+			eventsPayload.find("via imap-smtp-email") != std::string::npos) {
+			break;
+		}
+	}
+
+	const std::string combinedPayload =
+		deltasResponse.payloadJson.value() + eventsPayload;
+	REQUIRE(combinedPayload.find("via imap-smtp-email") != std::string::npos);
+
+	host.Stop();
+
+	if (previousModeRaw != nullptr && previousModeLength > 0) {
+		_putenv_s("BLAZECLAW_EMAIL_DELIVERY_MODE", previousModeRaw);
+		free(previousModeRaw);
+	}
+	else {
+		if (previousModeRaw != nullptr) {
+			free(previousModeRaw);
+		}
+		_putenv_s("BLAZECLAW_EMAIL_DELIVERY_MODE", "");
+	}
+
+	if (previousImapModeRaw != nullptr && previousImapModeLength > 0) {
+		_putenv_s("BLAZECLAW_EMAIL_IMAP_SMTP_MODE", previousImapModeRaw);
+		free(previousImapModeRaw);
+	}
+	else {
+		if (previousImapModeRaw != nullptr) {
+			free(previousImapModeRaw);
+		}
+		_putenv_s("BLAZECLAW_EMAIL_IMAP_SMTP_MODE", "");
+	}
+
+	if (previousBackendsRaw != nullptr && previousBackendsLength > 0) {
+		_putenv_s("BLAZECLAW_EMAIL_DELIVERY_BACKENDS", previousBackendsRaw);
+		free(previousBackendsRaw);
+	}
+	else {
+		if (previousBackendsRaw != nullptr) {
+			free(previousBackendsRaw);
+		}
+		_putenv_s("BLAZECLAW_EMAIL_DELIVERY_BACKENDS", "");
+	}
+}
+
+TEST_CASE(
 	"Parity coverage: MFC email config persistence targets canonical .env path",
 	"[parity][config][mfc][email]") {
 	const auto sourcePath = std::filesystem::path("blazeclaw") /

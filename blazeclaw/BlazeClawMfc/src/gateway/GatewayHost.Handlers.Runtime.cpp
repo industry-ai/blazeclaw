@@ -772,6 +772,7 @@ namespace blazeclaw::gateway {
 			bool shouldAutoApprove =
 				intent.scheduleKind == "immediate_keyword";
 			bool autoApproveBackendMissing = false;
+			std::string autoApproveBackend = "himalaya";
 			if (shouldAutoApprove) {
 				nlohmann::json emailApproveArgs = {
 					{ "action", "approve" },
@@ -782,8 +783,27 @@ namespace blazeclaw::gateway {
 				emailApproveExecution = toolRegistry.Execute(
 					"email.schedule",
 					emailApproveArgs.dump());
-				if (!emailApproveExecution.executed ||
-					emailApproveExecution.status != "ok") {
+				if (emailApproveExecution.executed &&
+					emailApproveExecution.status == "ok") {
+					try {
+						const auto approvePayload =
+							nlohmann::json::parse(emailApproveExecution.output);
+						if (approvePayload.contains("output") &&
+							approvePayload["output"].is_array() &&
+							!approvePayload["output"].empty() &&
+							approvePayload["output"][0].is_object() &&
+							approvePayload["output"][0].contains("summary") &&
+							approvePayload["output"][0]["summary"].is_object() &&
+							approvePayload["output"][0]["summary"].contains("engine") &&
+							approvePayload["output"][0]["summary"]["engine"].is_string()) {
+							autoApproveBackend =
+								approvePayload["output"][0]["summary"]["engine"].get<std::string>();
+						}
+					}
+					catch (...) {
+					}
+				}
+				else {
 					autoApproveBackendMissing =
 						emailApproveExecution.output.find("\"code\":\"himalaya_cli_missing\"") !=
 						std::string::npos ||
@@ -827,7 +847,7 @@ namespace blazeclaw::gateway {
 					report +
 					" Email sent to " + recipient +
 					" at " + sendAt +
-					" via himalaya.";
+					" via " + autoApproveBackend + ".";
 			}
 			else {
 				result.assistantText =

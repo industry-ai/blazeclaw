@@ -260,6 +260,16 @@ namespace blazeclaw::gateway::executors {
 			return "auto";
 		}
 
+		std::string NormalizeImapSmtpMode() {
+			const auto mode = ToLowerCopy(
+				json::Trim(ReadEnvVar("BLAZECLAW_EMAIL_IMAP_SMTP_MODE")));
+			if (mode == "mock_success" || mode == "mock_failure") {
+				return mode;
+			}
+
+			return "auto";
+		}
+
 		std::vector<std::string> ResolveEmailBackendChain() {
 			const std::string configured = ToLowerCopy(
 				json::Trim(ReadEnvVar("BLAZECLAW_EMAIL_DELIVERY_BACKENDS")));
@@ -524,6 +534,19 @@ namespace blazeclaw::gateway::executors {
 			outOutput.clear();
 			outErrorCode.clear();
 			outErrorMessage.clear();
+
+			const std::string mode = NormalizeImapSmtpMode();
+			if (mode == "mock_success") {
+				outStatus = "sent";
+				outOutput = "mock_success";
+				return true;
+			}
+
+			if (mode == "mock_failure") {
+				outErrorCode = "imap_smtp_send_failed";
+				outErrorMessage = "mock_failure";
+				return false;
+			}
 
 			if (!HasNodeBinary()) {
 				outErrorCode = "node_cli_missing";
