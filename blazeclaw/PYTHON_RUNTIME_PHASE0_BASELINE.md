@@ -108,3 +108,6 @@ Phase 2 runtime host abstraction implementation is now tracked in:
 
 Phase 3 embedded runtime host implementation is now tracked in:
 - `blazeclaw/PYTHON_SUPPORT_IMPLEMENTATION_PLAN.md`
+
+Phase 4 policy/security hardening implementation is now tracked in:
+- `blazeclaw/PYTHON_SUPPORT_IMPLEMENTATION_PLAN.md`

@@ -148,5 +148,22 @@ Outcome: reduced process spawn overhead and deeper in-process extensibility.
 - Runtime output now uses normalized embedded envelopes with stdout/stderr capture,
   and emits `python.embedded.execute` telemetry events.
 
+## Phase 4 implementation snapshot
+- Runtime policy hardening is now enforced centrally in:
+  - `blazeclaw/BlazeClawMfc/src/gateway/python/PythonRuntimeDispatcher.cpp`
+- Mode-aware approval hooks are now implemented with:
+  - `BLAZECLAW_PYTHON_EXTERNAL_REQUIRES_APPROVAL`
+  - `BLAZECLAW_PYTHON_EMBEDDED_REQUIRES_APPROVAL`
+  - `BLAZECLAW_PYTHON_APPROVAL_TOKEN`
+- Optional policy switches now include:
+  - `BLAZECLAW_PYTHON_ALLOW_NETWORK`
+  - `BLAZECLAW_PYTHON_ALLOW_CUSTOM_ENV`
+- Deny-by-default origin controls now include:
+  - `BLAZECLAW_PYTHON_DENY_UNKNOWN_ORIGINS`
+  - `BLAZECLAW_PYTHON_ALLOWED_ORIGINS`
+  - request origin via `args.policy.origin`
+- Structured policy audit events now emit via:
+  - `python.runtime.policy.audit`
+
 ## Bottom line
 Adding Python support is a good strategic move for OpenClaw-to-BlazeClaw porting. Start with policy-driven external execution for immediate migration value, while designing an abstraction that can later host true Python C API embedding when operational cost is justified.

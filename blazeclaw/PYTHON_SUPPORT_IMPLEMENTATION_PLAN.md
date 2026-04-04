@@ -225,6 +225,28 @@ Ensure both modes follow consistent and enforceable security policies.
 4. Deny-by-default behavior for unknown script origins.
 5. Structured audit events for policy decisions.
 
+### Phase 4 implementation status
+
+- Completed in code:
+  - Added centralized runtime policy gate in:
+    - `blazeclaw/BlazeClawMfc/src/gateway/python/PythonRuntimeDispatcher.cpp`
+  - Implemented mode-aware approval hooks:
+    - `BLAZECLAW_PYTHON_EXTERNAL_REQUIRES_APPROVAL`
+    - `BLAZECLAW_PYTHON_EMBEDDED_REQUIRES_APPROVAL`
+    - `BLAZECLAW_PYTHON_APPROVAL_TOKEN`
+    - request-level overrides under `args.policy`.
+  - Implemented optional network/custom-env restrictions:
+    - `BLAZECLAW_PYTHON_ALLOW_NETWORK`
+    - `BLAZECLAW_PYTHON_ALLOW_CUSTOM_ENV`
+  - Implemented deny-by-default origin policy:
+    - `BLAZECLAW_PYTHON_DENY_UNKNOWN_ORIGINS`
+    - `BLAZECLAW_PYTHON_ALLOWED_ORIGINS`
+    - request origin key: `args.policy.origin`.
+  - Preserved trusted-path validation for script/module loading in runtime hosts.
+  - Added structured policy audit telemetry events:
+    - `python.runtime.policy.audit`
+    - includes mode, decision, code, reason, and policy attributes.
+
 ---
 
 ## Phase 5 — Diagnostics, UX, and Rollout
