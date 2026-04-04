@@ -147,20 +147,26 @@ Phase 6 artifact snapshot:
 - `blazeclaw/BlazeClawMfc/src/app/MainFrame.cpp`
 
 ### Phase 7 - Testing and Validation
-1. Add unit/integration tests for:
-   - command mapping and argument parsing
-   - runtime executor status/error conversion
-   - tool registry exposure and preview/exists/count behavior
-   - MFC event -> new doc/template -> WebView2 `config.html` load path
-   - WebView2 form submit -> native validation -> `CBlazeClawMFCDoc` config persistence
-2. Add gated/manual validation scenarios:
-   - unread check, fetch by UID, attachment download in allowed dir
-   - SMTP send/test with valid and invalid credentials
-   - multi-account routing via `--account`
-   - configuration UI open/save/reopen roundtrip and persisted values reflected by runtime tools
-3. Build validation:
-   - run `msbuild BlazeClaw.sln`
-4. Smoke test full chat path with at least one IMAP read flow and one SMTP send flow.
+Status: Completed
+
+- [x] Add unit/integration tests for:
+  - command mapping and argument parsing
+  - runtime executor status/error conversion
+  - tool registry exposure and preview/exists/count behavior
+  - MFC event -> new doc/template -> WebView2 `config.html` load path
+  - WebView2 form submit -> native validation -> `CBlazeClawMFCDoc` config persistence
+- [x] Add gated/manual validation scenarios:
+  - unread check, fetch by UID, attachment download in allowed dir
+  - SMTP send/test with valid and invalid credentials
+  - multi-account routing via `--account`
+  - configuration UI open/save/reopen roundtrip and persisted values reflected by runtime tools
+- [x] Build validation:
+  - run `msbuild BlazeClaw.sln`
+- [x] Smoke test full chat path with at least one IMAP read flow and one SMTP send flow.
+
+Phase 7 artifact snapshot:
+- `blazeclaw/BlazeClawMfc/tests/ParityCoverageTests.cpp`
+- `blazeclaw/skills/imap-smtp-email/PHASE7_VALIDATION.md`
 
 ## Deliverables Checklist
 - [x] `blazeclaw/skills/imap-smtp-email/` contains full skill artifacts (scripts/docs/meta/setup/package)
@@ -169,11 +175,11 @@ Phase 6 artifact snapshot:
 - [x] `blazeclaw/skills/imap-smtp-email/config.html` is integrated into an MFC WebView2 configuration flow
 - [x] `CBlazeClawMFCView` can trigger email configuration and open a new chat document through `m_pChatDocTemplate`
 - [x] WebView2 form values are validated and persisted through `CBlazeClawMFCDoc`-associated config storage
-- [ ] BlazeClaw gateway can discover email tools in catalog
+- [x] BlazeClaw gateway can discover email tools in catalog
 - [x] BlazeClaw runtime can execute IMAP/SMTP skill tools from chat
 - [x] Tool-call deltas are persisted and observable
 - [x] Security allowlist controls are enforced
-- [ ] Build and tests pass
+- [x] Build and tests pass
 
 ## Risks and Mitigations
 - **Risk:** Gateway currently has seeded/mock run behavior in `gateway.agents.run`.

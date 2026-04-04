@@ -91,6 +91,16 @@ The native layer validates inputs and persists `.env` content via
   - truncating oversized single-line entries
   - trimming oldest rows when retention limit is exceeded
 
+## Testing and Validation (Phase 7)
+
+- Automated coverage includes parity tests for:
+  - tool catalog discovery (`LoadExtensionToolsFromCatalog`) and preview behavior
+  - `gateway.agents.run` / `gateway.agents.wait` lifecycle with task-delta visibility
+- Manual validation checklist is documented in:
+  - `PHASE7_VALIDATION.md`
+- Build and regression validation command:
+  - `msbuild BlazeClaw.sln`
+
 ## Namespace and Uniqueness
 
 - Namespace prefix is fixed: `imap_smtp_email.`

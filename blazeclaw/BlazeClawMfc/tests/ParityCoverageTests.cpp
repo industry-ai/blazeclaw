@@ -288,6 +288,186 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Parity coverage: MFC email config persistence targets canonical .env path",
+	"[parity][config][mfc][email]") {
+	const auto sourcePath = std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"app" /
+		"BlazeClawMFCDoc.cpp";
+	std::ifstream in(sourcePath.string());
+	REQUIRE(in.is_open());
+
+	const std::string source(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+
+	REQUIRE(source.find("USERPROFILE") != std::string::npos);
+	REQUIRE(source.find(".config") != std::string::npos);
+	REQUIRE(source.find("imap-smtp-email") != std::string::npos);
+	REQUIRE(source.find("return L\".env\";") != std::string::npos);
+}
+
+TEST_CASE(
+	"Parity coverage: gateway tools discovery exists and count include loaded catalog tools",
+	"[parity][tools][discovery][catalog]") {
+	const auto tmpRoot = std::filesystem::temp_directory_path() /
+		("blazeclaw_tools_discovery_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(tmpRoot / "skills");
+
+	{
+		std::ofstream out((tmpRoot / "skills" / "blazeclaw.extension.json").string());
+		REQUIRE(out.is_open());
+		out << "{\"tools\":["
+			"{\"id\":\"imap_smtp_email.imap.check\",\"label\":\"IMAP Check\",\"category\":\"email\",\"enabled\":true},"
+			"{\"id\":\"imap_smtp_email.smtp.send\",\"label\":\"SMTP Send\",\"category\":\"email\",\"enabled\":true}"
+			"]}";
+	}
+
+	{
+		std::ofstream out((tmpRoot / "extensions.catalog.json").string());
+		REQUIRE(out.is_open());
+		out << "{\"version\":1,\"extensions\":[{\"id\":\"imap-smtp-email\",\"path\":\"skills/blazeclaw.extension.json\",\"enabled\":true}]}";
+	}
+
+	GatewayToolRegistry registry;
+	const auto loaded = registry.LoadExtensionToolsFromCatalog(
+		(tmpRoot / "extensions.catalog.json").string());
+	REQUIRE(loaded == 2);
+
+	const auto listed = registry.List();
+	REQUIRE(std::any_of(
+		listed.begin(),
+		listed.end(),
+		[](const ToolCatalogEntry& tool) {
+			return tool.id == "imap_smtp_email.imap.check";
+		}));
+	REQUIRE(std::any_of(
+		listed.begin(),
+		listed.end(),
+		[](const ToolCatalogEntry& tool) {
+			return tool.id == "imap_smtp_email.smtp.send";
+		}));
+
+	const auto preview = registry.Preview("imap_smtp_email.imap.check");
+	REQUIRE(preview.allowed);
+	REQUIRE(preview.reason == "ready");
+
+	std::filesystem::remove_all(tmpRoot);
+}
+
+TEST_CASE(
+	"Parity coverage: gateway.agents.run wait lifecycle reaches terminal with task delta visibility",
+	"[parity][agents][run][wait][taskdeltas]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.Start(gatewayConfig));
+
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "agent lifecycle completed";
+			result.assistantDeltas = { "agent lifecycle completed" };
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "plan",
+					.resultJson = "[\"imap_smtp_email.imap.check\"]",
+					.status = "planned",
+					.stepLabel = "execution_plan",
+				},
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 1,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "tool_call",
+					.toolName = "imap_smtp_email.imap.check",
+					.status = "requested",
+					.stepLabel = "tool_request",
+				},
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 2,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "tool_result",
+					.toolName = "imap_smtp_email.imap.check",
+					.status = "ok",
+					.stepLabel = "tool_result",
+				},
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 3,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.resultJson = "agent lifecycle completed",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			result.modelId = "default";
+			return result;
+		});
+
+	const auto runResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "agents-run-e2e-1",
+			.method = "gateway.agents.run",
+			.paramsJson = std::string("{\"agentId\":\"default\",\"sessionId\":\"main\",\"message\":\"check my inbox summary\"}"),
+		});
+
+	REQUIRE(runResponse.ok);
+	REQUIRE(runResponse.payloadJson.has_value());
+	REQUIRE(runResponse.payloadJson->find("\"status\":\"queued\"") != std::string::npos);
+
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		runResponse.payloadJson.value(),
+		"runId",
+		runId));
+	REQUIRE_FALSE(runId.empty());
+
+	for (int attempt = 0; attempt < 10; ++attempt) {
+		const auto pollResponse = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = "agents-run-e2e-1-poll-" + std::to_string(attempt),
+				.method = "chat.events.poll",
+				.paramsJson = std::string("{\"sessionKey\":\"main\",\"limit\":20}"),
+			});
+		REQUIRE(pollResponse.ok);
+	}
+
+	const auto waitResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "agents-run-e2e-1-wait",
+			.method = "gateway.agents.wait",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+
+	REQUIRE(waitResponse.ok);
+	REQUIRE(waitResponse.payloadJson.has_value());
+	REQUIRE(waitResponse.payloadJson->find("\"terminal\":true") != std::string::npos);
+	REQUIRE(waitResponse.payloadJson->find("\"status\":\"completed\"") != std::string::npos);
+
+	const auto deltaResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "agents-run-e2e-1-deltas",
+			.method = "gateway.runtime.taskDeltas.get",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+
+	REQUIRE(deltaResponse.ok);
+	REQUIRE(deltaResponse.payloadJson.has_value());
+	REQUIRE(deltaResponse.payloadJson->find("\"toolName\":\"imap_smtp_email.imap.check\"") != std::string::npos);
+	REQUIRE(deltaResponse.payloadJson->find("\"phase\":\"final\"") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
 	"Parity coverage: chat.send immediate_keyword auto-approves and sends email end-to-end",
 	"[parity][chat][orchestration][e2e][runtime][immediate]") {
 	const auto tempStateRoot = std::filesystem::temp_directory_path() /
