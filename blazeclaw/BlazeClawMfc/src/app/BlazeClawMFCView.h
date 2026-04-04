@@ -42,14 +42,14 @@ protected: // create from serialization only
 	CBlazeClawMFCView() noexcept;
 	DECLARE_DYNCREATE(CBlazeClawMFCView)
 
-// Attributes
+	// Attributes
 public:
 	CBlazeClawMFCDoc* GetDocument() const;
 
-// Operations
+	// Operations
 public:
 
-// Overrides
+	// Overrides
 public:
 	virtual void OnDraw(CDC* pDC);  // overridden to draw this view
 	virtual BOOL PreCreateWindow(CREATESTRUCT& cs);
@@ -58,7 +58,7 @@ protected:
 	virtual void OnBeginPrinting(CDC* pDC, CPrintInfo* pInfo);
 	virtual void OnEndPrinting(CDC* pDC, CPrintInfo* pInfo);
 
-// Implementation
+	// Implementation
 public:
 	virtual ~CBlazeClawMFCView();
 #ifdef _DEBUG
@@ -71,7 +71,7 @@ protected:
 #ifdef HAVE_WEBVIEW2_HEADER
 	ComPtr<ICoreWebView2Controller> m_webViewController;
 	ComPtr<ICoreWebView2> m_webView;
-   EventRegistrationToken m_webMessageToken{};
+	EventRegistrationToken m_webMessageToken{};
 #else
 	// keep raw pointers when header not available
 	ICoreWebView2Controller* m_webViewController = nullptr;
@@ -80,7 +80,7 @@ protected:
 	UINT_PTR m_bridgeTimerId = 0;
 	bool m_bridgeLastConnected = false;
 	bool m_bridgeLifecycleSent = false;
-  std::string m_bridgeSessionId = "main";
+	std::string m_bridgeSessionId = "main";
 	std::uint64_t m_bridgeEventSeq = 0;
 	std::uint64_t m_bridgeTraceReqCount = 0;
 	std::uint64_t m_bridgeTraceResCount = 0;
@@ -92,16 +92,20 @@ protected:
 
 	void InitializeWebViewBridge();
 	void HandleWebMessageJson(const std::wstring& webMessageJson);
+	bool HandleEmailConfigBridgeMessage(const std::string& messageJson);
+	bool OpenEmailConfigDocument();
+	void PersistEmailConfigFromPayload(const std::string& payloadJson);
+	std::wstring ResolveInitialNavigationUrl() const;
 	void PostBridgeMessageJson(const std::wstring& jsonMessage);
-   void PostOpenClawWsFrameJson(const std::string& frameJson);
+	void PostOpenClawWsFrameJson(const std::string& frameJson);
 	void PostOpenClawWsClose(std::uint16_t code, const char* reason);
 	void EmitOpenClawChatEvents(const std::string& eventsArrayJson);
 	void EnsureOpenClawBridgeShim();
-   void TraceBridgeTraffic(
+	void TraceBridgeTraffic(
 		const char* kind,
 		const std::string& detail = std::string());
 	void FlushBridgeTraceIfNeeded();
-   void PostBridgeLifecycleEvent(
+	void PostBridgeLifecycleEvent(
 		const wchar_t* state,
 		const wchar_t* reason = nullptr,
 		const std::string& provider = std::string(),
@@ -109,21 +113,24 @@ protected:
 		const std::string& runtimeKind = std::string());
 	void PumpBridgeLifecycle();
 
-// Generated message map functions
+	// Generated message map functions
 protected:
 	afx_msg void OnFilePrintPreview();
 	afx_msg void OnRButtonUp(UINT nFlags, CPoint point);
 	afx_msg void OnContextMenu(CWnd* pWnd, CPoint point);
-   afx_msg void OnTimer(UINT_PTR nIDEvent);
+	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	DECLARE_MESSAGE_MAP()
 public:
 	virtual void OnInitialUpdate();
+	static void SetPendingStartupUrl(const std::wstring& url);
 	afx_msg void OnSize(UINT nType, int cx, int cy);
 	afx_msg void OnDestroy();
 };
 
 #ifndef _DEBUG  // debug version in BlazeClaw.MFCView.cpp
 inline CBlazeClawMFCDoc* CBlazeClawMFCView::GetDocument() const
-   { return reinterpret_cast<CBlazeClawMFCDoc*>(m_pDocument); }
+{
+	return reinterpret_cast<CBlazeClawMFCDoc*>(m_pDocument);
+}
 #endif
 

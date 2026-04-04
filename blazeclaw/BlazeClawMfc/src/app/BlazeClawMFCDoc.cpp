@@ -24,9 +24,45 @@
 
 #include <propkey.h>
 
+#include <filesystem>
+#include <fstream>
+
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
+
+namespace {
+
+	std::filesystem::path ResolveDocConfigRoot()
+	{
+		wchar_t localAppData[MAX_PATH]{};
+		const DWORD chars = GetEnvironmentVariableW(
+			L"LOCALAPPDATA",
+			localAppData,
+			MAX_PATH);
+		if (chars > 0 && chars < MAX_PATH)
+		{
+			return std::filesystem::path(localAppData) /
+				L"BlazeClaw" /
+				L"imap-smtp-email" /
+				L"docs";
+		}
+
+		return std::filesystem::current_path() /
+			L"blazeclaw" /
+			L"BlazeClawMfc" /
+			L"state" /
+			L"imap-smtp-email" /
+			L"docs";
+	}
+
+	std::wstring MakeDocConfigFileName()
+	{
+		const ULONGLONG tick = GetTickCount64();
+		return std::wstring(L"doc-") + std::to_wstring(tick) + L".env";
+	}
+
+}
 
 // CBlazeClawMFCDoc
 
@@ -39,12 +75,10 @@ END_MESSAGE_MAP()
 // CBlazeClawMFCDoc construction/destruction
 
 CBlazeClawMFCDoc::CBlazeClawMFCDoc() noexcept
-{
-}
+{}
 
 CBlazeClawMFCDoc::~CBlazeClawMFCDoc()
-{
-}
+{}
 
 void CBlazeClawMFCDoc::SetMarkdownContent(const std::wstring& content)
 {
@@ -57,10 +91,57 @@ BOOL CBlazeClawMFCDoc::OnNewDocument()
 	if (!CDocument::OnNewDocument())
 		return FALSE;
 
+	const std::filesystem::path root = ResolveDocConfigRoot();
+	std::error_code ec;
+	std::filesystem::create_directories(root, ec);
+	m_emailSkillConfigPath = root / MakeDocConfigFileName();
+
 	// TODO: add reinitialization code here
 	// (SDI documents will reuse this document)
 
 	return TRUE;
+}
+
+bool CBlazeClawMFCDoc::SaveEmailSkillConfigEnv(
+	const std::string& envContent,
+	std::string& error)
+{
+	error.clear();
+	if (envContent.empty())
+	{
+		error = "env content is empty";
+		return false;
+	}
+
+	if (m_emailSkillConfigPath.empty())
+	{
+		const std::filesystem::path root = ResolveDocConfigRoot();
+		std::error_code ec;
+		std::filesystem::create_directories(root, ec);
+		m_emailSkillConfigPath = root / MakeDocConfigFileName();
+	}
+
+	std::error_code ec;
+	std::filesystem::create_directories(m_emailSkillConfigPath.parent_path(), ec);
+
+	std::ofstream output(
+		m_emailSkillConfigPath,
+		std::ios::out | std::ios::trunc | std::ios::binary);
+	if (!output.is_open())
+	{
+		error = "failed to open email config file for writing";
+		return false;
+	}
+
+	output.write(envContent.data(), static_cast<std::streamsize>(envContent.size()));
+	if (!output.good())
+	{
+		error = "failed to write email config file";
+		return false;
+	}
+
+	SetModifiedFlag(TRUE);
+	return true;
 }
 
 
@@ -91,7 +172,7 @@ void CBlazeClawMFCDoc::OnDrawThumbnail(CDC& dc, LPRECT lprcBounds)
 	CString strText = _T("TODO: implement thumbnail drawing here");
 	LOGFONT lf;
 
-	CFont* pDefaultGUIFont = CFont::FromHandle((HFONT) GetStockObject(DEFAULT_GUI_FONT));
+	CFont* pDefaultGUIFont = CFont::FromHandle((HFONT)GetStockObject(DEFAULT_GUI_FONT));
 	pDefaultGUIFont->GetLogFont(&lf);
 	lf.lfHeight = 36;
 
@@ -122,7 +203,7 @@ void CBlazeClawMFCDoc::SetSearchContent(const CString& value)
 	}
 	else
 	{
-		CMFCFilterChunkValueImpl *pChunk = nullptr;
+		CMFCFilterChunkValueImpl* pChunk = nullptr;
 		ATLTRY(pChunk = new CMFCFilterChunkValueImpl);
 		if (pChunk != nullptr)
 		{

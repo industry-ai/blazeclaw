@@ -73,13 +73,22 @@ Phase 2 artifact snapshot:
 - `blazeclaw/skills/imap-smtp-email/TOOL_SURFACE.md`
 
 ### Phase 2.5 - Add MFC Email Configuration UI (WebView2)
-1. Add an email configuration event entry in `CBlazeClawMFCView` to launch the config flow.
-2. Open a new chat document via `CBlazeClawMFCApp::m_pChatDocTemplate` when the configuration event is triggered.
-3. Host a WebView2 surface in the new document/view and load `blazeclaw/skills/imap-smtp-email/config.html`.
-4. Implement bidirectional bridge between WebView2 JavaScript and native MFC handlers for submit/cancel/validation events.
-5. Validate SMTP parameters in native layer (server, port, account, password, TLS flags) before persistence.
-6. Persist configuration through `CBlazeClawMFCDoc`-associated storage and map values to skill `.env` format.
-7. Add secure persistence protections for password/secret fields and avoid plaintext exposure in logs/UI traces.
+Status: Completed
+
+- [x] Add an email configuration event entry in `CBlazeClawMFCView` to launch the config flow.
+- [x] Open a new chat document via `CBlazeClawMFCApp::m_pChatDocTemplate` when the configuration event is triggered.
+- [x] Host a WebView2 surface in the new document/view and load `blazeclaw/skills/imap-smtp-email/config.html`.
+- [x] Implement bidirectional bridge between WebView2 JavaScript and native MFC handlers for submit/cancel/validation events.
+- [x] Validate SMTP parameters in native layer (server, port, account, password, TLS flags) before persistence.
+- [x] Persist configuration through `CBlazeClawMFCDoc`-associated storage and map values to skill `.env` format.
+- [x] Add secure persistence protections for password/secret fields and avoid plaintext exposure in logs/UI traces.
+
+Phase 2.5 artifact snapshot:
+- `blazeclaw/skills/imap-smtp-email/config.html`
+- `blazeclaw/BlazeClawMfc/src/app/BlazeClawMFCView.h`
+- `blazeclaw/BlazeClawMfc/src/app/BlazeClawMFCView.cpp`
+- `blazeclaw/BlazeClawMfc/src/app/BlazeClawMFCDoc.h`
+- `blazeclaw/BlazeClawMfc/src/app/BlazeClawMFCDoc.cpp`
 
 ### Phase 3 - Implement Runtime Execution Bridge
 1. Add runtime executor bindings so tool IDs map to process execution of skill scripts.
@@ -128,9 +137,9 @@ Phase 2 artifact snapshot:
 - [x] `blazeclaw/skills/imap-smtp-email/` contains full skill artifacts (scripts/docs/meta/setup/package)
 - [x] BlazeClaw-compatible tool manifest is defined for IMAP/SMTP operations
 - [x] JSON payload argument contracts are defined for all exposed tool operations
-- [ ] `blazeclaw/skills/imap-smtp-email/config.html` is integrated into an MFC WebView2 configuration flow
-- [ ] `CBlazeClawMFCView` can trigger email configuration and open a new chat document through `m_pChatDocTemplate`
-- [ ] WebView2 form values are validated and persisted through `CBlazeClawMFCDoc`-associated config storage
+- [x] `blazeclaw/skills/imap-smtp-email/config.html` is integrated into an MFC WebView2 configuration flow
+- [x] `CBlazeClawMFCView` can trigger email configuration and open a new chat document through `m_pChatDocTemplate`
+- [x] WebView2 form values are validated and persisted through `CBlazeClawMFCDoc`-associated config storage
 - [ ] BlazeClaw gateway can discover email tools in catalog
 - [ ] BlazeClaw runtime can execute IMAP/SMTP skill tools from chat
 - [ ] Tool-call deltas are persisted and observable

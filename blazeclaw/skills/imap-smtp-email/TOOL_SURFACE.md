@@ -37,6 +37,18 @@ This document defines the BlazeClaw tool IDs, command mapping, and payload contr
 - For IMAP UID operations, numeric and string UIDs are accepted.
 - For SMTP send, one of `subject` or `subjectFile` is required.
 
+## MFC WebView2 Configuration Bridge (Phase 2.5)
+
+- Open configuration UI event: `blazeclaw.email.config.open`
+- Save configuration event: `blazeclaw.email.config.save`
+- Cancel configuration event: `blazeclaw.email.config.cancel`
+- Save success event: `blazeclaw.email.config.saved`
+- Save error event: `blazeclaw.email.config.error`
+
+The WebView2 page `config.html` posts bridge events to the native MFC view.
+The native layer validates inputs and persists `.env` content via
+`CBlazeClawMFCDoc`-associated storage.
+
 ## Namespace and Uniqueness
 
 - Namespace prefix is fixed: `imap_smtp_email.`

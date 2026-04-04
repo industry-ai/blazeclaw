@@ -38,6 +38,7 @@
 #endif
 
 namespace {
+	std::wstring g_pendingStartupUrl;
 
 	constexpr UINT_PTR kBridgeLifecycleTimerId = 0x4A21;
 	constexpr UINT kBridgeLifecycleTimerMs = 1000;
@@ -86,6 +87,80 @@ namespace {
 		}
 
 		return output;
+	}
+
+	std::optional<std::filesystem::path> FindEmailConfigHtml(
+		const std::filesystem::path& start)
+	{
+		std::filesystem::path cursor = start;
+		while (!cursor.empty())
+		{
+			const auto configHtml =
+				cursor /
+				L"blazeclaw" /
+				L"skills" /
+				L"imap-smtp-email" /
+				L"config.html";
+			if (std::filesystem::exists(configHtml))
+			{
+				return configHtml;
+			}
+
+			if (!cursor.has_parent_path())
+			{
+				break;
+			}
+
+			auto parent = cursor.parent_path();
+			if (parent == cursor)
+			{
+				break;
+			}
+
+			cursor = parent;
+		}
+
+		return std::nullopt;
+	}
+
+	bool IsLikelyEmailAddress(const std::string& value)
+	{
+		const auto atPos = value.find('@');
+		if (atPos == std::string::npos || atPos == 0 || atPos + 1 >= value.size())
+		{
+			return false;
+		}
+
+		return value.find('.', atPos + 1) != std::string::npos;
+	}
+
+	bool TryParsePort(
+		const std::string& value,
+		int& parsed)
+	{
+		if (value.empty())
+		{
+			return false;
+		}
+
+		for (const char ch : value)
+		{
+			if (!std::isdigit(static_cast<unsigned char>(ch)))
+			{
+				return false;
+			}
+		}
+
+		try
+		{
+			parsed = std::stoi(value);
+		}
+		catch (...)
+		{
+			return false;
+		}
+
+		return parsed > 0 && parsed <= 65535;
 	}
 
 	void AppendChatProcedureStatusLine(const CString& line)
@@ -655,6 +730,28 @@ namespace {
 		}
 
 		return L"file://" + escaped;
+	}
+
+	std::wstring ResolveEmailConfigStartupUrl()
+	{
+		std::vector<std::filesystem::path> roots;
+		roots.push_back(std::filesystem::current_path());
+
+		wchar_t modulePath[MAX_PATH]{};
+		if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) > 0)
+		{
+			roots.push_back(std::filesystem::path(modulePath).parent_path());
+		}
+
+		for (const auto& root : roots)
+		{
+			if (const auto found = FindEmailConfigHtml(root); found.has_value())
+			{
+				return BuildFileUrl(found.value());
+			}
+		}
+
+		return {};
 	}
 
 	std::optional<std::filesystem::path> FindOpenClawUiIndex(const std::filesystem::path& start)
@@ -1363,6 +1460,11 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 {
 #ifdef HAVE_WEBVIEW2_HEADER
 	const std::string message = ToNarrow(webMessageJson);
+    if (HandleEmailConfigBridgeMessage(message))
+	{
+		return;
+	}
+
 	std::string channel;
 	if (!blazeclaw::gateway::json::FindStringField(message, "channel", channel))
 	{
@@ -1621,6 +1723,229 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 #endif
 }
 
+bool CBlazeClawMFCView::HandleEmailConfigBridgeMessage(
+	const std::string& messageJson)
+{
+	std::string channel;
+	if (!blazeclaw::gateway::json::FindStringField(messageJson, "channel", channel))
+	{
+		return false;
+	}
+
+	if (channel == "blazeclaw.email.config.open")
+	{
+		const bool opened = OpenEmailConfigDocument();
+		const std::string json =
+			std::string("{\"channel\":\"blazeclaw.email.config.opened\",\"ok\":") +
+			(opened ? "true" : "false") +
+			(opened
+				? "}"
+				: ",\"error\":\"Failed to open email config document.\"}");
+		PostBridgeMessageJson(ToWide(json));
+		return true;
+	}
+
+	if (channel == "blazeclaw.email.config.save")
+	{
+		std::string payloadJson;
+		if (blazeclaw::gateway::json::FindRawField(messageJson, "payload", payloadJson))
+		{
+			PersistEmailConfigFromPayload(payloadJson);
+		}
+		else
+		{
+			PersistEmailConfigFromPayload(messageJson);
+		}
+
+		return true;
+	}
+
+	if (channel == "blazeclaw.email.config.cancel")
+	{
+		AppendChatProcedureStatusLine(L"email.config.cancelled");
+		PostBridgeMessageJson(
+			L"{\"channel\":\"blazeclaw.email.config.cancelled\",\"ok\":true}");
+		return true;
+	}
+
+	return false;
+}
+
+bool CBlazeClawMFCView::OpenEmailConfigDocument()
+{
+	const std::wstring configUrl = ResolveEmailConfigStartupUrl();
+	if (configUrl.empty())
+	{
+		AppendChatProcedureStatusLine(
+			L"email.config.open.failed",
+			"config.html not found");
+		return false;
+	}
+
+	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	if (app == nullptr)
+	{
+		AppendChatProcedureStatusLine(
+			L"email.config.open.failed",
+			"application context unavailable");
+		return false;
+	}
+
+	auto* chatTemplate = app->GetChatDocTemplate();
+	if (chatTemplate == nullptr)
+	{
+		AppendChatProcedureStatusLine(
+			L"email.config.open.failed",
+			"chat document template unavailable");
+		return false;
+	}
+
+	SetPendingStartupUrl(configUrl);
+	CDocument* opened = chatTemplate->OpenDocumentFile(nullptr);
+	if (opened == nullptr)
+	{
+		AppendChatProcedureStatusLine(
+			L"email.config.open.failed",
+			"failed to create document");
+		return false;
+	}
+
+	AppendChatProcedureStatusLine(L"email.config.opened");
+	return true;
+}
+
+void CBlazeClawMFCView::PersistEmailConfigFromPayload(
+	const std::string& payloadJson)
+{
+	std::string smtpHost;
+	std::string smtpPortRaw;
+	std::string imapHost;
+	std::string imapPortRaw;
+	std::string email;
+	std::string password;
+	std::string allowedReadDirs;
+	std::string allowedWriteDirs;
+	bool imapTls = true;
+	bool smtpSecure = false;
+	bool rejectUnauthorized = true;
+
+	blazeclaw::gateway::json::FindStringField(payloadJson, "smtpHost", smtpHost);
+	blazeclaw::gateway::json::FindStringField(payloadJson, "smtpPort", smtpPortRaw);
+	blazeclaw::gateway::json::FindStringField(payloadJson, "imapHost", imapHost);
+	blazeclaw::gateway::json::FindStringField(payloadJson, "imapPort", imapPortRaw);
+	blazeclaw::gateway::json::FindStringField(payloadJson, "email", email);
+	blazeclaw::gateway::json::FindStringField(payloadJson, "password", password);
+	blazeclaw::gateway::json::FindStringField(payloadJson, "allowedReadDirs", allowedReadDirs);
+	blazeclaw::gateway::json::FindStringField(payloadJson, "allowedWriteDirs", allowedWriteDirs);
+	blazeclaw::gateway::json::FindBoolField(payloadJson, "imapTls", imapTls);
+	blazeclaw::gateway::json::FindBoolField(payloadJson, "smtpSecure", smtpSecure);
+	blazeclaw::gateway::json::FindBoolField(payloadJson, "rejectUnauthorized", rejectUnauthorized);
+
+	if (imapHost.empty())
+	{
+		imapHost = smtpHost;
+	}
+
+	if (imapPortRaw.empty())
+	{
+		imapPortRaw = "993";
+	}
+
+	int smtpPort = 0;
+	int imapPort = 0;
+	if (smtpHost.empty())
+	{
+		PostBridgeMessageJson(
+			L"{\"channel\":\"blazeclaw.email.config.error\",\"ok\":false,\"message\":\"SMTP host is required.\"}");
+		return;
+	}
+
+	if (!TryParsePort(smtpPortRaw, smtpPort))
+	{
+		PostBridgeMessageJson(
+			L"{\"channel\":\"blazeclaw.email.config.error\",\"ok\":false,\"message\":\"SMTP port must be an integer between 1 and 65535.\"}");
+		return;
+	}
+
+	if (!TryParsePort(imapPortRaw, imapPort))
+	{
+		PostBridgeMessageJson(
+			L"{\"channel\":\"blazeclaw.email.config.error\",\"ok\":false,\"message\":\"IMAP port must be an integer between 1 and 65535.\"}");
+		return;
+	}
+
+	if (!IsLikelyEmailAddress(email))
+	{
+		PostBridgeMessageJson(
+			L"{\"channel\":\"blazeclaw.email.config.error\",\"ok\":false,\"message\":\"Valid email account is required.\"}");
+		return;
+	}
+
+	if (password.empty())
+	{
+		PostBridgeMessageJson(
+			L"{\"channel\":\"blazeclaw.email.config.error\",\"ok\":false,\"message\":\"Password or app password is required.\"}");
+		return;
+	}
+
+	if (allowedReadDirs.empty())
+	{
+		allowedReadDirs = "~/Downloads,~/Documents";
+	}
+
+	if (allowedWriteDirs.empty())
+	{
+		allowedWriteDirs = "~/Downloads";
+	}
+
+	std::ostringstream env;
+	env << "IMAP_HOST=" << imapHost << "\n";
+	env << "IMAP_PORT=" << imapPort << "\n";
+	env << "IMAP_USER=" << email << "\n";
+	env << "IMAP_PASS=" << password << "\n";
+	env << "IMAP_TLS=" << (imapTls ? "true" : "false") << "\n";
+	env << "IMAP_REJECT_UNAUTHORIZED=" << (rejectUnauthorized ? "true" : "false") << "\n";
+	env << "IMAP_MAILBOX=INBOX\n\n";
+	env << "SMTP_HOST=" << smtpHost << "\n";
+	env << "SMTP_PORT=" << smtpPort << "\n";
+	env << "SMTP_SECURE=" << (smtpSecure ? "true" : "false") << "\n";
+	env << "SMTP_USER=" << email << "\n";
+	env << "SMTP_PASS=" << password << "\n";
+	env << "SMTP_FROM=" << email << "\n";
+	env << "SMTP_REJECT_UNAUTHORIZED=" << (rejectUnauthorized ? "true" : "false") << "\n\n";
+	env << "ALLOWED_READ_DIRS=" << allowedReadDirs << "\n";
+	env << "ALLOWED_WRITE_DIRS=" << allowedWriteDirs << "\n";
+
+	CBlazeClawMFCDoc* doc = GetDocument();
+	if (doc == nullptr)
+	{
+		PostBridgeMessageJson(
+			L"{\"channel\":\"blazeclaw.email.config.error\",\"ok\":false,\"message\":\"Document context is unavailable.\"}");
+		return;
+	}
+
+	std::string error;
+	if (!doc->SaveEmailSkillConfigEnv(env.str(), error))
+	{
+		const std::string json =
+			"{\"channel\":\"blazeclaw.email.config.error\",\"ok\":false,\"message\":" +
+			JsonString(error.empty() ? "Failed to save email config." : error) +
+			"}";
+		PostBridgeMessageJson(ToWide(json));
+		return;
+	}
+
+	AppendChatProcedureStatusLine(
+		L"email.config.saved",
+     ToNarrow(doc->GetEmailSkillConfigPath().wstring()));
+
+	const std::string json =
+		"{\"channel\":\"blazeclaw.email.config.saved\",\"ok\":true,\"configPath\":" +
+     JsonString(ToNarrow(doc->GetEmailSkillConfigPath().wstring())) +
+		"}";
+	PostBridgeMessageJson(ToWide(json));
+}
+
 void CBlazeClawMFCView::InitializeWebViewBridge()
 {
 #ifdef HAVE_WEBVIEW2_HEADER
@@ -1739,7 +2064,7 @@ void CBlazeClawMFCView::OnInitialUpdate()
 										}).Get(),
 											nullptr);
 
-								const std::wstring startupUrl = ResolveChatStartupUrl();
+                                const std::wstring startupUrl = ResolveInitialNavigationUrl();
 								AppendChatProcedureStatusLine(
 									L"startup.url",
 									ToNarrow(startupUrl));
@@ -1774,6 +2099,23 @@ void CBlazeClawMFCView::OnInitialUpdate()
 	TRACE(_T("WebView2 headers not found at compile time."));
 	AfxMessageBox(L"WebView2 headers not found at compile time.");
 #endif
+}
+
+void CBlazeClawMFCView::SetPendingStartupUrl(const std::wstring& url)
+{
+	g_pendingStartupUrl = url;
+}
+
+std::wstring CBlazeClawMFCView::ResolveInitialNavigationUrl() const
+{
+	if (!g_pendingStartupUrl.empty())
+	{
+		std::wstring startupUrl = g_pendingStartupUrl;
+		g_pendingStartupUrl.clear();
+		return startupUrl;
+	}
+
+	return ResolveChatStartupUrl();
 }
 
 void CBlazeClawMFCView::OnBeginPrinting(CDC* /*pDC*/, CPrintInfo* /*pInfo*/)

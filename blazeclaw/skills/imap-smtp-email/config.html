@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>BlazeClaw Email Skill Configuration</title>
+    <style>
+        body {
+            font-family: Segoe UI, Arial, sans-serif;
+            margin: 24px;
+            background: #f8f9fb;
+        }
+
+        .card {
+            max-width: 780px;
+            background: #fff;
+            border: 1px solid #e2e6ef;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        h2 {
+            margin: 0 0 16px 0;
+        }
+
+        .row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .field {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-size: 12px;
+            color: #444;
+            margin-bottom: 4px;
+        }
+
+        input {
+            height: 34px;
+            border: 1px solid #cfd6e4;
+            border-radius: 6px;
+            padding: 0 10px;
+        }
+
+        .checkbox-row {
+            display: flex;
+            gap: 20px;
+            margin: 8px 0 16px 0;
+        }
+
+        .actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        button {
+            height: 34px;
+            min-width: 110px;
+            border-radius: 6px;
+            border: 1px solid #bec7da;
+            background: #fff;
+            cursor: pointer;
+        }
+
+            button.primary {
+                background: #2f6fec;
+                border-color: #2f6fec;
+                color: #fff;
+            }
+
+        #status {
+            margin-top: 14px;
+            font-size: 13px;
+            color: #2a3b68;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>IMAP/SMTP Email Configuration</h2>
+        <div class="row">
+            <div class="field">
+                <label for="smtpHost">SMTP Host</label>
+                <input id="smtpHost" placeholder="smtp.example.com" />
+            </div>
+            <div class="field">
+                <label for="smtpPort">SMTP Port</label>
+                <input id="smtpPort" value="587" />
+            </div>
+        </div>
+        <div class="row">
+            <div class="field">
+                <label for="imapHost">IMAP Host</label>
+                <input id="imapHost" placeholder="imap.example.com" />
+            </div>
+            <div class="field">
+                <label for="imapPort">IMAP Port</label>
+                <input id="imapPort" value="993" />
+            </div>
+        </div>
+        <div class="row">
+            <div class="field">
+                <label for="email">Email Account</label>
+                <input id="email" placeholder="you@example.com" />
+            </div>
+            <div class="field">
+                <label for="password">Password / App Password</label>
+                <input id="password" type="password" />
+            </div>
+        </div>
+        <div class="row">
+            <div class="field">
+                <label for="allowedReadDirs">Allowed Read Dirs</label>
+                <input id="allowedReadDirs" value="~/Downloads,~/Documents" />
+            </div>
+            <div class="field">
+                <label for="allowedWriteDirs">Allowed Write Dirs</label>
+                <input id="allowedWriteDirs" value="~/Downloads" />
+            </div>
+        </div>
+        <div class="checkbox-row">
+            <label><input id="imapTls" type="checkbox" checked /> IMAP TLS</label>
+            <label><input id="smtpSecure" type="checkbox" /> SMTP Secure (SSL)</label>
+            <label><input id="rejectUnauthorized" type="checkbox" checked /> Reject Unauthorized Cert</label>
+        </div>
+        <div class="actions">
+            <button class="primary" id="saveBtn">Save</button>
+            <button id="cancelBtn">Cancel</button>
+        </div>
+        <div id="status">Ready.</div>
+    </div>
+
+    <script>
+        const statusEl = document.getElementById('status');
+
+        function setStatus(text) {
+            statusEl.textContent = text;
+        }
+
+        function postMessage(payload) {
+            if (!window.chrome || !window.chrome.webview) {
+                setStatus('WebView bridge unavailable.');
+                return;
+            }
+            window.chrome.webview.postMessage(payload);
+        }
+
+        function collectPayload() {
+            return {
+                smtpHost: document.getElementById('smtpHost').value.trim(),
+                smtpPort: document.getElementById('smtpPort').value.trim(),
+                imapHost: document.getElementById('imapHost').value.trim(),
+                imapPort: document.getElementById('imapPort').value.trim(),
+                email: document.getElementById('email').value.trim(),
+                password: document.getElementById('password').value,
+                allowedReadDirs: document.getElementById('allowedReadDirs').value.trim(),
+                allowedWriteDirs: document.getElementById('allowedWriteDirs').value.trim(),
+                imapTls: !!document.getElementById('imapTls').checked,
+                smtpSecure: !!document.getElementById('smtpSecure').checked,
+                rejectUnauthorized: !!document.getElementById('rejectUnauthorized').checked
+            };
+        }
+
+        document.getElementById('saveBtn').addEventListener('click', () => {
+            setStatus('Saving configuration...');
+            postMessage({ channel: 'blazeclaw.email.config.save', payload: collectPayload() });
+        });
+
+        document.getElementById('cancelBtn').addEventListener('click', () => {
+            postMessage({ channel: 'blazeclaw.email.config.cancel' });
+            setStatus('Cancelled.');
+        });
+
+        if (window.chrome && window.chrome.webview) {
+            window.chrome.webview.addEventListener('message', (e) => {
+                const msg = e && e.data ? e.data : null;
+                if (!msg || typeof msg !== 'object' || !msg.channel) return;
+                if (msg.channel === 'blazeclaw.email.config.saved') {
+                    setStatus('Saved: ' + (msg.configPath || '(unknown path)'));
+                    return;
+                }
+                if (msg.channel === 'blazeclaw.email.config.error') {
+                    setStatus('Error: ' + (msg.message || 'save failed'));
+                }
+            });
+        }
+
+        postMessage({ channel: 'blazeclaw.email.config.ready' });
+    </script>
+</body>
+</html>

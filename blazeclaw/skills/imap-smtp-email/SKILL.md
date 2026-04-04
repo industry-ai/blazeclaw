@@ -19,6 +19,7 @@ Read, search, and manage email via IMAP protocol. Send email via SMTP. Supports 
 - `tool-manifest.json`: BlazeClaw tool catalog entries for gateway registration.
 - `tool-contracts.json`: JSON payload schema contracts for tool arguments.
 - `TOOL_SURFACE.md`: stable tool IDs and JSON-to-CLI mapping notes.
+- `config.html`: WebView2 email-configuration UI for MFC document/view flow.
 
 ## Configuration
 

@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <filesystem>
+
 constexpr UINT WM_DOC_MARKDOWN_UPDATE = WM_USER + 0x200;
 
 class CBlazeClawMFCDoc : public CDocument
@@ -22,15 +24,17 @@ protected: // create from serialization only
 	CBlazeClawMFCDoc() noexcept;
 	DECLARE_DYNCREATE(CBlazeClawMFCDoc)
 
-// Attributes
+	// Attributes
 public:
 	const std::wstring& GetMarkdownContent() const { return m_markdownContent; }
 	void SetMarkdownContent(const std::wstring& content);
+	const std::filesystem::path& GetEmailSkillConfigPath() const { return m_emailSkillConfigPath; }
+	bool SaveEmailSkillConfigEnv(const std::string& envContent, std::string& error);
 
-// Operations
+	// Operations
 public:
 
-// Overrides
+	// Overrides
 public:
 	virtual BOOL OnNewDocument();
 	virtual void Serialize(CArchive& ar);
@@ -39,7 +43,7 @@ public:
 	virtual void OnDrawThumbnail(CDC& dc, LPRECT lprcBounds);
 #endif // SHARED_HANDLERS
 
-// Implementation
+	// Implementation
 public:
 	virtual ~CBlazeClawMFCDoc();
 #ifdef _DEBUG
@@ -49,8 +53,9 @@ public:
 
 protected:
 	std::wstring m_markdownContent;
+	std::filesystem::path m_emailSkillConfigPath;
 
-// Generated message map functions
+	// Generated message map functions
 protected:
 	DECLARE_MESSAGE_MAP()
 
