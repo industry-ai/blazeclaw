@@ -48,6 +48,9 @@ public:
 
 	// Operations
 public:
+	void ShowSkillSelection(
+		const std::string& skillKey,
+		const std::string& propertiesJson);
 
 	// Overrides
 public:

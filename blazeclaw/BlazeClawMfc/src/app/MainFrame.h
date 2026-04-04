@@ -51,7 +51,7 @@ protected:  // control bar embedded members
 	CMFCToolBarImages m_PanelImages;
 	CMFCRibbonStatusBar  m_wndStatusBar;
 	CFileView         m_wndFileView;
-	CSkillView        m_wndClassView;
+	CSkillView        m_wndSkillView;
 	COutputWnd        m_wndOutput;
 	CPropertiesWnd    m_wndProperties;
 	COutlookBar       m_wndNavigationBar;
@@ -88,6 +88,9 @@ protected:
 public:
 	// Called by app to open a tab without showing dialog
 	void OpenDefaultTab() { OpenWebViewPlusChatTab(); }
+	void ShowSkillSelectionInActiveView(
+		const std::string& skillKey,
+		const std::string& propertiesJson);
 	// File / Ribbon "New" — MDI routes ID_FILE_NEW to CWinApp while a child is active, so the app calls this too.
 	void OpenNewTabWithChoiceDialog();
 

@@ -15,6 +15,9 @@
 #include "SkillView.h"
 #include "Resource.h"
 #include "BlazeClawMFCApp.h"
+#include "../gateway/GatewayJsonUtils.h"
+
+#include <map>
 
 class CSkillViewMenuButton : public CMFCToolBarMenuButton
 {
@@ -58,6 +61,8 @@ BEGIN_MESSAGE_MAP(CSkillView, CDockablePane)
 	ON_WM_CREATE()
 	ON_WM_SIZE()
 	ON_WM_CONTEXTMENU()
+	ON_NOTIFY(TVN_SELCHANGED, 2, OnTreeSelectionChanged)
+	ON_NOTIFY(NM_DBLCLK, 2, OnTreeItemDoubleClick)
 	ON_COMMAND(ID_CLASS_ADD_MEMBER_FUNCTION, OnClassAddMemberFunction)
 	ON_COMMAND(ID_CLASS_ADD_MEMBER_VARIABLE, OnClassAddMemberVariable)
 	ON_COMMAND(ID_CLASS_DEFINITION, OnClassDefinition)
@@ -83,7 +88,7 @@ int CSkillView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	// Create views:
 	const DWORD dwViewStyle = WS_CHILD | WS_VISIBLE | TVS_HASLINES | TVS_LINESATROOT | TVS_HASBUTTONS | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
 
-	if (!m_wndClassView.Create(dwViewStyle, rectDummy, this, 2))
+	if (!m_wndSkillView.Create(dwViewStyle, rectDummy, this, 2))
 	{
 		TRACE0("Failed to create Class View\n");
 		return -1;      // fail to create
@@ -119,7 +124,7 @@ int CSkillView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	}
 
 	// Fill in some static tree view data (dummy code, nothing magic here)
-	FillClassView();
+	FillSkillView();
 
 	return 0;
 }
@@ -130,47 +135,204 @@ void CSkillView::OnSize(UINT nType, int cx, int cy)
 	AdjustLayout();
 }
 
-void CSkillView::FillClassView()
+void CSkillView::FillSkillView()
 {
-	HTREEITEM hRoot = m_wndClassView.InsertItem(_T("FakeApp classes"), 0, 0);
-	m_wndClassView.SetItemState(hRoot, TVIS_BOLD, TVIS_BOLD);
+	m_wndSkillView.DeleteAllItems();
+	m_skillItemPayloadByTreeItem.clear();
 
-	HTREEITEM hClass = m_wndClassView.InsertItem(_T("CFakeAboutDlg"), 1, 1, hRoot);
-	m_wndClassView.InsertItem(_T("CFakeAboutDlg()"), 3, 3, hClass);
+	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	if (app == nullptr)
+	{
+		return;
+	}
 
-	m_wndClassView.Expand(hRoot, TVE_EXPAND);
+	const auto response = app->Services().RouteGatewayRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "skill-view.skills.list",
+			.method = "gateway.skills.list",
+			.paramsJson = std::string("{\"includeInvalid\":true}"),
+		});
 
-	hClass = m_wndClassView.InsertItem(_T("CFakeApp"), 1, 1, hRoot);
-	m_wndClassView.InsertItem(_T("CFakeApp()"), 3, 3, hClass);
-	m_wndClassView.InsertItem(_T("InitInstance()"), 3, 3, hClass);
-	m_wndClassView.InsertItem(_T("OnAppAbout()"), 3, 3, hClass);
+	HTREEITEM hRoot = m_wndSkillView.InsertItem(_T("Registered skills"), 0, 0);
+	m_wndSkillView.SetItemState(hRoot, TVIS_BOLD, TVIS_BOLD);
 
-	hClass = m_wndClassView.InsertItem(_T("CFakeAppDoc"), 1, 1, hRoot);
-	m_wndClassView.InsertItem(_T("CFakeAppDoc()"), 4, 4, hClass);
-	m_wndClassView.InsertItem(_T("~CFakeAppDoc()"), 3, 3, hClass);
-	m_wndClassView.InsertItem(_T("OnNewDocument()"), 3, 3, hClass);
+	if (!response.ok || !response.payloadJson.has_value())
+	{
+		m_wndSkillView.InsertItem(_T("(failed to load skills)"), 4, 4, hRoot);
+		m_wndSkillView.Expand(hRoot, TVE_EXPAND);
+		return;
+	}
 
-	hClass = m_wndClassView.InsertItem(_T("CFakeAppView"), 1, 1, hRoot);
-	m_wndClassView.InsertItem(_T("CFakeAppView()"), 4, 4, hClass);
-	m_wndClassView.InsertItem(_T("~CFakeAppView()"), 3, 3, hClass);
-	m_wndClassView.InsertItem(_T("GetDocument()"), 3, 3, hClass);
-	m_wndClassView.Expand(hClass, TVE_EXPAND);
+	std::string skillsRaw;
+	if (!blazeclaw::gateway::json::FindRawField(
+		response.payloadJson.value(),
+		"skills",
+		skillsRaw))
+	{
+		m_wndSkillView.InsertItem(_T("(no skills payload)"), 4, 4, hRoot);
+		m_wndSkillView.Expand(hRoot, TVE_EXPAND);
+		return;
+	}
 
-	hClass = m_wndClassView.InsertItem(_T("CFakeAppFrame"), 1, 1, hRoot);
-	m_wndClassView.InsertItem(_T("CFakeAppFrame()"), 3, 3, hClass);
-	m_wndClassView.InsertItem(_T("~CFakeAppFrame()"), 3, 3, hClass);
-	m_wndClassView.InsertItem(_T("m_wndMenuBar"), 6, 6, hClass);
-	m_wndClassView.InsertItem(_T("m_wndToolBar"), 6, 6, hClass);
-	m_wndClassView.InsertItem(_T("m_wndStatusBar"), 6, 6, hClass);
+	const std::string trimmed = blazeclaw::gateway::json::Trim(skillsRaw);
+	if (trimmed.size() < 2 || trimmed.front() != '[' || trimmed.back() != ']')
+	{
+		m_wndSkillView.InsertItem(_T("(invalid skills format)"), 4, 4, hRoot);
+		m_wndSkillView.Expand(hRoot, TVE_EXPAND);
+		return;
+	}
 
-	hClass = m_wndClassView.InsertItem(_T("Globals"), 2, 2, hRoot);
-	m_wndClassView.InsertItem(_T("theFakeApp"), 5, 5, hClass);
-	m_wndClassView.Expand(hClass, TVE_EXPAND);
+	std::vector<std::string> skillEntries;
+	std::size_t cursor = 1;
+	while (cursor + 1 < trimmed.size())
+	{
+		while (cursor + 1 < trimmed.size() &&
+			(std::isspace(static_cast<unsigned char>(trimmed[cursor])) != 0 ||
+				trimmed[cursor] == ','))
+		{
+			++cursor;
+		}
+
+		if (cursor + 1 >= trimmed.size() || trimmed[cursor] != '{')
+		{
+			break;
+		}
+
+		const std::size_t begin = cursor;
+		int depth = 0;
+		bool inString = false;
+		for (; cursor < trimmed.size(); ++cursor)
+		{
+			const char ch = trimmed[cursor];
+			if (inString)
+			{
+				if (ch == '\\')
+				{
+					++cursor;
+					continue;
+				}
+
+				if (ch == '"')
+				{
+					inString = false;
+				}
+				continue;
+			}
+
+			if (ch == '"')
+			{
+				inString = true;
+				continue;
+			}
+
+			if (ch == '{')
+			{
+				++depth;
+			}
+			else if (ch == '}')
+			{
+				--depth;
+				if (depth == 0)
+				{
+					skillEntries.push_back(
+						trimmed.substr(begin, cursor - begin + 1));
+					++cursor;
+					break;
+				}
+			}
+		}
+	}
+
+	std::map<std::string, HTREEITEM> categoryItems;
+	for (const auto& entryJson : skillEntries)
+	{
+		std::string skillKey;
+		blazeclaw::gateway::json::FindStringField(entryJson, "skillKey", skillKey);
+		if (skillKey.empty())
+		{
+			blazeclaw::gateway::json::FindStringField(entryJson, "name", skillKey);
+		}
+		if (skillKey.empty())
+		{
+			continue;
+		}
+
+		std::string category;
+		blazeclaw::gateway::json::FindStringField(entryJson, "installKind", category);
+		if (category.empty())
+		{
+			category = "general";
+		}
+
+		auto categoryIt = categoryItems.find(category);
+		HTREEITEM categoryNode = nullptr;
+		if (categoryIt == categoryItems.end())
+		{
+			categoryNode = m_wndSkillView.InsertItem(
+				CString(CA2W(category.c_str(), CP_UTF8)),
+				1,
+				1,
+				hRoot);
+			categoryItems.insert_or_assign(category, categoryNode);
+		}
+		else
+		{
+			categoryNode = categoryIt->second;
+		}
+
+		const HTREEITEM skillNode = m_wndSkillView.InsertItem(
+			CString(CA2W(skillKey.c_str(), CP_UTF8)),
+			2,
+			2,
+			categoryNode);
+		m_skillItemPayloadByTreeItem.insert_or_assign(skillNode, entryJson);
+	}
+
+	for (const auto& categoryEntry : categoryItems)
+	{
+		m_wndSkillView.Expand(categoryEntry.second, TVE_EXPAND);
+	}
+	m_wndSkillView.Expand(hRoot, TVE_EXPAND);
+}
+
+void CSkillView::NotifySelectionToChatView(HTREEITEM selectedItem)
+{
+	if (selectedItem == nullptr)
+	{
+		return;
+	}
+
+	const auto payloadIt = m_skillItemPayloadByTreeItem.find(selectedItem);
+	if (payloadIt == m_skillItemPayloadByTreeItem.end())
+	{
+		return;
+	}
+
+	std::string skillKey;
+	blazeclaw::gateway::json::FindStringField(
+		payloadIt->second,
+		"skillKey",
+		skillKey);
+	if (skillKey.empty())
+	{
+		blazeclaw::gateway::json::FindStringField(
+			payloadIt->second,
+			"name",
+			skillKey);
+	}
+
+	auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+	if (mainFrame == nullptr)
+	{
+		return;
+	}
+
+	mainFrame->ShowSkillSelectionInActiveView(skillKey, payloadIt->second);
 }
 
 void CSkillView::OnContextMenu(CWnd* pWnd, CPoint point)
 {
-	CTreeCtrl* pWndTree = (CTreeCtrl*)&m_wndClassView;
+	CTreeCtrl* pWndTree = (CTreeCtrl*)&m_wndSkillView;
 	ASSERT_VALID(pWndTree);
 
 	if (pWnd != pWndTree)
@@ -224,7 +386,7 @@ void CSkillView::AdjustLayout()
 	int cyTlb = m_wndToolBar.CalcFixedLayout(FALSE, TRUE).cy;
 
 	m_wndToolBar.SetWindowPos(nullptr, rectClient.left, rectClient.top, rectClient.Width(), cyTlb, SWP_NOACTIVATE | SWP_NOZORDER);
-	m_wndClassView.SetWindowPos(nullptr, rectClient.left + 1, rectClient.top + cyTlb + 1, rectClient.Width() - 2, rectClient.Height() - cyTlb - 2, SWP_NOACTIVATE | SWP_NOZORDER);
+	m_wndSkillView.SetWindowPos(nullptr, rectClient.left + 1, rectClient.top + cyTlb + 1, rectClient.Width() - 2, rectClient.Height() - cyTlb - 2, SWP_NOACTIVATE | SWP_NOZORDER);
 }
 
 BOOL CSkillView::PreTranslateMessage(MSG* pMsg)
@@ -286,7 +448,7 @@ void CSkillView::OnPaint()
 	CPaintDC dc(this); // device context for painting
 
 	CRect rectTree;
-	m_wndClassView.GetWindowRect(rectTree);
+	m_wndSkillView.GetWindowRect(rectTree);
 	ScreenToClient(rectTree);
 
 	rectTree.InflateRect(1, 1);
@@ -297,12 +459,32 @@ void CSkillView::OnSetFocus(CWnd* pOldWnd)
 {
 	CDockablePane::OnSetFocus(pOldWnd);
 
-	m_wndClassView.SetFocus();
+	m_wndSkillView.SetFocus();
+}
+
+void CSkillView::OnTreeSelectionChanged(NMHDR* pNMHDR, LRESULT* pResult)
+{
+	UNREFERENCED_PARAMETER(pNMHDR);
+	NotifySelectionToChatView(m_wndSkillView.GetSelectedItem());
+	if (pResult != nullptr)
+	{
+		*pResult = 0;
+	}
+}
+
+void CSkillView::OnTreeItemDoubleClick(NMHDR* pNMHDR, LRESULT* pResult)
+{
+	UNREFERENCED_PARAMETER(pNMHDR);
+	NotifySelectionToChatView(m_wndSkillView.GetSelectedItem());
+	if (pResult != nullptr)
+	{
+		*pResult = 0;
+	}
 }
 
 void CSkillView::OnChangeVisualStyle()
 {
-	m_ClassViewImages.DeleteImageList();
+	m_SkillViewImages.DeleteImageList();
 
 	UINT uiBmpId = theApp.m_bHiColorIcons ? IDB_CLASS_VIEW_24 : IDB_CLASS_VIEW;
 
@@ -321,10 +503,10 @@ void CSkillView::OnChangeVisualStyle()
 
 	nFlags |= (theApp.m_bHiColorIcons) ? ILC_COLOR24 : ILC_COLOR4;
 
-	m_ClassViewImages.Create(16, bmpObj.bmHeight, nFlags, 0, 0);
-	m_ClassViewImages.Add(&bmp, RGB(255, 0, 0));
+	m_SkillViewImages.Create(16, bmpObj.bmHeight, nFlags, 0, 0);
+	m_SkillViewImages.Add(&bmp, RGB(255, 0, 0));
 
-	m_wndClassView.SetImageList(&m_ClassViewImages, TVSIL_NORMAL);
+	m_wndSkillView.SetImageList(&m_SkillViewImages, TVSIL_NORMAL);
 
 	m_wndToolBar.CleanUpLockedImages();
 	m_wndToolBar.LoadBitmap(theApp.m_bHiColorIcons ? IDB_SORT_24 : IDR_SORT, 0, 0, TRUE /* Locked */);

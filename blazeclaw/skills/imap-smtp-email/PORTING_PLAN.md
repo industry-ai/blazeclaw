@@ -18,6 +18,7 @@ Port these assets and behaviors from:
 Primary integration points to implement and validate:
 - Skill packaging/layout under `blazeclaw/skills/imap-smtp-email/`
 - MFC configuration entry points and document/view ownership:
+  - `CSkillView` (registered skill catalog pane grouped by category)
   - `CBlazeClawMFCView`
   - `CBlazeClawMFCApp::m_pChatDocTemplate`
   - `CBlazeClawMFCDoc`
@@ -175,6 +176,8 @@ Phase 7 artifact snapshot:
 - [x] `blazeclaw/skills/imap-smtp-email/config.html` is integrated into an MFC WebView2 configuration flow
 - [x] `CBlazeClawMFCView` can trigger email configuration and open a new chat document through `m_pChatDocTemplate`
 - [x] WebView2 form values are validated and persisted through `CBlazeClawMFCDoc`-associated config storage
+- [ ] `CSkillView::FillSkillView()` renders real registered skills grouped by category
+- [ ] Clicking a `CSkillView` skill item routes properties/configuration payload to `CBlazeClawMFCView`
 - [x] BlazeClaw gateway can discover email tools in catalog
 - [x] BlazeClaw runtime can execute IMAP/SMTP skill tools from chat
 - [x] Tool-call deltas are persisted and observable

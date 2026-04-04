@@ -13,6 +13,8 @@
 
 #include "ViewTree.h"
 
+#include <unordered_map>
+
 class CClassToolBar : public CMFCToolBar
 {
 	virtual void OnUpdateCmdUI(CFrameWnd* /*pTarget*/, BOOL bDisableIfNoHndler)
@@ -34,11 +36,13 @@ public:
 
 protected:
 	CClassToolBar m_wndToolBar;
-	CViewTree m_wndClassView;
-	CImageList m_ClassViewImages;
+	CViewTree m_wndSkillView;
+	CImageList m_SkillViewImages;
 	UINT m_nCurrSort;
+	std::unordered_map<HTREEITEM, std::string> m_skillItemPayloadByTreeItem;
 
-	void FillClassView();
+	void FillSkillView();
+	void NotifySelectionToChatView(HTREEITEM selectedItem);
 
 	// Overrides
 public:
@@ -55,6 +59,8 @@ protected:
 	afx_msg void OnNewFolder();
 	afx_msg void OnPaint();
 	afx_msg void OnSetFocus(CWnd* pOldWnd);
+	afx_msg void OnTreeSelectionChanged(NMHDR* pNMHDR, LRESULT* pResult);
+	afx_msg void OnTreeItemDoubleClick(NMHDR* pNMHDR, LRESULT* pResult);
 	afx_msg LRESULT OnChangeActiveTab(WPARAM, LPARAM);
 	afx_msg void OnSort(UINT id);
 	afx_msg void OnUpdateSort(CCmdUI* pCmdUI);

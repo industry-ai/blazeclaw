@@ -482,7 +482,7 @@ namespace {
 	std::string BuildToolStartDetail(
 		const std::optional<std::string>& paramsJson)
 	{
-        const auto info = ParseToolStartInfo(paramsJson);
+		const auto info = ParseToolStartInfo(paramsJson);
 		std::string detail = "tool=" + info.tool;
 		if (!info.action.empty())
 		{
@@ -549,14 +549,14 @@ namespace {
 	std::string BuildToolResultDetail(
 		const blazeclaw::gateway::protocol::ResponseFrame& response)
 	{
-       const auto info = ParseToolResultInfo(response);
+		const auto info = ParseToolResultInfo(response);
 		if (info.phase == "error" && !info.code.empty())
 		{
 			return "status=error code=" + info.code;
 		}
 
 		std::string detail =
-            "tool=" + info.tool +
+			"tool=" + info.tool +
 			" status=" + info.status +
 			" executed=" + (info.executed ? "true" : "false");
 
@@ -1371,13 +1371,13 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 			connected ? L"lifecycle.connected" : L"lifecycle.disconnected");
 		PostBridgeLifecycleEvent(
 			connected ? L"connected" : L"disconnected",
-         connected ? L"service-ready" : L"service-not-running",
+			connected ? L"service-ready" : L"service-not-running",
 			provider,
 			model,
 			runtimeKind);
 		m_bridgeLifecycleSent = true;
 		m_bridgeLastConnected = connected;
-       m_bridgeLastProvider = provider;
+		m_bridgeLastProvider = provider;
 		m_bridgeLastModel = model;
 		m_bridgeLastRuntimeKind = runtimeKind;
 	}
@@ -1386,7 +1386,7 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 		if (connected)
 		{
 			AppendChatProcedureStatusLine(L"lifecycle.reconnected");
-         PostBridgeLifecycleEvent(
+			PostBridgeLifecycleEvent(
 				L"reconnected",
 				L"service-ready",
 				provider,
@@ -1401,7 +1401,7 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 		}
 
 		m_bridgeLastConnected = connected;
-       m_bridgeLastProvider = connected ? provider : std::string();
+		m_bridgeLastProvider = connected ? provider : std::string();
 		m_bridgeLastModel = connected ? model : std::string();
 		m_bridgeLastRuntimeKind = connected ? runtimeKind : std::string();
 	}
@@ -1409,8 +1409,8 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 	if (connected &&
 		m_bridgeLifecycleSent &&
 		(provider != m_bridgeLastProvider ||
-		 model != m_bridgeLastModel ||
-		 runtimeKind != m_bridgeLastRuntimeKind))
+			model != m_bridgeLastModel ||
+			runtimeKind != m_bridgeLastRuntimeKind))
 	{
 		AppendChatProcedureStatusLine(L"lifecycle.runtime-updated");
 		PostBridgeLifecycleEvent(
@@ -1484,7 +1484,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 {
 #ifdef HAVE_WEBVIEW2_HEADER
 	const std::string message = ToNarrow(webMessageJson);
-    if (HandleEmailConfigBridgeMessage(message))
+	if (HandleEmailConfigBridgeMessage(message))
 	{
 		return;
 	}
@@ -1610,7 +1610,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			AppendChatProcedureStatusLine(
 				L"tools.execute.start",
 				BuildToolStartDetail(paramsJson));
-           PostBridgeMessageJson(ToWide(
+			PostBridgeMessageJson(ToWide(
 				BuildToolLifecycleStartJson(
 					"openclaw.ws.req",
 					correlationId,
@@ -1660,7 +1660,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 				? L"tools.execute.result"
 				: L"tools.execute.error",
 				BuildToolResultDetail(response));
-           PostBridgeMessageJson(ToWide(
+			PostBridgeMessageJson(ToWide(
 				BuildToolLifecycleResultJson(
 					"openclaw.ws.req",
 					correlationId,
@@ -1697,7 +1697,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		AppendChatProcedureStatusLine(
 			L"tools.execute.start",
 			BuildToolStartDetail(paramsJson));
-       PostBridgeMessageJson(ToWide(
+		PostBridgeMessageJson(ToWide(
 			BuildToolLifecycleStartJson(
 				"blazeclaw.gateway.rpc",
 				correlationId,
@@ -1734,7 +1734,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			? L"tools.execute.result"
 			: L"tools.execute.error",
 			BuildToolResultDetail(response));
-       PostBridgeMessageJson(ToWide(
+		PostBridgeMessageJson(ToWide(
 			BuildToolLifecycleResultJson(
 				"blazeclaw.gateway.rpc",
 				correlationId,
@@ -1978,13 +1978,39 @@ void CBlazeClawMFCView::PersistEmailConfigFromPayload(
 
 	AppendChatProcedureStatusLine(
 		L"email.config.saved",
-     ToNarrow(doc->GetEmailSkillConfigPath().wstring()));
+		ToNarrow(doc->GetEmailSkillConfigPath().wstring()));
 
 	const std::string json =
 		"{\"channel\":\"blazeclaw.email.config.saved\",\"ok\":true,\"configPath\":" +
-     JsonString(ToNarrow(doc->GetEmailSkillConfigPath().wstring())) +
+		JsonString(ToNarrow(doc->GetEmailSkillConfigPath().wstring())) +
 		"}";
 	PostBridgeMessageJson(ToWide(json));
+}
+
+void CBlazeClawMFCView::ShowSkillSelection(
+	const std::string& skillKey,
+	const std::string& propertiesJson)
+{
+	const std::string normalizedSkillKey =
+		blazeclaw::gateway::json::Trim(skillKey).empty()
+		? std::string("unknown")
+		: skillKey;
+
+	AppendChatProcedureStatusLine(
+		L"skills.selection",
+		normalizedSkillKey);
+	if (!propertiesJson.empty())
+	{
+		AppendChatProcedureStatusBlock(propertiesJson);
+	}
+
+	const std::string payload =
+		"{\"channel\":\"blazeclaw.skills.selection\",\"skillKey\":" +
+		JsonString(normalizedSkillKey) +
+		",\"properties\":" +
+		(propertiesJson.empty() ? std::string("{}") : propertiesJson) +
+		"}";
+	PostBridgeMessageJson(ToWide(payload));
 }
 
 void CBlazeClawMFCView::InitializeWebViewBridge()
@@ -2105,7 +2131,7 @@ void CBlazeClawMFCView::OnInitialUpdate()
 										}).Get(),
 											nullptr);
 
-                                const std::wstring startupUrl = ResolveInitialNavigationUrl();
+								const std::wstring startupUrl = ResolveInitialNavigationUrl();
 								AppendChatProcedureStatusLine(
 									L"startup.url",
 									ToNarrow(startupUrl));
