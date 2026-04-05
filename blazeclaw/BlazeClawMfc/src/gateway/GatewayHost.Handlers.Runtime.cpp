@@ -355,6 +355,14 @@ namespace blazeclaw::gateway {
 				EscapeJsonLocal(delta.phase) +
 				"\",\"toolName\":\"" +
 				EscapeJsonLocal(delta.toolName) +
+				"\",\"fallbackBackend\":\"" +
+				EscapeJsonLocal(delta.fallbackBackend) +
+				"\",\"fallbackAction\":\"" +
+				EscapeJsonLocal(delta.fallbackAction) +
+				"\",\"fallbackAttempt\":" +
+				std::to_string(delta.fallbackAttempt) +
+				",\"fallbackMaxAttempts\":" +
+				std::to_string(delta.fallbackMaxAttempts) +
 				"\",\"argsJson\":\"" +
 				EscapeJsonLocal(delta.argsJson) +
 				"\",\"resultJson\":\"" +
@@ -379,6 +387,13 @@ namespace blazeclaw::gateway {
 		struct ChatPromptOrchestrationResult {
 			bool matched = false;
 			bool success = false;
+			bool requiresApproval = false;
+			std::string terminalStatus;
+			std::string terminalReason;
+			std::string fallbackBackend;
+			std::string fallbackAction;
+			std::size_t fallbackAttempt = 0;
+			std::size_t fallbackMaxAttempts = 0;
 			std::string assistantText;
 			std::vector<std::string> assistantDeltas;
 			std::string errorCode;
@@ -665,6 +680,8 @@ namespace blazeclaw::gateway {
 
 			if (recipient.empty()) {
 				result.success = false;
+				result.terminalStatus = "failed";
+				result.terminalReason = "recipient_missing";
 				result.errorCode = "orchestration_invalid_prompt";
 				result.errorMessage = "recipient_email_required";
 				return result;
@@ -680,6 +697,8 @@ namespace blazeclaw::gateway {
 
 			if (!weatherExecution.executed || weatherExecution.status != "ok") {
 				result.success = false;
+				result.terminalStatus = "failed";
+				result.terminalReason = "weather_failed";
 				result.errorCode = "orchestration_weather_failed";
 				result.errorMessage = weatherExecution.output;
 				return result;
@@ -735,6 +754,8 @@ namespace blazeclaw::gateway {
 			if (!emailPrepareExecution.executed ||
 				emailPrepareExecution.status != "needs_approval") {
 				result.success = false;
+				result.terminalStatus = "failed";
+				result.terminalReason = "email_prepare_failed";
 				result.errorCode = "orchestration_email_prepare_failed";
 				result.errorMessage = emailPrepareExecution.output;
 				return result;
@@ -764,6 +785,8 @@ namespace blazeclaw::gateway {
 
 			if (approvalToken.empty()) {
 				result.success = false;
+				result.terminalStatus = "failed";
+				result.terminalReason = "approval_token_missing";
 				result.errorCode = "orchestration_email_missing_approval_token";
 				result.errorMessage = "approval_token_missing";
 				return result;
@@ -805,13 +828,17 @@ namespace blazeclaw::gateway {
 					}
 				}
 				else {
+					const std::string approveOutputLower =
+						ToLowerCopyLocal(emailApproveExecution.output);
 					autoApproveBackendMissing =
-						emailApproveExecution.output.find("\"code\":\"himalaya_cli_missing\"") !=
-						std::string::npos ||
-						emailApproveExecution.output.find("himalaya_cli_missing") !=
-						std::string::npos;
+						emailApproveExecution.status == "error" &&
+						(approveOutputLower.find("missing") != std::string::npos ||
+							approveOutputLower.find("unavailable") != std::string::npos ||
+							emailApproveExecution.output.find("email_delivery_backends_exhausted") != std::string::npos);
 					if (!autoApproveBackendMissing) {
 						result.success = false;
+						result.terminalStatus = "failed";
+						result.terminalReason = "email_approve_failed";
 						result.errorCode = "orchestration_email_approve_failed";
 						result.errorMessage = emailApproveExecution.output;
 						return result;
@@ -822,6 +849,7 @@ namespace blazeclaw::gateway {
 			}
 
 			result.success = true;
+			result.requiresApproval = !shouldAutoApprove;
 			result.assistantDeltas = {
 				"tools.execute.start tool=weather.lookup",
 				"tools.execute.result tool=weather.lookup status=ok",
@@ -844,6 +872,8 @@ namespace blazeclaw::gateway {
 			}
 
 			if (shouldAutoApprove) {
+				result.terminalStatus = "completed";
+				result.terminalReason = "auto_approved";
 				result.assistantText =
 					report +
 					" Email sent to " + recipient +
@@ -851,6 +881,14 @@ namespace blazeclaw::gateway {
 					" via " + autoApproveBackend + ".";
 			}
 			else {
+				result.terminalStatus = "needs_approval";
+				result.terminalReason = autoApproveBackendMissing
+					? "fallback_backend_unavailable"
+					: "approval_required";
+				result.fallbackBackend = autoApproveBackend;
+				result.fallbackAction = "continue";
+				result.fallbackAttempt = 1;
+				result.fallbackMaxAttempts = 2;
 				result.assistantText =
 					report +
 					" Email scheduling to " + recipient +
@@ -2007,7 +2045,8 @@ namespace blazeclaw::gateway {
 						const std::string& finalStatus,
 						const std::string& finalText,
 						const std::string& errorCode,
-						const std::string& errorMessage) {
+						const std::string& errorMessage,
+						const ChatPromptOrchestrationResult& orchestrationResult) {
 							std::vector<ChatRuntimeResult::TaskDeltaEntry> taskDeltas;
 							const std::uint64_t baseMs = CurrentEpochMsLocal();
 
@@ -2092,6 +2131,10 @@ namespace blazeclaw::gateway {
 									.sessionId = sessionKey,
 									.phase = "tool_result",
 									.toolName = "email.schedule",
+								 .fallbackBackend = orchestrationResult.fallbackBackend,
+									.fallbackAction = orchestrationResult.fallbackAction,
+									.fallbackAttempt = orchestrationResult.fallbackAttempt,
+									.fallbackMaxAttempts = orchestrationResult.fallbackMaxAttempts,
 									.status = "needs_approval",
 									.startedAtMs = baseMs + 3,
 									.completedAtMs = baseMs + 4,
@@ -2106,7 +2149,9 @@ namespace blazeclaw::gateway {
 								.sessionId = sessionKey,
 								.phase = "final",
 								.resultJson = success ? finalText : errorMessage,
-								.status = finalStatus,
+							  .status = orchestrationResult.terminalStatus.empty()
+									? finalStatus
+									: orchestrationResult.terminalStatus,
 								.errorCode = errorCode,
 								.startedAtMs = baseMs + 4,
 								.completedAtMs = baseMs + 4,
@@ -2179,10 +2224,13 @@ namespace blazeclaw::gateway {
 							auto legacyTaskDeltas =
 								buildLegacyOrchestrationTaskDeltas(
 									true,
-									"completed",
+									orchestrationResult.terminalStatus.empty()
+									? "completed"
+									: orchestrationResult.terminalStatus,
 									assistantText,
 									{},
-									{});
+									{},
+									orchestrationResult);
 							assistantDeltas =
 								buildAssistantDeltasFromTaskDeltas(legacyTaskDeltas);
 							if (assistantDeltas.empty()) {
@@ -2246,10 +2294,13 @@ namespace blazeclaw::gateway {
 							auto legacyTaskDeltas =
 								buildLegacyOrchestrationTaskDeltas(
 									false,
-									"failed",
+									orchestrationResult.terminalStatus.empty()
+									? "failed"
+									: orchestrationResult.terminalStatus,
 									{},
 									backendErrorCode,
-									backendErrorMessage);
+									backendErrorMessage,
+									orchestrationResult);
 							assistantDeltas =
 								buildAssistantDeltasFromTaskDeltas(legacyTaskDeltas);
 							persistTaskDeltas(legacyTaskDeltas, false);

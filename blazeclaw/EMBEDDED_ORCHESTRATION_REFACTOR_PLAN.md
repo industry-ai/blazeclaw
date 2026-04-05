@@ -162,6 +162,9 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
 - Option 5/6 Phase 4 resolver migration is now in place
   (resolver-driven backend plan execution, policy action-matrix enforcement,
   and runtime policy propagation into email executor behavior).
+- Option 5/6 Phase 5 orchestration alignment is now in place
+  (normalized fallback handling in weather shortcut flow, policy-derived
+  deterministic terminal states, and fallback metadata emitted in task deltas).
 
 ## Step-by-Step Implementation Process
 

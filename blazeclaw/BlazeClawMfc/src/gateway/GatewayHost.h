@@ -122,6 +122,10 @@ namespace blazeclaw::gateway {
 				std::string sessionId;
 				std::string phase;
 				std::string toolName;
+				std::string fallbackBackend;
+				std::string fallbackAction;
+				std::size_t fallbackAttempt = 0;
+				std::size_t fallbackMaxAttempts = 0;
 				std::string argsJson;
 				std::string resultJson;
 				std::string status;

@@ -202,6 +202,10 @@ To reduce regression risk, validation is split into two smoke lanes:
   - completed resolver-driven executor migration with policy action matrix
     enforcement and runtime policy propagation from service/gateway to
     email fallback execution.
+- Phase 5 status:
+  - completed runtime orchestration alignment with normalized fallback handling,
+    extended fallback metadata in task-delta contracts, and deterministic
+    policy-derived terminal statuses in orchestration output.
 
 
 ### Priority 2 (behavioral parity)

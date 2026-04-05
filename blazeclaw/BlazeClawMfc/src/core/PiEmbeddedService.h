@@ -56,7 +56,7 @@ namespace blazeclaw::core {
 		std::function<blazeclaw::gateway::ToolExecuteResult(
 			const std::string&,
 			const std::optional<std::string>&)> toolExecutor;
-      std::function<bool()> isCancellationRequested;
+		std::function<bool()> isCancellationRequested;
 	};
 
 	struct EmbeddedTaskDelta {
@@ -65,6 +65,10 @@ namespace blazeclaw::core {
 		std::string sessionId;
 		std::string phase;
 		std::string toolName;
+		std::string fallbackBackend;
+		std::string fallbackAction;
+		std::size_t fallbackAttempt = 0;
+		std::size_t fallbackMaxAttempts = 0;
 		std::string argsJson;
 		std::string resultJson;
 		std::string status;
@@ -124,7 +128,7 @@ namespace blazeclaw::core {
 
 	private:
 		blazeclaw::config::AppConfig m_config;
-      mutable std::mutex m_cancelMutex;
+		mutable std::mutex m_cancelMutex;
 		std::unordered_set<std::string> m_cancelledRunIds;
 		std::unordered_map<std::string, EmbeddedRunRecord> m_runsById;
 		std::unordered_map<std::string, std::vector<EmbeddedTaskDelta>>

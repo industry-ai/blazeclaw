@@ -198,6 +198,13 @@ Support declarative fallback policy in config instead of hardcoding.
     with bounded retry behavior,
   - runtime-resolved policy values are propagated through gateway runtime state
     into executor consumption while preserving legacy output envelope shape.
+- Phase 5 runtime orchestration alignment is implemented:
+  - weather shortcut path now uses normalized fallback handling rather than
+    backend-specific `himalaya_cli_missing` checks,
+  - runtime and embedded task-delta contracts now include fallback backend,
+    action, and attempt metadata,
+  - orchestration terminal statuses are now deterministic and policy-derived
+    (`completed` / `needs_approval` / `failed`).
 
 ### Detailed implementation reference
 - `blazeclaw/EMAIL_FALLBACK_OPTION5_OPTION6_IMPLEMENTATION_PLAN.md`

@@ -351,6 +351,30 @@ target interfaces, and completion checks.
 3. Ensure terminal statuses are policy-derived and deterministic.
 4. Keep dynamic tool loop behavior generic and non-hardcoded.
 
+**Phase 5 implementation status (current): completed**
+
+- Runtime orchestration path now consumes normalized resolver outcomes:
+  - weather shortcut path no longer hardcodes backend-specific
+    `himalaya_cli_missing` matching.
+  - fallback-unavailable handling is normalized and policy-compatible.
+- Task-delta metadata contract has been extended for fallback telemetry:
+  - `ChatRuntimeResult::TaskDeltaEntry` now carries:
+    - `fallbackBackend`
+    - `fallbackAction`
+    - `fallbackAttempt`
+    - `fallbackMaxAttempts`
+  - `EmbeddedTaskDelta` now carries the same fields.
+- Embedded orchestration emits fallback metadata in `tool_result` deltas:
+  - per-step tool-result output now includes normalized fallback action and
+    attempt/max-attempt context.
+- Terminal statuses for weather shortcut orchestration are deterministic and
+  policy-derived:
+  - `completed` for auto-approved path,
+  - `needs_approval` for pending approval path,
+  - `failed` for orchestration failure path.
+- Task-delta persistence and runtime serialization now retain fallback metadata
+  across process lifecycle.
+
 ---
 
 ### Phase 6 — Policy Resolution Endpoint + Diagnostics

@@ -329,6 +329,10 @@ namespace blazeclaw::gateway {
 				"\",\"sessionId\":\"" + EscapeJson(delta.sessionId) +
 				"\",\"phase\":\"" + EscapeJson(delta.phase) +
 				"\",\"toolName\":\"" + EscapeJson(delta.toolName) +
+				"\",\"fallbackBackend\":\"" + EscapeJson(delta.fallbackBackend) +
+				"\",\"fallbackAction\":\"" + EscapeJson(delta.fallbackAction) +
+				"\",\"fallbackAttempt\":" + std::to_string(delta.fallbackAttempt) +
+				",\"fallbackMaxAttempts\":" + std::to_string(delta.fallbackMaxAttempts) +
 				"\",\"argsJson\":\"" + EscapeJson(delta.argsJson) +
 				"\",\"resultJson\":\"" + EscapeJson(delta.resultJson) +
 				"\",\"status\":\"" + EscapeJson(delta.status) +
@@ -842,6 +846,10 @@ namespace blazeclaw::gateway {
 				delta.sessionId = deltaNode.value("sessionId", std::string{});
 				delta.phase = deltaNode.value("phase", std::string{});
 				delta.toolName = deltaNode.value("toolName", std::string{});
+				delta.fallbackBackend = deltaNode.value("fallbackBackend", std::string{});
+				delta.fallbackAction = deltaNode.value("fallbackAction", std::string{});
+				delta.fallbackAttempt = deltaNode.value("fallbackAttempt", std::size_t{ 0 });
+				delta.fallbackMaxAttempts = deltaNode.value("fallbackMaxAttempts", std::size_t{ 0 });
 				delta.argsJson = deltaNode.value("argsJson", std::string{});
 				delta.resultJson = deltaNode.value("resultJson", std::string{});
 				delta.status = deltaNode.value("status", std::string{});

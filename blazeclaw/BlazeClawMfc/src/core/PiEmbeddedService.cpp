@@ -59,6 +59,49 @@ namespace blazeclaw::core {
 				.count());
 		}
 
+		std::string ResolveFallbackActionForExecution(
+			const blazeclaw::gateway::ToolExecuteResultV2& execution) {
+			auto toLower = [](const std::string& value) {
+				std::string lowered = value;
+				std::transform(
+					lowered.begin(),
+					lowered.end(),
+					lowered.begin(),
+					[](const unsigned char ch) {
+						return static_cast<char>(std::tolower(ch));
+					});
+				return lowered;
+				};
+
+			const std::string code = toLower(execution.errorCode);
+			const std::string status = toLower(execution.status);
+
+			if (code.find("missing") != std::string::npos ||
+				code.find("unavailable") != std::string::npos ||
+				status == "unavailable_runtime") {
+				return "continue";
+			}
+
+			if (code.find("auth") != std::string::npos ||
+				code.find("token") != std::string::npos ||
+				code.find("credential") != std::string::npos) {
+				return "stop";
+			}
+
+			const bool transient =
+				status == "timeout" ||
+				status == "temporary_error" ||
+				status == "throttled" ||
+				code == "timeout" ||
+				code == "network_error" ||
+				code == "transient";
+			if (transient) {
+				return "retry_then_continue";
+			}
+
+			return "stop";
+		}
+
 		bool IsSupportedArgMode(const std::string& argMode) {
 			if (argMode.empty()) {
 				return true;
@@ -907,9 +950,15 @@ namespace blazeclaw::core {
 				? (execution.executed ? kStatusCompleted : kStatusFailed)
 				: execution.status;
 
+			const std::string fallbackAction =
+				ResolveFallbackActionForExecution(execution);
 			appendDelta(EmbeddedTaskDelta{
-			 .phase = kPhaseToolResult,
+				.phase = kPhaseToolResult,
 				.toolName = toolName,
+				.fallbackBackend = toolName,
+				.fallbackAction = fallbackAction,
+				.fallbackAttempt = repeatCount + 1,
+				.fallbackMaxAttempts = kMaxRepeatCalls,
 				.argsJson = args.dump(),
 				.resultJson = execution.result,
 				.status = toolResultStatus,
@@ -921,8 +970,8 @@ namespace blazeclaw::core {
 				.startedAtMs = execution.startedAtMs,
 				.completedAtMs = execution.completedAtMs,
 				.latencyMs = execution.latencyMs,
-				.modelTurnId = execution.correlationId,
-			 .stepLabel = step.stepLabel,
+			 .modelTurnId = execution.correlationId,
+				.stepLabel = step.stepLabel,
 				});
 
 			if (!execution.executed || execution.status == "error") {
