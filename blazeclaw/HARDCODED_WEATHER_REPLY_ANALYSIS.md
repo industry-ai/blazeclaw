@@ -107,3 +107,6 @@ Progress snapshot:
 - Option 5/6 Phase 0 scaffolding is completed (config flags + runtime wiring +
   diagnostics exposure), enabling safe implementation of Phase 1 dependency
   preflight without behavior change.
+- Option 5/6 Phase 1 dependency preflight is completed in email executor
+  (health index probes + preflight gate when enabled), reducing avoidable
+  backend execution failures.

@@ -188,6 +188,10 @@ To reduce regression risk, validation is split into two smoke lanes:
   - completed flag scaffolding (`email.preflight.enabled`,
     `email.policyProfiles.enabled`, `email.policyProfiles.enforce`) with runtime
     wiring and diagnostics/config exposure.
+- Phase 1 status:
+  - completed dependency preflight health index probes and capability summary,
+    with preflight gating integrated into email backend execution path when
+    enabled.
 
 
 ### Priority 2 (behavioral parity)

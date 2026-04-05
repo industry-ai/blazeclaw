@@ -383,6 +383,9 @@ The Python dual-mode support framework plan (Phase 0 through Phase 5) is complet
     `Executable Phase-by-Phase Coding Checklist (Exact C++ Targets)`.
   - current status: Phase 0 scaffolding completed (config flags, runtime
     wiring, and diagnostics/config endpoint visibility).
+  - current status: Phase 1 dependency preflight health index completed
+    (probe snapshot + preflight gate in email delivery path + diagnostics
+    summary fields).
 - Added tests:
   - `BlazeClawMfc/tests/EmailScheduleFallbackTests.cpp`
   - updated `BlazeClawMfc/tests/OpsToolsExecutorTests.cpp` fallback coverage.

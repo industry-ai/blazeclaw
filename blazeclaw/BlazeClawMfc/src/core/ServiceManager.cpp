@@ -4,6 +4,7 @@
 
 #include "../gateway/GatewayProtocolModels.h"
 #include "../gateway/GatewayJsonUtils.h"
+#include "../gateway/executors/EmailScheduleExecutor.h"
 
 #include <cctype>
 #include <chrono>
@@ -3856,6 +3857,21 @@ namespace blazeclaw::core {
 		const auto embeddings = Embeddings();
 		const auto localModel = LocalModelRuntime();
 		const auto retrieval = RetrievalMemory();
+		const auto emailHealth =
+			blazeclaw::gateway::executors::EmailScheduleExecutor::
+			GetRuntimeHealthIndex(false);
+		std::size_t emailProbeReady = 0;
+		std::size_t emailProbeUnavailable = 0;
+		for (const auto& probe : emailHealth.probes) {
+			if (probe.state == "ready") {
+				++emailProbeReady;
+				continue;
+			}
+
+			if (probe.state == "unavailable") {
+				++emailProbeUnavailable;
+			}
+		}
 		const std::uint64_t embeddedTotalRuns =
 			m_embeddedRunSuccessCount + m_embeddedRunFailureCount;
 		const double embeddedSuccessRate = embeddedTotalRuns == 0
@@ -3877,6 +3893,16 @@ namespace blazeclaw::core {
 			std::string(m_activeConfig.email.policyProfiles.enabled ? "true" : "false") +
 			",\"policyProfilesEnforce\":" +
 			std::string(m_activeConfig.email.policyProfiles.enforce ? "true" : "false") +
+			",\"capabilityState\":\"" +
+			emailHealth.emailSendState +
+			"\",\"healthGeneratedAtEpochMs\":" +
+			std::to_string(emailHealth.generatedAtEpochMs) +
+			",\"healthTtlMs\":" +
+			std::to_string(emailHealth.ttlMs) +
+			",\"probeReadyCount\":" +
+			std::to_string(emailProbeReady) +
+			",\"probeUnavailableCount\":" +
+			std::to_string(emailProbeUnavailable) +
 			"},"
 			"\"agents\":{\"count\":" + std::to_string(m_agentsScope.entries.size()) +
 			",\"defaultAgent\":\"" + ToNarrow(m_agentsScope.defaultAgentId) + "\"},"

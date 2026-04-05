@@ -180,6 +180,23 @@ target interfaces, and completion checks.
 3. Add capability-level derived readiness (`email.send`).
 4. Ensure preflight can be forced on-demand after failed backend attempts.
 
+**Phase 1 implementation status (current): completed**
+
+- Implemented runtime health index models in executor surface:
+  - `DependencyProbeResult`
+  - `RuntimeHealthIndex`
+- Implemented cached preflight snapshot generation for:
+  - `backend:himalaya`
+  - `runtime:node`
+  - `skill:imap_smtp_email`
+- Implemented capability derivation:
+  - `email.send` equivalent state via `RuntimeHealthIndex.emailSendState`.
+- Implemented delivery path integration:
+  - preflight gate in `DeliverEmailWithFallback(...)` when
+    `BLAZECLAW_EMAIL_PREFLIGHT_ENABLED=true`.
+- Implemented diagnostics exposure:
+  - operator diagnostics now include preflight capability state and probe counts.
+
 ---
 
 ### Phase 2 — Health Endpoints + Contract/Schema Updates

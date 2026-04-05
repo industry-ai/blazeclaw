@@ -151,6 +151,8 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
 **Progress note**
 - Option 5/6 Phase 0 flag scaffolding is now in place (config keys, startup
   wiring, and diagnostics/config endpoint exposure).
+- Option 5/6 Phase 1 dependency preflight health index is now in place
+  (probe snapshot generation + delivery preflight gate + diagnostics summary).
 
 ## Step-by-Step Implementation Process
 

@@ -20,6 +20,128 @@
 
 namespace blazeclaw::gateway::executors {
 	namespace {
+		std::string ReadEnvVar(const char* name);
+		std::string ToLowerCopy(const std::string& value);
+		bool HasHimalayaBinary();
+		bool HasNodeBinary();
+		bool HasImapSmtpSkill();
+
+		constexpr std::uint64_t kDefaultPreflightTtlMs = 60 * 1000;
+
+		bool ParseBoolEnvOrDefault(
+			const char* name,
+			const bool fallback) {
+			const std::string value = ToLowerCopy(json::Trim(ReadEnvVar(name)));
+			if (value == "1" || value == "true" || value == "yes" || value == "on") {
+				return true;
+			}
+
+			if (value == "0" || value == "false" || value == "no" || value == "off") {
+				return false;
+			}
+
+			return fallback;
+		}
+
+		std::uint64_t ResolvePreflightTtlMs() {
+			const std::string raw = json::Trim(ReadEnvVar("BLAZECLAW_EMAIL_PREFLIGHT_TTL_MS"));
+			if (raw.empty()) {
+				return kDefaultPreflightTtlMs;
+			}
+
+			try {
+				const auto parsed = static_cast<std::uint64_t>(std::stoull(raw));
+				if (parsed == 0) {
+					return kDefaultPreflightTtlMs;
+				}
+				return parsed;
+			}
+			catch (...) {
+				return kDefaultPreflightTtlMs;
+			}
+		}
+
+		DependencyProbeResult BuildProbe(
+			const std::string& key,
+			const bool available,
+			const std::string& unavailableCode,
+			const std::string& unavailableMessage,
+			const std::uint64_t checkedAt,
+			const std::uint64_t ttlMs) {
+			DependencyProbeResult result;
+			result.key = key;
+			result.state = available ? "ready" : "unavailable";
+			result.reasonCode = available ? "ok" : unavailableCode;
+			result.reasonMessage = available ? "ok" : unavailableMessage;
+			result.checkedAtEpochMs = checkedAt;
+			result.expiresAtEpochMs = checkedAt + ttlMs;
+			return result;
+		}
+
+		RuntimeHealthIndex BuildRuntimeHealthIndexSnapshot(
+			const std::uint64_t checkedAt,
+			const std::uint64_t ttlMs) {
+			RuntimeHealthIndex index;
+			index.generatedAtEpochMs = checkedAt;
+			index.ttlMs = ttlMs;
+
+			const bool hasHimalaya = HasHimalayaBinary();
+			const bool hasNode = HasNodeBinary();
+			const bool hasImapSmtp = HasImapSmtpSkill();
+
+			index.probes.push_back(BuildProbe(
+				"backend:himalaya",
+				hasHimalaya,
+				"himalaya_cli_missing",
+				"himalaya cli not found",
+				checkedAt,
+				ttlMs));
+
+			index.probes.push_back(BuildProbe(
+				"runtime:node",
+				hasNode,
+				"node_cli_missing",
+				"node runtime not found",
+				checkedAt,
+				ttlMs));
+
+			index.probes.push_back(BuildProbe(
+				"skill:imap_smtp_email",
+				hasImapSmtp,
+				"imap_smtp_skill_missing",
+				"imap smtp skill scripts not found",
+				checkedAt,
+				ttlMs));
+
+			if (hasHimalaya || (hasNode && hasImapSmtp)) {
+				index.emailSendState = "ready";
+			}
+			else {
+				index.emailSendState = "unavailable";
+			}
+
+			return index;
+		}
+
+		RuntimeHealthIndex BuildFallbackHealthIndex(
+			const std::uint64_t checkedAt,
+			const std::uint64_t ttlMs) {
+			RuntimeHealthIndex index;
+			index.generatedAtEpochMs = checkedAt;
+			index.ttlMs = ttlMs;
+			index.emailSendState = "unknown";
+			return index;
+		}
+
+		RuntimeHealthIndex& MutableHealthIndexCache() {
+			static RuntimeHealthIndex cache{};
+			return cache;
+		}
+
+		std::mutex& HealthIndexCacheMutex() {
+			static std::mutex mutex;
+			return mutex;
+		}
 		std::string EscapeJson(const std::string& value) {
 			std::string escaped;
 			escaped.reserve(value.size() + 8);
@@ -622,6 +744,15 @@ namespace blazeclaw::gateway::executors {
 			outErrorCode.clear();
 			outErrorMessage.clear();
 
+			if (ParseBoolEnvOrDefault("BLAZECLAW_EMAIL_PREFLIGHT_ENABLED", false)) {
+				const auto healthIndex = EmailScheduleExecutor::GetRuntimeHealthIndex(false);
+				if (healthIndex.emailSendState == "unavailable") {
+					outErrorCode = "email_delivery_unavailable_preflight";
+					outErrorMessage = "email_send capability unavailable by preflight";
+					return false;
+				}
+			}
+
 			for (const auto& backend : ResolveEmailBackendChain()) {
 				std::string status;
 				std::string output;
@@ -936,5 +1067,30 @@ namespace blazeclaw::gateway::executors {
 					"action_prepare_or_approve_required"),
 			};
 			};
+	}
+
+	RuntimeHealthIndex EmailScheduleExecutor::GetRuntimeHealthIndex(
+		const bool forceRefresh) {
+		const std::uint64_t nowEpochMs = CurrentEpochMs();
+		const std::uint64_t ttlMs = ResolvePreflightTtlMs();
+
+		std::lock_guard<std::mutex> lock(HealthIndexCacheMutex());
+		auto& cache = MutableHealthIndexCache();
+		const bool cacheValid =
+			cache.generatedAtEpochMs > 0 &&
+			(nowEpochMs - cache.generatedAtEpochMs) <= ttlMs;
+
+		if (!forceRefresh && cacheValid) {
+			return cache;
+		}
+
+		try {
+			cache = BuildRuntimeHealthIndexSnapshot(nowEpochMs, ttlMs);
+		}
+		catch (...) {
+			cache = BuildFallbackHealthIndex(nowEpochMs, ttlMs);
+		}
+
+		return cache;
 	}
 } // namespace blazeclaw::gateway::executors

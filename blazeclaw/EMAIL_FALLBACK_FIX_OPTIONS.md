@@ -174,6 +174,12 @@ Support declarative fallback policy in config instead of hardcoding.
   - config keys for preflight/policy flags are available,
   - startup wiring passes flags into gateway runtime state,
   - diagnostics and gateway config endpoints expose effective flag state.
+- Phase 1 preflight is implemented:
+  - dependency probes for himalaya/node/imap-smtp skill are cached in a
+    runtime health index,
+  - email delivery fallback can short-circuit on preflight unavailability
+    when preflight is enabled,
+  - operator diagnostics include preflight capability/probe summary fields.
 
 ### Detailed implementation reference
 - `blazeclaw/EMAIL_FALLBACK_OPTION5_OPTION6_IMPLEMENTATION_PLAN.md`
