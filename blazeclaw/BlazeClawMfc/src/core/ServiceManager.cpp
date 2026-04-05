@@ -2140,102 +2140,21 @@ namespace blazeclaw::core {
 		ServiceManager::ResolveEmailFallbackPolicy(
 			const std::wstring& toolName,
 			const std::wstring& capabilityName) const {
-		const auto toLower = [](const std::wstring& value) {
-			std::wstring lowered;
-			lowered.reserve(value.size());
-			for (const auto ch : value) {
-				lowered.push_back(static_cast<wchar_t>(std::towlower(ch)));
-			}
-			return lowered;
-			};
-
-		const auto toStringOrDefault = [](const std::wstring& value, const std::wstring& fallback) {
-			return value.empty() ? fallback : value;
-			};
-
-		const auto toNarrowList = [&toLower](const std::vector<std::wstring>& values) {
-			std::vector<std::wstring> normalized = values;
-			if (normalized.empty()) {
-				normalized = { L"himalaya", L"imap-smtp-email" };
-			}
-
-			for (auto& value : normalized) {
-				value = toLower(value);
-			}
-
-			std::sort(normalized.begin(), normalized.end());
-			normalized.erase(
-				std::unique(normalized.begin(), normalized.end()),
-				normalized.end());
-
-			std::vector<std::wstring> result;
-			result.reserve(normalized.size());
-			for (const auto& value : normalized) {
-				result.push_back(value);
-			}
-			return result;
-			};
-
-		const auto clampU32 = [](
-			const std::uint32_t value,
-			const std::uint32_t minimum,
-			const std::uint32_t maximum) {
-				return (std::clamp)(value, minimum, maximum);
-			};
-
-		const auto& policyConfig = m_activeConfig.email.policy;
-		const auto normalizedToolName = toLower(toolName);
-		const auto normalizedCapabilityName = toLower(capabilityName);
-
-		const blazeclaw::config::EmailFallbackPolicyProfileConfig* selectedProfile =
-			&policyConfig.defaults;
-		std::wstring source = L"default";
-
-		const auto toolIt = policyConfig.tool.find(normalizedToolName);
-		if (toolIt != policyConfig.tool.end()) {
-			selectedProfile = &toolIt->second;
-			source = L"tool";
-		}
-		else {
-			const auto capabilityIt =
-				policyConfig.capability.find(normalizedCapabilityName);
-			if (capabilityIt != policyConfig.capability.end()) {
-				selectedProfile = &capabilityIt->second;
-				source = L"capability";
-			}
-		}
+		const auto resolvedPolicy = blazeclaw::config::ResolveEmailFallbackPolicy(
+			m_activeConfig.email.policy,
+			toolName,
+			capabilityName);
 
 		EmailFallbackResolvedPolicy resolved;
-		resolved.profileId = selectedProfile->id.empty()
-			? (source + L"-policy")
-			: selectedProfile->id;
-		resolved.backends = toNarrowList(selectedProfile->backends);
-		resolved.onUnavailable = toStringOrDefault(
-			selectedProfile->actions.unavailable,
-			L"continue");
-		resolved.onAuthError = toStringOrDefault(
-			selectedProfile->actions.authError,
-			L"stop");
-		resolved.onExecError = toStringOrDefault(
-			selectedProfile->actions.execError,
-			L"retry_then_continue");
-		resolved.retryMaxAttempts = clampU32(
-			selectedProfile->retry.maxAttempts == 0
-			? std::uint32_t{ 1 }
-			: selectedProfile->retry.maxAttempts,
-			std::uint32_t{ 1 },
-			std::uint32_t{ 8 });
-		resolved.retryDelayMs = clampU32(
-			selectedProfile->retry.retryDelayMs,
-			std::uint32_t{ 0 },
-			std::uint32_t{ 300000 });
-		resolved.requiresApproval = selectedProfile->approval.requiresApproval;
-		resolved.approvalTokenTtlMinutes = clampU32(
-			selectedProfile->approval.tokenTtlMinutes == 0
-			? std::uint32_t{ 60 }
-			: selectedProfile->approval.tokenTtlMinutes,
-			std::uint32_t{ 1 },
-			std::uint32_t{ 1440 });
+		resolved.profileId = resolvedPolicy.profileId;
+		resolved.backends = resolvedPolicy.backends;
+		resolved.onUnavailable = resolvedPolicy.onUnavailable;
+		resolved.onAuthError = resolvedPolicy.onAuthError;
+		resolved.onExecError = resolvedPolicy.onExecError;
+		resolved.retryMaxAttempts = resolvedPolicy.retryMaxAttempts;
+		resolved.retryDelayMs = resolvedPolicy.retryDelayMs;
+		resolved.requiresApproval = resolvedPolicy.requiresApproval;
+		resolved.approvalTokenTtlMinutes = resolvedPolicy.approvalTokenTtlMinutes;
 
 		return resolved;
 	}

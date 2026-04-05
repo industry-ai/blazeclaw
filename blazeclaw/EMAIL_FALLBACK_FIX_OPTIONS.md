@@ -217,7 +217,9 @@ Support declarative fallback policy in config instead of hardcoding.
   - fallback matrix tests now cover both directional backend failover paths plus
     deterministic all-backend-unavailable terminal behavior,
   - embedded fixture validation now asserts fallback metadata and terminal
-    status consistency in task-delta chains.
+    status consistency in task-delta chains,
+  - explicit policy-precedence unit tests now cover
+    `tool > capability > default` resolution.
 - Phase 8 rollout and migration gate are implemented:
   - rollout-mode controls (`legacy` / `monitor` / `enforce`) are now available,
   - enforce mode can be scoped to canary channels,

@@ -2,6 +2,8 @@
 
 #include "../app/pch.h"
 
+#include <algorithm>
+#include <cwctype>
 #include <map>
 #include <optional>
 
@@ -122,6 +124,118 @@ namespace blazeclaw::config {
 		EmailPolicyProfilesConfig policyProfiles;
 		EmailFallbackPolicyProfilesMapConfig policy;
 	};
+
+	struct EmailFallbackResolvedPolicyConfig {
+		std::wstring profileId;
+		std::vector<std::wstring> backends;
+		std::wstring onUnavailable = L"continue";
+		std::wstring onAuthError = L"stop";
+		std::wstring onExecError = L"retry_then_continue";
+		std::uint32_t retryMaxAttempts = 1;
+		std::uint32_t retryDelayMs = 0;
+		bool requiresApproval = true;
+		std::uint32_t approvalTokenTtlMinutes = 60;
+	};
+
+	inline EmailFallbackResolvedPolicyConfig ResolveEmailFallbackPolicy(
+		const EmailFallbackPolicyProfilesMapConfig& policyConfig,
+		const std::wstring& toolName,
+		const std::wstring& capabilityName) {
+		const auto toLower = [](const std::wstring& value) {
+			std::wstring lowered;
+			lowered.reserve(value.size());
+			for (const auto ch : value) {
+				lowered.push_back(static_cast<wchar_t>(std::towlower(ch)));
+			}
+			return lowered;
+			};
+
+		const auto toStringOrDefault = [](
+			const std::wstring& value,
+			const std::wstring& fallback) {
+				return value.empty() ? fallback : value;
+			};
+
+		const auto toNormalizedBackends = [&toLower](
+			const std::vector<std::wstring>& values) {
+				std::vector<std::wstring> normalized = values;
+				if (normalized.empty()) {
+					normalized = { L"himalaya", L"imap-smtp-email" };
+				}
+
+				for (auto& value : normalized) {
+					value = toLower(value);
+				}
+
+				std::sort(normalized.begin(), normalized.end());
+				normalized.erase(
+					std::unique(normalized.begin(), normalized.end()),
+					normalized.end());
+				return normalized;
+			};
+
+		const auto clampU32 = [](
+			const std::uint32_t value,
+			const std::uint32_t minimum,
+			const std::uint32_t maximum) {
+				return (std::clamp)(value, minimum, maximum);
+			};
+
+		const auto normalizedToolName = toLower(toolName);
+		const auto normalizedCapabilityName = toLower(capabilityName);
+
+		const EmailFallbackPolicyProfileConfig* selectedProfile =
+			&policyConfig.defaults;
+		std::wstring source = L"default";
+
+		const auto toolIt = policyConfig.tool.find(normalizedToolName);
+		if (toolIt != policyConfig.tool.end()) {
+			selectedProfile = &toolIt->second;
+			source = L"tool";
+		}
+		else {
+			const auto capabilityIt =
+				policyConfig.capability.find(normalizedCapabilityName);
+			if (capabilityIt != policyConfig.capability.end()) {
+				selectedProfile = &capabilityIt->second;
+				source = L"capability";
+			}
+		}
+
+		EmailFallbackResolvedPolicyConfig resolved;
+		resolved.profileId = selectedProfile->id.empty()
+			? (source + L"-policy")
+			: selectedProfile->id;
+		resolved.backends = toNormalizedBackends(selectedProfile->backends);
+		resolved.onUnavailable = toStringOrDefault(
+			selectedProfile->actions.unavailable,
+			L"continue");
+		resolved.onAuthError = toStringOrDefault(
+			selectedProfile->actions.authError,
+			L"stop");
+		resolved.onExecError = toStringOrDefault(
+			selectedProfile->actions.execError,
+			L"retry_then_continue");
+		resolved.retryMaxAttempts = clampU32(
+			selectedProfile->retry.maxAttempts == 0
+			? std::uint32_t{ 1 }
+			: selectedProfile->retry.maxAttempts,
+			std::uint32_t{ 1 },
+			std::uint32_t{ 8 });
+		resolved.retryDelayMs = clampU32(
+			selectedProfile->retry.retryDelayMs,
+			std::uint32_t{ 0 },
+			std::uint32_t{ 300000 });
+		resolved.requiresApproval = selectedProfile->approval.requiresApproval;
+		resolved.approvalTokenTtlMinutes = clampU32(
+			selectedProfile->approval.tokenTtlMinutes == 0
+			? std::uint32_t{ 60 }
+			: selectedProfile->approval.tokenTtlMinutes,
+			std::uint32_t{ 1 },
+			std::uint32_t{ 1440 });
+
+		return resolved;
+	}
 
 	struct ModelsRoutingConfig {
 		std::wstring primary = L"default";

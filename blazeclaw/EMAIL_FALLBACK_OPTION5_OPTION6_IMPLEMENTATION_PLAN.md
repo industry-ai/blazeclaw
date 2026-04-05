@@ -457,6 +457,10 @@ target interfaces, and completion checks.
 - Extended embedded fixture validation in `PiEmbeddedService`:
   - verifies fallback metadata fields on `email.schedule` `tool_result` deltas,
   - verifies non-empty terminal status consistency on final deltas.
+- Added policy precedence unit tests:
+  - explicit `tool > capability > default` resolution coverage is now present
+    in `EmailScheduleFallbackTests.cpp` using
+    `ServiceManager::ResolveEmailFallbackPolicy(...)`.
 - Validation command executed:
   - `msbuild blazeclaw/BlazeClaw.sln /t:Build /p:Configuration=Debug /p:Platform=x64`
 

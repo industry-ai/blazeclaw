@@ -1,5 +1,7 @@
 #include "gateway/executors/EmailScheduleExecutor.h"
 
+#include "config/ConfigModels.h"
+
 #include <catch2/catch_all.hpp>
 #include <nlohmann/json.hpp>
 
@@ -212,4 +214,120 @@ TEST_CASE(
 	REQUIRE(approve.executed);
 	REQUIRE(approve.status == "ok");
 	REQUIRE(approve.output.find("\"engine\":\"imap-smtp-email\"") != std::string::npos);
+}
+
+TEST_CASE(
+	"Email fallback policy precedence prefers tool over capability and default",
+	"[email][fallback][policy]") {
+	blazeclaw::config::EmailFallbackPolicyProfilesMapConfig policy;
+
+	auto& defaults = policy.defaults;
+	defaults.id = L"default-policy";
+	defaults.backends = { L"himalaya" };
+	defaults.actions.unavailable = L"continue";
+	defaults.actions.authError = L"stop";
+	defaults.actions.execError = L"retry_then_continue";
+	defaults.retry.maxAttempts = 1;
+	defaults.retry.retryDelayMs = 0;
+	defaults.approval.requiresApproval = true;
+	defaults.approval.tokenTtlMinutes = 60;
+
+	auto& capability = policy.capability[L"email.send"];
+	capability.id = L"capability-policy";
+	capability.backends = { L"imap-smtp-email" };
+	capability.actions.unavailable = L"stop";
+	capability.actions.authError = L"continue";
+	capability.actions.execError = L"stop";
+	capability.retry.maxAttempts = 2;
+	capability.retry.retryDelayMs = 100;
+	capability.approval.requiresApproval = false;
+	capability.approval.tokenTtlMinutes = 30;
+
+	auto& tool = policy.tool[L"email.schedule"];
+	tool.id = L"tool-policy";
+	tool.backends = { L"custom-backend" };
+	tool.actions.unavailable = L"continue";
+	tool.actions.authError = L"continue";
+	tool.actions.execError = L"stop";
+	tool.retry.maxAttempts = 3;
+	tool.retry.retryDelayMs = 250;
+	tool.approval.requiresApproval = false;
+	tool.approval.tokenTtlMinutes = 45;
+
+	const auto resolved = blazeclaw::config::ResolveEmailFallbackPolicy(
+		policy,
+		L"email.schedule",
+		L"email.send");
+
+	REQUIRE(resolved.profileId == L"tool-policy");
+	REQUIRE(resolved.backends.size() == 1);
+	REQUIRE(resolved.backends[0] == L"custom-backend");
+	REQUIRE(resolved.onExecError == L"stop");
+	REQUIRE(resolved.retryMaxAttempts == 3);
+	REQUIRE(resolved.retryDelayMs == 250);
+	REQUIRE_FALSE(resolved.requiresApproval);
+	REQUIRE(resolved.approvalTokenTtlMinutes == 45);
+}
+
+TEST_CASE(
+	"Email fallback policy precedence prefers capability over default",
+	"[email][fallback][policy]") {
+	blazeclaw::config::EmailFallbackPolicyProfilesMapConfig policy;
+
+	auto& defaults = policy.defaults;
+	defaults.id = L"default-policy";
+	defaults.backends = { L"himalaya" };
+	defaults.actions.authError = L"stop";
+	defaults.retry.maxAttempts = 1;
+
+	auto& capability = policy.capability[L"email.send"];
+	capability.id = L"capability-policy";
+	capability.backends = { L"imap-smtp-email" };
+	capability.actions.authError = L"continue";
+	capability.retry.maxAttempts = 4;
+
+	const auto resolved = blazeclaw::config::ResolveEmailFallbackPolicy(
+		policy,
+		L"other.tool",
+		L"email.send");
+
+	REQUIRE(resolved.profileId == L"capability-policy");
+	REQUIRE(resolved.backends.size() == 1);
+	REQUIRE(resolved.backends[0] == L"imap-smtp-email");
+	REQUIRE(resolved.onAuthError == L"continue");
+	REQUIRE(resolved.retryMaxAttempts == 4);
+}
+
+TEST_CASE(
+	"Email fallback policy precedence falls back to default when no overrides match",
+	"[email][fallback][policy]") {
+	blazeclaw::config::EmailFallbackPolicyProfilesMapConfig policy;
+
+	auto& defaults = policy.defaults;
+	defaults.id = L"default-policy";
+	defaults.backends = { L"himalaya", L"imap-smtp-email" };
+	defaults.actions.unavailable = L"continue";
+	defaults.actions.authError = L"stop";
+	defaults.actions.execError = L"retry_then_continue";
+	defaults.retry.maxAttempts = 2;
+	defaults.retry.retryDelayMs = 50;
+	defaults.approval.requiresApproval = true;
+	defaults.approval.tokenTtlMinutes = 90;
+
+	const auto resolved = blazeclaw::config::ResolveEmailFallbackPolicy(
+		policy,
+		L"tool.unknown",
+		L"capability.unknown");
+
+	REQUIRE(resolved.profileId == L"default-policy");
+	REQUIRE(resolved.backends.size() == 2);
+	REQUIRE(resolved.backends[0] == L"himalaya");
+	REQUIRE(resolved.backends[1] == L"imap-smtp-email");
+	REQUIRE(resolved.onUnavailable == L"continue");
+	REQUIRE(resolved.onAuthError == L"stop");
+	REQUIRE(resolved.onExecError == L"retry_then_continue");
+	REQUIRE(resolved.retryMaxAttempts == 2);
+	REQUIRE(resolved.retryDelayMs == 50);
+	REQUIRE(resolved.requiresApproval);
+	REQUIRE(resolved.approvalTokenTtlMinutes == 90);
 }

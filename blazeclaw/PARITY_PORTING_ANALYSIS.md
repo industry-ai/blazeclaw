@@ -211,9 +211,12 @@ To reduce regression risk, validation is split into two smoke lanes:
     policy/fallback lifecycle events, and operator diagnostics fallback
     attempt/success/failure counters.
 - Phase 7 status:
-  - completed validation matrix coverage for readiness state classification,
-    directional fallback execution scenarios, deterministic unavailable terminal
-    behavior, and embedded task-delta fallback metadata consistency checks.
+  - completed validation matrix coverage for readiness state
+    classification, directional fallback execution scenarios, deterministic
+    unavailable terminal behavior, and embedded task-delta fallback metadata
+    consistency checks,
+  - explicit policy-precedence unit tests now cover
+    `tool > capability > default` resolution.
 - Phase 8 status:
   - completed rollout/migration gate controls with monitor/enforce modes,
     canary-channel enforcement eligibility, effective runtime-vs-configured

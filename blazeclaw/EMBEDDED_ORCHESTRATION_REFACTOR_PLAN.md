@@ -171,7 +171,8 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
 - Option 5/6 Phase 7 validation matrix is now in place
   (readiness classification tests, fallback directionality matrix coverage,
   deterministic unavailable-terminal tests, and fallback task-delta metadata
-  consistency assertions in embedded fixture validation).
+  consistency assertions in embedded fixture validation), including explicit
+  policy-precedence unit-test coverage.
 - Option 5/6 Phase 8 rollout and migration gate is now in place
   (monitor/enforce rollout modes, canary-channel enforcement gating,
   diagnostics for configured vs effective runtime policy state, and explicit
