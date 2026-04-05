@@ -2159,6 +2159,7 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.runtime.taskDeltas.clear", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateTaskDeltasClearParams(r, i); } },
 			{ "gateway.runtime.health.dependencies", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
 			{ "gateway.runtime.health.capabilities", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
+			{ "gateway.runtime.policy.resolve", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
 			{ "gateway.logs.tail", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateLogsTailParams(r, i); } },
 			{ "gateway.logs.count", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateLogsCountParams(r, i); } },
 			{ "gateway.sessions.compact", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateSessionsCompactParams(r, i); } },

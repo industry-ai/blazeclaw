@@ -2163,7 +2163,7 @@ namespace blazeclaw::gateway {
 					};
 
 				auto buildAssistantDeltasFromTaskDeltas =
-					[](
+					[&runId](
 						const std::vector<ChatRuntimeResult::TaskDeltaEntry>& taskDeltas) {
 							std::vector<std::string> deltas;
 							for (const auto& delta : taskDeltas) {
@@ -2173,6 +2173,24 @@ namespace blazeclaw::gateway {
 								}
 
 								if (delta.phase == "tool_result" && !delta.toolName.empty()) {
+									if (delta.toolName == "email.schedule") {
+										EmitTelemetryEvent(
+											"gateway.email.fallback.attempt",
+											std::string("{\"runId\":") +
+											JsonString(runId) +
+											",\"tool\":\"email.schedule\",\"status\":" +
+											JsonString(delta.status) +
+											",\"backend\":" +
+											JsonString(delta.fallbackBackend) +
+											",\"action\":" +
+											JsonString(delta.fallbackAction) +
+											",\"attempt\":" +
+											std::to_string(delta.fallbackAttempt) +
+											",\"maxAttempts\":" +
+											std::to_string(delta.fallbackMaxAttempts) +
+											"}");
+									}
+
 									deltas.push_back(
 										"tools.execute.result tool=" +
 										delta.toolName +
@@ -2247,6 +2265,15 @@ namespace blazeclaw::gateway {
 								std::to_string(
 									orchestrationResult.decompositionSteps) +
 								"}");
+							EmitTelemetryEvent(
+								"gateway.email.fallback.terminal",
+								std::string("{\"runId\":") +
+								JsonString(runId) +
+								",\"status\":" +
+								JsonString(orchestrationResult.terminalStatus.empty()
+									? std::string("completed")
+									: orchestrationResult.terminalStatus) +
+								",\"errorCode\":null,\"errorMessage\":null}");
 
 							m_chatRunsById.insert_or_assign(
 								runId,
@@ -2285,6 +2312,15 @@ namespace blazeclaw::gateway {
 								JsonString(runId) +
 								",\"path\":" +
 								JsonString(orchestrationPath) +
+								",\"status\":\"failed\",\"errorCode\":" +
+								JsonString(backendErrorCode) +
+								",\"errorMessage\":" +
+								JsonString(backendErrorMessage) +
+								"}");
+							EmitTelemetryEvent(
+								"gateway.email.fallback.terminal",
+								std::string("{\"runId\":") +
+								JsonString(runId) +
 								",\"status\":\"failed\",\"errorCode\":" +
 								JsonString(backendErrorCode) +
 								",\"errorMessage\":" +
@@ -3344,7 +3380,7 @@ namespace blazeclaw::gateway {
 
 		m_dispatcher.Register(
 			"gateway.runtime.health.dependencies",
-			[](const protocol::RequestFrame& request) {
+			[this](const protocol::RequestFrame& request) {
 				const auto health =
 					executors::EmailScheduleExecutor::GetRuntimeHealthIndex(false);
 
@@ -3368,6 +3404,18 @@ namespace blazeclaw::gateway {
 						std::to_string(probe.expiresAtEpochMs) + "}";
 				}
 				probesJson += "]";
+
+				EmitTelemetryEvent(
+					"gateway.email.preflight.snapshot",
+					std::string("{\"generatedAtEpochMs\":") +
+					std::to_string(health.generatedAtEpochMs) +
+					",\"ttlMs\":" +
+					std::to_string(health.ttlMs) +
+					",\"count\":" +
+					std::to_string(health.probes.size()) +
+					",\"capability\":\"" +
+					EscapeJsonLocal(health.emailSendState) +
+					"\"}");
 
 				return protocol::ResponseFrame{
 					.id = request.id,
@@ -3397,6 +3445,61 @@ namespace blazeclaw::gateway {
 						"\"}],\"count\":1,\"generatedAtEpochMs\":" +
 						std::to_string(health.generatedAtEpochMs) +
 						",\"ttlMs\":" + std::to_string(health.ttlMs) + "}",
+					.error = std::nullopt,
+				};
+			});
+
+		m_dispatcher.Register(
+			"gateway.runtime.policy.resolve",
+			[this](const protocol::RequestFrame& request) {
+				std::string backendsJson = "[";
+				for (std::size_t i = 0; i < m_runtimeEmailResolvedBackends.size(); ++i) {
+					if (i > 0) {
+						backendsJson += ",";
+					}
+
+					backendsJson +=
+						"\"" + EscapeJsonLocal(m_runtimeEmailResolvedBackends[i]) + "\"";
+				}
+				backendsJson += "]";
+
+				EmitTelemetryEvent(
+					"gateway.email.policy.decision",
+					std::string("{\"profileId\":\"") +
+					EscapeJsonLocal(m_runtimeEmailPolicyProfileId) +
+					"\",\"backends\":" +
+					backendsJson +
+					",\"actions\":{\"unavailable\":\"" +
+					EscapeJsonLocal(m_runtimeEmailPolicyOnUnavailable) +
+					"\",\"authError\":\"" +
+					EscapeJsonLocal(m_runtimeEmailPolicyOnAuthError) +
+					"\",\"execError\":\"" +
+					EscapeJsonLocal(m_runtimeEmailPolicyOnExecError) +
+					"\"}}");
+
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = true,
+					.payloadJson =
+						"{\"profileId\":\"" +
+						EscapeJsonLocal(m_runtimeEmailPolicyProfileId) +
+						"\",\"backends\":" +
+						backendsJson +
+						",\"actions\":{\"unavailable\":\"" +
+						EscapeJsonLocal(m_runtimeEmailPolicyOnUnavailable) +
+						"\",\"authError\":\"" +
+						EscapeJsonLocal(m_runtimeEmailPolicyOnAuthError) +
+						"\",\"execError\":\"" +
+						EscapeJsonLocal(m_runtimeEmailPolicyOnExecError) +
+						"\"},\"retry\":{\"maxAttempts\":" +
+						std::to_string(m_runtimeEmailRetryMaxAttempts) +
+						",\"delayMs\":" +
+						std::to_string(m_runtimeEmailRetryDelayMs) +
+						"},\"approval\":{\"requiresApproval\":" +
+						std::string(m_runtimeEmailRequiresApproval ? "true" : "false") +
+						",\"tokenTtlMinutes\":" +
+						std::to_string(m_runtimeEmailApprovalTokenTtlMinutes) +
+						"}}",
 					.error = std::nullopt,
 				};
 			});

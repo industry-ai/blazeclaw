@@ -552,6 +552,31 @@ namespace blazeclaw::gateway::protocol {
 
 				return true;
 			} },
+			{ "gateway.runtime.policy.resolve", [&]() {
+				if (!IsFieldValueType(payload, "profileId", '"') ||
+					!IsFieldValueType(payload, "backends", '[') ||
+					!IsFieldValueType(payload, "actions", '{') ||
+					!IsFieldValueType(payload, "retry", '{') ||
+					!IsFieldValueType(payload, "approval", '{')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`gateway.runtime.policy.resolve` requires `profileId`, `backends`, `actions`, `retry`, and `approval` fields.");
+					return false;
+				}
+
+				if (!PayloadContainsAllFieldTokens(
+					payload,
+					{ "unavailable", "authError", "execError", "maxAttempts", "delayMs", "requiresApproval", "tokenTtlMinutes" })) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`gateway.runtime.policy.resolve` requires action/retry/approval child fields.");
+					return false;
+				}
+
+				return true;
+			} },
 			{ "chat.send", [&]() {
 				if (!IsFieldValueType(payload, "runId", '"') ||
 					!(IsFieldNull(payload, "backendErrorCode") ||

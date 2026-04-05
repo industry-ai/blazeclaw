@@ -205,6 +205,13 @@ Support declarative fallback policy in config instead of hardcoding.
     action, and attempt metadata,
   - orchestration terminal statuses are now deterministic and policy-derived
     (`completed` / `needs_approval` / `failed`).
+- Phase 6 policy endpoint and diagnostics are implemented:
+  - runtime endpoint `gateway.runtime.policy.resolve` exposes effective profile,
+    backend order, policy actions, retry settings, and approval settings,
+  - telemetry now emits policy and fallback lifecycle events
+    (`gateway.email.preflight.snapshot`, `gateway.email.policy.decision`,
+    `gateway.email.fallback.attempt`, `gateway.email.fallback.terminal`),
+  - operator diagnostics now include fallback attempts/success/failure counters.
 
 ### Detailed implementation reference
 - `blazeclaw/EMAIL_FALLBACK_OPTION5_OPTION6_IMPLEMENTATION_PLAN.md`

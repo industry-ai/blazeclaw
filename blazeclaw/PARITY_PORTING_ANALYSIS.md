@@ -206,6 +206,10 @@ To reduce regression risk, validation is split into two smoke lanes:
   - completed runtime orchestration alignment with normalized fallback handling,
     extended fallback metadata in task-delta contracts, and deterministic
     policy-derived terminal statuses in orchestration output.
+- Phase 6 status:
+  - completed runtime policy-resolution endpoint, telemetry instrumentation for
+    policy/fallback lifecycle events, and operator diagnostics fallback
+    attempt/success/failure counters.
 
 
 ### Priority 2 (behavioral parity)

@@ -165,6 +165,9 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
 - Option 5/6 Phase 5 orchestration alignment is now in place
   (normalized fallback handling in weather shortcut flow, policy-derived
   deterministic terminal states, and fallback metadata emitted in task deltas).
+- Option 5/6 Phase 6 policy diagnostics surface is now in place
+  (`gateway.runtime.policy.resolve`, policy/preflight/fallback telemetry events,
+  and fallback attempt/success/failure counters in operator diagnostics).
 
 ## Step-by-Step Implementation Process
 

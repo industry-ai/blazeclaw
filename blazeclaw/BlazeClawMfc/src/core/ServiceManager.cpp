@@ -2652,6 +2652,9 @@ namespace blazeclaw::core {
 		m_embeddedRunCancelledCount = 0;
 		m_embeddedRunFallbackCount = 0;
 		m_embeddedTaskDeltaTransitionCount = 0;
+		m_emailFallbackAttemptCount = 0;
+		m_emailFallbackSuccessCount = 0;
+		m_emailFallbackFailureCount = 0;
 		m_lastEmbeddedDynamicLoopEnabled = false;
 		m_lastEmbeddedCanaryEligible = false;
 		m_lastEmbeddedPromotionReady = false;
@@ -3986,6 +3989,16 @@ namespace blazeclaw::core {
 		const auto emailHealth =
 			blazeclaw::gateway::executors::EmailScheduleExecutor::
 			GetRuntimeHealthIndex(false);
+		const std::uint64_t emailFallbackAttemptCount =
+			m_embeddedRunFallbackCount;
+		const std::uint64_t emailFallbackSuccessCount =
+			emailFallbackAttemptCount >= m_embeddedRunFailureCount
+			? (emailFallbackAttemptCount - m_embeddedRunFailureCount)
+			: 0;
+		const std::uint64_t emailFallbackFailureCount =
+			emailFallbackAttemptCount >= emailFallbackSuccessCount
+			? (emailFallbackAttemptCount - emailFallbackSuccessCount)
+			: 0;
 		std::size_t emailProbeReady = 0;
 		std::size_t emailProbeUnavailable = 0;
 		for (const auto& probe : emailHealth.probes) {
@@ -4060,6 +4073,12 @@ namespace blazeclaw::core {
 					std::to_string(emailProbeReady) +
 					",\"probeUnavailableCount\":" +
 					std::to_string(emailProbeUnavailable) +
+					",\"fallbackAttempts\":" +
+					std::to_string(emailFallbackAttemptCount) +
+					",\"fallbackSuccess\":" +
+					std::to_string(emailFallbackSuccessCount) +
+					",\"fallbackFailure\":" +
+					std::to_string(emailFallbackFailureCount) +
 					"},"
 					"\"agents\":{\"count\":" + std::to_string(m_agentsScope.entries.size()) +
 					",\"defaultAgent\":\"" + ToNarrow(m_agentsScope.defaultAgentId) + "\"},"

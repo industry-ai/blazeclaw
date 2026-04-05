@@ -220,6 +220,9 @@ namespace blazeclaw::core {
 		std::uint64_t m_embeddedRunCancelledCount = 0;
 		std::uint64_t m_embeddedRunFallbackCount = 0;
 		std::uint64_t m_embeddedTaskDeltaTransitionCount = 0;
+		std::uint64_t m_emailFallbackAttemptCount = 0;
+		std::uint64_t m_emailFallbackSuccessCount = 0;
+		std::uint64_t m_emailFallbackFailureCount = 0;
 		HookCatalogService m_hookCatalogService;
 		HookCatalogSnapshot m_hookCatalog;
 		HookEventService m_hookEventService;

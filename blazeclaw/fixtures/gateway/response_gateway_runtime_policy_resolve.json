@@ -1,0 +1,25 @@
+{
+  "type": "res",
+  "id": "runtime-policy-resolve-1",
+  "ok": true,
+  "payload": {
+    "profileId": "tool-policy",
+    "backends": [
+      "himalaya",
+      "imap-smtp-email"
+    ],
+    "actions": {
+      "unavailable": "continue",
+      "authError": "stop",
+      "execError": "retry_then_continue"
+    },
+    "retry": {
+      "maxAttempts": 2,
+      "delayMs": 1000
+    },
+    "approval": {
+      "requiresApproval": true,
+      "tokenTtlMinutes": 60
+    }
+  }
+}

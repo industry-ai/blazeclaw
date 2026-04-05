@@ -397,6 +397,33 @@ target interfaces, and completion checks.
    - `gateway.email.fallback.terminal`
 3. Add operator diagnostics counters for fallback attempts/success/failure.
 
+**Phase 6 implementation status (current): completed**
+
+- Added runtime policy-resolution endpoint:
+  - `gateway.runtime.policy.resolve` now returns:
+    - selected `profileId`
+    - effective `backends` order
+    - action matrix (`unavailable`, `authError`, `execError`)
+    - retry settings (`maxAttempts`, `delayMs`)
+    - approval settings (`requiresApproval`, `tokenTtlMinutes`)
+- Added runtime telemetry events for Option 6 diagnostics:
+  - `gateway.email.preflight.snapshot` emitted from
+    `gateway.runtime.health.dependencies`
+  - `gateway.email.policy.decision` emitted from
+    `gateway.runtime.policy.resolve`
+  - `gateway.email.fallback.attempt` emitted from `email.schedule`
+    `tool_result` task-delta transitions
+  - `gateway.email.fallback.terminal` emitted from orchestration terminal paths
+    (`completed` / `needs_approval` / `failed`)
+- Added protocol and schema coverage for new endpoint:
+  - contract response fixture and decode/compare validation
+  - request validator mapping (`no params allowed`)
+  - response schema validation for required top-level and nested policy fields
+- Added operator diagnostics counters in `ServiceManager` report:
+  - `fallbackAttempts`
+  - `fallbackSuccess`
+  - `fallbackFailure`
+
 ---
 
 ### Phase 7 — Tests and Validation Matrix
