@@ -2136,6 +2136,110 @@ namespace blazeclaw::core {
 
 	ServiceManager::ServiceManager() = default;
 
+	ServiceManager::EmailFallbackResolvedPolicy
+		ServiceManager::ResolveEmailFallbackPolicy(
+			const std::wstring& toolName,
+			const std::wstring& capabilityName) const {
+		const auto toLower = [](const std::wstring& value) {
+			std::wstring lowered;
+			lowered.reserve(value.size());
+			for (const auto ch : value) {
+				lowered.push_back(static_cast<wchar_t>(std::towlower(ch)));
+			}
+			return lowered;
+			};
+
+		const auto toStringOrDefault = [](const std::wstring& value, const std::wstring& fallback) {
+			return value.empty() ? fallback : value;
+			};
+
+		const auto toNarrowList = [&toLower](const std::vector<std::wstring>& values) {
+			std::vector<std::wstring> normalized = values;
+			if (normalized.empty()) {
+				normalized = { L"himalaya", L"imap-smtp-email" };
+			}
+
+			for (auto& value : normalized) {
+				value = toLower(value);
+			}
+
+			std::sort(normalized.begin(), normalized.end());
+			normalized.erase(
+				std::unique(normalized.begin(), normalized.end()),
+				normalized.end());
+
+			std::vector<std::wstring> result;
+			result.reserve(normalized.size());
+			for (const auto& value : normalized) {
+				result.push_back(value);
+			}
+			return result;
+			};
+
+		const auto clampU32 = [](
+			const std::uint32_t value,
+			const std::uint32_t minimum,
+			const std::uint32_t maximum) {
+				return (std::clamp)(value, minimum, maximum);
+			};
+
+		const auto& policyConfig = m_activeConfig.email.policy;
+		const auto normalizedToolName = toLower(toolName);
+		const auto normalizedCapabilityName = toLower(capabilityName);
+
+		const blazeclaw::config::EmailFallbackPolicyProfileConfig* selectedProfile =
+			&policyConfig.defaults;
+		std::wstring source = L"default";
+
+		const auto toolIt = policyConfig.tool.find(normalizedToolName);
+		if (toolIt != policyConfig.tool.end()) {
+			selectedProfile = &toolIt->second;
+			source = L"tool";
+		}
+		else {
+			const auto capabilityIt =
+				policyConfig.capability.find(normalizedCapabilityName);
+			if (capabilityIt != policyConfig.capability.end()) {
+				selectedProfile = &capabilityIt->second;
+				source = L"capability";
+			}
+		}
+
+		EmailFallbackResolvedPolicy resolved;
+		resolved.profileId = selectedProfile->id.empty()
+			? (source + L"-policy")
+			: selectedProfile->id;
+		resolved.backends = toNarrowList(selectedProfile->backends);
+		resolved.onUnavailable = toStringOrDefault(
+			selectedProfile->actions.unavailable,
+			L"continue");
+		resolved.onAuthError = toStringOrDefault(
+			selectedProfile->actions.authError,
+			L"stop");
+		resolved.onExecError = toStringOrDefault(
+			selectedProfile->actions.execError,
+			L"retry_then_continue");
+		resolved.retryMaxAttempts = clampU32(
+			selectedProfile->retry.maxAttempts == 0
+			? std::uint32_t{ 1 }
+			: selectedProfile->retry.maxAttempts,
+			std::uint32_t{ 1 },
+			std::uint32_t{ 8 });
+		resolved.retryDelayMs = clampU32(
+			selectedProfile->retry.retryDelayMs,
+			std::uint32_t{ 0 },
+			std::uint32_t{ 300000 });
+		resolved.requiresApproval = selectedProfile->approval.requiresApproval;
+		resolved.approvalTokenTtlMinutes = clampU32(
+			selectedProfile->approval.tokenTtlMinutes == 0
+			? std::uint32_t{ 60 }
+			: selectedProfile->approval.tokenTtlMinutes,
+			std::uint32_t{ 1 },
+			std::uint32_t{ 1440 });
+
+		return resolved;
+	}
+
 	blazeclaw::gateway::SkillsCatalogGatewayState ServiceManager::BuildGatewaySkillsState() const {
 		blazeclaw::gateway::SkillsCatalogGatewayState gatewaySkillsState;
 		gatewaySkillsState.entries.reserve(m_skillsCatalog.entries.size());
@@ -2430,6 +2534,9 @@ namespace blazeclaw::core {
 		m_hooksLastCrossTenantAttestationAggregationPath.clear();
 		m_hooksCrossTenantAttestationAggregationCount = 0;
 		m_hooksCrossTenantAttestationAggregationStatus = L"idle";
+		m_emailFallbackResolvedPolicy = ResolveEmailFallbackPolicy(
+			L"email.schedule",
+			L"email.send");
 		m_selfEvolvingHookTriggered = false;
 		m_agentsScope = m_agentsCatalogService.BuildSnapshot(
 			std::filesystem::current_path(),
@@ -3893,260 +4000,291 @@ namespace blazeclaw::core {
 			std::string(m_activeConfig.email.policyProfiles.enabled ? "true" : "false") +
 			",\"policyProfilesEnforce\":" +
 			std::string(m_activeConfig.email.policyProfiles.enforce ? "true" : "false") +
-			",\"capabilityState\":\"" +
-			emailHealth.emailSendState +
-			"\",\"healthGeneratedAtEpochMs\":" +
-			std::to_string(emailHealth.generatedAtEpochMs) +
-			",\"healthTtlMs\":" +
-			std::to_string(emailHealth.ttlMs) +
-			",\"probeReadyCount\":" +
-			std::to_string(emailProbeReady) +
-			",\"probeUnavailableCount\":" +
-			std::to_string(emailProbeUnavailable) +
-			"},"
-			"\"agents\":{\"count\":" + std::to_string(m_agentsScope.entries.size()) +
-			",\"defaultAgent\":\"" + ToNarrow(m_agentsScope.defaultAgentId) + "\"},"
-			"\"subagents\":{\"active\":" + std::to_string(m_subagentRegistry.activeRuns) +
-			",\"pendingAnnounce\":" + std::to_string(m_subagentRegistry.pendingAnnounce) + "},"
-			"\"acp\":{\"lastAllowed\":" +
-			std::string(m_lastAcpDecision.allowed ? "true" : "false") +
-			",\"reason\":\"" + m_lastAcpDecision.reason + "\"},"
-			"\"embedded\":{\"activeRuns\":" + std::to_string(ActiveEmbeddedRuns()) +
-			",\"dynamicLoopEnabled\":" +
-			std::string(m_lastEmbeddedDynamicLoopEnabled ? "true" : "false") +
-			",\"canaryEligible\":" +
-			std::string(m_lastEmbeddedCanaryEligible ? "true" : "false") +
-			",\"promotionReady\":" +
-			std::string(m_lastEmbeddedPromotionReady ? "true" : "false") +
-			",\"promotionMinRuns\":" +
-			std::to_string(m_embeddedDynamicLoopPromotionMinRuns) +
-			",\"promotionMinSuccessRate\":" +
-			std::to_string(m_embeddedDynamicLoopPromotionMinSuccessRate) +
-			",\"fallbackUsed\":" +
-			std::string(m_lastEmbeddedFallbackUsed ? "true" : "false") +
-			",\"fallbackReason\":\"" + m_lastEmbeddedFallbackReason +
-			"\",\"totalRuns\":" + std::to_string(embeddedTotalRuns) +
-			",\"successRate\":" + std::to_string(embeddedSuccessRate) +
-			",\"runSuccess\":" + std::to_string(m_embeddedRunSuccessCount) +
-			",\"runFailure\":" + std::to_string(m_embeddedRunFailureCount) +
-			",\"runTimeout\":" + std::to_string(m_embeddedRunTimeoutCount) +
-			",\"runCancelled\":" + std::to_string(m_embeddedRunCancelledCount) +
-			",\"runFallback\":" + std::to_string(m_embeddedRunFallbackCount) +
-			",\"taskDeltaTransitions\":" +
-			std::to_string(m_embeddedTaskDeltaTransitionCount) + "},"
-			"\"tools\":{\"policyEntries\":" + std::to_string(m_agentsToolPolicy.entries.size()) +
-			",\"shellProcesses\":" + std::to_string(ShellProcessCount()) + "},"
-			"\"modelAuth\":{\"primary\":\"" + routing.primaryModel +
-			"\",\"fallback\":\"" + routing.fallbackModel +
-			"\",\"failovers\":" + std::to_string(routing.failoverHistory.size()) +
-			",\"authProfiles\":" + std::to_string(auth.entries.size()) + "},"
-			"\"sandbox\":{\"enabledCount\":" + std::to_string(sandbox.enabledCount) +
-			",\"browserEnabledCount\":" + std::to_string(sandbox.browserEnabledCount) + "},"
-			"\"embeddings\":{\"enabled\":" +
-			std::string(embeddings.enabled ? "true" : "false") +
-			",\"ready\":" +
-			std::string(embeddings.ready ? "true" : "false") +
-			",\"provider\":\"" + embeddings.provider +
-			"\",\"status\":\"" + embeddings.status +
-			"\",\"dimension\":" + std::to_string(embeddings.dimension) +
-			",\"maxSequenceLength\":" +
-			std::to_string(embeddings.maxSequenceLength) +
-			",\"modelPathConfigured\":" +
-			std::string(!embeddings.modelPath.empty() ? "true" : "false") +
-			",\"tokenizerPathConfigured\":" +
-			std::string(!embeddings.tokenizerPath.empty() ? "true" : "false") +
-			",\"configFeatureImplemented\":" +
-			std::string(configFeatureImplemented ? "true" : "false") + "},"
-			"\"localModel\":{\"enabled\":" +
-			std::string(localModel.enabled ? "true" : "false") +
-			",\"ready\":" +
-			std::string(localModel.ready ? "true" : "false") +
-			",\"rolloutEligible\":" +
-			std::string(m_localModelRolloutEligible ? "true" : "false") +
-			",\"activationEnabled\":" +
-			std::string(m_localModelActivationEnabled ? "true" : "false") +
-			",\"activationReason\":\"" + m_localModelActivationReason +
-			",\"provider\":\"" + localModel.provider +
-			"\",\"rolloutStage\":\"" + localModel.rolloutStage +
-			"\",\"storageRoot\":\"" + localModel.storageRoot +
-			"\",\"version\":\"" + localModel.version +
-			"\",\"status\":\"" + localModel.status +
-			"\",\"verboseMetrics\":" +
-			std::string(localModel.verboseMetrics ? "true" : "false") +
-			",\"runtimeDllPresent\":" +
-			std::string(localModel.runtimeDllPresent ? "true" : "false") +
-			",\"maxTokens\":" +
-			std::to_string(localModel.maxTokens) +
-			",\"temperature\":" +
-			std::to_string(localModel.temperature) +
-			",\"modelLoadAttempts\":" +
-			std::to_string(localModel.modelLoadAttempts) +
-			",\"modelLoadFailures\":" +
-			std::to_string(localModel.modelLoadFailures) +
-			",\"requestsStarted\":" +
-			std::to_string(localModel.requestsStarted) +
-			",\"requestsCompleted\":" +
-			std::to_string(localModel.requestsCompleted) +
-			",\"requestsFailed\":" +
-			std::to_string(localModel.requestsFailed) +
-			",\"requestsCancelled\":" +
-			std::to_string(localModel.requestsCancelled) +
-			",\"cumulativeTokens\":" +
-			std::to_string(localModel.cumulativeTokens) +
-			",\"cumulativeLatencyMs\":" +
-			std::to_string(localModel.cumulativeLatencyMs) +
-			",\"lastLatencyMs\":" +
-			std::to_string(localModel.lastLatencyMs) +
-			",\"lastGeneratedTokens\":" +
-			std::to_string(localModel.lastGeneratedTokens) +
-			",\"lastTokensPerSecond\":" +
-			std::to_string(localModel.lastTokensPerSecond) +
-			",\"modelPathConfigured\":" +
-			std::string(!localModel.modelPath.empty() ? "true" : "false") +
-			",\"modelHashConfigured\":" +
-			std::string(!localModel.modelExpectedSha256.empty() ? "true" : "false") +
-			",\"modelHashVerified\":" +
-			std::string(localModel.modelHashVerified ? "true" : "false") +
-			",\"tokenizerPathConfigured\":" +
-			std::string(!localModel.tokenizerPath.empty() ? "true" : "false") +
-			",\"tokenizerHashConfigured\":" +
-			std::string(!localModel.tokenizerExpectedSha256.empty() ? "true" : "false") +
-			",\"tokenizerHashVerified\":" +
-			std::string(localModel.tokenizerHashVerified ? "true" : "false") +
-			"},"
-			"\"retrieval\":{\"enabled\":" +
-			std::string(retrieval.enabled ? "true" : "false") +
-			",\"recordCount\":" + std::to_string(retrieval.recordCount) +
-			",\"lastQueryCount\":" + std::to_string(retrieval.lastQueryCount) +
-			",\"status\":\"" + retrieval.status + "\"},"
-			"\"skills\":{\"catalogEntries\":" + std::to_string(m_skillsCatalog.entries.size()) +
-			",\"promptIncluded\":" + std::to_string(m_skillsPrompt.includedCount) +
-			",\"selfEvolvingReminderInjected\":" +
-			std::string(selfEvolvingReminderInjected ? "true" : "false") +
-			"},"
-			"\"hooks\":{\"loaded\":" +
-			std::to_string(m_hookCatalog.diagnostics.hooksLoaded) +
-			",\"engineMode\":\"" +
-			WideToNarrowAscii(m_hookExecution.diagnostics.engineMode) + "\"" +
-			",\"hookEngineEnabled\":" +
-			std::string(m_hooksEngineEnabled ? "true" : "false") +
-			",\"fallbackPromptInjection\":" +
-			std::string(m_hooksFallbackPromptInjection ? "true" : "false") +
-			",\"reminderEnabled\":" +
-			std::string(m_hooksReminderEnabled ? "true" : "false") +
-			",\"reminderVerbosity\":\"" +
-			WideToNarrowAscii(m_hooksReminderVerbosity) + "\"" +
-			",\"strictPolicyEnforcement\":" +
-			std::string(m_hooksStrictPolicyEnforcement ? "true" : "false") +
-			",\"allowedPackagesCount\":" +
-			std::to_string(m_hooksAllowedPackages.size()) +
-			",\"governanceReportingEnabled\":" +
-			std::string(m_hooksGovernanceReportingEnabled ? "true" : "false") +
-			",\"governanceReportsGenerated\":" +
-			std::to_string(m_hooksGovernanceReportsGenerated) +
-			",\"lastGovernanceReportPath\":\"" +
-			WideToNarrowAscii(m_hooksLastGovernanceReportPath) + "\"" +
-			",\"autoRemediationEnabled\":" +
-			std::string(m_hooksAutoRemediationEnabled ? "true" : "false") +
-			",\"autoRemediationRequiresApproval\":" +
-			std::string(m_hooksAutoRemediationRequiresApproval ? "true" : "false") +
-			",\"autoRemediationExecuted\":" +
-			std::to_string(m_hooksAutoRemediationExecuted) +
-			",\"lastAutoRemediationStatus\":\"" +
-			WideToNarrowAscii(m_hooksLastAutoRemediationStatus) + "\"" +
-			",\"autoRemediationTenantId\":\"" +
-			WideToNarrowAscii(m_hooksAutoRemediationTenantId) + "\"" +
-			",\"lastAutoRemediationPlaybookPath\":\"" +
-			WideToNarrowAscii(m_hooksLastAutoRemediationPlaybookPath) + "\"" +
-			",\"autoRemediationTokenMaxAgeMinutes\":" +
-			std::to_string(m_hooksAutoRemediationTokenMaxAgeMinutes) +
-			",\"autoRemediationTokenRotations\":" +
-			std::to_string(m_hooksAutoRemediationTokenRotations) +
-			",\"remediationTelemetryEnabled\":" +
-			std::string(m_hooksRemediationTelemetryEnabled ? "true" : "false") +
-			",\"remediationAuditEnabled\":" +
-			std::string(m_hooksRemediationAuditEnabled ? "true" : "false") +
-			",\"lastRemediationTelemetryPath\":\"" +
-			WideToNarrowAscii(m_hooksLastRemediationTelemetryPath) + "\"" +
-			",\"lastRemediationAuditPath\":\"" +
-			WideToNarrowAscii(m_hooksLastRemediationAuditPath) + "\"" +
-			",\"remediationSloStatus\":\"" +
-			WideToNarrowAscii(m_hooksRemediationSloStatus) + "\"" +
-			",\"remediationSloMaxDriftDetected\":" +
-			std::to_string(m_hooksRemediationSloMaxDriftDetected) +
-			",\"remediationSloMaxPolicyBlocked\":" +
-			std::to_string(m_hooksRemediationSloMaxPolicyBlocked) +
-			",\"complianceAttestationEnabled\":" +
-			std::string(m_hooksComplianceAttestationEnabled ? "true" : "false") +
-			",\"lastComplianceAttestationPath\":\"" +
-			WideToNarrowAscii(m_hooksLastComplianceAttestationPath) + "\"" +
-			",\"enterpriseSlaGovernanceEnabled\":" +
-			std::string(m_hooksEnterpriseSlaGovernanceEnabled ? "true" : "false") +
-			",\"enterpriseSlaPolicyId\":\"" +
-			WideToNarrowAscii(m_hooksEnterpriseSlaPolicyId) + "\"" +
-			",\"crossTenantAttestationAggregationEnabled\":" +
-			std::string(m_hooksCrossTenantAttestationAggregationEnabled ? "true" : "false") +
-			",\"crossTenantAttestationAggregationStatus\":\"" +
-			WideToNarrowAscii(m_hooksCrossTenantAttestationAggregationStatus) + "\"" +
-			",\"crossTenantAttestationAggregationCount\":" +
-			std::to_string(m_hooksCrossTenantAttestationAggregationCount) +
-			",\"lastCrossTenantAttestationAggregationPath\":\"" +
-			WideToNarrowAscii(m_hooksLastCrossTenantAttestationAggregationPath) + "\"" +
-			",\"selfEvolvingHookTriggered\":" +
-			std::string(m_selfEvolvingHookTriggered ? "true" : "false") +
-			",\"invalidMetadata\":" +
-			std::to_string(m_hookCatalog.diagnostics.invalidMetadataFiles) +
-			",\"unsafeHandlerPaths\":" +
-			std::to_string(m_hookCatalog.diagnostics.unsafeHandlerPaths) +
-			",\"missingHandlers\":" +
-			std::to_string(m_hookCatalog.diagnostics.missingHandlerFiles) +
-			",\"eventsEmitted\":" +
-			std::to_string(m_hookEvents.diagnostics.emittedCount) +
-			",\"eventValidationFailed\":" +
-			std::to_string(m_hookEvents.diagnostics.validationFailedCount) +
-			",\"eventsDropped\":" +
-			std::to_string(m_hookEvents.diagnostics.droppedCount) +
-			",\"dispatches\":" +
-			std::to_string(m_hookExecution.diagnostics.dispatchCount) +
-			",\"hookDispatchCount\":" +
-			std::to_string(m_hookExecution.diagnostics.dispatchCount) +
-			",\"dispatchSuccess\":" +
-			std::to_string(m_hookExecution.diagnostics.successCount) +
-			",\"dispatchFailures\":" +
-			std::to_string(m_hookExecution.diagnostics.failureCount) +
-			",\"hookFailureCount\":" +
-			std::to_string(m_hookExecution.diagnostics.failureCount) +
-			",\"dispatchSkipped\":" +
-			std::to_string(m_hookExecution.diagnostics.skippedCount) +
-			",\"dispatchTimeouts\":" +
-			std::to_string(m_hookExecution.diagnostics.timeoutCount) +
-			",\"guardRejected\":" +
-			std::to_string(m_hookExecution.diagnostics.guardRejectedCount) +
-			",\"reminderTriggered\":" +
-			std::to_string(m_hookExecution.diagnostics.reminderTriggeredCount) +
-			",\"reminderInjected\":" +
-			std::to_string(m_hookExecution.diagnostics.reminderInjectedCount) +
-			",\"reminderSkipped\":" +
-			std::to_string(m_hookExecution.diagnostics.reminderSkippedCount) +
-			",\"policyBlocked\":" +
-			std::to_string(m_hookExecution.diagnostics.policyBlockedCount) +
-			",\"driftDetected\":" +
-			std::to_string(m_hookExecution.diagnostics.driftDetectedCount) +
-			",\"lastDriftReason\":\"" +
-			WideToNarrowAscii(m_hookExecution.diagnostics.lastDriftReason) + "\"" +
-			",\"reminderState\":\"" +
-			WideToNarrowAscii(m_hookExecution.diagnostics.lastReminderState) + "\"" +
-			",\"reminderReason\":\"" +
-			WideToNarrowAscii(m_hookExecution.diagnostics.lastReminderReason) + "\"" +
-			"},"
-			"\"features\":{\"implemented\":" + std::to_string(implementedCount) +
-			",\"inProgress\":" + std::to_string(inProgressCount) +
-			",\"planned\":" + std::to_string(plannedCount) +
-			",\"registryState\":\"" + featureStateLabel(
-				m_registry.Features().empty() ? FeatureState::Planned : m_registry.Features().front().state) +
-			"\"}}";
+			",\"resolvedPolicyId\":\"" +
+			ToNarrow(m_emailFallbackResolvedPolicy.profileId) +
+			"\",\"resolvedBackends\":[\"" +
+			(m_emailFallbackResolvedPolicy.backends.empty()
+				? std::string("himalaya\",\"imap-smtp-email")
+				: [&]() {
+					std::string list;
+					for (std::size_t i = 0;
+						i < m_emailFallbackResolvedPolicy.backends.size();
+						++i) {
+						if (i > 0) {
+							list += "\",\"";
+						}
+						list += ToNarrow(m_emailFallbackResolvedPolicy.backends[i]);
+					}
+					return list;
+				}()) +
+			"\"],\"policyActions\":{\"unavailable\":\"" +
+					ToNarrow(m_emailFallbackResolvedPolicy.onUnavailable) +
+					"\",\"authError\":\"" +
+					ToNarrow(m_emailFallbackResolvedPolicy.onAuthError) +
+					"\",\"execError\":\"" +
+					ToNarrow(m_emailFallbackResolvedPolicy.onExecError) +
+					"\"},\"retryMaxAttempts\":" +
+					std::to_string(m_emailFallbackResolvedPolicy.retryMaxAttempts) +
+					",\"retryDelayMs\":" +
+					std::to_string(m_emailFallbackResolvedPolicy.retryDelayMs) +
+					",\"requiresApproval\":" +
+					std::string(m_emailFallbackResolvedPolicy.requiresApproval ? "true" : "false") +
+					",\"approvalTokenTtlMinutes\":" +
+					std::to_string(m_emailFallbackResolvedPolicy.approvalTokenTtlMinutes) +
+					",\"capabilityState\":\"" +
+					emailHealth.emailSendState +
+					"\",\"healthGeneratedAtEpochMs\":" +
+					std::to_string(emailHealth.generatedAtEpochMs) +
+					",\"healthTtlMs\":" +
+					std::to_string(emailHealth.ttlMs) +
+					",\"probeReadyCount\":" +
+					std::to_string(emailProbeReady) +
+					",\"probeUnavailableCount\":" +
+					std::to_string(emailProbeUnavailable) +
+					"},"
+					"\"agents\":{\"count\":" + std::to_string(m_agentsScope.entries.size()) +
+					",\"defaultAgent\":\"" + ToNarrow(m_agentsScope.defaultAgentId) + "\"},"
+					"\"subagents\":{\"active\":" + std::to_string(m_subagentRegistry.activeRuns) +
+					",\"pendingAnnounce\":" + std::to_string(m_subagentRegistry.pendingAnnounce) + "},"
+					"\"acp\":{\"lastAllowed\":" +
+					std::string(m_lastAcpDecision.allowed ? "true" : "false") +
+					",\"reason\":\"" + m_lastAcpDecision.reason + "\"},"
+					"\"embedded\":{\"activeRuns\":" + std::to_string(ActiveEmbeddedRuns()) +
+					",\"dynamicLoopEnabled\":" +
+					std::string(m_lastEmbeddedDynamicLoopEnabled ? "true" : "false") +
+					",\"canaryEligible\":" +
+					std::string(m_lastEmbeddedCanaryEligible ? "true" : "false") +
+					",\"promotionReady\":" +
+					std::string(m_lastEmbeddedPromotionReady ? "true" : "false") +
+					",\"promotionMinRuns\":" +
+					std::to_string(m_embeddedDynamicLoopPromotionMinRuns) +
+					",\"promotionMinSuccessRate\":" +
+					std::to_string(m_embeddedDynamicLoopPromotionMinSuccessRate) +
+					",\"fallbackUsed\":" +
+					std::string(m_lastEmbeddedFallbackUsed ? "true" : "false") +
+					",\"fallbackReason\":\"" + m_lastEmbeddedFallbackReason +
+					"\",\"totalRuns\":" + std::to_string(embeddedTotalRuns) +
+					",\"successRate\":" + std::to_string(embeddedSuccessRate) +
+					",\"runSuccess\":" + std::to_string(m_embeddedRunSuccessCount) +
+					",\"runFailure\":" + std::to_string(m_embeddedRunFailureCount) +
+					",\"runTimeout\":" + std::to_string(m_embeddedRunTimeoutCount) +
+					",\"runCancelled\":" + std::to_string(m_embeddedRunCancelledCount) +
+					",\"runFallback\":" + std::to_string(m_embeddedRunFallbackCount) +
+					",\"taskDeltaTransitions\":" +
+					std::to_string(m_embeddedTaskDeltaTransitionCount) + "},"
+					"\"tools\":{\"policyEntries\":" + std::to_string(m_agentsToolPolicy.entries.size()) +
+					",\"shellProcesses\":" + std::to_string(ShellProcessCount()) + "},"
+					"\"modelAuth\":{\"primary\":\"" + routing.primaryModel +
+					"\",\"fallback\":\"" + routing.fallbackModel +
+					"\",\"failovers\":" + std::to_string(routing.failoverHistory.size()) +
+					",\"authProfiles\":" + std::to_string(auth.entries.size()) + "},"
+					"\"sandbox\":{\"enabledCount\":" + std::to_string(sandbox.enabledCount) +
+					",\"browserEnabledCount\":" + std::to_string(sandbox.browserEnabledCount) + "},"
+					"\"embeddings\":{\"enabled\":" +
+					std::string(embeddings.enabled ? "true" : "false") +
+					",\"ready\":" +
+					std::string(embeddings.ready ? "true" : "false") +
+					",\"provider\":\"" + embeddings.provider +
+					"\",\"status\":\"" + embeddings.status +
+					"\",\"dimension\":" + std::to_string(embeddings.dimension) +
+					",\"maxSequenceLength\":" +
+					std::to_string(embeddings.maxSequenceLength) +
+					",\"modelPathConfigured\":" +
+					std::string(!embeddings.modelPath.empty() ? "true" : "false") +
+					",\"tokenizerPathConfigured\":" +
+					std::string(!embeddings.tokenizerPath.empty() ? "true" : "false") +
+					",\"configFeatureImplemented\":" +
+					std::string(configFeatureImplemented ? "true" : "false") + "},"
+					"\"localModel\":{\"enabled\":" +
+					std::string(localModel.enabled ? "true" : "false") +
+					",\"ready\":" +
+					std::string(localModel.ready ? "true" : "false") +
+					",\"rolloutEligible\":" +
+					std::string(m_localModelRolloutEligible ? "true" : "false") +
+					",\"activationEnabled\":" +
+					std::string(m_localModelActivationEnabled ? "true" : "false") +
+					",\"activationReason\":\"" + m_localModelActivationReason +
+					",\"provider\":\"" + localModel.provider +
+					"\",\"rolloutStage\":\"" + localModel.rolloutStage +
+					"\",\"storageRoot\":\"" + localModel.storageRoot +
+					"\",\"version\":\"" + localModel.version +
+					"\",\"status\":\"" + localModel.status +
+					"\",\"verboseMetrics\":" +
+					std::string(localModel.verboseMetrics ? "true" : "false") +
+					",\"runtimeDllPresent\":" +
+					std::string(localModel.runtimeDllPresent ? "true" : "false") +
+					",\"maxTokens\":" +
+					std::to_string(localModel.maxTokens) +
+					",\"temperature\":" +
+					std::to_string(localModel.temperature) +
+					",\"modelLoadAttempts\":" +
+					std::to_string(localModel.modelLoadAttempts) +
+					",\"modelLoadFailures\":" +
+					std::to_string(localModel.modelLoadFailures) +
+					",\"requestsStarted\":" +
+					std::to_string(localModel.requestsStarted) +
+					",\"requestsCompleted\":" +
+					std::to_string(localModel.requestsCompleted) +
+					",\"requestsFailed\":" +
+					std::to_string(localModel.requestsFailed) +
+					",\"requestsCancelled\":" +
+					std::to_string(localModel.requestsCancelled) +
+					",\"cumulativeTokens\":" +
+					std::to_string(localModel.cumulativeTokens) +
+					",\"cumulativeLatencyMs\":" +
+					std::to_string(localModel.cumulativeLatencyMs) +
+					",\"lastLatencyMs\":" +
+					std::to_string(localModel.lastLatencyMs) +
+					",\"lastGeneratedTokens\":" +
+					std::to_string(localModel.lastGeneratedTokens) +
+					",\"lastTokensPerSecond\":" +
+					std::to_string(localModel.lastTokensPerSecond) +
+					",\"modelPathConfigured\":" +
+					std::string(!localModel.modelPath.empty() ? "true" : "false") +
+					",\"modelHashConfigured\":" +
+					std::string(!localModel.modelExpectedSha256.empty() ? "true" : "false") +
+					",\"modelHashVerified\":" +
+					std::string(localModel.modelHashVerified ? "true" : "false") +
+					",\"tokenizerPathConfigured\":" +
+					std::string(!localModel.tokenizerPath.empty() ? "true" : "false") +
+					",\"tokenizerHashConfigured\":" +
+					std::string(!localModel.tokenizerExpectedSha256.empty() ? "true" : "false") +
+					",\"tokenizerHashVerified\":" +
+					std::string(localModel.tokenizerHashVerified ? "true" : "false") +
+					"},"
+					"\"retrieval\":{\"enabled\":" +
+					std::string(retrieval.enabled ? "true" : "false") +
+					",\"recordCount\":" + std::to_string(retrieval.recordCount) +
+					",\"lastQueryCount\":" + std::to_string(retrieval.lastQueryCount) +
+					",\"status\":\"" + retrieval.status + "\"},"
+					"\"skills\":{\"catalogEntries\":" + std::to_string(m_skillsCatalog.entries.size()) +
+					",\"promptIncluded\":" + std::to_string(m_skillsPrompt.includedCount) +
+					",\"selfEvolvingReminderInjected\":" +
+					std::string(selfEvolvingReminderInjected ? "true" : "false") +
+					"},"
+					"\"hooks\":{\"loaded\":" +
+					std::to_string(m_hookCatalog.diagnostics.hooksLoaded) +
+					",\"engineMode\":\"" +
+					WideToNarrowAscii(m_hookExecution.diagnostics.engineMode) + "\"" +
+					",\"hookEngineEnabled\":" +
+					std::string(m_hooksEngineEnabled ? "true" : "false") +
+					",\"fallbackPromptInjection\":" +
+					std::string(m_hooksFallbackPromptInjection ? "true" : "false") +
+					",\"reminderEnabled\":" +
+					std::string(m_hooksReminderEnabled ? "true" : "false") +
+					",\"reminderVerbosity\":\"" +
+					WideToNarrowAscii(m_hooksReminderVerbosity) + "\"" +
+					",\"strictPolicyEnforcement\":" +
+					std::string(m_hooksStrictPolicyEnforcement ? "true" : "false") +
+					",\"allowedPackagesCount\":" +
+					std::to_string(m_hooksAllowedPackages.size()) +
+					",\"governanceReportingEnabled\":" +
+					std::string(m_hooksGovernanceReportingEnabled ? "true" : "false") +
+					",\"governanceReportsGenerated\":" +
+					std::to_string(m_hooksGovernanceReportsGenerated) +
+					",\"lastGovernanceReportPath\":\"" +
+					WideToNarrowAscii(m_hooksLastGovernanceReportPath) + "\"" +
+					",\"autoRemediationEnabled\":" +
+					std::string(m_hooksAutoRemediationEnabled ? "true" : "false") +
+					",\"autoRemediationRequiresApproval\":" +
+					std::string(m_hooksAutoRemediationRequiresApproval ? "true" : "false") +
+					",\"autoRemediationExecuted\":" +
+					std::to_string(m_hooksAutoRemediationExecuted) +
+					",\"lastAutoRemediationStatus\":\"" +
+					WideToNarrowAscii(m_hooksLastAutoRemediationStatus) + "\"" +
+					",\"autoRemediationTenantId\":\"" +
+					WideToNarrowAscii(m_hooksAutoRemediationTenantId) + "\"" +
+					",\"lastAutoRemediationPlaybookPath\":\"" +
+					WideToNarrowAscii(m_hooksLastAutoRemediationPlaybookPath) + "\"" +
+					",\"autoRemediationTokenMaxAgeMinutes\":" +
+					std::to_string(m_hooksAutoRemediationTokenMaxAgeMinutes) +
+					",\"autoRemediationTokenRotations\":" +
+					std::to_string(m_hooksAutoRemediationTokenRotations) +
+					",\"remediationTelemetryEnabled\":" +
+					std::string(m_hooksRemediationTelemetryEnabled ? "true" : "false") +
+					",\"remediationAuditEnabled\":" +
+					std::string(m_hooksRemediationAuditEnabled ? "true" : "false") +
+					",\"lastRemediationTelemetryPath\":\"" +
+					WideToNarrowAscii(m_hooksLastRemediationTelemetryPath) + "\"" +
+					",\"lastRemediationAuditPath\":\"" +
+					WideToNarrowAscii(m_hooksLastRemediationAuditPath) + "\"" +
+					",\"remediationSloStatus\":\"" +
+					WideToNarrowAscii(m_hooksRemediationSloStatus) + "\"" +
+					",\"remediationSloMaxDriftDetected\":" +
+					std::to_string(m_hooksRemediationSloMaxDriftDetected) +
+					",\"remediationSloMaxPolicyBlocked\":" +
+					std::to_string(m_hooksRemediationSloMaxPolicyBlocked) +
+					",\"complianceAttestationEnabled\":" +
+					std::string(m_hooksComplianceAttestationEnabled ? "true" : "false") +
+					",\"lastComplianceAttestationPath\":\"" +
+					WideToNarrowAscii(m_hooksLastComplianceAttestationPath) + "\"" +
+					",\"enterpriseSlaGovernanceEnabled\":" +
+					std::string(m_hooksEnterpriseSlaGovernanceEnabled ? "true" : "false") +
+					",\"enterpriseSlaPolicyId\":\"" +
+					WideToNarrowAscii(m_hooksEnterpriseSlaPolicyId) + "\"" +
+					",\"crossTenantAttestationAggregationEnabled\":" +
+					std::string(m_hooksCrossTenantAttestationAggregationEnabled ? "true" : "false") +
+					",\"crossTenantAttestationAggregationStatus\":\"" +
+					WideToNarrowAscii(m_hooksCrossTenantAttestationAggregationStatus) + "\"" +
+					",\"crossTenantAttestationAggregationCount\":" +
+					std::to_string(m_hooksCrossTenantAttestationAggregationCount) +
+					",\"lastCrossTenantAttestationAggregationPath\":\"" +
+					WideToNarrowAscii(m_hooksLastCrossTenantAttestationAggregationPath) + "\"" +
+					",\"selfEvolvingHookTriggered\":" +
+					std::string(m_selfEvolvingHookTriggered ? "true" : "false") +
+					",\"invalidMetadata\":" +
+					std::to_string(m_hookCatalog.diagnostics.invalidMetadataFiles) +
+					",\"unsafeHandlerPaths\":" +
+					std::to_string(m_hookCatalog.diagnostics.unsafeHandlerPaths) +
+					",\"missingHandlers\":" +
+					std::to_string(m_hookCatalog.diagnostics.missingHandlerFiles) +
+					",\"eventsEmitted\":" +
+					std::to_string(m_hookEvents.diagnostics.emittedCount) +
+					",\"eventValidationFailed\":" +
+					std::to_string(m_hookEvents.diagnostics.validationFailedCount) +
+					",\"eventsDropped\":" +
+					std::to_string(m_hookEvents.diagnostics.droppedCount) +
+					",\"dispatches\":" +
+					std::to_string(m_hookExecution.diagnostics.dispatchCount) +
+					",\"hookDispatchCount\":" +
+					std::to_string(m_hookExecution.diagnostics.dispatchCount) +
+					",\"dispatchSuccess\":" +
+					std::to_string(m_hookExecution.diagnostics.successCount) +
+					",\"dispatchFailures\":" +
+					std::to_string(m_hookExecution.diagnostics.failureCount) +
+					",\"hookFailureCount\":" +
+					std::to_string(m_hookExecution.diagnostics.failureCount) +
+					",\"dispatchSkipped\":" +
+					std::to_string(m_hookExecution.diagnostics.skippedCount) +
+					",\"dispatchTimeouts\":" +
+					std::to_string(m_hookExecution.diagnostics.timeoutCount) +
+					",\"guardRejected\":" +
+					std::to_string(m_hookExecution.diagnostics.guardRejectedCount) +
+					",\"reminderTriggered\":" +
+					std::to_string(m_hookExecution.diagnostics.reminderTriggeredCount) +
+					",\"reminderInjected\":" +
+					std::to_string(m_hookExecution.diagnostics.reminderInjectedCount) +
+					",\"reminderSkipped\":" +
+					std::to_string(m_hookExecution.diagnostics.reminderSkippedCount) +
+					",\"policyBlocked\":" +
+					std::to_string(m_hookExecution.diagnostics.policyBlockedCount) +
+					",\"driftDetected\":" +
+					std::to_string(m_hookExecution.diagnostics.driftDetectedCount) +
+					",\"lastDriftReason\":\"" +
+					WideToNarrowAscii(m_hookExecution.diagnostics.lastDriftReason) + "\"" +
+					",\"reminderState\":\"" +
+					WideToNarrowAscii(m_hookExecution.diagnostics.lastReminderState) + "\"" +
+					",\"reminderReason\":\"" +
+					WideToNarrowAscii(m_hookExecution.diagnostics.lastReminderReason) + "\"" +
+					"},"
+					"\"features\":{\"implemented\":" + std::to_string(implementedCount) +
+					",\"inProgress\":" + std::to_string(inProgressCount) +
+					",\"planned\":" + std::to_string(plannedCount) +
+					",\"registryState\":\"" + featureStateLabel(
+						m_registry.Features().empty() ? FeatureState::Planned : m_registry.Features().front().state) +
+					"\"}}";
 
-		return report;
+				return report;
 	}
 
 	void ServiceManager::SetActiveChatProvider(

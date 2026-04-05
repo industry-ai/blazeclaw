@@ -195,6 +195,9 @@ To reduce regression risk, validation is split into two smoke lanes:
 - Phase 2 status:
   - completed runtime health endpoints for dependency and capability snapshots,
     with schema validation, contract checks, and gateway response fixtures.
+- Phase 3 status:
+  - completed policy profile models and loader support for default/capability/
+    tool precedence, with effective-policy resolution surfaced in diagnostics.
 
 
 ### Priority 2 (behavioral parity)

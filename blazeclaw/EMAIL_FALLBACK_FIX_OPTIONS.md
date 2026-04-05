@@ -186,6 +186,11 @@ Support declarative fallback policy in config instead of hardcoding.
   - request/response schema validation and protocol contract coverage were
     added for deterministic gateway behavior,
   - gateway fixtures were added for both health responses.
+- Phase 3 policy profile foundation is implemented:
+  - config models now support default/capability/tool policy profile hierarchy,
+  - loader now parses and normalizes action/retry/approval profile fields,
+  - service startup resolves effective policy (`tool > capability > default`) and
+    diagnostics now expose resolved policy details.
 
 ### Detailed implementation reference
 - `blazeclaw/EMAIL_FALLBACK_OPTION5_OPTION6_IMPLEMENTATION_PLAN.md`

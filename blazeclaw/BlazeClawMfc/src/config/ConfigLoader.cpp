@@ -9,6 +9,82 @@
 namespace blazeclaw::config {
 
 	namespace {
+		std::wstring Trim(const std::wstring& value);
+		std::wstring ToLowerTrim(const std::wstring& raw);
+
+		std::wstring NormalizeEmailPolicyAction(const std::wstring& raw) {
+			const std::wstring normalized = ToLowerTrim(raw);
+			if (normalized == L"continue" ||
+				normalized == L"stop" ||
+				normalized == L"retry_then_continue") {
+				return normalized;
+			}
+
+			return L"stop";
+		}
+
+		std::vector<std::wstring> SplitCsvValues(const std::wstring& raw) {
+			std::vector<std::wstring> values;
+			std::wstring token;
+			for (const wchar_t ch : raw) {
+				if (ch == L',' || ch == L';') {
+					const std::wstring trimmed = Trim(token);
+					if (!trimmed.empty()) {
+						values.push_back(trimmed);
+					}
+					token.clear();
+					continue;
+				}
+
+				token.push_back(ch);
+			}
+
+			const std::wstring trimmed = Trim(token);
+			if (!trimmed.empty()) {
+				values.push_back(trimmed);
+			}
+
+			return values;
+		}
+
+		void NormalizeBackendList(std::vector<std::wstring>& backends) {
+			std::vector<std::wstring> normalized;
+			normalized.reserve(backends.size());
+			for (const auto& backend : backends) {
+				const std::wstring lowered = ToLowerTrim(backend);
+				if (lowered.empty()) {
+					continue;
+				}
+
+				normalized.push_back(lowered);
+			}
+
+			std::sort(normalized.begin(), normalized.end());
+			normalized.erase(
+				std::unique(normalized.begin(), normalized.end()),
+				normalized.end());
+			backends = std::move(normalized);
+		}
+
+		EmailFallbackPolicyProfileConfig& ResolvePolicyProfile(
+			AppConfig& config,
+			const std::wstring& scope,
+			const std::wstring& key) {
+			if (scope == L"default") {
+				config.email.policy.defaults.id = L"default";
+				return config.email.policy.defaults;
+			}
+
+			if (scope == L"capability") {
+				auto& profile = config.email.policy.capability[key];
+				profile.id = key;
+				return profile;
+			}
+
+			auto& profile = config.email.policy.tool[key];
+			profile.id = key;
+			return profile;
+		}
 
 		std::wstring Trim(const std::wstring& value) {
 			const auto first = std::find_if_not(
@@ -461,6 +537,103 @@ namespace blazeclaw::config {
 					trimmedLine.substr(29),
 					false);
 				continue;
+			}
+
+			if (trimmedLine.rfind(L"email.policy.default.", 0) == 0 ||
+				trimmedLine.rfind(L"email.policy.capability.", 0) == 0 ||
+				trimmedLine.rfind(L"email.policy.tool.", 0) == 0) {
+				const auto keyValuePos = trimmedLine.find(L'=');
+				if (keyValuePos == std::wstring::npos) {
+					continue;
+				}
+
+				std::wstring scope;
+				std::wstring key;
+				std::wstring fieldPath;
+				if (trimmedLine.rfind(L"email.policy.default.", 0) == 0) {
+					scope = L"default";
+					fieldPath = Trim(trimmedLine.substr(21, keyValuePos - 21));
+				}
+				else if (trimmedLine.rfind(L"email.policy.capability.", 0) == 0) {
+					scope = L"capability";
+					const std::wstring path = Trim(trimmedLine.substr(24, keyValuePos - 24));
+					const auto dotPos = path.find(L'.');
+					if (dotPos == std::wstring::npos) {
+						continue;
+					}
+					key = ToLowerTrim(path.substr(0, dotPos));
+					fieldPath = Trim(path.substr(dotPos + 1));
+				}
+				else {
+					scope = L"tool";
+					const std::wstring path = Trim(trimmedLine.substr(18, keyValuePos - 18));
+					const auto dotPos = path.find(L'.');
+					if (dotPos == std::wstring::npos) {
+						continue;
+					}
+					key = ToLowerTrim(path.substr(0, dotPos));
+					fieldPath = Trim(path.substr(dotPos + 1));
+				}
+
+				if (fieldPath.empty()) {
+					continue;
+				}
+
+				if (scope != L"default" && key.empty()) {
+					continue;
+				}
+
+				auto& profile = ResolvePolicyProfile(outConfig, scope, key);
+				const std::wstring value = Trim(trimmedLine.substr(keyValuePos + 1));
+
+				if (fieldPath == L"backends") {
+					profile.backends = SplitCsvValues(value);
+					continue;
+				}
+
+				if (fieldPath == L"actions.unavailable") {
+					profile.actions.unavailable = NormalizeEmailPolicyAction(value);
+					continue;
+				}
+
+				if (fieldPath == L"actions.authError") {
+					profile.actions.authError = NormalizeEmailPolicyAction(value);
+					continue;
+				}
+
+				if (fieldPath == L"actions.execError") {
+					profile.actions.execError = NormalizeEmailPolicyAction(value);
+					continue;
+				}
+
+				if (fieldPath == L"retry.maxAttempts") {
+					std::uint32_t parsed = 0;
+					if (TryParseUInt(value, parsed)) {
+						profile.retry.maxAttempts = parsed;
+					}
+					continue;
+				}
+
+				if (fieldPath == L"retry.retryDelayMs") {
+					std::uint32_t parsed = 0;
+					if (TryParseUInt(value, parsed)) {
+						profile.retry.retryDelayMs = parsed;
+					}
+					continue;
+				}
+
+				if (fieldPath == L"approval.requiresApproval") {
+					profile.approval.requiresApproval = ParseBool(value, true);
+					continue;
+				}
+
+				if (fieldPath == L"approval.tokenTtlMinutes") {
+					std::uint32_t parsed = 0;
+					if (TryParseUInt(value, parsed)) {
+						profile.approval.tokenTtlMinutes = parsed;
+					}
+					continue;
+				}
 			}
 
 			if (trimmedLine.rfind(L"models.primary=", 0) == 0) {
@@ -1157,6 +1330,93 @@ namespace blazeclaw::config {
 
 		if (outConfig.localModel.maxTokens == 0) {
 			outConfig.localModel.maxTokens = 256;
+		}
+
+		const auto sanitizePolicyProfile = [](
+			EmailFallbackPolicyProfileConfig& profile,
+			const EmailFallbackPolicyProfileConfig& fallbackProfile) {
+				if (profile.backends.empty()) {
+					profile.backends = fallbackProfile.backends;
+				}
+				NormalizeBackendList(profile.backends);
+
+				if (profile.actions.unavailable.empty()) {
+					profile.actions.unavailable = fallbackProfile.actions.unavailable;
+				}
+				if (profile.actions.authError.empty()) {
+					profile.actions.authError = fallbackProfile.actions.authError;
+				}
+				if (profile.actions.execError.empty()) {
+					profile.actions.execError = fallbackProfile.actions.execError;
+				}
+
+				profile.actions.unavailable = NormalizeEmailPolicyAction(
+					profile.actions.unavailable);
+				profile.actions.authError = NormalizeEmailPolicyAction(
+					profile.actions.authError);
+				profile.actions.execError = NormalizeEmailPolicyAction(
+					profile.actions.execError);
+
+				if (profile.retry.maxAttempts == 0) {
+					profile.retry.maxAttempts = fallbackProfile.retry.maxAttempts;
+				}
+				profile.retry.maxAttempts = (std::clamp)(
+					profile.retry.maxAttempts,
+					std::uint32_t{ 1 },
+					std::uint32_t{ 8 });
+
+				if (profile.retry.retryDelayMs > 300000) {
+					profile.retry.retryDelayMs = 300000;
+				}
+
+				if (profile.approval.tokenTtlMinutes == 0) {
+					profile.approval.tokenTtlMinutes =
+						fallbackProfile.approval.tokenTtlMinutes;
+				}
+				profile.approval.tokenTtlMinutes = (std::clamp)(
+					profile.approval.tokenTtlMinutes,
+					std::uint32_t{ 1 },
+					std::uint32_t{ 1440 });
+			};
+
+		auto& defaultPolicy = outConfig.email.policy.defaults;
+		defaultPolicy.id = L"default";
+		if (defaultPolicy.backends.empty()) {
+			defaultPolicy.backends = { L"himalaya", L"imap-smtp-email" };
+		}
+		NormalizeBackendList(defaultPolicy.backends);
+		defaultPolicy.actions.unavailable = NormalizeEmailPolicyAction(
+			defaultPolicy.actions.unavailable);
+		defaultPolicy.actions.authError = NormalizeEmailPolicyAction(
+			defaultPolicy.actions.authError);
+		defaultPolicy.actions.execError = NormalizeEmailPolicyAction(
+			defaultPolicy.actions.execError);
+		defaultPolicy.retry.maxAttempts = (std::clamp)(
+			defaultPolicy.retry.maxAttempts == 0 ? 1 : defaultPolicy.retry.maxAttempts,
+			std::uint32_t{ 1 },
+			std::uint32_t{ 8 });
+		defaultPolicy.retry.retryDelayMs = (std::min)(
+			defaultPolicy.retry.retryDelayMs,
+			std::uint32_t{ 300000 });
+		defaultPolicy.approval.tokenTtlMinutes = (std::clamp)(
+			defaultPolicy.approval.tokenTtlMinutes == 0
+			? std::uint32_t{ 60 }
+			: defaultPolicy.approval.tokenTtlMinutes,
+			std::uint32_t{ 1 },
+			std::uint32_t{ 1440 });
+
+		for (auto& [capabilityKey, profile] : outConfig.email.policy.capability) {
+			if (profile.id.empty()) {
+				profile.id = capabilityKey;
+			}
+			sanitizePolicyProfile(profile, defaultPolicy);
+		}
+
+		for (auto& [toolKey, profile] : outConfig.email.policy.tool) {
+			if (profile.id.empty()) {
+				profile.id = toolKey;
+			}
+			sanitizePolicyProfile(profile, defaultPolicy);
 		}
 
 		return true;

@@ -85,6 +85,21 @@ namespace blazeclaw::core {
 		bool PumpGatewayNetworkOnce(std::string& error);
 
 	private:
+		struct EmailFallbackResolvedPolicy {
+			std::wstring profileId;
+			std::vector<std::wstring> backends;
+			std::wstring onUnavailable;
+			std::wstring onAuthError;
+			std::wstring onExecError;
+			std::uint32_t retryMaxAttempts = 1;
+			std::uint32_t retryDelayMs = 0;
+			bool requiresApproval = true;
+			std::uint32_t approvalTokenTtlMinutes = 60;
+		};
+
+		[[nodiscard]] EmailFallbackResolvedPolicy ResolveEmailFallbackPolicy(
+			const std::wstring& toolName,
+			const std::wstring& capabilityName) const;
 		enum class ChatRuntimeJobLifecycleStatus {
 			Queued,
 			Started,
@@ -160,6 +175,7 @@ namespace blazeclaw::core {
 		std::string m_activeChatProvider = "local";
 		std::string m_activeChatModel = "default";
 		blazeclaw::config::AppConfig m_activeConfig;
+		EmailFallbackResolvedPolicy m_emailFallbackResolvedPolicy;
 		FeatureRegistry m_registry;
 		AgentsCatalogService m_agentsCatalogService;
 		AgentScopeSnapshot m_agentsScope;

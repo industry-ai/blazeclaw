@@ -84,9 +84,40 @@ namespace blazeclaw::config {
 		bool enforce = false;
 	};
 
+	struct EmailFallbackRetryPolicyConfig {
+		std::uint32_t maxAttempts = 1;
+		std::uint32_t retryDelayMs = 0;
+	};
+
+	struct EmailFallbackApprovalPolicyConfig {
+		bool requiresApproval = true;
+		std::uint32_t tokenTtlMinutes = 60;
+	};
+
+	struct EmailFallbackPolicyActionConfig {
+		std::wstring unavailable = L"continue";
+		std::wstring authError = L"stop";
+		std::wstring execError = L"retry_then_continue";
+	};
+
+	struct EmailFallbackPolicyProfileConfig {
+		std::wstring id;
+		std::vector<std::wstring> backends;
+		EmailFallbackPolicyActionConfig actions;
+		EmailFallbackRetryPolicyConfig retry;
+		EmailFallbackApprovalPolicyConfig approval;
+	};
+
+	struct EmailFallbackPolicyProfilesMapConfig {
+		EmailFallbackPolicyProfileConfig defaults;
+		std::map<std::wstring, EmailFallbackPolicyProfileConfig> capability;
+		std::map<std::wstring, EmailFallbackPolicyProfileConfig> tool;
+	};
+
 	struct EmailFallbackConfig {
 		EmailPreflightConfig preflight;
 		EmailPolicyProfilesConfig policyProfiles;
+		EmailFallbackPolicyProfilesMapConfig policy;
 	};
 
 	struct ModelsRoutingConfig {

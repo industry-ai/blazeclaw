@@ -256,6 +256,29 @@ target interfaces, and completion checks.
 3. Normalize invalid entries to safe defaults and emit warnings.
 4. Surface effective policy in operator diagnostics.
 
+**Phase 3 implementation status (current): completed**
+
+- Implemented policy profile models:
+  - `EmailFallbackPolicyProfileConfig`
+  - `EmailFallbackRetryPolicyConfig`
+  - `EmailFallbackApprovalPolicyConfig`
+  - hierarchy container for `default` / `capability` / `tool` scopes.
+- Implemented config parsing and normalization:
+  - supports `email.policy.default.*`,
+    `email.policy.capability.<name>.*`, and
+    `email.policy.tool.<name>.*`.
+  - normalizes invalid action values to safe defaults and clamps numeric limits.
+- Implemented resolver entrypoint:
+  - `ServiceManager::ResolveEmailFallbackPolicy(...)` with precedence
+    `tool > capability > default`.
+- Implemented diagnostics exposure:
+  - operator diagnostics now include resolved policy id, effective backend order,
+    action matrix, retry settings, and approval token TTL settings.
+- Updated config templates with Phase 3 example keys:
+  - `blazeclaw.conf`
+  - `blazeclaw/BlazeClawMfc/blazeclaw.conf`
+  - `blazeclaw/BlazeClawMfc/src/config/blazeclaw.conf`
+
 ---
 
 ### Phase 4 — Resolver Introduction + Email Executor Migration

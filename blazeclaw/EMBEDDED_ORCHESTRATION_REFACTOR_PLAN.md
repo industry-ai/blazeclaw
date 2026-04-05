@@ -156,6 +156,9 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
 - Option 5/6 Phase 2 health gateway surface is now in place
   (`gateway.runtime.health.dependencies` and
   `gateway.runtime.health.capabilities`) with contract/schema coverage.
+- Option 5/6 Phase 3 policy-profile foundation is now in place
+  (default/capability/tool model hierarchy, loader parsing/normalization,
+  resolver precedence, and diagnostics exposure).
 
 ## Step-by-Step Implementation Process
 
