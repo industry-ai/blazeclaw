@@ -196,6 +196,16 @@ namespace blazeclaw::gateway {
 			bool preflightEnabled,
 			bool policyProfilesEnabled,
 			bool policyProfilesEnforce);
+		void SetEmailFallbackResolvedPolicy(
+			const std::vector<std::string>& backends,
+			const std::string& onUnavailable,
+			const std::string& onAuthError,
+			const std::string& onExecError,
+			std::uint32_t retryMaxAttempts,
+			std::uint32_t retryDelayMs,
+			bool requiresApproval,
+			std::uint32_t approvalTokenTtlMinutes,
+			const std::string& profileId);
 		void SetChatRuntimeCallback(ChatRuntimeCallback callback);
 		void SetChatAbortCallback(ChatAbortCallback callback);
 		void SetEmbeddingsGenerateCallback(EmbeddingsGenerateCallback callback);
@@ -294,6 +304,15 @@ namespace blazeclaw::gateway {
 		bool m_runtimeEmailPreflightEnabled = false;
 		bool m_runtimeEmailPolicyProfilesEnabled = false;
 		bool m_runtimeEmailPolicyProfilesEnforce = false;
+		std::vector<std::string> m_runtimeEmailResolvedBackends;
+		std::string m_runtimeEmailPolicyOnUnavailable = "continue";
+		std::string m_runtimeEmailPolicyOnAuthError = "stop";
+		std::string m_runtimeEmailPolicyOnExecError = "retry_then_continue";
+		std::uint32_t m_runtimeEmailRetryMaxAttempts = 1;
+		std::uint32_t m_runtimeEmailRetryDelayMs = 0;
+		bool m_runtimeEmailRequiresApproval = true;
+		std::uint32_t m_runtimeEmailApprovalTokenTtlMinutes = 60;
+		std::string m_runtimeEmailPolicyProfileId = "default";
 		std::string m_embeddedOrchestrationPath = "dynamic_task_delta";
 		std::string m_runtimeAssignedSessionId = "main";
 		std::string m_runtimeAssignedAgentId = "default";

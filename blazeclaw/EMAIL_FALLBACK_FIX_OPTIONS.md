@@ -191,6 +191,13 @@ Support declarative fallback policy in config instead of hardcoding.
   - loader now parses and normalizes action/retry/approval profile fields,
   - service startup resolves effective policy (`tool > capability > default`) and
     diagnostics now expose resolved policy details.
+- Phase 4 resolver migration is implemented:
+  - email fallback execution now follows resolver output plan instead of ad-hoc
+    backend loop ordering,
+  - policy action matrix is enforced for unavailable/auth/exec failure classes
+    with bounded retry behavior,
+  - runtime-resolved policy values are propagated through gateway runtime state
+    into executor consumption while preserving legacy output envelope shape.
 
 ### Detailed implementation reference
 - `blazeclaw/EMAIL_FALLBACK_OPTION5_OPTION6_IMPLEMENTATION_PLAN.md`

@@ -198,6 +198,10 @@ To reduce regression risk, validation is split into two smoke lanes:
 - Phase 3 status:
   - completed policy profile models and loader support for default/capability/
     tool precedence, with effective-policy resolution surfaced in diagnostics.
+- Phase 4 status:
+  - completed resolver-driven executor migration with policy action matrix
+    enforcement and runtime policy propagation from service/gateway to
+    email fallback execution.
 
 
 ### Priority 2 (behavioral parity)

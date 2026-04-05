@@ -2991,6 +2991,21 @@ namespace blazeclaw::core {
 			m_activeConfig.email.preflight.enabled,
 			m_activeConfig.email.policyProfiles.enabled,
 			m_activeConfig.email.policyProfiles.enforce);
+		std::vector<std::string> resolvedBackends;
+		resolvedBackends.reserve(m_emailFallbackResolvedPolicy.backends.size());
+		for (const auto& backend : m_emailFallbackResolvedPolicy.backends) {
+			resolvedBackends.push_back(ToNarrow(backend));
+		}
+		m_gatewayHost.SetEmailFallbackResolvedPolicy(
+			resolvedBackends,
+			ToNarrow(m_emailFallbackResolvedPolicy.onUnavailable),
+			ToNarrow(m_emailFallbackResolvedPolicy.onAuthError),
+			ToNarrow(m_emailFallbackResolvedPolicy.onExecError),
+			m_emailFallbackResolvedPolicy.retryMaxAttempts,
+			m_emailFallbackResolvedPolicy.retryDelayMs,
+			m_emailFallbackResolvedPolicy.requiresApproval,
+			m_emailFallbackResolvedPolicy.approvalTokenTtlMinutes,
+			ToNarrow(m_emailFallbackResolvedPolicy.profileId));
 		RegisterImapSmtpRuntimeTools(m_gatewayHost);
 
 		m_gatewayHost.SetChatRuntimeCallback([this](

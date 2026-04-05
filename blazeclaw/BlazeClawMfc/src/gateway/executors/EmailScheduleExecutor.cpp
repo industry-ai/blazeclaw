@@ -15,6 +15,7 @@
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <thread>
 #include <vector>
 #include <windows.h>
 
@@ -25,6 +26,22 @@ namespace blazeclaw::gateway::executors {
 		bool HasHimalayaBinary();
 		bool HasNodeBinary();
 		bool HasImapSmtpSkill();
+
+		enum class EmailDeliveryFailureClass {
+			Unavailable,
+			AuthError,
+			ExecError,
+		};
+
+		struct EmailDeliveryResolverPlan {
+			std::vector<std::string> backends;
+			std::string onUnavailable = "continue";
+			std::string onAuthError = "stop";
+			std::string onExecError = "retry_then_continue";
+			std::uint32_t retryMaxAttempts = 1;
+			std::uint32_t retryDelayMs = 0;
+			bool enforcePolicy = false;
+		};
 
 		constexpr std::uint64_t kDefaultPreflightTtlMs = 60 * 1000;
 
@@ -41,6 +58,22 @@ namespace blazeclaw::gateway::executors {
 			}
 
 			return fallback;
+		}
+
+		std::uint32_t ParseUIntEnvOrDefault(
+			const char* name,
+			const std::uint32_t fallback) {
+			const std::string raw = json::Trim(ReadEnvVar(name));
+			if (raw.empty()) {
+				return fallback;
+			}
+
+			try {
+				return static_cast<std::uint32_t>(std::stoul(raw));
+			}
+			catch (...) {
+				return fallback;
+			}
 		}
 
 		std::uint64_t ResolvePreflightTtlMs() {
@@ -413,6 +446,114 @@ namespace blazeclaw::gateway::executors {
 			return chain;
 		}
 
+		std::string NormalizePolicyAction(
+			const std::string& raw,
+			const std::string& fallback) {
+			const std::string normalized = ToLowerCopy(json::Trim(raw));
+			if (normalized == "continue" ||
+				normalized == "stop" ||
+				normalized == "retry_then_continue") {
+				return normalized;
+			}
+
+			return fallback;
+		}
+
+		EmailDeliveryFailureClass ClassifyDeliveryFailure(
+			const std::string& errorCode,
+			const std::string& errorMessage) {
+			const std::string code = ToLowerCopy(errorCode);
+			const std::string message = ToLowerCopy(errorMessage);
+
+			const bool unavailable =
+				code.find("missing") != std::string::npos ||
+				code.find("unavailable") != std::string::npos ||
+				message.find("not found") != std::string::npos;
+			if (unavailable) {
+				return EmailDeliveryFailureClass::Unavailable;
+			}
+
+			const bool authError =
+				code.find("auth") != std::string::npos ||
+				code.find("credential") != std::string::npos ||
+				code.find("token") != std::string::npos ||
+				message.find("auth") != std::string::npos ||
+				message.find("credential") != std::string::npos;
+			if (authError) {
+				return EmailDeliveryFailureClass::AuthError;
+			}
+
+			return EmailDeliveryFailureClass::ExecError;
+		}
+
+		EmailDeliveryResolverPlan ResolveEmailDeliveryResolverPlan() {
+			EmailDeliveryResolverPlan plan;
+
+			const bool profilesEnabled = ParseBoolEnvOrDefault(
+				"BLAZECLAW_EMAIL_POLICY_PROFILES_ENABLED",
+				false);
+			const bool profilesEnforce = ParseBoolEnvOrDefault(
+				"BLAZECLAW_EMAIL_POLICY_PROFILES_ENFORCE",
+				false);
+			plan.enforcePolicy = profilesEnabled && profilesEnforce;
+
+			const std::string configuredBackends = json::Trim(
+				ReadEnvVar("BLAZECLAW_EMAIL_POLICY_BACKENDS"));
+			if (!configuredBackends.empty()) {
+				for (const auto& value : SplitValues(configuredBackends)) {
+					const std::string normalized = ToLowerCopy(json::Trim(value));
+					if (!normalized.empty()) {
+						plan.backends.push_back(normalized);
+					}
+				}
+			}
+			if (plan.backends.empty()) {
+				plan.backends = ResolveEmailBackendChain();
+			}
+
+			plan.onUnavailable = NormalizePolicyAction(
+				ReadEnvVar("BLAZECLAW_EMAIL_POLICY_ACTION_UNAVAILABLE"),
+				"continue");
+			plan.onAuthError = NormalizePolicyAction(
+				ReadEnvVar("BLAZECLAW_EMAIL_POLICY_ACTION_AUTH_ERROR"),
+				"stop");
+			plan.onExecError = NormalizePolicyAction(
+				ReadEnvVar("BLAZECLAW_EMAIL_POLICY_ACTION_EXEC_ERROR"),
+				"retry_then_continue");
+
+			plan.retryMaxAttempts = (std::clamp)(
+				ParseUIntEnvOrDefault(
+					"BLAZECLAW_EMAIL_POLICY_RETRY_MAX_ATTEMPTS",
+					1),
+				std::uint32_t{ 1 },
+				std::uint32_t{ 8 });
+			plan.retryDelayMs = (std::min)(
+				ParseUIntEnvOrDefault(
+					"BLAZECLAW_EMAIL_POLICY_RETRY_DELAY_MS",
+					0),
+				std::uint32_t{ 300000 });
+
+			return plan;
+		}
+
+		std::string ResolvePolicyActionForFailure(
+			const EmailDeliveryResolverPlan& plan,
+			const EmailDeliveryFailureClass failureClass) {
+			if (!plan.enforcePolicy) {
+				return "continue";
+			}
+
+			switch (failureClass) {
+			case EmailDeliveryFailureClass::Unavailable:
+				return NormalizePolicyAction(plan.onUnavailable, "continue");
+			case EmailDeliveryFailureClass::AuthError:
+				return NormalizePolicyAction(plan.onAuthError, "stop");
+			case EmailDeliveryFailureClass::ExecError:
+			default:
+				return NormalizePolicyAction(plan.onExecError, "retry_then_continue");
+			}
+		}
+
 		std::string ResolveImapSmtpSkillRoot() {
 			const std::vector<std::filesystem::path> candidates = {
 				std::filesystem::path("blazeclaw") / "skills" / "imap-smtp-email",
@@ -743,6 +884,7 @@ namespace blazeclaw::gateway::executors {
 			outOutput.clear();
 			outErrorCode.clear();
 			outErrorMessage.clear();
+			const auto deliveryPlan = ResolveEmailDeliveryResolverPlan();
 
 			if (ParseBoolEnvOrDefault("BLAZECLAW_EMAIL_PREFLIGHT_ENABLED", false)) {
 				const auto healthIndex = EmailScheduleExecutor::GetRuntimeHealthIndex(false);
@@ -753,49 +895,77 @@ namespace blazeclaw::gateway::executors {
 				}
 			}
 
-			for (const auto& backend : ResolveEmailBackendChain()) {
-				std::string status;
-				std::string output;
-				std::string code;
-				std::string message;
+			for (const auto& backend : deliveryPlan.backends) {
+				std::uint32_t attempt = 0;
+				while (attempt < deliveryPlan.retryMaxAttempts) {
+					++attempt;
 
-				bool delivered = false;
-				if (backend == "himalaya") {
-					delivered = DeliverViaHimalaya(
-						recipient,
-						subject,
-						body,
-						account,
-						status,
-						output,
-						code,
-						message);
-				}
-				else if (backend == "imap-smtp-email" ||
-					backend == "imap_smtp_email") {
-					delivered = DeliverViaImapSmtpSkill(
-						recipient,
-						subject,
-						body,
-						account,
-						status,
-						output,
-						code,
-						message);
-				}
+					std::string status;
+					std::string output;
+					std::string code;
+					std::string message;
 
-				if (delivered) {
-					outBackend = backend;
-					outStatus = status;
-					outOutput = output;
-					return true;
-				}
+					bool delivered = false;
+					if (backend == "himalaya") {
+						delivered = DeliverViaHimalaya(
+							recipient,
+							subject,
+							body,
+							account,
+							status,
+							output,
+							code,
+							message);
+					}
+					else if (backend == "imap-smtp-email" ||
+						backend == "imap_smtp_email") {
+						delivered = DeliverViaImapSmtpSkill(
+							recipient,
+							subject,
+							body,
+							account,
+							status,
+							output,
+							code,
+							message);
+					}
 
-				if (!code.empty()) {
-					outErrorCode = code;
-				}
-				if (!message.empty()) {
-					outErrorMessage = message;
+					if (delivered) {
+						outBackend = backend;
+						outStatus = status;
+						outOutput = output;
+						return true;
+					}
+
+					if (!code.empty()) {
+						outErrorCode = code;
+					}
+					if (!message.empty()) {
+						outErrorMessage = message;
+					}
+
+					const auto failureClass = ClassifyDeliveryFailure(code, message);
+					const std::string action = ResolvePolicyActionForFailure(
+						deliveryPlan,
+						failureClass);
+
+					const bool canRetrySameBackend =
+						failureClass == EmailDeliveryFailureClass::ExecError &&
+						action == "retry_then_continue" &&
+						attempt < deliveryPlan.retryMaxAttempts;
+					if (canRetrySameBackend) {
+						if (deliveryPlan.retryDelayMs > 0) {
+							std::this_thread::sleep_for(
+								std::chrono::milliseconds(deliveryPlan.retryDelayMs));
+						}
+						continue;
+					}
+
+					if (action == "stop") {
+						return false;
+					}
+
+					break;
 				}
 			}
 
@@ -855,7 +1025,10 @@ namespace blazeclaw::gateway::executors {
 					};
 				}
 
-				std::uint64_t ttlMinutes = 60;
+				std::uint64_t ttlMinutes = static_cast<std::uint64_t>(
+					ParseUIntEnvOrDefault(
+						"BLAZECLAW_EMAIL_APPROVAL_TOKEN_TTL_MINUTES",
+						60));
 				json::FindUInt64Field(argsJson.value(), "ttlMinutes", ttlMinutes);
 				ttlMinutes = (std::max)(
 					std::uint64_t{ 1 },

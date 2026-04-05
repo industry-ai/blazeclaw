@@ -741,6 +741,49 @@ namespace blazeclaw::gateway {
 		m_runtimeEmailPolicyProfilesEnforce = policyProfilesEnforce;
 	}
 
+	void GatewayHost::SetEmailFallbackResolvedPolicy(
+		const std::vector<std::string>& backends,
+		const std::string& onUnavailable,
+		const std::string& onAuthError,
+		const std::string& onExecError,
+		std::uint32_t retryMaxAttempts,
+		std::uint32_t retryDelayMs,
+		bool requiresApproval,
+		std::uint32_t approvalTokenTtlMinutes,
+		const std::string& profileId) {
+		m_runtimeEmailResolvedBackends = backends;
+		m_runtimeEmailPolicyOnUnavailable = onUnavailable;
+		m_runtimeEmailPolicyOnAuthError = onAuthError;
+		m_runtimeEmailPolicyOnExecError = onExecError;
+		m_runtimeEmailRetryMaxAttempts = retryMaxAttempts;
+		m_runtimeEmailRetryDelayMs = retryDelayMs;
+		m_runtimeEmailRequiresApproval = requiresApproval;
+		m_runtimeEmailApprovalTokenTtlMinutes = approvalTokenTtlMinutes;
+		m_runtimeEmailPolicyProfileId = profileId;
+
+		if (!m_runtimeEmailResolvedBackends.empty()) {
+			std::string joined;
+			for (std::size_t i = 0; i < m_runtimeEmailResolvedBackends.size(); ++i) {
+				if (i > 0) {
+					joined += ",";
+				}
+				joined += m_runtimeEmailResolvedBackends[i];
+			}
+			_putenv_s("BLAZECLAW_EMAIL_POLICY_BACKENDS", joined.c_str());
+		}
+		else {
+			_putenv_s("BLAZECLAW_EMAIL_POLICY_BACKENDS", "");
+		}
+
+		_putenv_s("BLAZECLAW_EMAIL_POLICY_ACTION_UNAVAILABLE", m_runtimeEmailPolicyOnUnavailable.c_str());
+		_putenv_s("BLAZECLAW_EMAIL_POLICY_ACTION_AUTH_ERROR", m_runtimeEmailPolicyOnAuthError.c_str());
+		_putenv_s("BLAZECLAW_EMAIL_POLICY_ACTION_EXEC_ERROR", m_runtimeEmailPolicyOnExecError.c_str());
+		_putenv_s("BLAZECLAW_EMAIL_POLICY_RETRY_MAX_ATTEMPTS", std::to_string(m_runtimeEmailRetryMaxAttempts).c_str());
+		_putenv_s("BLAZECLAW_EMAIL_POLICY_RETRY_DELAY_MS", std::to_string(m_runtimeEmailRetryDelayMs).c_str());
+		_putenv_s("BLAZECLAW_EMAIL_APPROVAL_TOKEN_TTL_MINUTES", std::to_string(m_runtimeEmailApprovalTokenTtlMinutes).c_str());
+		_putenv_s("BLAZECLAW_EMAIL_POLICY_PROFILE_ID", m_runtimeEmailPolicyProfileId.c_str());
+	}
+
 	void GatewayHost::LoadPersistedTaskDeltas() {
 		const std::filesystem::path persistencePath =
 			ResolveGatewayStateFilePath("taskdeltas.state");

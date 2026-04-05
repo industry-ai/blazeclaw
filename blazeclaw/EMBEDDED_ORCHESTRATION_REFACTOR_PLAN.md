@@ -159,6 +159,9 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
 - Option 5/6 Phase 3 policy-profile foundation is now in place
   (default/capability/tool model hierarchy, loader parsing/normalization,
   resolver precedence, and diagnostics exposure).
+- Option 5/6 Phase 4 resolver migration is now in place
+  (resolver-driven backend plan execution, policy action-matrix enforcement,
+  and runtime policy propagation into email executor behavior).
 
 ## Step-by-Step Implementation Process
 

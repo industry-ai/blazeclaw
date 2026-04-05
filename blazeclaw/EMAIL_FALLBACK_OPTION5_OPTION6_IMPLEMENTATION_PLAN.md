@@ -305,6 +305,30 @@ target interfaces, and completion checks.
 3. Preserve approval-token prepare/approve semantics.
 4. Preserve legacy envelope compatibility.
 
+**Phase 4 implementation status (current): completed**
+
+- Implemented resolver-driven execution plan in `EmailScheduleExecutor`:
+  - ad-hoc backend iteration is replaced by resolver plan output consumed at
+    runtime.
+  - delivery plan includes effective backend order, action matrix, retry
+    controls, and policy-enforcement toggle.
+- Implemented failure classification and policy action application:
+  - failures are normalized as `unavailable`, `auth_error`, `exec_error`.
+  - action rules now control `continue` / `stop` / `retry_then_continue`
+    behavior with bounded retry attempts and optional retry delay.
+- Preserved executor API and response envelope compatibility:
+  - `EmailScheduleExecutor::Create()` contract unchanged.
+  - existing output envelope shape remains backward compatible.
+- Preserved approval prepare/approve semantics:
+  - approval flow still uses tokenized `prepare` + `approve` lifecycle.
+  - default token TTL can now be policy-driven while explicit tool arg TTL
+    retains precedence.
+- Integrated runtime policy propagation path:
+  - `GatewayHost` now stores resolved policy state and projects it to runtime
+    environment keys consumed by executor resolver logic.
+  - `ServiceManager` startup now passes resolved policy details through
+    `GatewayHost::SetEmailFallbackResolvedPolicy(...)`.
+
 ---
 
 ### Phase 5 — Runtime Orchestration Path Alignment
