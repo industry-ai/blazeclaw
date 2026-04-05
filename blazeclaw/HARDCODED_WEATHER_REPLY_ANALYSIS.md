@@ -76,3 +76,28 @@ The main cause of the observed "hardcoded reply" is the **specialized weather-em
 ## Suggested Priority
 - **P0:** Action Item 1 + Action Item 2 (immediately restores user-visible behavior in WebView2).
 - **P1:** Action Item 3 (completes architecture objective and removes hardcoded perception entirely).
+
+## Option 5 + Option 6 alignment note
+
+To prevent recurrence of backend-specific hardcoded error handling (for example
+`himalaya_cli_missing` vs `node_cli_missing`), runtime execution should be
+aligned with:
+
+- dependency preflight + health index (Option 5), and
+- configurable fallback policy profiles (Option 6).
+
+Execution path implication:
+
+1. weather/email orchestration requests capability-level email delivery,
+2. resolver selects backend using health index + effective policy,
+3. orchestration consumes normalized resolver outcome rather than backend-specific checks.
+
+Detailed plan reference:
+
+- `blazeclaw/EMAIL_FALLBACK_OPTION5_OPTION6_IMPLEMENTATION_PLAN.md`
+- executable coding checklist section:
+  - `Executable Phase-by-Phase Coding Checklist (Exact C++ Targets)`
+  - includes concrete edits for:
+    - `GatewayHost.Handlers.Runtime.cpp`
+    - `EmailScheduleExecutor.cpp`
+    - `PiEmbeddedService.cpp/.h`

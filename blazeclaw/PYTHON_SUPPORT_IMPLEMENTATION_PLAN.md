@@ -374,6 +374,13 @@ The Python dual-mode support framework plan (Phase 0 through Phase 5) is complet
   - `email.schedule` approve flow now tries backend chain in order.
   - default chain: `himalaya` -> `imap-smtp-email`.
   - backend order override via `BLAZECLAW_EMAIL_DELIVERY_BACKENDS`.
+- Planned alignment for long-term extensibility:
+  - move backend selection to dependency-health + policy-profile resolver model
+    (Option 5 + Option 6), shared across runtime modes.
+  - tracking plan:
+    `blazeclaw/EMAIL_FALLBACK_OPTION5_OPTION6_IMPLEMENTATION_PLAN.md`.
+  - executable checklist section:
+    `Executable Phase-by-Phase Coding Checklist (Exact C++ Targets)`.
 - Added tests:
   - `BlazeClawMfc/tests/EmailScheduleFallbackTests.cpp`
   - updated `BlazeClawMfc/tests/OpsToolsExecutorTests.cpp` fallback coverage.

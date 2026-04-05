@@ -172,6 +172,19 @@ To reduce regression risk, validation is split into two smoke lanes:
 - Production strictness policy for universal arg-schema enforcement.
 - Explicit paused/resume lifecycle semantics for approval-gated tools.
 
+### Fallback architecture follow-up (Option 5 + Option 6)
+- Add dependency preflight health index to make backend readiness explicit before
+  execution.
+- Add configurable policy profiles so backend routing/fallback behavior is
+  declarative and consistent across runtime paths.
+- Ensure weather/email lane and parity lane both consume resolver outcomes rather
+  than flow-specific backend checks.
+- Tracking document:
+  `blazeclaw/EMAIL_FALLBACK_OPTION5_OPTION6_IMPLEMENTATION_PLAN.md`
+- Executable checklist section:
+  - `Executable Phase-by-Phase Coding Checklist (Exact C++ Targets)`
+  - contains exact C++ phase targets and interface inventory for implementation.
+
 
 ### Priority 2 (behavioral parity)
 3. Move from specialized `TryOrchestrateWeatherEmailPrompt` to generic skill orchestration (or keep it as fast-path but fallback into generic tool loop).

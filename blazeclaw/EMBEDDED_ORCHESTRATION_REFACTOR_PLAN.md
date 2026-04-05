@@ -127,6 +127,27 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
 - Rollout checklist.
 - Observability dashboard fields and failure playbook.
 
+### 8) Dependency Health + Policy-Driven Fallback (Option 5/6 alignment)
+**Objective:** Eliminate backend-specific branching by centralizing readiness and routing policy.
+
+- Add runtime dependency preflight probes and health index snapshots for tool backends.
+- Add declarative policy profiles for fallback ordering and failure-class actions.
+- Route email backend selection through resolver using:
+  - capability request
+  - health index state
+  - effective policy profile
+- Emit fallback-aware task-delta metadata (`attempt`, `backend`, `decision`).
+
+**Deliverables**
+- Health index endpoint(s) and policy resolution endpoint(s).
+- Resolver integration in `email.schedule` execution path.
+- Removal of backend-specific hardcoded fallback checks from orchestration handlers.
+
+**Executable implementation mapping**
+- Detailed phase checklist with exact C++ targets and interfaces:
+  - `blazeclaw/EMAIL_FALLBACK_OPTION5_OPTION6_IMPLEMENTATION_PLAN.md`
+  - section `Executable Phase-by-Phase Coding Checklist (Exact C++ Targets)`
+
 ## Step-by-Step Implementation Process
 
 ## Process Optimization (Smoke-Test-Driven)
