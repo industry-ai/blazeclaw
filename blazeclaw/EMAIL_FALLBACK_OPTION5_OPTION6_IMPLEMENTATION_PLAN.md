@@ -143,6 +143,19 @@ target interfaces, and completion checks.
 3. Expose effective flag state in operator diagnostics.
 4. Keep legacy behavior when flags are disabled.
 
+**Phase 0 implementation status (current): completed**
+
+- Implemented config keys:
+  - `email.preflight.enabled`
+  - `email.policyProfiles.enabled`
+  - `email.policyProfiles.enforce`
+- Implemented startup wiring:
+  - `ServiceManager -> GatewayHost` runtime flag propagation.
+- Implemented diagnostics exposure:
+  - `ServiceManager::BuildOperatorDiagnosticsReport()` includes `emailFallback` state.
+- Implemented runtime visibility:
+  - `gateway.config.get` and `gateway.config.snapshot` include `emailFallback` flags.
+
 ---
 
 ### Phase 1 — Dependency Preflight Models + Probes (Option 5)

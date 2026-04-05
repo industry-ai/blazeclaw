@@ -169,6 +169,12 @@ Support declarative fallback policy in config instead of hardcoding.
 4. **Phase D (enforcement):** switch `email.schedule` to resolver-driven execution using health + policy.
 5. **Phase E (generalization):** propagate the same resolver/policy model to broader capability routing.
 
+### Current implementation progress
+- Phase 0 scaffolding is implemented:
+  - config keys for preflight/policy flags are available,
+  - startup wiring passes flags into gateway runtime state,
+  - diagnostics and gateway config endpoints expose effective flag state.
+
 ### Detailed implementation reference
 - `blazeclaw/EMAIL_FALLBACK_OPTION5_OPTION6_IMPLEMENTATION_PLAN.md`
 

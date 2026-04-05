@@ -184,6 +184,10 @@ To reduce regression risk, validation is split into two smoke lanes:
 - Executable checklist section:
   - `Executable Phase-by-Phase Coding Checklist (Exact C++ Targets)`
   - contains exact C++ phase targets and interface inventory for implementation.
+- Phase 0 status:
+  - completed flag scaffolding (`email.preflight.enabled`,
+    `email.policyProfiles.enabled`, `email.policyProfiles.enforce`) with runtime
+    wiring and diagnostics/config exposure.
 
 
 ### Priority 2 (behavioral parity)

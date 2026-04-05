@@ -732,6 +732,15 @@ namespace blazeclaw::gateway {
 		m_embeddedOrchestrationPath = "dynamic_task_delta";
 	}
 
+	void GatewayHost::SetEmailFallbackRuntimeFlags(
+		bool preflightEnabled,
+		bool policyProfilesEnabled,
+		bool policyProfilesEnforce) {
+		m_runtimeEmailPreflightEnabled = preflightEnabled;
+		m_runtimeEmailPolicyProfilesEnabled = policyProfilesEnabled;
+		m_runtimeEmailPolicyProfilesEnforce = policyProfilesEnforce;
+	}
+
 	void GatewayHost::LoadPersistedTaskDeltas() {
 		const std::filesystem::path persistencePath =
 			ResolveGatewayStateFilePath("taskdeltas.state");
@@ -1288,10 +1297,16 @@ namespace blazeclaw::gateway {
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = true,
-			   .payloadJson = "{\"gateway\":{\"bind\":\"" + EscapeJson(m_runtimeGatewayBind) +
+			 .payloadJson = "{\"gateway\":{\"bind\":\"" + EscapeJson(m_runtimeGatewayBind) +
 					"\",\"port\":" + std::to_string(m_runtimeGatewayPort) + "},\"agent\":{\"model\":\"" +
 					EscapeJson(m_runtimeAgentModel) + "\",\"streaming\":" +
-					std::string(m_runtimeAgentStreaming ? "true" : "false") + "},\"deepseek\":" +
+					std::string(m_runtimeAgentStreaming ? "true" : "false") + "},\"emailFallback\":{\"preflightEnabled\":" +
+					std::string(m_runtimeEmailPreflightEnabled ? "true" : "false") +
+					",\"policyProfilesEnabled\":" +
+					std::string(m_runtimeEmailPolicyProfilesEnabled ? "true" : "false") +
+					",\"policyProfilesEnforce\":" +
+					std::string(m_runtimeEmailPolicyProfilesEnforce ? "true" : "false") +
+					"},\"deepseek\":" +
 					BuildDeepSeekConfigJson(
 						m_runtimeDeepSeekApiKey,
 						m_runtimeDeepSeekBaseUrl,
@@ -2433,6 +2448,12 @@ namespace blazeclaw::gateway {
 			"\",\"port\":" + std::to_string(m_runtimeGatewayPort) +
 			"},\"agent\":{\"model\":\"" + EscapeJson(m_runtimeAgentModel) +
 			"\",\"streaming\":" + std::string(m_runtimeAgentStreaming ? "true" : "false") +
+			"},\"emailFallback\":{\"preflightEnabled\":" +
+			std::string(m_runtimeEmailPreflightEnabled ? "true" : "false") +
+			",\"policyProfilesEnabled\":" +
+			std::string(m_runtimeEmailPolicyProfilesEnabled ? "true" : "false") +
+			",\"policyProfilesEnforce\":" +
+			std::string(m_runtimeEmailPolicyProfilesEnforce ? "true" : "false") +
 			"},\"deepseek\":" + BuildDeepSeekConfigJson(
 				m_runtimeDeepSeekApiKey,
 				m_runtimeDeepSeekBaseUrl,

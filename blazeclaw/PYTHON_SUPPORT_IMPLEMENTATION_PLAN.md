@@ -381,6 +381,8 @@ The Python dual-mode support framework plan (Phase 0 through Phase 5) is complet
     `blazeclaw/EMAIL_FALLBACK_OPTION5_OPTION6_IMPLEMENTATION_PLAN.md`.
   - executable checklist section:
     `Executable Phase-by-Phase Coding Checklist (Exact C++ Targets)`.
+  - current status: Phase 0 scaffolding completed (config flags, runtime
+    wiring, and diagnostics/config endpoint visibility).
 - Added tests:
   - `BlazeClawMfc/tests/EmailScheduleFallbackTests.cpp`
   - updated `BlazeClawMfc/tests/OpsToolsExecutorTests.cpp` fallback coverage.

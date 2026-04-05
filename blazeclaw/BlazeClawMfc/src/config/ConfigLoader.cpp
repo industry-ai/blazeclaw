@@ -442,6 +442,27 @@ namespace blazeclaw::config {
 				continue;
 			}
 
+			if (trimmedLine.rfind(L"email.preflight.enabled=", 0) == 0) {
+				outConfig.email.preflight.enabled = ParseBool(
+					trimmedLine.substr(24),
+					false);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"email.policyProfiles.enabled=", 0) == 0) {
+				outConfig.email.policyProfiles.enabled = ParseBool(
+					trimmedLine.substr(29),
+					false);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"email.policyProfiles.enforce=", 0) == 0) {
+				outConfig.email.policyProfiles.enforce = ParseBool(
+					trimmedLine.substr(29),
+					false);
+				continue;
+			}
+
 			if (trimmedLine.rfind(L"models.primary=", 0) == 0) {
 				outConfig.models.primary = Trim(trimmedLine.substr(13));
 				continue;

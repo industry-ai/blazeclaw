@@ -75,6 +75,20 @@ namespace blazeclaw::config {
 		std::wstring orchestrationPath = L"dynamic_task_delta";
 	};
 
+	struct EmailPreflightConfig {
+		bool enabled = false;
+	};
+
+	struct EmailPolicyProfilesConfig {
+		bool enabled = false;
+		bool enforce = false;
+	};
+
+	struct EmailFallbackConfig {
+		EmailPreflightConfig preflight;
+		EmailPolicyProfilesConfig policyProfiles;
+	};
+
 	struct ModelsRoutingConfig {
 		std::wstring primary = L"default";
 		std::wstring fallback = L"reasoner";
@@ -227,6 +241,7 @@ namespace blazeclaw::config {
 		AgentsConfig agents;
 		AcpRuntimeConfig acp;
 		EmbeddedRuntimeConfig embedded;
+		EmailFallbackConfig email;
 		ModelsRoutingConfig models;
 		EmbeddingsConfig embeddings;
 		AuthProfilesConfig authProfiles;

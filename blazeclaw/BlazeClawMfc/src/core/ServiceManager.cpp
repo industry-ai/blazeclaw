@@ -2879,6 +2879,10 @@ namespace blazeclaw::core {
 			});
 		m_gatewayHost.SetEmbeddedOrchestrationPath(
 			ToNarrow(m_activeConfig.embedded.orchestrationPath));
+		m_gatewayHost.SetEmailFallbackRuntimeFlags(
+			m_activeConfig.email.preflight.enabled,
+			m_activeConfig.email.policyProfiles.enabled,
+			m_activeConfig.email.policyProfiles.enforce);
 		RegisterImapSmtpRuntimeTools(m_gatewayHost);
 
 		m_gatewayHost.SetChatRuntimeCallback([this](
@@ -3867,6 +3871,13 @@ namespace blazeclaw::core {
 		std::string report =
 			"{\"runtime\":{\"running\":" + std::string(m_running ? "true" : "false") +
 			",\"gatewayWarning\":\"" + m_gatewayHost.LastWarning() + "\"},"
+			"\"emailFallback\":{\"preflightEnabled\":" +
+			std::string(m_activeConfig.email.preflight.enabled ? "true" : "false") +
+			",\"policyProfilesEnabled\":" +
+			std::string(m_activeConfig.email.policyProfiles.enabled ? "true" : "false") +
+			",\"policyProfilesEnforce\":" +
+			std::string(m_activeConfig.email.policyProfiles.enforce ? "true" : "false") +
+			"},"
 			"\"agents\":{\"count\":" + std::to_string(m_agentsScope.entries.size()) +
 			",\"defaultAgent\":\"" + ToNarrow(m_agentsScope.defaultAgentId) + "\"},"
 			"\"subagents\":{\"active\":" + std::to_string(m_subagentRegistry.activeRuns) +

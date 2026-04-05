@@ -101,3 +101,9 @@ Detailed plan reference:
     - `GatewayHost.Handlers.Runtime.cpp`
     - `EmailScheduleExecutor.cpp`
     - `PiEmbeddedService.cpp/.h`
+
+Progress snapshot:
+
+- Option 5/6 Phase 0 scaffolding is completed (config flags + runtime wiring +
+  diagnostics exposure), enabling safe implementation of Phase 1 dependency
+  preflight without behavior change.

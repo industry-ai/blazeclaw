@@ -148,6 +148,10 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
   - `blazeclaw/EMAIL_FALLBACK_OPTION5_OPTION6_IMPLEMENTATION_PLAN.md`
   - section `Executable Phase-by-Phase Coding Checklist (Exact C++ Targets)`
 
+**Progress note**
+- Option 5/6 Phase 0 flag scaffolding is now in place (config keys, startup
+  wiring, and diagnostics/config endpoint exposure).
+
 ## Step-by-Step Implementation Process
 
 ## Process Optimization (Smoke-Test-Driven)
