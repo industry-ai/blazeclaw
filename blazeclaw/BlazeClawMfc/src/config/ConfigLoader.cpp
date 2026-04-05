@@ -296,6 +296,17 @@ namespace blazeclaw::config {
 			return L"dynamic_task_delta";
 		}
 
+		std::wstring NormalizeEmailPolicyRolloutMode(const std::wstring& raw) {
+			const std::wstring normalized = ToLowerTrim(raw);
+			if (normalized == L"legacy" ||
+				normalized == L"monitor" ||
+				normalized == L"enforce") {
+				return normalized;
+			}
+
+			return L"legacy";
+		}
+
 	} // namespace
 
 	bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) const {
@@ -536,6 +547,25 @@ namespace blazeclaw::config {
 				outConfig.email.policyProfiles.enforce = ParseBool(
 					trimmedLine.substr(29),
 					false);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"email.policyProfiles.rolloutMode=", 0) == 0) {
+				outConfig.email.policyProfiles.rolloutMode =
+					NormalizeEmailPolicyRolloutMode(trimmedLine.substr(33));
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"email.policyProfiles.enforceChannel=", 0) == 0) {
+				outConfig.email.policyProfiles.enforceChannel =
+					ToLowerTrim(trimmedLine.substr(35));
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"email.policyProfiles.rollbackBridgeEnabled=", 0) == 0) {
+				outConfig.email.policyProfiles.rollbackBridgeEnabled = ParseBool(
+					trimmedLine.substr(40),
+					true);
 				continue;
 			}
 
@@ -1418,6 +1448,12 @@ namespace blazeclaw::config {
 			}
 			sanitizePolicyProfile(profile, defaultPolicy);
 		}
+
+		outConfig.email.policyProfiles.rolloutMode =
+			NormalizeEmailPolicyRolloutMode(
+				outConfig.email.policyProfiles.rolloutMode);
+		outConfig.email.policyProfiles.enforceChannel =
+			ToLowerTrim(outConfig.email.policyProfiles.enforceChannel);
 
 		return true;
 	}

@@ -223,6 +223,12 @@ namespace blazeclaw::core {
 		std::uint64_t m_emailFallbackAttemptCount = 0;
 		std::uint64_t m_emailFallbackSuccessCount = 0;
 		std::uint64_t m_emailFallbackFailureCount = 0;
+		std::wstring m_emailPolicyRolloutMode = L"legacy";
+		std::wstring m_emailPolicyEnforceChannel;
+		bool m_emailPolicyRollbackBridgeEnabled = true;
+		bool m_emailPolicyRuntimeEnabled = false;
+		bool m_emailPolicyRuntimeEnforce = false;
+		bool m_emailPolicyCanaryEligible = false;
 		HookCatalogService m_hookCatalogService;
 		HookCatalogSnapshot m_hookCatalog;
 		HookEventService m_hookEventService;

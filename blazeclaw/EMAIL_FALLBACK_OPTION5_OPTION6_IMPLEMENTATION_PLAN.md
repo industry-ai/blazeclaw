@@ -476,6 +476,28 @@ target interfaces, and completion checks.
 3. Switch to enforce mode after validation.
 4. Keep rollback path via flags and maintain Option-2-compatible path as bridge.
 
+**Phase 8 implementation status (current): completed**
+
+- Added rollout/migration config controls:
+  - `email.policyProfiles.rolloutMode` (`legacy` / `monitor` / `enforce`)
+  - `email.policyProfiles.enforceChannel`
+  - `email.policyProfiles.rollbackBridgeEnabled`
+- Added loader parsing and normalization for Phase 8 config keys.
+- Service startup now computes effective runtime policy mode independently from
+  raw config booleans:
+  - monitor mode -> runtime policy enabled, enforcement disabled
+  - enforce mode -> runtime policy enabled, enforcement gated by canary channel
+  - legacy mode -> runtime policy follows existing `enabled` / `enforce` flags
+- Canary channel gate support:
+  - enforce-mode activation can be scoped by configured channel eligibility.
+- Rollback bridge behavior preserved:
+  - when runtime policy is not enabled, legacy-equivalent profile/retry values
+    are propagated so Option-2-compatible behavior remains available.
+- Diagnostics now expose both configured and effective runtime rollout state:
+  - configured `policyProfiles.enabled/enforce`
+  - effective runtime enable/enforce flags
+  - rollout mode, enforce channel, canary eligibility, rollback bridge state
+
 ---
 
 ## Core Interfaces Inventory (Implementation Contract)

@@ -214,6 +214,11 @@ To reduce regression risk, validation is split into two smoke lanes:
   - completed validation matrix coverage for readiness state classification,
     directional fallback execution scenarios, deterministic unavailable terminal
     behavior, and embedded task-delta fallback metadata consistency checks.
+- Phase 8 status:
+  - completed rollout/migration gate controls with monitor/enforce modes,
+    canary-channel enforcement eligibility, effective runtime-vs-configured
+    policy diagnostics visibility, and rollback bridge preservation for
+    Option-2-compatible behavior.
 
 
 ### Priority 2 (behavioral parity)

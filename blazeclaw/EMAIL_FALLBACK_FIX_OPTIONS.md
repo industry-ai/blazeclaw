@@ -218,6 +218,13 @@ Support declarative fallback policy in config instead of hardcoding.
     deterministic all-backend-unavailable terminal behavior,
   - embedded fixture validation now asserts fallback metadata and terminal
     status consistency in task-delta chains.
+- Phase 8 rollout and migration gate are implemented:
+  - rollout-mode controls (`legacy` / `monitor` / `enforce`) are now available,
+  - enforce mode can be scoped to canary channels,
+  - rollback bridge behavior preserves Option-2-compatible execution path when
+    runtime policy rollout is inactive,
+  - diagnostics now expose configured versus effective runtime policy rollout
+    state for operational validation.
 
 ### Detailed implementation reference
 - `blazeclaw/EMAIL_FALLBACK_OPTION5_OPTION6_IMPLEMENTATION_PLAN.md`

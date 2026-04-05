@@ -2537,6 +2537,51 @@ namespace blazeclaw::core {
 		m_emailFallbackResolvedPolicy = ResolveEmailFallbackPolicy(
 			L"email.schedule",
 			L"email.send");
+		m_emailPolicyRolloutMode =
+			m_activeConfig.email.policyProfiles.rolloutMode;
+		if (m_emailPolicyRolloutMode.empty()) {
+			m_emailPolicyRolloutMode = L"legacy";
+		}
+		m_emailPolicyEnforceChannel =
+			m_activeConfig.email.policyProfiles.enforceChannel;
+		m_emailPolicyRollbackBridgeEnabled =
+			m_activeConfig.email.policyProfiles.rollbackBridgeEnabled;
+		m_emailPolicyCanaryEligible =
+			m_emailPolicyEnforceChannel.empty() ||
+			IsOneOfChannels(
+				m_activeConfig.enabledChannels,
+				m_emailPolicyEnforceChannel);
+		m_emailPolicyRuntimeEnabled =
+			m_activeConfig.email.policyProfiles.enabled;
+		m_emailPolicyRuntimeEnforce =
+			m_activeConfig.email.policyProfiles.enforce;
+		if (_wcsicmp(m_emailPolicyRolloutMode.c_str(), L"monitor") == 0) {
+			m_emailPolicyRuntimeEnabled = true;
+			m_emailPolicyRuntimeEnforce = false;
+		}
+		else if (_wcsicmp(m_emailPolicyRolloutMode.c_str(), L"enforce") == 0) {
+			m_emailPolicyRuntimeEnabled = true;
+			m_emailPolicyRuntimeEnforce = m_emailPolicyCanaryEligible;
+		}
+		else {
+			m_emailPolicyRuntimeEnabled =
+				m_activeConfig.email.policyProfiles.enabled;
+			m_emailPolicyRuntimeEnforce =
+				m_activeConfig.email.policyProfiles.enforce;
+		}
+
+		if (!m_emailPolicyRollbackBridgeEnabled) {
+			m_emailPolicyRuntimeEnabled =
+				m_activeConfig.email.policyProfiles.enabled;
+			m_emailPolicyRuntimeEnforce =
+				m_activeConfig.email.policyProfiles.enforce;
+		}
+
+		if (m_emailPolicyRuntimeEnabled &&
+			!m_activeConfig.email.policyProfiles.enabled) {
+			m_skillsCatalog.diagnostics.warnings.push_back(
+				L"email policy rollout gate activated runtime policy profile monitor/enforce mode.");
+		}
 		m_selfEvolvingHookTriggered = false;
 		m_agentsScope = m_agentsCatalogService.BuildSnapshot(
 			std::filesystem::current_path(),
@@ -2992,8 +3037,8 @@ namespace blazeclaw::core {
 			ToNarrow(m_activeConfig.embedded.orchestrationPath));
 		m_gatewayHost.SetEmailFallbackRuntimeFlags(
 			m_activeConfig.email.preflight.enabled,
-			m_activeConfig.email.policyProfiles.enabled,
-			m_activeConfig.email.policyProfiles.enforce);
+			m_emailPolicyRuntimeEnabled,
+			m_emailPolicyRuntimeEnforce);
 		std::vector<std::string> resolvedBackends;
 		resolvedBackends.reserve(m_emailFallbackResolvedPolicy.backends.size());
 		for (const auto& backend : m_emailFallbackResolvedPolicy.backends) {
@@ -3004,11 +3049,17 @@ namespace blazeclaw::core {
 			ToNarrow(m_emailFallbackResolvedPolicy.onUnavailable),
 			ToNarrow(m_emailFallbackResolvedPolicy.onAuthError),
 			ToNarrow(m_emailFallbackResolvedPolicy.onExecError),
-			m_emailFallbackResolvedPolicy.retryMaxAttempts,
-			m_emailFallbackResolvedPolicy.retryDelayMs,
+			m_emailPolicyRuntimeEnabled
+			? m_emailFallbackResolvedPolicy.retryMaxAttempts
+			: std::uint32_t{ 1 },
+			m_emailPolicyRuntimeEnabled
+			? m_emailFallbackResolvedPolicy.retryDelayMs
+			: std::uint32_t{ 0 },
 			m_emailFallbackResolvedPolicy.requiresApproval,
 			m_emailFallbackResolvedPolicy.approvalTokenTtlMinutes,
-			ToNarrow(m_emailFallbackResolvedPolicy.profileId));
+			m_emailPolicyRuntimeEnabled
+			? ToNarrow(m_emailFallbackResolvedPolicy.profileId)
+			: std::string("legacy-policy"));
 		RegisterImapSmtpRuntimeTools(m_gatewayHost);
 
 		m_gatewayHost.SetChatRuntimeCallback([this](
@@ -4032,6 +4083,18 @@ namespace blazeclaw::core {
 			std::string(m_activeConfig.email.policyProfiles.enabled ? "true" : "false") +
 			",\"policyProfilesEnforce\":" +
 			std::string(m_activeConfig.email.policyProfiles.enforce ? "true" : "false") +
+			",\"policyProfilesRuntimeEnabled\":" +
+			std::string(m_emailPolicyRuntimeEnabled ? "true" : "false") +
+			",\"policyProfilesRuntimeEnforce\":" +
+			std::string(m_emailPolicyRuntimeEnforce ? "true" : "false") +
+			",\"policyRolloutMode\":" +
+			ToNarrow(m_emailPolicyRolloutMode) +
+			"\",\"policyEnforceChannel\":" +
+			ToNarrow(m_emailPolicyEnforceChannel) +
+			"\",\"policyCanaryEligible\":" +
+			std::string(m_emailPolicyCanaryEligible ? "true" : "false") +
+			",\"rollbackBridgeEnabled\":" +
+			std::string(m_emailPolicyRollbackBridgeEnabled ? "true" : "false") +
 			",\"resolvedPolicyId\":\"" +
 			ToNarrow(m_emailFallbackResolvedPolicy.profileId) +
 			"\",\"resolvedBackends\":[\"" +

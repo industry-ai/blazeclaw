@@ -82,6 +82,9 @@ namespace blazeclaw::config {
 	struct EmailPolicyProfilesConfig {
 		bool enabled = false;
 		bool enforce = false;
+		std::wstring rolloutMode = L"legacy";
+		std::wstring enforceChannel;
+		bool rollbackBridgeEnabled = true;
 	};
 
 	struct EmailFallbackRetryPolicyConfig {
