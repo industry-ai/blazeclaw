@@ -212,6 +212,12 @@ Support declarative fallback policy in config instead of hardcoding.
     (`gateway.email.preflight.snapshot`, `gateway.email.policy.decision`,
     `gateway.email.fallback.attempt`, `gateway.email.fallback.terminal`),
   - operator diagnostics now include fallback attempts/success/failure counters.
+- Phase 7 tests and validation matrix are implemented:
+  - readiness-state tests now cover `ready` / `degraded` / `unavailable`,
+  - fallback matrix tests now cover both directional backend failover paths plus
+    deterministic all-backend-unavailable terminal behavior,
+  - embedded fixture validation now asserts fallback metadata and terminal
+    status consistency in task-delta chains.
 
 ### Detailed implementation reference
 - `blazeclaw/EMAIL_FALLBACK_OPTION5_OPTION6_IMPLEMENTATION_PLAN.md`

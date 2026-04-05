@@ -1773,6 +1773,38 @@ namespace blazeclaw::core {
 			return false;
 		}
 
+		const auto emailResultIt = std::find_if(
+			opsResult.taskDeltas.begin(),
+			opsResult.taskDeltas.end(),
+			[](const EmbeddedTaskDelta& delta) {
+				return delta.phase == "tool_result" &&
+					delta.toolName == "email.schedule";
+			});
+		if (emailResultIt == opsResult.taskDeltas.end()) {
+			outError = L"Fixture validation failed: expected email.schedule tool_result delta.";
+			return false;
+		}
+
+		if (emailResultIt->fallbackBackend.empty() ||
+			emailResultIt->fallbackAction.empty() ||
+			emailResultIt->fallbackAttempt == 0 ||
+			emailResultIt->fallbackMaxAttempts == 0) {
+			outError = L"Fixture validation failed: expected fallback metadata in email.schedule tool_result delta.";
+			return false;
+		}
+
+		const auto opsFinalIt = std::find_if(
+			opsResult.taskDeltas.begin(),
+			opsResult.taskDeltas.end(),
+			[](const EmbeddedTaskDelta& delta) {
+				return delta.phase == "final";
+			});
+		if (opsFinalIt == opsResult.taskDeltas.end() ||
+			opsFinalIt->status.empty()) {
+			outError = L"Fixture validation failed: expected non-empty terminal status in operational final delta.";
+			return false;
+		}
+
 		if (opsResult.assistantText.find(
 			"Email scheduling/sending result for jichengwhu@163.com with report content.") ==
 			std::string::npos) {

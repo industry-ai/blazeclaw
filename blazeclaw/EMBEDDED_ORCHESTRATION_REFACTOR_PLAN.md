@@ -168,6 +168,10 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
 - Option 5/6 Phase 6 policy diagnostics surface is now in place
   (`gateway.runtime.policy.resolve`, policy/preflight/fallback telemetry events,
   and fallback attempt/success/failure counters in operator diagnostics).
+- Option 5/6 Phase 7 validation matrix is now in place
+  (readiness classification tests, fallback directionality matrix coverage,
+  deterministic unavailable-terminal tests, and fallback task-delta metadata
+  consistency assertions in embedded fixture validation).
 
 ## Step-by-Step Implementation Process
 

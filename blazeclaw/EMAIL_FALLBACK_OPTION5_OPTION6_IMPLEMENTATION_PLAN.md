@@ -444,6 +444,22 @@ target interfaces, and completion checks.
 5. Build validation command:
    - `msbuild blazeclaw/BlazeClaw.sln /t:Build /p:Configuration=Debug /p:Platform=x64`
 
+**Phase 7 implementation status (current): completed**
+
+- Added readiness classification tests:
+  - deterministic dependency probe overrides validate `ready`, `degraded`, and
+    `unavailable` capability states in
+    `EmailScheduleExecutor::GetRuntimeHealthIndex(...)`.
+- Added fallback matrix test cases:
+  - node/imap failure + himalaya success -> deterministic fallback success,
+  - himalaya failure + imap-smtp success -> deterministic fallback success,
+  - both backends unavailable -> deterministic terminal failure.
+- Extended embedded fixture validation in `PiEmbeddedService`:
+  - verifies fallback metadata fields on `email.schedule` `tool_result` deltas,
+  - verifies non-empty terminal status consistency on final deltas.
+- Validation command executed:
+  - `msbuild blazeclaw/BlazeClaw.sln /t:Build /p:Configuration=Debug /p:Platform=x64`
+
 ---
 
 ### Phase 8 — Rollout and Migration Gate

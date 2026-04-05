@@ -210,6 +210,10 @@ To reduce regression risk, validation is split into two smoke lanes:
   - completed runtime policy-resolution endpoint, telemetry instrumentation for
     policy/fallback lifecycle events, and operator diagnostics fallback
     attempt/success/failure counters.
+- Phase 7 status:
+  - completed validation matrix coverage for readiness state classification,
+    directional fallback execution scenarios, deterministic unavailable terminal
+    behavior, and embedded task-delta fallback metadata consistency checks.
 
 
 ### Priority 2 (behavioral parity)

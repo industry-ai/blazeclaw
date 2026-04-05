@@ -118,9 +118,30 @@ namespace blazeclaw::gateway::executors {
 			index.generatedAtEpochMs = checkedAt;
 			index.ttlMs = ttlMs;
 
-			const bool hasHimalaya = HasHimalayaBinary();
-			const bool hasNode = HasNodeBinary();
-			const bool hasImapSmtp = HasImapSmtpSkill();
+			const auto normalizedOverride = [](const char* name) {
+				return ToLowerCopy(json::Trim(ReadEnvVar(name)));
+				};
+			const auto applyOverride = [](const std::string& overrideValue, const bool fallback) {
+				if (overrideValue == "ready") {
+					return true;
+				}
+
+				if (overrideValue == "unavailable") {
+					return false;
+				}
+
+				return fallback;
+				};
+
+			const bool hasHimalaya = applyOverride(
+				normalizedOverride("BLAZECLAW_EMAIL_PROBE_HIMALAYA"),
+				HasHimalayaBinary());
+			const bool hasNode = applyOverride(
+				normalizedOverride("BLAZECLAW_EMAIL_PROBE_NODE"),
+				HasNodeBinary());
+			const bool hasImapSmtp = applyOverride(
+				normalizedOverride("BLAZECLAW_EMAIL_PROBE_IMAP_SMTP_SKILL"),
+				HasImapSmtpSkill());
 
 			index.probes.push_back(BuildProbe(
 				"backend:himalaya",
@@ -146,8 +167,18 @@ namespace blazeclaw::gateway::executors {
 				checkedAt,
 				ttlMs));
 
-			if (hasHimalaya || (hasNode && hasImapSmtp)) {
+			const std::string capabilityOverride =
+				normalizedOverride("BLAZECLAW_EMAIL_CAPABILITY_STATE_OVERRIDE");
+			if (capabilityOverride == "ready" ||
+				capabilityOverride == "degraded" ||
+				capabilityOverride == "unavailable") {
+				index.emailSendState = capabilityOverride;
+			}
+			else if (hasHimalaya || (hasNode && hasImapSmtp)) {
 				index.emailSendState = "ready";
+			}
+			else if (hasHimalaya || hasNode || hasImapSmtp) {
+				index.emailSendState = "degraded";
 			}
 			else {
 				index.emailSendState = "unavailable";
