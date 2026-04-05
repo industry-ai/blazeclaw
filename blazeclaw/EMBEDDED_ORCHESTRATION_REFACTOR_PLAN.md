@@ -153,6 +153,9 @@ Refactor BlazeClaw embedded orchestration so it is task-decomposition and tool-e
   wiring, and diagnostics/config endpoint exposure).
 - Option 5/6 Phase 1 dependency preflight health index is now in place
   (probe snapshot generation + delivery preflight gate + diagnostics summary).
+- Option 5/6 Phase 2 health gateway surface is now in place
+  (`gateway.runtime.health.dependencies` and
+  `gateway.runtime.health.capabilities`) with contract/schema coverage.
 
 ## Step-by-Step Implementation Process
 

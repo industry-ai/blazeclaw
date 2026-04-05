@@ -2,6 +2,7 @@
 #include "GatewayHost.h"
 #include "GatewayJsonUtils.h"
 #include "Telemetry.h"
+#include "executors/EmailScheduleExecutor.h"
 
 #include <algorithm>
 #include <cctype>
@@ -3288,6 +3289,65 @@ namespace blazeclaw::gateway {
 					std::to_string(m_taskDeltaRunFallbackCount) + "}}",
 				.error = std::nullopt,
 			};
+			});
+
+		m_dispatcher.Register(
+			"gateway.runtime.health.dependencies",
+			[](const protocol::RequestFrame& request) {
+				const auto health =
+					executors::EmailScheduleExecutor::GetRuntimeHealthIndex(false);
+
+				std::string probesJson = "[";
+				for (std::size_t index = 0; index < health.probes.size(); ++index) {
+					if (index > 0) {
+						probesJson += ",";
+					}
+
+					const auto& probe = health.probes[index];
+					probesJson +=
+						"{\"key\":\"" + EscapeJsonLocal(probe.key) +
+						"\",\"state\":\"" + EscapeJsonLocal(probe.state) +
+						"\",\"reasonCode\":\"" +
+						EscapeJsonLocal(probe.reasonCode) +
+						"\",\"reasonMessage\":\"" +
+						EscapeJsonLocal(probe.reasonMessage) +
+						"\",\"checkedAtEpochMs\":" +
+						std::to_string(probe.checkedAtEpochMs) +
+						",\"expiresAtEpochMs\":" +
+						std::to_string(probe.expiresAtEpochMs) + "}";
+				}
+				probesJson += "]";
+
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = true,
+					.payloadJson =
+						"{\"probes\":" + probesJson +
+						",\"count\":" +
+						std::to_string(health.probes.size()) +
+						",\"generatedAtEpochMs\":" +
+						std::to_string(health.generatedAtEpochMs) +
+						",\"ttlMs\":" + std::to_string(health.ttlMs) + "}",
+					.error = std::nullopt,
+				};
+			});
+
+		m_dispatcher.Register(
+			"gateway.runtime.health.capabilities",
+			[](const protocol::RequestFrame& request) {
+				const auto health =
+					executors::EmailScheduleExecutor::GetRuntimeHealthIndex(false);
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = true,
+					.payloadJson =
+						"{\"capabilities\":[{\"name\":\"email.send\",\"state\":\"" +
+						EscapeJsonLocal(health.emailSendState) +
+						"\"}],\"count\":1,\"generatedAtEpochMs\":" +
+						std::to_string(health.generatedAtEpochMs) +
+						",\"ttlMs\":" + std::to_string(health.ttlMs) + "}",
+					.error = std::nullopt,
+				};
 			});
 
 		m_dispatcher.Register(

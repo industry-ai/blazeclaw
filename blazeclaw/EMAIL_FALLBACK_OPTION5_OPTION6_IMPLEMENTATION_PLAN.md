@@ -217,6 +217,21 @@ target interfaces, and completion checks.
 3. Extend schema validator for new payload fields.
 4. Keep response format deterministic for diagnostics and tests.
 
+**Phase 2 implementation status (current): completed**
+
+- Implemented runtime endpoints:
+  - `gateway.runtime.health.dependencies`
+  - `gateway.runtime.health.capabilities`
+- Implemented request schema enforcement:
+  - both new methods require no `params`.
+- Implemented response schema validation for required fields and entry shapes.
+- Implemented protocol contract coverage:
+  - positive response cases in `GatewayProtocolContract.cpp`
+  - negative response cases for missing required entry fields.
+- Added gateway fixtures:
+  - `fixtures/gateway/response_gateway_runtime_health_dependencies.json`
+  - `fixtures/gateway/response_gateway_runtime_health_capabilities.json`
+
 ---
 
 ### Phase 3 — Policy Profile Models + Loader (Option 6)

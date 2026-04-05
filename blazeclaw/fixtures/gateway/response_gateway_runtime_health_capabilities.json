@@ -1,0 +1,16 @@
+{
+  "type": "res",
+  "id": "runtime-health-capabilities-1",
+  "ok": true,
+  "payload": {
+    "capabilities": [
+      {
+        "name": "email.send",
+        "state": "ready"
+      }
+    ],
+    "count": 1,
+    "generatedAtEpochMs": 1735689600000,
+    "ttlMs": 60000
+  }
+}

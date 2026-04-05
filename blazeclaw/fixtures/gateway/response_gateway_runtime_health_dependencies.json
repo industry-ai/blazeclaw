@@ -1,0 +1,28 @@
+{
+  "type": "res",
+  "id": "runtime-health-dependencies-1",
+  "ok": true,
+  "payload": {
+    "probes": [
+      {
+        "key": "backend:himalaya",
+        "state": "ready",
+        "reasonCode": "ok",
+        "reasonMessage": "himalaya cli available",
+        "checkedAtEpochMs": 1735689600000,
+        "expiresAtEpochMs": 1735689660000
+      },
+      {
+        "key": "runtime:node",
+        "state": "ready",
+        "reasonCode": "ok",
+        "reasonMessage": "node runtime available",
+        "checkedAtEpochMs": 1735689600000,
+        "expiresAtEpochMs": 1735689660000
+      }
+    ],
+    "count": 2,
+    "generatedAtEpochMs": 1735689600000,
+    "ttlMs": 60000
+  }
+}

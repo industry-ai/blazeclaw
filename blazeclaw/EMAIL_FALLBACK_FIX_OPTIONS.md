@@ -180,6 +180,12 @@ Support declarative fallback policy in config instead of hardcoding.
   - email delivery fallback can short-circuit on preflight unavailability
     when preflight is enabled,
   - operator diagnostics include preflight capability/probe summary fields.
+- Phase 2 health API surface is implemented:
+  - runtime endpoints `gateway.runtime.health.dependencies` and
+    `gateway.runtime.health.capabilities` are available,
+  - request/response schema validation and protocol contract coverage were
+    added for deterministic gateway behavior,
+  - gateway fixtures were added for both health responses.
 
 ### Detailed implementation reference
 - `blazeclaw/EMAIL_FALLBACK_OPTION5_OPTION6_IMPLEMENTATION_PLAN.md`

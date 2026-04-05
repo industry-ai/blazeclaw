@@ -192,6 +192,9 @@ To reduce regression risk, validation is split into two smoke lanes:
   - completed dependency preflight health index probes and capability summary,
     with preflight gating integrated into email backend execution path when
     enabled.
+- Phase 2 status:
+  - completed runtime health endpoints for dependency and capability snapshots,
+    with schema validation, contract checks, and gateway response fixtures.
 
 
 ### Priority 2 (behavioral parity)
