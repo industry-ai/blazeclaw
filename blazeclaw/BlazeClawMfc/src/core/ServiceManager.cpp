@@ -1179,6 +1179,12 @@ namespace blazeclaw::core {
 			std::string command;
 		};
 
+		struct BraveSearchToolRuntimeSpec {
+			std::string id;
+			std::string label;
+			std::string script;
+		};
+
 		struct ChildProcessResult {
 			bool started = false;
 			bool timedOut = false;
@@ -1201,6 +1207,13 @@ namespace blazeclaw::core {
 				{ "imap_smtp_email.smtp.send", "SMTP Send", "scripts/smtp.js", "send" },
 				{ "imap_smtp_email.smtp.test", "SMTP Test", "scripts/smtp.js", "test" },
 				{ "imap_smtp_email.smtp.list_accounts", "SMTP List Accounts", "scripts/smtp.js", "list-accounts" },
+			};
+		}
+
+		std::vector<BraveSearchToolRuntimeSpec> BuildBraveSearchToolRuntimeSpecs() {
+			return {
+				{ "brave_search.search.web", "Brave Web Search", "scripts/search.js" },
+				{ "brave_search.fetch.content", "Brave Fetch Content", "scripts/content.js" },
 			};
 		}
 
@@ -1356,6 +1369,44 @@ namespace blazeclaw::core {
 						L"imap-smtp-email";
 					if (std::filesystem::exists(candidate / L"scripts" / L"imap.js") &&
 						std::filesystem::exists(candidate / L"scripts" / L"smtp.js")) {
+						return candidate;
+					}
+
+					if (!cursor.has_parent_path()) {
+						break;
+					}
+
+					auto parent = cursor.parent_path();
+					if (parent == cursor) {
+						break;
+					}
+
+					cursor = parent;
+				}
+			}
+
+			return std::nullopt;
+		}
+
+		std::optional<std::filesystem::path> ResolveBraveSearchSkillRoot() {
+			std::vector<std::filesystem::path> candidates;
+			candidates.push_back(std::filesystem::current_path());
+
+			wchar_t modulePath[MAX_PATH]{};
+			if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) > 0) {
+				candidates.push_back(std::filesystem::path(modulePath).parent_path());
+			}
+
+			for (const auto& root : candidates) {
+				std::filesystem::path cursor = root;
+				while (!cursor.empty()) {
+					const auto candidate =
+						cursor /
+						L"blazeclaw" /
+						L"skills" /
+						L"brave-search";
+					if (std::filesystem::exists(candidate / L"scripts" / L"search.js") &&
+						std::filesystem::exists(candidate / L"scripts" / L"content.js")) {
 						return candidate;
 					}
 
@@ -1574,6 +1625,74 @@ namespace blazeclaw::core {
 			return args;
 		}
 
+		std::optional<std::vector<std::string>> BuildBraveSearchCliArgs(
+			const BraveSearchToolRuntimeSpec& spec,
+			const nlohmann::json& params,
+			std::string& errorCode,
+			std::string& errorMessage) {
+			errorCode.clear();
+			errorMessage.clear();
+
+			std::vector<std::string> args;
+			if (spec.id == "brave_search.search.web") {
+				const auto queryIt = params.find("query");
+				if (queryIt == params.end() || !queryIt->is_string()) {
+					errorCode = "invalid_arguments";
+					errorMessage = "query is required";
+					return std::nullopt;
+				}
+
+				const std::string query = queryIt->get<std::string>();
+				if (query.empty()) {
+					errorCode = "invalid_arguments";
+					errorMessage = "query is required";
+					return std::nullopt;
+				}
+
+				args.push_back(query);
+
+				int count = 0;
+				if (const auto countIt = params.find("count");
+					countIt != params.end() && countIt->is_number_integer()) {
+					count = countIt->get<int>();
+				}
+				else if (const auto topKIt = params.find("topK");
+					topKIt != params.end() && topKIt->is_number_integer()) {
+					count = topKIt->get<int>();
+				}
+
+				if (count > 0) {
+					args.push_back("-n");
+					args.push_back(std::to_string((std::min)(count, 20)));
+				}
+
+				if (const auto contentIt = params.find("content");
+					contentIt != params.end() && contentIt->is_boolean() &&
+					contentIt->get<bool>()) {
+					args.push_back("--content");
+				}
+			}
+			else if (spec.id == "brave_search.fetch.content") {
+				const auto urlIt = params.find("url");
+				if (urlIt == params.end() || !urlIt->is_string()) {
+					errorCode = "invalid_arguments";
+					errorMessage = "url is required";
+					return std::nullopt;
+				}
+
+				const std::string url = urlIt->get<std::string>();
+				if (url.empty()) {
+					errorCode = "invalid_arguments";
+					errorMessage = "url is required";
+					return std::nullopt;
+				}
+
+				args.push_back(url);
+			}
+
+			return args;
+		}
+
 		void RegisterImapSmtpRuntimeTools(blazeclaw::gateway::GatewayHost& host) {
 			const auto skillRoot = ResolveImapSmtpSkillRoot();
 			for (const auto& spec : BuildImapSmtpToolRuntimeSpecs()) {
@@ -1647,7 +1766,163 @@ namespace blazeclaw::core {
 						if (!cliArgs.has_value()) {
 							result.executed = false;
 							result.status = "error";
-							result.errorCode = argsErrorCode.empty() ? "invalid_arguments" : argsErrorCode;
+							result.errorCode = argsErrorCode.empty()
+								? "invalid_arguments"
+								: argsErrorCode;
+							result.errorMessage = argsErrorMessage.empty()
+								? "tool arguments are invalid"
+								: argsErrorMessage;
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
+						std::uint64_t timeoutMs = 120000;
+						if (request.deadlineEpochMs.has_value()) {
+							const std::uint64_t now = CurrentEpochMs();
+							if (request.deadlineEpochMs.value() <= now) {
+								result.executed = false;
+								result.status = "timed_out";
+								result.errorCode = "deadline_exceeded";
+								result.errorMessage = "request deadline already elapsed";
+								result.completedAtMs = now;
+								result.latencyMs = result.completedAtMs - result.startedAtMs;
+								return result;
+							}
+
+							timeoutMs = request.deadlineEpochMs.value() - now;
+						}
+
+						const auto process = ExecuteNodeSkillProcess(
+							scriptPath,
+							cliArgs.value(),
+							timeoutMs);
+
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+
+						if (!process.started) {
+							result.executed = false;
+							result.status = "error";
+							result.result = process.output;
+							result.errorCode = process.errorCode.empty()
+								? "process_start_failed"
+								: process.errorCode;
+							result.errorMessage = process.errorMessage.empty()
+								? "failed to start tool process"
+								: process.errorMessage;
+							return result;
+						}
+
+						if (process.timedOut) {
+							result.executed = false;
+							result.status = "timed_out";
+							result.result = process.output;
+							result.errorCode = process.errorCode.empty()
+								? "deadline_exceeded"
+								: process.errorCode;
+							result.errorMessage = process.errorMessage.empty()
+								? "tool execution timed out"
+								: process.errorMessage;
+							return result;
+						}
+
+						result.result = process.output;
+						if (process.exitCode == 0) {
+							result.executed = true;
+							result.status = "ok";
+							result.errorCode.clear();
+							result.errorMessage.clear();
+							return result;
+						}
+
+						result.executed = false;
+						result.status = "error";
+						result.errorCode = "process_exit_nonzero";
+						result.errorMessage =
+							"tool process returned non-zero exit code " +
+							std::to_string(static_cast<unsigned long long>(process.exitCode));
+						return result;
+					});
+			}
+		}
+
+		void RegisterBraveSearchRuntimeTools(blazeclaw::gateway::GatewayHost& host) {
+			const auto skillRoot = ResolveBraveSearchSkillRoot();
+			for (const auto& spec : BuildBraveSearchToolRuntimeSpecs()) {
+				host.RegisterRuntimeToolV2(
+					blazeclaw::gateway::ToolCatalogEntry{
+						.id = spec.id,
+						.label = spec.label,
+						.category = "search",
+						.enabled = true,
+					},
+					[spec, skillRoot](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
+						blazeclaw::gateway::ToolExecuteResultV2 result;
+						result.tool = request.tool.empty() ? spec.id : request.tool;
+						result.correlationId = request.correlationId;
+						result.startedAtMs = CurrentEpochMs();
+
+						if (!skillRoot.has_value()) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "skill_runtime_missing";
+							result.errorMessage = "brave-search skill root not found";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
+						const auto scriptPath = skillRoot.value() / ToWide(spec.script);
+						if (!std::filesystem::exists(scriptPath)) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "script_missing";
+							result.errorMessage = "tool script not found";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
+						nlohmann::json params = nlohmann::json::object();
+						if (request.argsJson.has_value() && !request.argsJson->empty()) {
+							try {
+								params = nlohmann::json::parse(request.argsJson.value());
+							}
+							catch (...) {
+								result.executed = false;
+								result.status = "error";
+								result.errorCode = "invalid_args_json";
+								result.errorMessage = "argsJson is not valid JSON";
+								result.completedAtMs = CurrentEpochMs();
+								result.latencyMs = result.completedAtMs - result.startedAtMs;
+								return result;
+							}
+						}
+
+						if (!params.is_object()) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "invalid_arguments";
+							result.errorMessage = "tool args must be a JSON object";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
+						std::string argsErrorCode;
+						std::string argsErrorMessage;
+						const auto cliArgs = BuildBraveSearchCliArgs(
+							spec,
+							params,
+							argsErrorCode,
+							argsErrorMessage);
+						if (!cliArgs.has_value()) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = argsErrorCode.empty()
+								? "invalid_arguments"
+								: argsErrorCode;
 							result.errorMessage = argsErrorMessage.empty()
 								? "tool arguments are invalid"
 								: argsErrorMessage;
@@ -3079,6 +3354,7 @@ namespace blazeclaw::core {
 			? ToNarrow(m_emailFallbackResolvedPolicy.profileId)
 			: std::string("legacy-policy"));
 		RegisterImapSmtpRuntimeTools(m_gatewayHost);
+		RegisterBraveSearchRuntimeTools(m_gatewayHost);
 
 		m_gatewayHost.SetChatRuntimeCallback([this](
 			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {

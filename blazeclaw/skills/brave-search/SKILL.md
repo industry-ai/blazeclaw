@@ -1,6 +1,14 @@
 ---
 name: brave-search
 description: Web search and content extraction via Brave Search API. Use for searching documentation, facts, or any web content. Lightweight, no browser required.
+command-dispatch: tool
+command-tool: brave_search.search.web
+command-arg-mode: raw
+command-arg-schema: schema://brave_search.search.web.args.v1
+command-result-schema: schema://brave_search.search.web.result.v1
+command-idempotency-hint: safe
+command-retry-policy-hint: transient-network
+command-requires-approval: false
 ---
 
 # Brave Search
@@ -34,7 +42,8 @@ See:
 ## Integration Status
 
 - Discovery in runtime catalogs is available.
-- Full chat-callable runtime execution path is pending Phase 4/5 porting work.
+- Chat-callable runtime execution path is implemented (Phase 4).
+- Remaining hardening and configuration closure is tracked under Phase 5.
 
 ## Search
 

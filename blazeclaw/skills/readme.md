@@ -112,8 +112,8 @@ hook-related components.
 documentation lookup and general fact retrieval workflows.
 
 **Current state:**
-- Ported through Phase 3 (runtime discovery/catalog visibility).
-- Not yet fully ported: Phase 4/5 execution and hardening work remains.
+- Ported through Phase 4 (runtime discovery + chat-callable execution path).
+- Not yet fully ported: Phase 5 safety/config hardening remains.
 
 **Key files:**
 - `brave-search/SKILL.md`

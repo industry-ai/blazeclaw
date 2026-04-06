@@ -70,5 +70,13 @@ Use the gateway endpoints below to verify Phase 3 discovery:
 ## Current execution status
 
 - Runtime discovery is implemented.
-- Full runtime execution wiring for brave-search tool calls is pending
-  Phase 4 integration.
+- Runtime execution wiring is implemented for:
+  - `brave_search.search.web`
+  - `brave_search.fetch.content`
+
+## Chat orchestration status
+
+- `SKILL.md` frontmatter now exposes command dispatch metadata pointing to
+  `brave_search.search.web`.
+- Embedded orchestration can resolve brave-search command bindings and execute
+  runtime tool calls through gateway V2 execution path.

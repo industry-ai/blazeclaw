@@ -158,6 +158,32 @@ Port these artifacts as the baseline:
   endpoint verification guidance.
 - Updated `blazeclaw/skills/readme.md` brave-search status to Phase 3.
 
+## Phase 4 Execution Results (Completed)
+
+### Chat-callable runtime execution implemented
+- Added brave-search runtime executor registration in
+  `ServiceManager` startup (`RegisterBraveSearchRuntimeTools`).
+- Registered V2 runtime executors for:
+  - `brave_search.search.web`
+  - `brave_search.fetch.content`
+- Added argument mapping from embedded dynamic loop payloads to script CLI:
+  - `query` required for search
+  - `count` / `topK` mapped to `-n`
+  - `content=true` mapped to `--content`
+  - `url` required for content fetch
+
+### Command binding integration implemented
+- Updated `SKILL.md` frontmatter with command dispatch metadata:
+  - `command-dispatch: tool`
+  - `command-tool: brave_search.search.web`
+  - `command-arg-mode: raw`
+- This enables brave-search binding participation in embedded tool-call
+  sequencing metadata produced by skills command snapshot.
+
+### Associated docs updated
+- Updated `TOOL_SURFACE.md` execution status to reflect Phase 4 completion.
+- Updated `blazeclaw/skills/readme.md` brave-search state to Phase 4.
+
 ## Validation Plan
 
 ### 1) Skill asset integrity
@@ -214,13 +240,11 @@ Port these artifacts as the baseline:
 - **Phase 1:** Completed
 - **Phase 2:** Completed
 - **Phase 3:** Completed
+- **Phase 4:** Completed
 
 ### Remaining
-- **Phase 4 (chat usability integration):** Not completed
-  - Brave-search tools are discoverable in runtime catalogs, but no
-    brave-search runtime executor is registered for tool-call execution.
 - **Phase 5 (configuration and safety hardening):** Not completed
   - Brave credential preflight and runtime hardening tasks are not yet
     implemented for brave-search execution path.
 - **Phase 6 (final docs/usage hardening):** Partially completed
-  - Core docs are updated, but final completion depends on Phase 4/5 closure.
+  - Core docs are updated, but final completion depends on Phase 5 closure.
