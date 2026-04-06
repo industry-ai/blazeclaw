@@ -1185,6 +1185,12 @@ namespace blazeclaw::core {
 			std::string script;
 		};
 
+		struct BaiduSearchToolRuntimeSpec {
+			std::string id;
+			std::string label;
+			std::string script;
+		};
+
 		struct ChildProcessResult {
 			bool started = false;
 			bool timedOut = false;
@@ -1214,6 +1220,12 @@ namespace blazeclaw::core {
 			return {
 				{ "brave_search.search.web", "Brave Web Search", "scripts/search.js" },
 				{ "brave_search.fetch.content", "Brave Fetch Content", "scripts/content.js" },
+			};
+		}
+
+		std::vector<BaiduSearchToolRuntimeSpec> BuildBaiduSearchToolRuntimeSpecs() {
+			return {
+				{ "baidu_search.search.web", "Baidu Web Search", "scripts/search.py" },
 			};
 		}
 
@@ -1435,6 +1447,92 @@ namespace blazeclaw::core {
 			return result;
 		}
 
+		ChildProcessResult ExecutePythonSkillProcess(
+			const std::filesystem::path& scriptPath,
+			const std::vector<std::string>& cliArgs,
+			const std::uint64_t timeoutMs) {
+			ChildProcessResult result;
+
+			SECURITY_ATTRIBUTES security{};
+			security.nLength = sizeof(security);
+			security.bInheritHandle = TRUE;
+			security.lpSecurityDescriptor = nullptr;
+
+			HANDLE outputRead = nullptr;
+			HANDLE outputWrite = nullptr;
+			if (!CreatePipe(&outputRead, &outputWrite, &security, 0)) {
+				result.errorCode = "pipe_create_failed";
+				result.errorMessage = "failed to create child process pipes";
+				return result;
+			}
+
+			SetHandleInformation(outputRead, HANDLE_FLAG_INHERIT, 0);
+
+			STARTUPINFOW startupInfo{};
+			startupInfo.cb = sizeof(startupInfo);
+			startupInfo.dwFlags = STARTF_USESTDHANDLES;
+			startupInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+			startupInfo.hStdOutput = outputWrite;
+			startupInfo.hStdError = outputWrite;
+
+			PROCESS_INFORMATION processInfo{};
+
+			std::vector<std::wstring> commandTokens;
+			commandTokens.push_back(L"python");
+			commandTokens.push_back(scriptPath.wstring());
+			for (const auto& arg : cliArgs) {
+				commandTokens.push_back(ToWide(arg));
+			}
+
+			std::wstring commandLine = BuildCommandLine(commandTokens);
+			std::vector<wchar_t> mutableCommand(commandLine.begin(), commandLine.end());
+			mutableCommand.push_back(L'\0');
+
+			const BOOL created = CreateProcessW(
+				nullptr,
+				mutableCommand.data(),
+				nullptr,
+				nullptr,
+				TRUE,
+				CREATE_NO_WINDOW,
+				nullptr,
+				nullptr,
+				&startupInfo,
+				&processInfo);
+
+			CloseHandle(outputWrite);
+
+			if (!created) {
+				result.errorCode = "process_start_failed";
+				result.errorMessage = "failed to start python process";
+				result.output = ReadPipeAll(outputRead);
+				CloseHandle(outputRead);
+				return result;
+			}
+
+			result.started = true;
+			const DWORD waitMs = timeoutMs > static_cast<std::uint64_t>(MAXDWORD)
+				? MAXDWORD
+				: static_cast<DWORD>(timeoutMs);
+			const DWORD waitResult = WaitForSingleObject(processInfo.hProcess, waitMs);
+
+			if (waitResult == WAIT_TIMEOUT) {
+				TerminateProcess(processInfo.hProcess, 124);
+				result.timedOut = true;
+				result.errorCode = "deadline_exceeded";
+				result.errorMessage = "tool process exceeded execution deadline";
+			}
+
+			GetExitCodeProcess(processInfo.hProcess, &result.exitCode);
+			result.output = ReadPipeAll(outputRead);
+
+			CloseHandle(outputRead);
+			CloseHandle(processInfo.hThread);
+			CloseHandle(processInfo.hProcess);
+
+			return result;
+		}
+
 		std::optional<std::filesystem::path> ResolveImapSmtpSkillRoot() {
 			std::vector<std::filesystem::path> candidates;
 			candidates.push_back(std::filesystem::current_path());
@@ -1454,6 +1552,43 @@ namespace blazeclaw::core {
 						L"imap-smtp-email";
 					if (std::filesystem::exists(candidate / L"scripts" / L"imap.js") &&
 						std::filesystem::exists(candidate / L"scripts" / L"smtp.js")) {
+						return candidate;
+					}
+
+					if (!cursor.has_parent_path()) {
+						break;
+					}
+
+					auto parent = cursor.parent_path();
+					if (parent == cursor) {
+						break;
+					}
+
+					cursor = parent;
+				}
+			}
+
+			return std::nullopt;
+		}
+
+		std::optional<std::filesystem::path> ResolveBaiduSearchSkillRoot() {
+			std::vector<std::filesystem::path> candidates;
+			candidates.push_back(std::filesystem::current_path());
+
+			wchar_t modulePath[MAX_PATH]{};
+			if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) > 0) {
+				candidates.push_back(std::filesystem::path(modulePath).parent_path());
+			}
+
+			for (const auto& root : candidates) {
+				std::filesystem::path cursor = root;
+				while (!cursor.empty()) {
+					const auto candidate =
+						cursor /
+						L"blazeclaw" /
+						L"skills" /
+						L"baidu-search";
+					if (std::filesystem::exists(candidate / L"scripts" / L"search.py")) {
 						return candidate;
 					}
 
@@ -1710,6 +1845,141 @@ namespace blazeclaw::core {
 			return args;
 		}
 
+		bool IsDateRangeTokenForBaiduSearch(const std::string& value) {
+			if (value.size() != 22) {
+				return false;
+			}
+
+			if (value[4] != '-' || value[7] != '-' || value[10] != 't' ||
+				value[11] != 'o' || value[14] != '-' || value[17] != '-') {
+				return false;
+			}
+
+			const std::size_t digitPositions[] = {
+				0, 1, 2, 3, 5, 6, 8, 9, 12, 13, 15, 16, 18, 19, 20, 21
+			};
+			for (const auto pos : digitPositions) {
+				if (!std::isdigit(static_cast<unsigned char>(value[pos]))) {
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		std::string ClassifyBaiduFailureCode(const std::string& output) {
+			const std::string lowered = ToLowerAscii(output);
+			if (lowered.find("baidu_api_key") != std::string::npos &&
+				lowered.find("must be set") != std::string::npos) {
+				return "baidu_api_key_missing";
+			}
+
+			if (lowered.find("http 401") != std::string::npos ||
+				lowered.find("http 403") != std::string::npos) {
+				return "auth_error";
+			}
+
+			if (lowered.find("http 429") != std::string::npos) {
+				return "rate_limited";
+			}
+
+			if (lowered.find("timeout") != std::string::npos ||
+				lowered.find("timed out") != std::string::npos) {
+				return "network_timeout";
+			}
+
+			if (lowered.find("json parse error") != std::string::npos ||
+				lowered.find("request body must be a json object") != std::string::npos ||
+				lowered.find("query must be present") != std::string::npos ||
+				lowered.find("freshness must be") != std::string::npos) {
+				return "invalid_arguments";
+			}
+
+			if (lowered.find("network") != std::string::npos ||
+				lowered.find("connection") != std::string::npos) {
+				return "network_error";
+			}
+
+			return "process_exit_nonzero";
+		}
+
+		std::optional<std::vector<std::string>> BuildBaiduSearchCliArgs(
+			const BaiduSearchToolRuntimeSpec& spec,
+			const nlohmann::json& params,
+			std::string& errorCode,
+			std::string& errorMessage) {
+			errorCode.clear();
+			errorMessage.clear();
+
+			if (spec.id != "baidu_search.search.web") {
+				errorCode = "unsupported_tool";
+				errorMessage = "unsupported baidu tool";
+				return std::nullopt;
+			}
+
+			nlohmann::json cliPayload = nlohmann::json::object();
+			const auto queryIt = params.find("query");
+			if (queryIt == params.end() || !queryIt->is_string()) {
+				errorCode = "invalid_arguments";
+				errorMessage = "query is required";
+				return std::nullopt;
+			}
+
+			const std::string query = TrimAsciiForBraveSearch(queryIt->get<std::string>());
+			if (query.empty() || query.size() > 512 || HasControlCharsForBraveSearch(query)) {
+				errorCode = "invalid_arguments";
+				errorMessage = "query failed safety validation";
+				return std::nullopt;
+			}
+
+			cliPayload["query"] = query;
+
+			if (const auto countIt = params.find("count"); countIt != params.end()) {
+				if (!countIt->is_number_integer()) {
+					errorCode = "invalid_arguments";
+					errorMessage = "count must be an integer";
+					return std::nullopt;
+				}
+
+				const int count = countIt->get<int>();
+				if (count < 1 || count > 50) {
+					errorCode = "invalid_arguments";
+					errorMessage = "count must be between 1 and 50";
+					return std::nullopt;
+				}
+
+				cliPayload["count"] = count;
+			}
+
+			if (const auto freshnessIt = params.find("freshness"); freshnessIt != params.end()) {
+				if (!freshnessIt->is_string()) {
+					errorCode = "invalid_arguments";
+					errorMessage = "freshness must be a string";
+					return std::nullopt;
+				}
+
+				const std::string freshness = TrimAsciiForBraveSearch(
+					freshnessIt->get<std::string>());
+				if (freshness.empty()) {
+					errorCode = "invalid_arguments";
+					errorMessage = "freshness must be non-empty";
+					return std::nullopt;
+				}
+
+				if (freshness != "pd" && freshness != "pw" && freshness != "pm" &&
+					freshness != "py" && !IsDateRangeTokenForBaiduSearch(freshness)) {
+					errorCode = "invalid_arguments";
+					errorMessage =
+						"freshness must be pd/pw/pm/py or YYYY-MM-DDtoYYYY-MM-DD";
+					return std::nullopt;
+				}
+
+				cliPayload["freshness"] = freshness;
+			}
+
+			return std::vector<std::string>{ cliPayload.dump() };
+		}
+
 		std::optional<std::vector<std::string>> BuildBraveSearchCliArgs(
 			const BraveSearchToolRuntimeSpec& spec,
 			const nlohmann::json& params,
@@ -1815,6 +2085,172 @@ namespace blazeclaw::core {
 			}
 
 			return args;
+		}
+
+		void RegisterBaiduSearchRuntimeTools(blazeclaw::gateway::GatewayHost& host) {
+			const auto skillRoot = ResolveBaiduSearchSkillRoot();
+			for (const auto& spec : BuildBaiduSearchToolRuntimeSpecs()) {
+				host.RegisterRuntimeToolV2(
+					blazeclaw::gateway::ToolCatalogEntry{
+						.id = spec.id,
+						.label = spec.label,
+						.category = "search",
+						.enabled = true,
+					},
+					[spec, skillRoot](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
+						blazeclaw::gateway::ToolExecuteResultV2 result;
+						result.tool = request.tool.empty() ? spec.id : request.tool;
+						result.correlationId = request.correlationId;
+						result.startedAtMs = CurrentEpochMs();
+
+						if (!skillRoot.has_value()) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "skill_runtime_missing";
+							result.errorMessage = "baidu-search skill root not found";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
+						const auto scriptPath = skillRoot.value() / ToWide(spec.script);
+						if (!std::filesystem::exists(scriptPath)) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "script_missing";
+							result.errorMessage = "tool script not found";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
+						nlohmann::json params = nlohmann::json::object();
+						if (request.argsJson.has_value() && !request.argsJson->empty()) {
+							try {
+								params = nlohmann::json::parse(request.argsJson.value());
+							}
+							catch (...) {
+								result.executed = false;
+								result.status = "error";
+								result.errorCode = "invalid_args_json";
+								result.errorMessage = "argsJson is not valid JSON";
+								result.completedAtMs = CurrentEpochMs();
+								result.latencyMs = result.completedAtMs - result.startedAtMs;
+								return result;
+							}
+						}
+
+						if (params.is_string()) {
+							params = nlohmann::json::object(
+								{ {"query", params.get<std::string>()} });
+						}
+
+						if (!params.is_object()) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "invalid_arguments";
+							result.errorMessage = "tool args must be a JSON object";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
+						std::string argsErrorCode;
+						std::string argsErrorMessage;
+						const auto cliArgs = BuildBaiduSearchCliArgs(
+							spec,
+							params,
+							argsErrorCode,
+							argsErrorMessage);
+						if (!cliArgs.has_value()) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = argsErrorCode.empty()
+								? "invalid_arguments"
+								: argsErrorCode;
+							result.errorMessage = argsErrorMessage.empty()
+								? "tool arguments are invalid"
+								: argsErrorMessage;
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
+						std::uint64_t timeoutMs = 45000;
+						if (request.deadlineEpochMs.has_value()) {
+							const std::uint64_t now = CurrentEpochMs();
+							if (request.deadlineEpochMs.value() <= now) {
+								result.executed = false;
+								result.status = "timed_out";
+								result.errorCode = "deadline_exceeded";
+								result.errorMessage = "request deadline already elapsed";
+								result.completedAtMs = now;
+								result.latencyMs = result.completedAtMs - result.startedAtMs;
+								return result;
+							}
+
+							timeoutMs = request.deadlineEpochMs.value() - now;
+						}
+
+						const auto process = ExecutePythonSkillProcess(
+							scriptPath,
+							cliArgs.value(),
+							timeoutMs);
+
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
+
+						if (!process.started) {
+							result.executed = false;
+							result.status = "error";
+							result.result = process.output;
+							result.errorCode = process.errorCode.empty()
+								? "process_start_failed"
+								: process.errorCode;
+							result.errorMessage = process.errorMessage.empty()
+								? "failed to start tool process"
+								: process.errorMessage;
+							return result;
+						}
+
+						if (process.timedOut) {
+							result.executed = false;
+							result.status = "timed_out";
+							result.result = process.output;
+							result.errorCode = process.errorCode.empty()
+								? "deadline_exceeded"
+								: process.errorCode;
+							result.errorMessage = process.errorMessage.empty()
+								? "tool execution timed out"
+								: process.errorMessage;
+							return result;
+						}
+
+						result.result = process.output;
+						if (process.exitCode == 0) {
+							result.executed = true;
+							result.status = "ok";
+							result.errorCode.clear();
+							result.errorMessage.clear();
+							return result;
+						}
+
+						result.executed = false;
+						const std::string classifiedFailure =
+							ClassifyBaiduFailureCode(process.output);
+						result.status = classifiedFailure;
+						result.errorCode = classifiedFailure;
+						if (!result.result.empty()) {
+							result.errorMessage = result.result;
+						}
+						else {
+							result.errorMessage =
+								"tool process returned non-zero exit code " +
+								std::to_string(static_cast<unsigned long long>(process.exitCode));
+						}
+						return result;
+					});
+			}
 		}
 
 		void RegisterImapSmtpRuntimeTools(blazeclaw::gateway::GatewayHost& host) {
@@ -2037,6 +2473,17 @@ namespace blazeclaw::core {
 							}
 						}
 
+						if (params.is_string()) {
+							if (spec.id == "brave_search.search.web") {
+								params = nlohmann::json::object(
+									{ {"query", params.get<std::string>()} });
+							}
+							else if (spec.id == "brave_search.fetch.content") {
+								params = nlohmann::json::object(
+									{ {"url", params.get<std::string>()} });
+							}
+						}
+
 						if (!params.is_object()) {
 							result.executed = false;
 							result.status = "error";
@@ -2129,11 +2576,18 @@ namespace blazeclaw::core {
 						}
 
 						result.executed = false;
-						result.status = "error";
-						result.errorCode = ClassifyBraveFailureCode(process.output);
-						result.errorMessage =
-							"tool process returned non-zero exit code " +
-							std::to_string(static_cast<unsigned long long>(process.exitCode));
+						const std::string classifiedFailure =
+							ClassifyBraveFailureCode(process.output);
+						result.status = classifiedFailure;
+						result.errorCode = classifiedFailure;
+						if (!result.result.empty()) {
+							result.errorMessage = result.result;
+						}
+						else {
+							result.errorMessage =
+								"tool process returned non-zero exit code " +
+								std::to_string(static_cast<unsigned long long>(process.exitCode));
+						}
 						return result;
 					});
 			}
@@ -3493,6 +3947,7 @@ namespace blazeclaw::core {
 			: std::string("legacy-policy"));
 		RegisterImapSmtpRuntimeTools(m_gatewayHost);
 		RegisterBraveSearchRuntimeTools(m_gatewayHost);
+		RegisterBaiduSearchRuntimeTools(m_gatewayHost);
 
 		m_gatewayHost.SetChatRuntimeCallback([this](
 			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {

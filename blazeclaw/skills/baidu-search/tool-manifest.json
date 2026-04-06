@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "skill": "baidu-search",
+  "namespace": "baidu_search",
+  "description": "BlazeClaw tool manifest for Baidu AI Search web lookup.",
+  "tools": [
+    {
+      "id": "baidu_search.search.web",
+      "label": "Baidu Web Search",
+      "category": "search",
+      "enabled": true,
+      "runtime": {
+        "type": "python-cli",
+        "entry": "scripts/search.py",
+        "command": "run"
+      },
+      "inputSchemaRef": "tool-contracts.json#/contracts/baidu_search.search.web"
+    }
+  ]
+}

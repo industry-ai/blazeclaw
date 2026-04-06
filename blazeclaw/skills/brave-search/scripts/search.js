@@ -20,6 +20,95 @@ if (nIndex !== -1 && args[nIndex + 1]) {
 
 const query = args.join(" ");
 
+function stringifyErrorCause(cause) {
+    if (!cause) {
+        return undefined;
+    }
+
+    if (typeof cause === "string") {
+        return cause;
+    }
+
+    if (cause instanceof Error) {
+        return cause.message;
+    }
+
+    try {
+        return JSON.stringify(cause);
+    } catch {
+        return String(cause);
+    }
+}
+
+function formatErrorDetails(error, context = {}) {
+    const source = error?.cause && typeof error.cause === "object"
+        ? error.cause
+        : error;
+
+    const parts = [];
+    if (context.operation) {
+        parts.push(`operation=${context.operation}`);
+    }
+    if (context.target) {
+        parts.push(`target=${context.target}`);
+    }
+
+    parts.push(`message=${error?.message || "unknown_error"}`);
+
+    const causeMessage = stringifyErrorCause(error?.cause);
+    if (causeMessage) {
+        parts.push(`cause=${causeMessage}`);
+    }
+
+    const code = source?.code || error?.code;
+    if (code) {
+        parts.push(`code=${code}`);
+    }
+
+    const errno = source?.errno || error?.errno;
+    if (errno !== undefined) {
+        parts.push(`errno=${errno}`);
+    }
+
+    const syscall = source?.syscall || error?.syscall;
+    if (syscall) {
+        parts.push(`syscall=${syscall}`);
+    }
+
+    const hostname = source?.hostname || error?.hostname;
+    if (hostname) {
+        parts.push(`hostname=${hostname}`);
+    }
+
+    const address = source?.address || error?.address;
+    if (address) {
+        parts.push(`address=${address}`);
+    }
+
+    const port = source?.port || error?.port;
+    if (port) {
+        parts.push(`port=${port}`);
+    }
+
+    const proxy = process.env.HTTPS_PROXY || process.env.https_proxy ||
+        process.env.HTTP_PROXY || process.env.http_proxy;
+    if (proxy) {
+        parts.push(`proxyConfigured=true`);
+    }
+
+    if (code === "ENOTFOUND" || code === "EAI_AGAIN") {
+        parts.push("hint=DNS lookup failed; check network and DNS settings");
+    } else if (code === "ECONNREFUSED" || code === "ECONNRESET") {
+        parts.push("hint=connection rejected/reset; check proxy, firewall, or outbound policy");
+    } else if (code === "ETIMEDOUT") {
+        parts.push("hint=network timeout; check connectivity/proxy latency");
+    } else if (typeof code === "string" && code.startsWith("ERR_TLS")) {
+        parts.push("hint=TLS handshake/certificate issue; inspect proxy CA and TLS policy");
+    }
+
+    return parts.join("; ");
+}
+
 if (!query) {
     console.log("Usage: scripts/search.js <query> [-n <num>] [--content]");
     console.log("\nOptions:");
@@ -143,7 +232,10 @@ async function fetchPageContent(url) {
 
         return "(Could not extract content)";
     } catch (e) {
-        return `(Error: ${e.message})`;
+        return `(Error: ${formatErrorDetails(e, {
+            operation: "brave_search.fetch.content",
+            target: url,
+        })})`;
     }
 }
 
@@ -174,6 +266,9 @@ try {
         console.log("");
     }
 } catch (e) {
-    console.error(`Error: ${e.message}`);
+    console.error(formatErrorDetails(e, {
+        operation: "brave_search.search.web",
+        target: "https://search.brave.com",
+    }));
     process.exit(1);
 }

@@ -2113,9 +2113,10 @@ namespace blazeclaw::gateway {
 							}
 					};
 
-				std::string assistantText = message.empty()
-					? "Received image attachment."
-					: ("Echo: " + message);
+				std::string assistantText;
+				if (message.empty() && hasAttachments) {
+					assistantText = "Received image attachment.";
+				}
 				std::vector<std::string> assistantDeltas;
 				std::string backendErrorCode;
 				std::string backendErrorMessage;
@@ -2289,7 +2290,10 @@ namespace blazeclaw::gateway {
 										"tools.execute.result tool=" +
 										delta.toolName +
 										" status=" +
-										(delta.status.empty() ? std::string("ok") : delta.status));
+										(delta.status.empty() ? std::string("ok") : delta.status) +
+										(delta.errorCode.empty()
+											? std::string()
+											: (" errorCode=" + delta.errorCode)));
 									continue;
 								}
 							}
@@ -2465,24 +2469,32 @@ namespace blazeclaw::gateway {
 						}
 						assistantDeltas = providerDeltas;
 
-						m_chatRunsById.insert_or_assign(
-							runId,
-							ChatRunState{
-								.runId = runId,
-								.sessionKey = sessionKey,
-								.idempotencyKey = idempotencyKey,
-								.userMessage = message,
-								.assistantText = assistantText,
-								.providerDeltas = assistantDeltas,
-								.providerDeltaCursor = 0,
-								.streamCursor = 0,
-								.lastEmitMs = nowMs,
-								.failed = failed,
-								.errorMessage = backendErrorMessage,
-								.startedAtMs = nowMs,
-								 .active = true,
-									.terminalEventEnqueued = false,
-							});
+						if (assistantText.empty()) {
+							failed = true;
+							backendErrorCode = "chat_runtime_empty_response";
+							backendErrorMessage =
+								"chat runtime returned no assistant output";
+						}
+						else {
+							m_chatRunsById.insert_or_assign(
+								runId,
+								ChatRunState{
+									.runId = runId,
+									.sessionKey = sessionKey,
+									.idempotencyKey = idempotencyKey,
+									.userMessage = message,
+									.assistantText = assistantText,
+									.providerDeltas = assistantDeltas,
+									.providerDeltaCursor = 0,
+									.streamCursor = 0,
+									.lastEmitMs = nowMs,
+									.failed = failed,
+									.errorMessage = backendErrorMessage,
+									.startedAtMs = nowMs,
+									 .active = true,
+										.terminalEventEnqueued = false,
+								});
+						}
 					}
 					else {
 						failed = true;
@@ -2500,11 +2512,29 @@ namespace blazeclaw::gateway {
 							runtimeResult.taskDeltas,
 							runId,
 							sessionKey,
-							runtimeResult.ok,
+							runtimeResult.ok && !failed,
 							assistantText,
 							backendErrorCode,
 							backendErrorMessage),
-						runtimeResult.ok);
+						runtimeResult.ok && !failed);
+				}
+				else if (!forceError && !orchestrationHandled && !m_chatRuntimeCallback) {
+					failed = true;
+					assistantText.clear();
+					assistantDeltas.clear();
+					backendErrorCode = "chat_runtime_callback_missing";
+					backendErrorMessage = "chat runtime callback is not configured";
+
+					persistTaskDeltas(
+						EnsureRuntimeTaskDeltas(
+							{},
+							runId,
+							sessionKey,
+							false,
+							assistantText,
+							backendErrorCode,
+							backendErrorMessage),
+						false);
 				}
 
 				const bool silentAssistantReply = IsSilentReplyText(assistantText);

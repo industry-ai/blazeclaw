@@ -940,15 +940,20 @@ namespace blazeclaw::core {
 				completeWithSnapshot();
 				return result;
 			}
+			const std::string effectiveFailureStatus =
+				(!execution.errorCode.empty() &&
+					(execution.status.empty() || execution.status == "error"))
+				? execution.errorCode
+				: execution.status;
 			result.assistantDeltas.push_back(
 				"tools.execute.result tool=" +
 				toolName +
 				" status=" +
-				execution.status);
+				effectiveFailureStatus);
 			const std::string toolResultStatus =
-				execution.status.empty()
+				effectiveFailureStatus.empty()
 				? (execution.executed ? kStatusCompleted : kStatusFailed)
-				: execution.status;
+				: effectiveFailureStatus;
 
 			const std::string fallbackAction =
 				ResolveFallbackActionForExecution(execution);
