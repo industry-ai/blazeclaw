@@ -27,3 +27,6 @@ model.onnx.data
 
 .blazeclaw/
 #/blazeclaw/fixtures/agents/a3-registry/.blazeclaw/subagents.state
+
+.env
+

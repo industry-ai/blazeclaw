@@ -156,6 +156,10 @@ documentation lookup and general fact retrieval workflows.
   runtime-registered grouping in the tree (as a subitem).
 - If a local skill exists but does not appear as runtime-registered, verify
   its manifest/frontmatter validity and runtime catalog refresh flow.
+- OpenClaw reference: `OPENCLAW_SKILL_CONFIGURATION_MECHANISM.md`
+  (documents how OpenClaw configures skills and presents configuration UI).
+- BlazeClaw target mechanism: `BLAZECLAW_OPENCLAW_ORIGINAL_CONFIG_MECHANISM_ANALYSIS.md`
+  (defines the recommended unified WebView2 config host model).
 
 ---
 
