@@ -97,9 +97,17 @@ protected:
 	void InitializeWebViewBridge();
 	void HandleWebMessageJson(const std::wstring& webMessageJson);
 	bool HandleEmailConfigBridgeMessage(const std::string& messageJson);
+	bool HandleSkillConfigBridgeMessage(const std::string& messageJson);
 	bool OpenEmailConfigDocument();
 	void PersistEmailConfigFromPayload(const std::string& payloadJson);
 	void LoadEmailConfigToBridge();
+	void LoadSkillConfigToBridge(
+		const std::string& skillKey,
+		const std::string& correlationId);
+	void PersistSkillConfigFromPayload(
+		const std::string& skillKey,
+		const std::string& correlationId,
+		const std::string& payloadJson);
 	std::wstring ResolveInitialNavigationUrl() const;
 	void PostBridgeMessageJson(const std::wstring& jsonMessage);
 	void PostOpenClawWsFrameJson(const std::string& frameJson);

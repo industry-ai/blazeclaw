@@ -15,6 +15,7 @@
 #pragma once
 
 #include <filesystem>
+#include <string>
 
 constexpr UINT WM_DOC_MARKDOWN_UPDATE = WM_USER + 0x200;
 
@@ -29,6 +30,17 @@ public:
 	const std::wstring& GetMarkdownContent() const { return m_markdownContent; }
 	void SetMarkdownContent(const std::wstring& content);
 	const std::filesystem::path& GetEmailSkillConfigPath() const { return m_emailSkillConfigPath; }
+	std::filesystem::path GetSkillConfigPath(const std::string& skillKey) const;
+	bool SaveSkillConfigEnv(
+		const std::string& skillKey,
+		const std::string& envContent,
+		std::string& error,
+		std::filesystem::path* savedPath = nullptr);
+	bool LoadSkillConfigEnv(
+		const std::string& skillKey,
+		std::string& envContent,
+		std::string& error,
+		std::filesystem::path* loadedPath = nullptr) const;
 	bool SaveEmailSkillConfigEnv(const std::string& envContent, std::string& error);
 	bool LoadEmailSkillConfigEnv(std::string& envContent, std::string& error) const;
 

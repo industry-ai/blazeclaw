@@ -39,6 +39,11 @@ namespace blazeclaw::gateway {
 		bool disableModelInvocation = false;
 		bool validFrontmatter = false;
 		std::size_t validationErrorCount = 0;
+		std::string primaryEnv;
+		std::vector<std::string> requiresBins;
+		std::vector<std::string> requiresEnv;
+		std::vector<std::string> requiresConfig;
+		std::vector<std::string> normalizedMetadataSources;
 	};
 
 	struct SkillsCatalogGatewayState {

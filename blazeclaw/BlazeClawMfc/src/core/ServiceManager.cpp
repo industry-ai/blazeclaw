@@ -395,6 +395,120 @@ namespace blazeclaw::core {
 			return false;
 		}
 
+		std::wstring TrimWide(const std::wstring& value) {
+			const auto first = std::find_if_not(
+				value.begin(),
+				value.end(),
+				[](const wchar_t ch) {
+					return std::iswspace(ch) != 0;
+				});
+			const auto last = std::find_if_not(
+				value.rbegin(),
+				value.rend(),
+				[](const wchar_t ch) {
+					return std::iswspace(ch) != 0;
+				})
+				.base();
+
+			if (first >= last) {
+				return {};
+			}
+
+			return std::wstring(first, last);
+		}
+
+		std::wstring ToLowerWide(std::wstring value) {
+			std::transform(
+				value.begin(),
+				value.end(),
+				value.begin(),
+				[](const wchar_t ch) {
+					return static_cast<wchar_t>(std::towlower(ch));
+				});
+			return value;
+		}
+
+		std::vector<std::wstring> SplitCommaDelimitedWide(
+			const std::wstring& rawValue) {
+			std::vector<std::wstring> values;
+			std::wstring token;
+			for (const wchar_t ch : rawValue) {
+				if (ch == L',' || ch == L';') {
+					const std::wstring trimmed = TrimWide(token);
+					if (!trimmed.empty()) {
+						values.push_back(trimmed);
+					}
+					token.clear();
+					continue;
+				}
+
+				token.push_back(ch);
+			}
+
+			const std::wstring trimmed = TrimWide(token);
+			if (!trimmed.empty()) {
+				values.push_back(trimmed);
+			}
+
+			return values;
+		}
+
+		const std::wstring* FindFrontmatterFieldCaseInsensitive(
+			const SkillFrontmatter& frontmatter,
+			const std::wstring& key) {
+			const std::wstring loweredKey = ToLowerWide(key);
+			for (const auto& item : frontmatter.fields) {
+				if (ToLowerWide(item.first) == loweredKey) {
+					return &item.second;
+				}
+			}
+
+			return nullptr;
+		}
+
+		const std::wstring* ResolveNormalizedField(
+			const SkillFrontmatter& frontmatter,
+			const std::vector<std::wstring>& blazeclawKeys,
+			const std::vector<std::wstring>& openclawKeys,
+			std::vector<std::string>& outSources) {
+			for (const auto& key : blazeclawKeys) {
+				if (const auto* value = FindFrontmatterFieldCaseInsensitive(frontmatter, key);
+					value != nullptr && !TrimWide(*value).empty()) {
+					outSources.push_back("metadata.blazeclaw");
+					return value;
+				}
+			}
+
+			for (const auto& key : openclawKeys) {
+				if (const auto* value = FindFrontmatterFieldCaseInsensitive(frontmatter, key);
+					value != nullptr && !TrimWide(*value).empty()) {
+					outSources.push_back("metadata.openclaw");
+					return value;
+				}
+			}
+
+			return nullptr;
+		}
+
+		std::vector<std::string> UniqueNarrowValues(
+			const std::vector<std::wstring>& values) {
+			std::vector<std::string> output;
+			for (const auto& value : values) {
+				const std::string narrow = ToNarrow(value);
+				if (narrow.empty()) {
+					continue;
+				}
+
+				if (std::find(output.begin(), output.end(), narrow) != output.end()) {
+					continue;
+				}
+
+				output.push_back(narrow);
+			}
+
+			return output;
+		}
+
 		std::vector<std::wstring> ResolveHooksAllowedPackages(
 			const blazeclaw::config::AppConfig& config) {
 			std::vector<std::wstring> values;
@@ -3076,72 +3190,14 @@ namespace blazeclaw::core {
 
 		for (const auto& entry : m_skillsCatalog.entries) {
 			const auto eligibilityIt = eligibilityByName.find(entry.skillName);
-			const bool hasEligibility = eligibilityIt != eligibilityByName.end();
-
-			std::string commandName;
-			std::string commandToolName;
-			std::string commandArgMode;
-			std::string commandArgSchema;
-			std::string commandResultSchema;
-			std::string commandIdempotencyHint;
-			std::string commandRetryPolicyHint;
-			bool commandRequiresApproval = false;
 			const auto commandIt = commandsBySkill.find(entry.skillName);
-			if (commandIt != commandsBySkill.end()) {
-				commandName = ToNarrow(commandIt->second.name);
-				commandToolName = ToNarrow(commandIt->second.dispatch.toolName);
-				commandArgMode = ToNarrow(commandIt->second.dispatch.argMode);
-				commandArgSchema = ToNarrow(commandIt->second.dispatch.argSchema);
-				commandResultSchema = ToNarrow(commandIt->second.dispatch.resultSchema);
-				commandIdempotencyHint =
-					ToNarrow(commandIt->second.dispatch.idempotencyHint);
-				commandRetryPolicyHint =
-					ToNarrow(commandIt->second.dispatch.retryPolicyHint);
-				commandRequiresApproval =
-					commandIt->second.dispatch.requiresApproval;
-			}
-
-			std::string installKind;
-			std::string installCommand;
-			std::string installReason;
-			bool installExecutable = false;
 			const auto installIt = installBySkill.find(entry.skillName);
-			if (installIt != installBySkill.end()) {
-				installKind = ToNarrow(installIt->second.kind);
-				installCommand = ToNarrow(installIt->second.command);
-				installReason = ToNarrow(installIt->second.reason);
-				installExecutable = installIt->second.executable;
-			}
 
-			gatewaySkillsState.entries.push_back(
-				blazeclaw::gateway::SkillsCatalogGatewayEntry{
-					.name = ToNarrow(entry.skillName),
-					.skillKey = hasEligibility ? ToNarrow(eligibilityIt->second.skillKey)
-											   : ToNarrow(entry.skillName),
-					.commandName = commandName,
-				 .commandToolName = commandToolName,
-					.commandArgMode = commandArgMode,
-					.commandArgSchema = commandArgSchema,
-					.commandResultSchema = commandResultSchema,
-					.commandIdempotencyHint = commandIdempotencyHint,
-					.commandRetryPolicyHint = commandRetryPolicyHint,
-					.commandRequiresApproval = commandRequiresApproval,
-					.installKind = installKind,
-					.installCommand = installCommand,
-					.installExecutable = installExecutable,
-					.installReason = installReason,
-					.description = ToNarrow(entry.description),
-					.source = ToNarrow(SkillsCatalogService::SourceKindLabel(entry.sourceKind)),
-					.precedence = entry.precedence,
-					.eligible = hasEligibility ? eligibilityIt->second.eligible : false,
-					.disabled = hasEligibility ? eligibilityIt->second.disabled : false,
-					.blockedByAllowlist =
-						hasEligibility ? eligibilityIt->second.blockedByAllowlist : false,
-					.disableModelInvocation =
-						hasEligibility ? eligibilityIt->second.disableModelInvocation : false,
-					.validFrontmatter = entry.validFrontmatter,
-					.validationErrorCount = entry.validationErrors.size(),
-				});
+			gatewaySkillsState.entries.push_back(BuildGatewaySkillEntry(
+				entry,
+				eligibilityIt != eligibilityByName.end() ? &eligibilityIt->second : nullptr,
+				commandIt != commandsBySkill.end() ? &commandIt->second : nullptr,
+				installIt != installBySkill.end() ? &installIt->second : nullptr));
 		}
 
 		gatewaySkillsState.rootsScanned = m_skillsCatalog.diagnostics.rootsScanned;
@@ -3225,6 +3281,124 @@ namespace blazeclaw::core {
 		gatewaySkillsState.lastCrossTenantAttestationAggregationPath =
 			ToNarrow(m_hooksLastCrossTenantAttestationAggregationPath);
 		return gatewaySkillsState;
+	}
+
+	blazeclaw::gateway::SkillsCatalogGatewayEntry
+		ServiceManager::BuildGatewaySkillEntry(
+			const SkillsCatalogEntry& entry,
+			const SkillsEligibilityEntry* eligibility,
+			const SkillsCommandSpec* command,
+			const SkillsInstallPlanEntry* install) const {
+		std::vector<std::string> metadataSources;
+
+		std::string commandName;
+		std::string commandToolName;
+		std::string commandArgMode;
+		std::string commandArgSchema;
+		std::string commandResultSchema;
+		std::string commandIdempotencyHint;
+		std::string commandRetryPolicyHint;
+		bool commandRequiresApproval = false;
+		if (command != nullptr) {
+			commandName = ToNarrow(command->name);
+			commandToolName = ToNarrow(command->dispatch.toolName);
+			commandArgMode = ToNarrow(command->dispatch.argMode);
+			commandArgSchema = ToNarrow(command->dispatch.argSchema);
+			commandResultSchema = ToNarrow(command->dispatch.resultSchema);
+			commandIdempotencyHint = ToNarrow(command->dispatch.idempotencyHint);
+			commandRetryPolicyHint = ToNarrow(command->dispatch.retryPolicyHint);
+			commandRequiresApproval = command->dispatch.requiresApproval;
+		}
+
+		std::string installKind;
+		std::string installCommand;
+		std::string installReason;
+		bool installExecutable = false;
+		if (install != nullptr) {
+			installKind = ToNarrow(install->kind);
+			installCommand = ToNarrow(install->command);
+			installReason = ToNarrow(install->reason);
+			installExecutable = install->executable;
+		}
+
+		std::string primaryEnv;
+		std::vector<std::string> requiresBins;
+		std::vector<std::string> requiresEnv;
+		std::vector<std::string> requiresConfig;
+
+		if (const auto* value = ResolveNormalizedField(
+			entry.frontmatter,
+			{ L"metadata.blazeclaw.primaryenv", L"metadata.blazeclaw.primary_env" },
+			{ L"metadata.openclaw.primaryenv", L"metadata.openclaw.primary_env" },
+			metadataSources);
+			value != nullptr) {
+			primaryEnv = ToNarrow(*value);
+		}
+
+		if (const auto* value = ResolveNormalizedField(
+			entry.frontmatter,
+			{ L"metadata.blazeclaw.requires.bins" },
+			{ L"metadata.openclaw.requires.bins" },
+			metadataSources);
+			value != nullptr) {
+			requiresBins = UniqueNarrowValues(SplitCommaDelimitedWide(*value));
+		}
+
+		if (const auto* value = ResolveNormalizedField(
+			entry.frontmatter,
+			{ L"metadata.blazeclaw.requires.env" },
+			{ L"metadata.openclaw.requires.env" },
+			metadataSources);
+			value != nullptr) {
+			requiresEnv = UniqueNarrowValues(SplitCommaDelimitedWide(*value));
+		}
+
+		if (const auto* value = ResolveNormalizedField(
+			entry.frontmatter,
+			{ L"metadata.blazeclaw.requires.config" },
+			{ L"metadata.openclaw.requires.config" },
+			metadataSources);
+			value != nullptr) {
+			requiresConfig = UniqueNarrowValues(SplitCommaDelimitedWide(*value));
+		}
+
+		blazeclaw::gateway::SkillsCatalogGatewayEntry gatewayEntry;
+		gatewayEntry.name = ToNarrow(entry.skillName);
+		gatewayEntry.skillKey = eligibility != nullptr
+			? ToNarrow(eligibility->skillKey)
+			: ToNarrow(entry.skillName);
+		gatewayEntry.commandName = commandName;
+		gatewayEntry.commandToolName = commandToolName;
+		gatewayEntry.commandArgMode = commandArgMode;
+		gatewayEntry.commandArgSchema = commandArgSchema;
+		gatewayEntry.commandResultSchema = commandResultSchema;
+		gatewayEntry.commandIdempotencyHint = commandIdempotencyHint;
+		gatewayEntry.commandRetryPolicyHint = commandRetryPolicyHint;
+		gatewayEntry.commandRequiresApproval = commandRequiresApproval;
+		gatewayEntry.installKind = installKind;
+		gatewayEntry.installCommand = installCommand;
+		gatewayEntry.installExecutable = installExecutable;
+		gatewayEntry.installReason = installReason;
+		gatewayEntry.description = ToNarrow(entry.description);
+		gatewayEntry.source = ToNarrow(
+			SkillsCatalogService::SourceKindLabel(entry.sourceKind));
+		gatewayEntry.precedence = entry.precedence;
+		gatewayEntry.eligible = eligibility != nullptr ? eligibility->eligible : false;
+		gatewayEntry.disabled = eligibility != nullptr ? eligibility->disabled : false;
+		gatewayEntry.blockedByAllowlist = eligibility != nullptr
+			? eligibility->blockedByAllowlist
+			: false;
+		gatewayEntry.disableModelInvocation = eligibility != nullptr
+			? eligibility->disableModelInvocation
+			: false;
+		gatewayEntry.validFrontmatter = entry.validFrontmatter;
+		gatewayEntry.validationErrorCount = entry.validationErrors.size();
+		gatewayEntry.primaryEnv = primaryEnv;
+		gatewayEntry.requiresBins = std::move(requiresBins);
+		gatewayEntry.requiresEnv = std::move(requiresEnv);
+		gatewayEntry.requiresConfig = std::move(requiresConfig);
+		gatewayEntry.normalizedMetadataSources = std::move(metadataSources);
+		return gatewayEntry;
 	}
 
 	void ServiceManager::RefreshSkillsState(

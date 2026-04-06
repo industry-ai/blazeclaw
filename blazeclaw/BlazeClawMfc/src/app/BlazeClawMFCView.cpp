@@ -1676,6 +1676,11 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 {
 #ifdef HAVE_WEBVIEW2_HEADER
 	const std::string message = ToNarrow(webMessageJson);
+	if (HandleSkillConfigBridgeMessage(message))
+	{
+		return;
+	}
+
 	if (HandleEmailConfigBridgeMessage(message))
 	{
 		return;
@@ -1937,6 +1942,235 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 #else
 	UNREFERENCED_PARAMETER(webMessageJson);
 #endif
+}
+
+bool CBlazeClawMFCView::HandleSkillConfigBridgeMessage(
+	const std::string& messageJson)
+{
+	std::string channel;
+	if (!blazeclaw::gateway::json::FindStringField(messageJson, "channel", channel))
+	{
+		return false;
+	}
+
+	if (channel != "blazeclaw.skill.config.ready" &&
+		channel != "blazeclaw.skill.config.save" &&
+		channel != "blazeclaw.skill.config.cancel" &&
+		channel != "blazeclaw.skill.config.validate")
+	{
+		return false;
+	}
+
+	std::string skillKey;
+	blazeclaw::gateway::json::FindStringField(messageJson, "skillKey", skillKey);
+	if (blazeclaw::gateway::json::Trim(skillKey).empty())
+	{
+		const std::string response =
+			"{\"channel\":\"blazeclaw.skill.config.error\",\"skillKey\":\"\",\"code\":\"missing_skill_key\",\"message\":\"skillKey is required.\"}";
+		PostBridgeMessageJson(ToWide(response));
+		return true;
+	}
+
+	std::string correlationId;
+	blazeclaw::gateway::json::FindStringField(messageJson, "id", correlationId);
+	if (correlationId.empty())
+	{
+		correlationId = "skill-config";
+	}
+
+	if (channel == "blazeclaw.skill.config.ready")
+	{
+		LoadSkillConfigToBridge(skillKey, correlationId);
+		return true;
+	}
+
+	if (channel == "blazeclaw.skill.config.save")
+	{
+		std::string payloadJson;
+		if (blazeclaw::gateway::json::FindRawField(messageJson, "payload", payloadJson))
+		{
+			PersistSkillConfigFromPayload(skillKey, correlationId, payloadJson);
+		}
+		else
+		{
+			PersistSkillConfigFromPayload(skillKey, correlationId, messageJson);
+		}
+
+		return true;
+	}
+
+	if (channel == "blazeclaw.skill.config.validate")
+	{
+		const std::string response =
+			"{\"channel\":\"blazeclaw.skill.config.validation\",\"skillKey\":" +
+			JsonString(skillKey) +
+			",\"id\":" +
+			JsonString(correlationId) +
+			",\"ok\":true,\"fieldErrors\":[]}";
+		PostBridgeMessageJson(ToWide(response));
+		return true;
+	}
+
+	if (channel == "blazeclaw.skill.config.cancel")
+	{
+		const std::string response =
+			"{\"channel\":\"blazeclaw.skill.config.cancelled\",\"skillKey\":" +
+			JsonString(skillKey) +
+			",\"id\":" +
+			JsonString(correlationId) +
+			",\"ok\":true}";
+		PostBridgeMessageJson(ToWide(response));
+		return true;
+	}
+
+	return false;
+}
+
+void CBlazeClawMFCView::LoadSkillConfigToBridge(
+	const std::string& skillKey,
+	const std::string& correlationId)
+{
+	CBlazeClawMFCDoc* doc = GetDocument();
+	if (doc == nullptr)
+	{
+		const std::string response =
+			"{\"channel\":\"blazeclaw.skill.config.error\",\"skillKey\":" +
+			JsonString(skillKey) +
+			",\"id\":" +
+			JsonString(correlationId) +
+			",\"code\":\"doc_unavailable\",\"message\":\"Document context is unavailable.\"}";
+		PostBridgeMessageJson(ToWide(response));
+		return;
+	}
+
+	std::string envContent;
+	std::string loadError;
+	std::filesystem::path loadedPath;
+	if (!doc->LoadSkillConfigEnv(skillKey, envContent, loadError, &loadedPath))
+	{
+		const std::string response =
+			"{\"channel\":\"blazeclaw.skill.config.loaded\",\"skillKey\":" +
+			JsonString(skillKey) +
+			",\"id\":" +
+			JsonString(correlationId) +
+			",\"ok\":true,\"payload\":{},\"sourceMeta\":{\"configPath\":\"\",\"exists\":false}}";
+		PostBridgeMessageJson(ToWide(response));
+		return;
+	}
+
+	const auto pairs = ParseDotEnvPairs(envContent);
+	std::string payload = "{";
+	bool first = true;
+	for (const auto& pair : pairs)
+	{
+		if (!first)
+		{
+			payload += ",";
+		}
+
+		payload += JsonString(pair.first);
+		payload += ":";
+		payload += JsonString(pair.second);
+		first = false;
+	}
+	payload += "}";
+
+	const std::string response =
+		"{\"channel\":\"blazeclaw.skill.config.loaded\",\"skillKey\":" +
+		JsonString(skillKey) +
+		",\"id\":" +
+		JsonString(correlationId) +
+		",\"ok\":true,\"payload\":" +
+		payload +
+		",\"sourceMeta\":{\"configPath\":" +
+		JsonString(ToNarrow(loadedPath.wstring())) +
+		",\"exists\":true}}";
+	PostBridgeMessageJson(ToWide(response));
+}
+
+void CBlazeClawMFCView::PersistSkillConfigFromPayload(
+	const std::string& skillKey,
+	const std::string& correlationId,
+	const std::string& payloadJson)
+{
+	CBlazeClawMFCDoc* doc = GetDocument();
+	if (doc == nullptr)
+	{
+		const std::string response =
+			"{\"channel\":\"blazeclaw.skill.config.error\",\"skillKey\":" +
+			JsonString(skillKey) +
+			",\"id\":" +
+			JsonString(correlationId) +
+			",\"code\":\"doc_unavailable\",\"message\":\"Document context is unavailable.\"}";
+		PostBridgeMessageJson(ToWide(response));
+		return;
+	}
+
+	auto pairs = ParseDotEnvPairs(payloadJson);
+	if (pairs.empty())
+	{
+		std::string payloadRaw;
+		if (blazeclaw::gateway::json::FindRawField(payloadJson, "payload", payloadRaw))
+		{
+			pairs = ParseDotEnvPairs(payloadRaw);
+		}
+
+		if (pairs.empty())
+		{
+			std::string fieldName;
+			std::string fieldValue;
+			if (blazeclaw::gateway::json::FindStringField(payloadJson, "name", fieldName) &&
+				blazeclaw::gateway::json::FindStringField(payloadJson, "value", fieldValue) &&
+				!blazeclaw::gateway::json::Trim(fieldName).empty())
+			{
+				pairs.insert_or_assign(fieldName, fieldValue);
+			}
+		}
+
+		if (pairs.empty())
+		{
+			const std::string response =
+				"{\"channel\":\"blazeclaw.skill.config.error\",\"skillKey\":" +
+				JsonString(skillKey) +
+				",\"id\":" +
+				JsonString(correlationId) +
+				",\"code\":\"invalid_payload\",\"message\":\"No key-value payload was provided.\"}";
+			PostBridgeMessageJson(ToWide(response));
+			return;
+		}
+	}
+
+	std::ostringstream env;
+	for (const auto& pair : pairs)
+	{
+		env << pair.first << "=" << pair.second << "\n";
+	}
+
+	std::string error;
+	std::filesystem::path savedPath;
+	if (!doc->SaveSkillConfigEnv(skillKey, env.str(), error, &savedPath))
+	{
+		const std::string response =
+			"{\"channel\":\"blazeclaw.skill.config.error\",\"skillKey\":" +
+			JsonString(skillKey) +
+			",\"id\":" +
+			JsonString(correlationId) +
+			",\"code\":\"persist_failed\",\"message\":" +
+			JsonString(error.empty() ? "Failed to persist skill config." : error) +
+			"}";
+		PostBridgeMessageJson(ToWide(response));
+		return;
+	}
+
+	const std::string response =
+		"{\"channel\":\"blazeclaw.skill.config.saved\",\"skillKey\":" +
+		JsonString(skillKey) +
+		",\"id\":" +
+		JsonString(correlationId) +
+		",\"configPath\":" +
+		JsonString(ToNarrow(savedPath.wstring())) +
+		",\"updatedChecks\":{},\"ok\":true}";
+	PostBridgeMessageJson(ToWide(response));
 }
 
 bool CBlazeClawMFCView::HandleEmailConfigBridgeMessage(

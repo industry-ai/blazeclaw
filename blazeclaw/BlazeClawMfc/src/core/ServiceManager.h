@@ -166,6 +166,11 @@ namespace blazeclaw::core {
 			const std::string& reason) const;
 
 		[[nodiscard]] blazeclaw::gateway::SkillsCatalogGatewayState BuildGatewaySkillsState() const;
+		[[nodiscard]] blazeclaw::gateway::SkillsCatalogGatewayEntry BuildGatewaySkillEntry(
+			const SkillsCatalogEntry& entry,
+			const SkillsEligibilityEntry* eligibility,
+			const SkillsCommandSpec* command,
+			const SkillsInstallPlanEntry* install) const;
 		void RefreshSkillsState(
 			const blazeclaw::config::AppConfig& config,
 			bool forceRefresh,

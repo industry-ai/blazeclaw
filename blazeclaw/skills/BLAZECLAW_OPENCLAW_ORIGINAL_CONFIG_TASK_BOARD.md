@@ -24,10 +24,10 @@ Use explicit owner IDs in rows (example: `A1`, `G1`, `C1`, `QA1`).
 
 | Task ID | Work Item | Module / Files | Owner | Status | Test (How to verify) | Evidence (What to attach) |
 |---|---|---|---|---|---|---|
-| P1.1 | Implement metadata normalization (`metadata.blazeclaw` + `metadata.openclaw`) | `src/core/ServiceManager.cpp` | C1 | Not Started | Unit/manual check normalized fields in selection/status payload | Commit hash + sample payload JSON before/after |
-| P1.2 | Add canonical config persistence adapter for `.env` and structured JSON | `src/app/BlazeClawMFCDoc.h`, `src/app/BlazeClawMFCDoc.cpp` | A1 | Not Started | Save/load roundtrip for one env-centric and one config-path skill | Config files produced + logs + screenshots |
-| P1.3 | Wire unified bridge contract events in WebView2 host | `src/app/BlazeClawMFCView.h`, `src/app/BlazeClawMFCView.cpp` | A1 | Not Started | Verify `ready/save/cancel/validate` and `loaded/saved/error/validation` events | Web message traces + sample request/response payloads |
-| P1.4 | Expose normalized selection payload from skill selection flow | `src/app/SkillView.cpp`, `src/app/MainFrame.cpp` | A2 | Not Started | Select skill and inspect payload fields (`requires.*`, `primaryEnv`) | Output pane capture + payload JSON |
+| P1.1 | Implement metadata normalization (`metadata.blazeclaw` + `metadata.openclaw`) | `src/core/ServiceManager.cpp` | C1 | Done | Unit/manual check normalized fields in selection/status payload | `BuildGatewaySkillEntry` now resolves `primaryEnv`, `requiresBins/env/config`, and source tags; payload exposed through `gateway.skills.list` |
+| P1.2 | Add canonical config persistence adapter for `.env` and structured JSON | `src/app/BlazeClawMFCDoc.h`, `src/app/BlazeClawMFCDoc.cpp` | A1 | Done | Save/load roundtrip for one env-centric and one config-path skill | Added `SaveSkillConfigEnv`/`LoadSkillConfigEnv`/`GetSkillConfigPath`; email path preserved with fallback compatibility |
+| P1.3 | Wire unified bridge contract events in WebView2 host | `src/app/BlazeClawMFCView.h`, `src/app/BlazeClawMFCView.cpp` | A1 | Done | Verify `ready/save/cancel/validate` and `loaded/saved/error/validation` events | Added `HandleSkillConfigBridgeMessage` and load/save/validate/cancel responses using `blazeclaw.skill.config.*` contract |
+| P1.4 | Expose normalized selection payload from skill selection flow | `src/app/SkillView.cpp`, `src/app/MainFrame.cpp` | A2 | Done | Select skill and inspect payload fields (`requires.*`, `primaryEnv`) | Skill selection already forwards full gateway skill payload; `gateway.skills.list` now includes normalized metadata fields |
 
 ### Phase 1 acceptance gate
 - Skill selection shows normalized metadata.

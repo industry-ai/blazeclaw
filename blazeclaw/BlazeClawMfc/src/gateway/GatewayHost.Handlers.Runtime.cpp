@@ -68,11 +68,35 @@ namespace blazeclaw::gateway {
 
 		std::string SerializeSkillCatalogEntry(
 			const SkillsCatalogGatewayEntry& entry) {
+			auto serializeStringArray = [](const std::vector<std::string>& values) {
+				std::string json = "[";
+				for (std::size_t index = 0; index < values.size(); ++index) {
+					if (index > 0) {
+						json += ",";
+					}
+
+					json += "\"" + EscapeJsonLocal(values[index]) + "\"";
+				}
+
+				json += "]";
+				return json;
+				};
+
 			return "{\"name\":\"" +
 				EscapeJsonLocal(entry.name) +
 				"\",\"skillKey\":\"" +
 				EscapeJsonLocal(entry.skillKey) +
-				"\",\"command\":\"" +
+				"\",\"primaryEnv\":\"" +
+				EscapeJsonLocal(entry.primaryEnv) +
+				"\",\"requiresBins\":" +
+				serializeStringArray(entry.requiresBins) +
+				",\"requiresEnv\":" +
+				serializeStringArray(entry.requiresEnv) +
+				",\"requiresConfig\":" +
+				serializeStringArray(entry.requiresConfig) +
+				",\"normalizedMetadataSources\":" +
+				serializeStringArray(entry.normalizedMetadataSources) +
+				",\"command\":\"" +
 				EscapeJsonLocal(entry.commandName) +
 				"\",\"installKind\":\"" +
 				EscapeJsonLocal(entry.installKind) +

@@ -325,6 +325,46 @@ This section converts the mechanism into concrete implementation work across
 4. Security validation:
    - secret redaction checks across output surfaces
 
+## 10.7 Phase 1 implementation status (completed)
+
+Implemented in current codebase:
+
+1. **Metadata normalization service (Phase 1)**
+   - `ServiceManager.cpp` now centralizes normalized skill entry building via
+     `BuildGatewaySkillEntry(...)`.
+   - `gateway.skills.list` payload now carries:
+     - `primaryEnv`
+     - `requiresBins`
+     - `requiresEnv`
+     - `requiresConfig`
+     - `normalizedMetadataSources`
+
+2. **Canonical config persistence adapter (Phase 1)**
+   - `CBlazeClawMFCDoc` now exposes generic APIs:
+     - `GetSkillConfigPath(skillKey)`
+     - `SaveSkillConfigEnv(...)`
+     - `LoadSkillConfigEnv(...)`
+   - Existing email config methods are preserved and now routed through generic
+     skill-scoped persistence with compatibility fallback.
+
+3. **Unified WebView2 bridge events (Phase 1)**
+   - `CBlazeClawMFCView` now handles:
+     - `blazeclaw.skill.config.ready`
+     - `blazeclaw.skill.config.save`
+     - `blazeclaw.skill.config.cancel`
+     - `blazeclaw.skill.config.validate`
+   - Returns deterministic response channels:
+     - `blazeclaw.skill.config.loaded`
+     - `blazeclaw.skill.config.saved`
+     - `blazeclaw.skill.config.error`
+     - `blazeclaw.skill.config.validation`
+
+Notes:
+- This completes the Phase 1 foundation scope (normalization + persistence +
+  bridge contract).
+- Phase 2 remains focused on generated fallback UI rendering and host mode
+  routing polish.
+
 ---
 
 ## 11) Source sample set used in this analysis
