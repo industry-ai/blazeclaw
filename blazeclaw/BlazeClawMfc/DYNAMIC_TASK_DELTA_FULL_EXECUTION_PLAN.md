@@ -224,7 +224,7 @@ All previously tracked closure items (protocol/schema parity, dedicated test-pro
 ### Latest audit note (2026-04-06)
 
 - Build validation (`msbuild` Debug|x64) passed in current local audit.
-- Parity-chat filtered regression run currently reports local failures in approval-token cleanup and task-delta persistence-count assertions; dynamic task-delta feature completeness remains implemented but parity stability follow-up is recommended.
+- Parity-chat filtered regression behavior remains unstable across local runs, with recurring `host.Start(gatewayConfig)` startup failures and intermittent approval/persistence assertion mismatches; dynamic task-delta feature completeness remains implemented but parity stability follow-up is recommended.
 
 ## Candidate File Touchpoints
 

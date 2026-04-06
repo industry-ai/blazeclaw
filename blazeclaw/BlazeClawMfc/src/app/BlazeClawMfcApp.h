@@ -9,6 +9,11 @@
 #include "../config/ConfigLoader.h"
 #include "../core/ServiceManager.h"
 
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+
 class CMultiDocTemplate;
 class CBlazeClawMFCView;
 class CBlazeClawMarkdownView;
@@ -19,13 +24,13 @@ public:
 	CBlazeClawMFCApp() noexcept;
 
 
-// Overrides
+	// Overrides
 public:
 	virtual BOOL InitInstance();
 	virtual int ExitInstance();
 	virtual BOOL OnIdle(LONG lCount);
 
-// Implementation
+	// Implementation
 	UINT  m_nAppLook;
 	BOOL  m_bHiColorIcons;
 	// TRUE after InitInstance completes. OnFileNew is a no-op until then so startup
@@ -53,9 +58,17 @@ public:
 	CRuntimeClass* GetWebViewMarkdownRightViewClass() const;
 
 private:
+	void StartGatewayPumpWorker();
+	void StopGatewayPumpWorker();
+	void GatewayPumpWorkerLoop();
+
 	blazeclaw::config::ConfigLoader m_configLoader;
 	blazeclaw::config::AppConfig m_config;
 	blazeclaw::core::ServiceManager m_serviceManager;
+	std::atomic<bool> m_gatewayPumpWorkerStopRequested{ false };
+	std::thread m_gatewayPumpWorker;
+	std::mutex m_gatewayPumpWorkerMutex;
+	std::condition_variable m_gatewayPumpWorkerCv;
 
 	CMultiDocTemplate* m_pChatDocTemplate = nullptr;
 	CSharedTabsDocTemplate* m_pWebViewMarkdownSharedDocTemplate = nullptr;

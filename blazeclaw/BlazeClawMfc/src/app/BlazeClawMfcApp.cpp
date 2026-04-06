@@ -20,6 +20,7 @@
 #include <filesystem>
 #include <fstream>
 #include <algorithm>
+#include <chrono>
 #include <cwctype>
 #include <exception>
 #include <vector>
@@ -477,6 +478,10 @@ BOOL CBlazeClawMFCApp::InitInstance() try {
 		startupServiceError.has_value()
 		? (L"InitInstance.service.start.warning=" + startupServiceError.value())
 		: L"InitInstance.service.start.ok");
+	if (m_serviceManager.IsRunning()) {
+		StartGatewayPumpWorker();
+		AppendStartupCheckpoint(L"InitInstance.gateway.pump.worker.started");
+	}
 
 	// Register the application's document templates.  Document templates
 	//  serve as the connection between documents, frame windows and views
@@ -487,6 +492,7 @@ BOOL CBlazeClawMFCApp::InitInstance() try {
 		viewRuntimeClass);
 	if (!m_pChatDocTemplate) {
 		AppendStartupCheckpoint(L"InitInstance.fail.ChatDocTemplate");
+		StopGatewayPumpWorker();
 		AfxMessageBox(
 			L"Startup failed: unable to create chat document template.",
 			MB_OK | MB_ICONERROR);
@@ -510,6 +516,7 @@ BOOL CBlazeClawMFCApp::InitInstance() try {
 	if (!pMainFrame || !pMainFrame->LoadFrame(IDR_MAINFRAME))
 	{
 		AppendStartupCheckpoint(L"InitInstance.fail.MainFrame.LoadFrame");
+		StopGatewayPumpWorker();
 		AfxMessageBox(
 			L"Startup failed: unable to create main window frame.",
 			MB_OK | MB_ICONERROR);
@@ -545,6 +552,7 @@ BOOL CBlazeClawMFCApp::InitInstance() try {
 		if (parsedShellCommand == CCommandLineInfo::AppRegister ||
 			parsedShellCommand == CCommandLineInfo::AppUnregister) {
 			AppendStartupCheckpoint(L"InitInstance.exit.ProcessShellCommand.RegisterOperation");
+			StopGatewayPumpWorker();
 			return FALSE;
 		}
 
@@ -588,6 +596,7 @@ BOOL CBlazeClawMFCApp::InitInstance() try {
 	return TRUE;
 }
 catch (const std::exception& ex) {
+	StopGatewayPumpWorker();
 	AppendStartupCheckpoint(
 		L"InitInstance.exception.std=" + ToWide(ex.what()));
 	const std::wstring message =
@@ -597,6 +606,7 @@ catch (const std::exception& ex) {
 	return FALSE;
 }
 catch (...) {
+	StopGatewayPumpWorker();
 	AppendStartupCheckpoint(L"InitInstance.exception.unknown");
 	const std::wstring message =
 		L"Startup failed with an unknown exception. See: " +
@@ -606,6 +616,8 @@ catch (...) {
 }
 
 int CBlazeClawMFCApp::ExitInstance() {
+	StopGatewayPumpWorker();
+
 	PersistActiveChatConnection(m_serviceManager);
 	m_serviceManager.Stop();
 
@@ -615,18 +627,51 @@ int CBlazeClawMFCApp::ExitInstance() {
 }
 
 BOOL CBlazeClawMFCApp::OnIdle(LONG lCount) {
-	BOOL baseHandled = CWinAppEx::OnIdle(lCount);
+	return CWinAppEx::OnIdle(lCount);
+}
 
-	std::string pumpError;
-	if (!m_serviceManager.PumpGatewayNetworkOnce(pumpError)) {
-		if (!pumpError.empty()) {
+void CBlazeClawMFCApp::StartGatewayPumpWorker() {
+	if (m_gatewayPumpWorker.joinable()) {
+		return;
+	}
+
+	m_gatewayPumpWorkerStopRequested.store(false);
+	m_gatewayPumpWorker = std::thread(
+		[this]() {
+			GatewayPumpWorkerLoop();
+		});
+}
+
+void CBlazeClawMFCApp::StopGatewayPumpWorker() {
+	if (!m_gatewayPumpWorker.joinable()) {
+		return;
+	}
+
+	m_gatewayPumpWorkerStopRequested.store(true);
+	m_gatewayPumpWorkerCv.notify_all();
+	m_gatewayPumpWorker.join();
+}
+
+void CBlazeClawMFCApp::GatewayPumpWorkerLoop() {
+	constexpr auto kPumpInterval = std::chrono::milliseconds(16);
+
+	while (!m_gatewayPumpWorkerStopRequested.load()) {
+		std::string pumpError;
+		if (!m_serviceManager.PumpGatewayNetworkOnce(pumpError) &&
+			!pumpError.empty()) {
 			TRACE(
 				"[Gateway][PumpNetworkOnce] %s\n",
 				pumpError.c_str());
 		}
-	}
 
-	return baseHandled;
+		std::unique_lock<std::mutex> lock(m_gatewayPumpWorkerMutex);
+		m_gatewayPumpWorkerCv.wait_for(
+			lock,
+			kPumpInterval,
+			[this]() {
+				return m_gatewayPumpWorkerStopRequested.load();
+			});
+	}
 }
 
 blazeclaw::core::ServiceManager& CBlazeClawMFCApp::Services() noexcept {

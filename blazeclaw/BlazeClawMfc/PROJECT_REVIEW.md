@@ -37,7 +37,7 @@ Overall, this is a modular monolith with a strong `ServiceManager + GatewayHost`
 
 Effective runtime model is now mixed (UI-thread driven + dedicated worker threads):
 
-- Gateway network pump is called from `CBlazeClawMFCApp::OnIdle` (`BlazeClawMfcApp.cpp:506-519`).
+- Gateway network pump now runs on a dedicated app-owned worker thread (`StartGatewayPumpWorker`, `GatewayPumpWorkerLoop`, `StopGatewayPumpWorker`).
 - Chat polling is timer-driven on UI thread (`ChatView.cpp:468-477`, 500 ms interval).
 - Chat runtime async queue/worker is present in `ServiceManager` (`StartChatRuntimeWorker`, `ChatRuntimeWorkerLoop`, `StopChatRuntimeWorker`).
 - Transport/runtime internals also use background threading (e.g., WebSocket transport internals).
@@ -45,7 +45,7 @@ Effective runtime model is now mixed (UI-thread driven + dedicated worker thread
 Current behavior:
 
 - UI thread drives message loop.
-- UI thread still pumps gateway transport.
+- Gateway transport pumping is no longer driven by UI `OnIdle`.
 - UI thread now submits `chat.send` via background request execution and receives completion on UI message dispatch.
 - Heavy runtime execution (embedded/deepseek/local-model path) is executed via chat runtime worker when async queue is enabled.
 
@@ -53,7 +53,7 @@ Consequences:
 
 - Runtime work no longer executes directly on the UI thread, which reduces direct UI contention.
 - UI no longer blocks waiting for `chat.send` request/response completion at submit call sites.
-- Gateway pump work remains on `OnIdle`, so expensive dispatch/transport cycles can still impact responsiveness.
+- Gateway network pumping no longer competes with UI idle processing.
 
 ## 3) Memory Characteristics
 
@@ -77,7 +77,7 @@ Consequences:
 
 Status update (implemented): UI submit path is decoupled from synchronous `chat.send` waiting by moving request execution off the UI thread and marshalling completion back to UI state handlers.
 
-Residual risk: transport pump and event polling cadence can still affect responsiveness under heavy gateway load.
+Residual risk: event polling cadence and downstream rendering can still affect responsiveness under heavy gateway load.
 
 ### B) Chat view redraw strategy
 
@@ -120,7 +120,6 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 
 ### Weaknesses
 
-- Gateway transport pump remains `OnIdle`-driven on UI thread.
 - Startup path is broad and validation-heavy.
 - Some retention policies are bounded but not fully policy-optimized (e.g., map-order eviction).
 - Parity regression suite is not currently green in this local audit run, reducing confidence in stability claims.
@@ -144,20 +143,20 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 6. [Completed] Ensure local-model cancel flags are erased across all terminal/error/cancel paths.
 7. [Completed] Optionally parallelize embeddings safely (separate sessions or lock partitioning).
 8. [Completed] Decouple UI submit path from synchronous `chat.send` waiting by using non-blocking submit + UI completion message handling.
+9. [Completed] Move gateway network pump off `OnIdle` into an app-owned dedicated worker loop.
 
 ### Next recommended priorities
 
-1. Move gateway network pump off `OnIdle` into a dedicated pump thread or bounded work loop.
-2. Implement true provider-to-UI incremental streaming (avoid full-response-first staging before UI delta delivery).
-3. Stabilize parity regression assertions for approval-token cleanup and task-delta persistence counts.
-4. Reduce startup critical-path fixture validation cost (lazy/background validation or staged diagnostics pass).
+1. Implement true provider-to-UI incremental streaming (avoid full-response-first staging before UI delta delivery).
+2. Stabilize parity regression startup behavior (`host.Start(gatewayConfig)` failures) and related approval/persistence assertions.
+3. Reduce startup critical-path fixture validation cost (lazy/background validation or staged diagnostics pass).
 
 ## 7) Validation Snapshot (2026-04-06)
 
 - Build:
   - ✅ `msbuild blazeclaw/BlazeClaw.sln /t:Build /p:Configuration=Debug /p:Platform=x64`
 - Tests:
-  - ⚠️ `blazeclaw/bin/Debug/BlazeClawMfc.Tests.exe "[parity][chat]"` currently reports 2 local failures in approval-token cleanup and task-delta persistence-count assertions.
+  - ⚠️ `blazeclaw/bin/Debug/BlazeClawMfc.Tests.exe "[parity][chat]"` remains unstable across local runs, with recurring `host.Start(gatewayConfig)` startup failures in multiple parity cases.
 
 ## 8) Related Execution Planning Docs
 

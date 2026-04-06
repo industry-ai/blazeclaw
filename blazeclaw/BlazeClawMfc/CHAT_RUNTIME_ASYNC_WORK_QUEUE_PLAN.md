@@ -211,4 +211,9 @@ Current state: **fully accomplished**.
 - UI submit call path has now been decoupled from synchronous `chat.send` waiting in `CChatView` by executing request submission on a background thread and handling completion via UI message dispatch.
 - This closes the primary residual UI-blocking gap called out in the project review after initial worker-queue migration.
 
+### Additional threading follow-on (2026-04-06)
+
+- Gateway network pumping has been moved out of `CBlazeClawMFCApp::OnIdle` into a dedicated app-owned pump worker loop.
+- This removes idle-loop transport pumping from the UI thread and further reduces UI contention risk.
+
 The migration item "Move chat runtime execution off UI thread using async work queue + completion events" is complete for this planned scope.
