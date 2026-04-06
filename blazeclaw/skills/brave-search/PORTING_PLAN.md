@@ -152,6 +152,9 @@ Port these artifacts as the baseline:
 - `gateway.tools.list` now includes tools declared by local skill manifests,
   including brave-search tool IDs.
 - `gateway.tools.catalog` also includes local skill tool entries.
+- `CSkillView` groups runtime entries with missing/default category labels
+  (for example empty or `general` install kind) under
+  `runtime-registered -> general`.
 
 ### Associated docs updated
 - Updated `TOOL_SURFACE.md` with Phase 3 runtime discovery notes and

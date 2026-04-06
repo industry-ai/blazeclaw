@@ -10,6 +10,9 @@ At runtime, the system can surface skills from three sources:
    - Queried through `gateway.skills.list`.
    - Typically reflect skills that are parsed, validated, and currently known
      to the active runtime.
+   - If a runtime skill does not provide `installKind` (or reports
+     `installKind=general`), `CSkillView` places it under the
+     `runtime-registered -> general` subitem.
 
 2. **Implemented local skills**
    - Discovered from `blazeclaw/skills/*` in the workspace.
@@ -19,7 +22,7 @@ At runtime, the system can surface skills from three sources:
      `implemented`).
 
 3. **OpenClaw original copied skills (unmodified)**
-   - Discovered from `openclaw/skills/*` in the workspace.
+   - Discovered from `blazeclaw/skills-openclaw-original/*` in the workspace.
    - Intended for visibility of original upstream skill assets without any
      BlazeClaw-specific modification.
    - Displayed in `CSkillView` under `openclaw-original`.
@@ -147,6 +150,8 @@ documentation lookup and general fact retrieval workflows.
 
 - Runtime visibility in `CSkillView` should include registered runtime skills,
   implemented local skills, and original OpenClaw copied skills.
+- `general` is **not** a separate skill source/type. It is treated as part of
+  runtime-registered grouping in the tree (as a subitem).
 - If a local skill exists but does not appear as runtime-registered, verify
   its manifest/frontmatter validity and runtime catalog refresh flow.
 

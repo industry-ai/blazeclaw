@@ -199,7 +199,8 @@ namespace {
 
 		while (!cursor.empty())
 		{
-			const auto directOpenClawSkills = cursor / "openclaw" / "skills";
+			const auto directOpenClawSkills =
+				cursor / "blazeclaw" / "skills-openclaw-original";
 			if (std::filesystem::exists(directOpenClawSkills, ec) &&
 				std::filesystem::is_directory(directOpenClawSkills, ec))
 			{
@@ -207,7 +208,7 @@ namespace {
 			}
 
 			const auto nestedOpenClawSkills =
-				cursor / "blazeclaw" / "openclaw" / "skills";
+				cursor / "skills-openclaw-original";
 			if (std::filesystem::exists(nestedOpenClawSkills, ec) &&
 				std::filesystem::is_directory(nestedOpenClawSkills, ec))
 			{
@@ -399,9 +400,49 @@ void CSkillView::FillSkillView()
 
 		std::string category;
 		blazeclaw::gateway::json::FindStringField(entryJson, "installKind", category);
-		if (category.empty())
+		if (category.empty() || category == "general")
 		{
-			category = "general";
+			const std::string runtimeCategory = "runtime-registered";
+			auto runtimeCategoryIt = categoryItems.find(runtimeCategory);
+			HTREEITEM runtimeCategoryNode = nullptr;
+			if (runtimeCategoryIt == categoryItems.end())
+			{
+				runtimeCategoryNode = m_wndSkillView.InsertItem(
+					_T("runtime-registered"),
+					1,
+					1,
+					hRoot);
+				categoryItems.insert_or_assign(runtimeCategory, runtimeCategoryNode);
+			}
+			else
+			{
+				runtimeCategoryNode = runtimeCategoryIt->second;
+			}
+
+			const std::string generalCategory = "runtime-registered/general";
+			auto generalCategoryIt = categoryItems.find(generalCategory);
+			HTREEITEM generalCategoryNode = nullptr;
+			if (generalCategoryIt == categoryItems.end())
+			{
+				generalCategoryNode = m_wndSkillView.InsertItem(
+					_T("general"),
+					1,
+					1,
+					runtimeCategoryNode);
+				categoryItems.insert_or_assign(generalCategory, generalCategoryNode);
+			}
+			else
+			{
+				generalCategoryNode = generalCategoryIt->second;
+			}
+
+			const HTREEITEM skillNode = m_wndSkillView.InsertItem(
+				CString(CA2W(skillKey.c_str(), CP_UTF8)),
+				2,
+				2,
+				generalCategoryNode);
+			m_skillItemPayloadByTreeItem.insert_or_assign(skillNode, entryJson);
+			continue;
 		}
 
 		auto categoryIt = categoryItems.find(category);
