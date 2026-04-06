@@ -31,6 +31,10 @@ bash setup.sh
 
 Configuration is stored at `~/.config/imap-smtp-email/.env` (survives skill updates). If no config is found there, the skill falls back to a `.env` file in the skill directory (for backward compatibility).
 
+When opened from BlazeClaw MFC WebView2 configuration UI (`config.html`),
+the form now loads and displays the last saved values from the same canonical
+`.env` path so users can review and edit existing settings.
+
 ### Config file format
 
 ```bash

@@ -31,6 +31,7 @@
 #include <filesystem>
 #include <optional>
 #include <sstream>
+#include <unordered_map>
 #include <vector>
 
 #ifdef _DEBUG
@@ -463,6 +464,111 @@ namespace {
 	std::string JsonString(const std::string& value)
 	{
 		return std::string("\"") + EscapeJson(value) + "\"";
+	}
+
+	std::string TrimAscii(const std::string& value)
+	{
+		const std::size_t first = value.find_first_not_of(" \t\r\n");
+		if (first == std::string::npos)
+		{
+			return {};
+		}
+
+		const std::size_t last = value.find_last_not_of(" \t\r\n");
+		return value.substr(first, last - first + 1);
+	}
+
+	std::string ToLowerAscii(const std::string& value)
+	{
+		std::string lowered = value;
+		std::transform(
+			lowered.begin(),
+			lowered.end(),
+			lowered.begin(),
+			[](const unsigned char ch)
+			{
+				return static_cast<char>(std::tolower(ch));
+			});
+		return lowered;
+	}
+
+	bool ParseEnvBool(
+		const std::string& value,
+		const bool fallback)
+	{
+		const std::string lowered = ToLowerAscii(TrimAscii(value));
+		if (lowered == "1" || lowered == "true" || lowered == "yes" || lowered == "on")
+		{
+			return true;
+		}
+
+		if (lowered == "0" || lowered == "false" || lowered == "no" || lowered == "off")
+		{
+			return false;
+		}
+
+		return fallback;
+	}
+
+	std::unordered_map<std::string, std::string> ParseDotEnvPairs(
+		const std::string& envContent)
+	{
+		std::unordered_map<std::string, std::string> values;
+		std::istringstream stream(envContent);
+		std::string line;
+		while (std::getline(stream, line))
+		{
+			std::string trimmed = TrimAscii(line);
+			if (trimmed.empty() || trimmed[0] == '#')
+			{
+				continue;
+			}
+
+			if (!trimmed.empty() && trimmed.back() == '\r')
+			{
+				trimmed.pop_back();
+				trimmed = TrimAscii(trimmed);
+			}
+
+			const std::size_t eqPos = trimmed.find('=');
+			if (eqPos == std::string::npos || eqPos == 0)
+			{
+				continue;
+			}
+
+			std::string key = TrimAscii(trimmed.substr(0, eqPos));
+			std::string value = TrimAscii(trimmed.substr(eqPos + 1));
+			if (!value.empty() &&
+				value.size() >= 2 &&
+				((value.front() == '"' && value.back() == '"') ||
+					(value.front() == '\'' && value.back() == '\'')))
+			{
+				value = value.substr(1, value.size() - 2);
+			}
+
+			if (!key.empty())
+			{
+				values.insert_or_assign(key, value);
+			}
+		}
+
+		return values;
+	}
+
+	std::string ResolvePreferredServerPreset(const std::string& smtpHost)
+	{
+		const std::string lowered = ToLowerAscii(TrimAscii(smtpHost));
+		if (lowered == "smtp.163.com") return "163.com";
+		if (lowered == "smtp.vip.163.com") return "vip.163.com";
+		if (lowered == "smtp.126.com") return "126.com";
+		if (lowered == "smtp.vip.126.com") return "vip.126.com";
+		if (lowered == "smtp.188.com") return "188.com";
+		if (lowered == "smtp.vip.188.com") return "vip.188.com";
+		if (lowered == "smtp.yeah.net") return "yeah.net";
+		if (lowered == "smtp.gmail.com") return "gmail.com";
+		if (lowered == "smtp.office365.com") return "outlook.com";
+		if (lowered == "smtp.qq.com") return "qq.com";
+		return {};
 	}
 
 	std::string BuildBridgeRpcResultJson(
@@ -1855,6 +1961,12 @@ bool CBlazeClawMFCView::HandleEmailConfigBridgeMessage(
 		return true;
 	}
 
+	if (channel == "blazeclaw.email.config.ready")
+	{
+		LoadEmailConfigToBridge();
+		return true;
+	}
+
 	if (channel == "blazeclaw.chat.email.config.open")
 	{
 		const bool opened = OpenEmailConfigDocument();
@@ -1896,6 +2008,87 @@ bool CBlazeClawMFCView::HandleEmailConfigBridgeMessage(
 	}
 
 	return false;
+}
+
+void CBlazeClawMFCView::LoadEmailConfigToBridge()
+{
+	CBlazeClawMFCDoc* doc = GetDocument();
+	if (doc == nullptr)
+	{
+		const std::string json =
+			"{\"channel\":\"blazeclaw.email.config.load.error\",\"ok\":false,"
+			"\"message\":\"Document context is unavailable.\"}";
+		PostBridgeMessageJson(ToWide(json));
+		return;
+	}
+
+	std::string envContent;
+	std::string loadError;
+	if (!doc->LoadEmailSkillConfigEnv(envContent, loadError))
+	{
+		const std::string json =
+			"{\"channel\":\"blazeclaw.email.config.load.empty\",\"ok\":false,"
+			"\"message\":" +
+			JsonString(loadError.empty() ? "No saved config found." : loadError) +
+			"}";
+		PostBridgeMessageJson(ToWide(json));
+		return;
+	}
+
+	const auto pairs = ParseDotEnvPairs(envContent);
+	const auto readOrDefault = [&](const char* key, const char* fallback)
+		{
+			auto it = pairs.find(key);
+			if (it == pairs.end() || it->second.empty())
+			{
+				return std::string(fallback);
+			}
+
+			return it->second;
+		};
+
+	const std::string smtpHost = readOrDefault("SMTP_HOST", "");
+	const std::string smtpUser = readOrDefault("SMTP_USER", "");
+	const std::string imapUser = readOrDefault("IMAP_USER", "");
+	const std::string email = smtpUser.empty() ? imapUser : smtpUser;
+	const std::string smtpPass = readOrDefault("SMTP_PASS", "");
+	const std::string imapPass = readOrDefault("IMAP_PASS", "");
+	const std::string password = smtpPass.empty() ? imapPass : smtpPass;
+	const std::string smtpRejectUnauthorized =
+		readOrDefault("SMTP_REJECT_UNAUTHORIZED", "true");
+	const std::string imapRejectUnauthorized =
+		readOrDefault("IMAP_REJECT_UNAUTHORIZED", smtpRejectUnauthorized.c_str());
+
+	const std::string json =
+		"{\"channel\":\"blazeclaw.email.config.loaded\",\"ok\":true,"
+		"\"payload\":{"
+		"\"serverPreset\":" +
+		JsonString(ResolvePreferredServerPreset(smtpHost)) +
+		",\"smtpHost\":" + JsonString(smtpHost) +
+		",\"smtpPort\":" + JsonString(readOrDefault("SMTP_PORT", "587")) +
+		",\"imapHost\":" + JsonString(readOrDefault("IMAP_HOST", "")) +
+		",\"imapPort\":" + JsonString(readOrDefault("IMAP_PORT", "993")) +
+		",\"email\":" + JsonString(email) +
+		",\"password\":" + JsonString(password) +
+		",\"allowedReadDirs\":" +
+		JsonString(readOrDefault("ALLOWED_READ_DIRS", "~/Downloads,~/Documents")) +
+		",\"allowedWriteDirs\":" +
+		JsonString(readOrDefault("ALLOWED_WRITE_DIRS", "~/Downloads")) +
+		",\"imapTls\":" +
+		std::string(ParseEnvBool(readOrDefault("IMAP_TLS", "true"), true)
+			? "true"
+			: "false") +
+		",\"smtpSecure\":" +
+		std::string(ParseEnvBool(readOrDefault("SMTP_SECURE", "false"), false)
+			? "true"
+			: "false") +
+		",\"rejectUnauthorized\":" +
+		std::string(ParseEnvBool(imapRejectUnauthorized, true)
+			? "true"
+			: "false") +
+		"}}";
+
+	PostBridgeMessageJson(ToWide(json));
 }
 
 bool CBlazeClawMFCView::OpenEmailConfigDocument()

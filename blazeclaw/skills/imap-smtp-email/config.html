@@ -285,6 +285,50 @@
             };
         }
 
+        function applyLoadedConfig(payload) {
+            if (!payload || typeof payload !== 'object') {
+                return;
+            }
+
+            const assignValue = (id, value) => {
+                if (typeof value !== 'string') {
+                    return;
+                }
+                const el = document.getElementById(id);
+                if (!el) {
+                    return;
+                }
+                el.value = value;
+            };
+
+            const assignBool = (id, value) => {
+                if (typeof value !== 'boolean') {
+                    return;
+                }
+                const el = document.getElementById(id);
+                if (!el) {
+                    return;
+                }
+                el.checked = value;
+            };
+
+            assignValue('smtpHost', payload.smtpHost || '');
+            assignValue('smtpPort', payload.smtpPort || '587');
+            assignValue('imapHost', payload.imapHost || '');
+            assignValue('imapPort', payload.imapPort || '993');
+            assignValue('email', payload.email || '');
+            assignValue('password', payload.password || '');
+            assignValue('allowedReadDirs', payload.allowedReadDirs || '~/Downloads,~/Documents');
+            assignValue('allowedWriteDirs', payload.allowedWriteDirs || '~/Downloads');
+            assignBool('imapTls', payload.imapTls);
+            assignBool('smtpSecure', payload.smtpSecure);
+            assignBool('rejectUnauthorized', payload.rejectUnauthorized);
+
+            if (typeof payload.serverPreset === 'string' && payload.serverPreset) {
+                serverPresetEl.value = payload.serverPreset;
+            }
+        }
+
         document.getElementById('saveBtn').addEventListener('click', () => {
             setStatus('Saving configuration...');
             postMessage({ channel: 'blazeclaw.email.config.save', payload: collectPayload() });
@@ -315,6 +359,19 @@
                 }
                 if (msg.channel === 'blazeclaw.email.config.error') {
                     setStatus('Error: ' + (msg.message || 'save failed'));
+                    return;
+                }
+                if (msg.channel === 'blazeclaw.email.config.loaded') {
+                    applyLoadedConfig(msg.payload || {});
+                    setStatus('Loaded saved configuration.');
+                    return;
+                }
+                if (msg.channel === 'blazeclaw.email.config.load.empty') {
+                    setStatus('No saved configuration found yet.');
+                    return;
+                }
+                if (msg.channel === 'blazeclaw.email.config.load.error') {
+                    setStatus('Load error: ' + (msg.message || 'failed to load config'));
                 }
             });
         }

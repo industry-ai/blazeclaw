@@ -82,6 +82,8 @@ mark read/unread, send/test email, multi-account support).
 **Configuration:**
 - Canonical: `~/.config/imap-smtp-email/.env`
 - Fallback: skill-local `.env`
+- MFC WebView2 `config.html` loads the last saved `.env` values on open for
+  edit/review before saving.
 
 ---
 

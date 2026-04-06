@@ -140,6 +140,53 @@ bool CBlazeClawMFCDoc::SaveEmailSkillConfigEnv(
 	return true;
 }
 
+bool CBlazeClawMFCDoc::LoadEmailSkillConfigEnv(
+	std::string& envContent,
+	std::string& error) const
+{
+	envContent.clear();
+	error.clear();
+
+	std::filesystem::path configPath = m_emailSkillConfigPath;
+	if (configPath.empty())
+	{
+		const std::filesystem::path root = ResolveDocConfigRoot();
+		configPath = root / MakeDocConfigFileName();
+	}
+
+	std::error_code ec;
+	if (!std::filesystem::exists(configPath, ec) || ec)
+	{
+		error = "email config file does not exist";
+		return false;
+	}
+
+	std::ifstream input(configPath, std::ios::in | std::ios::binary);
+	if (!input.is_open())
+	{
+		error = "failed to open email config file for reading";
+		return false;
+	}
+
+	envContent.assign(
+		(std::istreambuf_iterator<char>(input)),
+		std::istreambuf_iterator<char>());
+	if (!input.good() && !input.eof())
+	{
+		error = "failed to read email config file";
+		envContent.clear();
+		return false;
+	}
+
+	if (envContent.empty())
+	{
+		error = "email config file is empty";
+		return false;
+	}
+
+	return true;
+}
+
 
 
 

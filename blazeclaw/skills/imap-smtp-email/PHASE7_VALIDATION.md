@@ -49,12 +49,14 @@ Expected:
 
 ## Scenario E - Config UI roundtrip
 1. Open config from chat bridge entry (`email.config.open` or `blazeclaw.chat.email.config.open`).
+2. Verify config form auto-loads previously saved values on initialization.
 2. Save updated values from WebView2 form.
 3. Reopen config UI and verify fields rehydrate from persisted config.
 4. Run one IMAP and one SMTP tool command using saved values.
 
 Expected:
 - Save succeeds and returns path/ok response.
+- Initial open preloads current persisted values.
 - Reopen reflects persisted values.
 - Runtime tools use updated values without manual file edits.
 

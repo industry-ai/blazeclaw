@@ -30,6 +30,7 @@ public:
 	void SetMarkdownContent(const std::wstring& content);
 	const std::filesystem::path& GetEmailSkillConfigPath() const { return m_emailSkillConfigPath; }
 	bool SaveEmailSkillConfigEnv(const std::string& envContent, std::string& error);
+	bool LoadEmailSkillConfigEnv(std::string& envContent, std::string& error) const;
 
 	// Operations
 public:

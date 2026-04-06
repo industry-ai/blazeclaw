@@ -99,6 +99,7 @@ protected:
 	bool HandleEmailConfigBridgeMessage(const std::string& messageJson);
 	bool OpenEmailConfigDocument();
 	void PersistEmailConfigFromPayload(const std::string& payloadJson);
+	void LoadEmailConfigToBridge();
 	std::wstring ResolveInitialNavigationUrl() const;
 	void PostBridgeMessageJson(const std::wstring& jsonMessage);
 	void PostOpenClawWsFrameJson(const std::string& frameJson);

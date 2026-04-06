@@ -122,6 +122,7 @@ Status: Completed
   - primary: `~/.config/imap-smtp-email/.env`
   - fallback: skill-local `.env` (if retained)
 - [x] Ensure MFC WebView2 configuration UI writes to the same canonical config location used by runtime scripts.
+- [x] Ensure MFC WebView2 configuration UI initializes by loading and displaying the last saved `.env` values for edit/review.
 - [x] Preserve strict file access checks for body/attachment read and attachment write operations.
 - [x] Add defensive validation for missing credentials and invalid account names.
 - [x] Verify no secrets are logged in plain text through gateway/output panes.
