@@ -211,6 +211,20 @@ Port these artifacts as the baseline:
 - Updated `TOOL_SURFACE.md` with hardening controls and failure semantics.
 - Updated `blazeclaw/skills/readme.md` brave-search status to Phase 5.
 
+## Phase 6 Execution Results (Completed)
+
+### Documentation and contributor guidance completed
+- Updated `SKILL.md` with:
+  - chat-oriented usage examples
+  - setup/policy environment notes
+  - troubleshooting guidance for common runtime failures
+- Updated `TOOL_SURFACE.md` with:
+  - chat-oriented argument examples for both brave tools
+  - quick troubleshooting map for deterministic error codes
+- Updated `blazeclaw/skills/readme.md` brave-search section with:
+  - usage highlights
+  - strict preflight policy toggle reminder
+
 ## Validation Plan
 
 ### 1) Skill asset integrity
@@ -261,7 +275,7 @@ Port these artifacts as the baseline:
 ## Port Completeness Check (Latest Audit)
 
 ### Result
-- **Not fully ported yet**.
+- **Fully ported for planned Phase 1-6 scope**.
 
 ### Completed
 - **Phase 1:** Completed
@@ -269,7 +283,13 @@ Port these artifacts as the baseline:
 - **Phase 3:** Completed
 - **Phase 4:** Completed
 - **Phase 5:** Completed
+- **Phase 6:** Completed
 
 ### Remaining
-- **Phase 6 (final docs/usage hardening):** Completed
-  - Contributor/usage docs are updated alongside Phase 5 implementation.
+- **None for scoped Phase 1-6 deliverables.**
+
+## Clearance Status
+
+- Porting scope is cleared for the defined Phase 1-6 plan.
+- Brave-search is documented as discoverable, executable, hardened, and
+  documented for contributor handoff.

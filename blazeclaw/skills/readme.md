@@ -112,8 +112,8 @@ hook-related components.
 documentation lookup and general fact retrieval workflows.
 
 **Current state:**
-- Ported through Phase 5 (runtime discovery, chat-callable execution,
-  and runtime hardening controls).
+- Fully ported through Phase 6 (runtime discovery, chat-callable execution,
+  runtime hardening, and contributor documentation clearance).
 
 **Key files:**
 - `brave-search/SKILL.md`
@@ -128,6 +128,12 @@ documentation lookup and general fact retrieval workflows.
 
 **Setup:**
 - `cd blazeclaw/skills/brave-search && npm ci`
+
+**Usage highlights:**
+- Chat-driven web lookup via `brave_search.search.web`
+- URL content extraction via `brave_search.fetch.content`
+- Optional strict API-key preflight:
+  `BLAZECLAW_BRAVE_REQUIRE_API_KEY=true`
 
 ---
 

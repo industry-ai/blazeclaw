@@ -30,6 +30,12 @@ Optional runtime policy env:
 
 - `BLAZECLAW_BRAVE_REQUIRE_API_KEY=true` to enforce API key preflight.
 
+## Chat Usage Examples
+
+- "Search for latest C++23 coroutine best practices and summarize key changes."
+- "Find official Microsoft docs about MFC dockable panes and extract the most relevant page content."
+- "Look up BlazeClaw gateway tool registry behavior and provide a short digest."
+
 ## Tool Surface
 
 This skill now exposes BlazeClaw tool contracts:
@@ -65,6 +71,19 @@ See:
 ```
 
 Fetches a URL and extracts readable content as markdown.
+
+## Troubleshooting
+
+- `brave_api_key_missing`
+  - Set `BRAVE_API_KEY` or disable strict preflight by leaving
+    `BLAZECLAW_BRAVE_REQUIRE_API_KEY` unset/false.
+- `invalid_arguments`
+  - Ensure `query` is non-empty for search and `url` is a valid
+    `http://` or `https://` value for content fetch.
+- `timed_out`
+  - Retry with a smaller result count or without `--content`.
+- `network_error` / `upstream_unavailable`
+  - Check outbound network/proxy settings and retry.
 
 ## Output Format
 

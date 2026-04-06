@@ -33,6 +33,16 @@ readable page content.
 }
 ```
 
+**Chat-oriented example args:**
+
+```json
+{
+  "query": "BlazeClaw gateway.tools.list behavior",
+  "count": 3,
+  "content": true
+}
+```
+
 ### 2) `brave_search.fetch.content`
 
 Fetch a single URL and extract readable markdown content.
@@ -49,6 +59,14 @@ Fetch a single URL and extract readable markdown content.
 ```json
 {
   "url": "https://example.com/article"
+}
+```
+
+**Chat-oriented example args:**
+
+```json
+{
+  "url": "https://learn.microsoft.com/cpp/mfc/reference/cdockablepane-class"
 }
 ```
 
@@ -95,3 +113,13 @@ Use the gateway endpoints below to verify Phase 3 discovery:
 - Optional credential policy:
   - `BLAZECLAW_BRAVE_REQUIRE_API_KEY=true` enforces preflight on
     `BRAVE_API_KEY` availability.
+
+## Troubleshooting quick map
+
+- `brave_api_key_missing`: missing `BRAVE_API_KEY` while strict preflight is enabled.
+- `invalid_arguments`: invalid `query`, `count/topK`, `content`, or `url` shape/value.
+- `timed_out`: operation exceeded runtime deadline.
+- `auth_error`: upstream auth/permission rejected.
+- `rate_limited`: upstream throttling response.
+- `upstream_unavailable`: transient upstream 5xx conditions.
+- `network_error`: connectivity or DNS failures.
