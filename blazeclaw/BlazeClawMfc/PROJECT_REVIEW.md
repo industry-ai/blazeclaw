@@ -46,13 +46,13 @@ Current behavior:
 
 - UI thread drives message loop.
 - UI thread still pumps gateway transport.
-- UI thread still issues synchronous `chat.send` gateway requests.
+- UI thread now submits `chat.send` via background request execution and receives completion on UI message dispatch.
 - Heavy runtime execution (embedded/deepseek/local-model path) is executed via chat runtime worker when async queue is enabled.
 
 Consequences:
 
 - Runtime work no longer executes directly on the UI thread, which reduces direct UI contention.
-- UI still blocks waiting for `chat.send` completion because request/response remains synchronous at call site.
+- UI no longer blocks waiting for `chat.send` request/response completion at submit call sites.
 - Gateway pump work remains on `OnIdle`, so expensive dispatch/transport cycles can still impact responsiveness.
 
 ## 3) Memory Characteristics
@@ -75,9 +75,9 @@ Consequences:
 
 ### A) UI-thread blocking
 
-Main residual issue: UI thread still synchronously issues `chat.send` and waits for completion, even though execution is offloaded to worker queue.
+Status update (implemented): UI submit path is decoupled from synchronous `chat.send` waiting by moving request execution off the UI thread and marshalling completion back to UI state handlers.
 
-Expected symptoms: typing lag, delayed repaint, temporary freeze under slow network/model conditions.
+Residual risk: transport pump and event polling cadence can still affect responsiveness under heavy gateway load.
 
 ### B) Chat view redraw strategy
 
@@ -120,7 +120,7 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 
 ### Weaknesses
 
-- Request/response entrypoints remain UI-synchronous even after worker offload.
+- Gateway transport pump remains `OnIdle`-driven on UI thread.
 - Startup path is broad and validation-heavy.
 - Some retention policies are bounded but not fully policy-optimized (e.g., map-order eviction).
 - Parity regression suite is not currently green in this local audit run, reducing confidence in stability claims.
@@ -143,21 +143,21 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 5. [Completed] Fix `PiEmbeddedService` started-at/deadline logic to use real current epoch consistently.
 6. [Completed] Ensure local-model cancel flags are erased across all terminal/error/cancel paths.
 7. [Completed] Optionally parallelize embeddings safely (separate sessions or lock partitioning).
+8. [Completed] Decouple UI submit path from synchronous `chat.send` waiting by using non-blocking submit + UI completion message handling.
 
 ### Next recommended priorities
 
-1. Decouple UI request path from synchronous `chat.send` wait (true non-blocking UI submit + completion event delivery).
-2. Move gateway network pump off `OnIdle` into a dedicated pump thread or bounded work loop.
-3. Implement true provider-to-UI incremental streaming (avoid full-response-first staging before UI delta delivery).
-4. Stabilize parity regression startup behavior (`host.Start(gatewayConfig)` failures in local audit) and approval/persistence parity assertions.
-5. Reduce startup critical-path fixture validation cost (lazy/background validation or staged diagnostics pass).
+1. Move gateway network pump off `OnIdle` into a dedicated pump thread or bounded work loop.
+2. Implement true provider-to-UI incremental streaming (avoid full-response-first staging before UI delta delivery).
+3. Stabilize parity regression assertions for approval-token cleanup and task-delta persistence counts.
+4. Reduce startup critical-path fixture validation cost (lazy/background validation or staged diagnostics pass).
 
 ## 7) Validation Snapshot (2026-04-06)
 
 - Build:
   - ✅ `msbuild blazeclaw/BlazeClaw.sln /t:Build /p:Configuration=Debug /p:Platform=x64`
 - Tests:
-  - ⚠️ `blazeclaw/bin/Debug/BlazeClawMfc.Tests.exe "[parity][chat]"` currently reports local failures (including `host.Start(gatewayConfig)` and parity assertion mismatches in approval/persistence scenarios).
+  - ⚠️ `blazeclaw/bin/Debug/BlazeClawMfc.Tests.exe "[parity][chat]"` currently reports 2 local failures in approval-token cleanup and task-delta persistence-count assertions.
 
 ## 8) Related Execution Planning Docs
 

@@ -10,6 +10,8 @@
 #include <cctype>
 #include <chrono>
 #include <fstream>
+#include <memory>
+#include <thread>
 #include <wincrypt.h>
 
 #ifdef _DEBUG
@@ -21,6 +23,7 @@ IMPLEMENT_DYNCREATE(CChatView, CView)
 namespace {
 	constexpr UINT_PTR kNativeChatPollTimerId = 0x5A11;
 	constexpr UINT kNativeChatPollIntervalMs = 500;
+	constexpr UINT kNativeChatSendCompletedMessage = WM_APP + 0x521;
 	constexpr UINT kMsgListControlId = 1000;
 	constexpr UINT kSendButtonControlId = 1001;
 	constexpr UINT kInputControlId = 1002;
@@ -264,6 +267,7 @@ BEGIN_MESSAGE_MAP(CChatView, CView)
 	ON_WM_DESTROY()
 	ON_WM_MEASUREITEM()
 	ON_WM_DRAWITEM()
+	ON_MESSAGE(kNativeChatSendCompletedMessage, &CChatView::OnNativeChatSendCompleted)
 	ON_BN_CLICKED(kSendButtonControlId, &CChatView::OnSendClicked)
 	ON_BN_CLICKED(kAbortButtonControlId, &CChatView::OnAbortClicked)
 	ON_BN_CLICKED(kAttachButtonControlId, &CChatView::OnAttachClicked)
@@ -478,6 +482,8 @@ void CChatView::OnTimer(UINT_PTR nIDEvent)
 
 void CChatView::OnDestroy()
 {
+	++m_chatSendGeneration;
+
 	if (m_chatPollTimerId != 0)
 	{
 		KillTimer(m_chatPollTimerId);
@@ -560,7 +566,7 @@ void CChatView::LoadChatHistoryNative()
 	m_chatState.chatStream.reset();
 	m_chatState.chatStreamStartedAt.reset();
 	m_chatState.chatLoading = false;
-   RebuildItemsFromState();
+	RebuildItemsFromState();
 	UpdateControlStates();
 }
 
@@ -570,9 +576,9 @@ void CChatView::SendChatMessageNative(const std::string& message)
 	const bool hasAttachments = !m_chatState.chatAttachments.empty();
 	if ((trimmed.empty() && !hasAttachments) || !IsGatewayConnected())
 	{
-     if (!IsGatewayConnected())
+		if (!IsGatewayConnected())
 		{
-           if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+			if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
 			{
 				frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
 					"send",
@@ -584,7 +590,7 @@ void CChatView::SendChatMessageNative(const std::string& message)
 
 	const std::string runId =
 		"native-run-" + std::to_string(CurrentEpochMs());
-  if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+	if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
 	{
 		frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
 			"send",
@@ -664,47 +670,122 @@ void CChatView::SendChatMessageNative(const std::string& message)
 		"\",\"attachments\":" +
 		attachmentsJson +
 		"}";
-
-	blazeclaw::gateway::protocol::ResponseFrame response;
-	if (!RequestGateway("chat.send", params, response) || !response.ok)
+	const auto generation = m_chatSendGeneration;
+	const HWND targetHwnd = GetSafeHwnd();
+	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	if (app == nullptr || !::IsWindow(targetHwnd))
 	{
-      std::string err = "chat.send failed";
-		if (response.error.has_value())
-		{
-			err = response.error->code + ":" + response.error->message;
-		}
-       if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
-		{
-			frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
-				"send",
-				std::string("chat.send error runId=") + runId + " detail=" + err));
-		}
+		m_chatState.chatSending = false;
 		m_chatState.chatRunId.reset();
 		m_chatState.chatStream.reset();
 		m_chatState.chatStreamStartedAt.reset();
-		m_chatState.lastError = "chat.send failed";
+		m_chatState.lastError = "chat.send unavailable";
+		SyncItemsFromState();
+		UpdateControlStates();
+		return;
 	}
-	else
+
+	std::thread(
+		[app, targetHwnd, generation, runId, params]()
+		{
+			auto completion = std::make_unique<CChatView::NativeChatSendCompletionPayload>();
+			completion->generation = generation;
+			completion->runId = runId;
+
+			blazeclaw::gateway::protocol::ResponseFrame response;
+			const blazeclaw::gateway::protocol::RequestFrame request{
+				.id = runId,
+				.method = "chat.send",
+				.paramsJson = params,
+			};
+			response = app->Services().RouteGatewayRequest(request);
+
+			completion->accepted = response.ok;
+			if (!completion->accepted)
+			{
+				completion->errorDetail = "chat.send failed";
+				if (response.error.has_value())
+				{
+					completion->errorDetail =
+						response.error->code + ":" + response.error->message;
+				}
+			}
+
+			if (!::PostMessage(
+				targetHwnd,
+				kNativeChatSendCompletedMessage,
+				0,
+				reinterpret_cast<LPARAM>(completion.get())))
+			{
+				return;
+			}
+
+			completion.release();
+		})
+		.detach();
+
+	SyncItemsFromState();
+	UpdateControlStates();
+}
+
+LRESULT CChatView::OnNativeChatSendCompleted(WPARAM /*wParam*/, LPARAM lParam)
+{
+	std::unique_ptr<NativeChatSendCompletionPayload> completion(
+		reinterpret_cast<NativeChatSendCompletionPayload*>(lParam));
+	if (!completion)
 	{
-       if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+		return 0;
+	}
+
+	if (completion->generation != m_chatSendGeneration)
+	{
+		return 0;
+	}
+
+	if (!completion->accepted)
+	{
+		if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
 		{
 			frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
 				"send",
-				std::string("chat.send accepted runId=") + runId));
+				std::string("chat.send error runId=") +
+				completion->runId +
+				" detail=" +
+				completion->errorDetail));
 		}
+
+		if (m_chatState.chatRunId.has_value() &&
+			m_chatState.chatRunId.value() == completion->runId)
+		{
+			m_chatState.chatRunId.reset();
+			m_chatState.chatStream.reset();
+			m_chatState.chatStreamStartedAt.reset();
+			m_chatState.lastError = "chat.send failed";
+		}
+	}
+	else
+	{
+		if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+		{
+			frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
+				"send",
+				std::string("chat.send accepted runId=") + completion->runId));
+		}
+
 		m_chatState.chatAttachments.clear();
 	}
 
 	m_chatState.chatSending = false;
 	SyncItemsFromState();
 	UpdateControlStates();
+	return 0;
 }
 
 void CChatView::AbortChatRunNative()
 {
 	if (!IsGatewayConnected())
 	{
-   if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+		if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
 		{
 			frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
 				"cancel",
@@ -713,7 +794,7 @@ void CChatView::AbortChatRunNative()
 		return;
 	}
 
-   if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+	if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
 	{
 		frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
 			"cancel",
@@ -736,7 +817,7 @@ void CChatView::AbortChatRunNative()
 	blazeclaw::gateway::protocol::ResponseFrame response;
 	if (!RequestGateway("chat.abort", params, response) || !response.ok)
 	{
-       if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+		if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
 		{
 			frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
 				"cancel",
@@ -746,7 +827,7 @@ void CChatView::AbortChatRunNative()
 	}
 	else
 	{
-       if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+		if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
 		{
 			frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
 				"cancel",
@@ -881,7 +962,7 @@ void CChatView::PumpChatEventsNative()
 
 void CChatView::SyncItemsFromState()
 {
-    if (!::IsWindow(m_wndMsgList.GetSafeHwnd()))
+	if (!::IsWindow(m_wndMsgList.GetSafeHwnd()))
 	{
 		return;
 	}
@@ -1047,7 +1128,7 @@ void CChatView::RemoveItemAt(int index)
 
 	if (m_items.GetSize() > 0)
 	{
-        const int lastIndex = static_cast<int>(m_items.GetSize() - 1);
+		const int lastIndex = static_cast<int>(m_items.GetSize() - 1);
 		m_wndMsgList.SetCurSel(lastIndex);
 		m_wndMsgList.SetTopIndex(max(0, lastIndex - 1));
 	}

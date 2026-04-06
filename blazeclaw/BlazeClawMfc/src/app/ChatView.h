@@ -39,6 +39,14 @@ protected:
 		std::optional<std::string> errorMessage;
 	};
 
+	struct NativeChatSendCompletionPayload
+	{
+		std::uint64_t generation = 0;
+		std::string runId;
+		bool accepted = false;
+		std::string errorDetail;
+	};
+
 	struct NativeChatState
 	{
 		bool connected = false;
@@ -68,6 +76,7 @@ protected:
 	int m_errorItemIndex = -1;
 	std::string m_renderedStreamText;
 	std::string m_renderedErrorText;
+	std::uint64_t m_chatSendGeneration = 1;
 
 	// Overrides
 public:
@@ -82,6 +91,7 @@ protected:
 	afx_msg void OnAttachClicked();
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnDestroy();
+	afx_msg LRESULT OnNativeChatSendCompleted(WPARAM wParam, LPARAM lParam);
 	afx_msg void OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct);
 	afx_msg void OnMeasureItem(int nIDCtl, LPMEASUREITEMSTRUCT lpMeasureItemStruct);
 	DECLARE_MESSAGE_MAP()

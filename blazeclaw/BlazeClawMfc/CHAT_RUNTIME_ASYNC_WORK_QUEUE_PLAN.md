@@ -206,4 +206,9 @@ Current state: **fully accomplished**.
 - Implementation completion status for this migration remains unchanged.
 - Local validation currently shows parity-chat instability that should be triaged separately from migration completeness.
 
+### Follow-on completion note (2026-04-06)
+
+- UI submit call path has now been decoupled from synchronous `chat.send` waiting in `CChatView` by executing request submission on a background thread and handling completion via UI message dispatch.
+- This closes the primary residual UI-blocking gap called out in the project review after initial worker-queue migration.
+
 The migration item "Move chat runtime execution off UI thread using async work queue + completion events" is complete for this planned scope.
