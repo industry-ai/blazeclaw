@@ -106,6 +106,27 @@ hook-related components.
 
 ---
 
+### 4. `brave-search`
+
+**Purpose:** Headless web search and readable page-content extraction for
+documentation lookup and general fact retrieval workflows.
+
+**Current state:**
+- Phase 1 scaffold ported from OpenClaw into BlazeClaw local skills.
+
+**Key files:**
+- `brave-search/SKILL.md`
+- `brave-search/_meta.json`
+- `brave-search/package.json`
+- `brave-search/scripts/search.js`
+- `brave-search/scripts/content.js`
+- `brave-search/.clawhub/origin.json`
+
+**Setup:**
+- `cd blazeclaw/skills/brave-search && npm ci`
+
+---
+
 ## Notes
 
 - Runtime visibility in `CSkillView` should include both registered runtime
