@@ -187,6 +187,49 @@ namespace {
 
 		return std::nullopt;
 	}
+
+	std::optional<std::filesystem::path> ResolveOpenClawSkillsRoot()
+	{
+		std::error_code ec;
+		std::filesystem::path cursor = std::filesystem::current_path(ec);
+		if (ec)
+		{
+			return std::nullopt;
+		}
+
+		while (!cursor.empty())
+		{
+			const auto directOpenClawSkills = cursor / "openclaw" / "skills";
+			if (std::filesystem::exists(directOpenClawSkills, ec) &&
+				std::filesystem::is_directory(directOpenClawSkills, ec))
+			{
+				return directOpenClawSkills;
+			}
+
+			const auto nestedOpenClawSkills =
+				cursor / "blazeclaw" / "openclaw" / "skills";
+			if (std::filesystem::exists(nestedOpenClawSkills, ec) &&
+				std::filesystem::is_directory(nestedOpenClawSkills, ec))
+			{
+				return nestedOpenClawSkills;
+			}
+
+			if (!cursor.has_parent_path())
+			{
+				break;
+			}
+
+			auto parent = cursor.parent_path();
+			if (parent == cursor)
+			{
+				break;
+			}
+
+			cursor = parent;
+		}
+
+		return std::nullopt;
+	}
 }
 
 class CSkillViewMenuButton : public CMFCToolBarMenuButton
@@ -461,6 +504,83 @@ void CSkillView::FillSkillView()
 						"{\"name\":\"" + EscapeJsonSkillView(skillKey) +
 						"\",\"skillKey\":\"" + EscapeJsonSkillView(skillKey) +
 						"\",\"installKind\":\"runtime-registered\",\"source\":\"gateway.tools.catalog\",\"description\":\"Derived from runtime tool registry\"}";
+					m_skillItemPayloadByTreeItem.insert_or_assign(skillNode, payload);
+				}
+			}
+
+			const auto openClawSkillsRoot = ResolveOpenClawSkillsRoot();
+			if (openClawSkillsRoot.has_value())
+			{
+				std::error_code ec;
+				for (const auto& entry : std::filesystem::directory_iterator(openClawSkillsRoot.value(), ec))
+				{
+					if (ec || !entry.is_directory())
+					{
+						continue;
+					}
+
+					const auto skillDir = entry.path();
+					const auto toolManifestPath = skillDir / "tool-manifest.json";
+					const auto skillDocPath = skillDir / "SKILL.md";
+					if (!std::filesystem::exists(toolManifestPath, ec) &&
+						!std::filesystem::exists(skillDocPath, ec))
+					{
+						continue;
+					}
+
+					std::string skillKey = skillDir.filename().string();
+					if (std::filesystem::exists(toolManifestPath, ec))
+					{
+						std::ifstream manifestIn(toolManifestPath, std::ios::binary);
+						if (manifestIn.is_open())
+						{
+							std::string manifestText(
+								(std::istreambuf_iterator<char>(manifestIn)),
+								std::istreambuf_iterator<char>());
+							std::string manifestNamespace;
+							if (blazeclaw::gateway::json::FindStringField(
+								manifestText,
+								"namespace",
+								manifestNamespace) &&
+								!manifestNamespace.empty())
+							{
+								skillKey = manifestNamespace;
+							}
+						}
+					}
+
+					if (knownSkillKeys.find(NormalizeSkillKeyForDedup(skillKey)) != knownSkillKeys.end())
+					{
+						continue;
+					}
+
+					knownSkillKeys.insert(NormalizeSkillKeyForDedup(skillKey));
+					const std::string category = "openclaw-original";
+					auto categoryIt = categoryItems.find(category);
+					HTREEITEM categoryNode = nullptr;
+					if (categoryIt == categoryItems.end())
+					{
+						categoryNode = m_wndSkillView.InsertItem(
+							_T("openclaw-original"),
+							1,
+							1,
+							hRoot);
+						categoryItems.insert_or_assign(category, categoryNode);
+					}
+					else
+					{
+						categoryNode = categoryIt->second;
+					}
+
+					const HTREEITEM skillNode = m_wndSkillView.InsertItem(
+						CString(CA2W(skillKey.c_str(), CP_UTF8)),
+						2,
+						2,
+						categoryNode);
+					const std::string payload =
+						"{\"name\":\"" + EscapeJsonSkillView(skillDir.filename().string()) +
+						"\",\"skillKey\":\"" + EscapeJsonSkillView(skillKey) +
+						"\",\"installKind\":\"openclaw-original\",\"source\":\"openclaw.filesystem\",\"description\":\"Discovered from openclaw/skills with original assets\"}";
 					m_skillItemPayloadByTreeItem.insert_or_assign(skillNode, payload);
 				}
 			}

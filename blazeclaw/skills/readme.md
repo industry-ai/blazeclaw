@@ -3,7 +3,7 @@
 This folder contains **local implemented skills** and related assets used by
 BlazeClaw.
 
-At runtime, the system can surface skills from two sources:
+At runtime, the system can surface skills from three sources:
 
 1. **Runtime-registered skills**
    - Provided by gateway/runtime services.
@@ -17,6 +17,12 @@ At runtime, the system can surface skills from two sources:
      still initializing.
    - Displayed in `CSkillView` under local categories (for example
      `implemented`).
+
+3. **OpenClaw original copied skills (unmodified)**
+   - Discovered from `openclaw/skills/*` in the workspace.
+   - Intended for visibility of original upstream skill assets without any
+     BlazeClaw-specific modification.
+   - Displayed in `CSkillView` under `openclaw-original`.
 
 ---
 
@@ -139,8 +145,8 @@ documentation lookup and general fact retrieval workflows.
 
 ## Notes
 
-- Runtime visibility in `CSkillView` should include both registered runtime
-  skills and implemented local skills.
+- Runtime visibility in `CSkillView` should include registered runtime skills,
+  implemented local skills, and original OpenClaw copied skills.
 - If a local skill exists but does not appear as runtime-registered, verify
   its manifest/frontmatter validity and runtime catalog refresh flow.
 
