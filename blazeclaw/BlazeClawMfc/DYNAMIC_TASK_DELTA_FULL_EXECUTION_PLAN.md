@@ -221,6 +221,11 @@ Upgrade the `dynamic_task_delta` path from decomposition-only behavior to a full
 ### Gap closure summary
 All previously tracked closure items (protocol/schema parity, dedicated test-project parity coverage, and filesystem persistence/replay hook) are now complete.
 
+### Latest audit note (2026-04-06)
+
+- Build validation (`msbuild` Debug|x64) passed in current local audit.
+- Parity-chat filtered regression run currently reports local failures, including host startup and parity assertion mismatches; dynamic task-delta feature completeness remains implemented but parity stability follow-up is recommended.
+
 ## Candidate File Touchpoints
 
 - `blazeclaw/BlazeClawMfc/src/core/PiEmbeddedService.h`

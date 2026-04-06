@@ -27,6 +27,10 @@ Observed layer stack is clear and mostly consistent:
 - **Extension/tooling layer**  
   Extension catalog loading and runtime tool binding in `GatewayHost`.
 
+- **Agents/policy/governance layer**  
+  `src/core/Agents*`, `src/gateway/ApprovalTokenStore.*`, `GatewayHost.Handlers.SecurityOps.cpp`  
+  Adds auth-profile, sandbox, workspace, shell, transcript-safety, and approval-token controls.
+
 Overall, this is a modular monolith with a strong `ServiceManager + GatewayHost` core and good separation by concern.
 
 ## 2) Threading Model
@@ -119,6 +123,7 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 - Request/response entrypoints remain UI-synchronous even after worker offload.
 - Startup path is broad and validation-heavy.
 - Some retention policies are bounded but not fully policy-optimized (e.g., map-order eviction).
+- Parity regression suite is not currently green in this local audit run, reducing confidence in stability claims.
 
 ## 6) Highest-Impact Improvements (Priority Order)
 
@@ -129,7 +134,7 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
    - Status: Phase 3 (completion/event integration and terminal dedup sequencing) completed in code.
    - Status: Phase 4 (cancellation + timeout hardening with terminal cleanup) completed in code.
    - Status: Phase 5 (validation/rollout gating + parity coverage extensions) completed in code.
-   - Latest audit: `msbuild` Debug|x64 passed and parity chat regression suite (`[parity][chat]`) passed.
+   - Latest audit: `msbuild` Debug|x64 passed; local parity chat filter run (`[parity][chat]`) currently has failures and needs stabilization follow-up.
 2. [Completed] Switch chat UI updates to incremental append/update instead of full list rebuild.
    - Execution plan: `CHAT_UI_INCREMENTAL_RENDER_PLAN.md`
    - Status: Phases 1-4 completed (state tracking, incremental sync, item-level helpers, history reload consistency).
@@ -144,15 +149,25 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 1. Decouple UI request path from synchronous `chat.send` wait (true non-blocking UI submit + completion event delivery).
 2. Move gateway network pump off `OnIdle` into a dedicated pump thread or bounded work loop.
 3. Implement true provider-to-UI incremental streaming (avoid full-response-first staging before UI delta delivery).
-4. Reduce startup critical-path fixture validation cost (lazy/background validation or staged diagnostics pass).
+4. Stabilize parity regression startup behavior (`host.Start(gatewayConfig)` failures in local audit) and approval/persistence parity assertions.
+5. Reduce startup critical-path fixture validation cost (lazy/background validation or staged diagnostics pass).
 
-## 7) Related Execution Planning Docs
+## 7) Validation Snapshot (2026-04-06)
+
+- Build:
+  - ✅ `msbuild blazeclaw/BlazeClaw.sln /t:Build /p:Configuration=Debug /p:Platform=x64`
+- Tests:
+  - ⚠️ `blazeclaw/bin/Debug/BlazeClawMfc.Tests.exe "[parity][chat]"` currently reports local failures (including `host.Start(gatewayConfig)` and parity assertion mismatches in approval/persistence scenarios).
+
+## 8) Related Execution Planning Docs
 
 - `CHAT_RUNTIME_ASYNC_WORK_QUEUE_PLAN.md` — first-pass migration plan for moving chat runtime work off the UI thread with queue-based async execution and completion events.
 - `CHAT_UI_INCREMENTAL_RENDER_PLAN.md` — incremental chat UI append/update migration and completion audit.
 - `DYNAMIC_TASK_DELTA_FULL_EXECUTION_PLAN.md` — dynamic task-delta orchestration hardening and rollout plan/status.
+- `ORCHESTRATION_PATH_ANALYSIS.md` — analysis of `dynamic_task_delta` vs `runtime_orchestration` behavior and recommended default.
+- `LLAMACPP_MODEL_LOADING_PLAN.md` — staged integration plan for GGUF/`llama.cpp` local runtime path.
 
 ---
 
-Review date: **2026-04-03**  
-Commit hash: **abc96aa**
+Review date: **2026-04-06**  
+Commit hash: **52f3ac0**

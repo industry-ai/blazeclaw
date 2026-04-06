@@ -199,6 +199,11 @@ Current state: **fully accomplished**.
   - Phase 5 rollout gating + validation coverage.
 - Verified by validation run:
   - Build: `msbuild blazeclaw/BlazeClaw.sln /t:Build /p:Configuration=Debug /p:Platform=x64` (pass).
-  - Regression tests: `blazeclaw/bin/Debug/BlazeClawMfc.Tests.exe "[parity][chat]"` (pass).
+  - Regression tests: `blazeclaw/bin/Debug/BlazeClawMfc.Tests.exe "[parity][chat]"` currently reports local failures in latest audit run; previous passing evidence remains documented in earlier review snapshots.
+
+### Latest audit note (2026-04-06)
+
+- Implementation completion status for this migration remains unchanged.
+- Local validation currently shows parity-chat instability that should be triaged separately from migration completeness.
 
 The migration item "Move chat runtime execution off UI thread using async work queue + completion events" is complete for this planned scope.

@@ -48,3 +48,8 @@ Current state: **completed**.
 - `SyncItemsFromState` now performs incremental append/update behavior with rebuild fallback on history shrink.
 - Item-level helpers are active for targeted row update/removal and tracked rebuild support.
 - `LoadChatHistoryNative` forces tracked rebuild after full history fetch.
+
+### Latest audit note (2026-04-06)
+
+- Build validation remains passing in current local audit.
+- Parity-chat regression filter currently reports local failures; no evidence from this run indicates a direct regression in incremental render implementation, but suite stabilization is recommended.
