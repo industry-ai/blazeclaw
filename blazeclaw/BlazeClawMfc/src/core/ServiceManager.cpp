@@ -1217,6 +1217,91 @@ namespace blazeclaw::core {
 			};
 		}
 
+		std::string TrimAsciiForBraveSearch(const std::string& value) {
+			const std::size_t first = value.find_first_not_of(" \t\r\n");
+			if (first == std::string::npos) {
+				return {};
+			}
+
+			const std::size_t last = value.find_last_not_of(" \t\r\n");
+			return value.substr(first, last - first + 1);
+		}
+
+		bool HasControlCharsForBraveSearch(const std::string& value) {
+			for (const unsigned char ch : value) {
+				if ((ch < 0x20 && ch != '\t') || ch == 0x7F) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		bool IsHttpUrlForBraveSearch(const std::string& value) {
+			const std::string lowered = ToLowerAscii(value);
+			return lowered.rfind("http://", 0) == 0 ||
+				lowered.rfind("https://", 0) == 0;
+		}
+
+		bool HasEnvVarValue(const wchar_t* key) {
+			wchar_t* value = nullptr;
+			std::size_t len = 0;
+			if (_wdupenv_s(&value, &len, key) != 0 || value == nullptr || len == 0) {
+				if (value != nullptr) {
+					free(value);
+				}
+				return false;
+			}
+
+			const std::wstring trimmed = Trim(value);
+			free(value);
+			return !trimmed.empty();
+		}
+
+		bool ResolveBraveRequireApiKey() {
+			return ReadBoolEnvOrDefault(L"BLAZECLAW_BRAVE_REQUIRE_API_KEY", false);
+		}
+
+		std::string TruncateBraveToolOutput(
+			const std::string& output,
+			const std::size_t maxBytes = 24000) {
+			if (output.size() <= maxBytes) {
+				return output;
+			}
+
+			const std::size_t retained = maxBytes > 48 ? maxBytes - 48 : maxBytes;
+			return output.substr(0, retained) +
+				"\n...(truncated by blazeclaw runtime output limit)";
+		}
+
+		std::string ClassifyBraveFailureCode(const std::string& output) {
+			const std::string lowered = ToLowerAscii(output);
+			if (lowered.find("http 401") != std::string::npos ||
+				lowered.find("http 403") != std::string::npos) {
+				return "auth_error";
+			}
+
+			if (lowered.find("http 429") != std::string::npos) {
+				return "rate_limited";
+			}
+
+			if (lowered.find("http 500") != std::string::npos ||
+				lowered.find("http 502") != std::string::npos ||
+				lowered.find("http 503") != std::string::npos ||
+				lowered.find("http 504") != std::string::npos) {
+				return "upstream_unavailable";
+			}
+
+			if (lowered.find("enotfound") != std::string::npos ||
+				lowered.find("eai_again") != std::string::npos ||
+				lowered.find("network") != std::string::npos ||
+				lowered.find("fetch failed") != std::string::npos) {
+				return "network_error";
+			}
+
+			return "process_exit_nonzero";
+		}
+
 		std::wstring QuoteCommandToken(const std::wstring& token) {
 			if (token.find_first_of(L" \t\"") == std::wstring::npos) {
 				return token;
@@ -1642,10 +1727,17 @@ namespace blazeclaw::core {
 					return std::nullopt;
 				}
 
-				const std::string query = queryIt->get<std::string>();
+				const std::string query = TrimAsciiForBraveSearch(
+					queryIt->get<std::string>());
 				if (query.empty()) {
 					errorCode = "invalid_arguments";
 					errorMessage = "query is required";
+					return std::nullopt;
+				}
+
+				if (query.size() > 512 || HasControlCharsForBraveSearch(query)) {
+					errorCode = "invalid_arguments";
+					errorMessage = "query failed safety validation";
 					return std::nullopt;
 				}
 
@@ -1656,20 +1748,44 @@ namespace blazeclaw::core {
 					countIt != params.end() && countIt->is_number_integer()) {
 					count = countIt->get<int>();
 				}
+				else if (const auto countIt = params.find("count");
+					countIt != params.end()) {
+					errorCode = "invalid_arguments";
+					errorMessage = "count must be an integer";
+					return std::nullopt;
+				}
 				else if (const auto topKIt = params.find("topK");
 					topKIt != params.end() && topKIt->is_number_integer()) {
 					count = topKIt->get<int>();
 				}
+				else if (const auto topKIt = params.find("topK");
+					topKIt != params.end()) {
+					errorCode = "invalid_arguments";
+					errorMessage = "topK must be an integer";
+					return std::nullopt;
+				}
 
 				if (count > 0) {
+					if (count < 1 || count > 20) {
+						errorCode = "invalid_arguments";
+						errorMessage = "count must be between 1 and 20";
+						return std::nullopt;
+					}
+
 					args.push_back("-n");
-					args.push_back(std::to_string((std::min)(count, 20)));
+					args.push_back(std::to_string(count));
 				}
 
 				if (const auto contentIt = params.find("content");
 					contentIt != params.end() && contentIt->is_boolean() &&
 					contentIt->get<bool>()) {
 					args.push_back("--content");
+				}
+				else if (const auto contentIt = params.find("content");
+					contentIt != params.end() && !contentIt->is_boolean()) {
+					errorCode = "invalid_arguments";
+					errorMessage = "content must be a boolean";
+					return std::nullopt;
 				}
 			}
 			else if (spec.id == "brave_search.fetch.content") {
@@ -1680,10 +1796,18 @@ namespace blazeclaw::core {
 					return std::nullopt;
 				}
 
-				const std::string url = urlIt->get<std::string>();
+				const std::string url = TrimAsciiForBraveSearch(urlIt->get<std::string>());
 				if (url.empty()) {
 					errorCode = "invalid_arguments";
 					errorMessage = "url is required";
+					return std::nullopt;
+				}
+
+				if (url.size() > 2048 ||
+					HasControlCharsForBraveSearch(url) ||
+					!IsHttpUrlForBraveSearch(url)) {
+					errorCode = "invalid_arguments";
+					errorMessage = "url failed safety validation";
 					return std::nullopt;
 				}
 
@@ -1849,6 +1973,8 @@ namespace blazeclaw::core {
 
 		void RegisterBraveSearchRuntimeTools(blazeclaw::gateway::GatewayHost& host) {
 			const auto skillRoot = ResolveBraveSearchSkillRoot();
+			const bool requireApiKey = ResolveBraveRequireApiKey();
+			const bool hasApiKey = HasEnvVarValue(L"BRAVE_API_KEY");
 			for (const auto& spec : BuildBraveSearchToolRuntimeSpecs()) {
 				host.RegisterRuntimeToolV2(
 					blazeclaw::gateway::ToolCatalogEntry{
@@ -1857,11 +1983,22 @@ namespace blazeclaw::core {
 						.category = "search",
 						.enabled = true,
 					},
-					[spec, skillRoot](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
+					[spec, skillRoot, requireApiKey, hasApiKey](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
 						blazeclaw::gateway::ToolExecuteResultV2 result;
 						result.tool = request.tool.empty() ? spec.id : request.tool;
 						result.correlationId = request.correlationId;
 						result.startedAtMs = CurrentEpochMs();
+
+						if (requireApiKey && !hasApiKey) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "brave_api_key_missing";
+							result.errorMessage =
+								"BRAVE_API_KEY is required by runtime policy";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
 
 						if (!skillRoot.has_value()) {
 							result.executed = false;
@@ -1931,7 +2068,8 @@ namespace blazeclaw::core {
 							return result;
 						}
 
-						std::uint64_t timeoutMs = 120000;
+						std::uint64_t timeoutMs =
+							spec.id == "brave_search.search.web" ? 45000 : 30000;
 						if (request.deadlineEpochMs.has_value()) {
 							const std::uint64_t now = CurrentEpochMs();
 							if (request.deadlineEpochMs.value() <= now) {
@@ -1958,7 +2096,7 @@ namespace blazeclaw::core {
 						if (!process.started) {
 							result.executed = false;
 							result.status = "error";
-							result.result = process.output;
+							result.result = TruncateBraveToolOutput(process.output);
 							result.errorCode = process.errorCode.empty()
 								? "process_start_failed"
 								: process.errorCode;
@@ -1971,7 +2109,7 @@ namespace blazeclaw::core {
 						if (process.timedOut) {
 							result.executed = false;
 							result.status = "timed_out";
-							result.result = process.output;
+							result.result = TruncateBraveToolOutput(process.output);
 							result.errorCode = process.errorCode.empty()
 								? "deadline_exceeded"
 								: process.errorCode;
@@ -1981,7 +2119,7 @@ namespace blazeclaw::core {
 							return result;
 						}
 
-						result.result = process.output;
+						result.result = TruncateBraveToolOutput(process.output);
 						if (process.exitCode == 0) {
 							result.executed = true;
 							result.status = "ok";
@@ -1992,7 +2130,7 @@ namespace blazeclaw::core {
 
 						result.executed = false;
 						result.status = "error";
-						result.errorCode = "process_exit_nonzero";
+						result.errorCode = ClassifyBraveFailureCode(process.output);
 						result.errorMessage =
 							"tool process returned non-zero exit code " +
 							std::to_string(static_cast<unsigned long long>(process.exitCode));

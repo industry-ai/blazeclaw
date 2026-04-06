@@ -184,6 +184,33 @@ Port these artifacts as the baseline:
 - Updated `TOOL_SURFACE.md` execution status to reflect Phase 4 completion.
 - Updated `blazeclaw/skills/readme.md` brave-search state to Phase 4.
 
+## Phase 5 Execution Results (Completed)
+
+### Runtime safety and config hardening implemented
+- Added brave-search runtime input guardrails in ServiceManager:
+  - query sanitization/length/control-char validation
+  - URL sanitization + HTTP/HTTPS scheme enforcement
+  - count/topK type and range validation
+- Added runtime timeout controls for brave-search operations.
+- Added output truncation policy for tool process output payloads.
+- Added deterministic failure code mapping for non-zero process exits:
+  - `auth_error`
+  - `rate_limited`
+  - `upstream_unavailable`
+  - `network_error`
+  - `process_exit_nonzero`
+
+### Credential preflight policy implemented
+- Added optional runtime policy gate:
+  - `BLAZECLAW_BRAVE_REQUIRE_API_KEY=true`
+- When enabled and `BRAVE_API_KEY` is missing, brave-search runtime calls
+  fail with `brave_api_key_missing`.
+
+### Associated docs updated
+- Updated `SKILL.md` with Phase 5 integration status and policy env notes.
+- Updated `TOOL_SURFACE.md` with hardening controls and failure semantics.
+- Updated `blazeclaw/skills/readme.md` brave-search status to Phase 5.
+
 ## Validation Plan
 
 ### 1) Skill asset integrity
@@ -241,10 +268,8 @@ Port these artifacts as the baseline:
 - **Phase 2:** Completed
 - **Phase 3:** Completed
 - **Phase 4:** Completed
+- **Phase 5:** Completed
 
 ### Remaining
-- **Phase 5 (configuration and safety hardening):** Not completed
-  - Brave credential preflight and runtime hardening tasks are not yet
-    implemented for brave-search execution path.
-- **Phase 6 (final docs/usage hardening):** Partially completed
-  - Core docs are updated, but final completion depends on Phase 5 closure.
+- **Phase 6 (final docs/usage hardening):** Completed
+  - Contributor/usage docs are updated alongside Phase 5 implementation.

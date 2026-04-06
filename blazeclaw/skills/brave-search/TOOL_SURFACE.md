@@ -80,3 +80,18 @@ Use the gateway endpoints below to verify Phase 3 discovery:
   `brave_search.search.web`.
 - Embedded orchestration can resolve brave-search command bindings and execute
   runtime tool calls through gateway V2 execution path.
+
+## Phase 5 hardening
+
+- Input guardrails:
+  - `query` required, trimmed, control-char rejected, max length enforced
+  - `count/topK` integer validation with bounded range
+  - `url` required, trimmed, control-char rejected, HTTP/HTTPS enforced
+- Runtime controls:
+  - bounded execution timeout per tool operation
+  - output truncation policy to protect UI/runtime channels
+  - deterministic failure code mapping (`auth_error`, `rate_limited`,
+    `upstream_unavailable`, `network_error`, `process_exit_nonzero`)
+- Optional credential policy:
+  - `BLAZECLAW_BRAVE_REQUIRE_API_KEY=true` enforces preflight on
+    `BRAVE_API_KEY` availability.

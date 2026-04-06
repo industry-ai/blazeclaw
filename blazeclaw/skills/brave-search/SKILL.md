@@ -26,6 +26,10 @@ npm ci
 
 Needs env: `BRAVE_API_KEY`.
 
+Optional runtime policy env:
+
+- `BLAZECLAW_BRAVE_REQUIRE_API_KEY=true` to enforce API key preflight.
+
 ## Tool Surface
 
 This skill now exposes BlazeClaw tool contracts:
@@ -43,7 +47,7 @@ See:
 
 - Discovery in runtime catalogs is available.
 - Chat-callable runtime execution path is implemented (Phase 4).
-- Remaining hardening and configuration closure is tracked under Phase 5.
+- Runtime hardening and configuration controls are implemented (Phase 5).
 
 ## Search
 
