@@ -435,6 +435,44 @@ Notes:
 - Phase 4 remains focused on hardening: redaction policy verification,
   validation/error matrices, and migration durability tooling.
 
+## 10.10 Phase 4 implementation status (completed)
+
+Implemented in current codebase:
+
+1. **Secret redaction hardening in status diagnostics**
+   - Added key-pattern redaction for sensitive fields (`pass`, `secret`,
+     `token`, `apiKey`) before skill config payload diagnostics are emitted.
+   - Added diagnostic truncation guardrails to reduce accidental secret leakage
+     risk in output surfaces.
+
+2. **Field-level validation with stable error codes**
+   - Skill config save flow now returns deterministic error envelopes with
+     explicit `code` and `fieldErrors` for:
+     - missing payload,
+     - too many fields,
+     - invalid field name length,
+     - invalid field value length.
+   - Email config validation errors now include stable codes and `fieldErrors`
+     for invalid host/port/email/password cases.
+
+3. **Compatibility migration helpers**
+   - `CBlazeClawMFCDoc::LoadSkillConfigEnv(...)` now includes legacy file
+     candidate probing for skill-local `.env` compatibility reads.
+   - `CBlazeClawMFCDoc::SaveSkillConfigEnv(...)` now supports optional dual-write
+     mode controlled by `BLAZECLAW_SKILLS_CONFIG_DUAL_WRITE`.
+
+4. **Source-of-truth and migration diagnostics**
+   - `blazeclaw.skill.config.loaded` response now carries `sourceMeta`
+     migration/source indicators (`sourceOfTruth`, `migratedFromLegacy`).
+   - Status lines now include resolved source path and canonical vs
+     legacy-migrated source decision.
+
+Notes:
+- This completes the Phase 4 scope (hardening + migration).
+- The staged Phase 1–4 configuration parity plan is now implemented end-to-end,
+  with remaining effort focused on extended QA evidence capture and regression
+  automation.
+
 ---
 
 ## 11) Source sample set used in this analysis

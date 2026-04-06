@@ -27,6 +27,7 @@
 #include <filesystem>
 #include <fstream>
 #include <cctype>
+#include <algorithm>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -167,6 +168,78 @@ namespace {
 		return true;
 	}
 
+	bool ReadBoolEnvVar(const wchar_t* key, const bool fallback)
+	{
+		wchar_t* value = nullptr;
+		std::size_t length = 0;
+		if (_wdupenv_s(&value, &length, key) != 0 || value == nullptr || length == 0)
+		{
+			if (value != nullptr)
+			{
+				free(value);
+			}
+			return fallback;
+		}
+
+		std::wstring lowered(value);
+		free(value);
+		std::transform(
+			lowered.begin(),
+			lowered.end(),
+			lowered.begin(),
+			[](const wchar_t ch)
+			{
+				return static_cast<wchar_t>(std::towlower(ch));
+			});
+
+		if (lowered == L"1" || lowered == L"true" || lowered == L"yes" || lowered == L"on")
+		{
+			return true;
+		}
+
+		if (lowered == L"0" || lowered == L"false" || lowered == L"no" || lowered == L"off")
+		{
+			return false;
+		}
+
+		return fallback;
+	}
+
+	std::vector<std::filesystem::path> BuildLegacySkillConfigCandidates(
+		const std::string& skillKey)
+	{
+		std::vector<std::filesystem::path> candidates;
+		const std::string normalized = NormalizeSkillKeyForConfigPath(skillKey);
+		if (normalized.empty())
+		{
+			return candidates;
+		}
+
+		std::error_code ec;
+		const auto cwd = std::filesystem::current_path(ec);
+		if (!ec)
+		{
+			candidates.push_back(
+				cwd /
+				L"blazeclaw" /
+				L"skills" /
+				std::filesystem::path(normalized.c_str()) /
+				L".env");
+			candidates.push_back(
+				cwd /
+				L"skills" /
+				std::filesystem::path(normalized.c_str()) /
+				L".env");
+		}
+
+		if (normalized == "imap-smtp-email")
+		{
+			candidates.push_back(ResolveDocConfigRoot() / MakeDocConfigFileName());
+		}
+
+		return candidates;
+	}
+
 }
 
 // CBlazeClawMFCDoc
@@ -252,6 +325,24 @@ bool CBlazeClawMFCDoc::SaveSkillConfigEnv(
 		return false;
 	}
 
+	const bool dualWriteEnabled = ReadBoolEnvVar(
+		L"BLAZECLAW_SKILLS_CONFIG_DUAL_WRITE",
+		false);
+	if (dualWriteEnabled)
+	{
+		const auto legacyCandidates = BuildLegacySkillConfigCandidates(skillKey);
+		for (const auto& legacyPath : legacyCandidates)
+		{
+			if (legacyPath.empty() || legacyPath == path)
+			{
+				continue;
+			}
+
+			std::string dualWriteError;
+			SaveConfigFile(legacyPath, envContent, dualWriteError);
+		}
+	}
+
 	if (savedPath != nullptr)
 	{
 		*savedPath = path;
@@ -273,11 +364,7 @@ bool CBlazeClawMFCDoc::LoadSkillConfigEnv(
 	std::filesystem::path* loadedPath) const
 {
 	std::filesystem::path primaryPath = GetSkillConfigPath(skillKey);
-	std::filesystem::path fallbackPath;
-	if (NormalizeSkillKeyForConfigPath(skillKey) == "imap-smtp-email")
-	{
-		fallbackPath = ResolveDocConfigRoot() / MakeDocConfigFileName();
-	}
+	const auto legacyCandidates = BuildLegacySkillConfigCandidates(skillKey);
 
 	if (LoadConfigFile(primaryPath, envContent, error))
 	{
@@ -288,8 +375,13 @@ bool CBlazeClawMFCDoc::LoadSkillConfigEnv(
 		return true;
 	}
 
-	if (!fallbackPath.empty() && fallbackPath != primaryPath)
+	for (const auto& fallbackPath : legacyCandidates)
 	{
+		if (fallbackPath.empty() || fallbackPath == primaryPath)
+		{
+			continue;
+		}
+
 		std::string fallbackError;
 		if (LoadConfigFile(fallbackPath, envContent, fallbackError))
 		{

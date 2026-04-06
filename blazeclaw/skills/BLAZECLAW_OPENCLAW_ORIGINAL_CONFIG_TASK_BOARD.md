@@ -70,10 +70,10 @@ Use explicit owner IDs in rows (example: `A1`, `G1`, `C1`, `QA1`).
 
 | Task ID | Work Item | Module / Files | Owner | Status | Test (How to verify) | Evidence (What to attach) |
 |---|---|---|---|---|---|---|
-| P4.1 | Enforce secret redaction across bridge/status/output surfaces | `src/core/ServiceManager.cpp`, `src/app/BlazeClawMFCView.cpp`, `src/gateway/GatewayHost.cpp` | C1 | Not Started | Inject secret values and verify no plaintext in logs/panes | Redaction test logs |
-| P4.2 | Add field-level validation with stable error codes | `src/app/BlazeClawMFCView.cpp`, `src/gateway/GatewayHost.cpp` | A1 | Not Started | Invalid payload cases return deterministic code + fieldErrors | Error matrix + captured responses |
-| P4.3 | Add compatibility migration helpers (legacy file reads + optional dual-write) | `src/app/BlazeClawMFCDoc.cpp`, `src/core/ServiceManager.cpp` | C2 | Not Started | Legacy config import and canonical persistence verification | Migration run output + file diffs |
-| P4.4 | Add diagnostics for source-of-truth and migration decisions | `src/app/OutputWnd.cpp` (if needed), `src/app/BlazeClawMFCView.cpp`, `src/core/ServiceManager.cpp` | A3 | Not Started | Diagnostics show source path and migration action | Output pane screenshots |
+| P4.1 | Enforce secret redaction across bridge/status/output surfaces | `src/core/ServiceManager.cpp`, `src/app/BlazeClawMFCView.cpp`, `src/gateway/GatewayHost.cpp` | C1 | Done | Inject secret values and verify no plaintext in logs/panes | Added key-pattern redaction (`pass/secret/token/apiKey`) and truncated sanitized diagnostics payload in skill-config status output |
+| P4.2 | Add field-level validation with stable error codes | `src/app/BlazeClawMFCView.cpp`, `src/gateway/GatewayHost.cpp` | A1 | Done | Invalid payload cases return deterministic code + fieldErrors | Added deterministic `code` + `fieldErrors` responses for invalid payload, max fields, invalid key/value lengths, and email field validation failures |
+| P4.3 | Add compatibility migration helpers (legacy file reads + optional dual-write) | `src/app/BlazeClawMFCDoc.cpp`, `src/core/ServiceManager.cpp` | C2 | Done | Legacy config import and canonical persistence verification | Added legacy candidate read fallback and optional dual-write via `BLAZECLAW_SKILLS_CONFIG_DUAL_WRITE` |
+| P4.4 | Add diagnostics for source-of-truth and migration decisions | `src/app/OutputWnd.cpp` (if needed), `src/app/BlazeClawMFCView.cpp`, `src/core/ServiceManager.cpp` | A3 | Done | Diagnostics show source path and migration action | Added `sourceMeta.sourceOfTruth` + `migratedFromLegacy` and status lines with canonical vs legacy-migrated source path |
 
 ### Phase 4 acceptance gate
 - No plaintext secret leakage.

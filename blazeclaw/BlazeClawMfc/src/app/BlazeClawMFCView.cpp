@@ -46,6 +46,9 @@ namespace {
 	std::wstring BuildFileUrl(const std::filesystem::path& filePath);
 	std::wstring ResolveEmailConfigStartupUrl();
 	std::string JsonString(const std::string& value);
+	std::string ToLowerAscii(const std::string& value);
+	std::unordered_map<std::string, std::string> ParseDotEnvPairs(
+		const std::string& envContent);
 
 	constexpr UINT_PTR kBridgeLifecycleTimerId = 0x4A21;
 	constexpr UINT kBridgeLifecycleTimerMs = 1000;
@@ -373,6 +376,55 @@ namespace {
 			<< "</script></body></html>";
 
 		return html.str();
+	}
+
+	bool IsSensitiveConfigKey(const std::string& key)
+	{
+		const std::string lowered = ToLowerAscii(key);
+		return lowered.find("pass") != std::string::npos ||
+			lowered.find("secret") != std::string::npos ||
+			lowered.find("token") != std::string::npos ||
+			lowered.find("apikey") != std::string::npos ||
+			lowered.find("api_key") != std::string::npos;
+	}
+
+	std::string RedactSensitiveJsonPayload(const std::string& payloadJson)
+	{
+		const auto pairs = ParseDotEnvPairs(payloadJson);
+		if (pairs.empty())
+		{
+			return payloadJson;
+		}
+
+		std::string json = "{";
+		bool first = true;
+		for (const auto& pair : pairs)
+		{
+			if (!first)
+			{
+				json += ",";
+			}
+
+			json += JsonString(pair.first);
+			json += ":";
+			json += JsonString(
+				IsSensitiveConfigKey(pair.first)
+				? std::string("***REDACTED***")
+				: pair.second);
+			first = false;
+		}
+		json += "}";
+		return json;
+	}
+
+	std::string TruncateForDiagnostics(const std::string& value, const std::size_t maxChars)
+	{
+		if (value.size() <= maxChars)
+		{
+			return value;
+		}
+
+		return value.substr(0, maxChars) + "...";
 	}
 
 	bool IsLikelyEmailAddress(const std::string& value)
@@ -2249,8 +2301,19 @@ void CBlazeClawMFCView::LoadSkillConfigToBridge(
 		payload +
 		",\"sourceMeta\":{\"configPath\":" +
 		JsonString(ToNarrow(loadedPath.wstring())) +
-		",\"exists\":true}}";
+		",\"exists\":true,\"sourceOfTruth\":" +
+		JsonString("canonical") +
+		",\"migratedFromLegacy\":" +
+		std::string(loadedPath == doc->GetSkillConfigPath(skillKey) ? "false" : "true") +
+		"}}";
 	PostBridgeMessageJson(ToWide(response));
+
+	AppendChatProcedureStatusLine(
+		L"skills.config.loaded",
+		"skill=" + skillKey +
+		" path=" + ToNarrow(loadedPath.wstring()) +
+		" source=" +
+		(loadedPath == doc->GetSkillConfigPath(skillKey) ? "canonical" : "legacy-migrated"));
 }
 
 void CBlazeClawMFCView::PersistSkillConfigFromPayload(
@@ -2299,7 +2362,50 @@ void CBlazeClawMFCView::PersistSkillConfigFromPayload(
 				JsonString(skillKey) +
 				",\"id\":" +
 				JsonString(correlationId) +
-				",\"code\":\"invalid_payload\",\"message\":\"No key-value payload was provided.\"}";
+				",\"code\":\"invalid_payload\",\"message\":\"No key-value payload was provided.\",\"fieldErrors\":[{\"field\":\"payload\",\"code\":\"required\",\"message\":\"Provide at least one key-value pair.\"}]}";
+			PostBridgeMessageJson(ToWide(response));
+			return;
+		}
+	}
+
+	if (pairs.size() > 64)
+	{
+		const std::string response =
+			"{\"channel\":\"blazeclaw.skill.config.error\",\"skillKey\":" +
+			JsonString(skillKey) +
+			",\"id\":" +
+			JsonString(correlationId) +
+			",\"code\":\"too_many_fields\",\"message\":\"Too many config fields.\",\"fieldErrors\":[{\"field\":\"payload\",\"code\":\"max_fields\",\"message\":\"Maximum 64 fields are allowed.\"}]}";
+		PostBridgeMessageJson(ToWide(response));
+		return;
+	}
+
+	for (const auto& pair : pairs)
+	{
+		if (pair.first.empty() || pair.first.size() > 128)
+		{
+			const std::string response =
+				"{\"channel\":\"blazeclaw.skill.config.error\",\"skillKey\":" +
+				JsonString(skillKey) +
+				",\"id\":" +
+				JsonString(correlationId) +
+				",\"code\":\"invalid_field_name\",\"message\":\"Invalid field name length.\",\"fieldErrors\":[{\"field\":" +
+				JsonString(pair.first) +
+				",\"code\":\"max_length\",\"message\":\"Field name must be between 1 and 128 characters.\"}]}";
+			PostBridgeMessageJson(ToWide(response));
+			return;
+		}
+
+		if (pair.second.size() > 4096)
+		{
+			const std::string response =
+				"{\"channel\":\"blazeclaw.skill.config.error\",\"skillKey\":" +
+				JsonString(skillKey) +
+				",\"id\":" +
+				JsonString(correlationId) +
+				",\"code\":\"invalid_field_value\",\"message\":\"Field value exceeds maximum length.\",\"fieldErrors\":[{\"field\":" +
+				JsonString(pair.first) +
+				",\"code\":\"max_length\",\"message\":\"Field value must not exceed 4096 characters.\"}]}";
 			PostBridgeMessageJson(ToWide(response));
 			return;
 		}
@@ -2340,13 +2446,30 @@ void CBlazeClawMFCView::PersistSkillConfigFromPayload(
 	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
 	if (app != nullptr)
 	{
-		app->Services().RouteGatewayRequest(
+		// Capture the response to avoid discarding a [[nodiscard]] return value.
+		const auto refreshResponse = app->Services().RouteGatewayRequest(
 			blazeclaw::gateway::protocol::RequestFrame{
 				.id = "skill.config.refresh",
 				.method = "gateway.skills.refresh",
 				.paramsJson = std::nullopt,
 			});
+
+		// Log a status line when refresh fails to aid diagnostics.
+		if (!refreshResponse.ok)
+		{
+			AppendChatProcedureStatusLine(
+				L"warning.skills.refresh.failed",
+				refreshResponse.error.has_value() ? refreshResponse.error->message : "gateway refresh failed");
+		}
 	}
+
+	AppendChatProcedureStatusLine(
+		L"skills.config.persisted",
+		"skill=" + skillKey +
+		" path=" + ToNarrow(savedPath.wstring()) +
+		" payload=" + TruncateForDiagnostics(
+			RedactSensitiveJsonPayload(payloadJson),
+			256));
 
 	auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
 	if (mainFrame != nullptr)
@@ -2592,35 +2715,40 @@ void CBlazeClawMFCView::PersistEmailConfigFromPayload(
 	if (smtpHost.empty())
 	{
 		PostBridgeMessageJson(
-			L"{\"channel\":\"blazeclaw.email.config.error\",\"ok\":false,\"message\":\"SMTP host is required.\"}");
+			L"{\"channel\":\"blazeclaw.email.config.error\",\"ok\":false,\"code\":\"smtp_host_required\",\"message\":\"SMTP host is required.\",\"fieldErrors\":[{\"field\":\"smtpHost\",\"code\":\"required\",\"message\":\"SMTP host is required.\"}]}"
+		);
 		return;
 	}
 
 	if (!TryParsePort(smtpPortRaw, smtpPort))
 	{
 		PostBridgeMessageJson(
-			L"{\"channel\":\"blazeclaw.email.config.error\",\"ok\":false,\"message\":\"SMTP port must be an integer between 1 and 65535.\"}");
+			L"{\"channel\":\"blazeclaw.email.config.error\",\"ok\":false,\"code\":\"smtp_port_invalid\",\"message\":\"SMTP port must be an integer between 1 and 65535.\",\"fieldErrors\":[{\"field\":\"smtpPort\",\"code\":\"invalid\",\"message\":\"SMTP port must be an integer between 1 and 65535.\"}]}"
+		);
 		return;
 	}
 
 	if (!TryParsePort(imapPortRaw, imapPort))
 	{
 		PostBridgeMessageJson(
-			L"{\"channel\":\"blazeclaw.email.config.error\",\"ok\":false,\"message\":\"IMAP port must be an integer between 1 and 65535.\"}");
+			L"{\"channel\":\"blazeclaw.email.config.error\",\"ok\":false,\"code\":\"imap_port_invalid\",\"message\":\"IMAP port must be an integer between 1 and 65535.\",\"fieldErrors\":[{\"field\":\"imapPort\",\"code\":\"invalid\",\"message\":\"IMAP port must be an integer between 1 and 65535.\"}]}"
+		);
 		return;
 	}
 
 	if (!IsLikelyEmailAddress(email))
 	{
 		PostBridgeMessageJson(
-			L"{\"channel\":\"blazeclaw.email.config.error\",\"ok\":false,\"message\":\"Valid email account is required.\"}");
+			L"{\"channel\":\"blazeclaw.email.config.error\",\"ok\":false,\"code\":\"email_invalid\",\"message\":\"Valid email account is required.\",\"fieldErrors\":[{\"field\":\"email\",\"code\":\"invalid\",\"message\":\"Valid email account is required.\"}]}"
+		);
 		return;
 	}
 
 	if (password.empty())
 	{
 		PostBridgeMessageJson(
-			L"{\"channel\":\"blazeclaw.email.config.error\",\"ok\":false,\"message\":\"Password or app password is required.\"}");
+			L"{\"channel\":\"blazeclaw.email.config.error\",\"ok\":false,\"code\":\"password_required\",\"message\":\"Password or app password is required.\",\"fieldErrors\":[{\"field\":\"password\",\"code\":\"required\",\"message\":\"Password or app password is required.\"}]}"
+		);
 		return;
 	}
 
