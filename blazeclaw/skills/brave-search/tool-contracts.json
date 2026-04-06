@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BlazeClaw Brave Search Tool Contracts",
+  "version": "1.0.0",
+  "contracts": {
+    "brave_search.search.web": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "query"
+      ],
+      "properties": {
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Search query text."
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Maximum number of search results to return."
+        },
+        "content": {
+          "type": "boolean",
+          "description": "When true, fetch readable page content for each result."
+        }
+      }
+    },
+    "brave_search.fetch.content": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Page URL to fetch and extract as markdown."
+        }
+      }
+    }
+  }
+}

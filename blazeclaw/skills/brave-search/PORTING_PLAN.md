@@ -117,6 +117,27 @@ Port these artifacts as the baseline:
   implemented local skills and identify the current state as
   Phase 1 scaffold complete.
 
+## Phase 2 Execution Results (Completed)
+
+### Tool IDs and namespace finalized
+- Namespace: `brave_search`
+- Tool IDs:
+  - `brave_search.search.web`
+  - `brave_search.fetch.content`
+
+### Tool artifacts implemented
+- Added `tool-manifest.json` with stable node-cli runtime mappings.
+- Added `tool-contracts.json` with strict JSON contracts:
+  - required `query` for web search
+  - optional `count` and `content` flags for search
+  - required `url` for content extraction
+- Added `TOOL_SURFACE.md` with contract and usage examples.
+
+### Associated docs updated
+- Updated `SKILL.md` with tool surface section and artifact references.
+- Updated `blazeclaw/skills/readme.md` to reflect Phase 2 status and
+  include manifest/contracts/tool-surface docs in key files.
+
 ## Validation Plan
 
 ### 1) Skill asset integrity

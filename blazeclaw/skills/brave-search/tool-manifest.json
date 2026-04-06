@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "skill": "brave-search",
+  "namespace": "brave_search",
+  "description": "BlazeClaw tool manifest for Brave Search web lookup and page content extraction.",
+  "tools": [
+    {
+      "id": "brave_search.search.web",
+      "label": "Brave Web Search",
+      "category": "search",
+      "enabled": true,
+      "runtime": {
+        "type": "node-cli",
+        "entry": "scripts/search.js",
+        "command": "run"
+      },
+      "inputSchemaRef": "tool-contracts.json#/contracts/brave_search.search.web"
+    },
+    {
+      "id": "brave_search.fetch.content",
+      "label": "Brave Fetch Content",
+      "category": "search",
+      "enabled": true,
+      "runtime": {
+        "type": "node-cli",
+        "entry": "scripts/content.js",
+        "command": "run"
+      },
+      "inputSchemaRef": "tool-contracts.json#/contracts/brave_search.fetch.content"
+    }
+  ]
+}

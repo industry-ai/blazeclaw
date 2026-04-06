@@ -112,7 +112,7 @@ hook-related components.
 documentation lookup and general fact retrieval workflows.
 
 **Current state:**
-- Phase 1 scaffold ported from OpenClaw into BlazeClaw local skills.
+- Phase 2 tool surface is implemented (manifest + contracts + tool docs).
 
 **Key files:**
 - `brave-search/SKILL.md`
@@ -120,6 +120,9 @@ documentation lookup and general fact retrieval workflows.
 - `brave-search/package.json`
 - `brave-search/scripts/search.js`
 - `brave-search/scripts/content.js`
+- `brave-search/tool-manifest.json`
+- `brave-search/tool-contracts.json`
+- `brave-search/TOOL_SURFACE.md`
 - `brave-search/.clawhub/origin.json`
 
 **Setup:**

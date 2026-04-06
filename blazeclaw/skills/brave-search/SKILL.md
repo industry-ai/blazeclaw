@@ -18,6 +18,19 @@ npm ci
 
 Needs env: `BRAVE_API_KEY`.
 
+## Tool Surface
+
+This skill now exposes BlazeClaw tool contracts:
+
+- `brave_search.search.web`
+- `brave_search.fetch.content`
+
+See:
+
+- `tool-manifest.json`
+- `tool-contracts.json`
+- `TOOL_SURFACE.md`
+
 ## Search
 
 ```bash
