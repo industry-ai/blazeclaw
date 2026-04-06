@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
 #include <fstream>
 
 namespace blazeclaw::gateway {
@@ -404,6 +405,69 @@ namespace blazeclaw::gateway {
 						.id = toolId,
 						.label = label.empty() ? toolId : label,
 						.category = category.empty() ? "extension" : category,
+						.enabled = enabled,
+					});
+				++registered;
+			}
+		}
+
+		return registered;
+	}
+
+	std::size_t GatewayToolRegistry::LoadSkillToolsFromDirectory(
+		const std::string& skillsDirectory) {
+		if (skillsDirectory.empty()) {
+			return 0;
+		}
+
+		std::error_code ec;
+		const std::filesystem::path skillsRoot(skillsDirectory);
+		if (!std::filesystem::exists(skillsRoot, ec) ||
+			!std::filesystem::is_directory(skillsRoot, ec)) {
+			return 0;
+		}
+
+		std::size_t registered = 0;
+		for (const auto& entry : std::filesystem::directory_iterator(skillsRoot, ec)) {
+			if (ec || !entry.is_directory()) {
+				continue;
+			}
+
+			const std::filesystem::path manifestPath =
+				entry.path() / "tool-manifest.json";
+			if (!std::filesystem::exists(manifestPath, ec) ||
+				!std::filesystem::is_regular_file(manifestPath, ec)) {
+				continue;
+			}
+
+			const std::string manifestText = ReadFileUtf8(manifestPath.string());
+			if (manifestText.empty()) {
+				continue;
+			}
+
+			std::string toolsRaw;
+			if (!json::FindRawField(manifestText, "tools", toolsRaw)) {
+				continue;
+			}
+
+			for (const auto& toolJson : SplitTopLevelObjects(toolsRaw)) {
+				std::string toolId;
+				if (!json::FindStringField(toolJson, "id", toolId) || toolId.empty()) {
+					continue;
+				}
+
+				std::string label;
+				json::FindStringField(toolJson, "label", label);
+				std::string category;
+				json::FindStringField(toolJson, "category", category);
+				const bool enabled = ExtractBoolField(toolJson, "enabled", true);
+
+				m_tools.insert_or_assign(
+					toolId,
+					ToolCatalogEntry{
+						.id = toolId,
+						.label = label.empty() ? toolId : label,
+						.category = category.empty() ? "skill" : category,
 						.enabled = enabled,
 					});
 				++registered;

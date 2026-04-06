@@ -56,4 +56,19 @@ Fetch a single URL and extract readable markdown content.
 
 - Tool IDs and schema references are defined in `tool-manifest.json`.
 - JSON contracts are defined in `tool-contracts.json`.
-- Runtime registration/dispatch behavior is validated in later porting phases.
+- Runtime startup now loads local `tool-manifest.json` files into
+  `gateway.tools.list` / `gateway.tools.catalog`.
+
+## Runtime discovery checks
+
+Use the gateway endpoints below to verify Phase 3 discovery:
+
+- `gateway.tools.list` (expect `brave_search.search.web` and
+  `brave_search.fetch.content`)
+- `gateway.tools.catalog` (same tool IDs present in full catalog)
+
+## Current execution status
+
+- Runtime discovery is implemented.
+- Full runtime execution wiring for brave-search tool calls is pending
+  Phase 4 integration.

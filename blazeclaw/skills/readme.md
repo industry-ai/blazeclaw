@@ -112,7 +112,8 @@ hook-related components.
 documentation lookup and general fact retrieval workflows.
 
 **Current state:**
-- Phase 2 tool surface is implemented (manifest + contracts + tool docs).
+- Ported through Phase 3 (runtime discovery/catalog visibility).
+- Not yet fully ported: Phase 4/5 execution and hardening work remains.
 
 **Key files:**
 - `brave-search/SKILL.md`

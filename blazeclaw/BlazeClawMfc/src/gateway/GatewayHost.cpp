@@ -545,6 +545,8 @@ namespace blazeclaw::gateway {
 	bool GatewayHost::StartLocalRuntimeDispatchOnly() {
 		PluginHostAdapter::EnsureDefaultAdaptersRegistered();
 		EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
+		m_toolRegistry.LoadSkillToolsFromDirectory("blazeclaw/skills");
+		m_toolRegistry.LoadSkillToolsFromDirectory("skills");
 		m_dispatcher.Register("gateway.tools.list", [this](const protocol::RequestFrame& request) {
 			const std::string category = ExtractStringParam(request.paramsJson, "category");
 			const auto tools = m_toolRegistry.List();
@@ -631,6 +633,8 @@ namespace blazeclaw::gateway {
 
 		const std::string catalogPath = ResolveExtensionsCatalogPath();
 		m_toolRegistry.LoadExtensionToolsFromCatalog(catalogPath);
+		m_toolRegistry.LoadSkillToolsFromDirectory("blazeclaw/skills");
+		m_toolRegistry.LoadSkillToolsFromDirectory("skills");
 		// Activate lifecycle-managed extensions (register tools without executors).
 		m_extensionLifecycle.LoadCatalog(catalogPath);
 		m_extensionLifecycle.ActivateAll(m_toolRegistry);

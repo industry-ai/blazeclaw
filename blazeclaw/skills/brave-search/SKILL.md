@@ -31,6 +31,11 @@ See:
 - `tool-contracts.json`
 - `TOOL_SURFACE.md`
 
+## Integration Status
+
+- Discovery in runtime catalogs is available.
+- Full chat-callable runtime execution path is pending Phase 4/5 porting work.
+
 ## Search
 
 ```bash

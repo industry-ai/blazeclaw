@@ -138,6 +138,26 @@ Port these artifacts as the baseline:
 - Updated `blazeclaw/skills/readme.md` to reflect Phase 2 status and
   include manifest/contracts/tool-surface docs in key files.
 
+## Phase 3 Execution Results (Completed)
+
+### Runtime registration path implemented
+- Added `GatewayToolRegistry::LoadSkillToolsFromDirectory(...)` to parse
+  local skill `tool-manifest.json` files and register declared tools into
+  runtime tool catalogs.
+- Wired gateway startup to load skill manifests from:
+  - `blazeclaw/skills`
+  - `skills`
+
+### Runtime discovery behavior
+- `gateway.tools.list` now includes tools declared by local skill manifests,
+  including brave-search tool IDs.
+- `gateway.tools.catalog` also includes local skill tool entries.
+
+### Associated docs updated
+- Updated `TOOL_SURFACE.md` with Phase 3 runtime discovery notes and
+  endpoint verification guidance.
+- Updated `blazeclaw/skills/readme.md` brave-search status to Phase 3.
+
 ## Validation Plan
 
 ### 1) Skill asset integrity
@@ -184,3 +204,23 @@ Port these artifacts as the baseline:
 - Chat can trigger brave-search tools and receive usable results.
 - `msbuild blazeclaw/BlazeClaw.sln` passes.
 - No runtime dependency on OpenClaw remains for brave-search behavior.
+
+## Port Completeness Check (Latest Audit)
+
+### Result
+- **Not fully ported yet**.
+
+### Completed
+- **Phase 1:** Completed
+- **Phase 2:** Completed
+- **Phase 3:** Completed
+
+### Remaining
+- **Phase 4 (chat usability integration):** Not completed
+  - Brave-search tools are discoverable in runtime catalogs, but no
+    brave-search runtime executor is registered for tool-call execution.
+- **Phase 5 (configuration and safety hardening):** Not completed
+  - Brave credential preflight and runtime hardening tasks are not yet
+    implemented for brave-search execution path.
+- **Phase 6 (final docs/usage hardening):** Partially completed
+  - Core docs are updated, but final completion depends on Phase 4/5 closure.
