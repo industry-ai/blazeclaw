@@ -21,6 +21,7 @@
 #include <fstream>
 #include <algorithm>
 #include <cwctype>
+#include <exception>
 #include <vector>
 #include <Windows.h>
 
@@ -113,6 +114,29 @@ namespace {
 		}
 
 		mainFrame->AddChatStatusLine(line);
+	}
+
+	std::filesystem::path ResolveStartupTracePath() {
+		wchar_t tempPath[MAX_PATH]{};
+		const DWORD tempLength = GetTempPathW(MAX_PATH, tempPath);
+		if (tempLength > 0 && tempLength < MAX_PATH) {
+			return std::filesystem::path(tempPath) / L"BlazeClaw.startup.trace.log";
+		}
+
+		return std::filesystem::current_path() / L"BlazeClaw.startup.trace.log";
+	}
+
+	void AppendStartupCheckpoint(const std::wstring& stage) {
+		std::wofstream output(ResolveStartupTracePath(), std::ios::app);
+		if (!output.is_open()) {
+			return;
+		}
+
+		output
+			<< L"pid=" << static_cast<unsigned long>(GetCurrentProcessId())
+			<< L" tick=" << static_cast<unsigned long long>(GetTickCount64())
+			<< L" stage=" << stage
+			<< L"\n";
 	}
 
 	void AppendStartupConfigStatus(const blazeclaw::config::AppConfig& config) {
@@ -373,7 +397,8 @@ CBlazeClawMFCApp theApp;
 
 
 // CBlazeClawMFCApp initialization
-BOOL CBlazeClawMFCApp::InitInstance() {
+BOOL CBlazeClawMFCApp::InitInstance() try {
+	AppendStartupCheckpoint(L"InitInstance.begin");
 	// InitCommonControlsEx() is required on Windows XP if an application
 	// manifest specifies use of ComCtl32.dll version 6 or later to enable
 	// visual styles.  Otherwise, any window creation will fail.
@@ -388,6 +413,7 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 
 	if (!AfxSocketInit())
 	{
+		AppendStartupCheckpoint(L"InitInstance.fail.AfxSocketInit");
 		AfxMessageBox(IDP_SOCKETS_INIT_FAILED);
 		return FALSE;
 	}
@@ -395,6 +421,7 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 	// Initialize OLE libraries
 	if (!AfxOleInit())
 	{
+		AppendStartupCheckpoint(L"InitInstance.fail.AfxOleInit");
 		AfxMessageBox(IDP_OLE_INIT_FAILED);
 		return FALSE;
 	}
@@ -429,7 +456,27 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 		RUNTIME_CLASS(CMFCToolTipCtrl), &ttParams);
 
 	m_configLoader.LoadFromFile(kConfigPath, m_config);
-	m_serviceManager.Start(m_config);
+	AppendStartupCheckpoint(L"InitInstance.config.loaded");
+	std::optional<std::wstring> startupServiceError;
+	try {
+		if (!m_serviceManager.Start(m_config)) {
+			startupServiceError =
+				L"service manager returned not running after startup.";
+		}
+	}
+	catch (const std::exception& ex) {
+		startupServiceError =
+			L"service manager startup exception: " +
+			ToWide(ex.what());
+	}
+	catch (...) {
+		startupServiceError =
+			L"service manager startup failed with unknown exception.";
+	}
+	AppendStartupCheckpoint(
+		startupServiceError.has_value()
+		? (L"InitInstance.service.start.warning=" + startupServiceError.value())
+		: L"InitInstance.service.start.ok");
 
 	// Register the application's document templates.  Document templates
 	//  serve as the connection between documents, frame windows and views
@@ -438,8 +485,13 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 		RUNTIME_CLASS(CBlazeClawMFCDoc),
 		RUNTIME_CLASS(CChildFrame), // custom MDI child frame
 		viewRuntimeClass);
-	if (!m_pChatDocTemplate)
+	if (!m_pChatDocTemplate) {
+		AppendStartupCheckpoint(L"InitInstance.fail.ChatDocTemplate");
+		AfxMessageBox(
+			L"Startup failed: unable to create chat document template.",
+			MB_OK | MB_ICONERROR);
 		return FALSE;
+	}
 	AddDocTemplate(m_pChatDocTemplate);
 
 	// New template: Two MDI tabs (WebView + Markdown) sharing the same document
@@ -457,6 +509,10 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 	CMainFrame* pMainFrame = new CMainFrame;
 	if (!pMainFrame || !pMainFrame->LoadFrame(IDR_MAINFRAME))
 	{
+		AppendStartupCheckpoint(L"InitInstance.fail.MainFrame.LoadFrame");
+		AfxMessageBox(
+			L"Startup failed: unable to create main window frame.",
+			MB_OK | MB_ICONERROR);
 		delete pMainFrame;
 		return FALSE;
 	}
@@ -470,6 +526,7 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 	// Parse command line for standard shell commands, DDE, file open
 	CCommandLineInfo cmdInfo;
 	ParseCommandLine(cmdInfo);
+	const auto parsedShellCommand = cmdInfo.m_nShellCommand;
 
 	// Enable DDE Execute open
 	EnableShellOpen();
@@ -480,24 +537,72 @@ BOOL CBlazeClawMFCApp::InitInstance() {
 
 	// 禁用默认的文档创建
 	cmdInfo.m_nShellCommand = CCommandLineInfo::FileNothing;
+	std::optional<std::wstring> startupShellWarning;
 
 	// Dispatch commands specified on the command line.  Will return FALSE if
 	// app was launched with /RegServer, /Register, /Unregserver or /Unregister.
-	if (!ProcessShellCommand(cmdInfo))
-		return FALSE;
+	if (!ProcessShellCommand(cmdInfo)) {
+		if (parsedShellCommand == CCommandLineInfo::AppRegister ||
+			parsedShellCommand == CCommandLineInfo::AppUnregister) {
+			AppendStartupCheckpoint(L"InitInstance.exit.ProcessShellCommand.RegisterOperation");
+			return FALSE;
+		}
+
+		startupShellWarning =
+			L"ProcessShellCommand returned false; continuing with fallback UI startup.";
+	}
+	AppendStartupCheckpoint(L"InitInstance.shell.command.processed");
 	// The main window has been initialized, so show and update it
 	pMainFrame->ShowWindow(SW_SHOWMAXIMIZED);
 	pMainFrame->UpdateWindow();
+	AppendStartupCheckpoint(L"InitInstance.mainframe.shown");
 
 	pMainFrame->PostMessage(kMsgCreateMdiGroup);
 
+	if (startupServiceError.has_value() && !startupServiceError->empty()) {
+		const CString startupErrorLine(
+			(L"[Startup] service.bootstrap.error - " +
+				startupServiceError.value()).c_str());
+		AppendMainFrameStatusLine(startupErrorLine);
+	}
+	if (startupShellWarning.has_value() && !startupShellWarning->empty()) {
+		const CString startupShellWarningLine(
+			(L"[Startup] shell.command.warning - " +
+				startupShellWarning.value()).c_str());
+		AppendMainFrameStatusLine(startupShellWarningLine);
+	}
+
 	AppendStartupConfigStatus(m_config);
-	AppendStartupLocalModelStatus(m_config, m_serviceManager);
-	AppendStartupEmbeddingsStatus(m_config, m_serviceManager);
+	if (m_serviceManager.IsRunning()) {
+		AppendStartupLocalModelStatus(m_config, m_serviceManager);
+		AppendStartupEmbeddingsStatus(m_config, m_serviceManager);
+	}
+	else {
+		AppendMainFrameStatusLine(
+			L"[Startup] service.bootstrap.status - running=false, startup diagnostics limited.");
+	}
 
 	m_bStartupComplete = TRUE;
+	AppendStartupCheckpoint(L"InitInstance.completed.true");
 
 	return TRUE;
+}
+catch (const std::exception& ex) {
+	AppendStartupCheckpoint(
+		L"InitInstance.exception.std=" + ToWide(ex.what()));
+	const std::wstring message =
+		L"Startup failed with an exception. See: " +
+		ResolveStartupTracePath().wstring();
+	AfxMessageBox(message.c_str(), MB_OK | MB_ICONERROR);
+	return FALSE;
+}
+catch (...) {
+	AppendStartupCheckpoint(L"InitInstance.exception.unknown");
+	const std::wstring message =
+		L"Startup failed with an unknown exception. See: " +
+		ResolveStartupTracePath().wstring();
+	AfxMessageBox(message.c_str(), MB_OK | MB_ICONERROR);
+	return FALSE;
 }
 
 int CBlazeClawMFCApp::ExitInstance() {

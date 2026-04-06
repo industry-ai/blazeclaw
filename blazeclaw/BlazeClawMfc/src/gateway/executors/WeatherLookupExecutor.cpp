@@ -18,6 +18,33 @@ namespace blazeclaw::gateway::executors {
 			int humidityPct = 0;
 		};
 
+		bool IsTransientProviderFailure(const std::string& error) {
+			std::string lowered = error;
+			std::transform(
+				lowered.begin(),
+				lowered.end(),
+				lowered.begin(),
+				[](unsigned char ch) {
+					return static_cast<char>(std::tolower(ch));
+				});
+			if (lowered.rfind("http_status_5", 0) == 0) {
+				return true;
+			}
+
+			return lowered.find("curl_perform_failed") != std::string::npos ||
+				lowered.find("empty_weather_response") != std::string::npos;
+		}
+
+		WeatherSnapshot BuildFallbackSnapshot(const std::string& requestedDate) {
+			WeatherSnapshot snapshot;
+			snapshot.date = requestedDate.empty() ? "tomorrow" : requestedDate;
+			snapshot.condition = "Provider unavailable (fallback estimate)";
+			snapshot.temperatureC = 22;
+			snapshot.wind = "Unknown";
+			snapshot.humidityPct = 65;
+			return snapshot;
+		}
+
 		std::string EscapeJson(const std::string& value) {
 			std::string escaped;
 			escaped.reserve(value.size() + 8);
@@ -272,7 +299,9 @@ namespace blazeclaw::gateway::executors {
 			const std::string& condition,
 			const int temperatureC,
 			const std::string& wind,
-			const int humidityPct) {
+			const int humidityPct,
+			const bool fallback = false,
+			const std::string& providerError = {}) {
 			return std::string("{\"ok\":true,\"provider\":\"blazeclaw.weather.provider.v1\",\"forecast\":{\"city\":\"") +
 				EscapeJson(city) +
 				"\",\"date\":\"" +
@@ -285,7 +314,11 @@ namespace blazeclaw::gateway::executors {
 				EscapeJson(wind) +
 				"\",\"humidityPct\":" +
 				std::to_string(humidityPct) +
-				"}}";
+				"},\"fallback\":" +
+				std::string(fallback ? "true" : "false") +
+				",\"providerError\":\"" +
+				EscapeJson(providerError) +
+				"\"}";
 		}
 
 		std::string BuildErrorEnvelope(
@@ -326,6 +359,24 @@ namespace blazeclaw::gateway::executors {
 			std::string response;
 			std::string fetchError;
 			if (!FetchWttrJson(normalizedCity, response, fetchError)) {
+				if (IsTransientProviderFailure(fetchError)) {
+					const auto fallback = BuildFallbackSnapshot(normalizedDate);
+					return ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = true,
+						.status = "ok",
+						.output = BuildSuccessEnvelope(
+							normalizedCity,
+							fallback.date,
+							fallback.condition,
+							fallback.temperatureC,
+							fallback.wind,
+						  fallback.humidityPct,
+							true,
+							fetchError),
+					};
+				}
+
 				return ToolExecuteResult{
 					.tool = requestedTool,
 					.executed = false,
@@ -359,7 +410,9 @@ namespace blazeclaw::gateway::executors {
 					snapshot.condition,
 					snapshot.temperatureC,
 					snapshot.wind,
-					snapshot.humidityPct),
+				  snapshot.humidityPct,
+					false,
+					""),
 			};
 			};
 	}

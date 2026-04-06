@@ -26,6 +26,14 @@ namespace blazeclaw::gateway::executors {
 		bool HasHimalayaBinary();
 		bool HasNodeBinary();
 		bool HasImapSmtpSkill();
+		bool HasNodeModuleInSkillRoot(
+			const std::string& skillRoot,
+			const std::string& moduleName,
+			std::string& outProbeOutput);
+		bool RunCommandWithOutput(
+			const std::string& command,
+			std::string& outStdout,
+			int& outExitCode);
 
 		enum class EmailDeliveryFailureClass {
 			Unavailable,
@@ -627,7 +635,21 @@ namespace blazeclaw::gateway::executors {
 		}
 
 		bool HasNodeBinary() {
-			return ResolveExecutablePath("node").has_value();
+			if (ResolveExecutablePath("node").has_value()) {
+				return true;
+			}
+
+			std::string probeOutput;
+			int probeExitCode = -1;
+			const bool launched = RunCommandWithOutput(
+				"cmd /C \"node -v 2>&1\"",
+				probeOutput,
+				probeExitCode);
+			if (!launched || probeExitCode != 0) {
+				return false;
+			}
+
+			return !json::Trim(probeOutput).empty();
 		}
 
 		bool HasImapSmtpSkill() {
@@ -640,6 +662,33 @@ namespace blazeclaw::gateway::executors {
 			const auto scriptPath =
 				std::filesystem::path(root) / "scripts" / "smtp.js";
 			return std::filesystem::exists(scriptPath, ec) && !ec;
+		}
+
+		bool HasNodeModuleInSkillRoot(
+			const std::string& skillRoot,
+			const std::string& moduleName,
+			std::string& outProbeOutput) {
+			outProbeOutput.clear();
+			if (skillRoot.empty() || moduleName.empty()) {
+				return false;
+			}
+
+			std::string command = "cmd /C \"cd /d ";
+			command += QuoteArg(skillRoot);
+			command += " && node -e \\\"require.resolve('";
+			command += moduleName;
+			command += "')\\\" 2>&1\"";
+
+			int exitCode = -1;
+			const bool launched = RunCommandWithOutput(
+				command,
+				outProbeOutput,
+				exitCode);
+			if (!launched || exitCode != 0) {
+				return false;
+			}
+
+			return true;
 		}
 
 		bool IsSafeAccountName(const std::string& account) {
@@ -855,6 +904,17 @@ namespace blazeclaw::gateway::executors {
 				return false;
 			}
 
+			std::string dependencyProbeOutput;
+			if (!HasNodeModuleInSkillRoot(
+				skillRoot,
+				"nodemailer",
+				dependencyProbeOutput)) {
+				outErrorCode = "imap_smtp_dependency_missing";
+				outErrorMessage =
+					"missing node dependency 'nodemailer'; run npm install in blazeclaw/skills/imap-smtp-email";
+				return false;
+			}
+
 			std::string command = "cmd /C \"node ";
 			command += QuoteArg(
 				(std::filesystem::path(skillRoot) / "scripts" / "smtp.js").string());
@@ -885,6 +945,16 @@ namespace blazeclaw::gateway::executors {
 
 			outOutput = json::Trim(commandOutput);
 			if (exitCode != 0) {
+				const std::string loweredOutput = ToLowerCopy(outOutput);
+				if (loweredOutput.find("cannot find module 'nodemailer'") != std::string::npos ||
+					loweredOutput.find("cannot find module \"nodemailer\"") != std::string::npos ||
+					loweredOutput.find("module_not_found") != std::string::npos) {
+					outErrorCode = "imap_smtp_dependency_missing";
+					outErrorMessage =
+						"missing node dependency 'nodemailer'; run npm install in blazeclaw/skills/imap-smtp-email";
+					return false;
+				}
+
 				outErrorCode = "imap_smtp_send_failed";
 				outErrorMessage = outOutput.empty()
 					? "imap_smtp_send_failed"

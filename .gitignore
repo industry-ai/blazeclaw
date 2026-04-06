@@ -11,6 +11,7 @@ Debug/
 /blazeclaw/vcpkg_installed/
 
 packages/
+node_modules/
 
 model.onnx.data
 /blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/model.onnx_data

@@ -35,6 +35,35 @@ namespace blazeclaw::core {
 			return output;
 		}
 
+		void AppendStartupTrace(const char* stage) {
+			if (stage == nullptr || *stage == '\0') {
+				return;
+			}
+
+			wchar_t tempPath[MAX_PATH]{};
+			const DWORD tempLength = GetTempPathW(MAX_PATH, tempPath);
+			std::filesystem::path logPath;
+			if (tempLength > 0 && tempLength < MAX_PATH) {
+				logPath = std::filesystem::path(tempPath) /
+					L"BlazeClaw.startup.trace.log";
+			}
+			else {
+				logPath = std::filesystem::current_path() /
+					L"BlazeClaw.startup.trace.log";
+			}
+
+			std::ofstream output(logPath, std::ios::app);
+			if (!output.is_open()) {
+				return;
+			}
+
+			output
+				<< "pid=" << static_cast<unsigned long>(GetCurrentProcessId())
+				<< " tick=" << static_cast<unsigned long long>(GetTickCount64())
+				<< " stage=" << stage
+				<< "\n";
+		}
+
 		std::wstring ToWide(const std::string& value) {
 			if (value.empty()) {
 				return {};
@@ -2384,6 +2413,7 @@ namespace blazeclaw::core {
 		if (m_running) {
 			return true;
 		}
+		AppendStartupTrace("ServiceManager.Start.begin");
 
 		m_activeConfig = config;
 		m_activeChatProvider = config.chat.activeProvider.empty()
@@ -2501,6 +2531,7 @@ namespace blazeclaw::core {
 			m_skillsCatalog.diagnostics.warnings.push_back(
 				L"email policy rollout gate activated runtime policy profile monitor/enforce mode.");
 		}
+		AppendStartupTrace("ServiceManager.Start.policy.ready");
 		m_selfEvolvingHookTriggered = false;
 		m_agentsScope = m_agentsCatalogService.BuildSnapshot(
 			std::filesystem::current_path(),
@@ -2529,8 +2560,10 @@ namespace blazeclaw::core {
 				.threadRequested = false,
 				.requesterSandboxed = false,
 			});
+		AppendStartupTrace("ServiceManager.Start.agents.ready");
 		m_embeddingsService.Configure(m_activeConfig);
 		m_embeddings = m_embeddingsService.Snapshot();
+		AppendStartupTrace("ServiceManager.Start.embeddings.ready");
 
 		m_localModelRolloutEligible = IsLocalModelRolloutEligible();
 		m_localModelActivationEnabled = false;
@@ -2544,10 +2577,26 @@ namespace blazeclaw::core {
 		}
 
 		m_localModelRuntime.Configure(m_activeConfig);
-		const bool localModelLoaded = m_localModelRuntime.LoadModel();
+		const bool localModelStartupLoadEnabled = ReadBoolEnvOrDefault(
+			L"BLAZECLAW_LOCALMODEL_STARTUP_LOAD_ENABLED",
+			false);
+		AppendStartupTrace("ServiceManager.Start.localmodel.beforeLoad");
+		bool localModelLoaded = false;
+		if (m_activeConfig.localModel.enabled &&
+			m_localModelRolloutEligible &&
+			localModelStartupLoadEnabled) {
+			localModelLoaded = m_localModelRuntime.LoadModel();
+		}
+		else if (m_activeConfig.localModel.enabled &&
+			m_localModelRolloutEligible) {
+			m_localModelActivationReason = "startup_load_deferred";
+		}
 		m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
+		AppendStartupTrace("ServiceManager.Start.localmodel.afterLoad");
 		if (!localModelLoaded && m_localModelRuntimeSnapshot.status.empty()) {
-			m_localModelRuntimeSnapshot.status = "load_failed";
+			m_localModelRuntimeSnapshot.status = localModelStartupLoadEnabled
+				? "load_failed"
+				: "startup_load_deferred";
 		}
 
 		if (m_activeConfig.localModel.enabled &&
@@ -2560,7 +2609,9 @@ namespace blazeclaw::core {
 		else if (m_activeConfig.localModel.enabled &&
 			m_localModelRolloutEligible &&
 			!m_localModelRuntimeSnapshot.ready) {
-			m_localModelActivationReason = "initialization_failed";
+			m_localModelActivationReason = localModelStartupLoadEnabled
+				? "initialization_failed"
+				: "startup_load_deferred";
 		}
 
 		TRACE(
@@ -2600,6 +2651,7 @@ namespace blazeclaw::core {
 		m_retrievalMemoryService.Configure(m_activeConfig);
 		m_retrievalMemory = m_retrievalMemoryService.Snapshot();
 		m_piEmbeddedService.Configure(m_activeConfig);
+		AppendStartupTrace("ServiceManager.Start.retrieval.ready");
 		m_embeddedDynamicLoopCanaryProviders = ParseCsvEnvValues(
 			L"BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_CANARY_PROVIDERS");
 		m_embeddedDynamicLoopCanarySessions = ParseCsvEnvValues(
@@ -2654,150 +2706,189 @@ namespace blazeclaw::core {
 			TRACE(
 				"[ChatRuntime] async queue disabled by rollout flag; using synchronous runtime path\n");
 		}
-		RefreshSkillsState(m_activeConfig, true, L"startup");
-
-		std::wstring hookEventError;
-		const bool emittedBootstrapEvent = m_hookEventService.EmitAgentBootstrap(
-			L"main",
-			std::vector<HookBootstrapFile>{
-			HookBootstrapFile{ .path = L"BOOTSTRAP.md", .virtualFile = true },
-				HookBootstrapFile{ .path = L"MEMORY.md", .virtualFile = true }},
-			hookEventError);
-		m_hookEvents = m_hookEventService.Snapshot();
-		if (!emittedBootstrapEvent && !hookEventError.empty()) {
-			m_skillsCatalog.diagnostics.warnings.push_back(
-				L"hooks-event emission failed: " + hookEventError);
+		const bool startupSkillsRefreshEnabled = ReadBoolEnvOrDefault(
+			L"BLAZECLAW_SKILLS_STARTUP_REFRESH_ENABLED",
+			false);
+		if (startupSkillsRefreshEnabled) {
+			RefreshSkillsState(m_activeConfig, true, L"startup");
+			AppendStartupTrace("ServiceManager.Start.skills.refreshed");
 		}
-
-		if (m_hooksEngineEnabled && emittedBootstrapEvent && !m_hookEvents.events.empty()) {
-			std::wstring dispatchError;
-			const auto& latestEvent = m_hookEvents.events.back();
-			HookLifecycleEvent eventForDispatch = latestEvent;
-			if (m_hooksReminderVerbosity == L"detailed") {
-				eventForDispatch.bootstrapFiles.push_back(
-					HookBootstrapFile{ .path = L"HOOK_RUNTIME_DETAILED_CONTEXT.md", .virtualFile = true });
-			}
-			if (!m_hookExecutionService.Dispatch(
-				eventForDispatch,
-				m_hookCatalog,
-				HookExecutionPolicy{
-					.reminderEnabled = m_hooksReminderEnabled,
-					.reminderVerbosity = m_hooksReminderVerbosity,
-					.allowedPackages = m_hooksAllowedPackages,
-					.strictPolicyEnforcement = m_hooksStrictPolicyEnforcement },
-					dispatchError) &&
-					!dispatchError.empty()) {
-				m_skillsCatalog.diagnostics.warnings.push_back(
-					L"hooks-dispatch failed: " + dispatchError);
-			}
-
+		else {
+			const auto workspaceRoot =
+				ResolveWorkspaceRootForSkills(std::filesystem::current_path());
+			m_skillsCatalog = m_skillsCatalogService.LoadCatalog(
+				workspaceRoot,
+				m_activeConfig);
+			m_skillsEligibility = m_skillsEligibilityService.Evaluate(
+				m_skillsCatalog,
+				m_activeConfig);
+			m_hookCatalog = m_hookCatalogService.BuildSnapshot(m_skillsCatalog);
 			m_hookExecution = m_hookExecutionService.Snapshot();
-			EmitGovernanceReportIfNeeded(
-				m_hookExecution,
-				m_hooksGovernanceReportingEnabled,
-				m_hooksGovernanceReportDir,
-				m_hooksAllowedPackages,
-				m_hooksStrictPolicyEnforcement,
-				m_hooksGovernanceReportsGenerated,
-				m_hooksLastGovernanceReportPath,
-				m_skillsCatalog.diagnostics.warnings);
-			EmitTenantRemediationPlaybookIfNeeded(
-				m_hookExecution,
-				m_hooksAutoRemediationEnabled,
-				m_hooksAutoRemediationTenantId,
-				m_hooksAutoRemediationPlaybookDir,
-				m_hooksLastGovernanceReportPath,
-				m_hooksAutoRemediationTokenMaxAgeMinutes,
-				m_hooksLastAutoRemediationPlaybookPath,
-				m_skillsCatalog.diagnostics.warnings);
-			if (!m_hooksLastAutoRemediationPlaybookPath.empty()) {
-				m_hooksLastAutoRemediationStatus = L"playbook_generated";
-			}
-			EmitRemediationTelemetryAndAuditIfNeeded(
-				m_hookExecution,
-				m_hooksRemediationTelemetryEnabled,
-				m_hooksRemediationTelemetryDir,
-				m_hooksRemediationAuditEnabled,
-				m_hooksRemediationAuditDir,
-				m_hooksAutoRemediationTenantId,
-				m_hooksAutoRemediationApprovalToken,
-				m_hooksLastGovernanceReportPath,
-				m_hooksLastAutoRemediationPlaybookPath,
-				m_hooksLastAutoRemediationStatus,
-				m_hooksAutoRemediationTokenRotations,
-				m_hooksLastRemediationTelemetryPath,
-				m_hooksLastRemediationAuditPath,
-				m_skillsCatalog.diagnostics.warnings);
-			m_hooksRemediationSloStatus = EvaluateRemediationSloStatus(
-				m_hookExecution,
-				m_hooksRemediationSloMaxDriftDetected,
-				m_hooksRemediationSloMaxPolicyBlocked);
-			EmitComplianceAttestationIfNeeded(
-				m_hooksComplianceAttestationEnabled,
-				m_hooksComplianceAttestationDir,
-				m_hooksAutoRemediationTenantId,
-				m_hooksRemediationSloStatus,
-				m_hookExecution,
-				m_hooksLastRemediationTelemetryPath,
-				m_hooksLastRemediationAuditPath,
-				m_hooksLastComplianceAttestationPath,
-				m_skillsCatalog.diagnostics.warnings);
-			EmitCrossTenantAttestationAggregationIfNeeded(
-				m_hooksCrossTenantAttestationAggregationEnabled,
-				m_hooksCrossTenantAttestationAggregationDir,
-				m_hooksAutoRemediationTenantId,
-				m_hooksEnterpriseSlaPolicyId,
-				m_hooksRemediationSloStatus,
-				m_hooksLastComplianceAttestationPath,
-				m_hookExecution,
-				m_hooksCrossTenantAttestationAggregationCount,
-				m_hooksCrossTenantAttestationAggregationStatus,
-				m_hooksLastCrossTenantAttestationAggregationPath,
-				m_skillsCatalog.diagnostics.warnings);
-			m_selfEvolvingHookTriggered = ContainsBootstrapFile(
-				m_hookExecution.bootstrapFiles,
-				L"SELF_EVOLVING_REMINDER.md");
-			if (m_selfEvolvingHookTriggered &&
-				m_skillsPrompt.prompt.find(L"## Self-Evolving Reminder") == std::wstring::npos) {
-				m_skillsPrompt.prompt += BuildSelfEvolvingReminderPromptBlock();
-				m_skillsPrompt.promptChars =
-					static_cast<std::uint32_t>(m_skillsPrompt.prompt.size());
-				if (m_skillsPrompt.prompt.size() >
-					m_activeConfig.skills.limits.maxSkillsPromptChars) {
-					m_skillsPrompt.prompt = m_skillsPrompt.prompt.substr(
-						0,
-						m_activeConfig.skills.limits.maxSkillsPromptChars);
-					m_skillsPrompt.promptChars =
-						static_cast<std::uint32_t>(m_skillsPrompt.prompt.size());
-					m_skillsPrompt.truncated = true;
-				}
+			m_skillsPrompt = m_skillsPromptService.BuildSnapshot(
+				m_skillsCatalog,
+				m_skillsEligibility,
+				m_activeConfig,
+				std::nullopt,
+				m_hooksFallbackPromptInjection);
+			m_hookEvents = m_hookEventService.Snapshot();
+			m_skillsCommands = m_skillsCommandService.BuildSnapshot(
+				m_skillsCatalog,
+				m_skillsEligibility);
+			m_skillsCatalog.diagnostics.warnings.push_back(
+				L"skills startup full refresh skipped; minimal startup catalog loaded.");
+			AppendStartupTrace("ServiceManager.Start.skills.refresh.minimal");
+		}
 
-				m_hookExecution.diagnostics.lastReminderState = L"reminder_fallback_used";
-				m_hookExecution.diagnostics.lastReminderReason = L"prompt_fallback";
+		const bool startupHookBootstrapEnabled = ReadBoolEnvOrDefault(
+			L"BLAZECLAW_HOOKS_STARTUP_BOOTSTRAP_ENABLED",
+			false);
+		if (startupSkillsRefreshEnabled && startupHookBootstrapEnabled) {
+			std::wstring hookEventError;
+			const bool emittedBootstrapEvent = m_hookEventService.EmitAgentBootstrap(
+				L"main",
+				std::vector<HookBootstrapFile>{
+				HookBootstrapFile{ .path = L"BOOTSTRAP.md", .virtualFile = true },
+					HookBootstrapFile{ .path = L"MEMORY.md", .virtualFile = true }},
+				hookEventError);
+			m_hookEvents = m_hookEventService.Snapshot();
+			if (!emittedBootstrapEvent && !hookEventError.empty()) {
+				m_skillsCatalog.diagnostics.warnings.push_back(
+					L"hooks-event emission failed: " + hookEventError);
 			}
 
-			const std::wstring genericHookContext = BuildGenericHookBootstrapContextBlock(
-				m_hookExecution.bootstrapFiles);
-			if (!genericHookContext.empty() &&
-				m_skillsPrompt.prompt.find(L"## Hook Bootstrap Context") == std::wstring::npos) {
-				m_skillsPrompt.prompt += genericHookContext;
-				m_skillsPrompt.promptChars =
-					static_cast<std::uint32_t>(m_skillsPrompt.prompt.size());
-				if (m_skillsPrompt.prompt.size() >
-					m_activeConfig.skills.limits.maxSkillsPromptChars) {
-					m_skillsPrompt.prompt = m_skillsPrompt.prompt.substr(
-						0,
-						m_activeConfig.skills.limits.maxSkillsPromptChars);
+			if (m_hooksEngineEnabled && emittedBootstrapEvent && !m_hookEvents.events.empty()) {
+				std::wstring dispatchError;
+				const auto& latestEvent = m_hookEvents.events.back();
+				HookLifecycleEvent eventForDispatch = latestEvent;
+				if (m_hooksReminderVerbosity == L"detailed") {
+					eventForDispatch.bootstrapFiles.push_back(
+						HookBootstrapFile{ .path = L"HOOK_RUNTIME_DETAILED_CONTEXT.md", .virtualFile = true });
+				}
+				if (!m_hookExecutionService.Dispatch(
+					eventForDispatch,
+					m_hookCatalog,
+					HookExecutionPolicy{
+						.reminderEnabled = m_hooksReminderEnabled,
+						.reminderVerbosity = m_hooksReminderVerbosity,
+						.allowedPackages = m_hooksAllowedPackages,
+						.strictPolicyEnforcement = m_hooksStrictPolicyEnforcement },
+						dispatchError) &&
+						!dispatchError.empty()) {
+					m_skillsCatalog.diagnostics.warnings.push_back(
+						L"hooks-dispatch failed: " + dispatchError);
+				}
+
+				m_hookExecution = m_hookExecutionService.Snapshot();
+				EmitGovernanceReportIfNeeded(
+					m_hookExecution,
+					m_hooksGovernanceReportingEnabled,
+					m_hooksGovernanceReportDir,
+					m_hooksAllowedPackages,
+					m_hooksStrictPolicyEnforcement,
+					m_hooksGovernanceReportsGenerated,
+					m_hooksLastGovernanceReportPath,
+					m_skillsCatalog.diagnostics.warnings);
+				EmitTenantRemediationPlaybookIfNeeded(
+					m_hookExecution,
+					m_hooksAutoRemediationEnabled,
+					m_hooksAutoRemediationTenantId,
+					m_hooksAutoRemediationPlaybookDir,
+					m_hooksLastGovernanceReportPath,
+					m_hooksAutoRemediationTokenMaxAgeMinutes,
+					m_hooksLastAutoRemediationPlaybookPath,
+					m_skillsCatalog.diagnostics.warnings);
+				if (!m_hooksLastAutoRemediationPlaybookPath.empty()) {
+					m_hooksLastAutoRemediationStatus = L"playbook_generated";
+				}
+				EmitRemediationTelemetryAndAuditIfNeeded(
+					m_hookExecution,
+					m_hooksRemediationTelemetryEnabled,
+					m_hooksRemediationTelemetryDir,
+					m_hooksRemediationAuditEnabled,
+					m_hooksRemediationAuditDir,
+					m_hooksAutoRemediationTenantId,
+					m_hooksAutoRemediationApprovalToken,
+					m_hooksLastGovernanceReportPath,
+					m_hooksLastAutoRemediationPlaybookPath,
+					m_hooksLastAutoRemediationStatus,
+					m_hooksAutoRemediationTokenRotations,
+					m_hooksLastRemediationTelemetryPath,
+					m_hooksLastRemediationAuditPath,
+					m_skillsCatalog.diagnostics.warnings);
+				m_hooksRemediationSloStatus = EvaluateRemediationSloStatus(
+					m_hookExecution,
+					m_hooksRemediationSloMaxDriftDetected,
+					m_hooksRemediationSloMaxPolicyBlocked);
+				EmitComplianceAttestationIfNeeded(
+					m_hooksComplianceAttestationEnabled,
+					m_hooksComplianceAttestationDir,
+					m_hooksAutoRemediationTenantId,
+					m_hooksRemediationSloStatus,
+					m_hookExecution,
+					m_hooksLastRemediationTelemetryPath,
+					m_hooksLastRemediationAuditPath,
+					m_hooksLastComplianceAttestationPath,
+					m_skillsCatalog.diagnostics.warnings);
+				EmitCrossTenantAttestationAggregationIfNeeded(
+					m_hooksCrossTenantAttestationAggregationEnabled,
+					m_hooksCrossTenantAttestationAggregationDir,
+					m_hooksAutoRemediationTenantId,
+					m_hooksEnterpriseSlaPolicyId,
+					m_hooksRemediationSloStatus,
+					m_hooksLastComplianceAttestationPath,
+					m_hookExecution,
+					m_hooksCrossTenantAttestationAggregationCount,
+					m_hooksCrossTenantAttestationAggregationStatus,
+					m_hooksLastCrossTenantAttestationAggregationPath,
+					m_skillsCatalog.diagnostics.warnings);
+				m_selfEvolvingHookTriggered = ContainsBootstrapFile(
+					m_hookExecution.bootstrapFiles,
+					L"SELF_EVOLVING_REMINDER.md");
+				if (m_selfEvolvingHookTriggered &&
+					m_skillsPrompt.prompt.find(L"## Self-Evolving Reminder") == std::wstring::npos) {
+					m_skillsPrompt.prompt += BuildSelfEvolvingReminderPromptBlock();
 					m_skillsPrompt.promptChars =
 						static_cast<std::uint32_t>(m_skillsPrompt.prompt.size());
-					m_skillsPrompt.truncated = true;
+					if (m_skillsPrompt.prompt.size() >
+						m_activeConfig.skills.limits.maxSkillsPromptChars) {
+						m_skillsPrompt.prompt = m_skillsPrompt.prompt.substr(
+							0,
+							m_activeConfig.skills.limits.maxSkillsPromptChars);
+						m_skillsPrompt.promptChars =
+							static_cast<std::uint32_t>(m_skillsPrompt.prompt.size());
+						m_skillsPrompt.truncated = true;
+					}
+
+					m_hookExecution.diagnostics.lastReminderState = L"reminder_fallback_used";
+					m_hookExecution.diagnostics.lastReminderReason = L"prompt_fallback";
 				}
+
+				const std::wstring genericHookContext = BuildGenericHookBootstrapContextBlock(
+					m_hookExecution.bootstrapFiles);
+				if (!genericHookContext.empty() &&
+					m_skillsPrompt.prompt.find(L"## Hook Bootstrap Context") == std::wstring::npos) {
+					m_skillsPrompt.prompt += genericHookContext;
+					m_skillsPrompt.promptChars =
+						static_cast<std::uint32_t>(m_skillsPrompt.prompt.size());
+					if (m_skillsPrompt.prompt.size() >
+						m_activeConfig.skills.limits.maxSkillsPromptChars) {
+						m_skillsPrompt.prompt = m_skillsPrompt.prompt.substr(
+							0,
+							m_activeConfig.skills.limits.maxSkillsPromptChars);
+						m_skillsPrompt.promptChars =
+							static_cast<std::uint32_t>(m_skillsPrompt.prompt.size());
+						m_skillsPrompt.truncated = true;
+					}
+				}
+			}
+			else if (!m_hooksEngineEnabled) {
+				++m_hookExecution.diagnostics.skippedCount;
+				m_hookExecution.diagnostics.lastReminderState = L"reminder_skipped";
+				m_hookExecution.diagnostics.lastReminderReason = L"hook_engine_disabled";
 			}
 		}
-		else if (!m_hooksEngineEnabled) {
-			++m_hookExecution.diagnostics.skippedCount;
-			m_hookExecution.diagnostics.lastReminderState = L"reminder_skipped";
-			m_hookExecution.diagnostics.lastReminderReason = L"hook_engine_disabled";
+		else {
+			AppendStartupTrace("ServiceManager.Start.hooks.bootstrap.skipped");
 		}
 
 		std::wstring fixtureError;
@@ -2808,143 +2899,151 @@ namespace blazeclaw::core {
 			std::filesystem::current_path() / L"fixtures" / L"skills-catalog",
 		};
 
-		for (const auto& candidate : fixtureCandidates) {
-			std::error_code ec;
-			if (!std::filesystem::is_directory(candidate, ec) || ec) {
-				continue;
-			}
-
-			const std::wstring candidateName = candidate.filename().wstring();
-			if (candidateName == L"agents") {
-				if (!m_agentsCatalogService.ValidateFixtureScenarios(candidate, fixtureError)) {
-					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"agents-scope fixture validation failed: " + fixtureError);
+		const bool startupFixtureValidationEnabled = ReadBoolEnvOrDefault(
+			L"BLAZECLAW_FIXTURES_STARTUP_VALIDATION_ENABLED",
+			false);
+		if (startupFixtureValidationEnabled) {
+			for (const auto& candidate : fixtureCandidates) {
+				std::error_code ec;
+				if (!std::filesystem::is_directory(candidate, ec) || ec) {
+					continue;
 				}
 
-				if (!m_agentsWorkspaceService.ValidateFixtureScenarios(candidate, fixtureError)) {
-					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"agents-workspace fixture validation failed: " + fixtureError);
+				const std::wstring candidateName = candidate.filename().wstring();
+				if (candidateName == L"agents") {
+					if (!m_agentsCatalogService.ValidateFixtureScenarios(candidate, fixtureError)) {
+						m_skillsCatalog.diagnostics.warnings.push_back(
+							L"agents-scope fixture validation failed: " + fixtureError);
+					}
+
+					if (!m_agentsWorkspaceService.ValidateFixtureScenarios(candidate, fixtureError)) {
+						m_skillsCatalog.diagnostics.warnings.push_back(
+							L"agents-workspace fixture validation failed: " + fixtureError);
+					}
+
+					if (!m_agentsToolPolicyService.ValidateFixtureScenarios(candidate, fixtureError)) {
+						m_skillsCatalog.diagnostics.warnings.push_back(
+							L"agents-tool-policy fixture validation failed: " + fixtureError);
+					}
+
+					if (!m_agentsShellRuntimeService.ValidateFixtureScenarios(candidate, fixtureError)) {
+						m_skillsCatalog.diagnostics.warnings.push_back(
+							L"agents-shell-runtime fixture validation failed: " + fixtureError);
+					}
+
+					if (!m_agentsModelRoutingService.ValidateFixtureScenarios(candidate, fixtureError)) {
+						m_skillsCatalog.diagnostics.warnings.push_back(
+							L"agents-model-routing fixture validation failed: " + fixtureError);
+					}
+
+					if (!m_agentsAuthProfileService.ValidateFixtureScenarios(candidate, fixtureError)) {
+						m_skillsCatalog.diagnostics.warnings.push_back(
+							L"agents-auth-profile fixture validation failed: " + fixtureError);
+					}
+
+					if (!m_agentsSandboxService.ValidateFixtureScenarios(candidate, fixtureError)) {
+						m_skillsCatalog.diagnostics.warnings.push_back(
+							L"agents-sandbox fixture validation failed: " + fixtureError);
+					}
+
+					if (!m_agentsTranscriptSafetyService.ValidateFixtureScenarios(candidate, fixtureError)) {
+						m_skillsCatalog.diagnostics.warnings.push_back(
+							L"agents-transcript fixture validation failed: " + fixtureError);
+					}
+
+					if (!m_subagentRegistryService.ValidateFixtureScenarios(candidate, fixtureError)) {
+						m_skillsCatalog.diagnostics.warnings.push_back(
+							L"agents-subagent fixture validation failed: " + fixtureError);
+					}
+
+					if (!m_acpSpawnService.ValidateFixtureScenarios(candidate, fixtureError)) {
+						m_skillsCatalog.diagnostics.warnings.push_back(
+							L"agents-acp fixture validation failed: " + fixtureError);
+					}
+
+					if (!m_embeddingsService.ValidateFixtureScenarios(candidate, fixtureError)) {
+						m_skillsCatalog.diagnostics.warnings.push_back(
+							L"agents-embeddings fixture validation failed: " + fixtureError);
+					}
+
+					if (!m_retrievalMemoryService.ValidateFixtureScenarios(candidate, fixtureError)) {
+						m_skillsCatalog.diagnostics.warnings.push_back(
+							L"agents-retrieval fixture validation failed: " + fixtureError);
+					}
+
+					if (!m_piEmbeddedService.ValidateFixtureScenarios(candidate, fixtureError)) {
+						m_skillsCatalog.diagnostics.warnings.push_back(
+							L"agents-embedded fixture validation failed: " + fixtureError);
+					}
+
+					continue;
 				}
 
-				if (!m_agentsToolPolicyService.ValidateFixtureScenarios(candidate, fixtureError)) {
+				if (!m_skillsCatalogService.ValidateFixtureScenarios(candidate, fixtureError)) {
 					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"agents-tool-policy fixture validation failed: " + fixtureError);
+						L"skills-catalog fixture validation failed: " + fixtureError);
 				}
 
-				if (!m_agentsShellRuntimeService.ValidateFixtureScenarios(candidate, fixtureError)) {
+				if (!m_skillsEligibilityService.ValidateFixtureScenarios(candidate, fixtureError)) {
 					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"agents-shell-runtime fixture validation failed: " + fixtureError);
+						L"skills-eligibility fixture validation failed: " + fixtureError);
 				}
 
-				if (!m_agentsModelRoutingService.ValidateFixtureScenarios(candidate, fixtureError)) {
+				if (!m_skillsPromptService.ValidateFixtureScenarios(candidate, fixtureError)) {
 					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"agents-model-routing fixture validation failed: " + fixtureError);
+						L"skills-prompt fixture validation failed: " + fixtureError);
 				}
 
-				if (!m_agentsAuthProfileService.ValidateFixtureScenarios(candidate, fixtureError)) {
+				if (!m_skillsCommandService.ValidateFixtureScenarios(candidate, fixtureError)) {
 					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"agents-auth-profile fixture validation failed: " + fixtureError);
+						L"skills-command fixture validation failed: " + fixtureError);
 				}
 
-				if (!m_agentsSandboxService.ValidateFixtureScenarios(candidate, fixtureError)) {
+				if (!m_skillsWatchService.ValidateFixtureScenarios(candidate, fixtureError)) {
 					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"agents-sandbox fixture validation failed: " + fixtureError);
+						L"skills-watch fixture validation failed: " + fixtureError);
 				}
 
-				if (!m_agentsTranscriptSafetyService.ValidateFixtureScenarios(candidate, fixtureError)) {
+				if (!m_skillsSyncService.ValidateFixtureScenarios(candidate, fixtureError)) {
 					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"agents-transcript fixture validation failed: " + fixtureError);
+						L"skills-sync fixture validation failed: " + fixtureError);
 				}
 
-				if (!m_subagentRegistryService.ValidateFixtureScenarios(candidate, fixtureError)) {
+				if (!m_skillsEnvOverrideService.ValidateFixtureScenarios(candidate, fixtureError)) {
 					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"agents-subagent fixture validation failed: " + fixtureError);
+						L"skills-env fixture validation failed: " + fixtureError);
 				}
 
-				if (!m_acpSpawnService.ValidateFixtureScenarios(candidate, fixtureError)) {
+				if (!m_skillsInstallService.ValidateFixtureScenarios(candidate, fixtureError)) {
 					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"agents-acp fixture validation failed: " + fixtureError);
+						L"skills-install fixture validation failed: " + fixtureError);
 				}
 
-				if (!m_embeddingsService.ValidateFixtureScenarios(candidate, fixtureError)) {
+				if (!m_skillSecurityScanService.ValidateFixtureScenarios(candidate, fixtureError)) {
 					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"agents-embeddings fixture validation failed: " + fixtureError);
+						L"skills-scan fixture validation failed: " + fixtureError);
 				}
 
-				if (!m_retrievalMemoryService.ValidateFixtureScenarios(candidate, fixtureError)) {
+				if (!m_hookCatalogService.ValidateFixtureScenarios(candidate, fixtureError)) {
 					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"agents-retrieval fixture validation failed: " + fixtureError);
+						L"hooks-catalog fixture validation failed: " + fixtureError);
 				}
 
-				if (!m_piEmbeddedService.ValidateFixtureScenarios(candidate, fixtureError)) {
+				if (!m_hookEventService.ValidateFixtureScenarios(candidate, fixtureError)) {
 					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"agents-embedded fixture validation failed: " + fixtureError);
+						L"hooks-events fixture validation failed: " + fixtureError);
 				}
 
-				continue;
-			}
+				if (!m_hookExecutionService.ValidateFixtureScenarios(candidate, fixtureError)) {
+					m_skillsCatalog.diagnostics.warnings.push_back(
+						L"hooks-execution fixture validation failed: " + fixtureError);
+				}
 
-			if (!m_skillsCatalogService.ValidateFixtureScenarios(candidate, fixtureError)) {
-				m_skillsCatalog.diagnostics.warnings.push_back(
-					L"skills-catalog fixture validation failed: " + fixtureError);
+				break;
 			}
-
-			if (!m_skillsEligibilityService.ValidateFixtureScenarios(candidate, fixtureError)) {
-				m_skillsCatalog.diagnostics.warnings.push_back(
-					L"skills-eligibility fixture validation failed: " + fixtureError);
-			}
-
-			if (!m_skillsPromptService.ValidateFixtureScenarios(candidate, fixtureError)) {
-				m_skillsCatalog.diagnostics.warnings.push_back(
-					L"skills-prompt fixture validation failed: " + fixtureError);
-			}
-
-			if (!m_skillsCommandService.ValidateFixtureScenarios(candidate, fixtureError)) {
-				m_skillsCatalog.diagnostics.warnings.push_back(
-					L"skills-command fixture validation failed: " + fixtureError);
-			}
-
-			if (!m_skillsWatchService.ValidateFixtureScenarios(candidate, fixtureError)) {
-				m_skillsCatalog.diagnostics.warnings.push_back(
-					L"skills-watch fixture validation failed: " + fixtureError);
-			}
-
-			if (!m_skillsSyncService.ValidateFixtureScenarios(candidate, fixtureError)) {
-				m_skillsCatalog.diagnostics.warnings.push_back(
-					L"skills-sync fixture validation failed: " + fixtureError);
-			}
-
-			if (!m_skillsEnvOverrideService.ValidateFixtureScenarios(candidate, fixtureError)) {
-				m_skillsCatalog.diagnostics.warnings.push_back(
-					L"skills-env fixture validation failed: " + fixtureError);
-			}
-
-			if (!m_skillsInstallService.ValidateFixtureScenarios(candidate, fixtureError)) {
-				m_skillsCatalog.diagnostics.warnings.push_back(
-					L"skills-install fixture validation failed: " + fixtureError);
-			}
-
-			if (!m_skillSecurityScanService.ValidateFixtureScenarios(candidate, fixtureError)) {
-				m_skillsCatalog.diagnostics.warnings.push_back(
-					L"skills-scan fixture validation failed: " + fixtureError);
-			}
-
-			if (!m_hookCatalogService.ValidateFixtureScenarios(candidate, fixtureError)) {
-				m_skillsCatalog.diagnostics.warnings.push_back(
-					L"hooks-catalog fixture validation failed: " + fixtureError);
-			}
-
-			if (!m_hookEventService.ValidateFixtureScenarios(candidate, fixtureError)) {
-				m_skillsCatalog.diagnostics.warnings.push_back(
-					L"hooks-events fixture validation failed: " + fixtureError);
-			}
-
-			if (!m_hookExecutionService.ValidateFixtureScenarios(candidate, fixtureError)) {
-				m_skillsCatalog.diagnostics.warnings.push_back(
-					L"hooks-execution fixture validation failed: " + fixtureError);
-			}
-
-			break;
+		}
+		else {
+			AppendStartupTrace("ServiceManager.Start.fixtures.validation.skipped");
 		}
 
 		m_gatewayHost.SetSkillsCatalogState(BuildGatewaySkillsState());
@@ -3643,9 +3742,79 @@ namespace blazeclaw::core {
 				return gatewayResult;
 			});
 
-		const bool gatewayStarted = m_gatewayHost.Start(config.gateway);
-		m_running = gatewayStarted;
-		return m_running;
+		AppendStartupTrace("ServiceManager.Start.gateway.beforeStart");
+		const bool gatewayStartupEnabled = false;
+		if (!gatewayStartupEnabled) {
+			AppendStartupTrace("ServiceManager.Start.gateway.skipped");
+			const bool startupLocalDispatchEnabled = ReadBoolEnvOrDefault(
+				L"BLAZECLAW_GATEWAY_LOCAL_DISPATCH_ON_SKIP_ENABLED",
+				true);
+			if (startupLocalDispatchEnabled) {
+				bool gatewayDispatchReady = false;
+				try {
+					gatewayDispatchReady =
+						m_gatewayHost.StartLocalRuntimeDispatchOnly();
+				}
+				catch (...) {
+					gatewayDispatchReady = false;
+					m_skillsCatalog.diagnostics.warnings.push_back(
+						L"gateway local dispatch initialization threw an exception; continuing without local dispatch.");
+					AppendStartupTrace("ServiceManager.Start.gateway.localRuntimeDispatch.exception");
+				}
+				if (!gatewayDispatchReady) {
+					m_skillsCatalog.diagnostics.warnings.push_back(
+						L"gateway local dispatch initialization failed; methods may be unavailable.");
+				}
+				AppendStartupTrace(
+					gatewayDispatchReady
+					? "ServiceManager.Start.gateway.localRuntimeDispatch.ready"
+					: "ServiceManager.Start.gateway.localRuntimeDispatch.failed");
+			}
+			else {
+				AppendStartupTrace("ServiceManager.Start.gateway.localRuntimeDispatch.skipped");
+			}
+			const bool startupLocalInitEnabled = ReadBoolEnvOrDefault(
+				L"BLAZECLAW_GATEWAY_LOCAL_INIT_ON_SKIP_ENABLED",
+				false);
+			if (startupLocalInitEnabled) {
+				const bool gatewayLocalReady = m_gatewayHost.StartLocalOnly(config.gateway);
+				if (!gatewayLocalReady) {
+					m_skillsCatalog.diagnostics.warnings.push_back(
+						L"gateway local runtime initialization failed; running with limited gateway methods.");
+				}
+				AppendStartupTrace("ServiceManager.Start.gateway.localInit.attempted");
+			}
+			else {
+				AppendStartupTrace("ServiceManager.Start.gateway.localInit.skipped");
+			}
+			m_running = true;
+			m_gatewayHost.SetSkillsCatalogState(BuildGatewaySkillsState());
+			return true;
+		}
+
+		bool gatewayStarted = false;
+		try {
+			gatewayStarted = m_gatewayHost.Start(config.gateway);
+		}
+		catch (...) {
+			gatewayStarted = false;
+			m_skillsCatalog.diagnostics.warnings.push_back(
+				L"gateway startup threw an exception; running in degraded local mode.");
+			AppendStartupTrace("ServiceManager.Start.gateway.exception");
+		}
+
+		if (!gatewayStarted) {
+			m_skillsCatalog.diagnostics.warnings.push_back(
+				L"gateway startup failed; running in degraded local mode.");
+			AppendStartupTrace("ServiceManager.Start.gateway.failed");
+			m_running = true;
+			m_gatewayHost.SetSkillsCatalogState(BuildGatewaySkillsState());
+			return true;
+		}
+
+		m_running = true;
+		AppendStartupTrace("ServiceManager.Start.gateway.afterStart");
+		return true;
 	}
 
 	void ServiceManager::Stop() {

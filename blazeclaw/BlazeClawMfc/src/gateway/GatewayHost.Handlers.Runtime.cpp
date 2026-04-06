@@ -649,6 +649,82 @@ namespace blazeclaw::gateway {
 				std::to_string(humidityPct) + "% .";
 		}
 
+		void ResolveFallbackProbeDiagnostic(
+			const std::string& rawOutput,
+			std::string& outCode,
+			std::string& outMessage) {
+			outCode.clear();
+			outMessage.clear();
+
+			if (rawOutput.empty()) {
+				return;
+			}
+
+			try {
+				const auto payload = nlohmann::json::parse(rawOutput);
+				if (payload.is_object()) {
+					if (payload.contains("error") && payload["error"].is_object()) {
+						const auto& error = payload["error"];
+						if (error.contains("code") && error["code"].is_string()) {
+							outCode = error["code"].get<std::string>();
+						}
+						if (error.contains("message") && error["message"].is_string()) {
+							outMessage = error["message"].get<std::string>();
+						}
+					}
+
+					if (outCode.empty() &&
+						payload.contains("code") &&
+						payload["code"].is_string()) {
+						outCode = payload["code"].get<std::string>();
+					}
+
+					if (outMessage.empty() &&
+						payload.contains("message") &&
+						payload["message"].is_string()) {
+						outMessage = payload["message"].get<std::string>();
+					}
+				}
+			}
+			catch (...) {
+			}
+
+			if (!outCode.empty()) {
+				if (outCode == "node_cli_missing" &&
+					(outMessage.empty() ||
+						ToLowerCopyLocal(json::Trim(outMessage)) == "node_cli_missing")) {
+					outMessage = "node runtime not found";
+				}
+
+				return;
+			}
+
+			const std::string lowered = ToLowerCopyLocal(rawOutput);
+			if (lowered.find("node_cli_missing") != std::string::npos) {
+				outCode = "node_cli_missing";
+				outMessage = "node runtime not found";
+				return;
+			}
+
+			if (lowered.find("imap_smtp_skill_missing") != std::string::npos) {
+				outCode = "imap_smtp_skill_missing";
+				outMessage = "imap smtp skill scripts not found";
+				return;
+			}
+
+			if (lowered.find("invalid_himalaya_account") != std::string::npos ||
+				lowered.find("invalid_account") != std::string::npos) {
+				outCode = "invalid_account";
+				outMessage = "configured email account is invalid";
+				return;
+			}
+
+			if (lowered.find("imap_smtp_send_failed") != std::string::npos) {
+				outCode = "imap_smtp_send_failed";
+				outMessage = "imap smtp send failed; check configuration/account credentials";
+			}
+		}
+
 		ChatPromptOrchestrationResult TryOrchestrateWeatherEmailPrompt(
 			GatewayToolRegistry& toolRegistry,
 			const std::string& message) {
@@ -797,6 +873,8 @@ namespace blazeclaw::gateway {
 				intent.scheduleKind == "immediate_keyword";
 			bool autoApproveBackendMissing = false;
 			std::string autoApproveBackend = "himalaya";
+			std::string fallbackProbeCode;
+			std::string fallbackProbeMessage;
 			if (shouldAutoApprove) {
 				nlohmann::json emailApproveArgs = {
 					{ "action", "approve" },
@@ -830,6 +908,10 @@ namespace blazeclaw::gateway {
 				else {
 					const std::string approveOutputLower =
 						ToLowerCopyLocal(emailApproveExecution.output);
+					ResolveFallbackProbeDiagnostic(
+						emailApproveExecution.output,
+						fallbackProbeCode,
+						fallbackProbeMessage);
 					autoApproveBackendMissing =
 						emailApproveExecution.status == "error" &&
 						(approveOutputLower.find("missing") != std::string::npos ||
@@ -867,8 +949,12 @@ namespace blazeclaw::gateway {
 			else if (autoApproveBackendMissing) {
 				result.assistantDeltas.push_back(
 					"tools.execute.start tool=email.schedule action=approve");
-				result.assistantDeltas.push_back(
-					"tools.execute.result tool=email.schedule status=needs_approval backend_missing=himalaya");
+				std::string approveDelta =
+					"tools.execute.result tool=email.schedule status=needs_approval backend_missing=himalaya";
+				if (!fallbackProbeCode.empty()) {
+					approveDelta += " probe=" + fallbackProbeCode;
+				}
+				result.assistantDeltas.push_back(approveDelta);
 			}
 
 			if (shouldAutoApprove) {
@@ -898,6 +984,14 @@ namespace blazeclaw::gateway {
 				if (autoApproveBackendMissing) {
 					result.assistantText +=
 						" Delivery backend is unavailable (himalaya CLI missing). Install/configure himalaya and re-approve this token.";
+					const std::string fallbackProbeLabel =
+						!fallbackProbeMessage.empty()
+						? fallbackProbeMessage
+						: fallbackProbeCode;
+					if (!fallbackProbeLabel.empty()) {
+						result.assistantText +=
+							" fallbackProbe=" + fallbackProbeLabel + ".";
+					}
 				}
 				if (approvalTokenExpiresAtEpochMs > 0) {
 					result.assistantText +=

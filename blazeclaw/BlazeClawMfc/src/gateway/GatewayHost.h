@@ -192,6 +192,9 @@ namespace blazeclaw::gateway {
 			std::function<EmbeddingsBatchResult(const EmbeddingsBatchRequest&)>;
 
 		bool Start(const blazeclaw::config::GatewayConfig& config);
+		bool StartLocalOnly(const blazeclaw::config::GatewayConfig& config);
+		bool StartLocalDispatchOnly();
+		bool StartLocalRuntimeDispatchOnly();
 		void Stop();
 		void SetSkillsCatalogState(SkillsCatalogGatewayState state);
 		void SetSkillsRefreshCallback(SkillsRefreshCallback callback);
@@ -294,8 +297,12 @@ namespace blazeclaw::gateway {
 		void RegisterTransportHandlers();
 		void LoadPersistedTaskDeltas();
 		void PersistTaskDeltas() const;
+		bool InitializeRuntime(const blazeclaw::config::GatewayConfig& config);
 
 		bool m_running = false;
+		bool m_initialized = false;
+		bool m_dispatchInitialized = false;
+		bool m_runtimeHandlersInitialized = false;
 		std::string m_bindAddress;
 		std::uint16_t m_port = 0;
 		std::string m_runtimeGatewayBind = "127.0.0.1";

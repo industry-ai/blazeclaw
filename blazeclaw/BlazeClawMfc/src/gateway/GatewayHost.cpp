@@ -527,8 +527,82 @@ namespace blazeclaw::gateway {
 
 	} // namespace
 
-	bool GatewayHost::Start(const blazeclaw::config::GatewayConfig& config) {
-		if (m_running) {
+	bool GatewayHost::StartLocalDispatchOnly() {
+		if (m_dispatchInitialized) {
+			m_running = true;
+			return true;
+		}
+
+		PluginHostAdapter::EnsureDefaultAdaptersRegistered();
+		EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
+		RegisterDefaultHandlers();
+		m_dispatchInitialized = true;
+		m_runtimeHandlersInitialized = true;
+		m_running = true;
+		return true;
+	}
+
+	bool GatewayHost::StartLocalRuntimeDispatchOnly() {
+		PluginHostAdapter::EnsureDefaultAdaptersRegistered();
+		EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
+		m_dispatcher.Register("gateway.tools.list", [this](const protocol::RequestFrame& request) {
+			const std::string category = ExtractStringParam(request.paramsJson, "category");
+			const auto tools = m_toolRegistry.List();
+			std::string toolsJson = "[";
+			std::size_t count = 0;
+			for (std::size_t i = 0; i < tools.size(); ++i) {
+				if (!category.empty() && tools[i].category != category) {
+					continue;
+				}
+				if (count > 0) {
+					toolsJson += ",";
+				}
+				toolsJson += SerializeTool(tools[i]);
+				++count;
+			}
+			toolsJson += "]";
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"tools\":" + toolsJson + ",\"count\":" + std::to_string(count) + "}",
+				.error = std::nullopt,
+			};
+			});
+		m_dispatcher.Register("gateway.tools.catalog", [this](const protocol::RequestFrame& request) {
+			const auto tools = m_toolRegistry.List();
+			std::string toolsJson = "[";
+			for (std::size_t i = 0; i < tools.size(); ++i) {
+				if (i > 0) {
+					toolsJson += ",";
+				}
+				toolsJson += SerializeTool(tools[i]);
+			}
+			toolsJson += "]";
+
+			return protocol::ResponseFrame{
+				.id = request.id,
+				.ok = true,
+				.payloadJson = "{\"tools\":" + toolsJson + "}",
+				.error = std::nullopt,
+			};
+			});
+		if (!m_runtimeHandlersInitialized) {
+			RegisterRuntimeHandlers();
+			m_runtimeHandlersInitialized = true;
+		}
+		m_dispatchInitialized = true;
+
+		m_running = true;
+		return true;
+	}
+
+	bool GatewayHost::InitializeRuntime(const blazeclaw::config::GatewayConfig& config) {
+		if (!m_dispatchInitialized) {
+			RegisterDefaultHandlers();
+			m_dispatchInitialized = true;
+		}
+		if (m_initialized) {
 			return true;
 		}
 
@@ -645,7 +719,9 @@ namespace blazeclaw::gateway {
 
 				std::uint64_t requestedLimit = 3;
 				json::FindUInt64Field(argsJson.value(), "limit", requestedLimit);
-				const std::size_t limit = static_cast<std::size_t>((std::max)(std::uint64_t{ 1 }, (std::min)(requestedLimit, std::uint64_t{ 10 })));
+				const std::size_t limit = static_cast<std::size_t>((std::max)(
+					std::uint64_t{ 1 },
+					(std::min)(requestedLimit, std::uint64_t{ 10 })));
 
 				const std::string normalizedSession =
 					json::Trim(sessionKey).empty() ? "main" : json::Trim(sessionKey);
@@ -674,8 +750,6 @@ namespace blazeclaw::gateway {
 				};
 			});
 
-		RegisterDefaultHandlers();
-
 		std::string fixtureError;
 		if (!protocol::GatewayProtocolContract::ValidateFixtureParity("blazeclaw/fixtures/gateway", fixtureError)) {
 			m_lastWarning = fixtureError;
@@ -686,8 +760,27 @@ namespace blazeclaw::gateway {
 
 		// Emit telemetry about startup configuration (mask sensitive values)
 		{
-			const std::string payload = "{\"bind\":" + JsonString(m_runtimeGatewayBind) + ",\"port\":" + std::to_string(m_runtimeGatewayPort) + ",\"agentModel\":" + JsonString(m_runtimeAgentModel) + "}";
+			const std::string payload =
+				"{\"bind\":" +
+				JsonString(m_runtimeGatewayBind) +
+				",\"port\":" +
+				std::to_string(m_runtimeGatewayPort) +
+				",\"agentModel\":" +
+				JsonString(m_runtimeAgentModel) +
+				"}";
 			EmitTelemetryEvent("gateway.startup.config", payload);
+		}
+
+		m_initialized = true;
+		return true;
+	}
+
+	bool GatewayHost::Start(const blazeclaw::config::GatewayConfig& config) {
+		if (m_running) {
+			return true;
+		}
+		if (!InitializeRuntime(config)) {
+			return false;
 		}
 
 		std::string transportError;
@@ -706,12 +799,24 @@ namespace blazeclaw::gateway {
 		return true;
 	}
 
+	bool GatewayHost::StartLocalOnly(const blazeclaw::config::GatewayConfig& config) {
+		if (!InitializeRuntime(config)) {
+			return false;
+		}
+
+		m_running = true;
+		return true;
+	}
+
 	void GatewayHost::Stop() {
 		m_transport.Stop();
 		// Deactivate registered extension tools and clear approval state
 		m_extensionLifecycle.DeactivateAll(m_toolRegistry);
 		PersistTaskDeltas();
 		m_running = false;
+		m_initialized = false;
+		m_dispatchInitialized = false;
+		m_runtimeHandlersInitialized = false;
 		m_bindAddress.clear();
 		m_port = 0;
 	}
@@ -972,6 +1077,11 @@ namespace blazeclaw::gateway {
 	}
 
 	bool GatewayHost::PumpNetworkOnce(std::string& error) {
+		if (!m_transport.IsRunning()) {
+			error.clear();
+			return true;
+		}
+
 		return m_transport.PumpNetworkOnce(error);
 	}
 

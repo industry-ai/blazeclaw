@@ -391,6 +391,81 @@ void CSkillView::FillSkillView()
 			.method = "gateway.tools.list",
 			.paramsJson = std::nullopt,
 		});
+	if (!toolsResponse.ok)
+	{
+		const auto toolsCatalogResponse = app->Services().RouteGatewayRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = "skill-view.tools.catalog",
+				.method = "gateway.tools.catalog",
+				.paramsJson = std::nullopt,
+			});
+		if (toolsCatalogResponse.ok)
+		{
+			std::string toolsRaw;
+			if (toolsCatalogResponse.payloadJson.has_value() &&
+				blazeclaw::gateway::json::FindRawField(
+					toolsCatalogResponse.payloadJson.value(),
+					"tools",
+					toolsRaw))
+			{
+				for (const auto& toolJson : SplitTopLevelObjects(toolsRaw))
+				{
+					std::string toolId;
+					if (!blazeclaw::gateway::json::FindStringField(
+						toolJson,
+						"id",
+						toolId) ||
+						toolId.empty())
+					{
+						continue;
+					}
+
+					std::string skillKey = toolId;
+					const auto dot = toolId.find('.');
+					if (dot != std::string::npos && dot > 0)
+					{
+						skillKey = toolId.substr(0, dot);
+					}
+
+					const std::string dedupKey =
+						NormalizeSkillKeyForDedup(skillKey);
+					if (knownSkillKeys.find(dedupKey) != knownSkillKeys.end())
+					{
+						continue;
+					}
+
+					knownSkillKeys.insert(dedupKey);
+					const std::string category = "runtime-registered";
+					auto categoryIt = categoryItems.find(category);
+					HTREEITEM categoryNode = nullptr;
+					if (categoryIt == categoryItems.end())
+					{
+						categoryNode = m_wndSkillView.InsertItem(
+							_T("runtime-registered"),
+							1,
+							1,
+							hRoot);
+						categoryItems.insert_or_assign(category, categoryNode);
+					}
+					else
+					{
+						categoryNode = categoryIt->second;
+					}
+
+					const HTREEITEM skillNode = m_wndSkillView.InsertItem(
+						CString(CA2W(skillKey.c_str(), CP_UTF8)),
+						2,
+						2,
+						categoryNode);
+					const std::string payload =
+						"{\"name\":\"" + EscapeJsonSkillView(skillKey) +
+						"\",\"skillKey\":\"" + EscapeJsonSkillView(skillKey) +
+						"\",\"installKind\":\"runtime-registered\",\"source\":\"gateway.tools.catalog\",\"description\":\"Derived from runtime tool registry\"}";
+					m_skillItemPayloadByTreeItem.insert_or_assign(skillNode, payload);
+				}
+			}
+		}
+	}
 	if (toolsResponse.ok && toolsResponse.payloadJson.has_value())
 	{
 		std::string toolsRaw;
