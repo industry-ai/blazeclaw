@@ -45,6 +45,10 @@ namespace blazeclaw::gateway {
 		std::vector<std::string> requiresConfig;
 		std::vector<std::string> configPathHints;
 		std::vector<std::string> normalizedMetadataSources;
+		std::vector<std::string> missingEnv;
+		std::vector<std::string> missingConfig;
+		std::vector<std::string> missingBins;
+		std::vector<std::string> missingAnyBins;
 	};
 
 	struct SkillsCatalogGatewayState {
@@ -107,6 +111,8 @@ namespace blazeclaw::gateway {
 	class GatewayHost {
 	public:
 		using SkillsRefreshCallback = std::function<SkillsCatalogGatewayState()>;
+		using SkillsUpdateCallback = std::function<protocol::ResponseFrame(
+			const protocol::RequestFrame& request)>;
 
 		struct ChatRuntimeRequest {
 			std::string runId;
@@ -204,6 +210,7 @@ namespace blazeclaw::gateway {
 		void Stop();
 		void SetSkillsCatalogState(SkillsCatalogGatewayState state);
 		void SetSkillsRefreshCallback(SkillsRefreshCallback callback);
+		void SetSkillsUpdateCallback(SkillsUpdateCallback callback);
 		void SetEmbeddedOrchestrationPath(const std::string& path);
 		void SetEmailFallbackRuntimeFlags(
 			bool preflightEnabled,
@@ -378,6 +385,7 @@ namespace blazeclaw::gateway {
 		std::uint64_t m_taskDeltaRunFallbackCount = 0;
 		SkillsCatalogGatewayState m_skillsCatalogState;
 		SkillsRefreshCallback m_skillsRefreshCallback;
+		SkillsUpdateCallback m_skillsUpdateCallback;
 		ChatRuntimeCallback m_chatRuntimeCallback;
 		ChatAbortCallback m_chatAbortCallback;
 		EmbeddingsGenerateCallback m_embeddingsGenerateCallback;

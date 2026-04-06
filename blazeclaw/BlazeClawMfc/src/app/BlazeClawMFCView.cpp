@@ -2336,6 +2336,23 @@ void CBlazeClawMFCView::PersistSkillConfigFromPayload(
 		JsonString(ToNarrow(savedPath.wstring())) +
 		",\"updatedChecks\":{},\"ok\":true}";
 	PostBridgeMessageJson(ToWide(response));
+
+	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	if (app != nullptr)
+	{
+		app->Services().RouteGatewayRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = "skill.config.refresh",
+				.method = "gateway.skills.refresh",
+				.paramsJson = std::nullopt,
+			});
+	}
+
+	auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+	if (mainFrame != nullptr)
+	{
+		mainFrame->RefreshSkillView();
+	}
 }
 
 bool CBlazeClawMFCView::HandleEmailConfigBridgeMessage(

@@ -33,6 +33,7 @@ public:
 
 	void AdjustLayout();
 	void OnChangeVisualStyle();
+	void RefreshSkills();
 
 protected:
 	CClassToolBar m_wndToolBar;

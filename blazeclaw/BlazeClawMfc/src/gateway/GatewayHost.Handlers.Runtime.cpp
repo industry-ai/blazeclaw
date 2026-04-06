@@ -21,6 +21,9 @@ namespace blazeclaw::gateway {
 		constexpr std::size_t kMaxChatHistoryEntriesPerSession = 500;
 		constexpr std::size_t kMaxChatEventsPerSession = 200;
 
+		std::string SerializeStringArrayLocal(
+			const std::vector<std::string>& values);
+
 		std::string EscapeJsonLocal(const std::string& value) {
 			std::string escaped;
 			escaped.reserve(value.size() + 8);
@@ -68,20 +71,6 @@ namespace blazeclaw::gateway {
 
 		std::string SerializeSkillCatalogEntry(
 			const SkillsCatalogGatewayEntry& entry) {
-			auto serializeStringArray = [](const std::vector<std::string>& values) {
-				std::string json = "[";
-				for (std::size_t index = 0; index < values.size(); ++index) {
-					if (index > 0) {
-						json += ",";
-					}
-
-					json += "\"" + EscapeJsonLocal(values[index]) + "\"";
-				}
-
-				json += "]";
-				return json;
-				};
-
 			return "{\"name\":\"" +
 				EscapeJsonLocal(entry.name) +
 				"\",\"skillKey\":\"" +
@@ -89,15 +78,15 @@ namespace blazeclaw::gateway {
 				"\",\"primaryEnv\":\"" +
 				EscapeJsonLocal(entry.primaryEnv) +
 				"\",\"requiresBins\":" +
-				serializeStringArray(entry.requiresBins) +
+				SerializeStringArrayLocal(entry.requiresBins) +
 				",\"requiresEnv\":" +
-				serializeStringArray(entry.requiresEnv) +
+				SerializeStringArrayLocal(entry.requiresEnv) +
 				",\"requiresConfig\":" +
-				serializeStringArray(entry.requiresConfig) +
+				SerializeStringArrayLocal(entry.requiresConfig) +
 				",\"configPathHints\":" +
-				serializeStringArray(entry.configPathHints) +
+				SerializeStringArrayLocal(entry.configPathHints) +
 				",\"normalizedMetadataSources\":" +
-				serializeStringArray(entry.normalizedMetadataSources) +
+				SerializeStringArrayLocal(entry.normalizedMetadataSources) +
 				",\"command\":\"" +
 				EscapeJsonLocal(entry.commandName) +
 				"\",\"installKind\":\"" +
@@ -121,6 +110,14 @@ namespace blazeclaw::gateway {
 				std::string(entry.disabled ? "true" : "false") +
 				",\"blockedByAllowlist\":" +
 				std::string(entry.blockedByAllowlist ? "true" : "false") +
+				",\"missingEnv\":" +
+				SerializeStringArrayLocal(entry.missingEnv) +
+				",\"missingConfig\":" +
+				SerializeStringArrayLocal(entry.missingConfig) +
+				",\"missingBins\":" +
+				SerializeStringArrayLocal(entry.missingBins) +
+				",\"missingAnyBins\":" +
+				SerializeStringArrayLocal(entry.missingAnyBins) +
 				",\"disableModelInvocation\":" +
 				std::string(entry.disableModelInvocation ? "true" : "false") +
 				",\"validFrontmatter\":" +
@@ -3249,7 +3246,21 @@ namespace blazeclaw::gateway {
 						EscapeJsonLocal(it->name) +
 						"\",\"skillKey\":\"" +
 						EscapeJsonLocal(it->skillKey) +
-						"\",\"eligible\":" +
+						"\",\"primaryEnv\":\"" +
+						EscapeJsonLocal(it->primaryEnv) +
+						"\",\"requiresEnv\":" +
+						SerializeStringArrayLocal(it->requiresEnv) +
+						",\"requiresConfig\":" +
+						SerializeStringArrayLocal(it->requiresConfig) +
+						",\"missingEnv\":" +
+						SerializeStringArrayLocal(it->missingEnv) +
+						",\"missingConfig\":" +
+						SerializeStringArrayLocal(it->missingConfig) +
+						",\"missingBins\":" +
+						SerializeStringArrayLocal(it->missingBins) +
+						",\"missingAnyBins\":" +
+						SerializeStringArrayLocal(it->missingAnyBins) +
+						",\"eligible\":" +
 						std::string(it->eligible ? "true" : "false") +
 						",\"disabled\":" +
 						std::string(it->disabled ? "true" : "false") +
@@ -3257,6 +3268,8 @@ namespace blazeclaw::gateway {
 						std::string(it->blockedByAllowlist ? "true" : "false") +
 						",\"installKind\":\"" +
 						EscapeJsonLocal(it->installKind) +
+					   "\",\"installReason\":\"" +
+						EscapeJsonLocal(it->installReason) +
 						"\",\"installExecutable\":" +
 						std::string(it->installExecutable ? "true" : "false") +
 						",\"scanCritical\":" +
@@ -3264,6 +3277,50 @@ namespace blazeclaw::gateway {
 						"}",
 					.error = std::nullopt,
 				};
+			});
+
+		m_dispatcher.Register(
+			"gateway.skills.update",
+			[this](const protocol::RequestFrame& request) {
+				if (!m_skillsUpdateCallback) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = false,
+						.payloadJson = std::nullopt,
+						.error = protocol::ErrorShape{
+							.code = "not_supported",
+							.message = "Skills update callback is not configured.",
+							.detailsJson = std::nullopt,
+						  .retryable = false,
+							.retryAfterMs = std::nullopt,
+						},
+					};
+				}
+
+				return m_skillsUpdateCallback(request);
+			});
+
+		m_dispatcher.Register(
+			"skills.update",
+			[this](const protocol::RequestFrame& request) {
+				protocol::RequestFrame delegated = request;
+				delegated.method = "gateway.skills.update";
+				if (!m_skillsUpdateCallback) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = false,
+						.payloadJson = std::nullopt,
+						.error = protocol::ErrorShape{
+							.code = "not_supported",
+							.message = "Skills update callback is not configured.",
+							.detailsJson = std::nullopt,
+							.retryable = false,
+							.retryAfterMs = std::nullopt,
+						},
+					};
+				}
+
+				return m_skillsUpdateCallback(delegated);
 			});
 
 		m_dispatcher.Register(

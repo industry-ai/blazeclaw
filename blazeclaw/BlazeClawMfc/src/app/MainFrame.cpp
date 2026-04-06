@@ -187,6 +187,16 @@ void CMainFrame::AddChatStatusBlock(const CString& text)
 	m_wndOutput.AddChatStatusBlock(text);
 }
 
+void CMainFrame::RefreshSkillView()
+{
+	if (!::IsWindow(m_hWnd))
+	{
+		return;
+	}
+
+	m_wndSkillView.RefreshSkills();
+}
+
 void CMainFrame::ShowSkillSelectionInActiveView(
 	const std::string& skillKey,
 	const std::string& propertiesJson)

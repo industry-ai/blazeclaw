@@ -791,6 +791,11 @@ void CSkillView::FillSkillView()
 	m_wndSkillView.Expand(hRoot, TVE_EXPAND);
 }
 
+void CSkillView::RefreshSkills()
+{
+	FillSkillView();
+}
+
 void CSkillView::NotifySelectionToChatView(HTREEITEM selectedItem)
 {
 	if (selectedItem == nullptr)

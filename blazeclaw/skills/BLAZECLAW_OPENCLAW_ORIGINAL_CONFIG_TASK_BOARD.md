@@ -55,10 +55,10 @@ Use explicit owner IDs in rows (example: `A1`, `G1`, `C1`, `QA1`).
 
 | Task ID | Work Item | Module / Files | Owner | Status | Test (How to verify) | Evidence (What to attach) |
 |---|---|---|---|---|---|---|
-| P3.1 | Extend skills payload with config readiness (`missing`, `install`, eligibility summary) | `src/gateway/GatewayHost.cpp` | G1 | Not Started | Compare `gateway.skills.list` payload before/after fields | API output samples + schema notes |
-| P3.2 | Add/align `skills.update`-style mutation behavior (env/apiKey/config-path semantics) | `src/gateway/GatewayHost.cpp` | G1 | Not Started | Execute updates from UI and direct gateway calls; results must match | Call logs + result payloads |
-| P3.3 | Refresh skill tree metadata/status immediately after config saves | `src/app/SkillView.cpp`, `src/app/BlazeClawMFCView.cpp` | A2 | Not Started | Post-save readiness updates without restart | Before/after tree screenshots |
-| P3.4 | Enrich tool catalog entries with normalized metadata hints | `src/gateway/GatewayToolRegistry.cpp` | G2 | Not Started | Inspect `gateway.tools.list/catalog` for expected hint fields | API output diff |
+| P3.1 | Extend skills payload with config readiness (`missing`, `install`, eligibility summary) | `src/gateway/GatewayHost.cpp` | G1 | Done | Compare `gateway.skills.list` payload before/after fields | Added missing requirement arrays (`missingEnv/missingConfig/missingBins/missingAnyBins`) and install reason details in skills list/info payloads |
+| P3.2 | Add/align `skills.update`-style mutation behavior (env/apiKey/config-path semantics) | `src/gateway/GatewayHost.cpp` | G1 | Done | Execute updates from UI and direct gateway calls; results must match | Added `gateway.skills.update` + `skills.update` alias routed via ServiceManager callback and canonical persistence adapters |
+| P3.3 | Refresh skill tree metadata/status immediately after config saves | `src/app/SkillView.cpp`, `src/app/BlazeClawMFCView.cpp` | A2 | Done | Post-save readiness updates without restart | Added `RefreshSkillView()` + `RefreshSkills()` and post-save `gateway.skills.refresh` + tree refresh trigger |
+| P3.4 | Enrich tool catalog entries with normalized metadata hints | `src/gateway/GatewayToolRegistry.cpp` | G2 | Done | Inspect `gateway.tools.list/catalog` for expected hint fields | Tool entries now include `skillKey`, `installKind`, and `source`; serialized in gateway tools list/catalog payloads |
 
 ### Phase 3 acceptance gate
 - Eligibility updates are visible in `CSkillView` without restart.

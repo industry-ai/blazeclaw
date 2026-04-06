@@ -8,6 +8,9 @@ namespace blazeclaw::gateway {
 		std::string id;
 		std::string label;
 		std::string category;
+		std::string skillKey;
+		std::string installKind;
+		std::string source;
 		bool enabled = true;
 	};
 

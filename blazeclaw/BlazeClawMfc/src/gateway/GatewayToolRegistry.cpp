@@ -42,6 +42,15 @@ namespace blazeclaw::gateway {
 			return v2;
 		}
 
+		std::string ExtractSkillKeyFromToolId(const std::string& toolId) {
+			const auto dot = toolId.find('.');
+			if (dot == std::string::npos || dot == 0) {
+				return toolId;
+			}
+
+			return toolId.substr(0, dot);
+		}
+
 		std::vector<std::string> SplitTopLevelObjects(const std::string& arrayJson) {
 			std::vector<std::string> objects;
 			const std::string trimmed = json::Trim(arrayJson);
@@ -169,7 +178,17 @@ namespace blazeclaw::gateway {
 		output.reserve(m_tools.size());
 
 		for (const auto& [_, tool] : m_tools) {
-			output.push_back(tool);
+			ToolCatalogEntry normalized = tool;
+			if (normalized.skillKey.empty()) {
+				normalized.skillKey = ExtractSkillKeyFromToolId(normalized.id);
+			}
+			if (normalized.installKind.empty()) {
+				normalized.installKind = normalized.category;
+			}
+			if (normalized.source.empty()) {
+				normalized.source = "runtime.tool.registry";
+			}
+			output.push_back(std::move(normalized));
 		}
 
 		std::sort(output.begin(), output.end(), [](const ToolCatalogEntry& left, const ToolCatalogEntry& right) {
@@ -405,6 +424,9 @@ namespace blazeclaw::gateway {
 						.id = toolId,
 						.label = label.empty() ? toolId : label,
 						.category = category.empty() ? "extension" : category,
+					 .skillKey = ExtractSkillKeyFromToolId(toolId),
+						.installKind = "runtime-registered",
+						.source = "extensions.catalog",
 						.enabled = enabled,
 					});
 				++registered;
@@ -468,6 +490,9 @@ namespace blazeclaw::gateway {
 						.id = toolId,
 						.label = label.empty() ? toolId : label,
 						.category = category.empty() ? "skill" : category,
+					 .skillKey = ExtractSkillKeyFromToolId(toolId),
+						.installKind = "skill",
+						.source = "skills.tool-manifest",
 						.enabled = enabled,
 					});
 				++registered;

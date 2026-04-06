@@ -317,8 +317,28 @@ namespace blazeclaw::gateway {
 		}
 
 		std::string SerializeTool(const ToolCatalogEntry& tool) {
+			const auto dot = tool.id.find('.');
+			const std::string derivedSkillKey =
+				dot == std::string::npos
+				? tool.id
+				: tool.id.substr(0, dot);
+			const std::string skillKey =
+				tool.skillKey.empty() ? derivedSkillKey : tool.skillKey;
+			const std::string installKind =
+				tool.installKind.empty()
+				? (tool.category == "extension"
+					? "runtime-registered"
+					: tool.category)
+				: tool.installKind;
+			const std::string source =
+				tool.source.empty()
+				? "runtime.tool.registry"
+				: tool.source;
 			return "{\"id\":\"" + EscapeJson(tool.id) + "\",\"label\":\"" + EscapeJson(tool.label) +
-				"\",\"category\":\"" + EscapeJson(tool.category) + "\",\"enabled\":" +
+				"\",\"category\":\"" + EscapeJson(tool.category) +
+				"\",\"skillKey\":\"" + EscapeJson(skillKey) +
+				"\",\"installKind\":\"" + EscapeJson(installKind) +
+				"\",\"source\":\"" + EscapeJson(source) + "\",\"enabled\":" +
 				std::string(tool.enabled ? "true" : "false") + "}";
 		}
 
@@ -832,6 +852,11 @@ namespace blazeclaw::gateway {
 	void GatewayHost::SetSkillsRefreshCallback(
 		SkillsRefreshCallback callback) {
 		m_skillsRefreshCallback = std::move(callback);
+	}
+
+	void GatewayHost::SetSkillsUpdateCallback(
+		SkillsUpdateCallback callback) {
+		m_skillsUpdateCallback = std::move(callback);
 	}
 
 	void GatewayHost::SetEmbeddedOrchestrationPath(

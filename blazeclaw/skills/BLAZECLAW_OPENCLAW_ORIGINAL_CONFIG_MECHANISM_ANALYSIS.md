@@ -397,6 +397,44 @@ Notes:
 - Existing custom skill configuration pages remain unchanged and continue to be
   preferred when available.
 
+## 10.9 Phase 3 implementation status (completed)
+
+Implemented in current codebase:
+
+1. **Runtime/status payload alignment**
+   - `gateway.skills.list` / `gateway.skills.info` now expose readiness details:
+     - normalized requirement arrays,
+     - missing requirement arrays (`missingEnv`, `missingConfig`,
+       `missingBins`, `missingAnyBins`),
+     - install details including `installKind`, `installExecutable`,
+       `installReason`.
+
+2. **`skills.update`-style mutation parity**
+   - Added `gateway.skills.update` and `skills.update` alias handlers in runtime
+     gateway handlers.
+   - Added ServiceManager-backed mutation callback to persist updates through
+     canonical skill config storage adapters.
+   - Supported update shapes include env object, apiKey field, and
+     configKey/configValue mapping into persisted entries.
+
+3. **Immediate UI/runtime refresh after saves**
+   - Skill config save flow now triggers `gateway.skills.refresh`.
+   - Added `RefreshSkillView()` / `RefreshSkills()` path so `CSkillView` updates
+     without restart.
+
+4. **Tools catalog discoverability enrichment**
+   - Tool registry entries now carry metadata hints:
+     - `skillKey`
+     - `installKind`
+     - `source`
+   - `gateway.tools.list` / `gateway.tools.catalog` serialization now includes
+     these fields.
+
+Notes:
+- This completes the Phase 3 scope (runtime/status alignment and update parity).
+- Phase 4 remains focused on hardening: redaction policy verification,
+  validation/error matrices, and migration durability tooling.
+
 ---
 
 ## 11) Source sample set used in this analysis

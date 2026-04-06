@@ -29,6 +29,7 @@ public:
 public:
 	void AddChatStatusLine(const CString& line);
 	void AddChatStatusBlock(const CString& text);
+	void RefreshSkillView();
 
 	// Overrides
 public:
