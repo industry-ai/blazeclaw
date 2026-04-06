@@ -40,10 +40,10 @@ Use explicit owner IDs in rows (example: `A1`, `G1`, `C1`, `QA1`).
 
 | Task ID | Work Item | Module / Files | Owner | Status | Test (How to verify) | Evidence (What to attach) |
 |---|---|---|---|---|---|---|
-| P2.1 | Implement mode router (Custom `config.html` vs Generated fallback) | `src/app/BlazeClawMFCView.cpp` | A1 | Not Started | Skill with `config.html` opens custom UI; skill without it opens generated UI | Side-by-side screenshots + selected skill IDs |
-| P2.2 | Ensure skill selection always triggers config host entry path | `src/app/SkillView.cpp`, `src/app/MainFrame.cpp` | A2 | Not Started | Single-click/double-click path consistency in `CSkillView` | UI interaction recording + logs |
-| P2.3 | Build generated-form bootstrap payload from normalized metadata and path hints | `src/core/ServiceManager.cpp`, `src/app/BlazeClawMFCView.cpp` | C1 | Not Started | Generated form fields match `requires.env/config` for sampled skills | Field mapping table + payload dump |
-| P2.4 | Add generated form section grouping and default controls | `src/app/BlazeClawMFCView.cpp` (and related web assets if introduced) | A3 | Not Started | Form contains Credentials/Connectivity/Policy/Advanced + save/cancel/validate | UI screenshots + event traces |
+| P2.1 | Implement mode router (Custom `config.html` vs Generated fallback) | `src/app/BlazeClawMFCView.cpp` | A1 | Done | Skill with `config.html` opens custom UI; skill without it opens generated UI | `OpenSkillConfigDocument(...)` now routes to generated `about:blank` host when `config.html` is missing |
+| P2.2 | Ensure skill selection always triggers config host entry path | `src/app/SkillView.cpp`, `src/app/MainFrame.cpp` | A2 | Done | Single-click/double-click path consistency in `CSkillView` | `ShowSkillSelection(...)` now passes full properties into open flow, preserving tree-triggered entry behavior |
+| P2.3 | Build generated-form bootstrap payload from normalized metadata and path hints | `src/core/ServiceManager.cpp`, `src/app/BlazeClawMFCView.cpp` | C1 | Done | Generated form fields match `requires.env/config` for sampled skills | Added `configPathHints` mapping/serialization and metadata-driven generated form bootstrap |
+| P2.4 | Add generated form section grouping and default controls | `src/app/BlazeClawMFCView.cpp` (and related web assets if introduced) | A3 | Done | Form contains Credentials/Connectivity/Policy/Advanced + save/cancel/validate | Generated page includes credentials/config sections and validate/save/cancel controls wired to bridge |
 
 ### Phase 2 acceptance gate
 - Existing custom config UI still works unchanged.

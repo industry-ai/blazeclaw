@@ -40,7 +40,12 @@
 
 namespace {
 	std::wstring g_pendingStartupUrl;
+	std::string g_pendingSkillKey;
+	std::string g_pendingSkillPropertiesJson;
+	std::string g_generatedSkillConfigHtml;
 	std::wstring BuildFileUrl(const std::filesystem::path& filePath);
+	std::wstring ResolveEmailConfigStartupUrl();
+	std::string JsonString(const std::string& value);
 
 	constexpr UINT_PTR kBridgeLifecycleTimerId = 0x4A21;
 	constexpr UINT kBridgeLifecycleTimerMs = 1000;
@@ -190,6 +195,11 @@ namespace {
 
 	std::wstring ResolveSkillConfigStartupUrl(const std::string& skillKey)
 	{
+		if (skillKey == "imap-smtp-email")
+		{
+			return ResolveEmailConfigStartupUrl();
+		}
+
 		std::vector<std::filesystem::path> roots;
 		roots.push_back(std::filesystem::current_path());
 
@@ -208,6 +218,161 @@ namespace {
 		}
 
 		return {};
+	}
+
+	std::vector<std::string> ParseJsonStringArray(const std::string& arrayJson)
+	{
+		std::vector<std::string> values;
+		const std::string trimmed = blazeclaw::gateway::json::Trim(arrayJson);
+		if (trimmed.size() < 2 || trimmed.front() != '[' || trimmed.back() != ']')
+		{
+			return values;
+		}
+
+		std::size_t cursor = 1;
+		while (cursor + 1 < trimmed.size())
+		{
+			cursor = blazeclaw::gateway::json::SkipWhitespace(trimmed, cursor);
+			if (cursor >= trimmed.size() || trimmed[cursor] == ']')
+			{
+				break;
+			}
+
+			if (trimmed[cursor] == ',')
+			{
+				++cursor;
+				continue;
+			}
+
+			if (trimmed[cursor] != '"')
+			{
+				++cursor;
+				continue;
+			}
+
+			std::size_t parseIndex = cursor;
+			std::string value;
+			if (!blazeclaw::gateway::json::ParseJsonStringAt(trimmed, parseIndex, value))
+			{
+				break;
+			}
+
+			values.push_back(value);
+			cursor = parseIndex;
+		}
+
+		return values;
+	}
+
+	std::string BuildGeneratedSkillConfigHtml(
+		const std::string& skillKey,
+		const std::string& propertiesJson)
+	{
+		std::string requiresEnvRaw;
+		std::string requiresConfigRaw;
+		std::string configPathHintsRaw;
+		std::string primaryEnv;
+		blazeclaw::gateway::json::FindRawField(
+			propertiesJson,
+			"requiresEnv",
+			requiresEnvRaw);
+		blazeclaw::gateway::json::FindRawField(
+			propertiesJson,
+			"requiresConfig",
+			requiresConfigRaw);
+		blazeclaw::gateway::json::FindRawField(
+			propertiesJson,
+			"configPathHints",
+			configPathHintsRaw);
+		blazeclaw::gateway::json::FindStringField(
+			propertiesJson,
+			"primaryEnv",
+			primaryEnv);
+
+		const auto requiresEnv = ParseJsonStringArray(requiresEnvRaw);
+		const auto requiresConfig = ParseJsonStringArray(requiresConfigRaw);
+		std::vector<std::string> envFields = requiresEnv;
+		if (!primaryEnv.empty() &&
+			std::find(envFields.begin(), envFields.end(), primaryEnv) == envFields.end())
+		{
+			envFields.insert(envFields.begin(), primaryEnv);
+		}
+
+		std::ostringstream html;
+		html
+			<< "<!doctype html><html><head><meta charset=\"utf-8\"/>"
+			<< "<title>Skill Config</title>"
+			<< "<style>body{font-family:Segoe UI,Arial,sans-serif;margin:20px;}"
+			<< "h1{font-size:18px;margin-bottom:8px;}"
+			<< "h2{font-size:14px;margin-top:18px;}"
+			<< "label{display:block;margin-top:10px;font-size:12px;color:#444;}"
+			<< "input{width:100%;padding:8px;margin-top:4px;}"
+			<< "button{margin-right:8px;margin-top:14px;padding:8px 12px;}"
+			<< "pre{background:#f6f6f6;padding:8px;border-radius:4px;}"
+			<< "</style></head><body>"
+			<< "<h1>Generated Skill Configuration</h1>"
+			<< "<div>skillKey: <b id=\"skill-key\"></b></div>"
+			<< "<h2>Credentials</h2><div id=\"env-fields\"></div>"
+			<< "<h2>Configuration Paths</h2><div id=\"config-fields\"></div>"
+			<< "<h2>Hints</h2><pre id=\"hints\"></pre>"
+			<< "<div><button id=\"btn-validate\">Validate</button>"
+			<< "<button id=\"btn-save\">Save</button>"
+			<< "<button id=\"btn-cancel\">Cancel</button></div>"
+			<< "<script>"
+			<< "const skillKey=" << JsonString(skillKey) << ";"
+			<< "const requiresEnv="
+			<< "[";
+		for (std::size_t i = 0; i < envFields.size(); ++i)
+		{
+			if (i > 0)
+			{
+				html << ",";
+			}
+			html << JsonString(envFields[i]);
+		}
+		html << "];"
+			<< "const requiresConfig=";
+		if (requiresConfig.empty())
+		{
+			html << "[]";
+		}
+		else
+		{
+			html << "[";
+			for (std::size_t i = 0; i < requiresConfig.size(); ++i)
+			{
+				if (i > 0)
+				{
+					html << ",";
+				}
+				html << JsonString(requiresConfig[i]);
+			}
+			html << "]";
+		}
+		html
+			<< ";"
+			<< "const configHints=" << (configPathHintsRaw.empty() ? "[]" : configPathHintsRaw) << ";"
+			<< "const state={};"
+			<< "document.getElementById('skill-key').textContent=skillKey;"
+			<< "document.getElementById('hints').textContent=JSON.stringify(configHints,null,2);"
+			<< "function send(msg){window.chrome.webview.postMessage(msg);}"
+			<< "function addField(container,key){"
+			<< "const l=document.createElement('label');l.textContent=key;"
+			<< "const i=document.createElement('input');i.id='f_'+key.replace(/[^a-zA-Z0-9_]/g,'_');"
+			<< "i.oninput=()=>{state[key]=i.value;};l.appendChild(i);container.appendChild(l);}"
+			<< "const envContainer=document.getElementById('env-fields');requiresEnv.forEach(k=>addField(envContainer,k));"
+			<< "const cfgContainer=document.getElementById('config-fields');requiresConfig.forEach(k=>addField(cfgContainer,k));"
+			<< "window.chrome.webview.addEventListener('message',ev=>{const m=ev.data||{};"
+			<< "if(m.channel==='blazeclaw.skill.config.loaded'&&m.skillKey===skillKey){"
+			<< "const payload=m.payload||{};Object.keys(payload).forEach(k=>{state[k]=payload[k];"
+			<< "const id='f_'+k.replace(/[^a-zA-Z0-9_]/g,'_');const el=document.getElementById(id);if(el){el.value=payload[k];}});}});"
+			<< "document.getElementById('btn-save').onclick=()=>send({channel:'blazeclaw.skill.config.save',skillKey,id:'generated-save',payload:state});"
+			<< "document.getElementById('btn-validate').onclick=()=>send({channel:'blazeclaw.skill.config.validate',skillKey,id:'generated-validate',payload:state});"
+			<< "document.getElementById('btn-cancel').onclick=()=>send({channel:'blazeclaw.skill.config.cancel',skillKey,id:'generated-cancel'});"
+			<< "send({channel:'blazeclaw.skill.config.ready',skillKey,id:'generated-ready'});"
+			<< "</script></body></html>";
+
+		return html.str();
 	}
 
 	bool IsLikelyEmailAddress(const std::string& value)
@@ -2525,7 +2690,7 @@ void CBlazeClawMFCView::ShowSkillSelection(
 		"}";
 	PostBridgeMessageJson(ToWide(payload));
 
-	const bool opened = OpenSkillConfigDocument(normalizedSkillKey);
+	const bool opened = OpenSkillConfigDocument(normalizedSkillKey, propertiesJson);
 	if (opened)
 	{
 		AppendChatProcedureStatusLine(
@@ -2534,7 +2699,9 @@ void CBlazeClawMFCView::ShowSkillSelection(
 	}
 }
 
-bool CBlazeClawMFCView::OpenSkillConfigDocument(const std::string& skillKey)
+bool CBlazeClawMFCView::OpenSkillConfigDocument(
+	const std::string& skillKey,
+	const std::string& propertiesJson)
 {
 	if (blazeclaw::gateway::json::Trim(skillKey).empty())
 	{
@@ -2544,7 +2711,28 @@ bool CBlazeClawMFCView::OpenSkillConfigDocument(const std::string& skillKey)
 	const std::wstring configUrl = ResolveSkillConfigStartupUrl(skillKey);
 	if (configUrl.empty())
 	{
-		return false;
+		const std::wstring generatedUrl = BuildGeneratedSkillConfigPageUrl(
+			skillKey,
+			propertiesJson);
+		if (generatedUrl.empty())
+		{
+			return false;
+		}
+
+		SetPendingStartupUrl(generatedUrl);
+		auto* appFallback = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+		if (appFallback == nullptr)
+		{
+			return false;
+		}
+
+		auto* templateFallback = appFallback->GetChatDocTemplate();
+		if (templateFallback == nullptr)
+		{
+			return false;
+		}
+
+		return templateFallback->OpenDocumentFile(nullptr) != nullptr;
 	}
 
 	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
@@ -2562,6 +2750,17 @@ bool CBlazeClawMFCView::OpenSkillConfigDocument(const std::string& skillKey)
 	SetPendingStartupUrl(configUrl);
 	CDocument* opened = chatTemplate->OpenDocumentFile(nullptr);
 	return opened != nullptr;
+}
+
+std::wstring CBlazeClawMFCView::BuildGeneratedSkillConfigPageUrl(
+	const std::string& skillKey,
+	const std::string& propertiesJson) const
+{
+	UNREFERENCED_PARAMETER(propertiesJson);
+	g_pendingSkillKey = skillKey;
+	g_pendingSkillPropertiesJson = propertiesJson;
+	g_generatedSkillConfigHtml = BuildGeneratedSkillConfigHtml(skillKey, propertiesJson);
+	return L"about:blank";
 }
 
 void CBlazeClawMFCView::InitializeWebViewBridge()
@@ -2676,6 +2875,19 @@ void CBlazeClawMFCView::OnInitialUpdate()
 													sender,
 													L"Navigation failed",
 													L"Verify OpenClaw UI assets or dev server availability.");
+												return S_OK;
+											}
+
+											if (!g_generatedSkillConfigHtml.empty() && sender != nullptr)
+											{
+												const std::wstring generatedHtmlW = ToWide(g_generatedSkillConfigHtml);
+												if (!generatedHtmlW.empty())
+												{
+													sender->NavigateToString(generatedHtmlW.c_str());
+													g_generatedSkillConfigHtml.clear();
+													g_pendingSkillKey.clear();
+													g_pendingSkillPropertiesJson.clear();
+												}
 											}
 
 											return S_OK;
@@ -2726,6 +2938,11 @@ void CBlazeClawMFCView::SetPendingStartupUrl(const std::wstring& url)
 
 std::wstring CBlazeClawMFCView::ResolveInitialNavigationUrl() const
 {
+	if (!g_generatedSkillConfigHtml.empty())
+	{
+		return L"about:blank";
+	}
+
 	if (!g_pendingStartupUrl.empty())
 	{
 		std::wstring startupUrl = g_pendingStartupUrl;

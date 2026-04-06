@@ -365,6 +365,38 @@ Notes:
 - Phase 2 remains focused on generated fallback UI rendering and host mode
   routing polish.
 
+## 10.8 Phase 2 implementation status (completed)
+
+Implemented in current codebase:
+
+1. **Unified host mode router (custom vs generated)**
+   - `CBlazeClawMFCView::OpenSkillConfigDocument(...)` now accepts skill
+     properties and prefers `config.html` when present.
+   - When `config.html` is absent, it routes to generated fallback via
+     `about:blank` startup and WebView2 `NavigateToString(...)` injection.
+
+2. **Generated fallback configuration UI bootstrap**
+   - `BuildGeneratedSkillConfigHtml(...)` now constructs a metadata-driven
+     fallback page with:
+     - credentials/env section,
+     - config-path section,
+     - hints panel,
+     - validate/save/cancel controls.
+   - Generated page is bridge-wired to
+     `blazeclaw.skill.config.ready/save/validate/cancel`.
+
+3. **Metadata registry hints for generated forms**
+   - `ServiceManager::BuildGatewaySkillEntry(...)` now computes
+     `configPathHints` from normalized `requiresConfig` values.
+   - `gateway.skills.list` serialization now includes `configPathHints` for UI
+     generation.
+
+Notes:
+- This completes the Phase 2 scope (mode routing + generated fallback host +
+  metadata hint bootstrap).
+- Existing custom skill configuration pages remain unchanged and continue to be
+  preferred when available.
+
 ---
 
 ## 11) Source sample set used in this analysis

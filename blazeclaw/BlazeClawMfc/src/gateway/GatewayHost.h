@@ -43,6 +43,7 @@ namespace blazeclaw::gateway {
 		std::vector<std::string> requiresBins;
 		std::vector<std::string> requiresEnv;
 		std::vector<std::string> requiresConfig;
+		std::vector<std::string> configPathHints;
 		std::vector<std::string> normalizedMetadataSources;
 	};
 

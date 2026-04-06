@@ -3362,6 +3362,29 @@ namespace blazeclaw::core {
 			requiresConfig = UniqueNarrowValues(SplitCommaDelimitedWide(*value));
 		}
 
+		std::vector<std::string> configPathHints;
+		for (const auto& configKey : requiresConfig) {
+			if (configKey == "channels.discord.token") {
+				configPathHints.push_back("credentials.discord.token");
+			}
+			else if (configKey == "channels.slack") {
+				configPathHints.push_back("channels.slack.default");
+			}
+			else if (configKey == "plugins.entries.voice-call.enabled") {
+				configPathHints.push_back("plugins.voice-call.enabled");
+			}
+			else {
+				configPathHints.push_back(configKey);
+			}
+
+			if (std::find(
+				configPathHints.begin(),
+				configPathHints.end(),
+				configKey) == configPathHints.end()) {
+				configPathHints.push_back(configKey);
+			}
+		}
+
 		blazeclaw::gateway::SkillsCatalogGatewayEntry gatewayEntry;
 		gatewayEntry.name = ToNarrow(entry.skillName);
 		gatewayEntry.skillKey = eligibility != nullptr
@@ -3397,6 +3420,7 @@ namespace blazeclaw::core {
 		gatewayEntry.requiresBins = std::move(requiresBins);
 		gatewayEntry.requiresEnv = std::move(requiresEnv);
 		gatewayEntry.requiresConfig = std::move(requiresConfig);
+		gatewayEntry.configPathHints = std::move(configPathHints);
 		gatewayEntry.normalizedMetadataSources = std::move(metadataSources);
 		return gatewayEntry;
 	}

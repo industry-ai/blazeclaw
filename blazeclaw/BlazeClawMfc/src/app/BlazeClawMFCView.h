@@ -51,7 +51,9 @@ public:
 	void ShowSkillSelection(
 		const std::string& skillKey,
 		const std::string& propertiesJson);
-	bool OpenSkillConfigDocument(const std::string& skillKey);
+	bool OpenSkillConfigDocument(
+		const std::string& skillKey,
+		const std::string& propertiesJson = std::string());
 
 	// Overrides
 public:
@@ -108,6 +110,9 @@ protected:
 		const std::string& skillKey,
 		const std::string& correlationId,
 		const std::string& payloadJson);
+	std::wstring BuildGeneratedSkillConfigPageUrl(
+		const std::string& skillKey,
+		const std::string& propertiesJson) const;
 	std::wstring ResolveInitialNavigationUrl() const;
 	void PostBridgeMessageJson(const std::wstring& jsonMessage);
 	void PostOpenClawWsFrameJson(const std::string& frameJson);

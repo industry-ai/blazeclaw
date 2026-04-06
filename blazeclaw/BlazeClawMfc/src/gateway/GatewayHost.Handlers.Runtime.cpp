@@ -94,6 +94,8 @@ namespace blazeclaw::gateway {
 				serializeStringArray(entry.requiresEnv) +
 				",\"requiresConfig\":" +
 				serializeStringArray(entry.requiresConfig) +
+				",\"configPathHints\":" +
+				serializeStringArray(entry.configPathHints) +
 				",\"normalizedMetadataSources\":" +
 				serializeStringArray(entry.normalizedMetadataSources) +
 				",\"command\":\"" +
