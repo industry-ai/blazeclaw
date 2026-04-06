@@ -473,6 +473,31 @@ Notes:
   with remaining effort focused on extended QA evidence capture and regression
   automation.
 
+## 10.11 Final completion summary and remaining effort
+
+Completed:
+- Phase 1 through Phase 4 implementation tasks are complete across app, gateway,
+  and core modules.
+- Bridge contract, generated/custom config host behavior, runtime parity,
+  hardening controls, and migration helpers are now integrated.
+- Latest required build validation command succeeds:
+  `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64`
+  with 0 warnings and 0 errors.
+
+Remaining effort (non-code, evidence-oriented):
+- Complete manual QA evidence capture for validation board items V2–V5:
+  - custom UI save/rehydrate flow capture,
+  - generated fallback save/rehydrate flow capture,
+  - openclaw-original end-to-end capture,
+  - redaction verification capture.
+- Attach screenshots/log artifacts and mark sign-off checklist items complete in
+  task board.
+
+Manual evidence collection note:
+- In current IDE test discovery context, `BlazeClawMfc.Tests` reports no
+  discoverable runnable tests (`No tests found to run`). Functional/security
+  evidence for V2–V5 remains manual UI/log capture based.
+
 ---
 
 ## 11) Source sample set used in this analysis

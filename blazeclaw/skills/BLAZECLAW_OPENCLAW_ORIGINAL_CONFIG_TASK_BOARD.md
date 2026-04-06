@@ -86,11 +86,11 @@ Use explicit owner IDs in rows (example: `A1`, `G1`, `C1`, `QA1`).
 
 | Check ID | Validation Item | Owner | Status | Command / Procedure | Evidence |
 |---|---|---|---|---|---|
-| V1 | Build succeeds | QA1 | Not Started | `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64` | Build output (0 errors) |
-| V2 | Custom UI skill load/save/rehydrate (`imap-smtp-email`) | QA1 | Not Started | Open config -> modify -> save -> reopen | Screen capture + payload logs |
-| V3 | Generated fallback skill load/save/rehydrate | QA1 | Not Started | Open skill without `config.html` -> save -> reopen | Screen capture + payload logs |
-| V4 | `openclaw-original` configuration flow works end-to-end | QA2 | Not Started | Select original skill -> configure -> verify readiness | Tree status screenshots + API payload |
-| V5 | Security redaction checks | QA2 | Not Started | Execute secret-bearing scenarios | Redaction evidence logs |
+| V1 | Build succeeds | QA1 | Done | `msbuild blazeclaw/BlazeClaw.sln /m /p:Configuration=Debug /p:Platform=x64` | Build succeeded: 0 warnings, 0 errors (latest run) |
+| V2 | Custom UI skill load/save/rehydrate (`imap-smtp-email`) | QA1 | In Progress | Open config -> modify -> save -> reopen | Awaiting manual UI evidence capture (screen + payload logs) |
+| V3 | Generated fallback skill load/save/rehydrate | QA1 | In Progress | Open skill without `config.html` -> save -> reopen | Awaiting manual UI evidence capture (screen + payload logs) |
+| V4 | `openclaw-original` configuration flow works end-to-end | QA2 | In Progress | Select original skill -> configure -> verify readiness | Awaiting manual end-to-end run evidence (tree + API payloads) |
+| V5 | Security redaction checks | QA2 | In Progress | Execute secret-bearing scenarios | Awaiting manual redaction verification logs/screens |
 
 ---
 
@@ -117,9 +117,9 @@ Evidence: <links/paths/screenshots/log references>
 
 ## Sign-off checklist
 
-- [ ] All P1 tasks Done + acceptance gate passed
-- [ ] All P2 tasks Done + acceptance gate passed
-- [ ] All P3 tasks Done + acceptance gate passed
-- [ ] All P4 tasks Done + acceptance gate passed
-- [ ] V1–V5 validation entries completed with evidence
-- [ ] Final summary added to source mechanism doc
+- [x] All P1 tasks Done + acceptance gate passed
+- [x] All P2 tasks Done + acceptance gate passed
+- [x] All P3 tasks Done + acceptance gate passed
+- [x] All P4 tasks Done + acceptance gate passed
+- [ ] V1–V5 validation entries completed with evidence (V1 automated complete; V2–V5 pending manual evidence capture)
+- [x] Final summary added to source mechanism doc
