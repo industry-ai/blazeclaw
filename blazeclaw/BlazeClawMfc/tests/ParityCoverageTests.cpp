@@ -958,7 +958,9 @@ TEST_CASE(
 
 		REQUIRE(getResponse.ok);
 		REQUIRE(getResponse.payloadJson.has_value());
-		REQUIRE(getResponse.payloadJson->find("\"count\":") != std::string::npos);
+		REQUIRE(getResponse.payloadJson->find("\"count\":2") != std::string::npos);
+		REQUIRE(getResponse.payloadJson->find("\"phase\":\"plan\"") != std::string::npos);
+		REQUIRE(getResponse.payloadJson->find("\"phase\":\"final\"") != std::string::npos);
 
 		host.Stop();
 	}

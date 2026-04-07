@@ -353,7 +353,7 @@ namespace blazeclaw::gateway {
 				"\",\"fallbackAction\":\"" + EscapeJson(delta.fallbackAction) +
 				"\",\"fallbackAttempt\":" + std::to_string(delta.fallbackAttempt) +
 				",\"fallbackMaxAttempts\":" + std::to_string(delta.fallbackMaxAttempts) +
-				"\",\"argsJson\":\"" + EscapeJson(delta.argsJson) +
+				",\"argsJson\":\"" + EscapeJson(delta.argsJson) +
 				"\",\"resultJson\":\"" + EscapeJson(delta.resultJson) +
 				"\",\"status\":\"" + EscapeJson(delta.status) +
 				"\",\"errorCode\":\"" + EscapeJson(delta.errorCode) +
@@ -400,6 +400,59 @@ namespace blazeclaw::gateway {
 
 			json += "]}";
 			return json;
+		}
+
+		GatewayHost::ChatRuntimeResult::TaskDeltaEntry NormalizePersistedTaskDelta(
+			const GatewayHost::ChatRuntimeResult::TaskDeltaEntry& source,
+			const std::string& runId,
+			const std::string& sessionId,
+			const std::size_t stableIndex) {
+			GatewayHost::ChatRuntimeResult::TaskDeltaEntry normalized = source;
+			normalized.index = stableIndex;
+			if (normalized.runId.empty()) {
+				normalized.runId = runId;
+			}
+
+			if (normalized.sessionId.empty()) {
+				normalized.sessionId = sessionId.empty() ? "main" : sessionId;
+			}
+
+			if (normalized.phase.empty()) {
+				normalized.phase = stableIndex + 1 == 1 ? "plan" : "unknown";
+			}
+
+			if (normalized.phase == "final") {
+				if (normalized.status.empty()) {
+					normalized.status = "completed";
+				}
+				if (normalized.stepLabel.empty()) {
+					normalized.stepLabel = "run_terminal";
+				}
+			}
+			else {
+				if (normalized.status.empty()) {
+					normalized.status = "ok";
+				}
+				if (normalized.stepLabel.empty()) {
+					normalized.stepLabel = normalized.phase;
+				}
+			}
+
+			if (normalized.startedAtMs == 0 && normalized.completedAtMs > 0) {
+				normalized.startedAtMs = normalized.completedAtMs;
+			}
+			if (normalized.completedAtMs == 0 && normalized.startedAtMs > 0) {
+				normalized.completedAtMs = normalized.startedAtMs;
+			}
+			if (normalized.completedAtMs < normalized.startedAtMs) {
+				normalized.completedAtMs = normalized.startedAtMs;
+			}
+			normalized.latencyMs =
+				normalized.completedAtMs >= normalized.startedAtMs
+				? (normalized.completedAtMs - normalized.startedAtMs)
+				: 0;
+
+			return normalized;
 		}
 
 		std::string SerializeToolExecution(const ToolExecutionEntry& execution) {
@@ -964,6 +1017,7 @@ namespace blazeclaw::gateway {
 			}
 
 			auto& deltas = m_taskDeltasByRunId[runId];
+			deltas.clear();
 			for (const auto& deltaNode : runNode["taskDeltas"]) {
 				if (!deltaNode.is_object()) {
 					continue;
@@ -998,6 +1052,81 @@ namespace blazeclaw::gateway {
 					const ChatRuntimeResult::TaskDeltaEntry& right) {
 						return left.index < right.index;
 				});
+
+			std::string fallbackSessionId;
+			for (const auto& delta : deltas) {
+				if (!delta.sessionId.empty()) {
+					fallbackSessionId = delta.sessionId;
+					break;
+				}
+			}
+
+			std::vector<ChatRuntimeResult::TaskDeltaEntry> normalizedDeltas;
+			normalizedDeltas.reserve(deltas.size() + 1);
+			for (std::size_t i = 0; i < deltas.size(); ++i) {
+				normalizedDeltas.push_back(NormalizePersistedTaskDelta(
+					deltas[i],
+					runId,
+					fallbackSessionId,
+					i));
+			}
+
+			const bool hasPlanPhase = std::any_of(
+				normalizedDeltas.begin(),
+				normalizedDeltas.end(),
+				[](const ChatRuntimeResult::TaskDeltaEntry& delta) {
+					return delta.phase == "plan";
+				});
+			if (!hasPlanPhase) {
+				normalizedDeltas.insert(
+					normalizedDeltas.begin(),
+					ChatRuntimeResult::TaskDeltaEntry{
+						.index = 0,
+						.runId = runId,
+						.sessionId = fallbackSessionId.empty() ? "main" : fallbackSessionId,
+						.phase = "plan",
+						.resultJson = "[]",
+						.status = "ok",
+						.errorCode = {},
+						.startedAtMs = 0,
+						.completedAtMs = 0,
+						.latencyMs = 0,
+						.stepLabel = "execution_plan",
+					});
+			}
+
+			const bool hasFinalPhase = std::any_of(
+				normalizedDeltas.begin(),
+				normalizedDeltas.end(),
+				[](const ChatRuntimeResult::TaskDeltaEntry& delta) {
+					return delta.phase == "final";
+				});
+			if (!hasFinalPhase) {
+				normalizedDeltas.push_back(
+					ChatRuntimeResult::TaskDeltaEntry{
+						.index = normalizedDeltas.size(),
+						.runId = runId,
+						.sessionId = fallbackSessionId.empty() ? "main" : fallbackSessionId,
+						.phase = "final",
+						.resultJson = {},
+						.status = "completed",
+						.errorCode = {},
+						.startedAtMs = 0,
+						.completedAtMs = 0,
+						.latencyMs = 0,
+						.stepLabel = "run_terminal",
+					});
+			}
+
+			for (std::size_t i = 0; i < normalizedDeltas.size(); ++i) {
+				normalizedDeltas[i] = NormalizePersistedTaskDelta(
+					normalizedDeltas[i],
+					runId,
+					fallbackSessionId,
+					i);
+			}
+
+			deltas = std::move(normalizedDeltas);
 		}
 
 		if (m_taskDeltasByRunId.size() > m_taskDeltasRetentionLimit) {
@@ -1005,6 +1134,8 @@ namespace blazeclaw::gateway {
 				m_taskDeltasByRunId.erase(m_taskDeltasByRunId.begin());
 			}
 		}
+
+		PersistTaskDeltas();
 	}
 
 	void GatewayHost::PersistTaskDeltas() const {

@@ -225,6 +225,7 @@ All previously tracked closure items (protocol/schema parity, dedicated test-pro
 
 - Build validation (`msbuild` Debug|x64) passed in current local audit.
 - Parity-chat filtered regression run now passes after parity harness stabilization updates (local-only startup path for route-level parity tests and assertion alignment to current persistence contract shape).
+- Persisted task-delta replay contract now hardens loaded entries to deterministic phase/index semantics (`plan` + `final` guarantees), and parity persistence assertions are restored to phase-level checks.
 
 ## Candidate File Touchpoints
 

@@ -154,19 +154,20 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 11. [Completed] Stabilize parity chat regression startup and related approval/persistence assertions.
 12. [Completed] Extend provider streaming parity to non-DeepSeek callback-driven runtime paths.
 13. [Completed] Reduce startup critical-path fixture validation cost by staging gateway fixture parity validation lazily.
+14. [Completed] Harden persisted task-delta replay contract and restore deterministic phase-level parity assertions.
 
 ### Next recommended priorities
 
-1. Tighten persisted task-delta parity assertions from contract-level checks to deterministic phase-level checks after persistence contract hardening.
-2. Reduce synthetic fallback staged-delta usage where true incremental emission is feasible.
-3. Continue startup-path reduction by staging additional non-critical diagnostics/validations.
+1. Reduce synthetic fallback staged-delta usage where true incremental emission is feasible.
+2. Continue startup-path reduction by staging additional non-critical diagnostics/validations.
+3. Improve task-delta retention eviction policy from map-order to recency-aware eviction.
 
 ## 7) Validation Snapshot (2026-04-07)
 
 - Build:
   - ✅ `msbuild blazeclaw/BlazeClaw.sln /t:Build /p:Configuration=Debug /p:Platform=x64`
 - Tests:
-  - ✅ `blazeclaw/bin/Debug/BlazeClawMfc.Tests.exe "[parity][chat]"` passed (15 test cases, 166 assertions).
+  - ✅ `blazeclaw/bin/Debug/BlazeClawMfc.Tests.exe "[parity][chat]"` passed (15 test cases, 168 assertions).
 
 ## 8) Related Execution Planning Docs
 
