@@ -349,17 +349,42 @@ namespace blazeclaw::core {
 		std::vector<EmbeddedExecutionPlanStep> BuildExecutionPlan(
 			const EmbeddedRuntimeExecutionRequest& request,
 			const std::size_t maxSteps) {
-			const auto toolPlan = ResolveDynamicExecutionPlan(request, maxSteps);
+			std::vector<std::string> toolPlan;
+			if (request.enforceOrderedAllowlist &&
+				!request.orderedAllowedToolTargets.empty()) {
+				for (const auto& orderedTool : request.orderedAllowedToolTargets) {
+					if (orderedTool.empty()) {
+						continue;
+					}
+
+					if (std::find(toolPlan.begin(), toolPlan.end(), orderedTool) !=
+						toolPlan.end()) {
+						continue;
+					}
+
+					toolPlan.push_back(orderedTool);
+					if (toolPlan.size() >= maxSteps) {
+						break;
+					}
+				}
+			}
+			else {
+				toolPlan = ResolveDynamicExecutionPlan(request, maxSteps);
+			}
+
 			std::vector<EmbeddedExecutionPlanStep> plan;
 			plan.reserve(toolPlan.size());
 
 			for (std::size_t index = 0; index < toolPlan.size(); ++index) {
 				const std::string& toolName = toolPlan[index];
+				const std::string stepLabel = request.enforceOrderedAllowlist
+					? "ordered-step-" + std::to_string(index + 1)
+					: "step-" + std::to_string(index + 1);
 				plan.push_back(EmbeddedExecutionPlanStep{
 					.index = index,
 					.toolName = toolName,
 					.argMode = ResolveBindingArgMode(request, toolName),
-					.stepLabel = "step-" + std::to_string(index + 1),
+				   .stepLabel = stepLabel,
 					});
 			}
 

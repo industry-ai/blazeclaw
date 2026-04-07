@@ -1273,7 +1273,9 @@ namespace blazeclaw::gateway {
 
 		struct OrderedSequencePreflight {
 			bool enforced = false;
+			bool strictAllowlist = false;
 			std::vector<std::string> orderedTargets;
+			std::vector<std::string> explicitCallTargets;
 			std::vector<std::string> resolvedToolTargets;
 			std::vector<std::string> missingTargets;
 		};
@@ -1333,8 +1335,10 @@ namespace blazeclaw::gateway {
 		}
 
 		std::vector<std::string> ExtractOrderedTargetsFromPrompt(
-			const std::string& message) {
+			const std::string& message,
+			std::vector<std::string>* explicitCallTargets) {
 			std::vector<std::string> targets;
+			std::vector<std::string> explicitTargets;
 
 			auto addTarget = [&targets](const std::string& candidate) {
 				const std::string normalized =
@@ -1349,6 +1353,24 @@ namespace blazeclaw::gateway {
 				}
 
 				targets.push_back(normalized);
+				};
+
+			auto addExplicitTarget =
+				[&explicitTargets](const std::string& candidate) {
+				const std::string normalized =
+					NormalizeOrderedTargetToken(candidate);
+				if (normalized.empty()) {
+					return;
+				}
+
+				if (std::find(
+					explicitTargets.begin(),
+					explicitTargets.end(),
+					normalized) != explicitTargets.end()) {
+					return;
+				}
+
+				explicitTargets.push_back(normalized);
 				};
 
 			const std::regex backtickTargetRegex(
@@ -1369,7 +1391,9 @@ namespace blazeclaw::gateway {
 				it != end;
 				++it) {
 				if (it->size() >= 2) {
-					addTarget((*it)[1].str());
+					const std::string target = (*it)[1].str();
+					addExplicitTarget(target);
+					addTarget(target);
 				}
 			}
 
@@ -1411,6 +1435,10 @@ namespace blazeclaw::gateway {
 
 					cursor = arrow + 2;
 				}
+			}
+
+			if (explicitCallTargets != nullptr) {
+				*explicitCallTargets = explicitTargets;
 			}
 
 			return targets;
@@ -1541,7 +1569,21 @@ namespace blazeclaw::gateway {
 				return preflight;
 			}
 
-			preflight.orderedTargets = ExtractOrderedTargetsFromPrompt(message);
+			std::vector<std::string> inferredTargets;
+			preflight.explicitCallTargets.clear();
+			inferredTargets = ExtractOrderedTargetsFromPrompt(
+				message,
+				&preflight.explicitCallTargets);
+
+			if (preflight.explicitCallTargets.size() >= 2) {
+				preflight.orderedTargets = preflight.explicitCallTargets;
+				preflight.strictAllowlist = true;
+			}
+			else {
+				preflight.orderedTargets = std::move(inferredTargets);
+				preflight.strictAllowlist = false;
+			}
+
 			preflight.resolvedToolTargets.reserve(preflight.orderedTargets.size());
 			preflight.enforced = preflight.orderedTargets.size() >= 2;
 			if (!preflight.enforced) {
@@ -1668,6 +1710,31 @@ namespace blazeclaw::gateway {
 				value.size() - suffix.size(),
 				suffix.size(),
 				suffix) == 0;
+		}
+
+		bool IsResolvedRuntimeToolTarget(
+			const std::string& resolvedToolId,
+			const std::vector<ToolCatalogEntry>& runtimeTools) {
+			if (resolvedToolId.empty()) {
+				return false;
+			}
+
+			const std::string lowered = ToLowerCopyLocal(resolvedToolId);
+			if (lowered.rfind("model_skill.", 0) == 0) {
+				return false;
+			}
+
+			for (const auto& tool : runtimeTools) {
+				if (!tool.enabled) {
+					continue;
+				}
+
+				if (ToLowerCopyLocal(tool.id) == lowered) {
+					return true;
+				}
+			}
+
+			return false;
 		}
 
 		bool IsInvalidArgumentsResult(
@@ -2886,10 +2953,31 @@ namespace blazeclaw::gateway {
 				const bool allowPromptOrchestration =
 					orchestrationPath == "runtime_orchestration" ||
 					orchestrationPath == "dynamic_task_delta";
+				const auto runtimeToolsSnapshot = m_toolRegistry.List();
 				const auto orderedSequencePreflight = BuildOrderedSequencePreflight(
 					normalizedMessage,
-					m_toolRegistry.List(),
+					runtimeToolsSnapshot,
 					m_skillsCatalogState.entries);
+				std::vector<std::string> orderedAllowlistTargets;
+				bool enforceOrderedAllowlist = false;
+				if (orderedSequencePreflight.enforced &&
+					orderedSequencePreflight.missingTargets.empty()) {
+					enforceOrderedAllowlist = true;
+					orderedAllowlistTargets.reserve(
+						orderedSequencePreflight.resolvedToolTargets.size());
+					for (const auto& resolvedToolId :
+						orderedSequencePreflight.resolvedToolTargets) {
+						if (!IsResolvedRuntimeToolTarget(
+							resolvedToolId,
+							runtimeToolsSnapshot)) {
+							enforceOrderedAllowlist = false;
+							orderedAllowlistTargets.clear();
+							break;
+						}
+
+						orderedAllowlistTargets.push_back(resolvedToolId);
+					}
+				}
 				const std::string runtimeMessage = orderedSequencePreflight.enforced
 					? (std::string("Ordered execution steps (preserve order): ") +
 						JoinOrderedResolution(orderedSequencePreflight) +
@@ -3307,7 +3395,9 @@ namespace blazeclaw::gateway {
 						ChatRuntimeRequest{
 							.runId = runId,
 							.sessionKey = sessionKey,
-						   .message = runtimeMessage,
+					  .message = runtimeMessage,
+						 .enforceOrderedAllowlist = enforceOrderedAllowlist,
+							.orderedAllowedToolTargets = orderedAllowlistTargets,
 							.hasAttachments = hasAttachments,
 							.attachmentMimeTypes = attachmentMimeTypes,
 						 .onAssistantDelta =

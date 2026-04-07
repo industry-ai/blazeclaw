@@ -176,12 +176,14 @@ Port these artifacts as the baseline:
   - `url` required for content fetch
 
 ### Command binding integration implemented
-- Updated `SKILL.md` frontmatter with command dispatch metadata:
-  - `command-dispatch: tool`
-  - `command-tool: brave_search.search.web`
-  - `command-arg-mode: raw`
-- This enables brave-search binding participation in embedded tool-call
-  sequencing metadata produced by skills command snapshot.
+- Phase 4 originally enabled command-dispatch frontmatter for brave-search.
+
+### Priority A alignment update
+- To prevent generic ordered workflow auto-capture, command-dispatch metadata
+  was removed from `blazeclaw/skills/brave-search/SKILL.md`.
+- Brave-search remains runtime-callable by explicit tool IDs:
+  - `brave_search.search.web`
+  - `brave_search.fetch.content`
 
 ### Associated docs updated
 - Updated `TOOL_SURFACE.md` execution status to reflect Phase 4 completion.

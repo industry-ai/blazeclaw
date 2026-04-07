@@ -50,6 +50,8 @@ namespace blazeclaw::core {
 		std::string skillsPrompt;
 		std::vector<EmbeddedToolBinding> toolBindings;
 		std::vector<blazeclaw::gateway::ToolCatalogEntry> runtimeTools;
+		bool enforceOrderedAllowlist = false;
+		std::vector<std::string> orderedAllowedToolTargets;
 		bool enableDynamicToolLoop = false;
 		std::function<blazeclaw::gateway::ToolExecuteResultV2(
 			const blazeclaw::gateway::ToolExecuteRequestV2&)> toolExecutorV2;

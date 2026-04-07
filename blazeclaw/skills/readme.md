@@ -150,6 +150,8 @@ documentation lookup and general fact retrieval workflows.
 - URL content extraction via `brave_search.fetch.content`
 - Optional strict API-key preflight:
   `BLAZECLAW_BRAVE_REQUIRE_API_KEY=true`
+- Command-dispatch auto-binding is intentionally disabled for brave-search to
+  avoid capturing non-search ordered workflow prompts.
 
 ---
 
@@ -173,12 +175,16 @@ Wikipedia AI-writing-pattern guidance.
 - Ordered execution prompts (for example, "strictly execute in order") are now
   guarded by runtime preflight in `chat.send`:
   - Step targets are extracted in sequence.
+  - Explicit `call <skill-or-tool>` directives are preferred over inferred
+    structural tokens when building ordered target lists.
   - Skill aliases are normalized to stable executable tool IDs when possible
     (for example, namespace-based `*.search.web` and preferred
     `imap_smtp_email.smtp.send` for email-send intent).
   - Each step target is validated against runtime tool + skill catalogs.
   - Missing targets return deterministic diagnostics instead of unrelated tool
     fallback.
+  - For enforced ordered workflows, embedded planning uses a strict allowlist
+    of preflight-resolved tool IDs and executes only those steps in order.
   - Ordered `task-delta` metadata persists both requested aliases and resolved
     tool IDs for plan/preflight visibility.
 - Runtime negative-feedback policy is enabled for `invalid_arguments` tool

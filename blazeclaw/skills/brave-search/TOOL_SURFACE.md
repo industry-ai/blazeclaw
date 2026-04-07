@@ -94,10 +94,12 @@ Use the gateway endpoints below to verify Phase 3 discovery:
 
 ## Chat orchestration status
 
-- `SKILL.md` frontmatter now exposes command dispatch metadata pointing to
-  `brave_search.search.web`.
-- Embedded orchestration can resolve brave-search command bindings and execute
-  runtime tool calls through gateway V2 execution path.
+- `SKILL.md` command-dispatch metadata is intentionally disabled.
+- This prevents brave-search from auto-capturing generic ordered workflows
+  that target non-search skills.
+- Embedded orchestration still executes brave-search through explicit tool IDs:
+  - `brave_search.search.web`
+  - `brave_search.fetch.content`
 
 ## Phase 5 hardening
 

@@ -1,14 +1,6 @@
 ---
 name: brave-search
 description: Web search and content extraction via Brave Search API. Use for searching documentation, facts, or any web content. Lightweight, no browser required.
-command-dispatch: tool
-command-tool: brave_search.search.web
-command-arg-mode: raw
-command-arg-schema: schema://brave_search.search.web.args.v1
-command-result-schema: schema://brave_search.search.web.result.v1
-command-idempotency-hint: safe
-command-retry-policy-hint: transient-network
-command-requires-approval: false
 ---
 
 # Brave Search
@@ -35,6 +27,15 @@ Optional runtime policy env:
 - "Search for latest C++23 coroutine best practices and summarize key changes."
 - "Find official Microsoft docs about MFC dockable panes and extract the most relevant page content."
 - "Look up BlazeClaw gateway tool registry behavior and provide a short digest."
+
+## Command Dispatch Policy
+
+- Command-dispatch metadata is intentionally disabled for this skill.
+- This prevents brave-search from auto-capturing generic ordered workflow prompts
+  that target non-search skills.
+- Brave Search remains available through explicit tool calls:
+  - `brave_search.search.web`
+  - `brave_search.fetch.content`
 
 ## Tool Surface
 

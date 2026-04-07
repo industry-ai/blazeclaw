@@ -118,6 +118,8 @@ namespace blazeclaw::gateway {
 			std::string runId;
 			std::string sessionKey;
 			std::string message;
+			bool enforceOrderedAllowlist = false;
+			std::vector<std::string> orderedAllowedToolTargets;
 			bool hasAttachments = false;
 			std::vector<std::string> attachmentMimeTypes;
 			std::function<void(const std::string&)> onAssistantDelta;
