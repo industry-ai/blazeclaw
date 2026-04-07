@@ -312,6 +312,7 @@ namespace blazeclaw::gateway {
 		void LoadPersistedTaskDeltas();
 		void PersistTaskDeltas() const;
 		bool InitializeRuntime(const blazeclaw::config::GatewayConfig& config);
+		void EnsureFixtureParityValidated();
 
 		bool m_running = false;
 		bool m_initialized = false;
@@ -360,6 +361,7 @@ namespace blazeclaw::gateway {
 		std::size_t m_failoverAttempts = 0;
 		std::size_t m_failoverFallbackHits = 0;
 		std::string m_lastWarning;
+		bool m_fixtureParityValidated = false;
 		GatewayMethodDispatcher m_dispatcher;
 		GatewayWebSocketTransport m_transport;
 		GatewayAgentRegistry m_agentRegistry;

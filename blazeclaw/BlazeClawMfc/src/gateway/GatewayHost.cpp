@@ -774,13 +774,7 @@ namespace blazeclaw::gateway {
 				};
 			});
 
-		std::string fixtureError;
-		if (!protocol::GatewayProtocolContract::ValidateFixtureParity("blazeclaw/fixtures/gateway", fixtureError)) {
-			m_lastWarning = fixtureError;
-		}
-		else {
-			m_lastWarning.clear();
-		}
+		m_fixtureParityValidated = false;
 
 		// Emit telemetry about startup configuration (mask sensitive values)
 		{
@@ -841,6 +835,7 @@ namespace blazeclaw::gateway {
 		m_initialized = false;
 		m_dispatchInitialized = false;
 		m_runtimeHandlersInitialized = false;
+		m_fixtureParityValidated = false;
 		m_bindAddress.clear();
 		m_port = 0;
 	}
@@ -1085,7 +1080,27 @@ namespace blazeclaw::gateway {
 	}
 
 	std::string GatewayHost::LastWarning() const {
+		auto* mutableThis = const_cast<GatewayHost*>(this);
+		mutableThis->EnsureFixtureParityValidated();
 		return m_lastWarning;
+	}
+
+	void GatewayHost::EnsureFixtureParityValidated() {
+		if (m_fixtureParityValidated) {
+			return;
+		}
+
+		m_fixtureParityValidated = true;
+		if (!m_lastWarning.empty()) {
+			return;
+		}
+
+		std::string fixtureError;
+		if (!protocol::GatewayProtocolContract::ValidateFixtureParity(
+			"blazeclaw/fixtures/gateway",
+			fixtureError)) {
+			m_lastWarning = fixtureError;
+		}
 	}
 
 	bool GatewayHost::AcceptConnection(const std::string& connectionId, std::string& error) {

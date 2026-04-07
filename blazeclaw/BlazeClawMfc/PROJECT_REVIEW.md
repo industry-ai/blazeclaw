@@ -105,7 +105,9 @@ This removes per-request dispatcher mutation and avoids unnecessary hot-path reg
 
 ### F) Startup load is heavy
 
-`ServiceManager::Start` performs broad initialization and multiple fixture validations, increasing startup time.
+Status update (implemented): gateway fixture parity validation is now staged/lazy and no longer runs in the gateway startup critical path; validation executes on-demand when warning diagnostics are queried.
+
+Residual risk: startup still performs broad service initialization and other validation-heavy checks.
 
 ### G) Embedded orchestration timeout semantics
 
@@ -151,12 +153,13 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 10. [Completed] Implement provider-to-UI incremental streaming for DeepSeek runtime path using live SSE delta emission callbacks.
 11. [Completed] Stabilize parity chat regression startup and related approval/persistence assertions.
 12. [Completed] Extend provider streaming parity to non-DeepSeek callback-driven runtime paths.
+13. [Completed] Reduce startup critical-path fixture validation cost by staging gateway fixture parity validation lazily.
 
 ### Next recommended priorities
 
-1. Reduce startup critical-path fixture validation cost (lazy/background validation or staged diagnostics pass).
-2. Tighten persisted task-delta parity assertions from contract-level checks to deterministic phase-level checks after persistence contract hardening.
-3. Reduce synthetic fallback staged-delta usage where true incremental emission is feasible.
+1. Tighten persisted task-delta parity assertions from contract-level checks to deterministic phase-level checks after persistence contract hardening.
+2. Reduce synthetic fallback staged-delta usage where true incremental emission is feasible.
+3. Continue startup-path reduction by staging additional non-critical diagnostics/validations.
 
 ## 7) Validation Snapshot (2026-04-07)
 
