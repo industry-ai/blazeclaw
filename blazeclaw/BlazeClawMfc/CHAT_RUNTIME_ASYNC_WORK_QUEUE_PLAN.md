@@ -216,4 +216,9 @@ Current state: **fully accomplished**.
 - Gateway network pumping has been moved out of `CBlazeClawMFCApp::OnIdle` into a dedicated app-owned pump worker loop.
 - This removes idle-loop transport pumping from the UI thread and further reduces UI contention risk.
 
+### Streaming follow-on (2026-04-06)
+
+- DeepSeek runtime path now emits provider SSE deltas through `ChatRuntimeRequest::onAssistantDelta` while response chunks are being read.
+- Gateway `chat.send` now wires this callback to enqueue live `delta` events so UI polling can receive incremental snapshots before terminal completion.
+
 The migration item "Move chat runtime execution off UI thread using async work queue + completion events" is complete for this planned scope.

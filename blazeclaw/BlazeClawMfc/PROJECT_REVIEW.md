@@ -85,7 +85,9 @@ Status update (implemented): `ChatView` uses incremental append/update synchroni
 
 ### C) Streaming pipeline behavior
 
-Streaming behavior remains simulated/chunked at gateway chat-event layer; there is still no end-to-end true token-by-token transport from provider to UI event queue.
+Status update (implemented): provider-to-UI incremental streaming now emits DeepSeek SSE-derived assistant snapshots into gateway chat events during provider read, instead of waiting for full-response completion before delta publication.
+
+Residual risk: non-DeepSeek paths and synthetic fallback paths can still use staged/simulated deltas.
 
 ### D) Embeddings throughput serialization
 
@@ -144,11 +146,12 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 7. [Completed] Optionally parallelize embeddings safely (separate sessions or lock partitioning).
 8. [Completed] Decouple UI submit path from synchronous `chat.send` waiting by using non-blocking submit + UI completion message handling.
 9. [Completed] Move gateway network pump off `OnIdle` into an app-owned dedicated worker loop.
+10. [Completed] Implement provider-to-UI incremental streaming for DeepSeek runtime path using live SSE delta emission callbacks.
 
 ### Next recommended priorities
 
-1. Implement true provider-to-UI incremental streaming (avoid full-response-first staging before UI delta delivery).
-2. Stabilize parity regression startup behavior (`host.Start(gatewayConfig)` failures) and related approval/persistence assertions.
+1. Stabilize parity regression startup behavior (`host.Start(gatewayConfig)` failures) and related approval/persistence assertions.
+2. Extend true incremental provider streaming parity across non-DeepSeek runtime paths.
 3. Reduce startup critical-path fixture validation cost (lazy/background validation or staged diagnostics pass).
 
 ## 7) Validation Snapshot (2026-04-06)

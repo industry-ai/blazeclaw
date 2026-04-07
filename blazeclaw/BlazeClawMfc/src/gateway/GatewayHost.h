@@ -120,6 +120,7 @@ namespace blazeclaw::gateway {
 			std::string message;
 			bool hasAttachments = false;
 			std::vector<std::string> attachmentMimeTypes;
+			std::function<void(const std::string&)> onAssistantDelta;
 		};
 
 		struct ChatAbortRequest {

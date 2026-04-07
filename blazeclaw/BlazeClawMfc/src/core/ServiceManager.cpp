@@ -6171,6 +6171,71 @@ namespace blazeclaw::core {
 
 		std::string responseBody;
 		std::size_t chunkCount = 0;
+		std::string streamBuffer;
+		std::string streamedCumulative;
+		std::vector<std::string> streamedSnapshots;
+
+		auto processStreamBuffer = [&](const bool flushTail) {
+			while (true) {
+				const std::size_t lineEnd = streamBuffer.find('\n');
+				if (lineEnd == std::string::npos) {
+					break;
+				}
+
+				std::string line = streamBuffer.substr(0, lineEnd);
+				streamBuffer.erase(0, lineEnd + 1);
+				if (!line.empty() && line.back() == '\r') {
+					line.pop_back();
+				}
+
+				const std::string prefix = "data:";
+				if (line.rfind(prefix, 0) != 0) {
+					continue;
+				}
+
+				const std::string payload =
+					blazeclaw::gateway::json::Trim(line.substr(prefix.size()));
+				if (payload.empty() || payload == "[DONE]") {
+					continue;
+				}
+
+				const auto piece = ExtractDeepSeekAssistantText(payload);
+				if (!piece.has_value() || piece->empty()) {
+					continue;
+				}
+
+				streamedCumulative += piece.value();
+				streamedSnapshots.push_back(streamedCumulative);
+				if (request.onAssistantDelta) {
+					request.onAssistantDelta(streamedCumulative);
+				}
+			}
+
+			if (flushTail && !streamBuffer.empty()) {
+				std::string tailLine = streamBuffer;
+				streamBuffer.clear();
+				if (!tailLine.empty() && tailLine.back() == '\r') {
+					tailLine.pop_back();
+				}
+
+				const std::string prefix = "data:";
+				if (tailLine.rfind(prefix, 0) == 0) {
+					const std::string payload =
+						blazeclaw::gateway::json::Trim(tailLine.substr(prefix.size()));
+					if (!payload.empty() && payload != "[DONE]") {
+						const auto piece = ExtractDeepSeekAssistantText(payload);
+						if (piece.has_value() && !piece->empty()) {
+							streamedCumulative += piece.value();
+							streamedSnapshots.push_back(streamedCumulative);
+							if (request.onAssistantDelta) {
+								request.onAssistantDelta(streamedCumulative);
+							}
+						}
+					}
+				}
+			}
+			};
+
 		while (true) {
 			if (IsDeepSeekRunCancelled(request.runId)) {
 				EmitDeepSeekDiagnostic(
@@ -6210,8 +6275,11 @@ namespace blazeclaw::core {
 			}
 
 			responseBody.append(chunk.data(), static_cast<std::size_t>(downloaded));
+			streamBuffer.append(chunk.data(), static_cast<std::size_t>(downloaded));
+			processStreamBuffer(false);
 			++chunkCount;
 		}
+		processStreamBuffer(true);
 
 		EmitDeepSeekDiagnostic(
 			"stream",
@@ -6246,7 +6314,10 @@ namespace blazeclaw::core {
 			};
 		}
 
-		const auto assistantDeltas = ExtractDeepSeekAssistantDeltas(responseBody);
+		auto assistantDeltas = streamedSnapshots;
+		if (assistantDeltas.empty()) {
+			assistantDeltas = ExtractDeepSeekAssistantDeltas(responseBody);
+		}
 		const std::string assistantText = assistantDeltas.empty()
 			? std::string()
 			: assistantDeltas.back();

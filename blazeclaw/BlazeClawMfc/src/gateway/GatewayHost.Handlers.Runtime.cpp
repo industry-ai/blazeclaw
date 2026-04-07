@@ -2145,6 +2145,8 @@ namespace blazeclaw::gateway {
 				std::string backendErrorMessage;
 				bool failed = false;
 				bool orchestrationHandled = false;
+				bool lifecycleEventsEnqueued = false;
+				bool providerStreamed = false;
 				const std::string orchestrationPath =
 					ToLowerCopyLocal(m_embeddedOrchestrationPath);
 				const bool allowPromptOrchestration =
@@ -2466,6 +2468,45 @@ namespace blazeclaw::gateway {
 				}
 
 				if (!forceError && !orchestrationHandled && m_chatRuntimeCallback) {
+					auto& runtimeSessionEvents = m_chatEventsBySession[sessionKey];
+					PushEventWithRetentionLimit(runtimeSessionEvents, ChatEventState{
+							.runId = runId,
+							.sessionKey = sessionKey,
+							.state = "queued",
+							.messageJson = std::nullopt,
+							.errorMessage = std::nullopt,
+							.timestampMs = nowMs,
+						});
+					PushEventWithRetentionLimit(runtimeSessionEvents, ChatEventState{
+							.runId = runId,
+							.sessionKey = sessionKey,
+							.state = "started",
+							.messageJson = std::nullopt,
+							.errorMessage = std::nullopt,
+							.timestampMs = nowMs,
+						});
+					lifecycleEventsEnqueued = true;
+
+					m_chatRunsById.insert_or_assign(
+						runId,
+						ChatRunState{
+							.runId = runId,
+							.sessionKey = sessionKey,
+							.idempotencyKey = idempotencyKey,
+							.userMessage = message,
+							.assistantText = {},
+							.providerDeltas = {},
+							.providerDeltaCursor = 0,
+							.streamCursor = 0,
+							.lastEmitMs = nowMs,
+							.failed = false,
+							.errorMessage = {},
+							.startedAtMs = nowMs,
+							.active = true,
+							.terminalEventEnqueued = false,
+						});
+
+					std::size_t streamedDeltaCount = 0;
 					const auto runtimeResult = m_chatRuntimeCallback(
 						ChatRuntimeRequest{
 							.runId = runId,
@@ -2473,7 +2514,34 @@ namespace blazeclaw::gateway {
 							.message = normalizedMessage,
 							.hasAttachments = hasAttachments,
 							.attachmentMimeTypes = attachmentMimeTypes,
+						 .onAssistantDelta =
+								[this, &streamedDeltaCount, &runId, &sessionKey](const std::string& delta) {
+									const std::string normalizedDelta = json::Trim(delta);
+									if (normalizedDelta.empty() || IsSilentReplyText(normalizedDelta)) {
+										return;
+									}
+
+									auto& streamEvents = m_chatEventsBySession[sessionKey];
+									PushEventWithRetentionLimit(streamEvents, ChatEventState{
+											.runId = runId,
+											.sessionKey = sessionKey,
+											.state = "delta",
+											.messageJson = BuildAssistantDeltaMessageJson(normalizedDelta),
+											.errorMessage = std::nullopt,
+											.timestampMs = CurrentEpochMsLocal(),
+										});
+
+									auto runStateIt = m_chatRunsById.find(runId);
+									if (runStateIt != m_chatRunsById.end()) {
+										runStateIt->second.assistantText = normalizedDelta;
+										runStateIt->second.streamCursor = normalizedDelta.size();
+										runStateIt->second.lastEmitMs = CurrentEpochMsLocal();
+									}
+
+									++streamedDeltaCount;
+								}
 						});
+					providerStreamed = streamedDeltaCount > 0;
 
 					if (runtimeResult.ok) {
 						if (!runtimeResult.assistantText.empty()) {
@@ -2490,6 +2558,9 @@ namespace blazeclaw::gateway {
 						if (providerDeltas.empty() && !assistantText.empty()) {
 							providerDeltas.push_back(assistantText);
 						}
+						if (providerStreamed) {
+							providerDeltas.clear();
+						}
 						assistantDeltas = providerDeltas;
 
 						if (assistantText.empty()) {
@@ -2499,24 +2570,18 @@ namespace blazeclaw::gateway {
 								"chat runtime returned no assistant output";
 						}
 						else {
-							m_chatRunsById.insert_or_assign(
-								runId,
-								ChatRunState{
-									.runId = runId,
-									.sessionKey = sessionKey,
-									.idempotencyKey = idempotencyKey,
-									.userMessage = message,
-									.assistantText = assistantText,
-									.providerDeltas = assistantDeltas,
-									.providerDeltaCursor = 0,
-									.streamCursor = 0,
-									.lastEmitMs = nowMs,
-									.failed = failed,
-									.errorMessage = backendErrorMessage,
-									.startedAtMs = nowMs,
-									 .active = true,
-										.terminalEventEnqueued = false,
-								});
+							auto existingRunIt = m_chatRunsById.find(runId);
+							if (existingRunIt != m_chatRunsById.end()) {
+								existingRunIt->second.assistantText = assistantText;
+								existingRunIt->second.providerDeltas = assistantDeltas;
+								existingRunIt->second.providerDeltaCursor = 0;
+								existingRunIt->second.streamCursor =
+									providerStreamed ? assistantText.size() : 0;
+								existingRunIt->second.lastEmitMs = nowMs;
+								existingRunIt->second.failed = failed;
+								existingRunIt->second.errorMessage = backendErrorMessage;
+								existingRunIt->second.active = true;
+							}
 						}
 					}
 					else {
@@ -2528,6 +2593,19 @@ namespace blazeclaw::gateway {
 							? "chat runtime failed"
 							: runtimeResult.errorMessage;
 						assistantText.clear();
+					}
+
+					auto existingRunIt = m_chatRunsById.find(runId);
+					if (existingRunIt != m_chatRunsById.end()) {
+						existingRunIt->second.assistantText = assistantText;
+						existingRunIt->second.providerDeltas = assistantDeltas;
+						existingRunIt->second.providerDeltaCursor = 0;
+						existingRunIt->second.streamCursor =
+							providerStreamed ? assistantText.size() : 0;
+						existingRunIt->second.lastEmitMs = nowMs;
+						existingRunIt->second.failed = failed;
+						existingRunIt->second.errorMessage = backendErrorMessage;
+						existingRunIt->second.active = true;
 					}
 
 					persistTaskDeltas(
@@ -2568,22 +2646,24 @@ namespace blazeclaw::gateway {
 					BuildUserMessageJson(normalizedMessage, hasAttachments, nowMs));
 
 				auto& sessionEvents = m_chatEventsBySession[sessionKey];
-				PushEventWithRetentionLimit(sessionEvents, ChatEventState{
-						.runId = runId,
-						.sessionKey = sessionKey,
-						.state = "queued",
-						.messageJson = std::nullopt,
-						.errorMessage = std::nullopt,
-						.timestampMs = nowMs,
-					});
-				PushEventWithRetentionLimit(sessionEvents, ChatEventState{
-					   .runId = runId,
-					   .sessionKey = sessionKey,
-					   .state = "started",
-					   .messageJson = std::nullopt,
-					   .errorMessage = std::nullopt,
-					   .timestampMs = nowMs,
-					});
+				if (!lifecycleEventsEnqueued) {
+					PushEventWithRetentionLimit(sessionEvents, ChatEventState{
+							.runId = runId,
+							.sessionKey = sessionKey,
+							.state = "queued",
+							.messageJson = std::nullopt,
+							.errorMessage = std::nullopt,
+							.timestampMs = nowMs,
+						});
+					PushEventWithRetentionLimit(sessionEvents, ChatEventState{
+							.runId = runId,
+							.sessionKey = sessionKey,
+							.state = "started",
+							.messageJson = std::nullopt,
+							.errorMessage = std::nullopt,
+							.timestampMs = nowMs,
+						});
+				}
 				EmitDeepSeekGatewayDiagnostic(
 					"event.enqueue",
 					std::string("state=queued runId=") +
@@ -2602,7 +2682,7 @@ namespace blazeclaw::gateway {
 					std::to_string(sessionEvents.size()));
 
 				std::size_t streamCursor = 0;
-				if (!failed && !silentAssistantReply) {
+				if (!failed && !silentAssistantReply && !providerStreamed) {
 					streamCursor = (std::min)(assistantText.size(), std::size_t{ 6 });
 					if (streamCursor > 0) {
 						PushEventWithRetentionLimit(sessionEvents, ChatEventState{
