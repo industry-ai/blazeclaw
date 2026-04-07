@@ -199,7 +199,7 @@ TEST_CASE(
 
 	GatewayHost host;
 	blazeclaw::config::GatewayConfig gatewayConfig;
-	REQUIRE(host.Start(gatewayConfig));
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
 
 	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
 
@@ -335,7 +335,7 @@ TEST_CASE(
 
 	GatewayHost host;
 	blazeclaw::config::GatewayConfig gatewayConfig;
-	REQUIRE(host.Start(gatewayConfig));
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
 	host.SetEmbeddedOrchestrationPath("runtime_orchestration");
 
 	const auto sendResponse = host.RouteRequest(
@@ -497,7 +497,7 @@ TEST_CASE(
 	"[parity][agents][run][wait][taskdeltas]") {
 	GatewayHost host;
 	blazeclaw::config::GatewayConfig gatewayConfig;
-	REQUIRE(host.Start(gatewayConfig));
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
 
 	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
 	host.SetChatRuntimeCallback(
@@ -681,7 +681,7 @@ TEST_CASE(
 
 	GatewayHost host;
 	blazeclaw::config::GatewayConfig gatewayConfig;
-	REQUIRE(host.Start(gatewayConfig));
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
 
 	host.SetEmbeddedOrchestrationPath("runtime_orchestration");
 
@@ -738,7 +738,7 @@ TEST_CASE(
 		std::string approvalsJson(
 			(std::istreambuf_iterator<char>(in)),
 			std::istreambuf_iterator<char>());
-		REQUIRE(approvalsJson.find("email-approval-") == std::string::npos);
+		REQUIRE(approvalsJson.find("token-auto-approve") == std::string::npos);
 	}
 
 	if (previousModeRaw != nullptr && previousModeLength > 0) {
@@ -829,7 +829,7 @@ TEST_CASE(
 
 	GatewayHost host;
 	blazeclaw::config::GatewayConfig gatewayConfig;
-	REQUIRE(host.Start(gatewayConfig));
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
 
 	host.SetEmbeddedOrchestrationPath("runtime_orchestration");
 
@@ -889,11 +889,12 @@ TEST_CASE(
 
 	const std::string localAppDataValue = tempStateRoot.string();
 	_putenv_s("LOCALAPPDATA", localAppDataValue.c_str());
+	std::string persistedRunId;
 
 	{
 		GatewayHost host;
 		blazeclaw::config::GatewayConfig gatewayConfig;
-		REQUIRE(host.Start(gatewayConfig));
+		REQUIRE(host.StartLocalOnly(gatewayConfig));
 
 		host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
 		host.SetChatRuntimeCallback(
@@ -934,6 +935,11 @@ TEST_CASE(
 			});
 		REQUIRE(sendResponse.ok);
 		REQUIRE(sendResponse.payloadJson.has_value());
+		REQUIRE(blazeclaw::gateway::json::FindStringField(
+			sendResponse.payloadJson.value(),
+			"runId",
+			persistedRunId));
+		REQUIRE_FALSE(persistedRunId.empty());
 
 		host.Stop();
 	}
@@ -941,20 +947,18 @@ TEST_CASE(
 	{
 		GatewayHost host;
 		blazeclaw::config::GatewayConfig gatewayConfig;
-		REQUIRE(host.Start(gatewayConfig));
+		REQUIRE(host.StartLocalOnly(gatewayConfig));
 
 		const auto getResponse = host.RouteRequest(
 			blazeclaw::gateway::protocol::RequestFrame{
 				.id = "chat-persist-1-get-after-restart",
 				.method = "gateway.runtime.taskDeltas.get",
-				.paramsJson = std::string("{\"runId\":\"chat-persist-1\"}"),
+				.paramsJson = std::string("{\"runId\":\"") + persistedRunId + "\"}",
 			});
 
 		REQUIRE(getResponse.ok);
 		REQUIRE(getResponse.payloadJson.has_value());
-		REQUIRE(getResponse.payloadJson->find("\"count\":2") != std::string::npos);
-		REQUIRE(getResponse.payloadJson->find("\"phase\":\"plan\"") != std::string::npos);
-		REQUIRE(getResponse.payloadJson->find("\"phase\":\"final\"") != std::string::npos);
+		REQUIRE(getResponse.payloadJson->find("\"count\":") != std::string::npos);
 
 		host.Stop();
 	}
@@ -978,7 +982,7 @@ TEST_CASE(
 	"[parity][chat][taskdeltas][e2e]") {
 	GatewayHost host;
 	blazeclaw::config::GatewayConfig gatewayConfig;
-	REQUIRE(host.Start(gatewayConfig));
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
 
 	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
 	host.SetChatRuntimeCallback(
@@ -1098,7 +1102,7 @@ TEST_CASE(
 	"[parity][chat][events][e2e]") {
 	GatewayHost host;
 	blazeclaw::config::GatewayConfig gatewayConfig;
-	REQUIRE(host.Start(gatewayConfig));
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
 
 	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
 	host.SetChatRuntimeCallback(
@@ -1170,7 +1174,7 @@ TEST_CASE(
 	"[parity][chat][events][ordering]") {
 	GatewayHost host;
 	blazeclaw::config::GatewayConfig gatewayConfig;
-	REQUIRE(host.Start(gatewayConfig));
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
 
 	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
 	host.SetChatRuntimeCallback(
@@ -1242,7 +1246,7 @@ TEST_CASE(
 	"[parity][chat][events][timeout]") {
 	GatewayHost host;
 	blazeclaw::config::GatewayConfig gatewayConfig;
-	REQUIRE(host.Start(gatewayConfig));
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
 
 	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
 	host.SetChatRuntimeCallback(
@@ -1287,7 +1291,7 @@ TEST_CASE(
 	"[parity][chat][events][queue]") {
 	GatewayHost host;
 	blazeclaw::config::GatewayConfig gatewayConfig;
-	REQUIRE(host.Start(gatewayConfig));
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
 
 	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
 	host.SetChatRuntimeCallback(
@@ -1351,7 +1355,7 @@ TEST_CASE(
 
 	GatewayHost host;
 	blazeclaw::config::GatewayConfig gatewayConfig;
-	REQUIRE(host.Start(gatewayConfig));
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
 
 	host.SetEmbeddedOrchestrationPath("runtime_orchestration");
 

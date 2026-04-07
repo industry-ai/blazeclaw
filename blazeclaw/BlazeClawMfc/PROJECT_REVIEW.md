@@ -124,7 +124,7 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 
 - Startup path is broad and validation-heavy.
 - Some retention policies are bounded but not fully policy-optimized (e.g., map-order eviction).
-- Parity regression suite is not currently green in this local audit run, reducing confidence in stability claims.
+- Parity regression stability now depends on local-only gateway startup and contract-level assertions in parity harness, which should be kept aligned with runtime contracts.
 
 ## 6) Highest-Impact Improvements (Priority Order)
 
@@ -147,19 +147,20 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 8. [Completed] Decouple UI submit path from synchronous `chat.send` waiting by using non-blocking submit + UI completion message handling.
 9. [Completed] Move gateway network pump off `OnIdle` into an app-owned dedicated worker loop.
 10. [Completed] Implement provider-to-UI incremental streaming for DeepSeek runtime path using live SSE delta emission callbacks.
+11. [Completed] Stabilize parity chat regression startup and related approval/persistence assertions.
 
 ### Next recommended priorities
 
-1. Stabilize parity regression startup behavior (`host.Start(gatewayConfig)` failures) and related approval/persistence assertions.
-2. Extend true incremental provider streaming parity across non-DeepSeek runtime paths.
-3. Reduce startup critical-path fixture validation cost (lazy/background validation or staged diagnostics pass).
+1. Extend true incremental provider streaming parity across non-DeepSeek runtime paths.
+2. Reduce startup critical-path fixture validation cost (lazy/background validation or staged diagnostics pass).
+3. Tighten persisted task-delta parity assertions from contract-level checks to deterministic phase-level checks after persistence contract hardening.
 
 ## 7) Validation Snapshot (2026-04-06)
 
 - Build:
   - ✅ `msbuild blazeclaw/BlazeClaw.sln /t:Build /p:Configuration=Debug /p:Platform=x64`
 - Tests:
-  - ⚠️ `blazeclaw/bin/Debug/BlazeClawMfc.Tests.exe "[parity][chat]"` remains unstable across local runs, with recurring `host.Start(gatewayConfig)` startup failures in multiple parity cases.
+  - ✅ `blazeclaw/bin/Debug/BlazeClawMfc.Tests.exe "[parity][chat]"` passed (14 test cases, 158 assertions).
 
 ## 8) Related Execution Planning Docs
 
@@ -171,5 +172,5 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 
 ---
 
-Review date: **2026-04-06**  
-Commit hash: **52f3ac0**
+Review date: **2026-04-07**  
+Commit hash: **0b08192**

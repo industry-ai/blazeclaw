@@ -116,4 +116,4 @@ Use `runtime_orchestration` only for tightly-scoped, deterministic, low-variance
 ## Latest audit note (2026-04-06)
 
 - Path recommendation remains unchanged: `dynamic_task_delta` should stay primary.
-- Current local parity-chat filtered behavior remains unstable across runs, including recurring `host.Start(gatewayConfig)` startup failures and intermittent approval/persistence assertion mismatches.
+- Current local parity-chat filtered run passes after parity harness stabilization updates; no startup-failure recurrence observed in latest audit run.
