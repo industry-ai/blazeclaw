@@ -168,6 +168,12 @@ documentation lookup and general fact retrieval workflows.
     fallback.
   - Ordered `task-delta` metadata persists both requested aliases and resolved
     tool IDs for plan/preflight visibility.
+- Runtime negative-feedback policy is enabled for `invalid_arguments` tool
+  results:
+  - retry with reconstructed arguments on the same tool,
+  - retry same-namespace candidate tools,
+  - allow cross-skill fallback only when intent similarity and reconstructed
+    parameters satisfy guard checks.
 - `general` is **not** a separate skill source/type. It is treated as part of
   runtime-registered grouping in the tree (as a subitem).
 - If a local skill exists but does not appear as runtime-registered, verify
