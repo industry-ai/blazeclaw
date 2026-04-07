@@ -243,6 +243,38 @@ namespace {
 		return text;
 	}
 
+	std::string BuildRunTaskDeltasParams(const std::string& runId)
+	{
+		return std::string("{\"runId\":\"") + runId + "\"}";
+	}
+
+	std::string ExtractToolPathLabel(
+		const std::string& toolName,
+		const std::string& status,
+		const std::string& errorCode)
+	{
+		std::string normalizedTool = blazeclaw::gateway::json::Trim(toolName);
+		if (normalizedTool.empty())
+		{
+			return {};
+		}
+
+		std::string normalizedStatus = blazeclaw::gateway::json::Trim(status);
+		if (normalizedStatus.empty())
+		{
+			normalizedStatus = "unknown";
+		}
+
+		std::string line = normalizedTool + " [" + normalizedStatus + "]";
+		const std::string normalizedError = blazeclaw::gateway::json::Trim(errorCode);
+		if (!normalizedError.empty())
+		{
+			line += " errorCode=" + normalizedError;
+		}
+
+		return line;
+	}
+
 	CString BuildDeepSeekDiagnosticLine(
 		const char* stage,
 		const std::string& detail)
@@ -590,6 +622,7 @@ void CChatView::SendChatMessageNative(const std::string& message)
 
 	const std::string runId =
 		"native-run-" + std::to_string(CurrentEpochMs());
+	m_reportedSkillPathRunIds.erase(runId);
 	if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
 	{
 		frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
@@ -752,6 +785,7 @@ LRESULT CChatView::OnNativeChatSendCompleted(WPARAM /*wParam*/, LPARAM lParam)
 				completion->runId +
 				" detail=" +
 				completion->errorDetail));
+			MaybeReportRunSkillPaths(completion->runId);
 		}
 
 		if (m_chatState.chatRunId.has_value() &&
@@ -886,6 +920,7 @@ void CChatView::HandleChatEventNative(const NativeChatEventPayload& payload)
 		m_chatState.chatRunId.reset();
 		m_chatState.chatStream.reset();
 		m_chatState.chatStreamStartedAt.reset();
+		MaybeReportRunSkillPaths(payload.runId);
 		return;
 	}
 
@@ -895,6 +930,107 @@ void CChatView::HandleChatEventNative(const NativeChatEventPayload& payload)
 		m_chatState.chatStream.reset();
 		m_chatState.chatStreamStartedAt.reset();
 		m_chatState.lastError = payload.errorMessage.value_or("chat error");
+		MaybeReportRunSkillPaths(payload.runId);
+		return;
+	}
+
+}
+
+void CChatView::MaybeReportRunSkillPaths(const std::string& runId)
+{
+	if (runId.empty())
+	{
+		return;
+	}
+
+	if (m_reportedSkillPathRunIds.find(runId) != m_reportedSkillPathRunIds.end())
+	{
+		return;
+	}
+
+	ReportTriedSkillPathsToFindOutput(runId);
+	m_reportedSkillPathRunIds.insert(runId);
+}
+
+void CChatView::ReportTriedSkillPathsToFindOutput(const std::string& runId)
+{
+	auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+	if (frame == nullptr)
+	{
+		return;
+	}
+
+	blazeclaw::gateway::protocol::ResponseFrame response;
+	if (!RequestGateway(
+		"gateway.runtime.taskDeltas.get",
+		BuildRunTaskDeltasParams(runId),
+		response) ||
+		!response.ok ||
+		!response.payloadJson.has_value())
+	{
+		frame->AddFindStatusLine(
+			BuildDeepSeekDiagnosticLine(
+				"skill-path",
+				std::string("runId=") + runId +
+				" failed to query task deltas."));
+		return;
+	}
+
+	std::string taskDeltasRaw;
+	if (!blazeclaw::gateway::json::FindRawField(
+		response.payloadJson.value(),
+		"taskDeltas",
+		taskDeltasRaw))
+	{
+		frame->AddFindStatusLine(
+			BuildDeepSeekDiagnosticLine(
+				"skill-path",
+				std::string("runId=") + runId +
+				" task deltas missing."));
+		return;
+	}
+
+	const auto taskDeltaObjects = SplitTopLevelObjects(taskDeltasRaw);
+	if (taskDeltaObjects.empty())
+	{
+		frame->AddFindStatusLine(
+			BuildDeepSeekDiagnosticLine(
+				"skill-path",
+				std::string("runId=") + runId +
+				" no tried skill paths."));
+		return;
+	}
+
+	frame->AddFindStatusLine(
+		BuildDeepSeekDiagnosticLine(
+			"skill-path",
+			std::string("runId=") + runId + " tried skill paths:"));
+
+	std::unordered_set<std::string> emitted;
+	for (const auto& deltaJson : taskDeltaObjects)
+	{
+		std::string phase;
+		blazeclaw::gateway::json::FindStringField(deltaJson, "phase", phase);
+		if (phase != "tool_result")
+		{
+			continue;
+		}
+
+		std::string toolName;
+		std::string status;
+		std::string errorCode;
+		blazeclaw::gateway::json::FindStringField(deltaJson, "toolName", toolName);
+		blazeclaw::gateway::json::FindStringField(deltaJson, "status", status);
+		blazeclaw::gateway::json::FindStringField(deltaJson, "errorCode", errorCode);
+
+		const std::string label = ExtractToolPathLabel(toolName, status, errorCode);
+		if (label.empty() || emitted.find(label) != emitted.end())
+		{
+			continue;
+		}
+
+		emitted.insert(label);
+		frame->AddFindStatusLine(CString(CA2W((std::string("  - ") + label).c_str(), CP_UTF8)));
 	}
 }
 

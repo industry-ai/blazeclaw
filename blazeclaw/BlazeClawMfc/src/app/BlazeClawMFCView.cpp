@@ -99,6 +99,164 @@ namespace {
 		return output;
 	}
 
+	std::string BuildSkillPathFromDeltaText(const std::string& text)
+	{
+		const std::string trimmed = blazeclaw::gateway::json::Trim(text);
+		if (trimmed.empty())
+		{
+			return {};
+		}
+
+		const bool isStart =
+			trimmed.rfind("tools.execute.start tool=", 0) == 0;
+		const bool isResult =
+			trimmed.rfind("tools.execute.result tool=", 0) == 0;
+		if (!isStart && !isResult)
+		{
+			return {};
+		}
+
+		const std::string toolToken = " tool=";
+		const std::size_t toolPos = trimmed.find(toolToken);
+		if (toolPos == std::string::npos)
+		{
+			return {};
+		}
+
+		const std::size_t toolStart = toolPos + toolToken.size();
+		std::size_t toolEnd = trimmed.find(' ', toolStart);
+		if (toolEnd == std::string::npos)
+		{
+			toolEnd = trimmed.size();
+		}
+
+		const std::string tool = trimmed.substr(toolStart, toolEnd - toolStart);
+		if (tool.empty())
+		{
+			return {};
+		}
+
+		std::string status = isStart ? "requested" : "ok";
+		const std::string statusToken = " status=";
+		const std::size_t statusPos = trimmed.find(statusToken);
+		if (statusPos != std::string::npos)
+		{
+			const std::size_t statusStart = statusPos + statusToken.size();
+			std::size_t statusEnd = trimmed.find(' ', statusStart);
+			if (statusEnd == std::string::npos)
+			{
+				statusEnd = trimmed.size();
+			}
+
+			const std::string parsed = trimmed.substr(
+				statusStart,
+				statusEnd - statusStart);
+			if (!parsed.empty())
+			{
+				status = parsed;
+			}
+		}
+
+		std::string line = "[SkillPath] " + tool + " [" + status + "]";
+		const std::string errorToken = " errorCode=";
+		const std::size_t errorPos = trimmed.find(errorToken);
+		if (errorPos != std::string::npos)
+		{
+			const std::string errorCode = trimmed.substr(
+				errorPos + errorToken.size());
+			if (!errorCode.empty())
+			{
+				line += " errorCode=" + errorCode;
+			}
+		}
+
+		return line;
+	}
+
+	std::vector<std::string> SplitTopLevelObjects(const std::string& arrayJson)
+	{
+		std::vector<std::string> objects;
+		const std::string trimmed = blazeclaw::gateway::json::Trim(arrayJson);
+		if (trimmed.size() < 2 || trimmed.front() != '[' || trimmed.back() != ']')
+		{
+			return objects;
+		}
+
+		bool inString = false;
+		int depth = 0;
+		std::size_t start = std::string::npos;
+		for (std::size_t i = 0; i < trimmed.size(); ++i)
+		{
+			const char ch = trimmed[i];
+			if (inString)
+			{
+				if (ch == '\\')
+				{
+					++i;
+					continue;
+				}
+
+				if (ch == '"')
+				{
+					inString = false;
+				}
+				continue;
+			}
+
+			if (ch == '"')
+			{
+				inString = true;
+				continue;
+			}
+
+			if (ch == '{')
+			{
+				if (depth == 0)
+				{
+					start = i;
+				}
+				++depth;
+				continue;
+			}
+
+			if (ch == '}')
+			{
+				--depth;
+				if (depth == 0 && start != std::string::npos)
+				{
+					objects.push_back(trimmed.substr(start, (i - start) + 1));
+					start = std::string::npos;
+				}
+			}
+		}
+
+		return objects;
+	}
+
+	std::vector<std::string> ExtractTerminalRunIds(const std::string& eventsRaw)
+	{
+		std::vector<std::string> runIds;
+		for (const auto& eventJson : SplitTopLevelObjects(eventsRaw))
+		{
+			std::string state;
+			blazeclaw::gateway::json::FindStringField(eventJson, "state", state);
+			if (state != "final" && state != "error" && state != "aborted")
+			{
+				continue;
+			}
+
+			std::string runId;
+			blazeclaw::gateway::json::FindStringField(eventJson, "runId", runId);
+			runId = blazeclaw::gateway::json::Trim(runId);
+			if (!runId.empty())
+			{
+				runIds.push_back(runId);
+			}
+		}
+
+		return runIds;
+	}
+
 	std::optional<std::filesystem::path> FindEmailConfigHtml(
 		const std::filesystem::path& start)
 	{
@@ -489,6 +647,56 @@ namespace {
 		}
 
 		mainFrame->AddChatStatusBlock(CString(CA2W(text.c_str(), CP_UTF8)));
+	}
+
+	void AppendFindSkillPathLine(const CString& line)
+	{
+		auto* mainFrame =
+			dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+		if (mainFrame == nullptr)
+		{
+			return;
+		}
+
+		mainFrame->AddFindStatusLine(line);
+	}
+
+	void AppendFindSkillPathStatus(
+		const wchar_t* stage,
+		const std::string& detail)
+	{
+		if (stage == nullptr)
+		{
+			return;
+		}
+
+		const std::wstring stageText(stage);
+		CStringW detailW(CA2W(detail.c_str(), CP_UTF8));
+		//TRACE(
+		//	L"[FindSkillPath][Trace] stage=%s detail=%s\n",
+		//	stageText.c_str(),
+		//	detailW.GetString());
+
+		CString traceLine;
+		traceLine.Format(
+			L"[SkillPath][Trace] stage=%s detail=%s",
+			stage,
+			detailW.GetString());
+		AppendFindSkillPathLine(traceLine);
+
+		if (stageText.rfind(L"tools.execute.", 0) != 0)
+		{
+			return;
+		}
+
+		CString line;
+		line.Format(
+			L"[SkillPath] %s - %s",
+			stage,
+			detailW.GetString());
+		AppendFindSkillPathLine(line);
+
+		//TRACE(L"[FindSkillPath][Trace] appended=%s\n", line.GetString());
 	}
 
 	void AppendChatProcedureStatusLine(const wchar_t* stage)
@@ -1869,6 +2077,11 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 	}
 
 	AppendChatProcedureStatusLine(L"events.poll.batch", eventsRaw);
+	EmitSkillPathLinesFromEvents(eventsRaw);
+	for (const auto& runId : ExtractTerminalRunIds(eventsRaw))
+	{
+		ReportRunSkillPathsToFindOutput(runId);
+	}
 
 	const std::string finalAssistantText =
 		TryExtractFinalAssistantText(eventsRaw);
@@ -1887,6 +2100,156 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 		"}";
 	PostBridgeMessageJson(ToWide(envelope));
 	EmitOpenClawChatEvents(eventsRaw);
+}
+
+void CBlazeClawMFCView::EmitSkillPathLinesFromEvents(const std::string& eventsRaw)
+{
+	auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+	if (mainFrame == nullptr)
+	{
+		return;
+	}
+
+	std::unordered_set<std::string> emittedInBatch;
+	for (const auto& eventJson : SplitTopLevelObjects(eventsRaw))
+	{
+		std::string state;
+		blazeclaw::gateway::json::FindStringField(eventJson, "state", state);
+		if (state != "delta")
+		{
+			continue;
+		}
+
+		std::string messageRaw;
+		if (!blazeclaw::gateway::json::FindRawField(eventJson, "message", messageRaw))
+		{
+			continue;
+		}
+
+		std::string text;
+		if (!blazeclaw::gateway::json::FindStringField(messageRaw, "text", text))
+		{
+			continue;
+		}
+
+		const std::string line = BuildSkillPathFromDeltaText(text);
+		if (line.empty() || emittedInBatch.find(line) != emittedInBatch.end())
+		{
+			continue;
+		}
+
+		emittedInBatch.insert(line);
+		mainFrame->AddFindStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
+	}
+}
+
+void CBlazeClawMFCView::ReportRunSkillPathsToFindOutput(const std::string& runId)
+{
+	const std::string normalizedRunId = blazeclaw::gateway::json::Trim(runId);
+	if (normalizedRunId.empty())
+	{
+		return;
+	}
+
+	if (m_reportedSkillPathRunIds.find(normalizedRunId) !=
+		m_reportedSkillPathRunIds.end())
+	{
+		return;
+	}
+
+	auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	if (mainFrame == nullptr || app == nullptr)
+	{
+		return;
+	}
+
+	const blazeclaw::gateway::protocol::RequestFrame request{
+		.id = std::string("find-skill-path-") + normalizedRunId,
+		.method = "gateway.runtime.taskDeltas.get",
+		.paramsJson =
+			std::string("{\"runId\":\"") + normalizedRunId + "\"}",
+	};
+
+	const auto response = app->Services().RouteGatewayRequest(request);
+	if (!response.ok || !response.payloadJson.has_value())
+	{
+		CString line;
+		line.Format(
+			L"[SkillPath] runId=%s taskDeltas query failed",
+			CString(CA2W(normalizedRunId.c_str(), CP_UTF8)).GetString());
+		mainFrame->AddFindStatusLine(line);
+		m_reportedSkillPathRunIds.insert(normalizedRunId);
+		return;
+	}
+
+	std::string taskDeltasRaw;
+	if (!blazeclaw::gateway::json::FindRawField(
+		response.payloadJson.value(),
+		"taskDeltas",
+		taskDeltasRaw))
+	{
+		m_reportedSkillPathRunIds.insert(normalizedRunId);
+		return;
+	}
+
+	const auto deltas = SplitTopLevelObjects(taskDeltasRaw);
+	if (deltas.empty())
+	{
+		m_reportedSkillPathRunIds.insert(normalizedRunId);
+		return;
+	}
+
+	mainFrame->AddFindStatusLine(CString(CA2W(
+		(std::string("[SkillPath] runId=") + normalizedRunId + " tried paths:").c_str(),
+		CP_UTF8)));
+
+	std::unordered_set<std::string> emitted;
+	for (const auto& deltaJson : deltas)
+	{
+		std::string phase;
+		blazeclaw::gateway::json::FindStringField(deltaJson, "phase", phase);
+		if (phase != "tool_result")
+		{
+			continue;
+		}
+
+		std::string toolName;
+		std::string status;
+		std::string errorCode;
+		blazeclaw::gateway::json::FindStringField(deltaJson, "toolName", toolName);
+		blazeclaw::gateway::json::FindStringField(deltaJson, "status", status);
+		blazeclaw::gateway::json::FindStringField(deltaJson, "errorCode", errorCode);
+
+		toolName = blazeclaw::gateway::json::Trim(toolName);
+		status = blazeclaw::gateway::json::Trim(status);
+		errorCode = blazeclaw::gateway::json::Trim(errorCode);
+		if (toolName.empty())
+		{
+			continue;
+		}
+
+		if (status.empty())
+		{
+			status = "unknown";
+		}
+
+		std::string line = "  - " + toolName + " [" + status + "]";
+		if (!errorCode.empty())
+		{
+			line += " errorCode=" + errorCode;
+		}
+
+		if (emitted.find(line) != emitted.end())
+		{
+			continue;
+		}
+
+		emitted.insert(line);
+		mainFrame->AddFindStatusLine(CString(CA2W(line.c_str(), CP_UTF8)));
+	}
+
+	m_reportedSkillPathRunIds.insert(normalizedRunId);
 }
 
 void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
@@ -2021,9 +2384,11 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 
 		if (IsToolExecuteMethod(method))
 		{
+			const std::string startDetail = BuildToolStartDetail(paramsJson);
 			AppendChatProcedureStatusLine(
 				L"tools.execute.start",
-				BuildToolStartDetail(paramsJson));
+				startDetail);
+			AppendFindSkillPathStatus(L"tools.execute.start", startDetail);
 			PostBridgeMessageJson(ToWide(
 				BuildToolLifecycleStartJson(
 					"openclaw.ws.req",
@@ -2038,9 +2403,11 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			AppendChatProcedureStatusLine(L"bridge.req.app_unavailable");
 			if (IsToolExecuteMethod(method))
 			{
+				const std::string errorDetail = "status=error code=app_unavailable";
 				AppendChatProcedureStatusLine(
 					L"tools.execute.error",
-					"status=error code=app_unavailable");
+					errorDetail);
+				AppendFindSkillPathStatus(L"tools.execute.error", errorDetail);
 			}
 			const blazeclaw::gateway::protocol::ResponseFrame errorResponse{
 				.id = correlationId,
@@ -2067,13 +2434,32 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		const auto response = app->Services().RouteGatewayRequest(request);
 		TraceBridgeTraffic("ws.req.route", method);
 		AppendChatProcedureStatusLine(L"bridge.req.route", method);
+		if (method == "chat.events.poll" &&
+			response.ok &&
+			response.payloadJson.has_value())
+		{
+			std::string eventsRaw;
+			if (blazeclaw::gateway::json::FindRawField(
+				response.payloadJson.value(),
+				"events",
+				eventsRaw))
+			{
+				for (const auto& runId : ExtractTerminalRunIds(eventsRaw))
+				{
+					ReportRunSkillPathsToFindOutput(runId);
+				}
+			}
+		}
 		if (IsToolExecuteMethod(method))
 		{
-			AppendChatProcedureStatusLine(
-				response.ok
+			const wchar_t* toolStage = response.ok
 				? L"tools.execute.result"
-				: L"tools.execute.error",
-				BuildToolResultDetail(response));
+				: L"tools.execute.error";
+			const std::string resultDetail = BuildToolResultDetail(response);
+			AppendChatProcedureStatusLine(
+				toolStage,
+				resultDetail);
+			AppendFindSkillPathStatus(toolStage, resultDetail);
 			PostBridgeMessageJson(ToWide(
 				BuildToolLifecycleResultJson(
 					"openclaw.ws.req",
@@ -2108,9 +2494,11 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 
 	if (IsToolExecuteMethod(method))
 	{
+		const std::string startDetail = BuildToolStartDetail(paramsJson);
 		AppendChatProcedureStatusLine(
 			L"tools.execute.start",
-			BuildToolStartDetail(paramsJson));
+			startDetail);
+		AppendFindSkillPathStatus(L"tools.execute.start", startDetail);
 		PostBridgeMessageJson(ToWide(
 			BuildToolLifecycleStartJson(
 				"blazeclaw.gateway.rpc",
@@ -2123,9 +2511,11 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 	{
 		if (IsToolExecuteMethod(method))
 		{
+			const std::string errorDetail = "status=error code=app_unavailable";
 			AppendChatProcedureStatusLine(
 				L"tools.execute.error",
-				"status=error code=app_unavailable");
+				errorDetail);
+			AppendFindSkillPathStatus(L"tools.execute.error", errorDetail);
 		}
 		const std::string errorJson =
 			"{\"channel\":\"blazeclaw.gateway.rpc.result\",\"id\":" +
@@ -2141,13 +2531,32 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		.paramsJson = paramsJson,
 	};
 	const auto response = app->Services().RouteGatewayRequest(request);
+	if (method == "chat.events.poll" &&
+		response.ok &&
+		response.payloadJson.has_value())
+	{
+		std::string eventsRaw;
+		if (blazeclaw::gateway::json::FindRawField(
+			response.payloadJson.value(),
+			"events",
+			eventsRaw))
+		{
+			for (const auto& runId : ExtractTerminalRunIds(eventsRaw))
+			{
+				ReportRunSkillPathsToFindOutput(runId);
+			}
+		}
+	}
 	if (IsToolExecuteMethod(method))
 	{
-		AppendChatProcedureStatusLine(
-			response.ok
+		const wchar_t* toolStage = response.ok
 			? L"tools.execute.result"
-			: L"tools.execute.error",
-			BuildToolResultDetail(response));
+			: L"tools.execute.error";
+		const std::string resultDetail = BuildToolResultDetail(response);
+		AppendChatProcedureStatusLine(
+			toolStage,
+			resultDetail);
+		AppendFindSkillPathStatus(toolStage, resultDetail);
 		PostBridgeMessageJson(ToWide(
 			BuildToolLifecycleResultJson(
 				"blazeclaw.gateway.rpc",

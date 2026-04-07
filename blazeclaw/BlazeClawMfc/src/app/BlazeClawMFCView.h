@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_set>
 
 #if defined(__has_include)
 # if __has_include(<WebView2.h>)
@@ -95,6 +96,7 @@ protected:
 	std::string m_bridgeLastProvider;
 	std::string m_bridgeLastModel;
 	std::string m_bridgeLastRuntimeKind;
+	std::unordered_set<std::string> m_reportedSkillPathRunIds;
 
 	void InitializeWebViewBridge();
 	void HandleWebMessageJson(const std::wstring& webMessageJson);
@@ -118,6 +120,8 @@ protected:
 	void PostOpenClawWsFrameJson(const std::string& frameJson);
 	void PostOpenClawWsClose(std::uint16_t code, const char* reason);
 	void EmitOpenClawChatEvents(const std::string& eventsArrayJson);
+	void ReportRunSkillPathsToFindOutput(const std::string& runId);
+	void EmitSkillPathLinesFromEvents(const std::string& eventsRaw);
 	void EnsureOpenClawBridgeShim();
 	void TraceBridgeTraffic(
 		const char* kind,

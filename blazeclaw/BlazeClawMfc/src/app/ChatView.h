@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 class CChatView : public CView
@@ -77,6 +78,7 @@ protected:
 	std::string m_renderedStreamText;
 	std::string m_renderedErrorText;
 	std::uint64_t m_chatSendGeneration = 1;
+	std::unordered_set<std::string> m_reportedSkillPathRunIds;
 
 	// Overrides
 public:
@@ -108,6 +110,8 @@ protected:
 	void AbortChatRunNative();
 	void PumpChatEventsNative();
 	void HandleChatEventNative(const NativeChatEventPayload& payload);
+	void ReportTriedSkillPathsToFindOutput(const std::string& runId);
+	void MaybeReportRunSkillPaths(const std::string& runId);
 	void SyncItemsFromState();
 	void RebuildItemsFromState();
 	void ResetRenderedItemsTracking();

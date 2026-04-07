@@ -187,6 +187,26 @@ void CMainFrame::AddChatStatusBlock(const CString& text)
 	m_wndOutput.AddChatStatusBlock(text);
 }
 
+void CMainFrame::AddFindStatusLine(const CString& line)
+{
+	if (!::IsWindow(m_hWnd))
+	{
+		return;
+	}
+
+	m_wndOutput.AddFindStatusLine(line);
+}
+
+void CMainFrame::AddFindStatusBlock(const CString& text)
+{
+	if (!::IsWindow(m_hWnd))
+	{
+		return;
+	}
+
+	m_wndOutput.AddFindStatusBlock(text);
+}
+
 void CMainFrame::RefreshSkillView()
 {
 	if (!::IsWindow(m_hWnd))

@@ -29,6 +29,8 @@ public:
 public:
 	void AddChatStatusLine(const CString& line);
 	void AddChatStatusBlock(const CString& text);
+	void AddFindStatusLine(const CString& line);
+	void AddFindStatusBlock(const CString& text);
 	void RefreshSkillView();
 
 	// Overrides

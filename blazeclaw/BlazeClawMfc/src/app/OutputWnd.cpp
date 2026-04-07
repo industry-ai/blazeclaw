@@ -170,6 +170,26 @@ void COutputWnd::AddChatStatusBlock(const CString& text)
 	m_wndOutputDebug.AppendMultiline(text);
 }
 
+void COutputWnd::AddFindStatusLine(const CString& line)
+{
+	if (!::IsWindow(m_wndTabs.GetSafeHwnd()))
+	{
+		return;
+	}
+
+	m_wndOutputFind.AppendLine(line);
+}
+
+void COutputWnd::AddFindStatusBlock(const CString& text)
+{
+	if (!::IsWindow(m_wndTabs.GetSafeHwnd()))
+	{
+		return;
+	}
+
+	m_wndOutputFind.AppendMultiline(text);
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // COutputList1
 
