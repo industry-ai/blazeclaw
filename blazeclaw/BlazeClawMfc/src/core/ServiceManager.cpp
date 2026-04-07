@@ -4541,6 +4541,8 @@ namespace blazeclaw::core {
 
 					if (m_localModelActivationEnabled) {
 						const std::string prompt = BuildLocalModelPrompt(providerRequest);
+						std::string streamedLocalText;
+						std::vector<std::string> streamedLocalSnapshots;
 						TRACE(
 							"[LocalModel] request.enqueue runId=%s session=%s promptChars=%zu attachments=%s\n",
 							providerRequest.runId.c_str(),
@@ -4558,7 +4560,17 @@ namespace blazeclaw::core {
 								.maxTokens = std::nullopt,
 								.temperature = std::nullopt,
 							},
-							nullptr);
+							[&](const std::string& delta) {
+								if (delta.empty()) {
+									return;
+								}
+
+								streamedLocalText += delta;
+								streamedLocalSnapshots.push_back(streamedLocalText);
+								if (request.onAssistantDelta) {
+									request.onAssistantDelta(streamedLocalText);
+								}
+							});
 						m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
 
 						if (!localResult.ok) {
@@ -4588,11 +4600,15 @@ namespace blazeclaw::core {
 							};
 						}
 
-						std::string assistantText = localResult.text;
+						std::string assistantText =
+							streamedLocalText.empty()
+							? localResult.text
+							: streamedLocalText;
 						std::string modelId = localResult.modelId;
 						std::uint32_t latencyMs = localResult.latencyMs;
 						std::uint32_t generatedTokens = localResult.generatedTokens;
-						if (IsLikelyEchoResponse(request.message, assistantText)) {
+						if (streamedLocalSnapshots.empty() &&
+							IsLikelyEchoResponse(request.message, assistantText)) {
 							TRACE(
 								"[LocalModel] request.retry runId=%s reason=echo_detected\n",
 								providerRequest.runId.c_str());
@@ -4638,11 +4654,12 @@ namespace blazeclaw::core {
 							generatedTokens);
 
 						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-							.ok = true,
-							.assistantText = assistantText,
-							.modelId = modelId,
-							.errorCode = {},
-							.errorMessage = {},
+							  .ok = true,
+							  .assistantText = assistantText,
+						   .assistantDeltas = streamedLocalSnapshots,
+							  .modelId = modelId,
+							  .errorCode = {},
+							  .errorMessage = {},
 						};
 					}
 

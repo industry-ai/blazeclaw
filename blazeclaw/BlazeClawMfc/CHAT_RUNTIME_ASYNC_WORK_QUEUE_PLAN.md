@@ -221,4 +221,9 @@ Current state: **fully accomplished**.
 - DeepSeek runtime path now emits provider SSE deltas through `ChatRuntimeRequest::onAssistantDelta` while response chunks are being read.
 - Gateway `chat.send` now wires this callback to enqueue live `delta` events so UI polling can receive incremental snapshots before terminal completion.
 
+### Streaming parity follow-on (2026-04-07)
+
+- Non-DeepSeek callback-driven runtime paths now propagate incremental snapshots by wiring local-model `GenerateStream` deltas into `ChatRuntimeRequest::onAssistantDelta`.
+- Added parity coverage asserting callback-driven streaming emits `delta` events before terminal `final` completion.
+
 The migration item "Move chat runtime execution off UI thread using async work queue + completion events" is complete for this planned scope.

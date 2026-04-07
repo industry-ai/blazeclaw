@@ -1242,6 +1242,63 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Parity coverage: callback-driven runtime path emits incremental delta events",
+	"[parity][chat][events][streaming]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			if (request.onAssistantDelta) {
+				request.onAssistantDelta("stream-part-1");
+				request.onAssistantDelta("stream-part-1 stream-part-2");
+			}
+
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "stream-part-1 stream-part-2";
+			result.modelId = "default";
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-events-streaming-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"streaming callback\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+
+	std::string payload;
+	for (int attempt = 0; attempt < 10; ++attempt) {
+		const auto eventsResponse = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = "chat-events-streaming-1-poll-" + std::to_string(attempt),
+				.method = "chat.events.poll",
+				.paramsJson = std::string("{\"sessionKey\":\"main\",\"limit\":50}"),
+			});
+
+		REQUIRE(eventsResponse.ok);
+		REQUIRE(eventsResponse.payloadJson.has_value());
+		payload += eventsResponse.payloadJson.value();
+
+		if (payload.find("\"state\":\"final\"") != std::string::npos) {
+			break;
+		}
+	}
+
+	REQUIRE(payload.find("\"state\":\"delta\"") != std::string::npos);
+	REQUIRE(payload.find("stream-part-1 stream-part-2") != std::string::npos);
+	REQUIRE(payload.find("\"state\":\"final\"") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
 	"Parity coverage: chat runtime timeout propagates backend error and error terminal",
 	"[parity][chat][events][timeout]") {
 	GatewayHost host;
@@ -1340,12 +1397,38 @@ TEST_CASE(
 
 			if (toolName == "email.schedule") {
 				return GatewayToolRegistry::RuntimeToolExecutor{
-					[](const std::string& requestedTool, const std::optional<std::string>&) {
+			   [](const std::string& requestedTool, const std::optional<std::string>& argsJson) {
+					std::string action;
+					if (argsJson.has_value()) {
+						blazeclaw::gateway::json::FindStringField(
+							argsJson.value(),
+							"action",
+							action);
+					}
+
+					if (action.empty() || action == "prepare") {
 						return ToolExecuteResult{
 							.tool = requestedTool,
 							.executed = true,
 							.status = "needs_approval",
 							.output = "{\"requiresApproval\":{\"approvalToken\":\"token-123\",\"approvalTokenExpiresAtEpochMs\":1735691000000}}",
+						};
+					}
+
+					if (action == "approve") {
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = true,
+							.status = "ok",
+							.output = "{\"protocolVersion\":1,\"ok\":true,\"status\":\"ok\",\"output\":[{\"summary\":{\"to\":\"jichengwhu@163.com\",\"subject\":\"Wuhan weather report\",\"sendAt\":\"13:00\",\"scheduled\":true,\"delivered\":true,\"engine\":\"himalaya\",\"transportStatus\":\"sent\",\"transportOutput\":\"ok\"}}],\"requiresApproval\":null}",
+						};
+					}
+
+						return ToolExecuteResult{
+							.tool = requestedTool,
+					   .executed = false,
+						.status = "invalid_args",
+						.output = "unsupported_action",
 						};
 					} };
 			}

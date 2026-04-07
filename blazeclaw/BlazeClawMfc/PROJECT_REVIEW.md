@@ -87,7 +87,9 @@ Status update (implemented): `ChatView` uses incremental append/update synchroni
 
 Status update (implemented): provider-to-UI incremental streaming now emits DeepSeek SSE-derived assistant snapshots into gateway chat events during provider read, instead of waiting for full-response completion before delta publication.
 
-Residual risk: non-DeepSeek paths and synthetic fallback paths can still use staged/simulated deltas.
+Status update (extended): non-DeepSeek callback-driven runtime paths now also emit incremental snapshots via runtime delta callback wiring.
+
+Residual risk: synthetic fallback paths can still use staged/simulated deltas.
 
 ### D) Embeddings throughput serialization
 
@@ -148,19 +150,20 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 9. [Completed] Move gateway network pump off `OnIdle` into an app-owned dedicated worker loop.
 10. [Completed] Implement provider-to-UI incremental streaming for DeepSeek runtime path using live SSE delta emission callbacks.
 11. [Completed] Stabilize parity chat regression startup and related approval/persistence assertions.
+12. [Completed] Extend provider streaming parity to non-DeepSeek callback-driven runtime paths.
 
 ### Next recommended priorities
 
-1. Extend true incremental provider streaming parity across non-DeepSeek runtime paths.
-2. Reduce startup critical-path fixture validation cost (lazy/background validation or staged diagnostics pass).
-3. Tighten persisted task-delta parity assertions from contract-level checks to deterministic phase-level checks after persistence contract hardening.
+1. Reduce startup critical-path fixture validation cost (lazy/background validation or staged diagnostics pass).
+2. Tighten persisted task-delta parity assertions from contract-level checks to deterministic phase-level checks after persistence contract hardening.
+3. Reduce synthetic fallback staged-delta usage where true incremental emission is feasible.
 
-## 7) Validation Snapshot (2026-04-06)
+## 7) Validation Snapshot (2026-04-07)
 
 - Build:
   - ✅ `msbuild blazeclaw/BlazeClaw.sln /t:Build /p:Configuration=Debug /p:Platform=x64`
 - Tests:
-  - ✅ `blazeclaw/bin/Debug/BlazeClawMfc.Tests.exe "[parity][chat]"` passed (14 test cases, 158 assertions).
+  - ✅ `blazeclaw/bin/Debug/BlazeClawMfc.Tests.exe "[parity][chat]"` passed (15 test cases, 166 assertions).
 
 ## 8) Related Execution Planning Docs
 
