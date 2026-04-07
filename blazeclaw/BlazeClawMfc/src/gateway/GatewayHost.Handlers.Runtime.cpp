@@ -1225,7 +1225,7 @@ namespace blazeclaw::gateway {
 			return mimeTypes;
 		}
 
-     std::vector<std::string> ParseJsonStringArrayLocal(
+		std::vector<std::string> ParseJsonStringArrayLocal(
 			const std::string& rawArray) {
 			std::vector<std::string> values;
 			const std::string trimmed = json::Trim(rawArray);
@@ -1274,8 +1274,42 @@ namespace blazeclaw::gateway {
 		struct OrderedSequencePreflight {
 			bool enforced = false;
 			std::vector<std::string> orderedTargets;
+			std::vector<std::string> resolvedToolTargets;
 			std::vector<std::string> missingTargets;
 		};
+
+		std::string ResolvePreferredToolForNamespace(
+			const std::string& normalizedNamespace,
+			const std::vector<ToolCatalogEntry>& tools) {
+			if (normalizedNamespace.empty()) {
+				return {};
+			}
+
+			const std::string preferredSendId =
+				normalizedNamespace + ".smtp.send";
+			for (const auto& tool : tools) {
+				if (ToLowerCopyLocal(tool.id) == preferredSendId) {
+					return tool.id;
+				}
+			}
+
+			const std::string preferredSearchId =
+				normalizedNamespace + ".search.web";
+			for (const auto& tool : tools) {
+				if (ToLowerCopyLocal(tool.id) == preferredSearchId) {
+					return tool.id;
+				}
+			}
+
+			for (const auto& tool : tools) {
+				const std::string toolIdLower = ToLowerCopyLocal(tool.id);
+				if (toolIdLower.rfind(normalizedNamespace + ".", 0) == 0) {
+					return tool.id;
+				}
+			}
+
+			return {};
+		}
 
 		std::string NormalizeOrderedTargetToken(const std::string& token) {
 			std::string normalized = json::Trim(token);
@@ -1315,7 +1349,7 @@ namespace blazeclaw::gateway {
 				}
 
 				targets.push_back(normalized);
-			};
+				};
 
 			const std::regex backtickTargetRegex(
 				R"(`([A-Za-z0-9._-]+)`)",
@@ -1342,12 +1376,12 @@ namespace blazeclaw::gateway {
 			return targets;
 		}
 
-		bool IsOrderedTargetAvailable(
+		std::string ResolveOrderedTargetToToolId(
 			const std::string& target,
 			const std::vector<ToolCatalogEntry>& tools,
 			const std::vector<SkillsCatalogGatewayEntry>& skillsCatalogEntries) {
 			if (target.empty()) {
-				return false;
+				return {};
 			}
 
 			const std::string normalizedTarget = ToLowerCopyLocal(target);
@@ -1361,13 +1395,22 @@ namespace blazeclaw::gateway {
 			for (const auto& tool : tools) {
 				const std::string toolIdLower = ToLowerCopyLocal(tool.id);
 				if (toolIdLower == normalizedTarget) {
-					return true;
+					return tool.id;
 				}
 
-				if (!normalizedNamespace.empty() &&
-					toolIdLower.rfind(normalizedNamespace + ".", 0) == 0) {
-					return true;
+				if (toolIdLower == normalizedTarget + ".search.web") {
+					return tool.id;
 				}
+
+				if (toolIdLower == normalizedTarget + ".smtp.send") {
+					return tool.id;
+				}
+			}
+
+			const std::string preferredByNamespace =
+				ResolvePreferredToolForNamespace(normalizedNamespace, tools);
+			if (!preferredByNamespace.empty()) {
+				return preferredByNamespace;
 			}
 
 			for (const auto& entry : skillsCatalogEntries) {
@@ -1380,11 +1423,29 @@ namespace blazeclaw::gateway {
 					keyLower == normalizedTarget ||
 					commandLower == normalizedTarget ||
 					commandToolLower == normalizedTarget) {
-					return true;
+					if (!entry.commandToolName.empty()) {
+						return entry.commandToolName;
+					}
+
+					std::string entryNamespace = keyLower.empty()
+						? nameLower
+						: keyLower;
+					std::replace(
+						entryNamespace.begin(),
+						entryNamespace.end(),
+						'-',
+						'_');
+					const std::string resolvedBySkill =
+						ResolvePreferredToolForNamespace(entryNamespace, tools);
+					if (!resolvedBySkill.empty()) {
+						return resolvedBySkill;
+					}
+
+					return {};
 				}
 			}
 
-			return false;
+			return {};
 		}
 
 		OrderedSequencePreflight BuildOrderedSequencePreflight(
@@ -1395,7 +1456,7 @@ namespace blazeclaw::gateway {
 			const bool explicitOrderedRequest =
 				loweredMessage.find("strictly execute in order") != std::string::npos ||
 				loweredMessage.find("execute in order") != std::string::npos ||
-                loweredMessage.find("sequentially complete") != std::string::npos;
+				loweredMessage.find("sequentially complete") != std::string::npos;
 
 			OrderedSequencePreflight preflight;
 			if (!explicitOrderedRequest) {
@@ -1403,13 +1464,19 @@ namespace blazeclaw::gateway {
 			}
 
 			preflight.orderedTargets = ExtractOrderedTargetsFromPrompt(message);
+			preflight.resolvedToolTargets.reserve(preflight.orderedTargets.size());
 			preflight.enforced = preflight.orderedTargets.size() >= 2;
 			if (!preflight.enforced) {
 				return preflight;
 			}
 
 			for (const auto& target : preflight.orderedTargets) {
-				if (!IsOrderedTargetAvailable(target, tools, skillsCatalogEntries)) {
+				const std::string resolvedTool = ResolveOrderedTargetToToolId(
+					target,
+					tools,
+					skillsCatalogEntries);
+				preflight.resolvedToolTargets.push_back(resolvedTool);
+				if (resolvedTool.empty()) {
 					preflight.missingTargets.push_back(target);
 				}
 			}
@@ -1418,13 +1485,13 @@ namespace blazeclaw::gateway {
 		}
 
 		std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry>
-		BuildOrderedPreflightTaskDeltas(
-			const std::string& runId,
-			const std::string& sessionKey,
-			const OrderedSequencePreflight& preflight,
-			const bool terminalFailure,
-			const std::string& terminalErrorCode,
-			const std::string& terminalErrorMessage) {
+			BuildOrderedPreflightTaskDeltas(
+				const std::string& runId,
+				const std::string& sessionKey,
+				const OrderedSequencePreflight& preflight,
+				const bool terminalFailure,
+				const std::string& terminalErrorCode,
+				const std::string& terminalErrorMessage) {
 			std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry> taskDeltas;
 			if (!preflight.enforced) {
 				return taskDeltas;
@@ -1442,10 +1509,15 @@ namespace blazeclaw::gateway {
 				.completedAtMs = baseMs,
 				.latencyMs = 0,
 				.stepLabel = "ordered_execution_plan",
-			});
+				});
 
 			for (std::size_t index = 0; index < preflight.orderedTargets.size(); ++index) {
 				const std::string& target = preflight.orderedTargets[index];
+				const std::string resolvedTarget =
+					index < preflight.resolvedToolTargets.size() &&
+					!preflight.resolvedToolTargets[index].empty()
+					? preflight.resolvedToolTargets[index]
+					: target;
 				const bool missing = std::find(
 					preflight.missingTargets.begin(),
 					preflight.missingTargets.end(),
@@ -1456,14 +1528,15 @@ namespace blazeclaw::gateway {
 					.runId = runId,
 					.sessionId = sessionKey,
 					.phase = "preflight",
-					.toolName = target,
+					.toolName = resolvedTarget,
+					.argsJson = target,
 					.status = missing ? "missing" : "ok",
 					.errorCode = missing ? "step_target_unavailable" : std::string(),
 					.startedAtMs = baseMs + index + 1,
 					.completedAtMs = baseMs + index + 1,
 					.latencyMs = 0,
 					.stepLabel = "ordered_step_precheck",
-				});
+					});
 			}
 
 			if (terminalFailure) {
@@ -1479,7 +1552,7 @@ namespace blazeclaw::gateway {
 					.completedAtMs = baseMs + preflight.orderedTargets.size() + 1,
 					.latencyMs = 0,
 					.stepLabel = "run_terminal",
-				});
+					});
 			}
 
 			return taskDeltas;
@@ -1493,6 +1566,30 @@ namespace blazeclaw::gateway {
 				}
 
 				joined += targets[i];
+			}
+
+			return joined;
+		}
+
+		std::string JoinOrderedResolution(
+			const OrderedSequencePreflight& preflight) {
+			std::string joined;
+			for (std::size_t i = 0; i < preflight.orderedTargets.size(); ++i) {
+				if (i > 0) {
+					joined += ", ";
+				}
+
+				const std::string requested = preflight.orderedTargets[i];
+				const std::string resolved =
+					i < preflight.resolvedToolTargets.size()
+					? preflight.resolvedToolTargets[i]
+					: std::string{};
+				if (!resolved.empty() && resolved != requested) {
+					joined += requested + "=>" + resolved;
+				}
+				else {
+					joined += requested;
+				}
 			}
 
 			return joined;
@@ -2385,7 +2482,7 @@ namespace blazeclaw::gateway {
 					m_skillsCatalogState.entries);
 				const std::string runtimeMessage = orderedSequencePreflight.enforced
 					? (std::string("Ordered execution steps (preserve order): ") +
-						JoinOrderedTargets(orderedSequencePreflight.orderedTargets) +
+						JoinOrderedResolution(orderedSequencePreflight) +
 						"\n\n" + normalizedMessage)
 					: normalizedMessage;
 				std::vector<ChatRuntimeResult::TaskDeltaEntry> orderedPreflightTaskDeltas;
@@ -2580,6 +2677,8 @@ namespace blazeclaw::gateway {
 						JsonString(runId) +
 						",\"enforced\":true,\"steps\":" +
 						SerializeStringArrayLocal(orderedSequencePreflight.orderedTargets) +
+						",\"resolvedTools\":" +
+						SerializeStringArrayLocal(orderedSequencePreflight.resolvedToolTargets) +
 						",\"missing\":" +
 						SerializeStringArrayLocal(orderedSequencePreflight.missingTargets) +
 						"}");
@@ -2798,7 +2897,7 @@ namespace blazeclaw::gateway {
 						ChatRuntimeRequest{
 							.runId = runId,
 							.sessionKey = sessionKey,
-                           .message = runtimeMessage,
+						   .message = runtimeMessage,
 							.hasAttachments = hasAttachments,
 							.attachmentMimeTypes = attachmentMimeTypes,
 						 .onAssistantDelta =
@@ -2895,7 +2994,7 @@ namespace blazeclaw::gateway {
 						existingRunIt->second.active = true;
 					}
 
-                  auto runtimeTaskDeltas = EnsureRuntimeTaskDeltas(
+					auto runtimeTaskDeltas = EnsureRuntimeTaskDeltas(
 						runtimeResult.taskDeltas,
 						runId,
 						sessionKey,
@@ -2930,7 +3029,7 @@ namespace blazeclaw::gateway {
 					backendErrorCode = "chat_runtime_callback_missing";
 					backendErrorMessage = "chat runtime callback is not configured";
 
-                  auto runtimeTaskDeltas = EnsureRuntimeTaskDeltas(
+					auto runtimeTaskDeltas = EnsureRuntimeTaskDeltas(
 						{},
 						runId,
 						sessionKey,

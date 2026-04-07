@@ -160,10 +160,14 @@ documentation lookup and general fact retrieval workflows.
 - Ordered execution prompts (for example, "strictly execute in order") are now
   guarded by runtime preflight in `chat.send`:
   - Step targets are extracted in sequence.
+  - Skill aliases are normalized to stable executable tool IDs when possible
+    (for example, namespace-based `*.search.web` and preferred
+    `imap_smtp_email.smtp.send` for email-send intent).
   - Each step target is validated against runtime tool + skill catalogs.
   - Missing targets return deterministic diagnostics instead of unrelated tool
     fallback.
-  - Ordered `task-delta` metadata is persisted for plan/preflight visibility.
+  - Ordered `task-delta` metadata persists both requested aliases and resolved
+    tool IDs for plan/preflight visibility.
 - `general` is **not** a separate skill source/type. It is treated as part of
   runtime-registered grouping in the tree (as a subitem).
 - If a local skill exists but does not appear as runtime-registered, verify
