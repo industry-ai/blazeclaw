@@ -157,6 +157,13 @@ documentation lookup and general fact retrieval workflows.
 
 - Runtime visibility in `CSkillView` should include registered runtime skills,
   implemented local skills, and original OpenClaw copied skills.
+- Ordered execution prompts (for example, "strictly execute in order") are now
+  guarded by runtime preflight in `chat.send`:
+  - Step targets are extracted in sequence.
+  - Each step target is validated against runtime tool + skill catalogs.
+  - Missing targets return deterministic diagnostics instead of unrelated tool
+    fallback.
+  - Ordered `task-delta` metadata is persisted for plan/preflight visibility.
 - `general` is **not** a separate skill source/type. It is treated as part of
   runtime-registered grouping in the tree (as a subitem).
 - If a local skill exists but does not appear as runtime-registered, verify

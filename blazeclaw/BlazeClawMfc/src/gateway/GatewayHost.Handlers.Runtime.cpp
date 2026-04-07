@@ -1225,7 +1225,7 @@ namespace blazeclaw::gateway {
 			return mimeTypes;
 		}
 
-		std::vector<std::string> ParseJsonStringArrayLocal(
+     std::vector<std::string> ParseJsonStringArrayLocal(
 			const std::string& rawArray) {
 			std::vector<std::string> values;
 			const std::string trimmed = json::Trim(rawArray);
@@ -1269,6 +1269,233 @@ namespace blazeclaw::gateway {
 			}
 
 			return values;
+		}
+
+		struct OrderedSequencePreflight {
+			bool enforced = false;
+			std::vector<std::string> orderedTargets;
+			std::vector<std::string> missingTargets;
+		};
+
+		std::string NormalizeOrderedTargetToken(const std::string& token) {
+			std::string normalized = json::Trim(token);
+			while (!normalized.empty() &&
+				(normalized.back() == '.' ||
+					normalized.back() == ';' ||
+					normalized.back() == ',' ||
+					normalized.back() == ':' ||
+					normalized.back() == ')' ||
+					normalized.back() == '"')) {
+				normalized.pop_back();
+			}
+
+			while (!normalized.empty() &&
+				(normalized.front() == '(' ||
+					normalized.front() == '"')) {
+				normalized.erase(normalized.begin());
+			}
+
+			return ToLowerCopyLocal(normalized);
+		}
+
+		std::vector<std::string> ExtractOrderedTargetsFromPrompt(
+			const std::string& message) {
+			std::vector<std::string> targets;
+
+			auto addTarget = [&targets](const std::string& candidate) {
+				const std::string normalized =
+					NormalizeOrderedTargetToken(candidate);
+				if (normalized.empty()) {
+					return;
+				}
+
+				if (std::find(targets.begin(), targets.end(), normalized) !=
+					targets.end()) {
+					return;
+				}
+
+				targets.push_back(normalized);
+			};
+
+			const std::regex backtickTargetRegex(
+				R"(`([A-Za-z0-9._-]+)`)",
+				std::regex_constants::icase);
+			for (std::sregex_iterator it(message.begin(), message.end(), backtickTargetRegex), end;
+				it != end;
+				++it) {
+				if (it->size() >= 2) {
+					addTarget((*it)[1].str());
+				}
+			}
+
+			const std::regex callTargetRegex(
+				R"(\bcall\s+([A-Za-z0-9._-]+))",
+				std::regex_constants::icase);
+			for (std::sregex_iterator it(message.begin(), message.end(), callTargetRegex), end;
+				it != end;
+				++it) {
+				if (it->size() >= 2) {
+					addTarget((*it)[1].str());
+				}
+			}
+
+			return targets;
+		}
+
+		bool IsOrderedTargetAvailable(
+			const std::string& target,
+			const std::vector<ToolCatalogEntry>& tools,
+			const std::vector<SkillsCatalogGatewayEntry>& skillsCatalogEntries) {
+			if (target.empty()) {
+				return false;
+			}
+
+			const std::string normalizedTarget = ToLowerCopyLocal(target);
+			std::string normalizedNamespace = normalizedTarget;
+			std::replace(
+				normalizedNamespace.begin(),
+				normalizedNamespace.end(),
+				'-',
+				'_');
+
+			for (const auto& tool : tools) {
+				const std::string toolIdLower = ToLowerCopyLocal(tool.id);
+				if (toolIdLower == normalizedTarget) {
+					return true;
+				}
+
+				if (!normalizedNamespace.empty() &&
+					toolIdLower.rfind(normalizedNamespace + ".", 0) == 0) {
+					return true;
+				}
+			}
+
+			for (const auto& entry : skillsCatalogEntries) {
+				const std::string nameLower = ToLowerCopyLocal(entry.name);
+				const std::string keyLower = ToLowerCopyLocal(entry.skillKey);
+				const std::string commandLower = ToLowerCopyLocal(entry.commandName);
+				const std::string commandToolLower = ToLowerCopyLocal(entry.commandToolName);
+
+				if (nameLower == normalizedTarget ||
+					keyLower == normalizedTarget ||
+					commandLower == normalizedTarget ||
+					commandToolLower == normalizedTarget) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		OrderedSequencePreflight BuildOrderedSequencePreflight(
+			const std::string& message,
+			const std::vector<ToolCatalogEntry>& tools,
+			const std::vector<SkillsCatalogGatewayEntry>& skillsCatalogEntries) {
+			const std::string loweredMessage = ToLowerCopyLocal(message);
+			const bool explicitOrderedRequest =
+				loweredMessage.find("strictly execute in order") != std::string::npos ||
+				loweredMessage.find("execute in order") != std::string::npos ||
+                loweredMessage.find("sequentially complete") != std::string::npos;
+
+			OrderedSequencePreflight preflight;
+			if (!explicitOrderedRequest) {
+				return preflight;
+			}
+
+			preflight.orderedTargets = ExtractOrderedTargetsFromPrompt(message);
+			preflight.enforced = preflight.orderedTargets.size() >= 2;
+			if (!preflight.enforced) {
+				return preflight;
+			}
+
+			for (const auto& target : preflight.orderedTargets) {
+				if (!IsOrderedTargetAvailable(target, tools, skillsCatalogEntries)) {
+					preflight.missingTargets.push_back(target);
+				}
+			}
+
+			return preflight;
+		}
+
+		std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry>
+		BuildOrderedPreflightTaskDeltas(
+			const std::string& runId,
+			const std::string& sessionKey,
+			const OrderedSequencePreflight& preflight,
+			const bool terminalFailure,
+			const std::string& terminalErrorCode,
+			const std::string& terminalErrorMessage) {
+			std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry> taskDeltas;
+			if (!preflight.enforced) {
+				return taskDeltas;
+			}
+
+			const std::uint64_t baseMs = CurrentEpochMsLocal();
+			taskDeltas.push_back(GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+				.index = taskDeltas.size(),
+				.runId = runId,
+				.sessionId = sessionKey,
+				.phase = "plan",
+				.resultJson = SerializeStringArrayLocal(preflight.orderedTargets),
+				.status = "ok",
+				.startedAtMs = baseMs,
+				.completedAtMs = baseMs,
+				.latencyMs = 0,
+				.stepLabel = "ordered_execution_plan",
+			});
+
+			for (std::size_t index = 0; index < preflight.orderedTargets.size(); ++index) {
+				const std::string& target = preflight.orderedTargets[index];
+				const bool missing = std::find(
+					preflight.missingTargets.begin(),
+					preflight.missingTargets.end(),
+					target) != preflight.missingTargets.end();
+
+				taskDeltas.push_back(GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = taskDeltas.size(),
+					.runId = runId,
+					.sessionId = sessionKey,
+					.phase = "preflight",
+					.toolName = target,
+					.status = missing ? "missing" : "ok",
+					.errorCode = missing ? "step_target_unavailable" : std::string(),
+					.startedAtMs = baseMs + index + 1,
+					.completedAtMs = baseMs + index + 1,
+					.latencyMs = 0,
+					.stepLabel = "ordered_step_precheck",
+				});
+			}
+
+			if (terminalFailure) {
+				taskDeltas.push_back(GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = taskDeltas.size(),
+					.runId = runId,
+					.sessionId = sessionKey,
+					.phase = "final",
+					.resultJson = terminalErrorMessage,
+					.status = "failed",
+					.errorCode = terminalErrorCode,
+					.startedAtMs = baseMs + preflight.orderedTargets.size() + 1,
+					.completedAtMs = baseMs + preflight.orderedTargets.size() + 1,
+					.latencyMs = 0,
+					.stepLabel = "run_terminal",
+				});
+			}
+
+			return taskDeltas;
+		}
+
+		std::string JoinOrderedTargets(const std::vector<std::string>& targets) {
+			std::string joined;
+			for (std::size_t i = 0; i < targets.size(); ++i) {
+				if (i > 0) {
+					joined += ", ";
+				}
+
+				joined += targets[i];
+			}
+
+			return joined;
 		}
 
 		std::string SerializeFloatArrayLocal(
@@ -2152,6 +2379,16 @@ namespace blazeclaw::gateway {
 				const bool allowPromptOrchestration =
 					orchestrationPath == "runtime_orchestration" ||
 					orchestrationPath == "dynamic_task_delta";
+				const auto orderedSequencePreflight = BuildOrderedSequencePreflight(
+					normalizedMessage,
+					m_toolRegistry.List(),
+					m_skillsCatalogState.entries);
+				const std::string runtimeMessage = orderedSequencePreflight.enforced
+					? (std::string("Ordered execution steps (preserve order): ") +
+						JoinOrderedTargets(orderedSequencePreflight.orderedTargets) +
+						"\n\n" + normalizedMessage)
+					: normalizedMessage;
+				std::vector<ChatRuntimeResult::TaskDeltaEntry> orderedPreflightTaskDeltas;
 
 				if (forceError) {
 					failed = true;
@@ -2325,6 +2562,56 @@ namespace blazeclaw::gateway {
 
 							return deltas;
 					};
+
+				if (!forceError &&
+					!hasAttachments &&
+					orderedSequencePreflight.enforced) {
+					orderedPreflightTaskDeltas = BuildOrderedPreflightTaskDeltas(
+						runId,
+						sessionKey,
+						orderedSequencePreflight,
+						false,
+						{},
+						{});
+
+					EmitTelemetryEvent(
+						"gateway.chat.ordered.preflight",
+						std::string("{\"runId\":") +
+						JsonString(runId) +
+						",\"enforced\":true,\"steps\":" +
+						SerializeStringArrayLocal(orderedSequencePreflight.orderedTargets) +
+						",\"missing\":" +
+						SerializeStringArrayLocal(orderedSequencePreflight.missingTargets) +
+						"}");
+
+					if (!orderedSequencePreflight.missingTargets.empty()) {
+						failed = true;
+						orchestrationHandled = true;
+						backendErrorCode = "ordered_sequence_target_unavailable";
+						backendErrorMessage =
+							"Ordered execution preflight failed. Missing targets: " +
+							JoinOrderedTargets(orderedSequencePreflight.missingTargets);
+						assistantText =
+							"Unable to execute the ordered workflow because required step targets are unavailable: " +
+							JoinOrderedTargets(orderedSequencePreflight.missingTargets) +
+							". Please install or enable these skills/tools and retry.";
+
+						auto blockedTaskDeltas = BuildOrderedPreflightTaskDeltas(
+							runId,
+							sessionKey,
+							orderedSequencePreflight,
+							true,
+							backendErrorCode,
+							backendErrorMessage);
+						assistantDeltas =
+							buildAssistantDeltasFromTaskDeltas(blockedTaskDeltas);
+						if (assistantDeltas.empty()) {
+							assistantDeltas.push_back(assistantText);
+						}
+
+						persistTaskDeltas(blockedTaskDeltas, false);
+					}
+				}
 
 				if (!forceError &&
 					!hasAttachments &&
@@ -2511,7 +2798,7 @@ namespace blazeclaw::gateway {
 						ChatRuntimeRequest{
 							.runId = runId,
 							.sessionKey = sessionKey,
-							.message = normalizedMessage,
+                           .message = runtimeMessage,
 							.hasAttachments = hasAttachments,
 							.attachmentMimeTypes = attachmentMimeTypes,
 						 .onAssistantDelta =
@@ -2608,15 +2895,32 @@ namespace blazeclaw::gateway {
 						existingRunIt->second.active = true;
 					}
 
+                  auto runtimeTaskDeltas = EnsureRuntimeTaskDeltas(
+						runtimeResult.taskDeltas,
+						runId,
+						sessionKey,
+						runtimeResult.ok && !failed,
+						assistantText,
+						backendErrorCode,
+						backendErrorMessage);
+					if (!orderedPreflightTaskDeltas.empty()) {
+						std::vector<ChatRuntimeResult::TaskDeltaEntry> mergedTaskDeltas;
+						mergedTaskDeltas.reserve(
+							orderedPreflightTaskDeltas.size() +
+							runtimeTaskDeltas.size());
+						mergedTaskDeltas.insert(
+							mergedTaskDeltas.end(),
+							orderedPreflightTaskDeltas.begin(),
+							orderedPreflightTaskDeltas.end());
+						mergedTaskDeltas.insert(
+							mergedTaskDeltas.end(),
+							runtimeTaskDeltas.begin(),
+							runtimeTaskDeltas.end());
+						runtimeTaskDeltas = std::move(mergedTaskDeltas);
+					}
+
 					persistTaskDeltas(
-						EnsureRuntimeTaskDeltas(
-							runtimeResult.taskDeltas,
-							runId,
-							sessionKey,
-							runtimeResult.ok && !failed,
-							assistantText,
-							backendErrorCode,
-							backendErrorMessage),
+						runtimeTaskDeltas,
 						runtimeResult.ok && !failed);
 				}
 				else if (!forceError && !orchestrationHandled && !m_chatRuntimeCallback) {
@@ -2626,16 +2930,31 @@ namespace blazeclaw::gateway {
 					backendErrorCode = "chat_runtime_callback_missing";
 					backendErrorMessage = "chat runtime callback is not configured";
 
-					persistTaskDeltas(
-						EnsureRuntimeTaskDeltas(
-							{},
-							runId,
-							sessionKey,
-							false,
-							assistantText,
-							backendErrorCode,
-							backendErrorMessage),
-						false);
+                  auto runtimeTaskDeltas = EnsureRuntimeTaskDeltas(
+						{},
+						runId,
+						sessionKey,
+						false,
+						assistantText,
+						backendErrorCode,
+						backendErrorMessage);
+					if (!orderedPreflightTaskDeltas.empty()) {
+						std::vector<ChatRuntimeResult::TaskDeltaEntry> mergedTaskDeltas;
+						mergedTaskDeltas.reserve(
+							orderedPreflightTaskDeltas.size() +
+							runtimeTaskDeltas.size());
+						mergedTaskDeltas.insert(
+							mergedTaskDeltas.end(),
+							orderedPreflightTaskDeltas.begin(),
+							orderedPreflightTaskDeltas.end());
+						mergedTaskDeltas.insert(
+							mergedTaskDeltas.end(),
+							runtimeTaskDeltas.begin(),
+							runtimeTaskDeltas.end());
+						runtimeTaskDeltas = std::move(mergedTaskDeltas);
+					}
+
+					persistTaskDeltas(runtimeTaskDeltas, false);
 				}
 
 				const bool silentAssistantReply = IsSilentReplyText(assistantText);
