@@ -1373,7 +1373,81 @@ namespace blazeclaw::gateway {
 				}
 			}
 
+			const std::regex numberedStepTargetRegex(
+				R"((?:^|\n|\r)\s*(?:step\s*)?\d+\s*[\)\.:\-]\s*([A-Za-z0-9._-]+))",
+				std::regex_constants::icase);
+			for (std::sregex_iterator it(message.begin(), message.end(), numberedStepTargetRegex), end;
+				it != end;
+				++it) {
+				if (it->size() >= 2) {
+					addTarget((*it)[1].str());
+				}
+			}
+
+			if (message.find("->") != std::string::npos) {
+				std::size_t cursor = 0;
+				while (cursor < message.size()) {
+					const std::size_t arrow = message.find("->", cursor);
+					if (arrow == std::string::npos) {
+						break;
+					}
+
+					const std::size_t leftBoundary =
+						message.rfind(' ', arrow) == std::string::npos
+						? 0
+						: message.rfind(' ', arrow) + 1;
+					const std::size_t rightBoundary =
+						message.find_first_of(" \n\r\t", arrow + 2);
+					const std::size_t rightEnd = rightBoundary == std::string::npos
+						? message.size()
+						: rightBoundary;
+
+					if (arrow > leftBoundary) {
+						addTarget(message.substr(leftBoundary, arrow - leftBoundary));
+					}
+					if (rightEnd > arrow + 2) {
+						addTarget(message.substr(arrow + 2, rightEnd - (arrow + 2)));
+					}
+
+					cursor = arrow + 2;
+				}
+			}
+
 			return targets;
+		}
+
+		bool HasStructuralSequenceSignal(const std::string& message) {
+			if (message.find("->") != std::string::npos) {
+				return true;
+			}
+
+			const std::regex numberedStepRegex(
+				R"((?:^|\n|\r)\s*(?:step\s*)?\d+\s*[\)\.:\-])",
+				std::regex_constants::icase);
+			std::size_t numberedStepCount = 0;
+			for (std::sregex_iterator it(message.begin(), message.end(), numberedStepRegex), end;
+				it != end;
+				++it) {
+				++numberedStepCount;
+				if (numberedStepCount >= 2) {
+					return true;
+				}
+			}
+
+			const std::regex callDirectiveRegex(
+				R"(\bcall\s+[A-Za-z0-9._-]+)",
+				std::regex_constants::icase);
+			std::size_t callDirectiveCount = 0;
+			for (std::sregex_iterator it(message.begin(), message.end(), callDirectiveRegex), end;
+				it != end;
+				++it) {
+				++callDirectiveCount;
+				if (callDirectiveCount >= 2) {
+					return true;
+				}
+			}
+
+			return false;
 		}
 
 		std::string ResolveOrderedTargetToToolId(
@@ -1441,6 +1515,16 @@ namespace blazeclaw::gateway {
 						return resolvedBySkill;
 					}
 
+					const bool modelInvocationAllowed =
+						entry.eligible &&
+						!entry.disabled &&
+						!entry.blockedByAllowlist &&
+						!entry.disableModelInvocation;
+					if (modelInvocationAllowed) {
+						return std::string("model_skill.") +
+							(entry.skillKey.empty() ? entry.name : entry.skillKey);
+					}
+
 					return {};
 				}
 			}
@@ -1452,14 +1536,8 @@ namespace blazeclaw::gateway {
 			const std::string& message,
 			const std::vector<ToolCatalogEntry>& tools,
 			const std::vector<SkillsCatalogGatewayEntry>& skillsCatalogEntries) {
-			const std::string loweredMessage = ToLowerCopyLocal(message);
-			const bool explicitOrderedRequest =
-				loweredMessage.find("strictly execute in order") != std::string::npos ||
-				loweredMessage.find("execute in order") != std::string::npos ||
-				loweredMessage.find("sequentially complete") != std::string::npos;
-
 			OrderedSequencePreflight preflight;
-			if (!explicitOrderedRequest) {
+			if (!HasStructuralSequenceSignal(message)) {
 				return preflight;
 			}
 
@@ -1569,6 +1647,14 @@ namespace blazeclaw::gateway {
 			}
 
 			return joined;
+		}
+
+		std::string BuildOrderedStepPreflightLabel(const std::string& resolvedTarget) {
+			if (resolvedTarget.rfind("model_skill.", 0) == 0) {
+				return "ordered_step_precheck_model";
+			}
+
+			return "ordered_step_precheck";
 		}
 
 		bool EndsWithLocal(
@@ -3660,6 +3746,7 @@ namespace blazeclaw::gateway {
 					}
 
 					const bool streamCompleted =
+						run.failed ||
 						silentAssistantReply ||
 						(run.providerDeltaCursor >= run.providerDeltas.size() &&
 							run.streamCursor >= run.assistantText.size());
