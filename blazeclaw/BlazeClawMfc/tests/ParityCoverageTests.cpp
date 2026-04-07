@@ -169,6 +169,21 @@ TEST_CASE("Parity coverage: prompt intent parser handles explicit time schedule"
 	REQUIRE(intent.sendAt == "15:00");
 }
 
+TEST_CASE("Parity coverage: prompt intent parser handles possessive tomorrow with immediate send", "[parity][chat][orchestration]") {
+	const auto intent = prompt::AnalyzeWeatherEmailPromptIntent(
+		"Check tomorrow's weather in Wuhan, write a short report, and email it to jicheng@whu.edu.cn now");
+
+	REQUIRE(intent.matched);
+	REQUIRE(intent.hasWeather);
+	REQUIRE(intent.hasEmail);
+	REQUIRE(intent.hasReport);
+	REQUIRE(intent.hasRecipient);
+	REQUIRE(intent.recipient == "jicheng@whu.edu.cn");
+	REQUIRE(intent.hasSchedule);
+	REQUIRE(intent.date == "tomorrow");
+	REQUIRE(intent.scheduleKind == "immediate_keyword");
+}
+
 TEST_CASE("Parity coverage: prompt intent parser reports miss reasons", "[parity][chat][orchestration]") {
 	const auto intent = prompt::AnalyzeWeatherEmailPromptIntent(
 		"Please summarize today's traffic updates.");

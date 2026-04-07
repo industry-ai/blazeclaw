@@ -4,6 +4,7 @@
 #include "../GatewayJsonUtils.h"
 
 #include <algorithm>
+#include <cmath>
 #include <curl/curl.h>
 #include <nlohmann/json.hpp>
 
@@ -33,6 +34,13 @@ namespace blazeclaw::gateway::executors {
 
 			return lowered.find("curl_perform_failed") != std::string::npos ||
 				lowered.find("empty_weather_response") != std::string::npos;
+		}
+
+		bool IsRecoverableProviderPayloadFailure(const std::string& error) {
+			return error == "weather_payload_parse_failed" ||
+				error == "weather_payload_missing_current_condition" ||
+				error == "weather_payload_missing_temperature" ||
+				error == "weather_payload_missing_humidity";
 		}
 
 		WeatherSnapshot BuildFallbackSnapshot(const std::string& requestedDate) {
@@ -112,8 +120,8 @@ namespace blazeclaw::gateway::executors {
 			return total;
 		}
 
-		bool FetchWttrJson(
-			const std::string& city,
+		bool FetchJsonByUrl(
+			const std::string& url,
 			std::string& outResponse,
 			std::string& outError) {
 			outResponse.clear();
@@ -129,20 +137,6 @@ namespace blazeclaw::gateway::executors {
 				outError = "curl_easy_init_failed";
 				return false;
 			}
-
-			char* escapedCity = curl_easy_escape(
-				curl,
-				city.c_str(),
-				static_cast<int>(city.size()));
-			const std::string encodedCity = escapedCity == nullptr
-				? city
-				: std::string(escapedCity);
-			if (escapedCity != nullptr) {
-				curl_free(escapedCity);
-			}
-
-			const std::string url =
-				"https://wttr.in/" + encodedCity + "?format=j1";
 
 			curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 			curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
@@ -167,7 +161,8 @@ namespace blazeclaw::gateway::executors {
 				return false;
 			}
 
-			if (json::Trim(outResponse).empty()) {
+			const std::string trimmed = json::Trim(outResponse);
+			if (trimmed.empty()) {
 				outError = "empty_weather_response";
 				return false;
 			}
@@ -175,7 +170,42 @@ namespace blazeclaw::gateway::executors {
 			return true;
 		}
 
-		bool TryReadInt(const nlohmann::json& value, int& out) {
+		bool FetchWttrJson(
+			const std::string& city,
+			std::string& outResponse,
+			std::string& outError) {
+            if (!EnsureCurlInitialized()) {
+				outError = "curl_global_init_failed";
+				outResponse.clear();
+				return false;
+			}
+
+			CURL* curl = curl_easy_init();
+			if (curl == nullptr) {
+				outError = "curl_easy_init_failed";
+				outResponse.clear();
+				return false;
+			}
+
+			char* escapedCity = curl_easy_escape(
+				curl,
+				city.c_str(),
+				static_cast<int>(city.size()));
+			const std::string encodedCity = escapedCity == nullptr
+				? city
+				: std::string(escapedCity);
+			if (escapedCity != nullptr) {
+				curl_free(escapedCity);
+			}
+
+			const std::string url =
+				"https://wttr.in/" + encodedCity + "?format=j1";
+			curl_easy_cleanup(curl);
+
+			return FetchJsonByUrl(url, outResponse, outError);
+		}
+
+        bool TryReadInt(const nlohmann::json& value, int& out) {
 			if (value.is_number_integer()) {
 				out = value.get<int>();
 				return true;
@@ -193,6 +223,265 @@ namespace blazeclaw::gateway::executors {
 			}
 
 			return false;
+		}
+
+		bool TryReadDouble(const nlohmann::json& value, double& out) {
+			if (value.is_number()) {
+				out = value.get<double>();
+				return true;
+			}
+
+			if (!value.is_string()) {
+				return false;
+			}
+
+			try {
+				out = std::stod(value.get<std::string>());
+				return true;
+			}
+			catch (...) {
+			}
+
+			return false;
+		}
+
+		std::string WindDirectionFromDegrees(const double degrees) {
+			static const char* kDirections[16] = {
+				"N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+				"S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"
+			};
+
+			double normalized = std::fmod(degrees, 360.0);
+			if (normalized < 0.0) {
+				normalized += 360.0;
+			}
+
+			const int index = static_cast<int>(std::round(normalized / 22.5)) % 16;
+			return kDirections[index];
+		}
+
+		std::string WmoCodeToCondition(const int code) {
+			switch (code) {
+			case 0: return "Clear";
+			case 1: return "Mainly clear";
+			case 2: return "Partly cloudy";
+			case 3: return "Overcast";
+			case 45:
+			case 48: return "Fog";
+			case 51:
+			case 53:
+			case 55: return "Drizzle";
+			case 61:
+			case 63:
+			case 65: return "Rain";
+			case 71:
+			case 73:
+			case 75: return "Snow";
+			case 80:
+			case 81:
+			case 82: return "Rain showers";
+			case 95:
+			case 96:
+			case 99: return "Thunderstorm";
+			default: return "Unknown";
+			}
+		}
+
+		bool ParseOpenMeteoJson(
+			const std::string& response,
+			const std::string& requestedDate,
+			WeatherSnapshot& outSnapshot,
+			std::string& outError) {
+			outError.clear();
+			nlohmann::json payload;
+			try {
+				payload = nlohmann::json::parse(response);
+			}
+			catch (...) {
+				outError = "openmeteo_payload_parse_failed";
+				return false;
+			}
+
+			if (!payload.is_object() || !payload.contains("daily") || !payload["daily"].is_object()) {
+				outError = "openmeteo_payload_missing_daily";
+				return false;
+			}
+
+			const auto& daily = payload["daily"];
+			if (!daily.contains("time") || !daily["time"].is_array() || daily["time"].empty()) {
+				outError = "openmeteo_payload_missing_dates";
+				return false;
+			}
+
+			std::size_t index = 0;
+			if (ToLowerCopy(requestedDate) == "tomorrow" && daily["time"].size() > 1) {
+				index = 1;
+			}
+
+			if (!daily["time"][index].is_string()) {
+				outError = "openmeteo_payload_invalid_date";
+				return false;
+			}
+
+			outSnapshot.date = daily["time"][index].get<std::string>();
+
+			int weatherCode = 0;
+			if (daily.contains("weather_code") &&
+				daily["weather_code"].is_array() &&
+				index < daily["weather_code"].size()) {
+				TryReadInt(daily["weather_code"][index], weatherCode);
+			}
+			outSnapshot.condition = WmoCodeToCondition(weatherCode);
+
+			double maxTemp = 0.0;
+			double minTemp = 0.0;
+			if (!daily.contains("temperature_2m_max") ||
+				!daily["temperature_2m_max"].is_array() ||
+				index >= daily["temperature_2m_max"].size() ||
+				!TryReadDouble(daily["temperature_2m_max"][index], maxTemp)) {
+				outError = "openmeteo_payload_missing_temperature_max";
+				return false;
+			}
+			if (!daily.contains("temperature_2m_min") ||
+				!daily["temperature_2m_min"].is_array() ||
+				index >= daily["temperature_2m_min"].size() ||
+				!TryReadDouble(daily["temperature_2m_min"][index], minTemp)) {
+				outError = "openmeteo_payload_missing_temperature_min";
+				return false;
+			}
+			outSnapshot.temperatureC = static_cast<int>(std::round((maxTemp + minTemp) / 2.0));
+
+			double maxHumidity = 0.0;
+			double minHumidity = 0.0;
+			if (daily.contains("relative_humidity_2m_max") &&
+				daily["relative_humidity_2m_max"].is_array() &&
+				index < daily["relative_humidity_2m_max"].size() &&
+				TryReadDouble(daily["relative_humidity_2m_max"][index], maxHumidity) &&
+				daily.contains("relative_humidity_2m_min") &&
+				daily["relative_humidity_2m_min"].is_array() &&
+				index < daily["relative_humidity_2m_min"].size() &&
+				TryReadDouble(daily["relative_humidity_2m_min"][index], minHumidity)) {
+				outSnapshot.humidityPct = static_cast<int>(std::round((maxHumidity + minHumidity) / 2.0));
+			}
+			else if (payload.contains("current") && payload["current"].is_object() &&
+				payload["current"].contains("relative_humidity_2m") &&
+				TryReadDouble(payload["current"]["relative_humidity_2m"], maxHumidity)) {
+				outSnapshot.humidityPct = static_cast<int>(std::round(maxHumidity));
+			}
+			else {
+				outSnapshot.humidityPct = 60;
+			}
+
+			double windSpeed = 0.0;
+			double windDirection = 0.0;
+			const bool hasDailyWind =
+				daily.contains("wind_speed_10m_max") &&
+				daily["wind_speed_10m_max"].is_array() &&
+				index < daily["wind_speed_10m_max"].size() &&
+				TryReadDouble(daily["wind_speed_10m_max"][index], windSpeed) &&
+				daily.contains("wind_direction_10m_dominant") &&
+				daily["wind_direction_10m_dominant"].is_array() &&
+				index < daily["wind_direction_10m_dominant"].size() &&
+				TryReadDouble(daily["wind_direction_10m_dominant"][index], windDirection);
+
+			if (!hasDailyWind && payload.contains("current") && payload["current"].is_object()) {
+				const auto& current = payload["current"];
+				if (current.contains("wind_speed_10m")) {
+					TryReadDouble(current["wind_speed_10m"], windSpeed);
+				}
+				if (current.contains("wind_direction_10m")) {
+					TryReadDouble(current["wind_direction_10m"], windDirection);
+				}
+			}
+
+			outSnapshot.wind = WindDirectionFromDegrees(windDirection) +
+				" " + std::to_string(static_cast<int>(std::round(windSpeed))) + " km/h";
+
+			return true;
+		}
+
+		bool FetchOpenMeteoSnapshot(
+			const std::string& city,
+			const std::string& requestedDate,
+			WeatherSnapshot& outSnapshot,
+			std::string& outError) {
+			if (!EnsureCurlInitialized()) {
+				outError = "curl_global_init_failed";
+				return false;
+			}
+
+			CURL* curl = curl_easy_init();
+			if (curl == nullptr) {
+				outError = "curl_easy_init_failed";
+				return false;
+			}
+
+			char* escapedCity = curl_easy_escape(
+				curl,
+				city.c_str(),
+				static_cast<int>(city.size()));
+			const std::string encodedCity = escapedCity == nullptr
+				? city
+				: std::string(escapedCity);
+			if (escapedCity != nullptr) {
+				curl_free(escapedCity);
+			}
+			curl_easy_cleanup(curl);
+
+			std::string geoResponse;
+			if (!FetchJsonByUrl(
+				"https://geocoding-api.open-meteo.com/v1/search?name=" + encodedCity + "&count=1&language=en&format=json",
+				geoResponse,
+				outError)) {
+				return false;
+			}
+
+			nlohmann::json geoPayload;
+			try {
+				geoPayload = nlohmann::json::parse(geoResponse);
+			}
+			catch (...) {
+				outError = "openmeteo_geocode_parse_failed";
+				return false;
+			}
+
+			if (!geoPayload.contains("results") ||
+				!geoPayload["results"].is_array() ||
+				geoPayload["results"].empty() ||
+				!geoPayload["results"][0].is_object()) {
+				outError = "openmeteo_geocode_missing_results";
+				return false;
+			}
+
+			const auto& location = geoPayload["results"][0];
+			double latitude = 0.0;
+			double longitude = 0.0;
+			if (!location.contains("latitude") || !TryReadDouble(location["latitude"], latitude) ||
+				!location.contains("longitude") || !TryReadDouble(location["longitude"], longitude)) {
+				outError = "openmeteo_geocode_missing_coordinates";
+				return false;
+			}
+
+			std::ostringstream forecastUrl;
+			forecastUrl.setf(std::ios::fixed);
+			forecastUrl.precision(4);
+			forecastUrl
+				<< "https://api.open-meteo.com/v1/forecast?latitude=" << latitude
+				<< "&longitude=" << longitude
+				<< "&daily=weather_code,temperature_2m_max,temperature_2m_min,relative_humidity_2m_max,relative_humidity_2m_min,wind_speed_10m_max,wind_direction_10m_dominant"
+				<< "&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,weather_code"
+				<< "&timezone=auto";
+
+			std::string forecastResponse;
+			if (!FetchJsonByUrl(forecastUrl.str(), forecastResponse, outError)) {
+				return false;
+			}
+
+			return ParseOpenMeteoJson(
+				forecastResponse,
+				requestedDate,
+				outSnapshot,
+				outError);
 		}
 
 		std::string ResolveForecastDate(
@@ -221,6 +510,118 @@ namespace blazeclaw::gateway::executors {
 			return requestedDate;
 		}
 
+		const nlohmann::json* ResolveForecastDayNode(
+			const nlohmann::json& payload,
+			const std::string& requestedDate) {
+			if (!payload.contains("weather") || !payload["weather"].is_array()) {
+				return nullptr;
+			}
+
+			const auto& weather = payload["weather"];
+			if (weather.empty()) {
+				return nullptr;
+			}
+
+			const std::string normalizedDate = ToLowerCopy(requestedDate);
+			std::size_t dayIndex = 0;
+			if (normalizedDate == "tomorrow" && weather.size() > 1) {
+				dayIndex = 1;
+			}
+
+			if (dayIndex < weather.size() && weather[dayIndex].is_object()) {
+				return &weather[dayIndex];
+			}
+
+			for (const auto& dayNode : weather) {
+				if (!dayNode.is_object()) {
+					continue;
+				}
+
+				if (!requestedDate.empty() && dayNode.contains("date") &&
+					dayNode["date"].is_string() &&
+					dayNode["date"].get<std::string>() == requestedDate) {
+					return &dayNode;
+				}
+			}
+
+			return nullptr;
+		}
+
+		const nlohmann::json* ResolveObservationNode(
+			const nlohmann::json& payload,
+			const nlohmann::json* forecastDayNode) {
+			if (payload.contains("current_condition") &&
+				payload["current_condition"].is_array() &&
+				!payload["current_condition"].empty() &&
+				payload["current_condition"][0].is_object()) {
+				return &payload["current_condition"][0];
+			}
+
+			if (forecastDayNode != nullptr &&
+				forecastDayNode->contains("hourly") &&
+				(*forecastDayNode)["hourly"].is_array() &&
+				!(*forecastDayNode)["hourly"].empty() &&
+				(*forecastDayNode)["hourly"][0].is_object()) {
+				return &(*forecastDayNode)["hourly"][0];
+			}
+
+			return nullptr;
+		}
+
+		bool TryReadForecastTemperature(
+			const nlohmann::json& observation,
+			const nlohmann::json* forecastDayNode,
+			int& outTemperatureC) {
+			if (observation.contains("temp_C") &&
+				TryReadInt(observation["temp_C"], outTemperatureC)) {
+				return true;
+			}
+
+			if (observation.contains("tempC") &&
+				TryReadInt(observation["tempC"], outTemperatureC)) {
+				return true;
+			}
+
+			if (forecastDayNode == nullptr) {
+				return false;
+			}
+
+			if (forecastDayNode->contains("avgtempC") &&
+				TryReadInt((*forecastDayNode)["avgtempC"], outTemperatureC)) {
+				return true;
+			}
+
+			int maxTemp = 0;
+			int minTemp = 0;
+			if (forecastDayNode->contains("maxtempC") &&
+				forecastDayNode->contains("mintempC") &&
+				TryReadInt((*forecastDayNode)["maxtempC"], maxTemp) &&
+				TryReadInt((*forecastDayNode)["mintempC"], minTemp)) {
+				outTemperatureC = (maxTemp + minTemp) / 2;
+				return true;
+			}
+
+			return false;
+		}
+
+		bool TryReadForecastHumidity(
+			const nlohmann::json& observation,
+			const nlohmann::json* forecastDayNode,
+			int& outHumidityPct) {
+			if (observation.contains("humidity") &&
+				TryReadInt(observation["humidity"], outHumidityPct)) {
+				return true;
+			}
+
+			if (forecastDayNode != nullptr &&
+				forecastDayNode->contains("avghumidity") &&
+				TryReadInt((*forecastDayNode)["avghumidity"], outHumidityPct)) {
+				return true;
+			}
+
+			return false;
+		}
+
 		bool ParseWttrJson(
 			const std::string& response,
 			const std::string& requestedDate,
@@ -236,15 +637,17 @@ namespace blazeclaw::gateway::executors {
 				return false;
 			}
 
-			if (!payload.contains("current_condition") ||
-				!payload["current_condition"].is_array() ||
-				payload["current_condition"].empty() ||
-				!payload["current_condition"][0].is_object()) {
+           const nlohmann::json* forecastDayNode =
+				ResolveForecastDayNode(payload, requestedDate);
+			const nlohmann::json* observationNode =
+				ResolveObservationNode(payload, forecastDayNode);
+
+			if (observationNode == nullptr) {
 				outError = "weather_payload_missing_current_condition";
 				return false;
 			}
 
-			const auto& current = payload["current_condition"][0];
+          const auto& current = *observationNode;
 			outSnapshot.date = ResolveForecastDate(payload, requestedDate);
 
 			outSnapshot.condition = "Unknown";
@@ -258,12 +661,12 @@ namespace blazeclaw::gateway::executors {
 					current["weatherDesc"][0]["value"].get<std::string>();
 			}
 
-			if (!current.contains("temp_C") || !TryReadInt(current["temp_C"], outSnapshot.temperatureC)) {
+          if (!TryReadForecastTemperature(current, forecastDayNode, outSnapshot.temperatureC)) {
 				outError = "weather_payload_missing_temperature";
 				return false;
 			}
 
-			if (!current.contains("humidity") || !TryReadInt(current["humidity"], outSnapshot.humidityPct)) {
+           if (!TryReadForecastHumidity(current, forecastDayNode, outSnapshot.humidityPct)) {
 				outError = "weather_payload_missing_humidity";
 				return false;
 			}
@@ -360,6 +763,29 @@ namespace blazeclaw::gateway::executors {
 			std::string fetchError;
 			if (!FetchWttrJson(normalizedCity, response, fetchError)) {
 				if (IsTransientProviderFailure(fetchError)) {
+                    WeatherSnapshot openMeteoSnapshot;
+					std::string openMeteoError;
+					if (FetchOpenMeteoSnapshot(
+						normalizedCity,
+						normalizedDate,
+						openMeteoSnapshot,
+						openMeteoError)) {
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = true,
+							.status = "ok",
+							.output = BuildSuccessEnvelope(
+								normalizedCity,
+								openMeteoSnapshot.date,
+								openMeteoSnapshot.condition,
+								openMeteoSnapshot.temperatureC,
+								openMeteoSnapshot.wind,
+								openMeteoSnapshot.humidityPct,
+								false,
+								fetchError),
+						};
+					}
+
 					const auto fallback = BuildFallbackSnapshot(normalizedDate);
 					return ToolExecuteResult{
 						.tool = requestedTool,
@@ -390,6 +816,47 @@ namespace blazeclaw::gateway::executors {
 			WeatherSnapshot snapshot;
 			std::string parseError;
 			if (!ParseWttrJson(response, normalizedDate, snapshot, parseError)) {
+               if (IsRecoverableProviderPayloadFailure(parseError)) {
+                    WeatherSnapshot openMeteoSnapshot;
+					std::string openMeteoError;
+					if (FetchOpenMeteoSnapshot(
+						normalizedCity,
+						normalizedDate,
+						openMeteoSnapshot,
+						openMeteoError)) {
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = true,
+							.status = "ok",
+							.output = BuildSuccessEnvelope(
+								normalizedCity,
+								openMeteoSnapshot.date,
+								openMeteoSnapshot.condition,
+								openMeteoSnapshot.temperatureC,
+								openMeteoSnapshot.wind,
+								openMeteoSnapshot.humidityPct,
+								false,
+								parseError),
+						};
+					}
+
+					const auto fallback = BuildFallbackSnapshot(normalizedDate);
+					return ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = true,
+						.status = "ok",
+						.output = BuildSuccessEnvelope(
+							normalizedCity,
+							fallback.date,
+							fallback.condition,
+							fallback.temperatureC,
+							fallback.wind,
+							fallback.humidityPct,
+							true,
+							parseError),
+					};
+				}
+
 				return ToolExecuteResult{
 					.tool = requestedTool,
 					.executed = false,
