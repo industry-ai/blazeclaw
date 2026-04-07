@@ -706,6 +706,7 @@ namespace blazeclaw::gateway {
 
 		const std::string catalogPath = ResolveExtensionsCatalogPath();
 		m_toolRegistry.LoadExtensionToolsFromCatalog(catalogPath);
+		m_toolRegistry.LoadSkillToolsFromDirectory("blazeclaw/skills-bundled");
 		m_toolRegistry.LoadSkillToolsFromDirectory("blazeclaw/skills");
 		m_toolRegistry.LoadSkillToolsFromDirectory("skills");
 		// Activate lifecycle-managed extensions (register tools without executors).

@@ -3,7 +3,7 @@
 This folder contains **local implemented skills** and related assets used by
 BlazeClaw.
 
-At runtime, the system can surface skills from three sources:
+At runtime, the system can surface skills from four sources:
 
 1. **Runtime-registered skills**
    - Provided by gateway/runtime services.
@@ -14,14 +14,19 @@ At runtime, the system can surface skills from three sources:
      `installKind=general`), `CSkillView` places it under the
      `runtime-registered -> general` subitem.
 
-2. **Implemented local skills**
+2. **Bundled baseline skills**
+   - Loaded from `blazeclaw/skills-bundled/*` by gateway runtime startup.
+   - Provides baseline cross-project skills that are ported with BlazeClaw.
+   - Intended as the default skill set before local overrides are applied.
+
+3. **Implemented local skills**
    - Discovered from `blazeclaw/skills/*` in the workspace.
-   - Useful as fallback visibility when runtime registration is incomplete or
-     still initializing.
+   - Loaded after bundled skills so local implementations can override bundled
+     tool IDs when needed.
    - Displayed in `CSkillView` under local categories (for example
      `implemented`).
 
-3. **OpenClaw original copied skills (unmodified)**
+4. **OpenClaw original copied skills (unmodified)**
    - Discovered from `blazeclaw/skills-openclaw-original/*` in the workspace.
    - Intended for visibility of original upstream skill assets without any
      BlazeClaw-specific modification.
