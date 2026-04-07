@@ -153,6 +153,19 @@ documentation lookup and general fact retrieval workflows.
 
 ---
 
+### 5. `humanizer`
+
+**Purpose:** Rewrites AI-sounding text into natural human-written language using
+Wikipedia AI-writing-pattern guidance.
+
+**Key files:**
+- `humanizer/SKILL.md`
+- `humanizer/README.md`
+- `humanizer/_meta.json`
+- `humanizer/.clawhub/origin.json`
+
+---
+
 ## Notes
 
 - Runtime visibility in `CSkillView` should include registered runtime skills,
