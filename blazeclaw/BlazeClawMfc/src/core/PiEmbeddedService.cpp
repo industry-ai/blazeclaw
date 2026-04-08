@@ -146,6 +146,8 @@ namespace blazeclaw::core {
 		std::optional<std::string> TryExtractQuoted(const std::string& message) {
 			static const std::regex kChineseSingleQuote(R"(‘([^’]{1,120})’)");
 			static const std::regex kAsciiSingleQuote(R"('([^']{1,120})')");
+			static const std::regex kAsciiDoubleQuote("\"([^\"]{1,160})\"");
+			static const std::regex kChineseDoubleQuote(R"(“([^”]{1,160})”)");
 
 			std::smatch match;
 			if (std::regex_search(message, match, kChineseSingleQuote) && match.size() >= 2) {
@@ -156,7 +158,75 @@ namespace blazeclaw::core {
 				return match[1].str();
 			}
 
+			if (std::regex_search(message, match, kChineseDoubleQuote) && match.size() >= 2) {
+				return match[1].str();
+			}
+
+			if (std::regex_search(message, match, kAsciiDoubleQuote) && match.size() >= 2) {
+				return match[1].str();
+			}
+
 			return std::nullopt;
+		}
+
+		std::string NormalizeSearchQueryText(
+			const std::string& input) {
+			std::string normalized;
+			normalized.reserve(input.size());
+
+			bool previousWasSpace = true;
+			for (const unsigned char rawCh : input) {
+				if (rawCh < 0x20) {
+					continue;
+				}
+
+				const char ch = static_cast<char>(rawCh);
+				if (std::isspace(rawCh) != 0) {
+					if (!previousWasSpace) {
+						normalized.push_back(' ');
+						previousWasSpace = true;
+					}
+					continue;
+				}
+
+				normalized.push_back(ch);
+				previousWasSpace = false;
+			}
+
+			while (!normalized.empty() && normalized.front() == ' ') {
+				normalized.erase(normalized.begin());
+			}
+			while (!normalized.empty() && normalized.back() == ' ') {
+				normalized.pop_back();
+			}
+
+			return normalized;
+		}
+
+		std::optional<std::string> DeriveCompactSearchQuery(
+			const std::string& source) {
+			constexpr std::size_t kMaxQueryChars = 240;
+			std::string normalized = NormalizeSearchQueryText(source);
+			if (normalized.empty()) {
+				return std::nullopt;
+			}
+
+			if (normalized.size() <= kMaxQueryChars) {
+				return normalized;
+			}
+
+			std::string compact = normalized.substr(0, kMaxQueryChars);
+			const auto lastSpace = compact.find_last_of(' ');
+			if (lastSpace != std::string::npos && lastSpace > 40) {
+				compact = compact.substr(0, lastSpace);
+			}
+
+			compact = NormalizeSearchQueryText(compact);
+			if (compact.empty()) {
+				return std::nullopt;
+			}
+
+			return compact;
 		}
 
 		std::optional<std::string> TryExtractEmailAddress(const std::string& text) {
@@ -255,7 +325,11 @@ namespace blazeclaw::core {
 			const std::string loweredTool = ToLowerCopy(toolName);
 			if (loweredTool.find("search") != std::string::npos ||
 				loweredTool.find("brave") != std::string::npos) {
-				args["query"] = query;
+				const std::string sourceQuery = query.empty() ? runMessage : query;
+				const auto compactQuery = DeriveCompactSearchQuery(sourceQuery);
+				if (compactQuery.has_value()) {
+					args["query"] = compactQuery.value();
+				}
 				args["topK"] = 3;
 			}
 			else if (loweredTool.find("smtp") != std::string::npos ||
@@ -283,6 +357,12 @@ namespace blazeclaw::core {
 			}
 
 			return args;
+		}
+
+		bool IsSearchToolId(const std::string& toolName) {
+			const std::string lowered = ToLowerCopy(toolName);
+			return lowered.find("search") != std::string::npos ||
+				lowered.find("brave") != std::string::npos;
 		}
 
 		std::string ResolveBindingArgMode(
@@ -894,6 +974,22 @@ namespace blazeclaw::core {
 				request.run.message,
 				lastOutput,
 				stepIndex);
+			if (IsSearchToolId(toolName)) {
+				const auto queryIt = args.find("query");
+				const bool hasQuery =
+					queryIt != args.end() &&
+					queryIt->is_string() &&
+					!NormalizeSearchQueryText(queryIt->get<std::string>()).empty();
+				if (!hasQuery) {
+					finalizeFailure(
+						"planner_invalid_search_query",
+						kErrorInvalidArgs,
+						"planner could not derive a safe query for search tool");
+					completeWithSnapshot();
+					return result;
+				}
+			}
+
 			const std::string argMode = step.argMode;
 			if (!ValidateArgsForArgMode(argMode, args)) {
 				finalizeFailure(

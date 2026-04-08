@@ -69,6 +69,64 @@ namespace blazeclaw::gateway {
 			return value;
 		}
 
+		std::string NormalizeSearchQueryTextLocal(const std::string& input) {
+			std::string normalized;
+			normalized.reserve(input.size());
+
+			bool previousWasSpace = true;
+			for (const unsigned char rawCh : input) {
+				if (rawCh < 0x20) {
+					continue;
+				}
+
+				if (std::isspace(rawCh) != 0) {
+					if (!previousWasSpace) {
+						normalized.push_back(' ');
+						previousWasSpace = true;
+					}
+					continue;
+				}
+
+				normalized.push_back(static_cast<char>(rawCh));
+				previousWasSpace = false;
+			}
+
+			while (!normalized.empty() && normalized.front() == ' ') {
+				normalized.erase(normalized.begin());
+			}
+			while (!normalized.empty() && normalized.back() == ' ') {
+				normalized.pop_back();
+			}
+
+			return normalized;
+		}
+
+		std::optional<std::string> DeriveCompactSearchQueryLocal(
+			const std::string& source) {
+			constexpr std::size_t kMaxQueryChars = 240;
+			std::string normalized = NormalizeSearchQueryTextLocal(source);
+			if (normalized.empty()) {
+				return std::nullopt;
+			}
+
+			if (normalized.size() <= kMaxQueryChars) {
+				return normalized;
+			}
+
+			std::string compact = normalized.substr(0, kMaxQueryChars);
+			const auto lastSpace = compact.find_last_of(' ');
+			if (lastSpace != std::string::npos && lastSpace > 40) {
+				compact = compact.substr(0, lastSpace);
+			}
+
+			compact = NormalizeSearchQueryTextLocal(compact);
+			if (compact.empty()) {
+				return std::nullopt;
+			}
+
+			return compact;
+		}
+
 		std::string SerializeSkillCatalogEntry(
 			const SkillsCatalogGatewayEntry& entry) {
 			return "{\"name\":\"" +
@@ -1776,8 +1834,13 @@ namespace blazeclaw::gateway {
 
 			const std::string lowerTool = ToLowerCopyLocal(toolId);
 			if (EndsWithLocal(lowerTool, ".search.web")) {
+               const auto compactQuery = DeriveCompactSearchQueryLocal(trimmedMessage);
+				if (!compactQuery.has_value()) {
+					return false;
+				}
+
 				outArgsJson =
-					"{\"query\":" + JsonString(trimmedMessage) +
+                    "{\"query\":" + JsonString(compactQuery.value()) +
 					",\"count\":5}";
 				return true;
 			}

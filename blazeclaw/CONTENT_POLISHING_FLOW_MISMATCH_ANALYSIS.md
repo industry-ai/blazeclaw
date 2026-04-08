@@ -104,3 +104,14 @@ Implement Priority A + B first to stop incorrect Brave Search capture, then add 
     allowlisted tools in the resolved order.
   - Associated runtime and skills docs were updated to describe the new
     precedence and strict-allowlist behavior.
+
+- Priority C has been implemented:
+  - Quoted-text extraction now supports both single-quote and double-quote
+    patterns (including smart quotes) in embedded planning input parsing.
+  - Search argument synthesis now derives a compact normalized query for
+    search tools when source text is oversized/noisy.
+  - If a safe search query cannot be derived, embedded planning now emits a
+    clear terminal planner error (`planner_invalid_search_query`) instead of
+    relying on downstream opaque invalid-arguments failures.
+  - Runtime invalid-arguments recovery for `.search.web` also applies compact
+    query derivation before retry.

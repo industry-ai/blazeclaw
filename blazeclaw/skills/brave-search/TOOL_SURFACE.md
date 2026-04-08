@@ -110,6 +110,8 @@ Use the gateway endpoints below to verify Phase 3 discovery:
 - Runtime controls:
   - bounded execution timeout per tool operation
   - output truncation policy to protect UI/runtime channels
+  - compact-query derivation for oversized/noisy search prompts
+  - explicit planner error when no safe search query can be derived
   - deterministic failure code mapping (`auth_error`, `rate_limited`,
     `upstream_unavailable`, `network_error`, `process_exit_nonzero`)
 - Optional credential policy:
@@ -120,6 +122,8 @@ Use the gateway endpoints below to verify Phase 3 discovery:
 
 - `brave_api_key_missing`: missing `BRAVE_API_KEY` while strict preflight is enabled.
 - `invalid_arguments`: invalid `query`, `count/topK`, `content`, or `url` shape/value.
+- `planner_invalid_search_query`: planner could not derive a safe compact query
+  for search execution; refine the prompt or provide a direct concise query.
 - `timed_out`: operation exceeded runtime deadline.
 - `auth_error`: upstream auth/permission rejected.
 - `rate_limited`: upstream throttling response.
