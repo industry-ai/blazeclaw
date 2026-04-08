@@ -159,6 +159,18 @@ namespace blazeclaw::core {
 			return std::nullopt;
 		}
 
+		std::optional<std::string> TryExtractEmailAddress(const std::string& text) {
+			static const std::regex kEmailRegex(
+				R"(([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}))");
+
+			std::smatch match;
+			if (std::regex_search(text, match, kEmailRegex) && match.size() >= 2) {
+				return match[1].str();
+			}
+
+			return std::nullopt;
+		}
+
 		std::optional<std::string> FindToolByAlias(
 			const std::vector<blazeclaw::gateway::ToolCatalogEntry>& tools,
 			const std::vector<EmbeddedToolBinding>& bindings,
@@ -245,6 +257,18 @@ namespace blazeclaw::core {
 				loweredTool.find("brave") != std::string::npos) {
 				args["query"] = query;
 				args["topK"] = 3;
+			}
+			else if (loweredTool.find("smtp") != std::string::npos ||
+				(loweredTool.find("email") != std::string::npos &&
+					loweredTool.find("send") != std::string::npos)) {
+				const std::string emailSource = runMessage + "\n" + lastOutput;
+				if (const auto to = TryExtractEmailAddress(emailSource);
+					to.has_value() && !to->empty()) {
+					args["to"] = to.value();
+				}
+
+				args["subject"] = "Preview";
+				args["body"] = lastOutput.empty() ? runMessage : lastOutput;
 			}
 			else if (loweredTool.find("summ") != std::string::npos) {
 				args["text"] = lastOutput.empty() ? runMessage : lastOutput;
