@@ -444,7 +444,7 @@ namespace blazeclaw::gateway {
 				std::to_string(delta.fallbackAttempt) +
 				",\"fallbackMaxAttempts\":" +
 				std::to_string(delta.fallbackMaxAttempts) +
-				"\",\"argsJson\":\"" +
+              ",\"argsJson\":\"" +
 				EscapeJsonLocal(delta.argsJson) +
 				"\",\"resultJson\":\"" +
 				EscapeJsonLocal(delta.resultJson) +
@@ -1566,7 +1566,9 @@ namespace blazeclaw::gateway {
 				it != end;
 				++it) {
 				if (it->size() >= 2) {
-					addTarget((*it)[1].str());
+                  const std::string target = (*it)[1].str();
+					addExplicitTarget(target);
+					addTarget(target);
 				}
 			}
 
@@ -1764,27 +1766,28 @@ namespace blazeclaw::gateway {
 			const std::vector<ToolCatalogEntry>& tools,
 			const std::vector<SkillsCatalogGatewayEntry>& skillsCatalogEntries) {
 			OrderedSequencePreflight preflight;
-			if (!HasStructuralSequenceSignal(message)) {
-				return preflight;
-			}
-
 			std::vector<std::string> inferredTargets;
 			preflight.explicitCallTargets.clear();
 			inferredTargets = ExtractOrderedTargetsFromPrompt(
 				message,
 				&preflight.explicitCallTargets);
 
-			if (preflight.explicitCallTargets.size() >= 2) {
+            if (!preflight.explicitCallTargets.empty()) {
 				preflight.orderedTargets = preflight.explicitCallTargets;
 				preflight.strictAllowlist = true;
+               preflight.enforced = true;
 			}
 			else {
+              if (!HasStructuralSequenceSignal(message)) {
+					return preflight;
+				}
+
 				preflight.orderedTargets = std::move(inferredTargets);
 				preflight.strictAllowlist = false;
+               preflight.enforced = preflight.orderedTargets.size() >= 2;
 			}
 
 			preflight.resolvedToolTargets.reserve(preflight.orderedTargets.size());
-			preflight.enforced = preflight.orderedTargets.size() >= 2;
 			if (!preflight.enforced) {
 				return preflight;
 			}

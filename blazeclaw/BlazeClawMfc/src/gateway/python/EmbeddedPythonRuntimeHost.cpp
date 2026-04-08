@@ -50,6 +50,67 @@ namespace blazeclaw::gateway::python {
 			return api;
 		}
 
+		bool IsValidEnvironmentVariableName(const std::string& name) {
+			if (name.empty()) {
+				return false;
+			}
+
+			for (const unsigned char ch : name) {
+				if (ch == '=' || ch == '\0') {
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		bool EqualsIgnoreCaseAscii(
+			const std::string& left,
+			const std::string& right) {
+			if (left.size() != right.size()) {
+				return false;
+			}
+
+			for (std::size_t i = 0; i < left.size(); ++i) {
+				const auto a = static_cast<unsigned char>(left[i]);
+				const auto b = static_cast<unsigned char>(right[i]);
+				if (std::tolower(a) != std::tolower(b)) {
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		std::string BuildMaskedEnvValue(const std::string& value) {
+			if (value.empty()) {
+				return "<empty>";
+			}
+
+			if (value.size() <= 4) {
+				return "<len=" + std::to_string(value.size()) + ">";
+			}
+
+			return value.substr(0, 2) +
+				"***" +
+				value.substr(value.size() - 2) +
+				"<len=" + std::to_string(value.size()) + ">";
+		}
+
+		void EmitEmbeddedEnvDebug(
+			const std::string& stage,
+			const std::string& key,
+			const std::string& value,
+			const bool success) {
+			std::ostringstream builder;
+			builder << "[PythonEmbedded][env] stage=" << stage
+				<< " key=" << key
+				<< " success=" << (success ? "true" : "false")
+				<< " value=" << BuildMaskedEnvValue(value)
+				<< "\n";
+			OutputDebugStringA(builder.str().c_str());
+		}
+
 		std::mutex& SharedExecutionMutex() {
 			static std::mutex executionMutex;
 			return executionMutex;
@@ -525,6 +586,16 @@ namespace blazeclaw::gateway::python {
 		return EnsureRuntimeLoaded(error);
 	}
 
+	bool EmbeddedPythonRuntimeHost::SetEnvironmentVariable(
+		const std::string& name,
+		const std::string& value) {
+		if (!IsValidEnvironmentVariableName(name)) {
+			return false;
+		}
+
+		return _putenv_s(name.c_str(), value.c_str()) == 0;
+	}
+
 	EmbeddedPythonRuntimeHealth EmbeddedPythonRuntimeHost::ProbeHealth() {
 		EmbeddedPythonRuntimeHealth health;
 		std::string loadError;
@@ -564,6 +635,69 @@ namespace blazeclaw::gateway::python {
 				.status = "invalid_args",
 				.output = BuildErrorEnvelope("args_parse_failed", "invalid args JSON"),
 			};
+		}
+
+		if (args.contains("env") && !args["env"].is_object()) {
+			EmitEmbeddedTelemetry("invalid_args", "env_not_object");
+			return ToolExecuteResult{
+				.tool = requestedTool,
+				.executed = false,
+				.status = "invalid_args",
+				.output = BuildErrorEnvelope("env_not_object", "env must be an object"),
+			};
+		}
+
+		if (args.contains("env") && args["env"].is_object()) {
+            bool baiduApiKeyObservedInArgs = false;
+			for (auto it = args["env"].begin(); it != args["env"].end(); ++it) {
+				if (!it.value().is_string()) {
+					continue;
+				}
+
+				const std::string key = blazeclaw::gateway::json::Trim(it.key());
+				if (key.empty()) {
+					continue;
+				}
+
+				const std::string envValue = it.value().get<std::string>();
+               const bool setSucceeded = SetEnvironmentVariable(key, envValue);
+				if (EqualsIgnoreCaseAscii(key, "BAIDU_API_KEY")) {
+					baiduApiKeyObservedInArgs = true;
+					EmitEmbeddedEnvDebug(
+						"set-request",
+						key,
+						envValue,
+						setSucceeded);
+					const std::string readBackValue = ReadEnvironmentVariable(key.c_str());
+					EmitEmbeddedEnvDebug(
+						"set-readback",
+						key,
+						readBackValue,
+						!readBackValue.empty());
+				}
+
+				if (!setSucceeded) {
+					EmitEmbeddedTelemetry("error", "env_set_failed");
+					return ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = false,
+						.status = "error",
+						.output = BuildErrorEnvelope(
+							"env_set_failed",
+							"failed to set env var: " + key),
+					};
+				}
+			}
+
+			if (baiduApiKeyObservedInArgs) {
+				const std::string finalBaiduApiKey =
+					ReadEnvironmentVariable("BAIDU_API_KEY");
+				EmitEmbeddedEnvDebug(
+					"post-env-apply",
+					"BAIDU_API_KEY",
+					finalBaiduApiKey,
+					!finalBaiduApiKey.empty());
+			}
 		}
 
 		if (!args.is_object()) {

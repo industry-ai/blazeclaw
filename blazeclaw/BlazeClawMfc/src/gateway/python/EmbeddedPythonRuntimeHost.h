@@ -16,6 +16,9 @@ namespace blazeclaw::gateway::python {
 	public:
 		const char* ModeName() const override;
 		bool IsAvailable() const override;
+       bool SetEnvironmentVariable(
+			const std::string& name,
+			const std::string& value);
 		static EmbeddedPythonRuntimeHealth ProbeHealth();
 		ToolExecuteResult Execute(
 			const std::string& requestedTool,

@@ -42,6 +42,24 @@ namespace blazeclaw::gateway {
 			return v2;
 		}
 
+		void NormalizeBaiduFailureStatus(ToolExecuteResultV2& result) {
+			if (result.tool != "baidu-search.search.web") {
+				return;
+			}
+
+			if (result.status == "process_exit_nonzero") {
+				result.status = "script_runtime_error";
+			}
+
+			if (result.errorCode == "process_exit_nonzero") {
+				result.errorCode = "script_runtime_error";
+			}
+
+			if (result.errorMessage.empty() && !result.result.empty()) {
+				result.errorMessage = result.result;
+			}
+		}
+
 		std::string ExtractSkillKeyFromToolId(const std::string& toolId) {
 			const auto dot = toolId.find('.');
 			if (dot == std::string::npos || dot == 0) {
@@ -291,6 +309,7 @@ namespace blazeclaw::gateway {
 			result.latencyMs = result.completedAtMs >= result.startedAtMs
 				? (result.completedAtMs - result.startedAtMs)
 				: 0;
+			NormalizeBaiduFailureStatus(result);
 
 			m_executionHistory.push_back(ToolExecutionEntry{
 				.tool = result.tool,
@@ -307,11 +326,13 @@ namespace blazeclaw::gateway {
 
 		const ToolExecuteResult legacy = Execute(request.tool, request.argsJson);
 		const std::uint64_t completedAtMs = CurrentEpochMs();
-		return AdaptLegacyResultToV2(
+       ToolExecuteResultV2 adapted = AdaptLegacyResultToV2(
 			legacy,
 			request,
 			startedAtMs,
 			completedAtMs);
+       NormalizeBaiduFailureStatus(adapted);
+		return adapted;
 	}
 
 	void GatewayToolRegistry::RegisterRuntimeTool(

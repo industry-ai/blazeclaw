@@ -2,10 +2,10 @@
 name: baidu-search
 description: Search the web using Baidu AI Search. Use for live information, documentation, and research topics.
 command-dispatch: tool
-command-tool: baidu_search.search.web
+command-tool: baidu-search.search.web
 command-arg-mode: raw
-command-arg-schema: schema://baidu_search.search.web.args.v1
-command-result-schema: schema://baidu_search.search.web.result.v1
+command-arg-schema: schema://baidu-search.search.web.args.v1
+command-result-schema: schema://baidu-search.search.web.result.v1
 command-idempotency-hint: safe
 command-retry-policy-hint: transient-network
 command-requires-approval: false
@@ -32,7 +32,7 @@ See: `references/apikey-fetch.md`
 
 ## Tool Surface
 
-- `baidu_search.search.web`
+- `baidu-search.search.web`
 
 See:
 

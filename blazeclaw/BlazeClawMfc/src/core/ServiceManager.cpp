@@ -137,6 +137,50 @@ namespace blazeclaw::core {
 				detail.c_str());
 		}
 
+		std::string MaskSecretForTrace(const std::wstring& value) {
+			if (value.empty()) {
+				return "<empty>";
+			}
+
+			if (value.size() <= 4) {
+				return "<len=" + std::to_string(value.size()) + ">";
+			}
+
+			const std::wstring masked =
+				value.substr(0, 2) +
+				L"***" +
+				value.substr(value.size() - 2) +
+				L"<len=" + std::to_wstring(value.size()) + L">";
+			return ToNarrow(masked);
+		}
+
+		void EmitBaiduRuntimeDiagnostic(
+			const char* stage,
+			const std::string& detail) {
+			const std::string safeStage =
+				(stage == nullptr || std::string(stage).empty())
+				? "unknown"
+				: std::string(stage);
+			TRACE(
+				"[BaiduRuntime][%s] %s\n",
+				safeStage.c_str(),
+				detail.c_str());
+		}
+
+		std::string TruncateDiagnosticText(
+			const std::string& value,
+			const std::size_t maxChars = 1200) {
+			if (value.size() <= maxChars) {
+				return value;
+			}
+
+			if (maxChars <= 24) {
+				return value.substr(0, maxChars);
+			}
+
+			return value.substr(0, maxChars - 24) + "...(truncated)";
+		}
+
 		std::string NormalizeDeepSeekApiModelId(
 			const std::string& modelId) {
 			if (modelId.empty() || modelId == "deepseek") {
@@ -196,6 +240,197 @@ namespace blazeclaw::core {
 			}
 
 			return std::nullopt;
+		}
+
+		std::optional<std::wstring> ResolveBaiduApiKeyFromPersistedConfig() {
+          auto trimLocal = [](const std::wstring& value) {
+				const auto first = std::find_if_not(
+					value.begin(),
+					value.end(),
+					[](const wchar_t ch) { return std::iswspace(ch) != 0; });
+				const auto last = std::find_if_not(
+					value.rbegin(),
+					value.rend(),
+					[](const wchar_t ch) { return std::iswspace(ch) != 0; })
+					.base();
+
+				if (first >= last) {
+					return std::wstring{};
+				}
+
+				return std::wstring(first, last);
+			};
+
+			auto toLowerWideLocal = [](std::wstring value) {
+				std::transform(
+					value.begin(),
+					value.end(),
+					value.begin(),
+					[](const wchar_t ch) {
+						return static_cast<wchar_t>(std::towlower(ch));
+					});
+				return value;
+			};
+
+			std::vector<std::filesystem::path> candidates;
+
+			const std::vector<std::wstring> configFolders = {
+				L"baidu-search",
+				L"baidu-search-search-web",
+				L"baidu-search-search",
+				L"baidu_search_search_web",
+			};
+
+			wchar_t profilePath[MAX_PATH]{};
+			const DWORD chars = GetEnvironmentVariableW(
+				L"USERPROFILE",
+				profilePath,
+				MAX_PATH);
+            if (chars > 0 && chars < MAX_PATH) {
+				for (const auto& folder : configFolders) {
+					candidates.push_back(
+						std::filesystem::path(profilePath) /
+						L".config" /
+						folder /
+						L".env");
+				}
+			}
+
+			std::error_code ec;
+			const auto cwd = std::filesystem::current_path(ec);
+			if (!ec) {
+				candidates.push_back(
+					cwd /
+					L"blazeclaw" /
+					L"skills" /
+					L"baidu-search" /
+					L".env");
+				candidates.push_back(
+					cwd /
+					L"skills" /
+					L"baidu-search" /
+					L".env");
+			}
+
+			wchar_t modulePath[MAX_PATH]{};
+			if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) > 0) {
+				std::filesystem::path cursor =
+					std::filesystem::path(modulePath).parent_path();
+				while (!cursor.empty()) {
+					candidates.push_back(
+						cursor /
+						L"blazeclaw" /
+						L"skills" /
+						L"baidu-search" /
+						L".env");
+					candidates.push_back(
+						cursor /
+						L"skills" /
+						L"baidu-search" /
+						L".env");
+
+					if (!cursor.has_parent_path()) {
+						break;
+					}
+
+					auto parent = cursor.parent_path();
+					if (parent == cursor) {
+						break;
+					}
+
+					cursor = parent;
+				}
+			}
+
+			for (const auto& path : candidates) {
+				std::error_code existsError;
+				if (!std::filesystem::exists(path, existsError) || existsError) {
+					continue;
+				}
+
+				std::wifstream input(path);
+				if (!input.is_open()) {
+					continue;
+				}
+
+				std::wstring line;
+				while (std::getline(input, line)) {
+                    const std::wstring trimmedLine = trimLocal(line);
+					if (trimmedLine.empty() || trimmedLine.starts_with(L"#")) {
+						continue;
+					}
+
+					const auto equals = trimmedLine.find(L'=');
+					if (equals == std::wstring::npos || equals == 0) {
+						continue;
+					}
+
+                  const std::wstring key =
+						toLowerWideLocal(trimLocal(trimmedLine.substr(0, equals)));
+					std::wstring value = trimLocal(trimmedLine.substr(equals + 1));
+					if (value.size() >= 2 &&
+						((value.front() == L'"' && value.back() == L'"') ||
+							(value.front() == L'\'' && value.back() == L'\''))) {
+						value = value.substr(1, value.size() - 2);
+					}
+
+					if (value.empty()) {
+						continue;
+					}
+
+					if (key == L"baidu_api_key" || key == L"api_key") {
+						return value;
+					}
+				}
+			}
+
+			return std::nullopt;
+		}
+
+		void EnsureBaiduApiKeyRuntimeEnv() {
+          wchar_t* inheritedValue = nullptr;
+			std::size_t inheritedLength = 0;
+			std::wstring inheritedKey;
+			if (_wdupenv_s(
+				&inheritedValue,
+				&inheritedLength,
+				L"BAIDU_API_KEY") == 0 &&
+				inheritedValue != nullptr) {
+				inheritedKey.assign(inheritedValue);
+				free(inheritedValue);
+			}
+
+			const auto persisted = ResolveBaiduApiKeyFromPersistedConfig();
+			if (persisted.has_value() && !persisted->empty()) {
+				_wputenv_s(L"BAIDU_API_KEY", persisted.value().c_str());
+             EmitBaiduRuntimeDiagnostic(
+					"env",
+					"BAIDU_API_KEY source=persisted set=true value=" +
+					MaskSecretForTrace(persisted.value()));
+				return;
+			}
+
+			if (!inheritedKey.empty()) {
+				EmitBaiduRuntimeDiagnostic(
+					"env",
+					"BAIDU_API_KEY source=process set=false inherited=true value=" +
+					MaskSecretForTrace(inheritedKey));
+				return;
+			}
+
+			EmitBaiduRuntimeDiagnostic(
+				"env",
+				"BAIDU_API_KEY source=none set=false inherited=false value=<empty>");
+
+			wchar_t* envValue = nullptr;
+			std::size_t envLength = 0;
+			if (_wdupenv_s(
+				&envValue,
+				&envLength,
+				L"BAIDU_API_KEY") == 0 &&
+				envValue != nullptr) {
+				free(envValue);
+			}
 		}
 
 		std::wstring Trim(const std::wstring& value) {
@@ -1370,7 +1605,7 @@ namespace blazeclaw::core {
 
 		std::vector<BaiduSearchToolRuntimeSpec> BuildBaiduSearchToolRuntimeSpecs() {
 			return {
-				{ "baidu_search.search.web", "Baidu Web Search", "scripts/search.py" },
+				{ "baidu-search.search.web", "Baidu Web Search", "scripts/search.py" },
 			};
 		}
 
@@ -1650,7 +1885,7 @@ namespace blazeclaw::core {
 				return "network_error";
 			}
 
-			return "process_exit_nonzero";
+          return "script_runtime_error";
 		}
 
 		bool IsBraveNetworkTimeoutFailure(const std::string& output) {
@@ -1750,6 +1985,15 @@ namespace blazeclaw::core {
 			std::vector<wchar_t> mutableCommand(commandLine.begin(), commandLine.end());
 			mutableCommand.push_back(L'\0');
 
+			const std::wstring scriptWorkingDirW =
+				scriptPath.has_parent_path()
+				? scriptPath.parent_path().wstring()
+				: std::wstring();
+			LPCWSTR workingDirectory =
+				scriptWorkingDirW.empty()
+				? nullptr
+				: scriptWorkingDirW.c_str();
+
 			const BOOL created = CreateProcessW(
 				nullptr,
 				mutableCommand.data(),
@@ -1757,8 +2001,8 @@ namespace blazeclaw::core {
 				nullptr,
 				TRUE,
 				CREATE_NO_WINDOW,
-				nullptr,
-				nullptr,
+                reinterpret_cast<LPVOID>(const_cast<wchar_t*>(L"PYTHONUTF8=1\0PYTHONIOENCODING=utf-8\0\0")),
+                workingDirectory,
 				&startupInfo,
 				&processInfo);
 
@@ -1801,6 +2045,9 @@ namespace blazeclaw::core {
 			const std::uint64_t timeoutMs) {
 			ChildProcessResult result;
 
+			_wputenv_s(L"PYTHONUTF8", L"1");
+			_wputenv_s(L"PYTHONIOENCODING", L"utf-8");
+
 			SECURITY_ATTRIBUTES security{};
 			security.nLength = sizeof(security);
 			security.bInheritHandle = TRUE;
@@ -1827,6 +2074,8 @@ namespace blazeclaw::core {
 
 			std::vector<std::wstring> commandTokens;
 			commandTokens.push_back(L"python");
+          commandTokens.push_back(L"-X");
+			commandTokens.push_back(L"utf8");
 			commandTokens.push_back(scriptPath.wstring());
 			for (const auto& arg : cliArgs) {
 				commandTokens.push_back(ToWide(arg));
@@ -2262,9 +2511,49 @@ namespace blazeclaw::core {
 
 		std::string ClassifyBaiduFailureCode(const std::string& output) {
 			const std::string lowered = ToLowerAscii(output);
+
+			std::smatch httpStatusMatch;
+			if (std::regex_search(
+				lowered,
+				httpStatusMatch,
+              std::regex(R"(http(?:\s+error)?\s*[:=]?\s*([0-9]{3}))")) &&
+				httpStatusMatch.size() >= 2) {
+				const int status = std::atoi(httpStatusMatch[1].str().c_str());
+				if (status == 401 || status == 403) {
+					return "auth_error";
+				}
+
+				if (status == 429) {
+					return "rate_limited";
+				}
+
+				if (status >= 500 && status < 600) {
+					return "upstream_unavailable";
+				}
+
+				if (status >= 400 && status < 500) {
+					return "invalid_arguments";
+				}
+			}
+
 			if (lowered.find("baidu_api_key") != std::string::npos &&
 				lowered.find("must be set") != std::string::npos) {
 				return "baidu_api_key_missing";
+			}
+
+			if (lowered.find("unauthorized") != std::string::npos ||
+				lowered.find("forbidden") != std::string::npos ||
+				lowered.find("invalid token") != std::string::npos ||
+				lowered.find("access token") != std::string::npos ||
+				lowered.find("invalid api key") != std::string::npos ||
+				lowered.find("authentication") != std::string::npos) {
+				return "auth_error";
+			}
+
+			if (lowered.find("rate limit") != std::string::npos ||
+				lowered.find("too many requests") != std::string::npos ||
+				lowered.find("quota") != std::string::npos) {
+				return "rate_limited";
 			}
 
 			if (lowered.find("http 401") != std::string::npos ||
@@ -2281,6 +2570,11 @@ namespace blazeclaw::core {
 				return "network_timeout";
 			}
 
+			if (lowered.find("no module named") != std::string::npos ||
+				lowered.find("modulenotfounderror") != std::string::npos) {
+				return "dependency_missing";
+			}
+
 			if (lowered.find("json parse error") != std::string::npos ||
 				lowered.find("request body must be a json object") != std::string::npos ||
 				lowered.find("query must be present") != std::string::npos ||
@@ -2289,11 +2583,20 @@ namespace blazeclaw::core {
 			}
 
 			if (lowered.find("network") != std::string::npos ||
-				lowered.find("connection") != std::string::npos) {
+              lowered.find("connection") != std::string::npos ||
+				lowered.find("ssl") != std::string::npos ||
+				lowered.find("certificate") != std::string::npos ||
+                lowered.find("httpsconnectionpool") != std::string::npos ||
+				lowered.find("urlopen error") != std::string::npos ||
+				lowered.find("proxyerror") != std::string::npos ||
+				lowered.find("name resolution") != std::string::npos ||
+				lowered.find("winerror") != std::string::npos ||
+				lowered.find("max retries exceeded") != std::string::npos ||
+				lowered.find("name or service not known") != std::string::npos) {
 				return "network_error";
 			}
 
-			return "process_exit_nonzero";
+          return "script_runtime_error";
 		}
 
 		std::optional<std::vector<std::string>> BuildBaiduSearchCliArgs(
@@ -2304,7 +2607,7 @@ namespace blazeclaw::core {
 			errorCode.clear();
 			errorMessage.clear();
 
-			if (spec.id != "baidu_search.search.web") {
+			if (spec.id != "baidu-search.search.web") {
 				errorCode = "unsupported_tool";
 				errorMessage = "unsupported baidu tool";
 				return std::nullopt;
@@ -2496,6 +2799,18 @@ namespace blazeclaw::core {
 						result.correlationId = request.correlationId;
 						result.startedAtMs = CurrentEpochMs();
 
+						EnsureBaiduApiKeyRuntimeEnv();
+						if (!HasEnvVarValue(L"BAIDU_API_KEY")) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "baidu_api_key_missing";
+							result.errorMessage =
+								"BAIDU_API_KEY missing in runtime environment and persisted skill config.";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
 						if (!skillRoot.has_value()) {
 							result.executed = false;
 							result.status = "error";
@@ -2594,6 +2909,10 @@ namespace blazeclaw::core {
 						result.latencyMs = result.completedAtMs - result.startedAtMs;
 
 						if (!process.started) {
+                            EmitBaiduRuntimeDiagnostic(
+								"process_start_failed",
+								"errorCode=" + process.errorCode +
+								" message=" + process.errorMessage);
 							result.executed = false;
 							result.status = "error";
 							result.result = process.output;
@@ -2607,6 +2926,11 @@ namespace blazeclaw::core {
 						}
 
 						if (process.timedOut) {
+                            EmitBaiduRuntimeDiagnostic(
+								"process_timeout",
+								"errorCode=" + process.errorCode +
+								" output=" +
+								TruncateDiagnosticText(process.output));
 							result.executed = false;
 							result.status = "timed_out";
 							result.result = process.output;
@@ -2631,8 +2955,19 @@ namespace blazeclaw::core {
 						result.executed = false;
 						const std::string classifiedFailure =
 							ClassifyBaiduFailureCode(process.output);
-						result.status = classifiedFailure;
-						result.errorCode = classifiedFailure;
+                       const std::string normalizedFailure =
+							classifiedFailure == "process_exit_nonzero"
+							? "script_runtime_error"
+							: classifiedFailure;
+                      EmitBaiduRuntimeDiagnostic(
+							"process_nonzero",
+							"exitCode=" +
+							std::to_string(static_cast<unsigned long long>(process.exitCode)) +
+							" classifiedFailure=" + classifiedFailure +
+							" normalizedFailure=" + normalizedFailure +
+							" output=" + TruncateDiagnosticText(process.output));
+						result.status = normalizedFailure;
+						result.errorCode = normalizedFailure;
 						if (!result.result.empty()) {
 							result.errorMessage = result.result;
 						}
@@ -2881,6 +3216,10 @@ namespace blazeclaw::core {
 		void RegisterBraveSearchRuntimeTools(blazeclaw::gateway::GatewayHost& host) {
 			const auto skillRoot = ResolveBraveSearchSkillRoot();
 			const auto openClawWebBrowsingSkillRoot = ResolveOpenClawWebBrowsingSkillRoot();
+         const bool enableOpenClawWebBrowsingFallback =
+				ReadBoolEnvOrDefault(
+                 L"BLAZECLAW_WEB_BROWSING_ENABLE_OPENCLAW_FALLBACK",
+					false);
 			const bool requireApiKey = ResolveBraveRequireApiKey();
 			const bool hasApiKey = HasEnvVarValue(L"BRAVE_API_KEY");
 			for (const auto& spec : BuildBraveSearchToolRuntimeSpecs()) {
@@ -2891,7 +3230,12 @@ namespace blazeclaw::core {
 						.category = "search",
 						.enabled = true,
 					},
-					[spec, skillRoot, openClawWebBrowsingSkillRoot, requireApiKey, hasApiKey](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
+                    [spec,
+					 skillRoot,
+					 openClawWebBrowsingSkillRoot,
+					 enableOpenClawWebBrowsingFallback,
+					 requireApiKey,
+					 hasApiKey](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
 						blazeclaw::gateway::ToolExecuteResultV2 result;
 						result.tool = request.tool.empty() ? spec.id : request.tool;
 						result.correlationId = request.correlationId;
@@ -3051,6 +3395,7 @@ namespace blazeclaw::core {
 						const std::string classifiedFailure =
 							ClassifyBraveFailureCode(process.output);
 						const bool canAttemptOpenClawFallback =
+                         enableOpenClawWebBrowsingFallback &&
 							spec.id == "web_browsing.search.web" &&
 							classifiedFailure == "network_error" &&
 							IsBraveNetworkTimeoutFailure(process.output) &&

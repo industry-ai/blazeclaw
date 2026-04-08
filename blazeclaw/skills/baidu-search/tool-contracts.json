@@ -3,7 +3,7 @@
   "title": "BlazeClaw Baidu Search Tool Contracts",
   "version": "1.0.0",
   "contracts": {
-    "baidu_search.search.web": {
+    "baidu-search.search.web": {
       "type": "object",
       "additionalProperties": false,
       "required": [
