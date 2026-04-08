@@ -127,3 +127,11 @@ Implement Priority A + B first to stop incorrect Brave Search capture, then add 
     - `summarize.extract` -> `humanizer.rewrite` -> `imap_smtp_email.smtp.send`
   - Skills documentation was updated to reflect adapter availability and
     deterministic ordered chain behavior.
+
+- Multilingual ordered-sequence fix has been implemented:
+  - Ordered structural signal detection now recognizes semicolon-delimited
+    numbered steps (including Chinese punctuation `；`).
+  - Ordered structural signal detection now also triggers when two or more
+    backticked skill/tool targets are present in the prompt.
+  - This prevents Chinese inline numbered prompts from bypassing deterministic
+    tool-chain execution and falling back to provider-only narrative responses.

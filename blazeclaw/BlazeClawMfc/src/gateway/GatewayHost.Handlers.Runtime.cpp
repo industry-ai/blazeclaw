@@ -1456,7 +1456,7 @@ namespace blazeclaw::gateway {
 			}
 
 			const std::regex numberedStepTargetRegex(
-				R"((?:^|\n|\r)\s*(?:step\s*)?\d+\s*[\)\.:\-]\s*([A-Za-z0-9._-]+))",
+             R"((?:^|\n|\r|;|；)\s*(?:step\s*)?\d+\s*[\)\.:\-]\s*([A-Za-z0-9._-]+))",
 				std::regex_constants::icase);
 			for (std::sregex_iterator it(message.begin(), message.end(), numberedStepTargetRegex), end;
 				it != end;
@@ -1503,12 +1503,25 @@ namespace blazeclaw::gateway {
 		}
 
 		bool HasStructuralSequenceSignal(const std::string& message) {
+          const std::regex backtickTargetRegex(
+				R"(`([A-Za-z0-9._-]+)`)",
+				std::regex_constants::icase);
+			std::size_t backtickTargetCount = 0;
+			for (std::sregex_iterator it(message.begin(), message.end(), backtickTargetRegex), end;
+				it != end;
+				++it) {
+				++backtickTargetCount;
+				if (backtickTargetCount >= 2) {
+					return true;
+				}
+			}
+
 			if (message.find("->") != std::string::npos) {
 				return true;
 			}
 
 			const std::regex numberedStepRegex(
-				R"((?:^|\n|\r)\s*(?:step\s*)?\d+\s*[\)\.:\-])",
+             R"((?:^|\n|\r|;|；)\s*(?:step\s*)?\d+\s*[\)\.:\-])",
 				std::regex_constants::icase);
 			std::size_t numberedStepCount = 0;
 			for (std::sregex_iterator it(message.begin(), message.end(), numberedStepRegex), end;
