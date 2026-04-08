@@ -11,693 +11,713 @@
 
 namespace blazeclaw::core {
 
-namespace {
-
-std::wstring Trim(const std::wstring& value) {
-  const auto first = std::find_if_not(
-      value.begin(),
-      value.end(),
-      [](const wchar_t ch) { return std::iswspace(ch) != 0; });
-  const auto last = std::find_if_not(
-      value.rbegin(),
-      value.rend(),
-      [](const wchar_t ch) { return std::iswspace(ch) != 0; })
-                        .base();
-
-  if (first >= last) {
-    return {};
-  }
-
-  return std::wstring(first, last);
-}
-
-std::wstring TrimQuotes(const std::wstring& value) {
-  const std::wstring trimmed = Trim(value);
-  if (trimmed.size() >= 2) {
-    const wchar_t first = trimmed.front();
-    const wchar_t last = trimmed.back();
-    if ((first == L'"' && last == L'"') ||
-        (first == L'\'' && last == L'\'')) {
-      return trimmed.substr(1, trimmed.size() - 2);
-    }
-  }
-
-  return trimmed;
-}
-
-std::wstring ToLower(const std::wstring& value) {
-  std::wstring lowered = value;
-  std::transform(
-      lowered.begin(),
-      lowered.end(),
-      lowered.begin(),
-      [](const wchar_t ch) {
-        return static_cast<wchar_t>(std::towlower(ch));
-      });
-  return lowered;
-}
-
-std::wstring Utf8ToWide(const std::string& value) {
-  if (value.empty()) {
-    return {};
-  }
-
-  const int required = MultiByteToWideChar(
-      CP_UTF8,
-      0,
-      value.c_str(),
-      static_cast<int>(value.size()),
-      nullptr,
-      0);
-  if (required <= 0) {
-    return std::wstring(value.begin(), value.end());
-  }
-
-  std::wstring output(static_cast<std::size_t>(required), L'\0');
-  const int converted = MultiByteToWideChar(
-      CP_UTF8,
-      0,
-      value.c_str(),
-      static_cast<int>(value.size()),
-      output.data(),
-      required);
-
-  if (converted <= 0) {
-    return std::wstring(value.begin(), value.end());
-  }
-
-  return output;
-}
-
-std::filesystem::path ResolveRootPath(
-    const std::filesystem::path& workspaceRoot,
-    const std::wstring& configuredPath) {
-  std::filesystem::path root(configuredPath);
-  if (root.is_relative()) {
-    root = workspaceRoot / root;
-  }
-
-  std::error_code ec;
-  const auto absolute = std::filesystem::absolute(root, ec);
-  if (ec) {
-    return root.lexically_normal();
-  }
-
-  return absolute.lexically_normal();
-}
-
-std::filesystem::path CanonicalOrSelf(const std::filesystem::path& pathValue) {
-  std::error_code ec;
-  const auto canonical = std::filesystem::weakly_canonical(pathValue, ec);
-  if (ec) {
-    return pathValue.lexically_normal();
-  }
-
-  return canonical;
-}
-
-bool IsPathInside(
-    const std::filesystem::path& rootPath,
-    const std::filesystem::path& candidatePath) {
-  const auto canonicalRoot = CanonicalOrSelf(rootPath);
-  const auto canonicalCandidate = CanonicalOrSelf(candidatePath);
-
-  auto rootIt = canonicalRoot.begin();
-  auto rootEnd = canonicalRoot.end();
-  auto candidateIt = canonicalCandidate.begin();
-  auto candidateEnd = canonicalCandidate.end();
-
-  for (; rootIt != rootEnd; ++rootIt, ++candidateIt) {
-    if (candidateIt == candidateEnd || *rootIt != *candidateIt) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-std::filesystem::path ResolveNestedSkillsRoot(
-    const std::filesystem::path& root,
-    const std::uint32_t maxCandidatesPerRoot) {
-  const auto nested = root / L"skills";
-  std::error_code ec;
-  if (!std::filesystem::is_directory(nested, ec)) {
-    return root;
-  }
-
-  std::uint32_t scanned = 0;
-  for (const auto& item : std::filesystem::directory_iterator(nested, ec)) {
-    if (ec) {
-      break;
-    }
-
-    if (scanned >= maxCandidatesPerRoot) {
-      break;
-    }
-
-    ++scanned;
-    if (!item.is_directory()) {
-      continue;
-    }
-
-    const auto skillFile = item.path() / L"SKILL.md";
-    std::error_code skillEc;
-    if (std::filesystem::is_regular_file(skillFile, skillEc) && !skillEc) {
-      return nested;
-    }
-  }
-
-  return root;
-}
-
-std::vector<std::filesystem::path> CollectCandidateSkillDirs(
-    const std::filesystem::path& root,
-    const std::uint32_t maxCandidatesPerRoot) {
-  std::vector<std::filesystem::path> candidates;
-
-  std::error_code ec;
-  const auto rootSkillFile = root / L"SKILL.md";
-  if (std::filesystem::is_regular_file(rootSkillFile, ec) && !ec) {
-    candidates.push_back(root);
-    return candidates;
-  }
-
-  for (const auto& item : std::filesystem::directory_iterator(root, ec)) {
-    if (ec) {
-      break;
-    }
-
-    if (!item.is_directory()) {
-      continue;
-    }
-
-    const auto name = item.path().filename().wstring();
-    if (!name.empty() && name.front() == L'.') {
-      continue;
-    }
-
-    const auto skillFile = item.path() / L"SKILL.md";
-    std::error_code skillEc;
-    if (std::filesystem::is_regular_file(skillFile, skillEc) && !skillEc) {
-      candidates.push_back(item.path());
-    }
-  }
-
-  std::sort(candidates.begin(), candidates.end());
-  if (candidates.size() > maxCandidatesPerRoot) {
-    candidates.resize(maxCandidatesPerRoot);
-  }
-
-  return candidates;
-}
-
-std::optional<std::wstring> ReadFileUtf8(const std::filesystem::path& filePath) {
-  std::ifstream input(filePath, std::ios::binary);
-  if (!input.is_open()) {
-    return std::nullopt;
-  }
-
-  std::string content(
-      (std::istreambuf_iterator<char>(input)),
-      std::istreambuf_iterator<char>());
-  return Utf8ToWide(content);
-}
-
-bool TryGetHomeDir(std::filesystem::path& outHomeDir) {
-  wchar_t* homeValue = nullptr;
-  std::size_t homeLength = 0;
-  if (_wdupenv_s(&homeValue, &homeLength, L"USERPROFILE") == 0 &&
-      homeValue != nullptr &&
-      homeLength > 0) {
-    outHomeDir = std::filesystem::path(homeValue);
-    free(homeValue);
-    return true;
-  }
-
-  if (homeValue != nullptr) {
-    free(homeValue);
-  }
-
-  if (_wdupenv_s(&homeValue, &homeLength, L"HOME") == 0 &&
-      homeValue != nullptr &&
-      homeLength > 0) {
-    outHomeDir = std::filesystem::path(homeValue);
-    free(homeValue);
-    return true;
-  }
-
-  if (homeValue != nullptr) {
-    free(homeValue);
-  }
-
-  return false;
-}
-
-std::optional<std::wstring> ReadEnvVar(const wchar_t* key) {
-  wchar_t* value = nullptr;
-  std::size_t length = 0;
-  if (_wdupenv_s(&value, &length, key) != 0 || value == nullptr || length == 0) {
-    if (value != nullptr) {
-      free(value);
-    }
-    return std::nullopt;
-  }
-
-  const std::wstring result(value);
-  free(value);
-  return result;
-}
-
-std::filesystem::path ResolveDefaultSkillsRoot(
-    const std::filesystem::path& directPath,
-    const std::filesystem::path& nestedPath) {
-  std::error_code ec;
-  if (std::filesystem::is_directory(directPath, ec) && !ec) {
-    return directPath;
-  }
-
-  ec.clear();
-  if (std::filesystem::is_directory(nestedPath, ec) && !ec) {
-    return nestedPath;
-  }
-
-  return directPath;
-}
-
-} // namespace
-
-std::wstring SkillsCatalogService::SourceKindLabel(const SkillsSourceKind kind) {
-  switch (kind) {
-    case SkillsSourceKind::Extra:
-      return L"extra";
-    case SkillsSourceKind::Bundled:
-      return L"bundled";
-    case SkillsSourceKind::Managed:
-      return L"managed";
-    case SkillsSourceKind::Personal:
-      return L"personal";
-    case SkillsSourceKind::Project:
-      return L"project";
-    case SkillsSourceKind::Workspace:
-      return L"workspace";
-    default:
-      return L"unknown";
-  }
-}
-
-bool SkillsCatalogService::ValidateFixtureScenarios(
-    const std::filesystem::path& fixturesRoot,
-    std::wstring& outError) const {
-  outError.clear();
-
-  const auto precedenceWorkspace =
-      fixturesRoot / L"precedence" / L"workspace";
-  blazeclaw::config::AppConfig precedenceConfig;
-  precedenceConfig.skills.load.extraDirs = {L"../extra"};
-  precedenceConfig.skills.limits.maxCandidatesPerRoot = 32;
-  precedenceConfig.skills.limits.maxSkillsLoadedPerSource = 32;
-  precedenceConfig.skills.limits.maxSkillFileBytes = 32 * 1024;
-
-  const auto precedenceSnapshot =
-      LoadCatalog(precedenceWorkspace, precedenceConfig);
-  const auto precedenceEntry = std::find_if(
-      precedenceSnapshot.entries.begin(),
-      precedenceSnapshot.entries.end(),
-      [](const SkillsCatalogEntry& entry) {
-        return ToLower(Trim(entry.skillName)) == L"demo-skill";
-      });
-  if (precedenceEntry == precedenceSnapshot.entries.end()) {
-    outError =
-        L"Fixture validation failed: precedence scenario missing demo-skill.";
-    return false;
-  }
-
-  if (ToLower(Trim(precedenceEntry->description)) !=
-      L"workspace takes precedence") {
-    outError =
-        L"Fixture validation failed: expected workspace precedence for demo-skill.";
-    return false;
-  }
-
-  const auto invalidWorkspace =
-      fixturesRoot / L"invalid-size" / L"workspace";
-  blazeclaw::config::AppConfig invalidConfig;
-  invalidConfig.skills.limits.maxCandidatesPerRoot = 32;
-  invalidConfig.skills.limits.maxSkillsLoadedPerSource = 32;
-  invalidConfig.skills.limits.maxSkillFileBytes = 220;
-
-  const auto invalidSnapshot =
-      LoadCatalog(invalidWorkspace, invalidConfig);
-  if (invalidSnapshot.diagnostics.invalidFrontmatterFiles == 0) {
-    outError =
-        L"Fixture validation failed: expected invalid frontmatter diagnostics.";
-    return false;
-  }
-
-  if (invalidSnapshot.diagnostics.oversizedSkillFiles == 0) {
-    outError =
-        L"Fixture validation failed: expected oversized SKILL.md diagnostics.";
-    return false;
-  }
-
-  const auto hasInvalidEntry = std::any_of(
-      invalidSnapshot.entries.begin(),
-      invalidSnapshot.entries.end(),
-      [](const SkillsCatalogEntry& entry) {
-        return ToLower(Trim(entry.skillName)) == L"invalid-frontmatter" &&
-               !entry.validFrontmatter;
-      });
-  if (!hasInvalidEntry) {
-    outError =
-        L"Fixture validation failed: invalid-frontmatter entry diagnostics missing.";
-    return false;
-  }
-
-  const auto hasOversizedEntry = std::any_of(
-      invalidSnapshot.entries.begin(),
-      invalidSnapshot.entries.end(),
-      [](const SkillsCatalogEntry& entry) {
-        return ToLower(Trim(entry.skillName)) == L"oversized-fixture";
-      });
-  if (hasOversizedEntry) {
-    outError =
-        L"Fixture validation failed: oversized fixture should be excluded from catalog.";
-    return false;
-  }
-
-  const auto selfEvolvingWorkspace =
-      fixturesRoot / L"s7-self-evolving" / L"workspace";
-  blazeclaw::config::AppConfig selfEvolvingConfig;
-  selfEvolvingConfig.skills.limits.maxCandidatesPerRoot = 32;
-  selfEvolvingConfig.skills.limits.maxSkillsLoadedPerSource = 32;
-  selfEvolvingConfig.skills.limits.maxSkillFileBytes = 32 * 1024;
-
-  const auto selfEvolvingSnapshot =
-      LoadCatalog(selfEvolvingWorkspace, selfEvolvingConfig);
-  const auto selfEvolvingEntry = std::find_if(
-      selfEvolvingSnapshot.entries.begin(),
-      selfEvolvingSnapshot.entries.end(),
-      [](const SkillsCatalogEntry& entry) {
-        return ToLower(Trim(entry.skillName)) == L"self-evolving";
-      });
-  if (selfEvolvingEntry == selfEvolvingSnapshot.entries.end()) {
-    outError =
-        L"Fixture validation failed: expected self-evolving skill from nested blazeclaw/skills path.";
-    return false;
-  }
-
-  if (!selfEvolvingEntry->validFrontmatter) {
-    outError =
-        L"Fixture validation failed: self-evolving skill frontmatter should be valid.";
-    return false;
-  }
-
-  if (ToLower(Trim(selfEvolvingEntry->description)).empty()) {
-    outError =
-        L"Fixture validation failed: self-evolving skill description should be parsed.";
-    return false;
-  }
-
-  return true;
-}
-
-std::optional<SkillFrontmatter> SkillsCatalogService::ParseFrontmatter(
-    const std::wstring& skillContent,
-    std::vector<std::wstring>& outValidationErrors) {
-  std::vector<std::wstring> lines;
-  std::size_t cursor = 0;
-  while (cursor <= skillContent.size()) {
-    const auto next = skillContent.find(L'\n', cursor);
-    if (next == std::wstring::npos) {
-      lines.push_back(skillContent.substr(cursor));
-      break;
-    }
-
-    lines.push_back(skillContent.substr(cursor, next - cursor));
-    cursor = next + 1;
-  }
-
-  if (lines.empty() || Trim(lines[0]) != L"---") {
-    outValidationErrors.push_back(L"Missing frontmatter start marker (---).");
-    return std::nullopt;
-  }
-
-  SkillFrontmatter parsed;
-  std::size_t lineIndex = 1;
-  bool closed = false;
-  for (; lineIndex < lines.size(); ++lineIndex) {
-    const std::wstring line = Trim(lines[lineIndex]);
-    if (line == L"---") {
-      closed = true;
-      ++lineIndex;
-      break;
-    }
-
-    if (line.empty() || line.starts_with(L"#")) {
-      continue;
-    }
-
-    const auto colonPos = line.find(L':');
-    if (colonPos == std::wstring::npos) {
-      outValidationErrors.push_back(
-          L"Invalid frontmatter line: " + line);
-      continue;
-    }
-
-    const std::wstring key = ToLower(Trim(line.substr(0, colonPos)));
-    const std::wstring value = TrimQuotes(line.substr(colonPos + 1));
-    if (key.empty()) {
-      outValidationErrors.push_back(L"Empty frontmatter key detected.");
-      continue;
-    }
-
-    parsed.fields[key] = value;
-    if (key == L"name") {
-      parsed.name = value;
-    } else if (key == L"description") {
-      parsed.description = value;
-    }
-  }
-
-  if (!closed) {
-    outValidationErrors.push_back(L"Missing frontmatter closing marker (---).");
-  }
-
-  if (Trim(parsed.name).empty()) {
-    outValidationErrors.push_back(L"Missing required frontmatter field: name.");
-  }
-
-  if (Trim(parsed.description).empty()) {
-    outValidationErrors.push_back(L"Missing required frontmatter field: description.");
-  }
-
-  if (!outValidationErrors.empty()) {
-    return std::nullopt;
-  }
-
-  return parsed;
-}
-
-std::vector<SkillsSourceRoot> SkillsCatalogService::BuildSourceRoots(
-    const std::filesystem::path& workspaceRoot,
-    const blazeclaw::config::AppConfig& appConfig) const {
-  std::vector<SkillsSourceRoot> roots;
-
-  for (const auto& extraDir : appConfig.skills.load.extraDirs) {
-    if (Trim(extraDir).empty()) {
-      continue;
-    }
-
-    roots.push_back({
-        .kind = SkillsSourceKind::Extra,
-        .precedence = 0,
-        .configuredRoot = std::filesystem::path(extraDir),
-        .resolvedRoot = ResolveRootPath(workspaceRoot, extraDir),
-    });
-  }
-
-  const auto bundledOverride = ReadEnvVar(L"BLAZECLAW_BUNDLED_SKILLS_DIR");
-  const std::filesystem::path bundledRoot = bundledOverride.has_value()
-      ? ResolveRootPath(workspaceRoot, bundledOverride.value())
-      : ResolveDefaultSkillsRoot(
-            workspaceRoot / L"skills-bundled",
-            workspaceRoot / L"blazeclaw" / L"skills-bundled");
-  roots.push_back({
-      .kind = SkillsSourceKind::Bundled,
-      .precedence = 1,
-      .configuredRoot = bundledRoot,
-      .resolvedRoot = CanonicalOrSelf(bundledRoot),
-  });
-
-  const auto managedOverride = ReadEnvVar(L"BLAZECLAW_MANAGED_SKILLS_DIR");
-  const std::filesystem::path managedRoot = managedOverride.has_value()
-      ? ResolveRootPath(workspaceRoot, managedOverride.value())
-      : (workspaceRoot / L".blazeclaw" / L"skills");
-  roots.push_back({
-      .kind = SkillsSourceKind::Managed,
-      .precedence = 2,
-      .configuredRoot = managedRoot,
-      .resolvedRoot = CanonicalOrSelf(managedRoot),
-  });
-
-  std::filesystem::path homeDir;
-  if (TryGetHomeDir(homeDir)) {
-    const auto personalRoot = homeDir / L".agents" / L"skills";
-    roots.push_back({
-        .kind = SkillsSourceKind::Personal,
-        .precedence = 3,
-        .configuredRoot = personalRoot,
-        .resolvedRoot = CanonicalOrSelf(personalRoot),
-    });
-  }
-
-  const auto projectRoot = workspaceRoot / L".agents" / L"skills";
-  roots.push_back({
-      .kind = SkillsSourceKind::Project,
-      .precedence = 4,
-      .configuredRoot = projectRoot,
-      .resolvedRoot = CanonicalOrSelf(projectRoot),
-  });
-
-  const auto workspaceSkillsRoot = ResolveDefaultSkillsRoot(
-      workspaceRoot / L"skills",
-      workspaceRoot / L"blazeclaw" / L"skills");
-  roots.push_back({
-      .kind = SkillsSourceKind::Workspace,
-      .precedence = 5,
-      .configuredRoot = workspaceSkillsRoot,
-      .resolvedRoot = CanonicalOrSelf(workspaceSkillsRoot),
-  });
-
-  std::set<std::filesystem::path> seenRoots;
-  std::vector<SkillsSourceRoot> uniqueRoots;
-  for (const auto& root : roots) {
-    const auto normalized = root.resolvedRoot.lexically_normal();
-    if (seenRoots.insert(normalized).second) {
-      uniqueRoots.push_back(root);
-    }
-  }
-
-  return uniqueRoots;
-}
-
-SkillsCatalogSnapshot SkillsCatalogService::LoadCatalog(
-    const std::filesystem::path& workspaceRoot,
-    const blazeclaw::config::AppConfig& appConfig) const {
-  SkillsCatalogSnapshot snapshot;
-
-  const auto sourceRoots = BuildSourceRoots(workspaceRoot, appConfig);
-  std::unordered_map<std::wstring, std::size_t> byName;
-
-  for (const auto& sourceRoot : sourceRoots) {
-    std::error_code rootEc;
-    const auto rootPath = CanonicalOrSelf(sourceRoot.resolvedRoot);
-    if (!std::filesystem::is_directory(rootPath, rootEc) || rootEc) {
-      ++snapshot.diagnostics.rootsSkipped;
-      continue;
-    }
-
-    ++snapshot.diagnostics.rootsScanned;
-
-    const auto discoveryRoot = ResolveNestedSkillsRoot(
-        rootPath,
-        appConfig.skills.limits.maxCandidatesPerRoot);
-    const auto candidates = CollectCandidateSkillDirs(
-        discoveryRoot,
-        appConfig.skills.limits.maxCandidatesPerRoot);
-    std::size_t loadedInSource = 0;
-
-    for (const auto& skillDir : candidates) {
-      if (!IsPathInside(discoveryRoot, skillDir)) {
-        snapshot.diagnostics.warnings.push_back(
-            L"Skipped skill directory outside discovery root: " +
-            skillDir.wstring());
-        continue;
-      }
-
-      const auto skillFile = skillDir / L"SKILL.md";
-      if (!IsPathInside(discoveryRoot, skillFile)) {
-        snapshot.diagnostics.warnings.push_back(
-            L"Skipped SKILL.md outside discovery root: " +
-            skillFile.wstring());
-        continue;
-      }
-
-      std::error_code statEc;
-      const auto size = std::filesystem::file_size(skillFile, statEc);
-      if (statEc ||
-          size > static_cast<std::uintmax_t>(
-              appConfig.skills.limits.maxSkillFileBytes)) {
-        ++snapshot.diagnostics.oversizedSkillFiles;
-        continue;
-      }
-
-      const auto content = ReadFileUtf8(skillFile);
-      if (!content.has_value()) {
-        snapshot.diagnostics.warnings.push_back(
-            L"Failed to read SKILL.md: " + skillFile.wstring());
-        continue;
-      }
-
-      SkillsCatalogEntry entry;
-      entry.skillDir = CanonicalOrSelf(skillDir);
-      entry.skillFile = CanonicalOrSelf(skillFile);
-      entry.sourceKind = sourceRoot.kind;
-      entry.precedence = sourceRoot.precedence;
-
-      std::vector<std::wstring> validationErrors;
-      const auto frontmatter = ParseFrontmatter(content.value(), validationErrors);
-      if (frontmatter.has_value()) {
-        entry.frontmatter = frontmatter.value();
-        entry.skillName = frontmatter->name;
-        entry.description = frontmatter->description;
-        entry.validFrontmatter = true;
-      } else {
-        entry.skillName = skillDir.filename().wstring();
-        entry.description = L"";
-        entry.validFrontmatter = false;
-        entry.validationErrors = validationErrors;
-        ++snapshot.diagnostics.invalidFrontmatterFiles;
-      }
-
-      const std::wstring key = ToLower(Trim(entry.skillName));
-      if (key.empty()) {
-        snapshot.diagnostics.warnings.push_back(
-            L"Skipped unnamed skill entry at: " + skillDir.wstring());
-        continue;
-      }
-
-      auto existing = byName.find(key);
-      if (existing == byName.end()) {
-        snapshot.entries.push_back(entry);
-        byName.emplace(key, snapshot.entries.size() - 1);
-      } else {
-        snapshot.entries[existing->second] = entry;
-      }
-
-      ++loadedInSource;
-
-      if (loadedInSource >=
-          appConfig.skills.limits.maxSkillsLoadedPerSource) {
-        break;
-      }
-    }
-  }
-
-  std::sort(
-      snapshot.entries.begin(),
-      snapshot.entries.end(),
-      [](const SkillsCatalogEntry& left, const SkillsCatalogEntry& right) {
-        const auto leftKey = ToLower(left.skillName);
-        const auto rightKey = ToLower(right.skillName);
-        if (leftKey == rightKey) {
-          return left.precedence < right.precedence;
-        }
-
-        return leftKey < rightKey;
-      });
-
-  return snapshot;
-}
+	namespace {
+
+		std::wstring Trim(const std::wstring& value) {
+			const auto first = std::find_if_not(
+				value.begin(),
+				value.end(),
+				[](const wchar_t ch) { return std::iswspace(ch) != 0; });
+			const auto last = std::find_if_not(
+				value.rbegin(),
+				value.rend(),
+				[](const wchar_t ch) { return std::iswspace(ch) != 0; })
+				.base();
+
+			if (first >= last) {
+				return {};
+			}
+
+			return std::wstring(first, last);
+		}
+
+		std::wstring TrimQuotes(const std::wstring& value) {
+			const std::wstring trimmed = Trim(value);
+			if (trimmed.size() >= 2) {
+				const wchar_t first = trimmed.front();
+				const wchar_t last = trimmed.back();
+				if ((first == L'"' && last == L'"') ||
+					(first == L'\'' && last == L'\'')) {
+					return trimmed.substr(1, trimmed.size() - 2);
+				}
+			}
+
+			return trimmed;
+		}
+
+		std::wstring ToLower(const std::wstring& value) {
+			std::wstring lowered = value;
+			std::transform(
+				lowered.begin(),
+				lowered.end(),
+				lowered.begin(),
+				[](const wchar_t ch) {
+					return static_cast<wchar_t>(std::towlower(ch));
+				});
+			return lowered;
+		}
+
+		std::wstring Utf8ToWide(const std::string& value) {
+			if (value.empty()) {
+				return {};
+			}
+
+			const int required = MultiByteToWideChar(
+				CP_UTF8,
+				0,
+				value.c_str(),
+				static_cast<int>(value.size()),
+				nullptr,
+				0);
+			if (required <= 0) {
+				return std::wstring(value.begin(), value.end());
+			}
+
+			std::wstring output(static_cast<std::size_t>(required), L'\0');
+			const int converted = MultiByteToWideChar(
+				CP_UTF8,
+				0,
+				value.c_str(),
+				static_cast<int>(value.size()),
+				output.data(),
+				required);
+
+			if (converted <= 0) {
+				return std::wstring(value.begin(), value.end());
+			}
+
+			return output;
+		}
+
+		std::filesystem::path ResolveRootPath(
+			const std::filesystem::path& workspaceRoot,
+			const std::wstring& configuredPath) {
+			std::filesystem::path root(configuredPath);
+			if (root.is_relative()) {
+				root = workspaceRoot / root;
+			}
+
+			std::error_code ec;
+			const auto absolute = std::filesystem::absolute(root, ec);
+			if (ec) {
+				return root.lexically_normal();
+			}
+
+			return absolute.lexically_normal();
+		}
+
+		std::filesystem::path CanonicalOrSelf(const std::filesystem::path& pathValue) {
+			std::error_code ec;
+			const auto canonical = std::filesystem::weakly_canonical(pathValue, ec);
+			if (ec) {
+				return pathValue.lexically_normal();
+			}
+
+			return canonical;
+		}
+
+		bool IsPathInside(
+			const std::filesystem::path& rootPath,
+			const std::filesystem::path& candidatePath) {
+			const auto canonicalRoot = CanonicalOrSelf(rootPath);
+			const auto canonicalCandidate = CanonicalOrSelf(candidatePath);
+
+			auto rootIt = canonicalRoot.begin();
+			auto rootEnd = canonicalRoot.end();
+			auto candidateIt = canonicalCandidate.begin();
+			auto candidateEnd = canonicalCandidate.end();
+
+			for (; rootIt != rootEnd; ++rootIt, ++candidateIt) {
+				if (candidateIt == candidateEnd || *rootIt != *candidateIt) {
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		std::filesystem::path ResolveNestedSkillsRoot(
+			const std::filesystem::path& root,
+			const std::uint32_t maxCandidatesPerRoot) {
+			const auto nested = root / L"skills";
+			std::error_code ec;
+			if (!std::filesystem::is_directory(nested, ec)) {
+				return root;
+			}
+
+			std::uint32_t scanned = 0;
+			for (const auto& item : std::filesystem::directory_iterator(nested, ec)) {
+				if (ec) {
+					break;
+				}
+
+				if (scanned >= maxCandidatesPerRoot) {
+					break;
+				}
+
+				++scanned;
+				if (!item.is_directory()) {
+					continue;
+				}
+
+				const auto skillFile = item.path() / L"SKILL.md";
+				std::error_code skillEc;
+				if (std::filesystem::is_regular_file(skillFile, skillEc) && !skillEc) {
+					return nested;
+				}
+			}
+
+			return root;
+		}
+
+		std::vector<std::filesystem::path> CollectCandidateSkillDirs(
+			const std::filesystem::path& root,
+			const std::uint32_t maxCandidatesPerRoot) {
+			std::vector<std::filesystem::path> candidates;
+
+			std::error_code ec;
+			const auto rootSkillFile = root / L"SKILL.md";
+			if (std::filesystem::is_regular_file(rootSkillFile, ec) && !ec) {
+				candidates.push_back(root);
+				return candidates;
+			}
+
+			for (const auto& item : std::filesystem::directory_iterator(root, ec)) {
+				if (ec) {
+					break;
+				}
+
+				if (!item.is_directory()) {
+					continue;
+				}
+
+				const auto name = item.path().filename().wstring();
+				if (!name.empty() && name.front() == L'.') {
+					continue;
+				}
+
+				const auto skillFile = item.path() / L"SKILL.md";
+				std::error_code skillEc;
+				if (std::filesystem::is_regular_file(skillFile, skillEc) && !skillEc) {
+					candidates.push_back(item.path());
+				}
+			}
+
+			std::sort(candidates.begin(), candidates.end());
+			if (candidates.size() > maxCandidatesPerRoot) {
+				candidates.resize(maxCandidatesPerRoot);
+			}
+
+			return candidates;
+		}
+
+		std::optional<std::wstring> ReadFileUtf8(const std::filesystem::path& filePath) {
+			std::ifstream input(filePath, std::ios::binary);
+			if (!input.is_open()) {
+				return std::nullopt;
+			}
+
+			std::string content(
+				(std::istreambuf_iterator<char>(input)),
+				std::istreambuf_iterator<char>());
+			return Utf8ToWide(content);
+		}
+
+		bool TryGetHomeDir(std::filesystem::path& outHomeDir) {
+			wchar_t* homeValue = nullptr;
+			std::size_t homeLength = 0;
+			if (_wdupenv_s(&homeValue, &homeLength, L"USERPROFILE") == 0 &&
+				homeValue != nullptr &&
+				homeLength > 0) {
+				outHomeDir = std::filesystem::path(homeValue);
+				free(homeValue);
+				return true;
+			}
+
+			if (homeValue != nullptr) {
+				free(homeValue);
+			}
+
+			if (_wdupenv_s(&homeValue, &homeLength, L"HOME") == 0 &&
+				homeValue != nullptr &&
+				homeLength > 0) {
+				outHomeDir = std::filesystem::path(homeValue);
+				free(homeValue);
+				return true;
+			}
+
+			if (homeValue != nullptr) {
+				free(homeValue);
+			}
+
+			return false;
+		}
+
+		std::optional<std::wstring> ReadEnvVar(const wchar_t* key) {
+			wchar_t* value = nullptr;
+			std::size_t length = 0;
+			if (_wdupenv_s(&value, &length, key) != 0 || value == nullptr || length == 0) {
+				if (value != nullptr) {
+					free(value);
+				}
+				return std::nullopt;
+			}
+
+			const std::wstring result(value);
+			free(value);
+			return result;
+		}
+
+		std::filesystem::path ResolveDefaultSkillsRoot(
+			const std::filesystem::path& directPath,
+			const std::filesystem::path& nestedPath) {
+			std::error_code ec;
+			if (std::filesystem::is_directory(directPath, ec) && !ec) {
+				return directPath;
+			}
+
+			ec.clear();
+			if (std::filesystem::is_directory(nestedPath, ec) && !ec) {
+				return nestedPath;
+			}
+
+			return directPath;
+		}
+
+	} // namespace
+
+	std::wstring SkillsCatalogService::SourceKindLabel(const SkillsSourceKind kind) {
+		switch (kind) {
+		case SkillsSourceKind::Extra:
+			return L"extra";
+		case SkillsSourceKind::Bundled:
+			return L"bundled";
+		case SkillsSourceKind::Managed:
+			return L"managed";
+		case SkillsSourceKind::Personal:
+			return L"personal";
+		case SkillsSourceKind::Project:
+			return L"project";
+		case SkillsSourceKind::Workspace:
+			return L"workspace";
+		case SkillsSourceKind::OpenClawOriginal:
+			return L"openclaw-original";
+		default:
+			return L"unknown";
+		}
+	}
+
+	bool SkillsCatalogService::ValidateFixtureScenarios(
+		const std::filesystem::path& fixturesRoot,
+		std::wstring& outError) const {
+		outError.clear();
+
+		const auto precedenceWorkspace =
+			fixturesRoot / L"precedence" / L"workspace";
+		blazeclaw::config::AppConfig precedenceConfig;
+		precedenceConfig.skills.load.extraDirs = { L"../extra" };
+		precedenceConfig.skills.limits.maxCandidatesPerRoot = 32;
+		precedenceConfig.skills.limits.maxSkillsLoadedPerSource = 32;
+		precedenceConfig.skills.limits.maxSkillFileBytes = 32 * 1024;
+
+		const auto precedenceSnapshot =
+			LoadCatalog(precedenceWorkspace, precedenceConfig);
+		const auto precedenceEntry = std::find_if(
+			precedenceSnapshot.entries.begin(),
+			precedenceSnapshot.entries.end(),
+			[](const SkillsCatalogEntry& entry) {
+				return ToLower(Trim(entry.skillName)) == L"demo-skill";
+			});
+		if (precedenceEntry == precedenceSnapshot.entries.end()) {
+			outError =
+				L"Fixture validation failed: precedence scenario missing demo-skill.";
+			return false;
+		}
+
+		if (ToLower(Trim(precedenceEntry->description)) !=
+			L"workspace takes precedence") {
+			outError =
+				L"Fixture validation failed: expected workspace precedence for demo-skill.";
+			return false;
+		}
+
+		const auto invalidWorkspace =
+			fixturesRoot / L"invalid-size" / L"workspace";
+		blazeclaw::config::AppConfig invalidConfig;
+		invalidConfig.skills.limits.maxCandidatesPerRoot = 32;
+		invalidConfig.skills.limits.maxSkillsLoadedPerSource = 32;
+		invalidConfig.skills.limits.maxSkillFileBytes = 220;
+
+		const auto invalidSnapshot =
+			LoadCatalog(invalidWorkspace, invalidConfig);
+		if (invalidSnapshot.diagnostics.invalidFrontmatterFiles == 0) {
+			outError =
+				L"Fixture validation failed: expected invalid frontmatter diagnostics.";
+			return false;
+		}
+
+		if (invalidSnapshot.diagnostics.oversizedSkillFiles == 0) {
+			outError =
+				L"Fixture validation failed: expected oversized SKILL.md diagnostics.";
+			return false;
+		}
+
+		const auto hasInvalidEntry = std::any_of(
+			invalidSnapshot.entries.begin(),
+			invalidSnapshot.entries.end(),
+			[](const SkillsCatalogEntry& entry) {
+				return ToLower(Trim(entry.skillName)) == L"invalid-frontmatter" &&
+					!entry.validFrontmatter;
+			});
+		if (!hasInvalidEntry) {
+			outError =
+				L"Fixture validation failed: invalid-frontmatter entry diagnostics missing.";
+			return false;
+		}
+
+		const auto hasOversizedEntry = std::any_of(
+			invalidSnapshot.entries.begin(),
+			invalidSnapshot.entries.end(),
+			[](const SkillsCatalogEntry& entry) {
+				return ToLower(Trim(entry.skillName)) == L"oversized-fixture";
+			});
+		if (hasOversizedEntry) {
+			outError =
+				L"Fixture validation failed: oversized fixture should be excluded from catalog.";
+			return false;
+		}
+
+		const auto selfEvolvingWorkspace =
+			fixturesRoot / L"s7-self-evolving" / L"workspace";
+		blazeclaw::config::AppConfig selfEvolvingConfig;
+		selfEvolvingConfig.skills.limits.maxCandidatesPerRoot = 32;
+		selfEvolvingConfig.skills.limits.maxSkillsLoadedPerSource = 32;
+		selfEvolvingConfig.skills.limits.maxSkillFileBytes = 32 * 1024;
+
+		const auto selfEvolvingSnapshot =
+			LoadCatalog(selfEvolvingWorkspace, selfEvolvingConfig);
+		const auto selfEvolvingEntry = std::find_if(
+			selfEvolvingSnapshot.entries.begin(),
+			selfEvolvingSnapshot.entries.end(),
+			[](const SkillsCatalogEntry& entry) {
+				return ToLower(Trim(entry.skillName)) == L"self-evolving";
+			});
+		if (selfEvolvingEntry == selfEvolvingSnapshot.entries.end()) {
+			outError =
+				L"Fixture validation failed: expected self-evolving skill from nested blazeclaw/skills path.";
+			return false;
+		}
+
+		if (!selfEvolvingEntry->validFrontmatter) {
+			outError =
+				L"Fixture validation failed: self-evolving skill frontmatter should be valid.";
+			return false;
+		}
+
+		if (ToLower(Trim(selfEvolvingEntry->description)).empty()) {
+			outError =
+				L"Fixture validation failed: self-evolving skill description should be parsed.";
+			return false;
+		}
+
+		return true;
+	}
+
+	std::optional<SkillFrontmatter> SkillsCatalogService::ParseFrontmatter(
+		const std::wstring& skillContent,
+		std::vector<std::wstring>& outValidationErrors) {
+		std::vector<std::wstring> lines;
+		std::size_t cursor = 0;
+		while (cursor <= skillContent.size()) {
+			const auto next = skillContent.find(L'\n', cursor);
+			if (next == std::wstring::npos) {
+				lines.push_back(skillContent.substr(cursor));
+				break;
+			}
+
+			lines.push_back(skillContent.substr(cursor, next - cursor));
+			cursor = next + 1;
+		}
+
+		if (lines.empty() || Trim(lines[0]) != L"---") {
+			outValidationErrors.push_back(L"Missing frontmatter start marker (---).");
+			return std::nullopt;
+		}
+
+		SkillFrontmatter parsed;
+		std::size_t lineIndex = 1;
+		bool closed = false;
+		for (; lineIndex < lines.size(); ++lineIndex) {
+			const std::wstring line = Trim(lines[lineIndex]);
+			if (line == L"---") {
+				closed = true;
+				++lineIndex;
+				break;
+			}
+
+			if (line.empty() || line.starts_with(L"#")) {
+				continue;
+			}
+
+			const auto colonPos = line.find(L':');
+			if (colonPos == std::wstring::npos) {
+				outValidationErrors.push_back(
+					L"Invalid frontmatter line: " + line);
+				continue;
+			}
+
+			const std::wstring key = ToLower(Trim(line.substr(0, colonPos)));
+			const std::wstring value = TrimQuotes(line.substr(colonPos + 1));
+			if (key.empty()) {
+				outValidationErrors.push_back(L"Empty frontmatter key detected.");
+				continue;
+			}
+
+			parsed.fields[key] = value;
+			if (key == L"name") {
+				parsed.name = value;
+			}
+			else if (key == L"description") {
+				parsed.description = value;
+			}
+		}
+
+		if (!closed) {
+			outValidationErrors.push_back(L"Missing frontmatter closing marker (---).");
+		}
+
+		if (Trim(parsed.name).empty()) {
+			outValidationErrors.push_back(L"Missing required frontmatter field: name.");
+		}
+
+		if (Trim(parsed.description).empty()) {
+			outValidationErrors.push_back(L"Missing required frontmatter field: description.");
+		}
+
+		if (!outValidationErrors.empty()) {
+			return std::nullopt;
+		}
+
+		return parsed;
+	}
+
+	std::vector<SkillsSourceRoot> SkillsCatalogService::BuildSourceRoots(
+		const std::filesystem::path& workspaceRoot,
+		const blazeclaw::config::AppConfig& appConfig) const {
+		std::vector<SkillsSourceRoot> roots;
+
+		for (const auto& extraDir : appConfig.skills.load.extraDirs) {
+			if (Trim(extraDir).empty()) {
+				continue;
+			}
+
+			roots.push_back({
+				.kind = SkillsSourceKind::Extra,
+				.precedence = 0,
+				.configuredRoot = std::filesystem::path(extraDir),
+				.resolvedRoot = ResolveRootPath(workspaceRoot, extraDir),
+				});
+		}
+
+		const auto bundledOverride = ReadEnvVar(L"BLAZECLAW_BUNDLED_SKILLS_DIR");
+		const std::filesystem::path bundledRoot = bundledOverride.has_value()
+			? ResolveRootPath(workspaceRoot, bundledOverride.value())
+			: ResolveDefaultSkillsRoot(
+				workspaceRoot / L"skills-bundled",
+				workspaceRoot / L"blazeclaw" / L"skills-bundled");
+		roots.push_back({
+			.kind = SkillsSourceKind::Bundled,
+			.precedence = 1,
+			.configuredRoot = bundledRoot,
+			.resolvedRoot = CanonicalOrSelf(bundledRoot),
+			});
+
+		const auto managedOverride = ReadEnvVar(L"BLAZECLAW_MANAGED_SKILLS_DIR");
+		const std::filesystem::path managedRoot = managedOverride.has_value()
+			? ResolveRootPath(workspaceRoot, managedOverride.value())
+			: (workspaceRoot / L".blazeclaw" / L"skills");
+		roots.push_back({
+			.kind = SkillsSourceKind::Managed,
+			.precedence = 2,
+			.configuredRoot = managedRoot,
+			.resolvedRoot = CanonicalOrSelf(managedRoot),
+			});
+
+		std::filesystem::path homeDir;
+		if (TryGetHomeDir(homeDir)) {
+			const auto personalRoot = homeDir / L".agents" / L"skills";
+			roots.push_back({
+				.kind = SkillsSourceKind::Personal,
+				.precedence = 3,
+				.configuredRoot = personalRoot,
+				.resolvedRoot = CanonicalOrSelf(personalRoot),
+				});
+		}
+
+		const auto projectRoot = workspaceRoot / L".agents" / L"skills";
+		roots.push_back({
+			.kind = SkillsSourceKind::Project,
+			.precedence = 4,
+			.configuredRoot = projectRoot,
+			.resolvedRoot = CanonicalOrSelf(projectRoot),
+			});
+
+		const auto workspaceSkillsRoot = ResolveDefaultSkillsRoot(
+			workspaceRoot / L"skills",
+			workspaceRoot / L"blazeclaw" / L"skills");
+		roots.push_back({
+			.kind = SkillsSourceKind::Workspace,
+			.precedence = 5,
+			.configuredRoot = workspaceSkillsRoot,
+			.resolvedRoot = CanonicalOrSelf(workspaceSkillsRoot),
+			});
+
+		const auto openClawOriginalOverride =
+			ReadEnvVar(L"BLAZECLAW_OPENCLAW_ORIGINAL_SKILLS_DIR");
+		const std::filesystem::path openClawOriginalRoot =
+			openClawOriginalOverride.has_value()
+			? ResolveRootPath(workspaceRoot, openClawOriginalOverride.value())
+			: ResolveDefaultSkillsRoot(
+				workspaceRoot / L"skills-openclaw-original",
+				workspaceRoot / L"blazeclaw" / L"skills-openclaw-original");
+		roots.push_back({
+			.kind = SkillsSourceKind::OpenClawOriginal,
+			.precedence = 6,
+			.configuredRoot = openClawOriginalRoot,
+			.resolvedRoot = CanonicalOrSelf(openClawOriginalRoot),
+			});
+
+		std::set<std::filesystem::path> seenRoots;
+		std::vector<SkillsSourceRoot> uniqueRoots;
+		for (const auto& root : roots) {
+			const auto normalized = root.resolvedRoot.lexically_normal();
+			if (seenRoots.insert(normalized).second) {
+				uniqueRoots.push_back(root);
+			}
+		}
+
+		return uniqueRoots;
+	}
+
+	SkillsCatalogSnapshot SkillsCatalogService::LoadCatalog(
+		const std::filesystem::path& workspaceRoot,
+		const blazeclaw::config::AppConfig& appConfig) const {
+		SkillsCatalogSnapshot snapshot;
+
+		const auto sourceRoots = BuildSourceRoots(workspaceRoot, appConfig);
+		std::unordered_map<std::wstring, std::size_t> byName;
+
+		for (const auto& sourceRoot : sourceRoots) {
+			std::error_code rootEc;
+			const auto rootPath = CanonicalOrSelf(sourceRoot.resolvedRoot);
+			if (!std::filesystem::is_directory(rootPath, rootEc) || rootEc) {
+				++snapshot.diagnostics.rootsSkipped;
+				continue;
+			}
+
+			++snapshot.diagnostics.rootsScanned;
+
+			const auto discoveryRoot = ResolveNestedSkillsRoot(
+				rootPath,
+				appConfig.skills.limits.maxCandidatesPerRoot);
+			const auto candidates = CollectCandidateSkillDirs(
+				discoveryRoot,
+				appConfig.skills.limits.maxCandidatesPerRoot);
+			std::size_t loadedInSource = 0;
+
+			for (const auto& skillDir : candidates) {
+				if (!IsPathInside(discoveryRoot, skillDir)) {
+					snapshot.diagnostics.warnings.push_back(
+						L"Skipped skill directory outside discovery root: " +
+						skillDir.wstring());
+					continue;
+				}
+
+				const auto skillFile = skillDir / L"SKILL.md";
+				if (!IsPathInside(discoveryRoot, skillFile)) {
+					snapshot.diagnostics.warnings.push_back(
+						L"Skipped SKILL.md outside discovery root: " +
+						skillFile.wstring());
+					continue;
+				}
+
+				std::error_code statEc;
+				const auto size = std::filesystem::file_size(skillFile, statEc);
+				if (statEc ||
+					size > static_cast<std::uintmax_t>(
+						appConfig.skills.limits.maxSkillFileBytes)) {
+					++snapshot.diagnostics.oversizedSkillFiles;
+					continue;
+				}
+
+				const auto content = ReadFileUtf8(skillFile);
+				if (!content.has_value()) {
+					snapshot.diagnostics.warnings.push_back(
+						L"Failed to read SKILL.md: " + skillFile.wstring());
+					continue;
+				}
+
+				SkillsCatalogEntry entry;
+				entry.skillDir = CanonicalOrSelf(skillDir);
+				entry.skillFile = CanonicalOrSelf(skillFile);
+				entry.sourceKind = sourceRoot.kind;
+				entry.precedence = sourceRoot.precedence;
+
+				std::vector<std::wstring> validationErrors;
+				const auto frontmatter = ParseFrontmatter(content.value(), validationErrors);
+				if (frontmatter.has_value()) {
+					entry.frontmatter = frontmatter.value();
+					entry.skillName = frontmatter->name;
+					entry.description = frontmatter->description;
+					entry.validFrontmatter = true;
+				}
+				else {
+					entry.skillName = skillDir.filename().wstring();
+					entry.description = L"";
+					entry.validFrontmatter = false;
+					entry.validationErrors = validationErrors;
+					++snapshot.diagnostics.invalidFrontmatterFiles;
+				}
+
+				const std::wstring key = ToLower(Trim(entry.skillName));
+				if (key.empty()) {
+					snapshot.diagnostics.warnings.push_back(
+						L"Skipped unnamed skill entry at: " + skillDir.wstring());
+					continue;
+				}
+
+				auto existing = byName.find(key);
+				if (existing == byName.end()) {
+					snapshot.entries.push_back(entry);
+					byName.emplace(key, snapshot.entries.size() - 1);
+				}
+				else {
+					snapshot.entries[existing->second] = entry;
+				}
+
+				++loadedInSource;
+
+				if (loadedInSource >=
+					appConfig.skills.limits.maxSkillsLoadedPerSource) {
+					break;
+				}
+			}
+		}
+
+		std::sort(
+			snapshot.entries.begin(),
+			snapshot.entries.end(),
+			[](const SkillsCatalogEntry& left, const SkillsCatalogEntry& right) {
+				const auto leftKey = ToLower(left.skillName);
+				const auto rightKey = ToLower(right.skillName);
+				if (leftKey == rightKey) {
+					return left.precedence < right.precedence;
+				}
+
+				return leftKey < rightKey;
+			});
+
+		return snapshot;
+	}
 
 } // namespace blazeclaw::core

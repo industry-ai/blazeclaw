@@ -708,7 +708,9 @@ namespace blazeclaw::gateway {
 		m_toolRegistry.LoadExtensionToolsFromCatalog(catalogPath);
 		m_toolRegistry.LoadSkillToolsFromDirectory("blazeclaw/skills-bundled");
 		m_toolRegistry.LoadSkillToolsFromDirectory("blazeclaw/skills");
+		m_toolRegistry.LoadSkillToolsFromDirectory("blazeclaw/skills-openclaw-original");
 		m_toolRegistry.LoadSkillToolsFromDirectory("skills");
+		m_toolRegistry.LoadSkillToolsFromDirectory("skills-openclaw-original");
 		// Activate lifecycle-managed extensions (register tools without executors).
 		m_extensionLifecycle.LoadCatalog(catalogPath);
 		m_extensionLifecycle.ActivateAll(m_toolRegistry);
