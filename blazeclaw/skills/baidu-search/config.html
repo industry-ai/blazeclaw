@@ -125,6 +125,72 @@
         .link:hover {
             text-decoration: underline;
         }
+
+        .diag-panel {
+            margin-top: 14px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: #f8fbff;
+            padding: 10px 12px;
+        }
+
+        .diag-title {
+            margin: 0 0 8px 0;
+            font-size: 12px;
+            color: #334155;
+            font-weight: 600;
+        }
+
+        .diag-grid {
+            display: grid;
+            grid-template-columns: 180px 1fr;
+            gap: 6px 10px;
+            font-size: 12px;
+            align-items: center;
+        }
+
+        .diag-key {
+            color: #475569;
+        }
+
+        .diag-value {
+            color: #1e293b;
+            min-height: 18px;
+            word-break: break-all;
+        }
+
+        .diag-badge {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 999px;
+            border: 1px solid transparent;
+            font-size: 11px;
+            line-height: 16px;
+        }
+
+        .diag-neutral {
+            background: #eef2ff;
+            border-color: #c7d2fe;
+            color: #3730a3;
+        }
+
+        .diag-success {
+            background: #ecfdf3;
+            border-color: #a7f3d0;
+            color: #065f46;
+        }
+
+        .diag-warn {
+            background: #fff7ed;
+            border-color: #fed7aa;
+            color: #9a3412;
+        }
+
+        .diag-error {
+            background: #fef2f2;
+            border-color: #fecaca;
+            color: #991b1b;
+        }
     </style>
 </head>
 <body>
@@ -158,6 +224,26 @@
         <div class="block-title">Local test command</div>
         <textarea id="testCmd" readonly>python blazeclaw/skills/baidu-search/scripts/search.py '{"query":"test search"}'</textarea>
 
+        <div class="diag-panel">
+            <p class="diag-title">API Key Diagnostics</p>
+            <div class="diag-grid">
+                <div class="diag-key">Config source</div>
+                <div class="diag-value" id="diagConfigSource">waiting for load...</div>
+
+                <div class="diag-key">Key loaded</div>
+                <div class="diag-value"><span id="diagKeyLoaded" class="diag-badge diag-neutral">unknown</span></div>
+
+                <div class="diag-key">Key format check</div>
+                <div class="diag-value"><span id="diagKeyValidity" class="diag-badge diag-neutral">unknown</span></div>
+
+                <div class="diag-key">Masked key</div>
+                <div class="diag-value" id="diagKeyFingerprint">(empty)</div>
+
+                <div class="diag-key">Skill env preflight</div>
+                <div class="diag-value"><span id="diagRuntimeHint" class="diag-badge diag-neutral">not checked</span></div>
+            </div>
+        </div>
+
         <div class="block-title">Notes</div>
         <ul>
             <li>
@@ -182,6 +268,13 @@
         const sessionCmdEl = document.getElementById('sessionCmd');
         const persistCmdEl = document.getElementById('persistCmd');
         const testCmdEl = document.getElementById('testCmd');
+        const diagConfigSourceEl = document.getElementById('diagConfigSource');
+        const diagKeyLoadedEl = document.getElementById('diagKeyLoaded');
+        const diagKeyValidityEl = document.getElementById('diagKeyValidity');
+        const diagKeyFingerprintEl = document.getElementById('diagKeyFingerprint');
+        const diagRuntimeHintEl = document.getElementById('diagRuntimeHint');
+
+        let lastSourceMeta = null;
 
         function setStatus(text) {
             statusEl.textContent = text;
@@ -201,6 +294,90 @@
             return (value || '').replace(/"/g, '`"').trim();
         }
 
+        function setBadge(el, text, tone) {
+            if (!el) {
+                return;
+            }
+
+            el.textContent = text;
+            el.className = `diag-badge ${tone}`;
+        }
+
+        function maskApiKey(rawKey) {
+            const key = (rawKey || '').trim();
+            if (!key) {
+                return '(empty)';
+            }
+
+            if (key.length <= 8) {
+                return `${'*'.repeat(key.length)} (len=${key.length})`;
+            }
+
+            return `${key.slice(0, 4)}...${key.slice(-4)} (len=${key.length})`;
+        }
+
+        function evaluateKeyFormat(rawKey) {
+            const key = (rawKey || '').trim();
+            if (!key) {
+                return {
+                    loadedText: 'missing',
+                    loadedTone: 'diag-error',
+                    formatText: 'invalid (empty)',
+                    formatTone: 'diag-error',
+                    runtimeText: 'BAIDU_API_KEY missing for runtime',
+                    runtimeTone: 'diag-error'
+                };
+            }
+
+            if (/\s/.test(key)) {
+                return {
+                    loadedText: 'yes',
+                    loadedTone: 'diag-success',
+                    formatText: 'invalid (contains whitespace)',
+                    formatTone: 'diag-error',
+                    runtimeText: 'fix key format before tool execution',
+                    runtimeTone: 'diag-warn'
+                };
+            }
+
+            if (key.length < 16) {
+                return {
+                    loadedText: 'yes',
+                    loadedTone: 'diag-success',
+                    formatText: 'suspicious (too short)',
+                    formatTone: 'diag-warn',
+                    runtimeText: 'verify actual key length in provider console',
+                    runtimeTone: 'diag-warn'
+                };
+            }
+
+            return {
+                loadedText: 'yes',
+                loadedTone: 'diag-success',
+                formatText: 'looks valid (format)',
+                formatTone: 'diag-success',
+                runtimeText: 'run local test command to confirm runtime env',
+                runtimeTone: 'diag-neutral'
+            };
+        }
+
+        function renderDiagnostics() {
+            const sourceMeta = lastSourceMeta || {};
+            if (sourceMeta.exists && sourceMeta.configPath) {
+                diagConfigSourceEl.textContent = `${sourceMeta.configPath}`;
+            } else if (sourceMeta.exists) {
+                diagConfigSourceEl.textContent = 'saved config exists';
+            } else {
+                diagConfigSourceEl.textContent = 'no saved config found';
+            }
+
+            const evaluation = evaluateKeyFormat(apiKeyEl.value || '');
+            setBadge(diagKeyLoadedEl, evaluation.loadedText, evaluation.loadedTone);
+            setBadge(diagKeyValidityEl, evaluation.formatText, evaluation.formatTone);
+            setBadge(diagRuntimeHintEl, evaluation.runtimeText, evaluation.runtimeTone);
+            diagKeyFingerprintEl.textContent = maskApiKey(apiKeyEl.value || '');
+        }
+
         function buildCommands() {
             const key = escapePs(apiKeyEl.value);
             const finalKey = key || 'your_actual_api_key_here';
@@ -211,10 +388,12 @@
 
             if (!key) {
                 setStatus('Commands generated with placeholder key.');
+                renderDiagnostics();
                 return;
             }
 
             setStatus('Commands updated from BAIDU_API_KEY input.');
+            renderDiagnostics();
         }
 
         function saveConfig() {
@@ -260,6 +439,7 @@
             }
 
             buildCommands();
+            renderDiagnostics();
         }
 
         async function copyText(text, successText) {
@@ -308,6 +488,7 @@
                 }
 
                 if (msg.channel === 'blazeclaw.skill.config.loaded') {
+                    lastSourceMeta = msg.sourceMeta || {};
                     applyLoadedPayload(msg.payload || {});
                     const sourceMeta = msg.sourceMeta || {};
                     if (sourceMeta.exists && sourceMeta.configPath) {
@@ -319,6 +500,15 @@
                 }
 
                 if (msg.channel === 'blazeclaw.skill.config.saved') {
+                    if (!lastSourceMeta || typeof lastSourceMeta !== 'object') {
+                        lastSourceMeta = {};
+                    }
+
+                    lastSourceMeta.exists = true;
+                    if (msg.configPath) {
+                        lastSourceMeta.configPath = msg.configPath;
+                    }
+                    renderDiagnostics();
                     setStatus(`Saved to ${msg.configPath || '~/.config/baidu-search/.env'}`);
                     return;
                 }

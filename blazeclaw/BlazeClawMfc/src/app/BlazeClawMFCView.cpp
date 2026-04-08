@@ -34,6 +34,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -2750,6 +2752,48 @@ void CBlazeClawMFCView::PersistSkillConfigFromPayload(
 		if (blazeclaw::gateway::json::FindRawField(payloadJson, "payload", payloadRaw))
 		{
 			pairs = ParseDotEnvPairs(payloadRaw);
+		}
+
+		if (pairs.empty())
+		{
+			auto parseJsonObjectPairs = [](const std::string& rawJson)
+				{
+					std::unordered_map<std::string, std::string> parsedPairs;
+					if (rawJson.empty())
+					{
+						return parsedPairs;
+					}
+
+					try
+					{
+						const auto json = nlohmann::json::parse(rawJson);
+						if (!json.is_object())
+						{
+							return parsedPairs;
+						}
+
+						for (auto it = json.begin(); it != json.end(); ++it)
+						{
+							if (it.value().is_string())
+							{
+								parsedPairs.insert_or_assign(
+									it.key(),
+									it.value().get<std::string>());
+							}
+						}
+					}
+					catch (...)
+					{
+					}
+
+					return parsedPairs;
+				};
+
+			pairs = parseJsonObjectPairs(payloadJson);
+			if (pairs.empty() && !payloadRaw.empty())
+			{
+				pairs = parseJsonObjectPairs(payloadRaw);
+			}
 		}
 
 		if (pairs.empty())

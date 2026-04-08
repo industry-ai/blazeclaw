@@ -3,8 +3,35 @@ import os
 import re
 import sys
 from datetime import datetime, timedelta
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
-import requests
+try:
+    import requests  # type: ignore
+except Exception:
+    requests = None
+
+
+def _http_post_json(url: str, headers: dict, request_body: dict, timeout: int = 30):
+    payload = json.dumps(request_body, ensure_ascii=False).encode("utf-8")
+
+    if requests is not None:
+        response = requests.post(url, data=payload, headers=headers, timeout=timeout)
+        response.raise_for_status()
+        return response.json()
+
+    req = urllib_request.Request(url, data=payload, headers=headers, method="POST")
+    try:
+        with urllib_request.urlopen(req, timeout=timeout) as response:
+            charset = response.headers.get_content_charset() or "utf-8"
+            text = response.read().decode(charset, errors="replace")
+            return json.loads(text)
+    except urllib_error.HTTPError as exc:
+        charset = "utf-8"
+        if exc.headers is not None:
+            charset = exc.headers.get_content_charset() or "utf-8"
+        body = exc.read().decode(charset, errors="replace") if exc.fp else ""
+        raise RuntimeError(f"HTTP {exc.code}: {body or exc.reason}") from exc
 
 
 def baidu_search(api_key: str, request_body: dict):
@@ -15,9 +42,7 @@ def baidu_search(api_key: str, request_body: dict):
         "Content-Type": "application/json",
     }
 
-    response = requests.post(url, json=request_body, headers=headers, timeout=30)
-    response.raise_for_status()
-    payload = response.json()
+    payload = _http_post_json(url, headers, request_body, timeout=30)
 
     if "code" in payload:
         raise RuntimeError(payload.get("message", "Baidu search request failed"))
@@ -33,10 +58,21 @@ def parse_args(argv):
     if len(argv) < 2:
         raise ValueError("Usage: python search.py '<JSON>'")
 
+    raw_arg = argv[1]
+
     try:
-        parsed = json.loads(argv[1])
+        parsed = json.loads(raw_arg)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"JSON parse error: {exc}") from exc
+        raw = (raw_arg or "").strip()
+
+        # PowerShell can pass malformed object-like payloads such as {query:test}
+        # by stripping JSON quotes. Accept this as a compatibility fallback.
+        loose_query_match = re.match(r"^\{\s*query\s*:\s*(.*?)\s*\}$", raw, re.IGNORECASE)
+        if loose_query_match is not None:
+            fallback_query = loose_query_match.group(1).strip().strip('"').strip("'")
+            parsed = {"query": fallback_query}
+        else:
+            raise ValueError(f"JSON parse error: {exc}") from exc
 
     if not isinstance(parsed, dict):
         raise ValueError("request body must be a JSON object")
