@@ -66,6 +66,59 @@ When a skill item is selected in `CSkillView`:
 - The view surfaces selected skill properties/configuration info via status
   output and bridge payloads (for WebView-side handling).
 
+### 4) `config.html` persistence mechanism (store/restore)
+
+When a skill provides `config.html`, BlazeClaw WebView2 can persist and reload
+configuration through the generic skill-config bridge.
+
+#### Canonical storage location
+
+- Canonical path pattern: `~/.config/<normalized-skill-key>/.env`
+- Example (`baidu-search`): `~/.config/baidu-search/.env`
+- Skill key normalization is handled by host code (lowercase, separators
+  normalized for filesystem path safety).
+
+#### Store flow (save)
+
+1. User opens the skill config page (`config.html`) in WebView2.
+2. Page gathers key-value pairs from UI fields.
+3. Page posts bridge message:
+   - `channel`: `blazeclaw.skill.config.save`
+   - `skillKey`: `<skill-name>` (for example `baidu-search`)
+   - `payload`: JSON object of env key-values (for example
+     `{ "BAIDU_API_KEY": "..." }`)
+4. `CBlazeClawMFCView::HandleSkillConfigBridgeMessage()` routes save request
+   to `PersistSkillConfigFromPayload()`.
+5. `CBlazeClawMFCDoc::SaveSkillConfigEnv()` writes `.env` content to canonical
+   config path (`~/.config/<skill>/.env`).
+6. Host replies with `blazeclaw.skill.config.saved` and `configPath`; UI shows
+   save success status.
+
+#### Restore flow (load on next run)
+
+1. On page startup, `config.html` posts bridge message:
+   - `channel`: `blazeclaw.skill.config.ready`
+   - `skillKey`: `<skill-name>`
+2. `CBlazeClawMFCView::LoadSkillConfigToBridge()` handles the request.
+3. `CBlazeClawMFCDoc::LoadSkillConfigEnv()` loads:
+   - canonical file first (`~/.config/<skill>/.env`),
+   - then legacy fallback candidates (if canonical missing).
+4. Host replies `blazeclaw.skill.config.loaded` with `payload` containing
+   parsed env key-values.
+5. `config.html` applies payload values to form controls as default values.
+6. On the next app run, the same load sequence restores the last-saved values.
+
+#### Recommended `config.html` integration pattern
+
+- Send `blazeclaw.skill.config.ready` once page is initialized.
+- Listen for:
+  - `blazeclaw.skill.config.loaded`
+  - `blazeclaw.skill.config.saved`
+  - `blazeclaw.skill.config.error`
+- Save only validated, minimal key-values required by the skill.
+- Keep env key names stable (avoid unnecessary renames) to preserve backward
+  compatibility with existing saved `.env` files.
+
 ---
 
 ## Implemented Local Skills (Current)
@@ -155,7 +208,15 @@ documentation lookup and general fact retrieval workflows.
 
 ---
 
-### 5. `summarize`
+### 5. `baidu-search`
+
+**Configuration:**
+- For `config.html` store/restore details, see
+  [4) `config.html` persistence mechanism (store/restore)](#config.html-persistence-mechanism-storerestore).
+
+---
+
+### 6. `summarize`
 
 **Purpose:** Extract structured key points from draft text, URLs, or content
 inputs for downstream rewrite and distribution flows.
@@ -169,7 +230,7 @@ inputs for downstream rewrite and distribution flows.
 
 ---
 
-### 6. `humanizer`
+### 7. `humanizer`
 
 **Purpose:** Rewrites AI-sounding text into natural human-written language using
 Wikipedia AI-writing-pattern guidance.

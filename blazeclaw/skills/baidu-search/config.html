@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>BlazeClaw Baidu Search Configuration</title>
+    <style>
+        body {
+            font-family: Segoe UI, Arial, sans-serif;
+            margin: 24px;
+            background: #f8f9fb;
+            color: #1f2937;
+        }
+
+        .card {
+            max-width: 860px;
+            background: #fff;
+            border: 1px solid #e2e6ef;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        h2 {
+            margin: 0 0 6px 0;
+        }
+
+        .subtle {
+            margin: 0 0 16px 0;
+            color: #4b5563;
+            font-size: 13px;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 12px;
+        }
+
+        label {
+            font-size: 12px;
+            color: #374151;
+            margin-bottom: 4px;
+        }
+
+        input {
+            height: 36px;
+            border: 1px solid #cfd6e4;
+            border-radius: 6px;
+            padding: 0 10px;
+            font-size: 13px;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 6px;
+        }
+
+        button {
+            height: 34px;
+            min-width: 128px;
+            border-radius: 6px;
+            border: 1px solid #bec7da;
+            background: #fff;
+            cursor: pointer;
+            padding: 0 10px;
+        }
+
+        button.primary {
+            background: #2f6fec;
+            border-color: #2f6fec;
+            color: #fff;
+        }
+
+        .block-title {
+            margin: 18px 0 8px 0;
+            font-size: 13px;
+            color: #374151;
+            font-weight: 600;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 76px;
+            border: 1px solid #cfd6e4;
+            border-radius: 6px;
+            padding: 10px;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 12px;
+            resize: vertical;
+            box-sizing: border-box;
+            background: #fbfcff;
+        }
+
+        ul {
+            margin: 8px 0 0 16px;
+            padding: 0;
+            color: #374151;
+            font-size: 13px;
+        }
+
+        li {
+            margin: 4px 0;
+        }
+
+        code {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            padding: 1px 4px;
+        }
+
+        #status {
+            margin-top: 12px;
+            font-size: 13px;
+            color: #2a3b68;
+        }
+
+        .link {
+            color: #2563eb;
+            text-decoration: none;
+        }
+
+        .link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Baidu Search Skill Configuration</h2>
+        <p class="subtle">
+            Skill: <code>baidu-search</code> · Tool: <code>baidu_search.search.web</code>
+            · Required env: <code>BAIDU_API_KEY</code>
+        </p>
+
+        <div class="field">
+            <label for="apiKey">BAIDU_API_KEY</label>
+            <input id="apiKey" type="password" placeholder="Paste your Baidu AI Search API Key" />
+        </div>
+
+        <div class="actions">
+            <button class="primary" id="buildCmdBtn">Generate Commands</button>
+            <button id="saveConfigBtn">Save Config</button>
+            <button id="copySessionBtn">Copy Session Command</button>
+            <button id="copyPersistBtn">Copy Persist Command</button>
+            <button id="copyTestBtn">Copy Test Command</button>
+            <button id="clearBtn">Clear</button>
+        </div>
+
+        <div class="block-title">PowerShell (current session)</div>
+        <textarea id="sessionCmd" readonly>$env:BAIDU_API_KEY = "your_actual_api_key_here"</textarea>
+
+        <div class="block-title">PowerShell (persist for new shells)</div>
+        <textarea id="persistCmd" readonly>setx BAIDU_API_KEY "your_actual_api_key_here"</textarea>
+
+        <div class="block-title">Local test command</div>
+        <textarea id="testCmd" readonly>python blazeclaw/skills/baidu-search/scripts/search.py '{"query":"test search"}'</textarea>
+
+        <div class="block-title">Notes</div>
+        <ul>
+            <li>
+                Get API key from:
+                <a class="link" href="https://console.bce.baidu.com/ai-search/qianfan/ais/console/apiKey" target="_blank" rel="noopener noreferrer">
+                    Baidu AI Search Console
+                </a>
+            </li>
+            <li>After <code>setx</code>, restart Visual Studio / BlazeClaw host process.</li>
+            <li>Ensure outbound access to <code>qianfan.baidubce.com</code>.</li>
+            <li>Required runtime binary: <code>python</code>.</li>
+        </ul>
+
+        <div id="status">Ready.</div>
+    </div>
+
+    <script>
+        const skillKey = 'baidu-search';
+        const requestIdPrefix = 'baidu-search-config';
+        const apiKeyEl = document.getElementById('apiKey');
+        const statusEl = document.getElementById('status');
+        const sessionCmdEl = document.getElementById('sessionCmd');
+        const persistCmdEl = document.getElementById('persistCmd');
+        const testCmdEl = document.getElementById('testCmd');
+
+        function setStatus(text) {
+            statusEl.textContent = text;
+        }
+
+        function postMessage(payload) {
+            if (!window.chrome || !window.chrome.webview) {
+                setStatus('WebView bridge unavailable.');
+                return false;
+            }
+
+            window.chrome.webview.postMessage(payload);
+            return true;
+        }
+
+        function escapePs(value) {
+            return (value || '').replace(/"/g, '`"').trim();
+        }
+
+        function buildCommands() {
+            const key = escapePs(apiKeyEl.value);
+            const finalKey = key || 'your_actual_api_key_here';
+
+            sessionCmdEl.value = `$env:BAIDU_API_KEY = "${finalKey}"`;
+            persistCmdEl.value = `setx BAIDU_API_KEY "${finalKey}"`;
+            testCmdEl.value = "python blazeclaw/skills/baidu-search/scripts/search.py '{\"query\":\"test search\"}'";
+
+            if (!key) {
+                setStatus('Commands generated with placeholder key.');
+                return;
+            }
+
+            setStatus('Commands updated from BAIDU_API_KEY input.');
+        }
+
+        function saveConfig() {
+            const rawKey = (apiKeyEl.value || '').trim();
+            if (!rawKey) {
+                setStatus('BAIDU_API_KEY is empty. Please enter a value before saving.');
+                return;
+            }
+
+            const sent = postMessage({
+                channel: 'blazeclaw.skill.config.save',
+                skillKey,
+                id: `${requestIdPrefix}-save`,
+                payload: {
+                    BAIDU_API_KEY: rawKey
+                }
+            });
+
+            if (sent) {
+                setStatus('Saving configuration...');
+            }
+        }
+
+        function requestConfigLoad() {
+            const sent = postMessage({
+                channel: 'blazeclaw.skill.config.ready',
+                skillKey,
+                id: `${requestIdPrefix}-ready`
+            });
+
+            if (sent) {
+                setStatus('Loading saved configuration...');
+            }
+        }
+
+        function applyLoadedPayload(payload) {
+            if (!payload || typeof payload !== 'object') {
+                return;
+            }
+
+            if (typeof payload.BAIDU_API_KEY === 'string') {
+                apiKeyEl.value = payload.BAIDU_API_KEY;
+            }
+
+            buildCommands();
+        }
+
+        async function copyText(text, successText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                setStatus(successText);
+            } catch (_) {
+                setStatus('Copy failed. Clipboard permission may be unavailable in this host.');
+            }
+        }
+
+        document.getElementById('buildCmdBtn').addEventListener('click', buildCommands);
+        document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
+        document.getElementById('copySessionBtn').addEventListener('click', () => {
+            copyText(sessionCmdEl.value, 'Session command copied.');
+        });
+        document.getElementById('copyPersistBtn').addEventListener('click', () => {
+            copyText(persistCmdEl.value, 'Persist command copied.');
+        });
+        document.getElementById('copyTestBtn').addEventListener('click', () => {
+            copyText(testCmdEl.value, 'Test command copied.');
+        });
+
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            apiKeyEl.value = '';
+            buildCommands();
+            setStatus('Input cleared.');
+        });
+
+        apiKeyEl.addEventListener('input', () => {
+            if (!apiKeyEl.value.trim()) {
+                return;
+            }
+            setStatus('Key entered. Click "Generate Commands" to refresh command blocks.');
+        });
+
+        if (window.chrome && window.chrome.webview) {
+            window.chrome.webview.addEventListener('message', (e) => {
+                const msg = e && e.data ? e.data : null;
+                if (!msg || typeof msg !== 'object' || !msg.channel) {
+                    return;
+                }
+
+                if (msg.skillKey && msg.skillKey !== skillKey) {
+                    return;
+                }
+
+                if (msg.channel === 'blazeclaw.skill.config.loaded') {
+                    applyLoadedPayload(msg.payload || {});
+                    const sourceMeta = msg.sourceMeta || {};
+                    if (sourceMeta.exists && sourceMeta.configPath) {
+                        setStatus(`Loaded saved config: ${sourceMeta.configPath}`);
+                    } else {
+                        setStatus('No saved config found. Using placeholders.');
+                    }
+                    return;
+                }
+
+                if (msg.channel === 'blazeclaw.skill.config.saved') {
+                    setStatus(`Saved to ${msg.configPath || '~/.config/baidu-search/.env'}`);
+                    return;
+                }
+
+                if (msg.channel === 'blazeclaw.skill.config.error') {
+                    setStatus(`Error: ${msg.message || 'config operation failed'}`);
+                }
+            });
+        }
+
+        buildCommands();
+        requestConfigLoad();
+    </script>
+</body>
+</html>
