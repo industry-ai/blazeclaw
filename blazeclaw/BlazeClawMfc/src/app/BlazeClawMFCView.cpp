@@ -2176,11 +2176,32 @@ void CBlazeClawMFCView::ReportRunSkillPathsToFindOutput(const std::string& runId
 	const auto response = app->Services().RouteGatewayRequest(request);
 	if (!response.ok || !response.payloadJson.has_value())
 	{
-		CString line;
-		line.Format(
-			L"[SkillPath] runId=%s taskDeltas query failed",
-			CString(CA2W(normalizedRunId.c_str(), CP_UTF8)).GetString());
-		mainFrame->AddFindStatusLine(line);
+		std::string detail =
+			std::string("[SkillPath] runId=") + normalizedRunId +
+			" taskDeltas query failed";
+		if (response.error.has_value())
+		{
+			detail +=
+				" errorCode=" +
+				blazeclaw::gateway::json::Trim(response.error->code);
+			detail +=
+				" errorMessage=" +
+				TruncateForDiagnostics(
+					blazeclaw::gateway::json::Trim(response.error->message),
+					320);
+		}
+
+		if (response.payloadJson.has_value())
+		{
+			detail +=
+				" payload=" +
+				TruncateForDiagnostics(
+					blazeclaw::gateway::json::Trim(response.payloadJson.value()),
+					320);
+		}
+
+		mainFrame->AddFindStatusLine(
+			CString(CA2W(detail.c_str(), CP_UTF8)));
 		m_reportedSkillPathRunIds.insert(normalizedRunId);
 		return;
 	}
@@ -2191,6 +2212,29 @@ void CBlazeClawMFCView::ReportRunSkillPathsToFindOutput(const std::string& runId
 		"taskDeltas",
 		taskDeltasRaw))
 	{
+		std::string payloadErrorCode;
+		blazeclaw::gateway::json::FindStringField(
+			response.payloadJson.value(),
+			"errorCode",
+			payloadErrorCode);
+
+		std::string detail =
+			std::string("[SkillPath] runId=") + normalizedRunId +
+			" taskDeltas missing";
+		if (!blazeclaw::gateway::json::Trim(payloadErrorCode).empty())
+		{
+			detail +=
+				" errorCode=" +
+				blazeclaw::gateway::json::Trim(payloadErrorCode);
+		}
+
+		detail +=
+			" payload=" +
+			TruncateForDiagnostics(
+				blazeclaw::gateway::json::Trim(response.payloadJson.value()),
+				320);
+
+		mainFrame->AddFindStatusLine(CString(CA2W(detail.c_str(), CP_UTF8)));
 		m_reportedSkillPathRunIds.insert(normalizedRunId);
 		return;
 	}

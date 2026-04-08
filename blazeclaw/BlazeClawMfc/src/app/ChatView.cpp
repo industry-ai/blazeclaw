@@ -290,6 +290,19 @@ namespace {
 			detail;
 		return CString(CA2W(line.c_str(), CP_UTF8));
 	}
+
+	std::string TruncateDiagnosticText(
+		const std::string& value,
+		const std::size_t maxChars = 320)
+	{
+		if (value.size() <= maxChars)
+		{
+			return value;
+		}
+
+		return value.substr(0, maxChars) + "...";
+	}
+
 }
 
 BEGIN_MESSAGE_MAP(CChatView, CView)
@@ -964,29 +977,71 @@ void CChatView::ReportTriedSkillPathsToFindOutput(const std::string& runId)
 	if (!RequestGateway(
 		"gateway.runtime.taskDeltas.get",
 		BuildRunTaskDeltasParams(runId),
-		response) ||
-		!response.ok ||
-		!response.payloadJson.has_value())
+		response))
 	{
 		frame->AddFindStatusLine(
 			BuildDeepSeekDiagnosticLine(
 				"skill-path",
 				std::string("runId=") + runId +
-				" failed to query task deltas."));
+				" taskDeltas query transport failed."));
 		return;
 	}
 
+	if (!response.ok || !response.payloadJson.has_value())
+	{
+		std::string detail = std::string("runId=") + runId +
+			" taskDeltas query failed";
+		if (response.error.has_value())
+		{
+			detail += " errorCode=" +
+				blazeclaw::gateway::json::Trim(response.error->code);
+			detail += " errorMessage=" +
+				TruncateDiagnosticText(
+					blazeclaw::gateway::json::Trim(response.error->message));
+		}
+
+		if (response.payloadJson.has_value())
+		{
+			detail += " payload=" +
+				TruncateDiagnosticText(
+					blazeclaw::gateway::json::Trim(response.payloadJson.value()));
+		}
+
+		frame->AddFindStatusLine(
+			BuildDeepSeekDiagnosticLine(
+				"skill-path",
+				detail));
+		return;
+	}
+
+	const std::string payloadTrimmed =
+		blazeclaw::gateway::json::Trim(response.payloadJson.value());
 	std::string taskDeltasRaw;
 	if (!blazeclaw::gateway::json::FindRawField(
 		response.payloadJson.value(),
 		"taskDeltas",
 		taskDeltasRaw))
 	{
+		std::string payloadErrorCode;
+		blazeclaw::gateway::json::FindStringField(
+			response.payloadJson.value(),
+			"errorCode",
+			payloadErrorCode);
+
+		std::string detail =
+			std::string("runId=") + runId + " task deltas missing.";
+		if (!blazeclaw::gateway::json::Trim(payloadErrorCode).empty())
+		{
+			detail += " errorCode=" +
+				blazeclaw::gateway::json::Trim(payloadErrorCode);
+		}
+
+		detail += " payload=" + TruncateDiagnosticText(payloadTrimmed);
+
 		frame->AddFindStatusLine(
 			BuildDeepSeekDiagnosticLine(
 				"skill-path",
-				std::string("runId=") + runId +
-				" task deltas missing."));
+				detail));
 		return;
 	}
 
