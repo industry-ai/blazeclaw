@@ -1792,6 +1792,19 @@ namespace blazeclaw::gateway {
 				return true;
 			}
 
+			if (EndsWithLocal(lowerTool, ".smtp.send")) {
+				const std::string recipient = ExtractFirstEmailAddress(trimmedMessage);
+				if (recipient.empty()) {
+					return false;
+				}
+
+				outArgsJson =
+					"{\"to\":" + JsonString(recipient) +
+					",\"subject\":\"Preview\",\"body\":" +
+					JsonString(trimmedMessage) + "}";
+				return true;
+			}
+
 			return false;
 		}
 
