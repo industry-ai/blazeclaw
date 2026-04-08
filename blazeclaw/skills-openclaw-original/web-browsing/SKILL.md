@@ -1,6 +1,14 @@
 ---
 name: web-browsing
 description: Browse and summarize websites, extract content from URLs, search the web for information. Use when user asks to visit a website, get webpage content, search online, or find current information that requires browsing the internet.
+command-dispatch: tool
+command-tool: web_browsing.fetch.content
+command-arg-mode: raw
+command-arg-schema: schema://web_browsing.fetch.content.args.v1
+command-result-schema: schema://web_browsing.fetch.content.result.v1
+command-idempotency-hint: safe
+command-retry-policy-hint: transient-network
+command-requires-approval: false
 ---
 
 # Web Browsing Skill

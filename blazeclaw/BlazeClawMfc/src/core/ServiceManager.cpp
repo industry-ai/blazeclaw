@@ -1353,7 +1353,19 @@ namespace blazeclaw::core {
 			return {
 				{ "brave_search.search.web", "Brave Web Search", "scripts/search.js" },
 				{ "brave_search.fetch.content", "Brave Fetch Content", "scripts/content.js" },
+			  { "web_browsing.search.web", "Web Browsing Search", "scripts/search.js" },
+				{ "web_browsing.fetch.content", "Web Browsing Fetch Content", "scripts/content.js" },
 			};
+		}
+
+		bool IsBraveSearchWebToolId(const std::string& toolId) {
+			return toolId == "brave_search.search.web" ||
+				toolId == "web_browsing.search.web";
+		}
+
+		bool IsBraveFetchContentToolId(const std::string& toolId) {
+			return toolId == "brave_search.fetch.content" ||
+				toolId == "web_browsing.fetch.content";
 		}
 
 		std::vector<BaiduSearchToolRuntimeSpec> BuildBaiduSearchToolRuntimeSpecs() {
@@ -2316,7 +2328,7 @@ namespace blazeclaw::core {
 			errorMessage.clear();
 
 			std::vector<std::string> args;
-			if (spec.id == "brave_search.search.web") {
+			if (IsBraveSearchWebToolId(spec.id)) {
 				const auto queryIt = params.find("query");
 				if (queryIt == params.end() || !queryIt->is_string()) {
 					errorCode = "invalid_arguments";
@@ -2385,7 +2397,7 @@ namespace blazeclaw::core {
 					return std::nullopt;
 				}
 			}
-			else if (spec.id == "brave_search.fetch.content") {
+			else if (IsBraveFetchContentToolId(spec.id)) {
 				const auto urlIt = params.find("url");
 				if (urlIt == params.end() || !urlIt->is_string()) {
 					errorCode = "invalid_arguments";
@@ -2879,11 +2891,11 @@ namespace blazeclaw::core {
 						}
 
 						if (params.is_string()) {
-							if (spec.id == "brave_search.search.web") {
+							if (IsBraveSearchWebToolId(spec.id)) {
 								params = nlohmann::json::object(
 									{ {"query", params.get<std::string>()} });
 							}
-							else if (spec.id == "brave_search.fetch.content") {
+							else if (IsBraveFetchContentToolId(spec.id)) {
 								params = nlohmann::json::object(
 									{ {"url", params.get<std::string>()} });
 							}
@@ -2921,7 +2933,7 @@ namespace blazeclaw::core {
 						}
 
 						std::uint64_t timeoutMs =
-							spec.id == "brave_search.search.web" ? 45000 : 30000;
+							IsBraveSearchWebToolId(spec.id) ? 45000 : 30000;
 						if (request.deadlineEpochMs.has_value()) {
 							const std::uint64_t now = CurrentEpochMs();
 							if (request.deadlineEpochMs.value() <= now) {
