@@ -4,9 +4,47 @@ Web search utility for the web-browsing skill.
 Searches the web and returns relevant results.
 """
 
-import requests
-from bs4 import BeautifulSoup
+import json
+import re
 import urllib.parse
+import urllib.request
+
+try:
+    import requests  # type: ignore
+except Exception:
+    requests = None
+
+try:
+    from bs4 import BeautifulSoup  # type: ignore
+except Exception:
+    BeautifulSoup = None
+
+
+def _http_get_text(url: str, timeout: int = 10) -> str:
+    if requests is not None:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        response = requests.get(url, headers=headers, timeout=timeout)
+        response.raise_for_status()
+        return response.text
+
+    req = urllib.request.Request(
+        url,
+        headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        })
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        charset = resp.headers.get_content_charset() or 'utf-8'
+        return resp.read().decode(charset, errors='replace')
+
+
+def _strip_html(text: str) -> str:
+    cleaned = re.sub(r'<script[\s\S]*?</script>', ' ', text, flags=re.IGNORECASE)
+    cleaned = re.sub(r'<style[\s\S]*?</style>', ' ', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'<[^>]+>', ' ', cleaned)
+    cleaned = re.sub(r'\s+', ' ', cleaned)
+    return cleaned.strip()
 
 
 def search_web(query: str, num_results: int = 5) -> list[dict]:
@@ -23,31 +61,46 @@ def search_web(query: str, num_results: int = 5) -> list[dict]:
     # Using DuckDuckGo HTML API (no API key required)
     search_url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
     
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    }
-    
     try:
-        response = requests.get(search_url, headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
+        html = _http_get_text(search_url, timeout=10)
         results = []
-        
-        # Extract search results
-        for result in soup.find_all('a', class_='result__a')[:num_results]:
-            title = result.get_text()
-            url = result.get('href', '')
-            
-            # Get snippet from adjacent div
-            snippet_div = result.find_parent().find_next_sibling('div', class_='result__snippet')
-            snippet = snippet_div.get_text() if snippet_div else ''
-            
-            results.append({
-                'title': title,
-                'url': url,
-                'snippet': snippet
-            })
+
+        if BeautifulSoup is not None:
+            soup = BeautifulSoup(html, 'html.parser')
+            for result in soup.find_all('a', class_='result__a')[:num_results]:
+                title = result.get_text()
+                url = result.get('href', '')
+
+                snippet_div = result.find_parent().find_next_sibling('div', class_='result__snippet')
+                snippet = snippet_div.get_text() if snippet_div else ''
+
+                results.append({
+                    'title': title,
+                    'url': url,
+                    'snippet': snippet
+                })
+        else:
+            anchor_pattern = re.compile(
+                r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
+                flags=re.IGNORECASE | re.DOTALL)
+            snippet_pattern = re.compile(
+                r'<a[^>]*class="result__a"[^>]*>.*?</a>[\s\S]{0,1200}?<a[^>]*class="result__snippet"[^>]*>(.*?)</a>',
+                flags=re.IGNORECASE | re.DOTALL)
+
+            anchors = list(anchor_pattern.finditer(html))
+            for i, match in enumerate(anchors[:num_results]):
+                url = match.group(1)
+                title = _strip_html(match.group(2))
+                snippet = ''
+                snippet_match = snippet_pattern.search(html, pos=match.start())
+                if snippet_match:
+                    snippet = _strip_html(snippet_match.group(1))
+
+                results.append({
+                    'title': title,
+                    'url': url,
+                    'snippet': snippet
+                })
         
         return results
     
@@ -65,15 +118,21 @@ def fetch_url(url: str) -> dict:
     Returns:
         Dictionary with title, content, and metadata
     """
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    }
-    
     try:
-        response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
+        html = _http_get_text(url, timeout=15)
+
+        if BeautifulSoup is None:
+            title_match = re.search(r'<title[^>]*>(.*?)</title>', html, flags=re.IGNORECASE | re.DOTALL)
+            title = _strip_html(title_match.group(1)) if title_match else 'No title found'
+            content = _strip_html(html)
+            return {
+                'url': url,
+                'title': title,
+                'content': content[:5000],
+                'status': 'success'
+            }
+
+        soup = BeautifulSoup(html, 'html.parser')
         
         # Extract title
         title_tag = soup.find('title')
@@ -113,5 +172,4 @@ if __name__ == '__main__':
     else:
         result = search_web(query)
     
-    import json
     print(json.dumps(result, ensure_ascii=False, indent=2))

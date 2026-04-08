@@ -1653,6 +1653,15 @@ namespace blazeclaw::core {
 			return "process_exit_nonzero";
 		}
 
+		bool IsBraveNetworkTimeoutFailure(const std::string& output) {
+			const std::string lowered = ToLowerAscii(output);
+			return lowered.find("und_err_connect_timeout") != std::string::npos ||
+				lowered.find("connect timeout") != std::string::npos ||
+				lowered.find("etimedout") != std::string::npos ||
+				lowered.find("timed out") != std::string::npos ||
+				lowered.find("timeout") != std::string::npos;
+		}
+
 		std::wstring QuoteCommandToken(const std::wstring& token) {
 			if (token.find_first_of(L" \t\"") == std::wstring::npos) {
 				return token;
@@ -1892,6 +1901,51 @@ namespace blazeclaw::core {
 					if (std::filesystem::exists(candidate / L"scripts" / L"imap.js") &&
 						std::filesystem::exists(candidate / L"scripts" / L"smtp.js")) {
 						return candidate;
+					}
+
+					if (!cursor.has_parent_path()) {
+						break;
+					}
+
+					auto parent = cursor.parent_path();
+					if (parent == cursor) {
+						break;
+					}
+
+					cursor = parent;
+				}
+			}
+
+			return std::nullopt;
+		}
+
+		std::optional<std::filesystem::path> ResolveOpenClawWebBrowsingSkillRoot() {
+			std::vector<std::filesystem::path> candidates;
+			candidates.push_back(std::filesystem::current_path());
+
+			wchar_t modulePath[MAX_PATH]{};
+			if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) > 0) {
+				candidates.push_back(std::filesystem::path(modulePath).parent_path());
+			}
+
+			for (const auto& root : candidates) {
+				std::filesystem::path cursor = root;
+				while (!cursor.empty()) {
+					const auto candidateA =
+						cursor /
+						L"blazeclaw" /
+						L"skills-openclaw-original" /
+						L"web-browsing";
+					if (std::filesystem::exists(candidateA / L"scripts" / L"search_web.py")) {
+						return candidateA;
+					}
+
+					const auto candidateB =
+						cursor /
+						L"skills-openclaw-original" /
+						L"web-browsing";
+					if (std::filesystem::exists(candidateB / L"scripts" / L"search_web.py")) {
+						return candidateB;
 					}
 
 					if (!cursor.has_parent_path()) {
@@ -2826,6 +2880,7 @@ namespace blazeclaw::core {
 
 		void RegisterBraveSearchRuntimeTools(blazeclaw::gateway::GatewayHost& host) {
 			const auto skillRoot = ResolveBraveSearchSkillRoot();
+			const auto openClawWebBrowsingSkillRoot = ResolveOpenClawWebBrowsingSkillRoot();
 			const bool requireApiKey = ResolveBraveRequireApiKey();
 			const bool hasApiKey = HasEnvVarValue(L"BRAVE_API_KEY");
 			for (const auto& spec : BuildBraveSearchToolRuntimeSpecs()) {
@@ -2836,7 +2891,7 @@ namespace blazeclaw::core {
 						.category = "search",
 						.enabled = true,
 					},
-					[spec, skillRoot, requireApiKey, hasApiKey](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
+					[spec, skillRoot, openClawWebBrowsingSkillRoot, requireApiKey, hasApiKey](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
 						blazeclaw::gateway::ToolExecuteResultV2 result;
 						result.tool = request.tool.empty() ? spec.id : request.tool;
 						result.correlationId = request.correlationId;
@@ -2995,6 +3050,59 @@ namespace blazeclaw::core {
 						result.executed = false;
 						const std::string classifiedFailure =
 							ClassifyBraveFailureCode(process.output);
+						const bool canAttemptOpenClawFallback =
+							spec.id == "web_browsing.search.web" &&
+							classifiedFailure == "network_error" &&
+							IsBraveNetworkTimeoutFailure(process.output) &&
+							openClawWebBrowsingSkillRoot.has_value() &&
+							params.contains("query") &&
+							params["query"].is_string();
+
+						if (canAttemptOpenClawFallback) {
+							const std::string query =
+								TrimAsciiForBraveSearch(params["query"].get<std::string>());
+							if (!query.empty()) {
+								std::uint64_t fallbackTimeoutMs = 15000;
+								if (request.deadlineEpochMs.has_value()) {
+									const std::uint64_t now = CurrentEpochMs();
+									if (request.deadlineEpochMs.value() <= now) {
+										fallbackTimeoutMs = 0;
+									}
+									else {
+										fallbackTimeoutMs = request.deadlineEpochMs.value() - now;
+									}
+								}
+
+								if (fallbackTimeoutMs > 0) {
+									const auto fallbackScriptPath =
+										openClawWebBrowsingSkillRoot.value() /
+										L"scripts" /
+										L"search_web.py";
+									if (std::filesystem::exists(fallbackScriptPath)) {
+										const auto fallbackProcess = ExecutePythonSkillProcess(
+											fallbackScriptPath,
+											std::vector<std::string>{ query },
+											fallbackTimeoutMs);
+										if (fallbackProcess.started &&
+											!fallbackProcess.timedOut &&
+											fallbackProcess.exitCode == 0) {
+											result.executed = true;
+											result.status = "ok";
+											result.result =
+												fallbackProcess.output +
+												"\n[fallback=openclaw_python]";
+											result.errorCode.clear();
+											result.errorMessage.clear();
+											result.completedAtMs = CurrentEpochMs();
+											result.latencyMs =
+												result.completedAtMs - result.startedAtMs;
+											return result;
+										}
+									}
+								}
+							}
+						}
+
 						result.status = classifiedFailure;
 						result.errorCode = classifiedFailure;
 						if (!result.result.empty()) {

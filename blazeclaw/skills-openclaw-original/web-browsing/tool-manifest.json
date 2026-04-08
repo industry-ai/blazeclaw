@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "skill": "web-browsing",
+  "namespace": "web_browsing",
+  "description": "BlazeClaw tool manifest for web browsing search and content extraction aliases.",
+  "tools": [
+    {
+      "id": "web_browsing.search.web",
+      "label": "Web Browsing Search",
+      "category": "search",
+      "enabled": true
+    },
+    {
+      "id": "web_browsing.fetch.content",
+      "label": "Web Browsing Fetch Content",
+      "category": "search",
+      "enabled": true
+    }
+  ]
+}

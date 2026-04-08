@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>BlazeClaw Web Browsing Configuration</title>
+    <style>
+        body {
+            font-family: Segoe UI, Arial, sans-serif;
+            margin: 24px;
+            background: #f8f9fb;
+            color: #1f2937;
+        }
+
+        .card {
+            max-width: 920px;
+            background: #fff;
+            border: 1px solid #e2e6ef;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        h2 {
+            margin: 0 0 6px 0;
+        }
+
+        .subtle {
+            margin: 0 0 14px 0;
+            color: #4b5563;
+            font-size: 13px;
+        }
+
+        .row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .field {
+            flex: 1;
+            min-width: 220px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-size: 12px;
+            color: #374151;
+            margin-bottom: 4px;
+        }
+
+        input,
+        select {
+            height: 36px;
+            border: 1px solid #cfd6e4;
+            border-radius: 6px;
+            padding: 0 10px;
+            font-size: 13px;
+            box-sizing: border-box;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        button {
+            height: 34px;
+            min-width: 128px;
+            border-radius: 6px;
+            border: 1px solid #bec7da;
+            background: #fff;
+            cursor: pointer;
+            padding: 0 10px;
+        }
+
+        button.primary {
+            background: #2f6fec;
+            border-color: #2f6fec;
+            color: #fff;
+        }
+
+        .block-title {
+            margin: 16px 0 8px 0;
+            font-size: 13px;
+            color: #374151;
+            font-weight: 600;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 70px;
+            border: 1px solid #cfd6e4;
+            border-radius: 6px;
+            padding: 10px;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 12px;
+            resize: vertical;
+            box-sizing: border-box;
+            background: #fbfcff;
+        }
+
+        ul {
+            margin: 8px 0 0 16px;
+            padding: 0;
+            color: #374151;
+            font-size: 13px;
+        }
+
+        li {
+            margin: 4px 0;
+        }
+
+        code {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            padding: 1px 4px;
+        }
+
+        #status {
+            margin-top: 12px;
+            font-size: 13px;
+            color: #2a3b68;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Web Browsing Skill Configuration</h2>
+        <p class="subtle">
+            Skill: <code>web-browsing</code> · Tools:
+            <code>web_browsing.search.web</code>,
+            <code>web_browsing.fetch.content</code>
+        </p>
+
+        <div class="row">
+            <div class="field">
+                <label for="defaultQuery">Default Search Query</label>
+                <input id="defaultQuery"
+                       placeholder="e.g. 2024 solid-state battery commercialization progress" />
+            </div>
+            <div class="field" style="max-width: 220px;">
+                <label for="defaultCount">Default Result Count (1-20)</label>
+                <input id="defaultCount" type="number" min="1" max="20" value="5" />
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="field">
+                <label for="defaultUrl">Default Fetch URL (must start with http:// or https://)</label>
+                <input id="defaultUrl"
+                       placeholder="https://example.com/article" />
+            </div>
+            <div class="field" style="max-width: 220px;">
+                <label for="topN">Preferred Top-N Pages to Read</label>
+                <select id="topN">
+                    <option value="1">1</option>
+                    <option value="2" selected>2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="field">
+                <label for="apiKey">Optional BRAVE_API_KEY</label>
+                <input id="apiKey" type="password" placeholder="Optional, for strict API-key runtime policy" />
+            </div>
+            <div class="field" style="max-width: 300px;">
+                <label for="requireApiKey">BLAZECLAW_BRAVE_REQUIRE_API_KEY</label>
+                <select id="requireApiKey">
+                    <option value="false" selected>false</option>
+                    <option value="true">true</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button class="primary" id="buildExamplesBtn">Generate Example Args</button>
+            <button id="saveConfigBtn">Save Config</button>
+            <button id="copySearchBtn">Copy Search Args</button>
+            <button id="copyFetchBtn">Copy Fetch Args</button>
+            <button id="clearBtn">Clear</button>
+        </div>
+
+        <div class="block-title">Example args for web_browsing.search.web</div>
+        <textarea id="searchArgs" readonly>{"query":"latest battery market report","count":5}</textarea>
+
+        <div class="block-title">Example args for web_browsing.fetch.content</div>
+        <textarea id="fetchArgs" readonly>{"url":"https://example.com"}</textarea>
+
+        <div class="block-title">Notes</div>
+        <ul>
+            <li>
+                <code>web_browsing.fetch.content</code> requires a valid <code>url</code>
+                string. Missing/invalid URL returns
+                <code>invalid_arguments</code>.
+            </li>
+            <li>
+                URL must start with <code>http://</code> or <code>https://</code>.
+            </li>
+            <li>
+                <code>web_browsing.search.web</code> requires
+                <code>query</code>; <code>count</code> should be 1-20.
+            </li>
+            <li>
+                If strict key policy is enabled, set both
+                <code>BRAVE_API_KEY</code> and
+                <code>BLAZECLAW_BRAVE_REQUIRE_API_KEY=true</code>.
+            </li>
+        </ul>
+
+        <div id="status">Ready.</div>
+    </div>
+
+    <script>
+        const skillKey = 'web-browsing';
+        const requestIdPrefix = 'web-browsing-config';
+
+        const defaultQueryEl = document.getElementById('defaultQuery');
+        const defaultCountEl = document.getElementById('defaultCount');
+        const defaultUrlEl = document.getElementById('defaultUrl');
+        const topNEl = document.getElementById('topN');
+        const apiKeyEl = document.getElementById('apiKey');
+        const requireApiKeyEl = document.getElementById('requireApiKey');
+        const searchArgsEl = document.getElementById('searchArgs');
+        const fetchArgsEl = document.getElementById('fetchArgs');
+        const statusEl = document.getElementById('status');
+
+        function setStatus(text) {
+            statusEl.textContent = text;
+        }
+
+        function postMessage(payload) {
+            if (!window.chrome || !window.chrome.webview) {
+                setStatus('WebView bridge unavailable.');
+                return false;
+            }
+
+            window.chrome.webview.postMessage(payload);
+            return true;
+        }
+
+        function isHttpUrl(text) {
+            const value = (text || '').trim().toLowerCase();
+            return value.startsWith('http://') || value.startsWith('https://');
+        }
+
+        function clampCount(value) {
+            const n = Number.parseInt(value, 10);
+            if (!Number.isFinite(n)) {
+                return 5;
+            }
+
+            return Math.min(20, Math.max(1, n));
+        }
+
+        function buildExamples() {
+            const query = (defaultQueryEl.value || '').trim() || 'latest battery market report';
+            const count = clampCount(defaultCountEl.value);
+            defaultCountEl.value = String(count);
+
+            searchArgsEl.value = JSON.stringify(
+                { query, count },
+                null,
+                2);
+
+            const url = (defaultUrlEl.value || '').trim();
+            if (url && !isHttpUrl(url)) {
+                fetchArgsEl.value = JSON.stringify(
+                    {
+                        url,
+                        note: 'URL must start with http:// or https://'
+                    },
+                    null,
+                    2);
+                setStatus('Default URL is invalid. Use http:// or https:// prefix.');
+                return;
+            }
+
+            fetchArgsEl.value = JSON.stringify(
+                { url: url || 'https://example.com' },
+                null,
+                2);
+            setStatus('Example args generated.');
+        }
+
+        function applyLoadedPayload(payload) {
+            if (!payload || typeof payload !== 'object') {
+                return;
+            }
+
+            if (typeof payload.WEB_BROWSING_DEFAULT_QUERY === 'string') {
+                defaultQueryEl.value = payload.WEB_BROWSING_DEFAULT_QUERY;
+            }
+            if (typeof payload.WEB_BROWSING_DEFAULT_COUNT === 'string') {
+                defaultCountEl.value = payload.WEB_BROWSING_DEFAULT_COUNT;
+            }
+            if (typeof payload.WEB_BROWSING_DEFAULT_URL === 'string') {
+                defaultUrlEl.value = payload.WEB_BROWSING_DEFAULT_URL;
+            }
+            if (typeof payload.WEB_BROWSING_TOP_N === 'string') {
+                topNEl.value = payload.WEB_BROWSING_TOP_N;
+            }
+            if (typeof payload.BRAVE_API_KEY === 'string') {
+                apiKeyEl.value = payload.BRAVE_API_KEY;
+            }
+            if (typeof payload.BLAZECLAW_BRAVE_REQUIRE_API_KEY === 'string') {
+                requireApiKeyEl.value = payload.BLAZECLAW_BRAVE_REQUIRE_API_KEY;
+            }
+
+            buildExamples();
+        }
+
+        function saveConfig() {
+            const count = String(clampCount(defaultCountEl.value));
+            defaultCountEl.value = count;
+
+            const rawUrl = (defaultUrlEl.value || '').trim();
+            if (rawUrl && !isHttpUrl(rawUrl)) {
+                setStatus('Cannot save: default URL must start with http:// or https://.');
+                return;
+            }
+
+            const payload = {
+                WEB_BROWSING_DEFAULT_QUERY: (defaultQueryEl.value || '').trim(),
+                WEB_BROWSING_DEFAULT_COUNT: count,
+                WEB_BROWSING_DEFAULT_URL: rawUrl,
+                WEB_BROWSING_TOP_N: topNEl.value || '2',
+                BLAZECLAW_BRAVE_REQUIRE_API_KEY: requireApiKeyEl.value || 'false'
+            };
+
+            const apiKey = (apiKeyEl.value || '').trim();
+            if (apiKey) {
+                payload.BRAVE_API_KEY = apiKey;
+            }
+
+            const sent = postMessage({
+                channel: 'blazeclaw.skill.config.save',
+                skillKey,
+                id: `${requestIdPrefix}-save`,
+                payload
+            });
+
+            if (sent) {
+                setStatus('Saving configuration...');
+            }
+        }
+
+        async function copyText(text, successText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                setStatus(successText);
+            } catch (_) {
+                setStatus('Copy failed. Clipboard permission may be unavailable in this host.');
+            }
+        }
+
+        function requestConfigLoad() {
+            const sent = postMessage({
+                channel: 'blazeclaw.skill.config.ready',
+                skillKey,
+                id: `${requestIdPrefix}-ready`
+            });
+
+            if (sent) {
+                setStatus('Loading saved configuration...');
+            }
+        }
+
+        document.getElementById('buildExamplesBtn').addEventListener('click', buildExamples);
+        document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
+        document.getElementById('copySearchBtn').addEventListener('click', () => {
+            copyText(searchArgsEl.value, 'Search args copied.');
+        });
+        document.getElementById('copyFetchBtn').addEventListener('click', () => {
+            copyText(fetchArgsEl.value, 'Fetch args copied.');
+        });
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            defaultQueryEl.value = '';
+            defaultCountEl.value = '5';
+            defaultUrlEl.value = '';
+            topNEl.value = '2';
+            apiKeyEl.value = '';
+            requireApiKeyEl.value = 'false';
+            buildExamples();
+            setStatus('Inputs cleared.');
+        });
+
+        if (window.chrome && window.chrome.webview) {
+            window.chrome.webview.addEventListener('message', (e) => {
+                const msg = e && e.data ? e.data : null;
+                if (!msg || typeof msg !== 'object' || !msg.channel) {
+                    return;
+                }
+
+                if (msg.skillKey && msg.skillKey !== skillKey) {
+                    return;
+                }
+
+                if (msg.channel === 'blazeclaw.skill.config.loaded') {
+                    applyLoadedPayload(msg.payload || {});
+                    const sourceMeta = msg.sourceMeta || {};
+                    if (sourceMeta.exists && sourceMeta.configPath) {
+                        setStatus(`Loaded saved config: ${sourceMeta.configPath}`);
+                    } else {
+                        setStatus('No saved config found. Using defaults.');
+                    }
+                    return;
+                }
+
+                if (msg.channel === 'blazeclaw.skill.config.saved') {
+                    const configPath = msg.configPath || '';
+                    setStatus(configPath
+                        ? `Config saved to: ${configPath}`
+                        : 'Config saved successfully.');
+                    return;
+                }
+
+                if (msg.channel === 'blazeclaw.skill.config.error') {
+                    setStatus(`Config error: ${msg.error || 'unknown error'}`);
+                }
+            });
+        }
+
+        buildExamples();
+        requestConfigLoad();
+    </script>
+</body>
+</html>
