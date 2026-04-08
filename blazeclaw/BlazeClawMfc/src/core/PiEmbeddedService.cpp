@@ -144,10 +144,10 @@ namespace blazeclaw::core {
 		}
 
 		std::optional<std::string> TryExtractQuoted(const std::string& message) {
-			static const std::regex kChineseSingleQuote(R"(‘([^’]{1,120})’)");
-			static const std::regex kAsciiSingleQuote(R"('([^']{1,120})')");
-			static const std::regex kAsciiDoubleQuote("\"([^\"]{1,160})\"");
-			static const std::regex kChineseDoubleQuote(R"(“([^”]{1,160})”)");
+			static const std::regex kChineseSingleQuote(R"(‘([^’]{1,600})’)");
+			static const std::regex kAsciiSingleQuote(R"('([^']{1,600})')");
+			static const std::regex kAsciiDoubleQuote("\"([^\"]{1,600})\"");
+			static const std::regex kChineseDoubleQuote(R"(“([^”]{1,600})”)");
 
 			std::smatch match;
 			if (std::regex_search(message, match, kChineseSingleQuote) && match.size() >= 2) {
@@ -345,7 +345,9 @@ namespace blazeclaw::core {
 				args["body"] = lastOutput.empty() ? runMessage : lastOutput;
 			}
 			else if (loweredTool.find("summ") != std::string::npos) {
-				args["text"] = lastOutput.empty() ? runMessage : lastOutput;
+				args["text"] = lastOutput.empty()
+					? (query.empty() ? runMessage : query)
+					: lastOutput;
 				args["maxChars"] = 100;
 			}
 			else if (loweredTool.find("humanizer") != std::string::npos ||
@@ -556,7 +558,9 @@ namespace blazeclaw::core {
 
 			if (argMode == "text") {
 				nlohmann::json args = nlohmann::json::object();
-				args["text"] = lastOutput.empty() ? runMessage : lastOutput;
+				args["text"] = lastOutput.empty()
+					? (query.empty() ? runMessage : query)
+					: lastOutput;
 				args["stepIndex"] = stepIndex;
 				return args;
 			}

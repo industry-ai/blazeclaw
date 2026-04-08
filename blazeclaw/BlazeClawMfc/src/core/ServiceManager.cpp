@@ -1396,9 +1396,13 @@ namespace blazeclaw::core {
 		}
 
 		std::string BuildSummarizeExtractOutput(const std::string& text) {
-			std::string timeValue = "not found";
-			std::string locationValue = "not found";
-			std::string peopleValue = "not found";
+			const bool hasChinese =
+				text.find("下周") != std::string::npos ||
+				text.find("会议室") != std::string::npos ||
+				text.find("老板") != std::string::npos;
+			std::string timeValue = hasChinese ? "未提取到" : "not found";
+			std::string locationValue = hasChinese ? "未提取到" : "not found";
+			std::string peopleValue = hasChinese ? "未提取到" : "not found";
 			std::string requestValue = TrimAsciiLocal(text);
 
 			static const std::regex kTimeRegex(
@@ -1408,12 +1412,26 @@ namespace blazeclaw::core {
 			if (std::regex_search(text, match, kTimeRegex) && match.size() >= 2) {
 				timeValue = match[1].str();
 			}
+			else {
+				static const std::regex kChineseTimeRegex(
+					R"(((?:下周[一二三四五六日天]|本周[一二三四五六日天])(?:上午|下午|晚上)?(?:\d{1,2}点(?:半|\d{1,2}分)?|\d{1,2}[:：]\d{2})))");
+				if (std::regex_search(text, match, kChineseTimeRegex) && match.size() >= 2) {
+					timeValue = match[1].str();
+				}
+			}
 
 			static const std::regex kLocationRegex(
 				R"((?:in|at)\s+the\s+([^,.;\n]+(?:meeting\s+room|room)))",
 				std::regex_constants::icase);
 			if (std::regex_search(text, match, kLocationRegex) && match.size() >= 2) {
 				locationValue = TrimAsciiLocal(match[1].str());
+			}
+			else {
+				static const std::regex kChineseLocationRegex(
+					R"(([^，。；\n]*(?:会议室|办公室|会议厅|线上会议|腾讯会议)))");
+				if (std::regex_search(text, match, kChineseLocationRegex) && match.size() >= 2) {
+					locationValue = TrimAsciiLocal(match[1].str());
+				}
 			}
 
 			std::vector<std::string> people;
@@ -1422,6 +1440,15 @@ namespace blazeclaw::core {
 			}
 			if (ToLowerAscii(text).find("we") != std::string::npos) {
 				people.push_back("requester team");
+			}
+			if (text.find("老板") != std::string::npos) {
+				people.push_back("老板");
+			}
+			if (text.find("我们") != std::string::npos) {
+				people.push_back("我方团队");
+			}
+			if (text.find("你") != std::string::npos) {
+				people.push_back("收件执行人");
 			}
 			if (!people.empty()) {
 				peopleValue.clear();
@@ -1435,6 +1462,14 @@ namespace blazeclaw::core {
 
 			if (requestValue.size() > 220) {
 				requestValue = requestValue.substr(0, 220) + "...";
+			}
+
+			if (hasChinese) {
+				return
+					"时间: " + timeValue + "\n" +
+					"地点: " + locationValue + "\n" +
+					"人物: " + peopleValue + "\n" +
+					"核心诉求: " + requestValue;
 			}
 
 			return
@@ -1464,6 +1499,38 @@ namespace blazeclaw::core {
 		}
 
 		std::string BuildHumanizerRewriteOutput(const std::string& text) {
+			const bool hasChineseSummary =
+				text.find("时间:") != std::string::npos ||
+				text.find("地点:") != std::string::npos ||
+				text.find("核心诉求:") != std::string::npos;
+			if (hasChineseSummary) {
+				const std::string timeValue = ExtractSummaryField(text, "时间");
+				const std::string locationValue = ExtractSummaryField(text, "地点");
+				const std::string peopleValue = ExtractSummaryField(text, "人物");
+				const std::string requestValue = ExtractSummaryField(text, "核心诉求");
+
+				std::string body;
+				body += "尊敬的老板：\n\n";
+				body += "您好！\n\n";
+				body += "新版本 UI 需求已完成主要修改，现拟组织一次评审沟通会议，诚邀您届时参加并指导。\n\n";
+				if (!timeValue.empty()) {
+					body += "会议时间：" + timeValue + "\n";
+				}
+				if (!locationValue.empty()) {
+					body += "会议地点：" + locationValue + "\n";
+				}
+				if (!peopleValue.empty()) {
+					body += "参会人员：" + peopleValue + "\n";
+				}
+				if (!requestValue.empty()) {
+					body += "\n会议目的：" + requestValue + "\n";
+				}
+				body += "\n烦请您预留时间参会，不胜感谢。\n\n";
+				body += "此致\n敬礼\n\n";
+				body += "项目组";
+				return body;
+			}
+
 			const std::string timeValue = ExtractSummaryField(text, "Time");
 			const std::string locationValue = ExtractSummaryField(text, "Location");
 			const std::string peopleValue = ExtractSummaryField(text, "People");

@@ -500,6 +500,98 @@ namespace blazeclaw::gateway {
 			return lowered;
 		}
 
+		std::string Utf8LiteralLocal(const char* value) {
+			return value == nullptr ? std::string{} : std::string(value);
+		}
+
+#if defined(__cpp_char8_t)
+		std::string Utf8LiteralLocal(const char8_t* value) {
+			if (value == nullptr) {
+				return {};
+			}
+
+			return std::string(reinterpret_cast<const char*>(value));
+		}
+#endif
+
+		bool IsLikelyChinesePromptLocal(const std::string& text) {
+			if (text.empty()) {
+				return false;
+			}
+
+			for (std::size_t i = 0; i < text.size();) {
+				const unsigned char lead =
+					static_cast<unsigned char>(text[i]);
+				std::uint32_t codePoint = 0;
+				std::size_t advance = 1;
+
+				if ((lead & 0x80u) == 0) {
+					codePoint = lead;
+				}
+				else if ((lead & 0xE0u) == 0xC0u && i + 1 < text.size()) {
+					const unsigned char b1 =
+						static_cast<unsigned char>(text[i + 1]);
+					if ((b1 & 0xC0u) != 0x80u) {
+						i += 1;
+						continue;
+					}
+
+					codePoint =
+						(static_cast<std::uint32_t>(lead & 0x1Fu) << 6) |
+						static_cast<std::uint32_t>(b1 & 0x3Fu);
+					advance = 2;
+				}
+				else if ((lead & 0xF0u) == 0xE0u && i + 2 < text.size()) {
+					const unsigned char b1 =
+						static_cast<unsigned char>(text[i + 1]);
+					const unsigned char b2 =
+						static_cast<unsigned char>(text[i + 2]);
+					if ((b1 & 0xC0u) != 0x80u || (b2 & 0xC0u) != 0x80u) {
+						i += 1;
+						continue;
+					}
+
+					codePoint =
+						(static_cast<std::uint32_t>(lead & 0x0Fu) << 12) |
+						(static_cast<std::uint32_t>(b1 & 0x3Fu) << 6) |
+						static_cast<std::uint32_t>(b2 & 0x3Fu);
+					advance = 3;
+				}
+				else if ((lead & 0xF8u) == 0xF0u && i + 3 < text.size()) {
+					const unsigned char b1 =
+						static_cast<unsigned char>(text[i + 1]);
+					const unsigned char b2 =
+						static_cast<unsigned char>(text[i + 2]);
+					const unsigned char b3 =
+						static_cast<unsigned char>(text[i + 3]);
+					if ((b1 & 0xC0u) != 0x80u ||
+						(b2 & 0xC0u) != 0x80u ||
+						(b3 & 0xC0u) != 0x80u) {
+						i += 1;
+						continue;
+					}
+
+					codePoint =
+						(static_cast<std::uint32_t>(lead & 0x07u) << 18) |
+						(static_cast<std::uint32_t>(b1 & 0x3Fu) << 12) |
+						(static_cast<std::uint32_t>(b2 & 0x3Fu) << 6) |
+						static_cast<std::uint32_t>(b3 & 0x3Fu);
+					advance = 4;
+				}
+
+				const bool isCjkUnifiedIdeograph =
+					(codePoint >= 0x4E00u && codePoint <= 0x9FFFu) ||
+					(codePoint >= 0x3400u && codePoint <= 0x4DBFu);
+				if (isCjkUnifiedIdeograph) {
+					return true;
+				}
+
+				i += advance;
+			}
+
+			return false;
+		}
+
 		std::string SerializeStringArrayLocal(
 			const std::vector<std::string>& values) {
 			std::string json = "[";
@@ -723,7 +815,19 @@ namespace blazeclaw::gateway {
 			const std::string& condition,
 			const int temperatureC,
 			const std::string& wind,
-			const int humidityPct) {
+			const int humidityPct,
+			const bool preferChinese) {
+			if (preferChinese) {
+				return city + Utf8LiteralLocal(u8"\uFF08") + date +
+					Utf8LiteralLocal(u8"\uFF09\u5929\u6C14\uFF1A") +
+					condition + Utf8LiteralLocal(u8"\uFF0C\u6C14\u6E29\u7EA6 ") +
+					std::to_string(temperatureC) +
+					"C" + Utf8LiteralLocal(u8"\uFF0C\u98CE\u529B ") + wind +
+					Utf8LiteralLocal(u8"\uFF0C\u6E7F\u5EA6 ") +
+					std::to_string(humidityPct) + "%" +
+					Utf8LiteralLocal(u8"\u3002");
+			}
+
 			return "Weather report for " + city + " (" + date + "): " +
 				condition + ", around " + std::to_string(temperatureC) +
 				"C, wind " + wind + ", humidity " +
@@ -810,6 +914,7 @@ namespace blazeclaw::gateway {
 			GatewayToolRegistry& toolRegistry,
 			const std::string& message) {
 			ChatPromptOrchestrationResult result;
+			const bool preferChinese = IsLikelyChinesePromptLocal(message);
 			const auto intent =
 				prompt::AnalyzeWeatherEmailPromptIntent(message);
 			result.matched = intent.matched;
@@ -894,7 +999,8 @@ namespace blazeclaw::gateway {
 				condition,
 				temperatureC,
 				wind,
-				humidityPct);
+				humidityPct,
+				preferChinese);
 
 			nlohmann::json emailPrepareArgs = {
 				{ "action", "prepare" },
@@ -1041,11 +1147,21 @@ namespace blazeclaw::gateway {
 			if (shouldAutoApprove) {
 				result.terminalStatus = "completed";
 				result.terminalReason = "auto_approved";
-				result.assistantText =
-					report +
-					" Email sent to " + recipient +
-					" at " + sendAt +
-					" via " + autoApproveBackend + ".";
+				if (preferChinese) {
+					result.assistantText =
+						report +
+						Utf8LiteralLocal(u8"\u5DF2\u901A\u8FC7 ") + autoApproveBackend +
+						Utf8LiteralLocal(u8"\u5728 ") + sendAt +
+						Utf8LiteralLocal(u8"\u5411 ") + recipient +
+						Utf8LiteralLocal(u8"\u53D1\u9001\u90AE\u4EF6\u3002");
+				}
+				else {
+					result.assistantText =
+						report +
+						" Email sent to " + recipient +
+						" at " + sendAt +
+						" via " + autoApproveBackend + ".";
+				}
 			}
 			else {
 				result.terminalStatus = "needs_approval";
@@ -1056,22 +1172,34 @@ namespace blazeclaw::gateway {
 				result.fallbackAction = "continue";
 				result.fallbackAttempt = 1;
 				result.fallbackMaxAttempts = 2;
-				result.assistantText =
-					report +
-					" Email scheduling to " + recipient +
-					" at " + sendAt +
-					" is pending approval. approvalToken=" +
-					approvalToken;
+				if (preferChinese) {
+					result.assistantText =
+						report +
+						Utf8LiteralLocal(u8"\u5411 ") + recipient +
+						Utf8LiteralLocal(u8"\u5728 ") + sendAt +
+						Utf8LiteralLocal(u8"\u53D1\u9001\u90AE\u4EF6\u7684\u8BA1\u5212\u7B49\u5F85\u5BA1\u6279\u3002approvalToken=") +
+						approvalToken;
+				}
+				else {
+					result.assistantText =
+						report +
+						" Email scheduling to " + recipient +
+						" at " + sendAt +
+						" is pending approval. approvalToken=" +
+						approvalToken;
+				}
 				if (autoApproveBackendMissing) {
-					result.assistantText +=
-						" Delivery backend is unavailable (himalaya CLI missing). Install/configure himalaya and re-approve this token.";
+					result.assistantText += preferChinese
+						? Utf8LiteralLocal(u8"\u90AE\u4EF6\u6295\u9012\u540E\u7AEF\u4E0D\u53EF\u7528\uFF08\u7F3A\u5C11 himalaya CLI\uFF09\u3002\u8BF7\u5B89\u88C5\u5E76\u914D\u7F6E himalaya \u540E\u91CD\u65B0\u5BA1\u6279\u8BE5\u4EE4\u724C\u3002")
+						: " Delivery backend is unavailable (himalaya CLI missing). Install/configure himalaya and re-approve this token.";
 					const std::string fallbackProbeLabel =
 						!fallbackProbeMessage.empty()
 						? fallbackProbeMessage
 						: fallbackProbeCode;
 					if (!fallbackProbeLabel.empty()) {
-						result.assistantText +=
-							" fallbackProbe=" + fallbackProbeLabel + ".";
+						result.assistantText += preferChinese
+							? " fallbackProbe=" + fallbackProbeLabel + Utf8LiteralLocal(u8"\u3002")
+							: " fallbackProbe=" + fallbackProbeLabel + ".";
 					}
 				}
 				if (approvalTokenExpiresAtEpochMs > 0) {
@@ -1456,7 +1584,7 @@ namespace blazeclaw::gateway {
 			}
 
 			const std::regex numberedStepTargetRegex(
-             R"((?:^|\n|\r|;|；)\s*(?:step\s*)?\d+\s*[\)\.:\-]\s*([A-Za-z0-9._-]+))",
+				R"((?:^|\n|\r|;|\xEF\xBC\x9B)\s*(?:step\s*)?\d+\s*[\)\.:\-]\s*([A-Za-z0-9._-]+))",
 				std::regex_constants::icase);
 			for (std::sregex_iterator it(message.begin(), message.end(), numberedStepTargetRegex), end;
 				it != end;
@@ -1503,7 +1631,7 @@ namespace blazeclaw::gateway {
 		}
 
 		bool HasStructuralSequenceSignal(const std::string& message) {
-          const std::regex backtickTargetRegex(
+			const std::regex backtickTargetRegex(
 				R"(`([A-Za-z0-9._-]+)`)",
 				std::regex_constants::icase);
 			std::size_t backtickTargetCount = 0;
@@ -1521,7 +1649,7 @@ namespace blazeclaw::gateway {
 			}
 
 			const std::regex numberedStepRegex(
-             R"((?:^|\n|\r|;|；)\s*(?:step\s*)?\d+\s*[\)\.:\-])",
+				R"((?:^|\n|\r|;|\xEF\xBC\x9B)\s*(?:step\s*)?\d+\s*[\)\.:\-])",
 				std::regex_constants::icase);
 			std::size_t numberedStepCount = 0;
 			for (std::sregex_iterator it(message.begin(), message.end(), numberedStepRegex), end;
@@ -3028,7 +3156,9 @@ namespace blazeclaw::gateway {
 
 				std::string assistantText;
 				if (message.empty() && hasAttachments) {
-					assistantText = "Received image attachment.";
+					assistantText = IsLikelyChinesePromptLocal(normalizedMessage)
+						? Utf8LiteralLocal(u8"\u5DF2\u6536\u5230\u56FE\u7247\u9644\u4EF6\u3002")
+						: "Received image attachment.";
 				}
 				std::vector<std::string> assistantDeltas;
 				std::string backendErrorCode;
@@ -3047,6 +3177,8 @@ namespace blazeclaw::gateway {
 					normalizedMessage,
 					runtimeToolsSnapshot,
 					m_skillsCatalogState.entries);
+				const bool preferChineseResponse =
+					IsLikelyChinesePromptLocal(normalizedMessage);
 				std::vector<std::string> orderedAllowlistTargets;
 				bool enforceOrderedAllowlist = false;
 				if (orderedSequencePreflight.enforced &&
@@ -3069,10 +3201,18 @@ namespace blazeclaw::gateway {
 				}
 				const std::string runtimeMessage =
 					(orderedSequencePreflight.enforced && !enforceOrderedAllowlist)
-					? (std::string("Ordered execution steps (preserve order): ") +
+					? (std::string(preferChineseResponse
+						? Utf8LiteralLocal(u8"\u6709\u5E8F\u6267\u884C\u6B65\u9AA4\uFF08\u4FDD\u6301\u987A\u5E8F\uFF09\uFF1A")
+						: "Ordered execution steps (preserve order): ") +
 						JoinOrderedResolution(orderedSequencePreflight) +
-						"\n\n" + normalizedMessage)
-					: normalizedMessage;
+						"\n\n" + normalizedMessage +
+						(preferChineseResponse
+							? ("\n\n" + Utf8LiteralLocal(u8"\u8BF7\u4F7F\u7528\u4E2D\u6587\u56DE\u7B54\u7528\u6237\u95EE\u9898\u3002"))
+							: ""))
+					: (normalizedMessage +
+						(preferChineseResponse
+							? ("\n\n" + Utf8LiteralLocal(u8"\u8BF7\u4F7F\u7528\u4E2D\u6587\u56DE\u7B54\u7528\u6237\u95EE\u9898\u3002"))
+							: ""));
 				std::vector<ChatRuntimeResult::TaskDeltaEntry> orderedPreflightTaskDeltas;
 
 				if (forceError) {
@@ -3279,9 +3419,13 @@ namespace blazeclaw::gateway {
 							"Ordered execution preflight failed. Missing targets: " +
 							JoinOrderedTargets(orderedSequencePreflight.missingTargets);
 						assistantText =
-							"Unable to execute the ordered workflow because required step targets are unavailable: " +
-							JoinOrderedTargets(orderedSequencePreflight.missingTargets) +
-							". Please install or enable these skills/tools and retry.";
+							(preferChineseResponse
+								? (Utf8LiteralLocal(u8"\u65E0\u6CD5\u6267\u884C\u6709\u5E8F\u5DE5\u4F5C\u6D41\uFF0C\u4EE5\u4E0B\u6B65\u9AA4\u76EE\u6807\u4E0D\u53EF\u7528\uFF1A") +
+									JoinOrderedTargets(orderedSequencePreflight.missingTargets) +
+									Utf8LiteralLocal(u8"\u3002\u8BF7\u5B89\u88C5\u6216\u542F\u7528\u8FD9\u4E9B\u6280\u80FD/\u5DE5\u5177\u540E\u91CD\u8BD5\u3002"))
+								: (std::string("Unable to execute the ordered workflow because required step targets are unavailable: ") +
+									JoinOrderedTargets(orderedSequencePreflight.missingTargets) +
+									". Please install or enable these skills/tools and retry."));
 
 						auto blockedTaskDeltas = BuildOrderedPreflightTaskDeltas(
 							runId,
