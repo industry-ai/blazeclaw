@@ -369,6 +369,14 @@ namespace blazeclaw::core {
 				lowered.find("brave") != std::string::npos;
 		}
 
+		bool IsSinkToolForAssistantOutput(const std::string& toolName) {
+			const std::string lowered = ToLowerCopy(toolName);
+			return lowered.find("smtp.send") != std::string::npos ||
+				lowered.find("notion.write") != std::string::npos ||
+				(lowered.find("email") != std::string::npos &&
+					lowered.find("send") != std::string::npos);
+		}
+
 		std::string ResolveBindingArgMode(
 			const EmbeddedRuntimeExecutionRequest& request,
 			const std::string& toolName) {
@@ -950,6 +958,7 @@ namespace blazeclaw::core {
 		const std::string query =
 			TryExtractQuoted(request.run.message).value_or(request.run.message);
 		std::string lastOutput;
+		std::string lastRenderableOutput;
 
 		std::unordered_map<std::string, std::size_t> repeatCounts;
 		for (const auto& step : executionPlan) {
@@ -1140,6 +1149,9 @@ namespace blazeclaw::core {
 			}
 
 			lastOutput = execution.result;
+			if (!execution.result.empty() && !IsSinkToolForAssistantOutput(toolName)) {
+				lastRenderableOutput = execution.result;
+			}
 		}
 
 		if (!CompleteRun(queued.runId, kStatusCompleted, CurrentEpochMs())) {
@@ -1156,9 +1168,9 @@ namespace blazeclaw::core {
 			"orchestrated",
 			{},
 			{},
-			lastOutput.empty()
+			(lastRenderableOutput.empty() ? lastOutput : lastRenderableOutput).empty()
 			? "Embedded orchestration completed."
-			: lastOutput);
+			: (lastRenderableOutput.empty() ? lastOutput : lastRenderableOutput));
 		appendDelta(EmbeddedTaskDelta{
 			 .phase = kPhaseFinal,
 				.resultJson = result.assistantText,

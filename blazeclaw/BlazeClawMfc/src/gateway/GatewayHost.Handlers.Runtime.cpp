@@ -1834,13 +1834,13 @@ namespace blazeclaw::gateway {
 
 			const std::string lowerTool = ToLowerCopyLocal(toolId);
 			if (EndsWithLocal(lowerTool, ".search.web")) {
-               const auto compactQuery = DeriveCompactSearchQueryLocal(trimmedMessage);
+				const auto compactQuery = DeriveCompactSearchQueryLocal(trimmedMessage);
 				if (!compactQuery.has_value()) {
 					return false;
 				}
 
 				outArgsJson =
-                    "{\"query\":" + JsonString(compactQuery.value()) +
+					"{\"query\":" + JsonString(compactQuery.value()) +
 					",\"count\":5}";
 				return true;
 			}
@@ -3054,7 +3054,8 @@ namespace blazeclaw::gateway {
 						orderedAllowlistTargets.push_back(resolvedToolId);
 					}
 				}
-				const std::string runtimeMessage = orderedSequencePreflight.enforced
+				const std::string runtimeMessage =
+					(orderedSequencePreflight.enforced && !enforceOrderedAllowlist)
 					? (std::string("Ordered execution steps (preserve order): ") +
 						JoinOrderedResolution(orderedSequencePreflight) +
 						"\n\n" + normalizedMessage)
