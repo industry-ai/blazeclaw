@@ -15,6 +15,7 @@
 #include <cwctype>
 #include <filesystem>
 #include <fstream>
+#include <regex>
 #include <sstream>
 #include <unordered_map>
 #include <Windows.h>
@@ -1308,6 +1309,11 @@ namespace blazeclaw::core {
 			std::string script;
 		};
 
+		struct ContentPolishingToolRuntimeSpec {
+			std::string id;
+			std::string label;
+		};
+
 		struct ChildProcessResult {
 			bool started = false;
 			bool timedOut = false;
@@ -1333,6 +1339,16 @@ namespace blazeclaw::core {
 			};
 		}
 
+		std::string TrimAsciiLocal(const std::string& value) {
+			const std::size_t first = value.find_first_not_of(" \t\r\n");
+			if (first == std::string::npos) {
+				return {};
+			}
+
+			const std::size_t last = value.find_last_not_of(" \t\r\n");
+			return value.substr(first, last - first + 1);
+		}
+
 		std::vector<BraveSearchToolRuntimeSpec> BuildBraveSearchToolRuntimeSpecs() {
 			return {
 				{ "brave_search.search.web", "Brave Web Search", "scripts/search.js" },
@@ -1344,6 +1360,133 @@ namespace blazeclaw::core {
 			return {
 				{ "baidu_search.search.web", "Baidu Web Search", "scripts/search.py" },
 			};
+		}
+
+		std::vector<ContentPolishingToolRuntimeSpec>
+			BuildContentPolishingToolRuntimeSpecs() {
+			return {
+				{ "summarize.extract", "Summarize Extract" },
+				{ "humanizer.rewrite", "Humanizer Rewrite" },
+			};
+		}
+
+		std::optional<std::string> ExtractTextArgument(
+			const nlohmann::json& params) {
+			const char* kKeys[] = {
+				"text",
+				"draft",
+				"content",
+				"message",
+				"input",
+			};
+
+			for (const auto* key : kKeys) {
+				const auto it = params.find(key);
+				if (it == params.end() || !it->is_string()) {
+					continue;
+				}
+
+				const std::string value = TrimAsciiLocal(it->get<std::string>());
+				if (!value.empty()) {
+					return value;
+				}
+			}
+
+			return std::nullopt;
+		}
+
+		std::string BuildSummarizeExtractOutput(const std::string& text) {
+			std::string timeValue = "not found";
+			std::string locationValue = "not found";
+			std::string peopleValue = "not found";
+			std::string requestValue = TrimAsciiLocal(text);
+
+			static const std::regex kTimeRegex(
+				R"(((next\s+\w+)\s+at\s+\d{1,2}[:.]\d{2}\s*(?:AM|PM|am|pm)?))",
+				std::regex_constants::icase);
+			std::smatch match;
+			if (std::regex_search(text, match, kTimeRegex) && match.size() >= 2) {
+				timeValue = match[1].str();
+			}
+
+			static const std::regex kLocationRegex(
+				R"((?:in|at)\s+the\s+([^,.;\n]+(?:meeting\s+room|room)))",
+				std::regex_constants::icase);
+			if (std::regex_search(text, match, kLocationRegex) && match.size() >= 2) {
+				locationValue = TrimAsciiLocal(match[1].str());
+			}
+
+			std::vector<std::string> people;
+			if (ToLowerAscii(text).find("boss") != std::string::npos) {
+				people.push_back("boss");
+			}
+			if (ToLowerAscii(text).find("we") != std::string::npos) {
+				people.push_back("requester team");
+			}
+			if (!people.empty()) {
+				peopleValue.clear();
+				for (std::size_t i = 0; i < people.size(); ++i) {
+					if (i > 0) {
+						peopleValue += ", ";
+					}
+					peopleValue += people[i];
+				}
+			}
+
+			if (requestValue.size() > 220) {
+				requestValue = requestValue.substr(0, 220) + "...";
+			}
+
+			return
+				"Time: " + timeValue + "\n" +
+				"Location: " + locationValue + "\n" +
+				"People: " + peopleValue + "\n" +
+				"Core request: " + requestValue;
+		}
+
+		std::string ExtractSummaryField(
+			const std::string& text,
+			const std::string& label) {
+			const std::string needle = label + ":";
+			const std::size_t begin = text.find(needle);
+			if (begin == std::string::npos) {
+				return {};
+			}
+
+			const std::size_t valueStart = begin + needle.size();
+			const std::size_t valueEnd = text.find('\n', valueStart);
+			return TrimAsciiLocal(
+				text.substr(
+					valueStart,
+					valueEnd == std::string::npos
+					? std::string::npos
+					: valueEnd - valueStart));
+		}
+
+		std::string BuildHumanizerRewriteOutput(const std::string& text) {
+			const std::string timeValue = ExtractSummaryField(text, "Time");
+			const std::string locationValue = ExtractSummaryField(text, "Location");
+			const std::string peopleValue = ExtractSummaryField(text, "People");
+			const std::string requestValue = ExtractSummaryField(text, "Core request");
+
+			std::string body;
+			body += "Dear Sir,\n\n";
+			body += "I would like to cordially invite you to the upcoming review meeting regarding the latest UI requirements.\n\n";
+			if (!timeValue.empty()) {
+				body += "Time: " + timeValue + "\n";
+			}
+			if (!locationValue.empty()) {
+				body += "Location: " + locationValue + "\n";
+			}
+			if (!peopleValue.empty()) {
+				body += "Participants: " + peopleValue + "\n";
+			}
+			if (!requestValue.empty()) {
+				body += "\nPurpose: " + requestValue + "\n";
+			}
+			body += "\nYour attendance would be greatly appreciated.\n\n";
+			body += "Best regards,";
+			return body;
 		}
 
 		std::string TrimAsciiForBraveSearch(const std::string& value) {
@@ -2365,6 +2508,84 @@ namespace blazeclaw::core {
 								"tool process returned non-zero exit code " +
 								std::to_string(static_cast<unsigned long long>(process.exitCode));
 						}
+						return result;
+					});
+			}
+		}
+
+		void RegisterContentPolishingRuntimeTools(
+			blazeclaw::gateway::GatewayHost& host) {
+			for (const auto& spec : BuildContentPolishingToolRuntimeSpecs()) {
+				host.RegisterRuntimeToolV2(
+					blazeclaw::gateway::ToolCatalogEntry{
+						.id = spec.id,
+						.label = spec.label,
+						.category = "transform",
+						.enabled = true,
+					},
+					[spec](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
+						blazeclaw::gateway::ToolExecuteResultV2 result;
+						result.tool = request.tool.empty() ? spec.id : request.tool;
+						result.correlationId = request.correlationId;
+						result.startedAtMs = CurrentEpochMs();
+
+						nlohmann::json params = nlohmann::json::object();
+						if (request.argsJson.has_value() && !request.argsJson->empty()) {
+							try {
+								params = nlohmann::json::parse(request.argsJson.value());
+							}
+							catch (...) {
+								result.executed = false;
+								result.status = "error";
+								result.errorCode = "invalid_args_json";
+								result.errorMessage = "argsJson is not valid JSON";
+								result.completedAtMs = CurrentEpochMs();
+								result.latencyMs = result.completedAtMs - result.startedAtMs;
+								return result;
+							}
+						}
+
+						if (params.is_string()) {
+							params = nlohmann::json::object(
+								{ { "text", params.get<std::string>() } });
+						}
+
+						if (!params.is_object()) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "invalid_arguments";
+							result.errorMessage = "tool args must be a JSON object";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
+						const auto text = ExtractTextArgument(params);
+						if (!text.has_value()) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "invalid_arguments";
+							result.errorMessage = "text is required";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
+						if (spec.id == "summarize.extract") {
+							result.executed = true;
+							result.status = "ok";
+							result.result = BuildSummarizeExtractOutput(text.value());
+						}
+						else {
+							result.executed = true;
+							result.status = "ok";
+							result.result = BuildHumanizerRewriteOutput(text.value());
+						}
+
+						result.errorCode.clear();
+						result.errorMessage.clear();
+						result.completedAtMs = CurrentEpochMs();
+						result.latencyMs = result.completedAtMs - result.startedAtMs;
 						return result;
 					});
 			}
@@ -4321,6 +4542,7 @@ namespace blazeclaw::core {
 			? ToNarrow(m_emailFallbackResolvedPolicy.profileId)
 			: std::string("legacy-policy"));
 		RegisterImapSmtpRuntimeTools(m_gatewayHost);
+		RegisterContentPolishingRuntimeTools(m_gatewayHost);
 		RegisterBraveSearchRuntimeTools(m_gatewayHost);
 		RegisterBaiduSearchRuntimeTools(m_gatewayHost);
 

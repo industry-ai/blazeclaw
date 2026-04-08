@@ -2,6 +2,9 @@
 name: summarize
 description: Summarize or extract text/transcripts from URLs, podcasts, and local files (great fallback for “transcribe this YouTube/video”).
 homepage: https://summarize.sh
+command-dispatch: tool
+command-tool: summarize.extract
+command-arg-mode: raw
 metadata:
   {
     "openclaw":

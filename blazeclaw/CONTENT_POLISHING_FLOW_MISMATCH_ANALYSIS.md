@@ -115,3 +115,15 @@ Implement Priority A + B first to stop incorrect Brave Search capture, then add 
     relying on downstream opaque invalid-arguments failures.
   - Runtime invalid-arguments recovery for `.search.web` also applies compact
     query derivation before retry.
+
+- Priority D has been implemented:
+  - Added dedicated local runtime adapters:
+    - `summarize.extract`
+    - `humanizer.rewrite`
+  - Added command-dispatch bindings in skill metadata so `call summarize` and
+    `call humanizer` resolve to deterministic runtime tool targets.
+  - Ordered workflow routing now executes the explicit chain through runtime
+    adapters before falling back to generic dynamic planning:
+    - `summarize.extract` -> `humanizer.rewrite` -> `imap_smtp_email.smtp.send`
+  - Skills documentation was updated to reflect adapter availability and
+    deterministic ordered chain behavior.

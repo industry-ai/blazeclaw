@@ -155,7 +155,21 @@ documentation lookup and general fact retrieval workflows.
 
 ---
 
-### 5. `humanizer`
+### 5. `summarize`
+
+**Purpose:** Extract structured key points from draft text, URLs, or content
+inputs for downstream rewrite and distribution flows.
+
+**Current state:**
+- Includes local runtime adapter `summarize.extract` for deterministic ordered
+  content-polishing chains.
+
+**Key files:**
+- `summarize/SKILL.md`
+
+---
+
+### 6. `humanizer`
 
 **Purpose:** Rewrites AI-sounding text into natural human-written language using
 Wikipedia AI-writing-pattern guidance.
@@ -165,6 +179,10 @@ Wikipedia AI-writing-pattern guidance.
 - `humanizer/README.md`
 - `humanizer/_meta.json`
 - `humanizer/.clawhub/origin.json`
+
+**Current state:**
+- Includes local runtime adapter `humanizer.rewrite` for deterministic ordered
+  content-polishing chains.
 
 ---
 
@@ -187,6 +205,11 @@ Wikipedia AI-writing-pattern guidance.
     of preflight-resolved tool IDs and executes only those steps in order.
   - Ordered `task-delta` metadata persists both requested aliases and resolved
     tool IDs for plan/preflight visibility.
+  - Content polishing flow commands can resolve deterministic chains through
+    local adapters and execute in order:
+    - `summarize.extract`
+    - `humanizer.rewrite`
+    - `imap_smtp_email.smtp.send`
 - Runtime negative-feedback policy is enabled for `invalid_arguments` tool
   results:
   - retry with reconstructed arguments on the same tool,

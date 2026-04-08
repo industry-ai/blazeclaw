@@ -348,6 +348,10 @@ namespace blazeclaw::core {
 				args["text"] = lastOutput.empty() ? runMessage : lastOutput;
 				args["maxChars"] = 100;
 			}
+			else if (loweredTool.find("humanizer") != std::string::npos ||
+				loweredTool.find("rewrite") != std::string::npos) {
+				args["text"] = lastOutput.empty() ? runMessage : lastOutput;
+			}
 			else if (loweredTool.find("notion") != std::string::npos) {
 				args["page"] = "每日早报";
 				args["content"] = lastOutput.empty() ? runMessage : lastOutput;
