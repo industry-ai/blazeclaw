@@ -87,6 +87,7 @@ protected:
 	UINT_PTR m_bridgeTimerId = 0;
 	bool m_bridgeLastConnected = false;
 	bool m_bridgeLifecycleSent = false;
+	bool m_isPumpingBridgeLifecycle = false;
 	std::string m_bridgeSessionId = "main";
 	std::uint64_t m_bridgeEventSeq = 0;
 	std::uint64_t m_bridgeTraceReqCount = 0;

@@ -1972,6 +1972,24 @@ void CBlazeClawMFCView::PostBridgeLifecycleEvent(
 
 void CBlazeClawMFCView::PumpBridgeLifecycle()
 {
+	if (m_isPumpingBridgeLifecycle)
+	{
+		return;
+	}
+
+	m_isPumpingBridgeLifecycle = true;
+	struct PumpGuard final
+	{
+		CBlazeClawMFCView* view = nullptr;
+		~PumpGuard()
+		{
+			if (view != nullptr)
+			{
+				view->m_isPumpingBridgeLifecycle = false;
+			}
+		}
+	} pumpGuard{ this };
+
 	const auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
 	const bool connected = app != nullptr && app->Services().IsRunning();
 	const std::string provider = (connected && app != nullptr)
@@ -3683,7 +3701,7 @@ void CBlazeClawMFCView::OnDestroy()
 
 void CBlazeClawMFCView::OnTimer(UINT_PTR nIDEvent)
 {
-	if (nIDEvent == m_bridgeTimerId && nIDEvent != 0)
+	if (m_bridgeTimerId != 0 && nIDEvent == m_bridgeTimerId)
 	{
 		PumpBridgeLifecycle();
 	}
