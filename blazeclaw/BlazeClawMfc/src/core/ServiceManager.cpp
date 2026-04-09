@@ -728,7 +728,7 @@ namespace blazeclaw::core {
 
 		void RegisterBaiduSearchRuntimeTools(
 			blazeclaw::gateway::GatewayHost& host,
-			const CServiceBootstrapCoordinator::ToolRuntimePolicySettings& toolPolicy) {
+			const CToolRuntimeRegistry::ToolRuntimePolicySettings& toolPolicy) {
 			const auto skillRoot = toolPolicy.baiduSearchSkillRoot;
 			for (const auto& spec : tools::BuildBaiduSearchToolRuntimeSpecs()) {
 				host.RegisterRuntimeToolV2(
@@ -1015,7 +1015,7 @@ namespace blazeclaw::core {
 
 		void RegisterImapSmtpRuntimeTools(
 			blazeclaw::gateway::GatewayHost& host,
-			const CServiceBootstrapCoordinator::ToolRuntimePolicySettings& toolPolicy) {
+			const CToolRuntimeRegistry::ToolRuntimePolicySettings& toolPolicy) {
 			const auto skillRoot = toolPolicy.imapSmtpSkillRoot;
 			for (const auto& spec : tools::BuildImapSmtpToolRuntimeSpecs()) {
 				host.RegisterRuntimeToolV2(
@@ -1171,7 +1171,7 @@ namespace blazeclaw::core {
 
 		void RegisterBraveSearchRuntimeTools(
 			blazeclaw::gateway::GatewayHost& host,
-			const CServiceBootstrapCoordinator::ToolRuntimePolicySettings& toolPolicy) {
+			const CToolRuntimeRegistry::ToolRuntimePolicySettings& toolPolicy) {
 			const auto skillRoot = toolPolicy.braveSearchSkillRoot;
 			const auto openClawWebBrowsingSkillRoot = toolPolicy.openClawWebBrowsingSkillRoot;
 			const bool enableOpenClawWebBrowsingFallback =
@@ -2637,26 +2637,39 @@ namespace blazeclaw::core {
 			m_emailPolicyRuntimeEnabled
 			? ToNarrow(m_emailFallbackResolvedPolicy.profileId)
 			: std::string("legacy-policy"));
+		const auto toolPolicy =
+			m_serviceBootstrapCoordinator.ResolveToolRuntimePolicySettings();
 		m_toolRuntimeRegistry.RegisterAll(
 			m_gatewayHost,
+			CToolRuntimeRegistry::ToolRuntimePolicySettings{
+				.imapSmtpSkillRoot = toolPolicy.imapSmtpSkillRoot,
+				.baiduSearchSkillRoot = toolPolicy.baiduSearchSkillRoot,
+				.braveSearchSkillRoot = toolPolicy.braveSearchSkillRoot,
+				.openClawWebBrowsingSkillRoot =
+					toolPolicy.openClawWebBrowsingSkillRoot,
+				.braveRequireApiKey = toolPolicy.braveRequireApiKey,
+				.braveApiKeyPresent = toolPolicy.braveApiKeyPresent,
+				.enableOpenClawWebBrowsingFallback =
+					toolPolicy.enableOpenClawWebBrowsingFallback,
+			},
 			CToolRuntimeRegistry::Dependencies{
-			 .registerImapSmtp = [this](blazeclaw::gateway::GatewayHost& host) {
-					const auto toolPolicy =
-						m_serviceBootstrapCoordinator.ResolveToolRuntimePolicySettings();
-					RegisterImapSmtpRuntimeTools(host, toolPolicy);
+				.registerImapSmtp = [](
+					blazeclaw::gateway::GatewayHost& host,
+					const CToolRuntimeRegistry::ToolRuntimePolicySettings& injectedPolicy) {
+					RegisterImapSmtpRuntimeTools(host, injectedPolicy);
 				},
 				.registerContentPolishing = [](blazeclaw::gateway::GatewayHost& host) {
 					RegisterContentPolishingRuntimeTools(host);
 				},
-			  .registerBraveSearch = [this](blazeclaw::gateway::GatewayHost& host) {
-					const auto toolPolicy =
-						m_serviceBootstrapCoordinator.ResolveToolRuntimePolicySettings();
-					RegisterBraveSearchRuntimeTools(host, toolPolicy);
+				.registerBraveSearch = [](
+					blazeclaw::gateway::GatewayHost& host,
+					const CToolRuntimeRegistry::ToolRuntimePolicySettings& injectedPolicy) {
+					RegisterBraveSearchRuntimeTools(host, injectedPolicy);
 				},
-			  .registerBaiduSearch = [this](blazeclaw::gateway::GatewayHost& host) {
-					const auto toolPolicy =
-						m_serviceBootstrapCoordinator.ResolveToolRuntimePolicySettings();
-					RegisterBaiduSearchRuntimeTools(host, toolPolicy);
+				.registerBaiduSearch = [](
+					blazeclaw::gateway::GatewayHost& host,
+					const CToolRuntimeRegistry::ToolRuntimePolicySettings& injectedPolicy) {
+					RegisterBaiduSearchRuntimeTools(host, injectedPolicy);
 				},
 			});
 

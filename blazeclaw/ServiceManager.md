@@ -120,6 +120,11 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
      (`ResolveImapSmtpSkillRoot`, `ResolveBraveSearchSkillRoot`,
       `ResolveOpenClawWebBrowsingSkillRoot`, `ResolveBaiduSearchSkillRoot`,
       `ResolveBraveRequireApiKey`, `HasEnvVarValue`).
+   - ✅ Runtime tool registration compaction aligned to `CToolRuntimeRegistry`
+     policy injection contract.
+   - Added `CToolRuntimeRegistry::ToolRuntimePolicySettings` and updated
+     `RegisterAll(host, toolPolicy, deps)` so policy is injected once and
+     propagated through registry dependencies.
 
 3. **Introduce a `ServiceManagerState` aggregate**
    - Group many related member fields into state structs (hooks state, runtime metrics state, email policy state).
@@ -181,6 +186,8 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
    - ✅ Hooks policy/env resolver cluster extracted to bootstrap policy module.
    - ✅ Non-hooks email policy resolver cluster extracted to bootstrap policy module.
    - ✅ Tool skill-root/env runtime resolver cluster extracted to bootstrap policy module.
+   - ✅ Tool runtime registration policy injection compacted into
+     `CToolRuntimeRegistry` contract path.
 2. Reduce `ServiceManager.h` state surface via grouped aggregates.
 3. Add startup/wiring contract tests (phase-level orchestration coverage).
    - ✅ Implemented for startup phase ordering + failure-path assertions.

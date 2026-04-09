@@ -5,11 +5,12 @@ namespace blazeclaw::core {
 
 	void CToolRuntimeRegistry::RegisterAll(
 		blazeclaw::gateway::GatewayHost& host,
+		const ToolRuntimePolicySettings& toolPolicy,
 		const Dependencies& deps) const
 	{
 		if (deps.registerImapSmtp)
 		{
-			deps.registerImapSmtp(host);
+			deps.registerImapSmtp(host, toolPolicy);
 		}
 		if (deps.registerContentPolishing)
 		{
@@ -17,11 +18,11 @@ namespace blazeclaw::core {
 		}
 		if (deps.registerBraveSearch)
 		{
-			deps.registerBraveSearch(host);
+			deps.registerBraveSearch(host, toolPolicy);
 		}
 		if (deps.registerBaiduSearch)
 		{
-			deps.registerBaiduSearch(host);
+			deps.registerBaiduSearch(host, toolPolicy);
 		}
 	}
 
