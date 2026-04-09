@@ -129,6 +129,13 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
 3. **Introduce a `ServiceManagerState` aggregate**
    - Group many related member fields into state structs (hooks state, runtime metrics state, email policy state).
    - Reduces header bloat and accidental coupling.
+   - ✅ Implemented with grouped state container in `ServiceManager.h`:
+     - `ServiceManagerState::HooksState`
+     - `ServiceManagerState::EmailPolicyState`
+     - `ServiceManagerState::EmbeddedRuntimeState`
+     - `ServiceManagerState::ChatRuntimeState`
+   - `ServiceManager.cpp` now consumes grouped paths via `m_state.*`
+     for hooks/email/embedded/chat-runtime state.
 
 4. **Use constructor-injected module interfaces where practical**
    - Enables easier testing/mocking and clearer dependency boundaries.
@@ -189,6 +196,7 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
    - ✅ Tool runtime registration policy injection compacted into
      `CToolRuntimeRegistry` contract path.
 2. Reduce `ServiceManager.h` state surface via grouped aggregates.
+   - ✅ Implemented via `ServiceManagerState` nested aggregates.
 3. Add startup/wiring contract tests (phase-level orchestration coverage).
    - ✅ Implemented for startup phase ordering + failure-path assertions.
 4. Keep diagnostics regression gate configurable (non-blocking local, strict CI).

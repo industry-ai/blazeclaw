@@ -1647,32 +1647,32 @@ namespace blazeclaw::core {
 				.install = m_skillsInstall,
 				.securityScan = m_skillSecurityScan,
 				.hookExecution = m_hookExecution,
-				.hooksGovernanceReportingEnabled = m_hooksGovernanceReportingEnabled,
-				.hooksLastGovernanceReportPath = m_hooksLastGovernanceReportPath,
-				.hooksGovernanceReportsGenerated = m_hooksGovernanceReportsGenerated,
-				.hooksAutoRemediationEnabled = m_hooksAutoRemediationEnabled,
-				.hooksAutoRemediationRequiresApproval = m_hooksAutoRemediationRequiresApproval,
-				.hooksAutoRemediationExecuted = m_hooksAutoRemediationExecuted,
-				.hooksLastAutoRemediationStatus = m_hooksLastAutoRemediationStatus,
-				.hooksAutoRemediationTenantId = m_hooksAutoRemediationTenantId,
-				.hooksLastAutoRemediationPlaybookPath = m_hooksLastAutoRemediationPlaybookPath,
-				.hooksAutoRemediationTokenMaxAgeMinutes = m_hooksAutoRemediationTokenMaxAgeMinutes,
-				.hooksAutoRemediationTokenRotations = m_hooksAutoRemediationTokenRotations,
-				.hooksLastRemediationTelemetryPath = m_hooksLastRemediationTelemetryPath,
-				.hooksLastRemediationAuditPath = m_hooksLastRemediationAuditPath,
-				.hooksRemediationSloStatus = m_hooksRemediationSloStatus,
-				.hooksRemediationSloMaxDriftDetected = m_hooksRemediationSloMaxDriftDetected,
-				.hooksRemediationSloMaxPolicyBlocked = m_hooksRemediationSloMaxPolicyBlocked,
-				.hooksLastComplianceAttestationPath = m_hooksLastComplianceAttestationPath,
-				.hooksEnterpriseSlaPolicyId = m_hooksEnterpriseSlaPolicyId,
+				.hooksGovernanceReportingEnabled = m_state.hooks.governanceReportingEnabled,
+				.hooksLastGovernanceReportPath = m_state.hooks.lastGovernanceReportPath,
+				.hooksGovernanceReportsGenerated = m_state.hooks.governanceReportsGenerated,
+				.hooksAutoRemediationEnabled = m_state.hooks.autoRemediationEnabled,
+				.hooksAutoRemediationRequiresApproval = m_state.hooks.autoRemediationRequiresApproval,
+				.hooksAutoRemediationExecuted = m_state.hooks.autoRemediationExecuted,
+				.hooksLastAutoRemediationStatus = m_state.hooks.lastAutoRemediationStatus,
+				.hooksAutoRemediationTenantId = m_state.hooks.autoRemediationTenantId,
+				.hooksLastAutoRemediationPlaybookPath = m_state.hooks.lastAutoRemediationPlaybookPath,
+				.hooksAutoRemediationTokenMaxAgeMinutes = m_state.hooks.autoRemediationTokenMaxAgeMinutes,
+				.hooksAutoRemediationTokenRotations = m_state.hooks.autoRemediationTokenRotations,
+				.hooksLastRemediationTelemetryPath = m_state.hooks.lastRemediationTelemetryPath,
+				.hooksLastRemediationAuditPath = m_state.hooks.lastRemediationAuditPath,
+				.hooksRemediationSloStatus = m_state.hooks.remediationSloStatus,
+				.hooksRemediationSloMaxDriftDetected = m_state.hooks.remediationSloMaxDriftDetected,
+				.hooksRemediationSloMaxPolicyBlocked = m_state.hooks.remediationSloMaxPolicyBlocked,
+				.hooksLastComplianceAttestationPath = m_state.hooks.lastComplianceAttestationPath,
+				.hooksEnterpriseSlaPolicyId = m_state.hooks.enterpriseSlaPolicyId,
 				.hooksCrossTenantAttestationAggregationEnabled =
-					m_hooksCrossTenantAttestationAggregationEnabled,
+					m_state.hooks.crossTenantAttestationAggregationEnabled,
 				.hooksCrossTenantAttestationAggregationStatus =
-					m_hooksCrossTenantAttestationAggregationStatus,
+					m_state.hooks.crossTenantAttestationAggregationStatus,
 				.hooksCrossTenantAttestationAggregationCount =
-					m_hooksCrossTenantAttestationAggregationCount,
+					m_state.hooks.crossTenantAttestationAggregationCount,
 				.hooksLastCrossTenantAttestationAggregationPath =
-					m_hooksLastCrossTenantAttestationAggregationPath,
+					m_state.hooks.lastCrossTenantAttestationAggregationPath,
 			},
 			[this](
 				const SkillsCatalogEntry& entry,
@@ -1878,7 +1878,7 @@ namespace blazeclaw::core {
 				.watch = m_skillsWatch,
 			 .workspaceRoot = ResolveWorkspaceRootForSkills(
 					std::filesystem::current_path()),
-				.hooksFallbackPromptInjection = m_hooksFallbackPromptInjection,
+				.hooksFallbackPromptInjection = m_state.hooks.fallbackPromptInjection,
 			});
 	}
 
@@ -1906,71 +1906,71 @@ namespace blazeclaw::core {
 			: ToNarrow(config.chat.activeModel);
 		const auto hooksPolicy =
 			m_serviceBootstrapCoordinator.ResolveHooksPolicySettings(m_activeConfig);
-		m_hooksEngineEnabled = hooksPolicy.engineEnabled;
-		m_hooksFallbackPromptInjection = hooksPolicy.fallbackPromptInjection;
-		m_hooksReminderEnabled = hooksPolicy.reminderEnabled;
-		m_hooksReminderVerbosity = hooksPolicy.reminderVerbosity;
-		m_hooksAllowedPackages = hooksPolicy.allowedPackages;
-		m_hooksStrictPolicyEnforcement = hooksPolicy.strictPolicyEnforcement;
-		m_hooksGovernanceReportingEnabled =
+		m_state.hooks.engineEnabled = hooksPolicy.engineEnabled;
+		m_state.hooks.fallbackPromptInjection = hooksPolicy.fallbackPromptInjection;
+		m_state.hooks.reminderEnabled = hooksPolicy.reminderEnabled;
+		m_state.hooks.reminderVerbosity = hooksPolicy.reminderVerbosity;
+		m_state.hooks.allowedPackages = hooksPolicy.allowedPackages;
+		m_state.hooks.strictPolicyEnforcement = hooksPolicy.strictPolicyEnforcement;
+		m_state.hooks.governanceReportingEnabled =
 			hooksPolicy.governanceReportingEnabled;
-		m_hooksGovernanceReportDir = hooksPolicy.governanceReportDir;
-		m_hooksAutoRemediationEnabled = hooksPolicy.autoRemediationEnabled;
-		m_hooksAutoRemediationRequiresApproval =
+		m_state.hooks.governanceReportDir = hooksPolicy.governanceReportDir;
+		m_state.hooks.autoRemediationEnabled = hooksPolicy.autoRemediationEnabled;
+		m_state.hooks.autoRemediationRequiresApproval =
 			hooksPolicy.autoRemediationRequiresApproval;
-		m_hooksAutoRemediationApprovalToken =
+		m_state.hooks.autoRemediationApprovalToken =
 			hooksPolicy.autoRemediationApprovalToken;
-		m_hooksAutoRemediationTenantId = hooksPolicy.autoRemediationTenantId;
-		m_hooksAutoRemediationPlaybookDir =
+		m_state.hooks.autoRemediationTenantId = hooksPolicy.autoRemediationTenantId;
+		m_state.hooks.autoRemediationPlaybookDir =
 			hooksPolicy.autoRemediationPlaybookDir;
-		m_hooksAutoRemediationTokenMaxAgeMinutes =
+		m_state.hooks.autoRemediationTokenMaxAgeMinutes =
 			hooksPolicy.autoRemediationTokenMaxAgeMinutes;
-		m_hooksRemediationTelemetryEnabled =
+		m_state.hooks.remediationTelemetryEnabled =
 			hooksPolicy.remediationTelemetryEnabled;
-		m_hooksRemediationTelemetryDir = hooksPolicy.remediationTelemetryDir;
-		m_hooksRemediationAuditEnabled = hooksPolicy.remediationAuditEnabled;
-		m_hooksRemediationAuditDir = hooksPolicy.remediationAuditDir;
-		m_hooksRemediationSloMaxDriftDetected =
+		m_state.hooks.remediationTelemetryDir = hooksPolicy.remediationTelemetryDir;
+		m_state.hooks.remediationAuditEnabled = hooksPolicy.remediationAuditEnabled;
+		m_state.hooks.remediationAuditDir = hooksPolicy.remediationAuditDir;
+		m_state.hooks.remediationSloMaxDriftDetected =
 			hooksPolicy.remediationSloMaxDriftDetected;
-		m_hooksRemediationSloMaxPolicyBlocked =
+		m_state.hooks.remediationSloMaxPolicyBlocked =
 			hooksPolicy.remediationSloMaxPolicyBlocked;
-		m_hooksComplianceAttestationEnabled =
+		m_state.hooks.complianceAttestationEnabled =
 			hooksPolicy.complianceAttestationEnabled;
-		m_hooksComplianceAttestationDir = hooksPolicy.complianceAttestationDir;
-		m_hooksEnterpriseSlaGovernanceEnabled =
+		m_state.hooks.complianceAttestationDir = hooksPolicy.complianceAttestationDir;
+		m_state.hooks.enterpriseSlaGovernanceEnabled =
 			hooksPolicy.enterpriseSlaGovernanceEnabled;
-		m_hooksEnterpriseSlaPolicyId = hooksPolicy.enterpriseSlaPolicyId;
-		m_hooksCrossTenantAttestationAggregationEnabled =
+		m_state.hooks.enterpriseSlaPolicyId = hooksPolicy.enterpriseSlaPolicyId;
+		m_state.hooks.crossTenantAttestationAggregationEnabled =
 			hooksPolicy.crossTenantAttestationAggregationEnabled;
-		m_hooksCrossTenantAttestationAggregationDir =
+		m_state.hooks.crossTenantAttestationAggregationDir =
 			hooksPolicy.crossTenantAttestationAggregationDir;
-		m_hooksGovernanceReportsGenerated = 0;
-		m_hooksLastGovernanceReportPath.clear();
-		m_hooksAutoRemediationExecuted = 0;
-		m_hooksLastAutoRemediationStatus = L"idle";
-		m_hooksLastAutoRemediationPlaybookPath.clear();
-		m_hooksAutoRemediationTokenRotations = 0;
-		m_hooksLastRemediationTelemetryPath.clear();
-		m_hooksLastRemediationAuditPath.clear();
-		m_hooksRemediationSloStatus = L"unknown";
-		m_hooksLastComplianceAttestationPath.clear();
-		m_hooksLastCrossTenantAttestationAggregationPath.clear();
-		m_hooksCrossTenantAttestationAggregationCount = 0;
-		m_hooksCrossTenantAttestationAggregationStatus = L"idle";
+		m_state.hooks.governanceReportsGenerated = 0;
+		m_state.hooks.lastGovernanceReportPath.clear();
+		m_state.hooks.autoRemediationExecuted = 0;
+		m_state.hooks.lastAutoRemediationStatus = L"idle";
+		m_state.hooks.lastAutoRemediationPlaybookPath.clear();
+		m_state.hooks.autoRemediationTokenRotations = 0;
+		m_state.hooks.lastRemediationTelemetryPath.clear();
+		m_state.hooks.lastRemediationAuditPath.clear();
+		m_state.hooks.remediationSloStatus = L"unknown";
+		m_state.hooks.lastComplianceAttestationPath.clear();
+		m_state.hooks.lastCrossTenantAttestationAggregationPath.clear();
+		m_state.hooks.crossTenantAttestationAggregationCount = 0;
+		m_state.hooks.crossTenantAttestationAggregationStatus = L"idle";
 
 		const auto emailPolicy =
 			m_serviceBootstrapCoordinator.ResolveEmailPolicySettings(m_activeConfig);
 		m_emailFallbackResolvedPolicy = ResolveEmailFallbackPolicy(
 			L"email.schedule",
 			L"email.send");
-		m_emailPolicyRolloutMode = emailPolicy.rolloutMode;
-		m_emailPolicyEnforceChannel = emailPolicy.enforceChannel;
-		m_emailPolicyRollbackBridgeEnabled = emailPolicy.rollbackBridgeEnabled;
-		m_emailPolicyCanaryEligible = emailPolicy.canaryEligible;
-		m_emailPolicyRuntimeEnabled = emailPolicy.runtimeEnabled;
-		m_emailPolicyRuntimeEnforce = emailPolicy.runtimeEnforce;
+		m_state.emailPolicy.rolloutMode = emailPolicy.rolloutMode;
+		m_state.emailPolicy.enforceChannel = emailPolicy.enforceChannel;
+		m_state.emailPolicy.rollbackBridgeEnabled = emailPolicy.rollbackBridgeEnabled;
+		m_state.emailPolicy.canaryEligible = emailPolicy.canaryEligible;
+		m_state.emailPolicy.runtimeEnabled = emailPolicy.runtimeEnabled;
+		m_state.emailPolicy.runtimeEnforce = emailPolicy.runtimeEnforce;
 
-		if (m_emailPolicyRuntimeEnabled &&
+		if (m_state.emailPolicy.runtimeEnabled &&
 			!m_activeConfig.email.policyProfiles.enabled) {
 			m_skillsCatalog.diagnostics.warnings.push_back(
 				L"email policy rollout gate activated runtime policy profile monitor/enforce mode.");
@@ -1980,7 +1980,7 @@ namespace blazeclaw::core {
 
 	void ServiceManager::InitializeModules()
 	{
-		m_selfEvolvingHookTriggered = false;
+		m_state.hooks.selfEvolvingHookTriggered = false;
 		m_agentsScope = m_agentsCatalogService.BuildSnapshot(
 			std::filesystem::current_path(),
 			m_activeConfig);
@@ -2102,30 +2102,30 @@ namespace blazeclaw::core {
 		m_retrievalMemory = m_retrievalMemoryService.Snapshot();
 		m_piEmbeddedService.Configure(m_activeConfig);
 		AppendStartupTrace("ServiceManager.Start.retrieval.ready");
-		m_embeddedDynamicLoopCanaryProviders = ParseCsvEnvValues(
+		m_state.embeddedRuntime.dynamicLoopCanaryProviders = ParseCsvEnvValues(
 			L"BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_CANARY_PROVIDERS");
-		m_embeddedDynamicLoopCanarySessions = ParseCsvEnvValues(
+		m_state.embeddedRuntime.dynamicLoopCanarySessions = ParseCsvEnvValues(
 			L"BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_CANARY_SESSIONS");
-		m_embeddedDynamicLoopPromotionMinRuns = ParseUInt64EnvValue(
+		m_state.embeddedRuntime.dynamicLoopPromotionMinRuns = ParseUInt64EnvValue(
 			L"BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_PROMOTION_MIN_RUNS",
 			20);
-		m_embeddedDynamicLoopPromotionMinSuccessRate = ParseDoubleEnvValue(
+		m_state.embeddedRuntime.dynamicLoopPromotionMinSuccessRate = ParseDoubleEnvValue(
 			L"BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_PROMOTION_MIN_SUCCESS_RATE",
 			0.95);
-		m_embeddedRunSuccessCount = 0;
-		m_embeddedRunFailureCount = 0;
-		m_embeddedRunTimeoutCount = 0;
-		m_embeddedRunCancelledCount = 0;
-		m_embeddedRunFallbackCount = 0;
-		m_embeddedTaskDeltaTransitionCount = 0;
-		m_emailFallbackAttemptCount = 0;
-		m_emailFallbackSuccessCount = 0;
-		m_emailFallbackFailureCount = 0;
-		m_lastEmbeddedDynamicLoopEnabled = false;
-		m_lastEmbeddedCanaryEligible = false;
-		m_lastEmbeddedPromotionReady = false;
-		m_lastEmbeddedFallbackUsed = false;
-		m_lastEmbeddedFallbackReason.clear();
+		m_state.embeddedRuntime.runSuccessCount = 0;
+		m_state.embeddedRuntime.runFailureCount = 0;
+		m_state.embeddedRuntime.runTimeoutCount = 0;
+		m_state.embeddedRuntime.runCancelledCount = 0;
+		m_state.embeddedRuntime.runFallbackCount = 0;
+		m_state.embeddedRuntime.taskDeltaTransitionCount = 0;
+		m_state.embeddedRuntime.emailFallbackAttemptCount = 0;
+		m_state.embeddedRuntime.emailFallbackSuccessCount = 0;
+		m_state.embeddedRuntime.emailFallbackFailureCount = 0;
+		m_state.embeddedRuntime.lastDynamicLoopEnabled = false;
+		m_state.embeddedRuntime.lastCanaryEligible = false;
+		m_state.embeddedRuntime.lastPromotionReady = false;
+		m_state.embeddedRuntime.lastFallbackUsed = false;
+		m_state.embeddedRuntime.lastFallbackReason.clear();
 		const auto runtimeQueueSettings =
 			m_serviceBootstrapCoordinator.ResolveRuntimeQueueSettings(
 				[](const wchar_t* key, const bool fallback)
@@ -2138,9 +2138,9 @@ namespace blazeclaw::core {
 				},
 				kChatRuntimeQueueWaitTimeoutMs,
 				kChatRuntimeExecutionTimeoutMs);
-		m_chatRuntimeAsyncQueueEnabled = runtimeQueueSettings.asyncQueueEnabled;
-		m_chatRuntimeQueueWaitTimeoutMs = runtimeQueueSettings.queueWaitTimeoutMs;
-		m_chatRuntimeExecutionTimeoutMs = runtimeQueueSettings.executionTimeoutMs;
+		m_state.chatRuntime.asyncQueueEnabled = runtimeQueueSettings.asyncQueueEnabled;
+		m_state.chatRuntime.queueWaitTimeoutMs = runtimeQueueSettings.queueWaitTimeoutMs;
+		m_state.chatRuntime.executionTimeoutMs = runtimeQueueSettings.executionTimeoutMs;
 		m_chatRuntime.Initialize(
 			CChatRuntime::Dependencies{
 				.isRunCancelled = [this](
@@ -2209,15 +2209,15 @@ namespace blazeclaw::core {
 			},
 			CChatRuntime::Config{
 				.queueCapacity = kChatRuntimeQueueCapacity,
-				.queueWaitTimeoutMs = m_chatRuntimeQueueWaitTimeoutMs,
-				.executionTimeoutMs = m_chatRuntimeExecutionTimeoutMs,
-				.asyncQueueEnabled = m_chatRuntimeAsyncQueueEnabled,
+				.queueWaitTimeoutMs = m_state.chatRuntime.queueWaitTimeoutMs,
+				.executionTimeoutMs = m_state.chatRuntime.executionTimeoutMs,
+				.asyncQueueEnabled = m_state.chatRuntime.asyncQueueEnabled,
 				.errorQueueFull = runtime::contracts::kErrorQueueFull,
 				.errorCancelled = runtime::contracts::kErrorCancelled,
 				.errorTimedOut = runtime::contracts::kErrorTimedOut,
 				.errorWorkerUnavailable = runtime::contracts::kErrorWorkerUnavailable,
 			});
-		if (m_chatRuntimeAsyncQueueEnabled) {
+		if (m_state.chatRuntime.asyncQueueEnabled) {
 			const bool chatRuntimeWorkerStarted = m_chatRuntime.StartWorker();
 			if (!chatRuntimeWorkerStarted) {
 				TRACE(
@@ -2252,7 +2252,7 @@ namespace blazeclaw::core {
 				m_skillsEligibility,
 				m_activeConfig,
 				std::nullopt,
-				m_hooksFallbackPromptInjection);
+				m_state.hooks.fallbackPromptInjection);
 			m_hookEvents = m_hookEventService.Snapshot();
 			m_skillsCommands = m_skillsCommandService.BuildSnapshot(
 				m_skillsCatalog,
@@ -2279,11 +2279,11 @@ namespace blazeclaw::core {
 					L"hooks-event emission failed: " + hookEventError);
 			}
 
-			if (m_hooksEngineEnabled && emittedBootstrapEvent && !m_hookEvents.events.empty()) {
+			if (m_state.hooks.engineEnabled && emittedBootstrapEvent && !m_hookEvents.events.empty()) {
 				std::wstring dispatchError;
 				const auto& latestEvent = m_hookEvents.events.back();
 				HookLifecycleEvent eventForDispatch = latestEvent;
-				if (m_hooksReminderVerbosity == L"detailed") {
+				if (m_state.hooks.reminderVerbosity == L"detailed") {
 					eventForDispatch.bootstrapFiles.push_back(
 						HookBootstrapFile{ .path = L"HOOK_RUNTIME_DETAILED_CONTEXT.md", .virtualFile = true });
 				}
@@ -2291,10 +2291,10 @@ namespace blazeclaw::core {
 					eventForDispatch,
 					m_hookCatalog,
 					HookExecutionPolicy{
-						.reminderEnabled = m_hooksReminderEnabled,
-						.reminderVerbosity = m_hooksReminderVerbosity,
-						.allowedPackages = m_hooksAllowedPackages,
-						.strictPolicyEnforcement = m_hooksStrictPolicyEnforcement },
+						.reminderEnabled = m_state.hooks.reminderEnabled,
+						.reminderVerbosity = m_state.hooks.reminderVerbosity,
+						.allowedPackages = m_state.hooks.allowedPackages,
+						.strictPolicyEnforcement = m_state.hooks.strictPolicyEnforcement },
 						dispatchError) &&
 						!dispatchError.empty()) {
 					m_skillsCatalog.diagnostics.warnings.push_back(
@@ -2305,60 +2305,60 @@ namespace blazeclaw::core {
 				m_skillsHooksCoordinator.EmitGovernanceAndRemediation(
 					HooksGovernanceEmitter::GovernanceContext{
 						.execution = m_hookExecution,
-						.governanceReportingEnabled = m_hooksGovernanceReportingEnabled,
-						.governanceReportDir = m_hooksGovernanceReportDir,
-						.allowedPackages = m_hooksAllowedPackages,
-						.strictPolicyEnforcement = m_hooksStrictPolicyEnforcement,
-						.governanceReportsGenerated = m_hooksGovernanceReportsGenerated,
-						.lastGovernanceReportPath = m_hooksLastGovernanceReportPath,
+						.governanceReportingEnabled = m_state.hooks.governanceReportingEnabled,
+						.governanceReportDir = m_state.hooks.governanceReportDir,
+						.allowedPackages = m_state.hooks.allowedPackages,
+						.strictPolicyEnforcement = m_state.hooks.strictPolicyEnforcement,
+						.governanceReportsGenerated = m_state.hooks.governanceReportsGenerated,
+						.lastGovernanceReportPath = m_state.hooks.lastGovernanceReportPath,
 					},
 					HooksGovernanceEmitter::RemediationContext{
 						.execution = m_hookExecution,
-						.autoRemediationEnabled = m_hooksAutoRemediationEnabled,
-						.autoRemediationTenantId = m_hooksAutoRemediationTenantId,
+						.autoRemediationEnabled = m_state.hooks.autoRemediationEnabled,
+						.autoRemediationTenantId = m_state.hooks.autoRemediationTenantId,
 						.autoRemediationPlaybookDir =
-							m_hooksAutoRemediationPlaybookDir,
+							m_state.hooks.autoRemediationPlaybookDir,
 						.autoRemediationTokenMaxAgeMinutes =
-							m_hooksAutoRemediationTokenMaxAgeMinutes,
+							m_state.hooks.autoRemediationTokenMaxAgeMinutes,
 						.autoRemediationApprovalToken =
-							m_hooksAutoRemediationApprovalToken,
+							m_state.hooks.autoRemediationApprovalToken,
 						.autoRemediationTokenRotations =
-							m_hooksAutoRemediationTokenRotations,
+							m_state.hooks.autoRemediationTokenRotations,
 						.remediationTelemetryEnabled =
-							m_hooksRemediationTelemetryEnabled,
-						.remediationTelemetryDir = m_hooksRemediationTelemetryDir,
-						.remediationAuditEnabled = m_hooksRemediationAuditEnabled,
-						.remediationAuditDir = m_hooksRemediationAuditDir,
+							m_state.hooks.remediationTelemetryEnabled,
+						.remediationTelemetryDir = m_state.hooks.remediationTelemetryDir,
+						.remediationAuditEnabled = m_state.hooks.remediationAuditEnabled,
+						.remediationAuditDir = m_state.hooks.remediationAuditDir,
 						.remediationSloMaxDriftDetected =
-							m_hooksRemediationSloMaxDriftDetected,
+							m_state.hooks.remediationSloMaxDriftDetected,
 						.remediationSloMaxPolicyBlocked =
-							m_hooksRemediationSloMaxPolicyBlocked,
+							m_state.hooks.remediationSloMaxPolicyBlocked,
 						.complianceAttestationEnabled =
-							m_hooksComplianceAttestationEnabled,
+							m_state.hooks.complianceAttestationEnabled,
 						.complianceAttestationDir =
-							m_hooksComplianceAttestationDir,
-						.enterpriseSlaPolicyId = m_hooksEnterpriseSlaPolicyId,
+							m_state.hooks.complianceAttestationDir,
+						.enterpriseSlaPolicyId = m_state.hooks.enterpriseSlaPolicyId,
 						.crossTenantAttestationAggregationEnabled =
-							m_hooksCrossTenantAttestationAggregationEnabled,
+							m_state.hooks.crossTenantAttestationAggregationEnabled,
 						.crossTenantAttestationAggregationDir =
-							m_hooksCrossTenantAttestationAggregationDir,
-						.lastGovernanceReportPath = m_hooksLastGovernanceReportPath,
+							m_state.hooks.crossTenantAttestationAggregationDir,
+						.lastGovernanceReportPath = m_state.hooks.lastGovernanceReportPath,
 						.lastAutoRemediationPlaybookPath =
-							m_hooksLastAutoRemediationPlaybookPath,
+							m_state.hooks.lastAutoRemediationPlaybookPath,
 						.lastAutoRemediationStatus =
-							m_hooksLastAutoRemediationStatus,
+							m_state.hooks.lastAutoRemediationStatus,
 						.lastRemediationTelemetryPath =
-							m_hooksLastRemediationTelemetryPath,
-						.lastRemediationAuditPath = m_hooksLastRemediationAuditPath,
-						.remediationSloStatus = m_hooksRemediationSloStatus,
+							m_state.hooks.lastRemediationTelemetryPath,
+						.lastRemediationAuditPath = m_state.hooks.lastRemediationAuditPath,
+						.remediationSloStatus = m_state.hooks.remediationSloStatus,
 						.lastComplianceAttestationPath =
-							m_hooksLastComplianceAttestationPath,
+							m_state.hooks.lastComplianceAttestationPath,
 						.crossTenantAttestationAggregationCount =
-							m_hooksCrossTenantAttestationAggregationCount,
+							m_state.hooks.crossTenantAttestationAggregationCount,
 						.crossTenantAttestationAggregationStatus =
-							m_hooksCrossTenantAttestationAggregationStatus,
+							m_state.hooks.crossTenantAttestationAggregationStatus,
 						.lastCrossTenantAttestationAggregationPath =
-							m_hooksLastCrossTenantAttestationAggregationPath,
+							m_state.hooks.lastCrossTenantAttestationAggregationPath,
 					},
 					m_skillsCatalog.diagnostics.warnings);
 				auto hookBootstrapProjection =
@@ -2373,12 +2373,12 @@ namespace blazeclaw::core {
 							m_hookExecution.diagnostics.lastReminderState,
 						.lastReminderReason =
 							m_hookExecution.diagnostics.lastReminderReason,
-						.selfEvolvingHookTriggered = m_selfEvolvingHookTriggered,
+						.selfEvolvingHookTriggered = m_state.hooks.selfEvolvingHookTriggered,
 				};
 				m_skillsHooksCoordinator.ApplyHookBootstrapProjection(
 					hookBootstrapProjection);
 			}
-			else if (!m_hooksEngineEnabled) {
+			else if (!m_state.hooks.engineEnabled) {
 				++m_hookExecution.diagnostics.skippedCount;
 				m_hookExecution.diagnostics.lastReminderState = L"reminder_skipped";
 				m_hookExecution.diagnostics.lastReminderReason = L"hook_engine_disabled";
@@ -2614,8 +2614,8 @@ namespace blazeclaw::core {
 			ToNarrow(m_activeConfig.embedded.orchestrationPath));
 		m_gatewayHost.SetEmailFallbackRuntimeFlags(
 			m_activeConfig.email.preflight.enabled,
-			m_emailPolicyRuntimeEnabled,
-			m_emailPolicyRuntimeEnforce);
+			m_state.emailPolicy.runtimeEnabled,
+			m_state.emailPolicy.runtimeEnforce);
 		std::vector<std::string> resolvedBackends;
 		resolvedBackends.reserve(m_emailFallbackResolvedPolicy.backends.size());
 		for (const auto& backend : m_emailFallbackResolvedPolicy.backends) {
@@ -2626,15 +2626,15 @@ namespace blazeclaw::core {
 			ToNarrow(m_emailFallbackResolvedPolicy.onUnavailable),
 			ToNarrow(m_emailFallbackResolvedPolicy.onAuthError),
 			ToNarrow(m_emailFallbackResolvedPolicy.onExecError),
-			m_emailPolicyRuntimeEnabled
+			m_state.emailPolicy.runtimeEnabled
 			? m_emailFallbackResolvedPolicy.retryMaxAttempts
 			: std::uint32_t{ 1 },
-			m_emailPolicyRuntimeEnabled
+			m_state.emailPolicy.runtimeEnabled
 			? m_emailFallbackResolvedPolicy.retryDelayMs
 			: std::uint32_t{ 0 },
 			m_emailFallbackResolvedPolicy.requiresApproval,
 			m_emailFallbackResolvedPolicy.approvalTokenTtlMinutes,
-			m_emailPolicyRuntimeEnabled
+			m_state.emailPolicy.runtimeEnabled
 			? ToNarrow(m_emailFallbackResolvedPolicy.profileId)
 			: std::string("legacy-policy"));
 		const auto toolPolicy =
@@ -2726,11 +2726,11 @@ namespace blazeclaw::core {
 					const bool enableEmbeddedDynamicLoop =
 						m_activeConfig.embedded.dynamicToolLoopEnabled &&
 						(canaryEligible || promotionReady);
-					m_lastEmbeddedDynamicLoopEnabled = enableEmbeddedDynamicLoop;
-					m_lastEmbeddedCanaryEligible = canaryEligible;
-					m_lastEmbeddedPromotionReady = promotionReady;
-					m_lastEmbeddedFallbackUsed = false;
-					m_lastEmbeddedFallbackReason.clear();
+					m_state.embeddedRuntime.lastDynamicLoopEnabled = enableEmbeddedDynamicLoop;
+					m_state.embeddedRuntime.lastCanaryEligible = canaryEligible;
+					m_state.embeddedRuntime.lastPromotionReady = promotionReady;
+					m_state.embeddedRuntime.lastFallbackUsed = false;
+					m_state.embeddedRuntime.lastFallbackReason.clear();
 
 					const auto embeddedExecution = m_piEmbeddedService.ExecuteRun(
 						EmbeddedRuntimeExecutionRequest{
@@ -2800,32 +2800,32 @@ namespace blazeclaw::core {
 								});
 						}
 
-						m_embeddedTaskDeltaTransitionCount +=
+						m_state.embeddedRuntime.taskDeltaTransitionCount +=
 							static_cast<std::uint64_t>(embeddedExecution.taskDeltas.size());
 						if (embeddedExecution.success) {
-							++m_embeddedRunSuccessCount;
+							++m_state.embeddedRuntime.runSuccessCount;
 						}
 						else {
-							++m_embeddedRunFailureCount;
+							++m_state.embeddedRuntime.runFailureCount;
 						}
 
 						const std::string normalizedEmbeddedError =
 							ToLowerAscii(embeddedExecution.errorCode);
 						if (normalizedEmbeddedError == "embedded_deadline_exceeded") {
-							++m_embeddedRunTimeoutCount;
+							++m_state.embeddedRuntime.runTimeoutCount;
 						}
 
 						if (normalizedEmbeddedError == "embedded_run_cancelled") {
-							++m_embeddedRunCancelledCount;
+							++m_state.embeddedRuntime.runCancelledCount;
 						}
 
 						if (!embeddedExecution.success) {
 							if (ShouldFallbackFromEmbeddedFailure(
 								embeddedExecution.errorCode,
 								embeddedExecution.reason)) {
-								m_lastEmbeddedFallbackUsed = true;
-								++m_embeddedRunFallbackCount;
-								m_lastEmbeddedFallbackReason = embeddedExecution.errorCode.empty()
+								m_state.embeddedRuntime.lastFallbackUsed = true;
+								++m_state.embeddedRuntime.runFallbackCount;
+								m_state.embeddedRuntime.lastFallbackReason = embeddedExecution.errorCode.empty()
 									? embeddedExecution.reason
 									: embeddedExecution.errorCode;
 							}
@@ -3299,7 +3299,7 @@ namespace blazeclaw::core {
 
 	void ServiceManager::Stop() {
 		m_skillsEnvOverrideService.RevertAll();
-		if (m_chatRuntimeAsyncQueueEnabled) {
+		if (m_state.chatRuntime.asyncQueueEnabled) {
 			m_chatRuntime.StopWorker();
 		}
 		m_gatewayHost.Stop();
@@ -3425,12 +3425,12 @@ namespace blazeclaw::core {
 		snapshot.emailPreflightEnabled = m_activeConfig.email.preflight.enabled;
 		snapshot.emailPolicyProfilesEnabled = m_activeConfig.email.policyProfiles.enabled;
 		snapshot.emailPolicyProfilesEnforce = m_activeConfig.email.policyProfiles.enforce;
-		snapshot.emailPolicyProfilesRuntimeEnabled = m_emailPolicyRuntimeEnabled;
-		snapshot.emailPolicyProfilesRuntimeEnforce = m_emailPolicyRuntimeEnforce;
-		snapshot.emailPolicyRolloutMode = ToNarrow(m_emailPolicyRolloutMode);
-		snapshot.emailPolicyEnforceChannel = ToNarrow(m_emailPolicyEnforceChannel);
-		snapshot.emailPolicyCanaryEligible = m_emailPolicyCanaryEligible;
-		snapshot.emailRollbackBridgeEnabled = m_emailPolicyRollbackBridgeEnabled;
+		snapshot.emailPolicyProfilesRuntimeEnabled = m_state.emailPolicy.runtimeEnabled;
+		snapshot.emailPolicyProfilesRuntimeEnforce = m_state.emailPolicy.runtimeEnforce;
+		snapshot.emailPolicyRolloutMode = ToNarrow(m_state.emailPolicy.rolloutMode);
+		snapshot.emailPolicyEnforceChannel = ToNarrow(m_state.emailPolicy.enforceChannel);
+		snapshot.emailPolicyCanaryEligible = m_state.emailPolicy.canaryEligible;
+		snapshot.emailRollbackBridgeEnabled = m_state.emailPolicy.rollbackBridgeEnabled;
 		snapshot.emailResolvedPolicyId = ToNarrow(m_emailFallbackResolvedPolicy.profileId);
 		for (const auto& backend : m_emailFallbackResolvedPolicy.backends) {
 			snapshot.emailResolvedBackends.push_back(ToNarrow(backend));
@@ -3455,10 +3455,10 @@ namespace blazeclaw::core {
 				++snapshot.emailProbeUnavailableCount;
 			}
 		}
-		snapshot.emailFallbackAttempts = m_embeddedRunFallbackCount;
+		snapshot.emailFallbackAttempts = m_state.embeddedRuntime.runFallbackCount;
 		snapshot.emailFallbackSuccess =
-			snapshot.emailFallbackAttempts >= m_embeddedRunFailureCount
-			? (snapshot.emailFallbackAttempts - m_embeddedRunFailureCount)
+			snapshot.emailFallbackAttempts >= m_state.embeddedRuntime.runFailureCount
+			? (snapshot.emailFallbackAttempts - m_state.embeddedRuntime.runFailureCount)
 			: 0;
 		snapshot.emailFallbackFailure =
 			snapshot.emailFallbackAttempts >= snapshot.emailFallbackSuccess
@@ -3473,24 +3473,24 @@ namespace blazeclaw::core {
 		snapshot.acpReason = m_lastAcpDecision.reason;
 
 		snapshot.embeddedActiveRuns = ActiveEmbeddedRuns();
-		snapshot.embeddedDynamicLoopEnabled = m_lastEmbeddedDynamicLoopEnabled;
-		snapshot.embeddedCanaryEligible = m_lastEmbeddedCanaryEligible;
-		snapshot.embeddedPromotionReady = m_lastEmbeddedPromotionReady;
-		snapshot.embeddedPromotionMinRuns = m_embeddedDynamicLoopPromotionMinRuns;
-		snapshot.embeddedPromotionMinSuccessRate = m_embeddedDynamicLoopPromotionMinSuccessRate;
-		snapshot.embeddedFallbackUsed = m_lastEmbeddedFallbackUsed;
-		snapshot.embeddedFallbackReason = m_lastEmbeddedFallbackReason;
-		snapshot.embeddedTotalRuns = m_embeddedRunSuccessCount + m_embeddedRunFailureCount;
+		snapshot.embeddedDynamicLoopEnabled = m_state.embeddedRuntime.lastDynamicLoopEnabled;
+		snapshot.embeddedCanaryEligible = m_state.embeddedRuntime.lastCanaryEligible;
+		snapshot.embeddedPromotionReady = m_state.embeddedRuntime.lastPromotionReady;
+		snapshot.embeddedPromotionMinRuns = m_state.embeddedRuntime.dynamicLoopPromotionMinRuns;
+		snapshot.embeddedPromotionMinSuccessRate = m_state.embeddedRuntime.dynamicLoopPromotionMinSuccessRate;
+		snapshot.embeddedFallbackUsed = m_state.embeddedRuntime.lastFallbackUsed;
+		snapshot.embeddedFallbackReason = m_state.embeddedRuntime.lastFallbackReason;
+		snapshot.embeddedTotalRuns = m_state.embeddedRuntime.runSuccessCount + m_state.embeddedRuntime.runFailureCount;
 		snapshot.embeddedSuccessRate = snapshot.embeddedTotalRuns == 0
 			? 0.0
-			: static_cast<double>(m_embeddedRunSuccessCount) /
+			: static_cast<double>(m_state.embeddedRuntime.runSuccessCount) /
 			static_cast<double>(snapshot.embeddedTotalRuns);
-		snapshot.embeddedRunSuccess = m_embeddedRunSuccessCount;
-		snapshot.embeddedRunFailure = m_embeddedRunFailureCount;
-		snapshot.embeddedRunTimeout = m_embeddedRunTimeoutCount;
-		snapshot.embeddedRunCancelled = m_embeddedRunCancelledCount;
-		snapshot.embeddedRunFallback = m_embeddedRunFallbackCount;
-		snapshot.embeddedTaskDeltaTransitions = m_embeddedTaskDeltaTransitionCount;
+		snapshot.embeddedRunSuccess = m_state.embeddedRuntime.runSuccessCount;
+		snapshot.embeddedRunFailure = m_state.embeddedRuntime.runFailureCount;
+		snapshot.embeddedRunTimeout = m_state.embeddedRuntime.runTimeoutCount;
+		snapshot.embeddedRunCancelled = m_state.embeddedRuntime.runCancelledCount;
+		snapshot.embeddedRunFallback = m_state.embeddedRuntime.runFallbackCount;
+		snapshot.embeddedTaskDeltaTransitions = m_state.embeddedRuntime.taskDeltaTransitionCount;
 
 		snapshot.toolsPolicyEntries = m_agentsToolPolicy.entries.size();
 		snapshot.toolsShellProcesses = ShellProcessCount();
@@ -3558,39 +3558,39 @@ namespace blazeclaw::core {
 
 		snapshot.hooksLoaded = m_hookCatalog.diagnostics.hooksLoaded;
 		snapshot.hooksEngineMode = WideToNarrowAscii(m_hookExecution.diagnostics.engineMode);
-		snapshot.hooksEngineEnabled = m_hooksEngineEnabled;
-		snapshot.hooksFallbackPromptInjection = m_hooksFallbackPromptInjection;
-		snapshot.hooksReminderEnabled = m_hooksReminderEnabled;
-		snapshot.hooksReminderVerbosity = WideToNarrowAscii(m_hooksReminderVerbosity);
-		snapshot.hooksStrictPolicyEnforcement = m_hooksStrictPolicyEnforcement;
-		snapshot.hooksAllowedPackagesCount = m_hooksAllowedPackages.size();
-		snapshot.hooksGovernanceReportingEnabled = m_hooksGovernanceReportingEnabled;
-		snapshot.hooksGovernanceReportsGenerated = m_hooksGovernanceReportsGenerated;
-		snapshot.hooksLastGovernanceReportPath = WideToNarrowAscii(m_hooksLastGovernanceReportPath);
-		snapshot.hooksAutoRemediationEnabled = m_hooksAutoRemediationEnabled;
-		snapshot.hooksAutoRemediationRequiresApproval = m_hooksAutoRemediationRequiresApproval;
-		snapshot.hooksAutoRemediationExecuted = m_hooksAutoRemediationExecuted;
-		snapshot.hooksLastAutoRemediationStatus = WideToNarrowAscii(m_hooksLastAutoRemediationStatus);
-		snapshot.hooksAutoRemediationTenantId = WideToNarrowAscii(m_hooksAutoRemediationTenantId);
-		snapshot.hooksLastAutoRemediationPlaybookPath = WideToNarrowAscii(m_hooksLastAutoRemediationPlaybookPath);
-		snapshot.hooksAutoRemediationTokenMaxAgeMinutes = m_hooksAutoRemediationTokenMaxAgeMinutes;
-		snapshot.hooksAutoRemediationTokenRotations = m_hooksAutoRemediationTokenRotations;
-		snapshot.hooksRemediationTelemetryEnabled = m_hooksRemediationTelemetryEnabled;
-		snapshot.hooksRemediationAuditEnabled = m_hooksRemediationAuditEnabled;
-		snapshot.hooksLastRemediationTelemetryPath = WideToNarrowAscii(m_hooksLastRemediationTelemetryPath);
-		snapshot.hooksLastRemediationAuditPath = WideToNarrowAscii(m_hooksLastRemediationAuditPath);
-		snapshot.hooksRemediationSloStatus = WideToNarrowAscii(m_hooksRemediationSloStatus);
-		snapshot.hooksRemediationSloMaxDriftDetected = m_hooksRemediationSloMaxDriftDetected;
-		snapshot.hooksRemediationSloMaxPolicyBlocked = m_hooksRemediationSloMaxPolicyBlocked;
-		snapshot.hooksComplianceAttestationEnabled = m_hooksComplianceAttestationEnabled;
-		snapshot.hooksLastComplianceAttestationPath = WideToNarrowAscii(m_hooksLastComplianceAttestationPath);
-		snapshot.hooksEnterpriseSlaGovernanceEnabled = m_hooksEnterpriseSlaGovernanceEnabled;
-		snapshot.hooksEnterpriseSlaPolicyId = WideToNarrowAscii(m_hooksEnterpriseSlaPolicyId);
-		snapshot.hooksCrossTenantAttestationAggregationEnabled = m_hooksCrossTenantAttestationAggregationEnabled;
-		snapshot.hooksCrossTenantAttestationAggregationStatus = WideToNarrowAscii(m_hooksCrossTenantAttestationAggregationStatus);
-		snapshot.hooksCrossTenantAttestationAggregationCount = m_hooksCrossTenantAttestationAggregationCount;
-		snapshot.hooksLastCrossTenantAttestationAggregationPath = WideToNarrowAscii(m_hooksLastCrossTenantAttestationAggregationPath);
-		snapshot.hooksSelfEvolvingHookTriggered = m_selfEvolvingHookTriggered;
+		snapshot.hooksEngineEnabled = m_state.hooks.engineEnabled;
+		snapshot.hooksFallbackPromptInjection = m_state.hooks.fallbackPromptInjection;
+		snapshot.hooksReminderEnabled = m_state.hooks.reminderEnabled;
+		snapshot.hooksReminderVerbosity = WideToNarrowAscii(m_state.hooks.reminderVerbosity);
+		snapshot.hooksStrictPolicyEnforcement = m_state.hooks.strictPolicyEnforcement;
+		snapshot.hooksAllowedPackagesCount = m_state.hooks.allowedPackages.size();
+		snapshot.hooksGovernanceReportingEnabled = m_state.hooks.governanceReportingEnabled;
+		snapshot.hooksGovernanceReportsGenerated = m_state.hooks.governanceReportsGenerated;
+		snapshot.hooksLastGovernanceReportPath = WideToNarrowAscii(m_state.hooks.lastGovernanceReportPath);
+		snapshot.hooksAutoRemediationEnabled = m_state.hooks.autoRemediationEnabled;
+		snapshot.hooksAutoRemediationRequiresApproval = m_state.hooks.autoRemediationRequiresApproval;
+		snapshot.hooksAutoRemediationExecuted = m_state.hooks.autoRemediationExecuted;
+		snapshot.hooksLastAutoRemediationStatus = WideToNarrowAscii(m_state.hooks.lastAutoRemediationStatus);
+		snapshot.hooksAutoRemediationTenantId = WideToNarrowAscii(m_state.hooks.autoRemediationTenantId);
+		snapshot.hooksLastAutoRemediationPlaybookPath = WideToNarrowAscii(m_state.hooks.lastAutoRemediationPlaybookPath);
+		snapshot.hooksAutoRemediationTokenMaxAgeMinutes = m_state.hooks.autoRemediationTokenMaxAgeMinutes;
+		snapshot.hooksAutoRemediationTokenRotations = m_state.hooks.autoRemediationTokenRotations;
+		snapshot.hooksRemediationTelemetryEnabled = m_state.hooks.remediationTelemetryEnabled;
+		snapshot.hooksRemediationAuditEnabled = m_state.hooks.remediationAuditEnabled;
+		snapshot.hooksLastRemediationTelemetryPath = WideToNarrowAscii(m_state.hooks.lastRemediationTelemetryPath);
+		snapshot.hooksLastRemediationAuditPath = WideToNarrowAscii(m_state.hooks.lastRemediationAuditPath);
+		snapshot.hooksRemediationSloStatus = WideToNarrowAscii(m_state.hooks.remediationSloStatus);
+		snapshot.hooksRemediationSloMaxDriftDetected = m_state.hooks.remediationSloMaxDriftDetected;
+		snapshot.hooksRemediationSloMaxPolicyBlocked = m_state.hooks.remediationSloMaxPolicyBlocked;
+		snapshot.hooksComplianceAttestationEnabled = m_state.hooks.complianceAttestationEnabled;
+		snapshot.hooksLastComplianceAttestationPath = WideToNarrowAscii(m_state.hooks.lastComplianceAttestationPath);
+		snapshot.hooksEnterpriseSlaGovernanceEnabled = m_state.hooks.enterpriseSlaGovernanceEnabled;
+		snapshot.hooksEnterpriseSlaPolicyId = WideToNarrowAscii(m_state.hooks.enterpriseSlaPolicyId);
+		snapshot.hooksCrossTenantAttestationAggregationEnabled = m_state.hooks.crossTenantAttestationAggregationEnabled;
+		snapshot.hooksCrossTenantAttestationAggregationStatus = WideToNarrowAscii(m_state.hooks.crossTenantAttestationAggregationStatus);
+		snapshot.hooksCrossTenantAttestationAggregationCount = m_state.hooks.crossTenantAttestationAggregationCount;
+		snapshot.hooksLastCrossTenantAttestationAggregationPath = WideToNarrowAscii(m_state.hooks.lastCrossTenantAttestationAggregationPath);
+		snapshot.hooksSelfEvolvingHookTriggered = m_state.hooks.selfEvolvingHookTriggered;
 		snapshot.hooksInvalidMetadata = m_hookCatalog.diagnostics.invalidMetadataFiles;
 		snapshot.hooksUnsafeHandlerPaths = m_hookCatalog.diagnostics.unsafeHandlerPaths;
 		snapshot.hooksMissingHandlers = m_hookCatalog.diagnostics.missingHandlerFiles;
@@ -3841,15 +3841,15 @@ namespace blazeclaw::core {
 			return false;
 		}
 
-		if (m_embeddedDynamicLoopCanaryProviders.empty() &&
-			m_embeddedDynamicLoopCanarySessions.empty()) {
+		if (m_state.embeddedRuntime.dynamicLoopCanaryProviders.empty() &&
+			m_state.embeddedRuntime.dynamicLoopCanarySessions.empty()) {
 			return true;
 		}
 
-		const bool providerAllowed = m_embeddedDynamicLoopCanaryProviders.empty() ||
-			ContainsCaseInsensitive(m_embeddedDynamicLoopCanaryProviders, provider);
-		const bool sessionAllowed = m_embeddedDynamicLoopCanarySessions.empty() ||
-			ContainsCaseInsensitive(m_embeddedDynamicLoopCanarySessions, sessionId);
+		const bool providerAllowed = m_state.embeddedRuntime.dynamicLoopCanaryProviders.empty() ||
+			ContainsCaseInsensitive(m_state.embeddedRuntime.dynamicLoopCanaryProviders, provider);
+		const bool sessionAllowed = m_state.embeddedRuntime.dynamicLoopCanarySessions.empty() ||
+			ContainsCaseInsensitive(m_state.embeddedRuntime.dynamicLoopCanarySessions, sessionId);
 		return providerAllowed && sessionAllowed;
 	}
 
@@ -3859,15 +3859,15 @@ namespace blazeclaw::core {
 		}
 
 		const std::uint64_t totalRuns =
-			m_embeddedRunSuccessCount + m_embeddedRunFailureCount;
-		if (totalRuns < m_embeddedDynamicLoopPromotionMinRuns) {
+			m_state.embeddedRuntime.runSuccessCount + m_state.embeddedRuntime.runFailureCount;
+		if (totalRuns < m_state.embeddedRuntime.dynamicLoopPromotionMinRuns) {
 			return false;
 		}
 
 		const double successRate =
-			static_cast<double>(m_embeddedRunSuccessCount) /
+			static_cast<double>(m_state.embeddedRuntime.runSuccessCount) /
 			static_cast<double>(totalRuns);
-		return successRate >= m_embeddedDynamicLoopPromotionMinSuccessRate;
+		return successRate >= m_state.embeddedRuntime.dynamicLoopPromotionMinSuccessRate;
 	}
 
 	bool ServiceManager::ShouldFallbackFromEmbeddedFailure(
@@ -3889,3 +3889,4 @@ namespace blazeclaw::core {
 	}
 
 } // namespace blazeclaw::core
+

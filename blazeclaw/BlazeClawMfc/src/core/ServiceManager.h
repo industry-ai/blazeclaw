@@ -104,6 +104,94 @@ namespace blazeclaw::core {
 			std::uint32_t approvalTokenTtlMinutes = 60;
 		};
 
+		struct ServiceManagerState {
+			struct EmbeddedRuntimeState {
+				std::vector<std::string> dynamicLoopCanaryProviders;
+				std::vector<std::string> dynamicLoopCanarySessions;
+				std::uint64_t dynamicLoopPromotionMinRuns = 20;
+				double dynamicLoopPromotionMinSuccessRate = 0.95;
+				bool lastDynamicLoopEnabled = false;
+				bool lastCanaryEligible = false;
+				bool lastPromotionReady = false;
+				bool lastFallbackUsed = false;
+				std::string lastFallbackReason;
+				std::uint64_t runSuccessCount = 0;
+				std::uint64_t runFailureCount = 0;
+				std::uint64_t runTimeoutCount = 0;
+				std::uint64_t runCancelledCount = 0;
+				std::uint64_t runFallbackCount = 0;
+				std::uint64_t taskDeltaTransitionCount = 0;
+				std::uint64_t emailFallbackAttemptCount = 0;
+				std::uint64_t emailFallbackSuccessCount = 0;
+				std::uint64_t emailFallbackFailureCount = 0;
+			};
+
+			struct EmailPolicyState {
+				std::wstring rolloutMode = L"legacy";
+				std::wstring enforceChannel;
+				bool rollbackBridgeEnabled = true;
+				bool runtimeEnabled = false;
+				bool runtimeEnforce = false;
+				bool canaryEligible = false;
+			};
+
+			struct HooksState {
+				bool engineEnabled = true;
+				bool fallbackPromptInjection = false;
+				bool reminderEnabled = true;
+				std::wstring reminderVerbosity = L"normal";
+				std::vector<std::wstring> allowedPackages;
+				bool strictPolicyEnforcement = false;
+				bool governanceReportingEnabled = true;
+				std::filesystem::path governanceReportDir;
+				std::uint64_t governanceReportsGenerated = 0;
+				std::wstring lastGovernanceReportPath;
+				bool autoRemediationEnabled = false;
+				bool autoRemediationRequiresApproval = true;
+				std::wstring autoRemediationApprovalToken;
+				std::wstring autoRemediationTenantId = L"default";
+				std::filesystem::path autoRemediationPlaybookDir;
+				std::uint32_t autoRemediationTokenMaxAgeMinutes = 1440;
+				std::uint64_t autoRemediationExecuted = 0;
+				std::wstring lastAutoRemediationStatus;
+				std::wstring lastAutoRemediationPlaybookPath;
+				std::uint64_t autoRemediationTokenRotations = 0;
+				bool remediationTelemetryEnabled = true;
+				std::filesystem::path remediationTelemetryDir;
+				std::wstring lastRemediationTelemetryPath;
+				bool remediationAuditEnabled = true;
+				std::filesystem::path remediationAuditDir;
+				std::wstring lastRemediationAuditPath;
+				std::uint32_t remediationSloMaxDriftDetected = 0;
+				std::uint32_t remediationSloMaxPolicyBlocked = 0;
+				std::wstring remediationSloStatus;
+				bool complianceAttestationEnabled = true;
+				std::filesystem::path complianceAttestationDir;
+				std::wstring lastComplianceAttestationPath;
+				bool enterpriseSlaGovernanceEnabled = true;
+				std::wstring enterpriseSlaPolicyId = L"default-policy";
+				bool crossTenantAttestationAggregationEnabled = true;
+				std::filesystem::path crossTenantAttestationAggregationDir;
+				std::wstring lastCrossTenantAttestationAggregationPath;
+				std::uint64_t crossTenantAttestationAggregationCount = 0;
+				std::wstring crossTenantAttestationAggregationStatus;
+				bool selfEvolvingHookTriggered = false;
+			};
+
+			struct ChatRuntimeState {
+				bool asyncQueueEnabled = true;
+				std::uint64_t queueWaitTimeoutMs =
+					ServiceManager::kChatRuntimeQueueWaitTimeoutMs;
+				std::uint64_t executionTimeoutMs =
+					ServiceManager::kChatRuntimeExecutionTimeoutMs;
+			};
+
+			EmbeddedRuntimeState embeddedRuntime;
+			EmailPolicyState emailPolicy;
+			HooksState hooks;
+			ChatRuntimeState chatRuntime;
+		};
+
 		[[nodiscard]] EmailFallbackResolvedPolicy ResolveEmailFallbackPolicy(
 			const std::wstring& toolName,
 			const std::wstring& capabilityName) const;
@@ -174,76 +262,13 @@ namespace blazeclaw::core {
 		RetrievalMemoryService m_retrievalMemoryService;
 		RetrievalMemorySnapshot m_retrievalMemory;
 		PiEmbeddedService m_piEmbeddedService;
-		std::vector<std::string> m_embeddedDynamicLoopCanaryProviders;
-		std::vector<std::string> m_embeddedDynamicLoopCanarySessions;
-		std::uint64_t m_embeddedDynamicLoopPromotionMinRuns = 20;
-		double m_embeddedDynamicLoopPromotionMinSuccessRate = 0.95;
-		bool m_lastEmbeddedDynamicLoopEnabled = false;
-		bool m_lastEmbeddedCanaryEligible = false;
-		bool m_lastEmbeddedPromotionReady = false;
-		bool m_lastEmbeddedFallbackUsed = false;
-		std::string m_lastEmbeddedFallbackReason;
-		std::uint64_t m_embeddedRunSuccessCount = 0;
-		std::uint64_t m_embeddedRunFailureCount = 0;
-		std::uint64_t m_embeddedRunTimeoutCount = 0;
-		std::uint64_t m_embeddedRunCancelledCount = 0;
-		std::uint64_t m_embeddedRunFallbackCount = 0;
-		std::uint64_t m_embeddedTaskDeltaTransitionCount = 0;
-		std::uint64_t m_emailFallbackAttemptCount = 0;
-		std::uint64_t m_emailFallbackSuccessCount = 0;
-		std::uint64_t m_emailFallbackFailureCount = 0;
-		std::wstring m_emailPolicyRolloutMode = L"legacy";
-		std::wstring m_emailPolicyEnforceChannel;
-		bool m_emailPolicyRollbackBridgeEnabled = true;
-		bool m_emailPolicyRuntimeEnabled = false;
-		bool m_emailPolicyRuntimeEnforce = false;
-		bool m_emailPolicyCanaryEligible = false;
+		ServiceManagerState m_state;
 		HookCatalogService m_hookCatalogService;
 		HookCatalogSnapshot m_hookCatalog;
 		HookEventService m_hookEventService;
 		HookEventSnapshot m_hookEvents;
 		HookExecutionService m_hookExecutionService;
 		HookExecutionSnapshot m_hookExecution;
-		bool m_hooksEngineEnabled = true;
-		bool m_hooksFallbackPromptInjection = false;
-		bool m_hooksReminderEnabled = true;
-		std::wstring m_hooksReminderVerbosity = L"normal";
-		std::vector<std::wstring> m_hooksAllowedPackages;
-		bool m_hooksStrictPolicyEnforcement = false;
-		bool m_hooksGovernanceReportingEnabled = true;
-		std::filesystem::path m_hooksGovernanceReportDir;
-		std::uint64_t m_hooksGovernanceReportsGenerated = 0;
-		std::wstring m_hooksLastGovernanceReportPath;
-		bool m_hooksAutoRemediationEnabled = false;
-		bool m_hooksAutoRemediationRequiresApproval = true;
-		std::wstring m_hooksAutoRemediationApprovalToken;
-		std::wstring m_hooksAutoRemediationTenantId = L"default";
-		std::filesystem::path m_hooksAutoRemediationPlaybookDir;
-		std::uint32_t m_hooksAutoRemediationTokenMaxAgeMinutes = 1440;
-		std::uint64_t m_hooksAutoRemediationExecuted = 0;
-		std::wstring m_hooksLastAutoRemediationStatus;
-		std::wstring m_hooksLastAutoRemediationPlaybookPath;
-		std::uint64_t m_hooksAutoRemediationTokenRotations = 0;
-		bool m_hooksRemediationTelemetryEnabled = true;
-		std::filesystem::path m_hooksRemediationTelemetryDir;
-		std::wstring m_hooksLastRemediationTelemetryPath;
-		bool m_hooksRemediationAuditEnabled = true;
-		std::filesystem::path m_hooksRemediationAuditDir;
-		std::wstring m_hooksLastRemediationAuditPath;
-		std::uint32_t m_hooksRemediationSloMaxDriftDetected = 0;
-		std::uint32_t m_hooksRemediationSloMaxPolicyBlocked = 0;
-		std::wstring m_hooksRemediationSloStatus;
-		bool m_hooksComplianceAttestationEnabled = true;
-		std::filesystem::path m_hooksComplianceAttestationDir;
-		std::wstring m_hooksLastComplianceAttestationPath;
-		bool m_hooksEnterpriseSlaGovernanceEnabled = true;
-		std::wstring m_hooksEnterpriseSlaPolicyId = L"default-policy";
-		bool m_hooksCrossTenantAttestationAggregationEnabled = true;
-		std::filesystem::path m_hooksCrossTenantAttestationAggregationDir;
-		std::wstring m_hooksLastCrossTenantAttestationAggregationPath;
-		std::uint64_t m_hooksCrossTenantAttestationAggregationCount = 0;
-		std::wstring m_hooksCrossTenantAttestationAggregationStatus;
-		bool m_selfEvolvingHookTriggered = false;
 		SkillsCatalogService m_skillsCatalogService;
 		SkillsCatalogSnapshot m_skillsCatalog;
 		SkillsEligibilityService m_skillsEligibilityService;
@@ -287,11 +312,6 @@ namespace blazeclaw::core {
 		mutable std::unordered_map<std::string, bool> m_deepSeekCancelledRuns;
 		mutable std::mutex m_embeddedCancelMutex;
 		mutable std::unordered_map<std::string, bool> m_embeddedCancelledRuns;
-		bool m_chatRuntimeAsyncQueueEnabled = true;
-		std::uint64_t m_chatRuntimeQueueWaitTimeoutMs =
-			kChatRuntimeQueueWaitTimeoutMs;
-		std::uint64_t m_chatRuntimeExecutionTimeoutMs =
-			kChatRuntimeExecutionTimeoutMs;
 	};
 
 } // namespace blazeclaw::core
