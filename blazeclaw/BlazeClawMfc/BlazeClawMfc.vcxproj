@@ -139,6 +139,8 @@
     <ClInclude Include="src\core\PiEmbeddedService.h" />
     <ClInclude Include="src\core\RetrievalMemoryService.h" />
     <ClInclude Include="src\\core\\runtime\\CChatRuntime.h" />
+    <ClInclude Include="src\\core\\runtime\\ChatRuntimeContracts.h" />
+    <ClInclude Include="src\\core\\runtime\\ChatRuntimeMetrics.h" />
     <ClInclude Include="src\\core\\providers\\CDeepSeekClient.h" />
     <ClInclude Include="src\\core\\tools\\CToolRuntimeRegistry.h" />
     <ClInclude Include="src\\core\\skills\\CSkillsHooksCoordinator.h" />
@@ -238,6 +240,7 @@
     <ClCompile Include="src\core\PiEmbeddedService.cpp" />
     <ClCompile Include="src\core\RetrievalMemoryService.cpp" />
     <ClCompile Include="src\\core\\runtime\\CChatRuntime.cpp" />
+    <ClCompile Include="src\\core\\runtime\\ChatRuntimeMetrics.cpp" />
     <ClCompile Include="src\\core\\providers\\CDeepSeekClient.cpp" />
     <ClCompile Include="src\\core\\tools\\CToolRuntimeRegistry.cpp" />
     <ClCompile Include="src\\core\\skills\\CSkillsHooksCoordinator.cpp" />

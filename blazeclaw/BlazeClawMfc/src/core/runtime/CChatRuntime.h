@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../gateway/GatewayHost.h"
+#include "ChatRuntimeMetrics.h"
 
 #include <condition_variable>
 #include <cstdint>
@@ -74,6 +75,7 @@ namespace blazeclaw::core {
 		blazeclaw::gateway::GatewayHost::ChatRuntimeResult Execute(
 			RuntimeExecutionRequest request);
 		bool Abort(const blazeclaw::gateway::GatewayHost::ChatAbortRequest& request);
+		[[nodiscard]] ChatRuntimeMetricsSnapshot MetricsSnapshot() const;
 
 	private:
 		struct ChatRuntimeJob {
@@ -111,6 +113,7 @@ namespace blazeclaw::core {
 		std::thread m_workerThread;
 		bool m_workerStopRequested = false;
 		bool m_workerAvailable = false;
+		ChatRuntimeMetrics m_metrics;
 	};
 
 } // namespace blazeclaw::core

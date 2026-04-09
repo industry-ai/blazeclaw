@@ -100,6 +100,7 @@ namespace blazeclaw::core {
 			std::lock_guard<std::mutex> lock(m_queueMutex);
 			if (!m_workerAvailable)
 			{
+				m_metrics.OnWorkerUnavailable();
 				return BuildErrorResult(
 					request.model,
 					m_cfg.errorWorkerUnavailable,
@@ -108,11 +109,13 @@ namespace blazeclaw::core {
 
 			if (m_queue.size() >= m_cfg.queueCapacity)
 			{
+				m_metrics.OnFailed();
 				return BuildErrorResult(
 					request.model,
 					m_cfg.errorQueueFull,
 					"chat runtime queue capacity reached");
 			}
+			m_metrics.OnEnqueued();
 
 			job->enqueueSequence = m_nextEnqueueSequence++;
 			job->enqueuedAtMs = enqueuedAtMs;
@@ -151,6 +154,8 @@ namespace blazeclaw::core {
 				return job->completed;
 			}))
 		{
+			m_metrics.OnQueueTimeout();
+			m_metrics.OnTimedOut();
 			if (m_deps.onQueueTimeout)
 			{
 				m_deps.onQueueTimeout(job->request.runId, job->provider);
@@ -191,6 +196,7 @@ namespace blazeclaw::core {
 	bool CChatRuntime::Abort(
 		const blazeclaw::gateway::GatewayHost::ChatAbortRequest& request)
 	{
+		m_metrics.OnAbortRequested();
 		std::shared_ptr<ChatRuntimeJob> queuedJob;
 		std::string runProvider;
 		bool removedQueuedJob = false;
@@ -224,6 +230,7 @@ namespace blazeclaw::core {
 
 		if (removedQueuedJob && queuedJob)
 		{
+			m_metrics.OnCancelled();
 			std::lock_guard<std::mutex> completionLock(queuedJob->completionMutex);
 			queuedJob->result = BuildErrorResult(
 				queuedJob->model,
@@ -339,18 +346,22 @@ namespace blazeclaw::core {
 					stateIt->second.errorCode = result.errorCode;
 					if (result.ok)
 					{
+						m_metrics.OnCompleted();
 						stateIt->second.status = JobLifecycleStatus::Completed;
 					}
 					else if (result.errorCode == m_cfg.errorCancelled)
 					{
+						m_metrics.OnCancelled();
 						stateIt->second.status = JobLifecycleStatus::Cancelled;
 					}
 					else if (result.errorCode == m_cfg.errorTimedOut)
 					{
+						m_metrics.OnTimedOut();
 						stateIt->second.status = JobLifecycleStatus::TimedOut;
 					}
 					else
 					{
+						m_metrics.OnFailed();
 						stateIt->second.status = JobLifecycleStatus::Failed;
 					}
 
@@ -393,6 +404,11 @@ namespace blazeclaw::core {
 			.errorCode = code,
 			.errorMessage = message,
 		};
+	}
+
+	ChatRuntimeMetricsSnapshot CChatRuntime::MetricsSnapshot() const
+	{
+		return m_metrics.Snapshot();
 	}
 
 } // namespace blazeclaw::core

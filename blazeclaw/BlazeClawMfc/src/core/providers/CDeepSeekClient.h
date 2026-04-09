@@ -26,6 +26,9 @@ namespace blazeclaw::core {
 			const ChatRequest& request,
 			const std::function<bool(const std::string& runId)>& isCancelled) const;
 
+		[[nodiscard]] std::vector<std::string> ParseAssistantDeltasForTest(
+			const std::string& responseBody) const;
+
 	private:
 		std::optional<std::string> ParseHttpsUrl(
 			const std::string& url,

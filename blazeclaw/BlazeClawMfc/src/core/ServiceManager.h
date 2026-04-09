@@ -34,6 +34,7 @@
 #include "diagnostics/CDiagnosticsReportBuilder.h"
 #include "tools/CToolRuntimeRegistry.h"
 #include "runtime/CChatRuntime.h"
+#include "runtime/ChatRuntimeContracts.h"
 #include "runtime/LocalModel/OnnxTextGenerationRuntime.h"
 #include <atomic>
 #include <condition_variable>
@@ -106,9 +107,12 @@ namespace blazeclaw::core {
 		[[nodiscard]] EmailFallbackResolvedPolicy ResolveEmailFallbackPolicy(
 			const std::wstring& toolName,
 			const std::wstring& capabilityName) const;
-		static constexpr std::size_t kChatRuntimeQueueCapacity = 64;
-		static constexpr std::uint64_t kChatRuntimeQueueWaitTimeoutMs = 15000;
-		static constexpr std::uint64_t kChatRuntimeExecutionTimeoutMs = 120000;
+		static constexpr std::size_t kChatRuntimeQueueCapacity =
+			runtime::contracts::kDefaultQueueCapacity;
+		static constexpr std::uint64_t kChatRuntimeQueueWaitTimeoutMs =
+			runtime::contracts::kDefaultQueueWaitTimeoutMs;
+		static constexpr std::uint64_t kChatRuntimeExecutionTimeoutMs =
+			runtime::contracts::kDefaultExecutionTimeoutMs;
 
 		[[nodiscard]] bool IsLocalModelRolloutEligible() const;
 		[[nodiscard]] bool IsEmbeddedDynamicLoopCanaryEligible(

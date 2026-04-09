@@ -26,15 +26,6 @@ namespace blazeclaw::core {
 
 	namespace {
 
-		constexpr const char* kChatRuntimeErrorQueueFull =
-			"chat_runtime_queue_full";
-		constexpr const char* kChatRuntimeErrorCancelled =
-			"chat_runtime_cancelled";
-		constexpr const char* kChatRuntimeErrorTimedOut =
-			"chat_runtime_timed_out";
-		constexpr const char* kChatRuntimeErrorWorkerUnavailable =
-			"chat_runtime_worker_unavailable";
-
 		std::string ToNarrow(const std::wstring& value) {
 			std::string output;
 			output.reserve(value.size());
@@ -4557,17 +4548,17 @@ namespace blazeclaw::core {
 				.queueWaitTimeoutMs = m_chatRuntimeQueueWaitTimeoutMs,
 				.executionTimeoutMs = m_chatRuntimeExecutionTimeoutMs,
 				.asyncQueueEnabled = m_chatRuntimeAsyncQueueEnabled,
-				.errorQueueFull = kChatRuntimeErrorQueueFull,
-				.errorCancelled = kChatRuntimeErrorCancelled,
-				.errorTimedOut = kChatRuntimeErrorTimedOut,
-				.errorWorkerUnavailable = kChatRuntimeErrorWorkerUnavailable,
+			   .errorQueueFull = runtime::contracts::kErrorQueueFull,
+				.errorCancelled = runtime::contracts::kErrorCancelled,
+				.errorTimedOut = runtime::contracts::kErrorTimedOut,
+				.errorWorkerUnavailable = runtime::contracts::kErrorWorkerUnavailable,
 			});
 		if (m_chatRuntimeAsyncQueueEnabled) {
 			const bool chatRuntimeWorkerStarted = m_chatRuntime.StartWorker();
 			if (!chatRuntimeWorkerStarted) {
 				TRACE(
 					"[ChatRuntime] worker unavailable; callbacks will return %s\n",
-					kChatRuntimeErrorWorkerUnavailable);
+					runtime::contracts::kErrorWorkerUnavailable);
 			}
 		}
 		else {
@@ -5046,7 +5037,7 @@ namespace blazeclaw::core {
 							.ok = false,
 							.assistantText = {},
 							.modelId = activeModel,
-							.errorCode = kChatRuntimeErrorCancelled,
+							.errorCode = runtime::contracts::kErrorCancelled,
 							.errorMessage = "chat runtime cancelled",
 						};
 					}

@@ -738,4 +738,10 @@ namespace blazeclaw::core {
 		};
 	}
 
+	std::vector<std::string> CDeepSeekClient::ParseAssistantDeltasForTest(
+		const std::string& responseBody) const
+	{
+		return ExtractAssistantDeltas(responseBody);
+	}
+
 } // namespace blazeclaw::core
