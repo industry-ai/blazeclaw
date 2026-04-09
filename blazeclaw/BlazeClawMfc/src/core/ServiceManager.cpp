@@ -2119,48 +2119,18 @@ namespace blazeclaw::core {
 		m_hooksLastCrossTenantAttestationAggregationPath.clear();
 		m_hooksCrossTenantAttestationAggregationCount = 0;
 		m_hooksCrossTenantAttestationAggregationStatus = L"idle";
+
+		const auto emailPolicy =
+			m_serviceBootstrapCoordinator.ResolveEmailPolicySettings(m_activeConfig);
 		m_emailFallbackResolvedPolicy = ResolveEmailFallbackPolicy(
 			L"email.schedule",
 			L"email.send");
-		m_emailPolicyRolloutMode =
-			m_activeConfig.email.policyProfiles.rolloutMode;
-		if (m_emailPolicyRolloutMode.empty()) {
-			m_emailPolicyRolloutMode = L"legacy";
-		}
-		m_emailPolicyEnforceChannel =
-			m_activeConfig.email.policyProfiles.enforceChannel;
-		m_emailPolicyRollbackBridgeEnabled =
-			m_activeConfig.email.policyProfiles.rollbackBridgeEnabled;
-		m_emailPolicyCanaryEligible =
-			m_emailPolicyEnforceChannel.empty() ||
-			IsOneOfChannels(
-				m_activeConfig.enabledChannels,
-				m_emailPolicyEnforceChannel);
-		m_emailPolicyRuntimeEnabled =
-			m_activeConfig.email.policyProfiles.enabled;
-		m_emailPolicyRuntimeEnforce =
-			m_activeConfig.email.policyProfiles.enforce;
-		if (_wcsicmp(m_emailPolicyRolloutMode.c_str(), L"monitor") == 0) {
-			m_emailPolicyRuntimeEnabled = true;
-			m_emailPolicyRuntimeEnforce = false;
-		}
-		else if (_wcsicmp(m_emailPolicyRolloutMode.c_str(), L"enforce") == 0) {
-			m_emailPolicyRuntimeEnabled = true;
-			m_emailPolicyRuntimeEnforce = m_emailPolicyCanaryEligible;
-		}
-		else {
-			m_emailPolicyRuntimeEnabled =
-				m_activeConfig.email.policyProfiles.enabled;
-			m_emailPolicyRuntimeEnforce =
-				m_activeConfig.email.policyProfiles.enforce;
-		}
-
-		if (!m_emailPolicyRollbackBridgeEnabled) {
-			m_emailPolicyRuntimeEnabled =
-				m_activeConfig.email.policyProfiles.enabled;
-			m_emailPolicyRuntimeEnforce =
-				m_activeConfig.email.policyProfiles.enforce;
-		}
+		m_emailPolicyRolloutMode = emailPolicy.rolloutMode;
+		m_emailPolicyEnforceChannel = emailPolicy.enforceChannel;
+		m_emailPolicyRollbackBridgeEnabled = emailPolicy.rollbackBridgeEnabled;
+		m_emailPolicyCanaryEligible = emailPolicy.canaryEligible;
+		m_emailPolicyRuntimeEnabled = emailPolicy.runtimeEnabled;
+		m_emailPolicyRuntimeEnforce = emailPolicy.runtimeEnforce;
 
 		if (m_emailPolicyRuntimeEnabled &&
 			!m_activeConfig.email.policyProfiles.enabled) {

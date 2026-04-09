@@ -310,6 +310,55 @@ namespace blazeclaw::core::bootstrap {
 		return settings;
 	}
 
+	StartupPolicyResolver::EmailPolicySettings
+		StartupPolicyResolver::ResolveEmailPolicySettings(
+			const blazeclaw::config::AppConfig& config) const
+	{
+		EmailPolicySettings settings;
+		settings.rolloutMode = config.email.policyProfiles.rolloutMode;
+		if (settings.rolloutMode.empty())
+		{
+			settings.rolloutMode = L"legacy";
+		}
+
+		settings.enforceChannel = config.email.policyProfiles.enforceChannel;
+		settings.rollbackBridgeEnabled =
+			config.email.policyProfiles.rollbackBridgeEnabled;
+		settings.canaryEligible = settings.enforceChannel.empty();
+		if (!settings.canaryEligible)
+		{
+			for (const auto& channel : config.enabledChannels)
+			{
+				if (_wcsicmp(channel.c_str(), settings.enforceChannel.c_str()) == 0)
+				{
+					settings.canaryEligible = true;
+					break;
+				}
+			}
+		}
+
+		settings.runtimeEnabled = config.email.policyProfiles.enabled;
+		settings.runtimeEnforce = config.email.policyProfiles.enforce;
+		if (_wcsicmp(settings.rolloutMode.c_str(), L"monitor") == 0)
+		{
+			settings.runtimeEnabled = true;
+			settings.runtimeEnforce = false;
+		}
+		else if (_wcsicmp(settings.rolloutMode.c_str(), L"enforce") == 0)
+		{
+			settings.runtimeEnabled = true;
+			settings.runtimeEnforce = settings.canaryEligible;
+		}
+
+		if (!settings.rollbackBridgeEnabled)
+		{
+			settings.runtimeEnabled = config.email.policyProfiles.enabled;
+			settings.runtimeEnforce = config.email.policyProfiles.enforce;
+		}
+
+		return settings;
+	}
+
 	void StartupPolicyResolver::AppendStartupTrace(const char* stage) const
 	{
 		if (stage == nullptr || *stage == '\0')

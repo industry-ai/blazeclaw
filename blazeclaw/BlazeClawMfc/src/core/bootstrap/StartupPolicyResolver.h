@@ -11,6 +11,15 @@ namespace blazeclaw::core::bootstrap {
 
 	class StartupPolicyResolver {
 	public:
+		struct EmailPolicySettings {
+			std::wstring rolloutMode = L"legacy";
+			std::wstring enforceChannel;
+			bool rollbackBridgeEnabled = true;
+			bool canaryEligible = false;
+			bool runtimeEnabled = false;
+			bool runtimeEnforce = false;
+		};
+
 		struct HooksPolicySettings {
 			bool engineEnabled = true;
 			bool fallbackPromptInjection = false;
@@ -41,6 +50,9 @@ namespace blazeclaw::core::bootstrap {
 		};
 
 		[[nodiscard]] HooksPolicySettings ResolveHooksPolicySettings(
+			const blazeclaw::config::AppConfig& config) const;
+
+		[[nodiscard]] EmailPolicySettings ResolveEmailPolicySettings(
 			const blazeclaw::config::AppConfig& config) const;
 
 		void AppendStartupTrace(const char* stage) const;

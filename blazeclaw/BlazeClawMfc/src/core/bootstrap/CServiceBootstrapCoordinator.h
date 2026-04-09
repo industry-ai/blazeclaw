@@ -39,6 +39,8 @@ namespace blazeclaw::core {
 
 	class CServiceBootstrapCoordinator {
 	public:
+		using EmailPolicySettings =
+			bootstrap::StartupPolicyResolver::EmailPolicySettings;
 		using HooksPolicySettings =
 			bootstrap::StartupPolicyResolver::HooksPolicySettings;
 		struct RuntimeQueueSettings {
@@ -92,6 +94,9 @@ namespace blazeclaw::core {
 		void ValidateStartupFixtures(const FixtureValidationContext& context) const;
 
 		[[nodiscard]] HooksPolicySettings ResolveHooksPolicySettings(
+			const blazeclaw::config::AppConfig& config) const;
+
+		[[nodiscard]] EmailPolicySettings ResolveEmailPolicySettings(
 			const blazeclaw::config::AppConfig& config) const;
 
 		void AppendStartupTrace(const char* stage) const;
