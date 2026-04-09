@@ -28,6 +28,15 @@ namespace blazeclaw::core {
 
 	namespace {
 
+		constexpr const char* kChatRuntimeErrorQueueFull =
+			"chat_runtime_queue_full";
+		constexpr const char* kChatRuntimeErrorCancelled =
+			"chat_runtime_cancelled";
+		constexpr const char* kChatRuntimeErrorTimedOut =
+			"chat_runtime_timed_out";
+		constexpr const char* kChatRuntimeErrorWorkerUnavailable =
+			"chat_runtime_worker_unavailable";
+
 		std::string ToNarrow(const std::wstring& value) {
 			std::string output;
 			output.reserve(value.size());
@@ -4581,17 +4590,84 @@ namespace blazeclaw::core {
 		m_chatRuntimeExecutionTimeoutMs = ParseUInt64EnvValue(
 			L"BLAZECLAW_CHAT_RUNTIME_EXECUTION_TIMEOUT_MS",
 			kChatRuntimeExecutionTimeoutMs);
-		{
-			std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
-			m_chatRuntimeQueue.clear();
-			m_chatRuntimeJobsByRunId.clear();
-			m_chatRuntimeRunsById.clear();
-			m_chatRuntimeNextEnqueueSequence = 1;
-			m_chatRuntimeWorkerStopRequested = false;
-			m_chatRuntimeWorkerAvailable = false;
-		}
+		m_chatRuntime.Initialize(
+			CChatRuntime::Dependencies{
+				.isRunCancelled = [this](
+					const std::string& runId,
+					const std::string& provider)
+					{
+						return IsEmbeddedRunCancelled(runId) ||
+							(provider == "deepseek" && IsDeepSeekRunCancelled(runId));
+					},
+				.onQueueTimeout = [this](
+					const std::string& runId,
+					const std::string& provider)
+					{
+						MarkEmbeddedRunCancelled(runId);
+						if (provider == "deepseek")
+						{
+							MarkDeepSeekRunCancelled(runId);
+						}
+					},
+				.onQueueTimeoutCleanup = [this](
+					const std::string& runId,
+					const std::string& provider)
+					{
+						ClearEmbeddedRunCancelled(runId);
+						if (provider == "deepseek")
+						{
+							ClearDeepSeekRunCancelled(runId);
+						}
+					},
+				.onAbort = [this](
+					const std::string& runId,
+					const std::string& provider,
+					const bool removedQueuedJob)
+					{
+						MarkEmbeddedRunCancelled(runId);
+						if (provider == "deepseek")
+						{
+							MarkDeepSeekRunCancelled(runId);
+						}
+						if (removedQueuedJob)
+						{
+							ClearEmbeddedRunCancelled(runId);
+							ClearDeepSeekRunCancelled(runId);
+						}
+					},
+				.onWorkerCompleted = [this](
+					const std::string& runId,
+					const std::string& provider)
+					{
+						ClearEmbeddedRunCancelled(runId);
+						if (provider == "deepseek")
+						{
+							ClearDeepSeekRunCancelled(runId);
+						}
+					},
+				.cancelActiveRuntime = [this](const std::string& runId)
+					{
+						if (m_localModelActivationEnabled)
+						{
+							const bool cancelled = m_localModelRuntime.Cancel(runId);
+							m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
+							return cancelled;
+						}
+						return false;
+					},
+			},
+			CChatRuntime::Config{
+				.queueCapacity = kChatRuntimeQueueCapacity,
+				.queueWaitTimeoutMs = m_chatRuntimeQueueWaitTimeoutMs,
+				.executionTimeoutMs = m_chatRuntimeExecutionTimeoutMs,
+				.asyncQueueEnabled = m_chatRuntimeAsyncQueueEnabled,
+				.errorQueueFull = kChatRuntimeErrorQueueFull,
+				.errorCancelled = kChatRuntimeErrorCancelled,
+				.errorTimedOut = kChatRuntimeErrorTimedOut,
+				.errorWorkerUnavailable = kChatRuntimeErrorWorkerUnavailable,
+			});
 		if (m_chatRuntimeAsyncQueueEnabled) {
-			const bool chatRuntimeWorkerStarted = StartChatRuntimeWorker();
+			const bool chatRuntimeWorkerStarted = m_chatRuntime.StartWorker();
 			if (!chatRuntimeWorkerStarted) {
 				TRACE(
 					"[ChatRuntime] worker unavailable; callbacks will return %s\n",
@@ -5610,160 +5686,24 @@ namespace blazeclaw::core {
 					};
 					};
 
-				if (!m_chatRuntimeAsyncQueueEnabled) {
-					return executeRequest();
-				}
-
-				const std::uint64_t enqueuedAtMs = CurrentEpochMs();
-				auto job = std::make_shared<ChatRuntimeJob>();
-				{
-					std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
-					if (!m_chatRuntimeWorkerAvailable) {
-						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-							.ok = false,
-							.assistantText = {},
-							.modelId = activeModel,
-							.errorCode = kChatRuntimeErrorWorkerUnavailable,
-							.errorMessage = "chat runtime worker unavailable",
-						};
-					}
-
-					if (m_chatRuntimeQueue.size() >= kChatRuntimeQueueCapacity) {
-						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-							.ok = false,
-							.assistantText = {},
-							.modelId = activeModel,
-							.errorCode = kChatRuntimeErrorQueueFull,
-							.errorMessage = "chat runtime queue capacity reached",
-						};
-					}
-
-					job->enqueueSequence = m_chatRuntimeNextEnqueueSequence++;
-					job->enqueuedAtMs = enqueuedAtMs;
-					job->status = ChatRuntimeJobLifecycleStatus::Queued;
-					job->request = request;
-					job->sessionId = sessionId;
-					job->runtimeMessage = runtimeMessage;
-					job->provider = activeProvider;
-					job->model = activeModel;
-					job->execute = std::move(executeRequest);
-
-					m_chatRuntimeQueue.push_back(job);
-					m_chatRuntimeJobsByRunId.insert_or_assign(request.runId, job);
-					m_chatRuntimeRunsById[request.runId] = ChatRuntimeRunState{
-						.runId = request.runId,
+				return m_chatRuntime.Execute(
+					CChatRuntime::RuntimeExecutionRequest{
+						.request = request,
 						.sessionId = sessionId,
+						.runtimeMessage = runtimeMessage,
 						.provider = activeProvider,
 						.model = activeModel,
-						.enqueuedAtMs = enqueuedAtMs,
-						.startedAtMs = 0,
-						.completedAtMs = 0,
-						.status = ChatRuntimeJobLifecycleStatus::Queued,
-						.errorCode = {},
-					};
-				}
-
-				m_chatRuntimeQueueCv.notify_one();
-
-				std::unique_lock<std::mutex> completionLock(job->completionMutex);
-				const auto waitBudget =
-					std::chrono::milliseconds(
-						m_chatRuntimeQueueWaitTimeoutMs +
-						m_chatRuntimeExecutionTimeoutMs +
-						1000);
-				if (!job->completionCv.wait_for(completionLock, waitBudget, [job]() {
-					return job->completed;
-					})) {
-					MarkEmbeddedRunCancelled(request.runId);
-					MarkDeepSeekRunCancelled(request.runId);
-					const bool localCancelRequested =
-						m_localModelRuntime.Cancel(request.runId);
-					(void)localCancelRequested;
-
-					{
-						std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
-						std::erase_if(
-							m_chatRuntimeQueue,
-							[&](const std::shared_ptr<ChatRuntimeJob>& queuedJob) {
-								return queuedJob->request.runId == request.runId;
-							});
-						m_chatRuntimeJobsByRunId.erase(request.runId);
-						m_chatRuntimeRunsById.erase(request.runId);
-					}
-
-					ClearEmbeddedRunCancelled(request.runId);
-					ClearDeepSeekRunCancelled(request.runId);
-					return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-						.ok = false,
-						.assistantText = {},
-						.modelId = activeModel,
-						.errorCode = kChatRuntimeErrorTimedOut,
-						.errorMessage = "chat runtime timed out",
-					};
-				}
-				return job->result;
+						.execute = std::move(executeRequest),
+					});
 			});
 
 		m_gatewayHost.SetChatAbortCallback([this](
 			const blazeclaw::gateway::GatewayHost::ChatAbortRequest& request) {
-				std::shared_ptr<ChatRuntimeJob> queuedJob;
-				std::string runProvider = m_activeChatProvider;
-				bool removedQueuedJob = false;
+				const bool cancelled = m_chatRuntime.Abort(request);
+				if (m_localModelActivationEnabled)
 				{
-					std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
-					auto stateIt = m_chatRuntimeRunsById.find(request.runId);
-					if (stateIt != m_chatRuntimeRunsById.end()) {
-						runProvider = stateIt->second.provider;
-						stateIt->second.status = ChatRuntimeJobLifecycleStatus::Cancelled;
-						stateIt->second.completedAtMs = CurrentEpochMs();
-						stateIt->second.errorCode = kChatRuntimeErrorCancelled;
-					}
-
-					auto jobIt = m_chatRuntimeJobsByRunId.find(request.runId);
-					if (jobIt != m_chatRuntimeJobsByRunId.end()) {
-						queuedJob = jobIt->second;
-						auto queueIt = std::find(
-							m_chatRuntimeQueue.begin(),
-							m_chatRuntimeQueue.end(),
-							queuedJob);
-						if (queueIt != m_chatRuntimeQueue.end()) {
-							m_chatRuntimeQueue.erase(queueIt);
-							removedQueuedJob = true;
-							m_chatRuntimeJobsByRunId.erase(jobIt);
-							m_chatRuntimeRunsById.erase(request.runId);
-						}
-					}
-				}
-
-				if (removedQueuedJob && queuedJob) {
-					std::lock_guard<std::mutex> completionLock(queuedJob->completionMutex);
-					queuedJob->result = blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-						.ok = false,
-						.assistantText = {},
-						.modelId = queuedJob->model,
-						.errorCode = kChatRuntimeErrorCancelled,
-						.errorMessage = "chat runtime cancelled",
-					};
-					queuedJob->completed = true;
-					queuedJob->completionCv.notify_all();
-				}
-
-				MarkEmbeddedRunCancelled(request.runId);
-				if (runProvider == "deepseek") {
-					MarkDeepSeekRunCancelled(request.runId);
-				}
-
-				if (removedQueuedJob) {
-					ClearEmbeddedRunCancelled(request.runId);
-					ClearDeepSeekRunCancelled(request.runId);
-				}
-
-				bool cancelled = removedQueuedJob;
-				if (m_localModelActivationEnabled) {
-					cancelled = m_localModelRuntime.Cancel(request.runId) || cancelled;
 					m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
 				}
-
 				return cancelled;
 			});
 
@@ -5905,201 +5845,10 @@ namespace blazeclaw::core {
 	void ServiceManager::Stop() {
 		m_skillsEnvOverrideService.RevertAll();
 		if (m_chatRuntimeAsyncQueueEnabled) {
-			StopChatRuntimeWorker();
+			m_chatRuntime.StopWorker();
 		}
 		m_gatewayHost.Stop();
 		m_running = false;
-	}
-
-	bool ServiceManager::StartChatRuntimeWorker() {
-		std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
-		if (m_chatRuntimeWorkerThread.joinable()) {
-			m_chatRuntimeWorkerAvailable = true;
-			return true;
-		}
-
-		m_chatRuntimeWorkerStopRequested = false;
-		try {
-			m_chatRuntimeWorkerThread = std::thread([this]() {
-				ChatRuntimeWorkerLoop();
-				});
-			m_chatRuntimeWorkerAvailable = true;
-			return true;
-		}
-		catch (...) {
-			m_chatRuntimeWorkerAvailable = false;
-			return false;
-		}
-	}
-
-	void ServiceManager::StopChatRuntimeWorker() {
-		std::vector<std::shared_ptr<ChatRuntimeJob>> abandonedJobs;
-		{
-			std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
-			m_chatRuntimeWorkerStopRequested = true;
-			m_chatRuntimeWorkerAvailable = false;
-			abandonedJobs.assign(
-				m_chatRuntimeQueue.begin(),
-				m_chatRuntimeQueue.end());
-			m_chatRuntimeQueue.clear();
-			m_chatRuntimeJobsByRunId.clear();
-			for (const auto& job : abandonedJobs) {
-				auto stateIt = m_chatRuntimeRunsById.find(job->request.runId);
-				if (stateIt != m_chatRuntimeRunsById.end()) {
-					stateIt->second.status = ChatRuntimeJobLifecycleStatus::Failed;
-					stateIt->second.completedAtMs = CurrentEpochMs();
-					stateIt->second.errorCode = kChatRuntimeErrorWorkerUnavailable;
-				}
-			}
-		}
-
-		m_chatRuntimeQueueCv.notify_all();
-
-		for (const auto& job : abandonedJobs) {
-			std::lock_guard<std::mutex> completionLock(job->completionMutex);
-			job->result = blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-				.ok = false,
-				.assistantText = {},
-				.modelId = job->model,
-				.errorCode = kChatRuntimeErrorWorkerUnavailable,
-				.errorMessage = "chat runtime worker unavailable",
-			};
-			job->completed = true;
-			job->completionCv.notify_all();
-		}
-
-		if (m_chatRuntimeWorkerThread.joinable()) {
-			m_chatRuntimeWorkerThread.join();
-		}
-
-		std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
-		m_chatRuntimeQueue.clear();
-		m_chatRuntimeJobsByRunId.clear();
-		m_chatRuntimeRunsById.clear();
-		m_chatRuntimeNextEnqueueSequence = 1;
-		m_chatRuntimeWorkerStopRequested = false;
-	}
-
-	void ServiceManager::ChatRuntimeWorkerLoop() {
-		for (;;) {
-			std::shared_ptr<ChatRuntimeJob> job;
-			bool cancelledBeforeExecution = false;
-			bool timedOutBeforeExecution = false;
-			{
-				std::unique_lock<std::mutex> lock(m_chatRuntimeQueueMutex);
-				m_chatRuntimeQueueCv.wait(lock, [this]() {
-					return m_chatRuntimeWorkerStopRequested || !m_chatRuntimeQueue.empty();
-					});
-
-				if (m_chatRuntimeWorkerStopRequested && m_chatRuntimeQueue.empty()) {
-					break;
-				}
-
-				job = m_chatRuntimeQueue.front();
-				m_chatRuntimeQueue.pop_front();
-				auto stateIt = m_chatRuntimeRunsById.find(job->request.runId);
-				if (stateIt != m_chatRuntimeRunsById.end()) {
-					const std::uint64_t nowMs = CurrentEpochMs();
-					cancelledBeforeExecution =
-						stateIt->second.status == ChatRuntimeJobLifecycleStatus::Cancelled;
-					timedOutBeforeExecution =
-						nowMs > stateIt->second.enqueuedAtMs &&
-						(nowMs - stateIt->second.enqueuedAtMs) >
-						m_chatRuntimeQueueWaitTimeoutMs;
-					stateIt->second.status = ChatRuntimeJobLifecycleStatus::Started;
-					stateIt->second.startedAtMs = nowMs;
-				}
-			}
-
-			blazeclaw::gateway::GatewayHost::ChatRuntimeResult result;
-			if (cancelledBeforeExecution) {
-				result = blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-					.ok = false,
-					.assistantText = {},
-					.modelId = job->model,
-					.errorCode = kChatRuntimeErrorCancelled,
-					.errorMessage = "chat runtime cancelled",
-				};
-			}
-			else if (timedOutBeforeExecution) {
-				result = blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-					.ok = false,
-					.assistantText = {},
-					.modelId = job->model,
-					.errorCode = kChatRuntimeErrorTimedOut,
-					.errorMessage = "chat runtime timed out before execution",
-				};
-			}
-			else if (job->execute) {
-				const std::uint64_t executeStartedAtMs = CurrentEpochMs();
-				result = job->execute();
-				const std::uint64_t executeCompletedAtMs = CurrentEpochMs();
-				if (executeCompletedAtMs > executeStartedAtMs &&
-					(executeCompletedAtMs - executeStartedAtMs) >
-					m_chatRuntimeExecutionTimeoutMs) {
-					result = blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-						.ok = false,
-						.assistantText = {},
-						.modelId = job->model,
-						.errorCode = kChatRuntimeErrorTimedOut,
-						.errorMessage = "chat runtime execution timed out",
-					};
-				}
-
-				if (IsEmbeddedRunCancelled(job->request.runId) ||
-					IsDeepSeekRunCancelled(job->request.runId)) {
-					result = blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-						.ok = false,
-						.assistantText = {},
-						.modelId = job->model,
-						.errorCode = kChatRuntimeErrorCancelled,
-						.errorMessage = "chat runtime cancelled",
-					};
-				}
-			}
-			else {
-				result = blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-					.ok = false,
-					.assistantText = {},
-					.modelId = job->model,
-					.errorCode = kChatRuntimeErrorWorkerUnavailable,
-					.errorMessage = "chat runtime worker unavailable",
-				};
-			}
-
-			{
-				std::lock_guard<std::mutex> lock(m_chatRuntimeQueueMutex);
-				auto stateIt = m_chatRuntimeRunsById.find(job->request.runId);
-				if (stateIt != m_chatRuntimeRunsById.end()) {
-					stateIt->second.completedAtMs = CurrentEpochMs();
-					stateIt->second.errorCode = result.errorCode;
-					if (result.ok) {
-						stateIt->second.status = ChatRuntimeJobLifecycleStatus::Completed;
-					}
-					else if (result.errorCode == kChatRuntimeErrorCancelled) {
-						stateIt->second.status = ChatRuntimeJobLifecycleStatus::Cancelled;
-					}
-					else if (result.errorCode == kChatRuntimeErrorTimedOut) {
-						stateIt->second.status = ChatRuntimeJobLifecycleStatus::TimedOut;
-					}
-					else {
-						stateIt->second.status = ChatRuntimeJobLifecycleStatus::Failed;
-					}
-
-					m_chatRuntimeRunsById.erase(stateIt);
-				}
-
-				m_chatRuntimeJobsByRunId.erase(job->request.runId);
-			}
-
-			ClearEmbeddedRunCancelled(job->request.runId);
-			ClearDeepSeekRunCancelled(job->request.runId);
-
-			std::lock_guard<std::mutex> completionLock(job->completionMutex);
-			job->result = std::move(result);
-			job->completed = true;
-			job->completionCv.notify_all();
-		}
 	}
 
 	bool ServiceManager::IsRunning() const noexcept {

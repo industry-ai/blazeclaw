@@ -28,6 +28,7 @@
 #include "SkillSecurityScanService.h"
 #include "SkillsSyncService.h"
 #include "SkillsWatchService.h"
+#include "runtime/CChatRuntime.h"
 #include "runtime/LocalModel/OnnxTextGenerationRuntime.h"
 #include <atomic>
 #include <condition_variable>
@@ -100,61 +101,9 @@ namespace blazeclaw::core {
 		[[nodiscard]] EmailFallbackResolvedPolicy ResolveEmailFallbackPolicy(
 			const std::wstring& toolName,
 			const std::wstring& capabilityName) const;
-		enum class ChatRuntimeJobLifecycleStatus {
-			Queued,
-			Started,
-			Delta,
-			Completed,
-			Failed,
-			Cancelled,
-			TimedOut,
-		};
-
-		struct ChatRuntimeJob {
-			std::uint64_t enqueueSequence = 0;
-			std::uint64_t enqueuedAtMs = 0;
-			ChatRuntimeJobLifecycleStatus status =
-				ChatRuntimeJobLifecycleStatus::Queued;
-			blazeclaw::gateway::GatewayHost::ChatRuntimeRequest request;
-			std::string sessionId;
-			std::string runtimeMessage;
-			std::string provider;
-			std::string model;
-			std::function<blazeclaw::gateway::GatewayHost::ChatRuntimeResult()> execute;
-			blazeclaw::gateway::GatewayHost::ChatRuntimeResult result;
-			std::mutex completionMutex;
-			std::condition_variable completionCv;
-			bool completed = false;
-		};
-
-		struct ChatRuntimeRunState {
-			std::string runId;
-			std::string sessionId;
-			std::string provider;
-			std::string model;
-			std::uint64_t enqueuedAtMs = 0;
-			std::uint64_t startedAtMs = 0;
-			std::uint64_t completedAtMs = 0;
-			ChatRuntimeJobLifecycleStatus status =
-				ChatRuntimeJobLifecycleStatus::Queued;
-			std::string errorCode;
-		};
-
 		static constexpr std::size_t kChatRuntimeQueueCapacity = 64;
 		static constexpr std::uint64_t kChatRuntimeQueueWaitTimeoutMs = 15000;
 		static constexpr std::uint64_t kChatRuntimeExecutionTimeoutMs = 120000;
-		static constexpr const char* kChatRuntimeErrorQueueFull =
-			"chat_runtime_queue_full";
-		static constexpr const char* kChatRuntimeErrorCancelled =
-			"chat_runtime_cancelled";
-		static constexpr const char* kChatRuntimeErrorTimedOut =
-			"chat_runtime_timed_out";
-		static constexpr const char* kChatRuntimeErrorWorkerUnavailable =
-			"chat_runtime_worker_unavailable";
-
-		bool StartChatRuntimeWorker();
-		void StopChatRuntimeWorker();
-		void ChatRuntimeWorkerLoop();
 
 		[[nodiscard]] bool IsLocalModelRolloutEligible() const;
 		[[nodiscard]] bool IsEmbeddedDynamicLoopCanaryEligible(
@@ -298,6 +247,7 @@ namespace blazeclaw::core {
 		SkillSecurityScanSnapshot m_skillSecurityScan;
 		SkillsWatchService m_skillsWatchService;
 		SkillsWatchSnapshot m_skillsWatch;
+		CChatRuntime m_chatRuntime;
 		blazeclaw::gateway::GatewayHost m_gatewayHost;
 
 		[[nodiscard]] std::optional<std::string> ResolveDeepSeekCredentialUtf8() const;
@@ -323,17 +273,6 @@ namespace blazeclaw::core {
 		mutable std::unordered_map<std::string, bool> m_deepSeekCancelledRuns;
 		mutable std::mutex m_embeddedCancelMutex;
 		mutable std::unordered_map<std::string, bool> m_embeddedCancelledRuns;
-		mutable std::mutex m_chatRuntimeQueueMutex;
-		std::condition_variable m_chatRuntimeQueueCv;
-		std::deque<std::shared_ptr<ChatRuntimeJob>> m_chatRuntimeQueue;
-		std::unordered_map<std::string, std::shared_ptr<ChatRuntimeJob>>
-			m_chatRuntimeJobsByRunId;
-		std::unordered_map<std::string, ChatRuntimeRunState>
-			m_chatRuntimeRunsById;
-		std::uint64_t m_chatRuntimeNextEnqueueSequence = 1;
-		std::thread m_chatRuntimeWorkerThread;
-		bool m_chatRuntimeWorkerStopRequested = false;
-		bool m_chatRuntimeWorkerAvailable = false;
 		bool m_chatRuntimeAsyncQueueEnabled = true;
 		std::uint64_t m_chatRuntimeQueueWaitTimeoutMs =
 			kChatRuntimeQueueWaitTimeoutMs;
