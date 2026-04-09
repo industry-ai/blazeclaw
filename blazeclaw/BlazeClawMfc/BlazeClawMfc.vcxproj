@@ -99,6 +99,7 @@
     <ClInclude Include="src\app\BlazeClawMFCDoc.h" />
     <ClInclude Include="src\app\BlazeClawMFCView.h" />
     <ClInclude Include="src\app\calendarbar.h" />
+    <ClInclude Include="src\app\CBridge.h" />
     <ClInclude Include="src\app\ChatInputEdit.h" />
     <ClInclude Include="src\app\ChatView.h" />
     <ClInclude Include="src\app\ChildFrm.h" />
@@ -191,6 +192,7 @@
     <ClCompile Include="src\app\BlazeClawMFCDoc.cpp" />
     <ClCompile Include="src\app\BlazeClawMFCView.cpp" />
     <ClCompile Include="src\app\calendarbar.cpp" />
+    <ClCompile Include="src\app\CBridge.cpp" />
     <ClCompile Include="src\app\ChatInputEdit.cpp" />
     <ClCompile Include="src\app\ChatView.cpp" />
     <ClCompile Include="src\app\ChildFrm.cpp" />

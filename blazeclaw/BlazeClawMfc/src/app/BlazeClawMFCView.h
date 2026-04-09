@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "CBridge.h"
 #include "EventTransport.h"
 
 #include <cstdint>
@@ -108,6 +109,7 @@ protected:
 	std::string m_bridgeLastRuntimeKind;
 	std::unordered_set<std::string> m_reportedSkillPathRunIds;
 	CEventTransport m_eventTransport;
+	CBridge m_bridge;
 
 	void InitializeWebViewBridge();
 	void HandleWebMessageJson(const std::wstring& webMessageJson);
