@@ -4003,117 +4003,63 @@ namespace blazeclaw::core {
 	}
 
 	blazeclaw::gateway::SkillsCatalogGatewayState ServiceManager::BuildGatewaySkillsState() const {
-		blazeclaw::gateway::SkillsCatalogGatewayState gatewaySkillsState;
-		gatewaySkillsState.entries.reserve(m_skillsCatalog.entries.size());
-
-		std::unordered_map<std::wstring, SkillsEligibilityEntry> eligibilityByName;
-		for (const auto& eligibility : m_skillsEligibility.entries) {
-			eligibilityByName.emplace(eligibility.skillName, eligibility);
-		}
-
-		std::unordered_map<std::wstring, SkillsCommandSpec> commandsBySkill;
-		for (const auto& command : m_skillsCommands.commands) {
-			commandsBySkill.emplace(command.skillName, command);
-		}
-
-		std::unordered_map<std::wstring, SkillsInstallPlanEntry> installBySkill;
-		for (const auto& plan : m_skillsInstall.entries) {
-			installBySkill.emplace(plan.skillName, plan);
-		}
-
-		for (const auto& entry : m_skillsCatalog.entries) {
-			const auto eligibilityIt = eligibilityByName.find(entry.skillName);
-			const auto commandIt = commandsBySkill.find(entry.skillName);
-			const auto installIt = installBySkill.find(entry.skillName);
-
-			gatewaySkillsState.entries.push_back(BuildGatewaySkillEntry(
-				entry,
-				eligibilityIt != eligibilityByName.end() ? &eligibilityIt->second : nullptr,
-				commandIt != commandsBySkill.end() ? &commandIt->second : nullptr,
-				installIt != installBySkill.end() ? &installIt->second : nullptr));
-		}
-
-		gatewaySkillsState.rootsScanned = m_skillsCatalog.diagnostics.rootsScanned;
-		gatewaySkillsState.rootsSkipped = m_skillsCatalog.diagnostics.rootsSkipped;
-		gatewaySkillsState.oversizedSkillFiles =
-			m_skillsCatalog.diagnostics.oversizedSkillFiles;
-		gatewaySkillsState.invalidFrontmatterFiles =
-			m_skillsCatalog.diagnostics.invalidFrontmatterFiles;
-		gatewaySkillsState.warningCount = m_skillsCatalog.diagnostics.warnings.size();
-		gatewaySkillsState.eligibleCount = m_skillsEligibility.eligibleCount;
-		gatewaySkillsState.disabledCount = m_skillsEligibility.disabledCount;
-		gatewaySkillsState.blockedByAllowlistCount =
-			m_skillsEligibility.blockedByAllowlistCount;
-		gatewaySkillsState.missingRequirementsCount =
-			m_skillsEligibility.missingRequirementsCount;
-		gatewaySkillsState.promptIncludedCount = m_skillsPrompt.includedCount;
-		gatewaySkillsState.promptChars = m_skillsPrompt.promptChars;
-		gatewaySkillsState.promptTruncated = m_skillsPrompt.truncated;
-		gatewaySkillsState.snapshotVersion = m_skillsWatch.version;
-		gatewaySkillsState.watchEnabled = m_skillsWatch.watchEnabled;
-		gatewaySkillsState.watchDebounceMs = m_skillsWatch.debounceMs;
-		gatewaySkillsState.watchReason = ToNarrow(m_skillsWatch.reason);
-		gatewaySkillsState.prompt = ToNarrow(m_skillsPrompt.prompt);
-		gatewaySkillsState.sandboxSyncOk = m_skillsSync.success;
-		gatewaySkillsState.sandboxSynced = m_skillsSync.copiedSkills;
-		gatewaySkillsState.sandboxSkipped = m_skillsSync.skippedSkills;
-		gatewaySkillsState.envAllowed = m_skillsEnvOverrides.allowedCount;
-		gatewaySkillsState.envBlocked = m_skillsEnvOverrides.blockedCount;
-		gatewaySkillsState.installExecutableCount = m_skillsInstall.executableCount;
-		gatewaySkillsState.installBlockedCount = m_skillsInstall.blockedCount;
-		gatewaySkillsState.scanInfoCount = m_skillSecurityScan.infoCount;
-		gatewaySkillsState.scanWarnCount = m_skillSecurityScan.warnCount;
-		gatewaySkillsState.scanCriticalCount = m_skillSecurityScan.criticalCount;
-		gatewaySkillsState.scanScannedFiles = m_skillSecurityScan.scannedFileCount;
-		gatewaySkillsState.governanceReportingEnabled = m_hooksGovernanceReportingEnabled;
-		gatewaySkillsState.governanceReportsGenerated =
-			static_cast<std::size_t>(m_hooksGovernanceReportsGenerated);
-		gatewaySkillsState.lastGovernanceReportPath =
-			ToNarrow(m_hooksLastGovernanceReportPath);
-		gatewaySkillsState.policyBlockedCount =
-			static_cast<std::size_t>(m_hookExecution.diagnostics.policyBlockedCount);
-		gatewaySkillsState.driftDetectedCount =
-			static_cast<std::size_t>(m_hookExecution.diagnostics.driftDetectedCount);
-		gatewaySkillsState.lastDriftReason =
-			ToNarrow(m_hookExecution.diagnostics.lastDriftReason);
-		gatewaySkillsState.autoRemediationEnabled = m_hooksAutoRemediationEnabled;
-		gatewaySkillsState.autoRemediationRequiresApproval =
-			m_hooksAutoRemediationRequiresApproval;
-		gatewaySkillsState.autoRemediationExecuted =
-			static_cast<std::size_t>(m_hooksAutoRemediationExecuted);
-		gatewaySkillsState.lastAutoRemediationStatus =
-			ToNarrow(m_hooksLastAutoRemediationStatus);
-		gatewaySkillsState.autoRemediationTenantId =
-			ToNarrow(m_hooksAutoRemediationTenantId);
-		gatewaySkillsState.lastAutoRemediationPlaybookPath =
-			ToNarrow(m_hooksLastAutoRemediationPlaybookPath);
-		gatewaySkillsState.autoRemediationTokenMaxAgeMinutes =
-			static_cast<std::size_t>(m_hooksAutoRemediationTokenMaxAgeMinutes);
-		gatewaySkillsState.autoRemediationTokenRotations =
-			static_cast<std::size_t>(m_hooksAutoRemediationTokenRotations);
-		gatewaySkillsState.lastRemediationTelemetryPath =
-			ToNarrow(m_hooksLastRemediationTelemetryPath);
-		gatewaySkillsState.lastRemediationAuditPath =
-			ToNarrow(m_hooksLastRemediationAuditPath);
-		gatewaySkillsState.remediationSloStatus =
-			ToNarrow(m_hooksRemediationSloStatus);
-		gatewaySkillsState.remediationSloMaxDriftDetected =
-			static_cast<std::size_t>(m_hooksRemediationSloMaxDriftDetected);
-		gatewaySkillsState.remediationSloMaxPolicyBlocked =
-			static_cast<std::size_t>(m_hooksRemediationSloMaxPolicyBlocked);
-		gatewaySkillsState.lastComplianceAttestationPath =
-			ToNarrow(m_hooksLastComplianceAttestationPath);
-		gatewaySkillsState.enterpriseSlaPolicyId =
-			ToNarrow(m_hooksEnterpriseSlaPolicyId);
-		gatewaySkillsState.crossTenantAttestationAggregationEnabled =
-			m_hooksCrossTenantAttestationAggregationEnabled;
-		gatewaySkillsState.crossTenantAttestationAggregationStatus =
-			ToNarrow(m_hooksCrossTenantAttestationAggregationStatus);
-		gatewaySkillsState.crossTenantAttestationAggregationCount =
-			static_cast<std::size_t>(m_hooksCrossTenantAttestationAggregationCount);
-		gatewaySkillsState.lastCrossTenantAttestationAggregationPath =
-			ToNarrow(m_hooksLastCrossTenantAttestationAggregationPath);
-		return gatewaySkillsState;
+		return m_skillsHooksCoordinator.BuildGatewaySkillsState(
+			CSkillsHooksCoordinator::GatewayStateContext{
+				.catalog = m_skillsCatalog,
+				.eligibility = m_skillsEligibility,
+				.prompt = m_skillsPrompt,
+				.commands = m_skillsCommands,
+				.watch = m_skillsWatch,
+				.sync = m_skillsSync,
+				.envOverrides = m_skillsEnvOverrides,
+				.install = m_skillsInstall,
+				.securityScan = m_skillSecurityScan,
+				.hookExecution = m_hookExecution,
+				.hooksGovernanceReportingEnabled = m_hooksGovernanceReportingEnabled,
+				.hooksLastGovernanceReportPath = m_hooksLastGovernanceReportPath,
+				.hooksGovernanceReportsGenerated = m_hooksGovernanceReportsGenerated,
+				.hooksAutoRemediationEnabled = m_hooksAutoRemediationEnabled,
+				.hooksAutoRemediationRequiresApproval = m_hooksAutoRemediationRequiresApproval,
+				.hooksAutoRemediationExecuted = m_hooksAutoRemediationExecuted,
+				.hooksLastAutoRemediationStatus = m_hooksLastAutoRemediationStatus,
+				.hooksAutoRemediationTenantId = m_hooksAutoRemediationTenantId,
+				.hooksLastAutoRemediationPlaybookPath = m_hooksLastAutoRemediationPlaybookPath,
+				.hooksAutoRemediationTokenMaxAgeMinutes = m_hooksAutoRemediationTokenMaxAgeMinutes,
+				.hooksAutoRemediationTokenRotations = m_hooksAutoRemediationTokenRotations,
+				.hooksLastRemediationTelemetryPath = m_hooksLastRemediationTelemetryPath,
+				.hooksLastRemediationAuditPath = m_hooksLastRemediationAuditPath,
+				.hooksRemediationSloStatus = m_hooksRemediationSloStatus,
+				.hooksRemediationSloMaxDriftDetected = m_hooksRemediationSloMaxDriftDetected,
+				.hooksRemediationSloMaxPolicyBlocked = m_hooksRemediationSloMaxPolicyBlocked,
+				.hooksLastComplianceAttestationPath = m_hooksLastComplianceAttestationPath,
+				.hooksEnterpriseSlaPolicyId = m_hooksEnterpriseSlaPolicyId,
+				.hooksCrossTenantAttestationAggregationEnabled =
+					m_hooksCrossTenantAttestationAggregationEnabled,
+				.hooksCrossTenantAttestationAggregationStatus =
+					m_hooksCrossTenantAttestationAggregationStatus,
+				.hooksCrossTenantAttestationAggregationCount =
+					m_hooksCrossTenantAttestationAggregationCount,
+				.hooksLastCrossTenantAttestationAggregationPath =
+					m_hooksLastCrossTenantAttestationAggregationPath,
+			},
+			[this](
+				const SkillsCatalogEntry& entry,
+				const SkillsEligibilityEntry* eligibility,
+				const SkillsCommandSpec* command,
+				const SkillsInstallPlanEntry* install)
+			{
+				return BuildGatewaySkillEntry(entry, eligibility, command, install);
+			},
+			[](const std::wstring& value)
+			{
+				std::string output;
+				output.reserve(value.size());
+				for (const auto ch : value)
+				{
+					output.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
+				}
+				return output;
+			});
 	}
 
 	blazeclaw::gateway::SkillsCatalogGatewayEntry
@@ -4269,49 +4215,39 @@ namespace blazeclaw::core {
 		const blazeclaw::config::AppConfig& config,
 		const bool forceRefresh,
 		const std::wstring& reason) {
-		const auto workspaceRoot =
-			ResolveWorkspaceRootForSkills(std::filesystem::current_path());
-		m_skillsCatalog = m_skillsCatalogService.LoadCatalog(
-			workspaceRoot,
-			config);
-		m_skillsEligibility = m_skillsEligibilityService.Evaluate(
-			m_skillsCatalog,
-			config);
-		m_hookCatalog = m_hookCatalogService.BuildSnapshot(m_skillsCatalog);
-		m_hookExecution = m_hookExecutionService.Snapshot();
-		m_skillsPrompt = m_skillsPromptService.BuildSnapshot(
-			m_skillsCatalog,
-			m_skillsEligibility,
-			config,
-			std::nullopt,
-			m_hooksFallbackPromptInjection);
-		m_hookEvents = m_hookEventService.Snapshot();
-		m_skillsCommands = m_skillsCommandService.BuildSnapshot(
-			m_skillsCatalog,
-			m_skillsEligibility);
-		m_skillsSync = m_skillsSyncService.SyncToSandbox(
-			workspaceRoot,
-			m_skillsCatalog,
-			m_skillsEligibility,
-			config);
-		m_skillsEnvOverrides = m_skillsEnvOverrideService.BuildSnapshot(
-			m_skillsCatalog,
-			m_skillsEligibility,
-			config);
-		m_skillsInstall = m_skillsInstallService.BuildSnapshot(
-			m_skillsCatalog,
-			m_skillsEligibility,
-			config);
-		m_skillSecurityScan = m_skillSecurityScanService.BuildSnapshot(
-			m_skillsCatalog,
-			m_skillsEligibility,
-			config);
-		m_skillsEnvOverrideService.Apply(m_skillsEnvOverrides);
-		m_skillsWatch = m_skillsWatchService.Observe(
-			m_skillsCatalog,
+		m_skillsHooksCoordinator.RefreshSkillsState(
 			config,
 			forceRefresh,
-			reason);
+			reason,
+			CSkillsHooksCoordinator::RefreshContext{
+				.catalogService = m_skillsCatalogService,
+				.eligibilityService = m_skillsEligibilityService,
+				.hookCatalogService = m_hookCatalogService,
+				.hookExecutionService = m_hookExecutionService,
+				.promptService = m_skillsPromptService,
+				.hookEventService = m_hookEventService,
+				.commandService = m_skillsCommandService,
+				.syncService = m_skillsSyncService,
+				.envOverrideService = m_skillsEnvOverrideService,
+				.installService = m_skillsInstallService,
+				.securityScanService = m_skillSecurityScanService,
+				.watchService = m_skillsWatchService,
+				.catalog = m_skillsCatalog,
+				.eligibility = m_skillsEligibility,
+				.hookCatalog = m_hookCatalog,
+				.hookExecution = m_hookExecution,
+				.prompt = m_skillsPrompt,
+				.events = m_hookEvents,
+				.commands = m_skillsCommands,
+				.sync = m_skillsSync,
+				.envOverrides = m_skillsEnvOverrides,
+				.install = m_skillsInstall,
+				.securityScan = m_skillSecurityScan,
+				.watch = m_skillsWatch,
+			 .workspaceRoot = ResolveWorkspaceRootForSkills(
+					std::filesystem::current_path()),
+				.hooksFallbackPromptInjection = m_hooksFallbackPromptInjection,
+			});
 	}
 
 	bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
@@ -4581,15 +4517,21 @@ namespace blazeclaw::core {
 		m_lastEmbeddedPromotionReady = false;
 		m_lastEmbeddedFallbackUsed = false;
 		m_lastEmbeddedFallbackReason.clear();
-		m_chatRuntimeAsyncQueueEnabled = ReadBoolEnvOrDefault(
-			L"BLAZECLAW_CHAT_RUNTIME_ASYNC_QUEUE_ENABLED",
-			true);
-		m_chatRuntimeQueueWaitTimeoutMs = ParseUInt64EnvValue(
-			L"BLAZECLAW_CHAT_RUNTIME_QUEUE_WAIT_TIMEOUT_MS",
-			kChatRuntimeQueueWaitTimeoutMs);
-		m_chatRuntimeExecutionTimeoutMs = ParseUInt64EnvValue(
-			L"BLAZECLAW_CHAT_RUNTIME_EXECUTION_TIMEOUT_MS",
-			kChatRuntimeExecutionTimeoutMs);
+		const auto runtimeQueueSettings =
+			m_serviceBootstrapCoordinator.ResolveRuntimeQueueSettings(
+				[](const wchar_t* key, const bool fallback)
+				{
+					return ReadBoolEnvOrDefault(key, fallback);
+				},
+				[](const wchar_t* key, const std::uint64_t fallback)
+				{
+					return ParseUInt64EnvValue(key, fallback);
+				},
+				kChatRuntimeQueueWaitTimeoutMs,
+				kChatRuntimeExecutionTimeoutMs);
+		m_chatRuntimeAsyncQueueEnabled = runtimeQueueSettings.asyncQueueEnabled;
+		m_chatRuntimeQueueWaitTimeoutMs = runtimeQueueSettings.queueWaitTimeoutMs;
+		m_chatRuntimeExecutionTimeoutMs = runtimeQueueSettings.executionTimeoutMs;
 		m_chatRuntime.Initialize(
 			CChatRuntime::Dependencies{
 				.isRunCancelled = [this](
@@ -4863,156 +4805,48 @@ namespace blazeclaw::core {
 			AppendStartupTrace("ServiceManager.Start.hooks.bootstrap.skipped");
 		}
 
-		std::wstring fixtureError;
 		const std::vector<std::filesystem::path> fixtureCandidates = {
-			std::filesystem::current_path() / L"blazeclaw" / L"fixtures" / L"agents",
-			std::filesystem::current_path() / L"fixtures" / L"agents",
-			std::filesystem::current_path() / L"blazeclaw" / L"fixtures" / L"skills-catalog",
-			std::filesystem::current_path() / L"fixtures" / L"skills-catalog",
+			  std::filesystem::current_path() / L"blazeclaw" / L"fixtures" / L"agents",
+			  std::filesystem::current_path() / L"fixtures" / L"agents",
+			  std::filesystem::current_path() / L"blazeclaw" / L"fixtures" / L"skills-catalog",
+			  std::filesystem::current_path() / L"fixtures" / L"skills-catalog",
 		};
 
 		const bool startupFixtureValidationEnabled = ReadBoolEnvOrDefault(
 			L"BLAZECLAW_FIXTURES_STARTUP_VALIDATION_ENABLED",
 			false);
 		if (startupFixtureValidationEnabled) {
-			for (const auto& candidate : fixtureCandidates) {
-				std::error_code ec;
-				if (!std::filesystem::is_directory(candidate, ec) || ec) {
-					continue;
-				}
-
-				const std::wstring candidateName = candidate.filename().wstring();
-				if (candidateName == L"agents") {
-					if (!m_agentsCatalogService.ValidateFixtureScenarios(candidate, fixtureError)) {
-						m_skillsCatalog.diagnostics.warnings.push_back(
-							L"agents-scope fixture validation failed: " + fixtureError);
-					}
-
-					if (!m_agentsWorkspaceService.ValidateFixtureScenarios(candidate, fixtureError)) {
-						m_skillsCatalog.diagnostics.warnings.push_back(
-							L"agents-workspace fixture validation failed: " + fixtureError);
-					}
-
-					if (!m_agentsToolPolicyService.ValidateFixtureScenarios(candidate, fixtureError)) {
-						m_skillsCatalog.diagnostics.warnings.push_back(
-							L"agents-tool-policy fixture validation failed: " + fixtureError);
-					}
-
-					if (!m_agentsShellRuntimeService.ValidateFixtureScenarios(candidate, fixtureError)) {
-						m_skillsCatalog.diagnostics.warnings.push_back(
-							L"agents-shell-runtime fixture validation failed: " + fixtureError);
-					}
-
-					if (!m_agentsModelRoutingService.ValidateFixtureScenarios(candidate, fixtureError)) {
-						m_skillsCatalog.diagnostics.warnings.push_back(
-							L"agents-model-routing fixture validation failed: " + fixtureError);
-					}
-
-					if (!m_agentsAuthProfileService.ValidateFixtureScenarios(candidate, fixtureError)) {
-						m_skillsCatalog.diagnostics.warnings.push_back(
-							L"agents-auth-profile fixture validation failed: " + fixtureError);
-					}
-
-					if (!m_agentsSandboxService.ValidateFixtureScenarios(candidate, fixtureError)) {
-						m_skillsCatalog.diagnostics.warnings.push_back(
-							L"agents-sandbox fixture validation failed: " + fixtureError);
-					}
-
-					if (!m_agentsTranscriptSafetyService.ValidateFixtureScenarios(candidate, fixtureError)) {
-						m_skillsCatalog.diagnostics.warnings.push_back(
-							L"agents-transcript fixture validation failed: " + fixtureError);
-					}
-
-					if (!m_subagentRegistryService.ValidateFixtureScenarios(candidate, fixtureError)) {
-						m_skillsCatalog.diagnostics.warnings.push_back(
-							L"agents-subagent fixture validation failed: " + fixtureError);
-					}
-
-					if (!m_acpSpawnService.ValidateFixtureScenarios(candidate, fixtureError)) {
-						m_skillsCatalog.diagnostics.warnings.push_back(
-							L"agents-acp fixture validation failed: " + fixtureError);
-					}
-
-					if (!m_embeddingsService.ValidateFixtureScenarios(candidate, fixtureError)) {
-						m_skillsCatalog.diagnostics.warnings.push_back(
-							L"agents-embeddings fixture validation failed: " + fixtureError);
-					}
-
-					if (!m_retrievalMemoryService.ValidateFixtureScenarios(candidate, fixtureError)) {
-						m_skillsCatalog.diagnostics.warnings.push_back(
-							L"agents-retrieval fixture validation failed: " + fixtureError);
-					}
-
-					if (!m_piEmbeddedService.ValidateFixtureScenarios(candidate, fixtureError)) {
-						m_skillsCatalog.diagnostics.warnings.push_back(
-							L"agents-embedded fixture validation failed: " + fixtureError);
-					}
-
-					continue;
-				}
-
-				if (!m_skillsCatalogService.ValidateFixtureScenarios(candidate, fixtureError)) {
-					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"skills-catalog fixture validation failed: " + fixtureError);
-				}
-
-				if (!m_skillsEligibilityService.ValidateFixtureScenarios(candidate, fixtureError)) {
-					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"skills-eligibility fixture validation failed: " + fixtureError);
-				}
-
-				if (!m_skillsPromptService.ValidateFixtureScenarios(candidate, fixtureError)) {
-					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"skills-prompt fixture validation failed: " + fixtureError);
-				}
-
-				if (!m_skillsCommandService.ValidateFixtureScenarios(candidate, fixtureError)) {
-					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"skills-command fixture validation failed: " + fixtureError);
-				}
-
-				if (!m_skillsWatchService.ValidateFixtureScenarios(candidate, fixtureError)) {
-					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"skills-watch fixture validation failed: " + fixtureError);
-				}
-
-				if (!m_skillsSyncService.ValidateFixtureScenarios(candidate, fixtureError)) {
-					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"skills-sync fixture validation failed: " + fixtureError);
-				}
-
-				if (!m_skillsEnvOverrideService.ValidateFixtureScenarios(candidate, fixtureError)) {
-					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"skills-env fixture validation failed: " + fixtureError);
-				}
-
-				if (!m_skillsInstallService.ValidateFixtureScenarios(candidate, fixtureError)) {
-					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"skills-install fixture validation failed: " + fixtureError);
-				}
-
-				if (!m_skillSecurityScanService.ValidateFixtureScenarios(candidate, fixtureError)) {
-					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"skills-scan fixture validation failed: " + fixtureError);
-				}
-
-				if (!m_hookCatalogService.ValidateFixtureScenarios(candidate, fixtureError)) {
-					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"hooks-catalog fixture validation failed: " + fixtureError);
-				}
-
-				if (!m_hookEventService.ValidateFixtureScenarios(candidate, fixtureError)) {
-					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"hooks-events fixture validation failed: " + fixtureError);
-				}
-
-				if (!m_hookExecutionService.ValidateFixtureScenarios(candidate, fixtureError)) {
-					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"hooks-execution fixture validation failed: " + fixtureError);
-				}
-
-				break;
-			}
+			m_serviceBootstrapCoordinator.ValidateStartupFixtures(
+				CServiceBootstrapCoordinator::FixtureValidationContext{
+					.enabled = startupFixtureValidationEnabled,
+					.fixtureCandidates = fixtureCandidates,
+					.warnings = m_skillsCatalog.diagnostics.warnings,
+					.agentsCatalogService = m_agentsCatalogService,
+					.agentsWorkspaceService = m_agentsWorkspaceService,
+					.agentsToolPolicyService = m_agentsToolPolicyService,
+					.agentsShellRuntimeService = m_agentsShellRuntimeService,
+					.agentsModelRoutingService = m_agentsModelRoutingService,
+					.agentsAuthProfileService = m_agentsAuthProfileService,
+					.agentsSandboxService = m_agentsSandboxService,
+					.agentsTranscriptSafetyService = m_agentsTranscriptSafetyService,
+					.subagentRegistryService = m_subagentRegistryService,
+					.acpSpawnService = m_acpSpawnService,
+					.embeddingsService = m_embeddingsService,
+					.retrievalMemoryService = m_retrievalMemoryService,
+					.piEmbeddedService = m_piEmbeddedService,
+					.skillsCatalogService = m_skillsCatalogService,
+					.skillsEligibilityService = m_skillsEligibilityService,
+					.skillsPromptService = m_skillsPromptService,
+					.skillsCommandService = m_skillsCommandService,
+					.skillsWatchService = m_skillsWatchService,
+					.skillsSyncService = m_skillsSyncService,
+					.skillsEnvOverrideService = m_skillsEnvOverrideService,
+					.skillsInstallService = m_skillsInstallService,
+					.skillSecurityScanService = m_skillSecurityScanService,
+					.hookCatalogService = m_hookCatalogService,
+					.hookEventService = m_hookEventService,
+					.hookExecutionService = m_hookExecutionService,
+				});
 		}
 		else {
 			AppendStartupTrace("ServiceManager.Start.fixtures.validation.skipped");

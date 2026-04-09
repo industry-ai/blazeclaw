@@ -29,6 +29,8 @@
 #include "SkillsSyncService.h"
 #include "SkillsWatchService.h"
 #include "providers/CDeepSeekClient.h"
+#include "skills/CSkillsHooksCoordinator.h"
+#include "bootstrap/CServiceBootstrapCoordinator.h"
 #include "tools/CToolRuntimeRegistry.h"
 #include "runtime/CChatRuntime.h"
 #include "runtime/LocalModel/OnnxTextGenerationRuntime.h"
@@ -251,6 +253,8 @@ namespace blazeclaw::core {
 		SkillsWatchSnapshot m_skillsWatch;
 		CChatRuntime m_chatRuntime;
 		CDeepSeekClient m_deepSeekClient;
+		CSkillsHooksCoordinator m_skillsHooksCoordinator;
+		CServiceBootstrapCoordinator m_serviceBootstrapCoordinator;
 		CToolRuntimeRegistry m_toolRuntimeRegistry;
 		blazeclaw::gateway::GatewayHost m_gatewayHost;
 
