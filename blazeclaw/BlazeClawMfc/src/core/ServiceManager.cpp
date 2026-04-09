@@ -9,6 +9,7 @@
 #include "../gateway/GatewayJsonUtils.h"
 #include "../gateway/executors/EmailScheduleExecutor.h"
 #include "diagnostics/DiagnosticsSnapshot.h"
+#include "diagnostics/DiagnosticsRegressionComparator.h"
 #include "bootstrap/StartupFixtureValidator.h"
 #include "tools/ToolArgumentValidators.h"
 #include "tools/ToolProcessRunner.h"
@@ -2212,62 +2213,7 @@ namespace blazeclaw::core {
 			return std::filesystem::path(trimmed);
 		}
 
-		std::wstring BuildGovernanceReportJson(
-			const HookExecutionSnapshot& execution,
-			const std::vector<std::wstring>& allowedPackages,
-			const bool strictMode) {
-			std::wstringstream builder;
-			builder << L"{\"policyBlocked\":"
-				<< execution.diagnostics.policyBlockedCount
-				<< L",\"driftDetected\":"
-				<< execution.diagnostics.driftDetectedCount
-				<< L",\"lastDriftReason\":\""
-				<< execution.diagnostics.lastDriftReason
-				<< L"\",\"strictPolicyEnforcement\":"
-				<< (strictMode ? L"true" : L"false")
-				<< L",\"allowedPackages\":[";
 
-			for (std::size_t i = 0; i < allowedPackages.size(); ++i) {
-				if (i > 0) {
-					builder << L",";
-				}
-				builder << L"\"" << allowedPackages[i] << L"\"";
-			}
-
-			builder << L"],\"reminderState\":\""
-				<< execution.diagnostics.lastReminderState
-				<< L"\",\"reminderReason\":\""
-				<< execution.diagnostics.lastReminderReason
-				<< L"\"}";
-			return builder.str();
-		}
-
-		bool WriteGovernanceReportFile(
-			const std::filesystem::path& reportFile,
-			const std::wstring& content) {
-			std::ofstream output(reportFile, std::ios::binary | std::ios::trunc);
-			if (!output.is_open()) {
-				return false;
-			}
-
-			std::string narrow;
-			narrow.reserve(content.size());
-			for (const auto ch : content) {
-				narrow.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
-			}
-
-			output.write(narrow.c_str(), static_cast<std::streamsize>(narrow.size()));
-			return output.good();
-		}
-
-
-		std::wstring BuildReminderSkipReason(const HookExecutionSnapshot& execution) {
-			if (!execution.diagnostics.lastReminderReason.empty()) {
-				return execution.diagnostics.lastReminderReason;
-			}
-
-			return L"none";
-		}
 
 	} // namespace
 

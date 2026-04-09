@@ -231,6 +231,7 @@
     <ClCompile Include="src\app\ViewTree.cpp" />
     <ClCompile Include="src\config\ConfigLoader.cpp" />
     <ClCompile Include="src\core\diagnostics\CDiagnosticsReportBuilder.cpp" />
+    <ClCompile Include="src\core\diagnostics\DiagnosticsRegressionComparator.cpp" />
     <ClCompile Include="src\core\FeatureRegistry.cpp" />
     <ClCompile Include="src\core\AgentsCatalogService.cpp" />
     <ClCompile Include="src\core\AgentsAuthProfileService.cpp" />
