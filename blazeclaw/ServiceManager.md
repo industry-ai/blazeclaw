@@ -157,10 +157,24 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
 8. **Narrow `ServiceManager.h` include footprint**
    - Use forward declarations when possible in header; move heavy includes to cpp.
    - Improves compile times and coupling.
+   - ✅ Implemented include footprint narrowing pass in `ServiceManager.h`.
+   - Removed unused standard headers (`<atomic>`, `<condition_variable>`,
+     `<deque>`, `<functional>`, `<memory>`, `<thread>`).
+   - Kept required type-complete service/module includes where members are
+     owned by value.
 
 9. **Introduce internal wiring helpers with strict naming**
    - Example: `BindChatCallbacks`, `BindSkillsCallbacks`, `BindEmbeddingsCallbacks`.
    - Easier code navigation and onboarding.
+   - ✅ Implemented strict-named internal wiring helper decomposition.
+   - Added helper methods:
+     - `BindSkillsCallbacks()`
+     - `BindGatewayPolicyCallbacks()`
+     - `BindToolRuntimeCallbacks()`
+     - `BindChatCallbacks()`
+     - `BindEmbeddingsCallbacks()`
+   - `WireGatewayCallbacks()` now acts as a sequencing facade invoking
+     these helpers in deterministic order.
 
 10. **Document invariants explicitly**
    - Startup order invariants

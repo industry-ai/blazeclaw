@@ -2438,6 +2438,15 @@ namespace blazeclaw::core {
 
 	void ServiceManager::WireGatewayCallbacks()
 	{
+		BindSkillsCallbacks();
+		BindGatewayPolicyCallbacks();
+		BindToolRuntimeCallbacks();
+		BindChatCallbacks();
+		BindEmbeddingsCallbacks();
+	}
+
+	void ServiceManager::BindSkillsCallbacks()
+	{
 		m_gatewayHost.SetSkillsCatalogState(BuildGatewaySkillsState());
 		m_gatewayHost.SetSkillsRefreshCallback([this]() {
 			RefreshSkillsState(m_activeConfig, true, L"manual-refresh");
@@ -2610,6 +2619,10 @@ namespace blazeclaw::core {
 					.error = std::nullopt,
 				};
 			});
+	}
+
+	void ServiceManager::BindGatewayPolicyCallbacks()
+	{
 		m_gatewayHost.SetEmbeddedOrchestrationPath(
 			ToNarrow(m_activeConfig.embedded.orchestrationPath));
 		m_gatewayHost.SetEmailFallbackRuntimeFlags(
@@ -2637,6 +2650,10 @@ namespace blazeclaw::core {
 			m_state.emailPolicy.runtimeEnabled
 			? ToNarrow(m_emailFallbackResolvedPolicy.profileId)
 			: std::string("legacy-policy"));
+	}
+
+	void ServiceManager::BindToolRuntimeCallbacks()
+	{
 		const auto toolPolicy =
 			m_serviceBootstrapCoordinator.ResolveToolRuntimePolicySettings();
 		m_toolRuntimeRegistry.RegisterAll(
@@ -2672,7 +2689,10 @@ namespace blazeclaw::core {
 					RegisterBaiduSearchRuntimeTools(host, injectedPolicy);
 				},
 			});
+	}
 
+	void ServiceManager::BindChatCallbacks()
+	{
 		m_gatewayHost.SetChatRuntimeCallback([this](
 			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
 				const std::string sessionId =
@@ -3157,7 +3177,10 @@ namespace blazeclaw::core {
 				}
 				return cancelled;
 			});
+	}
 
+	void ServiceManager::BindEmbeddingsCallbacks()
+	{
 		m_gatewayHost.SetEmbeddingsGenerateCallback([this](
 			const blazeclaw::gateway::GatewayHost::EmbeddingsGenerateRequest& request) {
 				const auto result = m_embeddingsService.EmbedText(

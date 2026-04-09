@@ -36,15 +36,9 @@
 #include "runtime/CChatRuntime.h"
 #include "runtime/ChatRuntimeContracts.h"
 #include "runtime/LocalModel/OnnxTextGenerationRuntime.h"
-#include <atomic>
-#include <condition_variable>
 #include <cstdint>
-#include <deque>
-#include <functional>
-#include <memory>
 #include <mutex>
 #include <optional>
-#include <thread>
 #include <unordered_map>
 
 namespace blazeclaw::core {
@@ -225,6 +219,11 @@ namespace blazeclaw::core {
 			const blazeclaw::config::AppConfig& config);
 		void InitializeModules();
 		void WireGatewayCallbacks();
+		void BindSkillsCallbacks();
+		void BindGatewayPolicyCallbacks();
+		void BindToolRuntimeCallbacks();
+		void BindChatCallbacks();
+		void BindEmbeddingsCallbacks();
 		[[nodiscard]] bool FinalizeStartup(
 			const blazeclaw::config::AppConfig& config);
 
