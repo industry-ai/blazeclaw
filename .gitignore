@@ -1,6 +1,7 @@
 
 .vs/
 docs/
+docs.old/
 
 bin/
 obj/

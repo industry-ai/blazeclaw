@@ -39,6 +39,38 @@ namespace blazeclaw::core {
 			return output;
 		}
 
+		void DrainPipeAvailable(HANDLE readPipe, std::string& output) {
+			if (readPipe == nullptr || readPipe == INVALID_HANDLE_VALUE) {
+				return;
+			}
+
+			for (;;) {
+				DWORD available = 0;
+				if (!PeekNamedPipe(
+					readPipe,
+					nullptr,
+					0,
+					nullptr,
+					&available,
+					nullptr) || available == 0) {
+					break;
+				}
+
+				char buffer[4096]{};
+				const DWORD toRead =
+					available > sizeof(buffer)
+					? static_cast<DWORD>(sizeof(buffer))
+					: available;
+				DWORD bytesRead = 0;
+				if (!ReadFile(readPipe, buffer, toRead, &bytesRead, nullptr) ||
+					bytesRead == 0) {
+					break;
+				}
+
+				output.append(buffer, buffer + bytesRead);
+			}
+		}
+
 		void AppendStartupTrace(const char* stage) {
 			if (stage == nullptr || *stage == '\0') {
 				return;
@@ -243,7 +275,7 @@ namespace blazeclaw::core {
 		}
 
 		std::optional<std::wstring> ResolveBaiduApiKeyFromPersistedConfig() {
-          auto trimLocal = [](const std::wstring& value) {
+			auto trimLocal = [](const std::wstring& value) {
 				const auto first = std::find_if_not(
 					value.begin(),
 					value.end(),
@@ -259,7 +291,7 @@ namespace blazeclaw::core {
 				}
 
 				return std::wstring(first, last);
-			};
+				};
 
 			auto toLowerWideLocal = [](std::wstring value) {
 				std::transform(
@@ -270,7 +302,7 @@ namespace blazeclaw::core {
 						return static_cast<wchar_t>(std::towlower(ch));
 					});
 				return value;
-			};
+				};
 
 			std::vector<std::filesystem::path> candidates;
 
@@ -286,7 +318,7 @@ namespace blazeclaw::core {
 				L"USERPROFILE",
 				profilePath,
 				MAX_PATH);
-            if (chars > 0 && chars < MAX_PATH) {
+			if (chars > 0 && chars < MAX_PATH) {
 				for (const auto& folder : configFolders) {
 					candidates.push_back(
 						std::filesystem::path(profilePath) /
@@ -355,7 +387,7 @@ namespace blazeclaw::core {
 
 				std::wstring line;
 				while (std::getline(input, line)) {
-                    const std::wstring trimmedLine = trimLocal(line);
+					const std::wstring trimmedLine = trimLocal(line);
 					if (trimmedLine.empty() || trimmedLine.starts_with(L"#")) {
 						continue;
 					}
@@ -365,7 +397,7 @@ namespace blazeclaw::core {
 						continue;
 					}
 
-                  const std::wstring key =
+					const std::wstring key =
 						toLowerWideLocal(trimLocal(trimmedLine.substr(0, equals)));
 					std::wstring value = trimLocal(trimmedLine.substr(equals + 1));
 					if (value.size() >= 2 &&
@@ -388,7 +420,7 @@ namespace blazeclaw::core {
 		}
 
 		void EnsureBaiduApiKeyRuntimeEnv() {
-          wchar_t* inheritedValue = nullptr;
+			wchar_t* inheritedValue = nullptr;
 			std::size_t inheritedLength = 0;
 			std::wstring inheritedKey;
 			if (_wdupenv_s(
@@ -403,7 +435,7 @@ namespace blazeclaw::core {
 			const auto persisted = ResolveBaiduApiKeyFromPersistedConfig();
 			if (persisted.has_value() && !persisted->empty()) {
 				_wputenv_s(L"BAIDU_API_KEY", persisted.value().c_str());
-             EmitBaiduRuntimeDiagnostic(
+				EmitBaiduRuntimeDiagnostic(
 					"env",
 					"BAIDU_API_KEY source=persisted set=true value=" +
 					MaskSecretForTrace(persisted.value()));
@@ -1885,7 +1917,7 @@ namespace blazeclaw::core {
 				return "network_error";
 			}
 
-          return "script_runtime_error";
+			return "script_runtime_error";
 		}
 
 		bool IsBraveNetworkTimeoutFailure(const std::string& output) {
@@ -2001,8 +2033,8 @@ namespace blazeclaw::core {
 				nullptr,
 				TRUE,
 				CREATE_NO_WINDOW,
-                reinterpret_cast<LPVOID>(const_cast<wchar_t*>(L"PYTHONUTF8=1\0PYTHONIOENCODING=utf-8\0\0")),
-                workingDirectory,
+				reinterpret_cast<LPVOID>(const_cast<wchar_t*>(L"PYTHONUTF8=1\0PYTHONIOENCODING=utf-8\0\0")),
+				workingDirectory,
 				&startupInfo,
 				&processInfo);
 
@@ -2017,20 +2049,38 @@ namespace blazeclaw::core {
 			}
 
 			result.started = true;
-			const DWORD waitMs = timeoutMs > static_cast<std::uint64_t>(MAXDWORD)
-				? MAXDWORD
-				: static_cast<DWORD>(timeoutMs);
-			const DWORD waitResult = WaitForSingleObject(processInfo.hProcess, waitMs);
+			const auto deadline =
+				std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+			DWORD waitResult = WAIT_TIMEOUT;
+			for (;;) {
+				waitResult = WaitForSingleObject(processInfo.hProcess, 50);
+				DrainPipeAvailable(outputRead, result.output);
+
+				if (waitResult == WAIT_OBJECT_0 || waitResult == WAIT_FAILED) {
+					break;
+				}
+
+				if (std::chrono::steady_clock::now() >= deadline) {
+					waitResult = WAIT_TIMEOUT;
+					break;
+				}
+			}
 
 			if (waitResult == WAIT_TIMEOUT) {
 				TerminateProcess(processInfo.hProcess, 124);
+				WaitForSingleObject(processInfo.hProcess, 5000);
 				result.timedOut = true;
 				result.errorCode = "deadline_exceeded";
 				result.errorMessage = "tool process exceeded execution deadline";
 			}
+			else if (waitResult == WAIT_FAILED) {
+				result.errorCode = "process_wait_failed";
+				result.errorMessage = "failed to wait for node process";
+			}
 
 			GetExitCodeProcess(processInfo.hProcess, &result.exitCode);
-			result.output = ReadPipeAll(outputRead);
+			DrainPipeAvailable(outputRead, result.output);
+			result.output += ReadPipeAll(outputRead);
 
 			CloseHandle(outputRead);
 			CloseHandle(processInfo.hThread);
@@ -2074,7 +2124,7 @@ namespace blazeclaw::core {
 
 			std::vector<std::wstring> commandTokens;
 			commandTokens.push_back(L"python");
-          commandTokens.push_back(L"-X");
+			commandTokens.push_back(L"-X");
 			commandTokens.push_back(L"utf8");
 			commandTokens.push_back(scriptPath.wstring());
 			for (const auto& arg : cliArgs) {
@@ -2108,20 +2158,38 @@ namespace blazeclaw::core {
 			}
 
 			result.started = true;
-			const DWORD waitMs = timeoutMs > static_cast<std::uint64_t>(MAXDWORD)
-				? MAXDWORD
-				: static_cast<DWORD>(timeoutMs);
-			const DWORD waitResult = WaitForSingleObject(processInfo.hProcess, waitMs);
+			const auto deadline =
+				std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+			DWORD waitResult = WAIT_TIMEOUT;
+			for (;;) {
+				waitResult = WaitForSingleObject(processInfo.hProcess, 50);
+				DrainPipeAvailable(outputRead, result.output);
+
+				if (waitResult == WAIT_OBJECT_0 || waitResult == WAIT_FAILED) {
+					break;
+				}
+
+				if (std::chrono::steady_clock::now() >= deadline) {
+					waitResult = WAIT_TIMEOUT;
+					break;
+				}
+			}
 
 			if (waitResult == WAIT_TIMEOUT) {
 				TerminateProcess(processInfo.hProcess, 124);
+				WaitForSingleObject(processInfo.hProcess, 5000);
 				result.timedOut = true;
 				result.errorCode = "deadline_exceeded";
 				result.errorMessage = "tool process exceeded execution deadline";
 			}
+			else if (waitResult == WAIT_FAILED) {
+				result.errorCode = "process_wait_failed";
+				result.errorMessage = "failed to wait for python process";
+			}
 
 			GetExitCodeProcess(processInfo.hProcess, &result.exitCode);
-			result.output = ReadPipeAll(outputRead);
+			DrainPipeAvailable(outputRead, result.output);
+			result.output += ReadPipeAll(outputRead);
 
 			CloseHandle(outputRead);
 			CloseHandle(processInfo.hThread);
@@ -2516,7 +2584,7 @@ namespace blazeclaw::core {
 			if (std::regex_search(
 				lowered,
 				httpStatusMatch,
-              std::regex(R"(http(?:\s+error)?\s*[:=]?\s*([0-9]{3}))")) &&
+				std::regex(R"(http(?:\s+error)?\s*[:=]?\s*([0-9]{3}))")) &&
 				httpStatusMatch.size() >= 2) {
 				const int status = std::atoi(httpStatusMatch[1].str().c_str());
 				if (status == 401 || status == 403) {
@@ -2583,10 +2651,10 @@ namespace blazeclaw::core {
 			}
 
 			if (lowered.find("network") != std::string::npos ||
-              lowered.find("connection") != std::string::npos ||
+				lowered.find("connection") != std::string::npos ||
 				lowered.find("ssl") != std::string::npos ||
 				lowered.find("certificate") != std::string::npos ||
-                lowered.find("httpsconnectionpool") != std::string::npos ||
+				lowered.find("httpsconnectionpool") != std::string::npos ||
 				lowered.find("urlopen error") != std::string::npos ||
 				lowered.find("proxyerror") != std::string::npos ||
 				lowered.find("name resolution") != std::string::npos ||
@@ -2596,7 +2664,7 @@ namespace blazeclaw::core {
 				return "network_error";
 			}
 
-          return "script_runtime_error";
+			return "script_runtime_error";
 		}
 
 		std::optional<std::vector<std::string>> BuildBaiduSearchCliArgs(
@@ -2909,7 +2977,7 @@ namespace blazeclaw::core {
 						result.latencyMs = result.completedAtMs - result.startedAtMs;
 
 						if (!process.started) {
-                            EmitBaiduRuntimeDiagnostic(
+							EmitBaiduRuntimeDiagnostic(
 								"process_start_failed",
 								"errorCode=" + process.errorCode +
 								" message=" + process.errorMessage);
@@ -2926,7 +2994,7 @@ namespace blazeclaw::core {
 						}
 
 						if (process.timedOut) {
-                            EmitBaiduRuntimeDiagnostic(
+							EmitBaiduRuntimeDiagnostic(
 								"process_timeout",
 								"errorCode=" + process.errorCode +
 								" output=" +
@@ -2955,11 +3023,11 @@ namespace blazeclaw::core {
 						result.executed = false;
 						const std::string classifiedFailure =
 							ClassifyBaiduFailureCode(process.output);
-                       const std::string normalizedFailure =
+						const std::string normalizedFailure =
 							classifiedFailure == "process_exit_nonzero"
 							? "script_runtime_error"
 							: classifiedFailure;
-                      EmitBaiduRuntimeDiagnostic(
+						EmitBaiduRuntimeDiagnostic(
 							"process_nonzero",
 							"exitCode=" +
 							std::to_string(static_cast<unsigned long long>(process.exitCode)) +
@@ -3216,9 +3284,9 @@ namespace blazeclaw::core {
 		void RegisterBraveSearchRuntimeTools(blazeclaw::gateway::GatewayHost& host) {
 			const auto skillRoot = ResolveBraveSearchSkillRoot();
 			const auto openClawWebBrowsingSkillRoot = ResolveOpenClawWebBrowsingSkillRoot();
-         const bool enableOpenClawWebBrowsingFallback =
+			const bool enableOpenClawWebBrowsingFallback =
 				ReadBoolEnvOrDefault(
-                 L"BLAZECLAW_WEB_BROWSING_ENABLE_OPENCLAW_FALLBACK",
+					L"BLAZECLAW_WEB_BROWSING_ENABLE_OPENCLAW_FALLBACK",
 					false);
 			const bool requireApiKey = ResolveBraveRequireApiKey();
 			const bool hasApiKey = HasEnvVarValue(L"BRAVE_API_KEY");
@@ -3230,12 +3298,12 @@ namespace blazeclaw::core {
 						.category = "search",
 						.enabled = true,
 					},
-                    [spec,
-					 skillRoot,
-					 openClawWebBrowsingSkillRoot,
-					 enableOpenClawWebBrowsingFallback,
-					 requireApiKey,
-					 hasApiKey](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
+					[spec,
+					skillRoot,
+					openClawWebBrowsingSkillRoot,
+					enableOpenClawWebBrowsingFallback,
+					requireApiKey,
+					hasApiKey](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
 						blazeclaw::gateway::ToolExecuteResultV2 result;
 						result.tool = request.tool.empty() ? spec.id : request.tool;
 						result.correlationId = request.correlationId;
@@ -3395,7 +3463,7 @@ namespace blazeclaw::core {
 						const std::string classifiedFailure =
 							ClassifyBraveFailureCode(process.output);
 						const bool canAttemptOpenClawFallback =
-                         enableOpenClawWebBrowsingFallback &&
+							enableOpenClawWebBrowsingFallback &&
 							spec.id == "web_browsing.search.web" &&
 							classifiedFailure == "network_error" &&
 							IsBraveNetworkTimeoutFailure(process.output) &&

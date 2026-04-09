@@ -284,6 +284,7 @@
     <ResourceCompile Include="src\app\BlazeClawMFC.rc" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\docs\readme.md" />
     <None Include="src\app\res\ribbon.mfcribbon-ms" />
     <None Include="src\config\blazeclaw.conf" />
     <None Include="web\chat\index.html" />

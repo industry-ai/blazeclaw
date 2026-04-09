@@ -1616,7 +1616,7 @@ void CBlazeClawMFCView::TraceBridgeTraffic(
 		TRACE(
 			L"[Bridge][%s] %s\n",
 			kindW.GetString(),
-			detailW.GetString());
+			detailW.Right(64).GetString());
 	}
 	else
 	{
