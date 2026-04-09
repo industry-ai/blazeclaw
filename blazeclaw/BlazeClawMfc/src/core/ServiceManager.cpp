@@ -8,6 +8,7 @@
 #include "../gateway/GatewayProtocolModels.h"
 #include "../gateway/GatewayJsonUtils.h"
 #include "../gateway/executors/EmailScheduleExecutor.h"
+#include "diagnostics/DiagnosticsSnapshot.h"
 
 #include <cctype>
 #include <chrono>
@@ -19,10 +20,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <Windows.h>
-#include <winhttp.h>
 #include <nlohmann/json.hpp>
-
-#pragma comment(lib, "Winhttp.lib")
 
 namespace blazeclaw::core {
 
@@ -237,50 +235,6 @@ namespace blazeclaw::core {
 			}
 
 			return modelId;
-		}
-
-		std::optional<std::string> ParseHttpsUrl(
-			const std::string& url,
-			std::wstring& host,
-			std::wstring& path,
-			INTERNET_PORT& port,
-			bool& secure) {
-			host.clear();
-			path.clear();
-			port = INTERNET_DEFAULT_HTTPS_PORT;
-			secure = true;
-
-			const std::wstring urlW = ToWide(url);
-			if (urlW.empty()) {
-				return std::string("invalid_url");
-			}
-
-			URL_COMPONENTSW components{};
-			components.dwStructSize = sizeof(components);
-			components.dwHostNameLength = static_cast<DWORD>(-1);
-			components.dwUrlPathLength = static_cast<DWORD>(-1);
-			components.dwExtraInfoLength = static_cast<DWORD>(-1);
-
-			if (!WinHttpCrackUrl(urlW.c_str(), 0, 0, &components)) {
-				return std::string("invalid_url");
-			}
-
-			if (components.nScheme != INTERNET_SCHEME_HTTPS) {
-				return std::string("deepseek_https_required");
-			}
-
-			secure = true;
-			port = components.nPort;
-			host.assign(components.lpszHostName, components.dwHostNameLength);
-			path.assign(components.lpszUrlPath, components.dwUrlPathLength);
-			if (components.dwExtraInfoLength > 0 && components.lpszExtraInfo != nullptr) {
-				path.append(components.lpszExtraInfo, components.dwExtraInfoLength);
-			}
-			if (path.empty()) {
-				path = L"/";
-			}
-
-			return std::nullopt;
 		}
 
 		std::optional<std::wstring> ResolveBaiduApiKeyFromPersistedConfig() {
@@ -5782,6 +5736,10 @@ namespace blazeclaw::core {
 			}
 			};
 
+		DiagnosticsSnapshot snapshot;
+		snapshot.runtimeRunning = m_running;
+		snapshot.gatewayWarning = m_gatewayHost.LastWarning();
+
 		std::size_t implementedCount = 0;
 		std::size_t inProgressCount = 0;
 		std::size_t plannedCount = 0;
@@ -5808,352 +5766,208 @@ namespace blazeclaw::core {
 		const auto emailHealth =
 			blazeclaw::gateway::executors::EmailScheduleExecutor::
 			GetRuntimeHealthIndex(false);
-		const std::uint64_t emailFallbackAttemptCount =
-			m_embeddedRunFallbackCount;
-		const std::uint64_t emailFallbackSuccessCount =
-			emailFallbackAttemptCount >= m_embeddedRunFailureCount
-			? (emailFallbackAttemptCount - m_embeddedRunFailureCount)
-			: 0;
-		const std::uint64_t emailFallbackFailureCount =
-			emailFallbackAttemptCount >= emailFallbackSuccessCount
-			? (emailFallbackAttemptCount - emailFallbackSuccessCount)
-			: 0;
-		std::size_t emailProbeReady = 0;
-		std::size_t emailProbeUnavailable = 0;
+
+		snapshot.emailPreflightEnabled = m_activeConfig.email.preflight.enabled;
+		snapshot.emailPolicyProfilesEnabled = m_activeConfig.email.policyProfiles.enabled;
+		snapshot.emailPolicyProfilesEnforce = m_activeConfig.email.policyProfiles.enforce;
+		snapshot.emailPolicyProfilesRuntimeEnabled = m_emailPolicyRuntimeEnabled;
+		snapshot.emailPolicyProfilesRuntimeEnforce = m_emailPolicyRuntimeEnforce;
+		snapshot.emailPolicyRolloutMode = ToNarrow(m_emailPolicyRolloutMode);
+		snapshot.emailPolicyEnforceChannel = ToNarrow(m_emailPolicyEnforceChannel);
+		snapshot.emailPolicyCanaryEligible = m_emailPolicyCanaryEligible;
+		snapshot.emailRollbackBridgeEnabled = m_emailPolicyRollbackBridgeEnabled;
+		snapshot.emailResolvedPolicyId = ToNarrow(m_emailFallbackResolvedPolicy.profileId);
+		for (const auto& backend : m_emailFallbackResolvedPolicy.backends) {
+			snapshot.emailResolvedBackends.push_back(ToNarrow(backend));
+		}
+		snapshot.emailPolicyActionUnavailable = ToNarrow(m_emailFallbackResolvedPolicy.onUnavailable);
+		snapshot.emailPolicyActionAuthError = ToNarrow(m_emailFallbackResolvedPolicy.onAuthError);
+		snapshot.emailPolicyActionExecError = ToNarrow(m_emailFallbackResolvedPolicy.onExecError);
+		snapshot.emailRetryMaxAttempts = m_emailFallbackResolvedPolicy.retryMaxAttempts;
+		snapshot.emailRetryDelayMs = m_emailFallbackResolvedPolicy.retryDelayMs;
+		snapshot.emailRequiresApproval = m_emailFallbackResolvedPolicy.requiresApproval;
+		snapshot.emailApprovalTokenTtlMinutes = m_emailFallbackResolvedPolicy.approvalTokenTtlMinutes;
+		snapshot.emailCapabilityState = emailHealth.emailSendState;
+		snapshot.emailHealthGeneratedAtEpochMs = emailHealth.generatedAtEpochMs;
+		snapshot.emailHealthTtlMs = emailHealth.ttlMs;
 		for (const auto& probe : emailHealth.probes) {
 			if (probe.state == "ready") {
-				++emailProbeReady;
+				++snapshot.emailProbeReadyCount;
 				continue;
 			}
 
 			if (probe.state == "unavailable") {
-				++emailProbeUnavailable;
+				++snapshot.emailProbeUnavailableCount;
 			}
 		}
-		const std::uint64_t embeddedTotalRuns =
-			m_embeddedRunSuccessCount + m_embeddedRunFailureCount;
-		const double embeddedSuccessRate = embeddedTotalRuns == 0
+		snapshot.emailFallbackAttempts = m_embeddedRunFallbackCount;
+		snapshot.emailFallbackSuccess =
+			snapshot.emailFallbackAttempts >= m_embeddedRunFailureCount
+			? (snapshot.emailFallbackAttempts - m_embeddedRunFailureCount)
+			: 0;
+		snapshot.emailFallbackFailure =
+			snapshot.emailFallbackAttempts >= snapshot.emailFallbackSuccess
+			? (snapshot.emailFallbackAttempts - snapshot.emailFallbackSuccess)
+			: 0;
+
+		snapshot.agentsCount = m_agentsScope.entries.size();
+		snapshot.agentsDefaultAgent = ToNarrow(m_agentsScope.defaultAgentId);
+		snapshot.subagentsActive = m_subagentRegistry.activeRuns;
+		snapshot.subagentsPendingAnnounce = m_subagentRegistry.pendingAnnounce;
+		snapshot.acpLastAllowed = m_lastAcpDecision.allowed;
+		snapshot.acpReason = m_lastAcpDecision.reason;
+
+		snapshot.embeddedActiveRuns = ActiveEmbeddedRuns();
+		snapshot.embeddedDynamicLoopEnabled = m_lastEmbeddedDynamicLoopEnabled;
+		snapshot.embeddedCanaryEligible = m_lastEmbeddedCanaryEligible;
+		snapshot.embeddedPromotionReady = m_lastEmbeddedPromotionReady;
+		snapshot.embeddedPromotionMinRuns = m_embeddedDynamicLoopPromotionMinRuns;
+		snapshot.embeddedPromotionMinSuccessRate = m_embeddedDynamicLoopPromotionMinSuccessRate;
+		snapshot.embeddedFallbackUsed = m_lastEmbeddedFallbackUsed;
+		snapshot.embeddedFallbackReason = m_lastEmbeddedFallbackReason;
+		snapshot.embeddedTotalRuns = m_embeddedRunSuccessCount + m_embeddedRunFailureCount;
+		snapshot.embeddedSuccessRate = snapshot.embeddedTotalRuns == 0
 			? 0.0
 			: static_cast<double>(m_embeddedRunSuccessCount) /
-			static_cast<double>(embeddedTotalRuns);
-		const bool selfEvolvingReminderInjected =
-			m_skillsPrompt.prompt.find(L"## Self-Evolving Reminder") !=
-			std::wstring::npos;
-		const bool configFeatureImplemented =
+			static_cast<double>(snapshot.embeddedTotalRuns);
+		snapshot.embeddedRunSuccess = m_embeddedRunSuccessCount;
+		snapshot.embeddedRunFailure = m_embeddedRunFailureCount;
+		snapshot.embeddedRunTimeout = m_embeddedRunTimeoutCount;
+		snapshot.embeddedRunCancelled = m_embeddedRunCancelledCount;
+		snapshot.embeddedRunFallback = m_embeddedRunFallbackCount;
+		snapshot.embeddedTaskDeltaTransitions = m_embeddedTaskDeltaTransitionCount;
+
+		snapshot.toolsPolicyEntries = m_agentsToolPolicy.entries.size();
+		snapshot.toolsShellProcesses = ShellProcessCount();
+
+		snapshot.modelPrimary = routing.primaryModel;
+		snapshot.modelFallback = routing.fallbackModel;
+		snapshot.modelFailovers = routing.failoverHistory.size();
+		snapshot.authProfiles = auth.entries.size();
+
+		snapshot.sandboxEnabledCount = sandbox.enabledCount;
+		snapshot.sandboxBrowserEnabledCount = sandbox.browserEnabledCount;
+
+		snapshot.embeddingsEnabled = embeddings.enabled;
+		snapshot.embeddingsReady = embeddings.ready;
+		snapshot.embeddingsProvider = embeddings.provider;
+		snapshot.embeddingsStatus = embeddings.status;
+		snapshot.embeddingsDimension = embeddings.dimension;
+		snapshot.embeddingsMaxSequenceLength = embeddings.maxSequenceLength;
+		snapshot.embeddingsModelPathConfigured = !embeddings.modelPath.empty();
+		snapshot.embeddingsTokenizerPathConfigured = !embeddings.tokenizerPath.empty();
+		snapshot.embeddingsConfigFeatureImplemented =
 			m_registry.IsImplemented(L"embeddings-config-foundation");
 
-		std::string report =
-			"{\"runtime\":{\"running\":" + std::string(m_running ? "true" : "false") +
-			",\"gatewayWarning\":\"" + m_gatewayHost.LastWarning() + "\"},"
-			"\"emailFallback\":{\"preflightEnabled\":" +
-			std::string(m_activeConfig.email.preflight.enabled ? "true" : "false") +
-			",\"policyProfilesEnabled\":" +
-			std::string(m_activeConfig.email.policyProfiles.enabled ? "true" : "false") +
-			",\"policyProfilesEnforce\":" +
-			std::string(m_activeConfig.email.policyProfiles.enforce ? "true" : "false") +
-			",\"policyProfilesRuntimeEnabled\":" +
-			std::string(m_emailPolicyRuntimeEnabled ? "true" : "false") +
-			",\"policyProfilesRuntimeEnforce\":" +
-			std::string(m_emailPolicyRuntimeEnforce ? "true" : "false") +
-			",\"policyRolloutMode\":" +
-			ToNarrow(m_emailPolicyRolloutMode) +
-			"\",\"policyEnforceChannel\":" +
-			ToNarrow(m_emailPolicyEnforceChannel) +
-			"\",\"policyCanaryEligible\":" +
-			std::string(m_emailPolicyCanaryEligible ? "true" : "false") +
-			",\"rollbackBridgeEnabled\":" +
-			std::string(m_emailPolicyRollbackBridgeEnabled ? "true" : "false") +
-			",\"resolvedPolicyId\":\"" +
-			ToNarrow(m_emailFallbackResolvedPolicy.profileId) +
-			"\",\"resolvedBackends\":[\"" +
-			(m_emailFallbackResolvedPolicy.backends.empty()
-				? std::string("himalaya\",\"imap-smtp-email")
-				: [&]() {
-					std::string list;
-					for (std::size_t i = 0;
-						i < m_emailFallbackResolvedPolicy.backends.size();
-						++i) {
-						if (i > 0) {
-							list += "\",\"";
-						}
-						list += ToNarrow(m_emailFallbackResolvedPolicy.backends[i]);
-					}
-					return list;
-				}()) +
-			"\"],\"policyActions\":{\"unavailable\":\"" +
-					ToNarrow(m_emailFallbackResolvedPolicy.onUnavailable) +
-					"\",\"authError\":\"" +
-					ToNarrow(m_emailFallbackResolvedPolicy.onAuthError) +
-					"\",\"execError\":\"" +
-					ToNarrow(m_emailFallbackResolvedPolicy.onExecError) +
-					"\"},\"retryMaxAttempts\":" +
-					std::to_string(m_emailFallbackResolvedPolicy.retryMaxAttempts) +
-					",\"retryDelayMs\":" +
-					std::to_string(m_emailFallbackResolvedPolicy.retryDelayMs) +
-					",\"requiresApproval\":" +
-					std::string(m_emailFallbackResolvedPolicy.requiresApproval ? "true" : "false") +
-					",\"approvalTokenTtlMinutes\":" +
-					std::to_string(m_emailFallbackResolvedPolicy.approvalTokenTtlMinutes) +
-					",\"capabilityState\":\"" +
-					emailHealth.emailSendState +
-					"\",\"healthGeneratedAtEpochMs\":" +
-					std::to_string(emailHealth.generatedAtEpochMs) +
-					",\"healthTtlMs\":" +
-					std::to_string(emailHealth.ttlMs) +
-					",\"probeReadyCount\":" +
-					std::to_string(emailProbeReady) +
-					",\"probeUnavailableCount\":" +
-					std::to_string(emailProbeUnavailable) +
-					",\"fallbackAttempts\":" +
-					std::to_string(emailFallbackAttemptCount) +
-					",\"fallbackSuccess\":" +
-					std::to_string(emailFallbackSuccessCount) +
-					",\"fallbackFailure\":" +
-					std::to_string(emailFallbackFailureCount) +
-					"},"
-					"\"agents\":{\"count\":" + std::to_string(m_agentsScope.entries.size()) +
-					",\"defaultAgent\":\"" + ToNarrow(m_agentsScope.defaultAgentId) + "\"},"
-					"\"subagents\":{\"active\":" + std::to_string(m_subagentRegistry.activeRuns) +
-					",\"pendingAnnounce\":" + std::to_string(m_subagentRegistry.pendingAnnounce) + "},"
-					"\"acp\":{\"lastAllowed\":" +
-					std::string(m_lastAcpDecision.allowed ? "true" : "false") +
-					",\"reason\":\"" + m_lastAcpDecision.reason + "\"},"
-					"\"embedded\":{\"activeRuns\":" + std::to_string(ActiveEmbeddedRuns()) +
-					",\"dynamicLoopEnabled\":" +
-					std::string(m_lastEmbeddedDynamicLoopEnabled ? "true" : "false") +
-					",\"canaryEligible\":" +
-					std::string(m_lastEmbeddedCanaryEligible ? "true" : "false") +
-					",\"promotionReady\":" +
-					std::string(m_lastEmbeddedPromotionReady ? "true" : "false") +
-					",\"promotionMinRuns\":" +
-					std::to_string(m_embeddedDynamicLoopPromotionMinRuns) +
-					",\"promotionMinSuccessRate\":" +
-					std::to_string(m_embeddedDynamicLoopPromotionMinSuccessRate) +
-					",\"fallbackUsed\":" +
-					std::string(m_lastEmbeddedFallbackUsed ? "true" : "false") +
-					",\"fallbackReason\":\"" + m_lastEmbeddedFallbackReason +
-					"\",\"totalRuns\":" + std::to_string(embeddedTotalRuns) +
-					",\"successRate\":" + std::to_string(embeddedSuccessRate) +
-					",\"runSuccess\":" + std::to_string(m_embeddedRunSuccessCount) +
-					",\"runFailure\":" + std::to_string(m_embeddedRunFailureCount) +
-					",\"runTimeout\":" + std::to_string(m_embeddedRunTimeoutCount) +
-					",\"runCancelled\":" + std::to_string(m_embeddedRunCancelledCount) +
-					",\"runFallback\":" + std::to_string(m_embeddedRunFallbackCount) +
-					",\"taskDeltaTransitions\":" +
-					std::to_string(m_embeddedTaskDeltaTransitionCount) + "},"
-					"\"tools\":{\"policyEntries\":" + std::to_string(m_agentsToolPolicy.entries.size()) +
-					",\"shellProcesses\":" + std::to_string(ShellProcessCount()) + "},"
-					"\"modelAuth\":{\"primary\":\"" + routing.primaryModel +
-					"\",\"fallback\":\"" + routing.fallbackModel +
-					"\",\"failovers\":" + std::to_string(routing.failoverHistory.size()) +
-					",\"authProfiles\":" + std::to_string(auth.entries.size()) + "},"
-					"\"sandbox\":{\"enabledCount\":" + std::to_string(sandbox.enabledCount) +
-					",\"browserEnabledCount\":" + std::to_string(sandbox.browserEnabledCount) + "},"
-					"\"embeddings\":{\"enabled\":" +
-					std::string(embeddings.enabled ? "true" : "false") +
-					",\"ready\":" +
-					std::string(embeddings.ready ? "true" : "false") +
-					",\"provider\":\"" + embeddings.provider +
-					"\",\"status\":\"" + embeddings.status +
-					"\",\"dimension\":" + std::to_string(embeddings.dimension) +
-					",\"maxSequenceLength\":" +
-					std::to_string(embeddings.maxSequenceLength) +
-					",\"modelPathConfigured\":" +
-					std::string(!embeddings.modelPath.empty() ? "true" : "false") +
-					",\"tokenizerPathConfigured\":" +
-					std::string(!embeddings.tokenizerPath.empty() ? "true" : "false") +
-					",\"configFeatureImplemented\":" +
-					std::string(configFeatureImplemented ? "true" : "false") + "},"
-					"\"localModel\":{\"enabled\":" +
-					std::string(localModel.enabled ? "true" : "false") +
-					",\"ready\":" +
-					std::string(localModel.ready ? "true" : "false") +
-					",\"rolloutEligible\":" +
-					std::string(m_localModelRolloutEligible ? "true" : "false") +
-					",\"activationEnabled\":" +
-					std::string(m_localModelActivationEnabled ? "true" : "false") +
-					",\"activationReason\":\"" + m_localModelActivationReason +
-					",\"provider\":\"" + localModel.provider +
-					"\",\"rolloutStage\":\"" + localModel.rolloutStage +
-					"\",\"storageRoot\":\"" + localModel.storageRoot +
-					"\",\"version\":\"" + localModel.version +
-					"\",\"status\":\"" + localModel.status +
-					"\",\"verboseMetrics\":" +
-					std::string(localModel.verboseMetrics ? "true" : "false") +
-					",\"runtimeDllPresent\":" +
-					std::string(localModel.runtimeDllPresent ? "true" : "false") +
-					",\"maxTokens\":" +
-					std::to_string(localModel.maxTokens) +
-					",\"temperature\":" +
-					std::to_string(localModel.temperature) +
-					",\"modelLoadAttempts\":" +
-					std::to_string(localModel.modelLoadAttempts) +
-					",\"modelLoadFailures\":" +
-					std::to_string(localModel.modelLoadFailures) +
-					",\"requestsStarted\":" +
-					std::to_string(localModel.requestsStarted) +
-					",\"requestsCompleted\":" +
-					std::to_string(localModel.requestsCompleted) +
-					",\"requestsFailed\":" +
-					std::to_string(localModel.requestsFailed) +
-					",\"requestsCancelled\":" +
-					std::to_string(localModel.requestsCancelled) +
-					",\"cumulativeTokens\":" +
-					std::to_string(localModel.cumulativeTokens) +
-					",\"cumulativeLatencyMs\":" +
-					std::to_string(localModel.cumulativeLatencyMs) +
-					",\"lastLatencyMs\":" +
-					std::to_string(localModel.lastLatencyMs) +
-					",\"lastGeneratedTokens\":" +
-					std::to_string(localModel.lastGeneratedTokens) +
-					",\"lastTokensPerSecond\":" +
-					std::to_string(localModel.lastTokensPerSecond) +
-					",\"modelPathConfigured\":" +
-					std::string(!localModel.modelPath.empty() ? "true" : "false") +
-					",\"modelHashConfigured\":" +
-					std::string(!localModel.modelExpectedSha256.empty() ? "true" : "false") +
-					",\"modelHashVerified\":" +
-					std::string(localModel.modelHashVerified ? "true" : "false") +
-					",\"tokenizerPathConfigured\":" +
-					std::string(!localModel.tokenizerPath.empty() ? "true" : "false") +
-					",\"tokenizerHashConfigured\":" +
-					std::string(!localModel.tokenizerExpectedSha256.empty() ? "true" : "false") +
-					",\"tokenizerHashVerified\":" +
-					std::string(localModel.tokenizerHashVerified ? "true" : "false") +
-					"},"
-					"\"retrieval\":{\"enabled\":" +
-					std::string(retrieval.enabled ? "true" : "false") +
-					",\"recordCount\":" + std::to_string(retrieval.recordCount) +
-					",\"lastQueryCount\":" + std::to_string(retrieval.lastQueryCount) +
-					",\"status\":\"" + retrieval.status + "\"},"
-					"\"skills\":{\"catalogEntries\":" + std::to_string(m_skillsCatalog.entries.size()) +
-					",\"promptIncluded\":" + std::to_string(m_skillsPrompt.includedCount) +
-					",\"selfEvolvingReminderInjected\":" +
-					std::string(selfEvolvingReminderInjected ? "true" : "false") +
-					"},"
-					"\"hooks\":{\"loaded\":" +
-					std::to_string(m_hookCatalog.diagnostics.hooksLoaded) +
-					",\"engineMode\":\"" +
-					WideToNarrowAscii(m_hookExecution.diagnostics.engineMode) + "\"" +
-					",\"hookEngineEnabled\":" +
-					std::string(m_hooksEngineEnabled ? "true" : "false") +
-					",\"fallbackPromptInjection\":" +
-					std::string(m_hooksFallbackPromptInjection ? "true" : "false") +
-					",\"reminderEnabled\":" +
-					std::string(m_hooksReminderEnabled ? "true" : "false") +
-					",\"reminderVerbosity\":\"" +
-					WideToNarrowAscii(m_hooksReminderVerbosity) + "\"" +
-					",\"strictPolicyEnforcement\":" +
-					std::string(m_hooksStrictPolicyEnforcement ? "true" : "false") +
-					",\"allowedPackagesCount\":" +
-					std::to_string(m_hooksAllowedPackages.size()) +
-					",\"governanceReportingEnabled\":" +
-					std::string(m_hooksGovernanceReportingEnabled ? "true" : "false") +
-					",\"governanceReportsGenerated\":" +
-					std::to_string(m_hooksGovernanceReportsGenerated) +
-					",\"lastGovernanceReportPath\":\"" +
-					WideToNarrowAscii(m_hooksLastGovernanceReportPath) + "\"" +
-					",\"autoRemediationEnabled\":" +
-					std::string(m_hooksAutoRemediationEnabled ? "true" : "false") +
-					",\"autoRemediationRequiresApproval\":" +
-					std::string(m_hooksAutoRemediationRequiresApproval ? "true" : "false") +
-					",\"autoRemediationExecuted\":" +
-					std::to_string(m_hooksAutoRemediationExecuted) +
-					",\"lastAutoRemediationStatus\":\"" +
-					WideToNarrowAscii(m_hooksLastAutoRemediationStatus) + "\"" +
-					",\"autoRemediationTenantId\":\"" +
-					WideToNarrowAscii(m_hooksAutoRemediationTenantId) + "\"" +
-					",\"lastAutoRemediationPlaybookPath\":\"" +
-					WideToNarrowAscii(m_hooksLastAutoRemediationPlaybookPath) + "\"" +
-					",\"autoRemediationTokenMaxAgeMinutes\":" +
-					std::to_string(m_hooksAutoRemediationTokenMaxAgeMinutes) +
-					",\"autoRemediationTokenRotations\":" +
-					std::to_string(m_hooksAutoRemediationTokenRotations) +
-					",\"remediationTelemetryEnabled\":" +
-					std::string(m_hooksRemediationTelemetryEnabled ? "true" : "false") +
-					",\"remediationAuditEnabled\":" +
-					std::string(m_hooksRemediationAuditEnabled ? "true" : "false") +
-					",\"lastRemediationTelemetryPath\":\"" +
-					WideToNarrowAscii(m_hooksLastRemediationTelemetryPath) + "\"" +
-					",\"lastRemediationAuditPath\":\"" +
-					WideToNarrowAscii(m_hooksLastRemediationAuditPath) + "\"" +
-					",\"remediationSloStatus\":\"" +
-					WideToNarrowAscii(m_hooksRemediationSloStatus) + "\"" +
-					",\"remediationSloMaxDriftDetected\":" +
-					std::to_string(m_hooksRemediationSloMaxDriftDetected) +
-					",\"remediationSloMaxPolicyBlocked\":" +
-					std::to_string(m_hooksRemediationSloMaxPolicyBlocked) +
-					",\"complianceAttestationEnabled\":" +
-					std::string(m_hooksComplianceAttestationEnabled ? "true" : "false") +
-					",\"lastComplianceAttestationPath\":\"" +
-					WideToNarrowAscii(m_hooksLastComplianceAttestationPath) + "\"" +
-					",\"enterpriseSlaGovernanceEnabled\":" +
-					std::string(m_hooksEnterpriseSlaGovernanceEnabled ? "true" : "false") +
-					",\"enterpriseSlaPolicyId\":\"" +
-					WideToNarrowAscii(m_hooksEnterpriseSlaPolicyId) + "\"" +
-					",\"crossTenantAttestationAggregationEnabled\":" +
-					std::string(m_hooksCrossTenantAttestationAggregationEnabled ? "true" : "false") +
-					",\"crossTenantAttestationAggregationStatus\":\"" +
-					WideToNarrowAscii(m_hooksCrossTenantAttestationAggregationStatus) + "\"" +
-					",\"crossTenantAttestationAggregationCount\":" +
-					std::to_string(m_hooksCrossTenantAttestationAggregationCount) +
-					",\"lastCrossTenantAttestationAggregationPath\":\"" +
-					WideToNarrowAscii(m_hooksLastCrossTenantAttestationAggregationPath) + "\"" +
-					",\"selfEvolvingHookTriggered\":" +
-					std::string(m_selfEvolvingHookTriggered ? "true" : "false") +
-					",\"invalidMetadata\":" +
-					std::to_string(m_hookCatalog.diagnostics.invalidMetadataFiles) +
-					",\"unsafeHandlerPaths\":" +
-					std::to_string(m_hookCatalog.diagnostics.unsafeHandlerPaths) +
-					",\"missingHandlers\":" +
-					std::to_string(m_hookCatalog.diagnostics.missingHandlerFiles) +
-					",\"eventsEmitted\":" +
-					std::to_string(m_hookEvents.diagnostics.emittedCount) +
-					",\"eventValidationFailed\":" +
-					std::to_string(m_hookEvents.diagnostics.validationFailedCount) +
-					",\"eventsDropped\":" +
-					std::to_string(m_hookEvents.diagnostics.droppedCount) +
-					",\"dispatches\":" +
-					std::to_string(m_hookExecution.diagnostics.dispatchCount) +
-					",\"hookDispatchCount\":" +
-					std::to_string(m_hookExecution.diagnostics.dispatchCount) +
-					",\"dispatchSuccess\":" +
-					std::to_string(m_hookExecution.diagnostics.successCount) +
-					",\"dispatchFailures\":" +
-					std::to_string(m_hookExecution.diagnostics.failureCount) +
-					",\"hookFailureCount\":" +
-					std::to_string(m_hookExecution.diagnostics.failureCount) +
-					",\"dispatchSkipped\":" +
-					std::to_string(m_hookExecution.diagnostics.skippedCount) +
-					",\"dispatchTimeouts\":" +
-					std::to_string(m_hookExecution.diagnostics.timeoutCount) +
-					",\"guardRejected\":" +
-					std::to_string(m_hookExecution.diagnostics.guardRejectedCount) +
-					",\"reminderTriggered\":" +
-					std::to_string(m_hookExecution.diagnostics.reminderTriggeredCount) +
-					",\"reminderInjected\":" +
-					std::to_string(m_hookExecution.diagnostics.reminderInjectedCount) +
-					",\"reminderSkipped\":" +
-					std::to_string(m_hookExecution.diagnostics.reminderSkippedCount) +
-					",\"policyBlocked\":" +
-					std::to_string(m_hookExecution.diagnostics.policyBlockedCount) +
-					",\"driftDetected\":" +
-					std::to_string(m_hookExecution.diagnostics.driftDetectedCount) +
-					",\"lastDriftReason\":\"" +
-					WideToNarrowAscii(m_hookExecution.diagnostics.lastDriftReason) + "\"" +
-					",\"reminderState\":\"" +
-					WideToNarrowAscii(m_hookExecution.diagnostics.lastReminderState) + "\"" +
-					",\"reminderReason\":\"" +
-					WideToNarrowAscii(m_hookExecution.diagnostics.lastReminderReason) + "\"" +
-					"},"
-					"\"features\":{\"implemented\":" + std::to_string(implementedCount) +
-					",\"inProgress\":" + std::to_string(inProgressCount) +
-					",\"planned\":" + std::to_string(plannedCount) +
-					",\"registryState\":\"" + featureStateLabel(
-						m_registry.Features().empty() ? FeatureState::Planned : m_registry.Features().front().state) +
-					"\"}}";
+		snapshot.localModelEnabled = localModel.enabled;
+		snapshot.localModelReady = localModel.ready;
+		snapshot.localModelRolloutEligible = m_localModelRolloutEligible;
+		snapshot.localModelActivationEnabled = m_localModelActivationEnabled;
+		snapshot.localModelActivationReason = m_localModelActivationReason;
+		snapshot.localModelProvider = localModel.provider;
+		snapshot.localModelRolloutStage = localModel.rolloutStage;
+		snapshot.localModelStorageRoot = localModel.storageRoot;
+		snapshot.localModelVersion = localModel.version;
+		snapshot.localModelStatus = localModel.status;
+		snapshot.localModelVerboseMetrics = localModel.verboseMetrics;
+		snapshot.localModelRuntimeDllPresent = localModel.runtimeDllPresent;
+		snapshot.localModelMaxTokens = localModel.maxTokens;
+		snapshot.localModelTemperature = localModel.temperature;
+		snapshot.localModelModelLoadAttempts = localModel.modelLoadAttempts;
+		snapshot.localModelModelLoadFailures = localModel.modelLoadFailures;
+		snapshot.localModelRequestsStarted = localModel.requestsStarted;
+		snapshot.localModelRequestsCompleted = localModel.requestsCompleted;
+		snapshot.localModelRequestsFailed = localModel.requestsFailed;
+		snapshot.localModelRequestsCancelled = localModel.requestsCancelled;
+		snapshot.localModelCumulativeTokens = localModel.cumulativeTokens;
+		snapshot.localModelCumulativeLatencyMs = localModel.cumulativeLatencyMs;
+		snapshot.localModelLastLatencyMs = localModel.lastLatencyMs;
+		snapshot.localModelLastGeneratedTokens = localModel.lastGeneratedTokens;
+		snapshot.localModelLastTokensPerSecond = localModel.lastTokensPerSecond;
+		snapshot.localModelModelPathConfigured = !localModel.modelPath.empty();
+		snapshot.localModelModelHashConfigured = !localModel.modelExpectedSha256.empty();
+		snapshot.localModelModelHashVerified = localModel.modelHashVerified;
+		snapshot.localModelTokenizerPathConfigured = !localModel.tokenizerPath.empty();
+		snapshot.localModelTokenizerHashConfigured = !localModel.tokenizerExpectedSha256.empty();
+		snapshot.localModelTokenizerHashVerified = localModel.tokenizerHashVerified;
 
-				return report;
+		snapshot.retrievalEnabled = retrieval.enabled;
+		snapshot.retrievalRecordCount = retrieval.recordCount;
+		snapshot.retrievalLastQueryCount = retrieval.lastQueryCount;
+		snapshot.retrievalStatus = retrieval.status;
+
+		snapshot.skillsCatalogEntries = m_skillsCatalog.entries.size();
+		snapshot.skillsPromptIncluded = m_skillsPrompt.includedCount;
+		snapshot.skillsSelfEvolvingReminderInjected =
+			m_skillsPrompt.prompt.find(L"## Self-Evolving Reminder") != std::wstring::npos;
+
+		snapshot.hooksLoaded = m_hookCatalog.diagnostics.hooksLoaded;
+		snapshot.hooksEngineMode = WideToNarrowAscii(m_hookExecution.diagnostics.engineMode);
+		snapshot.hooksEngineEnabled = m_hooksEngineEnabled;
+		snapshot.hooksFallbackPromptInjection = m_hooksFallbackPromptInjection;
+		snapshot.hooksReminderEnabled = m_hooksReminderEnabled;
+		snapshot.hooksReminderVerbosity = WideToNarrowAscii(m_hooksReminderVerbosity);
+		snapshot.hooksStrictPolicyEnforcement = m_hooksStrictPolicyEnforcement;
+		snapshot.hooksAllowedPackagesCount = m_hooksAllowedPackages.size();
+		snapshot.hooksGovernanceReportingEnabled = m_hooksGovernanceReportingEnabled;
+		snapshot.hooksGovernanceReportsGenerated = m_hooksGovernanceReportsGenerated;
+		snapshot.hooksLastGovernanceReportPath = WideToNarrowAscii(m_hooksLastGovernanceReportPath);
+		snapshot.hooksAutoRemediationEnabled = m_hooksAutoRemediationEnabled;
+		snapshot.hooksAutoRemediationRequiresApproval = m_hooksAutoRemediationRequiresApproval;
+		snapshot.hooksAutoRemediationExecuted = m_hooksAutoRemediationExecuted;
+		snapshot.hooksLastAutoRemediationStatus = WideToNarrowAscii(m_hooksLastAutoRemediationStatus);
+		snapshot.hooksAutoRemediationTenantId = WideToNarrowAscii(m_hooksAutoRemediationTenantId);
+		snapshot.hooksLastAutoRemediationPlaybookPath = WideToNarrowAscii(m_hooksLastAutoRemediationPlaybookPath);
+		snapshot.hooksAutoRemediationTokenMaxAgeMinutes = m_hooksAutoRemediationTokenMaxAgeMinutes;
+		snapshot.hooksAutoRemediationTokenRotations = m_hooksAutoRemediationTokenRotations;
+		snapshot.hooksRemediationTelemetryEnabled = m_hooksRemediationTelemetryEnabled;
+		snapshot.hooksRemediationAuditEnabled = m_hooksRemediationAuditEnabled;
+		snapshot.hooksLastRemediationTelemetryPath = WideToNarrowAscii(m_hooksLastRemediationTelemetryPath);
+		snapshot.hooksLastRemediationAuditPath = WideToNarrowAscii(m_hooksLastRemediationAuditPath);
+		snapshot.hooksRemediationSloStatus = WideToNarrowAscii(m_hooksRemediationSloStatus);
+		snapshot.hooksRemediationSloMaxDriftDetected = m_hooksRemediationSloMaxDriftDetected;
+		snapshot.hooksRemediationSloMaxPolicyBlocked = m_hooksRemediationSloMaxPolicyBlocked;
+		snapshot.hooksComplianceAttestationEnabled = m_hooksComplianceAttestationEnabled;
+		snapshot.hooksLastComplianceAttestationPath = WideToNarrowAscii(m_hooksLastComplianceAttestationPath);
+		snapshot.hooksEnterpriseSlaGovernanceEnabled = m_hooksEnterpriseSlaGovernanceEnabled;
+		snapshot.hooksEnterpriseSlaPolicyId = WideToNarrowAscii(m_hooksEnterpriseSlaPolicyId);
+		snapshot.hooksCrossTenantAttestationAggregationEnabled = m_hooksCrossTenantAttestationAggregationEnabled;
+		snapshot.hooksCrossTenantAttestationAggregationStatus = WideToNarrowAscii(m_hooksCrossTenantAttestationAggregationStatus);
+		snapshot.hooksCrossTenantAttestationAggregationCount = m_hooksCrossTenantAttestationAggregationCount;
+		snapshot.hooksLastCrossTenantAttestationAggregationPath = WideToNarrowAscii(m_hooksLastCrossTenantAttestationAggregationPath);
+		snapshot.hooksSelfEvolvingHookTriggered = m_selfEvolvingHookTriggered;
+		snapshot.hooksInvalidMetadata = m_hookCatalog.diagnostics.invalidMetadataFiles;
+		snapshot.hooksUnsafeHandlerPaths = m_hookCatalog.diagnostics.unsafeHandlerPaths;
+		snapshot.hooksMissingHandlers = m_hookCatalog.diagnostics.missingHandlerFiles;
+		snapshot.hooksEventsEmitted = m_hookEvents.diagnostics.emittedCount;
+		snapshot.hooksEventValidationFailed = m_hookEvents.diagnostics.validationFailedCount;
+		snapshot.hooksEventsDropped = m_hookEvents.diagnostics.droppedCount;
+		snapshot.hooksDispatches = m_hookExecution.diagnostics.dispatchCount;
+		snapshot.hooksHookDispatchCount = m_hookExecution.diagnostics.dispatchCount;
+		snapshot.hooksDispatchSuccess = m_hookExecution.diagnostics.successCount;
+		snapshot.hooksDispatchFailures = m_hookExecution.diagnostics.failureCount;
+		snapshot.hooksHookFailureCount = m_hookExecution.diagnostics.failureCount;
+		snapshot.hooksDispatchSkipped = m_hookExecution.diagnostics.skippedCount;
+		snapshot.hooksDispatchTimeouts = m_hookExecution.diagnostics.timeoutCount;
+		snapshot.hooksGuardRejected = m_hookExecution.diagnostics.guardRejectedCount;
+		snapshot.hooksReminderTriggered = m_hookExecution.diagnostics.reminderTriggeredCount;
+		snapshot.hooksReminderInjected = m_hookExecution.diagnostics.reminderInjectedCount;
+		snapshot.hooksReminderSkipped = m_hookExecution.diagnostics.reminderSkippedCount;
+		snapshot.hooksPolicyBlocked = m_hookExecution.diagnostics.policyBlockedCount;
+		snapshot.hooksDriftDetected = m_hookExecution.diagnostics.driftDetectedCount;
+		snapshot.hooksLastDriftReason = WideToNarrowAscii(m_hookExecution.diagnostics.lastDriftReason);
+		snapshot.hooksReminderState = WideToNarrowAscii(m_hookExecution.diagnostics.lastReminderState);
+		snapshot.hooksReminderReason = WideToNarrowAscii(m_hookExecution.diagnostics.lastReminderReason);
+
+		snapshot.featuresImplemented = implementedCount;
+		snapshot.featuresInProgress = inProgressCount;
+		snapshot.featuresPlanned = plannedCount;
+		snapshot.featuresRegistryState = featureStateLabel(
+			m_registry.Features().empty()
+			? FeatureState::Planned
+			: m_registry.Features().front().state);
+
+		return m_diagnosticsReportBuilder.BuildOperatorDiagnosticsReport(snapshot);
 	}
 
 	void ServiceManager::SetActiveChatProvider(

@@ -31,6 +31,7 @@
 #include "providers/CDeepSeekClient.h"
 #include "skills/CSkillsHooksCoordinator.h"
 #include "bootstrap/CServiceBootstrapCoordinator.h"
+#include "diagnostics/CDiagnosticsReportBuilder.h"
 #include "tools/CToolRuntimeRegistry.h"
 #include "runtime/CChatRuntime.h"
 #include "runtime/LocalModel/OnnxTextGenerationRuntime.h"
@@ -255,6 +256,7 @@ namespace blazeclaw::core {
 		CDeepSeekClient m_deepSeekClient;
 		CSkillsHooksCoordinator m_skillsHooksCoordinator;
 		CServiceBootstrapCoordinator m_serviceBootstrapCoordinator;
+		CDiagnosticsReportBuilder m_diagnosticsReportBuilder;
 		CToolRuntimeRegistry m_toolRuntimeRegistry;
 		blazeclaw::gateway::GatewayHost m_gatewayHost;
 
