@@ -112,6 +112,14 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
    - `ServiceManager::ConfigurePolicies(...)` now consumes
      `CServiceBootstrapCoordinator::ResolveEmailPolicySettings(...)`.
    - Removed inline email rollout/enforcement policy branch logic from `ServiceManager.cpp`.
+   - ✅ Implemented for tool skill-root/env runtime resolver cluster.
+   - Added `StartupPolicyResolver::ToolRuntimePolicySettings` DTO.
+   - Runtime tool wiring now consumes
+     `CServiceBootstrapCoordinator::ResolveToolRuntimePolicySettings(...)`.
+   - Removed migrated skill-root/env helpers from `ServiceManager.cpp`
+     (`ResolveImapSmtpSkillRoot`, `ResolveBraveSearchSkillRoot`,
+      `ResolveOpenClawWebBrowsingSkillRoot`, `ResolveBaiduSearchSkillRoot`,
+      `ResolveBraveRequireApiKey`, `HasEnvVarValue`).
 
 3. **Introduce a `ServiceManagerState` aggregate**
    - Group many related member fields into state structs (hooks state, runtime metrics state, email policy state).
@@ -172,6 +180,7 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
 1. Finish extracting residual resolver/helper clusters from `ServiceManager.cpp`.
    - ✅ Hooks policy/env resolver cluster extracted to bootstrap policy module.
    - ✅ Non-hooks email policy resolver cluster extracted to bootstrap policy module.
+   - ✅ Tool skill-root/env runtime resolver cluster extracted to bootstrap policy module.
 2. Reduce `ServiceManager.h` state surface via grouped aggregates.
 3. Add startup/wiring contract tests (phase-level orchestration coverage).
    - ✅ Implemented for startup phase ordering + failure-path assertions.

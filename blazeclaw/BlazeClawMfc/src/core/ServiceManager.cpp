@@ -724,185 +724,12 @@ namespace blazeclaw::core {
 		}
 
 
-		bool HasEnvVarValue(const wchar_t* key) {
-			wchar_t* value = nullptr;
-			std::size_t len = 0;
-			if (_wdupenv_s(&value, &len, key) != 0 || value == nullptr || len == 0) {
-				if (value != nullptr) {
-					free(value);
-				}
-				return false;
-			}
 
-			const std::wstring trimmed = Trim(value);
-			free(value);
-			return !trimmed.empty();
-		}
 
-		bool ResolveBraveRequireApiKey() {
-			return ReadBoolEnvOrDefault(L"BLAZECLAW_BRAVE_REQUIRE_API_KEY", false);
-		}
-
-		std::optional<std::filesystem::path> ResolveImapSmtpSkillRoot() {
-			std::vector<std::filesystem::path> candidates;
-			candidates.push_back(std::filesystem::current_path());
-
-			wchar_t modulePath[MAX_PATH]{};
-			if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) > 0) {
-				candidates.push_back(std::filesystem::path(modulePath).parent_path());
-			}
-
-			for (const auto& root : candidates) {
-				std::filesystem::path cursor = root;
-				while (!cursor.empty()) {
-					const auto candidate =
-						cursor /
-						L"blazeclaw" /
-						L"skills" /
-						L"imap-smtp-email";
-					if (std::filesystem::exists(candidate / L"scripts" / L"imap.js") &&
-						std::filesystem::exists(candidate / L"scripts" / L"smtp.js")) {
-						return candidate;
-					}
-
-					if (!cursor.has_parent_path()) {
-						break;
-					}
-
-					auto parent = cursor.parent_path();
-					if (parent == cursor) {
-						break;
-					}
-
-					cursor = parent;
-				}
-			}
-
-			return std::nullopt;
-		}
-
-		std::optional<std::filesystem::path> ResolveOpenClawWebBrowsingSkillRoot() {
-			std::vector<std::filesystem::path> candidates;
-			candidates.push_back(std::filesystem::current_path());
-
-			wchar_t modulePath[MAX_PATH]{};
-			if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) > 0) {
-				candidates.push_back(std::filesystem::path(modulePath).parent_path());
-			}
-
-			for (const auto& root : candidates) {
-				std::filesystem::path cursor = root;
-				while (!cursor.empty()) {
-					const auto candidateA =
-						cursor /
-						L"blazeclaw" /
-						L"skills-openclaw-original" /
-						L"web-browsing";
-					if (std::filesystem::exists(candidateA / L"scripts" / L"search_web.py")) {
-						return candidateA;
-					}
-
-					const auto candidateB =
-						cursor /
-						L"skills-openclaw-original" /
-						L"web-browsing";
-					if (std::filesystem::exists(candidateB / L"scripts" / L"search_web.py")) {
-						return candidateB;
-					}
-
-					if (!cursor.has_parent_path()) {
-						break;
-					}
-
-					auto parent = cursor.parent_path();
-					if (parent == cursor) {
-						break;
-					}
-
-					cursor = parent;
-				}
-			}
-
-			return std::nullopt;
-		}
-
-		std::optional<std::filesystem::path> ResolveBaiduSearchSkillRoot() {
-			std::vector<std::filesystem::path> candidates;
-			candidates.push_back(std::filesystem::current_path());
-
-			wchar_t modulePath[MAX_PATH]{};
-			if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) > 0) {
-				candidates.push_back(std::filesystem::path(modulePath).parent_path());
-			}
-
-			for (const auto& root : candidates) {
-				std::filesystem::path cursor = root;
-				while (!cursor.empty()) {
-					const auto candidate =
-						cursor /
-						L"blazeclaw" /
-						L"skills" /
-						L"baidu-search";
-					if (std::filesystem::exists(candidate / L"scripts" / L"search.py")) {
-						return candidate;
-					}
-
-					if (!cursor.has_parent_path()) {
-						break;
-					}
-
-					auto parent = cursor.parent_path();
-					if (parent == cursor) {
-						break;
-					}
-
-					cursor = parent;
-				}
-			}
-
-			return std::nullopt;
-		}
-
-		std::optional<std::filesystem::path> ResolveBraveSearchSkillRoot() {
-			std::vector<std::filesystem::path> candidates;
-			candidates.push_back(std::filesystem::current_path());
-
-			wchar_t modulePath[MAX_PATH]{};
-			if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) > 0) {
-				candidates.push_back(std::filesystem::path(modulePath).parent_path());
-			}
-
-			for (const auto& root : candidates) {
-				std::filesystem::path cursor = root;
-				while (!cursor.empty()) {
-					const auto candidate =
-						cursor /
-						L"blazeclaw" /
-						L"skills" /
-						L"brave-search";
-					if (std::filesystem::exists(candidate / L"scripts" / L"search.js") &&
-						std::filesystem::exists(candidate / L"scripts" / L"content.js")) {
-						return candidate;
-					}
-
-					if (!cursor.has_parent_path()) {
-						break;
-					}
-
-					auto parent = cursor.parent_path();
-					if (parent == cursor) {
-						break;
-					}
-
-					cursor = parent;
-				}
-			}
-
-			return std::nullopt;
-		}
-
-		void RegisterBaiduSearchRuntimeTools(blazeclaw::gateway::GatewayHost& host) {
-			const auto skillRoot = ResolveBaiduSearchSkillRoot();
+		void RegisterBaiduSearchRuntimeTools(
+			blazeclaw::gateway::GatewayHost& host,
+			const CServiceBootstrapCoordinator::ToolRuntimePolicySettings& toolPolicy) {
+			const auto skillRoot = toolPolicy.baiduSearchSkillRoot;
 			for (const auto& spec : tools::BuildBaiduSearchToolRuntimeSpecs()) {
 				host.RegisterRuntimeToolV2(
 					blazeclaw::gateway::ToolCatalogEntry{
@@ -918,7 +745,16 @@ namespace blazeclaw::core {
 						result.startedAtMs = CurrentEpochMs();
 
 						EnsureBaiduApiKeyRuntimeEnv();
-						if (!HasEnvVarValue(L"BAIDU_API_KEY")) {
+						wchar_t* baiduApiKey = nullptr;
+						std::size_t baiduApiKeyLen = 0;
+						const bool hasBaiduApiKey =
+							(_wdupenv_s(&baiduApiKey, &baiduApiKeyLen, L"BAIDU_API_KEY") == 0 &&
+								baiduApiKey != nullptr &&
+								baiduApiKeyLen > 0);
+						if (baiduApiKey != nullptr) {
+							free(baiduApiKey);
+						}
+						if (!hasBaiduApiKey) {
 							result.executed = false;
 							result.status = "error";
 							result.errorCode = "baidu_api_key_missing";
@@ -1177,8 +1013,10 @@ namespace blazeclaw::core {
 			}
 		}
 
-		void RegisterImapSmtpRuntimeTools(blazeclaw::gateway::GatewayHost& host) {
-			const auto skillRoot = ResolveImapSmtpSkillRoot();
+		void RegisterImapSmtpRuntimeTools(
+			blazeclaw::gateway::GatewayHost& host,
+			const CServiceBootstrapCoordinator::ToolRuntimePolicySettings& toolPolicy) {
+			const auto skillRoot = toolPolicy.imapSmtpSkillRoot;
 			for (const auto& spec : tools::BuildImapSmtpToolRuntimeSpecs()) {
 				host.RegisterRuntimeToolV2(
 					blazeclaw::gateway::ToolCatalogEntry{
@@ -1331,15 +1169,15 @@ namespace blazeclaw::core {
 			}
 		}
 
-		void RegisterBraveSearchRuntimeTools(blazeclaw::gateway::GatewayHost& host) {
-			const auto skillRoot = ResolveBraveSearchSkillRoot();
-			const auto openClawWebBrowsingSkillRoot = ResolveOpenClawWebBrowsingSkillRoot();
+		void RegisterBraveSearchRuntimeTools(
+			blazeclaw::gateway::GatewayHost& host,
+			const CServiceBootstrapCoordinator::ToolRuntimePolicySettings& toolPolicy) {
+			const auto skillRoot = toolPolicy.braveSearchSkillRoot;
+			const auto openClawWebBrowsingSkillRoot = toolPolicy.openClawWebBrowsingSkillRoot;
 			const bool enableOpenClawWebBrowsingFallback =
-				ReadBoolEnvOrDefault(
-					L"BLAZECLAW_WEB_BROWSING_ENABLE_OPENCLAW_FALLBACK",
-					false);
-			const bool requireApiKey = ResolveBraveRequireApiKey();
-			const bool hasApiKey = HasEnvVarValue(L"BRAVE_API_KEY");
+				toolPolicy.enableOpenClawWebBrowsingFallback;
+			const bool requireApiKey = toolPolicy.braveRequireApiKey;
+			const bool hasApiKey = toolPolicy.braveApiKeyPresent;
 			for (const auto& spec : tools::BuildBraveSearchToolRuntimeSpecs()) {
 				host.RegisterRuntimeToolV2(
 					blazeclaw::gateway::ToolCatalogEntry{
@@ -2802,17 +2640,23 @@ namespace blazeclaw::core {
 		m_toolRuntimeRegistry.RegisterAll(
 			m_gatewayHost,
 			CToolRuntimeRegistry::Dependencies{
-				.registerImapSmtp = [](blazeclaw::gateway::GatewayHost& host) {
-					RegisterImapSmtpRuntimeTools(host);
+			 .registerImapSmtp = [this](blazeclaw::gateway::GatewayHost& host) {
+					const auto toolPolicy =
+						m_serviceBootstrapCoordinator.ResolveToolRuntimePolicySettings();
+					RegisterImapSmtpRuntimeTools(host, toolPolicy);
 				},
 				.registerContentPolishing = [](blazeclaw::gateway::GatewayHost& host) {
 					RegisterContentPolishingRuntimeTools(host);
 				},
-				.registerBraveSearch = [](blazeclaw::gateway::GatewayHost& host) {
-					RegisterBraveSearchRuntimeTools(host);
+			  .registerBraveSearch = [this](blazeclaw::gateway::GatewayHost& host) {
+					const auto toolPolicy =
+						m_serviceBootstrapCoordinator.ResolveToolRuntimePolicySettings();
+					RegisterBraveSearchRuntimeTools(host, toolPolicy);
 				},
-				.registerBaiduSearch = [](blazeclaw::gateway::GatewayHost& host) {
-					RegisterBaiduSearchRuntimeTools(host);
+			  .registerBaiduSearch = [this](blazeclaw::gateway::GatewayHost& host) {
+					const auto toolPolicy =
+						m_serviceBootstrapCoordinator.ResolveToolRuntimePolicySettings();
+					RegisterBaiduSearchRuntimeTools(host, toolPolicy);
 				},
 			});
 

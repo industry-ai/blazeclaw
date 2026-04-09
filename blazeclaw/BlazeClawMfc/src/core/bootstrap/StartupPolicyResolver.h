@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -11,6 +12,16 @@ namespace blazeclaw::core::bootstrap {
 
 	class StartupPolicyResolver {
 	public:
+		struct ToolRuntimePolicySettings {
+			std::optional<std::filesystem::path> imapSmtpSkillRoot;
+			std::optional<std::filesystem::path> baiduSearchSkillRoot;
+			std::optional<std::filesystem::path> braveSearchSkillRoot;
+			std::optional<std::filesystem::path> openClawWebBrowsingSkillRoot;
+			bool braveRequireApiKey = false;
+			bool braveApiKeyPresent = false;
+			bool enableOpenClawWebBrowsingFallback = false;
+		};
+
 		struct EmailPolicySettings {
 			std::wstring rolloutMode = L"legacy";
 			std::wstring enforceChannel;
@@ -54,6 +65,8 @@ namespace blazeclaw::core::bootstrap {
 
 		[[nodiscard]] EmailPolicySettings ResolveEmailPolicySettings(
 			const blazeclaw::config::AppConfig& config) const;
+
+		[[nodiscard]] ToolRuntimePolicySettings ResolveToolRuntimePolicySettings() const;
 
 		void AppendStartupTrace(const char* stage) const;
 	};

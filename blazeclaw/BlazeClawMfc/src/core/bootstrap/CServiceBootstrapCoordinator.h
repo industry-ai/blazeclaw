@@ -39,6 +39,8 @@ namespace blazeclaw::core {
 
 	class CServiceBootstrapCoordinator {
 	public:
+		using ToolRuntimePolicySettings =
+			bootstrap::StartupPolicyResolver::ToolRuntimePolicySettings;
 		using EmailPolicySettings =
 			bootstrap::StartupPolicyResolver::EmailPolicySettings;
 		using HooksPolicySettings =
@@ -98,6 +100,8 @@ namespace blazeclaw::core {
 
 		[[nodiscard]] EmailPolicySettings ResolveEmailPolicySettings(
 			const blazeclaw::config::AppConfig& config) const;
+
+		[[nodiscard]] ToolRuntimePolicySettings ResolveToolRuntimePolicySettings() const;
 
 		void AppendStartupTrace(const char* stage) const;
 

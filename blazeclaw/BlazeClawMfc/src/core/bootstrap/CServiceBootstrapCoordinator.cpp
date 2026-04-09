@@ -230,6 +230,12 @@ namespace blazeclaw::core {
 		return m_startupPolicyResolver.ResolveEmailPolicySettings(config);
 	}
 
+	CServiceBootstrapCoordinator::ToolRuntimePolicySettings
+		CServiceBootstrapCoordinator::ResolveToolRuntimePolicySettings() const
+	{
+		return m_startupPolicyResolver.ResolveToolRuntimePolicySettings();
+	}
+
 	void CServiceBootstrapCoordinator::AppendStartupTrace(const char* stage) const
 	{
 		m_startupPolicyResolver.AppendStartupTrace(stage);

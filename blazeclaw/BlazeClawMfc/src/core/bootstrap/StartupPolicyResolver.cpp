@@ -12,6 +12,63 @@ namespace blazeclaw::core::bootstrap {
 
 	namespace {
 
+		std::optional<std::filesystem::path> ResolveSkillRootFromSearchPaths(
+			const std::vector<std::filesystem::path>& suffix,
+			const std::vector<std::filesystem::path>& requiredScripts)
+		{
+			std::vector<std::filesystem::path> candidates;
+			candidates.push_back(std::filesystem::current_path());
+
+			wchar_t modulePath[MAX_PATH]{};
+			if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) > 0)
+			{
+				candidates.push_back(std::filesystem::path(modulePath).parent_path());
+			}
+
+			for (const auto& root : candidates)
+			{
+				std::filesystem::path cursor = root;
+				while (!cursor.empty())
+				{
+					std::filesystem::path candidate = cursor;
+					for (const auto& segment : suffix)
+					{
+						candidate /= segment;
+					}
+
+					bool allPresent = true;
+					for (const auto& script : requiredScripts)
+					{
+						if (!std::filesystem::exists(candidate / script))
+						{
+							allPresent = false;
+							break;
+						}
+					}
+
+					if (allPresent)
+					{
+						return candidate;
+					}
+
+					if (!cursor.has_parent_path())
+					{
+						break;
+					}
+
+					auto parent = cursor.parent_path();
+					if (parent == cursor)
+					{
+						break;
+					}
+
+					cursor = parent;
+				}
+			}
+
+			return std::nullopt;
+		}
+
 		std::wstring TrimWide(const std::wstring& value)
 		{
 			const auto first = std::find_if_not(
@@ -30,6 +87,24 @@ namespace blazeclaw::core::bootstrap {
 			}
 
 			return std::wstring(first, last);
+		}
+
+		bool HasEnvVarValue(const wchar_t* key)
+		{
+			wchar_t* value = nullptr;
+			std::size_t len = 0;
+			if (_wdupenv_s(&value, &len, key) != 0 || value == nullptr || len == 0)
+			{
+				if (value != nullptr)
+				{
+					free(value);
+				}
+				return false;
+			}
+
+			const std::wstring trimmed = TrimWide(value);
+			free(value);
+			return !trimmed.empty();
 		}
 
 		bool ReadBoolEnvOrDefault(const wchar_t* key, const bool fallback)
@@ -356,6 +431,41 @@ namespace blazeclaw::core::bootstrap {
 			settings.runtimeEnforce = config.email.policyProfiles.enforce;
 		}
 
+		return settings;
+	}
+
+	StartupPolicyResolver::ToolRuntimePolicySettings
+		StartupPolicyResolver::ResolveToolRuntimePolicySettings() const
+	{
+		ToolRuntimePolicySettings settings;
+		settings.imapSmtpSkillRoot = ResolveSkillRootFromSearchPaths(
+			{ L"blazeclaw", L"skills", L"imap-smtp-email" },
+			{ std::filesystem::path(L"scripts") / L"imap.js",
+			  std::filesystem::path(L"scripts") / L"smtp.js" });
+		settings.baiduSearchSkillRoot = ResolveSkillRootFromSearchPaths(
+			{ L"blazeclaw", L"skills", L"baidu-search" },
+			{ std::filesystem::path(L"scripts") / L"search.py" });
+		settings.braveSearchSkillRoot = ResolveSkillRootFromSearchPaths(
+			{ L"blazeclaw", L"skills", L"brave-search" },
+			{ std::filesystem::path(L"scripts") / L"search.js",
+			  std::filesystem::path(L"scripts") / L"content.js" });
+		settings.openClawWebBrowsingSkillRoot = ResolveSkillRootFromSearchPaths(
+			{ L"blazeclaw", L"skills-openclaw-original", L"web-browsing" },
+			{ std::filesystem::path(L"scripts") / L"search_web.py" });
+		if (!settings.openClawWebBrowsingSkillRoot.has_value())
+		{
+			settings.openClawWebBrowsingSkillRoot = ResolveSkillRootFromSearchPaths(
+				{ L"skills-openclaw-original", L"web-browsing" },
+				{ std::filesystem::path(L"scripts") / L"search_web.py" });
+		}
+
+		settings.braveRequireApiKey = ReadBoolEnvOrDefault(
+			L"BLAZECLAW_BRAVE_REQUIRE_API_KEY",
+			false);
+		settings.braveApiKeyPresent = HasEnvVarValue(L"BRAVE_API_KEY");
+		settings.enableOpenClawWebBrowsingFallback = ReadBoolEnvOrDefault(
+			L"BLAZECLAW_WEB_BROWSING_ENABLE_OPENCLAW_FALLBACK",
+			false);
 		return settings;
 	}
 
