@@ -109,7 +109,20 @@ void CChildFrame::OnSize(UINT nType, int cx, int cy)
 		return;
 	if (!::IsWindow(m_wndSplitter.m_hWnd))
 		return;
-	if (m_wndSplitter.GetPane(0, 0) == nullptr || m_wndSplitter.GetPane(0, 1) == nullptr)
+	if (m_wndSplitter.GetPane(0, 0) == nullptr)
+		return;
+
+	// If chat view is hidden (from SkillView), expand WebView to full width
+	if (m_bHideChatView)
+	{
+		m_wndSplitter.SetColumnInfo(0, cx, 0);
+		m_wndSplitter.SetColumnInfo(1, 0, 0);
+		m_wndSplitter.RecalcLayout();
+		return;
+	}
+
+	// Normal mode: show both WebView and Chat
+	if (m_wndSplitter.GetPane(0, 1) == nullptr)
 		return;
 
 	const int minWeb = 120;
@@ -162,6 +175,59 @@ void CChildFrame::OnFilePrintPreview()
 	{
 		PostMessage(WM_COMMAND, AFX_ID_PREVIEW_CLOSE);  // force Print Preview mode closed
 	}
+}
+
+void CChildFrame::HideChatView()
+{
+	TRACE(_T("[CChildFrame::HideChatView] ENTER\n"));
+
+	if (!m_bSplitterReady)
+	{
+		return;
+	}
+	if (!::IsWindow(m_wndSplitter.m_hWnd))
+	{
+		return;
+	}
+	if (m_wndSplitter.GetPane(0, 0) == nullptr || m_wndSplitter.GetPane(0, 1) == nullptr)
+	{
+		return;
+	}
+
+	// Set the flag FIRST so OnSize handler knows chat is hidden
+	m_bHideChatView = TRUE;
+
+	CWnd* pChatView = m_wndSplitter.GetPane(0, 1);
+	if (pChatView && ::IsWindow(pChatView->m_hWnd))
+	{
+		TRACE(_T("[CChildFrame::HideChatView] hiding ChatView HWND\n"));
+		pChatView->ShowWindow(SW_HIDE);
+	}
+
+	CRect rect;
+	GetClientRect(rect);
+	const int cx = rect.Width();
+	const int cy = rect.Height();
+	TRACE(_T("[CChildFrame::HideChatView] client rect: cx=%d cy=%d\n"), cx, cy);
+
+	if (cx > 0 && cy > 0)
+	{
+		// Expand WebView to full width
+		m_wndSplitter.SetColumnInfo(0, cx, 0);
+		m_wndSplitter.SetColumnInfo(1, 0, 0);
+		m_wndSplitter.RecalcLayout();
+		TRACE(_T("[CChildFrame::HideChatView] layout updated\n"));
+	}
+}
+
+void CChildFrame::SetCurrentSkillKey(const std::string& skillKey)
+{
+	m_currentSkillKey = skillKey;
+}
+
+const std::string& CChildFrame::GetCurrentSkillKey() const
+{
+	return m_currentSkillKey;
 }
 
 void CChildFrame::OnUpdateFilePrintPreview(CCmdUI* pCmdUI)

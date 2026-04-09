@@ -17,6 +17,7 @@
 #include "BlazeClawMFCView.h"
 #include "BlazeClawMarkdownView.h"
 #include "SharedTabsDocTemplate.h"
+#include "ChildFrm.h"
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -1286,6 +1287,9 @@ void CMainFrame::OnWindowNewWebViewMarkdown()
 
 void CMainFrame::OpenWebViewPlusChatTab()
 {
+	// Clear any pending URL from previous SkillView interactions
+	CBlazeClawMFCView::ClearPendingStartupState();
+
 	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
 	auto* tpl = app ? app->GetChatDocTemplate() : nullptr;
 	TRACE(_T("[CMainFrame::OpenWebViewPlusChatTab] app=%p tpl=%p\n"), app, tpl);
@@ -1298,6 +1302,154 @@ void CMainFrame::OpenWebViewPlusChatTab()
 		return;
 
 	AddChatStatusLine(_T("[Tab] New WebView+Chat tab created."));
+}
+
+CWnd* CMainFrame::FindChildFrameWithSkill(const std::string& skillKey) const
+{
+	// Normalize the search key
+	std::string normalizedSearch;
+	normalizedSearch.reserve(skillKey.size());
+	for (const char ch : skillKey)
+	{
+		if (ch == '-')
+		{
+			normalizedSearch.push_back('_');
+		}
+		else
+		{
+			normalizedSearch.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+		}
+	}
+
+	// Enumerate all MDI child windows
+	for (HWND hWndChild = ::GetWindow(::AfxGetMainWnd()->m_hWnd, GW_CHILD);
+		hWndChild != nullptr;
+		hWndChild = ::GetWindow(hWndChild, GW_HWNDNEXT))
+	{
+		// Check if it's an MDI client
+		TCHAR className[64];
+		::GetClassName(hWndChild, className, _countof(className));
+		if (_tcscmp(className, _T("MDIClient")) != 0)
+			continue;
+
+		// Enumerate MDI children under this client
+		for (HWND hWndMdiChild = ::GetWindow(hWndChild, GW_CHILD);
+			hWndMdiChild != nullptr;
+			hWndMdiChild = ::GetWindow(hWndMdiChild, GW_HWNDNEXT))
+		{
+			// Try to cast to CChildFrame
+			CWnd* pWnd = CWnd::FromHandlePermanent(hWndMdiChild);
+			if (pWnd == nullptr)
+				continue;
+
+			auto* childFrame = DYNAMIC_DOWNCAST(CChildFrame, pWnd);
+			if (childFrame == nullptr)
+				continue;
+
+			// Normalize the frame's skill key
+			const std::string& frameSkillKey = childFrame->GetCurrentSkillKey();
+			if (frameSkillKey.empty())
+				continue;
+
+			std::string normalizedFrame;
+			normalizedFrame.reserve(frameSkillKey.size());
+			for (const char ch : frameSkillKey)
+			{
+				if (ch == '-')
+				{
+					normalizedFrame.push_back('_');
+				}
+				else
+				{
+					normalizedFrame.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+				}
+			}
+
+			if (normalizedFrame == normalizedSearch)
+			{
+				TRACE(_T("[CMainFrame::FindChildFrameWithSkill] found match: %s\n"), frameSkillKey.c_str());
+				return childFrame;
+			}
+		}
+	}
+
+	TRACE(_T("[CMainFrame::FindChildFrameWithSkill] no match found for: %s\n"), skillKey.c_str());
+	return nullptr;
+}
+
+bool CMainFrame::OpenSkillViewTab(
+	const std::string& skillKey,
+	const std::string& propertiesJson)
+{
+	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	auto* tpl = app ? app->GetChatDocTemplate() : nullptr;
+	TRACE(_T("[CMainFrame::OpenSkillViewTab] skillKey=%s app=%p tpl=%p\n"),
+		CA2W(skillKey.c_str()).m_psz, app, tpl);
+	if (!tpl)
+		return false;
+
+	// Check if this skill already has an open tab
+	CWnd* pExistingWnd = FindChildFrameWithSkill(skillKey);
+	if (pExistingWnd != nullptr)
+	{
+		TRACE(_T("[CMainFrame::OpenSkillViewTab] found existing tab for skill, activating\n"));
+		// Cast to CChildFrame for activation
+		auto* pExistingFrame = DYNAMIC_DOWNCAST(CChildFrame, pExistingWnd);
+		if (pExistingFrame != nullptr)
+		{
+			CMDIChildWndEx* pMdiChild = DYNAMIC_DOWNCAST(CMDIChildWndEx, pExistingFrame);
+			if (pMdiChild != nullptr)
+			{
+				pMdiChild->ActivateFrame(SW_SHOW);
+				pMdiChild->BringWindowToTop();
+				MDIActivate(pMdiChild);
+			}
+
+			// Update the skill content in the existing tab
+			CView* activeView = pExistingFrame->GetActiveView();
+			auto* webView = DYNAMIC_DOWNCAST(CBlazeClawMFCView, activeView);
+			if (webView != nullptr)
+			{
+				webView->ShowSkillSelection(skillKey, propertiesJson);
+			}
+		}
+
+		AddChatStatusLine(_T("[Tab] Switched to existing SkillView tab."));
+		return false;  // Did NOT create a new tab
+	}
+
+	// Get the currently active child before creating new tab
+	CMDIChildWndEx* pPrevActive = DYNAMIC_DOWNCAST(CMDIChildWndEx, MDIGetActive());
+
+	// Create the WebView+Chat tab
+	CDocument* pDoc = tpl->OpenDocumentFile(nullptr);
+	TRACE(_T("[CMainFrame::OpenSkillViewTab] pDoc=%p\n"), pDoc);
+	if (!pDoc)
+		return false;
+
+	// Get the newly active MDI child frame (should be the one we just created)
+	CMDIChildWndEx* activeChild = DYNAMIC_DOWNCAST(CMDIChildWndEx, MDIGetActive());
+	if (activeChild != nullptr && activeChild != pPrevActive)
+	{
+		// Cast to CChildFrame and hide the chat view
+		auto* childFrame = DYNAMIC_DOWNCAST(CChildFrame, activeChild);
+		if (childFrame != nullptr)
+		{
+			childFrame->HideChatView();
+			childFrame->SetCurrentSkillKey(skillKey);
+		}
+
+		// Show skill selection in the active WebView
+		auto* activeView = activeChild->GetActiveView();
+		auto* webView = DYNAMIC_DOWNCAST(CBlazeClawMFCView, activeView);
+		if (webView != nullptr)
+		{
+			webView->ShowSkillSelection(skillKey, propertiesJson);
+		}
+	}
+
+	AddChatStatusLine(_T("[Tab] SkillView tab created (Chat hidden)."));
+	return true;  // Created a new tab
 }
 
 void CMainFrame::OpenWebViewMarkdownTab()

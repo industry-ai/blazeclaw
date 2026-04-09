@@ -145,6 +145,7 @@ protected:
 public:
 	virtual void OnInitialUpdate();
 	static void SetPendingStartupUrl(const std::wstring& url);
+	static void ClearPendingStartupState();
 	afx_msg void OnSize(UINT nType, int cx, int cy);
 	afx_msg void OnDestroy();
 };

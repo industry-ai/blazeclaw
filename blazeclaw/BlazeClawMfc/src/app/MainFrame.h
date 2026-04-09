@@ -94,8 +94,19 @@ public:
 	void ShowSkillSelectionInActiveView(
 		const std::string& skillKey,
 		const std::string& propertiesJson);
+	// Open a new WebView+Chat tab with ChatView hidden (for SkillView)
+	// Returns true if tab was created, false if existing tab was activated
+	bool OpenSkillViewTab(
+		const std::string& skillKey,
+		const std::string& propertiesJson);
 	// File / Ribbon "New" — MDI routes ID_FILE_NEW to CWinApp while a child is active, so the app calls this too.
 	void OpenNewTabWithChoiceDialog();
+
+private:
+	// Helper: find existing CChildFrame with the given skill key (case-insensitive)
+	// Returns the CWnd* of the frame (cast to CChildFrame in implementation).
+	// Defined in MainFrame.cpp where CChildFrame is fully defined.
+	CWnd* FindChildFrameWithSkill(const std::string& skillKey) const;
 
 private:
 	void OpenWebViewPlusChatTab();
