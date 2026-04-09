@@ -216,6 +216,13 @@ namespace blazeclaw::core {
 		ValidateStartupFixtures(copy);
 	}
 
+	CServiceBootstrapCoordinator::HooksPolicySettings
+		CServiceBootstrapCoordinator::ResolveHooksPolicySettings(
+			const blazeclaw::config::AppConfig& config) const
+	{
+		return m_startupPolicyResolver.ResolveHooksPolicySettings(config);
+	}
+
 	void CServiceBootstrapCoordinator::AppendStartupTrace(const char* stage) const
 	{
 		m_startupPolicyResolver.AppendStartupTrace(stage);

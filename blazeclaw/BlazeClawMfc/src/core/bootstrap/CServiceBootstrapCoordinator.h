@@ -39,6 +39,8 @@ namespace blazeclaw::core {
 
 	class CServiceBootstrapCoordinator {
 	public:
+		using HooksPolicySettings =
+			bootstrap::StartupPolicyResolver::HooksPolicySettings;
 		struct RuntimeQueueSettings {
 			bool asyncQueueEnabled = true;
 			std::uint64_t queueWaitTimeoutMs = 15000;
@@ -88,6 +90,9 @@ namespace blazeclaw::core {
 
 		void ValidateStartupFixtures(FixtureValidationContext& context) const;
 		void ValidateStartupFixtures(const FixtureValidationContext& context) const;
+
+		[[nodiscard]] HooksPolicySettings ResolveHooksPolicySettings(
+			const blazeclaw::config::AppConfig& config) const;
 
 		void AppendStartupTrace(const char* stage) const;
 

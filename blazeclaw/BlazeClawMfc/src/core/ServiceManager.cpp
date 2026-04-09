@@ -714,378 +714,6 @@ namespace blazeclaw::core {
 			return output;
 		}
 
-		std::vector<std::wstring> ResolveHooksAllowedPackages(
-			const blazeclaw::config::AppConfig& config) {
-			std::vector<std::wstring> values;
-
-			const auto addNormalized = [&values](const std::wstring& raw) {
-				const auto trimmed = Trim(raw);
-				if (trimmed.empty()) {
-					return;
-				}
-
-				std::wstring lowered;
-				lowered.reserve(trimmed.size());
-				for (const auto ch : trimmed) {
-					lowered.push_back(static_cast<wchar_t>(std::towlower(ch)));
-				}
-				values.push_back(lowered);
-				};
-
-			for (const auto& item : config.hooks.engine.allowedPackages) {
-				addNormalized(item);
-			}
-
-			wchar_t* env = nullptr;
-			std::size_t len = 0;
-			if (_wdupenv_s(&env, &len, L"BLAZECLAW_HOOKS_ALLOWED_PACKAGES") == 0 &&
-				env != nullptr && len > 0) {
-				std::wstring token;
-				for (std::size_t i = 0; i < len && env[i] != L'\0'; ++i) {
-					if (env[i] == L',' || env[i] == L';') {
-						addNormalized(token);
-						token.clear();
-					}
-					else {
-						token.push_back(env[i]);
-					}
-				}
-				addNormalized(token);
-			}
-			if (env != nullptr) {
-				free(env);
-			}
-
-			std::sort(values.begin(), values.end());
-			values.erase(std::unique(values.begin(), values.end()), values.end());
-			return values;
-		}
-
-		bool ResolveHooksStrictPolicyEnforcement(
-			const blazeclaw::config::AppConfig& config) {
-			return ReadBoolEnvOrDefault(
-				L"BLAZECLAW_HOOKS_STRICT_POLICY_ENFORCEMENT",
-				config.hooks.engine.strictPolicyEnforcement);
-		}
-
-		bool ResolveHooksAutoRemediationEnabled(
-			const blazeclaw::config::AppConfig& config) {
-			return ReadBoolEnvOrDefault(
-				L"BLAZECLAW_HOOKS_AUTO_REMEDIATION_ENABLED",
-				config.hooks.engine.autoRemediationEnabled);
-		}
-
-		bool ResolveHooksAutoRemediationRequiresApproval(
-			const blazeclaw::config::AppConfig& config) {
-			return ReadBoolEnvOrDefault(
-				L"BLAZECLAW_HOOKS_AUTO_REMEDIATION_REQUIRES_APPROVAL",
-				config.hooks.engine.autoRemediationRequiresApproval);
-		}
-
-		std::wstring ResolveHooksAutoRemediationApprovalToken(
-			const blazeclaw::config::AppConfig& config) {
-			std::wstring value = config.hooks.engine.autoRemediationApprovalToken;
-			wchar_t* env = nullptr;
-			std::size_t len = 0;
-			if (_wdupenv_s(
-				&env,
-				&len,
-				L"BLAZECLAW_HOOKS_AUTO_REMEDIATION_APPROVAL_TOKEN") == 0 &&
-				env != nullptr &&
-				len > 0) {
-				value.assign(env);
-			}
-			if (env != nullptr) {
-				free(env);
-			}
-
-			return Trim(value);
-		}
-
-		std::wstring ResolveHooksAutoRemediationTenantId(
-			const blazeclaw::config::AppConfig& config) {
-			std::wstring value = config.hooks.engine.autoRemediationTenantId;
-			wchar_t* env = nullptr;
-			std::size_t len = 0;
-			if (_wdupenv_s(
-				&env,
-				&len,
-				L"BLAZECLAW_HOOKS_AUTO_REMEDIATION_TENANT_ID") == 0 &&
-				env != nullptr &&
-				len > 0) {
-				value.assign(env);
-			}
-			if (env != nullptr) {
-				free(env);
-			}
-
-			const auto trimmed = Trim(value);
-			return trimmed.empty() ? L"default" : trimmed;
-		}
-
-		std::filesystem::path ResolveHooksAutoRemediationPlaybookDir(
-			const blazeclaw::config::AppConfig& config) {
-			std::wstring value = config.hooks.engine.autoRemediationPlaybookDir;
-			wchar_t* env = nullptr;
-			std::size_t len = 0;
-			if (_wdupenv_s(
-				&env,
-				&len,
-				L"BLAZECLAW_HOOKS_AUTO_REMEDIATION_PLAYBOOK_DIR") == 0 &&
-				env != nullptr &&
-				len > 0) {
-				value.assign(env);
-			}
-			if (env != nullptr) {
-				free(env);
-			}
-
-			const auto trimmed = Trim(value);
-			if (trimmed.empty()) {
-				return std::filesystem::path(L"blazeclaw/reports/hooks-remediation-playbooks");
-			}
-
-			return std::filesystem::path(trimmed);
-		}
-
-		bool ResolveHooksEnterpriseSlaGovernanceEnabled(
-			const blazeclaw::config::AppConfig& config) {
-			return ReadBoolEnvOrDefault(
-				L"BLAZECLAW_HOOKS_ENTERPRISE_SLA_GOVERNANCE_ENABLED",
-				config.hooks.engine.enterpriseSlaGovernanceEnabled);
-		}
-
-		std::wstring ResolveHooksEnterpriseSlaPolicyId(
-			const blazeclaw::config::AppConfig& config) {
-			std::wstring value = config.hooks.engine.enterpriseSlaPolicyId;
-			wchar_t* env = nullptr;
-			std::size_t len = 0;
-			if (_wdupenv_s(
-				&env,
-				&len,
-				L"BLAZECLAW_HOOKS_ENTERPRISE_SLA_POLICY_ID") == 0 &&
-				env != nullptr &&
-				len > 0) {
-				value.assign(env);
-			}
-			if (env != nullptr) {
-				free(env);
-			}
-
-			const auto trimmed = Trim(value);
-			return trimmed.empty() ? L"default-policy" : trimmed;
-		}
-
-		bool ResolveHooksCrossTenantAttestationAggregationEnabled(
-			const blazeclaw::config::AppConfig& config) {
-			return ReadBoolEnvOrDefault(
-				L"BLAZECLAW_HOOKS_CROSS_TENANT_ATTESTATION_AGGREGATION_ENABLED",
-				config.hooks.engine.crossTenantAttestationAggregationEnabled);
-		}
-
-		std::filesystem::path ResolveHooksCrossTenantAttestationAggregationDir(
-			const blazeclaw::config::AppConfig& config) {
-			std::wstring value = config.hooks.engine.crossTenantAttestationAggregationDir;
-			wchar_t* env = nullptr;
-			std::size_t len = 0;
-			if (_wdupenv_s(
-				&env,
-				&len,
-				L"BLAZECLAW_HOOKS_CROSS_TENANT_ATTESTATION_AGGREGATION_DIR") == 0 &&
-				env != nullptr &&
-				len > 0) {
-				value.assign(env);
-			}
-			if (env != nullptr) {
-				free(env);
-			}
-
-			const auto trimmed = Trim(value);
-			if (trimmed.empty()) {
-				return std::filesystem::path(L"blazeclaw/reports/hooks-attestation-aggregation");
-			}
-
-			return std::filesystem::path(trimmed);
-		}
-
-		std::uint32_t ResolveHooksRemediationSloMaxDriftDetected(
-			const blazeclaw::config::AppConfig& config) {
-			std::uint32_t value = config.hooks.engine.remediationSloMaxDriftDetected;
-			wchar_t* env = nullptr;
-			std::size_t len = 0;
-			if (_wdupenv_s(
-				&env,
-				&len,
-				L"BLAZECLAW_HOOKS_REMEDIATION_SLO_MAX_DRIFT_DETECTED") == 0 &&
-				env != nullptr &&
-				len > 0) {
-				std::wstring trimmedEnv = Trim(env);
-				if (!trimmedEnv.empty()) {
-					std::wistringstream parser(trimmedEnv);
-					std::uint32_t parsed = 0;
-					if ((parser >> parsed) && parser.eof()) {
-						value = parsed;
-					}
-				}
-			}
-			if (env != nullptr) {
-				free(env);
-			}
-
-			return value;
-		}
-
-		std::uint32_t ResolveHooksRemediationSloMaxPolicyBlocked(
-			const blazeclaw::config::AppConfig& config) {
-			std::uint32_t value = config.hooks.engine.remediationSloMaxPolicyBlocked;
-			wchar_t* env = nullptr;
-			std::size_t len = 0;
-			if (_wdupenv_s(
-				&env,
-				&len,
-				L"BLAZECLAW_HOOKS_REMEDIATION_SLO_MAX_POLICY_BLOCKED") == 0 &&
-				env != nullptr &&
-				len > 0) {
-				std::wstring trimmedEnv = Trim(env);
-				if (!trimmedEnv.empty()) {
-					std::wistringstream parser(trimmedEnv);
-					std::uint32_t parsed = 0;
-					if ((parser >> parsed) && parser.eof()) {
-						value = parsed;
-					}
-				}
-			}
-			if (env != nullptr) {
-				free(env);
-			}
-
-			return value;
-		}
-
-		bool ResolveHooksComplianceAttestationEnabled(
-			const blazeclaw::config::AppConfig& config) {
-			return ReadBoolEnvOrDefault(
-				L"BLAZECLAW_HOOKS_COMPLIANCE_ATTESTATION_ENABLED",
-				config.hooks.engine.complianceAttestationEnabled);
-		}
-
-		std::filesystem::path ResolveHooksComplianceAttestationDir(
-			const blazeclaw::config::AppConfig& config) {
-			std::wstring value = config.hooks.engine.complianceAttestationDir;
-			wchar_t* env = nullptr;
-			std::size_t len = 0;
-			if (_wdupenv_s(
-				&env,
-				&len,
-				L"BLAZECLAW_HOOKS_COMPLIANCE_ATTESTATION_DIR") == 0 &&
-				env != nullptr &&
-				len > 0) {
-				value.assign(env);
-			}
-			if (env != nullptr) {
-				free(env);
-			}
-
-			const auto trimmed = Trim(value);
-			if (trimmed.empty()) {
-				return std::filesystem::path(L"blazeclaw/reports/hooks-remediation-attestation");
-			}
-
-			return std::filesystem::path(trimmed);
-		}
-
-		std::uint32_t ResolveHooksAutoRemediationTokenMaxAgeMinutes(
-			const blazeclaw::config::AppConfig& config) {
-			std::uint32_t value = config.hooks.engine.autoRemediationTokenMaxAgeMinutes;
-			wchar_t* env = nullptr;
-			std::size_t len = 0;
-			if (_wdupenv_s(
-				&env,
-				&len,
-				L"BLAZECLAW_HOOKS_AUTO_REMEDIATION_TOKEN_MAX_AGE_MINUTES") == 0 &&
-				env != nullptr &&
-				len > 0) {
-				std::wstring trimmedEnv = Trim(env);
-				if (!trimmedEnv.empty()) {
-					std::wistringstream parser(trimmedEnv);
-					std::uint32_t parsed = 0;
-					if ((parser >> parsed) && parser.eof()) {
-						value = parsed;
-					}
-				}
-			}
-			if (env != nullptr) {
-				free(env);
-			}
-
-			return value == 0 ? 1440 : value;
-		}
-
-
-		bool ResolveHooksRemediationTelemetryEnabled(
-			const blazeclaw::config::AppConfig& config) {
-			return ReadBoolEnvOrDefault(
-				L"BLAZENCLAW_HOOKS_REMEDIATION_TELEMETRY_ENABLED",
-				config.hooks.engine.remediationTelemetryEnabled);
-		}
-
-		std::filesystem::path ResolveHooksRemediationTelemetryDir(
-			const blazeclaw::config::AppConfig& config) {
-			std::wstring value = config.hooks.engine.remediationTelemetryDir;
-			wchar_t* env = nullptr;
-			std::size_t len = 0;
-			if (_wdupenv_s(
-				&env,
-				&len,
-				L"BLAZECLAW_HOOKS_REMEDIATION_TELEMETRY_DIR") == 0 &&
-				env != nullptr &&
-				len > 0) {
-				value.assign(env);
-			}
-			if (env != nullptr) {
-				free(env);
-			}
-
-			const auto trimmed = Trim(value);
-			if (trimmed.empty()) {
-				return std::filesystem::path(L"blazeclaw/reports/hooks-remediation-telemetry");
-			}
-
-			return std::filesystem::path(trimmed);
-		}
-
-		bool ResolveHooksRemediationAuditEnabled(
-			const blazeclaw::config::AppConfig& config) {
-			return ReadBoolEnvOrDefault(
-				L"BLAZECLAW_HOOKS_REMEDIATION_AUDIT_ENABLED",
-				config.hooks.engine.remediationAuditEnabled);
-		}
-
-		std::filesystem::path ResolveHooksRemediationAuditDir(
-			const blazeclaw::config::AppConfig& config) {
-			std::wstring value = config.hooks.engine.remediationAuditDir;
-			wchar_t* env = nullptr;
-			std::size_t len = 0;
-			if (_wdupenv_s(
-				&env,
-				&len,
-				L"BLAZECLAW_HOOKS_REMEDIATION_AUDIT_DIR") == 0 &&
-				env != nullptr &&
-				len > 0) {
-				value.assign(env);
-			}
-			if (env != nullptr) {
-				free(env);
-			}
-
-			const auto trimmed = Trim(value);
-			if (trimmed.empty()) {
-				return std::filesystem::path(L"blazeclaw/reports/hooks-remediation-audit");
-			}
-
-			return std::filesystem::path(trimmed);
-		}
-
 
 		std::uint64_t CurrentEpochMs() {
 			const auto now = std::chrono::system_clock::now();
@@ -2139,80 +1767,6 @@ namespace blazeclaw::core {
 			return false;
 		}
 
-		bool ResolveHooksEngineEnabled(const blazeclaw::config::AppConfig& config) {
-			return ReadBoolEnvOrDefault(
-				L"BLAZECLAW_HOOKS_ENGINE_ENABLED",
-				config.hooks.engine.enabled);
-		}
-
-		bool ResolveHooksFallbackPromptInjection(
-			const blazeclaw::config::AppConfig& config) {
-			return ReadBoolEnvOrDefault(
-				L"BLAZECLAW_HOOKS_FALLBACK_PROMPT_INJECTION",
-				config.hooks.engine.fallbackPromptInjection);
-		}
-
-		bool ResolveHooksReminderEnabled(const blazeclaw::config::AppConfig& config) {
-			return ReadBoolEnvOrDefault(
-				L"BLAZECLAW_HOOKS_REMINDER_ENABLED",
-				config.hooks.engine.reminderEnabled);
-		}
-
-		std::wstring ResolveHooksReminderVerbosity(
-			const blazeclaw::config::AppConfig& config) {
-			std::wstring value = config.hooks.engine.reminderVerbosity;
-			wchar_t* env = nullptr;
-			std::size_t length = 0;
-			if (_wdupenv_s(&env, &length, L"BLAZECLAW_HOOKS_REMINDER_VERBOSITY") == 0 &&
-				env != nullptr &&
-				length > 0) {
-				value.assign(env);
-			}
-			if (env != nullptr) {
-				free(env);
-			}
-
-			std::wstring normalized;
-			normalized.reserve(value.size());
-			for (const wchar_t ch : value) {
-				normalized.push_back(static_cast<wchar_t>(std::towlower(ch)));
-			}
-
-			if (normalized == L"minimal" || normalized == L"normal" || normalized == L"detailed") {
-				return normalized;
-			}
-
-			return L"normal";
-		}
-
-		bool ResolveHooksGovernanceReportingEnabled(
-			const blazeclaw::config::AppConfig& config) {
-			return ReadBoolEnvOrDefault(
-				L"BLAZECLAW_HOOKS_GOVERNANCE_REPORTING_ENABLED",
-				config.hooks.engine.governanceReportingEnabled);
-		}
-
-		std::filesystem::path ResolveHooksGovernanceReportDir(
-			const blazeclaw::config::AppConfig& config) {
-			std::wstring value = config.hooks.engine.governanceReportDir;
-			wchar_t* env = nullptr;
-			std::size_t len = 0;
-			if (_wdupenv_s(&env, &len, L"BLAZECLAW_HOOKS_GOVERNANCE_REPORT_DIR") == 0 &&
-				env != nullptr && len > 0) {
-				value.assign(env);
-			}
-			if (env != nullptr) {
-				free(env);
-			}
-
-			const auto trimmed = Trim(value);
-			if (trimmed.empty()) {
-				return std::filesystem::path(L"blazeclaw/reports/hooks-governance");
-			}
-
-			return std::filesystem::path(trimmed);
-		}
-
 
 
 	} // namespace
@@ -2512,54 +2066,46 @@ namespace blazeclaw::core {
 		m_activeChatModel = config.chat.activeModel.empty()
 			? "default"
 			: ToNarrow(config.chat.activeModel);
-		m_hooksEngineEnabled = ResolveHooksEngineEnabled(m_activeConfig);
-		m_hooksFallbackPromptInjection =
-			ResolveHooksFallbackPromptInjection(m_activeConfig);
-		m_hooksReminderEnabled = ResolveHooksReminderEnabled(m_activeConfig);
-		m_hooksReminderVerbosity = ResolveHooksReminderVerbosity(m_activeConfig);
-		m_hooksAllowedPackages = ResolveHooksAllowedPackages(m_activeConfig);
-		m_hooksStrictPolicyEnforcement =
-			ResolveHooksStrictPolicyEnforcement(m_activeConfig);
+		const auto hooksPolicy =
+			m_serviceBootstrapCoordinator.ResolveHooksPolicySettings(m_activeConfig);
+		m_hooksEngineEnabled = hooksPolicy.engineEnabled;
+		m_hooksFallbackPromptInjection = hooksPolicy.fallbackPromptInjection;
+		m_hooksReminderEnabled = hooksPolicy.reminderEnabled;
+		m_hooksReminderVerbosity = hooksPolicy.reminderVerbosity;
+		m_hooksAllowedPackages = hooksPolicy.allowedPackages;
+		m_hooksStrictPolicyEnforcement = hooksPolicy.strictPolicyEnforcement;
 		m_hooksGovernanceReportingEnabled =
-			ResolveHooksGovernanceReportingEnabled(m_activeConfig);
-		m_hooksGovernanceReportDir =
-			ResolveHooksGovernanceReportDir(m_activeConfig);
-		m_hooksAutoRemediationEnabled =
-			ResolveHooksAutoRemediationEnabled(m_activeConfig);
+			hooksPolicy.governanceReportingEnabled;
+		m_hooksGovernanceReportDir = hooksPolicy.governanceReportDir;
+		m_hooksAutoRemediationEnabled = hooksPolicy.autoRemediationEnabled;
 		m_hooksAutoRemediationRequiresApproval =
-			ResolveHooksAutoRemediationRequiresApproval(m_activeConfig);
+			hooksPolicy.autoRemediationRequiresApproval;
 		m_hooksAutoRemediationApprovalToken =
-			ResolveHooksAutoRemediationApprovalToken(m_activeConfig);
-		m_hooksAutoRemediationTenantId =
-			ResolveHooksAutoRemediationTenantId(m_activeConfig);
+			hooksPolicy.autoRemediationApprovalToken;
+		m_hooksAutoRemediationTenantId = hooksPolicy.autoRemediationTenantId;
 		m_hooksAutoRemediationPlaybookDir =
-			ResolveHooksAutoRemediationPlaybookDir(m_activeConfig);
+			hooksPolicy.autoRemediationPlaybookDir;
 		m_hooksAutoRemediationTokenMaxAgeMinutes =
-			ResolveHooksAutoRemediationTokenMaxAgeMinutes(m_activeConfig);
+			hooksPolicy.autoRemediationTokenMaxAgeMinutes;
 		m_hooksRemediationTelemetryEnabled =
-			ResolveHooksRemediationTelemetryEnabled(m_activeConfig);
-		m_hooksRemediationTelemetryDir =
-			ResolveHooksRemediationTelemetryDir(m_activeConfig);
-		m_hooksRemediationAuditEnabled =
-			ResolveHooksRemediationAuditEnabled(m_activeConfig);
-		m_hooksRemediationAuditDir =
-			ResolveHooksRemediationAuditDir(m_activeConfig);
+			hooksPolicy.remediationTelemetryEnabled;
+		m_hooksRemediationTelemetryDir = hooksPolicy.remediationTelemetryDir;
+		m_hooksRemediationAuditEnabled = hooksPolicy.remediationAuditEnabled;
+		m_hooksRemediationAuditDir = hooksPolicy.remediationAuditDir;
 		m_hooksRemediationSloMaxDriftDetected =
-			ResolveHooksRemediationSloMaxDriftDetected(m_activeConfig);
+			hooksPolicy.remediationSloMaxDriftDetected;
 		m_hooksRemediationSloMaxPolicyBlocked =
-			ResolveHooksRemediationSloMaxPolicyBlocked(m_activeConfig);
+			hooksPolicy.remediationSloMaxPolicyBlocked;
 		m_hooksComplianceAttestationEnabled =
-			ResolveHooksComplianceAttestationEnabled(m_activeConfig);
-		m_hooksComplianceAttestationDir =
-			ResolveHooksComplianceAttestationDir(m_activeConfig);
+			hooksPolicy.complianceAttestationEnabled;
+		m_hooksComplianceAttestationDir = hooksPolicy.complianceAttestationDir;
 		m_hooksEnterpriseSlaGovernanceEnabled =
-			ResolveHooksEnterpriseSlaGovernanceEnabled(m_activeConfig);
-		m_hooksEnterpriseSlaPolicyId =
-			ResolveHooksEnterpriseSlaPolicyId(m_activeConfig);
+			hooksPolicy.enterpriseSlaGovernanceEnabled;
+		m_hooksEnterpriseSlaPolicyId = hooksPolicy.enterpriseSlaPolicyId;
 		m_hooksCrossTenantAttestationAggregationEnabled =
-			ResolveHooksCrossTenantAttestationAggregationEnabled(m_activeConfig);
+			hooksPolicy.crossTenantAttestationAggregationEnabled;
 		m_hooksCrossTenantAttestationAggregationDir =
-			ResolveHooksCrossTenantAttestationAggregationDir(m_activeConfig);
+			hooksPolicy.crossTenantAttestationAggregationDir;
 		m_hooksGovernanceReportsGenerated = 0;
 		m_hooksLastGovernanceReportPath.clear();
 		m_hooksAutoRemediationExecuted = 0;

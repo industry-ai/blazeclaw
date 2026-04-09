@@ -102,6 +102,11 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
 2. **Move remaining env/policy resolvers out of `ServiceManager.cpp`**
    - Keep all env parsing in bootstrap/policy resolver modules.
    - `ServiceManager` should consume resolved DTOs only.
+   - ✅ Implemented for hooks policy/env resolver cluster.
+   - Added `StartupPolicyResolver::HooksPolicySettings` DTO.
+   - `ServiceManager::ConfigurePolicies(...)` now consumes
+     `CServiceBootstrapCoordinator::ResolveHooksPolicySettings(...)`.
+   - Removed migrated `ResolveHooks*` helper cluster from `ServiceManager.cpp`.
 
 3. **Introduce a `ServiceManagerState` aggregate**
    - Group many related member fields into state structs (hooks state, runtime metrics state, email policy state).
@@ -160,6 +165,7 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
 ## Recommended Near-Term Priorities
 
 1. Finish extracting residual resolver/helper clusters from `ServiceManager.cpp`.
+   - ✅ Hooks policy/env resolver cluster extracted to bootstrap policy module.
 2. Reduce `ServiceManager.h` state surface via grouped aggregates.
 3. Add startup/wiring contract tests (phase-level orchestration coverage).
    - ✅ Implemented for startup phase ordering + failure-path assertions.
