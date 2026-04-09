@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "CBridge.h"
 #include "EventTransport.h"
 
 #include <cstdint>
@@ -88,26 +89,10 @@ protected:
 	ICoreWebView2* m_webView = nullptr;
 #endif
 	UINT_PTR m_bridgeTimerId = 0;
-	bool m_bridgeLastConnected = false;
-	bool m_bridgeLifecycleSent = false;
-	bool m_isPumpingBridgeLifecycle = false;
-	bool m_bridgePollInFlight = false;
-	std::uint32_t m_bridgePollIntervalMs = 1000;
-	std::uint64_t m_bridgeNextPollTickMs = 0;
-	std::uint32_t m_bridgePollConsecutiveFailures = 0;
-	std::uint64_t m_bridgePollLastSuccessTickMs = 0;
-	std::string m_bridgePollHealthState = "unknown";
 	std::string m_bridgeSessionId = "main";
-	std::uint64_t m_bridgeEventSeq = 0;
-	std::uint64_t m_bridgeTraceReqCount = 0;
-	std::uint64_t m_bridgeTraceResCount = 0;
-	std::uint64_t m_bridgeTraceEventCount = 0;
-	std::uint64_t m_bridgeTraceLastFlushTickMs = 0;
-	std::string m_bridgeLastProvider;
-	std::string m_bridgeLastModel;
-	std::string m_bridgeLastRuntimeKind;
 	std::unordered_set<std::string> m_reportedSkillPathRunIds;
 	CEventTransport m_eventTransport;
+	CBridge m_bridge;
 
 	void InitializeWebViewBridge();
 	void HandleWebMessageJson(const std::wstring& webMessageJson);

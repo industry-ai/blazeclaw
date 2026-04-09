@@ -1615,6 +1615,161 @@ CBlazeClawMFCView::CBlazeClawMFCView() noexcept
 		}
 	}
 	m_eventTransport.SetEmitLegacyChannels(emitLegacyChannels);
+
+	CBridge::Dependencies bridgeDeps{};
+	bridgeDeps.isGatewayRunning =
+		[]()
+		{
+			auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+			return app != nullptr && app->Services().IsRunning();
+		};
+	bridgeDeps.activeProvider =
+		[]()
+		{
+			auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+			return app != nullptr
+				? app->Services().ActiveChatProvider()
+				: std::string();
+		};
+	bridgeDeps.activeModel =
+		[]()
+		{
+			auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+			return app != nullptr
+				? app->Services().ActiveChatModel()
+				: std::string();
+		};
+	bridgeDeps.sessionIdProvider =
+		[this]()
+		{
+			return m_bridgeSessionId;
+		};
+	bridgeDeps.getTargetHwnd =
+		[this]()
+		{
+			return GetSafeHwnd();
+		};
+	bridgeDeps.routeGatewayRequest =
+		[](const blazeclaw::gateway::protocol::RequestFrame& request)
+		{
+			auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+			if (app == nullptr)
+			{
+				return blazeclaw::gateway::protocol::ResponseFrame{
+					.id = request.id,
+					.ok = false,
+					.payloadJson = std::nullopt,
+					.error = blazeclaw::gateway::protocol::ErrorShape{
+						.code = "app_unavailable",
+						.message = "Application context unavailable.",
+						.detailsJson = std::nullopt,
+						.retryable = false,
+						.retryAfterMs = std::nullopt,
+					},
+				};
+			}
+
+			return app->Services().RouteGatewayRequest(request);
+		};
+	bridgeDeps.appendChatStatusStage =
+		[](const wchar_t* stage)
+		{
+			AppendChatProcedureStatusLine(stage);
+		};
+	bridgeDeps.appendChatStatusDetail =
+		[](const wchar_t* stage, const std::string& detail)
+		{
+			AppendChatProcedureStatusLine(stage, detail);
+		};
+	bridgeDeps.emitLifecycle =
+		[this](
+			const wchar_t* state,
+			const wchar_t* reason,
+			const std::string& provider,
+			const std::string& model,
+			const std::string& runtimeKind)
+		{
+			PostBridgeLifecycleEvent(state, reason, provider, model, runtimeKind);
+		};
+	bridgeDeps.emitWsClose =
+		[this](const std::uint16_t code, const char* reason)
+		{
+			PostOpenClawWsClose(code, reason);
+		};
+	bridgeDeps.emitPollHealth =
+		[this](
+			const std::string& state,
+			const std::string& reason,
+			const std::uint32_t failureCount,
+			const std::uint32_t nextPollMs,
+			const std::uint64_t sinceLastSuccessMs)
+		{
+			std::string payload =
+				"{\"sessionId\":" +
+				JsonString(m_bridgeSessionId) +
+				",\"state\":" +
+				JsonString(state) +
+				",\"failureCount\":" +
+				std::to_string(failureCount) +
+				",\"nextPollMs\":" +
+				std::to_string(nextPollMs);
+			if (!reason.empty())
+			{
+				payload += ",\"reason\":" + JsonString(reason);
+			}
+			if (sinceLastSuccessMs > 0)
+			{
+				payload +=
+					",\"sinceLastSuccessMs\":" +
+					std::to_string(sinceLastSuccessMs);
+			}
+			payload += "}";
+			m_eventTransport.EmitTopic(BridgeEventTopic::PollHealth, payload);
+			AppendChatProcedureStatusLine(
+				L"events.poll.health",
+				"state=" + state +
+				" failures=" + std::to_string(failureCount) +
+				" nextMs=" + std::to_string(nextPollMs));
+		};
+	bridgeDeps.handleEventsBatch =
+		[this](const std::string& eventsRaw)
+		{
+			AppendChatProcedureStatusLine(L"events.poll.batch", eventsRaw);
+			EmitSkillPathLinesFromEvents(eventsRaw);
+			for (const auto& runId : ExtractTerminalRunIds(eventsRaw))
+			{
+				ReportRunSkillPathsToFindOutput(runId);
+			}
+
+			const std::string finalAssistantText =
+				TryExtractFinalAssistantText(eventsRaw);
+			if (!finalAssistantText.empty())
+			{
+				AppendChatProcedureStatusLine(
+					L"localModel.response",
+					finalAssistantText);
+			}
+
+			const std::string envelope =
+				"{\"sessionId\":" +
+				JsonString(m_bridgeSessionId) +
+				",\"events\":" +
+				eventsRaw +
+				"}";
+			m_eventTransport.EmitTopic(BridgeEventTopic::ChatEvents, envelope);
+			EmitOpenClawChatEvents(eventsRaw);
+		};
+
+	CBridge::Config bridgeCfg{};
+	bridgeCfg.lifecycleTimerId = kBridgeLifecycleTimerId;
+	bridgeCfg.pollCompletedMessageId = kBridgePollCompletedMessage;
+	bridgeCfg.pollIntervalActiveMs = kBridgePollIntervalActiveMs;
+	bridgeCfg.pollIntervalIdleMs = kBridgePollIntervalIdleMs;
+	bridgeCfg.pollIntervalFailureMs = kBridgePollIntervalFailureMs;
+	bridgeCfg.pollIntervalFailureMaxMs = kBridgePollIntervalFailureMaxMs;
+	bridgeCfg.pollIntervalDisconnectedMs = kBridgePollIntervalDisconnectedMs;
+	bridgeCfg.traceFlushIntervalMs = kBridgeTraceFlushIntervalMs;
+	m_bridge.Initialize(std::move(bridgeDeps), bridgeCfg);
 }
 
 CBlazeClawMFCView::~CBlazeClawMFCView()
@@ -1701,20 +1856,19 @@ void CBlazeClawMFCView::TraceBridgeTraffic(
 void CBlazeClawMFCView::FlushBridgeTraceIfNeeded()
 {
 #ifdef _DEBUG
-	const std::uint64_t nowMs = GetTickCount64();
-	if (m_bridgeTraceLastFlushTickMs != 0 &&
-		(nowMs - m_bridgeTraceLastFlushTickMs) < kBridgeTraceFlushIntervalMs)
-	{
-		return;
-	}
-
-	m_bridgeTraceLastFlushTickMs = nowMs;
-	TRACE(
-		L"[Bridge][Counters] req=%llu res=%llu evt=%llu seq=%llu\n",
-		static_cast<unsigned long long>(m_bridgeTraceReqCount),
-		static_cast<unsigned long long>(m_bridgeTraceResCount),
-		static_cast<unsigned long long>(m_bridgeTraceEventCount),
-		static_cast<unsigned long long>(m_bridgeEventSeq));
+	m_bridge.FlushTraceIfNeeded(
+		[](const std::uint64_t req,
+			const std::uint64_t res,
+			const std::uint64_t evt,
+			const std::uint64_t seq)
+		{
+			TRACE(
+				L"[Bridge][Counters] req=%llu res=%llu evt=%llu seq=%llu\n",
+				static_cast<unsigned long long>(req),
+				static_cast<unsigned long long>(res),
+				static_cast<unsigned long long>(evt),
+				static_cast<unsigned long long>(seq));
+		});
 #endif
 }
 
@@ -1729,13 +1883,13 @@ void CBlazeClawMFCView::PostOpenClawWsFrameJson(const std::string& frameJson)
 	blazeclaw::gateway::json::FindStringField(frameJson, "type", frameType);
 	if (frameType == "res")
 	{
-		++m_bridgeTraceResCount;
+		m_bridge.IncrementResCount();
 		TraceBridgeTraffic("ws.res", frameJson);
 		AppendChatProcedureStatusLine(L"bridge.ws.res");
 	}
 	else if (frameType == "event")
 	{
-		++m_bridgeTraceEventCount;
+		m_bridge.IncrementEventCount();
 		TraceBridgeTraffic("ws.event", frameJson);
 		AppendChatProcedureStatusLine(L"bridge.ws.event");
 	}
@@ -1790,12 +1944,12 @@ void CBlazeClawMFCView::EmitOpenClawChatEvents(
 			continue;
 		}
 
-		++m_bridgeEventSeq;
+		const std::uint64_t seq = m_bridge.NextEventSeq();
 		nlohmann::json frameJson = {
 			{ "type", "event" },
 			{ "event", "chat" },
 			{ "payload", eventPayload },
-			{ "seq", m_bridgeEventSeq },
+			{ "seq", seq },
 		};
 		PostOpenClawWsFrameJson(frameJson.dump());
 	}
@@ -1995,281 +2149,24 @@ void CBlazeClawMFCView::PostBridgeLifecycleEvent(
 
 void CBlazeClawMFCView::PumpBridgeLifecycle()
 {
-	if (m_isPumpingBridgeLifecycle)
-	{
-		return;
-	}
-
-	m_isPumpingBridgeLifecycle = true;
-	struct PumpGuard final
-	{
-		CBlazeClawMFCView* view = nullptr;
-		~PumpGuard()
-		{
-			if (view != nullptr)
-			{
-				view->m_isPumpingBridgeLifecycle = false;
-			}
-		}
-	} pumpGuard{ this };
-
-	const auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
-	const bool connected = app != nullptr && app->Services().IsRunning();
-	const std::string provider = (connected && app != nullptr)
-		? app->Services().ActiveChatProvider()
-		: std::string();
-	const std::string model = (connected && app != nullptr)
-		? app->Services().ActiveChatModel()
-		: std::string();
-	const std::string runtimeKind = provider == "deepseek"
-		? "remote"
-		: (provider.empty() ? std::string() : "local");
-
-	if (!m_bridgeLifecycleSent)
-	{
-		AppendChatProcedureStatusLine(
-			connected ? L"lifecycle.connected" : L"lifecycle.disconnected");
-		PostBridgeLifecycleEvent(
-			connected ? L"connected" : L"disconnected",
-			connected ? L"service-ready" : L"service-not-running",
-			provider,
-			model,
-			runtimeKind);
-		m_bridgeLifecycleSent = true;
-		m_bridgeLastConnected = connected;
-		m_bridgeLastProvider = provider;
-		m_bridgeLastModel = model;
-		m_bridgeLastRuntimeKind = runtimeKind;
-	}
-	else if (connected != m_bridgeLastConnected)
-	{
-		if (connected)
-		{
-			AppendChatProcedureStatusLine(L"lifecycle.reconnected");
-			PostBridgeLifecycleEvent(
-				L"reconnected",
-				L"service-ready",
-				provider,
-				model,
-				runtimeKind);
-		}
-		else
-		{
-			AppendChatProcedureStatusLine(L"lifecycle.service-stopped");
-			PostBridgeLifecycleEvent(L"disconnected", L"service-stopped");
-			PostOpenClawWsClose(1001, "gateway disconnected");
-		}
-
-		m_bridgeLastConnected = connected;
-		m_bridgeLastProvider = connected ? provider : std::string();
-		m_bridgeLastModel = connected ? model : std::string();
-		m_bridgeLastRuntimeKind = connected ? runtimeKind : std::string();
-	}
-
-	if (connected &&
-		m_bridgeLifecycleSent &&
-		(provider != m_bridgeLastProvider ||
-			model != m_bridgeLastModel ||
-			runtimeKind != m_bridgeLastRuntimeKind))
-	{
-		AppendChatProcedureStatusLine(L"lifecycle.runtime-updated");
-		PostBridgeLifecycleEvent(
-			L"connected",
-			L"runtime-updated",
-			provider,
-			model,
-			runtimeKind);
-		m_bridgeLastProvider = provider;
-		m_bridgeLastModel = model;
-		m_bridgeLastRuntimeKind = runtimeKind;
-	}
-
-	if (!connected || app == nullptr)
-	{
-		if (m_bridgePollHealthState != "disconnected")
-		{
-			EmitBridgePollHealth(
-				L"disconnected",
-				L"service-not-running",
-				m_bridgePollConsecutiveFailures,
-				kBridgePollIntervalDisconnectedMs);
-		}
-		ScheduleNextBridgePoll(kBridgePollIntervalDisconnectedMs);
-		return;
-	}
-
-	const std::uint64_t nowMs = GetTickCount64();
-	if (m_bridgeNextPollTickMs == 0)
-	{
-		m_bridgeNextPollTickMs = nowMs;
-	}
-
-	if (m_bridgePollInFlight || nowMs < m_bridgeNextPollTickMs)
-	{
-		return;
-	}
-
-	StartBridgeEventsPollAsync();
+	m_bridge.PumpLifecycle();
 }
 
 void CBlazeClawMFCView::StartBridgeEventsPollAsync()
 {
-	if (m_bridgePollInFlight)
-	{
-		return;
-	}
-
-	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
-	if (app == nullptr || !app->Services().IsRunning())
-	{
-		ScheduleNextBridgePoll(kBridgePollIntervalDisconnectedMs);
-		return;
-	}
-
-	const HWND targetHwnd = GetSafeHwnd();
-	if (targetHwnd == nullptr)
-	{
-		ScheduleNextBridgePoll(kBridgePollIntervalIdleMs);
-		return;
-	}
-
-	m_bridgePollInFlight = true;
-	const std::string sessionId = m_bridgeSessionId;
-
-	std::thread(
-		[app, targetHwnd, sessionId]()
-		{
-			const blazeclaw::gateway::protocol::RequestFrame pollRequest{
-				.id = "bridge-chat-events",
-				.method = "chat.events.poll",
-				.paramsJson =
-					std::string("{\"sessionKey\":\"") +
-					sessionId +
-					"\",\"limit\":20}",
-			};
-
-			const auto pollResponse = app->Services().RouteGatewayRequest(pollRequest);
-			auto* payload = new BridgePollCompletionPayload{
-				.ok = pollResponse.ok,
-				.payloadJson = pollResponse.payloadJson,
-			};
-
-			if (!::PostMessage(
-				targetHwnd,
-				kBridgePollCompletedMessage,
-				reinterpret_cast<WPARAM>(payload),
-				0))
-			{
-				delete payload;
-			}
-		})
-		.detach();
+	m_bridge.StartEventsPollAsync();
 }
 
 void CBlazeClawMFCView::ScheduleNextBridgePoll(const std::uint32_t intervalMs)
 {
-	m_bridgePollIntervalMs = intervalMs;
-	m_bridgeNextPollTickMs = GetTickCount64() + intervalMs;
+	m_bridge.ScheduleNextPoll(intervalMs);
 }
 
 void CBlazeClawMFCView::HandleBridgePollResponse(
 	const bool ok,
 	const std::optional<std::string>& payloadJson)
 {
-	if (!ok || !payloadJson.has_value())
-	{
-		++m_bridgePollConsecutiveFailures;
-		const std::uint32_t backoffMs =
-			ComputeFailureBackoffMs(m_bridgePollConsecutiveFailures);
-		AppendChatProcedureStatusLine(
-			L"events.poll.failed",
-			"failures=" + std::to_string(m_bridgePollConsecutiveFailures) +
-			" nextMs=" + std::to_string(backoffMs));
-		EmitBridgePollHealth(
-			L"degraded",
-			L"poll-failed",
-			m_bridgePollConsecutiveFailures,
-			backoffMs);
-		ScheduleNextBridgePoll(backoffMs);
-		return;
-	}
-
-	std::string eventsRaw;
-	if (!blazeclaw::gateway::json::FindRawField(
-		payloadJson.value(),
-		"events",
-		eventsRaw))
-	{
-		++m_bridgePollConsecutiveFailures;
-		const std::uint32_t backoffMs =
-			ComputeFailureBackoffMs(m_bridgePollConsecutiveFailures);
-		AppendChatProcedureStatusLine(
-			L"events.poll.invalid",
-			"missing events field; failures=" +
-			std::to_string(m_bridgePollConsecutiveFailures));
-		EmitBridgePollHealth(
-			L"degraded",
-			L"payload-missing-events",
-			m_bridgePollConsecutiveFailures,
-			backoffMs);
-		ScheduleNextBridgePoll(backoffMs);
-		return;
-	}
-
-	const bool wasUnhealthy =
-		m_bridgePollConsecutiveFailures > 0 ||
-		m_bridgePollHealthState == "degraded" ||
-		m_bridgePollHealthState == "disconnected";
-	m_bridgePollConsecutiveFailures = 0;
-	m_bridgePollLastSuccessTickMs = GetTickCount64();
-
-	if (blazeclaw::gateway::json::Trim(eventsRaw) == "[]")
-	{
-		if (wasUnhealthy)
-		{
-			EmitBridgePollHealth(
-				L"healthy",
-				L"poll-recovered",
-				0,
-				kBridgePollIntervalIdleMs);
-		}
-		ScheduleNextBridgePoll(kBridgePollIntervalIdleMs);
-		return;
-	}
-
-	AppendChatProcedureStatusLine(L"events.poll.batch", eventsRaw);
-	EmitSkillPathLinesFromEvents(eventsRaw);
-	for (const auto& runId : ExtractTerminalRunIds(eventsRaw))
-	{
-		ReportRunSkillPathsToFindOutput(runId);
-	}
-
-	const std::string finalAssistantText =
-		TryExtractFinalAssistantText(eventsRaw);
-	if (!finalAssistantText.empty())
-	{
-		AppendChatProcedureStatusLine(
-			L"localModel.response",
-			finalAssistantText);
-	}
-
-	const std::string envelope =
-		"{\"sessionId\":" +
-		JsonString(m_bridgeSessionId) +
-		",\"events\":" +
-		eventsRaw +
-		"}";
-	m_eventTransport.EmitTopic(BridgeEventTopic::ChatEvents, envelope);
-	EmitOpenClawChatEvents(eventsRaw);
-	if (wasUnhealthy)
-	{
-		EmitBridgePollHealth(
-			L"healthy",
-			L"poll-recovered",
-			0,
-			kBridgePollIntervalActiveMs);
-	}
-	ScheduleNextBridgePoll(kBridgePollIntervalActiveMs);
+	m_bridge.HandlePollCompleted(ok, payloadJson);
 }
 
 void CBlazeClawMFCView::EmitBridgePollHealth(
@@ -2278,10 +2175,18 @@ void CBlazeClawMFCView::EmitBridgePollHealth(
 	const std::uint32_t failureCount,
 	const std::uint32_t nextIntervalMs)
 {
-	const std::string stateValue = ToNarrow(
-		(state != nullptr) ? std::wstring(state) : std::wstring(L"unknown"));
-	const std::string reasonValue = ToNarrow(
-		(reason != nullptr) ? std::wstring(reason) : std::wstring());
+	const std::string stateValue =
+		(state != nullptr)
+		? ToNarrow(std::wstring(state))
+		: std::string("unknown");
+	const std::string reasonValue =
+		(reason != nullptr)
+		? ToNarrow(std::wstring(reason))
+		: std::string();
+	const std::uint64_t sinceLastSuccessMs =
+		m_bridge.PollLastSuccessTickMs() != 0
+		? (GetTickCount64() - m_bridge.PollLastSuccessTickMs())
+		: 0;
 
 	std::string payload =
 		"{\"sessionId\":" +
@@ -2292,20 +2197,16 @@ void CBlazeClawMFCView::EmitBridgePollHealth(
 		std::to_string(failureCount) +
 		",\"nextPollMs\":" +
 		std::to_string(nextIntervalMs);
-
 	if (!reasonValue.empty())
 	{
 		payload += ",\"reason\":" + JsonString(reasonValue);
 	}
-
-	if (m_bridgePollLastSuccessTickMs != 0)
+	if (sinceLastSuccessMs > 0)
 	{
-		const std::uint64_t nowMs = GetTickCount64();
 		payload +=
 			",\"sinceLastSuccessMs\":" +
-			std::to_string(nowMs - m_bridgePollLastSuccessTickMs);
+			std::to_string(sinceLastSuccessMs);
 	}
-
 	payload += "}";
 	m_eventTransport.EmitTopic(BridgeEventTopic::PollHealth, payload);
 
@@ -2314,8 +2215,6 @@ void CBlazeClawMFCView::EmitBridgePollHealth(
 		"state=" + stateValue +
 		" failures=" + std::to_string(failureCount) +
 		" nextMs=" + std::to_string(nextIntervalMs));
-
-	m_bridgePollHealthState = stateValue;
 }
 
 LRESULT CBlazeClawMFCView::OnBridgePollCompleted(
@@ -2325,16 +2224,14 @@ LRESULT CBlazeClawMFCView::OnBridgePollCompleted(
 	UNREFERENCED_PARAMETER(lParam);
 
 	auto* payload =
-		reinterpret_cast<BridgePollCompletionPayload*>(wParam);
+		reinterpret_cast<CBridgePollCompletionPayload*>(wParam);
 	if (payload == nullptr)
 	{
-		m_bridgePollInFlight = false;
-		ScheduleNextBridgePoll(kBridgePollIntervalFailureMs);
+		m_bridge.HandlePollCompleted(false, std::nullopt);
 		return 0;
 	}
 
-	m_bridgePollInFlight = false;
-	HandleBridgePollResponse(payload->ok, payload->payloadJson);
+	m_bridge.HandlePollCompleted(payload->ok, payload->payloadJson);
 	delete payload;
 	return 0;
 }
@@ -2555,7 +2452,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 
 	if (channel == "blazeclaw.gateway.lifecycle.subscribe")
 	{
-		m_bridgeLifecycleSent = false;
+		m_bridge.ResetLifecycle();
 		PumpBridgeLifecycle();
 		return;
 	}
@@ -2568,7 +2465,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 
 	if (channel == "openclaw.ws.req")
 	{
-		++m_bridgeTraceReqCount;
+		m_bridge.IncrementReqCount();
 		TraceBridgeTraffic("ws.req.channel", message);
 		AppendChatProcedureStatusLine(L"bridge.ws.req");
 		FlushBridgeTraceIfNeeded();
@@ -2627,12 +2524,12 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			AppendChatProcedureStatusLine(
 				L"runtime.handshake",
 				"connect.challenge handled");
-			++m_bridgeEventSeq;
+			const std::uint64_t seq = m_bridge.NextEventSeq();
 			const std::string eventFrame =
 				"{\"type\":\"event\",\"event\":\"connect.challenge\","
 				"\"payload\":{\"nonce\":\"blazeclaw-bridge\"},"
 				"\"seq\":" +
-				std::to_string(m_bridgeEventSeq) +
+				std::to_string(seq) +
 				"}";
 			PostOpenClawWsFrameJson(eventFrame);
 			return;
@@ -3578,9 +3475,9 @@ void CBlazeClawMFCView::ShowSkillSelection(
 	const bool opened = OpenSkillConfigDocument(normalizedSkillKey, propertiesJson);
 	if (opened)
 	{
-	AppendChatProcedureStatusLine(
+		AppendChatProcedureStatusLine(
 			L"skills.config.opened",
-		normalizedSkillKey);
+			normalizedSkillKey);
 	}
 }
 
@@ -3680,7 +3577,7 @@ void CBlazeClawMFCView::InitializeWebViewBridge()
 			"bridge lifecycle timer started");
 	}
 
-	m_bridgeLifecycleSent = false;
+	m_bridge.ResetLifecycle();
 	PumpBridgeLifecycle();
 #endif
 }
@@ -3912,10 +3809,7 @@ void CBlazeClawMFCView::OnDestroy()
 
 void CBlazeClawMFCView::OnTimer(UINT_PTR nIDEvent)
 {
-	if (m_bridgeTimerId != 0 && nIDEvent == m_bridgeTimerId)
-	{
-		PumpBridgeLifecycle();
-	}
+	m_bridge.OnTimerTick(nIDEvent);
 
 	CView::OnTimer(nIDEvent);
 }
