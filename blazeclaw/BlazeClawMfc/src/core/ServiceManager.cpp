@@ -9,6 +9,8 @@
 #include "../gateway/GatewayJsonUtils.h"
 #include "../gateway/executors/EmailScheduleExecutor.h"
 #include "diagnostics/DiagnosticsSnapshot.h"
+#include "tools/ToolArgumentValidators.h"
+#include "tools/ToolProcessRunner.h"
 
 #include <cctype>
 #include <chrono>
@@ -1511,309 +1513,6 @@ namespace blazeclaw::core {
 				.count());
 		}
 
-		struct ImapSmtpToolRuntimeSpec {
-			std::string id;
-			std::string label;
-			std::string script;
-			std::string command;
-		};
-
-		struct BraveSearchToolRuntimeSpec {
-			std::string id;
-			std::string label;
-			std::string script;
-		};
-
-		struct BaiduSearchToolRuntimeSpec {
-			std::string id;
-			std::string label;
-			std::string script;
-		};
-
-		struct ContentPolishingToolRuntimeSpec {
-			std::string id;
-			std::string label;
-		};
-
-		struct ChildProcessResult {
-			bool started = false;
-			bool timedOut = false;
-			DWORD exitCode = static_cast<DWORD>(-1);
-			std::string output;
-			std::string errorCode;
-			std::string errorMessage;
-		};
-
-		std::vector<ImapSmtpToolRuntimeSpec> BuildImapSmtpToolRuntimeSpecs() {
-			return {
-				{ "imap_smtp_email.imap.check", "IMAP Check", "scripts/imap.js", "check" },
-				{ "imap_smtp_email.imap.fetch", "IMAP Fetch", "scripts/imap.js", "fetch" },
-				{ "imap_smtp_email.imap.download", "IMAP Download Attachments", "scripts/imap.js", "download" },
-				{ "imap_smtp_email.imap.search", "IMAP Search", "scripts/imap.js", "search" },
-				{ "imap_smtp_email.imap.mark_read", "IMAP Mark Read", "scripts/imap.js", "mark-read" },
-				{ "imap_smtp_email.imap.mark_unread", "IMAP Mark Unread", "scripts/imap.js", "mark-unread" },
-				{ "imap_smtp_email.imap.list_mailboxes", "IMAP List Mailboxes", "scripts/imap.js", "list-mailboxes" },
-				{ "imap_smtp_email.imap.list_accounts", "IMAP List Accounts", "scripts/imap.js", "list-accounts" },
-				{ "imap_smtp_email.smtp.send", "SMTP Send", "scripts/smtp.js", "send" },
-				{ "imap_smtp_email.smtp.test", "SMTP Test", "scripts/smtp.js", "test" },
-				{ "imap_smtp_email.smtp.list_accounts", "SMTP List Accounts", "scripts/smtp.js", "list-accounts" },
-			};
-		}
-
-		std::string TrimAsciiLocal(const std::string& value) {
-			const std::size_t first = value.find_first_not_of(" \t\r\n");
-			if (first == std::string::npos) {
-				return {};
-			}
-
-			const std::size_t last = value.find_last_not_of(" \t\r\n");
-			return value.substr(first, last - first + 1);
-		}
-
-		std::vector<BraveSearchToolRuntimeSpec> BuildBraveSearchToolRuntimeSpecs() {
-			return {
-				{ "brave_search.search.web", "Brave Web Search", "scripts/search.js" },
-				{ "brave_search.fetch.content", "Brave Fetch Content", "scripts/content.js" },
-			  { "web_browsing.search.web", "Web Browsing Search", "scripts/search.js" },
-				{ "web_browsing.fetch.content", "Web Browsing Fetch Content", "scripts/content.js" },
-			};
-		}
-
-		bool IsBraveSearchWebToolId(const std::string& toolId) {
-			return toolId == "brave_search.search.web" ||
-				toolId == "web_browsing.search.web";
-		}
-
-		bool IsBraveFetchContentToolId(const std::string& toolId) {
-			return toolId == "brave_search.fetch.content" ||
-				toolId == "web_browsing.fetch.content";
-		}
-
-		std::vector<BaiduSearchToolRuntimeSpec> BuildBaiduSearchToolRuntimeSpecs() {
-			return {
-				{ "baidu-search.search.web", "Baidu Web Search", "scripts/search.py" },
-			};
-		}
-
-		std::vector<ContentPolishingToolRuntimeSpec>
-			BuildContentPolishingToolRuntimeSpecs() {
-			return {
-				{ "summarize.extract", "Summarize Extract" },
-				{ "humanizer.rewrite", "Humanizer Rewrite" },
-			};
-		}
-
-		std::optional<std::string> ExtractTextArgument(
-			const nlohmann::json& params) {
-			const char* kKeys[] = {
-				"text",
-				"draft",
-				"content",
-				"message",
-				"input",
-			};
-
-			for (const auto* key : kKeys) {
-				const auto it = params.find(key);
-				if (it == params.end() || !it->is_string()) {
-					continue;
-				}
-
-				const std::string value = TrimAsciiLocal(it->get<std::string>());
-				if (!value.empty()) {
-					return value;
-				}
-			}
-
-			return std::nullopt;
-		}
-
-		std::string BuildSummarizeExtractOutput(const std::string& text) {
-			const bool hasChinese =
-				text.find("下周") != std::string::npos ||
-				text.find("会议室") != std::string::npos ||
-				text.find("老板") != std::string::npos;
-			std::string timeValue = hasChinese ? "未提取到" : "not found";
-			std::string locationValue = hasChinese ? "未提取到" : "not found";
-			std::string peopleValue = hasChinese ? "未提取到" : "not found";
-			std::string requestValue = TrimAsciiLocal(text);
-
-			static const std::regex kTimeRegex(
-				R"(((next\s+\w+)\s+at\s+\d{1,2}[:.]\d{2}\s*(?:AM|PM|am|pm)?))",
-				std::regex_constants::icase);
-			std::smatch match;
-			if (std::regex_search(text, match, kTimeRegex) && match.size() >= 2) {
-				timeValue = match[1].str();
-			}
-			else {
-				static const std::regex kChineseTimeRegex(
-					R"(((?:下周[一二三四五六日天]|本周[一二三四五六日天])(?:上午|下午|晚上)?(?:\d{1,2}点(?:半|\d{1,2}分)?|\d{1,2}[:：]\d{2})))");
-				if (std::regex_search(text, match, kChineseTimeRegex) && match.size() >= 2) {
-					timeValue = match[1].str();
-				}
-			}
-
-			static const std::regex kLocationRegex(
-				R"((?:in|at)\s+the\s+([^,.;\n]+(?:meeting\s+room|room)))",
-				std::regex_constants::icase);
-			if (std::regex_search(text, match, kLocationRegex) && match.size() >= 2) {
-				locationValue = TrimAsciiLocal(match[1].str());
-			}
-			else {
-				static const std::regex kChineseLocationRegex(
-					R"(([^，。；\n]*(?:会议室|办公室|会议厅|线上会议|腾讯会议)))");
-				if (std::regex_search(text, match, kChineseLocationRegex) && match.size() >= 2) {
-					locationValue = TrimAsciiLocal(match[1].str());
-				}
-			}
-
-			std::vector<std::string> people;
-			if (ToLowerAscii(text).find("boss") != std::string::npos) {
-				people.push_back("boss");
-			}
-			if (ToLowerAscii(text).find("we") != std::string::npos) {
-				people.push_back("requester team");
-			}
-			if (text.find("老板") != std::string::npos) {
-				people.push_back("老板");
-			}
-			if (text.find("我们") != std::string::npos) {
-				people.push_back("我方团队");
-			}
-			if (text.find("你") != std::string::npos) {
-				people.push_back("收件执行人");
-			}
-			if (!people.empty()) {
-				peopleValue.clear();
-				for (std::size_t i = 0; i < people.size(); ++i) {
-					if (i > 0) {
-						peopleValue += ", ";
-					}
-					peopleValue += people[i];
-				}
-			}
-
-			if (requestValue.size() > 220) {
-				requestValue = requestValue.substr(0, 220) + "...";
-			}
-
-			if (hasChinese) {
-				return
-					"时间: " + timeValue + "\n" +
-					"地点: " + locationValue + "\n" +
-					"人物: " + peopleValue + "\n" +
-					"核心诉求: " + requestValue;
-			}
-
-			return
-				"Time: " + timeValue + "\n" +
-				"Location: " + locationValue + "\n" +
-				"People: " + peopleValue + "\n" +
-				"Core request: " + requestValue;
-		}
-
-		std::string ExtractSummaryField(
-			const std::string& text,
-			const std::string& label) {
-			const std::string needle = label + ":";
-			const std::size_t begin = text.find(needle);
-			if (begin == std::string::npos) {
-				return {};
-			}
-
-			const std::size_t valueStart = begin + needle.size();
-			const std::size_t valueEnd = text.find('\n', valueStart);
-			return TrimAsciiLocal(
-				text.substr(
-					valueStart,
-					valueEnd == std::string::npos
-					? std::string::npos
-					: valueEnd - valueStart));
-		}
-
-		std::string BuildHumanizerRewriteOutput(const std::string& text) {
-			const bool hasChineseSummary =
-				text.find("时间:") != std::string::npos ||
-				text.find("地点:") != std::string::npos ||
-				text.find("核心诉求:") != std::string::npos;
-			if (hasChineseSummary) {
-				const std::string timeValue = ExtractSummaryField(text, "时间");
-				const std::string locationValue = ExtractSummaryField(text, "地点");
-				const std::string peopleValue = ExtractSummaryField(text, "人物");
-				const std::string requestValue = ExtractSummaryField(text, "核心诉求");
-
-				std::string body;
-				body += "尊敬的老板：\n\n";
-				body += "您好！\n\n";
-				body += "新版本 UI 需求已完成主要修改，现拟组织一次评审沟通会议，诚邀您届时参加并指导。\n\n";
-				if (!timeValue.empty()) {
-					body += "会议时间：" + timeValue + "\n";
-				}
-				if (!locationValue.empty()) {
-					body += "会议地点：" + locationValue + "\n";
-				}
-				if (!peopleValue.empty()) {
-					body += "参会人员：" + peopleValue + "\n";
-				}
-				if (!requestValue.empty()) {
-					body += "\n会议目的：" + requestValue + "\n";
-				}
-				body += "\n烦请您预留时间参会，不胜感谢。\n\n";
-				body += "此致\n敬礼\n\n";
-				body += "项目组";
-				return body;
-			}
-
-			const std::string timeValue = ExtractSummaryField(text, "Time");
-			const std::string locationValue = ExtractSummaryField(text, "Location");
-			const std::string peopleValue = ExtractSummaryField(text, "People");
-			const std::string requestValue = ExtractSummaryField(text, "Core request");
-
-			std::string body;
-			body += "Dear Sir,\n\n";
-			body += "I would like to cordially invite you to the upcoming review meeting regarding the latest UI requirements.\n\n";
-			if (!timeValue.empty()) {
-				body += "Time: " + timeValue + "\n";
-			}
-			if (!locationValue.empty()) {
-				body += "Location: " + locationValue + "\n";
-			}
-			if (!peopleValue.empty()) {
-				body += "Participants: " + peopleValue + "\n";
-			}
-			if (!requestValue.empty()) {
-				body += "\nPurpose: " + requestValue + "\n";
-			}
-			body += "\nYour attendance would be greatly appreciated.\n\n";
-			body += "Best regards,";
-			return body;
-		}
-
-		std::string TrimAsciiForBraveSearch(const std::string& value) {
-			const std::size_t first = value.find_first_not_of(" \t\r\n");
-			if (first == std::string::npos) {
-				return {};
-			}
-
-			const std::size_t last = value.find_last_not_of(" \t\r\n");
-			return value.substr(first, last - first + 1);
-		}
-
-		bool HasControlCharsForBraveSearch(const std::string& value) {
-			for (const unsigned char ch : value) {
-				if ((ch < 0x20 && ch != '\t') || ch == 0x7F) {
-					return true;
-				}
-			}
-
-			return false;
-		}
-
-		bool IsHttpUrlForBraveSearch(const std::string& value) {
-			const std::string lowered = ToLowerAscii(value);
-			return lowered.rfind("http://", 0) == 0 ||
-				lowered.rfind("https://", 0) == 0;
-		}
 
 		bool HasEnvVarValue(const wchar_t* key) {
 			wchar_t* value = nullptr;
@@ -1832,324 +1531,6 @@ namespace blazeclaw::core {
 
 		bool ResolveBraveRequireApiKey() {
 			return ReadBoolEnvOrDefault(L"BLAZECLAW_BRAVE_REQUIRE_API_KEY", false);
-		}
-
-		std::string TruncateBraveToolOutput(
-			const std::string& output,
-			const std::size_t maxBytes = 24000) {
-			if (output.size() <= maxBytes) {
-				return output;
-			}
-
-			const std::size_t retained = maxBytes > 48 ? maxBytes - 48 : maxBytes;
-			return output.substr(0, retained) +
-				"\n...(truncated by blazeclaw runtime output limit)";
-		}
-
-		std::string ClassifyBraveFailureCode(const std::string& output) {
-			const std::string lowered = ToLowerAscii(output);
-			if (lowered.find("http 401") != std::string::npos ||
-				lowered.find("http 403") != std::string::npos) {
-				return "auth_error";
-			}
-
-			if (lowered.find("http 429") != std::string::npos) {
-				return "rate_limited";
-			}
-
-			if (lowered.find("http 500") != std::string::npos ||
-				lowered.find("http 502") != std::string::npos ||
-				lowered.find("http 503") != std::string::npos ||
-				lowered.find("http 504") != std::string::npos) {
-				return "upstream_unavailable";
-			}
-
-			if (lowered.find("enotfound") != std::string::npos ||
-				lowered.find("eai_again") != std::string::npos ||
-				lowered.find("network") != std::string::npos ||
-				lowered.find("fetch failed") != std::string::npos) {
-				return "network_error";
-			}
-
-			return "script_runtime_error";
-		}
-
-		bool IsBraveNetworkTimeoutFailure(const std::string& output) {
-			const std::string lowered = ToLowerAscii(output);
-			return lowered.find("und_err_connect_timeout") != std::string::npos ||
-				lowered.find("connect timeout") != std::string::npos ||
-				lowered.find("etimedout") != std::string::npos ||
-				lowered.find("timed out") != std::string::npos ||
-				lowered.find("timeout") != std::string::npos;
-		}
-
-		std::wstring QuoteCommandToken(const std::wstring& token) {
-			if (token.find_first_of(L" \t\"") == std::wstring::npos) {
-				return token;
-			}
-
-			std::wstring quoted = L"\"";
-			for (const wchar_t ch : token) {
-				if (ch == L'\"') {
-					quoted += L"\\\"";
-				}
-				else {
-					quoted.push_back(ch);
-				}
-			}
-			quoted += L"\"";
-			return quoted;
-		}
-
-		std::wstring BuildCommandLine(const std::vector<std::wstring>& tokens) {
-			std::wstring commandLine;
-			for (std::size_t i = 0; i < tokens.size(); ++i) {
-				if (i > 0) {
-					commandLine += L" ";
-				}
-
-				commandLine += QuoteCommandToken(tokens[i]);
-			}
-
-			return commandLine;
-		}
-
-		std::string ReadPipeAll(HANDLE readPipe) {
-			std::string output;
-			if (readPipe == nullptr || readPipe == INVALID_HANDLE_VALUE) {
-				return output;
-			}
-
-			char buffer[4096]{};
-			DWORD bytesRead = 0;
-			while (ReadFile(readPipe, buffer, sizeof(buffer), &bytesRead, nullptr) &&
-				bytesRead > 0) {
-				output.append(buffer, buffer + bytesRead);
-			}
-
-			return output;
-		}
-
-		ChildProcessResult ExecuteNodeSkillProcess(
-			const std::filesystem::path& scriptPath,
-			const std::vector<std::string>& cliArgs,
-			const std::uint64_t timeoutMs) {
-			ChildProcessResult result;
-
-			SECURITY_ATTRIBUTES security{};
-			security.nLength = sizeof(security);
-			security.bInheritHandle = TRUE;
-			security.lpSecurityDescriptor = nullptr;
-
-			HANDLE outputRead = nullptr;
-			HANDLE outputWrite = nullptr;
-			if (!CreatePipe(&outputRead, &outputWrite, &security, 0)) {
-				result.errorCode = "pipe_create_failed";
-				result.errorMessage = "failed to create child process pipes";
-				return result;
-			}
-
-			SetHandleInformation(outputRead, HANDLE_FLAG_INHERIT, 0);
-
-			STARTUPINFOW startupInfo{};
-			startupInfo.cb = sizeof(startupInfo);
-			startupInfo.dwFlags = STARTF_USESTDHANDLES;
-			startupInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-			startupInfo.hStdOutput = outputWrite;
-			startupInfo.hStdError = outputWrite;
-
-			PROCESS_INFORMATION processInfo{};
-
-			std::vector<std::wstring> commandTokens;
-			commandTokens.push_back(L"node");
-			commandTokens.push_back(scriptPath.wstring());
-			for (const auto& arg : cliArgs) {
-				commandTokens.push_back(ToWide(arg));
-			}
-
-			std::wstring commandLine = BuildCommandLine(commandTokens);
-			std::vector<wchar_t> mutableCommand(commandLine.begin(), commandLine.end());
-			mutableCommand.push_back(L'\0');
-
-			const std::wstring scriptWorkingDirW =
-				scriptPath.has_parent_path()
-				? scriptPath.parent_path().wstring()
-				: std::wstring();
-			LPCWSTR workingDirectory =
-				scriptWorkingDirW.empty()
-				? nullptr
-				: scriptWorkingDirW.c_str();
-
-			const BOOL created = CreateProcessW(
-				nullptr,
-				mutableCommand.data(),
-				nullptr,
-				nullptr,
-				TRUE,
-				CREATE_NO_WINDOW,
-				reinterpret_cast<LPVOID>(const_cast<wchar_t*>(L"PYTHONUTF8=1\0PYTHONIOENCODING=utf-8\0\0")),
-				workingDirectory,
-				&startupInfo,
-				&processInfo);
-
-			CloseHandle(outputWrite);
-
-			if (!created) {
-				result.errorCode = "process_start_failed";
-				result.errorMessage = "failed to start node process";
-				result.output = ReadPipeAll(outputRead);
-				CloseHandle(outputRead);
-				return result;
-			}
-
-			result.started = true;
-			const auto deadline =
-				std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
-			DWORD waitResult = WAIT_TIMEOUT;
-			for (;;) {
-				waitResult = WaitForSingleObject(processInfo.hProcess, 50);
-				DrainPipeAvailable(outputRead, result.output);
-
-				if (waitResult == WAIT_OBJECT_0 || waitResult == WAIT_FAILED) {
-					break;
-				}
-
-				if (std::chrono::steady_clock::now() >= deadline) {
-					waitResult = WAIT_TIMEOUT;
-					break;
-				}
-			}
-
-			if (waitResult == WAIT_TIMEOUT) {
-				TerminateProcess(processInfo.hProcess, 124);
-				WaitForSingleObject(processInfo.hProcess, 5000);
-				result.timedOut = true;
-				result.errorCode = "deadline_exceeded";
-				result.errorMessage = "tool process exceeded execution deadline";
-			}
-			else if (waitResult == WAIT_FAILED) {
-				result.errorCode = "process_wait_failed";
-				result.errorMessage = "failed to wait for node process";
-			}
-
-			GetExitCodeProcess(processInfo.hProcess, &result.exitCode);
-			DrainPipeAvailable(outputRead, result.output);
-			result.output += ReadPipeAll(outputRead);
-
-			CloseHandle(outputRead);
-			CloseHandle(processInfo.hThread);
-			CloseHandle(processInfo.hProcess);
-
-			return result;
-		}
-
-		ChildProcessResult ExecutePythonSkillProcess(
-			const std::filesystem::path& scriptPath,
-			const std::vector<std::string>& cliArgs,
-			const std::uint64_t timeoutMs) {
-			ChildProcessResult result;
-
-			_wputenv_s(L"PYTHONUTF8", L"1");
-			_wputenv_s(L"PYTHONIOENCODING", L"utf-8");
-
-			SECURITY_ATTRIBUTES security{};
-			security.nLength = sizeof(security);
-			security.bInheritHandle = TRUE;
-			security.lpSecurityDescriptor = nullptr;
-
-			HANDLE outputRead = nullptr;
-			HANDLE outputWrite = nullptr;
-			if (!CreatePipe(&outputRead, &outputWrite, &security, 0)) {
-				result.errorCode = "pipe_create_failed";
-				result.errorMessage = "failed to create child process pipes";
-				return result;
-			}
-
-			SetHandleInformation(outputRead, HANDLE_FLAG_INHERIT, 0);
-
-			STARTUPINFOW startupInfo{};
-			startupInfo.cb = sizeof(startupInfo);
-			startupInfo.dwFlags = STARTF_USESTDHANDLES;
-			startupInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-			startupInfo.hStdOutput = outputWrite;
-			startupInfo.hStdError = outputWrite;
-
-			PROCESS_INFORMATION processInfo{};
-
-			std::vector<std::wstring> commandTokens;
-			commandTokens.push_back(L"python");
-			commandTokens.push_back(L"-X");
-			commandTokens.push_back(L"utf8");
-			commandTokens.push_back(scriptPath.wstring());
-			for (const auto& arg : cliArgs) {
-				commandTokens.push_back(ToWide(arg));
-			}
-
-			std::wstring commandLine = BuildCommandLine(commandTokens);
-			std::vector<wchar_t> mutableCommand(commandLine.begin(), commandLine.end());
-			mutableCommand.push_back(L'\0');
-
-			const BOOL created = CreateProcessW(
-				nullptr,
-				mutableCommand.data(),
-				nullptr,
-				nullptr,
-				TRUE,
-				CREATE_NO_WINDOW,
-				nullptr,
-				nullptr,
-				&startupInfo,
-				&processInfo);
-
-			CloseHandle(outputWrite);
-
-			if (!created) {
-				result.errorCode = "process_start_failed";
-				result.errorMessage = "failed to start python process";
-				result.output = ReadPipeAll(outputRead);
-				CloseHandle(outputRead);
-				return result;
-			}
-
-			result.started = true;
-			const auto deadline =
-				std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
-			DWORD waitResult = WAIT_TIMEOUT;
-			for (;;) {
-				waitResult = WaitForSingleObject(processInfo.hProcess, 50);
-				DrainPipeAvailable(outputRead, result.output);
-
-				if (waitResult == WAIT_OBJECT_0 || waitResult == WAIT_FAILED) {
-					break;
-				}
-
-				if (std::chrono::steady_clock::now() >= deadline) {
-					waitResult = WAIT_TIMEOUT;
-					break;
-				}
-			}
-
-			if (waitResult == WAIT_TIMEOUT) {
-				TerminateProcess(processInfo.hProcess, 124);
-				WaitForSingleObject(processInfo.hProcess, 5000);
-				result.timedOut = true;
-				result.errorCode = "deadline_exceeded";
-				result.errorMessage = "tool process exceeded execution deadline";
-			}
-			else if (waitResult == WAIT_FAILED) {
-				result.errorCode = "process_wait_failed";
-				result.errorMessage = "failed to wait for python process";
-			}
-
-			GetExitCodeProcess(processInfo.hProcess, &result.exitCode);
-			DrainPipeAvailable(outputRead, result.output);
-			result.output += ReadPipeAll(outputRead);
-
-			CloseHandle(outputRead);
-			CloseHandle(processInfo.hThread);
-			CloseHandle(processInfo.hProcess);
-
-			return result;
 		}
 
 		std::optional<std::filesystem::path> ResolveImapSmtpSkillRoot() {
@@ -2310,504 +1691,9 @@ namespace blazeclaw::core {
 			return std::nullopt;
 		}
 
-		std::optional<std::string> JsonValueToCliString(const nlohmann::json& value) {
-			if (value.is_string()) {
-				return value.get<std::string>();
-			}
-
-			if (value.is_boolean()) {
-				return value.get<bool>() ? "true" : "false";
-			}
-
-			if (value.is_number_integer()) {
-				return std::to_string(value.get<long long>());
-			}
-
-			if (value.is_number_unsigned()) {
-				return std::to_string(value.get<unsigned long long>());
-			}
-
-			if (value.is_number_float()) {
-				std::ostringstream stream;
-				stream << value.get<double>();
-				return stream.str();
-			}
-
-			return std::nullopt;
-		}
-
-		void AppendFlagWithValue(
-			std::vector<std::string>& args,
-			const std::string& flag,
-			const std::optional<std::string>& value) {
-			if (!value.has_value() || value->empty()) {
-				return;
-			}
-
-			args.push_back("--" + flag);
-			args.push_back(value.value());
-		}
-
-		void AppendBoolAsValue(
-			std::vector<std::string>& args,
-			const std::string& flag,
-			const nlohmann::json& params) {
-			const auto it = params.find(flag);
-			if (it == params.end() || !it->is_boolean()) {
-				return;
-			}
-
-			args.push_back("--" + flag);
-			args.push_back(it->get<bool>() ? "true" : "false");
-		}
-
-		std::optional<std::vector<std::string>> BuildImapSmtpCliArgs(
-			const ImapSmtpToolRuntimeSpec& spec,
-			const nlohmann::json& params,
-			std::string& errorCode,
-			std::string& errorMessage) {
-			errorCode.clear();
-			errorMessage.clear();
-
-			std::vector<std::string> args;
-			if (const auto accountIt = params.find("account");
-				accountIt != params.end()) {
-				AppendFlagWithValue(args, "account", JsonValueToCliString(*accountIt));
-			}
-
-			args.push_back(spec.command);
-
-			if (spec.id == "imap_smtp_email.imap.fetch" ||
-				spec.id == "imap_smtp_email.imap.download") {
-				const auto uidIt = params.find("uid");
-				if (uidIt == params.end()) {
-					errorCode = "invalid_arguments";
-					errorMessage = "uid is required";
-					return std::nullopt;
-				}
-
-				const auto uid = JsonValueToCliString(*uidIt);
-				if (!uid.has_value() || uid->empty()) {
-					errorCode = "invalid_arguments";
-					errorMessage = "uid is invalid";
-					return std::nullopt;
-				}
-
-				args.push_back(uid.value());
-			}
-
-			if (spec.id == "imap_smtp_email.imap.mark_read" ||
-				spec.id == "imap_smtp_email.imap.mark_unread") {
-				const auto uidsIt = params.find("uids");
-				if (uidsIt == params.end() || !uidsIt->is_array() || uidsIt->empty()) {
-					errorCode = "invalid_arguments";
-					errorMessage = "uids array is required";
-					return std::nullopt;
-				}
-
-				for (const auto& uidNode : *uidsIt) {
-					const auto uid = JsonValueToCliString(uidNode);
-					if (uid.has_value() && !uid->empty()) {
-						args.push_back(uid.value());
-					}
-				}
-				if (args.back() == spec.command) {
-					errorCode = "invalid_arguments";
-					errorMessage = "uids array must contain at least one value";
-					return std::nullopt;
-				}
-			}
-
-			auto appendIfPresent = [&](const std::string& jsonKey, const std::string& cliFlag) {
-				const auto it = params.find(jsonKey);
-				if (it == params.end()) {
-					return;
-				}
-
-				AppendFlagWithValue(args, cliFlag, JsonValueToCliString(*it));
-				};
-
-			if (spec.id == "imap_smtp_email.imap.check") {
-				appendIfPresent("limit", "limit");
-				appendIfPresent("mailbox", "mailbox");
-				appendIfPresent("recent", "recent");
-				AppendBoolAsValue(args, "unseen", params);
-			}
-			else if (spec.id == "imap_smtp_email.imap.download") {
-				appendIfPresent("mailbox", "mailbox");
-				appendIfPresent("dir", "dir");
-				appendIfPresent("file", "file");
-			}
-			else if (spec.id == "imap_smtp_email.imap.search") {
-				appendIfPresent("from", "from");
-				appendIfPresent("subject", "subject");
-				appendIfPresent("recent", "recent");
-				appendIfPresent("since", "since");
-				appendIfPresent("before", "before");
-				appendIfPresent("limit", "limit");
-				appendIfPresent("mailbox", "mailbox");
-				AppendBoolAsValue(args, "unseen", params);
-				AppendBoolAsValue(args, "seen", params);
-			}
-			else if (spec.id == "imap_smtp_email.imap.fetch" ||
-				spec.id == "imap_smtp_email.imap.mark_read" ||
-				spec.id == "imap_smtp_email.imap.mark_unread") {
-				appendIfPresent("mailbox", "mailbox");
-			}
-			else if (spec.id == "imap_smtp_email.smtp.send") {
-				appendIfPresent("to", "to");
-				appendIfPresent("subject", "subject");
-				appendIfPresent("subjectFile", "subject-file");
-				appendIfPresent("body", "body");
-				appendIfPresent("bodyFile", "body-file");
-				appendIfPresent("htmlFile", "html-file");
-				appendIfPresent("cc", "cc");
-				appendIfPresent("bcc", "bcc");
-				appendIfPresent("from", "from");
-
-				const auto htmlIt = params.find("html");
-				if (htmlIt != params.end() && htmlIt->is_boolean() && htmlIt->get<bool>()) {
-					args.push_back("--html");
-					args.push_back("true");
-				}
-
-				const auto attachIt = params.find("attach");
-				if (attachIt != params.end()) {
-					if (attachIt->is_array()) {
-						std::string joined;
-						for (const auto& item : *attachIt) {
-							const auto value = JsonValueToCliString(item);
-							if (!value.has_value() || value->empty()) {
-								continue;
-							}
-
-							if (!joined.empty()) {
-								joined += ",";
-							}
-							joined += value.value();
-						}
-
-						if (!joined.empty()) {
-							args.push_back("--attach");
-							args.push_back(joined);
-						}
-					}
-					else {
-						appendIfPresent("attach", "attach");
-					}
-				}
-
-				const bool hasTo = params.contains("to");
-				const bool hasSubject = params.contains("subject") || params.contains("subjectFile");
-				if (!hasTo || !hasSubject) {
-					errorCode = "invalid_arguments";
-					errorMessage = "smtp.send requires to and subject or subjectFile";
-					return std::nullopt;
-				}
-			}
-
-			return args;
-		}
-
-		bool IsDateRangeTokenForBaiduSearch(const std::string& value) {
-			if (value.size() != 22) {
-				return false;
-			}
-
-			if (value[4] != '-' || value[7] != '-' || value[10] != 't' ||
-				value[11] != 'o' || value[14] != '-' || value[17] != '-') {
-				return false;
-			}
-
-			const std::size_t digitPositions[] = {
-				0, 1, 2, 3, 5, 6, 8, 9, 12, 13, 15, 16, 18, 19, 20, 21
-			};
-			for (const auto pos : digitPositions) {
-				if (!std::isdigit(static_cast<unsigned char>(value[pos]))) {
-					return false;
-				}
-			}
-
-			return true;
-		}
-
-		std::string ClassifyBaiduFailureCode(const std::string& output) {
-			const std::string lowered = ToLowerAscii(output);
-
-			std::smatch httpStatusMatch;
-			if (std::regex_search(
-				lowered,
-				httpStatusMatch,
-				std::regex(R"(http(?:\s+error)?\s*[:=]?\s*([0-9]{3}))")) &&
-				httpStatusMatch.size() >= 2) {
-				const int status = std::atoi(httpStatusMatch[1].str().c_str());
-				if (status == 401 || status == 403) {
-					return "auth_error";
-				}
-
-				if (status == 429) {
-					return "rate_limited";
-				}
-
-				if (status >= 500 && status < 600) {
-					return "upstream_unavailable";
-				}
-
-				if (status >= 400 && status < 500) {
-					return "invalid_arguments";
-				}
-			}
-
-			if (lowered.find("baidu_api_key") != std::string::npos &&
-				lowered.find("must be set") != std::string::npos) {
-				return "baidu_api_key_missing";
-			}
-
-			if (lowered.find("unauthorized") != std::string::npos ||
-				lowered.find("forbidden") != std::string::npos ||
-				lowered.find("invalid token") != std::string::npos ||
-				lowered.find("access token") != std::string::npos ||
-				lowered.find("invalid api key") != std::string::npos ||
-				lowered.find("authentication") != std::string::npos) {
-				return "auth_error";
-			}
-
-			if (lowered.find("rate limit") != std::string::npos ||
-				lowered.find("too many requests") != std::string::npos ||
-				lowered.find("quota") != std::string::npos) {
-				return "rate_limited";
-			}
-
-			if (lowered.find("http 401") != std::string::npos ||
-				lowered.find("http 403") != std::string::npos) {
-				return "auth_error";
-			}
-
-			if (lowered.find("http 429") != std::string::npos) {
-				return "rate_limited";
-			}
-
-			if (lowered.find("timeout") != std::string::npos ||
-				lowered.find("timed out") != std::string::npos) {
-				return "network_timeout";
-			}
-
-			if (lowered.find("no module named") != std::string::npos ||
-				lowered.find("modulenotfounderror") != std::string::npos) {
-				return "dependency_missing";
-			}
-
-			if (lowered.find("json parse error") != std::string::npos ||
-				lowered.find("request body must be a json object") != std::string::npos ||
-				lowered.find("query must be present") != std::string::npos ||
-				lowered.find("freshness must be") != std::string::npos) {
-				return "invalid_arguments";
-			}
-
-			if (lowered.find("network") != std::string::npos ||
-				lowered.find("connection") != std::string::npos ||
-				lowered.find("ssl") != std::string::npos ||
-				lowered.find("certificate") != std::string::npos ||
-				lowered.find("httpsconnectionpool") != std::string::npos ||
-				lowered.find("urlopen error") != std::string::npos ||
-				lowered.find("proxyerror") != std::string::npos ||
-				lowered.find("name resolution") != std::string::npos ||
-				lowered.find("winerror") != std::string::npos ||
-				lowered.find("max retries exceeded") != std::string::npos ||
-				lowered.find("name or service not known") != std::string::npos) {
-				return "network_error";
-			}
-
-			return "script_runtime_error";
-		}
-
-		std::optional<std::vector<std::string>> BuildBaiduSearchCliArgs(
-			const BaiduSearchToolRuntimeSpec& spec,
-			const nlohmann::json& params,
-			std::string& errorCode,
-			std::string& errorMessage) {
-			errorCode.clear();
-			errorMessage.clear();
-
-			if (spec.id != "baidu-search.search.web") {
-				errorCode = "unsupported_tool";
-				errorMessage = "unsupported baidu tool";
-				return std::nullopt;
-			}
-
-			nlohmann::json cliPayload = nlohmann::json::object();
-			const auto queryIt = params.find("query");
-			if (queryIt == params.end() || !queryIt->is_string()) {
-				errorCode = "invalid_arguments";
-				errorMessage = "query is required";
-				return std::nullopt;
-			}
-
-			const std::string query = TrimAsciiForBraveSearch(queryIt->get<std::string>());
-			if (query.empty() || query.size() > 512 || HasControlCharsForBraveSearch(query)) {
-				errorCode = "invalid_arguments";
-				errorMessage = "query failed safety validation";
-				return std::nullopt;
-			}
-
-			cliPayload["query"] = query;
-
-			if (const auto countIt = params.find("count"); countIt != params.end()) {
-				if (!countIt->is_number_integer()) {
-					errorCode = "invalid_arguments";
-					errorMessage = "count must be an integer";
-					return std::nullopt;
-				}
-
-				const int count = countIt->get<int>();
-				if (count < 1 || count > 50) {
-					errorCode = "invalid_arguments";
-					errorMessage = "count must be between 1 and 50";
-					return std::nullopt;
-				}
-
-				cliPayload["count"] = count;
-			}
-
-			if (const auto freshnessIt = params.find("freshness"); freshnessIt != params.end()) {
-				if (!freshnessIt->is_string()) {
-					errorCode = "invalid_arguments";
-					errorMessage = "freshness must be a string";
-					return std::nullopt;
-				}
-
-				const std::string freshness = TrimAsciiForBraveSearch(
-					freshnessIt->get<std::string>());
-				if (freshness.empty()) {
-					errorCode = "invalid_arguments";
-					errorMessage = "freshness must be non-empty";
-					return std::nullopt;
-				}
-
-				if (freshness != "pd" && freshness != "pw" && freshness != "pm" &&
-					freshness != "py" && !IsDateRangeTokenForBaiduSearch(freshness)) {
-					errorCode = "invalid_arguments";
-					errorMessage =
-						"freshness must be pd/pw/pm/py or YYYY-MM-DDtoYYYY-MM-DD";
-					return std::nullopt;
-				}
-
-				cliPayload["freshness"] = freshness;
-			}
-
-			return std::vector<std::string>{ cliPayload.dump() };
-		}
-
-		std::optional<std::vector<std::string>> BuildBraveSearchCliArgs(
-			const BraveSearchToolRuntimeSpec& spec,
-			const nlohmann::json& params,
-			std::string& errorCode,
-			std::string& errorMessage) {
-			errorCode.clear();
-			errorMessage.clear();
-
-			std::vector<std::string> args;
-			if (IsBraveSearchWebToolId(spec.id)) {
-				const auto queryIt = params.find("query");
-				if (queryIt == params.end() || !queryIt->is_string()) {
-					errorCode = "invalid_arguments";
-					errorMessage = "query is required";
-					return std::nullopt;
-				}
-
-				const std::string query = TrimAsciiForBraveSearch(
-					queryIt->get<std::string>());
-				if (query.empty()) {
-					errorCode = "invalid_arguments";
-					errorMessage = "query is required";
-					return std::nullopt;
-				}
-
-				if (query.size() > 512 || HasControlCharsForBraveSearch(query)) {
-					errorCode = "invalid_arguments";
-					errorMessage = "query failed safety validation";
-					return std::nullopt;
-				}
-
-				args.push_back(query);
-
-				int count = 0;
-				if (const auto countIt = params.find("count");
-					countIt != params.end() && countIt->is_number_integer()) {
-					count = countIt->get<int>();
-				}
-				else if (const auto countIt = params.find("count");
-					countIt != params.end()) {
-					errorCode = "invalid_arguments";
-					errorMessage = "count must be an integer";
-					return std::nullopt;
-				}
-				else if (const auto topKIt = params.find("topK");
-					topKIt != params.end() && topKIt->is_number_integer()) {
-					count = topKIt->get<int>();
-				}
-				else if (const auto topKIt = params.find("topK");
-					topKIt != params.end()) {
-					errorCode = "invalid_arguments";
-					errorMessage = "topK must be an integer";
-					return std::nullopt;
-				}
-
-				if (count > 0) {
-					if (count < 1 || count > 20) {
-						errorCode = "invalid_arguments";
-						errorMessage = "count must be between 1 and 20";
-						return std::nullopt;
-					}
-
-					args.push_back("-n");
-					args.push_back(std::to_string(count));
-				}
-
-				if (const auto contentIt = params.find("content");
-					contentIt != params.end() && contentIt->is_boolean() &&
-					contentIt->get<bool>()) {
-					args.push_back("--content");
-				}
-				else if (const auto contentIt = params.find("content");
-					contentIt != params.end() && !contentIt->is_boolean()) {
-					errorCode = "invalid_arguments";
-					errorMessage = "content must be a boolean";
-					return std::nullopt;
-				}
-			}
-			else if (IsBraveFetchContentToolId(spec.id)) {
-				const auto urlIt = params.find("url");
-				if (urlIt == params.end() || !urlIt->is_string()) {
-					errorCode = "invalid_arguments";
-					errorMessage = "url is required";
-					return std::nullopt;
-				}
-
-				const std::string url = TrimAsciiForBraveSearch(urlIt->get<std::string>());
-				if (url.empty()) {
-					errorCode = "invalid_arguments";
-					errorMessage = "url is required";
-					return std::nullopt;
-				}
-
-				if (url.size() > 2048 ||
-					HasControlCharsForBraveSearch(url) ||
-					!IsHttpUrlForBraveSearch(url)) {
-					errorCode = "invalid_arguments";
-					errorMessage = "url failed safety validation";
-					return std::nullopt;
-				}
-
-				args.push_back(url);
-			}
-
-			return args;
-		}
-
 		void RegisterBaiduSearchRuntimeTools(blazeclaw::gateway::GatewayHost& host) {
 			const auto skillRoot = ResolveBaiduSearchSkillRoot();
-			for (const auto& spec : BuildBaiduSearchToolRuntimeSpecs()) {
+           for (const auto& spec : tools::BuildBaiduSearchToolRuntimeSpecs()) {
 				host.RegisterRuntimeToolV2(
 					blazeclaw::gateway::ToolCatalogEntry{
 						.id = spec.id,
@@ -2887,7 +1773,7 @@ namespace blazeclaw::core {
 
 						std::string argsErrorCode;
 						std::string argsErrorMessage;
-						const auto cliArgs = BuildBaiduSearchCliArgs(
+                       const auto cliArgs = tools::BuildBaiduSearchCliArgs(
 							spec,
 							params,
 							argsErrorCode,
@@ -2922,7 +1808,7 @@ namespace blazeclaw::core {
 							timeoutMs = request.deadlineEpochMs.value() - now;
 						}
 
-						const auto process = ExecutePythonSkillProcess(
+                     const auto process = tools::ExecutePythonSkillProcess(
 							scriptPath,
 							cliArgs.value(),
 							timeoutMs);
@@ -2975,8 +1861,8 @@ namespace blazeclaw::core {
 						}
 
 						result.executed = false;
-						const std::string classifiedFailure =
-							ClassifyBaiduFailureCode(process.output);
+                       const std::string classifiedFailure =
+							tools::ClassifyBaiduFailureCode(process.output);
 						const std::string normalizedFailure =
 							classifiedFailure == "process_exit_nonzero"
 							? "script_runtime_error"
@@ -3005,7 +1891,7 @@ namespace blazeclaw::core {
 
 		void RegisterContentPolishingRuntimeTools(
 			blazeclaw::gateway::GatewayHost& host) {
-			for (const auto& spec : BuildContentPolishingToolRuntimeSpecs()) {
+          for (const auto& spec : tools::BuildContentPolishingToolRuntimeSpecs()) {
 				host.RegisterRuntimeToolV2(
 					blazeclaw::gateway::ToolCatalogEntry{
 						.id = spec.id,
@@ -3050,7 +1936,7 @@ namespace blazeclaw::core {
 							return result;
 						}
 
-						const auto text = ExtractTextArgument(params);
+                      const auto text = tools::ExtractTextArgument(params);
 						if (!text.has_value()) {
 							result.executed = false;
 							result.status = "error";
@@ -3064,12 +1950,12 @@ namespace blazeclaw::core {
 						if (spec.id == "summarize.extract") {
 							result.executed = true;
 							result.status = "ok";
-							result.result = BuildSummarizeExtractOutput(text.value());
+                          result.result = tools::BuildSummarizeExtractOutput(text.value());
 						}
 						else {
 							result.executed = true;
 							result.status = "ok";
-							result.result = BuildHumanizerRewriteOutput(text.value());
+                          result.result = tools::BuildHumanizerRewriteOutput(text.value());
 						}
 
 						result.errorCode.clear();
@@ -3083,7 +1969,7 @@ namespace blazeclaw::core {
 
 		void RegisterImapSmtpRuntimeTools(blazeclaw::gateway::GatewayHost& host) {
 			const auto skillRoot = ResolveImapSmtpSkillRoot();
-			for (const auto& spec : BuildImapSmtpToolRuntimeSpecs()) {
+          for (const auto& spec : tools::BuildImapSmtpToolRuntimeSpecs()) {
 				host.RegisterRuntimeToolV2(
 					blazeclaw::gateway::ToolCatalogEntry{
 						.id = spec.id,
@@ -3146,7 +2032,7 @@ namespace blazeclaw::core {
 
 						std::string argsErrorCode;
 						std::string argsErrorMessage;
-						const auto cliArgs = BuildImapSmtpCliArgs(
+                      const auto cliArgs = tools::BuildImapSmtpCliArgs(
 							spec,
 							params,
 							argsErrorCode,
@@ -3181,7 +2067,7 @@ namespace blazeclaw::core {
 							timeoutMs = request.deadlineEpochMs.value() - now;
 						}
 
-						const auto process = ExecuteNodeSkillProcess(
+                       const auto process = tools::ExecuteNodeSkillProcess(
 							scriptPath,
 							cliArgs.value(),
 							timeoutMs);
@@ -3244,7 +2130,7 @@ namespace blazeclaw::core {
 					false);
 			const bool requireApiKey = ResolveBraveRequireApiKey();
 			const bool hasApiKey = HasEnvVarValue(L"BRAVE_API_KEY");
-			for (const auto& spec : BuildBraveSearchToolRuntimeSpecs()) {
+           for (const auto& spec : tools::BuildBraveSearchToolRuntimeSpecs()) {
 				host.RegisterRuntimeToolV2(
 					blazeclaw::gateway::ToolCatalogEntry{
 						.id = spec.id,
@@ -3312,11 +2198,11 @@ namespace blazeclaw::core {
 						}
 
 						if (params.is_string()) {
-							if (IsBraveSearchWebToolId(spec.id)) {
+                          if (tools::IsBraveSearchWebToolId(spec.id)) {
 								params = nlohmann::json::object(
 									{ {"query", params.get<std::string>()} });
 							}
-							else if (IsBraveFetchContentToolId(spec.id)) {
+                          else if (tools::IsBraveFetchContentToolId(spec.id)) {
 								params = nlohmann::json::object(
 									{ {"url", params.get<std::string>()} });
 							}
@@ -3334,7 +2220,7 @@ namespace blazeclaw::core {
 
 						std::string argsErrorCode;
 						std::string argsErrorMessage;
-						const auto cliArgs = BuildBraveSearchCliArgs(
+                       const auto cliArgs = tools::BuildBraveSearchCliArgs(
 							spec,
 							params,
 							argsErrorCode,
@@ -3354,7 +2240,7 @@ namespace blazeclaw::core {
 						}
 
 						std::uint64_t timeoutMs =
-							IsBraveSearchWebToolId(spec.id) ? 45000 : 30000;
+                            tools::IsBraveSearchWebToolId(spec.id) ? 45000 : 30000;
 						if (request.deadlineEpochMs.has_value()) {
 							const std::uint64_t now = CurrentEpochMs();
 							if (request.deadlineEpochMs.value() <= now) {
@@ -3370,7 +2256,7 @@ namespace blazeclaw::core {
 							timeoutMs = request.deadlineEpochMs.value() - now;
 						}
 
-						const auto process = ExecuteNodeSkillProcess(
+                       const auto process = tools::ExecuteNodeSkillProcess(
 							scriptPath,
 							cliArgs.value(),
 							timeoutMs);
@@ -3381,7 +2267,7 @@ namespace blazeclaw::core {
 						if (!process.started) {
 							result.executed = false;
 							result.status = "error";
-							result.result = TruncateBraveToolOutput(process.output);
+                            result.result = tools::TruncateBraveToolOutput(process.output);
 							result.errorCode = process.errorCode.empty()
 								? "process_start_failed"
 								: process.errorCode;
@@ -3394,7 +2280,7 @@ namespace blazeclaw::core {
 						if (process.timedOut) {
 							result.executed = false;
 							result.status = "timed_out";
-							result.result = TruncateBraveToolOutput(process.output);
+                            result.result = tools::TruncateBraveToolOutput(process.output);
 							result.errorCode = process.errorCode.empty()
 								? "deadline_exceeded"
 								: process.errorCode;
@@ -3404,7 +2290,7 @@ namespace blazeclaw::core {
 							return result;
 						}
 
-						result.result = TruncateBraveToolOutput(process.output);
+                        result.result = tools::TruncateBraveToolOutput(process.output);
 						if (process.exitCode == 0) {
 							result.executed = true;
 							result.status = "ok";
@@ -3414,20 +2300,20 @@ namespace blazeclaw::core {
 						}
 
 						result.executed = false;
-						const std::string classifiedFailure =
-							ClassifyBraveFailureCode(process.output);
+                       const std::string classifiedFailure =
+							tools::ClassifyBraveFailureCode(process.output);
 						const bool canAttemptOpenClawFallback =
 							enableOpenClawWebBrowsingFallback &&
 							spec.id == "web_browsing.search.web" &&
 							classifiedFailure == "network_error" &&
-							IsBraveNetworkTimeoutFailure(process.output) &&
+                         tools::IsBraveNetworkTimeoutFailure(process.output) &&
 							openClawWebBrowsingSkillRoot.has_value() &&
 							params.contains("query") &&
 							params["query"].is_string();
 
 						if (canAttemptOpenClawFallback) {
-							const std::string query =
-								TrimAsciiForBraveSearch(params["query"].get<std::string>());
+                           const std::string query =
+								tools::TrimAsciiForBraveSearch(params["query"].get<std::string>());
 							if (!query.empty()) {
 								std::uint64_t fallbackTimeoutMs = 15000;
 								if (request.deadlineEpochMs.has_value()) {
@@ -3446,7 +2332,7 @@ namespace blazeclaw::core {
 										L"scripts" /
 										L"search_web.py";
 									if (std::filesystem::exists(fallbackScriptPath)) {
-										const auto fallbackProcess = ExecutePythonSkillProcess(
+                                 const auto fallbackProcess = tools::ExecutePythonSkillProcess(
 											fallbackScriptPath,
 											std::vector<std::string>{ query },
 											fallbackTimeoutMs);

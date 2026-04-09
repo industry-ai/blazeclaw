@@ -143,6 +143,8 @@
     <ClInclude Include="src\\core\\runtime\\ChatRuntimeMetrics.h" />
     <ClInclude Include="src\\core\\providers\\CDeepSeekClient.h" />
     <ClInclude Include="src\\core\\tools\\CToolRuntimeRegistry.h" />
+    <ClInclude Include="src\\core\\tools\\ToolProcessRunner.h" />
+    <ClInclude Include="src\\core\\tools\\ToolArgumentValidators.h" />
     <ClInclude Include="src\\core\\skills\\CSkillsHooksCoordinator.h" />
     <ClInclude Include="src\\core\\bootstrap\\CServiceBootstrapCoordinator.h" />
     <ClInclude Include="src\core\SubagentRegistryService.h" />
@@ -243,6 +245,8 @@
     <ClCompile Include="src\\core\\runtime\\ChatRuntimeMetrics.cpp" />
     <ClCompile Include="src\\core\\providers\\CDeepSeekClient.cpp" />
     <ClCompile Include="src\\core\\tools\\CToolRuntimeRegistry.cpp" />
+    <ClCompile Include="src\\core\\tools\\ToolProcessRunner.cpp" />
+    <ClCompile Include="src\\core\\tools\\ToolArgumentValidators.cpp" />
     <ClCompile Include="src\\core\\skills\\CSkillsHooksCoordinator.cpp" />
     <ClCompile Include="src\\core\\bootstrap\\CServiceBootstrapCoordinator.cpp" />
     <ClCompile Include="src\core\SubagentRegistryService.cpp" />

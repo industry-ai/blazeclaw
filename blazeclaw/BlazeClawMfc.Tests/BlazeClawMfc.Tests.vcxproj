@@ -47,6 +47,7 @@
     <ClCompile Include="..\BlazeClawMfc\tests\PythonRuntimeTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\TelemetryTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\DeepSeekSseParserTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\ToolRuntimeRegistryIntegrationTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ExtensionLifecycleManager.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayAgentRegistry.cpp" />
@@ -85,6 +86,9 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\executors\PythonProcessExecutor.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\gateway\\executors\\WeatherLookupExecutor.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\providers\\CDeepSeekClient.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\core\\tools\\CToolRuntimeRegistry.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\core\\tools\\ToolArgumentValidators.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\core\\tools\\ToolProcessRunner.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.h" />
