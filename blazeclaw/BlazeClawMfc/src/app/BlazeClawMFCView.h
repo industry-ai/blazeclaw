@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <unordered_set>
 
@@ -88,6 +89,9 @@ protected:
 	bool m_bridgeLastConnected = false;
 	bool m_bridgeLifecycleSent = false;
 	bool m_isPumpingBridgeLifecycle = false;
+	bool m_bridgePollInFlight = false;
+	std::uint32_t m_bridgePollIntervalMs = 1000;
+	std::uint64_t m_bridgeNextPollTickMs = 0;
 	std::string m_bridgeSessionId = "main";
 	std::uint64_t m_bridgeEventSeq = 0;
 	std::uint64_t m_bridgeTraceReqCount = 0;
@@ -135,12 +139,18 @@ protected:
 		const std::string& model = std::string(),
 		const std::string& runtimeKind = std::string());
 	void PumpBridgeLifecycle();
+	void StartBridgeEventsPollAsync();
+	void HandleBridgePollResponse(
+		bool ok,
+		const std::optional<std::string>& payloadJson);
+	void ScheduleNextBridgePoll(std::uint32_t intervalMs);
 
 	// Generated message map functions
 protected:
 	afx_msg void OnFilePrintPreview();
 	afx_msg void OnRButtonUp(UINT nFlags, CPoint point);
 	afx_msg void OnContextMenu(CWnd* pWnd, CPoint point);
+	afx_msg LRESULT OnBridgePollCompleted(WPARAM wParam, LPARAM lParam);
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	DECLARE_MESSAGE_MAP()
 public:

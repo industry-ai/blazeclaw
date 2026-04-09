@@ -31,6 +31,7 @@
 #include <filesystem>
 #include <optional>
 #include <sstream>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -55,6 +56,17 @@ namespace {
 	constexpr UINT_PTR kBridgeLifecycleTimerId = 0x4A21;
 	constexpr UINT kBridgeLifecycleTimerMs = 1000;
 	constexpr std::uint64_t kBridgeTraceFlushIntervalMs = 1000;
+	constexpr UINT kBridgePollCompletedMessage = WM_APP + 0x2A1;
+	constexpr std::uint32_t kBridgePollIntervalActiveMs = 300;
+	constexpr std::uint32_t kBridgePollIntervalIdleMs = 1000;
+	constexpr std::uint32_t kBridgePollIntervalFailureMs = 3000;
+	constexpr std::uint32_t kBridgePollIntervalDisconnectedMs = 2000;
+
+	struct BridgePollCompletionPayload
+	{
+		bool ok = false;
+		std::optional<std::string> payloadJson;
+	};
 
 	std::string ToNarrow(const std::wstring& value)
 	{
@@ -1533,6 +1545,7 @@ BEGIN_MESSAGE_MAP(CBlazeClawMFCView, CView)
 	ON_COMMAND(ID_FILE_PRINT, &CView::OnFilePrint)
 	ON_COMMAND(ID_FILE_PRINT_DIRECT, &CView::OnFilePrint)
 	ON_COMMAND(ID_FILE_PRINT_PREVIEW, &CBlazeClawMFCView::OnFilePrintPreview)
+	ON_MESSAGE(kBridgePollCompletedMessage, &CBlazeClawMFCView::OnBridgePollCompleted)
 	ON_WM_CONTEXTMENU()
 	ON_WM_RBUTTONUP()
 	ON_WM_SIZE()
@@ -2063,36 +2076,108 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 
 	if (!connected || app == nullptr)
 	{
+		ScheduleNextBridgePoll(kBridgePollIntervalDisconnectedMs);
 		return;
 	}
 
-	const blazeclaw::gateway::protocol::RequestFrame pollRequest{
-		.id = "bridge-chat-events",
-		.method = "chat.events.poll",
-		.paramsJson =
-			std::string("{\"sessionKey\":\"") +
-			m_bridgeSessionId +
-			"\",\"limit\":20}",
-	};
+	const std::uint64_t nowMs = GetTickCount64();
+	if (m_bridgeNextPollTickMs == 0)
+	{
+		m_bridgeNextPollTickMs = nowMs;
+	}
 
-	const auto pollResponse = app->Services().RouteGatewayRequest(pollRequest);
-	if (!pollResponse.ok || !pollResponse.payloadJson.has_value())
+	if (m_bridgePollInFlight || nowMs < m_bridgeNextPollTickMs)
+	{
+		return;
+	}
+
+	StartBridgeEventsPollAsync();
+}
+
+void CBlazeClawMFCView::StartBridgeEventsPollAsync()
+{
+	if (m_bridgePollInFlight)
+	{
+		return;
+	}
+
+	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	if (app == nullptr || !app->Services().IsRunning())
+	{
+		ScheduleNextBridgePoll(kBridgePollIntervalDisconnectedMs);
+		return;
+	}
+
+	const HWND targetHwnd = GetSafeHwnd();
+	if (targetHwnd == nullptr)
+	{
+		ScheduleNextBridgePoll(kBridgePollIntervalIdleMs);
+		return;
+	}
+
+	m_bridgePollInFlight = true;
+	const std::string sessionId = m_bridgeSessionId;
+
+	std::thread(
+		[app, targetHwnd, sessionId]()
+		{
+			const blazeclaw::gateway::protocol::RequestFrame pollRequest{
+				.id = "bridge-chat-events",
+				.method = "chat.events.poll",
+				.paramsJson =
+					std::string("{\"sessionKey\":\"") +
+					sessionId +
+					"\",\"limit\":20}",
+			};
+
+			const auto pollResponse = app->Services().RouteGatewayRequest(pollRequest);
+			auto* payload = new BridgePollCompletionPayload{
+				.ok = pollResponse.ok,
+				.payloadJson = pollResponse.payloadJson,
+			};
+
+			if (!::PostMessage(
+				targetHwnd,
+				kBridgePollCompletedMessage,
+				reinterpret_cast<WPARAM>(payload),
+				0))
+			{
+				delete payload;
+			}
+		})
+		.detach();
+}
+
+void CBlazeClawMFCView::ScheduleNextBridgePoll(const std::uint32_t intervalMs)
+{
+	m_bridgePollIntervalMs = intervalMs;
+	m_bridgeNextPollTickMs = GetTickCount64() + intervalMs;
+}
+
+void CBlazeClawMFCView::HandleBridgePollResponse(
+	const bool ok,
+	const std::optional<std::string>& payloadJson)
+{
+	if (!ok || !payloadJson.has_value())
 	{
 		AppendChatProcedureStatusLine(L"events.poll.failed");
+		ScheduleNextBridgePoll(kBridgePollIntervalFailureMs);
 		return;
 	}
 
 	std::string eventsRaw;
 	if (!blazeclaw::gateway::json::FindRawField(
-		pollResponse.payloadJson.value(),
+		payloadJson.value(),
 		"events",
 		eventsRaw))
 	{
+		ScheduleNextBridgePoll(kBridgePollIntervalIdleMs);
 		return;
 	}
 
 	if (blazeclaw::gateway::json::Trim(eventsRaw) == "[]")
 	{
+		ScheduleNextBridgePoll(kBridgePollIntervalIdleMs);
 		return;
 	}
 
@@ -2120,6 +2205,28 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 		"}";
 	PostBridgeMessageJson(ToWide(envelope));
 	EmitOpenClawChatEvents(eventsRaw);
+	ScheduleNextBridgePoll(kBridgePollIntervalActiveMs);
+}
+
+LRESULT CBlazeClawMFCView::OnBridgePollCompleted(
+	WPARAM wParam,
+	LPARAM lParam)
+{
+	UNREFERENCED_PARAMETER(lParam);
+
+	auto* payload =
+		reinterpret_cast<BridgePollCompletionPayload*>(wParam);
+	if (payload == nullptr)
+	{
+		m_bridgePollInFlight = false;
+		ScheduleNextBridgePoll(kBridgePollIntervalFailureMs);
+		return 0;
+	}
+
+	m_bridgePollInFlight = false;
+	HandleBridgePollResponse(payload->ok, payload->payloadJson);
+	delete payload;
+	return 0;
 }
 
 void CBlazeClawMFCView::EmitSkillPathLinesFromEvents(const std::string& eventsRaw)
