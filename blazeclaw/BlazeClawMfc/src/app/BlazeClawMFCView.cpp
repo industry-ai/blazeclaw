@@ -1586,6 +1586,16 @@ END_MESSAGE_MAP()
 CBlazeClawMFCView::CBlazeClawMFCView() noexcept
 {
 	EnableActiveAccessibility();
+	m_eventTransport.SetEmitter(
+		[this](const std::string& json)
+		{
+			PostBridgeMessageJson(ToWide(json));
+		});
+	m_eventTransport.SetSessionIdProvider(
+		[this]()
+		{
+			return m_bridgeSessionId;
+		});
 }
 
 CBlazeClawMFCView::~CBlazeClawMFCView()
@@ -1712,13 +1722,9 @@ void CBlazeClawMFCView::PostOpenClawWsFrameJson(const std::string& frameJson)
 	}
 
 	FlushBridgeTraceIfNeeded();
-
-	const std::wstring wide = ToWide(
-		std::string(
-			"{\"channel\":\"openclaw.ws.frame\",\"frame\":") +
-		frameJson +
-		"}");
-	PostBridgeMessageJson(wide);
+	m_eventTransport.EmitTopic(
+		BridgeEventTopic::WsFrame,
+		std::string("{\"frame\":") + frameJson + "}");
 }
 
 void CBlazeClawMFCView::PostOpenClawWsClose(
@@ -1733,12 +1739,12 @@ void CBlazeClawMFCView::PostOpenClawWsClose(
 	FlushBridgeTraceIfNeeded();
 
 	const std::string closeJson =
-		std::string("{\"channel\":\"openclaw.ws.close\",\"code\":") +
+		std::string("{\"code\":") +
 		std::to_string(code) +
 		",\"reason\":" +
 		JsonString(reason != nullptr ? reason : "closed") +
 		"}";
-	PostBridgeMessageJson(ToWide(closeJson));
+	m_eventTransport.EmitTopic(BridgeEventTopic::WsClose, closeJson);
 }
 
 void CBlazeClawMFCView::EmitOpenClawChatEvents(
@@ -1965,7 +1971,7 @@ void CBlazeClawMFCView::PostBridgeLifecycleEvent(
 	}
 
 	payload += "}";
-	PostBridgeMessageJson(ToWide(payload));
+	m_eventTransport.EmitTopic(BridgeEventTopic::Lifecycle, payload);
 }
 
 void CBlazeClawMFCView::PumpBridgeLifecycle()
@@ -2229,12 +2235,12 @@ void CBlazeClawMFCView::HandleBridgePollResponse(
 	}
 
 	const std::string envelope =
-		"{\"channel\":\"blazeclaw.gateway.chat.events\",\"sessionId\":" +
+		"{\"sessionId\":" +
 		JsonString(m_bridgeSessionId) +
 		",\"events\":" +
 		eventsRaw +
 		"}";
-	PostBridgeMessageJson(ToWide(envelope));
+	m_eventTransport.EmitTopic(BridgeEventTopic::ChatEvents, envelope);
 	EmitOpenClawChatEvents(eventsRaw);
 	if (wasUnhealthy)
 	{
@@ -2259,7 +2265,7 @@ void CBlazeClawMFCView::EmitBridgePollHealth(
 		(reason != nullptr) ? std::wstring(reason) : std::wstring());
 
 	std::string payload =
-		"{\"channel\":\"blazeclaw.gateway.poll.health\",\"sessionId\":" +
+		"{\"sessionId\":" +
 		JsonString(m_bridgeSessionId) +
 		",\"state\":" +
 		JsonString(stateValue) +
@@ -2282,7 +2288,7 @@ void CBlazeClawMFCView::EmitBridgePollHealth(
 	}
 
 	payload += "}";
-	PostBridgeMessageJson(ToWide(payload));
+	m_eventTransport.EmitTopic(BridgeEventTopic::PollHealth, payload);
 
 	AppendChatProcedureStatusLine(
 		L"events.poll.health",
@@ -2645,11 +2651,13 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 				L"tools.execute.start",
 				startDetail);
 			AppendFindSkillPathStatus(L"tools.execute.start", startDetail);
-			PostBridgeMessageJson(ToWide(
-				BuildToolLifecycleStartJson(
-					"openclaw.ws.req",
-					correlationId,
-					paramsJson)));
+			const std::string lifecycleStart = BuildToolLifecycleStartJson(
+				"openclaw.ws.req",
+				correlationId,
+				paramsJson);
+			m_eventTransport.EmitTopic(
+				BridgeEventTopic::ToolsLifecycle,
+				lifecycleStart);
 		}
 
 		auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
@@ -2716,11 +2724,13 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 				toolStage,
 				resultDetail);
 			AppendFindSkillPathStatus(toolStage, resultDetail);
-			PostBridgeMessageJson(ToWide(
-				BuildToolLifecycleResultJson(
-					"openclaw.ws.req",
-					correlationId,
-					response)));
+			const std::string lifecycleResult = BuildToolLifecycleResultJson(
+				"openclaw.ws.req",
+				correlationId,
+				response);
+			m_eventTransport.EmitTopic(
+				BridgeEventTopic::ToolsLifecycle,
+				lifecycleResult);
 		}
 		PostOpenClawWsFrameJson(
 			BuildOpenClawWsResponseFrameJson(response, correlationId));
@@ -2755,11 +2765,13 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			L"tools.execute.start",
 			startDetail);
 		AppendFindSkillPathStatus(L"tools.execute.start", startDetail);
-		PostBridgeMessageJson(ToWide(
-			BuildToolLifecycleStartJson(
-				"blazeclaw.gateway.rpc",
-				correlationId,
-				paramsJson)));
+		const std::string lifecycleStart = BuildToolLifecycleStartJson(
+			"blazeclaw.gateway.rpc",
+			correlationId,
+			paramsJson);
+		m_eventTransport.EmitTopic(
+			BridgeEventTopic::ToolsLifecycle,
+			lifecycleStart);
 	}
 
 	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
@@ -2777,7 +2789,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			"{\"channel\":\"blazeclaw.gateway.rpc.result\",\"id\":" +
 			JsonString(correlationId) +
 			",\"ok\":false,\"error\":{\"code\":\"app_unavailable\",\"message\":\"Application context unavailable.\"}}";
-		PostBridgeMessageJson(ToWide(errorJson));
+		m_eventTransport.EmitTopic(BridgeEventTopic::RpcResult, errorJson);
 		return;
 	}
 
@@ -2813,14 +2825,16 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			toolStage,
 			resultDetail);
 		AppendFindSkillPathStatus(toolStage, resultDetail);
-		PostBridgeMessageJson(ToWide(
-			BuildToolLifecycleResultJson(
-				"blazeclaw.gateway.rpc",
-				correlationId,
-				response)));
+		const std::string lifecycleResult = BuildToolLifecycleResultJson(
+			"blazeclaw.gateway.rpc",
+			correlationId,
+			response);
+		m_eventTransport.EmitTopic(
+			BridgeEventTopic::ToolsLifecycle,
+			lifecycleResult);
 	}
 	const std::string responseJson = BuildBridgeRpcResultJson(response, correlationId);
-	PostBridgeMessageJson(ToWide(responseJson));
+	m_eventTransport.EmitTopic(BridgeEventTopic::RpcResult, responseJson);
 #else
 	UNREFERENCED_PARAMETER(webMessageJson);
 #endif
