@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>BlazeClaw Summarize Configuration</title>
+    <style>
+        body {
+            font-family: Segoe UI, Arial, sans-serif;
+            margin: 24px;
+            background: #f8f9fb;
+            color: #1f2937;
+        }
+        .card {
+            max-width: 920px;
+            background: #fff;
+            border: 1px solid #e2e6ef;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        h2 {
+            margin: 0 0 6px 0;
+        }
+        .subtle {
+            margin: 0 0 16px 0;
+            color: #4b5563;
+            font-size: 13px;
+        }
+        .section-title {
+            margin: 16px 0 8px 0;
+            font-size: 13px;
+            color: #374151;
+            font-weight: 600;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .field {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            font-size: 12px;
+            color: #374151;
+            margin-bottom: 4px;
+        }
+        input, select {
+            height: 36px;
+            border: 1px solid #cfd6e4;
+            border-radius: 6px;
+            padding: 0 10px;
+            font-size: 13px;
+            background: #fff;
+        }
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 14px;
+        }
+        button {
+            height: 34px;
+            min-width: 118px;
+            border-radius: 6px;
+            border: 1px solid #bec7da;
+            background: #fff;
+            cursor: pointer;
+            padding: 0 10px;
+        }
+        button.primary {
+            background: #2f6fec;
+            border-color: #2f6fec;
+            color: #fff;
+        }
+        .note {
+            margin-top: 10px;
+            color: #475569;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+        code {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            padding: 1px 4px;
+        }
+        #status {
+            margin-top: 12px;
+            font-size: 13px;
+            color: #2a3b68;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div id="previewBanner" style="display:none;background:#fff3cd;border:1px solid #ffc107;padding:10px;margin-bottom:12px;border-radius:6px;color:#856404;">
+            &#9888; Running in preview mode — changes will not persist. Save in WebView to apply.
+        </div>
+
+        <h2>Summarize Skill Configuration</h2>
+        <p class="subtle">
+            Skill: <code>summarize</code> · Tool: <code>summarize.extract</code>.
+            At least one model provider key is required.
+        </p>
+
+        <div class="section-title">Provider API Keys (required: at least one)</div>
+        <div class="grid">
+            <div class="field">
+                <label for="openaiKey">OPENAI_API_KEY</label>
+                <input id="openaiKey" type="password" placeholder="sk-..." />
+            </div>
+            <div class="field">
+                <label for="anthropicKey">ANTHROPIC_API_KEY</label>
+                <input id="anthropicKey" type="password" placeholder="sk-ant-..." />
+            </div>
+            <div class="field">
+                <label for="xaiKey">XAI_API_KEY</label>
+                <input id="xaiKey" type="password" placeholder="xai-..." />
+            </div>
+            <div class="field">
+                <label for="geminiKey">GEMINI_API_KEY</label>
+                <input id="geminiKey" type="password" placeholder="AIza..." />
+            </div>
+        </div>
+
+        <div class="section-title">Optional Service Keys</div>
+        <div class="grid">
+            <div class="field">
+                <label for="defaultModel">SUMMARIZE_DEFAULT_MODEL</label>
+                <select id="defaultModel">
+                    <option value="google/gemini-3-flash-preview">Gemini 3 Flash (recommended)</option>
+                    <option value="anthropic/claude-3-sonnet">Claude 3 Sonnet</option>
+                    <option value="openai/gpt-4o">GPT-4o</option>
+                    <option value="xai/grok-beta">Grok Beta</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="customModel">Custom model id (optional, overrides preset)</label>
+                <input id="customModel" type="text" placeholder="e.g. openai/gpt-5.2" />
+            </div>
+            <div class="field">
+                <label for="firecrawlKey">FIRECRAWL_API_KEY</label>
+                <input id="firecrawlKey" type="password" placeholder="For blocked sites extraction" />
+            </div>
+            <div class="field">
+                <label for="apifyToken">APIFY_API_TOKEN</label>
+                <input id="apifyToken" type="password" placeholder="For YouTube fallback extraction" />
+            </div>
+        </div>
+
+        <div class="actions">
+            <button class="primary" id="saveBtn">Save</button>
+            <button id="reloadBtn">Reload</button>
+            <button id="clearBtn">Clear</button>
+            <button id="cancelBtn">Cancel</button>
+        </div>
+
+        <p class="note">
+            Default model can be configured in <code>~/.summarize/config.json</code>, for example:
+            <code>{ "model": "google/gemini-3-flash-preview" }</code>.
+        </p>
+        <p class="note">
+            Alias keys <code>GOOGLE_GENERATIVE_AI_API_KEY</code> / <code>GOOGLE_API_KEY</code>
+            are supported by summarize, but this page stores <code>GEMINI_API_KEY</code> as the primary key.
+        </p>
+
+        <div id="status">Ready.</div>
+    </div>
+
+    <script>
+        const skillKey = "summarize";
+        const requestIdPrefix = "summarize-config";
+
+        const fields = {
+            OPENAI_API_KEY: document.getElementById("openaiKey"),
+            ANTHROPIC_API_KEY: document.getElementById("anthropicKey"),
+            XAI_API_KEY: document.getElementById("xaiKey"),
+            GEMINI_API_KEY: document.getElementById("geminiKey"),
+            SUMMARIZE_DEFAULT_MODEL: document.getElementById("defaultModel"),
+            SUMMARIZE_CUSTOM_MODEL: document.getElementById("customModel"),
+            FIRECRAWL_API_KEY: document.getElementById("firecrawlKey"),
+            APIFY_API_TOKEN: document.getElementById("apifyToken")
+        };
+
+        const statusEl = document.getElementById("status");
+
+        function setStatus(text) {
+            statusEl.textContent = text;
+        }
+
+        function postMessage(payload) {
+            if (window.chrome && window.chrome.webview) {
+                window.chrome.webview.postMessage(payload);
+                return true;
+            }
+            const banner = document.getElementById("previewBanner");
+            if (banner) {
+                banner.style.display = "block";
+            }
+            if (payload && payload.channel === "blazeclaw.skill.config.save") {
+                try {
+                    localStorage.setItem("blazeclaw.config." + skillKey, JSON.stringify(payload.payload || {}));
+                } catch (e) {}
+            }
+            return true;
+        }
+
+        function hasAnyProviderKey(payload) {
+            return Boolean(
+                (payload.OPENAI_API_KEY || "").trim() ||
+                (payload.ANTHROPIC_API_KEY || "").trim() ||
+                (payload.XAI_API_KEY || "").trim() ||
+                (payload.GEMINI_API_KEY || "").trim()
+            );
+        }
+
+        function collectPayload() {
+            const payload = {};
+            Object.keys(fields).forEach((key) => {
+                payload[key] = (fields[key].value || "").trim();
+            });
+            const customModel = (payload.SUMMARIZE_CUSTOM_MODEL || "").trim();
+            payload.SUMMARIZE_DEFAULT_MODEL = customModel || (payload.SUMMARIZE_DEFAULT_MODEL || "").trim();
+            return payload;
+        }
+
+        function applyLoadedPayload(payload) {
+            if (!payload || typeof payload !== "object") {
+                return;
+            }
+            let customModelApplied = false;
+            Object.keys(fields).forEach((key) => {
+                if (typeof payload[key] === "string") {
+                    fields[key].value = payload[key];
+                    if (key === "SUMMARIZE_CUSTOM_MODEL" && payload[key].trim()) {
+                        customModelApplied = true;
+                    }
+                }
+            });
+            if (!customModelApplied && typeof payload.SUMMARIZE_DEFAULT_MODEL === "string") {
+                const loadedModel = payload.SUMMARIZE_DEFAULT_MODEL.trim();
+                if (loadedModel && !Array.from(fields.SUMMARIZE_DEFAULT_MODEL.options).some((o) => o.value === loadedModel)) {
+                    fields.SUMMARIZE_CUSTOM_MODEL.value = loadedModel;
+                }
+            }
+        }
+
+        function saveConfig() {
+            const payload = collectPayload();
+            if (!hasAnyProviderKey(payload)) {
+                setStatus("Please set at least one provider key (OPENAI/ANTHROPIC/XAI/GEMINI).");
+                return;
+            }
+
+            const sent = postMessage({
+                channel: "blazeclaw.skill.config.save",
+                skillKey,
+                id: `${requestIdPrefix}-save`,
+                payload
+            });
+            if (sent) {
+                setStatus("Saving configuration...");
+            }
+        }
+
+        function reloadConfig() {
+            if (window.chrome && window.chrome.webview) {
+                const sent = postMessage({
+                    channel: "blazeclaw.skill.config.ready",
+                    skillKey,
+                    id: `${requestIdPrefix}-ready`
+                });
+                if (sent) {
+                    setStatus("Loading saved configuration...");
+                }
+                return;
+            }
+            let cached = null;
+            try {
+                cached = JSON.parse(localStorage.getItem("blazeclaw.config." + skillKey) || "null");
+            } catch (e) {}
+            if (cached) {
+                applyLoadedPayload(cached);
+                setStatus("Loaded from preview storage (localStorage).");
+            } else {
+                setStatus("No preview config found.");
+            }
+        }
+
+        function clearFields() {
+            Object.keys(fields).forEach((key) => {
+                fields[key].value = key === "SUMMARIZE_DEFAULT_MODEL"
+                    ? "google/gemini-3-flash-preview"
+                    : "";
+            });
+            setStatus("Inputs cleared.");
+        }
+
+        document.getElementById("saveBtn").addEventListener("click", saveConfig);
+        document.getElementById("reloadBtn").addEventListener("click", reloadConfig);
+        document.getElementById("clearBtn").addEventListener("click", clearFields);
+        document.getElementById("cancelBtn").addEventListener("click", () => {
+            postMessage({
+                channel: "blazeclaw.skill.config.cancel",
+                skillKey,
+                id: `${requestIdPrefix}-cancel`
+            });
+            setStatus("Cancelled.");
+        });
+
+        if (window.chrome && window.chrome.webview) {
+            window.chrome.webview.addEventListener("message", (e) => {
+                const msg = e && e.data ? e.data : null;
+                if (!msg || typeof msg !== "object" || !msg.channel) {
+                    return;
+                }
+                if (msg.skillKey && msg.skillKey !== skillKey) {
+                    return;
+                }
+
+                if (msg.channel === "blazeclaw.skill.config.loaded") {
+                    applyLoadedPayload(msg.payload || {});
+                    if (msg.sourceMeta && msg.sourceMeta.exists) {
+                        setStatus(`Loaded saved config: ${msg.sourceMeta.configPath || "(unknown path)"}`);
+                    } else {
+                        setStatus("No saved config found.");
+                    }
+                    return;
+                }
+                if (msg.channel === "blazeclaw.skill.config.saved") {
+                    setStatus(`Saved to ${msg.configPath || "~/.config/summarize/.env"}`);
+                    return;
+                }
+                if (msg.channel === "blazeclaw.skill.config.error") {
+                    setStatus(`Error: ${msg.message || "config operation failed"}`);
+                }
+            });
+        }
+
+        if (window.chrome && window.chrome.webview) {
+            reloadConfig();
+        } else {
+            const banner = document.getElementById("previewBanner");
+            if (banner) {
+                banner.style.display = "block";
+            }
+            reloadConfig();
+        }
+    </script>
+</body>
+</html>

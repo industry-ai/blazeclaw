@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>BlazeClaw gog Configuration</title>
+    <style>
+        body { font-family: "Segoe UI", Arial, sans-serif; background: #f8f9fb; margin: 0; padding: 0; color: #1f2937; }
+        .card { max-width: 920px; margin: 24px; background: #fff; border: 1px solid #e2e6ef; border-radius: 10px; padding: 20px; }
+        h2 { margin: 0 0 6px 0; }
+        .subtle { margin: 0 0 16px 0; color: #4b5563; font-size: 13px; }
+        .section-title { margin: 16px 0 8px 0; font-size: 13px; color: #374151; font-weight: 600; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+        .field { display: flex; flex-direction: column; }
+        label { font-size: 12px; color: #374151; margin-bottom: 4px; display: block; }
+        .opt { color: #888; font-weight: 400; }
+        input, select { height: 36px; border: 1px solid #cfd6e4; border-radius: 6px; padding: 0 10px; font-size: 13px; width: 100%; box-sizing: border-box; background: #fff; }
+        .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+        button { height: 34px; min-width: 118px; border-radius: 6px; border: 1px solid #bec7da; cursor: pointer; padding: 0 10px; }
+        button.primary { background: #2f6fec; border-color: #2f6fec; color: #fff; }
+        button.secondary { background: #fff; border-color: #bec7da; color: #333; }
+        .note { color: #475569; font-size: 12px; line-height: 1.45; margin-top: 10px; }
+        code { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 4px; padding: 1px 4px; }
+        #status { margin-top: 12px; font-size: 13px; color: #2a3b68; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div id="previewBanner" style="display:none;background:#fff3cd;border:1px solid #ffc107;padding:10px;margin-bottom:12px;border-radius:6px;color:#856404;">
+            &#9888; Running in preview mode — changes will not persist. Save in WebView to apply.
+        </div>
+
+        <h2>gog Configuration</h2>
+        <p class="subtle">
+            Skill: <code>gog</code> &middot; Tool: <code>gog</code>. OAuth is required (see notes below).
+        </p>
+
+        <div class="section-title">Optional settings</div>
+        <div class="grid">
+            <div class="field">
+                <label for="gogAccount">GOG_ACCOUNT <span class="opt">(optional)</span></label>
+                <input id="gogAccount" type="text" placeholder="e.g., you@gmail.com" />
+            </div>
+            <div class="field"></div>
+        </div>
+
+        <div class="section-title">Notes</div>
+        <p class="note">
+            First-time setup typically requires: <code>gog auth credentials /path/to/client_secret.json</code> and then <code>gog auth add you@gmail.com --services gmail,calendar,drive,contacts,docs,sheets</code>.
+        </p>
+        <p class="note">
+            Setting <code>GOG_ACCOUNT</code> helps avoid repeating <code>--account</code>.
+        </p>
+        <p class="note">
+            For scripting, prefer <code>--json</code> plus <code>--no-input</code>.
+        </p>
+
+        <div class="actions">
+            <button type="button" class="primary" id="saveBtn">Save</button>
+            <button type="button" class="secondary" id="reloadBtn">Reload</button>
+            <button type="button" class="secondary" id="clearBtn">Clear</button>
+            <button type="button" class="secondary" id="cancelBtn">Cancel</button>
+        </div>
+
+        <div id="status">Ready.</div>
+    </div>
+
+    <script>
+        const skillKey = "gog";
+        const requestIdPrefix = "gog-config";
+
+        const fields = {
+            GOG_ACCOUNT: document.getElementById("gogAccount")
+        };
+
+        function setStatus(text) {
+            const el = document.getElementById("status");
+            if (el) el.textContent = text;
+        }
+
+        function collectPayload() {
+            const payload = {};
+            Object.keys(fields).forEach((key) => {
+                payload[key] = (fields[key].value || "").trim();
+            });
+            return payload;
+        }
+
+        function applyLoadedPayload(payload) {
+            if (!payload || typeof payload !== "object") return;
+            Object.keys(fields).forEach((key) => {
+                if (typeof payload[key] === "string") {
+                    fields[key].value = payload[key];
+                }
+            });
+        }
+
+        function postMessage(message) {
+            if (window.chrome && window.chrome.webview) {
+                window.chrome.webview.postMessage(message);
+                return true;
+            }
+            console.warn("[Config Preview] Outside WebView — changes won't persist.");
+            const b = document.getElementById("previewBanner");
+            if (b) b.style.display = "block";
+            if (message && message.channel === "blazeclaw.skill.config.save") {
+                try {
+                    localStorage.setItem("blazeclaw.config." + skillKey, JSON.stringify(message.payload || {}));
+                } catch (e) {}
+            }
+            return true;
+        }
+
+        document.getElementById("saveBtn").addEventListener("click", function () {
+            const payload = collectPayload();
+            postMessage({
+                channel: "blazeclaw.skill.config.save",
+                skillKey: skillKey,
+                id: requestIdPrefix + "-save",
+                payload: payload
+            });
+            setStatus("Saving configuration...");
+        });
+
+        document.getElementById("reloadBtn").addEventListener("click", function () {
+            if (window.chrome && window.chrome.webview) {
+                postMessage({
+                    channel: "blazeclaw.skill.config.ready",
+                    skillKey: skillKey,
+                    id: requestIdPrefix + "-ready"
+                });
+                setStatus("Loading saved configuration...");
+                return;
+            }
+            let cached = null;
+            try {
+                cached = JSON.parse(localStorage.getItem("blazeclaw.config." + skillKey) || "null");
+            } catch (e) {}
+            if (cached) {
+                applyLoadedPayload(cached);
+                setStatus("Loaded from preview storage (localStorage).");
+            } else {
+                setStatus("No preview config found.");
+            }
+        });
+
+        document.getElementById("clearBtn").addEventListener("click", function () {
+            Object.keys(fields).forEach(function (key) {
+                fields[key].value = "";
+            });
+            setStatus("Inputs cleared.");
+        });
+
+        document.getElementById("cancelBtn").addEventListener("click", function () {
+            postMessage({
+                channel: "blazeclaw.skill.config.cancel",
+                skillKey: skillKey,
+                id: requestIdPrefix + "-cancel"
+            });
+            setStatus("Cancelled.");
+        });
+
+        if (window.chrome && window.chrome.webview) {
+            window.chrome.webview.addEventListener("message", function (e) {
+                const msg = e.data;
+                if (!msg || !msg.channel || (msg.skillKey && msg.skillKey !== skillKey)) return;
+
+                switch (msg.channel) {
+                    case "blazeclaw.skill.config.loaded":
+                        applyLoadedPayload(msg.payload || {});
+                        setStatus(
+                            msg.sourceMeta && msg.sourceMeta.exists
+                                ? "Loaded from " + (msg.sourceMeta.configPath || "(unknown)")
+                                : "No saved config found."
+                        );
+                        break;
+                    case "blazeclaw.skill.config.saved":
+                        setStatus("Saved to " + (msg.configPath || "(path unknown)"));
+                        break;
+                    case "blazeclaw.skill.config.error":
+                        setStatus("Error: " + (msg.message || "operation failed"));
+                        break;
+                }
+            });
+        }
+
+        setStatus("Ready.");
+        if (window.chrome && window.chrome.webview) {
+            postMessage({
+                channel: "blazeclaw.skill.config.ready",
+                skillKey: skillKey,
+                id: requestIdPrefix + "-ready"
+            });
+        } else {
+            let cached = null;
+            try {
+                cached = JSON.parse(localStorage.getItem("blazeclaw.config." + skillKey) || "null");
+            } catch (e) {}
+            if (cached) {
+                applyLoadedPayload(cached);
+                setStatus("Loaded from preview storage (localStorage).");
+            }
+        }
+    </script>
+</body>
+</html>
