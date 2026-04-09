@@ -136,7 +136,9 @@
     <ClInclude Include="src\core\OnnxEmbeddingsService.h" />
     <ClInclude Include="src\core\PiEmbeddedService.h" />
     <ClInclude Include="src\core\RetrievalMemoryService.h" />
-    <ClInclude Include="src\core\runtime\CChatRuntime.h" />
+    <ClInclude Include="src\\core\\runtime\\CChatRuntime.h" />
+    <ClInclude Include="src\\core\\providers\\CDeepSeekClient.h" />
+    <ClInclude Include="src\\core\\tools\\CToolRuntimeRegistry.h" />
     <ClInclude Include="src\core\SubagentRegistryService.h" />
     <ClInclude Include="src\core\HookCatalogService.h" />
     <ClInclude Include="src\core\HookEventService.h" />
@@ -230,7 +232,9 @@
     <ClCompile Include="src\core\OnnxEmbeddingsService.cpp" />
     <ClCompile Include="src\core\PiEmbeddedService.cpp" />
     <ClCompile Include="src\core\RetrievalMemoryService.cpp" />
-    <ClCompile Include="src\core\runtime\CChatRuntime.cpp" />
+    <ClCompile Include="src\\core\\runtime\\CChatRuntime.cpp" />
+    <ClCompile Include="src\\core\\providers\\CDeepSeekClient.cpp" />
+    <ClCompile Include="src\\core\\tools\\CToolRuntimeRegistry.cpp" />
     <ClCompile Include="src\core\SubagentRegistryService.cpp" />
     <ClCompile Include="src\core\HookCatalogService.cpp" />
     <ClCompile Include="src\core\HookEventService.cpp" />

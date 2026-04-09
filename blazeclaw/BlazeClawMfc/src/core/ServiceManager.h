@@ -28,6 +28,8 @@
 #include "SkillSecurityScanService.h"
 #include "SkillsSyncService.h"
 #include "SkillsWatchService.h"
+#include "providers/CDeepSeekClient.h"
+#include "tools/CToolRuntimeRegistry.h"
 #include "runtime/CChatRuntime.h"
 #include "runtime/LocalModel/OnnxTextGenerationRuntime.h"
 #include <atomic>
@@ -248,6 +250,8 @@ namespace blazeclaw::core {
 		SkillsWatchService m_skillsWatchService;
 		SkillsWatchSnapshot m_skillsWatch;
 		CChatRuntime m_chatRuntime;
+		CDeepSeekClient m_deepSeekClient;
+		CToolRuntimeRegistry m_toolRuntimeRegistry;
 		blazeclaw::gateway::GatewayHost m_gatewayHost;
 
 		[[nodiscard]] std::optional<std::string> ResolveDeepSeekCredentialUtf8() const;
@@ -256,12 +260,6 @@ namespace blazeclaw::core {
 				const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
 				const std::string& modelId,
 				const std::string& apiKey) const;
-		[[nodiscard]] std::optional<std::string> ExtractDeepSeekAssistantText(
-			const std::string& responseJson) const;
-		[[nodiscard]] std::vector<std::string> ExtractDeepSeekAssistantDeltas(
-			const std::string& responseBody) const;
-		[[nodiscard]] std::optional<std::string> ExtractDeepSeekErrorMessage(
-			const std::string& responseJson) const;
 		[[nodiscard]] bool IsDeepSeekRunCancelled(const std::string& runId) const;
 		void MarkDeepSeekRunCancelled(const std::string& runId);
 		void ClearDeepSeekRunCancelled(const std::string& runId);
