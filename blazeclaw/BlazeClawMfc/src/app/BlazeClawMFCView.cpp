@@ -2452,7 +2452,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 
 	if (channel == "blazeclaw.gateway.lifecycle.subscribe")
 	{
-		m_bridgeLifecycleSent = false;
+		m_bridge.ResetLifecycle();
 		PumpBridgeLifecycle();
 		return;
 	}
@@ -3577,7 +3577,7 @@ void CBlazeClawMFCView::InitializeWebViewBridge()
 			"bridge lifecycle timer started");
 	}
 
-	m_bridgeLifecycleSent = false;
+	m_bridge.ResetLifecycle();
 	PumpBridgeLifecycle();
 #endif
 }
@@ -3809,10 +3809,7 @@ void CBlazeClawMFCView::OnDestroy()
 
 void CBlazeClawMFCView::OnTimer(UINT_PTR nIDEvent)
 {
-	if (m_bridgeTimerId != 0 && nIDEvent == m_bridgeTimerId)
-	{
-		PumpBridgeLifecycle();
-	}
+	m_bridge.OnTimerTick(nIDEvent);
 
 	CView::OnTimer(nIDEvent);
 }

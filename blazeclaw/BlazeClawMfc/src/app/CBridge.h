@@ -57,6 +57,7 @@ public:
 	};
 
 	void Initialize(Dependencies deps, Config cfg);
+	void ResetLifecycle();
 	void OnTimerTick(UINT_PTR timerId);
 	void PumpLifecycle();
 	void StartEventsPollAsync();

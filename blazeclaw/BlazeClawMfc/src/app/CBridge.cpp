@@ -5,11 +5,65 @@
 
 #include <thread>
 
+namespace {
+
+	std::string ToUtf8Bridge(const std::wstring& value)
+	{
+		if (value.empty())
+		{
+			return {};
+		}
+
+		const int sizeNeeded = WideCharToMultiByte(
+			CP_UTF8,
+			0,
+			value.c_str(),
+			static_cast<int>(value.size()),
+			nullptr,
+			0,
+			nullptr,
+			nullptr);
+		if (sizeNeeded <= 0)
+		{
+			std::string fallback;
+			fallback.reserve(value.size());
+			for (const wchar_t ch : value)
+			{
+				fallback.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
+			}
+			return fallback;
+		}
+
+		std::string output(sizeNeeded, '\0');
+		const int written = WideCharToMultiByte(
+			CP_UTF8,
+			0,
+			value.c_str(),
+			static_cast<int>(value.size()),
+			output.data(),
+			sizeNeeded,
+			nullptr,
+			nullptr);
+		if (written <= 0)
+		{
+			return {};
+		}
+
+		return output;
+	}
+
+} // namespace
+
 void CBridge::Initialize(Dependencies deps, Config cfg)
 {
 	m_deps = std::move(deps);
 	m_cfg = cfg;
 	m_initialized = true;
+}
+
+void CBridge::ResetLifecycle()
+{
+	m_lifecycleSent = false;
 }
 
 void CBridge::OnTimerTick(const UINT_PTR timerId)
@@ -355,20 +409,18 @@ void CBridge::EmitPollHealth(
 
 	if (m_deps.emitPollHealth)
 	{
+		const std::wstring stateW = state != nullptr ? state : L"unknown";
+		const std::wstring reasonW = reason != nullptr ? reason : L"";
 		m_deps.emitPollHealth(
-			state != nullptr
-			? std::string(std::wstring(state).begin(), std::wstring(state).end())
-			: std::string("unknown"),
-			reason != nullptr
-			? std::string(std::wstring(reason).begin(), std::wstring(reason).end())
-			: std::string(),
+			ToUtf8Bridge(stateW),
+			ToUtf8Bridge(reasonW),
 			failureCount,
 			nextPollMs,
 			sinceLastSuccessMs);
 	}
 
 	std::wstring stateW = state != nullptr ? state : L"unknown";
-	m_pollHealthState = std::string(stateW.begin(), stateW.end());
+	m_pollHealthState = ToUtf8Bridge(stateW);
 }
 
 void CBridge::HandlePollResponse(
