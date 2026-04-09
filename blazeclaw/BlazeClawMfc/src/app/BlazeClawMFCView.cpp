@@ -60,6 +60,7 @@ namespace {
 	constexpr std::uint32_t kBridgePollIntervalActiveMs = 300;
 	constexpr std::uint32_t kBridgePollIntervalIdleMs = 1000;
 	constexpr std::uint32_t kBridgePollIntervalFailureMs = 3000;
+	constexpr std::uint32_t kBridgePollIntervalFailureMaxMs = 15000;
 	constexpr std::uint32_t kBridgePollIntervalDisconnectedMs = 2000;
 
 	struct BridgePollCompletionPayload
@@ -67,6 +68,33 @@ namespace {
 		bool ok = false;
 		std::optional<std::string> payloadJson;
 	};
+
+	std::uint32_t ComputeFailureBackoffMs(const std::uint32_t failureCount)
+	{
+		if (failureCount <= 1)
+		{
+			return kBridgePollIntervalFailureMs;
+		}
+
+		std::uint32_t backoffMs = kBridgePollIntervalFailureMs;
+		for (std::uint32_t i = 1; i < failureCount; ++i)
+		{
+			if (backoffMs >= kBridgePollIntervalFailureMaxMs)
+			{
+				return kBridgePollIntervalFailureMaxMs;
+			}
+
+			const std::uint32_t doubled = backoffMs * 2;
+			if (doubled < backoffMs || doubled > kBridgePollIntervalFailureMaxMs)
+			{
+				return kBridgePollIntervalFailureMaxMs;
+			}
+
+			backoffMs = doubled;
+		}
+
+		return backoffMs;
+	}
 
 	std::string ToNarrow(const std::wstring& value)
 	{
@@ -1716,78 +1744,35 @@ void CBlazeClawMFCView::PostOpenClawWsClose(
 void CBlazeClawMFCView::EmitOpenClawChatEvents(
 	const std::string& eventsArrayJson)
 {
-	std::string seqRaw = "1";
-	if (!eventsArrayJson.empty())
+	if (eventsArrayJson.empty())
 	{
-		const auto array = blazeclaw::gateway::json::Trim(eventsArrayJson);
-		if (array.size() >= 2 && array.front() == '[' && array.back() == ']')
+		return;
+	}
+
+	const auto parsed = nlohmann::json::parse(
+		eventsArrayJson,
+		nullptr,
+		false);
+	if (parsed.is_discarded() || !parsed.is_array())
+	{
+		return;
+	}
+
+	for (const auto& eventPayload : parsed)
+	{
+		if (!eventPayload.is_object())
 		{
-			std::size_t index = 1;
-			while (index < array.size() - 1)
-			{
-				while (index < array.size() - 1 &&
-					(std::isspace(static_cast<unsigned char>(array[index])) != 0 ||
-						array[index] == ','))
-				{
-					++index;
-				}
-
-				if (index >= array.size() - 1 || array[index] != '{')
-				{
-					break;
-				}
-
-				const std::size_t start = index;
-				int depth = 0;
-				bool inString = false;
-				for (; index < array.size() - 1; ++index)
-				{
-					const char ch = array[index];
-					if (inString)
-					{
-						if (ch == '\\')
-						{
-							++index;
-							continue;
-						}
-						if (ch == '"')
-						{
-							inString = false;
-						}
-						continue;
-					}
-
-					if (ch == '"')
-					{
-						inString = true;
-						continue;
-					}
-
-					if (ch == '{')
-					{
-						++depth;
-					}
-					else if (ch == '}')
-					{
-						--depth;
-						if (depth == 0)
-						{
-							const std::string payload = array.substr(start, (index - start) + 1);
-							++m_bridgeEventSeq;
-							const std::string frame =
-								"{\"type\":\"event\",\"event\":\"chat\",\"payload\":" +
-								payload +
-								",\"seq\":" +
-								std::to_string(m_bridgeEventSeq) +
-								"}";
-							PostOpenClawWsFrameJson(frame);
-							++index;
-							break;
-						}
-					}
-				}
-			}
+			continue;
 		}
+
+		++m_bridgeEventSeq;
+		nlohmann::json frameJson = {
+			{ "type", "event" },
+			{ "event", "chat" },
+			{ "payload", eventPayload },
+			{ "seq", m_bridgeEventSeq },
+		};
+		PostOpenClawWsFrameJson(frameJson.dump());
 	}
 }
 
@@ -2076,6 +2061,14 @@ void CBlazeClawMFCView::PumpBridgeLifecycle()
 
 	if (!connected || app == nullptr)
 	{
+		if (m_bridgePollHealthState != "disconnected")
+		{
+			EmitBridgePollHealth(
+				L"disconnected",
+				L"service-not-running",
+				m_bridgePollConsecutiveFailures,
+				kBridgePollIntervalDisconnectedMs);
+		}
 		ScheduleNextBridgePoll(kBridgePollIntervalDisconnectedMs);
 		return;
 	}
@@ -2160,8 +2153,19 @@ void CBlazeClawMFCView::HandleBridgePollResponse(
 {
 	if (!ok || !payloadJson.has_value())
 	{
-		AppendChatProcedureStatusLine(L"events.poll.failed");
-		ScheduleNextBridgePoll(kBridgePollIntervalFailureMs);
+		++m_bridgePollConsecutiveFailures;
+		const std::uint32_t backoffMs =
+			ComputeFailureBackoffMs(m_bridgePollConsecutiveFailures);
+		AppendChatProcedureStatusLine(
+			L"events.poll.failed",
+			"failures=" + std::to_string(m_bridgePollConsecutiveFailures) +
+			" nextMs=" + std::to_string(backoffMs));
+		EmitBridgePollHealth(
+			L"degraded",
+			L"poll-failed",
+			m_bridgePollConsecutiveFailures,
+			backoffMs);
+		ScheduleNextBridgePoll(backoffMs);
 		return;
 	}
 
@@ -2171,12 +2175,39 @@ void CBlazeClawMFCView::HandleBridgePollResponse(
 		"events",
 		eventsRaw))
 	{
-		ScheduleNextBridgePoll(kBridgePollIntervalIdleMs);
+		++m_bridgePollConsecutiveFailures;
+		const std::uint32_t backoffMs =
+			ComputeFailureBackoffMs(m_bridgePollConsecutiveFailures);
+		AppendChatProcedureStatusLine(
+			L"events.poll.invalid",
+			"missing events field; failures=" +
+			std::to_string(m_bridgePollConsecutiveFailures));
+		EmitBridgePollHealth(
+			L"degraded",
+			L"payload-missing-events",
+			m_bridgePollConsecutiveFailures,
+			backoffMs);
+		ScheduleNextBridgePoll(backoffMs);
 		return;
 	}
 
+	const bool wasUnhealthy =
+		m_bridgePollConsecutiveFailures > 0 ||
+		m_bridgePollHealthState == "degraded" ||
+		m_bridgePollHealthState == "disconnected";
+	m_bridgePollConsecutiveFailures = 0;
+	m_bridgePollLastSuccessTickMs = GetTickCount64();
+
 	if (blazeclaw::gateway::json::Trim(eventsRaw) == "[]")
 	{
+		if (wasUnhealthy)
+		{
+			EmitBridgePollHealth(
+				L"healthy",
+				L"poll-recovered",
+				0,
+				kBridgePollIntervalIdleMs);
+		}
 		ScheduleNextBridgePoll(kBridgePollIntervalIdleMs);
 		return;
 	}
@@ -2205,7 +2236,61 @@ void CBlazeClawMFCView::HandleBridgePollResponse(
 		"}";
 	PostBridgeMessageJson(ToWide(envelope));
 	EmitOpenClawChatEvents(eventsRaw);
+	if (wasUnhealthy)
+	{
+		EmitBridgePollHealth(
+			L"healthy",
+			L"poll-recovered",
+			0,
+			kBridgePollIntervalActiveMs);
+	}
 	ScheduleNextBridgePoll(kBridgePollIntervalActiveMs);
+}
+
+void CBlazeClawMFCView::EmitBridgePollHealth(
+	const wchar_t* state,
+	const wchar_t* reason,
+	const std::uint32_t failureCount,
+	const std::uint32_t nextIntervalMs)
+{
+	const std::string stateValue = ToNarrow(
+		(state != nullptr) ? std::wstring(state) : std::wstring(L"unknown"));
+	const std::string reasonValue = ToNarrow(
+		(reason != nullptr) ? std::wstring(reason) : std::wstring());
+
+	std::string payload =
+		"{\"channel\":\"blazeclaw.gateway.poll.health\",\"sessionId\":" +
+		JsonString(m_bridgeSessionId) +
+		",\"state\":" +
+		JsonString(stateValue) +
+		",\"failureCount\":" +
+		std::to_string(failureCount) +
+		",\"nextPollMs\":" +
+		std::to_string(nextIntervalMs);
+
+	if (!reasonValue.empty())
+	{
+		payload += ",\"reason\":" + JsonString(reasonValue);
+	}
+
+	if (m_bridgePollLastSuccessTickMs != 0)
+	{
+		const std::uint64_t nowMs = GetTickCount64();
+		payload +=
+			",\"sinceLastSuccessMs\":" +
+			std::to_string(nowMs - m_bridgePollLastSuccessTickMs);
+	}
+
+	payload += "}";
+	PostBridgeMessageJson(ToWide(payload));
+
+	AppendChatProcedureStatusLine(
+		L"events.poll.health",
+		"state=" + stateValue +
+		" failures=" + std::to_string(failureCount) +
+		" nextMs=" + std::to_string(nextIntervalMs));
+
+	m_bridgePollHealthState = stateValue;
 }
 
 LRESULT CBlazeClawMFCView::OnBridgePollCompleted(

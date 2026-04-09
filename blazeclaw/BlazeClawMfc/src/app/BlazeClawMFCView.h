@@ -92,6 +92,9 @@ protected:
 	bool m_bridgePollInFlight = false;
 	std::uint32_t m_bridgePollIntervalMs = 1000;
 	std::uint64_t m_bridgeNextPollTickMs = 0;
+	std::uint32_t m_bridgePollConsecutiveFailures = 0;
+	std::uint64_t m_bridgePollLastSuccessTickMs = 0;
+	std::string m_bridgePollHealthState = "unknown";
 	std::string m_bridgeSessionId = "main";
 	std::uint64_t m_bridgeEventSeq = 0;
 	std::uint64_t m_bridgeTraceReqCount = 0;
@@ -143,6 +146,11 @@ protected:
 	void HandleBridgePollResponse(
 		bool ok,
 		const std::optional<std::string>& payloadJson);
+	void EmitBridgePollHealth(
+		const wchar_t* state,
+		const wchar_t* reason,
+		std::uint32_t failureCount,
+		std::uint32_t nextIntervalMs);
 	void ScheduleNextBridgePoll(std::uint32_t intervalMs);
 
 	// Generated message map functions
