@@ -3578,9 +3578,9 @@ void CBlazeClawMFCView::ShowSkillSelection(
 	const bool opened = OpenSkillConfigDocument(normalizedSkillKey, propertiesJson);
 	if (opened)
 	{
-		AppendChatProcedureStatusLine(
+	AppendChatProcedureStatusLine(
 			L"skills.config.opened",
-			normalizedSkillKey);
+		normalizedSkillKey);
 	}
 }
 
@@ -3604,37 +3604,14 @@ bool CBlazeClawMFCView::OpenSkillConfigDocument(
 			return false;
 		}
 
+		// Just set the pending URL - the tab/document was already created by OpenSkillViewTab
 		SetPendingStartupUrl(generatedUrl);
-		auto* appFallback = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
-		if (appFallback == nullptr)
-		{
-			return false;
-		}
-
-		auto* templateFallback = appFallback->GetChatDocTemplate();
-		if (templateFallback == nullptr)
-		{
-			return false;
-		}
-
-		return templateFallback->OpenDocumentFile(nullptr) != nullptr;
+		return true;
 	}
 
-	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
-	if (app == nullptr)
-	{
-		return false;
-	}
-
-	auto* chatTemplate = app->GetChatDocTemplate();
-	if (chatTemplate == nullptr)
-	{
-		return false;
-	}
-
+	// Just set the pending URL - the tab/document was already created by OpenSkillViewTab
 	SetPendingStartupUrl(configUrl);
-	CDocument* opened = chatTemplate->OpenDocumentFile(nullptr);
-	return opened != nullptr;
+	return true;
 }
 
 std::wstring CBlazeClawMFCView::BuildGeneratedSkillConfigPageUrl(
@@ -3819,6 +3796,15 @@ void CBlazeClawMFCView::OnInitialUpdate()
 void CBlazeClawMFCView::SetPendingStartupUrl(const std::wstring& url)
 {
 	g_pendingStartupUrl = url;
+}
+
+void CBlazeClawMFCView::ClearPendingStartupState()
+{
+	TRACE(_T("[CBlazeClawMFCView::ClearPendingStartupState] clearing pending state\n"));
+	g_pendingStartupUrl.clear();
+	g_generatedSkillConfigHtml.clear();
+	g_pendingSkillKey.clear();
+	g_pendingSkillPropertiesJson.clear();
 }
 
 std::wstring CBlazeClawMFCView::ResolveInitialNavigationUrl() const

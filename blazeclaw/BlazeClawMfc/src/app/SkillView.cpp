@@ -828,7 +828,8 @@ void CSkillView::NotifySelectionToChatView(HTREEITEM selectedItem)
 		return;
 	}
 
-	mainFrame->ShowSkillSelectionInActiveView(skillKey, payloadIt->second);
+	// Use OpenSkillViewTab to create a new tab with ChatView hidden
+	mainFrame->OpenSkillViewTab(skillKey, payloadIt->second);
 }
 
 void CSkillView::OnContextMenu(CWnd* pWnd, CPoint point)
@@ -976,7 +977,17 @@ void CSkillView::OnTreeSelectionChanged(NMHDR* pNMHDR, LRESULT* pResult)
 void CSkillView::OnTreeItemDoubleClick(NMHDR* pNMHDR, LRESULT* pResult)
 {
 	UNREFERENCED_PARAMETER(pNMHDR);
-	NotifySelectionToChatView(m_wndSkillView.GetSelectedItem());
+	// Don't open a new tab on double-click, single click already opened one
+	// Just focus the existing tab
+	auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+	if (mainFrame != nullptr)
+	{
+		CMDIChildWndEx* activeChild = DYNAMIC_DOWNCAST(CMDIChildWndEx, mainFrame->MDIGetActive());
+		if (activeChild != nullptr)
+		{
+			activeChild->BringWindowToTop();
+		}
+	}
 	if (pResult != nullptr)
 	{
 		*pResult = 0;

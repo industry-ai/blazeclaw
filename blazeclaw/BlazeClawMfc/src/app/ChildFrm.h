@@ -15,6 +15,7 @@
 #pragma once
 
 #include <afxext.h>
+#include <string>
 
 class CChildFrame : public CMDIChildWndEx
 {
@@ -27,6 +28,10 @@ protected:
 	CSplitterWndEx m_wndSplitter;
 	/// Set TRUE only after both splitter panes are created (avoids WM_SIZE re-entrancy during OnCreateClient).
 	BOOL m_bSplitterReady = FALSE;
+	/// Set TRUE when chat view should be hidden (called from SkillView).
+	BOOL m_bHideChatView = FALSE;
+	/// The skill key currently displayed in this frame's view (for tab deduplication).
+	std::string m_currentSkillKey;
 
 // Overrides
 	virtual BOOL PreCreateWindow(CREATESTRUCT& cs);
@@ -35,6 +40,9 @@ protected:
 // Implementation
 public:
 	virtual ~CChildFrame();
+	void HideChatView();
+	void SetCurrentSkillKey(const std::string& skillKey);
+	const std::string& GetCurrentSkillKey() const;
 #ifdef _DEBUG
 	virtual void AssertValid() const;
 	virtual void Dump(CDumpContext& dc) const;
