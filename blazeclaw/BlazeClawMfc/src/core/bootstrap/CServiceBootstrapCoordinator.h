@@ -1,5 +1,8 @@
 #pragma once
 
+#include "StartupPolicyResolver.h"
+#include "StartupFixtureValidator.h"
+
 #include "../AcpSpawnService.h"
 #include "../AgentsAuthProfileService.h"
 #include "../AgentsCatalogService.h"
@@ -85,6 +88,17 @@ namespace blazeclaw::core {
 
 		void ValidateStartupFixtures(FixtureValidationContext& context) const;
 		void ValidateStartupFixtures(const FixtureValidationContext& context) const;
+
+		void AppendStartupTrace(const char* stage) const;
+
+		[[nodiscard]] static constexpr const wchar_t*
+			StartupFixtureValidationEnvKey()
+		{
+			return bootstrap::StartupFixtureValidator::kEnvStartupValidationEnabled;
+		}
+
+	private:
+		bootstrap::StartupPolicyResolver m_startupPolicyResolver;
 	};
 
 } // namespace blazeclaw::core

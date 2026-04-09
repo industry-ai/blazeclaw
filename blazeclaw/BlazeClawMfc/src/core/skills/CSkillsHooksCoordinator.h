@@ -12,6 +12,7 @@
 #include "../SkillsPromptService.h"
 #include "../SkillsSyncService.h"
 #include "../SkillsWatchService.h"
+#include "HooksGovernanceEmitter.h"
 #include "../../config/ConfigModels.h"
 #include "../../gateway/GatewayHost.h"
 
@@ -19,6 +20,7 @@
 #include <filesystem>
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace blazeclaw::core {
 
@@ -96,6 +98,17 @@ namespace blazeclaw::core {
 			const SkillsCommandSpec*,
 			const SkillsInstallPlanEntry*)>;
 
+		struct HookBootstrapProjectionContext {
+			const std::vector<HookBootstrapFile>& bootstrapFiles;
+			std::wstring& prompt;
+			std::uint32_t& promptChars;
+			bool& promptTruncated;
+			std::size_t maxSkillsPromptChars = 0;
+			std::wstring& lastReminderState;
+			std::wstring& lastReminderReason;
+			bool& selfEvolvingHookTriggered;
+		};
+
 		void RefreshSkillsState(
 			const blazeclaw::config::AppConfig& config,
 			bool forceRefresh,
@@ -106,6 +119,18 @@ namespace blazeclaw::core {
 			const GatewayStateContext& context,
 			const EntryBuilder& entryBuilder,
 			const std::function<std::string(const std::wstring&)>& toNarrow) const;
+
+		void EmitGovernanceAndRemediation(
+			const HooksGovernanceEmitter::GovernanceContext& governanceContext,
+			const HooksGovernanceEmitter::RemediationContext& remediationContext,
+			std::vector<std::wstring>& inOutWarnings) const;
+
+		void ApplyHookBootstrapProjection(
+			HookBootstrapProjectionContext& context) const;
+
+		[[nodiscard]] static bool ContainsBootstrapFile(
+			const std::vector<HookBootstrapFile>& files,
+			const std::wstring& expectedPath);
 	};
 
 } // namespace blazeclaw::core

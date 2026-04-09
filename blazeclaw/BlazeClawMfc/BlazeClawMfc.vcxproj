@@ -146,7 +146,10 @@
     <ClInclude Include="src\\core\\tools\\ToolProcessRunner.h" />
     <ClInclude Include="src\\core\\tools\\ToolArgumentValidators.h" />
     <ClInclude Include="src\\core\\skills\\CSkillsHooksCoordinator.h" />
+    <ClInclude Include="src\\core\\skills\\HooksGovernanceEmitter.h" />
     <ClInclude Include="src\\core\\bootstrap\\CServiceBootstrapCoordinator.h" />
+    <ClInclude Include="src\\core\\bootstrap\\StartupPolicyResolver.h" />
+    <ClInclude Include="src\\core\\bootstrap\\StartupFixtureValidator.h" />
     <ClInclude Include="src\core\SubagentRegistryService.h" />
     <ClInclude Include="src\core\HookCatalogService.h" />
     <ClInclude Include="src\core\HookEventService.h" />
@@ -248,7 +251,10 @@
     <ClCompile Include="src\\core\\tools\\ToolProcessRunner.cpp" />
     <ClCompile Include="src\\core\\tools\\ToolArgumentValidators.cpp" />
     <ClCompile Include="src\\core\\skills\\CSkillsHooksCoordinator.cpp" />
+    <ClCompile Include="src\\core\\skills\\HooksGovernanceEmitter.cpp" />
     <ClCompile Include="src\\core\\bootstrap\\CServiceBootstrapCoordinator.cpp" />
+    <ClCompile Include="src\\core\\bootstrap\\StartupPolicyResolver.cpp" />
+    <ClCompile Include="src\\core\\bootstrap\\StartupFixtureValidator.cpp" />
     <ClCompile Include="src\core\SubagentRegistryService.cpp" />
     <ClCompile Include="src\core\HookCatalogService.cpp" />
     <ClCompile Include="src\core\HookEventService.cpp" />

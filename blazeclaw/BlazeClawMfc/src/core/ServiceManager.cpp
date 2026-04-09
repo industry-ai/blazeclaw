@@ -9,6 +9,7 @@
 #include "../gateway/GatewayJsonUtils.h"
 #include "../gateway/executors/EmailScheduleExecutor.h"
 #include "diagnostics/DiagnosticsSnapshot.h"
+#include "bootstrap/StartupFixtureValidator.h"
 #include "tools/ToolArgumentValidators.h"
 #include "tools/ToolProcessRunner.h"
 
@@ -72,32 +73,8 @@ namespace blazeclaw::core {
 		}
 
 		void AppendStartupTrace(const char* stage) {
-			if (stage == nullptr || *stage == '\0') {
-				return;
-			}
-
-			wchar_t tempPath[MAX_PATH]{};
-			const DWORD tempLength = GetTempPathW(MAX_PATH, tempPath);
-			std::filesystem::path logPath;
-			if (tempLength > 0 && tempLength < MAX_PATH) {
-				logPath = std::filesystem::path(tempPath) /
-					L"BlazeClaw.startup.trace.log";
-			}
-			else {
-				logPath = std::filesystem::current_path() /
-					L"BlazeClaw.startup.trace.log";
-			}
-
-			std::ofstream output(logPath, std::ios::app);
-			if (!output.is_open()) {
-				return;
-			}
-
-			output
-				<< "pid=" << static_cast<unsigned long>(GetCurrentProcessId())
-				<< " tick=" << static_cast<unsigned long long>(GetTickCount64())
-				<< " stage=" << stage
-				<< "\n";
+			CServiceBootstrapCoordinator coordinator;
+			coordinator.AppendStartupTrace(stage);
 		}
 
 		std::wstring ToWide(const std::string& value) {
@@ -1043,182 +1020,6 @@ namespace blazeclaw::core {
 			return value == 0 ? 1440 : value;
 		}
 
-		std::wstring EvaluateRemediationSloStatus(
-			const HookExecutionSnapshot& execution,
-			const std::uint32_t maxDriftDetected,
-			const std::uint32_t maxPolicyBlocked) {
-			if (execution.diagnostics.driftDetectedCount > maxDriftDetected) {
-				return L"breach_drift";
-			}
-
-			if (execution.diagnostics.policyBlockedCount > maxPolicyBlocked) {
-				return L"breach_policy_blocked";
-			}
-
-			return L"healthy";
-		}
-
-		std::wstring BuildComplianceAttestationJson(
-			const std::wstring& tenantId,
-			const std::wstring& sloStatus,
-			const HookExecutionSnapshot& execution,
-			const std::wstring& telemetryPath,
-			const std::wstring& auditPath) {
-			std::wstringstream builder;
-			builder << L"{\"tenantId\":\"" << tenantId
-				<< L"\",\"sloStatus\":\"" << sloStatus
-				<< L"\",\"driftDetected\":"
-				<< execution.diagnostics.driftDetectedCount
-				<< L",\"policyBlocked\":"
-				<< execution.diagnostics.policyBlockedCount
-				<< L",\"telemetryPath\":\"" << telemetryPath
-				<< L"\",\"auditPath\":\"" << auditPath
-				<< L"\"}";
-			return builder.str();
-		}
-
-		void EmitComplianceAttestationIfNeeded(
-			const bool enabled,
-			const std::filesystem::path& attestationDir,
-			const std::wstring& tenantId,
-			const std::wstring& sloStatus,
-			const HookExecutionSnapshot& execution,
-			const std::wstring& telemetryPath,
-			const std::wstring& auditPath,
-			std::wstring& outAttestationPath,
-			std::vector<std::wstring>& inOutWarnings) {
-			outAttestationPath.clear();
-			if (!enabled) {
-				return;
-			}
-
-			if (execution.diagnostics.policyBlockedCount == 0 &&
-				execution.diagnostics.driftDetectedCount == 0) {
-				return;
-			}
-
-			std::error_code ec;
-			auto fullDir = attestationDir;
-			if (fullDir.is_relative()) {
-				fullDir = std::filesystem::current_path(ec) / fullDir;
-			}
-			std::filesystem::create_directories(fullDir, ec);
-			if (ec) {
-				inOutWarnings.push_back(
-					L"hooks-remediation compliance attestation emission failed: cannot create directory.");
-				return;
-			}
-
-			const auto content = BuildComplianceAttestationJson(
-				tenantId,
-				sloStatus,
-				execution,
-				telemetryPath,
-				auditPath);
-			const auto nonce = std::to_wstring(
-				static_cast<std::uint64_t>(
-					std::chrono::system_clock::now().time_since_epoch().count()));
-			const auto attestationPath =
-				fullDir / (L"hooks-remediation-attestation-" + tenantId + L"-" + nonce + L".json");
-
-			std::ofstream output(attestationPath, std::ios::binary | std::ios::trunc);
-			if (!output.is_open()) {
-				inOutWarnings.push_back(
-					L"hooks-remediation compliance attestation emission failed: cannot write file.");
-				return;
-			}
-
-			std::string narrow;
-			narrow.reserve(content.size());
-			for (const auto ch : content) {
-				narrow.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
-			}
-			output.write(narrow.c_str(), static_cast<std::streamsize>(narrow.size()));
-			if (!output.good()) {
-				inOutWarnings.push_back(
-					L"hooks-remediation compliance attestation emission failed: cannot flush file.");
-				return;
-			}
-
-			outAttestationPath = attestationPath.wstring();
-		}
-
-		std::wstring BuildCrossTenantAttestationAggregationJson(
-			const std::wstring& tenantId,
-			const std::wstring& policyId,
-			const std::wstring& sloStatus,
-			const std::wstring& attestationPath,
-			const HookExecutionSnapshot& execution,
-			const std::uint64_t aggregationCount) {
-			std::wstringstream builder;
-			builder << L"{\"tenantId\":\"" << tenantId
-				<< L"\",\"policyId\":\"" << policyId
-				<< L"\",\"sloStatus\":\"" << sloStatus
-				<< L"\",\"attestationPath\":\"" << attestationPath
-				<< L"\",\"driftDetected\":"
-				<< execution.diagnostics.driftDetectedCount
-				<< L",\"policyBlocked\":"
-				<< execution.diagnostics.policyBlockedCount
-				<< L",\"aggregationSequence\":"
-				<< (aggregationCount + 1)
-				<< L"}";
-			return builder.str();
-		}
-
-		std::wstring WriteLifecycleArtifact(
-			const std::filesystem::path& outputDir,
-			const std::wstring& filePrefix,
-			const std::wstring& tenantId,
-			const std::wstring& content,
-			const std::wstring& failureLabel,
-			std::vector<std::wstring>& inOutWarnings);
-
-		void EmitCrossTenantAttestationAggregationIfNeeded(
-			const bool enabled,
-			const std::filesystem::path& aggregationDir,
-			const std::wstring& tenantId,
-			const std::wstring& policyId,
-			const std::wstring& sloStatus,
-			const std::wstring& attestationPath,
-			const HookExecutionSnapshot& execution,
-			std::uint64_t& inOutAggregationCount,
-			std::wstring& outAggregationStatus,
-			std::wstring& outAggregationPath,
-			std::vector<std::wstring>& inOutWarnings) {
-			outAggregationPath.clear();
-			if (!enabled) {
-				outAggregationStatus = L"aggregation_disabled";
-				return;
-			}
-
-			if (attestationPath.empty()) {
-				outAggregationStatus = L"attestation_missing";
-				return;
-			}
-
-			const auto content = BuildCrossTenantAttestationAggregationJson(
-				tenantId,
-				policyId,
-				sloStatus,
-				attestationPath,
-				execution,
-				inOutAggregationCount);
-			const auto path = WriteLifecycleArtifact(
-				aggregationDir,
-				L"hooks-attestation-aggregation",
-				tenantId,
-				content,
-				L"hooks-remediation cross-tenant aggregation emission failed",
-				inOutWarnings);
-			if (path.empty()) {
-				outAggregationStatus = L"aggregation_emit_failed";
-				return;
-			}
-
-			++inOutAggregationCount;
-			outAggregationStatus = L"aggregation_emitted";
-			outAggregationPath = path;
-		}
 
 		bool ResolveHooksRemediationTelemetryEnabled(
 			const blazeclaw::config::AppConfig& config) {
@@ -1284,226 +1085,6 @@ namespace blazeclaw::core {
 			return std::filesystem::path(trimmed);
 		}
 
-		std::wstring BuildRemediationPlaybookJson(
-			const std::wstring& tenantId,
-			const HookExecutionSnapshot& execution,
-			const std::wstring& reportPath,
-			const std::uint32_t tokenMaxAgeMinutes) {
-			std::wstringstream builder;
-			builder << L"{\"tenantId\":\"" << tenantId
-				<< L"\",\"policyBlocked\":"
-				<< execution.diagnostics.policyBlockedCount
-				<< L",\"driftDetected\":"
-				<< execution.diagnostics.driftDetectedCount
-				<< L",\"lastDriftReason\":\""
-				<< execution.diagnostics.lastDriftReason
-				<< L"\",\"sourceReportPath\":\""
-				<< reportPath
-				<< L"\",\"tokenMaxAgeMinutes\":"
-				<< tokenMaxAgeMinutes
-				<< L",\"recommendedSteps\":[\"validate_approval_token\",\"review_policy_drift\",\"execute_remediation_with_gate\"]}";
-			return builder.str();
-		}
-
-		void EmitTenantRemediationPlaybookIfNeeded(
-			const HookExecutionSnapshot& execution,
-			const bool autoRemediationEnabled,
-			const std::wstring& tenantId,
-			const std::filesystem::path& playbookDir,
-			const std::wstring& sourceReportPath,
-			const std::uint32_t tokenMaxAgeMinutes,
-			std::wstring& outPlaybookPath,
-			std::vector<std::wstring>& inOutWarnings) {
-			outPlaybookPath.clear();
-			if (!autoRemediationEnabled) {
-				return;
-			}
-
-			if (execution.diagnostics.policyBlockedCount == 0 &&
-				execution.diagnostics.driftDetectedCount == 0) {
-				return;
-			}
-
-			std::error_code ec;
-			auto fullDir = playbookDir;
-			if (fullDir.is_relative()) {
-				fullDir = std::filesystem::current_path(ec) / fullDir;
-			}
-
-			std::filesystem::create_directories(fullDir, ec);
-			if (ec) {
-				inOutWarnings.push_back(
-					L"hooks-remediation playbook generation failed: cannot create directory.");
-				return;
-			}
-
-			const auto nonce = std::to_wstring(
-				static_cast<std::uint64_t>(
-					std::chrono::system_clock::now().time_since_epoch().count()));
-			const auto playbookFile =
-				fullDir / (L"hooks-remediation-" + tenantId + L"-" + nonce + L".json");
-			const auto content = BuildRemediationPlaybookJson(
-				tenantId,
-				execution,
-				sourceReportPath,
-				tokenMaxAgeMinutes);
-			std::ofstream output(playbookFile, std::ios::binary | std::ios::trunc);
-			if (!output.is_open()) {
-				inOutWarnings.push_back(
-					L"hooks-remediation playbook generation failed: cannot write file.");
-				return;
-			}
-
-			std::string narrow;
-			narrow.reserve(content.size());
-			for (const auto ch : content) {
-				narrow.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
-			}
-			output.write(narrow.c_str(), static_cast<std::streamsize>(narrow.size()));
-			if (!output.good()) {
-				inOutWarnings.push_back(
-					L"hooks-remediation playbook generation failed: cannot write file.");
-				return;
-			}
-
-			outPlaybookPath = playbookFile.wstring();
-		}
-
-		std::wstring BuildRemediationTelemetryJson(
-			const std::wstring& tenantId,
-			const std::wstring& playbookPath,
-			const HookExecutionSnapshot& execution,
-			const std::wstring& remediationStatus) {
-			std::wstringstream builder;
-			builder << L"{\"tenantId\":\"" << tenantId
-				<< L"\",\"playbookPath\":\"" << playbookPath
-				<< L"\",\"status\":\"" << remediationStatus
-				<< L"\",\"policyBlocked\":"
-				<< execution.diagnostics.policyBlockedCount
-				<< L",\"driftDetected\":"
-				<< execution.diagnostics.driftDetectedCount
-				<< L",\"lastDriftReason\":\""
-				<< execution.diagnostics.lastDriftReason
-				<< L"\"}";
-			return builder.str();
-		}
-
-		std::wstring BuildRemediationAuditJson(
-			const std::wstring& tenantId,
-			const std::wstring& approvalToken,
-			const std::wstring& remediationStatus,
-			const std::wstring& reportPath,
-			const std::wstring& playbookPath,
-			const std::uint64_t tokenRotations) {
-			std::wstringstream builder;
-			builder << L"{\"tenantId\":\"" << tenantId
-				<< L"\",\"approvalTokenConfigured\":"
-				<< (!approvalToken.empty() ? L"true" : L"false")
-				<< L",\"status\":\"" << remediationStatus
-				<< L"\",\"reportPath\":\"" << reportPath
-				<< L"\",\"playbookPath\":\"" << playbookPath
-				<< L"\",\"tokenRotations\":" << tokenRotations
-				<< L"}";
-			return builder.str();
-		}
-
-		std::wstring WriteLifecycleArtifact(
-			const std::filesystem::path& outputDir,
-			const std::wstring& filePrefix,
-			const std::wstring& tenantId,
-			const std::wstring& content,
-			const std::wstring& failureLabel,
-			std::vector<std::wstring>& inOutWarnings) {
-			std::error_code ec;
-			auto fullDir = outputDir;
-			if (fullDir.is_relative()) {
-				fullDir = std::filesystem::current_path(ec) / fullDir;
-			}
-			std::filesystem::create_directories(fullDir, ec);
-			if (ec) {
-				inOutWarnings.push_back(failureLabel + L": cannot create directory.");
-				return {};
-			}
-
-			const auto nonce = std::to_wstring(
-				static_cast<std::uint64_t>(
-					std::chrono::system_clock::now().time_since_epoch().count()));
-			const auto path = fullDir / (filePrefix + L"-" + tenantId + L"-" + nonce + L".json");
-			std::ofstream output(path, std::ios::binary | std::ios::trunc);
-			if (!output.is_open()) {
-				inOutWarnings.push_back(failureLabel + L": cannot write file.");
-				return {};
-			}
-
-			std::string narrow;
-			narrow.reserve(content.size());
-			for (const auto ch : content) {
-				narrow.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
-			}
-			output.write(narrow.c_str(), static_cast<std::streamsize>(narrow.size()));
-			if (!output.good()) {
-				inOutWarnings.push_back(failureLabel + L": cannot flush file.");
-				return {};
-			}
-
-			return path.wstring();
-		}
-
-		void EmitRemediationTelemetryAndAuditIfNeeded(
-			const HookExecutionSnapshot& execution,
-			const bool telemetryEnabled,
-			const std::filesystem::path& telemetryDir,
-			const bool auditEnabled,
-			const std::filesystem::path& auditDir,
-			const std::wstring& tenantId,
-			const std::wstring& approvalToken,
-			const std::wstring& reportPath,
-			const std::wstring& playbookPath,
-			const std::wstring& remediationStatus,
-			const std::uint64_t tokenRotations,
-			std::wstring& outTelemetryPath,
-			std::wstring& outAuditPath,
-			std::vector<std::wstring>& inOutWarnings) {
-			outTelemetryPath.clear();
-			outAuditPath.clear();
-
-			if (execution.diagnostics.policyBlockedCount == 0 &&
-				execution.diagnostics.driftDetectedCount == 0) {
-				return;
-			}
-
-			if (telemetryEnabled) {
-				const auto telemetryContent = BuildRemediationTelemetryJson(
-					tenantId,
-					playbookPath,
-					execution,
-					remediationStatus);
-				outTelemetryPath = WriteLifecycleArtifact(
-					telemetryDir,
-					L"hooks-remediation-telemetry",
-					tenantId,
-					telemetryContent,
-					L"hooks-remediation telemetry emission failed",
-					inOutWarnings);
-			}
-
-			if (auditEnabled) {
-				const auto auditContent = BuildRemediationAuditJson(
-					tenantId,
-					approvalToken,
-					remediationStatus,
-					reportPath,
-					playbookPath,
-					tokenRotations);
-				outAuditPath = WriteLifecycleArtifact(
-					auditDir,
-					L"hooks-remediation-audit",
-					tenantId,
-					auditContent,
-					L"hooks-remediation audit emission failed",
-					inOutWarnings);
-			}
-		}
 
 		std::uint64_t CurrentEpochMs() {
 			const auto now = std::chrono::system_clock::now();
@@ -1693,7 +1274,7 @@ namespace blazeclaw::core {
 
 		void RegisterBaiduSearchRuntimeTools(blazeclaw::gateway::GatewayHost& host) {
 			const auto skillRoot = ResolveBaiduSearchSkillRoot();
-           for (const auto& spec : tools::BuildBaiduSearchToolRuntimeSpecs()) {
+			for (const auto& spec : tools::BuildBaiduSearchToolRuntimeSpecs()) {
 				host.RegisterRuntimeToolV2(
 					blazeclaw::gateway::ToolCatalogEntry{
 						.id = spec.id,
@@ -1773,7 +1354,7 @@ namespace blazeclaw::core {
 
 						std::string argsErrorCode;
 						std::string argsErrorMessage;
-                       const auto cliArgs = tools::BuildBaiduSearchCliArgs(
+						const auto cliArgs = tools::BuildBaiduSearchCliArgs(
 							spec,
 							params,
 							argsErrorCode,
@@ -1808,7 +1389,7 @@ namespace blazeclaw::core {
 							timeoutMs = request.deadlineEpochMs.value() - now;
 						}
 
-                     const auto process = tools::ExecutePythonSkillProcess(
+						const auto process = tools::ExecutePythonSkillProcess(
 							scriptPath,
 							cliArgs.value(),
 							timeoutMs);
@@ -1861,7 +1442,7 @@ namespace blazeclaw::core {
 						}
 
 						result.executed = false;
-                       const std::string classifiedFailure =
+						const std::string classifiedFailure =
 							tools::ClassifyBaiduFailureCode(process.output);
 						const std::string normalizedFailure =
 							classifiedFailure == "process_exit_nonzero"
@@ -1891,7 +1472,7 @@ namespace blazeclaw::core {
 
 		void RegisterContentPolishingRuntimeTools(
 			blazeclaw::gateway::GatewayHost& host) {
-          for (const auto& spec : tools::BuildContentPolishingToolRuntimeSpecs()) {
+			for (const auto& spec : tools::BuildContentPolishingToolRuntimeSpecs()) {
 				host.RegisterRuntimeToolV2(
 					blazeclaw::gateway::ToolCatalogEntry{
 						.id = spec.id,
@@ -1936,7 +1517,7 @@ namespace blazeclaw::core {
 							return result;
 						}
 
-                      const auto text = tools::ExtractTextArgument(params);
+						const auto text = tools::ExtractTextArgument(params);
 						if (!text.has_value()) {
 							result.executed = false;
 							result.status = "error";
@@ -1950,12 +1531,12 @@ namespace blazeclaw::core {
 						if (spec.id == "summarize.extract") {
 							result.executed = true;
 							result.status = "ok";
-                          result.result = tools::BuildSummarizeExtractOutput(text.value());
+							result.result = tools::BuildSummarizeExtractOutput(text.value());
 						}
 						else {
 							result.executed = true;
 							result.status = "ok";
-                          result.result = tools::BuildHumanizerRewriteOutput(text.value());
+							result.result = tools::BuildHumanizerRewriteOutput(text.value());
 						}
 
 						result.errorCode.clear();
@@ -1969,7 +1550,7 @@ namespace blazeclaw::core {
 
 		void RegisterImapSmtpRuntimeTools(blazeclaw::gateway::GatewayHost& host) {
 			const auto skillRoot = ResolveImapSmtpSkillRoot();
-          for (const auto& spec : tools::BuildImapSmtpToolRuntimeSpecs()) {
+			for (const auto& spec : tools::BuildImapSmtpToolRuntimeSpecs()) {
 				host.RegisterRuntimeToolV2(
 					blazeclaw::gateway::ToolCatalogEntry{
 						.id = spec.id,
@@ -2032,7 +1613,7 @@ namespace blazeclaw::core {
 
 						std::string argsErrorCode;
 						std::string argsErrorMessage;
-                      const auto cliArgs = tools::BuildImapSmtpCliArgs(
+						const auto cliArgs = tools::BuildImapSmtpCliArgs(
 							spec,
 							params,
 							argsErrorCode,
@@ -2067,7 +1648,7 @@ namespace blazeclaw::core {
 							timeoutMs = request.deadlineEpochMs.value() - now;
 						}
 
-                       const auto process = tools::ExecuteNodeSkillProcess(
+						const auto process = tools::ExecuteNodeSkillProcess(
 							scriptPath,
 							cliArgs.value(),
 							timeoutMs);
@@ -2130,7 +1711,7 @@ namespace blazeclaw::core {
 					false);
 			const bool requireApiKey = ResolveBraveRequireApiKey();
 			const bool hasApiKey = HasEnvVarValue(L"BRAVE_API_KEY");
-           for (const auto& spec : tools::BuildBraveSearchToolRuntimeSpecs()) {
+			for (const auto& spec : tools::BuildBraveSearchToolRuntimeSpecs()) {
 				host.RegisterRuntimeToolV2(
 					blazeclaw::gateway::ToolCatalogEntry{
 						.id = spec.id,
@@ -2198,11 +1779,11 @@ namespace blazeclaw::core {
 						}
 
 						if (params.is_string()) {
-                          if (tools::IsBraveSearchWebToolId(spec.id)) {
+							if (tools::IsBraveSearchWebToolId(spec.id)) {
 								params = nlohmann::json::object(
 									{ {"query", params.get<std::string>()} });
 							}
-                          else if (tools::IsBraveFetchContentToolId(spec.id)) {
+							else if (tools::IsBraveFetchContentToolId(spec.id)) {
 								params = nlohmann::json::object(
 									{ {"url", params.get<std::string>()} });
 							}
@@ -2220,7 +1801,7 @@ namespace blazeclaw::core {
 
 						std::string argsErrorCode;
 						std::string argsErrorMessage;
-                       const auto cliArgs = tools::BuildBraveSearchCliArgs(
+						const auto cliArgs = tools::BuildBraveSearchCliArgs(
 							spec,
 							params,
 							argsErrorCode,
@@ -2240,7 +1821,7 @@ namespace blazeclaw::core {
 						}
 
 						std::uint64_t timeoutMs =
-                            tools::IsBraveSearchWebToolId(spec.id) ? 45000 : 30000;
+							tools::IsBraveSearchWebToolId(spec.id) ? 45000 : 30000;
 						if (request.deadlineEpochMs.has_value()) {
 							const std::uint64_t now = CurrentEpochMs();
 							if (request.deadlineEpochMs.value() <= now) {
@@ -2256,7 +1837,7 @@ namespace blazeclaw::core {
 							timeoutMs = request.deadlineEpochMs.value() - now;
 						}
 
-                       const auto process = tools::ExecuteNodeSkillProcess(
+						const auto process = tools::ExecuteNodeSkillProcess(
 							scriptPath,
 							cliArgs.value(),
 							timeoutMs);
@@ -2267,7 +1848,7 @@ namespace blazeclaw::core {
 						if (!process.started) {
 							result.executed = false;
 							result.status = "error";
-                            result.result = tools::TruncateBraveToolOutput(process.output);
+							result.result = tools::TruncateBraveToolOutput(process.output);
 							result.errorCode = process.errorCode.empty()
 								? "process_start_failed"
 								: process.errorCode;
@@ -2280,7 +1861,7 @@ namespace blazeclaw::core {
 						if (process.timedOut) {
 							result.executed = false;
 							result.status = "timed_out";
-                            result.result = tools::TruncateBraveToolOutput(process.output);
+							result.result = tools::TruncateBraveToolOutput(process.output);
 							result.errorCode = process.errorCode.empty()
 								? "deadline_exceeded"
 								: process.errorCode;
@@ -2290,7 +1871,7 @@ namespace blazeclaw::core {
 							return result;
 						}
 
-                        result.result = tools::TruncateBraveToolOutput(process.output);
+						result.result = tools::TruncateBraveToolOutput(process.output);
 						if (process.exitCode == 0) {
 							result.executed = true;
 							result.status = "ok";
@@ -2300,19 +1881,19 @@ namespace blazeclaw::core {
 						}
 
 						result.executed = false;
-                       const std::string classifiedFailure =
+						const std::string classifiedFailure =
 							tools::ClassifyBraveFailureCode(process.output);
 						const bool canAttemptOpenClawFallback =
 							enableOpenClawWebBrowsingFallback &&
 							spec.id == "web_browsing.search.web" &&
 							classifiedFailure == "network_error" &&
-                         tools::IsBraveNetworkTimeoutFailure(process.output) &&
+							tools::IsBraveNetworkTimeoutFailure(process.output) &&
 							openClawWebBrowsingSkillRoot.has_value() &&
 							params.contains("query") &&
 							params["query"].is_string();
 
 						if (canAttemptOpenClawFallback) {
-                           const std::string query =
+							const std::string query =
 								tools::TrimAsciiForBraveSearch(params["query"].get<std::string>());
 							if (!query.empty()) {
 								std::uint64_t fallbackTimeoutMs = 15000;
@@ -2332,7 +1913,7 @@ namespace blazeclaw::core {
 										L"scripts" /
 										L"search_web.py";
 									if (std::filesystem::exists(fallbackScriptPath)) {
-                                 const auto fallbackProcess = tools::ExecutePythonSkillProcess(
+										const auto fallbackProcess = tools::ExecutePythonSkillProcess(
 											fallbackScriptPath,
 											std::vector<std::string>{ query },
 											fallbackTimeoutMs);
@@ -2679,124 +2260,6 @@ namespace blazeclaw::core {
 			return output.good();
 		}
 
-		void EmitGovernanceReportIfNeeded(
-			const HookExecutionSnapshot& execution,
-			const bool enabled,
-			const std::filesystem::path& reportDir,
-			const std::vector<std::wstring>& allowedPackages,
-			const bool strictMode,
-			std::uint64_t& inOutReportCount,
-			std::wstring& outLastReportPath,
-			std::vector<std::wstring>& inOutWarnings) {
-			if (!enabled) {
-				return;
-			}
-
-			if (execution.diagnostics.policyBlockedCount == 0 &&
-				execution.diagnostics.driftDetectedCount == 0) {
-				return;
-			}
-
-			std::error_code ec;
-			auto fullDir = reportDir;
-			if (fullDir.is_relative()) {
-				fullDir = std::filesystem::current_path(ec) / fullDir;
-			}
-
-			std::filesystem::create_directories(fullDir, ec);
-			if (ec) {
-				inOutWarnings.push_back(
-					L"hooks-governance report generation failed: cannot create report directory.");
-				return;
-			}
-
-			const auto nonce = std::to_wstring(
-				static_cast<std::uint64_t>(
-					std::chrono::system_clock::now().time_since_epoch().count()));
-			const auto reportFile = fullDir / (L"hooks-governance-" + nonce + L".json");
-			const auto reportContent = BuildGovernanceReportJson(
-				execution,
-				allowedPackages,
-				strictMode);
-			if (!WriteGovernanceReportFile(reportFile, reportContent)) {
-				inOutWarnings.push_back(
-					L"hooks-governance report generation failed: cannot write report file.");
-				return;
-			}
-
-			++inOutReportCount;
-			outLastReportPath = reportFile.wstring();
-		}
-
-		bool ContainsBootstrapFile(
-			const std::vector<HookBootstrapFile>& files,
-			const std::wstring& expectedPath) {
-			for (const auto& file : files) {
-				std::wstring lowered = file.path;
-				std::transform(
-					lowered.begin(),
-					lowered.end(),
-					lowered.begin(),
-					[](const wchar_t ch) {
-						return static_cast<wchar_t>(std::towlower(ch));
-					});
-
-				std::wstring expected = expectedPath;
-				std::transform(
-					expected.begin(),
-					expected.end(),
-					expected.begin(),
-					[](const wchar_t ch) {
-						return static_cast<wchar_t>(std::towlower(ch));
-					});
-
-				if (lowered == expected) {
-					return true;
-				}
-			}
-
-			return false;
-		}
-
-		std::wstring BuildSelfEvolvingReminderPromptBlock() {
-			return L"\n## Self-Evolving Reminder\n"
-				L"When tasks finish, capture reusable learnings:\n"
-				L"- corrections -> .learnings/LEARNINGS.md\n"
-				L"- failures -> .learnings/ERRORS.md\n"
-				L"- missing capabilities -> .learnings/FEATURE_REQUESTS.md\n"
-				L"Promote proven patterns to AGENTS.md / SOUL.md / TOOLS.md.\n";
-		}
-
-		std::wstring BuildGenericHookBootstrapContextBlock(
-			const std::vector<HookBootstrapFile>& bootstrapFiles) {
-			std::wstringstream builder;
-			bool headerWritten = false;
-			for (const auto& file : bootstrapFiles) {
-				const auto lowered = file.path;
-				std::wstring normalized;
-				normalized.reserve(lowered.size());
-				for (const auto ch : lowered) {
-					normalized.push_back(static_cast<wchar_t>(std::towlower(ch)));
-				}
-
-				if (normalized == L"self_evolving_reminder.md") {
-					continue;
-				}
-
-				if (!headerWritten) {
-					builder << L"\n## Hook Bootstrap Context\n";
-					headerWritten = true;
-				}
-
-				builder << L"- " << file.path;
-				if (file.virtualFile) {
-					builder << L" (virtual)";
-				}
-				builder << L"\n";
-			}
-
-			return builder.str();
-		}
 
 		std::wstring BuildReminderSkipReason(const HookExecutionSnapshot& execution) {
 			if (!execution.diagnostics.lastReminderReason.empty()) {
@@ -3524,107 +2987,81 @@ namespace blazeclaw::core {
 				}
 
 				m_hookExecution = m_hookExecutionService.Snapshot();
-				EmitGovernanceReportIfNeeded(
-					m_hookExecution,
-					m_hooksGovernanceReportingEnabled,
-					m_hooksGovernanceReportDir,
-					m_hooksAllowedPackages,
-					m_hooksStrictPolicyEnforcement,
-					m_hooksGovernanceReportsGenerated,
-					m_hooksLastGovernanceReportPath,
+				m_skillsHooksCoordinator.EmitGovernanceAndRemediation(
+					HooksGovernanceEmitter::GovernanceContext{
+						.execution = m_hookExecution,
+						.governanceReportingEnabled = m_hooksGovernanceReportingEnabled,
+						.governanceReportDir = m_hooksGovernanceReportDir,
+						.allowedPackages = m_hooksAllowedPackages,
+						.strictPolicyEnforcement = m_hooksStrictPolicyEnforcement,
+						.governanceReportsGenerated = m_hooksGovernanceReportsGenerated,
+						.lastGovernanceReportPath = m_hooksLastGovernanceReportPath,
+					},
+					HooksGovernanceEmitter::RemediationContext{
+						.execution = m_hookExecution,
+						.autoRemediationEnabled = m_hooksAutoRemediationEnabled,
+						.autoRemediationTenantId = m_hooksAutoRemediationTenantId,
+						.autoRemediationPlaybookDir =
+							m_hooksAutoRemediationPlaybookDir,
+						.autoRemediationTokenMaxAgeMinutes =
+							m_hooksAutoRemediationTokenMaxAgeMinutes,
+						.autoRemediationApprovalToken =
+							m_hooksAutoRemediationApprovalToken,
+						.autoRemediationTokenRotations =
+							m_hooksAutoRemediationTokenRotations,
+						.remediationTelemetryEnabled =
+							m_hooksRemediationTelemetryEnabled,
+						.remediationTelemetryDir = m_hooksRemediationTelemetryDir,
+						.remediationAuditEnabled = m_hooksRemediationAuditEnabled,
+						.remediationAuditDir = m_hooksRemediationAuditDir,
+						.remediationSloMaxDriftDetected =
+							m_hooksRemediationSloMaxDriftDetected,
+						.remediationSloMaxPolicyBlocked =
+							m_hooksRemediationSloMaxPolicyBlocked,
+						.complianceAttestationEnabled =
+							m_hooksComplianceAttestationEnabled,
+						.complianceAttestationDir =
+							m_hooksComplianceAttestationDir,
+						.enterpriseSlaPolicyId = m_hooksEnterpriseSlaPolicyId,
+						.crossTenantAttestationAggregationEnabled =
+							m_hooksCrossTenantAttestationAggregationEnabled,
+						.crossTenantAttestationAggregationDir =
+							m_hooksCrossTenantAttestationAggregationDir,
+						.lastGovernanceReportPath = m_hooksLastGovernanceReportPath,
+						.lastAutoRemediationPlaybookPath =
+							m_hooksLastAutoRemediationPlaybookPath,
+						.lastAutoRemediationStatus =
+							m_hooksLastAutoRemediationStatus,
+						.lastRemediationTelemetryPath =
+							m_hooksLastRemediationTelemetryPath,
+						.lastRemediationAuditPath = m_hooksLastRemediationAuditPath,
+						.remediationSloStatus = m_hooksRemediationSloStatus,
+						.lastComplianceAttestationPath =
+							m_hooksLastComplianceAttestationPath,
+						.crossTenantAttestationAggregationCount =
+							m_hooksCrossTenantAttestationAggregationCount,
+						.crossTenantAttestationAggregationStatus =
+							m_hooksCrossTenantAttestationAggregationStatus,
+						.lastCrossTenantAttestationAggregationPath =
+							m_hooksLastCrossTenantAttestationAggregationPath,
+					},
 					m_skillsCatalog.diagnostics.warnings);
-				EmitTenantRemediationPlaybookIfNeeded(
-					m_hookExecution,
-					m_hooksAutoRemediationEnabled,
-					m_hooksAutoRemediationTenantId,
-					m_hooksAutoRemediationPlaybookDir,
-					m_hooksLastGovernanceReportPath,
-					m_hooksAutoRemediationTokenMaxAgeMinutes,
-					m_hooksLastAutoRemediationPlaybookPath,
-					m_skillsCatalog.diagnostics.warnings);
-				if (!m_hooksLastAutoRemediationPlaybookPath.empty()) {
-					m_hooksLastAutoRemediationStatus = L"playbook_generated";
-				}
-				EmitRemediationTelemetryAndAuditIfNeeded(
-					m_hookExecution,
-					m_hooksRemediationTelemetryEnabled,
-					m_hooksRemediationTelemetryDir,
-					m_hooksRemediationAuditEnabled,
-					m_hooksRemediationAuditDir,
-					m_hooksAutoRemediationTenantId,
-					m_hooksAutoRemediationApprovalToken,
-					m_hooksLastGovernanceReportPath,
-					m_hooksLastAutoRemediationPlaybookPath,
-					m_hooksLastAutoRemediationStatus,
-					m_hooksAutoRemediationTokenRotations,
-					m_hooksLastRemediationTelemetryPath,
-					m_hooksLastRemediationAuditPath,
-					m_skillsCatalog.diagnostics.warnings);
-				m_hooksRemediationSloStatus = EvaluateRemediationSloStatus(
-					m_hookExecution,
-					m_hooksRemediationSloMaxDriftDetected,
-					m_hooksRemediationSloMaxPolicyBlocked);
-				EmitComplianceAttestationIfNeeded(
-					m_hooksComplianceAttestationEnabled,
-					m_hooksComplianceAttestationDir,
-					m_hooksAutoRemediationTenantId,
-					m_hooksRemediationSloStatus,
-					m_hookExecution,
-					m_hooksLastRemediationTelemetryPath,
-					m_hooksLastRemediationAuditPath,
-					m_hooksLastComplianceAttestationPath,
-					m_skillsCatalog.diagnostics.warnings);
-				EmitCrossTenantAttestationAggregationIfNeeded(
-					m_hooksCrossTenantAttestationAggregationEnabled,
-					m_hooksCrossTenantAttestationAggregationDir,
-					m_hooksAutoRemediationTenantId,
-					m_hooksEnterpriseSlaPolicyId,
-					m_hooksRemediationSloStatus,
-					m_hooksLastComplianceAttestationPath,
-					m_hookExecution,
-					m_hooksCrossTenantAttestationAggregationCount,
-					m_hooksCrossTenantAttestationAggregationStatus,
-					m_hooksLastCrossTenantAttestationAggregationPath,
-					m_skillsCatalog.diagnostics.warnings);
-				m_selfEvolvingHookTriggered = ContainsBootstrapFile(
-					m_hookExecution.bootstrapFiles,
-					L"SELF_EVOLVING_REMINDER.md");
-				if (m_selfEvolvingHookTriggered &&
-					m_skillsPrompt.prompt.find(L"## Self-Evolving Reminder") == std::wstring::npos) {
-					m_skillsPrompt.prompt += BuildSelfEvolvingReminderPromptBlock();
-					m_skillsPrompt.promptChars =
-						static_cast<std::uint32_t>(m_skillsPrompt.prompt.size());
-					if (m_skillsPrompt.prompt.size() >
-						m_activeConfig.skills.limits.maxSkillsPromptChars) {
-						m_skillsPrompt.prompt = m_skillsPrompt.prompt.substr(
-							0,
-							m_activeConfig.skills.limits.maxSkillsPromptChars);
-						m_skillsPrompt.promptChars =
-							static_cast<std::uint32_t>(m_skillsPrompt.prompt.size());
-						m_skillsPrompt.truncated = true;
-					}
-
-					m_hookExecution.diagnostics.lastReminderState = L"reminder_fallback_used";
-					m_hookExecution.diagnostics.lastReminderReason = L"prompt_fallback";
-				}
-
-				const std::wstring genericHookContext = BuildGenericHookBootstrapContextBlock(
-					m_hookExecution.bootstrapFiles);
-				if (!genericHookContext.empty() &&
-					m_skillsPrompt.prompt.find(L"## Hook Bootstrap Context") == std::wstring::npos) {
-					m_skillsPrompt.prompt += genericHookContext;
-					m_skillsPrompt.promptChars =
-						static_cast<std::uint32_t>(m_skillsPrompt.prompt.size());
-					if (m_skillsPrompt.prompt.size() >
-						m_activeConfig.skills.limits.maxSkillsPromptChars) {
-						m_skillsPrompt.prompt = m_skillsPrompt.prompt.substr(
-							0,
-							m_activeConfig.skills.limits.maxSkillsPromptChars);
-						m_skillsPrompt.promptChars =
-							static_cast<std::uint32_t>(m_skillsPrompt.prompt.size());
-						m_skillsPrompt.truncated = true;
-					}
-				}
+				auto hookBootstrapProjection =
+					CSkillsHooksCoordinator::HookBootstrapProjectionContext{
+						.bootstrapFiles = m_hookExecution.bootstrapFiles,
+						.prompt = m_skillsPrompt.prompt,
+						.promptChars = m_skillsPrompt.promptChars,
+						.promptTruncated = m_skillsPrompt.truncated,
+						.maxSkillsPromptChars =
+							m_activeConfig.skills.limits.maxSkillsPromptChars,
+						.lastReminderState =
+							m_hookExecution.diagnostics.lastReminderState,
+						.lastReminderReason =
+							m_hookExecution.diagnostics.lastReminderReason,
+						.selfEvolvingHookTriggered = m_selfEvolvingHookTriggered,
+				};
+				m_skillsHooksCoordinator.ApplyHookBootstrapProjection(
+					hookBootstrapProjection);
 			}
 			else if (!m_hooksEngineEnabled) {
 				++m_hookExecution.diagnostics.skippedCount;
@@ -3644,7 +3081,7 @@ namespace blazeclaw::core {
 		};
 
 		const bool startupFixtureValidationEnabled = ReadBoolEnvOrDefault(
-			L"BLAZECLAW_FIXTURES_STARTUP_VALIDATION_ENABLED",
+			bootstrap::StartupFixtureValidator::kEnvStartupValidationEnabled,
 			false);
 		if (startupFixtureValidationEnabled) {
 			m_serviceBootstrapCoordinator.ValidateStartupFixtures(

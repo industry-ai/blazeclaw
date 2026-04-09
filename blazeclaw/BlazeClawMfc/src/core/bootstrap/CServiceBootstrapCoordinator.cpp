@@ -216,4 +216,9 @@ namespace blazeclaw::core {
 		ValidateStartupFixtures(copy);
 	}
 
+	void CServiceBootstrapCoordinator::AppendStartupTrace(const char* stage) const
+	{
+		m_startupPolicyResolver.AppendStartupTrace(stage);
+	}
+
 } // namespace blazeclaw::core
