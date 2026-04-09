@@ -24,6 +24,7 @@ public:
 
 	void SetEmitter(EmitJsonCallback callback);
 	void SetSessionIdProvider(SessionIdProvider provider);
+	void SetEmitLegacyChannels(bool enabled);
 
 	void EmitTopic(
 		BridgeEventTopic topic,
@@ -47,4 +48,5 @@ private:
 	EmitJsonCallback m_emitJson;
 	SessionIdProvider m_sessionIdProvider;
 	std::uint64_t m_transportSeq = 0;
+	bool m_emitLegacyChannels = true;
 };

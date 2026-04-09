@@ -144,6 +144,8 @@
       const toolTimelineByRequest = new Map();
       const bridgeQueue = [];
       const pending = new Map();
+      const seenBridgeSeq = new Set();
+      const seenBridgeIds = new Set();
 
       const statusEl = document.getElementById("status");
       const messagesEl = document.getElementById("messages");
@@ -337,6 +339,75 @@
           pending.set(id, { resolve, reject });
           post({ channel: "blazeclaw.gateway.rpc", id, method, params });
         });
+      }
+
+      function trackSeenWithLimit(container, key, maxSize) {
+        if (!key) {
+          return false;
+        }
+
+        if (container.has(key)) {
+          return true;
+        }
+
+        container.add(key);
+        if (container.size > maxSize) {
+          const first = container.values().next();
+          if (!first.done) {
+            container.delete(first.value);
+          }
+        }
+
+        return false;
+      }
+
+      function normalizeInboundBridgeEvent(rawMsg) {
+        const msg = rawMsg && typeof rawMsg === "object" ? rawMsg : null;
+        if (!msg) {
+          return null;
+        }
+
+        if (msg.channel === "blazeclaw.transport.event.v1") {
+          const topic = String(msg.topic || "");
+          const payload = msg && typeof msg.payload === "object" ? msg.payload : {};
+          const meta = msg && typeof msg.meta === "object" ? msg.meta : {};
+          const seq = Number(meta.seq || 0);
+          if (seq > 0 && trackSeenWithLimit(seenBridgeSeq, `seq:${seq}`, 512)) {
+            return null;
+          }
+
+          if (topic === "lifecycle") {
+            return { channel: "blazeclaw.gateway.lifecycle", ...payload };
+          }
+          if (topic === "rpc.result") {
+            return { channel: "blazeclaw.gateway.rpc.result", ...payload };
+          }
+          if (topic === "chat.events") {
+            return { channel: "blazeclaw.gateway.chat.events", ...payload };
+          }
+          if (topic === "tools.lifecycle") {
+            return { channel: "blazeclaw.gateway.tools.lifecycle", ...payload };
+          }
+
+          return null;
+        }
+
+        if (msg.channel === "blazeclaw.gateway.rpc.result") {
+          const id = String(msg.id || "");
+          if (trackSeenWithLimit(seenBridgeIds, `rpc:${id}`, 512)) {
+            return null;
+          }
+        }
+
+        if (msg.channel === "blazeclaw.gateway.tools.lifecycle") {
+          const id = String(msg.id || "");
+          const phase = String(msg.phase || "");
+          if (trackSeenWithLimit(seenBridgeIds, `tool:${id}:${phase}`, 512)) {
+            return null;
+          }
+        }
+
+        return msg;
       }
 
       function normalizeFinalAssistantMessage(message) {
@@ -627,7 +698,7 @@
 
       if (window.chrome && window.chrome.webview) {
         window.chrome.webview.addEventListener("message", (event) => {
-          const msg = event && event.data;
+          const msg = normalizeInboundBridgeEvent(event && event.data);
           if (!msg || typeof msg !== "object") {
             return;
           }

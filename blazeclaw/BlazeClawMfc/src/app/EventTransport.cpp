@@ -15,6 +15,11 @@ void CEventTransport::SetSessionIdProvider(SessionIdProvider provider)
 	m_sessionIdProvider = std::move(provider);
 }
 
+void CEventTransport::SetEmitLegacyChannels(const bool enabled)
+{
+	m_emitLegacyChannels = enabled;
+}
+
 void CEventTransport::EmitTopic(
 	const BridgeEventTopic topic,
 	const std::string& payloadObjectJson)
@@ -34,7 +39,10 @@ void CEventTransport::EmitTopic(
 		m_emitJson(canonicalJson);
 	}
 
-	EmitCompatibilityChannels(compatChannels, payloadObjectJson);
+	if (m_emitLegacyChannels)
+	{
+		EmitCompatibilityChannels(compatChannels, payloadObjectJson);
+	}
 }
 
 std::string CEventTransport::TopicToString(const BridgeEventTopic topic)

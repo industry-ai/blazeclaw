@@ -1043,7 +1043,7 @@ namespace {
 		const std::string& correlationId)
 	{
 		std::string json =
-			"{\"channel\":\"blazeclaw.gateway.rpc.result\",\"id\":" +
+			"{\"id\":" +
 			JsonString(correlationId) +
 			",\"ok\":" +
 			(response.ok ? "true" : "false");
@@ -1246,7 +1246,7 @@ namespace {
 	{
 		const auto info = ParseToolStartInfo(paramsJson);
 		std::string json =
-			"{\"channel\":\"blazeclaw.gateway.tools.lifecycle\",\"phase\":\"start\","
+			"{\"phase\":\"start\","
 			"\"source\":" + JsonString(channel) +
 			",\"id\":" + JsonString(requestId) +
 			",\"tool\":" + JsonString(info.tool);
@@ -1266,7 +1266,7 @@ namespace {
 	{
 		const auto info = ParseToolResultInfo(response);
 		std::string json =
-			"{\"channel\":\"blazeclaw.gateway.tools.lifecycle\",\"phase\":" +
+			"{\"phase\":" +
 			JsonString(info.phase.empty() ? "result" : info.phase) +
 			",\"source\":" + JsonString(channel) +
 			",\"id\":" + JsonString(requestId) +
@@ -1596,6 +1596,25 @@ CBlazeClawMFCView::CBlazeClawMFCView() noexcept
 		{
 			return m_bridgeSessionId;
 		});
+
+	bool emitLegacyChannels = true;
+	if (const auto value = GetEnvValue(L"BLAZECLAW_BRIDGE_LEGACY_CHANNELS");
+		value.has_value())
+	{
+		std::wstring normalized = TrimCopy(value.value());
+		for (wchar_t& ch : normalized)
+		{
+			ch = static_cast<wchar_t>(::towlower(ch));
+		}
+
+		if (normalized == L"off" ||
+			normalized == L"false" ||
+			normalized == L"0")
+		{
+			emitLegacyChannels = false;
+		}
+	}
+	m_eventTransport.SetEmitLegacyChannels(emitLegacyChannels);
 }
 
 CBlazeClawMFCView::~CBlazeClawMFCView()
