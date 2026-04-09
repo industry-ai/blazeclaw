@@ -133,6 +133,12 @@ namespace blazeclaw::core {
 			const blazeclaw::config::AppConfig& config,
 			bool forceRefresh,
 			const std::wstring& reason);
+		void ConfigurePolicies(
+			const blazeclaw::config::AppConfig& config);
+		void InitializeModules();
+		void WireGatewayCallbacks();
+		[[nodiscard]] bool FinalizeStartup(
+			const blazeclaw::config::AppConfig& config);
 
 		bool m_running = false;
 		std::string m_activeChatProvider = "local";

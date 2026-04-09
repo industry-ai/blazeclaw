@@ -1025,7 +1025,7 @@ namespace blazeclaw::core {
 		bool ResolveHooksRemediationTelemetryEnabled(
 			const blazeclaw::config::AppConfig& config) {
 			return ReadBoolEnvOrDefault(
-				L"BLAZECLAW_HOOKS_REMEDIATION_TELEMETRY_ENABLED",
+				L"BLAZENCLAW_HOOKS_REMEDIATION_TELEMETRY_ENABLED",
 				config.hooks.engine.remediationTelemetryEnabled);
 		}
 
@@ -1849,7 +1849,7 @@ namespace blazeclaw::core {
 						if (!process.started) {
 							result.executed = false;
 							result.status = "error";
-							result.result = tools::TruncateBraveToolOutput(process.output);
+							result.result = process.output;
 							result.errorCode = process.errorCode.empty()
 								? "process_start_failed"
 								: process.errorCode;
@@ -1862,7 +1862,7 @@ namespace blazeclaw::core {
 						if (process.timedOut) {
 							result.executed = false;
 							result.status = "timed_out";
-							result.result = tools::TruncateBraveToolOutput(process.output);
+							result.result = process.output;
 							result.errorCode = process.errorCode.empty()
 								? "deadline_exceeded"
 								: process.errorCode;
@@ -1872,7 +1872,7 @@ namespace blazeclaw::core {
 							return result;
 						}
 
-						result.result = tools::TruncateBraveToolOutput(process.output);
+						result.result = process.output;
 						if (process.exitCode == 0) {
 							result.executed = true;
 							result.status = "ok";
@@ -2496,6 +2496,15 @@ namespace blazeclaw::core {
 		}
 		AppendStartupTrace("ServiceManager.Start.begin");
 
+		ConfigurePolicies(config);
+		InitializeModules();
+		WireGatewayCallbacks();
+		return FinalizeStartup(config);
+	}
+
+	void ServiceManager::ConfigurePolicies(
+		const blazeclaw::config::AppConfig& config)
+	{
 		m_activeConfig = config;
 		m_activeChatProvider = config.chat.activeProvider.empty()
 			? "local"
@@ -2613,6 +2622,10 @@ namespace blazeclaw::core {
 				L"email policy rollout gate activated runtime policy profile monitor/enforce mode.");
 		}
 		AppendStartupTrace("ServiceManager.Start.policy.ready");
+	}
+
+	void ServiceManager::InitializeModules()
+	{
 		m_selfEvolvingHookTriggered = false;
 		m_agentsScope = m_agentsCatalogService.BuildSnapshot(
 			std::filesystem::current_path(),
@@ -2627,7 +2640,9 @@ namespace blazeclaw::core {
 		m_agentsAuthProfileService.Configure(m_activeConfig);
 		m_agentsAuthProfileService.Initialize(std::filesystem::current_path());
 		m_authProfiles = m_agentsAuthProfileService.Snapshot(1735690000000);
-		m_sandbox = m_agentsSandboxService.BuildSnapshot(m_agentsScope, m_activeConfig);
+		m_sandbox = m_agentsSandboxService.BuildSnapshot(
+			m_agentsScope,
+			m_activeConfig);
 		m_agentsTranscriptSafetyService.Configure(m_activeConfig);
 		m_subagentRegistryService.Configure(m_activeConfig);
 		m_subagentRegistryService.Initialize(std::filesystem::current_path());
@@ -2843,7 +2858,7 @@ namespace blazeclaw::core {
 				.queueWaitTimeoutMs = m_chatRuntimeQueueWaitTimeoutMs,
 				.executionTimeoutMs = m_chatRuntimeExecutionTimeoutMs,
 				.asyncQueueEnabled = m_chatRuntimeAsyncQueueEnabled,
-			   .errorQueueFull = runtime::contracts::kErrorQueueFull,
+				.errorQueueFull = runtime::contracts::kErrorQueueFull,
 				.errorCancelled = runtime::contracts::kErrorCancelled,
 				.errorTimedOut = runtime::contracts::kErrorTimedOut,
 				.errorWorkerUnavailable = runtime::contracts::kErrorWorkerUnavailable,
@@ -3065,7 +3080,10 @@ namespace blazeclaw::core {
 		else {
 			AppendStartupTrace("ServiceManager.Start.fixtures.validation.skipped");
 		}
+	}
 
+	void ServiceManager::WireGatewayCallbacks()
+	{
 		m_gatewayHost.SetSkillsCatalogState(BuildGatewaySkillsState());
 		m_gatewayHost.SetSkillsRefreshCallback([this]() {
 			RefreshSkillsState(m_activeConfig, true, L"manual-refresh");
@@ -3168,7 +3186,7 @@ namespace blazeclaw::core {
 							.code = "empty_update",
 							.message = "No update payload was provided.",
 							.detailsJson = std::nullopt,
-						  .retryable = false,
+							.retryable = false,
 							.retryAfterMs = std::nullopt,
 						},
 					};
@@ -3195,7 +3213,7 @@ namespace blazeclaw::core {
 							.code = "doc_unavailable",
 							.message = "No active document context for skill update.",
 							.detailsJson = std::nullopt,
-						   .retryable = true,
+							.retryable = true,
 							.retryAfterMs = 100,
 						},
 					};
@@ -3214,7 +3232,7 @@ namespace blazeclaw::core {
 								? "Failed to persist skill update payload."
 								: persistError,
 							.detailsJson = std::nullopt,
-						  .retryable = false,
+							.retryable = false,
 							.retryAfterMs = std::nullopt,
 						},
 					};
@@ -3324,7 +3342,7 @@ namespace blazeclaw::core {
 							.commandName = WideToNarrowAscii(command.name),
 							.description = WideToNarrowAscii(command.description),
 							.toolName = WideToNarrowAscii(command.dispatch.toolName),
-						 .argMode = WideToNarrowAscii(command.dispatch.argMode),
+							.argMode = WideToNarrowAscii(command.dispatch.argMode),
 							});
 					}
 
@@ -3351,19 +3369,19 @@ namespace blazeclaw::core {
 							.skillsPrompt = WideToNarrowAscii(m_skillsPrompt.prompt),
 							.toolBindings = std::move(toolBindings),
 							.runtimeTools = m_gatewayHost.ListRuntimeTools(),
-						  .enforceOrderedAllowlist = request.enforceOrderedAllowlist,
+							.enforceOrderedAllowlist = request.enforceOrderedAllowlist,
 							.orderedAllowedToolTargets = request.orderedAllowedToolTargets,
-						   .enableDynamicToolLoop = enableEmbeddedDynamicLoop,
-						 .toolExecutorV2 = [this](
+							.enableDynamicToolLoop = enableEmbeddedDynamicLoop,
+							.toolExecutorV2 = [this](
 								const blazeclaw::gateway::ToolExecuteRequestV2& executeRequest) {
 								return m_gatewayHost.ExecuteRuntimeToolV2(executeRequest);
 							},
 							.toolExecutor = [this](
 												const std::string& tool,
 												const std::optional<std::string>& argsJson) {
-							  return m_gatewayHost.ExecuteRuntimeTool(tool, argsJson);
+								return m_gatewayHost.ExecuteRuntimeTool(tool, argsJson);
 							},
-						 .isCancellationRequested = [this, runId = request.runId]() {
+							.isCancellationRequested = [this, runId = request.runId]() {
 								return IsEmbeddedRunCancelled(runId);
 							},
 						});
@@ -3373,7 +3391,7 @@ namespace blazeclaw::core {
 						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
 							.ok = false,
 							.assistantText = {},
-						   .modelId = activeModel,
+							.modelId = activeModel,
 							.errorCode = "embedded_run_rejected",
 							.errorMessage = embeddedExecution.errorMessage.empty()
 								? embeddedExecution.reason
@@ -3393,7 +3411,7 @@ namespace blazeclaw::core {
 									.sessionId = delta.sessionId,
 									.phase = delta.phase,
 									.toolName = delta.toolName,
-								 .fallbackBackend = delta.fallbackBackend,
+									.fallbackBackend = delta.fallbackBackend,
 									.fallbackAction = delta.fallbackAction,
 									.fallbackAttempt = delta.fallbackAttempt,
 									.fallbackMaxAttempts = delta.fallbackMaxAttempts,
@@ -3444,7 +3462,7 @@ namespace blazeclaw::core {
 									.assistantText = {},
 									.assistantDeltas = embeddedExecution.assistantDeltas,
 									.taskDeltas = std::move(runtimeDeltas),
-								   .modelId = activeModel,
+									.modelId = activeModel,
 									.errorCode = embeddedExecution.errorCode.empty()
 										? "embedded_tool_execution_failed"
 										: embeddedExecution.errorCode,
@@ -3459,8 +3477,8 @@ namespace blazeclaw::core {
 							.ok = true,
 							.assistantText = embeddedExecution.assistantText,
 							.assistantDeltas = embeddedExecution.assistantDeltas,
-						   .taskDeltas = std::move(runtimeDeltas),
-						   .modelId = activeModel,
+							.taskDeltas = std::move(runtimeDeltas),
+							.modelId = activeModel,
 							.errorCode = {},
 							.errorMessage = {},
 						};
@@ -3475,7 +3493,7 @@ namespace blazeclaw::core {
 							return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
 								.ok = false,
 								.assistantText = {},
-							   .modelId = activeModel,
+								.modelId = activeModel,
 								.errorCode = "deepseek_api_key_missing",
 								.errorMessage =
 									"DeepSeek API key missing. Configure DeepSeek extension first.",
@@ -3614,12 +3632,12 @@ namespace blazeclaw::core {
 							generatedTokens);
 
 						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-							  .ok = true,
-							  .assistantText = assistantText,
-						   .assistantDeltas = streamedLocalSnapshots,
-							  .modelId = modelId,
-							  .errorCode = {},
-							  .errorMessage = {},
+							.ok = true,
+							.assistantText = assistantText,
+							.assistantDeltas = streamedLocalSnapshots,
+							.modelId = modelId,
+							.errorCode = {},
+							.errorMessage = {},
 						};
 					}
 
@@ -3826,7 +3844,11 @@ namespace blazeclaw::core {
 
 				return gatewayResult;
 			});
+	}
 
+	bool ServiceManager::FinalizeStartup(
+		const blazeclaw::config::AppConfig& config)
+	{
 		AppendStartupTrace("ServiceManager.Start.gateway.beforeStart");
 		const bool gatewayStartupEnabled = false;
 		if (!gatewayStartupEnabled) {
