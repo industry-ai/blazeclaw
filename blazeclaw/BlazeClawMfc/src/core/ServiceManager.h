@@ -206,6 +206,8 @@ namespace blazeclaw::core {
 			const std::string& reason) const;
 
 		[[nodiscard]] blazeclaw::gateway::SkillsCatalogGatewayState BuildGatewaySkillsState() const;
+		void RefreshGatewaySkillsStateProjection();
+		void PublishGatewaySkillsStateProjection();
 		[[nodiscard]] blazeclaw::gateway::SkillsCatalogGatewayEntry BuildGatewaySkillEntry(
 			const SkillsCatalogEntry& entry,
 			const SkillsEligibilityEntry* eligibility,
@@ -293,6 +295,7 @@ namespace blazeclaw::core {
 		CDiagnosticsReportBuilder m_diagnosticsReportBuilder;
 		CToolRuntimeRegistry m_toolRuntimeRegistry;
 		blazeclaw::gateway::GatewayHost m_gatewayHost;
+		blazeclaw::gateway::SkillsCatalogGatewayState m_gatewaySkillsStateProjection;
 
 		[[nodiscard]] std::optional<std::string> ResolveDeepSeekCredentialUtf8() const;
 		[[nodiscard]] blazeclaw::gateway::GatewayHost::ChatRuntimeResult

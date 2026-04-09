@@ -151,6 +151,12 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
 7. **Reduce duplicated state projections**
    - Build snapshot DTOs once per report/tick where possible.
    - Reuse immutable snapshots across diagnostics and gateway publication.
+   - ✅ Implemented gateway skills projection deduplication.
+   - Added cached projection state and helper flow:
+     - `RefreshGatewaySkillsStateProjection()`
+     - `PublishGatewaySkillsStateProjection()`
+   - Replaced repeated direct `BuildGatewaySkillsState()` publish calls in
+     refresh/update/startup paths with cached projection refresh + publish.
 
 ## C) Maintainability Optimizations
 

@@ -1694,6 +1694,16 @@ namespace blazeclaw::core {
 			});
 	}
 
+	void ServiceManager::RefreshGatewaySkillsStateProjection()
+	{
+		m_gatewaySkillsStateProjection = BuildGatewaySkillsState();
+	}
+
+	void ServiceManager::PublishGatewaySkillsStateProjection()
+	{
+		m_gatewayHost.SetSkillsCatalogState(m_gatewaySkillsStateProjection);
+	}
+
 	blazeclaw::gateway::SkillsCatalogGatewayEntry
 		ServiceManager::BuildGatewaySkillEntry(
 			const SkillsCatalogEntry& entry,
@@ -1880,6 +1890,7 @@ namespace blazeclaw::core {
 					std::filesystem::current_path()),
 				.hooksFallbackPromptInjection = m_state.hooks.fallbackPromptInjection,
 			});
+		RefreshGatewaySkillsStateProjection();
 	}
 
 	bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
@@ -2447,10 +2458,11 @@ namespace blazeclaw::core {
 
 	void ServiceManager::BindSkillsCallbacks()
 	{
-		m_gatewayHost.SetSkillsCatalogState(BuildGatewaySkillsState());
+		RefreshGatewaySkillsStateProjection();
+		PublishGatewaySkillsStateProjection();
 		m_gatewayHost.SetSkillsRefreshCallback([this]() {
 			RefreshSkillsState(m_activeConfig, true, L"manual-refresh");
-			return BuildGatewaySkillsState();
+			return m_gatewaySkillsStateProjection;
 			});
 		m_gatewayHost.SetSkillsUpdateCallback([this](
 			const blazeclaw::gateway::protocol::RequestFrame& request) {
@@ -2602,7 +2614,7 @@ namespace blazeclaw::core {
 				}
 
 				RefreshSkillsState(m_activeConfig, true, L"skills.update");
-				m_gatewayHost.SetSkillsCatalogState(BuildGatewaySkillsState());
+				PublishGatewaySkillsStateProjection();
 				if (mainFrame != nullptr) {
 					mainFrame->RefreshSkillView();
 				}
@@ -3291,7 +3303,7 @@ namespace blazeclaw::core {
 				AppendStartupTrace("ServiceManager.Start.gateway.localInit.skipped");
 			}
 			m_running = true;
-			m_gatewayHost.SetSkillsCatalogState(BuildGatewaySkillsState());
+			PublishGatewaySkillsStateProjection();
 			return true;
 		}
 
@@ -3311,7 +3323,7 @@ namespace blazeclaw::core {
 				L"gateway startup failed; running in degraded local mode.");
 			AppendStartupTrace("ServiceManager.Start.gateway.failed");
 			m_running = true;
-			m_gatewayHost.SetSkillsCatalogState(BuildGatewaySkillsState());
+			PublishGatewaySkillsStateProjection();
 			return true;
 		}
 
