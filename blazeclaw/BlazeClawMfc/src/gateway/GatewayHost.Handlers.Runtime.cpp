@@ -3,6 +3,9 @@
 #include "GatewayJsonUtils.h"
 #include "Telemetry.h"
 #include "ChatRunStageContext.h"
+#include "TaskDeltaRepository.h"
+#include "TaskDeltaLegacyAdapter.h"
+#include "TaskDeltaSchemaValidator.h"
 #include "executors/EmailScheduleExecutor.h"
 
 #include <algorithm>
@@ -429,6 +432,8 @@ namespace blazeclaw::gateway {
 			const GatewayHost::ChatRuntimeResult::TaskDeltaEntry& delta) {
 			return "{\"index\":" +
 				std::to_string(delta.index) +
+				",\"schemaVersion\":" +
+				std::to_string(delta.schemaVersion) +
 				",\"runId\":\"" +
 				EscapeJsonLocal(delta.runId) +
 				"\",\"sessionId\":\"" +
@@ -2872,8 +2877,8 @@ namespace blazeclaw::gateway {
 					};
 				}
 
-				const auto it = m_taskDeltasByRunId.find(runId);
-				if (it == m_taskDeltasByRunId.end()) {
+				const auto storedDeltas = m_taskDeltaRepository.Get(runId);
+				if (!storedDeltas.has_value()) {
 					return protocol::ResponseFrame{
 						.id = request.id,
 						.ok = true,
@@ -2884,7 +2889,7 @@ namespace blazeclaw::gateway {
 					};
 				}
 
-				auto orderedTaskDeltas = it->second;
+				auto orderedTaskDeltas = storedDeltas.value();
 				std::sort(
 					orderedTaskDeltas.begin(),
 					orderedTaskDeltas.end(),
@@ -2892,6 +2897,32 @@ namespace blazeclaw::gateway {
 						const ChatRuntimeResult::TaskDeltaEntry& right) {
 							return left.index < right.index;
 					});
+
+				orderedTaskDeltas = TaskDeltaLegacyAdapter::AdaptRun(
+					runId,
+					orderedTaskDeltas.empty() ? std::string("main") : orderedTaskDeltas.front().sessionId,
+					orderedTaskDeltas);
+
+				std::string schemaErrorCode;
+				std::string schemaErrorMessage;
+				if (!TaskDeltaSchemaValidator::ValidateRun(
+					runId,
+					orderedTaskDeltas,
+					schemaErrorCode,
+					schemaErrorMessage)) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = false,
+						.payloadJson = std::nullopt,
+						.error = protocol::ErrorShape{
+							.code = schemaErrorCode,
+							.message = schemaErrorMessage,
+							.detailsJson = std::nullopt,
+							.retryable = false,
+							.retryAfterMs = std::nullopt,
+						},
+					};
+				}
 
 				std::string deltasJson = "[";
 				for (std::size_t i = 0; i < orderedTaskDeltas.size(); ++i) {
@@ -2920,15 +2951,11 @@ namespace blazeclaw::gateway {
 					ExtractStringParam(request.paramsJson, "runId");
 				std::size_t cleared = 0;
 				if (runId.empty()) {
-					cleared = m_taskDeltasByRunId.size();
-					m_taskDeltasByRunId.clear();
+					cleared = m_taskDeltaRepository.Size();
+					m_taskDeltaRepository.ClearAll();
 				}
 				else {
-					const auto it = m_taskDeltasByRunId.find(runId);
-					if (it != m_taskDeltasByRunId.end()) {
-						cleared = 1;
-						m_taskDeltasByRunId.erase(it);
-					}
+					cleared = m_taskDeltaRepository.Clear(runId) ? 1 : 0;
 				}
 
 				return protocol::ResponseFrame{
@@ -2937,7 +2964,7 @@ namespace blazeclaw::gateway {
 					.payloadJson =
 						"{\"runId\":\"" + EscapeJsonLocal(runId.empty() ? "*" : runId) +
 						"\",\"cleared\":" + std::to_string(cleared) +
-						",\"remaining\":" + std::to_string(m_taskDeltasByRunId.size()) + "}",
+					 ",\"remaining\":" + std::to_string(m_taskDeltaRepository.Size()) + "}",
 					.error = std::nullopt,
 				};
 			});
@@ -3109,14 +3136,26 @@ namespace blazeclaw::gateway {
 							normalizedTaskDeltas.reserve(taskDeltas.size());
 							for (std::size_t index = 0; index < taskDeltas.size(); ++index) {
 								normalizedTaskDeltas.push_back(
-									NormalizeTaskDeltaEntry(
+									TaskDeltaLegacyAdapter::AdaptEntry(
 										taskDeltas[index],
 										runId,
 										sessionKey,
 										index));
 							}
 
-							m_taskDeltasByRunId.insert_or_assign(runId, normalizedTaskDeltas);
+							std::string schemaErrorCode;
+							std::string schemaErrorMessage;
+							if (!TaskDeltaSchemaValidator::ValidateRun(
+								runId,
+								normalizedTaskDeltas,
+								schemaErrorCode,
+								schemaErrorMessage)) {
+								return;
+							}
+
+							const bool upserted =
+								m_taskDeltaRepository.Upsert(runId, normalizedTaskDeltas);
+							(void)upserted;
 							PersistTaskDeltas();
 							for (const auto& delta : normalizedTaskDeltas) {
 								EmitTelemetryEvent(
@@ -3184,8 +3223,11 @@ namespace blazeclaw::gateway {
 								",\"fallback\":" + std::to_string(m_taskDeltaRunFallbackCount) + "}" +
 								"}");
 
-							if (m_taskDeltasByRunId.size() > 64) {
-								m_taskDeltasByRunId.erase(m_taskDeltasByRunId.begin());
+							if (m_taskDeltaRepository.Size() > 64) {
+								const auto& snapshot = m_taskDeltaRepository.Snapshot();
+								if (!snapshot.empty()) {
+									m_taskDeltasByRunId.erase(snapshot.begin()->first);
+								}
 								PersistTaskDeltas();
 							}
 					};

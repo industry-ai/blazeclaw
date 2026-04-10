@@ -173,6 +173,12 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
 - ✅ Workstream A control-stage output enrichment:
   - attachment MIME extraction and invalid-message error envelope assembly are now
     stage-owned outputs (`attachmentMimeTypes`, `responseError`) consumed by `chat.send`.
+- ✅ Workstream B task-delta contract hardening baseline implemented:
+  - introduced schema validator, legacy adapter, and run-scoped repository
+  - added `schemaVersion` to task-delta entries and enforced schema validation
+    on persisted/replayed/runtime task-delta paths
+  - strengthened `gateway.runtime.taskDeltas.get` response contract validation and
+    added dedicated task-delta contract tests
 
 [back to top](#index)
 

@@ -481,7 +481,7 @@ namespace blazeclaw::gateway::protocol {
 				if (!IsArrayFieldExplicitlyEmpty(payload, "taskDeltas") &&
 					!PayloadContainsAllFieldTokens(
 						payload,
-						{ "index", "phase", "status", "stepLabel", "startedAtMs", "completedAtMs", "latencyMs" })) {
+						{ "index", "schemaVersion", "runId", "sessionId", "phase", "status", "stepLabel", "startedAtMs", "completedAtMs", "latencyMs" })) {
 					SetIssue(
 						issue,
 						"schema_invalid_response",

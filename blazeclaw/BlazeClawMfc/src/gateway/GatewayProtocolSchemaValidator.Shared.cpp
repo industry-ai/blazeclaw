@@ -4,179 +4,212 @@
 
 namespace blazeclaw::gateway::protocol {
 
-std::string Trim(const std::string& value) {
-    std::size_t start = 0;
-    std::size_t end = value.size();
+	std::string Trim(const std::string& value) {
+		std::size_t start = 0;
+		std::size_t end = value.size();
 
-    while (start < end && std::isspace(static_cast<unsigned char>(value[start])) != 0) {
-        ++start;
-    }
+		while (start < end && std::isspace(static_cast<unsigned char>(value[start])) != 0) {
+			++start;
+		}
 
-    while (end > start && std::isspace(static_cast<unsigned char>(value[end - 1])) != 0) {
-        --end;
-    }
+		while (end > start && std::isspace(static_cast<unsigned char>(value[end - 1])) != 0) {
+			--end;
+		}
 
-    return value.substr(start, end - start);
-}
+		return value.substr(start, end - start);
+	}
 
-bool IsJsonObjectShape(const std::string& value) {
-    const std::string trimmed = Trim(value);
-    return trimmed.size() >= 2 && trimmed.front() == '{' && trimmed.back() == '}';
-}
+	bool IsJsonObjectShape(const std::string& value) {
+		const std::string trimmed = Trim(value);
+		return trimmed.size() >= 2 && trimmed.front() == '{' && trimmed.back() == '}';
+	}
 
-void SetIssue(SchemaValidationIssue& issue, const std::string& code, const std::string& message) {
-    issue.code = code;
-    issue.message = message;
-}
+	void SetIssue(SchemaValidationIssue& issue, const std::string& code, const std::string& message) {
+		issue.code = code;
+		issue.message = message;
+	}
 
-bool ContainsFieldToken(const std::string& json, const std::string& fieldName, std::size_t& tokenPos) {
-    const std::string token = "\"" + fieldName + "\"";
-    tokenPos = json.find(token);
-    return tokenPos != std::string::npos;
-}
+	bool ContainsFieldToken(const std::string& json, const std::string& fieldName, std::size_t& tokenPos) {
+		const std::string token = "\"" + fieldName + "\"";
+		tokenPos = json.find(token);
+		return tokenPos != std::string::npos;
+	}
 
-bool IsFieldValueType(const std::string& json, const std::string& fieldName, char expectedFirstChar) {
-    std::size_t tokenPos = 0;
-    if (!ContainsFieldToken(json, fieldName, tokenPos)) {
-        return false;
-    }
+	bool IsFieldValueType(const std::string& json, const std::string& fieldName, char expectedFirstChar) {
+		std::size_t tokenPos = 0;
+		if (!ContainsFieldToken(json, fieldName, tokenPos)) {
+			return false;
+		}
 
-    std::size_t valuePos = json.find(':', tokenPos);
-    if (valuePos == std::string::npos) {
-        return false;
-    }
+		std::size_t valuePos = json.find(':', tokenPos);
+		if (valuePos == std::string::npos) {
+			return false;
+		}
 
-    ++valuePos;
-    while (valuePos < json.size() && std::isspace(static_cast<unsigned char>(json[valuePos])) != 0) {
-        ++valuePos;
-    }
+		++valuePos;
+		while (valuePos < json.size() && std::isspace(static_cast<unsigned char>(json[valuePos])) != 0) {
+			++valuePos;
+		}
 
-    if (valuePos >= json.size()) {
-        return false;
-    }
+		if (valuePos >= json.size()) {
+			return false;
+		}
 
-    return json[valuePos] == expectedFirstChar;
-}
+		return json[valuePos] == expectedFirstChar;
+	}
 
-bool IsFieldBoolean(const std::string& json, const std::string& fieldName) {
-    std::size_t tokenPos = 0;
-    if (!ContainsFieldToken(json, fieldName, tokenPos)) {
-        return false;
-    }
+	bool IsFieldBoolean(const std::string& json, const std::string& fieldName) {
+		std::size_t tokenPos = 0;
+		if (!ContainsFieldToken(json, fieldName, tokenPos)) {
+			return false;
+		}
 
-    std::size_t valuePos = json.find(':', tokenPos);
-    if (valuePos == std::string::npos) {
-        return false;
-    }
+		std::size_t valuePos = json.find(':', tokenPos);
+		if (valuePos == std::string::npos) {
+			return false;
+		}
 
-    ++valuePos;
-    while (valuePos < json.size() && std::isspace(static_cast<unsigned char>(json[valuePos])) != 0) {
-        ++valuePos;
-    }
+		++valuePos;
+		while (valuePos < json.size() && std::isspace(static_cast<unsigned char>(json[valuePos])) != 0) {
+			++valuePos;
+		}
 
-    return json.compare(valuePos, 4, "true") == 0 || json.compare(valuePos, 5, "false") == 0;
-}
+		return json.compare(valuePos, 4, "true") == 0 || json.compare(valuePos, 5, "false") == 0;
+	}
 
-bool IsFieldNumber(const std::string& json, const std::string& fieldName) {
-    std::size_t tokenPos = 0;
-    if (!ContainsFieldToken(json, fieldName, tokenPos)) {
-        return false;
-    }
+	bool IsFieldNumber(const std::string& json, const std::string& fieldName) {
+		std::size_t tokenPos = 0;
+		if (!ContainsFieldToken(json, fieldName, tokenPos)) {
+			return false;
+		}
 
-    std::size_t valuePos = json.find(':', tokenPos);
-    if (valuePos == std::string::npos) {
-        return false;
-    }
+		std::size_t valuePos = json.find(':', tokenPos);
+		if (valuePos == std::string::npos) {
+			return false;
+		}
 
-    ++valuePos;
-    while (valuePos < json.size() && std::isspace(static_cast<unsigned char>(json[valuePos])) != 0) {
-        ++valuePos;
-    }
+		++valuePos;
+		while (valuePos < json.size() && std::isspace(static_cast<unsigned char>(json[valuePos])) != 0) {
+			++valuePos;
+		}
 
-    if (valuePos >= json.size()) {
-        return false;
-    }
+		if (valuePos >= json.size()) {
+			return false;
+		}
 
-    const char ch = json[valuePos];
-    return std::isdigit(static_cast<unsigned char>(ch)) != 0 || ch == '-';
-}
+		const char ch = json[valuePos];
+		return std::isdigit(static_cast<unsigned char>(ch)) != 0 || ch == '-';
+	}
 
-bool IsArrayFieldExplicitlyEmpty(const std::string& json, const std::string& fieldName) {
-    std::size_t tokenPos = 0;
-    if (!ContainsFieldToken(json, fieldName, tokenPos)) {
-        return false;
-    }
+	bool IsArrayFieldExplicitlyEmpty(const std::string& json, const std::string& fieldName) {
+		std::size_t tokenPos = 0;
+		if (!ContainsFieldToken(json, fieldName, tokenPos)) {
+			return false;
+		}
 
-    std::size_t valuePos = json.find(':', tokenPos);
-    if (valuePos == std::string::npos) {
-        return false;
-    }
+		std::size_t valuePos = json.find(':', tokenPos);
+		if (valuePos == std::string::npos) {
+			return false;
+		}
 
-    ++valuePos;
-    while (valuePos < json.size() && std::isspace(static_cast<unsigned char>(json[valuePos])) != 0) {
-        ++valuePos;
-    }
+		++valuePos;
+		while (valuePos < json.size() && std::isspace(static_cast<unsigned char>(json[valuePos])) != 0) {
+			++valuePos;
+		}
 
-    if (valuePos >= json.size() || json[valuePos] != '[') {
-        return false;
-    }
+		if (valuePos >= json.size() || json[valuePos] != '[') {
+			return false;
+		}
 
-    ++valuePos;
-    while (valuePos < json.size() && std::isspace(static_cast<unsigned char>(json[valuePos])) != 0) {
-        ++valuePos;
-    }
+		++valuePos;
+		while (valuePos < json.size() && std::isspace(static_cast<unsigned char>(json[valuePos])) != 0) {
+			++valuePos;
+		}
 
-    return valuePos < json.size() && json[valuePos] == ']';
-}
+		return valuePos < json.size() && json[valuePos] == ']';
+	}
 
-bool PayloadContainsAllFieldTokens(const std::string& json, std::initializer_list<const char*> fieldNames) {
-    for (const char* fieldName : fieldNames) {
-        std::size_t tokenPos = 0;
-        if (!ContainsFieldToken(json, fieldName, tokenPos)) {
-            return false;
-        }
-    }
+	bool PayloadContainsAllFieldTokens(const std::string& json, std::initializer_list<const char*> fieldNames) {
+		for (const char* fieldName : fieldNames) {
+			std::size_t tokenPos = 0;
+			if (!ContainsFieldToken(json, fieldName, tokenPos)) {
+				return false;
+			}
+		}
 
-    return true;
-}
+		return true;
+	}
 
-bool PayloadContainsAllStringValues(const std::string& json, std::initializer_list<const char*> values) {
-    for (const char* value : values) {
-        const std::string token = "\"" + std::string(value) + "\"";
-        if (json.find(token) == std::string::npos) {
-            return false;
-        }
-    }
+	bool PayloadContainsAllStringValues(const std::string& json, std::initializer_list<const char*> values) {
+		for (const char* value : values) {
+			const std::string token = "\"" + std::string(value) + "\"";
+			if (json.find(token) == std::string::npos) {
+				return false;
+			}
+		}
 
-    return true;
-}
+		return true;
+	}
 
-bool ValidateResponseEnvelope(const ResponseFrame& response, SchemaValidationIssue& issue) {
-    if (response.id.empty()) {
-        SetIssue(issue, "schema_invalid_response", "Response `id` is required.");
-        return false;
-    }
+	bool ValidateResponseEnvelope(const ResponseFrame& response, SchemaValidationIssue& issue) {
+		if (response.id.empty()) {
+			SetIssue(issue, "schema_invalid_response", "Response `id` is required.");
+			return false;
+		}
 
-    if (response.ok) {
-        if (!response.payloadJson.has_value() || !IsJsonObjectShape(response.payloadJson.value())) {
-            SetIssue(issue, "schema_invalid_response", "Response `payload` must be a JSON object.");
-            return false;
-        }
-    }
-    else {
-        if (!response.error.has_value()) {
-            SetIssue(issue, "schema_invalid_response", "Error response must include `error`.");
-            return false;
-        }
+		if (response.ok) {
+			if (!response.payloadJson.has_value() || !IsJsonObjectShape(response.payloadJson.value())) {
+				SetIssue(issue, "schema_invalid_response", "Response `payload` must be a JSON object.");
+				return false;
+			}
+		}
+		else {
+			if (!response.error.has_value()) {
+				SetIssue(issue, "schema_invalid_response", "Error response must include `error`.");
+				return false;
+			}
 
-        const auto& errorShape = response.error.value();
-        if (errorShape.code.empty() || errorShape.message.empty()) {
-            SetIssue(issue, "schema_invalid_response", "Error response must include non-empty `error.code` and `error.message`.");
-            return false;
-        }
-    }
+			const auto& errorShape = response.error.value();
+			if (errorShape.code.empty() || errorShape.message.empty()) {
+				SetIssue(issue, "schema_invalid_response", "Error response must include non-empty `error.code` and `error.message`.");
+				return false;
+			}
+		}
 
-    return true;
-}
+		return true;
+	}
+
+	bool ValidateTaskDeltaPayloadShape(const std::string& payloadJson, SchemaValidationIssue& issue) {
+		if (!IsFieldValueType(payloadJson, "runId", '"')) {
+			SetIssue(issue, "schema_invalid_response", "Task delta payload requires string runId.");
+			return false;
+		}
+
+		if (!IsFieldValueType(payloadJson, "taskDeltas", '[')) {
+			SetIssue(issue, "schema_invalid_response", "Task delta payload requires taskDeltas array.");
+			return false;
+		}
+
+		if (!IsFieldNumber(payloadJson, "count")) {
+			SetIssue(issue, "schema_invalid_response", "Task delta payload requires numeric count.");
+			return false;
+		}
+
+		if (IsArrayFieldExplicitlyEmpty(payloadJson, "taskDeltas")) {
+			return true;
+		}
+
+		if (!PayloadContainsAllFieldTokens(
+			payloadJson,
+			{ "index", "runId", "sessionId", "phase", "status", "stepLabel" })) {
+			SetIssue(
+				issue,
+				"schema_invalid_response",
+				"Task delta entries require index/runId/sessionId/phase/status/stepLabel.");
+			return false;
+		}
+
+		return true;
+	}
 
 } // namespace blazeclaw::gateway::protocol

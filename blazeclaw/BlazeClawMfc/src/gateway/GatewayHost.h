@@ -11,6 +11,7 @@
 #include "GatewayWebSocketTransport.h"
 #include "GatewayProtocolContract.h"
 #include "ChatRunPipelineOrchestrator.h"
+#include "TaskDeltaRepository.h"
 
 #include <unordered_set>
 
@@ -132,26 +133,7 @@ namespace blazeclaw::gateway {
 		};
 
 		struct ChatRuntimeResult {
-			struct TaskDeltaEntry {
-				std::size_t index = 0;
-				std::string runId;
-				std::string sessionId;
-				std::string phase;
-				std::string toolName;
-				std::string fallbackBackend;
-				std::string fallbackAction;
-				std::size_t fallbackAttempt = 0;
-				std::size_t fallbackMaxAttempts = 0;
-				std::string argsJson;
-				std::string resultJson;
-				std::string status;
-				std::string errorCode;
-				std::uint64_t startedAtMs = 0;
-				std::uint64_t completedAtMs = 0;
-				std::uint64_t latencyMs = 0;
-				std::string modelTurnId;
-				std::string stepLabel;
-			};
+			using TaskDeltaEntry = blazeclaw::gateway::TaskDeltaEntry;
 
 			bool ok = false;
 			std::string assistantText;
@@ -397,6 +379,7 @@ namespace blazeclaw::gateway {
 		EmbeddingsGenerateCallback m_embeddingsGenerateCallback;
 		EmbeddingsBatchCallback m_embeddingsBatchCallback;
 		ChatRunPipelineOrchestrator m_chatRunPipelineOrchestrator;
+		TaskDeltaRepository m_taskDeltaRepository{ m_taskDeltasByRunId };
 	};
 
 } // namespace blazeclaw::gateway

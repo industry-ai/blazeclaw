@@ -6,6 +6,9 @@
 #include "GatewayProtocolCodec.h"
 #include "GatewayProtocolSchemaValidator.h"
 #include "PluginHostAdapter.h"
+#include "TaskDeltaRepository.h"
+#include "TaskDeltaLegacyAdapter.h"
+#include "TaskDeltaSchemaValidator.h"
 #include "python/PythonRuntimeDispatcher.h"
 #include "generated/GatewayHandlerCatalog.Generated.h"
 #include "Telemetry.h"
@@ -20,6 +23,7 @@
 #include <nlohmann/json.hpp>
 
 namespace blazeclaw::gateway {
+
 	namespace {
 		std::string EscapeJson(const std::string& value);
 
@@ -345,6 +349,7 @@ namespace blazeclaw::gateway {
 		std::string SerializeTaskDeltaEntry(
 			const GatewayHost::ChatRuntimeResult::TaskDeltaEntry& delta) {
 			return "{\"index\":" + std::to_string(delta.index) +
+				",\"schemaVersion\":" + std::to_string(delta.schemaVersion) +
 				",\"runId\":\"" + EscapeJson(delta.runId) +
 				"\",\"sessionId\":\"" + EscapeJson(delta.sessionId) +
 				"\",\"phase\":\"" + EscapeJson(delta.phase) +
@@ -1028,6 +1033,7 @@ namespace blazeclaw::gateway {
 
 				ChatRuntimeResult::TaskDeltaEntry delta;
 				delta.index = deltaNode.value("index", std::size_t{ 0 });
+				delta.schemaVersion = deltaNode.value("schemaVersion", std::uint32_t{ 1 });
 				delta.runId = deltaNode.value("runId", runId);
 				delta.sessionId = deltaNode.value("sessionId", std::string{});
 				delta.phase = deltaNode.value("phase", std::string{});
@@ -1064,15 +1070,10 @@ namespace blazeclaw::gateway {
 				}
 			}
 
-			std::vector<ChatRuntimeResult::TaskDeltaEntry> normalizedDeltas;
-			normalizedDeltas.reserve(deltas.size() + 1);
-			for (std::size_t i = 0; i < deltas.size(); ++i) {
-				normalizedDeltas.push_back(NormalizePersistedTaskDelta(
-					deltas[i],
-					runId,
-					fallbackSessionId,
-					i));
-			}
+			auto normalizedDeltas = TaskDeltaLegacyAdapter::AdaptRun(
+				runId,
+				fallbackSessionId,
+				deltas);
 
 			const bool hasPlanPhase = std::any_of(
 				normalizedDeltas.begin(),
@@ -1122,14 +1123,26 @@ namespace blazeclaw::gateway {
 			}
 
 			for (std::size_t i = 0; i < normalizedDeltas.size(); ++i) {
-				normalizedDeltas[i] = NormalizePersistedTaskDelta(
+				normalizedDeltas[i] = TaskDeltaLegacyAdapter::AdaptEntry(
 					normalizedDeltas[i],
 					runId,
 					fallbackSessionId,
 					i);
 			}
 
+			std::string schemaErrorCode;
+			std::string schemaErrorMessage;
+			if (!TaskDeltaSchemaValidator::ValidateRun(
+				runId,
+				normalizedDeltas,
+				schemaErrorCode,
+				schemaErrorMessage)) {
+				continue;
+			}
+
 			deltas = std::move(normalizedDeltas);
+			const bool upserted = m_taskDeltaRepository.Upsert(runId, deltas);
+			(void)upserted;
 		}
 
 		if (m_taskDeltasByRunId.size() > m_taskDeltasRetentionLimit) {
@@ -1147,7 +1160,8 @@ namespace blazeclaw::gateway {
 		std::error_code ec;
 		std::filesystem::create_directories(persistencePath.parent_path(), ec);
 
-		const std::string jsonState = SerializeTaskDeltaState(m_taskDeltasByRunId);
+		const auto& taskDeltaState = m_taskDeltaRepository.Snapshot();
+		const std::string jsonState = SerializeTaskDeltaState(taskDeltaState);
 		if (jsonState.size() > m_taskDeltasMaxPayloadBytes) {
 			return;
 		}
