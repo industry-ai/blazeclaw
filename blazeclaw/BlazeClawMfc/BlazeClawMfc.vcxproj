@@ -196,6 +196,9 @@
     <ClInclude Include="src\gateway\AuthProfilePolicyService.h" />
     <ClInclude Include="src\gateway\ContextEnginePolicySelector.h" />
     <ClInclude Include="src\gateway\RecoveryPolicyEngine.h" />
+    <ClInclude Include="src\gateway\GatewayLifecycleEventEmitter.h" />
+    <ClInclude Include="src\gateway\RunSummaryBuilder.h" />
+    <ClInclude Include="src\gateway\BranchDecisionDiagnostics.h" />
     <ClInclude Include="src\gateway\executors\LobsterExecutor.h" />
     <ClInclude Include="src\gateway\executors\PythonProcessExecutor.h" />
     <ClInclude Include="src\gateway\python\EmbeddedPythonRuntimeHost.h" />
@@ -330,6 +333,9 @@
     <ClCompile Include="src\gateway\AuthProfilePolicyService.cpp" />
     <ClCompile Include="src\gateway\ContextEnginePolicySelector.cpp" />
     <ClCompile Include="src\gateway\RecoveryPolicyEngine.cpp" />
+    <ClCompile Include="src\gateway\GatewayLifecycleEventEmitter.cpp" />
+    <ClCompile Include="src\gateway\RunSummaryBuilder.cpp" />
+    <ClCompile Include="src\gateway\BranchDecisionDiagnostics.cpp" />
     <ClCompile Include="src\gateway\python\EmbeddedPythonRuntimeHost.cpp" />
     <ClCompile Include="src\gateway\python\ExternalPythonRuntimeHost.cpp" />
     <ClCompile Include="src\gateway\python\PythonRuntimeDispatcher.cpp" />

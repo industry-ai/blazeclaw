@@ -79,6 +79,9 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\AuthProfilePolicyService.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ContextEnginePolicySelector.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\RecoveryPolicyEngine.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayLifecycleEventEmitter.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\RunSummaryBuilder.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\BranchDecisionDiagnostics.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayMethodDispatcher.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayToolRegistry.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\PluginHostAdapter.cpp" />

@@ -199,6 +199,12 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
     truncation/profile/context selectors as explicit components
   - `chat.send` runtime failure path now executes ordered recovery decisions
     and emits `gateway.chat.recovery.decision` telemetry with branch outcomes
+- ✅ Workstream E observability baseline integration:
+  - added `GatewayLifecycleEventEmitter`, `RunSummaryBuilder`, and
+    `BranchDecisionDiagnostics`
+  - runtime lifecycle transitions now emit standardized `gateway.chat.lifecycle`
+    telemetry and branch diagnostics emit `gateway.chat.branchDecision`
+  - terminal run envelopes now emit structured `gateway.chat.runSummary` telemetry
 
 [back to top](#index)
 

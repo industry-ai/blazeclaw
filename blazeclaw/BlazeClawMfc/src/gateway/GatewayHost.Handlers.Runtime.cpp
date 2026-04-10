@@ -10,6 +10,9 @@
 #include "RuntimeToolCallNormalizer.h"
 #include "RuntimeTranscriptGuard.h"
 #include "RecoveryPolicyEngine.h"
+#include "GatewayLifecycleEventEmitter.h"
+#include "RunSummaryBuilder.h"
+#include "BranchDecisionDiagnostics.h"
 #include "executors/EmailScheduleExecutor.h"
 
 #include <algorithm>
@@ -3265,6 +3268,13 @@ namespace blazeclaw::gateway {
 					",\"compatDeterministicEnabled\":" +
 					std::string(allowPromptOrchestration ? "true" : "false") +
 					",\"dynamicRuntimeDefault\":true}");
+				BranchDecisionDiagnostics::Emit(
+					runId,
+					"runtime",
+					"orchestration.pathSelection",
+					allowPromptOrchestration
+					? "compat_runtime_orchestration_enabled"
+					: "dynamic_runtime_default");
 				const auto runtimeToolsSnapshot = m_toolRegistry.List();
 				const auto orderedSequencePreflight =
 					RuntimeSequencingPolicy::BuildOrderedSequencePreflight(
@@ -3512,10 +3522,12 @@ namespace blazeclaw::gateway {
 						assistantText =
 							(preferChineseResponse
 								? (Utf8LiteralLocal(u8"\u65E0\u6CD5\u6267\u884C\u6709\u5E8F\u5DE5\u4F5C\u6D41\uFF0C\u4EE5\u4E0B\u6B65\u9AA4\u76EE\u6807\u4E0D\u53EF\u7528\uFF1A") +
-									JoinOrderedTargets(orderedSequencePreflight.missingTargets) +
+									RuntimeSequencingPolicy::JoinOrderedTargets(
+										orderedSequencePreflight.missingTargets) +
 									Utf8LiteralLocal(u8"\u3002\u8BF7\u5B89\u88C5\u6216\u542F\u7528\u8FD9\u4E9B\u6280\u80FD/\u5DE5\u5177\u540E\u91CD\u8BD5\u3002"))
 								: (std::string("Unable to execute the ordered workflow because required step targets are unavailable: ") +
-									JoinOrderedTargets(orderedSequencePreflight.missingTargets) +
+									RuntimeSequencingPolicy::JoinOrderedTargets(
+										orderedSequencePreflight.missingTargets) +
 									". Please install or enable these skills/tools and retry."));
 
 						auto blockedTaskDeltas =
@@ -3696,6 +3708,16 @@ namespace blazeclaw::gateway {
 							.timestampMs = nowMs,
 						});
 					lifecycleEventsEnqueued = true;
+					GatewayLifecycleEventEmitter::EmitLifecycle(
+						"queued",
+						runId,
+						sessionKey,
+						nowMs);
+					GatewayLifecycleEventEmitter::EmitLifecycle(
+						"started",
+						runId,
+						sessionKey,
+						nowMs);
 
 					m_chatRunsById.insert_or_assign(
 						runId,
@@ -3743,6 +3765,11 @@ namespace blazeclaw::gateway {
 											.errorMessage = std::nullopt,
 											.timestampMs = CurrentEpochMsLocal(),
 										});
+									GatewayLifecycleEventEmitter::EmitLifecycle(
+										"delta",
+										runId,
+										sessionKey,
+										CurrentEpochMsLocal());
 
 									auto runStateIt = m_chatRunsById.find(runId);
 									if (runStateIt != m_chatRunsById.end()) {
@@ -3882,6 +3909,15 @@ namespace blazeclaw::gateway {
 							",\"terminalCode\":" +
 							JsonString(recoveryOutcome.terminalErrorCode) +
 							"}");
+						BranchDecisionDiagnostics::Emit(
+							runId,
+							"recovery",
+							recoveryOutcome.recovered
+							? "recovered"
+							: "terminal",
+							recoveryOutcome.terminalErrorCode.empty()
+							? "recovery_chain_continue"
+							: recoveryOutcome.terminalErrorCode);
 
 						if (recoveryOutcome.recovered) {
 							failed = false;
@@ -3982,6 +4018,16 @@ namespace blazeclaw::gateway {
 							.errorMessage = std::nullopt,
 							.timestampMs = nowMs,
 						});
+					GatewayLifecycleEventEmitter::EmitLifecycle(
+						"queued",
+						runId,
+						sessionKey,
+						nowMs);
+					GatewayLifecycleEventEmitter::EmitLifecycle(
+						"started",
+						runId,
+						sessionKey,
+						nowMs);
 				}
 				EmitDeepSeekGatewayDiagnostic(
 					"event.enqueue",
@@ -4013,6 +4059,11 @@ namespace blazeclaw::gateway {
 							   .errorMessage = std::nullopt,
 							   .timestampMs = nowMs,
 							});
+						GatewayLifecycleEventEmitter::EmitLifecycle(
+							"delta",
+							runId,
+							sessionKey,
+							nowMs);
 						EmitDeepSeekGatewayDiagnostic(
 							"event.enqueue",
 							std::string("state=delta runId=") +
@@ -4139,6 +4190,11 @@ namespace blazeclaw::gateway {
 					   .errorMessage = std::nullopt,
 					   .timestampMs = nowMs,
 					});
+				GatewayLifecycleEventEmitter::EmitLifecycle(
+					"aborted",
+					runIt->second.runId,
+					sessionKey,
+					nowMs);
 				runIt->second.terminalEventEnqueued = true;
 				EmitDeepSeekGatewayDiagnostic(
 					"event.enqueue",
@@ -4253,6 +4309,16 @@ namespace blazeclaw::gateway {
 								   : std::nullopt,
 							   .timestampMs = nowMs,
 							});
+						GatewayLifecycleEventEmitter::EmitLifecycle(
+							run.failed ? "error" : "final",
+							run.runId,
+							run.sessionKey,
+							nowMs,
+							run.failed
+							? std::optional<std::string>(run.errorMessage.empty()
+								? "chat error"
+								: run.errorMessage)
+							: std::nullopt);
 						run.terminalEventEnqueued = true;
 						EmitDeepSeekGatewayDiagnostic(
 							"event.enqueue",

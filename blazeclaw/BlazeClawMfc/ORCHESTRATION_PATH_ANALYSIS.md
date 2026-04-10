@@ -135,3 +135,13 @@ Use `runtime_orchestration` only for tightly-scoped, deterministic, low-variance
   - `RuntimeTranscriptGuard`
 - Ordered preflight policy resolution and runtime transcript/tool normalization logic now
   execute through these extracted classes rather than relying solely on inline helper blocks.
+
+## Observability update (2026-04-10)
+
+- Runtime lifecycle and branch diagnostics are now emitted through explicit
+  observability components:
+  - `GatewayLifecycleEventEmitter` (`gateway.chat.lifecycle`)
+  - `BranchDecisionDiagnostics` (`gateway.chat.branchDecision`)
+  - `RunSummaryBuilder` (`gateway.chat.runSummary`)
+- These additions improve diagnosability of orchestration-path selection,
+  preflight decisions, recovery branch outcomes, and terminal run envelopes.
