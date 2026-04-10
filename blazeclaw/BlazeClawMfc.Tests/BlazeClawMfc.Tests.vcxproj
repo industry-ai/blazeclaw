@@ -68,6 +68,9 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\TaskDeltaSchemaValidator.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\TaskDeltaLegacyAdapter.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\TaskDeltaRepository.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\RuntimeSequencingPolicy.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\RuntimeToolCallNormalizer.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\RuntimeTranscriptGuard.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayMethodDispatcher.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayToolRegistry.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\PluginHostAdapter.cpp" />

@@ -186,6 +186,9 @@
     <ClInclude Include="src\gateway\TaskDeltaSchemaValidator.h" />
     <ClInclude Include="src\gateway\TaskDeltaLegacyAdapter.h" />
     <ClInclude Include="src\gateway\TaskDeltaRepository.h" />
+    <ClInclude Include="src\gateway\RuntimeSequencingPolicy.h" />
+    <ClInclude Include="src\gateway\RuntimeToolCallNormalizer.h" />
+    <ClInclude Include="src\gateway\RuntimeTranscriptGuard.h" />
     <ClInclude Include="src\gateway\executors\LobsterExecutor.h" />
     <ClInclude Include="src\gateway\executors\PythonProcessExecutor.h" />
     <ClInclude Include="src\gateway\python\EmbeddedPythonRuntimeHost.h" />
@@ -310,6 +313,9 @@
     <ClCompile Include="src\gateway\TaskDeltaSchemaValidator.cpp" />
     <ClCompile Include="src\gateway\TaskDeltaLegacyAdapter.cpp" />
     <ClCompile Include="src\gateway\TaskDeltaRepository.cpp" />
+    <ClCompile Include="src\gateway\RuntimeSequencingPolicy.cpp" />
+    <ClCompile Include="src\gateway\RuntimeToolCallNormalizer.cpp" />
+    <ClCompile Include="src\gateway\RuntimeTranscriptGuard.cpp" />
     <ClCompile Include="src\gateway\python\EmbeddedPythonRuntimeHost.cpp" />
     <ClCompile Include="src\gateway\python\ExternalPythonRuntimeHost.cpp" />
     <ClCompile Include="src\gateway\python\PythonRuntimeDispatcher.cpp" />

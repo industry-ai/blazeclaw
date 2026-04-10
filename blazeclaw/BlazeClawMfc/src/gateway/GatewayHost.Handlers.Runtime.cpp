@@ -6,6 +6,9 @@
 #include "TaskDeltaRepository.h"
 #include "TaskDeltaLegacyAdapter.h"
 #include "TaskDeltaSchemaValidator.h"
+#include "RuntimeSequencingPolicy.h"
+#include "RuntimeToolCallNormalizer.h"
+#include "RuntimeTranscriptGuard.h"
 #include "executors/EmailScheduleExecutor.h"
 
 #include <algorithm>
@@ -21,7 +24,6 @@
 namespace blazeclaw::gateway {
 
 	namespace {
-		constexpr char kSilentReplyToken[] = "NO_REPLY";
 		constexpr std::size_t kMaxChatHistoryEntriesPerSession = 500;
 		constexpr std::size_t kMaxChatEventsPerSession = 200;
 
@@ -236,6 +238,8 @@ namespace blazeclaw::gateway {
 				normalized.completedAtMs - normalized.startedAtMs;
 			return normalized;
 		}
+
+		constexpr char kSilentReplyToken[] = "NO_REPLY";
 
 		std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry> EnsureRuntimeTaskDeltas(
 			const std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry>& taskDeltas,
@@ -3250,7 +3254,7 @@ namespace blazeclaw::gateway {
 				const std::string orchestrationPath =
 					ToLowerCopyLocal(m_embeddedOrchestrationPath);
 				const bool allowPromptOrchestration =
-                 orchestrationPath == "runtime_orchestration";
+					orchestrationPath == "runtime_orchestration";
 				EmitTelemetryEvent(
 					"gateway.chat.orchestration.pathSelection",
 					std::string("{\"runId\":") +
@@ -3261,10 +3265,11 @@ namespace blazeclaw::gateway {
 					std::string(allowPromptOrchestration ? "true" : "false") +
 					",\"dynamicRuntimeDefault\":true}");
 				const auto runtimeToolsSnapshot = m_toolRegistry.List();
-				const auto orderedSequencePreflight = BuildOrderedSequencePreflight(
-					normalizedMessage,
-					runtimeToolsSnapshot,
-					m_skillsCatalogState.entries);
+				const auto orderedSequencePreflight =
+					RuntimeSequencingPolicy::BuildOrderedSequencePreflight(
+						normalizedMessage,
+						runtimeToolsSnapshot,
+						m_skillsCatalogState.entries);
 				const bool preferChineseResponse =
 					stageContext.preferChineseResponse;
 				std::vector<std::string> orderedAllowlistTargets;
@@ -3276,7 +3281,7 @@ namespace blazeclaw::gateway {
 						orderedSequencePreflight.resolvedToolTargets.size());
 					for (const auto& resolvedToolId :
 						orderedSequencePreflight.resolvedToolTargets) {
-						if (!IsResolvedRuntimeToolTarget(
+						if (!RuntimeSequencingPolicy::IsResolvedRuntimeToolTarget(
 							resolvedToolId,
 							runtimeToolsSnapshot)) {
 							enforceOrderedAllowlist = false;
@@ -3292,7 +3297,8 @@ namespace blazeclaw::gateway {
 					? (std::string(preferChineseResponse
 						? Utf8LiteralLocal(u8"\u6709\u5E8F\u6267\u884C\u6B65\u9AA4\uFF08\u4FDD\u6301\u987A\u5E8F\uFF09\uFF1A")
 						: "Ordered execution steps (preserve order): ") +
-						JoinOrderedResolution(orderedSequencePreflight) +
+						RuntimeSequencingPolicy::JoinOrderedResolution(
+							orderedSequencePreflight) +
 						"\n\n" + stageContext.runtimeMessage)
 					: stageContext.runtimeMessage;
 				std::vector<ChatRuntimeResult::TaskDeltaEntry> orderedPreflightTaskDeltas;
@@ -3473,13 +3479,14 @@ namespace blazeclaw::gateway {
 				if (!forceError &&
 					!hasAttachments &&
 					orderedSequencePreflight.enforced) {
-					orderedPreflightTaskDeltas = BuildOrderedPreflightTaskDeltas(
-						runId,
-						sessionKey,
-						orderedSequencePreflight,
-						false,
-						{},
-						{});
+					orderedPreflightTaskDeltas =
+						RuntimeSequencingPolicy::BuildOrderedPreflightTaskDeltas(
+							runId,
+							sessionKey,
+							orderedSequencePreflight,
+							false,
+							{},
+							{});
 
 					EmitTelemetryEvent(
 						"gateway.chat.ordered.preflight",
@@ -3499,7 +3506,8 @@ namespace blazeclaw::gateway {
 						backendErrorCode = "ordered_sequence_target_unavailable";
 						backendErrorMessage =
 							"Ordered execution preflight failed. Missing targets: " +
-							JoinOrderedTargets(orderedSequencePreflight.missingTargets);
+							RuntimeSequencingPolicy::JoinOrderedTargets(
+								orderedSequencePreflight.missingTargets);
 						assistantText =
 							(preferChineseResponse
 								? (Utf8LiteralLocal(u8"\u65E0\u6CD5\u6267\u884C\u6709\u5E8F\u5DE5\u4F5C\u6D41\uFF0C\u4EE5\u4E0B\u6B65\u9AA4\u76EE\u6807\u4E0D\u53EF\u7528\uFF1A") +
@@ -3509,13 +3517,14 @@ namespace blazeclaw::gateway {
 									JoinOrderedTargets(orderedSequencePreflight.missingTargets) +
 									". Please install or enable these skills/tools and retry."));
 
-						auto blockedTaskDeltas = BuildOrderedPreflightTaskDeltas(
-							runId,
-							sessionKey,
-							orderedSequencePreflight,
-							true,
-							backendErrorCode,
-							backendErrorMessage);
+						auto blockedTaskDeltas =
+							RuntimeSequencingPolicy::BuildOrderedPreflightTaskDeltas(
+								runId,
+								sessionKey,
+								orderedSequencePreflight,
+								true,
+								backendErrorCode,
+								backendErrorMessage);
 						assistantDeltas =
 							buildAssistantDeltasFromTaskDeltas(blockedTaskDeltas);
 						if (assistantDeltas.empty()) {
@@ -3719,7 +3728,8 @@ namespace blazeclaw::gateway {
 						 .onAssistantDelta =
 								[this, &streamedDeltaCount, &runId, &sessionKey](const std::string& delta) {
 									const std::string normalizedDelta = json::Trim(delta);
-									if (normalizedDelta.empty() || IsSilentReplyText(normalizedDelta)) {
+									if (normalizedDelta.empty() ||
+										RuntimeTranscriptGuard::IsSilentReplyText(normalizedDelta)) {
 										return;
 									}
 
@@ -3756,13 +3766,10 @@ namespace blazeclaw::gateway {
 						}
 
 						std::vector<std::string> providerDeltas =
-							runtimeResult.assistantDeltas;
-						if (providerDeltas.empty() && !assistantText.empty()) {
-							providerDeltas.push_back(assistantText);
-						}
-						if (providerStreamed) {
-							providerDeltas.clear();
-						}
+							RuntimeTranscriptGuard::NormalizeAssistantDeltas(
+								runtimeResult.assistantDeltas,
+								assistantText,
+								providerStreamed);
 						assistantDeltas = providerDeltas;
 
 						if (assistantText.empty()) {
@@ -3810,20 +3817,22 @@ namespace blazeclaw::gateway {
 						existingRunIt->second.active = true;
 					}
 
-					auto runtimeTaskDeltas = EnsureRuntimeTaskDeltas(
-						runtimeResult.taskDeltas,
-						runId,
-						sessionKey,
-						runtimeResult.ok && !failed,
-						assistantText,
-						backendErrorCode,
-						backendErrorMessage);
-					runtimeTaskDeltas = ApplyInvalidArgumentsRecoveryPolicy(
-						runtimeTaskDeltas,
-						runId,
-						sessionKey,
-						normalizedMessage,
-						m_toolRegistry);
+					auto runtimeTaskDeltas =
+						RuntimeToolCallNormalizer::EnsureRuntimeTaskDeltas(
+							runtimeResult.taskDeltas,
+							runId,
+							sessionKey,
+							runtimeResult.ok && !failed,
+							assistantText,
+							backendErrorCode,
+							backendErrorMessage);
+					runtimeTaskDeltas =
+						RuntimeToolCallNormalizer::ApplyInvalidArgumentsRecoveryPolicy(
+							runtimeTaskDeltas,
+							runId,
+							sessionKey,
+							normalizedMessage,
+							m_toolRegistry);
 					if (!orderedPreflightTaskDeltas.empty()) {
 						std::vector<ChatRuntimeResult::TaskDeltaEntry> mergedTaskDeltas;
 						mergedTaskDeltas.reserve(
@@ -3851,14 +3860,15 @@ namespace blazeclaw::gateway {
 					backendErrorCode = "chat_runtime_callback_missing";
 					backendErrorMessage = "chat runtime callback is not configured";
 
-					auto runtimeTaskDeltas = EnsureRuntimeTaskDeltas(
-						{},
-						runId,
-						sessionKey,
-						false,
-						assistantText,
-						backendErrorCode,
-						backendErrorMessage);
+					auto runtimeTaskDeltas =
+						RuntimeToolCallNormalizer::EnsureRuntimeTaskDeltas(
+							{},
+							runId,
+							sessionKey,
+							false,
+							assistantText,
+							backendErrorCode,
+							backendErrorMessage);
 					if (!orderedPreflightTaskDeltas.empty()) {
 						std::vector<ChatRuntimeResult::TaskDeltaEntry> mergedTaskDeltas;
 						mergedTaskDeltas.reserve(
@@ -3878,7 +3888,8 @@ namespace blazeclaw::gateway {
 					persistTaskDeltas(runtimeTaskDeltas, false);
 				}
 
-				const bool silentAssistantReply = IsSilentReplyText(assistantText);
+				const bool silentAssistantReply =
+					RuntimeTranscriptGuard::IsSilentReplyText(assistantText);
 
 				auto& sessionHistory = m_chatHistoryBySession[sessionKey];
 				PushHistoryMessageIfNew(
@@ -4045,7 +4056,8 @@ namespace blazeclaw::gateway {
 
 				const std::uint64_t nowMs = CurrentEpochMsLocal();
 				const bool silentAssistantReply =
-					IsSilentReplyText(runIt->second.assistantText);
+					RuntimeTranscriptGuard::IsSilentReplyText(
+						runIt->second.assistantText);
 				PushEventWithRetentionLimit(queue, ChatEventState{
 					   .runId = runIt->second.runId,
 					   .sessionKey = sessionKey,
@@ -4110,7 +4122,8 @@ namespace blazeclaw::gateway {
 
 				if (runIt != m_chatRunsById.end()) {
 					auto& run = runIt->second;
-					const bool silentAssistantReply = IsSilentReplyText(run.assistantText);
+					const bool silentAssistantReply =
+						RuntimeTranscriptGuard::IsSilentReplyText(run.assistantText);
 					const bool enoughTimeElapsed =
 						run.lastEmitMs == 0 || (nowMs - run.lastEmitMs) >= 180;
 

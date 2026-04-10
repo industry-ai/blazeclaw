@@ -189,6 +189,11 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
     `runtime_orchestration` compatibility mode
   - branch-selection telemetry (`gateway.chat.orchestration.pathSelection`) and
     parity coverage were added to validate default-vs-compat behavior
+- ✅ Workstream C class-map parity extraction completed:
+  - added standalone `RuntimeSequencingPolicy`, `RuntimeToolCallNormalizer`,
+    and `RuntimeTranscriptGuard` components
+  - migrated runtime preflight policy and transcript/tool normalization logic from
+    inline gateway helper paths into extracted Workstream C classes
 
 [back to top](#index)
 

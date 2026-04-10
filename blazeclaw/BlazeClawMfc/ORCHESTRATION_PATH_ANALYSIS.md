@@ -117,3 +117,21 @@ Use `runtime_orchestration` only for tightly-scoped, deterministic, low-variance
 
 - Path recommendation remains unchanged: `dynamic_task_delta` should stay primary.
 - Current local parity-chat filtered run passes after parity harness stabilization updates; no startup-failure recurrence observed in latest audit run.
+
+## Implementation update (2026-04-10)
+
+- `chat.send` deterministic weather/report/email orchestration is now compatibility-gated to
+  `runtime_orchestration` only.
+- `dynamic_task_delta` remains runtime-callback-first by default and no longer executes the
+  deterministic prompt orchestration branch.
+- Branch-selection telemetry now emits `gateway.chat.orchestration.pathSelection` to make
+  path/compat decisions observable.
+
+## Extraction update (2026-04-10)
+
+- Workstream C class extraction pass introduced explicit runtime components:
+  - `RuntimeSequencingPolicy`
+  - `RuntimeToolCallNormalizer`
+  - `RuntimeTranscriptGuard`
+- Ordered preflight policy resolution and runtime transcript/tool normalization logic now
+  execute through these extracted classes rather than relying solely on inline helper blocks.
