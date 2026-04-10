@@ -5,12 +5,12 @@
 
 namespace blazeclaw::gateway {
 
-	GatewayHostEx::GatewayHostEx(const GatewayHost* legacyHost) noexcept
-		: m_legacyHost(legacyHost) {}
+	GatewayHostEx::GatewayHostEx(const GatewayHostExDependencies& dependencies) noexcept
+		: m_dependencies(dependencies) {}
 
 	protocol::ResponseFrame GatewayHostEx::RouteRequest(
 		const protocol::RequestFrame& request) const {
-		if (m_legacyHost == nullptr) {
+		if (m_dependencies.legacyHost == nullptr) {
 			return protocol::ResponseFrame{
 				.id = request.id,
 				.ok = false,
@@ -25,11 +25,12 @@ namespace blazeclaw::gateway {
 			};
 		}
 
-		return m_legacyHost->RouteRequestLegacy(request);
+		return m_dependencies.legacyHost->RouteRequestLegacy(request);
 	}
 
 	bool GatewayHostEx::IsHealthy() const noexcept {
-		return m_legacyHost != nullptr;
+		return m_dependencies.legacyHost != nullptr &&
+			m_dependencies.legacyHost->IsHealthy();
 	}
 
 } // namespace blazeclaw::gateway

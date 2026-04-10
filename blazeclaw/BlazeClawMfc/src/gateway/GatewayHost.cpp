@@ -684,7 +684,11 @@ namespace blazeclaw::gateway {
 			m_dispatchInitialized = true;
 		}
 		if (!m_stageRuntimeHost) {
-			m_stageRuntimeHost = std::make_unique<GatewayHostEx>(this);
+			m_stageRuntimeHost = std::make_unique<GatewayHostEx>(
+				GatewayHostExDependencies{
+					.legacyHost = this,
+					.stagePipeline = &m_chatRunPipelineOrchestrator,
+				});
 		}
 		if (m_initialized) {
 			return true;
@@ -1568,11 +1572,16 @@ namespace blazeclaw::gateway {
 
 		auto* mutableThis = const_cast<GatewayHost*>(this);
 		if (mutableThis->m_stageRuntimeHost == nullptr) {
-			mutableThis->m_stageRuntimeHost = std::make_unique<GatewayHostEx>(this);
+			mutableThis->m_stageRuntimeHost = std::make_unique<GatewayHostEx>(
+				GatewayHostExDependencies{
+					.legacyHost = this,
+					.stagePipeline = &m_chatRunPipelineOrchestrator,
+				});
 		}
 
 		const bool stageHealthy =
-			mutableThis->m_stageRuntimeHost != nullptr;
+			mutableThis->m_stageRuntimeHost != nullptr &&
+			mutableThis->m_stageRuntimeHost->IsHealthy();
 		const GatewayHostRouteRequest routeRequest{
 			  .method = request.method,
 			  .orchestrationPath = m_embeddedOrchestrationPath,
@@ -1610,6 +1619,10 @@ namespace blazeclaw::gateway {
 	protocol::ResponseFrame GatewayHost::RouteRequestLegacy(
 		const protocol::RequestFrame& request) const {
 		return m_dispatcher.Dispatch(request);
+	}
+
+	bool GatewayHost::IsHealthy() const noexcept {
+		return m_dispatchInitialized;
 	}
 
 	void GatewayHost::RegisterDefaultHandlers() {

@@ -67,3 +67,19 @@ TEST_CASE("GatewayHostRouter keeps legacy when stage pipeline feature is disable
 	REQUIRE(decision.reasonCode == "legacy_stage_pipeline_feature_disabled");
 	REQUIRE_FALSE(decision.fallback);
 }
+
+TEST_CASE("GatewayHostRouter falls back when stage host reports unhealthy", "[router]") {
+	GatewayHostRouter router;
+	const auto decision = router.Decide(GatewayHostRouteRequest{
+		.method = "chat.send",
+		.orchestrationPath = "dynamic_task_delta",
+		.stageHostHealthy = false,
+		.runtimeOrchestrationCompatEnabled = false,
+		.stagePipelineFeatureEnabled = true,
+		.rolloutCohort = "default",
+		});
+
+	REQUIRE(decision.target == GatewayHostRouteTarget::Legacy);
+	REQUIRE(decision.reasonCode == "fallback_stage_host_unhealthy");
+	REQUIRE(decision.fallback);
+}

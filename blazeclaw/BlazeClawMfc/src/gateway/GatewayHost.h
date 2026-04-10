@@ -250,6 +250,7 @@ namespace blazeclaw::gateway {
 			GatewayToolRegistry::RuntimeToolExecutorV2 executor);
 
 		[[nodiscard]] protocol::ResponseFrame RouteRequest(const protocol::RequestFrame& request) const override;
+		[[nodiscard]] bool IsHealthy() const noexcept override;
 
 	private:
 		friend class GatewayHostEx;

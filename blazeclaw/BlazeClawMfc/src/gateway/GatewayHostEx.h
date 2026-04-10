@@ -5,10 +5,16 @@
 namespace blazeclaw::gateway {
 
 	class GatewayHost;
+	class ChatRunPipelineOrchestrator;
+
+	struct GatewayHostExDependencies {
+		const GatewayHost* legacyHost = nullptr;
+		const ChatRunPipelineOrchestrator* stagePipeline = nullptr;
+	};
 
 	class GatewayHostEx final : public IGatewayHostRuntime {
 	public:
-		explicit GatewayHostEx(const GatewayHost* legacyHost) noexcept;
+		explicit GatewayHostEx(const GatewayHostExDependencies& dependencies) noexcept;
 
 		[[nodiscard]] protocol::ResponseFrame RouteRequest(
 			const protocol::RequestFrame& request) const override;
@@ -16,7 +22,7 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] bool IsHealthy() const noexcept;
 
 	private:
-		const GatewayHost* m_legacyHost = nullptr;
+		GatewayHostExDependencies m_dependencies;
 	};
 
 } // namespace blazeclaw::gateway

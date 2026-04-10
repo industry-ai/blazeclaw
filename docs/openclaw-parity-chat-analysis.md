@@ -252,6 +252,14 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
   - parity coverage adds interface-invocation checks for both `chat.send`
     envelope invariants and legacy non-chat dispatch compatibility
 
+- ✅ Phase C new-host scaffolding update:
+  - `GatewayHostEx` now uses explicit composition dependencies and shared
+    runtime health signaling (`IGatewayHostRuntime::IsHealthy`)
+  - routed stage-host selection is health-gated with deterministic legacy
+    fallback semantics
+  - parity coverage now validates GatewayHostEx unavailable-dependency
+    contract behavior (`stage_host_unavailable`)
+
 [back to top](#index)
 
 ### 2.1.2 Remaining parity implementation plan (extension lifecycle manager + workflow-engine runtime)

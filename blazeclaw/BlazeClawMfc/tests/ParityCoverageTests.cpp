@@ -4,6 +4,7 @@
 #include "gateway/GatewayProtocolModels.h"
 #include "gateway/GatewayToolRegistry.h"
 #include "gateway/PluginHostAdapter.h"
+#include "gateway/GatewayHostEx.h"
 #include "gateway/executors/EmailScheduleExecutor.h"
 #include "config/ConfigModels.h"
 
@@ -49,6 +50,23 @@ TEST_CASE("Parity coverage: router-neutral route decision telemetry is emitted f
 	REQUIRE(sendResponse.ok);
 	REQUIRE(sendResponse.payloadJson.has_value());
 	host.Stop();
+}
+
+TEST_CASE("Parity coverage: GatewayHostEx scaffolding remains health-gated and contract-safe", "[parity][router][gateway-host-ex]") {
+	GatewayHostEx hostEx(GatewayHostExDependencies{});
+
+	REQUIRE_FALSE(hostEx.IsHealthy());
+
+	const auto response = hostEx.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "gateway-host-ex-unhealthy-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"hello\"}"),
+		});
+
+	REQUIRE_FALSE(response.ok);
+	REQUIRE(response.error.has_value());
+	REQUIRE(response.error->code == "stage_host_unavailable");
 }
 
 TEST_CASE("Parity coverage: GatewayHost via IGatewayHostRuntime preserves chat.send contract", "[parity][router][interface]") {
