@@ -2994,7 +2994,31 @@ namespace blazeclaw::gateway {
 				ChatRunStageContext stageContext{
 					   .requestId = request.id,
 					   .method = request.method,
-				  .paramsJson = request.paramsJson,
+				 .paramsJson = request.paramsJson,
+					.validateAttachments = [this](
+						const std::optional<std::string>& paramsJson,
+						bool& hasAttachments,
+						std::string& errorCode,
+						std::string& errorMessage) {
+						return ValidateAttachmentPayloadShape(
+							paramsJson,
+							hasAttachments,
+							errorCode,
+							errorMessage);
+					},
+					.findRunByIdempotency = [this](const std::string& key)
+						-> std::optional<std::string> {
+						if (key.empty()) {
+							return std::nullopt;
+						}
+
+						const auto dedupeIt = m_chatRunByIdempotency.find(key);
+						if (dedupeIt == m_chatRunByIdempotency.end()) {
+							return std::nullopt;
+						}
+
+						return dedupeIt->second;
+					},
 				};
 				auto pipelineResult = m_chatRunPipelineOrchestrator.Run(stageContext);
 				EmitTelemetryEvent(
@@ -3019,68 +3043,45 @@ namespace blazeclaw::gateway {
 					SerializeStringArrayLocal(stageContext.stageTrace) +
 					"}");
 
+				if (stageContext.shouldReturnEarly) {
+					if (stageContext.deduped) {
+						return protocol::ResponseFrame{
+							.id = request.id,
+							.ok = true,
+							.payloadJson =
+								"{\"runId\":\"" +
+								EscapeJsonLocal(stageContext.dedupedRunId) +
+								"\",\"queued\":false,\"deduped\":true}",
+							.error = std::nullopt,
+						};
+					}
+
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = false,
+						.payloadJson = std::nullopt,
+						.error = protocol::ErrorShape{
+							.code = stageContext.responseErrorCode,
+							.message = stageContext.responseErrorMessage,
+							.detailsJson = std::nullopt,
+							.retryable = false,
+							.retryAfterMs = std::nullopt,
+						},
+					};
+				}
+
 				const std::string requestedSessionKey = stageContext.requestedSessionKey;
 				const std::string sessionKey = stageContext.sessionKey;
 				const std::string message = stageContext.message;
 				const std::string normalizedMessage = stageContext.normalizedMessage;
 				const std::string idempotencyKey = stageContext.idempotencyKey;
 				const bool forceError = stageContext.forceError;
-
-				bool hasAttachments = false;
-				std::string attachmentsErrorCode;
-				std::string attachmentsErrorMessage;
-				if (!ValidateAttachmentPayloadShape(
-					request.paramsJson,
-					hasAttachments,
-					attachmentsErrorCode,
-					attachmentsErrorMessage)) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
-							.code = attachmentsErrorCode,
-							.message = attachmentsErrorMessage,
-							.detailsJson = std::nullopt,
-							.retryable = false,
-							.retryAfterMs = std::nullopt,
-						},
-					};
-				}
-
-				if (normalizedMessage.empty() && !hasAttachments) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
-							.code = "invalid_message",
-							.message = "chat.send requires non-empty message or attachments.",
-							.detailsJson = std::nullopt,
-							.retryable = false,
-							.retryAfterMs = std::nullopt,
-						},
-					};
-				}
+				const bool hasAttachments = stageContext.hasAttachmentPayload;
 
 				const std::vector<std::string> attachmentMimeTypes =
 					ExtractAttachmentMimeTypes(request.paramsJson);
 
-				if (!idempotencyKey.empty()) {
-					const auto dedupeIt =
-						m_chatRunByIdempotency.find(idempotencyKey);
-					if (dedupeIt != m_chatRunByIdempotency.end()) {
-						return protocol::ResponseFrame{
-							.id = request.id,
-							.ok = true,
-							.payloadJson =
-								"{\"runId\":\"" +
-								EscapeJsonLocal(dedupeIt->second) +
-								"\",\"queued\":false,\"deduped\":true}",
-							.error = std::nullopt,
-						};
-					}
-				}
+
 
 				const std::uint64_t nowMs = stageContext.nowEpochMs > 0
 					? stageContext.nowEpochMs

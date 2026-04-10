@@ -166,6 +166,10 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
   - `chat.send` transport/control/decomposition/runtime pre-processing now uses
     stage-owned context fields (session/message/idempotency/forceError/runtimeMessage/runId/timestamp)
     before legacy continuation logic.
+- ✅ Workstream A control-stage branch extraction:
+  - attachment validation and idempotency dedupe are now emitted as control-stage
+    execution results (including short-circuit outcomes), and consumed by `chat.send`
+    without duplicating these branches inline.
 
 [back to top](#index)
 

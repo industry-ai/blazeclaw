@@ -91,6 +91,51 @@ namespace blazeclaw::gateway {
 			context.forceError = false;
 		}
 
+		bool hasAttachments = false;
+		std::string attachmentsErrorCode;
+		std::string attachmentsErrorMessage;
+		if (context.validateAttachments) {
+			context.attachmentsValid = context.validateAttachments(
+				context.paramsJson,
+				hasAttachments,
+				attachmentsErrorCode,
+				attachmentsErrorMessage);
+		}
+		else {
+			context.attachmentsValid = true;
+			hasAttachments = context.hasAttachmentPayload;
+		}
+
+		context.hasAttachmentPayload = hasAttachments;
+		if (!context.attachmentsValid) {
+			context.shouldReturnEarly = true;
+			context.responseOk = false;
+			context.responseErrorCode = attachmentsErrorCode;
+			context.responseErrorMessage = attachmentsErrorMessage;
+			return AppendStage(context, Name(), {}, "validation_failed");
+		}
+
+		if (context.normalizedMessage.empty() && !context.hasAttachmentPayload) {
+			context.shouldReturnEarly = true;
+			context.responseOk = false;
+			context.responseErrorCode = "invalid_message";
+			context.responseErrorMessage =
+				"chat.send requires non-empty message or attachments.";
+			return AppendStage(context, Name(), {}, "validation_failed");
+		}
+
+		if (!context.idempotencyKey.empty() && context.findRunByIdempotency) {
+			const auto dedupedRunId =
+				context.findRunByIdempotency(context.idempotencyKey);
+			if (dedupedRunId.has_value() && !dedupedRunId->empty()) {
+				context.deduped = true;
+				context.dedupedRunId = *dedupedRunId;
+				context.shouldReturnEarly = true;
+				context.responseOk = true;
+				return AppendStage(context, Name(), {}, "deduped");
+			}
+		}
+
 		return AppendStage(context, Name(), "decomposition", "ok");
 	}
 
