@@ -222,6 +222,15 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
   - fallback branch visibility in task-delta UI diagnostics now includes explicit
     fallback entries (status/code/step label)
   - lifecycle event parity coverage extended with queued/started/final assertions
+- ✅ Item 11 foundational progress update:
+  - added host runtime routing scaffolding (`IGatewayHostRuntime`,
+    `GatewayHostRouter`, `GatewayHostEx`) and route-decision telemetry
+    (`gateway.host.route.decision`)
+  - added router-specific tests and route-flow parity assertions as staged
+    groundwork for full dual-host parity validation
+- ✅ Item 13 progress update:
+  - added stable `chat.send` contract-envelope parity assertions to strengthen
+    fixture/contract freeze guardrails during phased cleanup
 
 [back to top](#index)
 

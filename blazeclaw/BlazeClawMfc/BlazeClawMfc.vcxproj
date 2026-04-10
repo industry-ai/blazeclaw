@@ -199,6 +199,9 @@
     <ClInclude Include="src\gateway\GatewayLifecycleEventEmitter.h" />
     <ClInclude Include="src\gateway\RunSummaryBuilder.h" />
     <ClInclude Include="src\gateway\BranchDecisionDiagnostics.h" />
+    <ClInclude Include="src\gateway\IGatewayHostRuntime.h" />
+    <ClInclude Include="src\gateway\GatewayHostRouter.h" />
+    <ClInclude Include="src\gateway\GatewayHostEx.h" />
     <ClInclude Include="src\gateway\SendPolicyResolver.h" />
     <ClInclude Include="src\gateway\ToolPolicyPipeline.h" />
     <ClInclude Include="src\gateway\TranscriptPolicyResolver.h" />
@@ -339,6 +342,8 @@
     <ClCompile Include="src\gateway\GatewayLifecycleEventEmitter.cpp" />
     <ClCompile Include="src\gateway\RunSummaryBuilder.cpp" />
     <ClCompile Include="src\gateway\BranchDecisionDiagnostics.cpp" />
+    <ClCompile Include="src\gateway\GatewayHostRouter.cpp" />
+    <ClCompile Include="src\gateway\GatewayHostEx.cpp" />
     <ClCompile Include="src\gateway\SendPolicyResolver.cpp" />
     <ClCompile Include="src\gateway\ToolPolicyPipeline.cpp" />
     <ClCompile Include="src\gateway\TranscriptPolicyResolver.cpp" />

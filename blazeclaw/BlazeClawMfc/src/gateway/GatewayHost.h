@@ -12,6 +12,10 @@
 #include "GatewayProtocolContract.h"
 #include "ChatRunPipelineOrchestrator.h"
 #include "TaskDeltaRepository.h"
+#include "IGatewayHostRuntime.h"
+#include "GatewayHostRouter.h"
+
+#include <memory>
 
 #include <unordered_set>
 
@@ -110,7 +114,7 @@ namespace blazeclaw::gateway {
 		std::string lastCrossTenantAttestationAggregationPath;
 	};
 
-	class GatewayHost {
+	class GatewayHost : public IGatewayHostRuntime {
 	public:
 		using SkillsRefreshCallback = std::function<SkillsCatalogGatewayState()>;
 		using SkillsUpdateCallback = std::function<protocol::ResponseFrame(
@@ -245,9 +249,14 @@ namespace blazeclaw::gateway {
 			const ToolCatalogEntry& tool,
 			GatewayToolRegistry::RuntimeToolExecutorV2 executor);
 
-		[[nodiscard]] protocol::ResponseFrame RouteRequest(const protocol::RequestFrame& request) const;
+		[[nodiscard]] protocol::ResponseFrame RouteRequest(const protocol::RequestFrame& request) const override;
 
 	private:
+		friend class GatewayHostEx;
+
+		[[nodiscard]] protocol::ResponseFrame RouteRequestLegacy(
+			const protocol::RequestFrame& request) const;
+
 		struct AgentRunState {
 			std::string runId;
 			std::string agentId;
@@ -380,6 +389,8 @@ namespace blazeclaw::gateway {
 		EmbeddingsBatchCallback m_embeddingsBatchCallback;
 		ChatRunPipelineOrchestrator m_chatRunPipelineOrchestrator;
 		TaskDeltaRepository m_taskDeltaRepository{ m_taskDeltasByRunId };
+		GatewayHostRouter m_hostRouter;
+		mutable std::unique_ptr<IGatewayHostRuntime> m_stageRuntimeHost;
 	};
 
 } // namespace blazeclaw::gateway

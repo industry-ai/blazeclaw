@@ -6,6 +6,7 @@
 #include "GatewayProtocolCodec.h"
 #include "GatewayProtocolSchemaValidator.h"
 #include "PluginHostAdapter.h"
+#include "GatewayHostEx.h"
 #include "TaskDeltaRepository.h"
 #include "TaskDeltaLegacyAdapter.h"
 #include "TaskDeltaSchemaValidator.h"
@@ -682,6 +683,9 @@ namespace blazeclaw::gateway {
 			RegisterDefaultHandlers();
 			m_dispatchInitialized = true;
 		}
+		if (!m_stageRuntimeHost) {
+			m_stageRuntimeHost = std::make_unique<GatewayHostEx>(this);
+		}
 		if (m_initialized) {
 			return true;
 		}
@@ -836,6 +840,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_fixtureParityValidated = false;
+		m_stageRuntimeHost.reset();
 
 		// Emit telemetry about startup configuration (mask sensitive values)
 		{
@@ -1557,6 +1562,43 @@ namespace blazeclaw::gateway {
 	}
 
 	protocol::ResponseFrame GatewayHost::RouteRequest(const protocol::RequestFrame& request) const {
+		auto* mutableThis = const_cast<GatewayHost*>(this);
+		if (mutableThis->m_stageRuntimeHost == nullptr) {
+			mutableThis->m_stageRuntimeHost = std::make_unique<GatewayHostEx>(this);
+		}
+
+		const bool stageHealthy =
+			mutableThis->m_stageRuntimeHost != nullptr;
+		const GatewayHostRouteDecision routeDecision =
+			m_hostRouter.Decide(
+				request.method,
+				m_embeddedOrchestrationPath,
+				stageHealthy);
+		EmitTelemetryEvent(
+			"gateway.host.route.decision",
+			std::string("{\"method\":") +
+			JsonString(request.method) +
+			",\"target\":" +
+			JsonString(
+				routeDecision.target == GatewayHostRouteTarget::StagePipeline
+				? "stage_pipeline"
+				: "legacy") +
+			",\"reason\":" + JsonString(routeDecision.reasonCode) +
+			",\"fallback\":" +
+			std::string(routeDecision.fallback ? "true" : "false") +
+			"}");
+
+		if (request.method == "chat.send" &&
+			routeDecision.target == GatewayHostRouteTarget::StagePipeline &&
+			mutableThis->m_stageRuntimeHost != nullptr) {
+			return mutableThis->m_stageRuntimeHost->RouteRequest(request);
+		}
+
+		return RouteRequestLegacy(request);
+	}
+
+	protocol::ResponseFrame GatewayHost::RouteRequestLegacy(
+		const protocol::RequestFrame& request) const {
 		return m_dispatcher.Dispatch(request);
 	}
 

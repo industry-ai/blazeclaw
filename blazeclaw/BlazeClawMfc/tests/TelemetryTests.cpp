@@ -64,3 +64,12 @@ TEST_CASE("GatewayLifecycleEventEmitter builds lifecycle payload", "[telemetry][
 	REQUIRE(payload.find("\"state\":\"queued\"") != std::string::npos);
 	REQUIRE(payload.find("\"reason\":\"preflight\"") != std::string::npos);
 }
+
+TEST_CASE("Route decision telemetry payload keeps object shape", "[telemetry][router]") {
+	const std::string payload = NormalizePayloadObject(
+		"{\"method\":\"chat.send\",\"target\":\"stage_pipeline\",\"reason\":\"stage_pipeline_dynamic_default\",\"fallback\":false}");
+
+	REQUIRE(payload.find("\"method\":\"chat.send\"") != std::string::npos);
+	REQUIRE(payload.find("\"target\":\"stage_pipeline\"") != std::string::npos);
+	REQUIRE(payload.find("\"fallback\":false") != std::string::npos);
+}

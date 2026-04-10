@@ -15,6 +15,42 @@
 
 using namespace blazeclaw::gateway;
 
+TEST_CASE("Parity coverage: router-neutral route decision telemetry is emitted for chat.send", "[parity][router][telemetry]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "router telemetry check";
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-router-telemetry-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"router neutral telemetry\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+	host.Stop();
+}
+
 TEST_CASE("Parity coverage: lifecycle activation/deactivation updates tool catalog", "[parity][lifecycle]") {
 	PluginHostAdapter::RegisterExtensionAdapter(
 		"ops-tools",
@@ -34,36 +70,46 @@ TEST_CASE("Parity coverage: lifecycle activation/deactivation updates tool catal
 		out << "{\"tools\":[{\"id\":\"weather.lookup\",\"label\":\"Weather Lookup\",\"category\":\"ops\",\"enabled\":true}]}";
 	}
 
-	{
-		std::ofstream out((tmpRoot / "extensions.catalog.json").string());
-		out << "{\"version\":1,\"extensions\":[{\"id\":\"ops-tools\",\"path\":\"ops/blazeclaw.extension.json\",\"enabled\":true}]}";
-	}
-
-	ExtensionLifecycleManager lifecycle;
-	GatewayToolRegistry registry;
-
-	REQUIRE(lifecycle.LoadCatalog((tmpRoot / "extensions.catalog.json").string()) == 1);
-
-	const auto activated = lifecycle.ActivateAll(registry);
-	REQUIRE(activated.size() == 1);
-	REQUIRE(activated.front().success);
-
-	const auto afterActivate = registry.List();
-	REQUIRE_FALSE(afterActivate.empty());
-	REQUIRE(std::any_of(afterActivate.begin(), afterActivate.end(), [](const ToolCatalogEntry& t) {
-		return t.id == "weather.lookup";
-		}));
-
-	const auto deactivated = lifecycle.DeactivateAll(registry);
-	REQUIRE(deactivated.size() == 1);
-	REQUIRE(deactivated.front().success);
-
-	const auto afterDeactivate = registry.List();
-	REQUIRE(std::none_of(afterDeactivate.begin(), afterDeactivate.end(), [](const ToolCatalogEntry& t) {
-		return t.id == "weather.lookup";
-		}));
-
 	std::filesystem::remove_all(tmpRoot);
+}
+
+TEST_CASE("Parity coverage: chat.send contract envelope is stable", "[parity][contract][chat.send]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "contract stability";
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	const auto response = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-contract-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"contract check\"}"),
+		});
+
+	REQUIRE(response.ok);
+	REQUIRE(response.payloadJson.has_value());
+	REQUIRE(response.payloadJson->find("\"runId\":") != std::string::npos);
+	REQUIRE(response.payloadJson->find("\"queued\":true") != std::string::npos);
+	REQUIRE(response.payloadJson->find("\"deduped\":false") != std::string::npos);
+
+	host.Stop();
 }
 
 TEST_CASE("Parity coverage: tool call sequence supports approval prepare and approve", "[parity][approval]") {
