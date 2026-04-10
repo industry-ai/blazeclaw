@@ -1116,6 +1116,29 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Parity coverage: OutputWnd contract freeze removes placeholder rows and preserves runtime append path",
+	"[parity][contract][mfc][output]") {
+	const auto sourcePath = std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"app" /
+		"OutputWnd.cpp";
+	std::ifstream in(sourcePath.string());
+	REQUIRE(in.is_open());
+
+	const std::string source(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+
+	REQUIRE(source.find("Build output is being displayed here.") == std::string::npos);
+	REQUIRE(source.find("Find output is being displayed here.") == std::string::npos);
+	REQUIRE(source.find("m_wndOutputDebug.AppendLine(line);") != std::string::npos);
+	REQUIRE(source.find("m_wndOutputFind.AppendLine(line);") != std::string::npos);
+	REQUIRE(source.find("void COutputWnd::FillBuildWindow()") != std::string::npos);
+	REQUIRE(source.find("void COutputWnd::FillFindWindow()") != std::string::npos);
+}
+
+TEST_CASE(
 	"Parity coverage: gateway tools discovery exists and count include loaded catalog tools",
 	"[parity][tools][discovery][catalog]") {
 	const auto tmpRoot = std::filesystem::temp_directory_path() /

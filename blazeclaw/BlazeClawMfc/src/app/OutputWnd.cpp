@@ -84,7 +84,7 @@ int COutputWnd::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	ASSERT(bNameValid);
 	m_wndTabs.AddTab(&m_wndOutputFind, strTabName, (UINT)2);
 
-	// Fill output tabs with some dummy text (nothing magic here)
+	// Output tabs start empty; runtime status producers append rows.
 	FillBuildWindow();
 	FillDebugWindow();
 	FillFindWindow();
@@ -123,11 +123,7 @@ void COutputWnd::AdjustHorzScroll(CListBox& wndListBox)
 }
 
 void COutputWnd::FillBuildWindow()
-{
-	m_wndOutputBuild.AddString(_T("Build output is being displayed here."));
-	m_wndOutputBuild.AddString(_T("The output is being displayed in rows of a list view"));
-	m_wndOutputBuild.AddString(_T("but you can change the way it is displayed as you wish..."));
-}
+{}
 
 void COutputWnd::FillDebugWindow()
 {
@@ -137,11 +133,7 @@ void COutputWnd::FillDebugWindow()
 }
 
 void COutputWnd::FillFindWindow()
-{
-	m_wndOutputFind.AddString(_T("Find output is being displayed here."));
-	m_wndOutputFind.AddString(_T("The output is being displayed in rows of a list view"));
-	m_wndOutputFind.AddString(_T("but you can change the way it is displayed as you wish..."));
-}
+{}
 
 void COutputWnd::UpdateFonts()
 {

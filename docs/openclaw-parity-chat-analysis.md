@@ -288,6 +288,12 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
   - stage host runtime unavailability now yields deterministic legacy fallback
     diagnostics (`fallback_stage_host_runtime_unavailable`)
 
+- ✅ Phase 4 cleanup/contract-freeze completion update:
+  - MFC output pane placeholder initialization rows were removed so output panes
+    now start empty and reflect runtime-emitted status data only
+  - parity contract freeze coverage now includes explicit OutputWnd source-contract
+    guard assertions in addition to existing `chat.send` envelope freeze checks
+
 [back to top](#index)
 
 ### 2.1.2 Remaining parity implementation plan (extension lifecycle manager + workflow-engine runtime)
