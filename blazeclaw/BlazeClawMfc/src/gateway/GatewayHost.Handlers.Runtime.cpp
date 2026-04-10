@@ -2994,12 +2994,23 @@ namespace blazeclaw::gateway {
 				ChatRunStageContext stageContext{
 					   .requestId = request.id,
 					   .method = request.method,
+				  .paramsJson = request.paramsJson,
 				};
 				auto pipelineResult = m_chatRunPipelineOrchestrator.Run(stageContext);
 				EmitTelemetryEvent(
 					"gateway.chat.pipeline.stages",
 					std::string("{\"requestId\":") +
 					JsonString(stageContext.requestId) +
+					",\"runId\":" +
+					JsonString(stageContext.runId) +
+					",\"sessionKey\":" +
+					JsonString(stageContext.sessionKey) +
+					",\"forceError\":" +
+					std::string(stageContext.forceError ? "true" : "false") +
+					",\"hasAttachmentPayload\":" +
+					std::string(stageContext.hasAttachmentPayload ? "true" : "false") +
+					",\"normalizedMessageChars\":" +
+					std::to_string(stageContext.normalizedMessage.size()) +
 					",\"method\":" +
 					JsonString(stageContext.method) +
 					",\"status\":" +
@@ -3008,17 +3019,12 @@ namespace blazeclaw::gateway {
 					SerializeStringArrayLocal(stageContext.stageTrace) +
 					"}");
 
-				const std::string requestedSessionKey =
-					ExtractStringParam(request.paramsJson, "sessionKey");
-				const std::string sessionKey =
-					requestedSessionKey.empty() ? "main" : requestedSessionKey;
-				const std::string message =
-					ExtractStringParam(request.paramsJson, "message");
-				const std::string normalizedMessage = json::Trim(message);
-				const std::string idempotencyKey =
-					ExtractStringParam(request.paramsJson, "idempotencyKey");
-				const bool forceError =
-					ExtractBoolParam(request.paramsJson, "forceError").value_or(false);
+				const std::string requestedSessionKey = stageContext.requestedSessionKey;
+				const std::string sessionKey = stageContext.sessionKey;
+				const std::string message = stageContext.message;
+				const std::string normalizedMessage = stageContext.normalizedMessage;
+				const std::string idempotencyKey = stageContext.idempotencyKey;
+				const bool forceError = stageContext.forceError;
 
 				bool hasAttachments = false;
 				std::string attachmentsErrorCode;
@@ -3076,11 +3082,15 @@ namespace blazeclaw::gateway {
 					}
 				}
 
-				const std::uint64_t nowMs = CurrentEpochMsLocal();
-				const std::string runId = !request.id.empty()
-					? request.id
-					: ("chat-run-" + std::to_string(nowMs) +
-						"-" + std::to_string(m_chatRunsById.size() + 1));
+				const std::uint64_t nowMs = stageContext.nowEpochMs > 0
+					? stageContext.nowEpochMs
+					: CurrentEpochMsLocal();
+				const std::string runId = !stageContext.runId.empty()
+					? stageContext.runId
+					: (!request.id.empty()
+						? request.id
+						: ("chat-run-" + std::to_string(nowMs) +
+							"-" + std::to_string(m_chatRunsById.size() + 1)));
 
 				auto persistTaskDeltas =
 					[this, &runId, &sessionKey](
@@ -3199,7 +3209,7 @@ namespace blazeclaw::gateway {
 					runtimeToolsSnapshot,
 					m_skillsCatalogState.entries);
 				const bool preferChineseResponse =
-					IsLikelyChinesePromptLocal(normalizedMessage);
+					stageContext.preferChineseResponse;
 				std::vector<std::string> orderedAllowlistTargets;
 				bool enforceOrderedAllowlist = false;
 				if (orderedSequencePreflight.enforced &&
@@ -3226,14 +3236,8 @@ namespace blazeclaw::gateway {
 						? Utf8LiteralLocal(u8"\u6709\u5E8F\u6267\u884C\u6B65\u9AA4\uFF08\u4FDD\u6301\u987A\u5E8F\uFF09\uFF1A")
 						: "Ordered execution steps (preserve order): ") +
 						JoinOrderedResolution(orderedSequencePreflight) +
-						"\n\n" + normalizedMessage +
-						(preferChineseResponse
-							? ("\n\n" + Utf8LiteralLocal(u8"\u8BF7\u4F7F\u7528\u4E2D\u6587\u56DE\u7B54\u7528\u6237\u95EE\u9898\u3002"))
-							: ""))
-					: (normalizedMessage +
-						(preferChineseResponse
-							? ("\n\n" + Utf8LiteralLocal(u8"\u8BF7\u4F7F\u7528\u4E2D\u6587\u56DE\u7B54\u7528\u6237\u95EE\u9898\u3002"))
-							: ""));
+						"\n\n" + stageContext.runtimeMessage)
+					: stageContext.runtimeMessage;
 				std::vector<ChatRuntimeResult::TaskDeltaEntry> orderedPreflightTaskDeltas;
 
 				if (forceError) {

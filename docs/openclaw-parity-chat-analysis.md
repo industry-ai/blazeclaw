@@ -162,6 +162,10 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
     and `ChatRunPipelineOrchestrator`.
   - `chat.send` now executes staged pipeline scaffolding and emits
     `gateway.chat.pipeline.stages` telemetry.
+- ✅ Workstream A decomposition progression beyond scaffolding:
+  - `chat.send` transport/control/decomposition/runtime pre-processing now uses
+    stage-owned context fields (session/message/idempotency/forceError/runtimeMessage/runId/timestamp)
+    before legacy continuation logic.
 
 [back to top](#index)
 
