@@ -107,11 +107,26 @@ namespace blazeclaw::gateway {
 		}
 
 		context.hasAttachmentPayload = hasAttachments;
+		if (context.extractAttachmentMimeTypes) {
+			context.attachmentMimeTypes =
+				context.extractAttachmentMimeTypes(context.paramsJson);
+		}
+		else {
+			context.attachmentMimeTypes.clear();
+		}
+
 		if (!context.attachmentsValid) {
 			context.shouldReturnEarly = true;
 			context.responseOk = false;
 			context.responseErrorCode = attachmentsErrorCode;
 			context.responseErrorMessage = attachmentsErrorMessage;
+			context.responseError = protocol::ErrorShape{
+				 .code = context.responseErrorCode,
+				 .message = context.responseErrorMessage,
+				 .detailsJson = std::nullopt,
+				 .retryable = false,
+				 .retryAfterMs = std::nullopt,
+			};
 			return AppendStage(context, Name(), {}, "validation_failed");
 		}
 
@@ -121,6 +136,13 @@ namespace blazeclaw::gateway {
 			context.responseErrorCode = "invalid_message";
 			context.responseErrorMessage =
 				"chat.send requires non-empty message or attachments.";
+			context.responseError = protocol::ErrorShape{
+				 .code = context.responseErrorCode,
+				 .message = context.responseErrorMessage,
+				 .detailsJson = std::nullopt,
+				 .retryable = false,
+				 .retryAfterMs = std::nullopt,
+			};
 			return AppendStage(context, Name(), {}, "validation_failed");
 		}
 
@@ -132,6 +154,7 @@ namespace blazeclaw::gateway {
 				context.dedupedRunId = *dedupedRunId;
 				context.shouldReturnEarly = true;
 				context.responseOk = true;
+				context.responseError.reset();
 				return AppendStage(context, Name(), {}, "deduped");
 			}
 		}

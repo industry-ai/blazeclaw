@@ -170,6 +170,9 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
   - attachment validation and idempotency dedupe are now emitted as control-stage
     execution results (including short-circuit outcomes), and consumed by `chat.send`
     without duplicating these branches inline.
+- ✅ Workstream A control-stage output enrichment:
+  - attachment MIME extraction and invalid-message error envelope assembly are now
+    stage-owned outputs (`attachmentMimeTypes`, `responseError`) consumed by `chat.send`.
 
 [back to top](#index)
 

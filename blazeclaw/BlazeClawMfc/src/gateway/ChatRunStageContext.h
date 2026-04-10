@@ -13,6 +13,9 @@ namespace blazeclaw::gateway {
 				std::string&)>;
 		using IdempotencyLookupCallback =
 			std::function<std::optional<std::string>(const std::string&)>;
+		using AttachmentMimeTypesCallback =
+			std::function<std::vector<std::string>(
+				const std::optional<std::string>&)>;
 
 		std::string requestId;
 		std::string method;
@@ -32,11 +35,14 @@ namespace blazeclaw::gateway {
 		bool responseOk = true;
 		std::string responseErrorCode;
 		std::string responseErrorMessage;
+		std::optional<protocol::ErrorShape> responseError;
+		std::vector<std::string> attachmentMimeTypes;
 		bool preferChineseResponse = false;
 		std::string runtimeMessage;
 		std::uint64_t nowEpochMs = 0;
 		AttachmentValidationCallback validateAttachments;
 		IdempotencyLookupCallback findRunByIdempotency;
+		AttachmentMimeTypesCallback extractAttachmentMimeTypes;
 		std::vector<std::string> stageTrace;
 		std::string diagnostics;
 	};

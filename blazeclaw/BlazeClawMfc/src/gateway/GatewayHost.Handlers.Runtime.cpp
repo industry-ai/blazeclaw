@@ -3019,6 +3019,10 @@ namespace blazeclaw::gateway {
 
 						return dedupeIt->second;
 					},
+				  .extractAttachmentMimeTypes = [this](
+						const std::optional<std::string>& paramsJson) {
+						return ExtractAttachmentMimeTypes(paramsJson);
+					},
 				};
 				auto pipelineResult = m_chatRunPipelineOrchestrator.Run(stageContext);
 				EmitTelemetryEvent(
@@ -3060,13 +3064,16 @@ namespace blazeclaw::gateway {
 						.id = request.id,
 						.ok = false,
 						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
-							.code = stageContext.responseErrorCode,
-							.message = stageContext.responseErrorMessage,
-							.detailsJson = std::nullopt,
-							.retryable = false,
-							.retryAfterMs = std::nullopt,
-						},
+					  .error = stageContext.responseError.has_value()
+							? stageContext.responseError
+							: std::optional<protocol::ErrorShape>(
+								protocol::ErrorShape{
+									.code = stageContext.responseErrorCode,
+									.message = stageContext.responseErrorMessage,
+									.detailsJson = std::nullopt,
+									.retryable = false,
+									.retryAfterMs = std::nullopt,
+								}),
 					};
 				}
 
@@ -3079,10 +3086,7 @@ namespace blazeclaw::gateway {
 				const bool hasAttachments = stageContext.hasAttachmentPayload;
 
 				const std::vector<std::string> attachmentMimeTypes =
-					ExtractAttachmentMimeTypes(request.paramsJson);
-
-
-
+					stageContext.attachmentMimeTypes;
 				const std::uint64_t nowMs = stageContext.nowEpochMs > 0
 					? stageContext.nowEpochMs
 					: CurrentEpochMsLocal();

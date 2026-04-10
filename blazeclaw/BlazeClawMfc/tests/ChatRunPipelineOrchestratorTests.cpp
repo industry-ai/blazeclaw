@@ -93,8 +93,38 @@ TEST_CASE("ChatRunPipelineOrchestrator control stage short-circuits on attachmen
 	REQUIRE_FALSE(context.responseOk);
 	REQUIRE(context.responseErrorCode == "invalid_attachments");
 	REQUIRE(context.responseErrorMessage == "attachments must be array");
+	REQUIRE(context.responseError.has_value());
+	REQUIRE(context.responseError->code == "invalid_attachments");
 	REQUIRE(context.stageTrace == std::vector<std::string>{
 		"transport",
 			"control",
 	});
+}
+
+TEST_CASE("ChatRunPipelineOrchestrator control stage owns attachment MIME extraction", "[pipeline][workstream-a]") {
+	ChatRunPipelineOrchestrator orchestrator;
+	ChatRunStageContext context;
+	context.requestId = "req-mime";
+	context.method = "chat.send";
+	context.paramsJson =
+		"{\"sessionKey\":\"main\",\"message\":\"image\",\"attachments\":[{\"mimeType\":\"image/png\"}]}";
+	context.validateAttachments = [](
+		const std::optional<std::string>&,
+		bool& hasAttachments,
+		std::string&,
+		std::string&) {
+			hasAttachments = true;
+			return true;
+		};
+	context.extractAttachmentMimeTypes = [](
+		const std::optional<std::string>&) {
+			return std::vector<std::string>{"image/png"};
+		};
+
+	const auto result = orchestrator.Run(context);
+
+	REQUIRE(result.ok);
+	REQUIRE(result.status == "completed");
+	REQUIRE(context.hasAttachmentPayload);
+	REQUIRE(context.attachmentMimeTypes == std::vector<std::string>{"image/png"});
 }
