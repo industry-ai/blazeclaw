@@ -232,6 +232,13 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
   - added stable `chat.send` contract-envelope parity assertions to strengthen
     fixture/contract freeze guardrails during phased cleanup
 
+- ✅ Item 1-7 verification update:
+  - implementation coverage is now explicitly verified across staged pipeline,
+    task-delta schema contract, runtime-default sequencing, compatibility gating,
+    bounded recovery controls, and policy-layer integration
+  - parity coverage now includes end-to-end `chat.send` send-policy denial envelope
+    assertion to validate deterministic policy admission behavior
+
 [back to top](#index)
 
 ### 2.1.2 Remaining parity implementation plan (extension lifecycle manager + workflow-engine runtime)

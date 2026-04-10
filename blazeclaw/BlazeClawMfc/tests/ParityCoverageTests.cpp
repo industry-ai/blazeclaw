@@ -51,6 +51,26 @@ TEST_CASE("Parity coverage: router-neutral route decision telemetry is emitted f
 	host.Stop();
 }
 
+TEST_CASE("Parity coverage: chat.send send-policy denial returns deterministic error envelope", "[parity][policy][send]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+
+	const auto response = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-send-policy-deny-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"\",\"message\":\"policy deny\"}"),
+		});
+
+	REQUIRE_FALSE(response.ok);
+	REQUIRE(response.error.has_value());
+	REQUIRE(response.error->code == "denied_send");
+	REQUIRE(response.payloadJson == std::nullopt);
+
+	host.Stop();
+}
+
 TEST_CASE("Parity coverage: lifecycle activation/deactivation updates tool catalog", "[parity][lifecycle]") {
 	PluginHostAdapter::RegisterExtensionAdapter(
 		"ops-tools",
