@@ -10,6 +10,9 @@
 #include "RuntimeToolCallNormalizer.h"
 #include "RuntimeTranscriptGuard.h"
 #include "RecoveryPolicyEngine.h"
+#include "SendPolicyResolver.h"
+#include "ToolPolicyPipeline.h"
+#include "TranscriptPolicyResolver.h"
 #include "GatewayLifecycleEventEmitter.h"
 #include "RunSummaryBuilder.h"
 #include "BranchDecisionDiagnostics.h"
@@ -3119,9 +3122,6 @@ namespace blazeclaw::gateway {
 				const std::string idempotencyKey = stageContext.idempotencyKey;
 				const bool forceError = stageContext.forceError;
 				const bool hasAttachments = stageContext.hasAttachmentPayload;
-
-				const std::vector<std::string> attachmentMimeTypes =
-					stageContext.attachmentMimeTypes;
 				const std::uint64_t nowMs = stageContext.nowEpochMs > 0
 					? stageContext.nowEpochMs
 					: CurrentEpochMsLocal();
@@ -3132,6 +3132,40 @@ namespace blazeclaw::gateway {
 						: ("chat-run-" + std::to_string(nowMs) +
 							"-" + std::to_string(m_chatRunsById.size() + 1)));
 
+				const std::vector<std::string> attachmentMimeTypes =
+					stageContext.attachmentMimeTypes;
+				const SendPolicyDecision sendPolicyDecision =
+					SendPolicyResolver::Evaluate(
+						sessionKey,
+						normalizedMessage,
+						hasAttachments,
+						attachmentMimeTypes);
+				if (!sendPolicyDecision.allowed) {
+					BranchDecisionDiagnostics::Emit(
+						runId,
+						"transport_control",
+						"send_policy",
+						"denied_send",
+						std::string("{\"hits\":") +
+						SerializeStringArrayLocal(sendPolicyDecision.policyHits) +
+						"}");
+					EmitTelemetryEvent(
+						"gateway.chat.policy.decision",
+						std::string("{\"runId\":") + JsonString(runId) +
+						",\"layer\":\"send\",\"reason\":\"denied_send\"}");
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = false,
+						.payloadJson = std::nullopt,
+						.error = protocol::ErrorShape{
+							.code = "denied_send",
+							.message = "Request denied by send policy.",
+							.detailsJson = std::nullopt,
+							.retryable = false,
+							.retryAfterMs = std::nullopt,
+						},
+					};
+				}
 				auto persistTaskDeltas =
 					[this, &runId, &sessionKey](
 						const std::vector<ChatRuntimeResult::TaskDeltaEntry>& taskDeltas,
@@ -3303,6 +3337,49 @@ namespace blazeclaw::gateway {
 						orderedAllowlistTargets.push_back(resolvedToolId);
 					}
 				}
+				const ToolPolicyDecision toolPolicyDecision =
+					ToolPolicyPipeline::Build(
+						enforceOrderedAllowlist,
+						orderedAllowlistTargets,
+						runtimeToolsSnapshot);
+				if (!toolPolicyDecision.allowAll &&
+					toolPolicyDecision.allowedTargets.empty()) {
+					BranchDecisionDiagnostics::Emit(
+						runId,
+						"runtime",
+						"tool_policy",
+						"tool_policy_block");
+					EmitTelemetryEvent(
+						"gateway.chat.policy.decision",
+						std::string("{\"runId\":") + JsonString(runId) +
+						",\"layer\":\"tool\",\"reason\":\"tool_policy_block\"}");
+				}
+				else {
+					orderedAllowlistTargets = toolPolicyDecision.allowedTargets;
+					enforceOrderedAllowlist = !toolPolicyDecision.allowAll;
+					EmitTelemetryEvent(
+						"gateway.chat.policy.decision",
+						std::string("{\"runId\":") + JsonString(runId) +
+						",\"layer\":\"tool\",\"reason\":" +
+						JsonString(toolPolicyDecision.reasonCode) + "}");
+				}
+
+				const TranscriptPolicyDecision transcriptPolicyDecision =
+					TranscriptPolicyResolver::Resolve(
+						stageContext.runtimeMessage,
+						"deepseek");
+				if (transcriptPolicyDecision.applied) {
+					BranchDecisionDiagnostics::Emit(
+						runId,
+						"runtime",
+						"transcript_policy",
+						"transcript_policy_applied");
+					EmitTelemetryEvent(
+						"gateway.chat.policy.decision",
+						std::string("{\"runId\":") + JsonString(runId) +
+						",\"layer\":\"transcript\",\"reason\":\"transcript_policy_applied\"}");
+				}
+
 				const std::string runtimeMessage =
 					(orderedSequencePreflight.enforced && !enforceOrderedAllowlist)
 					? (std::string(preferChineseResponse
@@ -3310,8 +3387,8 @@ namespace blazeclaw::gateway {
 						: "Ordered execution steps (preserve order): ") +
 						RuntimeSequencingPolicy::JoinOrderedResolution(
 							orderedSequencePreflight) +
-						"\n\n" + stageContext.runtimeMessage)
-					: stageContext.runtimeMessage;
+						"\n\n" + transcriptPolicyDecision.sanitizedMessage)
+					: transcriptPolicyDecision.sanitizedMessage;
 				std::vector<ChatRuntimeResult::TaskDeltaEntry> orderedPreflightTaskDeltas;
 
 				if (forceError) {

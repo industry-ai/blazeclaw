@@ -82,6 +82,9 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayLifecycleEventEmitter.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\RunSummaryBuilder.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\BranchDecisionDiagnostics.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\SendPolicyResolver.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\ToolPolicyPipeline.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\TranscriptPolicyResolver.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayMethodDispatcher.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayToolRegistry.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\PluginHostAdapter.cpp" />

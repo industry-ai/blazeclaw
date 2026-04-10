@@ -205,6 +205,12 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
   - runtime lifecycle transitions now emit standardized `gateway.chat.lifecycle`
     telemetry and branch diagnostics emit `gateway.chat.branchDecision`
   - terminal run envelopes now emit structured `gateway.chat.runSummary` telemetry
+- ✅ Cross-workstream policy parity baseline integration:
+  - implemented `SendPolicyResolver`, `ToolPolicyPipeline`, and
+    `TranscriptPolicyResolver`
+  - `chat.send` now applies policy-guided send admission, tool policy shaping,
+    and transcript sanitization before runtime callback dispatch
+  - policy reason-code telemetry now emits via `gateway.chat.policy.decision`
 
 [back to top](#index)
 
