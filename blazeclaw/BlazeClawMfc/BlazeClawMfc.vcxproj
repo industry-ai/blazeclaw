@@ -189,6 +189,13 @@
     <ClInclude Include="src\gateway\RuntimeSequencingPolicy.h" />
     <ClInclude Include="src\gateway\RuntimeToolCallNormalizer.h" />
     <ClInclude Include="src\gateway\RuntimeTranscriptGuard.h" />
+    <ClInclude Include="src\gateway\FailureClassifier.h" />
+    <ClInclude Include="src\gateway\RunLoopBudget.h" />
+    <ClInclude Include="src\gateway\CompactionCoordinator.h" />
+    <ClInclude Include="src\gateway\ToolResultTruncationCoordinator.h" />
+    <ClInclude Include="src\gateway\AuthProfilePolicyService.h" />
+    <ClInclude Include="src\gateway\ContextEnginePolicySelector.h" />
+    <ClInclude Include="src\gateway\RecoveryPolicyEngine.h" />
     <ClInclude Include="src\gateway\executors\LobsterExecutor.h" />
     <ClInclude Include="src\gateway\executors\PythonProcessExecutor.h" />
     <ClInclude Include="src\gateway\python\EmbeddedPythonRuntimeHost.h" />
@@ -316,6 +323,13 @@
     <ClCompile Include="src\gateway\RuntimeSequencingPolicy.cpp" />
     <ClCompile Include="src\gateway\RuntimeToolCallNormalizer.cpp" />
     <ClCompile Include="src\gateway\RuntimeTranscriptGuard.cpp" />
+    <ClCompile Include="src\gateway\FailureClassifier.cpp" />
+    <ClCompile Include="src\gateway\RunLoopBudget.cpp" />
+    <ClCompile Include="src\gateway\CompactionCoordinator.cpp" />
+    <ClCompile Include="src\gateway\ToolResultTruncationCoordinator.cpp" />
+    <ClCompile Include="src\gateway\AuthProfilePolicyService.cpp" />
+    <ClCompile Include="src\gateway\ContextEnginePolicySelector.cpp" />
+    <ClCompile Include="src\gateway\RecoveryPolicyEngine.cpp" />
     <ClCompile Include="src\gateway\python\EmbeddedPythonRuntimeHost.cpp" />
     <ClCompile Include="src\gateway\python\ExternalPythonRuntimeHost.cpp" />
     <ClCompile Include="src\gateway\python\PythonRuntimeDispatcher.cpp" />

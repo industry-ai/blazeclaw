@@ -194,6 +194,11 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
     and `RuntimeTranscriptGuard` components
   - migrated runtime preflight policy and transcript/tool normalization logic from
     inline gateway helper paths into extracted Workstream C classes
+- ✅ Workstream D recovery/fallback baseline integration:
+  - added `RecoveryPolicyEngine` + failure taxonomy/budget/compaction/
+    truncation/profile/context selectors as explicit components
+  - `chat.send` runtime failure path now executes ordered recovery decisions
+    and emits `gateway.chat.recovery.decision` telemetry with branch outcomes
 
 [back to top](#index)
 

@@ -43,6 +43,7 @@
     <ClCompile Include="..\BlazeClawMfc\tests\EmailScheduleFallbackTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ExtensionLifecycleManagerTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\LobsterExecutorTests.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\tests\RecoveryPolicyEngineTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\OpsToolsExecutorTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ParityCoverageTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\PythonRuntimeTests.cpp" />
@@ -71,6 +72,13 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\RuntimeSequencingPolicy.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\RuntimeToolCallNormalizer.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\RuntimeTranscriptGuard.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\FailureClassifier.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\RunLoopBudget.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\CompactionCoordinator.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\ToolResultTruncationCoordinator.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\AuthProfilePolicyService.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\ContextEnginePolicySelector.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\RecoveryPolicyEngine.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayMethodDispatcher.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayToolRegistry.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\PluginHostAdapter.cpp" />

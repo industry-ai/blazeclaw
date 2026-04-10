@@ -9,6 +9,7 @@
 #include "RuntimeSequencingPolicy.h"
 #include "RuntimeToolCallNormalizer.h"
 #include "RuntimeTranscriptGuard.h"
+#include "RecoveryPolicyEngine.h"
 #include "executors/EmailScheduleExecutor.h"
 
 #include <algorithm>
@@ -3833,6 +3834,73 @@ namespace blazeclaw::gateway {
 							sessionKey,
 							normalizedMessage,
 							m_toolRegistry);
+
+					if (failed) {
+						RunLoopBudget budget;
+						const RecoveryOutcome recoveryOutcome =
+							RecoveryPolicyEngine::Execute(
+								RecoveryRequest{
+									.runId = runId,
+									.sessionKey = sessionKey,
+									.message = normalizedMessage,
+									.errorCode = backendErrorCode,
+									.errorMessage = backendErrorMessage,
+									.authProfileId = "default",
+									.taskDeltas = runtimeTaskDeltas,
+								},
+								budget);
+
+						if (!recoveryOutcome.recoveryDeltas.empty()) {
+							runtimeTaskDeltas.insert(
+								runtimeTaskDeltas.end(),
+								recoveryOutcome.recoveryDeltas.begin(),
+								recoveryOutcome.recoveryDeltas.end());
+						}
+
+						if (!recoveryOutcome.normalizedDeltas.empty()) {
+							runtimeTaskDeltas = recoveryOutcome.normalizedDeltas;
+						}
+
+						EmitTelemetryEvent(
+							"gateway.chat.recovery.decision",
+							std::string("{\"runId\":") +
+							JsonString(runId) +
+							",\"recovered\":" +
+							std::string(recoveryOutcome.recovered ? "true" : "false") +
+							",\"retry\":" +
+							std::string(recoveryOutcome.shouldRetry ? "true" : "false") +
+							",\"reinvoke\":" +
+							std::string(recoveryOutcome.shouldReinvokeRuntime ? "true" : "false") +
+							",\"compaction\":" +
+							std::string(recoveryOutcome.compactionApplied ? "true" : "false") +
+							",\"truncation\":" +
+							std::string(recoveryOutcome.truncationApplied ? "true" : "false") +
+							",\"profile\":" +
+							JsonString(recoveryOutcome.selectedProfileId) +
+							",\"contextEngine\":" +
+							JsonString(recoveryOutcome.selectedContextEngineId) +
+							",\"terminalCode\":" +
+							JsonString(recoveryOutcome.terminalErrorCode) +
+							"}");
+
+						if (recoveryOutcome.recovered) {
+							failed = false;
+							backendErrorCode.clear();
+							backendErrorMessage.clear();
+							if (assistantText.empty()) {
+								assistantText = recoveryOutcome.compactionApplied
+									? "Recovered via context compaction; runtime will continue."
+									: "Recovered via fallback normalization; runtime will continue.";
+							}
+						}
+						else if (!recoveryOutcome.terminalErrorCode.empty()) {
+							backendErrorCode = recoveryOutcome.terminalErrorCode;
+							if (!recoveryOutcome.terminalErrorMessage.empty()) {
+								backendErrorMessage = recoveryOutcome.terminalErrorMessage;
+							}
+						}
+					}
+
 					if (!orderedPreflightTaskDeltas.empty()) {
 						std::vector<ChatRuntimeResult::TaskDeltaEntry> mergedTaskDeltas;
 						mergedTaskDeltas.reserve(
