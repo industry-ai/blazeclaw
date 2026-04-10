@@ -1569,11 +1569,17 @@ namespace blazeclaw::gateway {
 
 		const bool stageHealthy =
 			mutableThis->m_stageRuntimeHost != nullptr;
+		const GatewayHostRouteRequest routeRequest{
+			  .method = request.method,
+			  .orchestrationPath = m_embeddedOrchestrationPath,
+			  .stageHostHealthy = stageHealthy,
+			  .runtimeOrchestrationCompatEnabled =
+				  m_embeddedOrchestrationPath == "runtime_orchestration",
+			  .stagePipelineFeatureEnabled = true,
+			  .rolloutCohort = "default",
+		};
 		const GatewayHostRouteDecision routeDecision =
-			m_hostRouter.Decide(
-				request.method,
-				m_embeddedOrchestrationPath,
-				stageHealthy);
+			m_hostRouter.Decide(routeRequest);
 		EmitTelemetryEvent(
 			"gateway.host.route.decision",
 			std::string("{\"method\":") +
@@ -1584,6 +1590,7 @@ namespace blazeclaw::gateway {
 				? "stage_pipeline"
 				: "legacy") +
 			",\"reason\":" + JsonString(routeDecision.reasonCode) +
+			",\"cohort\":" + JsonString(routeDecision.selectedCohort) +
 			",\"fallback\":" +
 			std::string(routeDecision.fallback ? "true" : "false") +
 			"}");

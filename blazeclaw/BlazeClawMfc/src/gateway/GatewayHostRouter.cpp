@@ -4,25 +4,31 @@
 namespace blazeclaw::gateway {
 
 	GatewayHostRouteDecision GatewayHostRouter::Decide(
-		const std::string& method,
-		const std::string& orchestrationPath,
-		const bool stageHostHealthy) const {
+		const GatewayHostRouteRequest& request) const {
 		GatewayHostRouteDecision decision;
+		decision.selectedCohort = request.rolloutCohort;
 
-		if (method != "chat.send") {
+		if (request.method != "chat.send") {
 			decision.target = GatewayHostRouteTarget::Legacy;
 			decision.reasonCode = "legacy_non_chat_send";
 			return decision;
 		}
 
-		if (!stageHostHealthy) {
+		if (!request.stagePipelineFeatureEnabled) {
+			decision.target = GatewayHostRouteTarget::Legacy;
+			decision.reasonCode = "legacy_stage_pipeline_feature_disabled";
+			return decision;
+		}
+
+		if (!request.stageHostHealthy) {
 			decision.target = GatewayHostRouteTarget::Legacy;
 			decision.reasonCode = "fallback_stage_host_unhealthy";
 			decision.fallback = true;
 			return decision;
 		}
 
-		if (orchestrationPath == "runtime_orchestration") {
+		if (request.orchestrationPath == "runtime_orchestration" ||
+			request.runtimeOrchestrationCompatEnabled) {
 			decision.target = GatewayHostRouteTarget::Legacy;
 			decision.reasonCode = "legacy_runtime_orchestration_compat";
 			return decision;

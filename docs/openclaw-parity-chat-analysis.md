@@ -239,6 +239,12 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
   - parity coverage now includes end-to-end `chat.send` send-policy denial envelope
     assertion to validate deterministic policy admission behavior
 
+- ✅ Phase A contract/router scaffolding update:
+  - `IGatewayHostRuntime` contract is in place and used by routed host surfaces
+  - `GatewayHostRouter` now uses explicit route request metadata including
+    feature/compat/cohort inputs with deterministic reason-code decisions
+  - router tests now validate feature-gated legacy routing and cohort metadata
+
 [back to top](#index)
 
 ### 2.1.2 Remaining parity implementation plan (extension lifecycle manager + workflow-engine runtime)

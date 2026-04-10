@@ -4,6 +4,15 @@
 
 namespace blazeclaw::gateway {
 
+	struct GatewayHostRouteRequest {
+		std::string method;
+		std::string orchestrationPath;
+		bool stageHostHealthy = false;
+		bool runtimeOrchestrationCompatEnabled = false;
+		bool stagePipelineFeatureEnabled = true;
+		std::string rolloutCohort;
+	};
+
 	enum class GatewayHostRouteTarget {
 		Legacy,
 		StagePipeline,
@@ -13,14 +22,13 @@ namespace blazeclaw::gateway {
 		GatewayHostRouteTarget target = GatewayHostRouteTarget::Legacy;
 		std::string reasonCode = "legacy_default";
 		bool fallback = false;
+		std::string selectedCohort;
 	};
 
 	class GatewayHostRouter {
 	public:
 		[[nodiscard]] GatewayHostRouteDecision Decide(
-			const std::string& method,
-			const std::string& orchestrationPath,
-			bool stageHostHealthy) const;
+			const GatewayHostRouteRequest& request) const;
 	};
 
 } // namespace blazeclaw::gateway
