@@ -51,6 +51,67 @@ TEST_CASE("Parity coverage: router-neutral route decision telemetry is emitted f
 	host.Stop();
 }
 
+TEST_CASE("Parity coverage: GatewayHost via IGatewayHostRuntime preserves chat.send contract", "[parity][router][interface]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "interface contract ok";
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	IGatewayHostRuntime* runtime = &host;
+	const auto response = runtime->RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-interface-contract-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"interface route check\"}"),
+		});
+
+	REQUIRE(response.ok);
+	REQUIRE(response.payloadJson.has_value());
+	REQUIRE(response.payloadJson->find("\"runId\":") != std::string::npos);
+	REQUIRE(response.payloadJson->find("\"queued\":true") != std::string::npos);
+	REQUIRE(response.payloadJson->find("\"deduped\":false") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE("Parity coverage: GatewayHost via IGatewayHostRuntime preserves legacy non-chat dispatch", "[parity][router][interface]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+
+	IGatewayHostRuntime* runtime = &host;
+	const auto response = runtime->RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "tools-list-interface-1",
+			.method = "gateway.tools.list",
+			.paramsJson = std::string("{}"),
+		});
+
+	REQUIRE(response.ok);
+	REQUIRE(response.payloadJson.has_value());
+	REQUIRE(response.payloadJson->find("\"tools\":") != std::string::npos);
+
+	host.Stop();
+}
+
 TEST_CASE("Parity coverage: chat.send send-policy denial returns deterministic error envelope", "[parity][policy][send]") {
 	GatewayHost host;
 	blazeclaw::config::GatewayConfig gatewayConfig;

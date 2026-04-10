@@ -1562,6 +1562,10 @@ namespace blazeclaw::gateway {
 	}
 
 	protocol::ResponseFrame GatewayHost::RouteRequest(const protocol::RequestFrame& request) const {
+		if (request.method != "chat.send") {
+			return RouteRequestLegacy(request);
+		}
+
 		auto* mutableThis = const_cast<GatewayHost*>(this);
 		if (mutableThis->m_stageRuntimeHost == nullptr) {
 			mutableThis->m_stageRuntimeHost = std::make_unique<GatewayHostEx>(this);
@@ -1595,8 +1599,7 @@ namespace blazeclaw::gateway {
 			std::string(routeDecision.fallback ? "true" : "false") +
 			"}");
 
-		if (request.method == "chat.send" &&
-			routeDecision.target == GatewayHostRouteTarget::StagePipeline &&
+		if (routeDecision.target == GatewayHostRouteTarget::StagePipeline &&
 			mutableThis->m_stageRuntimeHost != nullptr) {
 			return mutableThis->m_stageRuntimeHost->RouteRequest(request);
 		}

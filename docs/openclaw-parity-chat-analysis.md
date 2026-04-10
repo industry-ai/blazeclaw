@@ -245,6 +245,13 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
     feature/compat/cohort inputs with deterministic reason-code decisions
   - router tests now validate feature-gated legacy routing and cohort metadata
 
+- ✅ Phase B legacy host alignment update:
+  - `GatewayHost` interface-path behavior now explicitly preserves legacy
+    non-chat dispatch semantics while keeping routed `chat.send` behavior
+    contract-stable
+  - parity coverage adds interface-invocation checks for both `chat.send`
+    envelope invariants and legacy non-chat dispatch compatibility
+
 [back to top](#index)
 
 ### 2.1.2 Remaining parity implementation plan (extension lifecycle manager + workflow-engine runtime)
