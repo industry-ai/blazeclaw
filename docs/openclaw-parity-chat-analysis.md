@@ -268,6 +268,12 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
   - coverage now includes centralized route payload helper assertions and
     `legacy_only` routing compatibility verification
 
+- ✅ Phase E tests/parity validation update:
+  - parity coverage now includes routed `chat.send` runId continuity checks
+    across ACK, task-deltas, and lifecycle polling surfaces
+  - router tests now assert explicit non-chat legacy route reason-code behavior
+  - telemetry tests now validate route-decision payload normalization behavior
+
 [back to top](#index)
 
 ### 2.1.2 Remaining parity implementation plan (extension lifecycle manager + workflow-engine runtime)

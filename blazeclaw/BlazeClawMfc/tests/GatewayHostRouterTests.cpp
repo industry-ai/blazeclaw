@@ -83,3 +83,20 @@ TEST_CASE("GatewayHostRouter falls back when stage host reports unhealthy", "[ro
 	REQUIRE(decision.reasonCode == "fallback_stage_host_unhealthy");
 	REQUIRE(decision.fallback);
 }
+
+TEST_CASE("GatewayHostRouter keeps legacy for non-chat requests", "[router]") {
+	GatewayHostRouter router;
+	const auto decision = router.Decide(GatewayHostRouteRequest{
+		.method = "gateway.tools.list",
+		.orchestrationPath = "stage_pipeline_canary",
+		.stageHostHealthy = true,
+		.runtimeOrchestrationCompatEnabled = false,
+		.stagePipelineFeatureEnabled = true,
+		.rolloutCohort = "canary",
+		});
+
+	REQUIRE(decision.target == GatewayHostRouteTarget::Legacy);
+	REQUIRE(decision.reasonCode == "legacy_non_chat_send");
+	REQUIRE_FALSE(decision.fallback);
+	REQUIRE(decision.selectedCohort == "canary");
+}

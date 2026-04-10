@@ -52,6 +52,87 @@ TEST_CASE("Parity coverage: router-neutral route decision telemetry is emitted f
 	host.Stop();
 }
 
+TEST_CASE("Parity coverage: routed chat.send preserves runId continuity across ack events and task-deltas", "[parity][router][runid]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	host.SetEmbeddedOrchestrationPath("stage_pipeline_canary");
+
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "runId continuity";
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "plan",
+					.status = "ok",
+					.stepLabel = "execution_plan",
+				},
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 1,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-router-runid-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"continuity check\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		sendResponse.payloadJson.value(),
+		"runId",
+		runId));
+	REQUIRE_FALSE(runId.empty());
+
+	const auto deltasResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-router-runid-1-deltas",
+			.method = "gateway.runtime.taskDeltas.get",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+
+	REQUIRE(deltasResponse.ok);
+	REQUIRE(deltasResponse.payloadJson.has_value());
+	REQUIRE(deltasResponse.payloadJson->find(std::string("\"runId\":\"") + runId + "\"") != std::string::npos);
+
+	std::string polledEvents;
+	for (int attempt = 0; attempt < 4; ++attempt) {
+		const auto eventsResponse = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = std::string("chat-router-runid-1-events-") + std::to_string(attempt),
+				.method = "chat.events.poll",
+				.paramsJson = std::string("{\"sessionKey\":\"main\",\"limit\":50}"),
+			});
+		REQUIRE(eventsResponse.ok);
+		REQUIRE(eventsResponse.payloadJson.has_value());
+		polledEvents += eventsResponse.payloadJson.value();
+		if (polledEvents.find("\"state\":\"final\"") != std::string::npos) {
+			break;
+		}
+	}
+
+	REQUIRE(polledEvents.find(std::string("\"runId\":\"") + runId + "\"") != std::string::npos);
+
+	host.Stop();
+}
+
 TEST_CASE("Parity coverage: legacy_only orchestration path preserves legacy routing", "[parity][router][legacy-only]") {
 	GatewayHost host;
 	blazeclaw::config::GatewayConfig gatewayConfig;

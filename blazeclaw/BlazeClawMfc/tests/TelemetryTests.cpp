@@ -89,3 +89,17 @@ TEST_CASE("BuildGatewayHostRouteDecisionPayload emits deterministic fields", "[t
 	REQUIRE(payload.find("\"cohort\":\"legacy_only\"") != std::string::npos);
 	REQUIRE(payload.find("\"fallback\":false") != std::string::npos);
 }
+
+TEST_CASE("BuildGatewayHostRouteDecisionPayload normalizes through telemetry payload object", "[telemetry][router]") {
+	const std::string routePayload = BuildGatewayHostRouteDecisionPayload(
+		"chat.send",
+		"stage_pipeline",
+		"stage_pipeline_dynamic_default",
+		"canary",
+		false);
+
+	const std::string normalized = NormalizePayloadObject(routePayload);
+	REQUIRE(normalized.find("\"method\":\"chat.send\"") != std::string::npos);
+	REQUIRE(normalized.find("\"target\":\"stage_pipeline\"") != std::string::npos);
+	REQUIRE(normalized.find("\"cohort\":\"canary\"") != std::string::npos);
+}
