@@ -170,6 +170,10 @@
     <ClInclude Include="src\gateway\GatewayAgentRegistry.h" />
     <ClInclude Include="src\gateway\GatewayChannelRegistry.h" />
     <ClInclude Include="src\gateway\GatewayHost.h" />
+    <ClInclude Include="src\gateway\ChatRunStageContext.h" />
+    <ClInclude Include="src\gateway\IChatRunStage.h" />
+    <ClInclude Include="src\gateway\ChatRunStages.h" />
+    <ClInclude Include="src\gateway\ChatRunPipelineOrchestrator.h" />
     <ClInclude Include="src\gateway\GatewayMethodDispatcher.h" />
     <ClInclude Include="src\gateway\GatewayPersistencePaths.h" />
     <ClInclude Include="src\gateway\GatewayProtocolContract.h" />
@@ -283,6 +287,8 @@
     <ClCompile Include="src\gateway\GatewayHost.Handlers.ScopeCluster.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Transport.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Tools.cpp" />
+    <ClCompile Include="src\gateway\ChatRunStages.cpp" />
+    <ClCompile Include="src\gateway\ChatRunPipelineOrchestrator.cpp" />
     <ClCompile Include="src\gateway\executors\EmailScheduleExecutor.cpp" />
     <ClCompile Include="src\gateway\executors\LobsterExecutor.cpp" />
     <ClCompile Include="src\gateway\executors\PythonProcessExecutor.cpp" />

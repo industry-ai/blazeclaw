@@ -10,6 +10,7 @@
 #include "ApprovalTokenStore.h"
 #include "GatewayWebSocketTransport.h"
 #include "GatewayProtocolContract.h"
+#include "ChatRunPipelineOrchestrator.h"
 
 #include <unordered_set>
 
@@ -395,6 +396,7 @@ namespace blazeclaw::gateway {
 		ChatAbortCallback m_chatAbortCallback;
 		EmbeddingsGenerateCallback m_embeddingsGenerateCallback;
 		EmbeddingsBatchCallback m_embeddingsBatchCallback;
+		ChatRunPipelineOrchestrator m_chatRunPipelineOrchestrator;
 	};
 
 } // namespace blazeclaw::gateway

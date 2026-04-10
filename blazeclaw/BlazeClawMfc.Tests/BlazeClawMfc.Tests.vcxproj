@@ -39,6 +39,7 @@
   <ItemGroup>
     <ClCompile Include="..\BlazeClawMfc\tests\ApprovalTokenStoreTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ConfigLoaderTests.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\tests\ChatRunPipelineOrchestratorTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\EmailScheduleFallbackTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ExtensionLifecycleManagerTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\LobsterExecutorTests.cpp" />
@@ -62,6 +63,8 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.SecurityOps.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Tools.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Transport.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\ChatRunStages.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\ChatRunPipelineOrchestrator.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayMethodDispatcher.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayToolRegistry.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\PluginHostAdapter.cpp" />

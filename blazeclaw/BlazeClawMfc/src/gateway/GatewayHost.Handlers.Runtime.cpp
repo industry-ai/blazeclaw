@@ -2,6 +2,7 @@
 #include "GatewayHost.h"
 #include "GatewayJsonUtils.h"
 #include "Telemetry.h"
+#include "ChatRunStageContext.h"
 #include "executors/EmailScheduleExecutor.h"
 
 #include <algorithm>
@@ -444,7 +445,7 @@ namespace blazeclaw::gateway {
 				std::to_string(delta.fallbackAttempt) +
 				",\"fallbackMaxAttempts\":" +
 				std::to_string(delta.fallbackMaxAttempts) +
-              ",\"argsJson\":\"" +
+				",\"argsJson\":\"" +
 				EscapeJsonLocal(delta.argsJson) +
 				"\",\"resultJson\":\"" +
 				EscapeJsonLocal(delta.resultJson) +
@@ -1566,7 +1567,7 @@ namespace blazeclaw::gateway {
 				it != end;
 				++it) {
 				if (it->size() >= 2) {
-                  const std::string target = (*it)[1].str();
+					const std::string target = (*it)[1].str();
 					addExplicitTarget(target);
 					addTarget(target);
 				}
@@ -1772,19 +1773,19 @@ namespace blazeclaw::gateway {
 				message,
 				&preflight.explicitCallTargets);
 
-            if (!preflight.explicitCallTargets.empty()) {
+			if (!preflight.explicitCallTargets.empty()) {
 				preflight.orderedTargets = preflight.explicitCallTargets;
 				preflight.strictAllowlist = true;
-               preflight.enforced = true;
+				preflight.enforced = true;
 			}
 			else {
-              if (!HasStructuralSequenceSignal(message)) {
+				if (!HasStructuralSequenceSignal(message)) {
 					return preflight;
 				}
 
 				preflight.orderedTargets = std::move(inferredTargets);
 				preflight.strictAllowlist = false;
-               preflight.enforced = preflight.orderedTargets.size() >= 2;
+				preflight.enforced = preflight.orderedTargets.size() >= 2;
 			}
 
 			preflight.resolvedToolTargets.reserve(preflight.orderedTargets.size());
@@ -2990,6 +2991,23 @@ namespace blazeclaw::gateway {
 		m_dispatcher.Register(
 			"chat.send",
 			[this](const protocol::RequestFrame& request) {
+				ChatRunStageContext stageContext{
+					   .requestId = request.id,
+					   .method = request.method,
+				};
+				auto pipelineResult = m_chatRunPipelineOrchestrator.Run(stageContext);
+				EmitTelemetryEvent(
+					"gateway.chat.pipeline.stages",
+					std::string("{\"requestId\":") +
+					JsonString(stageContext.requestId) +
+					",\"method\":" +
+					JsonString(stageContext.method) +
+					",\"status\":" +
+					JsonString(pipelineResult.status) +
+					",\"stages\":" +
+					SerializeStringArrayLocal(stageContext.stageTrace) +
+					"}");
+
 				const std::string requestedSessionKey =
 					ExtractStringParam(request.paramsJson, "sessionKey");
 				const std::string sessionKey =

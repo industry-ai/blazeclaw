@@ -157,6 +157,12 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
   - parity-oriented gateway test case (`ParityCoverageTests.cpp`) for catalog/execute/lifecycle contract
 - ⚠️ Remaining for full parity: workflow-engine plugin runtime completeness and concrete non-seeded weather/email runtime backends (tracked in sections 2.1.2 and 2.3).
 
+- ✅ Workstream A staged decomposition baseline implemented:
+  - Added `ChatRunStageContext`, `IChatRunStage`, concrete stage classes,
+    and `ChatRunPipelineOrchestrator`.
+  - `chat.send` now executes staged pipeline scaffolding and emits
+    `gateway.chat.pipeline.stages` telemetry.
+
 [back to top](#index)
 
 ### 2.1.2 Remaining parity implementation plan (extension lifecycle manager + workflow-engine runtime)
