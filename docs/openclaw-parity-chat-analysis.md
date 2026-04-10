@@ -212,6 +212,17 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
     and transcript sanitization before runtime callback dispatch
   - policy reason-code telemetry now emits via `gateway.chat.policy.decision`
 
+- ✅ Phase 1-2 execution-plan status:
+  - Phase 1 objectives are complete (staged pipeline and task-delta schema baseline)
+  - Phase 2 objectives are complete (runtime-default sequencing, compatibility gating,
+    bounded recovery controls, and send/tool/transcript policy integration)
+- ✅ Phase 3 progress update:
+  - UI lifecycle visibility expanded in native chat surfaces for
+    queued/started/delta/final/error/aborted state diagnostics
+  - fallback branch visibility in task-delta UI diagnostics now includes explicit
+    fallback entries (status/code/step label)
+  - lifecycle event parity coverage extended with queued/started/final assertions
+
 [back to top](#index)
 
 ### 2.1.2 Remaining parity implementation plan (extension lifecycle manager + workflow-engine runtime)

@@ -360,7 +360,7 @@ void COutputList::OnEditCopy()
 
 void COutputList::OnEditClear()
 {
-	MessageBox(_T("Clear output"));
+	ResetContent();
 }
 
 void COutputList::OnViewOutput()

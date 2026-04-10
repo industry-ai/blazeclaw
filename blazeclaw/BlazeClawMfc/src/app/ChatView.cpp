@@ -894,6 +894,13 @@ void CChatView::HandleChatEventNative(const NativeChatEventPayload& payload)
 
 	if (payload.state == "delta")
 	{
+		if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+		{
+			frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
+				"lifecycle",
+				std::string("state=delta runId=") + payload.runId));
+		}
+
 		const std::string next = payload.messageJson.has_value()
 			? ExtractMessageText(payload.messageJson.value())
 			: std::string();
@@ -910,6 +917,15 @@ void CChatView::HandleChatEventNative(const NativeChatEventPayload& payload)
 
 	if (payload.state == "final" || payload.state == "aborted")
 	{
+		if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+		{
+			frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
+				"lifecycle",
+				std::string("state=") + payload.state +
+				" runId=" +
+				payload.runId));
+		}
+
 		if (payload.messageJson.has_value())
 		{
 			const std::string text = ExtractMessageText(payload.messageJson.value());
@@ -939,11 +955,33 @@ void CChatView::HandleChatEventNative(const NativeChatEventPayload& payload)
 
 	if (payload.state == "error")
 	{
+		if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+		{
+			frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
+				"lifecycle",
+				std::string("state=error runId=") + payload.runId +
+				" detail=" +
+				payload.errorMessage.value_or("chat error")));
+		}
+
 		m_chatState.chatRunId.reset();
 		m_chatState.chatStream.reset();
 		m_chatState.chatStreamStartedAt.reset();
 		m_chatState.lastError = payload.errorMessage.value_or("chat error");
 		MaybeReportRunSkillPaths(payload.runId);
+		return;
+	}
+
+	if (payload.state == "queued" || payload.state == "started")
+	{
+		if (auto* frame = dynamic_cast<CMainFrame*>(AfxGetMainWnd()); frame != nullptr)
+		{
+			frame->AddChatStatusLine(BuildDeepSeekDiagnosticLine(
+				"lifecycle",
+				std::string("state=") + payload.state +
+				" runId=" +
+				payload.runId));
+		}
 		return;
 	}
 
@@ -1066,6 +1104,37 @@ void CChatView::ReportTriedSkillPathsToFindOutput(const std::string& runId)
 	{
 		std::string phase;
 		blazeclaw::gateway::json::FindStringField(deltaJson, "phase", phase);
+
+		if (phase == "fallback")
+		{
+			std::string status;
+			std::string errorCode;
+			std::string stepLabel;
+			blazeclaw::gateway::json::FindStringField(deltaJson, "status", status);
+			blazeclaw::gateway::json::FindStringField(deltaJson, "errorCode", errorCode);
+			blazeclaw::gateway::json::FindStringField(deltaJson, "stepLabel", stepLabel);
+
+			std::string fallbackLine =
+				std::string("  - [fallback] ") +
+				blazeclaw::gateway::json::Trim(stepLabel);
+			if (!blazeclaw::gateway::json::Trim(status).empty())
+			{
+				fallbackLine += " status=" + blazeclaw::gateway::json::Trim(status);
+			}
+			if (!blazeclaw::gateway::json::Trim(errorCode).empty())
+			{
+				fallbackLine += " code=" + blazeclaw::gateway::json::Trim(errorCode);
+			}
+
+			if (emitted.find(fallbackLine) == emitted.end())
+			{
+				emitted.insert(fallbackLine);
+				frame->AddFindStatusLine(
+					CString(CA2W(fallbackLine.c_str(), CP_UTF8)));
+			}
+			continue;
+		}
+
 		if (phase != "tool_result")
 		{
 			continue;

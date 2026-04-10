@@ -303,6 +303,65 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Parity coverage: chat.events.poll emits lifecycle visibility states in order",
+	"[parity][chat][events][lifecycle]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "lifecycle visibility response";
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-events-lifecycle-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"Lifecycle visibility test\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+
+	std::string eventPayload;
+	for (int i = 0; i < 5; ++i) {
+		const auto eventsResponse = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = std::string("chat-events-lifecycle-1-poll-") + std::to_string(i),
+				.method = "chat.events.poll",
+				.paramsJson = std::string("{\"sessionKey\":\"main\",\"limit\":50}"),
+			});
+		REQUIRE(eventsResponse.ok);
+		REQUIRE(eventsResponse.payloadJson.has_value());
+		eventPayload += eventsResponse.payloadJson.value();
+		if (eventPayload.find("\"state\":\"final\"") != std::string::npos) {
+			break;
+		}
+	}
+
+	REQUIRE(eventPayload.find("\"state\":\"queued\"") != std::string::npos);
+	REQUIRE(eventPayload.find("\"state\":\"started\"") != std::string::npos);
+	REQUIRE(eventPayload.find("\"state\":\"final\"") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
 	"Parity coverage: dynamic_task_delta defaults to runtime callback and avoids deterministic prompt orchestration branch",
 	"[parity][chat][runtime][dynamic-task-delta][default]") {
 	GatewayHost host;
