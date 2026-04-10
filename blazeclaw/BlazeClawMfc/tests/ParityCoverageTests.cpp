@@ -53,6 +53,80 @@ TEST_CASE("Parity coverage: router-neutral route decision telemetry is emitted f
 }
 
 TEST_CASE(
+	"Parity coverage: reversible route switch preserves idempotent run lineage",
+	"[parity][router][equivalence][idempotency]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "equivalence lineage";
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	const auto sendWithIdempotency =
+		[&host](const std::string& requestId,
+			const std::string& idempotencyKey) {
+				return host.RouteRequest(
+					blazeclaw::gateway::protocol::RequestFrame{
+						.id = requestId,
+						.method = "chat.send",
+						.paramsJson =
+							std::string("{\"sessionKey\":\"main\",\"message\":\"switch parity\",\"idempotencyKey\":\"") +
+							idempotencyKey +
+							"\"}",
+					});
+		};
+
+	host.SetEmbeddedOrchestrationPath("stage_pipeline_canary");
+	const auto stageFirst = sendWithIdempotency(
+		"route-switch-idem-stage-1",
+		"idem-route-switch-1");
+	REQUIRE(stageFirst.ok);
+	REQUIRE(stageFirst.payloadJson.has_value());
+
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		stageFirst.payloadJson.value(),
+		"runId",
+		runId));
+	REQUIRE_FALSE(runId.empty());
+
+	host.SetEmbeddedOrchestrationPath("legacy_only");
+	const auto legacyDedupe = sendWithIdempotency(
+		"route-switch-idem-legacy-1",
+		"idem-route-switch-1");
+	REQUIRE(legacyDedupe.ok);
+	REQUIRE(legacyDedupe.payloadJson.has_value());
+	REQUIRE(legacyDedupe.payloadJson->find("\"deduped\":true") != std::string::npos);
+	REQUIRE(legacyDedupe.payloadJson->find(std::string("\"runId\":\"") + runId + "\"") != std::string::npos);
+
+	host.SetEmbeddedOrchestrationPath("stage_pipeline_canary");
+	const auto stageDedupeAgain = sendWithIdempotency(
+		"route-switch-idem-stage-2",
+		"idem-route-switch-1");
+	REQUIRE(stageDedupeAgain.ok);
+	REQUIRE(stageDedupeAgain.payloadJson.has_value());
+	REQUIRE(stageDedupeAgain.payloadJson->find("\"deduped\":true") != std::string::npos);
+	REQUIRE(stageDedupeAgain.payloadJson->find(std::string("\"runId\":\"") + runId + "\"") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
 	"Parity coverage: chat.send succeeds across stage and legacy route mode switches",
 	"[parity][phase-f][chat][route-switch]") {
 	GatewayHost host;

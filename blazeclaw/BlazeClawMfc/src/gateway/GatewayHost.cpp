@@ -1622,7 +1622,23 @@ namespace blazeclaw::gateway {
 
 		if (routeDecision.target == GatewayHostRouteTarget::StagePipeline &&
 			mutableThis->m_stageRuntimeHost != nullptr) {
-			return mutableThis->m_stageRuntimeHost->RouteRequest(request);
+			const protocol::ResponseFrame stageResponse =
+				mutableThis->m_stageRuntimeHost->RouteRequest(request);
+			if (!stageResponse.ok &&
+				stageResponse.error.has_value() &&
+				stageResponse.error->code == "stage_host_unavailable") {
+				EmitTelemetryEvent(
+					"gateway.host.route.decision",
+					BuildGatewayHostRouteDecisionPayload(
+						request.method,
+						"legacy",
+						"fallback_stage_host_runtime_unavailable",
+						routeDecision.selectedCohort,
+						true));
+				return RouteRequestLegacy(request);
+			}
+
+			return stageResponse;
 		}
 
 		return RouteRequestLegacy(request);

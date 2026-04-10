@@ -100,3 +100,39 @@ TEST_CASE("GatewayHostRouter keeps legacy for non-chat requests", "[router]") {
 	REQUIRE_FALSE(decision.fallback);
 	REQUIRE(decision.selectedCohort == "canary");
 }
+
+TEST_CASE("GatewayHostRouter decisions are reversible for route mode switches", "[router]") {
+	GatewayHostRouter router;
+
+	const auto stageDecision = router.Decide(GatewayHostRouteRequest{
+		.method = "chat.send",
+		.orchestrationPath = "dynamic_task_delta",
+		.stageHostHealthy = true,
+		.runtimeOrchestrationCompatEnabled = false,
+		.stagePipelineFeatureEnabled = true,
+		.rolloutCohort = "canary",
+		});
+	REQUIRE(stageDecision.target == GatewayHostRouteTarget::StagePipeline);
+
+	const auto legacyDecision = router.Decide(GatewayHostRouteRequest{
+		.method = "chat.send",
+		.orchestrationPath = "dynamic_task_delta",
+		.stageHostHealthy = true,
+		.runtimeOrchestrationCompatEnabled = false,
+		.stagePipelineFeatureEnabled = false,
+		.rolloutCohort = "legacy_only",
+		});
+	REQUIRE(legacyDecision.target == GatewayHostRouteTarget::Legacy);
+	REQUIRE(legacyDecision.reasonCode == "legacy_stage_pipeline_feature_disabled");
+
+	const auto stageDecisionAgain = router.Decide(GatewayHostRouteRequest{
+		.method = "chat.send",
+		.orchestrationPath = "dynamic_task_delta",
+		.stageHostHealthy = true,
+		.runtimeOrchestrationCompatEnabled = false,
+		.stagePipelineFeatureEnabled = true,
+		.rolloutCohort = "canary",
+		});
+	REQUIRE(stageDecisionAgain.target == GatewayHostRouteTarget::StagePipeline);
+	REQUIRE(stageDecisionAgain.reasonCode == "stage_pipeline_dynamic_default");
+}

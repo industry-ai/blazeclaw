@@ -281,6 +281,13 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
     `gateway.agents.run`/`gateway.agents.wait` runId lineage continuity,
     and `chat.abort` run-correlation checks
 
+- ✅ Item 11 completion update:
+  - dual-host reversible route parity is now explicitly validated with idempotent
+    run-lineage continuity across `stage_pipeline_canary` and `legacy_only`
+  - router reversibility checks now assert deterministic target/reason restoration
+  - stage host runtime unavailability now yields deterministic legacy fallback
+    diagnostics (`fallback_stage_host_runtime_unavailable`)
+
 [back to top](#index)
 
 ### 2.1.2 Remaining parity implementation plan (extension lifecycle manager + workflow-engine runtime)
