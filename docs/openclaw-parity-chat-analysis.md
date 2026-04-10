@@ -179,6 +179,10 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
     on persisted/replayed/runtime task-delta paths
   - strengthened `gateway.runtime.taskDeltas.get` response contract validation and
     added dedicated task-delta contract tests
+- ✅ Workstream B repository hardening completion:
+  - removed remaining direct map mutation in persisted-load and retention paths,
+    so task-delta persistence/replay lifecycle is now repository-driven end-to-end
+    for Workstream B owned flows
 
 [back to top](#index)
 

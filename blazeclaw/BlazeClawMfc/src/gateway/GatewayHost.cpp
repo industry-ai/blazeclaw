@@ -1009,7 +1009,7 @@ namespace blazeclaw::gateway {
 			return;
 		}
 
-		m_taskDeltasByRunId.clear();
+		m_taskDeltaRepository.ClearAll();
 		for (const auto& runNode : root["runs"]) {
 			if (!runNode.is_object() ||
 				!runNode.contains("runId") ||
@@ -1024,8 +1024,7 @@ namespace blazeclaw::gateway {
 				continue;
 			}
 
-			auto& deltas = m_taskDeltasByRunId[runId];
-			deltas.clear();
+			std::vector<ChatRuntimeResult::TaskDeltaEntry> parsedDeltas;
 			for (const auto& deltaNode : runNode["taskDeltas"]) {
 				if (!deltaNode.is_object()) {
 					continue;
@@ -1051,19 +1050,19 @@ namespace blazeclaw::gateway {
 				delta.latencyMs = deltaNode.value("latencyMs", std::uint64_t{ 0 });
 				delta.modelTurnId = deltaNode.value("modelTurnId", std::string{});
 				delta.stepLabel = deltaNode.value("stepLabel", std::string{});
-				deltas.push_back(std::move(delta));
+				parsedDeltas.push_back(std::move(delta));
 			}
 
 			std::sort(
-				deltas.begin(),
-				deltas.end(),
+				parsedDeltas.begin(),
+				parsedDeltas.end(),
 				[](const ChatRuntimeResult::TaskDeltaEntry& left,
 					const ChatRuntimeResult::TaskDeltaEntry& right) {
 						return left.index < right.index;
 				});
 
 			std::string fallbackSessionId;
-			for (const auto& delta : deltas) {
+			for (const auto& delta : parsedDeltas) {
 				if (!delta.sessionId.empty()) {
 					fallbackSessionId = delta.sessionId;
 					break;
@@ -1073,7 +1072,7 @@ namespace blazeclaw::gateway {
 			auto normalizedDeltas = TaskDeltaLegacyAdapter::AdaptRun(
 				runId,
 				fallbackSessionId,
-				deltas);
+				parsedDeltas);
 
 			const bool hasPlanPhase = std::any_of(
 				normalizedDeltas.begin(),
@@ -1140,15 +1139,21 @@ namespace blazeclaw::gateway {
 				continue;
 			}
 
-			deltas = std::move(normalizedDeltas);
-			const bool upserted = m_taskDeltaRepository.Upsert(runId, deltas);
+			const bool upserted = m_taskDeltaRepository.Upsert(
+				runId,
+				normalizedDeltas);
 			(void)upserted;
 		}
 
-		if (m_taskDeltasByRunId.size() > m_taskDeltasRetentionLimit) {
-			while (m_taskDeltasByRunId.size() > m_taskDeltasRetentionLimit) {
-				m_taskDeltasByRunId.erase(m_taskDeltasByRunId.begin());
+		while (m_taskDeltaRepository.Size() > m_taskDeltasRetentionLimit) {
+			const auto& snapshot = m_taskDeltaRepository.Snapshot();
+			if (snapshot.empty()) {
+				break;
 			}
+
+			const bool cleared =
+				m_taskDeltaRepository.Clear(snapshot.begin()->first);
+			(void)cleared;
 		}
 
 		PersistTaskDeltas();

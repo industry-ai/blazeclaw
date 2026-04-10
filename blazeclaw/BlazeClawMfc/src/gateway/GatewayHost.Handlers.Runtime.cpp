@@ -3226,7 +3226,9 @@ namespace blazeclaw::gateway {
 							if (m_taskDeltaRepository.Size() > 64) {
 								const auto& snapshot = m_taskDeltaRepository.Snapshot();
 								if (!snapshot.empty()) {
-									m_taskDeltasByRunId.erase(snapshot.begin()->first);
+									const bool cleared =
+										m_taskDeltaRepository.Clear(snapshot.begin()->first);
+									(void)cleared;
 								}
 								PersistTaskDeltas();
 							}
