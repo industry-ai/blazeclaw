@@ -183,6 +183,12 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
   - removed remaining direct map mutation in persisted-load and retention paths,
     so task-delta persistence/replay lifecycle is now repository-driven end-to-end
     for Workstream B owned flows
+- ✅ Workstream C runtime-driven sequencing progression:
+  - `dynamic_task_delta` now defaults to runtime callback sequencing path,
+    while deterministic prompt orchestration is constrained to explicit
+    `runtime_orchestration` compatibility mode
+  - branch-selection telemetry (`gateway.chat.orchestration.pathSelection`) and
+    parity coverage were added to validate default-vs-compat behavior
 
 [back to top](#index)
 

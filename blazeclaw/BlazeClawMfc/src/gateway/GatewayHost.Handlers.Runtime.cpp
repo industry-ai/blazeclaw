@@ -3250,8 +3250,16 @@ namespace blazeclaw::gateway {
 				const std::string orchestrationPath =
 					ToLowerCopyLocal(m_embeddedOrchestrationPath);
 				const bool allowPromptOrchestration =
-					orchestrationPath == "runtime_orchestration" ||
-					orchestrationPath == "dynamic_task_delta";
+                 orchestrationPath == "runtime_orchestration";
+				EmitTelemetryEvent(
+					"gateway.chat.orchestration.pathSelection",
+					std::string("{\"runId\":") +
+					JsonString(runId) +
+					",\"path\":" +
+					JsonString(orchestrationPath) +
+					",\"compatDeterministicEnabled\":" +
+					std::string(allowPromptOrchestration ? "true" : "false") +
+					",\"dynamicRuntimeDefault\":true}");
 				const auto runtimeToolsSnapshot = m_toolRegistry.List();
 				const auto orderedSequencePreflight = BuildOrderedSequencePreflight(
 					normalizedMessage,

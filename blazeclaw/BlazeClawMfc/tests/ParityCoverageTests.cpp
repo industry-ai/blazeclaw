@@ -303,6 +303,74 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Parity coverage: dynamic_task_delta defaults to runtime callback and avoids deterministic prompt orchestration branch",
+	"[parity][chat][runtime][dynamic-task-delta][default]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+
+	std::size_t callbackCalls = 0;
+	host.SetChatRuntimeCallback(
+		[&](const GatewayHost::ChatRuntimeRequest& request) {
+			++callbackCalls;
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "dynamic default runtime callback";
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "plan",
+					.status = "ok",
+					.stepLabel = "execution_plan",
+				},
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 1,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			result.modelId = "default";
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-dynamic-default-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"Check tomorrow's weather in Wuhan, write a short report, and email it to jicheng@whu.edu.cn now.\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+	REQUIRE(callbackCalls == 1);
+
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		sendResponse.payloadJson.value(),
+		"runId",
+		runId));
+
+	const auto deltasResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-dynamic-default-1-deltas",
+			.method = "gateway.runtime.taskDeltas.get",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+
+	REQUIRE(deltasResponse.ok);
+	REQUIRE(deltasResponse.payloadJson.has_value());
+	REQUIRE(deltasResponse.payloadJson->find("\"phase\":\"final\"") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
 	"Parity coverage: runtime orchestration reflects fallback backend when himalaya is unavailable",
 	"[parity][chat][orchestration][e2e][runtime][fallback][backend]") {
 	char* previousModeRaw = nullptr;
