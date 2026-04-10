@@ -6,6 +6,7 @@
 
 using blazeclaw::gateway::NormalizePayloadObject;
 using blazeclaw::gateway::JsonString;
+using blazeclaw::gateway::BuildGatewayHostRouteDecisionPayload;
 using blazeclaw::gateway::RunSummaryBuilder;
 using blazeclaw::gateway::GatewayLifecycleEventEmitter;
 
@@ -71,5 +72,20 @@ TEST_CASE("Route decision telemetry payload keeps object shape", "[telemetry][ro
 
 	REQUIRE(payload.find("\"method\":\"chat.send\"") != std::string::npos);
 	REQUIRE(payload.find("\"target\":\"stage_pipeline\"") != std::string::npos);
+	REQUIRE(payload.find("\"fallback\":false") != std::string::npos);
+}
+
+TEST_CASE("BuildGatewayHostRouteDecisionPayload emits deterministic fields", "[telemetry][router]") {
+	const std::string payload = BuildGatewayHostRouteDecisionPayload(
+		"chat.send",
+		"legacy",
+		"legacy_stage_pipeline_feature_disabled",
+		"legacy_only",
+		false);
+
+	REQUIRE(payload.find("\"method\":\"chat.send\"") != std::string::npos);
+	REQUIRE(payload.find("\"target\":\"legacy\"") != std::string::npos);
+	REQUIRE(payload.find("\"reason\":\"legacy_stage_pipeline_feature_disabled\"") != std::string::npos);
+	REQUIRE(payload.find("\"cohort\":\"legacy_only\"") != std::string::npos);
 	REQUIRE(payload.find("\"fallback\":false") != std::string::npos);
 }

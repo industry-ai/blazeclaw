@@ -52,6 +52,25 @@ TEST_CASE("Parity coverage: router-neutral route decision telemetry is emitted f
 	host.Stop();
 }
 
+TEST_CASE("Parity coverage: legacy_only orchestration path preserves legacy routing", "[parity][router][legacy-only]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	host.SetEmbeddedOrchestrationPath("legacy_only");
+
+	const auto response = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-legacy-only-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"legacy only route\"}"),
+		});
+
+	REQUIRE(response.ok);
+	REQUIRE(response.payloadJson.has_value());
+
+	host.Stop();
+}
+
 TEST_CASE("Parity coverage: GatewayHostEx scaffolding remains health-gated and contract-safe", "[parity][router][gateway-host-ex]") {
 	GatewayHostEx hostEx(GatewayHostExDependencies{});
 

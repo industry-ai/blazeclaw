@@ -260,6 +260,14 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
   - parity coverage now validates GatewayHostEx unavailable-dependency
     contract behavior (`stage_host_unavailable`)
 
+- ✅ Phase D composition/diagnostics parity update:
+  - host-level route feature/cohort wiring is now explicit and deterministic
+    for router request composition
+  - route decision telemetry payload construction is centralized with stable
+    schema fields (`method`, `target`, `reason`, `cohort`, `fallback`)
+  - coverage now includes centralized route payload helper assertions and
+    `legacy_only` routing compatibility verification
+
 [back to top](#index)
 
 ### 2.1.2 Remaining parity implementation plan (extension lifecycle manager + workflow-engine runtime)

@@ -927,8 +927,24 @@ namespace blazeclaw::gateway {
 	void GatewayHost::SetEmbeddedOrchestrationPath(
 		const std::string& path) {
 		const std::string normalized = ToLowerCopy(json::Trim(path));
+		m_stagePipelineFeatureEnabled = true;
+		m_stagePipelineRolloutCohort = "default";
 		if (normalized == "runtime_orchestration") {
 			m_embeddedOrchestrationPath = normalized;
+			m_stagePipelineFeatureEnabled = false;
+			m_stagePipelineRolloutCohort = "compat_runtime_orchestration";
+			return;
+		}
+		if (normalized == "legacy_only") {
+			m_embeddedOrchestrationPath = "dynamic_task_delta";
+			m_stagePipelineFeatureEnabled = false;
+			m_stagePipelineRolloutCohort = "legacy_only";
+			return;
+		}
+		if (normalized == "stage_pipeline_canary") {
+			m_embeddedOrchestrationPath = "dynamic_task_delta";
+			m_stagePipelineFeatureEnabled = true;
+			m_stagePipelineRolloutCohort = "canary";
 			return;
 		}
 
@@ -1588,25 +1604,21 @@ namespace blazeclaw::gateway {
 			  .stageHostHealthy = stageHealthy,
 			  .runtimeOrchestrationCompatEnabled =
 				  m_embeddedOrchestrationPath == "runtime_orchestration",
-			  .stagePipelineFeatureEnabled = true,
-			  .rolloutCohort = "default",
+			.stagePipelineFeatureEnabled = m_stagePipelineFeatureEnabled,
+			  .rolloutCohort = m_stagePipelineRolloutCohort,
 		};
 		const GatewayHostRouteDecision routeDecision =
 			m_hostRouter.Decide(routeRequest);
 		EmitTelemetryEvent(
 			"gateway.host.route.decision",
-			std::string("{\"method\":") +
-			JsonString(request.method) +
-			",\"target\":" +
-			JsonString(
+			BuildGatewayHostRouteDecisionPayload(
+				request.method,
 				routeDecision.target == GatewayHostRouteTarget::StagePipeline
 				? "stage_pipeline"
-				: "legacy") +
-			",\"reason\":" + JsonString(routeDecision.reasonCode) +
-			",\"cohort\":" + JsonString(routeDecision.selectedCohort) +
-			",\"fallback\":" +
-			std::string(routeDecision.fallback ? "true" : "false") +
-			"}");
+				: "legacy",
+				routeDecision.reasonCode,
+				routeDecision.selectedCohort,
+				routeDecision.fallback));
 
 		if (routeDecision.target == GatewayHostRouteTarget::StagePipeline &&
 			mutableThis->m_stageRuntimeHost != nullptr) {

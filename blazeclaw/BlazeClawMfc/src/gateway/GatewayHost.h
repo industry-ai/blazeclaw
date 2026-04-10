@@ -355,6 +355,8 @@ namespace blazeclaw::gateway {
 		std::size_t m_failoverOverrideChanges = 0;
 		std::size_t m_failoverAttempts = 0;
 		std::size_t m_failoverFallbackHits = 0;
+		bool m_stagePipelineFeatureEnabled = true;
+		std::string m_stagePipelineRolloutCohort = "default";
 		std::string m_lastWarning;
 		bool m_fixtureParityValidated = false;
 		GatewayMethodDispatcher m_dispatcher;
