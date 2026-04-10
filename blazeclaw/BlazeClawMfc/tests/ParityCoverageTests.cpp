@@ -52,6 +52,216 @@ TEST_CASE("Parity coverage: router-neutral route decision telemetry is emitted f
 	host.Stop();
 }
 
+TEST_CASE(
+	"Parity coverage: chat.send succeeds across stage and legacy route mode switches",
+	"[parity][phase-f][chat][route-switch]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "phase-f route switch";
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	host.SetEmbeddedOrchestrationPath("stage_pipeline_canary");
+	const auto stageResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase-f-stage-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"stage path\"}"),
+		});
+	REQUIRE(stageResponse.ok);
+	REQUIRE(stageResponse.payloadJson.has_value());
+
+	std::string stageRunId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		stageResponse.payloadJson.value(),
+		"runId",
+		stageRunId));
+	REQUIRE_FALSE(stageRunId.empty());
+
+	host.SetEmbeddedOrchestrationPath("legacy_only");
+	const auto legacyResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase-f-legacy-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"legacy path\"}"),
+		});
+	REQUIRE(legacyResponse.ok);
+	REQUIRE(legacyResponse.payloadJson.has_value());
+
+	std::string legacyRunId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		legacyResponse.payloadJson.value(),
+		"runId",
+		legacyRunId));
+	REQUIRE_FALSE(legacyRunId.empty());
+	REQUIRE(stageRunId != legacyRunId);
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Parity coverage: gateway.agents.run idempotency and wait preserve runId lineage",
+	"[parity][phase-f][agents][runid]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "agent runId lineage";
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	const auto firstRun = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase-f-agents-run-1",
+			.method = "gateway.agents.run",
+			.paramsJson = std::string(
+				"{\"agentId\":\"default\",\"sessionId\":\"main\","
+				"\"message\":\"lineage\",\"idempotencyKey\":\"idem-phase-f-1\"}"),
+		});
+	REQUIRE(firstRun.ok);
+	REQUIRE(firstRun.payloadJson.has_value());
+
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		firstRun.payloadJson.value(),
+		"runId",
+		runId));
+	REQUIRE_FALSE(runId.empty());
+
+	const auto dedupedRun = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase-f-agents-run-1-dedupe",
+			.method = "gateway.agents.run",
+			.paramsJson = std::string(
+				"{\"agentId\":\"default\",\"sessionId\":\"main\","
+				"\"message\":\"lineage\",\"idempotencyKey\":\"idem-phase-f-1\"}"),
+		});
+	REQUIRE(dedupedRun.ok);
+	REQUIRE(dedupedRun.payloadJson.has_value());
+	REQUIRE(dedupedRun.payloadJson->find("\"deduped\":true") != std::string::npos);
+	REQUIRE(dedupedRun.payloadJson->find(std::string("\"runId\":\"") + runId + "\"") != std::string::npos);
+
+	for (int attempt = 0; attempt < 6; ++attempt) {
+		const auto pollResponse = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = std::string("phase-f-agents-run-1-poll-") + std::to_string(attempt),
+				.method = "chat.events.poll",
+				.paramsJson = std::string("{\"sessionKey\":\"main\",\"limit\":50}"),
+			});
+		REQUIRE(pollResponse.ok);
+	}
+
+	const auto waitResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase-f-agents-run-1-wait",
+			.method = "gateway.agents.wait",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+	REQUIRE(waitResponse.ok);
+	REQUIRE(waitResponse.payloadJson.has_value());
+	REQUIRE(waitResponse.payloadJson->find(std::string("\"runId\":\"") + runId + "\"") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Parity coverage: chat.abort preserves run correlation in later event polling",
+	"[parity][phase-f][chat][abort]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "abort lineage";
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase-f-abort-send-1",
+			.method = "chat.send",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"abort test\"}"),
+		});
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		sendResponse.payloadJson.value(),
+		"runId",
+		runId));
+	REQUIRE_FALSE(runId.empty());
+
+	const auto abortResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase-f-abort-1",
+			.method = "chat.abort",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"runId\":\"") + runId + "\"}",
+		});
+	REQUIRE(abortResponse.ok);
+	REQUIRE(abortResponse.payloadJson.has_value());
+	REQUIRE(abortResponse.payloadJson->find("\"aborted\":true") != std::string::npos);
+	REQUIRE(abortResponse.payloadJson->find(std::string("\"runId\":\"") + runId + "\"") != std::string::npos);
+
+	const auto eventsResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase-f-abort-1-events",
+			.method = "chat.events.poll",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"limit\":50}"),
+		});
+	REQUIRE(eventsResponse.ok);
+	REQUIRE(eventsResponse.payloadJson.has_value());
+	REQUIRE(eventsResponse.payloadJson->find("\"state\":\"aborted\"") != std::string::npos);
+	REQUIRE(eventsResponse.payloadJson->find(std::string("\"runId\":\"") + runId + "\"") != std::string::npos);
+
+	host.Stop();
+}
+
 TEST_CASE("Parity coverage: routed chat.send preserves runId continuity across ack events and task-deltas", "[parity][router][runid]") {
 	GatewayHost host;
 	blazeclaw::config::GatewayConfig gatewayConfig;

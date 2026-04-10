@@ -274,6 +274,13 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
   - router tests now assert explicit non-chat legacy route reason-code behavior
   - telemetry tests now validate route-decision payload normalization behavior
 
+- ✅ Phase F build/execution validation update:
+  - full solution build validation completed successfully for Debug x64
+  - phase-f parity subset execution passed (`[parity][phase-f]`)
+  - parity suite now includes route-mode switch success checks,
+    `gateway.agents.run`/`gateway.agents.wait` runId lineage continuity,
+    and `chat.abort` run-correlation checks
+
 [back to top](#index)
 
 ### 2.1.2 Remaining parity implementation plan (extension lifecycle manager + workflow-engine runtime)
