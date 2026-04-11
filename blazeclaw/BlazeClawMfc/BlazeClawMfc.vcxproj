@@ -209,6 +209,8 @@
     <ClInclude Include="src\gateway\GatewayHostRouter.h" />
     <ClInclude Include="src\gateway\GatewayHostEx.h" />
     <ClInclude Include="src\gateway\GatewayHandshakePolicy.h" />
+    <ClInclude Include="src\gateway\GatewayRequestPolicyGuard.h" />
+    <ClInclude Include="src\gateway\GatewayEventFanoutService.h" />
     <ClInclude Include="src\gateway\SendPolicyResolver.h" />
     <ClInclude Include="src\gateway\ToolPolicyPipeline.h" />
     <ClInclude Include="src\gateway\TranscriptPolicyResolver.h" />
@@ -358,6 +360,8 @@
     <ClCompile Include="src\gateway\GatewayHostRouter.cpp" />
     <ClCompile Include="src\gateway\GatewayHostEx.cpp" />
     <ClCompile Include="src\gateway\GatewayHandshakePolicy.cpp" />
+    <ClCompile Include="src\gateway\GatewayRequestPolicyGuard.cpp" />
+    <ClCompile Include="src\gateway\GatewayEventFanoutService.cpp" />
     <ClCompile Include="src\gateway\SendPolicyResolver.cpp" />
     <ClCompile Include="src\gateway\ToolPolicyPipeline.cpp" />
     <ClCompile Include="src\gateway\TranscriptPolicyResolver.cpp" />

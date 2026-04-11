@@ -14,6 +14,8 @@
 #include "TaskDeltaRepository.h"
 #include "IGatewayHostRuntime.h"
 #include "GatewayHostRouter.h"
+#include "GatewayRequestPolicyGuard.h"
+#include "GatewayEventFanoutService.h"
 
 #include <memory>
 
@@ -284,6 +286,7 @@ namespace blazeclaw::gateway {
 			std::uint64_t startedAtMs = 0;
 			bool active = true;
 			bool terminalEventEnqueued = false;
+			bool pushLifecycleRequested = false;
 			bool toolEventsAllowed = false;
 			std::string originatingChannel = "internal";
 			std::string originatingTo;
@@ -387,6 +390,7 @@ namespace blazeclaw::gateway {
 		std::unordered_map<std::string, ChatReplayEntry> m_chatReplayByIdempotency;
 		std::unordered_map<std::string, std::unordered_set<std::string>> m_chatToolEventRecipientsByRun;
 		std::unordered_set<std::string> m_chatTerminalDeliveredRunIds;
+		std::uint64_t m_chatPushEventSeq = 0;
 		std::unordered_map<std::string, std::vector<ChatRuntimeResult::TaskDeltaEntry>> m_taskDeltasByRunId;
 		std::size_t m_taskDeltasRetentionLimit = 64;
 		std::size_t m_taskDeltasMaxPayloadBytes = 1024 * 1024;
@@ -405,6 +409,8 @@ namespace blazeclaw::gateway {
 		ChatRunPipelineOrchestrator m_chatRunPipelineOrchestrator;
 		TaskDeltaRepository m_taskDeltaRepository{ m_taskDeltasByRunId };
 		GatewayHostRouter m_hostRouter;
+		GatewayRequestPolicyGuard m_requestPolicyGuard;
+		GatewayEventFanoutService m_eventFanoutService;
 		mutable std::unique_ptr<IGatewayHostRuntime> m_stageRuntimeHost;
 	};
 

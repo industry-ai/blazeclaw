@@ -526,6 +526,35 @@ namespace blazeclaw::gateway {
 		return true;
 	}
 
+	bool GatewayWebSocketTransport::BroadcastOutboundFrame(
+		const std::string& outboundFrame,
+		std::string& error) {
+		if (!m_running) {
+			error = "Transport is not running.";
+			return false;
+		}
+
+		for (auto& [_, session] : m_connections) {
+			if (session.outboundFrames.size() >= kMaxOutboundFramesPerConnection) {
+				error = "Outbound frame queue pressure limit reached for broadcast.";
+				return false;
+			}
+
+			session.outboundFrames.push_back(outboundFrame);
+			if (session.isNetworkConnection && session.handshakeComplete) {
+				if (!TryQueueNetworkFrame(
+					session,
+					EncodeServerFrame(0x1, true, outboundFrame),
+					error)) {
+					return false;
+				}
+			}
+		}
+
+		error.clear();
+		return true;
+	}
+
 	std::vector<std::string> GatewayWebSocketTransport::DrainOutboundFrames(
 		const std::string& connectionId,
 		std::string& error) {

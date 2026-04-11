@@ -22,6 +22,7 @@
 #include "ChatRoutePolicy.h"
 #include "ToolEventRecipientPolicy.h"
 #include "ChatControlPlaneService.h"
+#include "GatewayEventFanoutService.h"
 #include "executors/EmailScheduleExecutor.h"
 
 #include <algorithm>
@@ -439,6 +440,16 @@ namespace blazeclaw::gateway {
 
 			payload += "}";
 			return payload;
+		}
+
+		void EmitPushLifecycleEvent(
+			GatewayWebSocketTransport& transport,
+			const GatewayEventFanoutService& fanout,
+			const GatewayEventFanoutService::ChatLifecycleEvent& event,
+			std::uint64_t& eventSeq) {
+			std::string queueError;
+			const std::string frame = fanout.BuildChatLifecycleEventFrame(event, ++eventSeq);
+			transport.BroadcastOutboundFrame(frame, queueError);
 		}
 
 		bool IsTerminalChatState(const std::string& state) {
@@ -3142,6 +3153,8 @@ namespace blazeclaw::gateway {
 						? request.id
 						: ("chat-run-" + std::to_string(nowMs) +
 							"-" + std::to_string(m_chatRunsById.size() + 1)));
+				const bool pushLifecycleEnabled =
+					stageContext.pushLifecycleRequested;
 
 				ChatControlPlaneService controlPlaneService;
 				const auto sendControlDecision =
@@ -3767,6 +3780,7 @@ namespace blazeclaw::gateway {
 									.startedAtMs = nowMs,
 								 .active = true,
 								 .terminalEventEnqueued = false,
+									.pushLifecycleRequested = pushLifecycleEnabled,
 									.toolEventsAllowed = sendControlDecision.toolEvents.wantsToolEvents,
 									.originatingChannel = sendControlDecision.route.originatingChannel,
 									.originatingTo = sendControlDecision.route.originatingTo,
@@ -3852,6 +3866,32 @@ namespace blazeclaw::gateway {
 						runId,
 						sessionKey,
 						nowMs);
+					if (pushLifecycleEnabled) {
+						EmitPushLifecycleEvent(
+							m_transport,
+							m_eventFanoutService,
+							GatewayEventFanoutService::ChatLifecycleEvent{
+								.runId = runId,
+								.sessionKey = sessionKey,
+								.state = "queued",
+								.messageJson = std::nullopt,
+								.errorMessage = std::nullopt,
+								.timestampMs = nowMs,
+							},
+							m_chatPushEventSeq);
+						EmitPushLifecycleEvent(
+							m_transport,
+							m_eventFanoutService,
+							GatewayEventFanoutService::ChatLifecycleEvent{
+								.runId = runId,
+								.sessionKey = sessionKey,
+								.state = "started",
+								.messageJson = std::nullopt,
+								.errorMessage = std::nullopt,
+								.timestampMs = nowMs,
+							},
+							m_chatPushEventSeq);
+					}
 
 					m_chatRunsById.insert_or_assign(
 						runId,
@@ -3870,6 +3910,7 @@ namespace blazeclaw::gateway {
 							.startedAtMs = nowMs,
 							.active = true,
 						 .terminalEventEnqueued = false,
+							.pushLifecycleRequested = pushLifecycleEnabled,
 							.toolEventsAllowed = sendControlDecision.toolEvents.wantsToolEvents,
 							.originatingChannel = sendControlDecision.route.originatingChannel,
 							.originatingTo = sendControlDecision.route.originatingTo,
@@ -3922,17 +3963,34 @@ namespace blazeclaw::gateway {
 											.errorMessage = std::nullopt,
 											.timestampMs = CurrentEpochMsLocal(),
 										});
+									const std::uint64_t deltaNowMs = CurrentEpochMsLocal();
 									GatewayLifecycleEventEmitter::EmitLifecycle(
 										"delta",
 										runId,
 										sessionKey,
-										CurrentEpochMsLocal());
+									 deltaNowMs);
 
 									auto runStateIt = m_chatRunsById.find(runId);
+									if (runStateIt != m_chatRunsById.end() &&
+										runStateIt->second.pushLifecycleRequested) {
+										EmitPushLifecycleEvent(
+											m_transport,
+							 m_eventFanoutService,
+											GatewayEventFanoutService::ChatLifecycleEvent{
+												.runId = runId,
+												.sessionKey = sessionKey,
+												.state = "delta",
+												.messageJson = BuildAssistantDeltaMessageJson(normalizedDelta),
+												.errorMessage = std::nullopt,
+												.timestampMs = deltaNowMs,
+											},
+											m_chatPushEventSeq);
+									}
+
 									if (runStateIt != m_chatRunsById.end()) {
 										runStateIt->second.assistantText = normalizedDelta;
 										runStateIt->second.streamCursor = normalizedDelta.size();
-										runStateIt->second.lastEmitMs = CurrentEpochMsLocal();
+									  runStateIt->second.lastEmitMs = deltaNowMs;
 									}
 
 									++streamedDeltaCount;
@@ -4185,6 +4243,32 @@ namespace blazeclaw::gateway {
 						runId,
 						sessionKey,
 						nowMs);
+					if (pushLifecycleEnabled) {
+						EmitPushLifecycleEvent(
+							m_transport,
+							m_eventFanoutService,
+							GatewayEventFanoutService::ChatLifecycleEvent{
+								.runId = runId,
+								.sessionKey = sessionKey,
+								.state = "queued",
+								.messageJson = std::nullopt,
+								.errorMessage = std::nullopt,
+								.timestampMs = nowMs,
+							},
+							m_chatPushEventSeq);
+						EmitPushLifecycleEvent(
+							m_transport,
+							m_eventFanoutService,
+							GatewayEventFanoutService::ChatLifecycleEvent{
+								.runId = runId,
+								.sessionKey = sessionKey,
+								.state = "started",
+								.messageJson = std::nullopt,
+								.errorMessage = std::nullopt,
+								.timestampMs = nowMs,
+							},
+							m_chatPushEventSeq);
+					}
 				}
 				EmitDeepSeekGatewayDiagnostic(
 					"event.enqueue",
@@ -4207,12 +4291,13 @@ namespace blazeclaw::gateway {
 				if (!failed && !silentAssistantReply && !providerStreamed) {
 					streamCursor = (std::min)(assistantText.size(), std::size_t{ 6 });
 					if (streamCursor > 0) {
+						const std::string initialDeltaMessage = BuildAssistantDeltaMessageJson(
+							assistantText.substr(0, streamCursor));
 						PushEventWithRetentionLimit(sessionEvents, ChatEventState{
 							   .runId = runId,
 							   .sessionKey = sessionKey,
 							   .state = "delta",
-							   .messageJson = BuildAssistantDeltaMessageJson(
-								   assistantText.substr(0, streamCursor)),
+							  .messageJson = initialDeltaMessage,
 							   .errorMessage = std::nullopt,
 							   .timestampMs = nowMs,
 							});
@@ -4229,6 +4314,20 @@ namespace blazeclaw::gateway {
 							sessionKey +
 							" queueSize=" +
 							std::to_string(sessionEvents.size()));
+						if (pushLifecycleEnabled) {
+							EmitPushLifecycleEvent(
+								m_transport,
+								m_eventFanoutService,
+								GatewayEventFanoutService::ChatLifecycleEvent{
+									.runId = runId,
+									.sessionKey = sessionKey,
+									.state = "delta",
+									.messageJson = initialDeltaMessage,
+									.errorMessage = std::nullopt,
+									.timestampMs = nowMs,
+								},
+								m_chatPushEventSeq);
+						}
 					}
 				}
 
@@ -4250,6 +4349,7 @@ namespace blazeclaw::gateway {
 							.startedAtMs = nowMs,
 						 .active = true,
 						 .terminalEventEnqueued = false,
+							.pushLifecycleRequested = pushLifecycleEnabled,
 							.toolEventsAllowed = sendControlDecision.toolEvents.wantsToolEvents,
 							.originatingChannel = sendControlDecision.route.originatingChannel,
 							.originatingTo = sendControlDecision.route.originatingTo,
@@ -4558,6 +4658,8 @@ namespace blazeclaw::gateway {
 
 				if (runIt != m_chatRunsById.end()) {
 					auto& run = runIt->second;
+					const bool pushLifecycleEnabledForRun =
+						run.pushLifecycleRequested;
 					const bool silentAssistantReply =
 						RuntimeTranscriptGuard::IsSilentReplyText(run.assistantText);
 					const bool enoughTimeElapsed =
@@ -4583,6 +4685,7 @@ namespace blazeclaw::gateway {
 						};
 
 						std::string deltaText;
+						std::string pollDeltaMessage;
 						if (run.providerDeltaCursor < run.providerDeltas.size()) {
 							while (run.providerDeltaCursor < run.providerDeltas.size()) {
 								deltaText = run.providerDeltas[run.providerDeltaCursor];
@@ -4616,15 +4719,30 @@ namespace blazeclaw::gateway {
 						}
 
 						run.lastEmitMs = nowMs;
+						pollDeltaMessage = BuildAssistantDeltaMessageJson(deltaText);
 
 						PushEventWithRetentionLimit(queue, ChatEventState{
 							   .runId = run.runId,
 							   .sessionKey = run.sessionKey,
 							   .state = "delta",
-							   .messageJson = BuildAssistantDeltaMessageJson(deltaText),
+							   .messageJson = pollDeltaMessage,
 							   .errorMessage = std::nullopt,
 							   .timestampMs = nowMs,
 							});
+						if (pushLifecycleEnabledForRun) {
+							EmitPushLifecycleEvent(
+								m_transport,
+								m_eventFanoutService,
+								GatewayEventFanoutService::ChatLifecycleEvent{
+									.runId = run.runId,
+									.sessionKey = run.sessionKey,
+									.state = "delta",
+									.messageJson = pollDeltaMessage,
+									.errorMessage = std::nullopt,
+									.timestampMs = nowMs,
+								},
+								m_chatPushEventSeq);
+						}
 						EmitDeepSeekGatewayDiagnostic(
 							"event.enqueue",
 							std::string("state=delta runId=") +
@@ -4642,31 +4760,46 @@ namespace blazeclaw::gateway {
 						(run.providerDeltaCursor >= run.providerDeltas.size() &&
 							run.streamCursor >= run.assistantText.size());
 					if (streamCompleted && !run.terminalEventEnqueued) {
+						const std::optional<std::string> terminalMessage =
+							run.failed || silentAssistantReply
+							? std::nullopt
+							: std::optional<std::string>(
+								BuildAssistantFinalMessageJson(run.assistantText, nowMs));
+						const std::optional<std::string> terminalError =
+							run.failed
+							? std::optional<std::string>(run.errorMessage.empty()
+								? "chat error"
+								: run.errorMessage)
+							: std::nullopt;
+
 						PushEventWithRetentionLimit(queue, ChatEventState{
 							   .runId = run.runId,
 							   .sessionKey = run.sessionKey,
 							   .state = run.failed ? "error" : "final",
-							   .messageJson = run.failed || silentAssistantReply
-								   ? std::nullopt
-								   : std::optional<std::string>(
-									   BuildAssistantFinalMessageJson(run.assistantText, nowMs)),
-							   .errorMessage = run.failed
-								   ? std::optional<std::string>(run.errorMessage.empty()
-									   ? "chat error"
-									   : run.errorMessage)
-								   : std::nullopt,
+							   .messageJson = terminalMessage,
+							   .errorMessage = terminalError,
 							   .timestampMs = nowMs,
 							});
+						if (pushLifecycleEnabledForRun) {
+							EmitPushLifecycleEvent(
+								m_transport,
+								m_eventFanoutService,
+								GatewayEventFanoutService::ChatLifecycleEvent{
+									.runId = run.runId,
+									.sessionKey = run.sessionKey,
+									.state = run.failed ? "error" : "final",
+									.messageJson = terminalMessage,
+									.errorMessage = terminalError,
+									.timestampMs = nowMs,
+								},
+								m_chatPushEventSeq);
+						}
 						GatewayLifecycleEventEmitter::EmitLifecycle(
 							run.failed ? "error" : "final",
 							run.runId,
 							run.sessionKey,
 							nowMs,
-							run.failed
-							? std::optional<std::string>(run.errorMessage.empty()
-								? "chat error"
-								: run.errorMessage)
-							: std::nullopt);
+							terminalError);
 						run.terminalEventEnqueued = true;
 						EmitDeepSeekGatewayDiagnostic(
 							"event.enqueue",

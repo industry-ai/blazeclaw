@@ -92,6 +92,8 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostRouter.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostEx.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHandshakePolicy.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayRequestPolicyGuard.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayEventFanoutService.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\SendPolicyResolver.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ToolPolicyPipeline.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\TranscriptPolicyResolver.cpp" />

@@ -1555,6 +1555,23 @@ namespace blazeclaw::gateway {
 			return protocol::EncodeResponseFrame(schemaErrorResponse);
 		}
 
+		const auto policyError = m_requestPolicyGuard.Evaluate(
+			request,
+			GatewayRequestPolicyGuard::Context{
+				.dispatchInitialized = m_dispatchInitialized,
+				.hostRunning = m_running,
+			});
+		if (policyError.has_value()) {
+			const protocol::ResponseFrame policyErrorResponse{
+				.id = request.id,
+				.ok = false,
+				.payloadJson = std::nullopt,
+				.error = policyError,
+			};
+
+			return protocol::EncodeResponseFrame(policyErrorResponse);
+		}
+
 		const protocol::ResponseFrame routedResponse = RouteRequest(request);
 		if (!protocol::GatewayProtocolSchemaValidator::ValidateResponseForMethod(
 			request.method,
