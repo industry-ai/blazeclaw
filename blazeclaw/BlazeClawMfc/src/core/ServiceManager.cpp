@@ -2460,6 +2460,13 @@ namespace blazeclaw::core {
 	{
 		RefreshGatewaySkillsStateProjection();
 		PublishGatewaySkillsStateProjection();
+		m_gatewayHost.SetConfigSchemaGetCallback([this]() {
+			return BuildConfigSchemaGatewayState();
+			});
+		m_gatewayHost.SetConfigSchemaLookupCallback([this](
+			const std::string& path) {
+				return LookupConfigSchemaGatewayPath(path);
+			});
 		m_gatewayHost.SetSkillsRefreshCallback([this]() {
 			RefreshSkillsState(m_activeConfig, true, L"manual-refresh");
 			return m_gatewaySkillsStateProjection;
@@ -3787,6 +3794,63 @@ namespace blazeclaw::core {
 
 	const SkillsPromptSnapshot& ServiceManager::SkillsPrompt() const noexcept {
 		return m_skillsPrompt;
+	}
+
+	blazeclaw::gateway::ConfigSchemaGatewayState
+		ServiceManager::BuildConfigSchemaGatewayState() const {
+		return blazeclaw::gateway::ConfigSchemaGatewayState{
+			.schemaJson = "{}",
+			.uiHintsJson = "{}",
+			.version = "schema-v1",
+			.generatedAt = "",
+		};
+	}
+
+	std::optional<blazeclaw::gateway::ConfigSchemaGatewayLookupResult>
+		ServiceManager::LookupConfigSchemaGatewayPath(
+			const std::string& path) const {
+		const std::string normalized = blazeclaw::gateway::json::Trim(path);
+		if (normalized.empty()) {
+			return std::nullopt;
+		}
+
+		std::size_t segmentCount = 0;
+		std::string segment;
+		for (const char ch : normalized) {
+			if (ch == '.') {
+				if (!segment.empty()) {
+					if (segment == "__proto__" ||
+						segment == "prototype" ||
+						segment == "constructor") {
+						return std::nullopt;
+					}
+					++segmentCount;
+					segment.clear();
+				}
+				continue;
+			}
+
+			segment.push_back(ch);
+		}
+
+		if (!segment.empty()) {
+			if (segment == "__proto__" ||
+				segment == "prototype" ||
+				segment == "constructor") {
+				return std::nullopt;
+			}
+			++segmentCount;
+		}
+
+		if (segmentCount == 0 ||
+			segmentCount > blazeclaw::config::kConfigSchemaLookupMaxPathSegments) {
+			return std::nullopt;
+		}
+
+		blazeclaw::gateway::ConfigSchemaGatewayLookupResult result;
+		result.path = normalized;
+		result.schemaJson = "{}";
+		return result;
 	}
 
 	std::string ServiceManager::InvokeGatewayMethod(

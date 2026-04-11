@@ -117,11 +117,39 @@ namespace blazeclaw::gateway {
 		std::string lastCrossTenantAttestationAggregationPath;
 	};
 
+	struct ConfigSchemaGatewayChild {
+		std::string key;
+		std::string path;
+		std::string type;
+		bool required = false;
+		bool hasChildren = false;
+		std::optional<blazeclaw::config::ConfigUiHintModel> hint;
+		std::string hintPath;
+	};
+
+	struct ConfigSchemaGatewayLookupResult {
+		std::string path;
+		std::string schemaJson;
+		std::optional<blazeclaw::config::ConfigUiHintModel> hint;
+		std::string hintPath;
+		std::vector<ConfigSchemaGatewayChild> children;
+	};
+
+	struct ConfigSchemaGatewayState {
+		std::string schemaJson;
+		std::string uiHintsJson;
+		std::string version;
+		std::string generatedAt;
+	};
+
 	class GatewayHost : public IGatewayHostRuntime {
 	public:
 		using SkillsRefreshCallback = std::function<SkillsCatalogGatewayState()>;
 		using SkillsUpdateCallback = std::function<protocol::ResponseFrame(
 			const protocol::RequestFrame& request)>;
+		using ConfigSchemaGetCallback = std::function<ConfigSchemaGatewayState()>;
+		using ConfigSchemaLookupCallback = std::function<
+			std::optional<ConfigSchemaGatewayLookupResult>(const std::string& path)>;
 
 		struct ChatRuntimeRequest {
 			std::string runId;
@@ -204,6 +232,8 @@ namespace blazeclaw::gateway {
 		void SetSkillsCatalogState(SkillsCatalogGatewayState state);
 		void SetSkillsRefreshCallback(SkillsRefreshCallback callback);
 		void SetSkillsUpdateCallback(SkillsUpdateCallback callback);
+		void SetConfigSchemaGetCallback(ConfigSchemaGetCallback callback);
+		void SetConfigSchemaLookupCallback(ConfigSchemaLookupCallback callback);
 		void SetEmbeddedOrchestrationPath(const std::string& path);
 		void SetEmailFallbackRuntimeFlags(
 			bool preflightEnabled,
@@ -404,6 +434,8 @@ namespace blazeclaw::gateway {
 		SkillsCatalogGatewayState m_skillsCatalogState;
 		SkillsRefreshCallback m_skillsRefreshCallback;
 		SkillsUpdateCallback m_skillsUpdateCallback;
+		ConfigSchemaGetCallback m_configSchemaGetCallback;
+		ConfigSchemaLookupCallback m_configSchemaLookupCallback;
 		ChatRuntimeCallback m_chatRuntimeCallback;
 		ChatAbortCallback m_chatAbortCallback;
 		EmbeddingsGenerateCallback m_embeddingsGenerateCallback;

@@ -78,6 +78,10 @@ namespace blazeclaw::core {
 		[[nodiscard]] const SkillsCatalogSnapshot& SkillsCatalog() const noexcept;
 		[[nodiscard]] const SkillsEligibilitySnapshot& SkillsEligibility() const noexcept;
 		[[nodiscard]] const SkillsPromptSnapshot& SkillsPrompt() const noexcept;
+		[[nodiscard]] blazeclaw::gateway::ConfigSchemaGatewayState
+			BuildConfigSchemaGatewayState() const;
+		[[nodiscard]] std::optional<blazeclaw::gateway::ConfigSchemaGatewayLookupResult>
+			LookupConfigSchemaGatewayPath(const std::string& path) const;
 		[[nodiscard]] std::string InvokeGatewayMethod(
 			const std::string& method,
 			const std::optional<std::string>& paramsJson = std::nullopt) const;

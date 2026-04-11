@@ -5,6 +5,7 @@
 - Fully port OpenClaw features into BlazeClaw to avoid runtime dependency on the OpenClaw project alongside BlazeClaw.
 - Use `msbuild` to build `BlazeClaw.sln` for validation instead of generic build commands.
 - For fixing email fallback, use Option 5 + Option 6, which includes a dependency preflight health index and configurable fallback policy profiles.
+- For BlazeClaw config UX, keep a dual mechanism: use `config.html` provided by the skill when present; otherwise, use the ported OpenClaw schema-based configuration mechanism.
 
 ## Debugging Guidelines
 - When debugging behavior regressions, validate by actually modifying code and confirming rerun behavior, especially differences between English and Chinese prompts.

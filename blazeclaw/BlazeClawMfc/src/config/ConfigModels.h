@@ -357,6 +357,18 @@ namespace blazeclaw::config {
 		HooksEngineConfig engine;
 	};
 
+	inline constexpr std::size_t kConfigSchemaLookupMaxPathSegments = 32;
+	inline constexpr std::size_t kConfigSchemaMergeCacheMax = 64;
+
+	struct ConfigUiHintModel {
+		std::string label;
+		std::string help;
+		std::vector<std::string> tags;
+		bool advanced = false;
+		bool sensitive = false;
+		std::string placeholder;
+	};
+
 	struct ChatUiConfig {
 		std::wstring mode = L"webview2";
 		std::wstring activeProvider = L"local";

@@ -924,6 +924,16 @@ namespace blazeclaw::gateway {
 		m_skillsUpdateCallback = std::move(callback);
 	}
 
+	void GatewayHost::SetConfigSchemaGetCallback(
+		ConfigSchemaGetCallback callback) {
+		m_configSchemaGetCallback = std::move(callback);
+	}
+
+	void GatewayHost::SetConfigSchemaLookupCallback(
+		ConfigSchemaLookupCallback callback) {
+		m_configSchemaLookupCallback = std::move(callback);
+	}
+
 	void GatewayHost::SetEmbeddedOrchestrationPath(
 		const std::string& path) {
 		const std::string normalized = ToLowerCopy(json::Trim(path));
