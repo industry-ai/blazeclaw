@@ -17,6 +17,8 @@
 #include "RunSummaryBuilder.h"
 #include "BranchDecisionDiagnostics.h"
 #include "ChatTranscriptStore.h"
+#include "ChatAbortCoordinator.h"
+#include "ChatHistoryPolicy.h"
 #include "executors/EmailScheduleExecutor.h"
 
 #include <algorithm>
@@ -2990,38 +2992,31 @@ namespace blazeclaw::gateway {
 					requestedSessionKey.empty() ? "main" : requestedSessionKey;
 				const std::size_t requestedLimit =
 					ExtractSizeParam(request.paramsJson, "limit").value_or(200);
-				const std::size_t limit =
-					(std::max)(std::size_t{ 1 }, (std::min)(requestedLimit, std::size_t{ 500 }));
-
 				const auto historyIt = m_chatHistoryBySession.find(sessionKey);
-				std::string messagesJson = "[";
+				ChatHistoryPolicy historyPolicy;
+				ChatHistoryPolicy::BuildParams historyParams;
+				historyParams.requestedLimit = requestedLimit;
 				if (historyIt != m_chatHistoryBySession.end()) {
-					const auto& history = historyIt->second;
-					const std::size_t begin = history.size() > limit
-						? history.size() - limit
-						: 0;
-					bool firstMessage = true;
-					for (std::size_t i = begin; i < history.size(); ++i) {
-						if (IsSilentAssistantMessageJson(history[i])) {
-							continue;
-						}
-
-						if (!firstMessage) {
-							messagesJson += ",";
-						}
-
-						messagesJson += history[i];
-						firstMessage = false;
-					}
+					historyParams.history = historyIt->second;
 				}
 
-				messagesJson += "]";
+				const auto historyResult = historyPolicy.Build(historyParams);
+				if (historyResult.placeholderCount > 0) {
+					EmitTelemetryEvent(
+						"gateway.chat.history.placeholder",
+						std::string("{\"sessionKey\":") +
+						JsonString(sessionKey) +
+						",\"placeholderCount\":" +
+						std::to_string(historyResult.placeholderCount) +
+						"}");
+				}
+
 				return protocol::ResponseFrame{
 					.id = request.id,
 					.ok = true,
 					.payloadJson =
 						"{\"messages\":" +
-						messagesJson +
+					  historyResult.messagesJson +
 						",\"thinkingLevel\":\"normal\"}",
 					.error = std::nullopt,
 				};
@@ -4373,6 +4368,26 @@ namespace blazeclaw::gateway {
 				runIt->second.active = false;
 				runIt->second.streamCursor = runIt->second.assistantText.size();
 
+				ChatAbortCoordinator abortCoordinator;
+				const auto persistResult = abortCoordinator.PersistAbortedPartial(
+					ChatAbortCoordinator::PersistPartialParams{
+						.sessionKey = sessionKey,
+						.runId = runId,
+						.text = runIt->second.assistantText,
+						.origin = "rpc",
+					});
+				if (!persistResult.persisted && !persistResult.error.empty()) {
+					EmitTelemetryEvent(
+						"gateway.chat.abort.partialPersistence",
+						std::string("{\"runId\":") +
+						JsonString(runId) +
+						",\"sessionKey\":" +
+						JsonString(sessionKey) +
+						",\"persisted\":false,\"error\":" +
+						JsonString(persistResult.error) +
+						"}");
+				}
+
 				return protocol::ResponseFrame{
 					.id = request.id,
 					.ok = true,
@@ -4381,7 +4396,9 @@ namespace blazeclaw::gateway {
 						EscapeJsonLocal(runId) +
 						"\",\"sessionKey\":\"" +
 						EscapeJsonLocal(sessionKey) +
-						"\"}",
+					  "\",\"partialPersisted\":" +
+						std::string(persistResult.persisted ? "true" : "false") +
+						"}",
 					.error = std::nullopt,
 				};
 			});

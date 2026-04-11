@@ -55,6 +55,132 @@ TEST_CASE("Parity coverage: router-neutral route decision telemetry is emitted f
 }
 
 TEST_CASE(
+	"Phase 2: chat.abort persists partial assistant output",
+	"[parity][phase-2][chat][abort][durability]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "partial output to persist on abort";
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	const std::string sessionKey = "phase2abort";
+	const std::filesystem::path transcriptPath =
+		ResolveGatewayStateFilePath("chat-transcripts") /
+		(sessionKey + ".jsonl");
+	std::error_code removeError;
+	std::filesystem::remove(transcriptPath, removeError);
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase2-chat-send",
+			.method = "chat.send",
+			.paramsJson = std::string(
+				"{\"sessionKey\":\"phase2abort\",\"message\":\"abort me\",\"idempotencyKey\":\"phase2-idem\"}"),
+		});
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		sendResponse.payloadJson.value(),
+		"runId",
+		runId));
+	REQUIRE_FALSE(runId.empty());
+
+	const auto abortResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase2-chat-abort",
+			.method = "chat.abort",
+			.paramsJson = std::string("{\"sessionKey\":\"phase2abort\",\"runId\":\"") + runId + "\"}",
+		});
+	REQUIRE(abortResponse.ok);
+	REQUIRE(abortResponse.payloadJson.has_value());
+	REQUIRE(abortResponse.payloadJson->find("\"aborted\":true") != std::string::npos);
+	REQUIRE(abortResponse.payloadJson->find("\"partialPersisted\":true") != std::string::npos);
+
+	REQUIRE(std::filesystem::exists(transcriptPath));
+	std::ifstream transcript(transcriptPath, std::ios::in | std::ios::binary);
+	REQUIRE(transcript.is_open());
+	const std::string transcriptContent(
+		(std::istreambuf_iterator<char>(transcript)),
+		std::istreambuf_iterator<char>());
+	REQUIRE(transcriptContent.find("partial output to persist on abort") != std::string::npos);
+	REQUIRE(transcriptContent.find("abort:rpc:") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Phase 3: chat.history sanitizes, truncates, and bounds oversized entries",
+	"[parity][phase-3][chat][history][policy]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+
+	const std::string hugeText(150000, 'A');
+	const std::string longText(13050, 'B');
+
+	const auto injectHuge = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase3-chat-inject-huge",
+			.method = "chat.inject",
+			.paramsJson = std::string("{\"sessionKey\":\"phase3history\",\"message\":\"") + hugeText + "\"}",
+		});
+	REQUIRE(injectHuge.ok);
+
+	const auto historyOversizedResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase3-chat-history-oversized",
+			.method = "chat.history",
+			.paramsJson = std::string("{\"sessionKey\":\"phase3history\",\"limit\":5}"),
+		});
+	REQUIRE(historyOversizedResponse.ok);
+	REQUIRE(historyOversizedResponse.payloadJson.has_value());
+	REQUIRE(
+		historyOversizedResponse.payloadJson->find("[chat.history omitted: message too large]") !=
+		std::string::npos);
+
+	const auto injectLong = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase3-chat-inject-long",
+			.method = "chat.inject",
+			.paramsJson = std::string("{\"sessionKey\":\"phase3history\",\"message\":\"") + longText + "\"}",
+		});
+	REQUIRE(injectLong.ok);
+
+	const auto historyResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase3-chat-history",
+			.method = "chat.history",
+			.paramsJson = std::string("{\"sessionKey\":\"phase3history\",\"limit\":20}"),
+		});
+	REQUIRE(historyResponse.ok);
+	REQUIRE(historyResponse.payloadJson.has_value());
+	REQUIRE(
+		historyResponse.payloadJson->find("...(truncated)...") !=
+		std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
 	"Phase 0: chat control-plane contract matrix baseline",
 	"[parity][phase-0][chat][contract]") {
 	GatewayHost host;

@@ -190,6 +190,8 @@
     <ClInclude Include="src\gateway\RuntimeToolCallNormalizer.h" />
     <ClInclude Include="src\gateway\RuntimeTranscriptGuard.h" />
     <ClInclude Include="src\gateway\ChatTranscriptStore.h" />
+    <ClInclude Include="src\gateway\ChatAbortCoordinator.h" />
+    <ClInclude Include="src\gateway\ChatHistoryPolicy.h" />
     <ClInclude Include="src\gateway\FailureClassifier.h" />
     <ClInclude Include="src\gateway\RunLoopBudget.h" />
     <ClInclude Include="src\gateway\CompactionCoordinator.h" />
@@ -334,6 +336,8 @@
     <ClCompile Include="src\gateway\RuntimeToolCallNormalizer.cpp" />
     <ClCompile Include="src\gateway\RuntimeTranscriptGuard.cpp" />
     <ClCompile Include="src\gateway\ChatTranscriptStore.cpp" />
+    <ClCompile Include="src\gateway\ChatAbortCoordinator.cpp" />
+    <ClCompile Include="src\gateway\ChatHistoryPolicy.cpp" />
     <ClCompile Include="src\gateway\FailureClassifier.cpp" />
     <ClCompile Include="src\gateway\RunLoopBudget.cpp" />
     <ClCompile Include="src\gateway\CompactionCoordinator.cpp" />
