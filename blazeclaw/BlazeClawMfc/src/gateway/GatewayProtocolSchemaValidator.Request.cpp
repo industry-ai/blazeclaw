@@ -1371,6 +1371,41 @@ namespace blazeclaw::gateway::protocol {
 					JsonFieldKind::Array,
 					issue,
 					"chat.send",
+					"an array") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"deliver",
+					JsonFieldKind::Boolean,
+					issue,
+					"chat.send",
+					"boolean") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"originatingChannel",
+					JsonFieldKind::String,
+					issue,
+					"chat.send",
+					"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"originatingTo",
+					JsonFieldKind::String,
+					issue,
+					"chat.send",
+					"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"clientMode",
+					JsonFieldKind::String,
+					issue,
+					"chat.send",
+					"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"clientCaps",
+					JsonFieldKind::Array,
+					issue,
+					"chat.send",
 					"an array")) {
 				return false;
 			}
@@ -1380,7 +1415,12 @@ namespace blazeclaw::gateway::protocol {
 					field == "message" ||
 					field == "idempotencyKey" ||
 					field == "forceError" ||
-					field == "attachments") {
+					field == "attachments" ||
+					field == "deliver" ||
+					field == "originatingChannel" ||
+					field == "originatingTo" ||
+					field == "clientMode" ||
+					field == "clientCaps") {
 					continue;
 				}
 

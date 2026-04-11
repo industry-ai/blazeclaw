@@ -19,6 +19,9 @@
 #include "ChatTranscriptStore.h"
 #include "ChatAbortCoordinator.h"
 #include "ChatHistoryPolicy.h"
+#include "ChatRoutePolicy.h"
+#include "ToolEventRecipientPolicy.h"
+#include "ChatControlPlaneService.h"
 #include "executors/EmailScheduleExecutor.h"
 
 #include <algorithm>
@@ -3128,6 +3131,35 @@ namespace blazeclaw::gateway {
 						: ("chat-run-" + std::to_string(nowMs) +
 							"-" + std::to_string(m_chatRunsById.size() + 1)));
 
+				ChatControlPlaneService controlPlaneService;
+				const auto sendControlDecision =
+					controlPlaneService.EvaluateSendControl(
+						ChatControlPlaneService::SendControlInput{
+							.sessionKey = sessionKey,
+							.deliver = stageContext.deliver,
+							.routeChannel = stageContext.routeChannel,
+							.routeTo = stageContext.routeTo,
+							.clientMode = stageContext.clientMode,
+							.clientCaps = stageContext.clientCaps,
+							.runId = runId,
+						});
+				EmitTelemetryEvent(
+					"gateway.chat.controlplane.decision",
+					std::string("{\"runId\":") +
+					JsonString(runId) +
+					",\"route\":{\"originatingChannel\":" +
+					JsonString(sendControlDecision.route.originatingChannel) +
+					",\"explicitDeliverRoute\":" +
+					std::string(sendControlDecision.route.explicitDeliverRoute ? "true" : "false") +
+					",\"reasonCode\":" +
+					JsonString(sendControlDecision.route.reasonCode) +
+					"},\"toolEvents\":{\"allowed\":" +
+					std::string(sendControlDecision.toolEvents.wantsToolEvents ? "true" : "false") +
+					",\"reasonCode\":" +
+					JsonString(sendControlDecision.toolEvents.reasonCode) +
+					"}}"
+				);
+
 				const std::vector<std::string> attachmentMimeTypes =
 					stageContext.attachmentMimeTypes;
 				const SendPolicyDecision sendPolicyDecision =
@@ -3709,7 +3741,11 @@ namespace blazeclaw::gateway {
 									.errorMessage = {},
 									.startedAtMs = nowMs,
 								 .active = true,
-									.terminalEventEnqueued = false,
+								 .terminalEventEnqueued = false,
+									.toolEventsAllowed = sendControlDecision.toolEvents.wantsToolEvents,
+									.originatingChannel = sendControlDecision.route.originatingChannel,
+									.originatingTo = sendControlDecision.route.originatingTo,
+									.explicitDeliverRoute = sendControlDecision.route.explicitDeliverRoute,
 								});
 
 							persistTaskDeltas(legacyTaskDeltas, true);
@@ -3808,7 +3844,11 @@ namespace blazeclaw::gateway {
 							.errorMessage = {},
 							.startedAtMs = nowMs,
 							.active = true,
-							.terminalEventEnqueued = false,
+						 .terminalEventEnqueued = false,
+							.toolEventsAllowed = sendControlDecision.toolEvents.wantsToolEvents,
+							.originatingChannel = sendControlDecision.route.originatingChannel,
+							.originatingTo = sendControlDecision.route.originatingTo,
+							.explicitDeliverRoute = sendControlDecision.route.explicitDeliverRoute,
 						});
 
 					std::size_t streamedDeltaCount = 0;
@@ -3822,10 +3862,21 @@ namespace blazeclaw::gateway {
 							.hasAttachments = hasAttachments,
 							.attachmentMimeTypes = attachmentMimeTypes,
 						 .onAssistantDelta =
-								[this, &streamedDeltaCount, &runId, &sessionKey](const std::string& delta) {
+								[this,
+									&streamedDeltaCount,
+									&runId,
+									&sessionKey,
+									&controlPlaneService,
+									&sendControlDecision](const std::string& delta) {
 									const std::string normalizedDelta = json::Trim(delta);
 									if (normalizedDelta.empty() ||
 										RuntimeTranscriptGuard::IsSilentReplyText(normalizedDelta)) {
+										return;
+									}
+
+									if (!controlPlaneService.ShouldPublishToolDelta(
+										normalizedDelta,
+										sendControlDecision)) {
 										return;
 									}
 
@@ -4165,7 +4216,11 @@ namespace blazeclaw::gateway {
 							.errorMessage = backendErrorMessage,
 							.startedAtMs = nowMs,
 						 .active = true,
-							.terminalEventEnqueued = false,
+						 .terminalEventEnqueued = false,
+							.toolEventsAllowed = sendControlDecision.toolEvents.wantsToolEvents,
+							.originatingChannel = sendControlDecision.route.originatingChannel,
+							.originatingTo = sendControlDecision.route.originatingTo,
+							.explicitDeliverRoute = sendControlDecision.route.explicitDeliverRoute,
 						});
 				}
 
@@ -4185,7 +4240,12 @@ namespace blazeclaw::gateway {
 						(backendErrorCode.empty()
 							? std::string("null")
 							: ("\"" + EscapeJsonLocal(backendErrorCode) + "\"")) +
-						",\"queued\":true,\"deduped\":false}",
+					  ",\"queued\":true,\"deduped\":false" +
+						",\"originatingChannel\":" +
+						JsonString(sendControlDecision.route.originatingChannel) +
+						",\"explicitDeliverRoute\":" +
+						std::string(sendControlDecision.route.explicitDeliverRoute ? "true" : "false") +
+						"}",
 					.error = std::nullopt,
 				};
 			});
@@ -4437,10 +4497,36 @@ namespace blazeclaw::gateway {
 						((run.providerDeltaCursor < run.providerDeltas.size()) ||
 							(run.streamCursor < run.assistantText.size())) &&
 						enoughTimeElapsed) {
+						ChatControlPlaneService controlPlaneService;
+						const auto pollDecision =
+							ChatControlPlaneService::SendControlDecision{
+								.route = ChatRoutePolicy::Output{
+									.originatingChannel = run.originatingChannel,
+									.originatingTo = run.originatingTo,
+									.explicitDeliverRoute = run.explicitDeliverRoute,
+									.reasonCode = "persisted_run_state",
+								},
+								.toolEvents = ToolEventRecipientPolicy::Output{
+									.wantsToolEvents = run.toolEventsAllowed,
+									.reasonCode = "persisted_run_state",
+								},
+						};
+
 						std::string deltaText;
 						if (run.providerDeltaCursor < run.providerDeltas.size()) {
-							deltaText = run.providerDeltas[run.providerDeltaCursor];
-							++run.providerDeltaCursor;
+							while (run.providerDeltaCursor < run.providerDeltas.size()) {
+								deltaText = run.providerDeltas[run.providerDeltaCursor];
+								++run.providerDeltaCursor;
+								if (controlPlaneService.ShouldPublishToolDelta(
+									deltaText,
+									pollDecision)) {
+									break;
+								}
+								deltaText.clear();
+							}
+							if (deltaText.empty()) {
+								goto skip_poll_delta_emit;
+							}
 							run.streamCursor = deltaText.size();
 						}
 						else {
@@ -4468,6 +4554,7 @@ namespace blazeclaw::gateway {
 							run.sessionKey +
 							" queueSize=" +
 							std::to_string(queue.size()));
+					skip_poll_delta_emit:;
 					}
 
 					const bool streamCompleted =

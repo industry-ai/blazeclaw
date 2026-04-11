@@ -76,6 +76,9 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ChatTranscriptStore.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ChatAbortCoordinator.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ChatHistoryPolicy.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\ChatRoutePolicy.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\ToolEventRecipientPolicy.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\ChatControlPlaneService.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\FailureClassifier.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\RunLoopBudget.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\CompactionCoordinator.cpp" />

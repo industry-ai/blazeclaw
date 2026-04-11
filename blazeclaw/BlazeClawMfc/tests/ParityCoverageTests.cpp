@@ -6,6 +6,7 @@
 #include "gateway/PluginHostAdapter.h"
 #include "gateway/GatewayHostEx.h"
 #include "gateway/GatewayPersistencePaths.h"
+#include "gateway/ChatControlPlaneService.h"
 #include "gateway/executors/EmailScheduleExecutor.h"
 #include "config/ConfigModels.h"
 
@@ -52,6 +53,128 @@ TEST_CASE("Parity coverage: router-neutral route decision telemetry is emitted f
 	REQUIRE(sendResponse.ok);
 	REQUIRE(sendResponse.payloadJson.has_value());
 	host.Stop();
+}
+
+TEST_CASE(
+	"Phase 4: route policy and capability-gated tool events are enforced",
+	"[parity][phase-4][chat][route][caps]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "assistant response";
+			result.assistantDeltas = {
+				"tools.execute.start tool=weather.lookup",
+				"assistant response",
+			};
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	const auto sendNoCaps = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase4-send-nocaps",
+			.method = "chat.send",
+			.paramsJson = std::string(
+				"{\"sessionKey\":\"channel:general\",\"message\":\"route check\",\"deliver\":true,\"originatingChannel\":\"slack\",\"originatingTo\":\"U-no-caps\",\"clientMode\":\"desktop\"}"),
+		});
+	REQUIRE(sendNoCaps.ok);
+	REQUIRE(sendNoCaps.payloadJson.has_value());
+	REQUIRE(sendNoCaps.payloadJson->find("\"originatingChannel\":\"slack\"") != std::string::npos);
+	REQUIRE(sendNoCaps.payloadJson->find("\"explicitDeliverRoute\":true") != std::string::npos);
+
+	std::string polledNoCaps;
+	for (int i = 0; i < 4; ++i) {
+		const auto poll = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = std::string("phase4-poll-nocaps-") + std::to_string(i),
+				.method = "chat.events.poll",
+				.paramsJson = std::string("{\"sessionKey\":\"channel:general\",\"limit\":20}"),
+			});
+		REQUIRE(poll.ok);
+		REQUIRE(poll.payloadJson.has_value());
+		polledNoCaps += poll.payloadJson.value();
+	}
+	REQUIRE(polledNoCaps.find("tools.execute.start") == std::string::npos);
+
+	const auto sendWithCaps = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase4-send-withcaps",
+			.method = "chat.send",
+			.paramsJson = std::string(
+				"{\"sessionKey\":\"channel:general\",\"message\":\"route check with caps\",\"deliver\":true,\"originatingChannel\":\"slack\",\"originatingTo\":\"U-with-caps\",\"clientMode\":\"desktop\",\"clientCaps\":[\"TOOL_EVENTS\"]}"),
+		});
+	REQUIRE(sendWithCaps.ok);
+
+	std::string polledWithCaps;
+	for (int i = 0; i < 4; ++i) {
+		const auto poll = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = std::string("phase4-poll-withcaps-") + std::to_string(i),
+				.method = "chat.events.poll",
+				.paramsJson = std::string("{\"sessionKey\":\"channel:general\",\"limit\":20}"),
+			});
+		REQUIRE(poll.ok);
+		REQUIRE(poll.payloadJson.has_value());
+		polledWithCaps += poll.payloadJson.value();
+	}
+	REQUIRE(polledWithCaps.find("tools.execute.start") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Phase 5: chat control-plane service centralizes route and tool-delta gating decisions",
+	"[parity][phase-5][chat][decomposition]") {
+	ChatControlPlaneService service;
+
+	const auto noCapsDecision = service.EvaluateSendControl(
+		ChatControlPlaneService::SendControlInput{
+			.sessionKey = "channel:general",
+			.deliver = true,
+			.routeChannel = "slack",
+			.routeTo = "user-1",
+			.clientMode = "desktop",
+			.clientCaps = {},
+			.runId = "phase5-run-1",
+		});
+	REQUIRE(noCapsDecision.route.explicitDeliverRoute);
+	REQUIRE(noCapsDecision.route.originatingChannel == "slack");
+	REQUIRE_FALSE(noCapsDecision.toolEvents.wantsToolEvents);
+	REQUIRE_FALSE(
+		service.ShouldPublishToolDelta(
+			"tools.execute.start tool=weather.lookup",
+			noCapsDecision));
+
+	const auto withCapsDecision = service.EvaluateSendControl(
+		ChatControlPlaneService::SendControlInput{
+			.sessionKey = "channel:general",
+			.deliver = true,
+			.routeChannel = "slack",
+			.routeTo = "user-1",
+			.clientMode = "desktop",
+			.clientCaps = { "TOOL_EVENTS" },
+			.runId = "phase5-run-2",
+		});
+	REQUIRE(withCapsDecision.toolEvents.wantsToolEvents);
+	REQUIRE(
+		service.ShouldPublishToolDelta(
+			"tools.execute.start tool=weather.lookup",
+			withCapsDecision));
 }
 
 TEST_CASE(

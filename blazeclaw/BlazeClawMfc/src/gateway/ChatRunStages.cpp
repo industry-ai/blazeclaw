@@ -4,10 +4,44 @@
 #include "GatewayJsonUtils.h"
 
 #include <algorithm>
+#include <nlohmann/json.hpp>
 
 namespace blazeclaw::gateway {
 
 	namespace {
+
+		std::vector<std::string> ParseStringArrayField(
+			const std::optional<std::string>& paramsJson,
+			const std::string& fieldName) {
+			if (!paramsJson.has_value()) {
+				return {};
+			}
+
+			std::string raw;
+			if (!json::FindRawField(paramsJson.value(), fieldName, raw)) {
+				return {};
+			}
+
+			try {
+				const auto parsed = nlohmann::json::parse(raw);
+				if (!parsed.is_array()) {
+					return {};
+				}
+
+				std::vector<std::string> values;
+				for (const auto& item : parsed) {
+					if (!item.is_string()) {
+						continue;
+					}
+					values.push_back(item.get<std::string>());
+				}
+
+				return values;
+			}
+			catch (...) {
+				return {};
+			}
+		}
 
 		ChatRunStageResult AppendStage(
 			ChatRunStageContext& context,
@@ -82,6 +116,28 @@ namespace blazeclaw::gateway {
 			"idempotencyKey",
 			idempotencyKey);
 		context.idempotencyKey = idempotencyKey;
+
+		bool deliver = false;
+		if (json::FindBoolField(context.paramsJson.value(), "deliver", deliver)) {
+			context.deliver = deliver;
+		}
+		else {
+			context.deliver = false;
+		}
+
+		std::string routeChannel;
+		json::FindStringField(context.paramsJson.value(), "originatingChannel", routeChannel);
+		context.routeChannel = routeChannel;
+
+		std::string routeTo;
+		json::FindStringField(context.paramsJson.value(), "originatingTo", routeTo);
+		context.routeTo = routeTo;
+
+		std::string clientMode;
+		json::FindStringField(context.paramsJson.value(), "clientMode", clientMode);
+		context.clientMode = clientMode;
+
+		context.clientCaps = ParseStringArrayField(context.paramsJson, "clientCaps");
 
 		bool forceError = false;
 		if (json::FindBoolField(context.paramsJson.value(), "forceError", forceError)) {

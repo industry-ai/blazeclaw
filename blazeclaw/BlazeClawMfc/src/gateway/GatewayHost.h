@@ -284,6 +284,10 @@ namespace blazeclaw::gateway {
 			std::uint64_t startedAtMs = 0;
 			bool active = true;
 			bool terminalEventEnqueued = false;
+			bool toolEventsAllowed = false;
+			std::string originatingChannel = "internal";
+			std::string originatingTo;
+			bool explicitDeliverRoute = false;
 		};
 
 		struct ChatEventState {

@@ -26,6 +26,11 @@ namespace blazeclaw::gateway {
 		std::string message;
 		std::string normalizedMessage;
 		std::string idempotencyKey;
+		bool deliver = false;
+		std::string routeChannel;
+		std::string routeTo;
+		std::string clientMode;
+		std::vector<std::string> clientCaps;
 		bool forceError = false;
 		bool attachmentsValid = true;
 		bool hasAttachmentPayload = false;

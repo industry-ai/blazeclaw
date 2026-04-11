@@ -192,6 +192,9 @@
     <ClInclude Include="src\gateway\ChatTranscriptStore.h" />
     <ClInclude Include="src\gateway\ChatAbortCoordinator.h" />
     <ClInclude Include="src\gateway\ChatHistoryPolicy.h" />
+    <ClInclude Include="src\gateway\ChatRoutePolicy.h" />
+    <ClInclude Include="src\gateway\ToolEventRecipientPolicy.h" />
+    <ClInclude Include="src\gateway\ChatControlPlaneService.h" />
     <ClInclude Include="src\gateway\FailureClassifier.h" />
     <ClInclude Include="src\gateway\RunLoopBudget.h" />
     <ClInclude Include="src\gateway\CompactionCoordinator.h" />
@@ -338,6 +341,9 @@
     <ClCompile Include="src\gateway\ChatTranscriptStore.cpp" />
     <ClCompile Include="src\gateway\ChatAbortCoordinator.cpp" />
     <ClCompile Include="src\gateway\ChatHistoryPolicy.cpp" />
+    <ClCompile Include="src\gateway\ChatRoutePolicy.cpp" />
+    <ClCompile Include="src\gateway\ToolEventRecipientPolicy.cpp" />
+    <ClCompile Include="src\gateway\ChatControlPlaneService.cpp" />
     <ClCompile Include="src\gateway\FailureClassifier.cpp" />
     <ClCompile Include="src\gateway\RunLoopBudget.cpp" />
     <ClCompile Include="src\gateway\CompactionCoordinator.cpp" />
