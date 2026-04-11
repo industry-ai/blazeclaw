@@ -3086,6 +3086,17 @@ namespace blazeclaw::gateway {
 
 				if (stageContext.shouldReturnEarly) {
 					if (stageContext.deduped) {
+						const auto replayIt =
+							m_chatReplayByIdempotency.find(stageContext.idempotencyKey);
+						if (replayIt != m_chatReplayByIdempotency.end()) {
+							return protocol::ResponseFrame{
+								.id = request.id,
+								.ok = replayIt->second.ok,
+								.payloadJson = replayIt->second.payloadJson,
+								.error = replayIt->second.error,
+							};
+						}
+
 						return protocol::ResponseFrame{
 							.id = request.id,
 							.ok = true,
@@ -4230,24 +4241,43 @@ namespace blazeclaw::gateway {
 					m_chatRunByIdempotency.insert_or_assign(idempotencyKey, runId);
 				}
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"runId\":\"" +
-						EscapeJsonLocal(runId) +
-						"\",\"backendErrorCode\":" +
-						(backendErrorCode.empty()
-							? std::string("null")
-							: ("\"" + EscapeJsonLocal(backendErrorCode) + "\"")) +
-					  ",\"queued\":true,\"deduped\":false" +
-						",\"originatingChannel\":" +
-						JsonString(sendControlDecision.route.originatingChannel) +
-						",\"explicitDeliverRoute\":" +
-						std::string(sendControlDecision.route.explicitDeliverRoute ? "true" : "false") +
-						"}",
-					.error = std::nullopt,
+				const protocol::ResponseFrame sendResponse = protocol::ResponseFrame{
+					   .id = request.id,
+					   .ok = true,
+					   .payloadJson =
+						   "{\"runId\":\"" +
+						   EscapeJsonLocal(runId) +
+						   "\",\"backendErrorCode\":" +
+						   (backendErrorCode.empty()
+							   ? std::string("null")
+							   : ("\"" + EscapeJsonLocal(backendErrorCode) + "\"")) +
+						 ",\"queued\":true,\"deduped\":false" +
+						   ",\"originatingChannel\":" +
+						   JsonString(sendControlDecision.route.originatingChannel) +
+						   ",\"explicitDeliverRoute\":" +
+						   std::string(sendControlDecision.route.explicitDeliverRoute ? "true" : "false") +
+						   "}",
+					   .error = std::nullopt,
 				};
+				if (!idempotencyKey.empty()) {
+					m_chatReplayByIdempotency.insert_or_assign(
+						idempotencyKey,
+						ChatReplayEntry{
+							.ok = sendResponse.ok,
+							.payloadJson = sendResponse.payloadJson,
+							.error = sendResponse.error,
+						});
+				}
+
+				if (stageContext.pushLifecycleRequested) {
+					EmitTelemetryEvent(
+						"gateway.chat.lifecycle.push_ack",
+						std::string("{\"runId\":") + JsonString(runId) +
+						",\"sessionKey\":" + JsonString(sessionKey) +
+						",\"state\":\"started\"}");
+				}
+
+				return sendResponse;
 			});
 
 		m_dispatcher.Register(
@@ -4283,9 +4313,9 @@ namespace blazeclaw::gateway {
 						.sessionKey = sessionKey,
 						.message = message,
 						.label = label,
+					 .idempotencyKey = request.id,
 					});
-				if (!appended.ok || appended.messageId.empty() ||
-					appended.messageJson.empty()) {
+				if (!appended.ok) {
 					return protocol::ResponseFrame{
 						.id = request.id,
 						.ok = false,
@@ -4301,6 +4331,16 @@ namespace blazeclaw::gateway {
 							.retryable = false,
 							.retryAfterMs = std::nullopt,
 						},
+					};
+				}
+
+				if (appended.messageId.empty() || appended.messageJson.empty()) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = true,
+						.payloadJson =
+							"{\"ok\":true,\"deduped\":true}",
+						.error = std::nullopt,
 					};
 				}
 

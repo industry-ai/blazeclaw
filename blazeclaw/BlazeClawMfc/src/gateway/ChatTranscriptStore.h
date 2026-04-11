@@ -10,6 +10,7 @@ namespace blazeclaw::gateway {
 			std::string sessionKey;
 			std::string message;
 			std::string label;
+			std::string idempotencyKey;
 		};
 
 		struct AppendResult {

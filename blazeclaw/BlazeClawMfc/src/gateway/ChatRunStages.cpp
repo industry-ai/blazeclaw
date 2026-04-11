@@ -139,6 +139,14 @@ namespace blazeclaw::gateway {
 
 		context.clientCaps = ParseStringArrayField(context.paramsJson, "clientCaps");
 
+		bool pushLifecycle = false;
+		if (json::FindBoolField(context.paramsJson.value(), "pushLifecycle", pushLifecycle)) {
+			context.pushLifecycleRequested = pushLifecycle;
+		}
+		else {
+			context.pushLifecycleRequested = false;
+		}
+
 		bool forceError = false;
 		if (json::FindBoolField(context.paramsJson.value(), "forceError", forceError)) {
 			context.forceError = forceError;

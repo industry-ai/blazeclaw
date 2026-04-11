@@ -1406,7 +1406,14 @@ namespace blazeclaw::gateway::protocol {
 					JsonFieldKind::Array,
 					issue,
 					"chat.send",
-					"an array")) {
+					"an array") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"pushLifecycle",
+					JsonFieldKind::Boolean,
+					issue,
+					"chat.send",
+					"boolean")) {
 				return false;
 			}
 
@@ -1420,7 +1427,8 @@ namespace blazeclaw::gateway::protocol {
 					field == "originatingChannel" ||
 					field == "originatingTo" ||
 					field == "clientMode" ||
-					field == "clientCaps") {
+					field == "clientCaps" ||
+					field == "pushLifecycle") {
 					continue;
 				}
 

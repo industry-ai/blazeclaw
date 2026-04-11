@@ -10,6 +10,38 @@
 
 namespace blazeclaw::gateway {
 	namespace {
+		bool TranscriptHasIdempotencyKey(
+			const std::filesystem::path& transcriptPath,
+			const std::string& idempotencyKey) {
+			if (idempotencyKey.empty()) {
+				return false;
+			}
+
+			try {
+				std::ifstream input(transcriptPath, std::ios::in | std::ios::binary);
+				if (!input.is_open()) {
+					return false;
+				}
+
+				std::string line;
+				while (std::getline(input, line)) {
+					if (line.find("\"idempotencyKey\":") == std::string::npos) {
+						continue;
+					}
+
+					if (line.find(std::string("\"idempotencyKey\":") + JsonString(idempotencyKey)) !=
+						std::string::npos) {
+						return true;
+					}
+				}
+			}
+			catch (...) {
+				return false;
+			}
+
+			return false;
+		}
+
 		std::string NormalizeSessionKeyForFileName(const std::string& sessionKey) {
 			const std::string fallback = "main";
 			const std::string source = sessionKey.empty() ? fallback : sessionKey;
@@ -44,6 +76,7 @@ namespace blazeclaw::gateway {
 			const std::string& messageId,
 			const std::string& text,
 			const std::string& label,
+			const std::string& idempotencyKey,
 			const std::uint64_t timestampMs) {
 			std::string payload =
 				"{\"id\":" + JsonString(messageId) +
@@ -53,6 +86,9 @@ namespace blazeclaw::gateway {
 				",\"timestamp\":" + std::to_string(timestampMs);
 			if (!label.empty()) {
 				payload += ",\"label\":" + JsonString(label);
+			}
+			if (!idempotencyKey.empty()) {
+				payload += ",\"idempotencyKey\":" + JsonString(idempotencyKey);
 			}
 			payload += "}";
 			return payload;
@@ -73,6 +109,7 @@ namespace blazeclaw::gateway {
 			messageId,
 			params.message,
 			params.label,
+			params.idempotencyKey,
 			timestampMs);
 
 		try {
@@ -80,6 +117,14 @@ namespace blazeclaw::gateway {
 				ResolveGatewayStateFilePath("chat-transcripts") /
 				(NormalizeSessionKeyForFileName(effectiveSessionKey) + ".jsonl");
 			std::filesystem::create_directories(transcriptPath.parent_path());
+			if (TranscriptHasIdempotencyKey(transcriptPath, params.idempotencyKey)) {
+				return AppendResult{
+					.ok = true,
+					.messageId = {},
+					.messageJson = {},
+					.error = {},
+				};
+			}
 
 			std::ofstream output(
 				transcriptPath,
@@ -96,6 +141,9 @@ namespace blazeclaw::gateway {
 			const std::string line =
 				"{\"messageId\":" + JsonString(messageId) +
 				",\"sessionKey\":" + JsonString(effectiveSessionKey) +
+				(params.idempotencyKey.empty()
+					? std::string()
+					: (",\"idempotencyKey\":" + JsonString(params.idempotencyKey))) +
 				",\"message\":" + messageJson + "}";
 			output << line << "\n";
 			output.flush();

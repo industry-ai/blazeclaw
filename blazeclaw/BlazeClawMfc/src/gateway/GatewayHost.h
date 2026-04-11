@@ -299,6 +299,12 @@ namespace blazeclaw::gateway {
 			std::uint64_t timestampMs = 0;
 		};
 
+		struct ChatReplayEntry {
+			bool ok = false;
+			std::optional<std::string> payloadJson;
+			std::optional<protocol::ErrorShape> error;
+		};
+
 		void RegisterDefaultHandlers();
 		void RegisterChannelsHandlers();
 		void RegisterEventHandlers();
@@ -378,6 +384,7 @@ namespace blazeclaw::gateway {
 		std::unordered_map<std::string, std::deque<ChatEventState>> m_chatEventsBySession;
 		std::unordered_map<std::string, ChatRunState> m_chatRunsById;
 		std::unordered_map<std::string, std::string> m_chatRunByIdempotency;
+		std::unordered_map<std::string, ChatReplayEntry> m_chatReplayByIdempotency;
 		std::unordered_set<std::string> m_chatTerminalDeliveredRunIds;
 		std::unordered_map<std::string, std::vector<ChatRuntimeResult::TaskDeltaEntry>> m_taskDeltasByRunId;
 		std::size_t m_taskDeltasRetentionLimit = 64;

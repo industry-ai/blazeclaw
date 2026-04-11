@@ -178,6 +178,101 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Phase 6: chat.send idempotency replays cached payload and supports pushLifecycle hint",
+	"[parity][phase-6][chat][dedupe][lifecycle]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "phase6 dedupe payload";
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	const std::string paramsJson =
+		"{\"sessionKey\":\"main\",\"message\":\"phase6 dedupe\",\"idempotencyKey\":\"phase6-idem-1\",\"pushLifecycle\":true}";
+
+	const auto first = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase6-send-1",
+			.method = "chat.send",
+			.paramsJson = paramsJson,
+		});
+	REQUIRE(first.ok);
+	REQUIRE(first.payloadJson.has_value());
+
+	const auto second = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase6-send-2",
+			.method = "chat.send",
+			.paramsJson = paramsJson,
+		});
+	REQUIRE(second.ok);
+	REQUIRE(second.payloadJson.has_value());
+	REQUIRE(second.payloadJson.value() == first.payloadJson.value());
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Phase 6: transcript append idempotency prevents duplicate inject writes",
+	"[parity][phase-6][chat][transcript][idempotency]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+
+	const std::string sessionKey = "phase6inject";
+	const std::filesystem::path transcriptPath =
+		ResolveGatewayStateFilePath("chat-transcripts") /
+		(sessionKey + ".jsonl");
+	std::error_code removeError;
+	std::filesystem::remove(transcriptPath, removeError);
+
+	const auto inject1 = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase6-inject-idem",
+			.method = "chat.inject",
+			.paramsJson = std::string("{\"sessionKey\":\"phase6inject\",\"message\":\"same inject content\",\"label\":\"phase6\"}"),
+		});
+	REQUIRE(inject1.ok);
+
+	const auto inject2 = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase6-inject-idem",
+			.method = "chat.inject",
+			.paramsJson = std::string("{\"sessionKey\":\"phase6inject\",\"message\":\"same inject content\",\"label\":\"phase6\"}"),
+		});
+	REQUIRE(inject2.ok);
+
+	REQUIRE(std::filesystem::exists(transcriptPath));
+	std::ifstream transcript(transcriptPath, std::ios::in | std::ios::binary);
+	REQUIRE(transcript.is_open());
+	std::string line;
+	std::size_t occurrenceCount = 0;
+	while (std::getline(transcript, line)) {
+		if (line.find("same inject content") != std::string::npos) {
+			++occurrenceCount;
+		}
+	}
+	REQUIRE(occurrenceCount == 1);
+
+	host.Stop();
+}
+
+TEST_CASE(
 	"Phase 2: chat.abort persists partial assistant output",
 	"[parity][phase-2][chat][abort][durability]") {
 	GatewayHost host;

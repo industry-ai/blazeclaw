@@ -23,6 +23,10 @@ namespace blazeclaw::gateway {
 				.label = std::string("abort:") +
 					(params.origin.empty() ? std::string("rpc") : params.origin) +
 					":" +
+				   params.runId,
+				.idempotencyKey = std::string("abort:") +
+					(params.origin.empty() ? std::string("rpc") : params.origin) +
+					":" +
 					params.runId,
 			});
 		if (!appendResult.ok) {
