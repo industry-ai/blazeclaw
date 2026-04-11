@@ -1409,6 +1409,20 @@ namespace blazeclaw::gateway::protocol {
 					"a string") ||
 				!RequireFieldKindIfPresent(
 					fieldKinds,
+					"hasConnectedClient",
+					JsonFieldKind::Boolean,
+					issue,
+					"chat.send",
+					"boolean") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"mainKey",
+					JsonFieldKind::String,
+					issue,
+					"chat.send",
+					"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
 					"clientCaps",
 					JsonFieldKind::Array,
 					issue,
@@ -1435,6 +1449,8 @@ namespace blazeclaw::gateway::protocol {
 					field == "originatingTo" ||
 					field == "clientMode" ||
 					field == "clientConnectionId" ||
+					field == "hasConnectedClient" ||
+					field == "mainKey" ||
 					field == "clientCaps" ||
 					field == "pushLifecycle") {
 					continue;

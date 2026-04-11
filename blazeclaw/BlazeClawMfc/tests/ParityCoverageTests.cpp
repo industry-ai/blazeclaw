@@ -86,6 +86,62 @@ TEST_CASE(
 		});
 	REQUIRE_FALSE(webchatDecision.route.explicitDeliverRoute);
 	REQUIRE(webchatDecision.route.reasonCode == "webchat_no_inherit");
+
+	const auto mainConnectedDecision = service.EvaluateSendControl(
+		ChatControlPlaneService::SendControlInput{
+			.sessionKey = "main:workspace",
+			.deliver = true,
+			.routeChannel = "slack",
+			.routeTo = "user-1",
+			.clientMode = "desktop",
+			.hasConnectedClient = true,
+			.mainKey = "main",
+			.clientCaps = {},
+			.runId = "phase6-route-main-connected",
+		});
+	REQUIRE(mainConnectedDecision.route.explicitDeliverRoute);
+	REQUIRE(mainConnectedDecision.route.reasonCode == "explicit_route");
+}
+
+TEST_CASE(
+	"Phase 6: chat.send pushLifecycle adds push-compatible lifecycle metadata",
+	"[parity][phase-6][chat][lifecycle][push]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "phase6 lifecycle";
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase6-push-lifecycle",
+			.method = "chat.send",
+			.paramsJson = std::string(
+				"{\"sessionKey\":\"main\",\"message\":\"phase6 push lifecycle\",\"idempotencyKey\":\"phase6-push-lifecycle-idem\",\"pushLifecycle\":true}"),
+		});
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+	REQUIRE(sendResponse.payloadJson->find("\"lifecycle\":{") != std::string::npos);
+	REQUIRE(sendResponse.payloadJson->find("\"transport\":\"push_compatible\"") != std::string::npos);
+	REQUIRE(sendResponse.payloadJson->find("\"state\":\"started\"") != std::string::npos);
+
+	host.Stop();
 }
 
 TEST_CASE(

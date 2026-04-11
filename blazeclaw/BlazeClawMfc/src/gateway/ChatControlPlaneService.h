@@ -16,6 +16,8 @@ namespace blazeclaw::gateway {
 			std::string routeChannel;
 			std::string routeTo;
 			std::string clientMode;
+			bool hasConnectedClient = false;
+			std::string mainKey = "main";
 			std::vector<std::string> clientCaps;
 			std::string runId;
 		};

@@ -30,6 +30,14 @@ namespace blazeclaw::gateway {
 				lower.find("group:") == 0;
 		}
 
+		bool IsSessionChannelHint(const std::string& scopeHead, const std::string& routeChannel) {
+			if (scopeHead.empty() || routeChannel.empty()) {
+				return false;
+			}
+
+			return scopeHead == routeChannel;
+		}
+
 		std::vector<std::string> SplitSessionScope(const std::string& sessionKey) {
 			std::vector<std::string> parts;
 			std::string current;
@@ -105,9 +113,11 @@ namespace blazeclaw::gateway {
 		const bool isConfiguredMainScope = !scopeHead.empty() && scopeHead == mainKey;
 		const bool channelScoped = IsLikelyChannelScopedSession(sessionKey);
 		const bool isAgnosticScope = IsChannelAgnosticScope(scopeHead);
+		const bool hasLegacyPeerShape =
+			scopeParts.size() > 1 && IsSessionChannelHint(scopeParts[1], channel);
 
 		const bool canInheritRoute =
-			(channelScoped && !isAgnosticScope) ||
+			((channelScoped || hasLegacyPeerShape) && !isAgnosticScope) ||
 			(isConfiguredMainScope && input.hasConnectedClient);
 
 		if (!canInheritRoute) {

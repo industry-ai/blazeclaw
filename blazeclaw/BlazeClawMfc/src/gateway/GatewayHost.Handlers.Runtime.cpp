@@ -3152,6 +3152,8 @@ namespace blazeclaw::gateway {
 							.routeChannel = stageContext.routeChannel,
 							.routeTo = stageContext.routeTo,
 							.clientMode = stageContext.clientMode,
+						  .hasConnectedClient = stageContext.hasConnectedClient,
+							.mainKey = stageContext.mainKey,
 							.clientCaps = stageContext.clientCaps,
 							.runId = runId,
 						});
@@ -4261,22 +4263,29 @@ namespace blazeclaw::gateway {
 					m_chatRunByIdempotency.insert_or_assign(idempotencyKey, runId);
 				}
 
+				std::string sendPayload =
+					"{\"runId\":\"" +
+					EscapeJsonLocal(runId) +
+					"\",\"backendErrorCode\":" +
+					(backendErrorCode.empty()
+						? std::string("null")
+						: ("\"" + EscapeJsonLocal(backendErrorCode) + "\"")) +
+					",\"queued\":true,\"deduped\":false" +
+					",\"originatingChannel\":" +
+					JsonString(sendControlDecision.route.originatingChannel) +
+					",\"explicitDeliverRoute\":" +
+					std::string(sendControlDecision.route.explicitDeliverRoute ? "true" : "false");
+
+				if (stageContext.pushLifecycleRequested) {
+					sendPayload +=
+						",\"lifecycle\":{\"transport\":\"push_compatible\",\"state\":\"started\"}";
+				}
+				sendPayload += "}";
+
 				const protocol::ResponseFrame sendResponse = protocol::ResponseFrame{
 					   .id = request.id,
 					   .ok = true,
-					   .payloadJson =
-						   "{\"runId\":\"" +
-						   EscapeJsonLocal(runId) +
-						   "\",\"backendErrorCode\":" +
-						   (backendErrorCode.empty()
-							   ? std::string("null")
-							   : ("\"" + EscapeJsonLocal(backendErrorCode) + "\"")) +
-						 ",\"queued\":true,\"deduped\":false" +
-						   ",\"originatingChannel\":" +
-						   JsonString(sendControlDecision.route.originatingChannel) +
-						   ",\"explicitDeliverRoute\":" +
-						   std::string(sendControlDecision.route.explicitDeliverRoute ? "true" : "false") +
-						   "}",
+				   .payloadJson = sendPayload,
 					   .error = std::nullopt,
 				};
 				if (!idempotencyKey.empty()) {
