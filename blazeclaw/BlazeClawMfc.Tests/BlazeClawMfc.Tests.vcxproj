@@ -73,6 +73,7 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\RuntimeSequencingPolicy.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\RuntimeToolCallNormalizer.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\RuntimeTranscriptGuard.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\ChatTranscriptStore.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\FailureClassifier.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\RunLoopBudget.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\CompactionCoordinator.cpp" />

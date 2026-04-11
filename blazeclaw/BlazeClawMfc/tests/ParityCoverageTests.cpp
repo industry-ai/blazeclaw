@@ -5,6 +5,7 @@
 #include "gateway/GatewayToolRegistry.h"
 #include "gateway/PluginHostAdapter.h"
 #include "gateway/GatewayHostEx.h"
+#include "gateway/GatewayPersistencePaths.h"
 #include "gateway/executors/EmailScheduleExecutor.h"
 #include "config/ConfigModels.h"
 
@@ -12,6 +13,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <cstdlib>
 
 using namespace blazeclaw::gateway;
@@ -49,6 +51,141 @@ TEST_CASE("Parity coverage: router-neutral route decision telemetry is emitted f
 
 	REQUIRE(sendResponse.ok);
 	REQUIRE(sendResponse.payloadJson.has_value());
+	host.Stop();
+}
+
+TEST_CASE(
+	"Phase 0: chat control-plane contract matrix baseline",
+	"[parity][phase-0][chat][contract]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "phase0 contract";
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase0-chat-send",
+			.method = "chat.send",
+			.paramsJson = std::string(
+				"{\"sessionKey\":\"main\",\"message\":\"phase0 contract request\",\"idempotencyKey\":\"phase0-idem\"}"),
+		});
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+	REQUIRE(sendResponse.payloadJson->find("\"runId\":") != std::string::npos);
+	REQUIRE(sendResponse.payloadJson->find("\"queued\":true") != std::string::npos);
+
+	const auto historyResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase0-chat-history",
+			.method = "chat.history",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"limit\":10}"),
+		});
+	REQUIRE(historyResponse.ok);
+	REQUIRE(historyResponse.payloadJson.has_value());
+	REQUIRE(historyResponse.payloadJson->find("\"messages\":") != std::string::npos);
+	REQUIRE(historyResponse.payloadJson->find("\"thinkingLevel\":") != std::string::npos);
+
+	const auto abortResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase0-chat-abort",
+			.method = "chat.abort",
+			.paramsJson = std::string("{\"sessionKey\":\"main\"}"),
+		});
+	REQUIRE(abortResponse.ok);
+	REQUIRE(abortResponse.payloadJson.has_value());
+	REQUIRE(abortResponse.payloadJson->find("\"aborted\":") != std::string::npos);
+
+	const auto injectResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase0-chat-inject",
+			.method = "chat.inject",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"message\":\"phase0 inject\"}"),
+		});
+	REQUIRE(injectResponse.ok);
+	REQUIRE(injectResponse.payloadJson.has_value());
+	REQUIRE(injectResponse.payloadJson->find("\"ok\":true") != std::string::npos);
+	REQUIRE(injectResponse.payloadJson->find("\"messageId\":") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Phase 1: chat.inject persists transcript and emits final event",
+	"[parity][phase-1][chat][inject][durability]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+
+	const std::string sessionKey = "phase1inject";
+	const std::filesystem::path transcriptPath =
+		ResolveGatewayStateFilePath("chat-transcripts") /
+		(sessionKey + ".jsonl");
+	std::error_code removeError;
+	std::filesystem::remove(transcriptPath, removeError);
+
+	const auto injectResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase1-chat-inject",
+			.method = "chat.inject",
+			.paramsJson = std::string(
+				"{\"sessionKey\":\"phase1inject\",\"message\":\"persist this injected assistant message\",\"label\":\"phase1\"}"),
+		});
+	REQUIRE(injectResponse.ok);
+	REQUIRE(injectResponse.payloadJson.has_value());
+
+	std::string messageId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		injectResponse.payloadJson.value(),
+		"messageId",
+		messageId));
+	REQUIRE_FALSE(messageId.empty());
+
+	const auto pollResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase1-chat-inject-poll",
+			.method = "chat.events.poll",
+			.paramsJson = std::string("{\"sessionKey\":\"phase1inject\",\"limit\":20}"),
+		});
+	REQUIRE(pollResponse.ok);
+	REQUIRE(pollResponse.payloadJson.has_value());
+	REQUIRE(
+		pollResponse.payloadJson->find(std::string("\"runId\":\"inject-") + messageId + "\"") !=
+		std::string::npos);
+	REQUIRE(
+		pollResponse.payloadJson->find("persist this injected assistant message") !=
+		std::string::npos);
+
+	REQUIRE(std::filesystem::exists(transcriptPath));
+	std::ifstream transcript(transcriptPath, std::ios::in | std::ios::binary);
+	REQUIRE(transcript.is_open());
+	std::string transcriptContent(
+		(std::istreambuf_iterator<char>(transcript)),
+		std::istreambuf_iterator<char>());
+	REQUIRE(
+		transcriptContent.find(std::string("\"messageId\":\"") + messageId + "\"") !=
+		std::string::npos);
+	REQUIRE(
+		transcriptContent.find("persist this injected assistant message") !=
+		std::string::npos);
+
 	host.Stop();
 }
 

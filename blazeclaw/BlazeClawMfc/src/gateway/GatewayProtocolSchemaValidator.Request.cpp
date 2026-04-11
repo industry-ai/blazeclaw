@@ -1434,6 +1434,53 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool ValidateChatInjectParams(
+			const RequestFrame& request,
+			SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "chat.inject", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"sessionKey",
+				JsonFieldKind::String,
+				issue,
+				"chat.inject",
+				"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"message",
+					JsonFieldKind::String,
+					issue,
+					"chat.inject",
+					"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"label",
+					JsonFieldKind::String,
+					issue,
+					"chat.inject",
+					"a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "sessionKey" || field == "message" || field == "label") {
+					continue;
+				}
+
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `chat.inject` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		bool ValidateChatEventsPollParams(
 			const RequestFrame& request,
 			SchemaValidationIssue& issue) {
@@ -2154,6 +2201,7 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.ping", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidatePingParams(r, i); } },
 			{ "chat.send", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateChatSendParams(r, i); } },
 			{ "chat.abort", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateChatAbortParams(r, i); } },
+		 { "chat.inject", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateChatInjectParams(r, i); } },
 			{ "chat.events.poll", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateChatEventsPollParams(r, i); } },
 			{ "gateway.runtime.taskDeltas.get", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateTaskDeltasGetParams(r, i); } },
 			{ "gateway.runtime.taskDeltas.clear", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateTaskDeltasClearParams(r, i); } },

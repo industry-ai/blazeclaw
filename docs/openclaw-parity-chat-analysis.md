@@ -294,6 +294,11 @@ Enable BlazeClaw to execute real extension/workflow tools (instead of seeded pla
   - parity contract freeze coverage now includes explicit OutputWnd source-contract
     guard assertions in addition to existing `chat.send` envelope freeze checks
 
+- ✅ Policy-hardening checklist closure update:
+  - section 10.11 P1->P5 implementation checklist status is now explicitly
+    documented as complete, with policy parity, telemetry parity, and rollout
+    gate validation evidence synchronized to current code/test state
+
 [back to top](#index)
 
 ### 2.1.2 Remaining parity implementation plan (extension lifecycle manager + workflow-engine runtime)

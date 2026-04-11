@@ -16,6 +16,7 @@
 #include "GatewayLifecycleEventEmitter.h"
 #include "RunSummaryBuilder.h"
 #include "BranchDecisionDiagnostics.h"
+#include "ChatTranscriptStore.h"
 #include "executors/EmailScheduleExecutor.h"
 
 #include <algorithm>
@@ -4190,6 +4191,93 @@ namespace blazeclaw::gateway {
 							? std::string("null")
 							: ("\"" + EscapeJsonLocal(backendErrorCode) + "\"")) +
 						",\"queued\":true,\"deduped\":false}",
+					.error = std::nullopt,
+				};
+			});
+
+		m_dispatcher.Register(
+			"chat.inject",
+			[this](const protocol::RequestFrame& request) {
+				const std::string requestedSessionKey =
+					ExtractStringParam(request.paramsJson, "sessionKey");
+				const std::string sessionKey =
+					requestedSessionKey.empty() ? "main" : requestedSessionKey;
+				const std::string message =
+					ExtractStringParam(request.paramsJson, "message");
+				const std::string label =
+					ExtractStringParam(request.paramsJson, "label");
+
+				if (json::Trim(message).empty()) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = false,
+						.payloadJson = std::nullopt,
+						.error = protocol::ErrorShape{
+							.code = "invalid_params",
+							.message = "`message` must be a non-empty string.",
+							.detailsJson = std::nullopt,
+							.retryable = false,
+							.retryAfterMs = std::nullopt,
+						},
+					};
+				}
+
+				const ChatTranscriptStore transcriptStore;
+				const auto appended = transcriptStore.AppendAssistantMessage(
+					ChatTranscriptStore::AppendParams{
+						.sessionKey = sessionKey,
+						.message = message,
+						.label = label,
+					});
+				if (!appended.ok || appended.messageId.empty() ||
+					appended.messageJson.empty()) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = false,
+						.payloadJson = std::nullopt,
+						.error = protocol::ErrorShape{
+							.code = "unavailable",
+							.message =
+								"failed to write transcript: " +
+								(appended.error.empty()
+									? std::string("unknown error")
+									: appended.error),
+							.detailsJson = std::nullopt,
+							.retryable = false,
+							.retryAfterMs = std::nullopt,
+						},
+					};
+				}
+
+				const std::uint64_t nowMs = CurrentEpochMsLocal();
+				const std::string runId = "inject-" + appended.messageId;
+				auto& queue = m_chatEventsBySession[sessionKey];
+				PushEventWithRetentionLimit(queue, ChatEventState{
+						.runId = runId,
+						.sessionKey = sessionKey,
+						.state = "final",
+						.messageJson = appended.messageJson,
+						.errorMessage = std::nullopt,
+						.timestampMs = nowMs,
+					});
+				GatewayLifecycleEventEmitter::EmitLifecycle(
+					"final",
+					runId,
+					sessionKey,
+					nowMs);
+
+				if (!RuntimeTranscriptGuard::IsSilentReplyText(message)) {
+					PushHistoryMessageIfNew(
+						m_chatHistoryBySession[sessionKey],
+						appended.messageJson);
+				}
+
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = true,
+					.payloadJson =
+						"{\"ok\":true,\"messageId\":" +
+						JsonString(appended.messageId) + "}",
 					.error = std::nullopt,
 				};
 			});
