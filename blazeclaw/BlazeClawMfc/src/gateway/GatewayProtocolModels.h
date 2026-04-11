@@ -4,32 +4,42 @@
 
 namespace blazeclaw::gateway::protocol {
 
-struct ErrorShape {
-  std::string code;
-  std::string message;
-  std::optional<std::string> detailsJson;
-  std::optional<bool> retryable;
-  std::optional<std::uint64_t> retryAfterMs;
-};
+	struct ErrorShape {
+		std::string code;
+		std::string message;
+		std::optional<std::string> detailsJson;
+		std::optional<bool> retryable;
+		std::optional<std::uint64_t> retryAfterMs;
+	};
 
-struct RequestFrame {
-  std::string id;
-  std::string method;
-  std::optional<std::string> paramsJson;
-};
+	struct RequestFrame {
+		std::string id;
+		std::string method;
+		std::optional<std::string> paramsJson;
+	};
 
-struct ResponseFrame {
-  std::string id;
-  bool ok = false;
-  std::optional<std::string> payloadJson;
-  std::optional<ErrorShape> error;
-};
+	struct ResponseFrame {
+		std::string id;
+		bool ok = false;
+		std::optional<std::string> payloadJson;
+		std::optional<ErrorShape> error;
+	};
 
-struct EventFrame {
-  std::string eventName;
-  std::optional<std::string> payloadJson;
-  std::optional<std::uint64_t> seq;
-  std::optional<std::uint64_t> stateVersion;
-};
+	struct StateVersion {
+		std::optional<std::uint64_t> presence;
+		std::optional<std::uint64_t> health;
+
+		StateVersion() = default;
+		StateVersion(std::uint64_t legacyVersion)
+			: presence(legacyVersion),
+			health(legacyVersion) {}
+	};
+
+	struct EventFrame {
+		std::string eventName;
+		std::optional<std::string> payloadJson;
+		std::optional<std::uint64_t> seq;
+		std::optional<StateVersion> stateVersion;
+	};
 
 } // namespace blazeclaw::gateway::protocol

@@ -1,8 +1,10 @@
 #include "pch.h"
 #include "GatewayWebSocketTransport.h"
+#include "GatewayHandshakePolicy.h"
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <ws2tcpip.h>
 #include <wincrypt.h>
 #include <ws2tcpip.h>
@@ -11,13 +13,13 @@ namespace blazeclaw::gateway {
 	namespace {
 
 		constexpr std::uint64_t kMaxFramePayloadBytes = 1024ULL * 1024ULL;
-        constexpr std::size_t kMaxReadBufferBytes = 4ULL * 1024ULL * 1024ULL;
+		constexpr std::size_t kMaxReadBufferBytes = 4ULL * 1024ULL * 1024ULL;
 		constexpr std::size_t kMaxFragmentBufferBytes = 2ULL * 1024ULL * 1024ULL;
 		constexpr std::size_t kMaxOutboundFramesPerConnection = 256;
 		constexpr std::size_t kMaxOutboundNetworkFramesPerConnection = 256;
-        constexpr std::uint64_t kHandshakeTimeoutMs = 10'000;
+		constexpr std::uint64_t kHandshakeTimeoutMs = 10'000;
 		constexpr std::uint64_t kIdleConnectionTimeoutMs = 120'000;
-     constexpr char kSupportedGatewaySubprotocol[] = "blazeclaw.gateway.v1";
+		constexpr char kSupportedGatewaySubprotocol[] = "blazeclaw.gateway.v1";
 		constexpr std::uint16_t kCloseCodeGoingAway = 1001;
 		constexpr std::uint16_t kCloseCodeInvalidPayloadData = 1007;
 		constexpr std::uint16_t kCloseCodeMessageTooBig = 1009;
@@ -324,6 +326,18 @@ namespace blazeclaw::gateway {
 			return true;
 		}
 
+		std::string BuildConnectChallengeFrame() {
+			static std::atomic<std::uint64_t> nonceCounter{ 0 };
+			const std::uint64_t nextNonce = ++nonceCounter;
+			const std::uint64_t nowMs = NowMs();
+			const std::string nonce =
+				"nonce-" + std::to_string(nowMs) + "-" + std::to_string(nextNonce);
+
+			return std::string("{\"type\":\"event\",\"event\":\"connect.challenge\",\"payload\":{\"nonce\":\"") +
+				nonce +
+				"\",\"ts\":" + std::to_string(nowMs) + "}}";
+		}
+
 	} // namespace
 
 	bool GatewayWebSocketTransport::Start(
@@ -357,7 +371,7 @@ namespace blazeclaw::gateway {
 		}
 
 		m_wsaStarted = true;
-     addrinfo hints{};
+		addrinfo hints{};
 		hints.ai_family = AF_UNSPEC;
 		hints.ai_socktype = SOCK_STREAM;
 		hints.ai_protocol = IPPROTO_TCP;
@@ -424,9 +438,9 @@ namespace blazeclaw::gateway {
 		m_port = port;
 		m_inboundFrameHandler = std::move(inboundFrameHandler);
 		m_connections.clear();
-       m_handshakeTimeoutCount = 0;
+		m_handshakeTimeoutCount = 0;
 		m_idleTimeoutCloseCount = 0;
-       m_invalidUtf8CloseCount = 0;
+		m_invalidUtf8CloseCount = 0;
 		m_messageTooBigCloseCount = 0;
 		m_extensionRejectCount = 0;
 		m_running = true;
@@ -500,7 +514,7 @@ namespace blazeclaw::gateway {
 
 		const std::string outboundFrame = m_inboundFrameHandler(inboundFrame);
 		if (!outboundFrame.empty()) {
-         if (it->second.outboundFrames.size() >= kMaxOutboundFramesPerConnection) {
+			if (it->second.outboundFrames.size() >= kMaxOutboundFramesPerConnection) {
 				error = "Outbound frame queue pressure limit reached for in-memory connection.";
 				return false;
 			}
@@ -865,7 +879,7 @@ namespace blazeclaw::gateway {
 			}
 
 			u_long nonBlocking = 1;
-            std::string acceptedSocketPolicyError;
+			std::string acceptedSocketPolicyError;
 			if (!ConfigureAcceptedSocket(accepted, acceptedSocketPolicyError)) {
 				error = acceptedSocketPolicyError;
 				closesocket(accepted);
@@ -890,10 +904,10 @@ namespace blazeclaw::gateway {
 	}
 
 	bool GatewayWebSocketTransport::PumpNetworkConnection(ConnectionSession& session, std::string& error) {
-        const std::uint64_t now = NowMs();
+		const std::uint64_t now = NowMs();
 		if (!session.handshakeComplete && session.acceptedAtMs != 0 && now > session.acceptedAtMs &&
 			now - session.acceptedAtMs > kHandshakeTimeoutMs) {
-            ++m_handshakeTimeoutCount;
+			++m_handshakeTimeoutCount;
 			CloseSocketIfNeeded(session.socket);
 			error.clear();
 			return true;
@@ -914,7 +928,7 @@ namespace blazeclaw::gateway {
 
 			session.timeoutCloseQueued = true;
 			session.closeAfterFlush = true;
-           ++m_idleTimeoutCloseCount;
+			++m_idleTimeoutCloseCount;
 		}
 
 		std::array<char, 4096> recvBuffer{};
@@ -922,9 +936,9 @@ namespace blazeclaw::gateway {
 		while (true) {
 			const int bytesRead = recv(session.socket, recvBuffer.data(), static_cast<int>(recvBuffer.size()), 0);
 			if (bytesRead > 0) {
-              session.lastActivityAtMs = NowMs();
-              if (session.readBuffer.size() + static_cast<std::size_t>(bytesRead) > kMaxReadBufferBytes) {
-                 ++m_messageTooBigCloseCount;
+				session.lastActivityAtMs = NowMs();
+				if (session.readBuffer.size() + static_cast<std::size_t>(bytesRead) > kMaxReadBufferBytes) {
+					++m_messageTooBigCloseCount;
 					std::string queueError;
 					if (!TryQueueNetworkFrame(
 						session,
@@ -985,7 +999,7 @@ namespace blazeclaw::gateway {
 			}
 
 			if (frame.opcode == 0x8) {
-                if (!TryQueueNetworkFrame(session, EncodeServerFrame(0x8, true, frame.payload), error)) {
+				if (!TryQueueNetworkFrame(session, EncodeServerFrame(0x8, true, frame.payload), error)) {
 					return false;
 				}
 				session.closeAfterFlush = true;
@@ -993,7 +1007,7 @@ namespace blazeclaw::gateway {
 			}
 
 			if (frame.opcode == 0x9) {
-                if (!TryQueueNetworkFrame(session, EncodeServerFrame(0xA, true, frame.payload), error)) {
+				if (!TryQueueNetworkFrame(session, EncodeServerFrame(0xA, true, frame.payload), error)) {
 					return false;
 				}
 				continue;
@@ -1003,10 +1017,10 @@ namespace blazeclaw::gateway {
 				continue;
 			}
 
-            std::string assembledText;
+			std::string assembledText;
 			std::string assembledBinary;
 			bool hasCompletedTextMessage = false;
-          bool hasCompletedBinaryMessage = false;
+			bool hasCompletedBinaryMessage = false;
 			if (frame.opcode == 0x1) {
 				if (session.awaitingContinuation) {
 					error = "Received new text frame while continuation sequence is in progress.";
@@ -1015,13 +1029,13 @@ namespace blazeclaw::gateway {
 
 				if (frame.fin) {
 					assembledText = frame.payload;
-                   hasCompletedTextMessage = true;
+					hasCompletedTextMessage = true;
 				}
 				else {
 					session.fragmentedTextBuffer = frame.payload;
-                    session.fragmentedBinaryBuffer.clear();
-                   if (session.fragmentedTextBuffer.size() > kMaxFragmentBufferBytes) {
-                      ++m_messageTooBigCloseCount;
+					session.fragmentedBinaryBuffer.clear();
+					if (session.fragmentedTextBuffer.size() > kMaxFragmentBufferBytes) {
+						++m_messageTooBigCloseCount;
 						if (!TryQueueNetworkFrame(
 							session,
 							EncodeServerFrame(
@@ -1040,21 +1054,21 @@ namespace blazeclaw::gateway {
 					session.awaitingContinuation = true;
 				}
 			}
-         else if (frame.opcode == 0x2) {
+			else if (frame.opcode == 0x2) {
 				if (session.awaitingContinuation) {
 					error = "Received binary frame while continuation sequence is in progress.";
 					return false;
 				}
 
-               if (frame.fin) {
+				if (frame.fin) {
 					assembledBinary = frame.payload;
 					hasCompletedBinaryMessage = true;
 				}
 				else {
 					session.fragmentedBinaryBuffer = frame.payload;
 					session.fragmentedTextBuffer.clear();
-                   if (session.fragmentedBinaryBuffer.size() > kMaxFragmentBufferBytes) {
-                      ++m_messageTooBigCloseCount;
+					if (session.fragmentedBinaryBuffer.size() > kMaxFragmentBufferBytes) {
+						++m_messageTooBigCloseCount;
 						if (!TryQueueNetworkFrame(
 							session,
 							EncodeServerFrame(
@@ -1079,10 +1093,10 @@ namespace blazeclaw::gateway {
 					return false;
 				}
 
-              if (session.continuationOpcode == 0x1) {
+				if (session.continuationOpcode == 0x1) {
 					session.fragmentedTextBuffer += frame.payload;
-                    if (session.fragmentedTextBuffer.size() > kMaxFragmentBufferBytes) {
-                      ++m_messageTooBigCloseCount;
+					if (session.fragmentedTextBuffer.size() > kMaxFragmentBufferBytes) {
+						++m_messageTooBigCloseCount;
 						if (!TryQueueNetworkFrame(
 							session,
 							EncodeServerFrame(
@@ -1107,8 +1121,8 @@ namespace blazeclaw::gateway {
 				}
 				else if (session.continuationOpcode == 0x2) {
 					session.fragmentedBinaryBuffer += frame.payload;
-                    if (session.fragmentedBinaryBuffer.size() > kMaxFragmentBufferBytes) {
-                      ++m_messageTooBigCloseCount;
+					if (session.fragmentedBinaryBuffer.size() > kMaxFragmentBufferBytes) {
+						++m_messageTooBigCloseCount;
 						if (!TryQueueNetworkFrame(
 							session,
 							EncodeServerFrame(
@@ -1141,9 +1155,9 @@ namespace blazeclaw::gateway {
 				return false;
 			}
 
-           if (hasCompletedTextMessage && !IsValidUtf8(assembledText)) {
-              ++m_invalidUtf8CloseCount;
-                if (!TryQueueNetworkFrame(
+			if (hasCompletedTextMessage && !IsValidUtf8(assembledText)) {
+				++m_invalidUtf8CloseCount;
+				if (!TryQueueNetworkFrame(
 					session,
 					EncodeServerFrame(
 						0x8,
@@ -1160,7 +1174,7 @@ namespace blazeclaw::gateway {
 			if (!assembledText.empty() && m_inboundFrameHandler != nullptr) {
 				const std::string outbound = m_inboundFrameHandler(assembledText);
 				if (!outbound.empty()) {
-                 if (!TryQueueApplicationOutbound(session, outbound, 0x1, error)) {
+					if (!TryQueueApplicationOutbound(session, outbound, 0x1, error)) {
 						return false;
 					}
 				}
@@ -1169,7 +1183,7 @@ namespace blazeclaw::gateway {
 			if (hasCompletedBinaryMessage && m_inboundFrameHandler != nullptr) {
 				const std::string outbound = m_inboundFrameHandler(assembledBinary);
 				if (!outbound.empty()) {
-                 if (!TryQueueApplicationOutbound(session, outbound, 0x2, error)) {
+					if (!TryQueueApplicationOutbound(session, outbound, 0x2, error)) {
 						return false;
 					}
 				}
@@ -1207,21 +1221,14 @@ namespace blazeclaw::gateway {
 		const std::string requestLine = request.substr(0, requestLineEnd);
 
 		const std::string lowerRequest = ToLowerCopy(request);
-      if (lowerRequest.rfind("get ", 0) != 0 || lowerRequest.find(" http/1.1\r\n") == std::string::npos) {
-	error = "Handshake must be an HTTP/1.1 GET request.";
-	return false;
-     }
-
-		if (!IsAllowedRequestTarget(requestLine)) {
-			error = "Handshake request target is not allowed for gateway endpoint.";
+		if (lowerRequest.rfind("get ", 0) != 0 || lowerRequest.find(" http/1.1\r\n") == std::string::npos) {
+			error = "Handshake must be an HTTP/1.1 GET request.";
 			return false;
 		}
 
-     std::string host;
-		if (!TryExtractHttpHeader(request, "Host", host) || host.empty()) {
-			error = "Missing `Host` header.";
-			return false;
-		}
+		std::string host;
+		const bool hasHostHeader =
+			TryExtractHttpHeader(request, "Host", host) && !host.empty();
 
 		std::string upgradeHeader;
 		if (!TryExtractHttpHeader(request, "Upgrade", upgradeHeader) || ToLowerCopy(upgradeHeader) != "websocket") {
@@ -1229,14 +1236,14 @@ namespace blazeclaw::gateway {
 			return false;
 		}
 
-      std::string connectionHeader;
+		std::string connectionHeader;
 		if (!TryExtractHttpHeader(request, "Connection", connectionHeader) ||
 			!HeaderContainsToken(connectionHeader, "upgrade")) {
 			error = "Missing `Connection: Upgrade` token.";
 			return false;
 		}
 
-      std::string version;
+		std::string version;
 		if (!TryExtractHttpHeader(request, "Sec-WebSocket-Version", version) || version != "13") {
 			error = "Unsupported or missing `Sec-WebSocket-Version`; expected `13`.";
 			return false;
@@ -1254,29 +1261,46 @@ namespace blazeclaw::gateway {
 		}
 
 		std::string origin;
-		if (TryExtractHttpHeader(request, "Origin", origin) && !IsAllowedOriginValue(origin)) {
-			error = "Origin is not permitted by endpoint policy.";
-			return false;
-		}
+		const bool hasOrigin = TryExtractHttpHeader(request, "Origin", origin);
+		const bool isAllowedOrigin = !hasOrigin || IsAllowedOriginValue(origin);
 
 		std::string extensions;
-		if (TryExtractHttpHeader(request, "Sec-WebSocket-Extensions", extensions) &&
-			HeaderContainsTokenPrefix(extensions, "permessage-deflate")) {
-           ++m_extensionRejectCount;
-			error = "Unsupported websocket extension requested: permessage-deflate.";
-			return false;
-		}
+		const bool hasExtensions = TryExtractHttpHeader(request, "Sec-WebSocket-Extensions", extensions);
+		const bool requestedPerMessageDeflate =
+			hasExtensions && HeaderContainsTokenPrefix(extensions, "permessage-deflate");
 
 		std::string selectedSubprotocol;
 		std::string requestedSubprotocols;
-		if (TryExtractHttpHeader(request, "Sec-WebSocket-Protocol", requestedSubprotocols)) {
-			if (!HeaderContainsToken(requestedSubprotocols, kSupportedGatewaySubprotocol)) {
-				error = "Requested websocket subprotocol is not supported.";
-				return false;
+		const bool subprotocolRequested =
+			TryExtractHttpHeader(request, "Sec-WebSocket-Protocol", requestedSubprotocols);
+		const bool supportsRequestedSubprotocol =
+			!subprotocolRequested ||
+			HeaderContainsToken(requestedSubprotocols, kSupportedGatewaySubprotocol);
+
+		GatewayHandshakePolicy handshakePolicy;
+		const auto policyOutput = handshakePolicy.Evaluate(
+			GatewayHandshakePolicy::Input{
+				.hasHostHeader = hasHostHeader,
+				.isAllowedRequestTarget = IsAllowedRequestTarget(requestLine),
+				.isAllowedOrigin = isAllowedOrigin,
+				.requestedPerMessageDeflate = requestedPerMessageDeflate,
+				.subprotocolRequested = subprotocolRequested,
+				.supportsRequestedSubprotocol = supportsRequestedSubprotocol,
+				.requestedSubprotocol = kSupportedGatewaySubprotocol,
+			});
+
+		if (!policyOutput.accepted) {
+			if (policyOutput.extensionRejected) {
+				++m_extensionRejectCount;
 			}
 
-			selectedSubprotocol = kSupportedGatewaySubprotocol;
+			error = policyOutput.errorMessage.empty()
+				? "Handshake rejected by policy."
+				: policyOutput.errorMessage;
+			return false;
 		}
+
+		selectedSubprotocol = policyOutput.selectedSubprotocol;
 
 		std::string acceptValue;
 		if (!BuildWebSocketAcceptValue(websocketKey, acceptValue)) {
@@ -1284,11 +1308,11 @@ namespace blazeclaw::gateway {
 			return false;
 		}
 
-        std::string response =
+		std::string response =
 			"HTTP/1.1 101 Switching Protocols\r\n"
 			"Upgrade: websocket\r\n"
 			"Connection: Upgrade\r\n"
-          "Sec-WebSocket-Accept: " + acceptValue + "\r\n";
+			"Sec-WebSocket-Accept: " + acceptValue + "\r\n";
 
 		if (!selectedSubprotocol.empty()) {
 			response += "Sec-WebSocket-Protocol: " + selectedSubprotocol + "\r\n";
@@ -1308,7 +1332,13 @@ namespace blazeclaw::gateway {
 		}
 
 		session.handshakeComplete = true;
-      session.lastActivityAtMs = NowMs();
+		session.lastActivityAtMs = NowMs();
+		if (policyOutput.emitConnectChallenge) {
+			const std::string challengeFrame = BuildConnectChallengeFrame();
+			if (!TryQueueApplicationOutbound(session, challengeFrame, 0x1, error)) {
+				return false;
+			}
+		}
 		error.clear();
 		return true;
 	}
@@ -1369,7 +1399,7 @@ namespace blazeclaw::gateway {
 			}
 
 			pending.sentBytes += static_cast<std::size_t>(sent);
-            session.lastActivityAtMs = NowMs();
+			session.lastActivityAtMs = NowMs();
 			if (pending.sentBytes >= pending.bytes.size()) {
 				session.outboundNetworkFrames.pop_front();
 			}
