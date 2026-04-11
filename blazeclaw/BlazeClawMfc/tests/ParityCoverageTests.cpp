@@ -56,6 +56,118 @@ TEST_CASE("Parity coverage: router-neutral route decision telemetry is emitted f
 }
 
 TEST_CASE(
+	"Phase 6: route policy blocks overlong session keys and webchat inheritance",
+	"[parity][phase-6][chat][route][deep]") {
+	ChatControlPlaneService service;
+
+	const std::string overlongSession(600, 'x');
+	const auto overlongDecision = service.EvaluateSendControl(
+		ChatControlPlaneService::SendControlInput{
+			.sessionKey = overlongSession,
+			.deliver = true,
+			.routeChannel = "slack",
+			.routeTo = "user-1",
+			.clientMode = "desktop",
+			.clientCaps = { "TOOL_EVENTS" },
+			.runId = "phase6-route-overlong",
+		});
+	REQUIRE_FALSE(overlongDecision.route.explicitDeliverRoute);
+	REQUIRE(overlongDecision.route.reasonCode == "session_key_too_long");
+
+	const auto webchatDecision = service.EvaluateSendControl(
+		ChatControlPlaneService::SendControlInput{
+			.sessionKey = "channel:general:user",
+			.deliver = true,
+			.routeChannel = "slack",
+			.routeTo = "user-1",
+			.clientMode = "webchat",
+			.clientCaps = { "TOOL_EVENTS" },
+			.runId = "phase6-route-webchat",
+		});
+	REQUIRE_FALSE(webchatDecision.route.explicitDeliverRoute);
+	REQUIRE(webchatDecision.route.reasonCode == "webchat_no_inherit");
+}
+
+TEST_CASE(
+	"Phase 6: recipient registry gates tool deltas and supports same-session late join",
+	"[parity][phase-6][chat][tool-events][registry]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "assistant response";
+			result.assistantDeltas = {
+				"tools.execute.start tool=weather.lookup",
+				"assistant response",
+			};
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	const auto baselineNoRecipient = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase6-registry-norecipient",
+			.method = "chat.send",
+			.paramsJson = std::string(
+				"{\"sessionKey\":\"channel:general\",\"message\":\"registry baseline\",\"idempotencyKey\":\"phase6-registry-idem-0\"}"),
+		});
+	REQUIRE(baselineNoRecipient.ok);
+
+	std::string baselinePoll;
+	for (int i = 0; i < 4; ++i) {
+		const auto poll = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = std::string("phase6-registry-baseline-poll-") + std::to_string(i),
+				.method = "chat.events.poll",
+				.paramsJson = std::string("{\"sessionKey\":\"channel:general\",\"limit\":20}"),
+			});
+		REQUIRE(poll.ok);
+		REQUIRE(poll.payloadJson.has_value());
+		baselinePoll += poll.payloadJson.value();
+	}
+	REQUIRE(baselinePoll.find("tools.execute.start") == std::string::npos);
+
+	const auto withRecipient = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase6-registry-recipient",
+			.method = "chat.send",
+			.paramsJson = std::string(
+				"{\"sessionKey\":\"channel:general\",\"message\":\"registry recipient\",\"idempotencyKey\":\"phase6-registry-idem-1\",\"clientMode\":\"desktop\",\"clientConnectionId\":\"conn-1\",\"clientCaps\":[\"TOOL_EVENTS\"]}"),
+		});
+	REQUIRE(withRecipient.ok);
+
+	std::string recipientPoll;
+	for (int i = 0; i < 4; ++i) {
+		const auto poll = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = std::string("phase6-registry-recipient-poll-") + std::to_string(i),
+				.method = "chat.events.poll",
+				.paramsJson = std::string("{\"sessionKey\":\"channel:general\",\"limit\":20}"),
+			});
+		REQUIRE(poll.ok);
+		REQUIRE(poll.payloadJson.has_value());
+		recipientPoll += poll.payloadJson.value();
+	}
+	REQUIRE(recipientPoll.find("tools.execute.start") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
 	"Phase 4: route policy and capability-gated tool events are enforced",
 	"[parity][phase-4][chat][route][caps]") {
 	GatewayHost host;

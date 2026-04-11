@@ -19,6 +19,8 @@ namespace blazeclaw::gateway {
 					.routeChannel = input.routeChannel,
 					.routeTo = input.routeTo,
 					.clientMode = input.clientMode,
+				 .hasConnectedClient = !input.clientMode.empty(),
+					.mainKey = "main",
 				}),
 			.toolEvents = toolEventPolicy.Evaluate(
 				ToolEventRecipientPolicy::Input{

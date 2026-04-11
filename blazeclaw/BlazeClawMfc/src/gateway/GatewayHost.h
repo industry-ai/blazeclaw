@@ -385,6 +385,7 @@ namespace blazeclaw::gateway {
 		std::unordered_map<std::string, ChatRunState> m_chatRunsById;
 		std::unordered_map<std::string, std::string> m_chatRunByIdempotency;
 		std::unordered_map<std::string, ChatReplayEntry> m_chatReplayByIdempotency;
+		std::unordered_map<std::string, std::unordered_set<std::string>> m_chatToolEventRecipientsByRun;
 		std::unordered_set<std::string> m_chatTerminalDeliveredRunIds;
 		std::unordered_map<std::string, std::vector<ChatRuntimeResult::TaskDeltaEntry>> m_taskDeltasByRunId;
 		std::size_t m_taskDeltasRetentionLimit = 64;

@@ -137,6 +137,10 @@ namespace blazeclaw::gateway {
 		json::FindStringField(context.paramsJson.value(), "clientMode", clientMode);
 		context.clientMode = clientMode;
 
+		std::string clientConnectionId;
+		json::FindStringField(context.paramsJson.value(), "clientConnectionId", clientConnectionId);
+		context.clientConnectionId = clientConnectionId;
+
 		context.clientCaps = ParseStringArrayField(context.paramsJson, "clientCaps");
 
 		bool pushLifecycle = false;

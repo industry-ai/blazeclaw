@@ -2,9 +2,12 @@
 #include "ChatRoutePolicy.h"
 
 #include <algorithm>
+#include <unordered_set>
 
 namespace blazeclaw::gateway {
 	namespace {
+		constexpr std::size_t kSessionKeyMaxLength = 512;
+
 		std::string LowerTrim(const std::string& value) {
 			std::string out = value;
 			out.erase(out.begin(), std::find_if(out.begin(), out.end(), [](unsigned char ch) {
@@ -26,15 +29,57 @@ namespace blazeclaw::gateway {
 				lower.find("dm:") == 0 ||
 				lower.find("group:") == 0;
 		}
+
+		std::vector<std::string> SplitSessionScope(const std::string& sessionKey) {
+			std::vector<std::string> parts;
+			std::string current;
+			for (char ch : sessionKey) {
+				if (ch == ':') {
+					if (!current.empty()) {
+						parts.push_back(LowerTrim(current));
+					}
+					current.clear();
+					if (parts.size() >= 3) {
+						break;
+					}
+					continue;
+				}
+
+				current.push_back(ch);
+			}
+			if (!current.empty() && parts.size() < 3) {
+				parts.push_back(LowerTrim(current));
+			}
+
+			return parts;
+		}
+
+		bool IsChannelAgnosticScope(const std::string& scopeHead) {
+			static const std::unordered_set<std::string> kAgnosticScopes = {
+				"main", "direct", "dm", "group", "channel", "cron", "run", "subagent", "acp", "thread", "topic"
+			};
+			return kAgnosticScopes.find(scopeHead) != kAgnosticScopes.end();
+		}
 	}
 
 	ChatRoutePolicy::Output ChatRoutePolicy::Resolve(const Input& input) const {
 		const std::string mode = LowerTrim(input.clientMode);
 		const std::string channel = LowerTrim(input.routeChannel);
-		const std::string to = input.routeTo;
+		const std::string to = LowerTrim(input.routeTo);
+		const std::string sessionKey = LowerTrim(input.sessionKey);
+		const std::string mainKey = LowerTrim(input.mainKey.empty() ? std::string("main") : input.mainKey);
 
 		if (!input.deliver) {
 			return Output{};
+		}
+
+		if (sessionKey.size() > kSessionKeyMaxLength) {
+			return Output{
+				.originatingChannel = "internal",
+				.originatingTo = {},
+				.explicitDeliverRoute = false,
+				.reasonCode = "session_key_too_long",
+			};
 		}
 
 		if (mode == "webchat" || mode == "control") {
@@ -55,12 +100,22 @@ namespace blazeclaw::gateway {
 			};
 		}
 
-		if (!IsLikelyChannelScopedSession(input.sessionKey)) {
+		const auto scopeParts = SplitSessionScope(sessionKey);
+		const std::string scopeHead = scopeParts.empty() ? std::string{} : scopeParts.front();
+		const bool isConfiguredMainScope = !scopeHead.empty() && scopeHead == mainKey;
+		const bool channelScoped = IsLikelyChannelScopedSession(sessionKey);
+		const bool isAgnosticScope = IsChannelAgnosticScope(scopeHead);
+
+		const bool canInheritRoute =
+			(channelScoped && !isAgnosticScope) ||
+			(isConfiguredMainScope && input.hasConnectedClient);
+
+		if (!canInheritRoute) {
 			return Output{
 				.originatingChannel = "internal",
 				.originatingTo = {},
 				.explicitDeliverRoute = false,
-				.reasonCode = "session_not_channel_scoped",
+			 .reasonCode = "session_not_route_eligible",
 			};
 		}
 

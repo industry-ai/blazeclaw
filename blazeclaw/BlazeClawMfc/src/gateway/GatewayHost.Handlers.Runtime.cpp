@@ -3130,6 +3130,7 @@ namespace blazeclaw::gateway {
 				const std::string message = stageContext.message;
 				const std::string normalizedMessage = stageContext.normalizedMessage;
 				const std::string idempotencyKey = stageContext.idempotencyKey;
+				const std::string clientConnectionId = stageContext.clientConnectionId;
 				const bool forceError = stageContext.forceError;
 				const bool hasAttachments = stageContext.hasAttachmentPayload;
 				const std::uint64_t nowMs = stageContext.nowEpochMs > 0
@@ -3154,6 +3155,17 @@ namespace blazeclaw::gateway {
 							.clientCaps = stageContext.clientCaps,
 							.runId = runId,
 						});
+				if (sendControlDecision.toolEvents.wantsToolEvents &&
+					!clientConnectionId.empty()) {
+					m_chatToolEventRecipientsByRun[runId].insert(clientConnectionId);
+					for (const auto& [activeRunId, activeRun] : m_chatRunsById) {
+						if (activeRunId != runId &&
+							activeRun.sessionKey == sessionKey &&
+							activeRun.active) {
+							m_chatToolEventRecipientsByRun[activeRunId].insert(clientConnectionId);
+						}
+					}
+				}
 				EmitTelemetryEvent(
 					"gateway.chat.controlplane.decision",
 					std::string("{\"runId\":") +
@@ -3890,6 +3902,14 @@ namespace blazeclaw::gateway {
 										sendControlDecision)) {
 										return;
 									}
+									if (normalizedDelta.find("tools.execute") == 0) {
+										const auto recipientsIt =
+											m_chatToolEventRecipientsByRun.find(runId);
+										if (recipientsIt == m_chatToolEventRecipientsByRun.end() ||
+											recipientsIt->second.empty()) {
+											return;
+										}
+									}
 
 									auto& streamEvents = m_chatEventsBySession[sessionKey];
 									PushEventWithRetentionLimit(streamEvents, ChatEventState{
@@ -4467,6 +4487,7 @@ namespace blazeclaw::gateway {
 
 				runIt->second.active = false;
 				runIt->second.streamCursor = runIt->second.assistantText.size();
+				m_chatToolEventRecipientsByRun.erase(runId);
 
 				ChatAbortCoordinator abortCoordinator;
 				const auto persistResult = abortCoordinator.PersistAbortedPartial(
@@ -4560,6 +4581,15 @@ namespace blazeclaw::gateway {
 								if (controlPlaneService.ShouldPublishToolDelta(
 									deltaText,
 									pollDecision)) {
+									if (deltaText.find("tools.execute") == 0) {
+										const auto recipientsIt =
+											m_chatToolEventRecipientsByRun.find(run.runId);
+										if (recipientsIt == m_chatToolEventRecipientsByRun.end() ||
+											recipientsIt->second.empty()) {
+											deltaText.clear();
+											continue;
+										}
+									}
 									break;
 								}
 								deltaText.clear();
@@ -4641,6 +4671,7 @@ namespace blazeclaw::gateway {
 							std::to_string(queue.size()));
 
 						run.active = false;
+						m_chatToolEventRecipientsByRun.erase(run.runId);
 					}
 				}
 

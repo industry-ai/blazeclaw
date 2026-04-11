@@ -31,6 +31,7 @@ namespace blazeclaw::gateway {
 		std::string routeTo;
 		std::string clientMode;
 		std::vector<std::string> clientCaps;
+		std::string clientConnectionId;
 		bool pushLifecycleRequested = false;
 		bool forceError = false;
 		bool attachmentsValid = true;
