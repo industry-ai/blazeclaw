@@ -114,6 +114,32 @@ namespace blazeclaw::gateway::protocol {
 				}
 				return true;
 			} },
+		  { "chat.lifecycle", [&]() {
+				if (!IsFieldValueType(payload, "runId", '"') ||
+					!IsFieldValueType(payload, "sessionKey", '"') ||
+					!IsFieldValueType(payload, "state", '"') ||
+					!IsFieldNumber(payload, "timestamp")) {
+					SetIssue(
+						issue,
+						"schema_invalid_event",
+						"`chat.lifecycle` requires `runId`, `sessionKey`, `state`, and numeric `timestamp`.");
+					return false;
+				}
+				return true;
+			} },
+			{ "gateway.events.metadata", [&]() {
+				if (!IsFieldNumber(payload, "sequenceWatermark") ||
+					!IsFieldNumber(payload, "activeSubscribers") ||
+					!IsFieldNumber(payload, "activeRuns") ||
+					!IsFieldNumber(payload, "finalizedRuns")) {
+					SetIssue(
+						issue,
+						"schema_invalid_event",
+						"`gateway.events.metadata` requires numeric state counters.");
+					return false;
+				}
+				return true;
+			} },
 		};
 
 		if (const auto it = validators.find(event.eventName); it != validators.end()) {

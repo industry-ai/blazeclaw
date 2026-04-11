@@ -3153,10 +3153,19 @@ namespace blazeclaw::gateway {
 						? request.id
 						: ("chat-run-" + std::to_string(nowMs) +
 							"-" + std::to_string(m_chatRunsById.size() + 1)));
+				const bool runAlreadyTracked =
+					m_chatRunsById.find(runId) != m_chatRunsById.end();
+				const bool lateJoinRequested =
+					runAlreadyTracked &&
+					stageContext.hasConnectedClient &&
+					!clientConnectionId.empty();
 				const bool pushLifecycleEnabled =
 					stageContext.pushLifecycleRequested;
 
 				ChatControlPlaneService controlPlaneService;
+				const bool hasRegisteredRecipient =
+					!clientConnectionId.empty() &&
+					m_transportRecipientRegistry.HasRecipients(runId);
 				const auto sendControlDecision =
 					controlPlaneService.EvaluateSendControl(
 						ChatControlPlaneService::SendControlInput{
@@ -3169,9 +3178,20 @@ namespace blazeclaw::gateway {
 							.mainKey = stageContext.mainKey,
 							.clientCaps = stageContext.clientCaps,
 							.runId = runId,
+						 .hasRegisteredRecipient = hasRegisteredRecipient,
+							.lateJoinRequested = lateJoinRequested,
 						});
 				if (sendControlDecision.toolEvents.wantsToolEvents &&
 					!clientConnectionId.empty()) {
+					m_transportRecipientRegistry.RegisterRecipient(
+						runId,
+						sessionKey,
+						clientConnectionId,
+						nowMs);
+					m_transportRecipientRegistry.RegisterLateJoin(
+						sessionKey,
+						clientConnectionId,
+						nowMs);
 					m_chatToolEventRecipientsByRun[runId].insert(clientConnectionId);
 					for (const auto& [activeRunId, activeRun] : m_chatRunsById) {
 						if (activeRunId != runId &&
@@ -3180,6 +3200,7 @@ namespace blazeclaw::gateway {
 							m_chatToolEventRecipientsByRun[activeRunId].insert(clientConnectionId);
 						}
 					}
+					m_transportRecipientRegistry.PruneExpired(nowMs);
 				}
 				EmitTelemetryEvent(
 					"gateway.chat.controlplane.decision",
@@ -4597,6 +4618,8 @@ namespace blazeclaw::gateway {
 				runIt->second.active = false;
 				runIt->second.streamCursor = runIt->second.assistantText.size();
 				m_chatToolEventRecipientsByRun.erase(runId);
+				m_transportRecipientRegistry.MarkRunFinalized(runId, nowMs);
+				m_transportRecipientRegistry.PruneExpired(nowMs);
 
 				ChatAbortCoordinator abortCoordinator;
 				const auto persistResult = abortCoordinator.PersistAbortedPartial(
@@ -4801,6 +4824,9 @@ namespace blazeclaw::gateway {
 							nowMs,
 							terminalError);
 						run.terminalEventEnqueued = true;
+						m_transportRecipientRegistry.MarkRunFinalized(
+							run.runId,
+							nowMs);
 						EmitDeepSeekGatewayDiagnostic(
 							"event.enqueue",
 							std::string("state=") +
@@ -4814,6 +4840,7 @@ namespace blazeclaw::gateway {
 
 						run.active = false;
 						m_chatToolEventRecipientsByRun.erase(run.runId);
+						m_transportRecipientRegistry.PruneExpired(nowMs);
 					}
 				}
 
@@ -4882,6 +4909,7 @@ namespace blazeclaw::gateway {
 								}
 
 								m_chatRunsById.erase(runIt);
+								m_transportRecipientRegistry.PruneRun(eventState.runId);
 							}
 						}
 					}

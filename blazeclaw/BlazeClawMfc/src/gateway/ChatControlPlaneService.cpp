@@ -27,6 +27,8 @@ namespace blazeclaw::gateway {
 					.clientCaps = input.clientCaps,
 					.sessionKey = input.sessionKey,
 					.runId = input.runId,
+				 .hasRegisteredRecipient = input.hasRegisteredRecipient,
+					.lateJoinRequested = input.lateJoinRequested,
 				}),
 		};
 	}

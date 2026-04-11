@@ -11,6 +11,8 @@ namespace blazeclaw::gateway {
 			std::vector<std::string> clientCaps;
 			std::string sessionKey;
 			std::string runId;
+			bool hasRegisteredRecipient = false;
+			bool lateJoinRequested = false;
 		};
 
 		struct Output {

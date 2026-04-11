@@ -39,9 +39,18 @@ namespace blazeclaw::gateway {
 			return Output{};
 		}
 
+		if (input.lateJoinRequested && !input.hasRegisteredRecipient) {
+			return Output{
+				.wantsToolEvents = false,
+				.reasonCode = "late_join_pending_registration",
+			};
+		}
+
 		return Output{
 			.wantsToolEvents = true,
-			.reasonCode = "capability_granted",
+		 .reasonCode = input.hasRegisteredRecipient
+				? "recipient_registry_granted"
+				: "capability_granted",
 		};
 	}
 

@@ -20,6 +20,8 @@ namespace blazeclaw::gateway {
 			std::string mainKey = "main";
 			std::vector<std::string> clientCaps;
 			std::string runId;
+			bool hasRegisteredRecipient = false;
+			bool lateJoinRequested = false;
 		};
 
 		struct SendControlDecision {

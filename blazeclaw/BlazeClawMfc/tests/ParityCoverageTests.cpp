@@ -56,6 +56,121 @@ TEST_CASE("Parity coverage: router-neutral route decision telemetry is emitted f
 }
 
 TEST_CASE(
+	"Phase 7: gateway events metadata endpoints are runtime-backed",
+	"[parity][phase-7][events][metadata]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "event metadata runtime";
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase7-events-send",
+			.method = "chat.send",
+			.paramsJson = std::string(
+				"{\"sessionKey\":\"main\",\"message\":\"seed events\","
+				"\"clientConnectionId\":\"conn-meta\",\"hasConnectedClient\":true,"
+				"\"clientCaps\":[\"TOOL_EVENTS\"],\"pushLifecycle\":true}"),
+		});
+	REQUIRE(sendResponse.ok);
+
+	const auto seqResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase7-events-sequence",
+			.method = "gateway.events.sequence",
+			.paramsJson = std::nullopt,
+		});
+	REQUIRE(seqResponse.ok);
+	REQUIRE(seqResponse.payloadJson.has_value());
+	REQUIRE(seqResponse.payloadJson->find("\"event\":\"chat.lifecycle\"") != std::string::npos);
+
+	const auto recentResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase7-events-recent",
+			.method = "gateway.events.recent",
+			.paramsJson = std::nullopt,
+		});
+	REQUIRE(recentResponse.ok);
+	REQUIRE(recentResponse.payloadJson.has_value());
+	REQUIRE(recentResponse.payloadJson->find("\"sequenceWatermark\":") != std::string::npos);
+	REQUIRE(recentResponse.payloadJson->find("\"activeSubscribers\":") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Phase 7: push and poll lifecycle envelopes remain equivalent on terminal progression",
+	"[parity][phase-7][push][poll][equivalence]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "terminal equivalence response";
+			result.assistantDeltas = {
+				"terminal equivalence",
+			};
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase7-eq-send",
+			.method = "chat.send",
+			.paramsJson = std::string(
+				"{\"sessionKey\":\"main\",\"message\":\"equivalence\","
+				"\"clientConnectionId\":\"parity-push-1\",\"hasConnectedClient\":true,"
+				"\"clientCaps\":[\"TOOL_EVENTS\"],\"pushLifecycle\":true}"),
+		});
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+	REQUIRE(sendResponse.payloadJson->find("\"lifecycle\":{") != std::string::npos);
+	REQUIRE(sendResponse.payloadJson->find("\"transport\":\"push_compatible\"") != std::string::npos);
+
+	const auto pollResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "phase7-equivalence-poll",
+			.method = "chat.events.poll",
+			.paramsJson = std::string("{\"sessionKey\":\"main\",\"limit\":50}"),
+		});
+	REQUIRE(pollResponse.ok);
+	REQUIRE(pollResponse.payloadJson.has_value());
+	REQUIRE(pollResponse.payloadJson->find("\"events\":") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
 	"Phase 6: route policy blocks overlong session keys and webchat inheritance",
 	"[parity][phase-6][chat][route][deep]") {
 	ChatControlPlaneService service;

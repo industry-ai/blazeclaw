@@ -1295,6 +1295,7 @@ namespace blazeclaw::gateway {
 	std::vector<std::string> GatewayHost::DrainOutboundFrames(
 		const std::string& connectionId,
 		std::string& error) {
+		m_transportRecipientRegistry.PruneDisconnected(connectionId);
 		return m_transport.DrainOutboundFrames(connectionId, error);
 	}
 
