@@ -93,7 +93,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-	"ServiceManager startup contract: Stop executes close prelude before host stop",
+	"ServiceManager startup contract: Stop executes owned runtime cleanup",
 	"[servicemanager][startup][contract]")
 {
 	const std::string source = ReadServiceManagerSource();
@@ -101,15 +101,11 @@ TEST_CASE(
 	REQUIRE(stopPos != std::string::npos);
 
 	const auto stopBody = source.substr(stopPos);
-	const auto preludePos = stopBody.find(
-		"m_gatewayRuntimeBootstrapCoordinator.RunClosePrelude");
-	const auto hostStopPos = stopBody.find("m_gatewayHost.Stop();");
-
-	REQUIRE(preludePos != std::string::npos);
-	REQUIRE(hostStopPos != std::string::npos);
-	REQUIRE(preludePos < hostStopPos);
 	REQUIRE(
-		stopBody.find("m_state.gatewayLifecycle.closePreludeExecuted = true;") !=
+		stopBody.find("m_state.gatewayLifecycle.cleanupPath = \"normal_stop\";") !=
+		std::string::npos);
+	REQUIRE(
+		stopBody.find("ExecuteGatewayOwnedRuntimeCleanup();") !=
 		std::string::npos);
 }
 
@@ -131,4 +127,51 @@ TEST_CASE(
 	REQUIRE(
 		applyDiffBody.find("authSessionGenerationRejectCount") !=
 		std::string::npos);
+	REQUIRE(
+		applyDiffBody.find("gateway auth/session config change requires") !=
+		std::string::npos);
+}
+
+TEST_CASE(
+	"ServiceManager startup contract: startup failure cleanup path is dedicated",
+	"[servicemanager][startup][contract]")
+{
+	const std::string source = ReadServiceManagerSource();
+	const auto finalizePos = source.find("bool ServiceManager::FinalizeStartup(");
+	REQUIRE(finalizePos != std::string::npos);
+
+	const auto finalizeBody = source.substr(finalizePos);
+	REQUIRE(
+		finalizeBody.find("ExecuteGatewayStartupFailureCleanup(config, startupResult);") !=
+		std::string::npos);
+
+	REQUIRE(
+		source.find("void ServiceManager::ExecuteGatewayStartupFailureCleanup(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("m_state.gatewayLifecycle.cleanupPath = \"startup_failure\";") !=
+		std::string::npos);
+}
+
+TEST_CASE(
+	"ServiceManager startup contract: startup mode matrix labels are fully defined",
+	"[servicemanager][startup][contract]")
+{
+	const auto coordinatorPath =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"bootstrap" /
+		"GatewayRuntimeBootstrapCoordinator.cpp";
+	std::ifstream in(coordinatorPath.string());
+	REQUIRE(in.is_open());
+
+	const std::string coordinatorSource(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+
+	REQUIRE(coordinatorSource.find("raw == L\"disabled\"") != std::string::npos);
+	REQUIRE(coordinatorSource.find("raw == L\"local_only\"") != std::string::npos);
+	REQUIRE(coordinatorSource.find("raw == L\"full\" || raw == L\"transport\"") != std::string::npos);
+	REQUIRE(coordinatorSource.find("return \"local_runtime_dispatch\";") != std::string::npos);
 }

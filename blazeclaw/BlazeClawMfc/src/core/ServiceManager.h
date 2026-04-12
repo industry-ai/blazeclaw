@@ -196,6 +196,8 @@ namespace blazeclaw::core {
 				bool startupDegraded = false;
 				bool managedConfigReloaderStarted = false;
 				bool closePreludeExecuted = false;
+				bool startupFailureCleanupExecuted = false;
+				std::string cleanupPath = "none";
 				std::uint64_t authSessionGenerationCurrent = 0;
 				std::uint64_t authSessionGenerationRequired = 0;
 				std::uint64_t authSessionGenerationRejectCount = 0;
@@ -278,6 +280,9 @@ namespace blazeclaw::core {
 			const std::string& name,
 			std::function<void()> action);
 		void ExecuteGatewayOwnedRuntimeCleanup();
+		void ExecuteGatewayStartupFailureCleanup(
+			const blazeclaw::config::AppConfig& config,
+			const GatewayRuntimeBootstrapCoordinator::StartupResult& startupResult);
 
 		bool m_running = false;
 		std::string m_activeChatProvider = "local";

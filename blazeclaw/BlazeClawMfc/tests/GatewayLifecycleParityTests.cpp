@@ -31,12 +31,18 @@ namespace {
 		out.flush();
 	}
 
-	std::uint64_t ComputeContentHash(const std::string& content)
+	std::uint64_t ComputeFileContentHash(
+		const std::filesystem::path& path)
 	{
+		std::ifstream in(path, std::ios::in | std::ios::binary);
+		REQUIRE(in.is_open());
+
+		const std::string content(
+			(std::istreambuf_iterator<char>(in)),
+			std::istreambuf_iterator<char>());
 		return std::hash<std::string>{}(content);
 	}
 
-} // namespace
 } // namespace
 
 TEST_CASE(
@@ -93,6 +99,61 @@ TEST_CASE(
 		"GatewayRuntimeBootstrap.StartupFailureCleanup.begin");
 	REQUIRE(traces.back() ==
 		"GatewayRuntimeBootstrap.StartupFailureCleanup.done");
+}
+
+TEST_CASE(
+	"GatewayRuntimeBootstrapCoordinator startup mode matrix yields expected lifecycle state",
+	"[gateway][lifecycle][p2][startup-mode]")
+{
+	struct StartupModeExpectation
+	{
+		std::wstring configuredMode;
+		std::string selectedMode;
+		bool expectDegraded;
+	};
+
+	const std::vector<StartupModeExpectation> expectations = {
+		StartupModeExpectation{ L"disabled", "disabled", true },
+		StartupModeExpectation{ L"local_runtime_dispatch", "local_runtime_dispatch", true },
+		StartupModeExpectation{ L"local_only", "local_only", false },
+		StartupModeExpectation{ L"full", "full_gateway", false },
+	};
+
+	for (const auto& expectation : expectations) {
+		blazeclaw::config::AppConfig config;
+		config.gateway.startupMode = expectation.configuredMode;
+		config.gateway.bindAddress = L"127.0.0.1";
+		config.gateway.port = static_cast<std::uint16_t>(57200);
+
+		blazeclaw::gateway::GatewayHost host;
+		blazeclaw::core::GatewayRuntimeBootstrapCoordinator coordinator;
+		const auto startupResult = coordinator.ExecuteStartup(
+			blazeclaw::core::GatewayRuntimeBootstrapCoordinator::StartupContext{
+				.config = config,
+				.gatewayHost = host,
+				.appendTrace = nullptr,
+			});
+
+		REQUIRE(startupResult.selectedMode == expectation.selectedMode);
+		if (expectation.configuredMode == L"full") {
+			if (startupResult.success) {
+				REQUIRE(startupResult.gatewayStarted);
+			}
+		}
+		else {
+			REQUIRE(startupResult.success);
+		}
+
+		REQUIRE(startupResult.degraded == expectation.expectDegraded);
+
+		coordinator.HandleStartupFailure(
+			blazeclaw::core::GatewayRuntimeBootstrapCoordinator::StartupContext{
+				.config = config,
+				.gatewayHost = host,
+				.appendTrace = nullptr,
+			},
+			startupResult);
+	}
 }
 
 TEST_CASE(
@@ -210,7 +271,7 @@ TEST_CASE(
 		"chat.activeModel=deepseek-chat\n";
 	WriteConfigFile(path, internalWriteContent);
 	reloader.RegisterInternalWriteHash(
-		ComputeContentHash(internalWriteContent));
+		ComputeFileContentHash(path));
 	reloader.Pump();
 
 	REQUIRE(reloader.ApplyCount() == 0);
@@ -282,6 +343,8 @@ TEST_CASE(
 	snapshot.gatewayAuthSessionGenerationCurrent = 4;
 	snapshot.gatewayAuthSessionGenerationRequired = 5;
 	snapshot.gatewayAuthSessionGenerationRejectCount = 2;
+	snapshot.gatewayStartupFailureCleanupExecuted = true;
+	snapshot.gatewayCleanupPath = "startup_failure";
 
 	blazeclaw::core::CDiagnosticsReportBuilder builder;
 	const std::string report = builder.BuildOperatorDiagnosticsReport(snapshot);
@@ -307,5 +370,11 @@ TEST_CASE(
 		std::string::npos);
 	REQUIRE(
 		report.find("\"authSessionGenerationRejectCount\":2") !=
+		std::string::npos);
+	REQUIRE(
+		report.find("\"startupFailureCleanupExecuted\":true") !=
+		std::string::npos);
+	REQUIRE(
+		report.find("\"cleanupPath\":\"startup_failure\"") !=
 		std::string::npos);
 }

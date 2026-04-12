@@ -3447,6 +3447,8 @@ namespace blazeclaw::core {
 		m_state.gatewayLifecycle.failedStage = startupResult.failedStage;
 		m_state.gatewayLifecycle.managedConfigReloaderStarted =
 			startupResult.managedConfigReloaderStarted;
+		m_state.gatewayLifecycle.startupFailureCleanupExecuted = false;
+		m_state.gatewayLifecycle.cleanupPath = "none";
 		m_state.gatewayLifecycle.authSessionGenerationCurrent =
 			config.gateway.authSessionGeneration;
 		m_state.gatewayLifecycle.authSessionGenerationRequired =
@@ -3525,15 +3527,7 @@ namespace blazeclaw::core {
 			});
 
 		if (!startupResult.success) {
-			m_gatewayRuntimeBootstrapCoordinator.HandleStartupFailure(
-				GatewayRuntimeBootstrapCoordinator::StartupContext{
-					.config = config,
-					.gatewayHost = m_gatewayHost,
-					.appendTrace = [this](const char* stage) {
-						AppendStartupTrace(stage);
-					},
-				},
-				startupResult);
+			ExecuteGatewayStartupFailureCleanup(config, startupResult);
 			m_skillsCatalog.diagnostics.warnings.push_back(
 				L"gateway startup failed; running in degraded local mode.");
 			AppendStartupTrace("ServiceManager.Start.gateway.failed");
@@ -3552,6 +3546,7 @@ namespace blazeclaw::core {
 	}
 
 	void ServiceManager::Stop() {
+		m_state.gatewayLifecycle.cleanupPath = "normal_stop";
 		m_skillsEnvOverrideService.RevertAll();
 		if (m_state.chatRuntime.asyncQueueEnabled) {
 			m_chatRuntime.StopWorker();
@@ -3591,6 +3586,33 @@ namespace blazeclaw::core {
 		}
 
 		ResetGatewayOwnedRuntimeCleanup();
+	}
+
+	void ServiceManager::ExecuteGatewayStartupFailureCleanup(
+		const blazeclaw::config::AppConfig& config,
+		const GatewayRuntimeBootstrapCoordinator::StartupResult& startupResult) {
+		AppendStartupTrace("ServiceManager.Start.gateway.startupFailureCleanup.begin");
+		m_state.gatewayLifecycle.cleanupPath = "startup_failure";
+
+		if (m_gatewayManagedConfigReloader.IsRunning()) {
+			m_gatewayManagedConfigReloader.Stop();
+			m_state.gatewayLiveRuntime.managedConfigReloaderRunning = false;
+		}
+
+		ExecuteGatewayOwnedRuntimeCleanup();
+
+		m_gatewayRuntimeBootstrapCoordinator.HandleStartupFailure(
+			GatewayRuntimeBootstrapCoordinator::StartupContext{
+				.config = config,
+				.gatewayHost = m_gatewayHost,
+				.appendTrace = [this](const char* stage) {
+					AppendStartupTrace(stage);
+				},
+			},
+			startupResult);
+
+		m_state.gatewayLifecycle.startupFailureCleanupExecuted = true;
+		AppendStartupTrace("ServiceManager.Start.gateway.startupFailureCleanup.done");
 	}
 
 	bool ServiceManager::ApplyManagedRuntimeConfigDiff(
@@ -3795,6 +3817,10 @@ namespace blazeclaw::core {
 			m_state.gatewayLiveRuntime.managedConfigReloaderRunning;
 		snapshot.gatewayClosePreludeExecuted =
 			m_state.gatewayLifecycle.closePreludeExecuted;
+		snapshot.gatewayStartupFailureCleanupExecuted =
+			m_state.gatewayLifecycle.startupFailureCleanupExecuted;
+		snapshot.gatewayCleanupPath =
+			m_state.gatewayLifecycle.cleanupPath;
 		snapshot.gatewayRuntimeStateCreated =
 			m_state.gatewayLiveRuntime.runtimeStateCreated;
 		snapshot.gatewayRuntimeServicesStarted =

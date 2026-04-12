@@ -17,6 +17,8 @@ namespace blazeclaw::core {
 		bool gatewayManagedConfigReloaderStarted = false;
 		bool gatewayManagedConfigReloaderRunning = false;
 		bool gatewayClosePreludeExecuted = false;
+		bool gatewayStartupFailureCleanupExecuted = false;
+		std::string gatewayCleanupPath;
 		bool gatewayRuntimeStateCreated = false;
 		bool gatewayRuntimeServicesStarted = false;
 		bool gatewayTransportHandlersAttached = false;

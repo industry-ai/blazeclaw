@@ -24,6 +24,11 @@ namespace blazeclaw::core {
 			std::string(s.gatewayManagedConfigReloaderRunning ? "true" : "false") +
 			",\"closePreludeExecuted\":" +
 			std::string(s.gatewayClosePreludeExecuted ? "true" : "false") +
+			",\"startupFailureCleanupExecuted\":" +
+			std::string(s.gatewayStartupFailureCleanupExecuted ? "true" : "false") +
+			",\"cleanupPath\":\"" +
+			s.gatewayCleanupPath +
+			"\"" +
 			",\"runtimeStateCreated\":" +
 			std::string(s.gatewayRuntimeStateCreated ? "true" : "false") +
 			",\"runtimeServicesStarted\":" +
