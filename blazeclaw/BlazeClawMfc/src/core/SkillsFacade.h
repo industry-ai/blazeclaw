@@ -1,0 +1,59 @@
+#pragma once
+
+#include "SkillsCatalogService.h"
+#include "SkillsEligibilityService.h"
+#include "SkillsPromptService.h"
+#include "SkillsWatchService.h"
+
+#include "../config/ConfigModels.h"
+
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace blazeclaw::core {
+
+	struct SkillsInstallPreferences {
+		bool preferBrew = true;
+		std::wstring nodeManager = L"npm";
+	};
+
+	struct SkillsRunSnapshotSkill {
+		std::wstring name;
+		std::wstring primaryEnv;
+		std::vector<std::wstring> requiredEnv;
+	};
+
+	struct SkillsRunSnapshot {
+		std::wstring prompt;
+		std::vector<SkillsRunSnapshotSkill> skills;
+		std::optional<std::vector<std::wstring>> skillFilter;
+		std::vector<std::wstring> resolvedSkills;
+		std::uint64_t version = 0;
+	};
+
+	class SkillsFacade {
+	public:
+		[[nodiscard]] SkillsInstallPreferences ResolveInstallPreferences(
+			const blazeclaw::config::AppConfig& appConfig) const;
+
+		[[nodiscard]] SkillsRunSnapshot BuildRunSnapshot(
+			const SkillsCatalogSnapshot& catalog,
+			const SkillsEligibilitySnapshot& eligibility,
+			const SkillsPromptSnapshot& prompt,
+			const SkillsWatchSnapshot& watch,
+			const std::optional<std::vector<std::wstring>>& skillFilter = std::nullopt) const;
+
+		[[nodiscard]] std::wstring ResolvePromptForRun(
+			const SkillsRunSnapshot* runSnapshot,
+			const SkillsPromptSnapshot* promptSnapshot,
+			const SkillsCatalogSnapshot& catalog,
+			const SkillsEligibilitySnapshot& eligibility,
+			const blazeclaw::config::AppConfig& appConfig,
+			const std::optional<std::vector<std::wstring>>& skillFilter,
+			bool enableSelfEvolvingPromptFallback,
+			const SkillsPromptService& promptService) const;
+	};
+
+} // namespace blazeclaw::core

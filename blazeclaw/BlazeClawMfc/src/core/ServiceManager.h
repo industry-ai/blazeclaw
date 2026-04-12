@@ -23,6 +23,7 @@
 #include "SkillsCatalogService.h"
 #include "SkillsEnvOverrideService.h"
 #include "SkillsEligibilityService.h"
+#include "SkillsFacade.h"
 #include "SkillsInstallService.h"
 #include "SkillsPromptService.h"
 #include "SkillSecurityScanService.h"
@@ -83,6 +84,7 @@ namespace blazeclaw::core {
 		[[nodiscard]] const SkillsCatalogSnapshot& SkillsCatalog() const noexcept;
 		[[nodiscard]] const SkillsEligibilitySnapshot& SkillsEligibility() const noexcept;
 		[[nodiscard]] const SkillsPromptSnapshot& SkillsPrompt() const noexcept;
+		[[nodiscard]] const SkillsRunSnapshot& RunSkillsSnapshot() const noexcept;
 		[[nodiscard]] blazeclaw::gateway::ConfigSchemaGatewayState
 			BuildConfigSchemaGatewayState() const;
 		[[nodiscard]] std::optional<blazeclaw::gateway::ConfigSchemaGatewayLookupResult>
@@ -338,6 +340,8 @@ namespace blazeclaw::core {
 		SkillsEligibilitySnapshot m_skillsEligibility;
 		SkillsPromptService m_skillsPromptService;
 		SkillsPromptSnapshot m_skillsPrompt;
+		SkillsFacade m_skillsFacade;
+		SkillsRunSnapshot m_skillsRunSnapshot;
 		SkillsCommandService m_skillsCommandService;
 		SkillsCommandSnapshot m_skillsCommands;
 		SkillsSyncService m_skillsSyncService;

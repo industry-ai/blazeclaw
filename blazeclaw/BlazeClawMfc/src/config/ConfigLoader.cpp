@@ -259,6 +259,18 @@ namespace blazeclaw::config {
 			return L"normal";
 		}
 
+		std::wstring NormalizeSkillsInstallNodeManager(const std::wstring& raw) {
+			const std::wstring normalized = ToLowerTrim(raw);
+			if (normalized == L"pnpm" ||
+				normalized == L"yarn" ||
+				normalized == L"bun" ||
+				normalized == L"npm") {
+				return normalized;
+			}
+
+			return L"npm";
+		}
+
 		std::wstring NormalizeEmbeddingsExecutionMode(
 			const std::wstring& raw) {
 			const std::wstring normalized = ToLowerTrim(raw);
@@ -1369,6 +1381,8 @@ namespace blazeclaw::config {
 			outConfig.embeddings.executionMode);
 		outConfig.localModel.provider = NormalizeLocalModelProvider(
 			outConfig.localModel.provider);
+		outConfig.skills.install.nodeManager =
+			NormalizeSkillsInstallNodeManager(outConfig.skills.install.nodeManager);
 		if (outConfig.embeddings.dimension == 0) {
 			outConfig.embeddings.dimension = 384;
 		}

@@ -160,6 +160,7 @@
     <ClInclude Include="src\core\SkillsCatalogService.h" />
     <ClInclude Include="src\core\SkillsEnvOverrideService.h" />
     <ClInclude Include="src\core\SkillsEligibilityService.h" />
+    <ClInclude Include="src\core\SkillsFacade.h" />
     <ClInclude Include="src\core\SkillsInstallService.h" />
     <ClInclude Include="src\core\SkillSecurityScanService.h" />
     <ClInclude Include="src\core\SkillsPromptService.h" />
@@ -305,6 +306,7 @@
     <ClCompile Include="src\core\SkillsCatalogService.cpp" />
     <ClCompile Include="src\core\SkillsEnvOverrideService.cpp" />
     <ClCompile Include="src\core\SkillsEligibilityService.cpp" />
+    <ClCompile Include="src\core\SkillsFacade.cpp" />
     <ClCompile Include="src\core\SkillsInstallService.cpp" />
     <ClCompile Include="src\core\SkillSecurityScanService.cpp" />
     <ClCompile Include="src\core\SkillsPromptService.cpp" />

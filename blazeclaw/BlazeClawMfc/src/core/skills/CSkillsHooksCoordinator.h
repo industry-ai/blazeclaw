@@ -10,6 +10,7 @@
 #include "../SkillsEnvOverrideService.h"
 #include "../SkillsInstallService.h"
 #include "../SkillsPromptService.h"
+#include "../SkillsFacade.h"
 #include "../SkillsSyncService.h"
 #include "../SkillsWatchService.h"
 #include "HooksGovernanceEmitter.h"
@@ -37,6 +38,7 @@ namespace blazeclaw::core {
 			SkillsSyncService& syncService;
 			SkillsEnvOverrideService& envOverrideService;
 			SkillsInstallService& installService;
+			SkillsFacade& skillsFacade;
 			SkillSecurityScanService& securityScanService;
 			SkillsWatchService& watchService;
 
@@ -50,6 +52,7 @@ namespace blazeclaw::core {
 			SkillsSyncSnapshot& sync;
 			SkillsEnvOverrideSnapshot& envOverrides;
 			SkillsInstallSnapshot& install;
+			SkillsRunSnapshot& runSnapshot;
 			SkillSecurityScanSnapshot& securityScan;
 			SkillsWatchSnapshot& watch;
 			std::filesystem::path workspaceRoot;

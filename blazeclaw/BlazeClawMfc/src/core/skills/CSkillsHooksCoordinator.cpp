@@ -44,7 +44,8 @@ namespace blazeclaw::core {
 		context.install = context.installService.BuildSnapshot(
 			context.catalog,
 			context.eligibility,
-			config);
+			config,
+			context.skillsFacade.ResolveInstallPreferences(config));
 		context.securityScan = context.securityScanService.BuildSnapshot(
 			context.catalog,
 			context.eligibility,
@@ -55,6 +56,12 @@ namespace blazeclaw::core {
 			config,
 			forceRefresh,
 			reason);
+		context.runSnapshot = context.skillsFacade.BuildRunSnapshot(
+			context.catalog,
+			context.eligibility,
+			context.prompt,
+			context.watch,
+			std::nullopt);
 	}
 
 	blazeclaw::gateway::SkillsCatalogGatewayState

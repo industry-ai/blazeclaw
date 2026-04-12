@@ -2031,6 +2031,7 @@ namespace blazeclaw::core {
 				.syncService = m_skillsSyncService,
 				.envOverrideService = m_skillsEnvOverrideService,
 				.installService = m_skillsInstallService,
+			  .skillsFacade = m_skillsFacade,
 				.securityScanService = m_skillSecurityScanService,
 				.watchService = m_skillsWatchService,
 				.catalog = m_skillsCatalog,
@@ -2043,6 +2044,7 @@ namespace blazeclaw::core {
 				.sync = m_skillsSync,
 				.envOverrides = m_skillsEnvOverrides,
 				.install = m_skillsInstall,
+				.runSnapshot = m_skillsRunSnapshot,
 				.securityScan = m_skillSecurityScan,
 				.watch = m_skillsWatch,
 			 .workspaceRoot = ResolveWorkspaceRootForSkills(
@@ -2424,6 +2426,12 @@ namespace blazeclaw::core {
 				m_activeConfig,
 				std::nullopt,
 				m_state.hooks.fallbackPromptInjection);
+			m_skillsRunSnapshot = m_skillsFacade.BuildRunSnapshot(
+				m_skillsCatalog,
+				m_skillsEligibility,
+				m_skillsPrompt,
+				m_skillsWatch,
+				std::nullopt);
 			m_hookEvents = m_hookEventService.Snapshot();
 			m_skillsCommands = m_skillsCommandService.BuildSnapshot(
 				m_skillsCatalog,
@@ -2876,10 +2884,24 @@ namespace blazeclaw::core {
 			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
 				const std::string sessionId =
 					request.sessionKey.empty() ? "main" : request.sessionKey;
+				const std::wstring resolvedPromptForRunWide =
+					m_skillsFacade.ResolvePromptForRun(
+						&m_skillsRunSnapshot,
+						&m_skillsPrompt,
+						m_skillsCatalog,
+						m_skillsEligibility,
+						m_activeConfig,
+						std::nullopt,
+						m_state.hooks.fallbackPromptInjection,
+						m_skillsPromptService);
+				const std::wstring resolvedPromptForRun =
+					resolvedPromptForRunWide;
+				const std::string resolvedPromptForRunNarrow =
+					WideToNarrowAscii(resolvedPromptForRun);
 				const std::string runtimeMessage =
 					BuildSkillsInjectedMessage(
 						request.message,
-						m_skillsPrompt.prompt,
+						resolvedPromptForRun,
 						static_cast<std::size_t>(
 							m_activeConfig.skills.limits.maxSkillsPromptChars));
 				const std::string activeProvider = m_activeChatProvider;
@@ -2888,6 +2910,7 @@ namespace blazeclaw::core {
 					request,
 					sessionId,
 					runtimeMessage,
+					resolvedPromptForRunNarrow,
 					activeProvider,
 					activeModel]() -> blazeclaw::gateway::GatewayHost::ChatRuntimeResult {
 					if (IsEmbeddedRunCancelled(request.runId) ||
@@ -2938,7 +2961,7 @@ namespace blazeclaw::core {
 								.agentId = "default",
 								.message = request.message,
 							},
-							.skillsPrompt = WideToNarrowAscii(m_skillsPrompt.prompt),
+							.skillsPrompt = resolvedPromptForRunNarrow,
 							.toolBindings = std::move(toolBindings),
 							.runtimeTools = m_gatewayHost.ListRuntimeTools(),
 							.enforceOrderedAllowlist = request.enforceOrderedAllowlist,
@@ -4303,6 +4326,10 @@ namespace blazeclaw::core {
 
 	const SkillsPromptSnapshot& ServiceManager::SkillsPrompt() const noexcept {
 		return m_skillsPrompt;
+	}
+
+	const SkillsRunSnapshot& ServiceManager::RunSkillsSnapshot() const noexcept {
+		return m_skillsRunSnapshot;
 	}
 
 	blazeclaw::gateway::ConfigSchemaGatewayState
