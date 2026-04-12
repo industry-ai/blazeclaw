@@ -222,6 +222,91 @@ TEST_CASE("ConfigSchemaService lookup strip keeps expanded schema scalar keys", 
 	REQUIRE(lookup->schemaJson.find("\"multipleOf\":2") != std::string::npos);
 }
 
+TEST_CASE("ConfigSchemaService merges plugin extension schema metadata", "[schema][merge][plugin]") {
+	blazeclaw::core::ConfigSchemaService service;
+	blazeclaw::gateway::SkillsCatalogGatewayState skills;
+	auto entry = MakeSkill("voice-call", { "plugins.entries.voice-call.config.apiKey" });
+	entry.pluginConfigSchemaJson =
+		"{"
+		"\"type\":\"object\","
+		"\"properties\":{"
+		"\"apiKey\":{\"type\":\"string\",\"minLength\":8},"
+		"\"endpoint\":{\"type\":\"string\"}"
+		"}"
+		"}";
+	skills.entries.push_back(entry);
+
+	const auto state = service.BuildGatewayState(MakeConfig({ L"discord" }), skills);
+	const auto lookup = service.Lookup(state, "plugins.entries.voice-call.config");
+	REQUIRE(lookup.has_value());
+
+	const auto hasApiKeyChild = std::find_if(
+		lookup->children.begin(),
+		lookup->children.end(),
+		[](const blazeclaw::gateway::ConfigSchemaGatewayChild& child) {
+			return child.key == "apiKey";
+		}) != lookup->children.end();
+	REQUIRE(hasApiKeyChild);
+}
+
+TEST_CASE("ConfigSchemaService merges plugin extension ui-hints metadata", "[schema][merge][hints][plugin]") {
+	blazeclaw::core::ConfigSchemaService service;
+	blazeclaw::gateway::SkillsCatalogGatewayState skills;
+	auto entry = MakeSkill("voice-call", { "plugins.entries.voice-call.config.apiKey" });
+	entry.pluginConfigUiHintsJson =
+		"{"
+		"\"apiKey\":{\"label\":\"Voice API Key\",\"sensitive\":true},"
+		"\"endpoint\":{\"label\":\"Voice Endpoint\"}"
+		"}";
+	skills.entries.push_back(entry);
+
+	const auto state = service.BuildGatewayState(MakeConfig({ L"discord" }), skills);
+	const auto lookup = service.Lookup(state, "plugins.entries.voice-call.config.apiKey");
+	REQUIRE(lookup.has_value());
+	REQUIRE(lookup->hint.has_value());
+	REQUIRE(lookup->hint->label == "Voice API Key");
+	REQUIRE(lookup->hint->sensitive);
+}
+
+TEST_CASE("ConfigSchemaService merges channel extension schema and hints metadata", "[schema][merge][channel]") {
+	blazeclaw::core::ConfigSchemaService service;
+	blazeclaw::gateway::SkillsCatalogGatewayState skills;
+	auto entry = MakeSkill("bridge", { "channels.discord.token" });
+	entry.channelConfigSchemasJson =
+		"{"
+		"\"discord\":{"
+		"\"type\":\"object\","
+		"\"properties\":{"
+		"\"botToken\":{\"type\":\"string\"}"
+		"}"
+		"}"
+		"}";
+	entry.channelConfigUiHintsJson =
+		"{"
+		"\"discord\":{"
+		"\"botToken\":{\"label\":\"Discord Bot Token\",\"sensitive\":true}"
+		"}"
+		"}";
+	skills.entries.push_back(entry);
+
+	const auto state = service.BuildGatewayState(MakeConfig({ L"discord" }), skills);
+	const auto schemaLookup = service.Lookup(state, "channels.discord");
+	REQUIRE(schemaLookup.has_value());
+	const auto hasBotTokenChild = std::find_if(
+		schemaLookup->children.begin(),
+		schemaLookup->children.end(),
+		[](const blazeclaw::gateway::ConfigSchemaGatewayChild& child) {
+			return child.key == "botToken";
+		}) != schemaLookup->children.end();
+	REQUIRE(hasBotTokenChild);
+
+	const auto hintLookup = service.Lookup(state, "channels.discord.botToken");
+	REQUIRE(hintLookup.has_value());
+	REQUIRE(hintLookup->hint.has_value());
+	REQUIRE(hintLookup->hint->label == "Discord Bot Token");
+	REQUIRE(hintLookup->hint->sensitive);
+}
+
 TEST_CASE("ConfigSchemaService cache invalidates on demand", "[schema][cache][invalidate]") {
 	blazeclaw::core::ConfigSchemaService service;
 	blazeclaw::gateway::SkillsCatalogGatewayState skills;

@@ -41,6 +41,85 @@ namespace blazeclaw::core {
 			return output;
 		}
 
+		std::wstring TrimWideLocal(const std::wstring& value) {
+			const auto first = std::find_if_not(
+				value.begin(),
+				value.end(),
+				[](const wchar_t ch) {
+					return std::iswspace(ch) != 0;
+				});
+			const auto last = std::find_if_not(
+				value.rbegin(),
+				value.rend(),
+				[](const wchar_t ch) {
+					return std::iswspace(ch) != 0;
+				})
+				.base();
+
+			if (first >= last) {
+				return {};
+			}
+
+			return std::wstring(first, last);
+		}
+
+		std::string NarrowTrimmedOrEmpty(const std::wstring& value) {
+			const std::wstring trimmed = TrimWideLocal(value);
+			if (trimmed.empty()) {
+				return {};
+			}
+
+			return ToNarrow(trimmed);
+		}
+
+		std::string NormalizeFlatJsonMapToObject(const std::wstring& rawValue) {
+			const std::wstring trimmedWide = TrimWideLocal(rawValue);
+			if (trimmedWide.empty()) {
+				return {};
+			}
+
+			const std::string narrow = ToNarrow(trimmedWide);
+			if (blazeclaw::gateway::json::Trim(narrow).empty()) {
+				return {};
+			}
+
+			nlohmann::json parsed =
+				nlohmann::json::parse(narrow, nullptr, false);
+			if (parsed.is_discarded()) {
+				return {};
+			}
+
+			if (parsed.is_object()) {
+				return parsed.dump();
+			}
+
+			if (!parsed.is_array()) {
+				return {};
+			}
+
+			nlohmann::json normalized = nlohmann::json::object();
+			for (const auto& entry : parsed) {
+				if (!entry.is_object()) {
+					continue;
+				}
+
+				const auto idIt = entry.find("id");
+				if (idIt == entry.end() || !idIt->is_string()) {
+					continue;
+				}
+
+				const std::string id =
+					blazeclaw::gateway::json::Trim(idIt->get<std::string>());
+				if (id.empty()) {
+					continue;
+				}
+
+				normalized[id] = entry;
+			}
+
+			return normalized.dump();
+		}
+
 		void DrainPipeAvailable(HANDLE readPipe, std::string& output) {
 			if (readPipe == nullptr || readPipe == INVALID_HANDLE_VALUE) {
 				return;
@@ -1746,6 +1825,10 @@ namespace blazeclaw::core {
 		std::vector<std::string> requiresBins;
 		std::vector<std::string> requiresEnv;
 		std::vector<std::string> requiresConfig;
+		std::string pluginConfigSchemaJson;
+		std::string pluginConfigUiHintsJson;
+		std::string channelConfigSchemasJson;
+		std::string channelConfigUiHintsJson;
 
 		if (const auto* value = ResolveNormalizedField(
 			entry.frontmatter,
@@ -1781,6 +1864,42 @@ namespace blazeclaw::core {
 			metadataSources);
 			value != nullptr) {
 			requiresConfig = UniqueNarrowValues(SplitCommaDelimitedWide(*value));
+		}
+
+		if (const auto* value = ResolveNormalizedField(
+			entry.frontmatter,
+			{ L"metadata.blazeclaw.plugin.configschema", L"metadata.blazeclaw.plugin.config_schema" },
+			{ L"metadata.openclaw.plugin.configschema", L"metadata.openclaw.plugin.config_schema" },
+			metadataSources);
+			value != nullptr) {
+			pluginConfigSchemaJson = NarrowTrimmedOrEmpty(*value);
+		}
+
+		if (const auto* value = ResolveNormalizedField(
+			entry.frontmatter,
+			{ L"metadata.blazeclaw.plugin.configuihints", L"metadata.blazeclaw.plugin.config_ui_hints" },
+			{ L"metadata.openclaw.plugin.configuihints", L"metadata.openclaw.plugin.config_ui_hints" },
+			metadataSources);
+			value != nullptr) {
+			pluginConfigUiHintsJson = NarrowTrimmedOrEmpty(*value);
+		}
+
+		if (const auto* value = ResolveNormalizedField(
+			entry.frontmatter,
+			{ L"metadata.blazeclaw.channels.configschemas", L"metadata.blazeclaw.channels.config_schemas" },
+			{ L"metadata.openclaw.channels.configschemas", L"metadata.openclaw.channels.config_schemas" },
+			metadataSources);
+			value != nullptr) {
+			channelConfigSchemasJson = NormalizeFlatJsonMapToObject(*value);
+		}
+
+		if (const auto* value = ResolveNormalizedField(
+			entry.frontmatter,
+			{ L"metadata.blazeclaw.channels.configuihints", L"metadata.blazeclaw.channels.config_ui_hints" },
+			{ L"metadata.openclaw.channels.configuihints", L"metadata.openclaw.channels.config_ui_hints" },
+			metadataSources);
+			value != nullptr) {
+			channelConfigUiHintsJson = NormalizeFlatJsonMapToObject(*value);
 		}
 
 		std::vector<std::string> configPathHints;
@@ -1842,6 +1961,10 @@ namespace blazeclaw::core {
 		gatewayEntry.requiresEnv = std::move(requiresEnv);
 		gatewayEntry.requiresConfig = std::move(requiresConfig);
 		gatewayEntry.configPathHints = std::move(configPathHints);
+		gatewayEntry.pluginConfigSchemaJson = std::move(pluginConfigSchemaJson);
+		gatewayEntry.pluginConfigUiHintsJson = std::move(pluginConfigUiHintsJson);
+		gatewayEntry.channelConfigSchemasJson = std::move(channelConfigSchemasJson);
+		gatewayEntry.channelConfigUiHintsJson = std::move(channelConfigUiHintsJson);
 		gatewayEntry.normalizedMetadataSources = std::move(metadataSources);
 		if (eligibility != nullptr) {
 			gatewayEntry.missingEnv = UniqueNarrowValues(eligibility->missingEnv);

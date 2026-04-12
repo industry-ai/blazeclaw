@@ -424,6 +424,66 @@ namespace blazeclaw::core {
 			root["properties"]["agents"] = std::move(agentsNode);
 
 			for (const auto& skill : skillsState.entries) {
+				if (!skill.pluginConfigSchemaJson.empty()) {
+					Json pluginSchema =
+						Json::parse(skill.pluginConfigSchemaJson, nullptr, false);
+					if (!pluginSchema.is_discarded() && pluginSchema.is_object()) {
+						const std::string pluginId =
+							blazeclaw::gateway::json::Trim(skill.skillKey);
+						if (!pluginId.empty()) {
+							EnsurePathProjectedSchemaNode(
+								root,
+								"plugins.entries." + pluginId + ".config");
+							Json* pluginsNode = EnsureObjectNode(root, "plugins");
+							if (pluginsNode != nullptr) {
+								Json* entriesNode = EnsureObjectNode(*pluginsNode, "entries");
+								if (entriesNode != nullptr) {
+									Json* pluginNode = EnsureObjectNode(*entriesNode, pluginId);
+									if (pluginNode != nullptr) {
+										if (!pluginNode->contains("properties") ||
+											!(*pluginNode)["properties"].is_object()) {
+											(*pluginNode)["properties"] = Json::object();
+										}
+										Json& configNode = (*pluginNode)["properties"]["config"];
+										if (configNode.is_object()) {
+											for (const auto& [key, value] : pluginSchema.items()) {
+												configNode[key] = value;
+											}
+										}
+										else {
+											configNode = pluginSchema;
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+
+				if (!skill.channelConfigSchemasJson.empty()) {
+					Json channelSchemas =
+						Json::parse(skill.channelConfigSchemasJson, nullptr, false);
+					if (!channelSchemas.is_discarded() && channelSchemas.is_object()) {
+						Json* channelsNode = EnsureObjectNode(root, "channels");
+						if (channelsNode != nullptr) {
+							for (const auto& [channelId, schemaValue] : channelSchemas.items()) {
+								if (!schemaValue.is_object()) {
+									continue;
+								}
+
+								Json* channelNode = EnsureObjectNode(*channelsNode, channelId);
+								if (channelNode == nullptr) {
+									continue;
+								}
+
+								for (const auto& [schemaKey, schemaItem] : schemaValue.items()) {
+									(*channelNode)[schemaKey] = schemaItem;
+								}
+							}
+						}
+					}
+				}
+
 				for (const auto& path : skill.requiresConfig) {
 					EnsurePathProjectedSchemaNode(root, path);
 				}
@@ -440,6 +500,67 @@ namespace blazeclaw::core {
 			const blazeclaw::gateway::SkillsCatalogGatewayState& skillsState) {
 			Json hints = Json::object();
 			for (const auto& skill : skillsState.entries) {
+				const std::string pluginId =
+					blazeclaw::gateway::json::Trim(skill.skillKey);
+				if (!pluginId.empty()) {
+					hints["plugins.entries." + pluginId] = Json{
+						{ "label", pluginId },
+						{ "help", "Plugin entry for " + pluginId + "." },
+					};
+					hints["plugins.entries." + pluginId + ".config"] = Json{
+						{ "label", pluginId + " Config" },
+						{ "help", "Plugin-defined config payload for " + pluginId + "." },
+					};
+
+					if (!skill.pluginConfigUiHintsJson.empty()) {
+						Json pluginHints =
+							Json::parse(skill.pluginConfigUiHintsJson, nullptr, false);
+						if (!pluginHints.is_discarded() && pluginHints.is_object()) {
+							for (const auto& [relPathRaw, hintValue] : pluginHints.items()) {
+								if (!hintValue.is_object()) {
+									continue;
+								}
+
+								const std::string relPath =
+									blazeclaw::gateway::json::Trim(relPathRaw);
+								if (relPath.empty()) {
+									continue;
+								}
+
+								hints[
+									"plugins.entries." + pluginId + ".config." + relPath] =
+									hintValue;
+							}
+						}
+					}
+				}
+
+				if (!skill.channelConfigUiHintsJson.empty()) {
+					Json channelHints =
+						Json::parse(skill.channelConfigUiHintsJson, nullptr, false);
+					if (!channelHints.is_discarded() && channelHints.is_object()) {
+						for (const auto& [channelId, channelHintValue] : channelHints.items()) {
+							if (!channelHintValue.is_object()) {
+								continue;
+							}
+
+							for (const auto& [relPathRaw, hintValue] : channelHintValue.items()) {
+								if (!hintValue.is_object()) {
+									continue;
+								}
+
+								const std::string relPath =
+									blazeclaw::gateway::json::Trim(relPathRaw);
+								if (relPath.empty()) {
+									continue;
+								}
+
+								hints["channels." + channelId + "." + relPath] = hintValue;
+							}
+						}
+					}
+				}
+
 				std::vector<std::string> hintPaths = skill.requiresConfig;
 				hintPaths.insert(
 					hintPaths.end(),

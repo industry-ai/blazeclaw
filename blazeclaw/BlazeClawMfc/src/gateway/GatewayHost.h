@@ -53,6 +53,10 @@ namespace blazeclaw::gateway {
 		std::vector<std::string> requiresEnv;
 		std::vector<std::string> requiresConfig;
 		std::vector<std::string> configPathHints;
+		std::string pluginConfigSchemaJson;
+		std::string pluginConfigUiHintsJson;
+		std::string channelConfigSchemasJson;
+		std::string channelConfigUiHintsJson;
 		std::vector<std::string> normalizedMetadataSources;
 		std::vector<std::string> missingEnv;
 		std::vector<std::string> missingConfig;
