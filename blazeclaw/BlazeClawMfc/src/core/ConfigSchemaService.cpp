@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <chrono>
 #include <iomanip>
 #include <nlohmann/json.hpp>
@@ -61,6 +62,60 @@ namespace blazeclaw::core {
 				}
 			}
 			return escaped;
+		}
+
+		bool ContainsAnySubstring(
+			const std::string& loweredValue,
+			std::initializer_list<const char*> fragments) {
+			for (const auto* fragment : fragments) {
+				if (fragment == nullptr || *fragment == '\0') {
+					continue;
+				}
+
+				if (loweredValue.find(fragment) != std::string::npos) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		bool IsSensitiveHintPath(const std::string& path) {
+			const std::string lowered = ToLowerCopy(path);
+			return ContainsAnySubstring(
+				lowered,
+				{ "token", "apikey", "api_key", "secret", "password", "credential" });
+		}
+
+		bool IsSensitiveUrlHintPath(const std::string& path) {
+			const std::string lowered = ToLowerCopy(path);
+			const bool looksLikeUrlField =
+				ContainsAnySubstring(lowered, { "url", "uri", "endpoint", "webhook" });
+			if (!looksLikeUrlField) {
+				return false;
+			}
+
+			return ContainsAnySubstring(
+				lowered,
+				{ "token", "key", "secret", "password", "credential", "auth" });
+		}
+
+		Json BuildHintTags(
+			const bool sensitive,
+			const bool sensitiveUrl) {
+			Json tags = Json::array();
+			tags.push_back("config");
+			tags.push_back("skill");
+
+			if (sensitive) {
+				tags.push_back("sensitive");
+			}
+
+			if (sensitiveUrl) {
+				tags.push_back("sensitive-url");
+			}
+
+			return tags;
 		}
 
 		std::string BuildIso8601NowUtc() {
@@ -217,24 +272,34 @@ namespace blazeclaw::core {
 		Json BuildUiHintsJson(const blazeclaw::gateway::SkillsCatalogGatewayState& skillsState) {
 			Json hints = Json::object();
 			for (const auto& skill : skillsState.entries) {
-				for (const auto& path : skill.requiresConfig) {
+				std::vector<std::string> hintPaths = skill.requiresConfig;
+				hintPaths.insert(
+					hintPaths.end(),
+					skill.configPathHints.begin(),
+					skill.configPathHints.end());
+
+				for (const auto& path : hintPaths) {
 					const std::string normalized = blazeclaw::gateway::json::Trim(path);
 					if (normalized.empty()) {
 						continue;
 					}
 
-					const std::string lowered = ToLowerCopy(normalized);
 					Json hint = Json::object();
 					hint["label"] = normalized;
 					hint["help"] =
 						"Config path required by skill " + skill.skillKey + ".";
-					if (lowered.find("token") != std::string::npos ||
-						lowered.find("apikey") != std::string::npos ||
-						lowered.find("api_key") != std::string::npos ||
-						lowered.find("secret") != std::string::npos ||
-						lowered.find("password") != std::string::npos) {
+
+					const bool sensitive = IsSensitiveHintPath(normalized);
+					const bool sensitiveUrl = IsSensitiveUrlHintPath(normalized);
+					if (sensitive || sensitiveUrl) {
 						hint["sensitive"] = true;
 					}
+
+					hint["tags"] = BuildHintTags(sensitive || sensitiveUrl, sensitiveUrl);
+					if (sensitiveUrl) {
+						hint["placeholder"] = "https://***:***@example.com/path";
+					}
+
 					hints[normalized] = std::move(hint);
 				}
 			}

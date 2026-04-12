@@ -1980,6 +1980,45 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool ValidateConfigSchemaLookupParams(
+			const RequestFrame& request,
+			SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(
+				request,
+				issue,
+				"gateway.config.schema.lookup",
+				fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"path",
+				JsonFieldKind::String,
+				issue,
+				"gateway.config.schema.lookup",
+				"a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "path") {
+					continue;
+				}
+
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `gateway.config.schema.lookup` does not allow `params." +
+					field +
+					"`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		bool ValidateAgentsFilesListParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 			ParsedObjectFieldKinds fieldKinds;
 			if (!TryParseRequestParamsObject(request, issue, "gateway.agents.files.list", fieldKinds)) {
@@ -2280,6 +2319,8 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.runtime.health.dependencies", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
 			{ "gateway.runtime.health.capabilities", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
 			{ "gateway.runtime.policy.resolve", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
+		  { "gateway.config.schema.get", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
+			{ "gateway.config.schema.lookup", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateConfigSchemaLookupParams(r, i); } },
 			{ "gateway.logs.tail", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateLogsTailParams(r, i); } },
 			{ "gateway.logs.count", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateLogsCountParams(r, i); } },
 			{ "gateway.sessions.compact", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateSessionsCompactParams(r, i); } },

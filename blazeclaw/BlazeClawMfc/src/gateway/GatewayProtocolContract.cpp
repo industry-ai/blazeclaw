@@ -413,6 +413,107 @@ namespace blazeclaw::gateway::protocol {
 			return false;
 		}
 
+		const ResponseFrame configSchemaGetResponse{
+			.id = "config-schema-get-1",
+			.ok = true,
+			.payloadJson =
+				"{\"schema\":{\"type\":\"object\",\"properties\":{}},"
+				"\"uiHints\":{},\"version\":\"schema-v1\","
+				"\"generatedAt\":\"2026-04-12T00:00:00Z\"}",
+			.error = std::nullopt,
+		};
+		if (!ValidateDecodedResponseCase(
+			root / "response_gateway_config_schema_get.json",
+			"gateway.config.schema.get",
+			configSchemaGetResponse,
+			error)) {
+			return false;
+		}
+
+		const ResponseFrame configSchemaLookupResponse{
+			.id = "config-schema-lookup-1",
+			.ok = true,
+			.payloadJson =
+				"{\"path\":\"channels.discord.token\","
+				"\"schema\":{\"type\":\"string\",\"minLength\":1},"
+				"\"hint\":{\"label\":\"Discord Token\",\"sensitive\":true},"
+				"\"hintPath\":\"channels.discord.token\","
+				"\"children\":[]}",
+			.error = std::nullopt,
+		};
+		if (!ValidateDecodedResponseCase(
+			root / "response_gateway_config_schema_lookup.json",
+			"gateway.config.schema.lookup",
+			configSchemaLookupResponse,
+			error)) {
+			return false;
+		}
+
+		if (!ValidateNegativeResponseCase(
+			"gateway.config.schema.get",
+			ResponseFrame{
+				.id = "neg-config-schema-get",
+				.ok = true,
+				.payloadJson = "{\"schema\":{},\"version\":\"schema-v1\"}",
+				.error = std::nullopt,
+			},
+			"gateway.config.schema.get negative",
+			error)) {
+			return false;
+		}
+
+		if (!ValidateNegativeResponseCase(
+			"gateway.config.schema.lookup",
+			ResponseFrame{
+				.id = "neg-config-schema-lookup",
+				.ok = true,
+				.payloadJson = "{\"path\":\"x\",\"schema\":{},\"hint\":\"bad\"}",
+				.error = std::nullopt,
+			},
+			"gateway.config.schema.lookup negative",
+			error)) {
+			return false;
+		}
+
+		SchemaValidationIssue schemaRequestIssue;
+		if (!GatewayProtocolSchemaValidator::ValidateRequest(
+			RequestFrame{
+				.id = "config-schema-get-req-1",
+				.method = "gateway.config.schema.get",
+				.paramsJson = std::nullopt,
+			},
+			schemaRequestIssue)) {
+			error =
+				"Request schema validation failed for gateway.config.schema.get: " +
+				schemaRequestIssue.message;
+			return false;
+		}
+
+		if (!GatewayProtocolSchemaValidator::ValidateRequest(
+			RequestFrame{
+				.id = "config-schema-lookup-req-1",
+				.method = "gateway.config.schema.lookup",
+				.paramsJson = std::string("{\"path\":\"channels.discord.token\"}"),
+			},
+			schemaRequestIssue)) {
+			error =
+				"Request schema validation failed for gateway.config.schema.lookup: " +
+				schemaRequestIssue.message;
+			return false;
+		}
+
+		if (GatewayProtocolSchemaValidator::ValidateRequest(
+			RequestFrame{
+				.id = "config-schema-lookup-req-neg-1",
+				.method = "gateway.config.schema.lookup",
+				.paramsJson = std::string("{\"path\":\"x\",\"extra\":1}"),
+			},
+			schemaRequestIssue)) {
+			error =
+				"Negative request schema validation unexpectedly passed for gateway.config.schema.lookup.";
+			return false;
+		}
+
 		std::vector<std::filesystem::path> responseFixtures;
 		std::vector<std::filesystem::path> eventFixtures;
 		for (const auto& entry : std::filesystem::directory_iterator(root)) {

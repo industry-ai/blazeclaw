@@ -39,6 +39,7 @@
   <ItemGroup>
     <ClCompile Include="..\BlazeClawMfc\tests\ApprovalTokenStoreTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ConfigLoaderTests.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\tests\ConfigSchemaServiceTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ChatRunPipelineOrchestratorTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\EmailScheduleFallbackTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\ExtensionLifecycleManagerTests.cpp" />
@@ -119,6 +120,7 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\generated\GatewayHandlerCatalog.Generated.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\generated\GatewaySchemaCatalog.Generated.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\config\ConfigLoader.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\core\ConfigSchemaService.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\executors\EmailScheduleExecutor.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\executors\LobsterExecutor.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\executors\PythonProcessExecutor.cpp" />

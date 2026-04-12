@@ -353,6 +353,52 @@ namespace blazeclaw::gateway::protocol {
 		const std::string payload = response.payloadJson.value_or("{}");
 
 		const std::unordered_map<std::string, std::function<bool()>> groupedValidators = {
+			{ "gateway.config.schema.get", [&]() {
+				if (!IsFieldValueType(payload, "schema", '{') ||
+					!IsFieldValueType(payload, "uiHints", '{') ||
+					!IsFieldValueType(payload, "version", '"') ||
+					!IsFieldValueType(payload, "generatedAt", '"')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`gateway.config.schema.get` requires `schema`, `uiHints`, `version`, and `generatedAt` fields.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "gateway.config.schema.lookup", [&]() {
+				if (!IsFieldValueType(payload, "path", '"') ||
+					!IsFieldValueType(payload, "schema", '{') ||
+					!IsFieldValueType(payload, "children", '[')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`gateway.config.schema.lookup` requires `path`, `schema`, and `children` fields.");
+					return false;
+				}
+
+				if (HasFieldToken(payload, "hint") &&
+					!IsFieldNull(payload, "hint") &&
+					!IsFieldValueType(payload, "hint", '{')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`gateway.config.schema.lookup` optional `hint` must be object or null.");
+					return false;
+				}
+
+				if (HasFieldToken(payload, "hintPath") &&
+					!IsFieldValueType(payload, "hintPath", '"')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`gateway.config.schema.lookup` optional `hintPath` must be string.");
+					return false;
+				}
+
+				return true;
+			} },
 			{ "gateway.embeddings.generate", [&]() {
 				if (!IsFieldValueType(payload, "vector", '[') ||
 					!IsFieldNumber(payload, "dimension") ||
