@@ -9,7 +9,36 @@ namespace blazeclaw::core {
 		const std::string report =
 			"{\"runtime\":{\"running\":" +
 			std::string(s.runtimeRunning ? "true" : "false") +
-			",\"gatewayWarning\":\"" + s.gatewayWarning + "\"}," +
+			",\"gatewayWarning\":\"" + s.gatewayWarning + "\"" +
+			",\"gatewayLifecycle\":{\"startupMode\":\"" +
+			s.gatewayStartupMode +
+			"\",\"startupModeSource\":\"" +
+			s.gatewayStartupModeSource +
+			"\",\"startupFailedStage\":\"" +
+			s.gatewayStartupFailedStage +
+			"\",\"startupDegraded\":" +
+			std::string(s.gatewayStartupDegraded ? "true" : "false") +
+			",\"managedConfigReloaderStarted\":" +
+			std::string(s.gatewayManagedConfigReloaderStarted ? "true" : "false") +
+			",\"managedConfigReloaderRunning\":" +
+			std::string(s.gatewayManagedConfigReloaderRunning ? "true" : "false") +
+			",\"closePreludeExecuted\":" +
+			std::string(s.gatewayClosePreludeExecuted ? "true" : "false") +
+			",\"runtimeStateCreated\":" +
+			std::string(s.gatewayRuntimeStateCreated ? "true" : "false") +
+			",\"runtimeServicesStarted\":" +
+			std::string(s.gatewayRuntimeServicesStarted ? "true" : "false") +
+			",\"transportHandlersAttached\":" +
+			std::string(s.gatewayTransportHandlersAttached ? "true" : "false") +
+			",\"runtimeSubscriptionsStarted\":" +
+			std::string(s.gatewayRuntimeSubscriptionsStarted ? "true" : "false") +
+			",\"managedConfigPath\":\"" +
+			s.gatewayManagedConfigPath +
+			"\",\"managedConfigApplyCount\":" +
+			std::to_string(s.gatewayManagedConfigApplyCount) +
+			",\"managedConfigRejectCount\":" +
+			std::to_string(s.gatewayManagedConfigRejectCount) +
+			"}}," +
 			"\"emailFallback\":{\"preflightEnabled\":" +
 			std::string(s.emailPreflightEnabled ? "true" : "false") +
 			",\"policyProfilesEnabled\":" +

@@ -60,7 +60,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-	"ServiceManager startup contract: FinalizeStartup preserves failure-path warnings and trace labels",
+	"ServiceManager startup contract: FinalizeStartup delegates bootstrap coordinator and failure cleanup",
 	"[servicemanager][startup][contract]")
 {
 	const std::string source = ReadServiceManagerSource();
@@ -70,37 +70,45 @@ TEST_CASE(
 	const auto finalizeBody = source.substr(finalizePos);
 
 	REQUIRE(
-		finalizeBody.find("gateway local dispatch initialization threw an exception") !=
+		finalizeBody.find("m_gatewayRuntimeBootstrapCoordinator.ExecuteStartup") !=
 		std::string::npos);
 	REQUIRE(
-		finalizeBody.find("gateway local dispatch initialization failed; methods may be unavailable.") !=
-		std::string::npos);
-	REQUIRE(
-		finalizeBody.find("gateway local runtime initialization failed; running with limited gateway methods.") !=
-		std::string::npos);
-	REQUIRE(
-		finalizeBody.find("gateway startup threw an exception; running in degraded local mode.") !=
+		finalizeBody.find("m_gatewayRuntimeBootstrapCoordinator.HandleStartupFailure") !=
 		std::string::npos);
 	REQUIRE(
 		finalizeBody.find("gateway startup failed; running in degraded local mode.") !=
 		std::string::npos);
-
 	REQUIRE(
-		finalizeBody.find("ServiceManager.Start.gateway.localRuntimeDispatch.exception") !=
+		finalizeBody.find("ServiceManager.Start.gateway.failed") !=
 		std::string::npos);
 	REQUIRE(
-		finalizeBody.find("ServiceManager.Start.gateway.localRuntimeDispatch.failed") !=
-		std::string::npos);
-	REQUIRE(
-		finalizeBody.find("ServiceManager.Start.gateway.localInit.attempted") !=
-		std::string::npos);
-	REQUIRE(
-		finalizeBody.find("ServiceManager.Start.gateway.exception") !=
+		finalizeBody.find("ServiceManager.Start.gateway.degraded") !=
 		std::string::npos);
 	REQUIRE(
 		finalizeBody.find("ServiceManager.Start.gateway.failed") !=
 		std::string::npos);
 	REQUIRE(
 		finalizeBody.find("ServiceManager.Start.gateway.afterStart") !=
+		std::string::npos);
+}
+
+TEST_CASE(
+	"ServiceManager startup contract: Stop executes close prelude before host stop",
+	"[servicemanager][startup][contract]")
+{
+	const std::string source = ReadServiceManagerSource();
+	const auto stopPos = source.find("void ServiceManager::Stop()");
+	REQUIRE(stopPos != std::string::npos);
+
+	const auto stopBody = source.substr(stopPos);
+	const auto preludePos = stopBody.find(
+		"m_gatewayRuntimeBootstrapCoordinator.RunClosePrelude");
+	const auto hostStopPos = stopBody.find("m_gatewayHost.Stop();");
+
+	REQUIRE(preludePos != std::string::npos);
+	REQUIRE(hostStopPos != std::string::npos);
+	REQUIRE(preludePos < hostStopPos);
+	REQUIRE(
+		stopBody.find("m_state.gatewayLifecycle.closePreludeExecuted = true;") !=
 		std::string::npos);
 }

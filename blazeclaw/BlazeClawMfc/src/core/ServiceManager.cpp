@@ -3674,6 +3674,33 @@ namespace blazeclaw::core {
 		DiagnosticsSnapshot snapshot;
 		snapshot.runtimeRunning = m_running;
 		snapshot.gatewayWarning = m_gatewayHost.LastWarning();
+		snapshot.gatewayStartupMode = m_state.gatewayLifecycle.startupMode;
+		snapshot.gatewayStartupModeSource =
+			m_state.gatewayLifecycle.startupModeSource;
+		snapshot.gatewayStartupFailedStage =
+			m_state.gatewayLifecycle.failedStage;
+		snapshot.gatewayStartupDegraded =
+			m_state.gatewayLifecycle.startupDegraded;
+		snapshot.gatewayManagedConfigReloaderStarted =
+			m_state.gatewayLifecycle.managedConfigReloaderStarted;
+		snapshot.gatewayManagedConfigReloaderRunning =
+			m_state.gatewayLiveRuntime.managedConfigReloaderRunning;
+		snapshot.gatewayClosePreludeExecuted =
+			m_state.gatewayLifecycle.closePreludeExecuted;
+		snapshot.gatewayRuntimeStateCreated =
+			m_state.gatewayLiveRuntime.runtimeStateCreated;
+		snapshot.gatewayRuntimeServicesStarted =
+			m_state.gatewayLiveRuntime.runtimeServicesStarted;
+		snapshot.gatewayTransportHandlersAttached =
+			m_state.gatewayLiveRuntime.transportHandlersAttached;
+		snapshot.gatewayRuntimeSubscriptionsStarted =
+			m_state.gatewayLiveRuntime.runtimeSubscriptionsStarted;
+		snapshot.gatewayManagedConfigPath =
+			ToNarrow(m_state.gatewayLiveRuntime.managedConfigPath);
+		snapshot.gatewayManagedConfigApplyCount =
+			m_state.gatewayLiveRuntime.managedConfigApplyCount;
+		snapshot.gatewayManagedConfigRejectCount =
+			m_state.gatewayLiveRuntime.managedConfigRejectCount;
 
 		std::size_t implementedCount = 0;
 		std::size_t inProgressCount = 0;

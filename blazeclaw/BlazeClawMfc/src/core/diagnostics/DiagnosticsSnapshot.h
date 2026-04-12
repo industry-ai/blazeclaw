@@ -10,6 +10,20 @@ namespace blazeclaw::core {
 	struct DiagnosticsSnapshot {
 		bool runtimeRunning = false;
 		std::string gatewayWarning;
+		std::string gatewayStartupMode;
+		std::string gatewayStartupModeSource;
+		std::string gatewayStartupFailedStage;
+		bool gatewayStartupDegraded = false;
+		bool gatewayManagedConfigReloaderStarted = false;
+		bool gatewayManagedConfigReloaderRunning = false;
+		bool gatewayClosePreludeExecuted = false;
+		bool gatewayRuntimeStateCreated = false;
+		bool gatewayRuntimeServicesStarted = false;
+		bool gatewayTransportHandlersAttached = false;
+		bool gatewayRuntimeSubscriptionsStarted = false;
+		std::string gatewayManagedConfigPath;
+		std::uint64_t gatewayManagedConfigApplyCount = 0;
+		std::uint64_t gatewayManagedConfigRejectCount = 0;
 
 		bool emailPreflightEnabled = false;
 		bool emailPolicyProfilesEnabled = false;
