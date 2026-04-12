@@ -140,6 +140,114 @@ namespace blazeclaw::core {
 			return truncated;
 		}
 
+		std::wstring EscapeXml(const std::wstring& value) {
+			std::wstring escaped;
+			escaped.reserve(value.size());
+			for (const wchar_t ch : value) {
+				switch (ch) {
+				case L'&':
+					escaped += L"&amp;";
+					break;
+				case L'<':
+					escaped += L"&lt;";
+					break;
+				case L'>':
+					escaped += L"&gt;";
+					break;
+				case L'"':
+					escaped += L"&quot;";
+					break;
+				case L'\'':
+					escaped += L"&apos;";
+					break;
+				default:
+					escaped.push_back(ch);
+					break;
+				}
+			}
+
+			return escaped;
+		}
+
+		std::wstring BuildCompactPrompt(
+			const std::vector<SkillsCatalogEntry>& entries) {
+			if (entries.empty()) {
+				return {};
+			}
+
+			std::wstringstream builder;
+			builder
+				<< L"\n\nThe following skills provide specialized instructions for specific tasks.\n"
+				<< L"Use the read tool to load a skill's file when the task matches its name.\n"
+				<< L"When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.\n\n"
+				<< L"<available_skills>\n";
+
+			for (const auto& entry : entries) {
+				builder << L"  <skill>\n";
+				builder << L"    <name>" << EscapeXml(entry.skillName) << L"</name>\n";
+				builder << L"    <location>" << EscapeXml(CompactHomePath(entry.skillFile)) << L"</location>\n";
+				builder << L"  </skill>\n";
+			}
+
+			builder << L"</available_skills>";
+			return builder.str();
+		}
+
+		std::wstring BuildFullPrompt(
+			const std::vector<SkillsCatalogEntry>& entries,
+			const std::vector<SkillsPromptSnapshot::PlannerSkillContext>& plannerContext,
+			const bool includeSelfEvolvingReminder,
+			const bool compact,
+			const bool truncated,
+			const std::size_t totalVisibleSkillCount,
+			const std::wstring& compactPromptBody) {
+			std::wstringstream builder;
+			builder << L"# Skills\n";
+			builder << L"Available skill instructions for this run:\n";
+
+			if (compact) {
+				if (truncated) {
+					builder
+						<< L"⚠️ Skills truncated: included "
+						<< entries.size()
+						<< L" of "
+						<< totalVisibleSkillCount
+						<< L" (compact format, descriptions omitted). Run `openclaw skills check` to audit.\n";
+				}
+				else {
+					builder
+						<< L"⚠️ Skills catalog using compact format (descriptions omitted). Run `openclaw skills check` to audit.\n";
+				}
+				builder << compactPromptBody;
+			}
+			else {
+				for (const auto& entry : entries) {
+					builder << L"- " << entry.skillName << L": " << entry.description;
+					builder << L" (" << CompactHomePath(entry.skillFile) << L")\n";
+				}
+			}
+
+			if (!plannerContext.empty()) {
+				builder << L"\n## Planner Context\n";
+				for (const auto& context : plannerContext) {
+					builder << L"- skill=" << context.skillName;
+					builder << L"; capability=" << context.capability;
+					builder << L"; preconditions=" << context.preconditions;
+					builder << L"; sideEffects=" << context.sideEffects;
+					if (!context.commandToolName.empty()) {
+						builder << L"; tool=" << context.commandToolName;
+					}
+					builder << L"\n";
+				}
+			}
+
+			if (includeSelfEvolvingReminder) {
+				builder << BuildSelfEvolvingReminderBlock();
+			}
+
+			return builder.str();
+		}
+
 		SkillsPromptSnapshot::PlannerSkillContext BuildPlannerContext(
 			const SkillsCatalogEntry& entry) {
 			SkillsPromptSnapshot::PlannerSkillContext context;
@@ -225,11 +333,8 @@ namespace blazeclaw::core {
 		const auto includeFilter = snapshot.filter.has_value() &&
 			!snapshot.filter->empty();
 
-		std::wstringstream builder;
-		builder << L"# Skills\n";
-		builder << L"Available skill instructions for this run:\n";
-
-		std::uint32_t included = 0;
+		std::vector<const SkillsCatalogEntry*> visibleEntries;
+		visibleEntries.reserve(catalog.entries.size());
 		for (const auto& entry : catalog.entries) {
 			const auto key = ToLower(Trim(entry.skillName));
 			const auto eligibilityIt = eligibilityMap.find(key);
@@ -249,44 +354,102 @@ namespace blazeclaw::core {
 				continue;
 			}
 
-			if (included >= appConfig.skills.limits.maxSkillsInPrompt) {
+			visibleEntries.push_back(&entry);
+		}
+
+		std::vector<SkillsCatalogEntry> entriesForPrompt;
+		entriesForPrompt.reserve(
+			std::min<std::size_t>(
+				visibleEntries.size(),
+				appConfig.skills.limits.maxSkillsInPrompt));
+
+		for (const auto* entry : visibleEntries) {
+			if (entriesForPrompt.size() >= appConfig.skills.limits.maxSkillsInPrompt) {
 				snapshot.truncated = true;
 				break;
 			}
 
-			builder << L"- " << entry.skillName << L": " << entry.description;
-			builder << L" (" << CompactHomePath(entry.skillFile) << L")\n";
-			snapshot.includedSkills.push_back(entry.skillName);
-			snapshot.plannerContext.push_back(BuildPlannerContext(entry));
-			++included;
+			entriesForPrompt.push_back(*entry);
+			snapshot.includedSkills.push_back(entry->skillName);
+			snapshot.plannerContext.push_back(BuildPlannerContext(*entry));
 		}
 
-		if (!snapshot.plannerContext.empty()) {
-			builder << L"\n## Planner Context\n";
-			for (const auto& context : snapshot.plannerContext) {
-				builder << L"- skill=" << context.skillName;
-				builder << L"; capability=" << context.capability;
-				builder << L"; preconditions=" << context.preconditions;
-				builder << L"; sideEffects=" << context.sideEffects;
-				if (!context.commandToolName.empty()) {
-					builder << L"; tool=" << context.commandToolName;
-				}
-				builder << L"\n";
-			}
-		}
-
-		if (enableSelfEvolvingPromptFallback &&
+		const bool includeSelfEvolvingReminder =
+			enableSelfEvolvingPromptFallback &&
 			IncludesSkill(snapshot.includedSkills, L"self-evolving") &&
-			IsSelfEvolvingHookBridgeReady(catalog)) {
-			builder << BuildSelfEvolvingReminderBlock();
-		}
+			IsSelfEvolvingHookBridgeReady(catalog);
 
-		snapshot.prompt = builder.str();
-		if (snapshot.prompt.size() > appConfig.skills.limits.maxSkillsPromptChars) {
-			snapshot.prompt = snapshot.prompt.substr(
-				0,
-				appConfig.skills.limits.maxSkillsPromptChars);
-			snapshot.truncated = true;
+		const std::wstring fullPrompt = BuildFullPrompt(
+			entriesForPrompt,
+			snapshot.plannerContext,
+			includeSelfEvolvingReminder,
+			false,
+			snapshot.truncated,
+			visibleEntries.size(),
+			L"");
+
+		const std::size_t maxPromptChars = appConfig.skills.limits.maxSkillsPromptChars;
+		const std::size_t compactWarningOverhead = 180;
+		const std::size_t compactBudget =
+			maxPromptChars > compactWarningOverhead
+			? maxPromptChars - compactWarningOverhead
+			: maxPromptChars;
+
+		if (fullPrompt.size() <= maxPromptChars) {
+			snapshot.prompt = fullPrompt;
+		}
+		else {
+			bool compact = false;
+			std::vector<SkillsCatalogEntry> compactEntries = entriesForPrompt;
+			std::wstring compactBody = BuildCompactPrompt(compactEntries);
+
+			auto compactFits = [&](const std::vector<SkillsCatalogEntry>& testEntries) {
+				return BuildCompactPrompt(testEntries).size() <= compactBudget;
+				};
+
+			if (compactFits(compactEntries)) {
+				compact = true;
+			}
+			else {
+				compact = true;
+				std::size_t lo = 0;
+				std::size_t hi = compactEntries.size();
+				while (lo < hi) {
+					const std::size_t mid = static_cast<std::size_t>(
+						std::ceil((static_cast<double>(lo + hi)) / 2.0));
+					std::vector<SkillsCatalogEntry> candidate(
+						compactEntries.begin(),
+						compactEntries.begin() + static_cast<std::ptrdiff_t>(mid));
+					if (compactFits(candidate)) {
+						lo = mid;
+					}
+					else {
+						hi = mid - 1;
+					}
+				}
+
+				if (lo < compactEntries.size()) {
+					compactEntries.resize(lo);
+					snapshot.truncated = true;
+					snapshot.includedSkills.resize(lo);
+					snapshot.plannerContext.resize(lo);
+				}
+				compactBody = BuildCompactPrompt(compactEntries);
+			}
+
+			snapshot.prompt = BuildFullPrompt(
+				compactEntries,
+				snapshot.plannerContext,
+				includeSelfEvolvingReminder,
+				compact,
+				snapshot.truncated,
+				visibleEntries.size(),
+				compactBody);
+
+			if (snapshot.prompt.size() > maxPromptChars) {
+				snapshot.prompt = snapshot.prompt.substr(0, maxPromptChars);
+				snapshot.truncated = true;
+			}
 		}
 
 		snapshot.includedCount = static_cast<std::uint32_t>(snapshot.includedSkills.size());
@@ -322,6 +485,12 @@ namespace blazeclaw::core {
 
 		if (snapshot.includedCount != 1) {
 			outError = L"S2 prompt fixture failed: expected maxSkillsInPrompt limit of 1.";
+			return false;
+		}
+
+		if (snapshot.prompt.find(L"compact format") == std::wstring::npos &&
+			snapshot.prompt.find(L"Skills catalog using compact format") == std::wstring::npos) {
+			outError = L"S2 prompt fixture failed: expected compact fallback warning in truncated fixture prompt.";
 			return false;
 		}
 

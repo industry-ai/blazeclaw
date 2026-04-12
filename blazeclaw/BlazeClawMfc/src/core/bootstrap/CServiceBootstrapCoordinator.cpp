@@ -175,6 +175,15 @@ namespace blazeclaw::core {
 					L"skills-env fixture validation failed: " + fixtureError);
 			}
 
+			if (!context.skillsFacade.ValidateFixtureScenarios(
+				candidate,
+				fixtureError,
+				context.skillsPromptService))
+			{
+				context.warnings.push_back(
+					L"skills-facade fixture validation failed: " + fixtureError);
+			}
+
 			if (!context.skillsInstallService.ValidateFixtureScenarios(candidate, fixtureError))
 			{
 				context.warnings.push_back(

@@ -8,6 +8,7 @@
 #include "../config/ConfigModels.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
@@ -53,6 +54,11 @@ namespace blazeclaw::core {
 			const blazeclaw::config::AppConfig& appConfig,
 			const std::optional<std::vector<std::wstring>>& skillFilter,
 			bool enableSelfEvolvingPromptFallback,
+			const SkillsPromptService& promptService) const;
+
+		[[nodiscard]] bool ValidateFixtureScenarios(
+			const std::filesystem::path& fixturesRoot,
+			std::wstring& outError,
 			const SkillsPromptService& promptService) const;
 	};
 

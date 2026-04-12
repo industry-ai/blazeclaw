@@ -2603,6 +2603,7 @@ namespace blazeclaw::core {
 					.skillsWatchService = m_skillsWatchService,
 					.skillsSyncService = m_skillsSyncService,
 					.skillsEnvOverrideService = m_skillsEnvOverrideService,
+					.skillsFacade = m_skillsFacade,
 					.skillsInstallService = m_skillsInstallService,
 					.skillSecurityScanService = m_skillSecurityScanService,
 					.hookCatalogService = m_hookCatalogService,

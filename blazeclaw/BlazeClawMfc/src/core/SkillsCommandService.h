@@ -27,6 +27,8 @@ namespace blazeclaw::core {
 		std::wstring skillName;
 		std::wstring description;
 		SkillsCommandDispatch dispatch;
+		std::wstring promptTemplate;
+		std::wstring sourceFilePath;
 	};
 
 	struct SkillsCommandSnapshot {

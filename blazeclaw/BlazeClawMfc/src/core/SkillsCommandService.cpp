@@ -192,6 +192,13 @@ namespace blazeclaw::core {
 					== L"true";
 			}
 
+			spec.promptTemplate = Trim(GetFrontmatterField(
+				catalogEntry.frontmatter,
+				{ L"command-prompt-template", L"command_prompt_template" }));
+			spec.sourceFilePath = Trim(GetFrontmatterField(
+				catalogEntry.frontmatter,
+				{ L"command-source-file-path", L"command_source_file_path" }));
+
 			snapshot.commands.push_back(std::move(spec));
 		}
 
@@ -300,6 +307,19 @@ namespace blazeclaw::core {
 			!legacyDispatch->dispatch.retryPolicyHint.empty() ||
 			legacyDispatch->dispatch.requiresApproval) {
 			outError = L"S3 commands fixture failed: expected legacy default metadata values.";
+			return false;
+		}
+
+		const auto hasPromptTemplateMetadata = std::any_of(
+			snapshot.commands.begin(),
+			snapshot.commands.end(),
+			[](const SkillsCommandSpec& item) {
+				return item.skillName == L"tool-dispatch" &&
+					item.promptTemplate == L"Template for tool dispatch command" &&
+					item.sourceFilePath == L"skills/tool-dispatch/SKILL.md";
+			});
+		if (!hasPromptTemplateMetadata) {
+			outError = L"S3 commands fixture failed: expected command prompt template/source metadata.";
 			return false;
 		}
 

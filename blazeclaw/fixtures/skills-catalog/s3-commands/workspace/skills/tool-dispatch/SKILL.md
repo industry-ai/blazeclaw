@@ -9,6 +9,8 @@ command-result-schema: schema://tool.dispatch.result.v1
 command-idempotency-hint: safe
 command-retry-policy-hint: transient-network
 command-requires-approval: true
+command-prompt-template: Template for tool dispatch command
+command-source-file-path: skills/tool-dispatch/SKILL.md
 ---
 
 # Tool Dispatch

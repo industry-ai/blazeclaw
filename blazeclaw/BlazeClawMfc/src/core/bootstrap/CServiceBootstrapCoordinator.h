@@ -23,6 +23,7 @@
 #include "../SkillsCommandService.h"
 #include "../SkillsEligibilityService.h"
 #include "../SkillsEnvOverrideService.h"
+#include "../SkillsFacade.h"
 #include "../SkillsInstallService.h"
 #include "../SkillsPromptService.h"
 #include "../SkillsSyncService.h"
@@ -77,6 +78,7 @@ namespace blazeclaw::core {
 			SkillsWatchService& skillsWatchService;
 			SkillsSyncService& skillsSyncService;
 			SkillsEnvOverrideService& skillsEnvOverrideService;
+			SkillsFacade& skillsFacade;
 			SkillsInstallService& skillsInstallService;
 			SkillSecurityScanService& skillSecurityScanService;
 			HookCatalogService& hookCatalogService;

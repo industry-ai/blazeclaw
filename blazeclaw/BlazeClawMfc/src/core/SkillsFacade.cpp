@@ -221,4 +221,96 @@ namespace blazeclaw::core {
 		return Trim(rebuilt.prompt);
 	}
 
+	bool SkillsFacade::ValidateFixtureScenarios(
+		const std::filesystem::path& fixturesRoot,
+		std::wstring& outError,
+		const SkillsPromptService& promptService) const {
+		outError.clear();
+
+		blazeclaw::config::AppConfig appConfig;
+		appConfig.skills.install.nodeManager = L"unexpected-manager";
+		const auto prefs = ResolveInstallPreferences(appConfig);
+		if (prefs.nodeManager != L"npm") {
+			outError = L"SkillsFacade fixture failed: expected invalid node manager fallback to npm.";
+			return false;
+		}
+
+		const SkillsPromptSnapshot promptSnapshot{
+			.prompt = L"resolved prompt from prompt snapshot",
+			.includedSkills = {},
+			.plannerContext = {},
+			.filter = std::nullopt,
+			.truncated = false,
+			.totalEligible = 0,
+			.includedCount = 0,
+			.promptChars = 0,
+		};
+		const SkillsRunSnapshot runSnapshot{
+			.prompt = L"resolved prompt from run snapshot",
+			.skills = {},
+			.skillFilter = std::nullopt,
+			.resolvedSkills = {},
+			.version = 1,
+		};
+
+		SkillsCatalogSnapshot emptyCatalog;
+		emptyCatalog.entries.clear();
+		SkillsEligibilitySnapshot emptyEligibility;
+		emptyEligibility.entries.clear();
+
+		const std::wstring fromRunSnapshot = ResolvePromptForRun(
+			&runSnapshot,
+			&promptSnapshot,
+			emptyCatalog,
+			emptyEligibility,
+			appConfig,
+			std::nullopt,
+			false,
+			promptService);
+		if (fromRunSnapshot != L"resolved prompt from run snapshot") {
+			outError = L"SkillsFacade fixture failed: expected run snapshot prompt reuse.";
+			return false;
+		}
+
+		const SkillsRunSnapshot emptyRunSnapshot;
+		const std::wstring fromPromptSnapshot = ResolvePromptForRun(
+			&emptyRunSnapshot,
+			&promptSnapshot,
+			emptyCatalog,
+			emptyEligibility,
+			appConfig,
+			std::nullopt,
+			false,
+			promptService);
+		if (fromPromptSnapshot != L"resolved prompt from prompt snapshot") {
+			outError = L"SkillsFacade fixture failed: expected fallback to prompt snapshot.";
+			return false;
+		}
+
+		const SkillsCatalogService catalogService;
+		const SkillsEligibilityService eligibilityService;
+		const auto promptRoot = fixturesRoot / L"s2-prompt" / L"workspace";
+		blazeclaw::config::AppConfig promptConfig;
+		promptConfig.skills.limits.maxSkillsInPrompt = 1;
+		promptConfig.skills.limits.maxSkillsPromptChars = 150;
+		const auto promptCatalog = catalogService.LoadCatalog(promptRoot, promptConfig);
+		const auto promptEligibility = eligibilityService.Evaluate(promptCatalog, promptConfig);
+
+		const std::wstring rebuiltPrompt = ResolvePromptForRun(
+			nullptr,
+			nullptr,
+			promptCatalog,
+			promptEligibility,
+			promptConfig,
+			std::nullopt,
+			false,
+			promptService);
+		if (rebuiltPrompt.empty()) {
+			outError = L"SkillsFacade fixture failed: expected resolver rebuild fallback prompt.";
+			return false;
+		}
+
+		return true;
+	}
+
 } // namespace blazeclaw::core
