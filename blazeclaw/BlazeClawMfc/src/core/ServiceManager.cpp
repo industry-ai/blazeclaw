@@ -3415,6 +3415,7 @@ namespace blazeclaw::core {
 		m_state.gatewayLifecycle.failedStage = startupResult.failedStage;
 		m_state.gatewayLifecycle.managedConfigReloaderStarted =
 			startupResult.managedConfigReloaderStarted;
+		ResetGatewayOwnedRuntimeCleanup();
 		m_state.gatewayLiveRuntime.runtimeStateCreated = true;
 		m_state.gatewayLiveRuntime.runtimeServicesStarted =
 			startupResult.success;
@@ -3453,7 +3454,39 @@ namespace blazeclaw::core {
 				});
 			m_state.gatewayLiveRuntime.managedConfigReloaderRunning =
 				m_gatewayManagedConfigReloader.IsRunning();
+			RegisterGatewayOwnedRuntimeCleanup(
+				"managed_config_reloader_stop",
+				[this]() {
+					m_gatewayManagedConfigReloader.Stop();
+					m_state.gatewayLiveRuntime.managedConfigReloaderRunning = false;
+				});
 		}
+
+		RegisterGatewayOwnedRuntimeCleanup(
+			"gateway_close_prelude",
+			[this]() {
+				const auto closePreludeWarnings =
+					m_gatewayRuntimeBootstrapCoordinator.RunClosePrelude(
+						GatewayRuntimeBootstrapCoordinator::CloseContext{
+							.gatewayHost = m_gatewayHost,
+							.appendTrace = [this](const char* stage) {
+								AppendStartupTrace(stage);
+							},
+						});
+				for (const auto& warning : closePreludeWarnings) {
+					m_skillsCatalog.diagnostics.warnings.push_back(warning);
+				}
+				m_state.gatewayLifecycle.closePreludeExecuted = true;
+			});
+
+		RegisterGatewayOwnedRuntimeCleanup(
+			"gateway_host_stop",
+			[this]() {
+				m_gatewayHost.Stop();
+				m_state.gatewayLiveRuntime.runtimeSubscriptionsStarted = false;
+				m_state.gatewayLiveRuntime.transportHandlersAttached = false;
+				m_state.gatewayLiveRuntime.runtimeServicesStarted = false;
+			});
 
 		if (!startupResult.success) {
 			m_gatewayRuntimeBootstrapCoordinator.HandleStartupFailure(
@@ -3483,32 +3516,45 @@ namespace blazeclaw::core {
 	}
 
 	void ServiceManager::Stop() {
-		m_gatewayManagedConfigReloader.Stop();
-		m_state.gatewayLiveRuntime.managedConfigReloaderRunning = false;
-		m_state.gatewayLiveRuntime.runtimeSubscriptionsStarted = false;
-		m_state.gatewayLiveRuntime.transportHandlersAttached = false;
-		m_state.gatewayLiveRuntime.runtimeServicesStarted = false;
-
 		m_skillsEnvOverrideService.RevertAll();
 		if (m_state.chatRuntime.asyncQueueEnabled) {
 			m_chatRuntime.StopWorker();
 		}
 
-		const auto closePreludeWarnings =
-			m_gatewayRuntimeBootstrapCoordinator.RunClosePrelude(
-				GatewayRuntimeBootstrapCoordinator::CloseContext{
-					.gatewayHost = m_gatewayHost,
-					.appendTrace = [this](const char* stage) {
-						AppendStartupTrace(stage);
-					},
-				});
-		for (const auto& warning : closePreludeWarnings) {
-			m_skillsCatalog.diagnostics.warnings.push_back(warning);
-		}
-		m_state.gatewayLifecycle.closePreludeExecuted = true;
-
-		m_gatewayHost.Stop();
+		ExecuteGatewayOwnedRuntimeCleanup();
 		m_running = false;
+	}
+
+	void ServiceManager::ResetGatewayOwnedRuntimeCleanup() {
+		m_state.gatewayLiveRuntime.ownedCleanup.clear();
+		m_state.gatewayLiveRuntime.ownedCleanupOrder.clear();
+	}
+
+	void ServiceManager::RegisterGatewayOwnedRuntimeCleanup(
+		const std::string& name,
+		std::function<void()> action) {
+		if (!action) {
+			return;
+		}
+
+		m_state.gatewayLiveRuntime.ownedCleanup.push_back(
+			ServiceManagerState::GatewayLiveRuntimeState::OwnedCleanupEntry{
+				.name = name,
+				.action = std::move(action),
+			});
+	}
+
+	void ServiceManager::ExecuteGatewayOwnedRuntimeCleanup() {
+		for (auto it = m_state.gatewayLiveRuntime.ownedCleanup.rbegin();
+			it != m_state.gatewayLiveRuntime.ownedCleanup.rend();
+			++it) {
+			m_state.gatewayLiveRuntime.ownedCleanupOrder.push_back(it->name);
+			if (it->action) {
+				it->action();
+			}
+		}
+
+		ResetGatewayOwnedRuntimeCleanup();
 	}
 
 	bool ServiceManager::ApplyManagedRuntimeConfigDiff(

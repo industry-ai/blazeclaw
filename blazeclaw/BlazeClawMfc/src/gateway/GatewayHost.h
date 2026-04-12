@@ -232,6 +232,12 @@ namespace blazeclaw::gateway {
 		bool StartLocalOnly(const blazeclaw::config::GatewayConfig& config);
 		bool StartLocalDispatchOnly();
 		bool StartLocalRuntimeDispatchOnly();
+		bool BootstrapCreateRuntimeState(
+			const blazeclaw::config::GatewayConfig& config);
+		bool BootstrapStartRuntimeServices();
+		bool BootstrapAttachTransportHandlers();
+		bool BootstrapStartRuntimeSubscriptions();
+		bool BootstrapFinalizeRuntimeInitialization();
 		void Stop();
 		void SetSkillsCatalogState(SkillsCatalogGatewayState state);
 		void SetSkillsRefreshCallback(SkillsRefreshCallback callback);
@@ -357,6 +363,7 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] bool StartRuntimeServices();
 		[[nodiscard]] bool AttachTransportRuntime();
 		[[nodiscard]] bool StartRuntimeSubscriptions();
+		[[nodiscard]] bool FinalizeRuntimeInitialization();
 		void LoadPersistedTaskDeltas();
 		void PersistTaskDeltas() const;
 		bool InitializeRuntime(const blazeclaw::config::GatewayConfig& config);

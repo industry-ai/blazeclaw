@@ -133,6 +133,15 @@ namespace blazeclaw::core {
 		}
 
 		result.failedStage = "create_runtime_state";
+		if (result.selectedMode == "full_gateway" ||
+			result.selectedMode == "local_only") {
+			if (!context.gatewayHost.BootstrapCreateRuntimeState(
+				context.config.gateway)) {
+				result.warnings.push_back(
+					L"gateway runtime state creation failed.");
+				return false;
+			}
+		}
 
 		if (context.appendTrace) {
 			context.appendTrace("GatewayRuntimeBootstrap.CreateRuntimeState.ready");
@@ -172,13 +181,37 @@ namespace blazeclaw::core {
 		const StartupContext& context,
 		const StartupDecision& decision,
 		StartupResult& result) const {
-		UNREFERENCED_PARAMETER(decision);
-
 		if (context.appendTrace) {
 			context.appendTrace("GatewayRuntimeBootstrap.AttachTransportHandlers.begin");
 		}
 
 		result.failedStage = "attach_transport_handlers";
+		if (decision.mode == StartupMode::FullGateway ||
+			decision.mode == StartupMode::LocalOnly) {
+			if (!context.gatewayHost.BootstrapStartRuntimeServices()) {
+				result.warnings.push_back(
+					L"gateway runtime services startup failed.");
+				return false;
+			}
+
+			if (!context.gatewayHost.BootstrapAttachTransportHandlers()) {
+				result.warnings.push_back(
+					L"gateway transport handler attach failed.");
+				return false;
+			}
+
+			if (!context.gatewayHost.BootstrapStartRuntimeSubscriptions()) {
+				result.warnings.push_back(
+					L"gateway runtime subscription startup failed.");
+				return false;
+			}
+
+			if (!context.gatewayHost.BootstrapFinalizeRuntimeInitialization()) {
+				result.warnings.push_back(
+					L"gateway runtime initialization finalization failed.");
+				return false;
+			}
+		}
 
 		if (context.appendTrace) {
 			context.appendTrace("GatewayRuntimeBootstrap.AttachTransportHandlers.ready");

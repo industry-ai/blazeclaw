@@ -40,9 +40,11 @@
 #include "runtime/ChatRuntimeContracts.h"
 #include "runtime/LocalModel/OnnxTextGenerationRuntime.h"
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <unordered_map>
+#include <vector>
 
 namespace blazeclaw::core {
 
@@ -197,6 +199,11 @@ namespace blazeclaw::core {
 			};
 
 			struct GatewayLiveRuntimeState {
+				struct OwnedCleanupEntry {
+					std::string name;
+					std::function<void()> action;
+				};
+
 				bool runtimeStateCreated = false;
 				bool runtimeServicesStarted = false;
 				bool transportHandlersAttached = false;
@@ -206,6 +213,8 @@ namespace blazeclaw::core {
 				bool managedConfigReloaderRunning = false;
 				std::uint64_t managedConfigApplyCount = 0;
 				std::uint64_t managedConfigRejectCount = 0;
+				std::vector<OwnedCleanupEntry> ownedCleanup;
+				std::vector<std::string> ownedCleanupOrder;
 			};
 
 			EmbeddedRuntimeState embeddedRuntime;
@@ -261,6 +270,11 @@ namespace blazeclaw::core {
 		[[nodiscard]] bool ApplyManagedRuntimeConfigDiff(
 			const blazeclaw::config::AppConfig& nextConfig,
 			std::wstring& warningMessage);
+		void ResetGatewayOwnedRuntimeCleanup();
+		void RegisterGatewayOwnedRuntimeCleanup(
+			const std::string& name,
+			std::function<void()> action);
+		void ExecuteGatewayOwnedRuntimeCleanup();
 
 		bool m_running = false;
 		std::string m_activeChatProvider = "local";
