@@ -3415,9 +3415,44 @@ namespace blazeclaw::core {
 		m_state.gatewayLifecycle.failedStage = startupResult.failedStage;
 		m_state.gatewayLifecycle.managedConfigReloaderStarted =
 			startupResult.managedConfigReloaderStarted;
+		m_state.gatewayLiveRuntime.runtimeStateCreated = true;
+		m_state.gatewayLiveRuntime.runtimeServicesStarted =
+			startupResult.success;
+		m_state.gatewayLiveRuntime.transportHandlersAttached =
+			startupResult.gatewayStarted;
+		m_state.gatewayLiveRuntime.runtimeSubscriptionsStarted =
+			startupResult.success;
 
 		for (const auto& warning : startupResult.warnings) {
 			m_skillsCatalog.diagnostics.warnings.push_back(warning);
+		}
+
+		m_state.gatewayLiveRuntime.managedConfigReloaderEnabled =
+			startupResult.managedConfigReloaderStarted;
+		if (startupResult.managedConfigReloaderStarted) {
+			m_gatewayManagedConfigReloader.Start(
+				m_activeConfig,
+				GatewayManagedConfigReloader::Options{
+					.configPath = m_state.gatewayLiveRuntime.managedConfigPath,
+					.pollIntervalMs = 1000,
+				},
+				GatewayManagedConfigReloader::Callbacks{
+					.appendTrace = [this](const char* stage) {
+						AppendStartupTrace(stage);
+					},
+					.onWarning = [this](const std::wstring& warning) {
+						m_skillsCatalog.diagnostics.warnings.push_back(warning);
+					},
+					.applyConfigDiff = [this](
+						const blazeclaw::config::AppConfig& nextConfig,
+						std::wstring& warningMessage) {
+						return ApplyManagedRuntimeConfigDiff(
+							nextConfig,
+							warningMessage);
+					},
+				});
+			m_state.gatewayLiveRuntime.managedConfigReloaderRunning =
+				m_gatewayManagedConfigReloader.IsRunning();
 		}
 
 		if (!startupResult.success) {
@@ -3448,6 +3483,12 @@ namespace blazeclaw::core {
 	}
 
 	void ServiceManager::Stop() {
+		m_gatewayManagedConfigReloader.Stop();
+		m_state.gatewayLiveRuntime.managedConfigReloaderRunning = false;
+		m_state.gatewayLiveRuntime.runtimeSubscriptionsStarted = false;
+		m_state.gatewayLiveRuntime.transportHandlersAttached = false;
+		m_state.gatewayLiveRuntime.runtimeServicesStarted = false;
+
 		m_skillsEnvOverrideService.RevertAll();
 		if (m_state.chatRuntime.asyncQueueEnabled) {
 			m_chatRuntime.StopWorker();
@@ -3468,6 +3509,81 @@ namespace blazeclaw::core {
 
 		m_gatewayHost.Stop();
 		m_running = false;
+	}
+
+	bool ServiceManager::ApplyManagedRuntimeConfigDiff(
+		const blazeclaw::config::AppConfig& nextConfig,
+		std::wstring& warningMessage) {
+		const bool gatewayBindChanged =
+			m_activeConfig.gateway.bindAddress != nextConfig.gateway.bindAddress;
+		const bool gatewayPortChanged =
+			m_activeConfig.gateway.port != nextConfig.gateway.port;
+
+		if (gatewayBindChanged || gatewayPortChanged) {
+			warningMessage =
+				L"managed gateway config reload detected bind/port change; "
+				L"restart is required for transport endpoint updates.";
+		}
+
+		m_activeConfig.chat.activeProvider = nextConfig.chat.activeProvider;
+		m_activeConfig.chat.activeModel = nextConfig.chat.activeModel;
+		m_activeConfig.embedded.orchestrationPath =
+			nextConfig.embedded.orchestrationPath;
+		m_activeConfig.email = nextConfig.email;
+		m_activeConfig.gateway.startupMode = nextConfig.gateway.startupMode;
+		m_activeConfig.gateway.bindAddress = nextConfig.gateway.bindAddress;
+		m_activeConfig.gateway.port = nextConfig.gateway.port;
+
+		m_activeChatProvider = m_activeConfig.chat.activeProvider.empty()
+			? "local"
+			: ToNarrow(m_activeConfig.chat.activeProvider);
+		m_activeChatModel = m_activeConfig.chat.activeModel.empty()
+			? "default"
+			: ToNarrow(m_activeConfig.chat.activeModel);
+
+		m_gatewayHost.SetEmbeddedOrchestrationPath(
+			ToNarrow(m_activeConfig.embedded.orchestrationPath));
+
+		const auto emailPolicy =
+			m_serviceBootstrapCoordinator.ResolveEmailPolicySettings(m_activeConfig);
+		m_state.emailPolicy.runtimeEnabled = emailPolicy.runtimeEnabled;
+		m_state.emailPolicy.runtimeEnforce = emailPolicy.runtimeEnforce;
+		m_state.emailPolicy.rolloutMode = emailPolicy.rolloutMode;
+		m_state.emailPolicy.enforceChannel = emailPolicy.enforceChannel;
+		m_state.emailPolicy.rollbackBridgeEnabled = emailPolicy.rollbackBridgeEnabled;
+		m_state.emailPolicy.canaryEligible = emailPolicy.canaryEligible;
+
+		m_emailFallbackResolvedPolicy = ResolveEmailFallbackPolicy(
+			L"email.schedule",
+			L"email.send");
+
+		std::vector<std::string> resolvedBackends;
+		resolvedBackends.reserve(m_emailFallbackResolvedPolicy.backends.size());
+		for (const auto& backend : m_emailFallbackResolvedPolicy.backends) {
+			resolvedBackends.push_back(ToNarrow(backend));
+		}
+
+		m_gatewayHost.SetEmailFallbackRuntimeFlags(
+			m_activeConfig.email.preflight.enabled,
+			m_state.emailPolicy.runtimeEnabled,
+			m_state.emailPolicy.runtimeEnforce);
+		m_gatewayHost.SetEmailFallbackResolvedPolicy(
+			resolvedBackends,
+			ToNarrow(m_emailFallbackResolvedPolicy.onUnavailable),
+			ToNarrow(m_emailFallbackResolvedPolicy.onAuthError),
+			ToNarrow(m_emailFallbackResolvedPolicy.onExecError),
+			m_emailFallbackResolvedPolicy.retryMaxAttempts,
+			m_emailFallbackResolvedPolicy.retryDelayMs,
+			m_emailFallbackResolvedPolicy.requiresApproval,
+			m_emailFallbackResolvedPolicy.approvalTokenTtlMinutes,
+			ToNarrow(m_emailFallbackResolvedPolicy.profileId));
+
+		m_configSchemaService.Invalidate();
+		RefreshGatewaySkillsStateProjection();
+		PublishGatewaySkillsStateProjection();
+
+		++m_state.gatewayLiveRuntime.managedConfigApplyCount;
+		return true;
 	}
 
 	bool ServiceManager::IsRunning() const noexcept {
@@ -3995,6 +4111,14 @@ namespace blazeclaw::core {
 			error = "service manager is not running";
 			return false;
 		}
+
+		m_gatewayManagedConfigReloader.Pump();
+		m_state.gatewayLiveRuntime.managedConfigReloaderRunning =
+			m_gatewayManagedConfigReloader.IsRunning();
+		m_state.gatewayLiveRuntime.managedConfigApplyCount =
+			m_gatewayManagedConfigReloader.ApplyCount();
+		m_state.gatewayLiveRuntime.managedConfigRejectCount =
+			m_gatewayManagedConfigReloader.RejectCount();
 
 		return m_gatewayHost.PumpNetworkOnce(error);
 	}

@@ -32,6 +32,7 @@
 #include "skills/CSkillsHooksCoordinator.h"
 #include "bootstrap/CServiceBootstrapCoordinator.h"
 #include "bootstrap/GatewayRuntimeBootstrapCoordinator.h"
+#include "bootstrap/GatewayManagedConfigReloader.h"
 #include "diagnostics/CDiagnosticsReportBuilder.h"
 #include "ConfigSchemaService.h"
 #include "tools/CToolRuntimeRegistry.h"
@@ -195,11 +196,24 @@ namespace blazeclaw::core {
 				bool closePreludeExecuted = false;
 			};
 
+			struct GatewayLiveRuntimeState {
+				bool runtimeStateCreated = false;
+				bool runtimeServicesStarted = false;
+				bool transportHandlersAttached = false;
+				bool runtimeSubscriptionsStarted = false;
+				std::wstring managedConfigPath = L"blazeclaw.conf";
+				bool managedConfigReloaderEnabled = false;
+				bool managedConfigReloaderRunning = false;
+				std::uint64_t managedConfigApplyCount = 0;
+				std::uint64_t managedConfigRejectCount = 0;
+			};
+
 			EmbeddedRuntimeState embeddedRuntime;
 			EmailPolicyState emailPolicy;
 			HooksState hooks;
 			ChatRuntimeState chatRuntime;
 			GatewayLifecycleState gatewayLifecycle;
+			GatewayLiveRuntimeState gatewayLiveRuntime;
 		};
 
 		[[nodiscard]] EmailFallbackResolvedPolicy ResolveEmailFallbackPolicy(
@@ -244,6 +258,9 @@ namespace blazeclaw::core {
 		void BindEmbeddingsCallbacks();
 		[[nodiscard]] bool FinalizeStartup(
 			const blazeclaw::config::AppConfig& config);
+		[[nodiscard]] bool ApplyManagedRuntimeConfigDiff(
+			const blazeclaw::config::AppConfig& nextConfig,
+			std::wstring& warningMessage);
 
 		bool m_running = false;
 		std::string m_activeChatProvider = "local";
@@ -310,6 +327,7 @@ namespace blazeclaw::core {
 		CSkillsHooksCoordinator m_skillsHooksCoordinator;
 		CServiceBootstrapCoordinator m_serviceBootstrapCoordinator;
 		GatewayRuntimeBootstrapCoordinator m_gatewayRuntimeBootstrapCoordinator;
+		GatewayManagedConfigReloader m_gatewayManagedConfigReloader;
 		CDiagnosticsReportBuilder m_diagnosticsReportBuilder;
 		CToolRuntimeRegistry m_toolRuntimeRegistry;
 		blazeclaw::gateway::GatewayHost m_gatewayHost;

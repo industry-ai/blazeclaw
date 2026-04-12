@@ -678,22 +678,8 @@ namespace blazeclaw::gateway {
 		return true;
 	}
 
-	bool GatewayHost::InitializeRuntime(const blazeclaw::config::GatewayConfig& config) {
-		if (!m_dispatchInitialized) {
-			RegisterDefaultHandlers();
-			m_dispatchInitialized = true;
-		}
-		if (!m_stageRuntimeHost) {
-			m_stageRuntimeHost = std::make_unique<GatewayHostEx>(
-				GatewayHostExDependencies{
-					.legacyHost = this,
-					.stagePipeline = &m_chatRunPipelineOrchestrator,
-				});
-		}
-		if (m_initialized) {
-			return true;
-		}
-
+	bool GatewayHost::CreateRuntimeState(
+		const blazeclaw::config::GatewayConfig& config) {
 		if (config.bindAddress.empty() || config.port == 0) {
 			m_lastWarning = "Invalid gateway bind configuration.";
 			return false;
@@ -703,6 +689,19 @@ namespace blazeclaw::gateway {
 		m_port = config.port;
 		m_runtimeGatewayBind = m_bindAddress;
 		m_runtimeGatewayPort = m_port;
+
+		if (!m_stageRuntimeHost) {
+			m_stageRuntimeHost = std::make_unique<GatewayHostEx>(
+				GatewayHostExDependencies{
+					.legacyHost = this,
+					.stagePipeline = &m_chatRunPipelineOrchestrator,
+				});
+		}
+
+		return true;
+	}
+
+	bool GatewayHost::StartRuntimeServices() {
 		PluginHostAdapter::EnsureDefaultAdaptersRegistered();
 		m_runtimeDeepSeekApiKey = ReadEnvironmentVariable("DEEPSEEK_API_KEY");
 		const std::string deepSeekBaseUrl =
@@ -724,12 +723,13 @@ namespace blazeclaw::gateway {
 		m_toolRegistry.LoadSkillToolsFromDirectory("blazeclaw/skills-openclaw-original");
 		m_toolRegistry.LoadSkillToolsFromDirectory("skills");
 		m_toolRegistry.LoadSkillToolsFromDirectory("skills-openclaw-original");
-		// Activate lifecycle-managed extensions (register tools without executors).
+
 		m_extensionLifecycle.LoadCatalog(catalogPath);
 		m_extensionLifecycle.ActivateAll(m_toolRegistry);
 		EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
 		m_approvalStore.Initialize(ResolveGatewayStateFilePath("approvals.json").string());
 		LoadPersistedTaskDeltas();
+
 		m_toolRegistry.RegisterRuntimeTool(
 			ToolCatalogEntry{
 				.id = "python.script.run",
@@ -746,6 +746,39 @@ namespace blazeclaw::gateway {
 				.enabled = true,
 			},
 			python::PythonRuntimeDispatcher::CreateDiagnosticsExecutor());
+
+		return true;
+	}
+
+	bool GatewayHost::AttachTransportRuntime() {
+		return true;
+	}
+
+	bool GatewayHost::StartRuntimeSubscriptions() {
+		return true;
+	}
+
+	bool GatewayHost::InitializeRuntime(const blazeclaw::config::GatewayConfig& config) {
+		if (!m_dispatchInitialized) {
+			RegisterDefaultHandlers();
+			m_dispatchInitialized = true;
+		}
+		if (m_initialized) {
+			return true;
+		}
+
+		if (!CreateRuntimeState(config)) {
+			return false;
+		}
+		if (!StartRuntimeServices()) {
+			return false;
+		}
+		if (!AttachTransportRuntime()) {
+			return false;
+		}
+		if (!StartRuntimeSubscriptions()) {
+			return false;
+		}
 		m_toolRegistry.RegisterRuntimeTool(
 			ToolCatalogEntry{
 				.id = "chat.send",

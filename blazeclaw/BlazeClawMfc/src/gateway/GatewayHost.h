@@ -352,6 +352,11 @@ namespace blazeclaw::gateway {
 		void RegisterSecurityOpsHandlers();
 		void RegisterRuntimeHandlers();
 		void RegisterTransportHandlers();
+		[[nodiscard]] bool CreateRuntimeState(
+			const blazeclaw::config::GatewayConfig& config);
+		[[nodiscard]] bool StartRuntimeServices();
+		[[nodiscard]] bool AttachTransportRuntime();
+		[[nodiscard]] bool StartRuntimeSubscriptions();
 		void LoadPersistedTaskDeltas();
 		void PersistTaskDeltas() const;
 		bool InitializeRuntime(const blazeclaw::config::GatewayConfig& config);
