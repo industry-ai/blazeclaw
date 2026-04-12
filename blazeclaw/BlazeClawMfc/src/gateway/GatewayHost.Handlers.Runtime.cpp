@@ -40,6 +40,11 @@ namespace blazeclaw::gateway {
 	namespace {
 		constexpr std::size_t kMaxChatHistoryEntriesPerSession = 500;
 		constexpr std::size_t kMaxChatEventsPerSession = 200;
+		constexpr std::array<const char*, 3> kConfigSchemaForbiddenSegments = {
+			"__proto__",
+			"prototype",
+			"constructor",
+		};
 
 		std::string SerializeStringArrayLocal(
 			const std::vector<std::string>& values);
@@ -72,6 +77,195 @@ namespace blazeclaw::gateway {
 			}
 
 			return escaped;
+		}
+
+		std::string NormalizeJsonRawForPayload(
+			const std::string& raw,
+			const char* fallbackRaw) {
+			try {
+				const auto parsed = nlohmann::json::parse(raw);
+				return parsed.dump();
+			}
+			catch (...) {
+				return fallbackRaw == nullptr ? "{}" : std::string(fallbackRaw);
+			}
+		}
+
+		std::string SerializeConfigUiHintLocal(
+			const blazeclaw::config::ConfigUiHintModel& hint) {
+			std::string tagsJson = "[";
+			for (std::size_t index = 0; index < hint.tags.size(); ++index) {
+				if (index > 0) {
+					tagsJson += ",";
+				}
+
+				tagsJson += "\"" + EscapeJsonLocal(hint.tags[index]) + "\"";
+			}
+			tagsJson += "]";
+
+			return
+				"{\"label\":\"" +
+				EscapeJsonLocal(hint.label) +
+				"\",\"help\":\"" +
+				EscapeJsonLocal(hint.help) +
+				"\",\"tags\":" +
+				tagsJson +
+				",\"advanced\":" +
+				std::string(hint.advanced ? "true" : "false") +
+				",\"sensitive\":" +
+				std::string(hint.sensitive ? "true" : "false") +
+				",\"placeholder\":\"" +
+				EscapeJsonLocal(hint.placeholder) +
+				"\"}";
+		}
+
+		std::string SerializeConfigSchemaChildLocal(
+			const ConfigSchemaGatewayChild& child) {
+			std::string hintJson = "null";
+			if (child.hint.has_value()) {
+				hintJson = SerializeConfigUiHintLocal(child.hint.value());
+			}
+
+			return
+				"{\"key\":\"" +
+				EscapeJsonLocal(child.key) +
+				"\",\"path\":\"" +
+				EscapeJsonLocal(child.path) +
+				"\",\"type\":\"" +
+				EscapeJsonLocal(child.type) +
+				"\",\"required\":" +
+				std::string(child.required ? "true" : "false") +
+				",\"hasChildren\":" +
+				std::string(child.hasChildren ? "true" : "false") +
+				",\"hint\":" +
+				hintJson +
+				",\"hintPath\":\"" +
+				EscapeJsonLocal(child.hintPath) +
+				"\"}";
+		}
+
+		std::string SerializeConfigSchemaLookupResultLocal(
+			const ConfigSchemaGatewayLookupResult& result) {
+			std::string childrenJson = "[";
+			for (std::size_t index = 0; index < result.children.size(); ++index) {
+				if (index > 0) {
+					childrenJson += ",";
+				}
+
+				childrenJson += SerializeConfigSchemaChildLocal(result.children[index]);
+			}
+			childrenJson += "]";
+
+			std::string hintJson = "null";
+			if (result.hint.has_value()) {
+				hintJson = SerializeConfigUiHintLocal(result.hint.value());
+			}
+
+			return
+				"{\"path\":\"" +
+				EscapeJsonLocal(result.path) +
+				"\",\"schema\":" +
+				NormalizeJsonRawForPayload(result.schemaJson, "{}") +
+				",\"hint\":" +
+				hintJson +
+				",\"hintPath\":\"" +
+				EscapeJsonLocal(result.hintPath) +
+				"\",\"children\":" +
+				childrenJson +
+				"}";
+		}
+
+		std::optional<std::string> NormalizeSchemaLookupPathRequest(
+			const std::string& rawPath) {
+			std::string trimmed = json::Trim(rawPath);
+			if (trimmed.empty()) {
+				return std::nullopt;
+			}
+
+			std::string normalized;
+			normalized.reserve(trimmed.size() + 8);
+			for (std::size_t index = 0; index < trimmed.size(); ++index) {
+				const char ch = trimmed[index];
+				if (ch == '[') {
+					normalized.push_back('.');
+					const std::size_t end = trimmed.find(']', index + 1);
+					if (end == std::string::npos) {
+						return std::nullopt;
+					}
+
+					const std::string inside =
+						trimmed.substr(index + 1, end - index - 1);
+					normalized += inside.empty() ? "*" : inside;
+					index = end;
+					continue;
+				}
+
+				normalized.push_back(ch);
+			}
+
+			while (!normalized.empty() && normalized.front() == '.') {
+				normalized.erase(normalized.begin());
+			}
+
+			while (!normalized.empty() && normalized.back() == '.') {
+				normalized.pop_back();
+			}
+
+			std::string collapsed;
+			collapsed.reserve(normalized.size());
+			bool previousDot = false;
+			for (const char ch : normalized) {
+				if (ch == '.') {
+					if (!previousDot) {
+						collapsed.push_back(ch);
+					}
+					previousDot = true;
+					continue;
+				}
+
+				collapsed.push_back(ch);
+				previousDot = false;
+			}
+
+			if (collapsed.empty()) {
+				return std::nullopt;
+			}
+
+			std::size_t segmentCount = 0;
+			std::size_t start = 0;
+			while (start <= collapsed.size()) {
+				const auto next = collapsed.find('.', start);
+				const std::string segment =
+					next == std::string::npos
+					? collapsed.substr(start)
+					: collapsed.substr(start, next - start);
+
+				if (!segment.empty()) {
+					if (std::any_of(
+						kConfigSchemaForbiddenSegments.begin(),
+						kConfigSchemaForbiddenSegments.end(),
+						[&segment](const char* forbidden) {
+							return forbidden != nullptr && segment == forbidden;
+						})) {
+						return std::nullopt;
+					}
+
+					++segmentCount;
+				}
+
+				if (next == std::string::npos) {
+					break;
+				}
+
+				start = next + 1;
+			}
+
+			if (segmentCount == 0 ||
+				segmentCount > blazeclaw::config::kConfigSchemaLookupMaxPathSegments) {
+				return std::nullopt;
+			}
+
+			return collapsed;
 		}
 
 		std::string ExtractStringParam(
@@ -5166,6 +5360,117 @@ namespace blazeclaw::gateway {
 						",\"blocked\":" +
 						std::to_string(state.envBlocked) +
 						"}",
+					.error = std::nullopt,
+				};
+			});
+
+		m_dispatcher.Register(
+			"gateway.config.schema.get",
+			[this](const protocol::RequestFrame& request) {
+				if (!m_configSchemaGetCallback) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = false,
+						.payloadJson = std::nullopt,
+						.error = protocol::ErrorShape{
+							.code = "not_supported",
+							.message =
+								"Config schema callback is not configured.",
+							.detailsJson = std::nullopt,
+							.retryable = false,
+							.retryAfterMs = std::nullopt,
+						},
+					};
+				}
+
+				const auto state = m_configSchemaGetCallback();
+				const std::string payload =
+					"{\"schema\":" +
+					NormalizeJsonRawForPayload(state.schemaJson, "{}") +
+					",\"uiHints\":" +
+					NormalizeJsonRawForPayload(state.uiHintsJson, "{}") +
+					",\"version\":\"" +
+					EscapeJsonLocal(state.version) +
+					"\",\"generatedAt\":\"" +
+					EscapeJsonLocal(state.generatedAt) +
+					"\"}";
+
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = true,
+					.payloadJson = payload,
+					.error = std::nullopt,
+				};
+			});
+
+		m_dispatcher.Register(
+			"gateway.config.schema.lookup",
+			[this](const protocol::RequestFrame& request) {
+				if (!m_configSchemaLookupCallback) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = false,
+						.payloadJson = std::nullopt,
+						.error = protocol::ErrorShape{
+							.code = "not_supported",
+							.message =
+								"Config schema lookup callback is not configured.",
+							.detailsJson = std::nullopt,
+							.retryable = false,
+							.retryAfterMs = std::nullopt,
+						},
+					};
+				}
+
+				const std::string requestedPath =
+					ExtractStringParam(request.paramsJson, "path");
+				const auto normalizedPath =
+					NormalizeSchemaLookupPathRequest(requestedPath);
+				if (!normalizedPath.has_value()) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = false,
+						.payloadJson = std::nullopt,
+						.error = protocol::ErrorShape{
+							.code = "invalid_lookup_path",
+							.message =
+								"Invalid schema lookup path.",
+							.detailsJson =
+								"{\"path\":\"" +
+								EscapeJsonLocal(requestedPath) +
+								"\"}",
+							.retryable = false,
+							.retryAfterMs = std::nullopt,
+						},
+					};
+				}
+
+				const auto lookupResult =
+					m_configSchemaLookupCallback(normalizedPath.value());
+				if (!lookupResult.has_value()) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = false,
+						.payloadJson = std::nullopt,
+						.error = protocol::ErrorShape{
+							.code = "schema_path_not_found",
+							.message = "Schema path was not found.",
+							.detailsJson =
+								"{\"path\":\"" +
+								EscapeJsonLocal(normalizedPath.value()) +
+								"\"}",
+							.retryable = false,
+							.retryAfterMs = std::nullopt,
+						},
+					};
+				}
+
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = true,
+					.payloadJson =
+						SerializeConfigSchemaLookupResultLocal(
+							lookupResult.value()),
 					.error = std::nullopt,
 				};
 			});
