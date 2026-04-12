@@ -29,6 +29,7 @@ namespace blazeclaw::core {
 		std::uint64_t gatewayAuthSessionGenerationCurrent = 0;
 		std::uint64_t gatewayAuthSessionGenerationRequired = 0;
 		std::uint64_t gatewayAuthSessionGenerationRejectCount = 0;
+		std::vector<std::string> gatewayLifecycleTransitions;
 
 		bool emailPreflightEnabled = false;
 		bool emailPolicyProfilesEnabled = false;

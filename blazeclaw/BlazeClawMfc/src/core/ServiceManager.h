@@ -201,6 +201,7 @@ namespace blazeclaw::core {
 				std::uint64_t authSessionGenerationCurrent = 0;
 				std::uint64_t authSessionGenerationRequired = 0;
 				std::uint64_t authSessionGenerationRejectCount = 0;
+				std::vector<std::string> transitions;
 			};
 
 			struct GatewayLiveRuntimeState {
@@ -220,6 +221,7 @@ namespace blazeclaw::core {
 				std::uint64_t managedConfigRejectCount = 0;
 				std::vector<OwnedCleanupEntry> ownedCleanup;
 				std::vector<std::string> ownedCleanupOrder;
+				std::vector<std::uint64_t> pendingInternalWriteHashes;
 			};
 
 			EmbeddedRuntimeState embeddedRuntime;
@@ -283,6 +285,11 @@ namespace blazeclaw::core {
 		void ExecuteGatewayStartupFailureCleanup(
 			const blazeclaw::config::AppConfig& config,
 			const GatewayRuntimeBootstrapCoordinator::StartupResult& startupResult);
+		void ExecuteNonGatewayRuntimeCleanup();
+		void RecordGatewayLifecycleTransition(const std::string& transition);
+		void QueueManagedConfigInternalWriteHash(std::uint64_t hash);
+		[[nodiscard]] std::optional<std::uint64_t>
+			ConsumeManagedConfigInternalWriteHash();
 
 		bool m_running = false;
 		std::string m_activeChatProvider = "local";

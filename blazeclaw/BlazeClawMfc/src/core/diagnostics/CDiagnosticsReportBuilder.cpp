@@ -6,6 +6,18 @@ namespace blazeclaw::core {
 	std::string CDiagnosticsReportBuilder::BuildOperatorDiagnosticsReport(
 		const DiagnosticsSnapshot& s) const
 	{
+		const auto serializeTransitions = [&s]() {
+			std::string json = "[";
+			for (std::size_t i = 0; i < s.gatewayLifecycleTransitions.size(); ++i) {
+				if (i > 0) {
+					json += ",";
+				}
+				json += "\"" + s.gatewayLifecycleTransitions[i] + "\"";
+			}
+			json += "]";
+			return json;
+			};
+
 		const std::string report =
 			"{\"runtime\":{\"running\":" +
 			std::string(s.runtimeRunning ? "true" : "false") +
@@ -49,6 +61,8 @@ namespace blazeclaw::core {
 			std::to_string(s.gatewayAuthSessionGenerationRequired) +
 			",\"authSessionGenerationRejectCount\":" +
 			std::to_string(s.gatewayAuthSessionGenerationRejectCount) +
+			",\"transitions\":" +
+			serializeTransitions() +
 			"}}," +
 			"\"emailFallback\":{\"preflightEnabled\":" +
 			std::string(s.emailPreflightEnabled ? "true" : "false") +

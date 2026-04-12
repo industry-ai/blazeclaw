@@ -75,6 +75,14 @@ namespace blazeclaw::core {
 			return;
 		}
 
+		if (m_options.pollInternalWriteHash) {
+			if (const auto pendingHash = m_options.pollInternalWriteHash();
+				pendingHash.has_value()) {
+				m_pendingInternalWriteHash = pendingHash;
+				EmitTrace("GatewayManagedConfigReloader.Pump.internal_write_event");
+			}
+		}
+
 		const auto currentHash = ComputeFileContentHash(m_options.configPath);
 		if (!currentHash.has_value()) {
 			return;

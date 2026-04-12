@@ -821,6 +821,10 @@ namespace blazeclaw::core {
 				return true;
 			}
 
+			if (currentConfig.deepseekApiKey != nextConfig.deepseekApiKey) {
+				return true;
+			}
+
 			return BuildAuthProfilesSignature(currentConfig.authProfiles) !=
 				BuildAuthProfilesSignature(nextConfig.authProfiles);
 		}
@@ -3421,6 +3425,8 @@ namespace blazeclaw::core {
 		const blazeclaw::config::AppConfig& config)
 	{
 		AppendStartupTrace("ServiceManager.Start.gateway.beforeStart");
+		m_state.gatewayLifecycle.transitions.clear();
+		RecordGatewayLifecycleTransition("startup.begin");
 
 		GatewayRuntimeBootstrapCoordinator::StartupResult startupResult;
 		try {
@@ -3453,6 +3459,7 @@ namespace blazeclaw::core {
 			config.gateway.authSessionGeneration;
 		m_state.gatewayLifecycle.authSessionGenerationRequired =
 			config.gateway.authSessionGeneration;
+		m_state.gatewayLifecycle.authSessionGenerationRejectCount = 0;
 		ResetGatewayOwnedRuntimeCleanup();
 		m_state.gatewayLiveRuntime.runtimeStateCreated = true;
 		m_state.gatewayLiveRuntime.runtimeServicesStarted =
@@ -3469,11 +3476,17 @@ namespace blazeclaw::core {
 		m_state.gatewayLiveRuntime.managedConfigReloaderEnabled =
 			startupResult.managedConfigReloaderStarted;
 		if (startupResult.managedConfigReloaderStarted) {
+			const auto initialInternalWriteHash =
+				ConsumeManagedConfigInternalWriteHash();
 			m_gatewayManagedConfigReloader.Start(
 				m_activeConfig,
 				GatewayManagedConfigReloader::Options{
 					.configPath = m_state.gatewayLiveRuntime.managedConfigPath,
 					.pollIntervalMs = 1000,
+				  .initialInternalWriteHash = initialInternalWriteHash,
+					.pollInternalWriteHash = [this]() {
+						return ConsumeManagedConfigInternalWriteHash();
+					},
 				},
 				GatewayManagedConfigReloader::Callbacks{
 					.appendTrace = [this](const char* stage) {
@@ -3492,13 +3505,21 @@ namespace blazeclaw::core {
 				});
 			m_state.gatewayLiveRuntime.managedConfigReloaderRunning =
 				m_gatewayManagedConfigReloader.IsRunning();
+			RecordGatewayLifecycleTransition("managed_reloader.start");
 			RegisterGatewayOwnedRuntimeCleanup(
 				"managed_config_reloader_stop",
 				[this]() {
 					m_gatewayManagedConfigReloader.Stop();
 					m_state.gatewayLiveRuntime.managedConfigReloaderRunning = false;
+					RecordGatewayLifecycleTransition("managed_reloader.stop");
 				});
 		}
+
+		RegisterGatewayOwnedRuntimeCleanup(
+			"non_gateway_runtime_cleanup",
+			[this]() {
+				ExecuteNonGatewayRuntimeCleanup();
+			});
 
 		RegisterGatewayOwnedRuntimeCleanup(
 			"gateway_close_prelude",
@@ -3515,6 +3536,7 @@ namespace blazeclaw::core {
 					m_skillsCatalog.diagnostics.warnings.push_back(warning);
 				}
 				m_state.gatewayLifecycle.closePreludeExecuted = true;
+				RecordGatewayLifecycleTransition("gateway.close_prelude.executed");
 			});
 
 		RegisterGatewayOwnedRuntimeCleanup(
@@ -3524,6 +3546,7 @@ namespace blazeclaw::core {
 				m_state.gatewayLiveRuntime.runtimeSubscriptionsStarted = false;
 				m_state.gatewayLiveRuntime.transportHandlersAttached = false;
 				m_state.gatewayLiveRuntime.runtimeServicesStarted = false;
+				RecordGatewayLifecycleTransition("gateway.host.stop");
 			});
 
 		if (!startupResult.success) {
@@ -3531,6 +3554,7 @@ namespace blazeclaw::core {
 			m_skillsCatalog.diagnostics.warnings.push_back(
 				L"gateway startup failed; running in degraded local mode.");
 			AppendStartupTrace("ServiceManager.Start.gateway.failed");
+			RecordGatewayLifecycleTransition("startup.failed.degraded_mode");
 			m_running = true;
 			PublishGatewaySkillsStateProjection();
 			return true;
@@ -3538,22 +3562,22 @@ namespace blazeclaw::core {
 
 		if (startupResult.degraded) {
 			AppendStartupTrace("ServiceManager.Start.gateway.degraded");
+			RecordGatewayLifecycleTransition("startup.degraded");
 		}
 
 		m_running = true;
 		AppendStartupTrace("ServiceManager.Start.gateway.afterStart");
+		RecordGatewayLifecycleTransition("startup.ready");
 		return true;
 	}
 
 	void ServiceManager::Stop() {
 		m_state.gatewayLifecycle.cleanupPath = "normal_stop";
-		m_skillsEnvOverrideService.RevertAll();
-		if (m_state.chatRuntime.asyncQueueEnabled) {
-			m_chatRuntime.StopWorker();
-		}
+		RecordGatewayLifecycleTransition("stop.begin");
 
 		ExecuteGatewayOwnedRuntimeCleanup();
 		m_running = false;
+		RecordGatewayLifecycleTransition("stop.done");
 	}
 
 	void ServiceManager::ResetGatewayOwnedRuntimeCleanup() {
@@ -3593,11 +3617,15 @@ namespace blazeclaw::core {
 		const GatewayRuntimeBootstrapCoordinator::StartupResult& startupResult) {
 		AppendStartupTrace("ServiceManager.Start.gateway.startupFailureCleanup.begin");
 		m_state.gatewayLifecycle.cleanupPath = "startup_failure";
+		RecordGatewayLifecycleTransition("startup_failure_cleanup.begin");
 
 		if (m_gatewayManagedConfigReloader.IsRunning()) {
 			m_gatewayManagedConfigReloader.Stop();
 			m_state.gatewayLiveRuntime.managedConfigReloaderRunning = false;
+			RecordGatewayLifecycleTransition("managed_reloader.stop.startup_failure");
 		}
+
+		ExecuteNonGatewayRuntimeCleanup();
 
 		ExecuteGatewayOwnedRuntimeCleanup();
 
@@ -3612,7 +3640,65 @@ namespace blazeclaw::core {
 			startupResult);
 
 		m_state.gatewayLifecycle.startupFailureCleanupExecuted = true;
+		RecordGatewayLifecycleTransition("startup_failure_cleanup.done");
 		AppendStartupTrace("ServiceManager.Start.gateway.startupFailureCleanup.done");
+	}
+
+	void ServiceManager::ExecuteNonGatewayRuntimeCleanup() {
+		m_skillsEnvOverrideService.RevertAll();
+		RecordGatewayLifecycleTransition("skills_env_override.revert_all");
+
+		if (m_state.chatRuntime.asyncQueueEnabled) {
+			m_chatRuntime.StopWorker();
+			RecordGatewayLifecycleTransition("chat_runtime.worker.stop");
+		}
+
+		{
+			std::scoped_lock lock(m_deepSeekCancelMutex);
+			m_deepSeekCancelledRuns.clear();
+		}
+		{
+			std::scoped_lock lock(m_embeddedCancelMutex);
+			m_embeddedCancelledRuns.clear();
+		}
+		RecordGatewayLifecycleTransition("runtime_cancellation_state.cleared");
+	}
+
+	void ServiceManager::RecordGatewayLifecycleTransition(
+		const std::string& transition) {
+		if (transition.empty()) {
+			return;
+		}
+
+		m_state.gatewayLifecycle.transitions.push_back(transition);
+		if (m_state.gatewayLifecycle.transitions.size() > 64) {
+			m_state.gatewayLifecycle.transitions.erase(
+				m_state.gatewayLifecycle.transitions.begin());
+		}
+	}
+
+	void ServiceManager::QueueManagedConfigInternalWriteHash(
+		std::uint64_t hash) {
+		m_state.gatewayLiveRuntime.pendingInternalWriteHashes.push_back(hash);
+		if (m_state.gatewayLiveRuntime.pendingInternalWriteHashes.size() > 16) {
+			m_state.gatewayLiveRuntime.pendingInternalWriteHashes.erase(
+				m_state.gatewayLiveRuntime.pendingInternalWriteHashes.begin());
+		}
+		RecordGatewayLifecycleTransition("managed_reloader.internal_write.queued");
+	}
+
+	std::optional<std::uint64_t>
+		ServiceManager::ConsumeManagedConfigInternalWriteHash() {
+		if (m_state.gatewayLiveRuntime.pendingInternalWriteHashes.empty()) {
+			return std::nullopt;
+		}
+
+		const std::uint64_t hash =
+			m_state.gatewayLiveRuntime.pendingInternalWriteHashes.front();
+		m_state.gatewayLiveRuntime.pendingInternalWriteHashes.erase(
+			m_state.gatewayLiveRuntime.pendingInternalWriteHashes.begin());
+		RecordGatewayLifecycleTransition("managed_reloader.internal_write.consumed");
+		return hash;
 	}
 
 	bool ServiceManager::ApplyManagedRuntimeConfigDiff(
@@ -3631,6 +3717,7 @@ namespace blazeclaw::core {
 				L"gateway auth/session config change requires "
 				L"gateway.authSessionGeneration to increase.";
 			m_skillsCatalog.diagnostics.warnings.push_back(warningMessage);
+			RecordGatewayLifecycleTransition("managed_reload.auth_generation_reject");
 			return false;
 		}
 
@@ -3651,6 +3738,7 @@ namespace blazeclaw::core {
 			nextConfig.embedded.orchestrationPath;
 		m_activeConfig.email = nextConfig.email;
 		m_activeConfig.authProfiles = nextConfig.authProfiles;
+		m_activeConfig.deepseekApiKey = nextConfig.deepseekApiKey;
 		m_activeConfig.gateway.startupMode = nextConfig.gateway.startupMode;
 		m_activeConfig.gateway.bindAddress = nextConfig.gateway.bindAddress;
 		m_activeConfig.gateway.port = nextConfig.gateway.port;
@@ -3662,6 +3750,7 @@ namespace blazeclaw::core {
 				nextConfig.gateway.authSessionGeneration;
 			m_state.gatewayLifecycle.authSessionGenerationRequired =
 				nextConfig.gateway.authSessionGeneration;
+			RecordGatewayLifecycleTransition("managed_reload.auth_generation_accepted");
 		}
 
 		m_activeChatProvider = m_activeConfig.chat.activeProvider.empty()
@@ -3713,6 +3802,7 @@ namespace blazeclaw::core {
 		PublishGatewaySkillsStateProjection();
 
 		++m_state.gatewayLiveRuntime.managedConfigApplyCount;
+		RecordGatewayLifecycleTransition("managed_reload.applied");
 		return true;
 	}
 
@@ -3841,6 +3931,8 @@ namespace blazeclaw::core {
 			m_state.gatewayLifecycle.authSessionGenerationRequired;
 		snapshot.gatewayAuthSessionGenerationRejectCount =
 			m_state.gatewayLifecycle.authSessionGenerationRejectCount;
+		snapshot.gatewayLifecycleTransitions =
+			m_state.gatewayLifecycle.transitions;
 
 		std::size_t implementedCount = 0;
 		std::size_t inProgressCount = 0;
@@ -4075,8 +4167,20 @@ namespace blazeclaw::core {
 	void ServiceManager::SetActiveChatProvider(
 		const std::string& provider,
 		const std::string& model) {
+		const std::string nextProvider = provider.empty() ? "local" : provider;
+		if (nextProvider != m_activeChatProvider) {
+			m_state.gatewayLifecycle.authSessionGenerationRequired =
+				(m_state.gatewayLifecycle.authSessionGenerationCurrent + 1);
+			++m_state.gatewayLifecycle.authSessionGenerationRejectCount;
+			m_skillsCatalog.diagnostics.warnings.push_back(
+				L"active chat provider mutation requires managed auth session generation bump.");
+			RecordGatewayLifecycleTransition("runtime_mutation.auth_generation_reject");
+			return;
+		}
+
 		m_activeChatProvider = provider.empty() ? "local" : provider;
 		m_activeChatModel = model.empty() ? "default" : model;
+		RecordGatewayLifecycleTransition("runtime_mutation.chat_provider_applied");
 	}
 
 	const std::string& ServiceManager::ActiveChatProvider() const noexcept {
@@ -4279,6 +4383,11 @@ namespace blazeclaw::core {
 			return false;
 		}
 
+		const std::uint64_t applyCountBefore =
+			m_gatewayManagedConfigReloader.ApplyCount();
+		const std::uint64_t rejectCountBefore =
+			m_gatewayManagedConfigReloader.RejectCount();
+
 		m_gatewayManagedConfigReloader.Pump();
 		m_state.gatewayLiveRuntime.managedConfigReloaderRunning =
 			m_gatewayManagedConfigReloader.IsRunning();
@@ -4286,6 +4395,13 @@ namespace blazeclaw::core {
 			m_gatewayManagedConfigReloader.ApplyCount();
 		m_state.gatewayLiveRuntime.managedConfigRejectCount =
 			m_gatewayManagedConfigReloader.RejectCount();
+
+		if (m_gatewayManagedConfigReloader.ApplyCount() > applyCountBefore) {
+			RecordGatewayLifecycleTransition("managed_reload.apply_observed");
+		}
+		if (m_gatewayManagedConfigReloader.RejectCount() > rejectCountBefore) {
+			RecordGatewayLifecycleTransition("managed_reload.reject_observed");
+		}
 
 		return m_gatewayHost.PumpNetworkOnce(error);
 	}

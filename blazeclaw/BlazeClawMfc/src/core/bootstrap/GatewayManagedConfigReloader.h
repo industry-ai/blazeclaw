@@ -16,6 +16,7 @@ namespace blazeclaw::core {
 			std::filesystem::path configPath = L"blazeclaw.conf";
 			std::uint64_t pollIntervalMs = 1000;
 			std::optional<std::uint64_t> initialInternalWriteHash;
+			std::function<std::optional<std::uint64_t>()> pollInternalWriteHash;
 		};
 
 		struct Callbacks {

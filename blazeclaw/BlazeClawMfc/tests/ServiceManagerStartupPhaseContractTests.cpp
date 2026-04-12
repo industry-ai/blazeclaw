@@ -175,3 +175,35 @@ TEST_CASE(
 	REQUIRE(coordinatorSource.find("raw == L\"full\" || raw == L\"transport\"") != std::string::npos);
 	REQUIRE(coordinatorSource.find("return \"local_runtime_dispatch\";") != std::string::npos);
 }
+
+TEST_CASE(
+	"ServiceManager startup contract: lifecycle transition tracing is recorded",
+	"[servicemanager][startup][contract]")
+{
+	const std::string source = ReadServiceManagerSource();
+	REQUIRE(
+		source.find("void ServiceManager::RecordGatewayLifecycleTransition(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("m_state.gatewayLifecycle.transitions.push_back") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("managed_reload.apply_observed") !=
+		std::string::npos);
+}
+
+TEST_CASE(
+	"ServiceManager startup contract: startup-failure cleanup includes non-gateway cleanup",
+	"[servicemanager][startup][contract]")
+{
+	const std::string source = ReadServiceManagerSource();
+	REQUIRE(
+		source.find("void ServiceManager::ExecuteNonGatewayRuntimeCleanup()") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("ExecuteNonGatewayRuntimeCleanup();") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("runtime_cancellation_state.cleared") !=
+		std::string::npos);
+}

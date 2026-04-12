@@ -233,6 +233,141 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"GatewayManagedConfigReloader write-origin bridge callback skips internal write hash",
+	"[gateway][lifecycle][p2][reloader][bridge]")
+{
+	const auto path = CreateTempConfigPath(L"internal_write_bridge");
+	WriteConfigFile(
+		path,
+		"gateway.port=56789\n"
+		"chat.activeProvider=local\n"
+		"chat.activeModel=default\n");
+
+	blazeclaw::core::GatewayManagedConfigReloader reloader;
+	blazeclaw::config::AppConfig initialConfig;
+	std::size_t callbackApplyCount = 0;
+	std::optional<std::uint64_t> pendingBridgeHash;
+
+	reloader.Start(
+		initialConfig,
+		blazeclaw::core::GatewayManagedConfigReloader::Options{
+			.configPath = path,
+			.pollIntervalMs = 0,
+			.initialInternalWriteHash = std::nullopt,
+			.pollInternalWriteHash = [&pendingBridgeHash]() {
+				const auto value = pendingBridgeHash;
+				pendingBridgeHash.reset();
+				return value;
+			},
+		},
+		blazeclaw::core::GatewayManagedConfigReloader::Callbacks{
+			.appendTrace = nullptr,
+			.onWarning = nullptr,
+			.applyConfigDiff = [&callbackApplyCount](
+				const blazeclaw::config::AppConfig&,
+				std::wstring&)
+			{
+				++callbackApplyCount;
+				return true;
+			},
+		});
+
+	WriteConfigFile(
+		path,
+		"gateway.port=56789\n"
+		"chat.activeProvider=deepseek\n"
+		"chat.activeModel=deepseek-chat\n");
+	pendingBridgeHash = ComputeFileContentHash(path);
+	reloader.Pump();
+
+	REQUIRE(reloader.ApplyCount() == 0);
+	REQUIRE(reloader.RejectCount() == 0);
+	REQUIRE(callbackApplyCount == 0);
+
+	reloader.Stop();
+
+	std::error_code removeError;
+	std::filesystem::remove(path, removeError);
+}
+
+TEST_CASE(
+	"GatewayManagedConfigReloader handles auth generation stress transitions",
+	"[gateway][lifecycle][p2][reloader][stress]")
+{
+	const auto path = CreateTempConfigPath(L"auth_generation_stress");
+	WriteConfigFile(
+		path,
+		"gateway.port=56789\n"
+		"gateway.authSessionGeneration=1\n"
+		"chat.activeProvider=local\n"
+		"chat.activeModel=default\n");
+
+	blazeclaw::core::GatewayManagedConfigReloader reloader;
+	blazeclaw::config::AppConfig initialConfig;
+	std::uint64_t currentGeneration = 1;
+	std::wstring currentProvider = L"local";
+
+	reloader.Start(
+		initialConfig,
+		blazeclaw::core::GatewayManagedConfigReloader::Options{
+			.configPath = path,
+			.pollIntervalMs = 0,
+		},
+		blazeclaw::core::GatewayManagedConfigReloader::Callbacks{
+			.appendTrace = nullptr,
+			.onWarning = nullptr,
+			.applyConfigDiff = [
+				&currentGeneration,
+				&currentProvider](
+					const blazeclaw::config::AppConfig& next,
+					std::wstring& warning)
+			{
+				if (next.chat.activeProvider != currentProvider &&
+					next.gateway.authSessionGeneration <= currentGeneration) {
+					warning = L"auth generation bump required";
+					return false;
+				}
+
+				currentGeneration = next.gateway.authSessionGeneration;
+				currentProvider = next.chat.activeProvider;
+				return true;
+			},
+		});
+
+	WriteConfigFile(
+		path,
+		"gateway.port=56789\n"
+		"gateway.authSessionGeneration=1\n"
+		"chat.activeProvider=deepseek\n"
+		"chat.activeModel=deepseek-chat\n");
+	reloader.Pump();
+
+	WriteConfigFile(
+		path,
+		"gateway.port=56789\n"
+		"gateway.authSessionGeneration=2\n"
+		"chat.activeProvider=deepseek\n"
+		"chat.activeModel=deepseek-chat\n");
+	reloader.Pump();
+
+	WriteConfigFile(
+		path,
+		"gateway.port=56789\n"
+		"gateway.authSessionGeneration=2\n"
+		"chat.activeProvider=local\n"
+		"chat.activeModel=default\n");
+	reloader.Pump();
+
+	REQUIRE(reloader.ApplyCount() == 1);
+	REQUIRE(reloader.RejectCount() == 2);
+
+	reloader.Stop();
+
+	std::error_code removeError;
+	std::filesystem::remove(path, removeError);
+}
+
+TEST_CASE(
 	"GatewayManagedConfigReloader skips internally tagged writes",
 	"[gateway][lifecycle][p2][reloader]")
 {
@@ -345,6 +480,12 @@ TEST_CASE(
 	snapshot.gatewayAuthSessionGenerationRejectCount = 2;
 	snapshot.gatewayStartupFailureCleanupExecuted = true;
 	snapshot.gatewayCleanupPath = "startup_failure";
+	snapshot.gatewayLifecycleTransitions = {
+		"startup.begin",
+		"managed_reloader.start",
+		"managed_reload.applied",
+		"stop.done",
+	};
 
 	blazeclaw::core::CDiagnosticsReportBuilder builder;
 	const std::string report = builder.BuildOperatorDiagnosticsReport(snapshot);
@@ -376,5 +517,8 @@ TEST_CASE(
 		std::string::npos);
 	REQUIRE(
 		report.find("\"cleanupPath\":\"startup_failure\"") !=
+		std::string::npos);
+	REQUIRE(
+		report.find("\"transitions\":[\"startup.begin\"") !=
 		std::string::npos);
 }
