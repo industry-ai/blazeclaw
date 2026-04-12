@@ -26,4 +26,38 @@ namespace blazeclaw::core {
 		}
 	}
 
+	void CToolRuntimeRegistry::RegisterWithAdapters(
+		blazeclaw::gateway::GatewayHost& host,
+		const ToolRuntimePolicySettings& toolPolicy,
+		const std::vector<ToolCapabilityAdapter*>& adapters,
+		const Dependencies& deps) const
+	{
+		const extensions::RuntimeToolPolicySnapshot adapterPolicy{
+			.imapSmtpSkillRoot = toolPolicy.imapSmtpSkillRoot,
+			.baiduSearchSkillRoot = toolPolicy.baiduSearchSkillRoot,
+			.braveSearchSkillRoot = toolPolicy.braveSearchSkillRoot,
+			.openClawWebBrowsingSkillRoot = toolPolicy.openClawWebBrowsingSkillRoot,
+			.braveRequireApiKey = toolPolicy.braveRequireApiKey,
+			.braveApiKeyPresent = toolPolicy.braveApiKeyPresent,
+			.enableOpenClawWebBrowsingFallback =
+				toolPolicy.enableOpenClawWebBrowsingFallback,
+		};
+
+		for (const auto* adapter : adapters)
+		{
+			if (adapter == nullptr)
+			{
+				continue;
+			}
+
+			adapter->RegisterRuntimeTools(
+				extensions::RuntimeToolAdapterContext{
+					.host = host,
+				   .toolPolicy = adapterPolicy,
+				});
+		}
+
+		RegisterAll(host, toolPolicy, deps);
+	}
+
 } // namespace blazeclaw::core

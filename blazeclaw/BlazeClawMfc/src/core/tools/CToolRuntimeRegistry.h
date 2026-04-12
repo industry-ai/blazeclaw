@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../gateway/GatewayHost.h"
+#include "../extensions/RuntimeCapabilityAdapterContracts.h"
 
 #include <filesystem>
 #include <functional>
@@ -20,6 +21,9 @@ namespace blazeclaw::core {
 			bool enableOpenClawWebBrowsingFallback = false;
 		};
 
+		using ToolCapabilityAdapter =
+			extensions::IRuntimeToolCapabilityAdapter;
+
 		struct Dependencies {
 			std::function<void(
 				blazeclaw::gateway::GatewayHost&,
@@ -36,6 +40,12 @@ namespace blazeclaw::core {
 		void RegisterAll(
 			blazeclaw::gateway::GatewayHost& host,
 			const ToolRuntimePolicySettings& toolPolicy,
+			const Dependencies& deps) const;
+
+		void RegisterWithAdapters(
+			blazeclaw::gateway::GatewayHost& host,
+			const ToolRuntimePolicySettings& toolPolicy,
+			const std::vector<ToolCapabilityAdapter*>& adapters,
 			const Dependencies& deps) const;
 	};
 

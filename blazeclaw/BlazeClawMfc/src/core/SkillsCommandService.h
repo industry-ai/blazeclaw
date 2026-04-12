@@ -2,7 +2,9 @@
 
 #include "SkillsCatalogService.h"
 #include "SkillsEligibilityService.h"
+#include "extensions/RuntimeCapabilityAdapterContracts.h"
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -36,6 +38,11 @@ namespace blazeclaw::core {
 		[[nodiscard]] SkillsCommandSnapshot BuildSnapshot(
 			const SkillsCatalogSnapshot& catalog,
 			const SkillsEligibilitySnapshot& eligibility) const;
+
+		[[nodiscard]] SkillsCommandSnapshot BuildSnapshotWithAdapters(
+			const SkillsCatalogSnapshot& catalog,
+			const SkillsEligibilitySnapshot& eligibility,
+			const std::vector<extensions::IRuntimeSkillCapabilityAdapter*>& adapters) const;
 
 		[[nodiscard]] bool ValidateFixtureScenarios(
 			const std::filesystem::path& fixturesRoot,

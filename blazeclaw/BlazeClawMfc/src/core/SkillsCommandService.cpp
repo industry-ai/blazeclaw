@@ -198,6 +198,27 @@ namespace blazeclaw::core {
 		return snapshot;
 	}
 
+	SkillsCommandSnapshot SkillsCommandService::BuildSnapshotWithAdapters(
+		const SkillsCatalogSnapshot& catalog,
+		const SkillsEligibilitySnapshot& eligibility,
+		const std::vector<extensions::IRuntimeSkillCapabilityAdapter*>& adapters) const {
+		auto snapshot = BuildSnapshot(catalog, eligibility);
+
+		for (const auto* adapter : adapters) {
+			if (adapter == nullptr) {
+				continue;
+			}
+
+			adapter->EnrichSkillsCommandSnapshot(
+				extensions::RuntimeSkillAdapterContext{
+					.commandSnapshot = snapshot,
+					.mutableCommands = snapshot.commands,
+				});
+		}
+
+		return snapshot;
+	}
+
 	bool SkillsCommandService::ValidateFixtureScenarios(
 		const std::filesystem::path& fixturesRoot,
 		std::wstring& outError) const {
