@@ -5,6 +5,11 @@
 
 It should not be the place where deep business logic is implemented.
 
+Related cross-project architecture report:
+
+- `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md`
+  - BlazeClaw vs OpenClaw architecture/framework comparison and gap-closure suggestions.
+
 ---
 
 ## Role in Project Architecture

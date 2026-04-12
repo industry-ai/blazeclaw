@@ -31,6 +31,7 @@
 #include "providers/CDeepSeekClient.h"
 #include "skills/CSkillsHooksCoordinator.h"
 #include "bootstrap/CServiceBootstrapCoordinator.h"
+#include "bootstrap/GatewayRuntimeBootstrapCoordinator.h"
 #include "diagnostics/CDiagnosticsReportBuilder.h"
 #include "ConfigSchemaService.h"
 #include "tools/CToolRuntimeRegistry.h"
@@ -185,10 +186,20 @@ namespace blazeclaw::core {
 					ServiceManager::kChatRuntimeExecutionTimeoutMs;
 			};
 
+			struct GatewayLifecycleState {
+				std::string startupMode = "local_runtime_dispatch";
+				std::string startupModeSource = "config";
+				std::string failedStage;
+				bool startupDegraded = false;
+				bool managedConfigReloaderStarted = false;
+				bool closePreludeExecuted = false;
+			};
+
 			EmbeddedRuntimeState embeddedRuntime;
 			EmailPolicyState emailPolicy;
 			HooksState hooks;
 			ChatRuntimeState chatRuntime;
+			GatewayLifecycleState gatewayLifecycle;
 		};
 
 		[[nodiscard]] EmailFallbackResolvedPolicy ResolveEmailFallbackPolicy(
@@ -298,6 +309,7 @@ namespace blazeclaw::core {
 		CDeepSeekClient m_deepSeekClient;
 		CSkillsHooksCoordinator m_skillsHooksCoordinator;
 		CServiceBootstrapCoordinator m_serviceBootstrapCoordinator;
+		GatewayRuntimeBootstrapCoordinator m_gatewayRuntimeBootstrapCoordinator;
 		CDiagnosticsReportBuilder m_diagnosticsReportBuilder;
 		CToolRuntimeRegistry m_toolRuntimeRegistry;
 		blazeclaw::gateway::GatewayHost m_gatewayHost;

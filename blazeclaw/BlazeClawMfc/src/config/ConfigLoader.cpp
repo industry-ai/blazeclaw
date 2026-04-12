@@ -342,6 +342,14 @@ namespace blazeclaw::config {
 				continue;
 			}
 
+			if (trimmedLine.rfind(L"gateway.startupMode=", 0) == 0) {
+				outConfig.gateway.startupMode = ToLowerTrim(trimmedLine.substr(20));
+				if (outConfig.gateway.startupMode.empty()) {
+					outConfig.gateway.startupMode = L"local_runtime_dispatch";
+				}
+				continue;
+			}
+
 			if (trimmedLine.rfind(L"agent.model=", 0) == 0) {
 				outConfig.agent.model = Trim(trimmedLine.substr(12));
 				continue;

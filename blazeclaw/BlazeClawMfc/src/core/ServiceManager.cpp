@@ -3389,73 +3389,57 @@ namespace blazeclaw::core {
 		const blazeclaw::config::AppConfig& config)
 	{
 		AppendStartupTrace("ServiceManager.Start.gateway.beforeStart");
-		const bool gatewayStartupEnabled = false;
-		if (!gatewayStartupEnabled) {
-			AppendStartupTrace("ServiceManager.Start.gateway.skipped");
-			const bool startupLocalDispatchEnabled = ReadBoolEnvOrDefault(
-				L"BLAZECLAW_GATEWAY_LOCAL_DISPATCH_ON_SKIP_ENABLED",
-				true);
-			if (startupLocalDispatchEnabled) {
-				bool gatewayDispatchReady = false;
-				try {
-					gatewayDispatchReady =
-						m_gatewayHost.StartLocalRuntimeDispatchOnly();
-				}
-				catch (...) {
-					gatewayDispatchReady = false;
-					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"gateway local dispatch initialization threw an exception; continuing without local dispatch.");
-					AppendStartupTrace("ServiceManager.Start.gateway.localRuntimeDispatch.exception");
-				}
-				if (!gatewayDispatchReady) {
-					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"gateway local dispatch initialization failed; methods may be unavailable.");
-				}
-				AppendStartupTrace(
-					gatewayDispatchReady
-					? "ServiceManager.Start.gateway.localRuntimeDispatch.ready"
-					: "ServiceManager.Start.gateway.localRuntimeDispatch.failed");
-			}
-			else {
-				AppendStartupTrace("ServiceManager.Start.gateway.localRuntimeDispatch.skipped");
-			}
-			const bool startupLocalInitEnabled = ReadBoolEnvOrDefault(
-				L"BLAZECLAW_GATEWAY_LOCAL_INIT_ON_SKIP_ENABLED",
-				false);
-			if (startupLocalInitEnabled) {
-				const bool gatewayLocalReady = m_gatewayHost.StartLocalOnly(config.gateway);
-				if (!gatewayLocalReady) {
-					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"gateway local runtime initialization failed; running with limited gateway methods.");
-				}
-				AppendStartupTrace("ServiceManager.Start.gateway.localInit.attempted");
-			}
-			else {
-				AppendStartupTrace("ServiceManager.Start.gateway.localInit.skipped");
-			}
-			m_running = true;
-			PublishGatewaySkillsStateProjection();
-			return true;
-		}
 
-		bool gatewayStarted = false;
+		GatewayRuntimeBootstrapCoordinator::StartupResult startupResult;
 		try {
-			gatewayStarted = m_gatewayHost.Start(config.gateway);
+			startupResult = m_gatewayRuntimeBootstrapCoordinator.ExecuteStartup(
+				GatewayRuntimeBootstrapCoordinator::StartupContext{
+					.config = config,
+					.gatewayHost = m_gatewayHost,
+					.appendTrace = [this](const char* stage) {
+						AppendStartupTrace(stage);
+					},
+				});
 		}
 		catch (...) {
-			gatewayStarted = false;
-			m_skillsCatalog.diagnostics.warnings.push_back(
-				L"gateway startup threw an exception; running in degraded local mode.");
-			AppendStartupTrace("ServiceManager.Start.gateway.exception");
+			startupResult.success = false;
+			startupResult.failedStage = "unexpected_exception";
+			startupResult.warnings.push_back(
+				L"gateway startup bootstrap threw an exception.");
 		}
 
-		if (!gatewayStarted) {
+		m_state.gatewayLifecycle.startupMode = startupResult.selectedMode;
+		m_state.gatewayLifecycle.startupModeSource =
+			startupResult.selectedModeSource;
+		m_state.gatewayLifecycle.startupDegraded = startupResult.degraded;
+		m_state.gatewayLifecycle.failedStage = startupResult.failedStage;
+		m_state.gatewayLifecycle.managedConfigReloaderStarted =
+			startupResult.managedConfigReloaderStarted;
+
+		for (const auto& warning : startupResult.warnings) {
+			m_skillsCatalog.diagnostics.warnings.push_back(warning);
+		}
+
+		if (!startupResult.success) {
+			m_gatewayRuntimeBootstrapCoordinator.HandleStartupFailure(
+				GatewayRuntimeBootstrapCoordinator::StartupContext{
+					.config = config,
+					.gatewayHost = m_gatewayHost,
+					.appendTrace = [this](const char* stage) {
+						AppendStartupTrace(stage);
+					},
+				},
+				startupResult);
 			m_skillsCatalog.diagnostics.warnings.push_back(
 				L"gateway startup failed; running in degraded local mode.");
 			AppendStartupTrace("ServiceManager.Start.gateway.failed");
 			m_running = true;
 			PublishGatewaySkillsStateProjection();
 			return true;
+		}
+
+		if (startupResult.degraded) {
+			AppendStartupTrace("ServiceManager.Start.gateway.degraded");
 		}
 
 		m_running = true;
@@ -3468,6 +3452,20 @@ namespace blazeclaw::core {
 		if (m_state.chatRuntime.asyncQueueEnabled) {
 			m_chatRuntime.StopWorker();
 		}
+
+		const auto closePreludeWarnings =
+			m_gatewayRuntimeBootstrapCoordinator.RunClosePrelude(
+				GatewayRuntimeBootstrapCoordinator::CloseContext{
+					.gatewayHost = m_gatewayHost,
+					.appendTrace = [this](const char* stage) {
+						AppendStartupTrace(stage);
+					},
+				});
+		for (const auto& warning : closePreludeWarnings) {
+			m_skillsCatalog.diagnostics.warnings.push_back(warning);
+		}
+		m_state.gatewayLifecycle.closePreludeExecuted = true;
+
 		m_gatewayHost.Stop();
 		m_running = false;
 	}
