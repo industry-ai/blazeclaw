@@ -107,6 +107,59 @@ TEST_CASE("ConfigSchemaService cache returns stable generatedAt for identical ke
 	REQUIRE(state1.uiHintsJson == state2.uiHintsJson);
 }
 
+TEST_CASE("ConfigSchemaService cache key includes config path hint content", "[schema][cache][key]") {
+	blazeclaw::core::ConfigSchemaService service;
+	auto config = MakeConfig({ L"discord" });
+
+	blazeclaw::gateway::SkillsCatalogGatewayState skillsWithHintA;
+	skillsWithHintA.snapshotVersion = 5;
+	skillsWithHintA.entries.push_back(MakeSkill(
+		"discord",
+		{ "channels.discord.token" },
+		{ "channels.discord.webhookAuthUrl" }));
+
+	blazeclaw::gateway::SkillsCatalogGatewayState skillsWithHintB;
+	skillsWithHintB.snapshotVersion = 5;
+	skillsWithHintB.entries.push_back(MakeSkill(
+		"discord",
+		{ "channels.discord.token" },
+		{ "channels.discord.endpoint" }));
+
+	const auto stateA = service.BuildGatewayState(config, skillsWithHintA);
+	const auto stateB = service.BuildGatewayState(config, skillsWithHintB);
+
+	const auto lookupA = service.Lookup(stateA, "channels.discord.webhookAuthUrl");
+	const auto lookupB = service.Lookup(stateB, "channels.discord.webhookAuthUrl");
+
+	REQUIRE(lookupA.has_value());
+	REQUIRE(lookupA->hint.has_value());
+	const bool lookupBHasHint =
+		lookupB.has_value() && lookupB->hint.has_value();
+	REQUIRE_FALSE(lookupBHasHint);
+}
+
+TEST_CASE("ConfigSchemaService cache key ignores skill order", "[schema][cache][order]") {
+	blazeclaw::core::ConfigSchemaService service;
+	auto config = MakeConfig({ L"discord", L"slack" });
+
+	blazeclaw::gateway::SkillsCatalogGatewayState skillsOrderedA;
+	skillsOrderedA.snapshotVersion = 11;
+	skillsOrderedA.entries.push_back(MakeSkill("discord", { "channels.discord.token" }));
+	skillsOrderedA.entries.push_back(MakeSkill("slack", { "channels.slack.botToken" }));
+
+	blazeclaw::gateway::SkillsCatalogGatewayState skillsOrderedB;
+	skillsOrderedB.snapshotVersion = 11;
+	skillsOrderedB.entries.push_back(MakeSkill("slack", { "channels.slack.botToken" }));
+	skillsOrderedB.entries.push_back(MakeSkill("discord", { "channels.discord.token" }));
+
+	const auto stateA = service.BuildGatewayState(config, skillsOrderedA);
+	const auto stateB = service.BuildGatewayState(config, skillsOrderedB);
+
+	REQUIRE(stateA.generatedAt == stateB.generatedAt);
+	REQUIRE(stateA.schemaJson == stateB.schemaJson);
+	REQUIRE(stateA.uiHintsJson == stateB.uiHintsJson);
+}
+
 TEST_CASE("ConfigSchemaService cache invalidates on demand", "[schema][cache][invalidate]") {
 	blazeclaw::core::ConfigSchemaService service;
 	blazeclaw::gateway::SkillsCatalogGatewayState skills;

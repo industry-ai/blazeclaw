@@ -7,6 +7,7 @@
 #include <array>
 #include <cctype>
 #include <chrono>
+#include <cstdint>
 #include <iomanip>
 #include <nlohmann/json.hpp>
 #include <set>
@@ -116,6 +117,30 @@ namespace blazeclaw::core {
 			}
 
 			return tags;
+		}
+
+		std::uint64_t Fnv1a64(
+			const std::uint64_t seed,
+			const std::string& value) {
+			std::uint64_t hash = seed;
+			for (const unsigned char ch : value) {
+				hash ^= static_cast<std::uint64_t>(ch);
+				hash *= 1099511628211ull;
+			}
+
+			return hash;
+		}
+
+		std::string ToAsciiLowerTrimmed(const std::wstring& input) {
+			std::string output;
+			output.reserve(input.size());
+			for (const wchar_t ch : input) {
+				if (ch <= 0x7F) {
+					output.push_back(static_cast<char>(ch));
+				}
+			}
+
+			return ToLowerCopy(blazeclaw::gateway::json::Trim(output));
 		}
 
 		std::string BuildIso8601NowUtc() {
@@ -426,29 +451,55 @@ namespace blazeclaw::core {
 
 	void ConfigSchemaService::Invalidate() {
 		std::scoped_lock lock(m_cacheMutex);
-		m_cache.reset();
+		m_cacheEntries.clear();
 	}
 
 	std::string ConfigSchemaService::BuildCacheKey(
 		const blazeclaw::config::AppConfig& config,
 		const blazeclaw::gateway::SkillsCatalogGatewayState& skillsState) {
-		std::ostringstream out;
-		out << "v1|";
-		out << skillsState.snapshotVersion << "|";
-		out << skillsState.entries.size() << "|";
-		out << config.enabledChannels.size() << "|";
-		for (const auto& entry : skillsState.entries) {
-			out << entry.skillKey << ":" << entry.requiresConfig.size() << ";";
-		}
+		std::vector<std::string> normalizedChannels;
+		normalizedChannels.reserve(config.enabledChannels.size());
 		for (const auto& channel : config.enabledChannels) {
-			for (const wchar_t ch : channel) {
-				if (ch <= 0x7F) {
-					out << static_cast<char>(ch);
-				}
+			const std::string normalized = ToAsciiLowerTrimmed(channel);
+			if (!normalized.empty()) {
+				normalizedChannels.push_back(normalized);
 			}
-			out << ",";
 		}
-		return out.str();
+		std::sort(normalizedChannels.begin(), normalizedChannels.end());
+
+		std::vector<std::string> normalizedSkillFragments;
+		normalizedSkillFragments.reserve(skillsState.entries.size());
+		for (const auto& entry : skillsState.entries) {
+			std::vector<std::string> requiresConfig = entry.requiresConfig;
+			std::vector<std::string> configPathHints = entry.configPathHints;
+			std::sort(requiresConfig.begin(), requiresConfig.end());
+			std::sort(configPathHints.begin(), configPathHints.end());
+
+			std::ostringstream fragment;
+			fragment << entry.skillKey << "|";
+			for (const auto& path : requiresConfig) {
+				fragment << "r:" << path << ";";
+			}
+			for (const auto& hint : configPathHints) {
+				fragment << "h:" << hint << ";";
+			}
+			normalizedSkillFragments.push_back(fragment.str());
+		}
+		std::sort(normalizedSkillFragments.begin(), normalizedSkillFragments.end());
+
+		std::uint64_t hash = 1469598103934665603ull;
+		hash = Fnv1a64(hash, "config-schema-cache-v2");
+		hash = Fnv1a64(hash, std::to_string(skillsState.snapshotVersion));
+		for (const auto& channel : normalizedChannels) {
+			hash = Fnv1a64(hash, channel);
+		}
+		for (const auto& fragment : normalizedSkillFragments) {
+			hash = Fnv1a64(hash, fragment);
+		}
+
+		std::ostringstream key;
+		key << "v2-" << std::hex << hash;
+		return key.str();
 	}
 
 	blazeclaw::gateway::ConfigSchemaGatewayState ConfigSchemaService::BuildGatewayState(
@@ -457,8 +508,10 @@ namespace blazeclaw::core {
 		const std::string key = BuildCacheKey(config, skillsState);
 		{
 			std::scoped_lock lock(m_cacheMutex);
-			if (m_cache.has_value() && m_cache->key == key) {
-				return m_cache->state;
+			for (const auto& entry : m_cacheEntries) {
+				if (entry.key == key) {
+					return entry.state;
+				}
 			}
 		}
 
@@ -473,10 +526,14 @@ namespace blazeclaw::core {
 
 		{
 			std::scoped_lock lock(m_cacheMutex);
-			m_cache = CacheEntry{
-				.key = key,
-				.state = next,
-			};
+			m_cacheEntries.push_back(CacheEntry{
+				 .key = key,
+				 .state = next,
+				});
+			while (m_cacheEntries.size() >
+				blazeclaw::config::kConfigSchemaMergeCacheMax) {
+				m_cacheEntries.pop_front();
+			}
 		}
 
 		return next;

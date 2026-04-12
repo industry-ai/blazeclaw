@@ -3,6 +3,7 @@
 #include "../config/ConfigModels.h"
 #include "../gateway/GatewayHost.h"
 
+#include <deque>
 #include <mutex>
 
 namespace blazeclaw::core {
@@ -32,7 +33,7 @@ namespace blazeclaw::core {
 			const blazeclaw::gateway::SkillsCatalogGatewayState& skillsState);
 
 		mutable std::mutex m_cacheMutex;
-		mutable std::optional<CacheEntry> m_cache;
+		mutable std::deque<CacheEntry> m_cacheEntries;
 	};
 
 } // namespace blazeclaw::core
