@@ -47,6 +47,18 @@ namespace blazeclaw::core {
 		SkillsRunSnapshot runSnapshot;
 	};
 
+	struct SkillsRefreshDependencies {
+		SkillsCatalogService& catalogService;
+		SkillsEligibilityService& eligibilityService;
+		SkillsPromptService& promptService;
+		SkillsCommandService& commandService;
+		SkillsSyncService& syncService;
+		SkillsEnvOverrideService& envOverrideService;
+		SkillsInstallService& installService;
+		SkillSecurityScanService& securityScanService;
+		SkillsWatchService& watchService;
+	};
+
 	class SkillsFacade {
 	public:
 		[[nodiscard]] SkillsInstallPreferences ResolveInstallPreferences(
@@ -80,15 +92,7 @@ namespace blazeclaw::core {
 			bool forceRefresh,
 			const std::wstring& reason,
 			bool enableSelfEvolvingPromptFallback,
-			SkillsCatalogService& catalogService,
-			SkillsEligibilityService& eligibilityService,
-			SkillsPromptService& promptService,
-			SkillsCommandService& commandService,
-			SkillsSyncService& syncService,
-			SkillsEnvOverrideService& envOverrideService,
-			SkillsInstallService& installService,
-			SkillSecurityScanService& securityScanService,
-			SkillsWatchService& watchService) const;
+			const SkillsRefreshDependencies& dependencies) const;
 	};
 
 } // namespace blazeclaw::core

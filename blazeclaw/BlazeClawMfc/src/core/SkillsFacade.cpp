@@ -319,50 +319,42 @@ namespace blazeclaw::core {
 		const bool forceRefresh,
 		const std::wstring& reason,
 		const bool enableSelfEvolvingPromptFallback,
-		SkillsCatalogService& catalogService,
-		SkillsEligibilityService& eligibilityService,
-		SkillsPromptService& promptService,
-		SkillsCommandService& commandService,
-		SkillsSyncService& syncService,
-		SkillsEnvOverrideService& envOverrideService,
-		SkillsInstallService& installService,
-		SkillSecurityScanService& securityScanService,
-		SkillsWatchService& watchService) const {
+		const SkillsRefreshDependencies& dependencies) const {
 		SkillsRefreshResult result;
 
-		result.catalog = catalogService.LoadCatalog(workspaceRoot, appConfig);
-		result.eligibility = eligibilityService.Evaluate(result.catalog, appConfig);
-		result.prompt = promptService.BuildSnapshot(
+		result.catalog = dependencies.catalogService.LoadCatalog(workspaceRoot, appConfig);
+		result.eligibility = dependencies.eligibilityService.Evaluate(result.catalog, appConfig);
+		result.prompt = dependencies.promptService.BuildSnapshot(
 			result.catalog,
 			result.eligibility,
 			appConfig,
 			std::nullopt,
 			enableSelfEvolvingPromptFallback);
-		result.commands = commandService.BuildSnapshot(
+		result.commands = dependencies.commandService.BuildSnapshot(
 			result.catalog,
 			result.eligibility);
-		result.sync = syncService.SyncToSandbox(
+		result.sync = dependencies.syncService.SyncToSandbox(
 			workspaceRoot,
 			result.catalog,
 			result.eligibility,
 			appConfig);
-		result.envOverrides = envOverrideService.BuildSnapshot(
+		result.envOverrides = dependencies.envOverrideService.BuildSnapshot(
 			result.catalog,
 			result.eligibility,
 			appConfig);
-		result.install = installService.BuildSnapshot(
+		result.install = dependencies.installService.BuildSnapshot(
 			result.catalog,
 			result.eligibility,
 			appConfig,
 			ResolveInstallPreferences(appConfig));
-		result.securityScan = securityScanService.BuildSnapshot(
+		result.securityScan = dependencies.securityScanService.BuildSnapshot(
 			result.catalog,
 			result.eligibility,
 			appConfig);
 
-		envOverrideService.Apply(result.envOverrides);
+		dependencies.envOverrideService.Apply(result.envOverrides);
 
-		result.watch = watchService.Observe(
+		result.watch = dependencies.watchService.Observe(
 			result.catalog,
 			appConfig,
 			forceRefresh,

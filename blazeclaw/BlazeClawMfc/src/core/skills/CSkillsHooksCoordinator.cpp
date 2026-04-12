@@ -24,15 +24,7 @@ namespace blazeclaw::core {
 			forceRefresh,
 			reason,
 			context.hooksFallbackPromptInjection,
-			context.catalogService,
-			context.eligibilityService,
-			context.promptService,
-			context.commandService,
-			context.syncService,
-			context.envOverrideService,
-			context.installService,
-			context.securityScanService,
-			context.watchService);
+			context.refreshDependencies);
 
 		context.catalog = std::move(refresh.catalog);
 		context.eligibility = std::move(refresh.eligibility);

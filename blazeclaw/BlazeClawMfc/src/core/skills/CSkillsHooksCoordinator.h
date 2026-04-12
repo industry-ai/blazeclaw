@@ -28,22 +28,14 @@ namespace blazeclaw::core {
 	class CSkillsHooksCoordinator {
 	public:
 		struct RefreshContext {
-			SkillsCatalogService& catalogService;
-			SkillsEligibilityService& eligibilityService;
+			SkillsRefreshDependencies refreshDependencies;
 			HookCatalogService& hookCatalogService;
 			HookExecutionService& hookExecutionService;
-			SkillsPromptService& promptService;
 			HookEventService& hookEventService;
-			SkillsCommandService& commandService;
-			SkillsSyncService& syncService;
-			SkillsEnvOverrideService& envOverrideService;
-			SkillsInstallService& installService;
 			SkillsFacade& skillsFacade;
-			SkillSecurityScanService& securityScanService;
-			SkillsWatchService& watchService;
 
-			SkillsCatalogSnapshot& catalog; // Keep coordinator context consistent
-			SkillsEligibilitySnapshot& eligibility; // Keep coordinator context consistent
+			SkillsCatalogSnapshot& catalog;
+			SkillsEligibilitySnapshot& eligibility;
 			HookCatalogSnapshot& hookCatalog;
 			HookExecutionSnapshot& hookExecution;
 			SkillsPromptSnapshot& prompt;
