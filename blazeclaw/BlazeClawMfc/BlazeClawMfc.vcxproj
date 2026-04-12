@@ -163,6 +163,7 @@
     <ClInclude Include="src\core\SkillsPromptService.h" />
     <ClInclude Include="src\core\SkillsSyncService.h" />
     <ClInclude Include="src\core\SkillsWatchService.h" />
+    <ClInclude Include="src\core\ConfigSchemaService.h" />
     <ClInclude Include="src\core\ServiceManager.h" />
     <ClInclude Include="src\core\runtime\LocalModel\ITextGenerationRuntime.h" />
     <ClInclude Include="src\core\runtime\LocalModel\OnnxTextGenerationRuntime.h" />
@@ -305,6 +306,7 @@
     <ClCompile Include="src\core\SkillsPromptService.cpp" />
     <ClCompile Include="src\core\SkillsSyncService.cpp" />
     <ClCompile Include="src\core\SkillsWatchService.cpp" />
+    <ClCompile Include="src\core\ConfigSchemaService.cpp" />
     <ClCompile Include="src\core\ServiceManager.cpp" />
     <ClCompile Include="src\core\runtime\LocalModel\ITextGenerationRuntime.cpp" />
     <ClCompile Include="src\core\runtime\LocalModel\OnnxTextGenerationRuntime.cpp" />

@@ -32,6 +32,7 @@
 #include "skills/CSkillsHooksCoordinator.h"
 #include "bootstrap/CServiceBootstrapCoordinator.h"
 #include "diagnostics/CDiagnosticsReportBuilder.h"
+#include "ConfigSchemaService.h"
 #include "tools/CToolRuntimeRegistry.h"
 #include "runtime/CChatRuntime.h"
 #include "runtime/ChatRuntimeContracts.h"
@@ -290,6 +291,7 @@ namespace blazeclaw::core {
 		SkillsInstallSnapshot m_skillsInstall;
 		SkillSecurityScanService m_skillSecurityScanService;
 		SkillSecurityScanSnapshot m_skillSecurityScan;
+		ConfigSchemaService m_configSchemaService;
 		SkillsWatchService m_skillsWatchService;
 		SkillsWatchSnapshot m_skillsWatch;
 		CChatRuntime m_chatRuntime;
