@@ -2412,30 +2412,34 @@ namespace blazeclaw::core {
 		else {
 			const auto workspaceRoot =
 				ResolveWorkspaceRootForSkills(std::filesystem::current_path());
-			m_skillsCatalog = m_skillsCatalogService.LoadCatalog(
+			auto refresh = m_skillsFacade.RefreshSkillsState(
 				workspaceRoot,
-				m_activeConfig);
-			m_skillsEligibility = m_skillsEligibilityService.Evaluate(
-				m_skillsCatalog,
-				m_activeConfig);
+				m_activeConfig,
+				true,
+				L"startup-minimal",
+				m_state.hooks.fallbackPromptInjection,
+				m_skillsCatalogService,
+				m_skillsEligibilityService,
+				m_skillsPromptService,
+				m_skillsCommandService,
+				m_skillsSyncService,
+				m_skillsEnvOverrideService,
+				m_skillsInstallService,
+				m_skillSecurityScanService,
+				m_skillsWatchService);
+			m_skillsCatalog = std::move(refresh.catalog);
+			m_skillsEligibility = std::move(refresh.eligibility);
 			m_hookCatalog = m_hookCatalogService.BuildSnapshot(m_skillsCatalog);
 			m_hookExecution = m_hookExecutionService.Snapshot();
-			m_skillsPrompt = m_skillsPromptService.BuildSnapshot(
-				m_skillsCatalog,
-				m_skillsEligibility,
-				m_activeConfig,
-				std::nullopt,
-				m_state.hooks.fallbackPromptInjection);
-			m_skillsRunSnapshot = m_skillsFacade.BuildRunSnapshot(
-				m_skillsCatalog,
-				m_skillsEligibility,
-				m_skillsPrompt,
-				m_skillsWatch,
-				std::nullopt);
+			m_skillsPrompt = std::move(refresh.prompt);
+			m_skillsRunSnapshot = std::move(refresh.runSnapshot);
 			m_hookEvents = m_hookEventService.Snapshot();
-			m_skillsCommands = m_skillsCommandService.BuildSnapshot(
-				m_skillsCatalog,
-				m_skillsEligibility);
+			m_skillsCommands = std::move(refresh.commands);
+			m_skillsSync = std::move(refresh.sync);
+			m_skillsEnvOverrides = std::move(refresh.envOverrides);
+			m_skillsInstall = std::move(refresh.install);
+			m_skillSecurityScan = std::move(refresh.securityScan);
+			m_skillsWatch = std::move(refresh.watch);
 			m_skillsCatalog.diagnostics.warnings.push_back(
 				L"skills startup full refresh skipped; minimal startup catalog loaded.");
 			AppendStartupTrace("ServiceManager.Start.skills.refresh.minimal");

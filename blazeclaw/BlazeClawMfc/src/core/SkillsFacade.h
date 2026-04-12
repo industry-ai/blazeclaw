@@ -1,9 +1,14 @@
 #pragma once
 
 #include "SkillsCatalogService.h"
+#include "SkillsCommandService.h"
+#include "SkillsEnvOverrideService.h"
 #include "SkillsEligibilityService.h"
+#include "SkillsInstallService.h"
 #include "SkillsPromptService.h"
+#include "SkillsSyncService.h"
 #include "SkillsWatchService.h"
+#include "SkillSecurityScanService.h"
 
 #include "../config/ConfigModels.h"
 
@@ -14,11 +19,6 @@
 #include <vector>
 
 namespace blazeclaw::core {
-
-	struct SkillsInstallPreferences {
-		bool preferBrew = true;
-		std::wstring nodeManager = L"npm";
-	};
 
 	struct SkillsRunSnapshotSkill {
 		std::wstring name;
@@ -32,6 +32,19 @@ namespace blazeclaw::core {
 		std::optional<std::vector<std::wstring>> skillFilter;
 		std::vector<std::wstring> resolvedSkills;
 		std::uint64_t version = 0;
+	};
+
+	struct SkillsRefreshResult {
+		SkillsCatalogSnapshot catalog;
+		SkillsEligibilitySnapshot eligibility;
+		SkillsPromptSnapshot prompt;
+		SkillsCommandSnapshot commands;
+		SkillsSyncSnapshot sync;
+		SkillsEnvOverrideSnapshot envOverrides;
+		SkillsInstallSnapshot install;
+		SkillSecurityScanSnapshot securityScan;
+		SkillsWatchSnapshot watch;
+		SkillsRunSnapshot runSnapshot;
 	};
 
 	class SkillsFacade {
@@ -60,6 +73,22 @@ namespace blazeclaw::core {
 			const std::filesystem::path& fixturesRoot,
 			std::wstring& outError,
 			const SkillsPromptService& promptService) const;
+
+		[[nodiscard]] SkillsRefreshResult RefreshSkillsState(
+			const std::filesystem::path& workspaceRoot,
+			const blazeclaw::config::AppConfig& appConfig,
+			bool forceRefresh,
+			const std::wstring& reason,
+			bool enableSelfEvolvingPromptFallback,
+			SkillsCatalogService& catalogService,
+			SkillsEligibilityService& eligibilityService,
+			SkillsPromptService& promptService,
+			SkillsCommandService& commandService,
+			SkillsSyncService& syncService,
+			SkillsEnvOverrideService& envOverrideService,
+			SkillsInstallService& installService,
+			SkillSecurityScanService& securityScanService,
+			SkillsWatchService& watchService) const;
 	};
 
 } // namespace blazeclaw::core

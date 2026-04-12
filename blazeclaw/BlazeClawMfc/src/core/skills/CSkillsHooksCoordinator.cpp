@@ -18,50 +18,35 @@ namespace blazeclaw::core {
 			workspaceRoot = std::filesystem::current_path();
 		}
 
-		context.catalog = context.catalogService.LoadCatalog(workspaceRoot, config);
-		context.eligibility = context.eligibilityService.Evaluate(context.catalog, config);
-		context.hookCatalog = context.hookCatalogService.BuildSnapshot(context.catalog);
-		context.hookExecution = context.hookExecutionService.Snapshot();
-		context.prompt = context.promptService.BuildSnapshot(
-			context.catalog,
-			context.eligibility,
-			config,
-			std::nullopt,
-			context.hooksFallbackPromptInjection);
-		context.events = context.hookEventService.Snapshot();
-		context.commands = context.commandService.BuildSnapshot(
-			context.catalog,
-			context.eligibility);
-		context.sync = context.syncService.SyncToSandbox(
+		auto refresh = context.skillsFacade.RefreshSkillsState(
 			workspaceRoot,
-			context.catalog,
-			context.eligibility,
-			config);
-		context.envOverrides = context.envOverrideService.BuildSnapshot(
-			context.catalog,
-			context.eligibility,
-			config);
-		context.install = context.installService.BuildSnapshot(
-			context.catalog,
-			context.eligibility,
-			config,
-			context.skillsFacade.ResolveInstallPreferences(config));
-		context.securityScan = context.securityScanService.BuildSnapshot(
-			context.catalog,
-			context.eligibility,
-			config);
-		context.envOverrideService.Apply(context.envOverrides);
-		context.watch = context.watchService.Observe(
-			context.catalog,
 			config,
 			forceRefresh,
-			reason);
-		context.runSnapshot = context.skillsFacade.BuildRunSnapshot(
-			context.catalog,
-			context.eligibility,
-			context.prompt,
-			context.watch,
-			std::nullopt);
+			reason,
+			context.hooksFallbackPromptInjection,
+			context.catalogService,
+			context.eligibilityService,
+			context.promptService,
+			context.commandService,
+			context.syncService,
+			context.envOverrideService,
+			context.installService,
+			context.securityScanService,
+			context.watchService);
+
+		context.catalog = std::move(refresh.catalog);
+		context.eligibility = std::move(refresh.eligibility);
+		context.hookCatalog = context.hookCatalogService.BuildSnapshot(context.catalog);
+		context.hookExecution = context.hookExecutionService.Snapshot();
+		context.prompt = std::move(refresh.prompt);
+		context.events = context.hookEventService.Snapshot();
+		context.commands = std::move(refresh.commands);
+		context.sync = std::move(refresh.sync);
+		context.envOverrides = std::move(refresh.envOverrides);
+		context.install = std::move(refresh.install);
+		context.securityScan = std::move(refresh.securityScan);
+		context.watch = std::move(refresh.watch);
+		context.runSnapshot = std::move(refresh.runSnapshot);
 	}
 
 	blazeclaw::gateway::SkillsCatalogGatewayState

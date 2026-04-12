@@ -313,4 +313,68 @@ namespace blazeclaw::core {
 		return true;
 	}
 
+	SkillsRefreshResult SkillsFacade::RefreshSkillsState(
+		const std::filesystem::path& workspaceRoot,
+		const blazeclaw::config::AppConfig& appConfig,
+		const bool forceRefresh,
+		const std::wstring& reason,
+		const bool enableSelfEvolvingPromptFallback,
+		SkillsCatalogService& catalogService,
+		SkillsEligibilityService& eligibilityService,
+		SkillsPromptService& promptService,
+		SkillsCommandService& commandService,
+		SkillsSyncService& syncService,
+		SkillsEnvOverrideService& envOverrideService,
+		SkillsInstallService& installService,
+		SkillSecurityScanService& securityScanService,
+		SkillsWatchService& watchService) const {
+		SkillsRefreshResult result;
+
+		result.catalog = catalogService.LoadCatalog(workspaceRoot, appConfig);
+		result.eligibility = eligibilityService.Evaluate(result.catalog, appConfig);
+		result.prompt = promptService.BuildSnapshot(
+			result.catalog,
+			result.eligibility,
+			appConfig,
+			std::nullopt,
+			enableSelfEvolvingPromptFallback);
+		result.commands = commandService.BuildSnapshot(
+			result.catalog,
+			result.eligibility);
+		result.sync = syncService.SyncToSandbox(
+			workspaceRoot,
+			result.catalog,
+			result.eligibility,
+			appConfig);
+		result.envOverrides = envOverrideService.BuildSnapshot(
+			result.catalog,
+			result.eligibility,
+			appConfig);
+		result.install = installService.BuildSnapshot(
+			result.catalog,
+			result.eligibility,
+			appConfig,
+			ResolveInstallPreferences(appConfig));
+		result.securityScan = securityScanService.BuildSnapshot(
+			result.catalog,
+			result.eligibility,
+			appConfig);
+
+		envOverrideService.Apply(result.envOverrides);
+
+		result.watch = watchService.Observe(
+			result.catalog,
+			appConfig,
+			forceRefresh,
+			reason);
+		result.runSnapshot = BuildRunSnapshot(
+			result.catalog,
+			result.eligibility,
+			result.prompt,
+			result.watch,
+			std::nullopt);
+
+		return result;
+	}
+
 } // namespace blazeclaw::core

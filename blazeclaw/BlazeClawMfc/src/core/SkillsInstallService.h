@@ -2,12 +2,16 @@
 
 #include "SkillsCatalogService.h"
 #include "SkillsEligibilityService.h"
-#include "SkillsFacade.h"
 
 #include <string>
 #include <vector>
 
 namespace blazeclaw::core {
+
+	struct SkillsInstallPreferences {
+		bool preferBrew = true;
+		std::wstring nodeManager = L"npm";
+	};
 
 	struct SkillsInstallPlanEntry {
 		std::wstring skillName;

@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "SkillsInstallService.h"
+#include "SkillsFacade.h"
 
 #include <algorithm>
 #include <cwctype>

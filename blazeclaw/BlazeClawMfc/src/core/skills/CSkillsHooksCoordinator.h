@@ -42,8 +42,8 @@ namespace blazeclaw::core {
 			SkillSecurityScanService& securityScanService;
 			SkillsWatchService& watchService;
 
-			SkillsCatalogSnapshot& catalog;
-			SkillsEligibilitySnapshot& eligibility;
+			SkillsCatalogSnapshot& catalog; // Keep coordinator context consistent
+			SkillsEligibilitySnapshot& eligibility; // Keep coordinator context consistent
 			HookCatalogSnapshot& hookCatalog;
 			HookExecutionSnapshot& hookExecution;
 			SkillsPromptSnapshot& prompt;
