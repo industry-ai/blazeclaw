@@ -160,6 +160,68 @@ TEST_CASE("ConfigSchemaService cache key ignores skill order", "[schema][cache][
 	REQUIRE(stateA.uiHintsJson == stateB.uiHintsJson);
 }
 
+TEST_CASE("ConfigSchemaService projects requiresConfig paths into schema lookup", "[schema][projection]") {
+	blazeclaw::core::ConfigSchemaService service;
+	blazeclaw::gateway::SkillsCatalogGatewayState skills;
+	skills.entries.push_back(MakeSkill(
+		"custom",
+		{ "plugins.entries.custom.config.apiKey" },
+		{}));
+
+	const auto state = service.BuildGatewayState(MakeConfig({ L"discord" }), skills);
+	const auto lookup = service.Lookup(state, "plugins.entries.custom.config.apiKey");
+	REQUIRE(lookup.has_value());
+	REQUIRE(lookup->schemaJson.find("\"type\":\"string\"") != std::string::npos);
+	REQUIRE(lookup->schemaJson.find("\"minLength\":1") != std::string::npos);
+}
+
+TEST_CASE("ConfigSchemaService adds heartbeat target hint enrichment", "[schema][hints][heartbeat]") {
+	blazeclaw::core::ConfigSchemaService service;
+	blazeclaw::gateway::SkillsCatalogGatewayState skills;
+
+	const auto state = service.BuildGatewayState(MakeConfig({ L"discord", L"slack" }), skills);
+	const auto lookup = service.Lookup(state, "agents.defaults.heartbeat.target");
+	REQUIRE(lookup.has_value());
+	REQUIRE(lookup->hint.has_value());
+	REQUIRE(lookup->hint->placeholder == "last");
+	REQUIRE(
+		lookup->hint->help.find("Known channels") != std::string::npos);
+}
+
+TEST_CASE("ConfigSchemaService lookup strip keeps expanded schema scalar keys", "[schema][lookup][strip]") {
+	blazeclaw::core::ConfigSchemaService service;
+	blazeclaw::gateway::SkillsCatalogGatewayState skills;
+
+	blazeclaw::gateway::ConfigSchemaGatewayState state;
+	state.schemaJson =
+		"{"
+		"\"type\":\"object\","
+		"\"properties\":{"
+		"\"sample\":{"
+		"\"type\":\"string\","
+		"\"$id\":\"sample-id\","
+		"\"$schema\":\"https://json-schema.org/draft/2020-12/schema\","
+		"\"contentEncoding\":\"base64\","
+		"\"contentMediaType\":\"application/octet-stream\","
+		"\"exclusiveMinimum\":1,"
+		"\"exclusiveMaximum\":9,"
+		"\"multipleOf\":2"
+		"}"
+		"}"
+		"}";
+	state.uiHintsJson = "{}";
+	state.version = "schema-v1";
+	state.generatedAt = "2026-04-12T00:00:00Z";
+
+	const auto lookup = service.Lookup(state, "sample");
+	REQUIRE(lookup.has_value());
+	REQUIRE(lookup->schemaJson.find("\"$id\":\"sample-id\"") != std::string::npos);
+	REQUIRE(lookup->schemaJson.find("\"$schema\"") != std::string::npos);
+	REQUIRE(lookup->schemaJson.find("\"contentEncoding\":\"base64\"") != std::string::npos);
+	REQUIRE(lookup->schemaJson.find("\"exclusiveMinimum\":1") != std::string::npos);
+	REQUIRE(lookup->schemaJson.find("\"multipleOf\":2") != std::string::npos);
+}
+
 TEST_CASE("ConfigSchemaService cache invalidates on demand", "[schema][cache][invalidate]") {
 	blazeclaw::core::ConfigSchemaService service;
 	blazeclaw::gateway::SkillsCatalogGatewayState skills;

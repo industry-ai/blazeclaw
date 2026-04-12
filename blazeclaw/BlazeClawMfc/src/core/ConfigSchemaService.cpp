@@ -8,6 +8,7 @@
 #include <cctype>
 #include <chrono>
 #include <cstdint>
+#include <numeric>
 #include <iomanip>
 #include <nlohmann/json.hpp>
 #include <set>
@@ -23,6 +24,31 @@ namespace blazeclaw::core {
 			"__proto__",
 			"prototype",
 			"constructor",
+		};
+
+		constexpr std::array<const char*, 22> kKnownChannelIds = {
+			"internal",
+			"whatsapp",
+			"telegram",
+			"slack",
+			"discord",
+			"msteams",
+			"googlechat",
+			"matrix",
+			"line",
+			"feishu",
+			"mattermost",
+			"nextcloudtalk",
+			"signal",
+			"irc",
+			"nostr",
+			"bluebubbles",
+			"synologychat",
+			"webchat",
+			"tlon",
+			"twitch",
+			"zalo",
+			"teams",
 		};
 
 		std::string ToLowerCopy(const std::string& value) {
@@ -236,7 +262,112 @@ namespace blazeclaw::core {
 			return parts;
 		}
 
-		Json BuildBaseSchemaJson(const blazeclaw::config::AppConfig& config) {
+		Json* EnsureObjectNode(Json& parent, const std::string& key) {
+			if (!parent.is_object()) {
+				return nullptr;
+			}
+
+			if (!parent.contains("properties") || !parent["properties"].is_object()) {
+				parent["properties"] = Json::object();
+			}
+
+			Json& properties = parent["properties"];
+			if (!properties.contains(key) || !properties[key].is_object()) {
+				properties[key] = Json{
+					{ "type", "object" },
+					{ "properties", Json::object() },
+				};
+			}
+
+			return &properties[key];
+		}
+
+		Json* EnsureWildcardObjectNode(Json& parent) {
+			if (!parent.is_object()) {
+				return nullptr;
+			}
+
+			if (!parent.contains("additionalProperties") ||
+				!parent["additionalProperties"].is_object()) {
+				parent["additionalProperties"] = Json{
+					{ "type", "object" },
+					{ "properties", Json::object() },
+				};
+			}
+
+			return &parent["additionalProperties"];
+		}
+
+		void EnsurePathProjectedSchemaNode(
+			Json& root,
+			const std::string& rawPath) {
+			const auto parts = SplitLookupPath(rawPath);
+			if (parts.empty()) {
+				return;
+			}
+
+			Json* current = &root;
+			for (std::size_t index = 0; index < parts.size(); ++index) {
+				const bool isLast = index + 1 == parts.size();
+				const std::string& segment = parts[index];
+				if (segment.empty() || IsForbiddenSegment(segment)) {
+					return;
+				}
+
+				if (segment == "*") {
+					current = EnsureWildcardObjectNode(*current);
+				}
+				else {
+					current = EnsureObjectNode(*current, segment);
+				}
+
+				if (current == nullptr) {
+					return;
+				}
+
+				if (isLast) {
+					(*current)["type"] = "string";
+					if (!current->contains("minLength")) {
+						(*current)["minLength"] = 1;
+					}
+				}
+			}
+		}
+
+		std::vector<std::string> ListKnownChannels(
+			const blazeclaw::config::AppConfig& config) {
+			std::set<std::string> seen;
+			std::vector<std::string> ordered;
+
+			for (const auto* channel : kKnownChannelIds) {
+				if (channel == nullptr || *channel == '\0') {
+					continue;
+				}
+
+				const std::string normalized = ToLowerCopy(channel);
+				if (seen.insert(normalized).second) {
+					ordered.push_back(normalized);
+				}
+			}
+
+			for (const auto& channel : config.enabledChannels) {
+				const std::string normalized = ToAsciiLowerTrimmed(channel);
+				if (normalized.empty()) {
+					continue;
+				}
+
+				if (seen.insert(normalized).second) {
+					ordered.push_back(normalized);
+				}
+			}
+
+			return ordered;
+		}
+
+
+		Json BuildBaseSchemaJson(
+			const blazeclaw::config::AppConfig& config,
+			const blazeclaw::gateway::SkillsCatalogGatewayState& skillsState) {
 			Json root = {
 				{ "type", "object" },
 				{ "properties", Json::object() },
@@ -291,10 +422,22 @@ namespace blazeclaw::core {
 			root["properties"]["channels"] = std::move(channelsNode);
 			root["properties"]["plugins"] = std::move(pluginsNode);
 			root["properties"]["agents"] = std::move(agentsNode);
+
+			for (const auto& skill : skillsState.entries) {
+				for (const auto& path : skill.requiresConfig) {
+					EnsurePathProjectedSchemaNode(root, path);
+				}
+				for (const auto& path : skill.configPathHints) {
+					EnsurePathProjectedSchemaNode(root, path);
+				}
+			}
+
 			return root;
 		}
 
-		Json BuildUiHintsJson(const blazeclaw::gateway::SkillsCatalogGatewayState& skillsState) {
+		Json BuildUiHintsJson(
+			const blazeclaw::config::AppConfig& config,
+			const blazeclaw::gateway::SkillsCatalogGatewayState& skillsState) {
 			Json hints = Json::object();
 			for (const auto& skill : skillsState.entries) {
 				std::vector<std::string> hintPaths = skill.requiresConfig;
@@ -328,7 +471,43 @@ namespace blazeclaw::core {
 					hints[normalized] = std::move(hint);
 				}
 			}
-			return hints;
+
+			const auto channels = ListKnownChannels(config);
+			const std::string knownChannels = channels.empty()
+				? std::string()
+				: std::string(" Known channels: ") +
+				std::accumulate(
+					std::next(channels.begin()),
+					channels.end(),
+					channels.front(),
+					[](const std::string& left, const std::string& right) {
+						return left + ", " + right;
+					}) +
+				".";
+					const std::string heartbeatHelp =
+						"Delivery target (\"last\", \"none\", or a channel id)." +
+						knownChannels;
+					for (const auto* heartbeatPath : {
+						"agents.defaults.heartbeat.target",
+						"agents.list.*.heartbeat.target",
+						}) {
+						if (heartbeatPath == nullptr) {
+							continue;
+						}
+
+						Json hint = hints.contains(heartbeatPath) && hints[heartbeatPath].is_object()
+							? hints[heartbeatPath]
+							: Json::object();
+						if (!hint.contains("help") || !hint["help"].is_string()) {
+							hint["help"] = heartbeatHelp;
+						}
+						if (!hint.contains("placeholder") || !hint["placeholder"].is_string()) {
+							hint["placeholder"] = "last";
+						}
+						hints[heartbeatPath] = std::move(hint);
+					}
+
+					return hints;
 		}
 
 		Json StripSchemaForLookup(const Json& schemaNode) {
@@ -337,14 +516,21 @@ namespace blazeclaw::core {
 				return stripped;
 			}
 
-			static constexpr std::array<const char*, 12> kAllowedKeys = {
+			static constexpr std::array<const char*, 19> kAllowedKeys = {
 				"type",
+				"$id",
+				"$schema",
 				"title",
 				"description",
 				"format",
 				"pattern",
+				"contentEncoding",
+				"contentMediaType",
 				"minimum",
 				"maximum",
+				"exclusiveMinimum",
+				"exclusiveMaximum",
+				"multipleOf",
 				"minLength",
 				"maxLength",
 				"minItems",
@@ -515,8 +701,8 @@ namespace blazeclaw::core {
 			}
 		}
 
-		const Json schema = BuildBaseSchemaJson(config);
-		const Json hints = BuildUiHintsJson(skillsState);
+		const Json schema = BuildBaseSchemaJson(config, skillsState);
+		const Json hints = BuildUiHintsJson(config, skillsState);
 
 		blazeclaw::gateway::ConfigSchemaGatewayState next;
 		next.schemaJson = schema.dump();
