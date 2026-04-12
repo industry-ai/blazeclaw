@@ -350,6 +350,17 @@ namespace blazeclaw::config {
 				continue;
 			}
 
+			if (trimmedLine.rfind(L"gateway.authSessionGeneration=", 0) == 0) {
+				try {
+					outConfig.gateway.authSessionGeneration =
+						static_cast<std::uint64_t>(
+							std::stoull(Trim(trimmedLine.substr(30))));
+				}
+				catch (...) {
+				}
+				continue;
+			}
+
 			if (trimmedLine.rfind(L"agent.model=", 0) == 0) {
 				outConfig.agent.model = Trim(trimmedLine.substr(12));
 				continue;

@@ -196,6 +196,9 @@ namespace blazeclaw::core {
 				bool startupDegraded = false;
 				bool managedConfigReloaderStarted = false;
 				bool closePreludeExecuted = false;
+				std::uint64_t authSessionGenerationCurrent = 0;
+				std::uint64_t authSessionGenerationRequired = 0;
+				std::uint64_t authSessionGenerationRejectCount = 0;
 			};
 
 			struct GatewayLiveRuntimeState {

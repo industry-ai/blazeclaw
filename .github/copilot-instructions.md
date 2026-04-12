@@ -2,7 +2,7 @@
 
 ## Project Guidelines
 - Prefer splitting long lines into shorter, readable multiline formatting in source files.
-- Prefer readable, explicit code over overly compact solutions when implementing BlazeClaw/OpenClaw porting changes.
+- Use readable, explicit code over overly compact solutions when implementing BlazeClaw/OpenClaw porting changes.
 - Fully port OpenClaw features into BlazeClaw to avoid runtime dependency on the OpenClaw project alongside BlazeClaw.
 - Use `msbuild` to build `BlazeClaw.sln` for validation instead of generic build commands.
 - For fixing email fallback, use Option 5 + Option 6, which includes a dependency preflight health index and configurable fallback policy profiles.

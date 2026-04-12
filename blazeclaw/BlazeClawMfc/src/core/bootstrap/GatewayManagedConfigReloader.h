@@ -15,6 +15,7 @@ namespace blazeclaw::core {
 		struct Options {
 			std::filesystem::path configPath = L"blazeclaw.conf";
 			std::uint64_t pollIntervalMs = 1000;
+			std::optional<std::uint64_t> initialInternalWriteHash;
 		};
 
 		struct Callbacks {
@@ -31,6 +32,7 @@ namespace blazeclaw::core {
 			Callbacks callbacks);
 		void Stop();
 		void Pump();
+		void RegisterInternalWriteHash(std::uint64_t hash);
 		[[nodiscard]] bool IsRunning() const noexcept;
 		[[nodiscard]] std::uint64_t ApplyCount() const noexcept;
 		[[nodiscard]] std::uint64_t RejectCount() const noexcept;
@@ -47,6 +49,7 @@ namespace blazeclaw::core {
 		Callbacks m_callbacks;
 		bool m_running = false;
 		std::optional<std::uint64_t> m_lastContentHash;
+		std::optional<std::uint64_t> m_pendingInternalWriteHash;
 		mutable std::uint64_t m_lastPollEpochMs = 0;
 		std::uint64_t m_applyCount = 0;
 		std::uint64_t m_rejectCount = 0;

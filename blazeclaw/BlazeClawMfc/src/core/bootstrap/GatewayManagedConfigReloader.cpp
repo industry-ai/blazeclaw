@@ -45,6 +45,8 @@ namespace blazeclaw::core {
 		m_applyCount = 0;
 		m_rejectCount = 0;
 		m_lastPollEpochMs = 0;
+		m_pendingInternalWriteHash =
+			m_options.initialInternalWriteHash;
 		m_lastContentHash = ComputeFileContentHash(m_options.configPath);
 		EmitTrace("GatewayManagedConfigReloader.Start.ready");
 	}
@@ -58,8 +60,14 @@ namespace blazeclaw::core {
 		m_running = false;
 		m_callbacks = {};
 		m_lastContentHash.reset();
+		m_pendingInternalWriteHash.reset();
 		m_lastPollEpochMs = 0;
 		EmitTrace("GatewayManagedConfigReloader.Stop.done");
+	}
+
+	void GatewayManagedConfigReloader::RegisterInternalWriteHash(
+		std::uint64_t hash) {
+		m_pendingInternalWriteHash = hash;
 	}
 
 	void GatewayManagedConfigReloader::Pump() {
@@ -74,6 +82,14 @@ namespace blazeclaw::core {
 
 		if (m_lastContentHash.has_value() &&
 			m_lastContentHash.value() == currentHash.value()) {
+			return;
+		}
+
+		if (m_pendingInternalWriteHash.has_value() &&
+			m_pendingInternalWriteHash.value() == currentHash.value()) {
+			m_lastContentHash = currentHash;
+			m_pendingInternalWriteHash.reset();
+			EmitTrace("GatewayManagedConfigReloader.Pump.skipped_internal_write");
 			return;
 		}
 

@@ -13,6 +13,7 @@ namespace blazeclaw::config {
 		std::wstring bindAddress = L"127.0.0.1";
 		std::uint16_t port = 56789;
 		std::wstring startupMode = L"local_runtime_dispatch";
+		std::uint64_t authSessionGeneration = 0;
 	};
 
 	struct AgentConfig {

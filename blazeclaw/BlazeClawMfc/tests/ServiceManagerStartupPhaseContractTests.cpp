@@ -112,3 +112,23 @@ TEST_CASE(
 		stopBody.find("m_state.gatewayLifecycle.closePreludeExecuted = true;") !=
 		std::string::npos);
 }
+
+TEST_CASE(
+	"ServiceManager startup contract: managed config auth generation enforcement exists",
+	"[servicemanager][startup][contract]")
+{
+	const std::string source = ReadServiceManagerSource();
+	const auto applyDiffPos = source.find("bool ServiceManager::ApplyManagedRuntimeConfigDiff(");
+	REQUIRE(applyDiffPos != std::string::npos);
+
+	const auto applyDiffBody = source.substr(applyDiffPos);
+	REQUIRE(
+		applyDiffBody.find("HasAuthSensitiveConfigChanges(") !=
+		std::string::npos);
+	REQUIRE(
+		applyDiffBody.find("gateway.authSessionGeneration") !=
+		std::string::npos);
+	REQUIRE(
+		applyDiffBody.find("authSessionGenerationRejectCount") !=
+		std::string::npos);
+}

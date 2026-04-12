@@ -24,6 +24,9 @@ namespace blazeclaw::core {
 		std::string gatewayManagedConfigPath;
 		std::uint64_t gatewayManagedConfigApplyCount = 0;
 		std::uint64_t gatewayManagedConfigRejectCount = 0;
+		std::uint64_t gatewayAuthSessionGenerationCurrent = 0;
+		std::uint64_t gatewayAuthSessionGenerationRequired = 0;
+		std::uint64_t gatewayAuthSessionGenerationRejectCount = 0;
 
 		bool emailPreflightEnabled = false;
 		bool emailPolicyProfilesEnabled = false;

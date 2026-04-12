@@ -31,6 +31,12 @@ namespace {
 		out.flush();
 	}
 
+	std::uint64_t ComputeContentHash(const std::string& content)
+	{
+		return std::hash<std::string>{}(content);
+	}
+
+} // namespace
 } // namespace
 
 TEST_CASE(
@@ -166,6 +172,58 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"GatewayManagedConfigReloader skips internally tagged writes",
+	"[gateway][lifecycle][p2][reloader]")
+{
+	const auto path = CreateTempConfigPath(L"internal_write_skip");
+	const std::string initialContent =
+		"gateway.port=56789\n"
+		"chat.activeProvider=local\n"
+		"chat.activeModel=default\n";
+	WriteConfigFile(path, initialContent);
+
+	blazeclaw::core::GatewayManagedConfigReloader reloader;
+	blazeclaw::config::AppConfig initialConfig;
+	std::size_t callbackApplyCount = 0;
+
+	reloader.Start(
+		initialConfig,
+		blazeclaw::core::GatewayManagedConfigReloader::Options{
+			.configPath = path,
+			.pollIntervalMs = 0,
+		},
+		blazeclaw::core::GatewayManagedConfigReloader::Callbacks{
+			.appendTrace = nullptr,
+			.onWarning = nullptr,
+			.applyConfigDiff = [&callbackApplyCount](
+				const blazeclaw::config::AppConfig&,
+				std::wstring&)
+			{
+				++callbackApplyCount;
+				return true;
+			},
+		});
+
+	const std::string internalWriteContent =
+		"gateway.port=56789\n"
+		"chat.activeProvider=deepseek\n"
+		"chat.activeModel=deepseek-chat\n";
+	WriteConfigFile(path, internalWriteContent);
+	reloader.RegisterInternalWriteHash(
+		ComputeContentHash(internalWriteContent));
+	reloader.Pump();
+
+	REQUIRE(reloader.ApplyCount() == 0);
+	REQUIRE(reloader.RejectCount() == 0);
+	REQUIRE(callbackApplyCount == 0);
+
+	reloader.Stop();
+
+	std::error_code removeError;
+	std::filesystem::remove(path, removeError);
+}
+
+TEST_CASE(
 	"TransportRecipientRegistry handles reconnect and multi-client recipient lifecycle",
 	"[gateway][lifecycle][p2][recipient]")
 {
@@ -221,6 +279,9 @@ TEST_CASE(
 	snapshot.gatewayManagedConfigPath = "blazeclaw.conf";
 	snapshot.gatewayManagedConfigApplyCount = 3;
 	snapshot.gatewayManagedConfigRejectCount = 1;
+	snapshot.gatewayAuthSessionGenerationCurrent = 4;
+	snapshot.gatewayAuthSessionGenerationRequired = 5;
+	snapshot.gatewayAuthSessionGenerationRejectCount = 2;
 
 	blazeclaw::core::CDiagnosticsReportBuilder builder;
 	const std::string report = builder.BuildOperatorDiagnosticsReport(snapshot);
@@ -237,5 +298,14 @@ TEST_CASE(
 		std::string::npos);
 	REQUIRE(
 		report.find("\"managedConfigRejectCount\":1") !=
+		std::string::npos);
+	REQUIRE(
+		report.find("\"authSessionGenerationCurrent\":4") !=
+		std::string::npos);
+	REQUIRE(
+		report.find("\"authSessionGenerationRequired\":5") !=
+		std::string::npos);
+	REQUIRE(
+		report.find("\"authSessionGenerationRejectCount\":2") !=
 		std::string::npos);
 }

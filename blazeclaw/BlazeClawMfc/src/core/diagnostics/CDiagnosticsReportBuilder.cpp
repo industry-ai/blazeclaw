@@ -38,6 +38,12 @@ namespace blazeclaw::core {
 			std::to_string(s.gatewayManagedConfigApplyCount) +
 			",\"managedConfigRejectCount\":" +
 			std::to_string(s.gatewayManagedConfigRejectCount) +
+			",\"authSessionGenerationCurrent\":" +
+			std::to_string(s.gatewayAuthSessionGenerationCurrent) +
+			",\"authSessionGenerationRequired\":" +
+			std::to_string(s.gatewayAuthSessionGenerationRequired) +
+			",\"authSessionGenerationRejectCount\":" +
+			std::to_string(s.gatewayAuthSessionGenerationRejectCount) +
 			"}}," +
 			"\"emailFallback\":{\"preflightEnabled\":" +
 			std::string(s.emailPreflightEnabled ? "true" : "false") +

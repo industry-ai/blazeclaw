@@ -793,6 +793,38 @@ namespace blazeclaw::core {
 			return output;
 		}
 
+		std::wstring BuildAuthProfilesSignature(
+			const blazeclaw::config::AuthProfilesConfig& config) {
+			std::wostringstream stream;
+			stream << L"order=";
+			for (const auto& entryId : config.order) {
+				stream << entryId << L";";
+			}
+
+			stream << L"|entries=";
+			for (const auto& [entryId, entry] : config.entries) {
+				stream << entryId << L":"
+					<< entry.provider << L":"
+					<< entry.credentialRef << L":"
+					<< entry.cooldownSeconds << L":"
+					<< (entry.enabled ? L"1" : L"0") << L";";
+			}
+
+			return stream.str();
+		}
+
+		bool HasAuthSensitiveConfigChanges(
+			const blazeclaw::config::AppConfig& currentConfig,
+			const blazeclaw::config::AppConfig& nextConfig) {
+			if (currentConfig.chat.activeProvider !=
+				nextConfig.chat.activeProvider) {
+				return true;
+			}
+
+			return BuildAuthProfilesSignature(currentConfig.authProfiles) !=
+				BuildAuthProfilesSignature(nextConfig.authProfiles);
+		}
+
 
 		std::uint64_t CurrentEpochMs() {
 			const auto now = std::chrono::system_clock::now();
@@ -3415,6 +3447,10 @@ namespace blazeclaw::core {
 		m_state.gatewayLifecycle.failedStage = startupResult.failedStage;
 		m_state.gatewayLifecycle.managedConfigReloaderStarted =
 			startupResult.managedConfigReloaderStarted;
+		m_state.gatewayLifecycle.authSessionGenerationCurrent =
+			config.gateway.authSessionGeneration;
+		m_state.gatewayLifecycle.authSessionGenerationRequired =
+			config.gateway.authSessionGeneration;
 		ResetGatewayOwnedRuntimeCleanup();
 		m_state.gatewayLiveRuntime.runtimeStateCreated = true;
 		m_state.gatewayLiveRuntime.runtimeServicesStarted =
@@ -3560,6 +3596,22 @@ namespace blazeclaw::core {
 	bool ServiceManager::ApplyManagedRuntimeConfigDiff(
 		const blazeclaw::config::AppConfig& nextConfig,
 		std::wstring& warningMessage) {
+		const bool authSensitiveChanged = HasAuthSensitiveConfigChanges(
+			m_activeConfig,
+			nextConfig);
+		if (authSensitiveChanged &&
+			nextConfig.gateway.authSessionGeneration <=
+			m_state.gatewayLifecycle.authSessionGenerationCurrent) {
+			m_state.gatewayLifecycle.authSessionGenerationRequired =
+				m_state.gatewayLifecycle.authSessionGenerationCurrent + 1;
+			++m_state.gatewayLifecycle.authSessionGenerationRejectCount;
+			warningMessage =
+				L"gateway auth/session config change requires "
+				L"gateway.authSessionGeneration to increase.";
+			m_skillsCatalog.diagnostics.warnings.push_back(warningMessage);
+			return false;
+		}
+
 		const bool gatewayBindChanged =
 			m_activeConfig.gateway.bindAddress != nextConfig.gateway.bindAddress;
 		const bool gatewayPortChanged =
@@ -3576,9 +3628,19 @@ namespace blazeclaw::core {
 		m_activeConfig.embedded.orchestrationPath =
 			nextConfig.embedded.orchestrationPath;
 		m_activeConfig.email = nextConfig.email;
+		m_activeConfig.authProfiles = nextConfig.authProfiles;
 		m_activeConfig.gateway.startupMode = nextConfig.gateway.startupMode;
 		m_activeConfig.gateway.bindAddress = nextConfig.gateway.bindAddress;
 		m_activeConfig.gateway.port = nextConfig.gateway.port;
+		m_activeConfig.gateway.authSessionGeneration =
+			nextConfig.gateway.authSessionGeneration;
+
+		if (authSensitiveChanged) {
+			m_state.gatewayLifecycle.authSessionGenerationCurrent =
+				nextConfig.gateway.authSessionGeneration;
+			m_state.gatewayLifecycle.authSessionGenerationRequired =
+				nextConfig.gateway.authSessionGeneration;
+		}
 
 		m_activeChatProvider = m_activeConfig.chat.activeProvider.empty()
 			? "local"
@@ -3747,6 +3809,12 @@ namespace blazeclaw::core {
 			m_state.gatewayLiveRuntime.managedConfigApplyCount;
 		snapshot.gatewayManagedConfigRejectCount =
 			m_state.gatewayLiveRuntime.managedConfigRejectCount;
+		snapshot.gatewayAuthSessionGenerationCurrent =
+			m_state.gatewayLifecycle.authSessionGenerationCurrent;
+		snapshot.gatewayAuthSessionGenerationRequired =
+			m_state.gatewayLifecycle.authSessionGenerationRequired;
+		snapshot.gatewayAuthSessionGenerationRejectCount =
+			m_state.gatewayLifecycle.authSessionGenerationRejectCount;
 
 		std::size_t implementedCount = 0;
 		std::size_t inProgressCount = 0;
