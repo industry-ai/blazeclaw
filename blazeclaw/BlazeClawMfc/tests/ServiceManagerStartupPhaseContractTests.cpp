@@ -223,3 +223,22 @@ TEST_CASE(
 		source.find("m_skillsHostCallbacks.refreshSkillView") !=
 		std::string::npos);
 }
+
+TEST_CASE(
+	"ServiceManager startup contract: runtime orchestration env policies resolve via bootstrap coordinator",
+	"[servicemanager][startup][contract]")
+{
+	const std::string source = ReadServiceManagerSource();
+	REQUIRE(
+		source.find("ResolveRuntimeOrchestrationPolicySettings()") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("runtimeOrchestrationPolicy.startupSkillsRefreshEnabled") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("runtimeOrchestrationPolicy.startupHookBootstrapEnabled") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("runtimeOrchestrationPolicy.startupFixtureValidationEnabled") !=
+		std::string::npos);
+}

@@ -12,6 +12,23 @@ namespace blazeclaw::core::bootstrap {
 
 	class StartupPolicyResolver {
 	public:
+		struct RuntimeQueueSettings {
+			bool asyncQueueEnabled = true;
+			std::uint64_t queueWaitTimeoutMs = 15000;
+			std::uint64_t executionTimeoutMs = 120000;
+		};
+
+		struct RuntimeOrchestrationPolicySettings {
+			bool localModelStartupLoadEnabled = false;
+			bool startupSkillsRefreshEnabled = false;
+			bool startupHookBootstrapEnabled = false;
+			bool startupFixtureValidationEnabled = false;
+			std::vector<std::string> dynamicLoopCanaryProviders;
+			std::vector<std::string> dynamicLoopCanarySessions;
+			std::uint64_t dynamicLoopPromotionMinRuns = 20;
+			double dynamicLoopPromotionMinSuccessRate = 0.95;
+		};
+
 		struct ToolRuntimePolicySettings {
 			std::optional<std::filesystem::path> imapSmtpSkillRoot;
 			std::optional<std::filesystem::path> baiduSearchSkillRoot;
@@ -62,6 +79,13 @@ namespace blazeclaw::core::bootstrap {
 
 		[[nodiscard]] HooksPolicySettings ResolveHooksPolicySettings(
 			const blazeclaw::config::AppConfig& config) const;
+
+		[[nodiscard]] RuntimeQueueSettings ResolveRuntimeQueueSettings(
+			std::uint64_t defaultQueueWaitTimeoutMs,
+			std::uint64_t defaultExecutionTimeoutMs) const;
+
+		[[nodiscard]] RuntimeOrchestrationPolicySettings
+			ResolveRuntimeOrchestrationPolicySettings() const;
 
 		[[nodiscard]] EmailPolicySettings ResolveEmailPolicySettings(
 			const blazeclaw::config::AppConfig& config) const;

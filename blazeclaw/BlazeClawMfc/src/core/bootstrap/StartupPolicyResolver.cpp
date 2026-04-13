@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "StartupPolicyResolver.h"
+#include "StartupFixtureValidator.h"
 
 #include <algorithm>
 #include <cwctype>
@@ -205,6 +206,105 @@ namespace blazeclaw::core::bootstrap {
 			return value;
 		}
 
+		std::uint64_t ParseUInt64EnvValue(
+			const wchar_t* key,
+			const std::uint64_t fallback) {
+			wchar_t* env = nullptr;
+			std::size_t len = 0;
+			if (_wdupenv_s(&env, &len, key) != 0 || env == nullptr || len == 0) {
+				if (env != nullptr) {
+					free(env);
+				}
+				return fallback;
+			}
+
+			const std::wstring rawValue(env);
+			free(env);
+
+			const std::wstring trimmed = TrimWide(rawValue);
+			if (trimmed.empty()) {
+				return fallback;
+			}
+
+			try {
+				return static_cast<std::uint64_t>(std::stoull(trimmed));
+			}
+			catch (...) {
+				return fallback;
+			}
+		}
+
+		double ParseDoubleEnvValue(
+			const wchar_t* key,
+			const double fallback) {
+			wchar_t* env = nullptr;
+			std::size_t len = 0;
+			if (_wdupenv_s(&env, &len, key) != 0 || env == nullptr || len == 0) {
+				if (env != nullptr) {
+					free(env);
+				}
+				return fallback;
+			}
+
+			const std::wstring rawValue(env);
+			free(env);
+
+			const std::wstring trimmed = TrimWide(rawValue);
+			if (trimmed.empty()) {
+				return fallback;
+			}
+
+			try {
+				return std::stod(trimmed);
+			}
+			catch (...) {
+				return fallback;
+			}
+		}
+
+		std::vector<std::string> ParseCsvEnvValues(const wchar_t* key) {
+			std::vector<std::string> values;
+			auto toNarrowAscii = [](const std::wstring& input) {
+				std::string output;
+				output.reserve(input.size());
+				for (const wchar_t ch : input) {
+					output.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
+				}
+				return output;
+				};
+
+			wchar_t* env = nullptr;
+			std::size_t len = 0;
+			if (_wdupenv_s(&env, &len, key) != 0 || env == nullptr || len == 0) {
+				if (env != nullptr) {
+					free(env);
+				}
+				return values;
+			}
+
+			std::wstring token;
+			for (std::size_t i = 0; i < len && env[i] != L'\0'; ++i) {
+				if (env[i] == L',' || env[i] == L';') {
+					const auto trimmed = TrimWide(token);
+					if (!trimmed.empty()) {
+						values.push_back(toNarrowAscii(trimmed));
+					}
+					token.clear();
+					continue;
+				}
+
+				token.push_back(env[i]);
+			}
+
+			const auto trimmed = TrimWide(token);
+			if (!trimmed.empty()) {
+				values.push_back(toNarrowAscii(trimmed));
+			}
+
+			free(env);
+			return values;
+		}
+
 		std::wstring NormalizeReminderVerbosity(const std::wstring& value)
 		{
 			std::wstring normalized;
@@ -381,6 +481,53 @@ namespace blazeclaw::core::bootstrap {
 			config.hooks.engine.crossTenantAttestationAggregationDir.empty()
 			? L"blazeclaw/reports/hooks-attestation-aggregation"
 			: config.hooks.engine.crossTenantAttestationAggregationDir);
+
+		return settings;
+	}
+
+	StartupPolicyResolver::RuntimeQueueSettings
+		StartupPolicyResolver::ResolveRuntimeQueueSettings(
+			const std::uint64_t defaultQueueWaitTimeoutMs,
+			const std::uint64_t defaultExecutionTimeoutMs) const {
+		RuntimeQueueSettings settings;
+		settings.asyncQueueEnabled = ReadBoolEnvOrDefault(
+			L"BLAZECLAW_CHAT_RUNTIME_ASYNC_QUEUE_ENABLED",
+			true);
+		settings.queueWaitTimeoutMs = ParseUInt64EnvValue(
+			L"BLAZECLAW_CHAT_RUNTIME_QUEUE_WAIT_TIMEOUT_MS",
+			defaultQueueWaitTimeoutMs);
+		settings.executionTimeoutMs = ParseUInt64EnvValue(
+			L"BLAZECLAW_CHAT_RUNTIME_EXECUTION_TIMEOUT_MS",
+			defaultExecutionTimeoutMs);
+
+		return settings;
+	}
+
+	StartupPolicyResolver::RuntimeOrchestrationPolicySettings
+		StartupPolicyResolver::ResolveRuntimeOrchestrationPolicySettings() const {
+		RuntimeOrchestrationPolicySettings settings;
+		settings.localModelStartupLoadEnabled = ReadBoolEnvOrDefault(
+			L"BLAZECLAW_LOCALMODEL_STARTUP_LOAD_ENABLED",
+			false);
+		settings.startupSkillsRefreshEnabled = ReadBoolEnvOrDefault(
+			L"BLAZECLAW_SKILLS_STARTUP_REFRESH_ENABLED",
+			false);
+		settings.startupHookBootstrapEnabled = ReadBoolEnvOrDefault(
+			L"BLAZECLAW_HOOKS_STARTUP_BOOTSTRAP_ENABLED",
+			false);
+		settings.startupFixtureValidationEnabled = ReadBoolEnvOrDefault(
+			StartupFixtureValidator::kEnvStartupValidationEnabled,
+			false);
+		settings.dynamicLoopCanaryProviders = ParseCsvEnvValues(
+			L"BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_CANARY_PROVIDERS");
+		settings.dynamicLoopCanarySessions = ParseCsvEnvValues(
+			L"BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_CANARY_SESSIONS");
+		settings.dynamicLoopPromotionMinRuns = ParseUInt64EnvValue(
+			L"BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_PROMOTION_MIN_RUNS",
+			20);
+		settings.dynamicLoopPromotionMinSuccessRate = ParseDoubleEnvValue(
+			L"BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_PROMOTION_MIN_SUCCESS_RATE",
+			0.95);
 
 		return settings;
 	}

@@ -40,18 +40,16 @@ namespace blazeclaw::core {
 
 	class CServiceBootstrapCoordinator {
 	public:
+		using RuntimeQueueSettings =
+			bootstrap::StartupPolicyResolver::RuntimeQueueSettings;
+		using RuntimeOrchestrationPolicySettings =
+			bootstrap::StartupPolicyResolver::RuntimeOrchestrationPolicySettings;
 		using ToolRuntimePolicySettings =
 			bootstrap::StartupPolicyResolver::ToolRuntimePolicySettings;
 		using EmailPolicySettings =
 			bootstrap::StartupPolicyResolver::EmailPolicySettings;
 		using HooksPolicySettings =
 			bootstrap::StartupPolicyResolver::HooksPolicySettings;
-		struct RuntimeQueueSettings {
-			bool asyncQueueEnabled = true;
-			std::uint64_t queueWaitTimeoutMs = 15000;
-			std::uint64_t executionTimeoutMs = 120000;
-		};
-
 		struct FixtureValidationContext {
 			bool enabled = false;
 			std::vector<std::filesystem::path> fixtureCandidates;
@@ -87,12 +85,11 @@ namespace blazeclaw::core {
 		};
 
 		RuntimeQueueSettings ResolveRuntimeQueueSettings(
-			const std::function<bool(const wchar_t* key, bool fallback)>& readBool,
-			const std::function<std::uint64_t(
-				const wchar_t* key,
-				std::uint64_t fallback)>& readUInt64,
 			std::uint64_t defaultQueueWaitTimeoutMs,
 			std::uint64_t defaultExecutionTimeoutMs) const;
+
+		[[nodiscard]] RuntimeOrchestrationPolicySettings
+			ResolveRuntimeOrchestrationPolicySettings() const;
 
 		void ValidateStartupFixtures(FixtureValidationContext& context) const;
 		void ValidateStartupFixtures(const FixtureValidationContext& context) const;

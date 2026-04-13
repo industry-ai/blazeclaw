@@ -5,31 +5,17 @@ namespace blazeclaw::core {
 
 	CServiceBootstrapCoordinator::RuntimeQueueSettings
 		CServiceBootstrapCoordinator::ResolveRuntimeQueueSettings(
-			const std::function<bool(const wchar_t* key, bool fallback)>& readBool,
-			const std::function<std::uint64_t(
-				const wchar_t* key,
-				std::uint64_t fallback)>& readUInt64,
 			const std::uint64_t defaultQueueWaitTimeoutMs,
 			const std::uint64_t defaultExecutionTimeoutMs) const
 	{
-		RuntimeQueueSettings settings;
-		if (readBool)
-		{
-			settings.asyncQueueEnabled = readBool(
-				L"BLAZECLAW_CHAT_RUNTIME_ASYNC_QUEUE_ENABLED",
-				true);
-		}
-		if (readUInt64)
-		{
-			settings.queueWaitTimeoutMs = readUInt64(
-				L"BLAZECLAW_CHAT_RUNTIME_QUEUE_WAIT_TIMEOUT_MS",
-				defaultQueueWaitTimeoutMs);
-			settings.executionTimeoutMs = readUInt64(
-				L"BLAZECLAW_CHAT_RUNTIME_EXECUTION_TIMEOUT_MS",
-				defaultExecutionTimeoutMs);
-		}
+		return m_startupPolicyResolver.ResolveRuntimeQueueSettings(
+			defaultQueueWaitTimeoutMs,
+			defaultExecutionTimeoutMs);
+	}
 
-		return settings;
+	CServiceBootstrapCoordinator::RuntimeOrchestrationPolicySettings
+		CServiceBootstrapCoordinator::ResolveRuntimeOrchestrationPolicySettings() const {
+		return m_startupPolicyResolver.ResolveRuntimeOrchestrationPolicySettings();
 	}
 
 	void CServiceBootstrapCoordinator::ValidateStartupFixtures(

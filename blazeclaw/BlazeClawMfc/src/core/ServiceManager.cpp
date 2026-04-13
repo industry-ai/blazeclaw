@@ -2263,9 +2263,10 @@ namespace blazeclaw::core {
 		}
 
 		m_localModelRuntime.Configure(m_activeConfig);
-		const bool localModelStartupLoadEnabled = ReadBoolEnvOrDefault(
-			L"BLAZECLAW_LOCALMODEL_STARTUP_LOAD_ENABLED",
-			false);
+		const auto runtimeOrchestrationPolicy =
+			m_serviceBootstrapCoordinator.ResolveRuntimeOrchestrationPolicySettings();
+		const bool localModelStartupLoadEnabled =
+			runtimeOrchestrationPolicy.localModelStartupLoadEnabled;
 		AppendStartupTrace("ServiceManager.Start.localmodel.beforeLoad");
 		bool localModelLoaded = false;
 		if (m_activeConfig.localModel.enabled &&
@@ -2338,16 +2339,14 @@ namespace blazeclaw::core {
 		m_retrievalMemory = m_retrievalMemoryService.Snapshot();
 		m_piEmbeddedService.Configure(m_activeConfig);
 		AppendStartupTrace("ServiceManager.Start.retrieval.ready");
-		m_state.embeddedRuntime.dynamicLoopCanaryProviders = ParseCsvEnvValues(
-			L"BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_CANARY_PROVIDERS");
-		m_state.embeddedRuntime.dynamicLoopCanarySessions = ParseCsvEnvValues(
-			L"BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_CANARY_SESSIONS");
-		m_state.embeddedRuntime.dynamicLoopPromotionMinRuns = ParseUInt64EnvValue(
-			L"BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_PROMOTION_MIN_RUNS",
-			20);
-		m_state.embeddedRuntime.dynamicLoopPromotionMinSuccessRate = ParseDoubleEnvValue(
-			L"BLAZECLAW_EMBEDDED_DYNAMIC_LOOP_PROMOTION_MIN_SUCCESS_RATE",
-			0.95);
+		m_state.embeddedRuntime.dynamicLoopCanaryProviders =
+			runtimeOrchestrationPolicy.dynamicLoopCanaryProviders;
+		m_state.embeddedRuntime.dynamicLoopCanarySessions =
+			runtimeOrchestrationPolicy.dynamicLoopCanarySessions;
+		m_state.embeddedRuntime.dynamicLoopPromotionMinRuns =
+			runtimeOrchestrationPolicy.dynamicLoopPromotionMinRuns;
+		m_state.embeddedRuntime.dynamicLoopPromotionMinSuccessRate =
+			runtimeOrchestrationPolicy.dynamicLoopPromotionMinSuccessRate;
 		m_state.embeddedRuntime.runSuccessCount = 0;
 		m_state.embeddedRuntime.runFailureCount = 0;
 		m_state.embeddedRuntime.runTimeoutCount = 0;
@@ -2364,14 +2363,6 @@ namespace blazeclaw::core {
 		m_state.embeddedRuntime.lastFallbackReason.clear();
 		const auto runtimeQueueSettings =
 			m_serviceBootstrapCoordinator.ResolveRuntimeQueueSettings(
-				[](const wchar_t* key, const bool fallback)
-				{
-					return ReadBoolEnvOrDefault(key, fallback);
-				},
-				[](const wchar_t* key, const std::uint64_t fallback)
-				{
-					return ParseUInt64EnvValue(key, fallback);
-				},
 				kChatRuntimeQueueWaitTimeoutMs,
 				kChatRuntimeExecutionTimeoutMs);
 		m_state.chatRuntime.asyncQueueEnabled = runtimeQueueSettings.asyncQueueEnabled;
@@ -2465,9 +2456,8 @@ namespace blazeclaw::core {
 			TRACE(
 				"[ChatRuntime] async queue disabled by rollout flag; using synchronous runtime path\n");
 		}
-		const bool startupSkillsRefreshEnabled = ReadBoolEnvOrDefault(
-			L"BLAZECLAW_SKILLS_STARTUP_REFRESH_ENABLED",
-			false);
+		const bool startupSkillsRefreshEnabled =
+			runtimeOrchestrationPolicy.startupSkillsRefreshEnabled;
 		if (startupSkillsRefreshEnabled) {
 			RefreshSkillsState(m_activeConfig, true, L"startup");
 			AppendStartupTrace("ServiceManager.Start.skills.refreshed");
@@ -2510,9 +2500,8 @@ namespace blazeclaw::core {
 			AppendStartupTrace("ServiceManager.Start.skills.refresh.minimal");
 		}
 
-		const bool startupHookBootstrapEnabled = ReadBoolEnvOrDefault(
-			L"BLAZECLAW_HOOKS_STARTUP_BOOTSTRAP_ENABLED",
-			false);
+		const bool startupHookBootstrapEnabled =
+			runtimeOrchestrationPolicy.startupHookBootstrapEnabled;
 		if (startupSkillsRefreshEnabled && startupHookBootstrapEnabled) {
 			std::wstring hookEventError;
 			const bool emittedBootstrapEvent = m_hookEventService.EmitAgentBootstrap(
@@ -2643,9 +2632,8 @@ namespace blazeclaw::core {
 			  std::filesystem::current_path() / L"fixtures" / L"skills-catalog",
 		};
 
-		const bool startupFixtureValidationEnabled = ReadBoolEnvOrDefault(
-			bootstrap::StartupFixtureValidator::kEnvStartupValidationEnabled,
-			false);
+		const bool startupFixtureValidationEnabled =
+			runtimeOrchestrationPolicy.startupFixtureValidationEnabled;
 		if (startupFixtureValidationEnabled) {
 			m_serviceBootstrapCoordinator.ValidateStartupFixtures(
 				CServiceBootstrapCoordinator::FixtureValidationContext{
