@@ -171,6 +171,58 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Safe-open-sync step 5-7: gateway skills diagnostics expose verified-open failure categories",
+	"[parity][safe-open-sync][skills][diagnostics]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+
+	SkillsCatalogGatewayState state;
+	state.verifiedOpenPathFailures = 2;
+	state.verifiedOpenValidationFailures = 3;
+	state.verifiedOpenIoFailures = 4;
+	state.scanWarnCount = 1;
+	host.SetSkillsCatalogState(state);
+
+	const auto statusResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "safe-open-sync-status",
+			.method = "gateway.skills.status",
+			.paramsJson = std::nullopt,
+		});
+	REQUIRE(statusResponse.ok);
+	REQUIRE(statusResponse.payloadJson.has_value());
+	REQUIRE(statusResponse.payloadJson->find("\"verifiedOpenPathFailures\":2") !=
+		std::string::npos);
+	REQUIRE(
+		statusResponse.payloadJson->find("\"verifiedOpenValidationFailures\":3") !=
+		std::string::npos);
+	REQUIRE(statusResponse.payloadJson->find("\"verifiedOpenIoFailures\":4") !=
+		std::string::npos);
+
+	const auto diagnosticsResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "safe-open-sync-diagnostics",
+			.method = "gateway.skills.diagnostics",
+			.paramsJson = std::nullopt,
+		});
+	REQUIRE(diagnosticsResponse.ok);
+	REQUIRE(diagnosticsResponse.payloadJson.has_value());
+	REQUIRE(diagnosticsResponse.payloadJson->find("\"verifiedOpenPathFailures\":2") !=
+		std::string::npos);
+	REQUIRE(
+		diagnosticsResponse.payloadJson->find("\"verifiedOpenValidationFailures\":3") !=
+		std::string::npos);
+	REQUIRE(diagnosticsResponse.payloadJson->find("\"verifiedOpenIoFailures\":4") !=
+		std::string::npos);
+	REQUIRE(
+		diagnosticsResponse.payloadJson->find("skills.local-loader.verified-open") !=
+		std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
 	"Phase 6: route policy blocks overlong session keys and webchat inheritance",
 	"[parity][phase-6][chat][route][deep]") {
 	ChatControlPlaneService service;

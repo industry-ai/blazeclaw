@@ -247,7 +247,8 @@ namespace blazeclaw::core {
 		VerifiedSkillFileReadResult ReadSkillFileVerified(
 			const std::filesystem::path& rootRealPath,
 			const std::filesystem::path& skillFile,
-			const bool rejectPathSymlink) {
+			const bool rejectPathSymlink,
+			SkillsCatalogDiagnostics& outDiagnostics) {
 			std::error_code ec;
 			const auto canonicalFile = std::filesystem::weakly_canonical(skillFile, ec);
 			if (ec) {
@@ -274,6 +275,18 @@ namespace blazeclaw::core {
 			const auto verifiedOpenResult =
 				blazeclaw::core::filesystem::OpenVerifiedFileUtf8Sync(request);
 			if (!verifiedOpenResult.ok) {
+				if (verifiedOpenResult.reason ==
+					blazeclaw::core::filesystem::VerifiedOpenFailureReason::Path) {
+					outDiagnostics.verifiedOpenPathFailures += 1;
+				}
+				else if (verifiedOpenResult.reason ==
+					blazeclaw::core::filesystem::VerifiedOpenFailureReason::Validation) {
+					outDiagnostics.verifiedOpenValidationFailures += 1;
+				}
+				else {
+					outDiagnostics.verifiedOpenIoFailures += 1;
+				}
+
 				return VerifiedSkillFileReadResult{
 					.ok = false,
 					.rejectedBySymlinkPolicy =
@@ -845,7 +858,8 @@ namespace blazeclaw::core {
 				const auto verifiedRead = ReadSkillFileVerified(
 					discoveryRootCanonical,
 					skillFile,
-					loaderPolicy.rejectPathSymlink);
+					loaderPolicy.rejectPathSymlink,
+					snapshot.diagnostics);
 				if (!verifiedRead.ok) {
 					if (verifiedRead.rejectedBySymlinkPolicy) {
 						++snapshot.diagnostics.symlinkRejectedFiles;

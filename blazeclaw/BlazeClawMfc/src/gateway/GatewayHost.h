@@ -77,6 +77,9 @@ namespace blazeclaw::gateway {
 		std::size_t strictFrontmatterOmittedFiles = 0;
 		std::size_t oversizedSkillFiles = 0;
 		std::size_t invalidFrontmatterFiles = 0;
+		std::size_t verifiedOpenPathFailures = 0;
+		std::size_t verifiedOpenValidationFailures = 0;
+		std::size_t verifiedOpenIoFailures = 0;
 		std::size_t warningCount = 0;
 		std::size_t eligibleCount = 0;
 		std::size_t disabledCount = 0;

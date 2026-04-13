@@ -5417,18 +5417,24 @@ namespace blazeclaw::gateway {
 						std::to_string(state.rootsScanned) +
 						",\"rootsSkipped\":" +
 						std::to_string(state.rootsSkipped) +
-				   ",\"pluginRootsConfigured\":" +
-					std::to_string(state.pluginRootsConfigured) +
-					",\"pluginRootsScanned\":" +
-					std::to_string(state.pluginRootsScanned) +
-				   ",\"loaderPolicyRejectPathSymlink\":" +
-					std::to_string(state.loaderPolicyRejectPathSymlinkCount) +
-					",\"loaderPolicyStrictFrontmatter\":" +
-					std::to_string(state.loaderPolicyStrictFrontmatterCount) +
-					",\"symlinkRejectedFiles\":" +
-					std::to_string(state.symlinkRejectedFiles) +
-					",\"strictFrontmatterOmittedFiles\":" +
-					std::to_string(state.strictFrontmatterOmittedFiles) +
+						",\"pluginRootsConfigured\":" +
+						std::to_string(state.pluginRootsConfigured) +
+						",\"pluginRootsScanned\":" +
+						std::to_string(state.pluginRootsScanned) +
+						",\"loaderPolicyRejectPathSymlink\":" +
+						std::to_string(state.loaderPolicyRejectPathSymlinkCount) +
+						",\"loaderPolicyStrictFrontmatter\":" +
+						std::to_string(state.loaderPolicyStrictFrontmatterCount) +
+						",\"symlinkRejectedFiles\":" +
+						std::to_string(state.symlinkRejectedFiles) +
+						",\"strictFrontmatterOmittedFiles\":" +
+						std::to_string(state.strictFrontmatterOmittedFiles) +
+						",\"verifiedOpenPathFailures\":" +
+						std::to_string(state.verifiedOpenPathFailures) +
+						",\"verifiedOpenValidationFailures\":" +
+						std::to_string(state.verifiedOpenValidationFailures) +
+						",\"verifiedOpenIoFailures\":" +
+						std::to_string(state.verifiedOpenIoFailures) +
 						",\"oversizedSkillFiles\":" +
 						std::to_string(state.oversizedSkillFiles) +
 						",\"invalidFrontmatterFiles\":" +
@@ -5458,13 +5464,13 @@ namespace blazeclaw::gateway {
 						"\"" +
 						",\"sandboxSyncOk\":" +
 						std::string(state.sandboxSyncOk ? "true" : "false") +
-				 ",\"sandboxDestinationNamingMode\":\"" +
-					EscapeJsonLocal(state.sandboxDestinationNamingMode) +
-					"\"" +
-					",\"sandboxDestinationCollisions\":" +
-					std::to_string(state.sandboxDestinationCollisions) +
-					",\"sandboxSourceDirFallbacks\":" +
-					std::to_string(state.sandboxSourceDirFallbacks) +
+						",\"sandboxDestinationNamingMode\":\"" +
+						EscapeJsonLocal(state.sandboxDestinationNamingMode) +
+						"\"" +
+						",\"sandboxDestinationCollisions\":" +
+						std::to_string(state.sandboxDestinationCollisions) +
+						",\"sandboxSourceDirFallbacks\":" +
+						std::to_string(state.sandboxSourceDirFallbacks) +
 						",\"sandboxSynced\":" +
 						std::to_string(state.sandboxSynced) +
 						",\"sandboxSkipped\":" +
@@ -5935,6 +5941,12 @@ namespace blazeclaw::gateway {
 					hints.push_back("skills.scan.status");
 				}
 
+				if (state.verifiedOpenPathFailures > 0 ||
+					state.verifiedOpenValidationFailures > 0 ||
+					state.verifiedOpenIoFailures > 0) {
+					hints.push_back("skills.local-loader.verified-open");
+				}
+
 				if (!state.sandboxSyncOk) {
 					hints.push_back("skills.sandbox.status");
 				}
@@ -5964,6 +5976,12 @@ namespace blazeclaw::gateway {
 						std::to_string(state.scanCriticalCount) +
 						",\"scanWarn\":" +
 						std::to_string(state.scanWarnCount) +
+				 ",\"verifiedOpenPathFailures\":" +
+					std::to_string(state.verifiedOpenPathFailures) +
+					",\"verifiedOpenValidationFailures\":" +
+					std::to_string(state.verifiedOpenValidationFailures) +
+					",\"verifiedOpenIoFailures\":" +
+					std::to_string(state.verifiedOpenIoFailures) +
 						",\"hints\":" +
 						hintsJson +
 						"}",

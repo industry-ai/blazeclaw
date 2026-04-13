@@ -63,6 +63,9 @@ namespace blazeclaw::core {
 		std::uint32_t strictFrontmatterOmittedFiles = 0;
 		std::uint32_t oversizedSkillFiles = 0;
 		std::uint32_t invalidFrontmatterFiles = 0;
+		std::uint32_t verifiedOpenPathFailures = 0;
+		std::uint32_t verifiedOpenValidationFailures = 0;
+		std::uint32_t verifiedOpenIoFailures = 0;
 	};
 
 	struct SkillsCatalogSnapshot {

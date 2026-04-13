@@ -99,6 +99,12 @@ namespace blazeclaw::core {
 			context.catalog.diagnostics.oversizedSkillFiles;
 		gatewaySkillsState.invalidFrontmatterFiles =
 			context.catalog.diagnostics.invalidFrontmatterFiles;
+		gatewaySkillsState.verifiedOpenPathFailures =
+			context.catalog.diagnostics.verifiedOpenPathFailures;
+		gatewaySkillsState.verifiedOpenValidationFailures =
+			context.catalog.diagnostics.verifiedOpenValidationFailures;
+		gatewaySkillsState.verifiedOpenIoFailures =
+			context.catalog.diagnostics.verifiedOpenIoFailures;
 		gatewaySkillsState.warningCount = context.catalog.diagnostics.warnings.size();
 		gatewaySkillsState.eligibleCount = context.eligibility.eligibleCount;
 		gatewaySkillsState.disabledCount = context.eligibility.disabledCount;
