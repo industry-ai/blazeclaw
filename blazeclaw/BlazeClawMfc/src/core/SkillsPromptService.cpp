@@ -41,6 +41,19 @@ namespace blazeclaw::core {
 			return lowered;
 		}
 
+		bool ParseBoolField(const std::wstring& value, const bool fallback) {
+			const std::wstring normalized = ToLower(Trim(value));
+			if (normalized == L"true" || normalized == L"1" || normalized == L"yes") {
+				return true;
+			}
+
+			if (normalized == L"false" || normalized == L"0" || normalized == L"no") {
+				return false;
+			}
+
+			return fallback;
+		}
+
 		std::wstring CompactHomePath(const std::filesystem::path& pathValue) {
 			std::filesystem::path home;
 			wchar_t* homeValue = nullptr;
@@ -122,6 +135,21 @@ namespace blazeclaw::core {
 			}
 
 			return {};
+		}
+
+		bool IsLegacyPromptHiddenByInvocationPolicy(const SkillFrontmatter& frontmatter) {
+			const std::wstring raw = GetFrontmatterField(
+				frontmatter,
+				{ L"disable-model-invocation",
+				  L"disable_model_invocation",
+				  L"disablemodelinvocation",
+				  L"metadata.openclaw.disable-model-invocation",
+				  L"metadata.openclaw.disable_model_invocation",
+				  L"metadata.openclaw.disablemodelinvocation",
+				  L"metadata.blazeclaw.disable-model-invocation",
+				  L"metadata.blazeclaw.disable_model_invocation",
+				  L"metadata.blazeclaw.disablemodelinvocation" });
+			return ParseBoolField(raw, false);
 		}
 
 		std::wstring TruncateField(
@@ -343,8 +371,11 @@ namespace blazeclaw::core {
 			}
 
 			const auto modelInvocationIt = modelInvocationMap.find(key);
-			if (modelInvocationIt != modelInvocationMap.end() &&
-				modelInvocationIt->second) {
+			const bool hiddenByEligibility =
+				modelInvocationIt != modelInvocationMap.end() && modelInvocationIt->second;
+			const bool hiddenByLegacyFallback =
+				IsLegacyPromptHiddenByInvocationPolicy(entry.frontmatter);
+			if (hiddenByEligibility || hiddenByLegacyFallback) {
 				continue;
 			}
 
