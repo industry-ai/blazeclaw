@@ -227,6 +227,7 @@
     <ClInclude Include="src\gateway\python\PythonRuntimeDispatcher.h" />
     <ClInclude Include="src\gateway\python\PythonRuntimeSelector.h" />
     <ClInclude Include="src\gateway\PluginHostAdapter.h" />
+    <ClInclude Include="src\gateway\PluginRuntimeStateService.h" />
     <ClInclude Include="src\gateway\GatewaySessionRegistry.h" />
     <ClInclude Include="src\gateway\GatewayToolRegistry.h" />
     <ClInclude Include="src\gateway\GatewayWebSocketTransport.h" />
@@ -334,6 +335,7 @@
     <ClCompile Include="src\gateway\executors\PythonProcessExecutor.cpp" />
     <ClCompile Include="src\gateway\executors\WeatherLookupExecutor.cpp" />
     <ClCompile Include="src\gateway\PluginHostAdapter.cpp" />
+    <ClCompile Include="src\gateway\PluginRuntimeStateService.cpp" />
     <ClCompile Include="src\gateway\GatewayMethodDispatcher.cpp" />
     <ClCompile Include="src\gateway\GatewayPersistencePaths.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolCodec.cpp" />

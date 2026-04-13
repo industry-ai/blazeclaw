@@ -103,6 +103,7 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayMethodDispatcher.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayToolRegistry.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\PluginHostAdapter.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\PluginRuntimeStateService.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayPersistencePaths.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayProtocolCodec.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayProtocolContract.cpp" />

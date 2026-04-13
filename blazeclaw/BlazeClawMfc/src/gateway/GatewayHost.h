@@ -10,6 +10,7 @@
 #include "ApprovalTokenStore.h"
 #include "GatewayWebSocketTransport.h"
 #include "GatewayProtocolContract.h"
+#include "PluginRuntimeStateService.h"
 #include "ChatRunPipelineOrchestrator.h"
 #include "TaskDeltaRepository.h"
 #include "IGatewayHostRuntime.h"
@@ -426,6 +427,7 @@ namespace blazeclaw::gateway {
 		GatewaySessionRegistry m_sessionRegistry;
 		GatewayToolRegistry m_toolRegistry;
 		ExtensionLifecycleManager m_extensionLifecycle{ true };
+		PluginRuntimeStateService m_pluginRuntimeState;
 		ApprovalTokenStore m_approvalStore;
 		std::unordered_map<std::string, AgentRunState> m_agentRuns;
 		std::unordered_map<std::string, std::string> m_agentRunByIdempotency;
