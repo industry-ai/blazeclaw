@@ -2,6 +2,7 @@
 
 #include "SkillsCatalogService.h"
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -34,6 +35,17 @@ namespace blazeclaw::core {
 		std::uint32_t configResolvedByNameFallbackCount = 0;
 		std::uint32_t allowlistRawCount = 0;
 		std::uint32_t allowlistNormalizedCount = 0;
+		std::uint32_t remoteEligibilityEnabledCount = 0;
+		std::uint32_t remotePlatformSatisfiedCount = 0;
+		std::uint32_t remoteBinSatisfiedCount = 0;
+		std::uint32_t remoteAnyBinSatisfiedCount = 0;
+		std::uint32_t alwaysBypassCount = 0;
+	};
+
+	struct SkillsRemoteEligibilityContext {
+		std::vector<std::wstring> platforms;
+		std::function<bool(const std::wstring&)> hasBin;
+		std::function<bool(const std::vector<std::wstring>&)> hasAnyBin;
 	};
 
 	class SkillsEligibilityService {
@@ -41,6 +53,11 @@ namespace blazeclaw::core {
 		[[nodiscard]] SkillsEligibilitySnapshot Evaluate(
 			const SkillsCatalogSnapshot& catalog,
 			const blazeclaw::config::AppConfig& appConfig) const;
+
+		[[nodiscard]] SkillsEligibilitySnapshot Evaluate(
+			const SkillsCatalogSnapshot& catalog,
+			const blazeclaw::config::AppConfig& appConfig,
+			const SkillsRemoteEligibilityContext* remoteContext) const;
 
 		[[nodiscard]] bool ValidateFixtureScenarios(
 			const std::filesystem::path& fixturesRoot,

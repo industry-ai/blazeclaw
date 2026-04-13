@@ -315,10 +315,17 @@ namespace blazeclaw::config {
 		std::wstring nodeManager = L"npm";
 	};
 
+	struct SkillsRemoteEligibilityConfig {
+		bool enabled = false;
+		std::vector<std::wstring> platforms;
+		std::map<std::wstring, bool> bins;
+	};
+
 	struct SkillsConfig {
 		std::map<std::wstring, SkillEntryConfig> entries;
 		std::vector<std::wstring> allowBundled;
 		std::wstring entryResolutionMode = L"strict";
+		SkillsRemoteEligibilityConfig remoteEligibility;
 		SkillsLoadConfig load;
 		SkillsLimitsConfig limits;
 		SkillsInstallConfig install;

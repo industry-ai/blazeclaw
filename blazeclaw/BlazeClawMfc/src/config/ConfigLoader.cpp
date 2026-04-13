@@ -280,6 +280,15 @@ namespace blazeclaw::config {
 			return L"strict";
 		}
 
+		std::wstring NormalizePlatformLabel(const std::wstring& raw) {
+			const std::wstring normalized = ToLowerTrim(raw);
+			if (normalized == L"windows") {
+				return L"win32";
+			}
+
+			return normalized;
+		}
+
 		std::wstring NormalizeEmbeddingsExecutionMode(
 			const std::wstring& raw) {
 			const std::wstring normalized = ToLowerTrim(raw);
@@ -1273,6 +1282,39 @@ namespace blazeclaw::config {
 				continue;
 			}
 
+			if (trimmedLine.rfind(L"skills.remoteEligibility.enabled=", 0) == 0) {
+				outConfig.skills.remoteEligibility.enabled = ParseBool(
+					trimmedLine.substr(31),
+					false);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"skills.remoteEligibility.platform=", 0) == 0) {
+				const auto platform = NormalizePlatformLabel(trimmedLine.substr(32));
+				if (!platform.empty()) {
+					outConfig.skills.remoteEligibility.platforms.push_back(platform);
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"skills.remoteEligibility.bin.", 0) == 0) {
+				const auto keyValuePos = trimmedLine.find(L'=');
+				if (keyValuePos == std::wstring::npos) {
+					continue;
+				}
+
+				const std::wstring binName = ToLowerTrim(
+					trimmedLine.substr(28, keyValuePos - 28));
+				if (binName.empty()) {
+					continue;
+				}
+
+				outConfig.skills.remoteEligibility.bins[binName] = ParseBool(
+					trimmedLine.substr(keyValuePos + 1),
+					false);
+				continue;
+			}
+
 			if (trimmedLine.rfind(L"skills.load.extraDir=", 0) == 0) {
 				const auto extraDir = Trim(trimmedLine.substr(21));
 				if (!extraDir.empty()) {
@@ -1410,6 +1452,18 @@ namespace blazeclaw::config {
 			outConfig.localModel.provider);
 		outConfig.skills.install.nodeManager =
 			NormalizeSkillsInstallNodeManager(outConfig.skills.install.nodeManager);
+
+		for (auto& platform : outConfig.skills.remoteEligibility.platforms) {
+			platform = NormalizePlatformLabel(platform);
+		}
+		std::sort(
+			outConfig.skills.remoteEligibility.platforms.begin(),
+			outConfig.skills.remoteEligibility.platforms.end());
+		outConfig.skills.remoteEligibility.platforms.erase(
+			std::unique(
+				outConfig.skills.remoteEligibility.platforms.begin(),
+				outConfig.skills.remoteEligibility.platforms.end()),
+			outConfig.skills.remoteEligibility.platforms.end());
 		if (outConfig.embeddings.dimension == 0) {
 			outConfig.embeddings.dimension = 384;
 		}

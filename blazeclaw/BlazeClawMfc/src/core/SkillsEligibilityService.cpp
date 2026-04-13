@@ -261,6 +261,72 @@ namespace blazeclaw::core {
 				std::find(osList.begin(), osList.end(), kPlatformB) != osList.end();
 		}
 
+		bool IsAnyPlatformAllowed(
+			const std::vector<std::wstring>& osList,
+			const std::vector<std::wstring>& platforms) {
+			for (const auto& platform : platforms) {
+				if (std::find(osList.begin(), osList.end(), platform) != osList.end()) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		std::vector<std::wstring> ResolveRemotePlatforms(
+			const blazeclaw::config::AppConfig& appConfig,
+			const SkillsRemoteEligibilityContext* remoteContext) {
+			if (remoteContext != nullptr && !remoteContext->platforms.empty()) {
+				auto normalized = NormalizeSkillsAllowlistEntries(remoteContext->platforms);
+				return normalized;
+			}
+
+			if (!appConfig.skills.remoteEligibility.enabled) {
+				return {};
+			}
+
+			return NormalizeSkillsAllowlistEntries(
+				appConfig.skills.remoteEligibility.platforms);
+		}
+
+		bool ResolveRemoteBinValue(
+			const blazeclaw::config::AppConfig& appConfig,
+			const SkillsRemoteEligibilityContext* remoteContext,
+			const std::wstring& binName) {
+			const auto normalizedBin = ToLower(Trim(binName));
+			if (normalizedBin.empty()) {
+				return false;
+			}
+
+			if (remoteContext != nullptr && remoteContext->hasBin) {
+				return remoteContext->hasBin(normalizedBin);
+			}
+
+			if (!appConfig.skills.remoteEligibility.enabled) {
+				return false;
+			}
+
+			const auto it = appConfig.skills.remoteEligibility.bins.find(normalizedBin);
+			return it != appConfig.skills.remoteEligibility.bins.end() && it->second;
+		}
+
+		bool ResolveRemoteAnyBinValue(
+			const blazeclaw::config::AppConfig& appConfig,
+			const SkillsRemoteEligibilityContext* remoteContext,
+			const std::vector<std::wstring>& bins) {
+			if (remoteContext != nullptr && remoteContext->hasAnyBin) {
+				return remoteContext->hasAnyBin(bins);
+			}
+
+			for (const auto& bin : bins) {
+				if (ResolveRemoteBinValue(appConfig, remoteContext, bin)) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
 		bool IsBundledAllowed(
 			const SkillsCatalogEntry& catalogEntry,
 			const SkillsEligibilityEntry& eligibility,
@@ -338,6 +404,13 @@ namespace blazeclaw::core {
 	SkillsEligibilitySnapshot SkillsEligibilityService::Evaluate(
 		const SkillsCatalogSnapshot& catalog,
 		const blazeclaw::config::AppConfig& appConfig) const {
+		return Evaluate(catalog, appConfig, nullptr);
+	}
+
+	SkillsEligibilitySnapshot SkillsEligibilityService::Evaluate(
+		const SkillsCatalogSnapshot& catalog,
+		const blazeclaw::config::AppConfig& appConfig,
+		const SkillsRemoteEligibilityContext* remoteContext) const {
 		SkillsEligibilitySnapshot snapshot;
 		snapshot.entries.reserve(catalog.entries.size());
 
@@ -356,6 +429,17 @@ namespace blazeclaw::core {
 			appConfig.skills.allowBundled);
 		snapshot.allowlistNormalizedCount = static_cast<std::uint32_t>(
 			normalizedBundledAllowlist.size());
+
+		const auto remotePlatforms = ResolveRemotePlatforms(appConfig, remoteContext);
+		const bool remoteEligibilityEnabled =
+			!remotePlatforms.empty() ||
+			(remoteContext != nullptr &&
+				(static_cast<bool>(remoteContext->hasBin) ||
+					static_cast<bool>(remoteContext->hasAnyBin))) ||
+			appConfig.skills.remoteEligibility.enabled;
+		if (remoteEligibilityEnabled) {
+			++snapshot.remoteEligibilityEnabledCount;
+		}
 
 		for (const auto& catalogEntry : catalog.entries) {
 			SkillsEligibilityEntry result;
@@ -410,7 +494,13 @@ namespace blazeclaw::core {
 					catalogEntry.frontmatter,
 					{ L"openclaw.os", L"os" }));
 			if (!IsCurrentPlatformAllowed(requiredOs)) {
-				result.missingOs = requiredOs;
+				if (!remotePlatforms.empty() &&
+					IsAnyPlatformAllowed(requiredOs, remotePlatforms)) {
+					++snapshot.remotePlatformSatisfiedCount;
+				}
+				else {
+					result.missingOs = requiredOs;
+				}
 			}
 
 			const auto requiredBins = SplitList(
@@ -418,6 +508,15 @@ namespace blazeclaw::core {
 					catalogEntry.frontmatter,
 					{ L"openclaw.requires.bins", L"requires.bins" }));
 			for (const auto& bin : requiredBins) {
+				if (SkillsHasBinary(bin)) {
+					continue;
+				}
+
+				if (ResolveRemoteBinValue(appConfig, remoteContext, bin)) {
+					++snapshot.remoteBinSatisfiedCount;
+					continue;
+				}
+
 				if (!SkillsHasBinary(bin)) {
 					result.missingBins.push_back(bin);
 				}
@@ -434,6 +533,15 @@ namespace blazeclaw::core {
 						foundAny = true;
 						break;
 					}
+				}
+
+				if (!foundAny &&
+					ResolveRemoteAnyBinValue(
+						appConfig,
+						remoteContext,
+						requiredAnyBins)) {
+					foundAny = true;
+					++snapshot.remoteAnyBinSatisfiedCount;
 				}
 
 				if (!foundAny) {
@@ -488,6 +596,20 @@ namespace blazeclaw::core {
 				}
 			}
 
+			const bool alwaysEligible = ParseBoolField(
+				GetFrontmatterField(
+					catalogEntry.frontmatter,
+					{ L"openclaw.always", L"always" }),
+				false);
+			if (alwaysEligible) {
+				result.missingOs.clear();
+				result.missingBins.clear();
+				result.missingAnyBins.clear();
+				result.missingEnv.clear();
+				result.missingConfig.clear();
+				++snapshot.alwaysBypassCount;
+			}
+
 			const bool hasMissingRequirements =
 				!result.missingOs.empty() ||
 				!result.missingBins.empty() ||
@@ -525,6 +647,7 @@ namespace blazeclaw::core {
 		appConfig.skills.limits.maxCandidatesPerRoot = 32;
 		appConfig.skills.limits.maxSkillsLoadedPerSource = 32;
 		appConfig.skills.entries[L"disabled-skill"].enabled = false;
+		appConfig.skills.entries[L"strict-key-target-key"].enabled = false;
 
 		const SkillsCatalogService catalogService;
 		const auto catalog = catalogService.LoadCatalog(root, appConfig);
@@ -560,6 +683,161 @@ namespace blazeclaw::core {
 		const auto envRequired = findByName(L"env-required-skill");
 		if (envRequired == eligibility.entries.end() || envRequired->missingEnv.empty()) {
 			outError = L"S2 eligibility fixture failed: env-required-skill should have missing env requirement.";
+			return false;
+		}
+
+		const auto browserDefault = findByName(L"browser-default-skill");
+		if (browserDefault == eligibility.entries.end() || !browserDefault->eligible ||
+			!browserDefault->missingConfig.empty()) {
+			outError = L"S2 eligibility fixture failed: browser-default-skill should be eligible via defaults-aware config truthiness.";
+			return false;
+		}
+
+		const auto strictKeyTarget = findByName(L"strict-key-target-skill");
+		if (strictKeyTarget == eligibility.entries.end() || !strictKeyTarget->disabled) {
+			outError = L"S2 eligibility fixture failed: strict-key-target-skill should be disabled by strict key config mapping.";
+			return false;
+		}
+
+		const auto strictNameOnly = findByName(L"strict-name-only");
+		if (strictNameOnly == eligibility.entries.end() || strictNameOnly->disabled) {
+			outError = L"S2 eligibility fixture failed: strict-name-only-skill should remain enabled in strict mode.";
+			return false;
+		}
+
+		blazeclaw::config::AppConfig compatConfig = appConfig;
+		compatConfig.skills.entryResolutionMode = L"compat";
+		compatConfig.skills.entries[L"strict-name-only"].enabled = false;
+		const auto compatEligibility = Evaluate(catalog, compatConfig);
+		const auto compatStrictNameOnly = std::find_if(
+			compatEligibility.entries.begin(),
+			compatEligibility.entries.end(),
+			[](const SkillsEligibilityEntry& entry) {
+				return ToLower(Trim(entry.skillName)) == L"strict-name-only";
+			});
+		if (compatStrictNameOnly == compatEligibility.entries.end() ||
+			!compatStrictNameOnly->disabled ||
+			compatEligibility.configResolvedByNameFallbackCount == 0) {
+			outError = L"S2 eligibility fixture failed: strict-name-only should disable in compat mode via name fallback.";
+			return false;
+		}
+
+		blazeclaw::config::AppConfig remoteConfig = appConfig;
+		remoteConfig.skills.remoteEligibility.enabled = true;
+		remoteConfig.skills.remoteEligibility.platforms = { L"linux" };
+		remoteConfig.skills.remoteEligibility.bins[L"remote-bin"] = true;
+		const auto remoteEligibility = Evaluate(catalog, remoteConfig);
+		const auto remotePlatform = std::find_if(
+			remoteEligibility.entries.begin(),
+			remoteEligibility.entries.end(),
+			[](const SkillsEligibilityEntry& entry) {
+				return ToLower(Trim(entry.skillName)) == L"remote-platform-skill";
+			});
+		if (remotePlatform == remoteEligibility.entries.end() ||
+			!remotePlatform->eligible ||
+			remoteEligibility.remotePlatformSatisfiedCount == 0) {
+			outError = L"S2 eligibility fixture failed: remote-platform-skill should be eligible via remote platform fallback.";
+			return false;
+		}
+
+		const auto remoteBin = std::find_if(
+			remoteEligibility.entries.begin(),
+			remoteEligibility.entries.end(),
+			[](const SkillsEligibilityEntry& entry) {
+				return ToLower(Trim(entry.skillName)) == L"remote-bin-skill";
+			});
+		if (remoteBin == remoteEligibility.entries.end() ||
+			!remoteBin->eligible ||
+			remoteEligibility.remoteBinSatisfiedCount == 0) {
+			outError = L"S2 eligibility fixture failed: remote-bin-skill should be eligible via remote bin fallback.";
+			return false;
+		}
+
+		const auto remoteAnyBin = std::find_if(
+			remoteEligibility.entries.begin(),
+			remoteEligibility.entries.end(),
+			[](const SkillsEligibilityEntry& entry) {
+				return ToLower(Trim(entry.skillName)) == L"remote-anybin-skill";
+			});
+		if (remoteAnyBin == remoteEligibility.entries.end() ||
+			!remoteAnyBin->eligible ||
+			remoteEligibility.remoteAnyBinSatisfiedCount == 0) {
+			outError = L"S2 eligibility fixture failed: remote-anybin-skill should be eligible via remote anyBins fallback.";
+			return false;
+		}
+
+		const auto alwaysBypass = std::find_if(
+			eligibility.entries.begin(),
+			eligibility.entries.end(),
+			[](const SkillsEligibilityEntry& entry) {
+				return ToLower(Trim(entry.skillName)) == L"always-bypass-skill";
+			});
+		if (alwaysBypass == eligibility.entries.end() || !alwaysBypass->eligible) {
+			outError = L"S2 eligibility fixture failed: always-bypass-skill should be eligible via always short-circuit.";
+			return false;
+		}
+
+		if (eligibility.alwaysBypassCount == 0) {
+			outError = L"S2 eligibility fixture failed: alwaysBypassCount should be incremented.";
+			return false;
+		}
+
+		const auto persistedRoot = fixturesRoot / L"s2-eligibility" / L"runtime-scratch";
+		std::error_code fsEc;
+		std::filesystem::create_directories(
+			persistedRoot /
+			L"blazeclaw" /
+			L"skills" /
+			L"persisted-env-skill",
+			fsEc);
+		if (fsEc) {
+			outError = L"S2 eligibility fixture failed: unable to create persisted env scratch directory.";
+			return false;
+		}
+
+		{
+			std::wofstream output(
+				persistedRoot /
+				L"blazeclaw" /
+				L"skills" /
+				L"persisted-env-skill" /
+				L".env");
+			if (!output.is_open()) {
+				outError = L"S2 eligibility fixture failed: unable to write persisted env fixture file.";
+				return false;
+			}
+
+			output << L"PERSISTED_FIXTURE_ENV=fixture-value\n";
+		}
+
+		const auto originalCurrentPath = std::filesystem::current_path(fsEc);
+		if (fsEc) {
+			outError = L"S2 eligibility fixture failed: unable to resolve current path.";
+			return false;
+		}
+
+		std::filesystem::current_path(persistedRoot, fsEc);
+		if (fsEc) {
+			outError = L"S2 eligibility fixture failed: unable to set persisted env fixture path.";
+			return false;
+		}
+
+		const auto persistedEligibility = Evaluate(catalog, appConfig);
+		std::filesystem::current_path(originalCurrentPath, fsEc);
+		if (fsEc) {
+			outError = L"S2 eligibility fixture failed: unable to restore current path.";
+			return false;
+		}
+
+		const auto persistedEnvSkill = std::find_if(
+			persistedEligibility.entries.begin(),
+			persistedEligibility.entries.end(),
+			[](const SkillsEligibilityEntry& entry) {
+				return ToLower(Trim(entry.skillName)) == L"persisted-env-skill";
+			});
+		if (persistedEnvSkill == persistedEligibility.entries.end() ||
+			!persistedEnvSkill->missingEnv.empty()) {
+			outError = L"S2 eligibility fixture failed: persisted-env-skill should resolve env from persisted .env fallback.";
 			return false;
 		}
 

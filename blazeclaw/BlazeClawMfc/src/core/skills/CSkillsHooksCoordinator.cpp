@@ -124,6 +124,16 @@ namespace blazeclaw::core {
 			context.eligibility.allowlistRawCount;
 		gatewaySkillsState.allowlistNormalizedCount =
 			context.eligibility.allowlistNormalizedCount;
+		gatewaySkillsState.remoteEligibilityEnabledCount =
+			context.eligibility.remoteEligibilityEnabledCount;
+		gatewaySkillsState.remotePlatformSatisfiedCount =
+			context.eligibility.remotePlatformSatisfiedCount;
+		gatewaySkillsState.remoteBinSatisfiedCount =
+			context.eligibility.remoteBinSatisfiedCount;
+		gatewaySkillsState.remoteAnyBinSatisfiedCount =
+			context.eligibility.remoteAnyBinSatisfiedCount;
+		gatewaySkillsState.alwaysBypassCount =
+			context.eligibility.alwaysBypassCount;
 		gatewaySkillsState.promptIncludedCount = context.prompt.includedCount;
 		gatewaySkillsState.promptChars = context.prompt.promptChars;
 		gatewaySkillsState.promptTruncated = context.prompt.truncated;

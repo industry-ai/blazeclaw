@@ -5459,6 +5459,16 @@ namespace blazeclaw::gateway {
 						std::to_string(state.allowlistRawCount) +
 						",\"allowlistNormalized\":" +
 						std::to_string(state.allowlistNormalizedCount) +
+						",\"remoteEligibilityEnabled\":" +
+						std::to_string(state.remoteEligibilityEnabledCount) +
+						",\"remotePlatformSatisfied\":" +
+						std::to_string(state.remotePlatformSatisfiedCount) +
+						",\"remoteBinSatisfied\":" +
+						std::to_string(state.remoteBinSatisfiedCount) +
+						",\"remoteAnyBinSatisfied\":" +
+						std::to_string(state.remoteAnyBinSatisfiedCount) +
+						",\"alwaysBypass\":" +
+						std::to_string(state.alwaysBypassCount) +
 						",\"promptIncluded\":" +
 						std::to_string(state.promptIncludedCount) +
 						",\"promptChars\":" +
