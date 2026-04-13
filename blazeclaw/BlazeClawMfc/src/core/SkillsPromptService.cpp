@@ -532,6 +532,17 @@ namespace blazeclaw::core {
 			return false;
 		}
 
+		const auto legacyVisibilitySnapshot = BuildSnapshot(
+			catalog,
+			eligibility,
+			appConfig,
+			std::nullopt,
+			false);
+		if (IncludesSkill(legacyVisibilitySnapshot.includedSkills, L"prompt-legacy-hidden")) {
+			outError = L"S2 prompt fixture failed: expected legacy disableModelInvocation field to hide skill from available prompt list.";
+			return false;
+		}
+
 		const auto selfEvolvingRoot =
 			fixturesRoot / L"s7-self-evolving" / L"workspace";
 		blazeclaw::config::AppConfig selfEvolvingConfig;

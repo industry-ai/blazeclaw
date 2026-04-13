@@ -391,7 +391,7 @@ namespace blazeclaw::core {
 			result.disableModelInvocation = ParseBoolField(
 				GetFrontmatterField(
 					catalogEntry.frontmatter,
-					{ L"disable-model-invocation", L"disable_model_invocation" }),
+					{ L"disable-model-invocation", L"disable_model_invocation", L"disablemodelinvocation" }),
 				false);
 
 			if (!IsBundledAllowed(catalogEntry, result, appConfig)) {

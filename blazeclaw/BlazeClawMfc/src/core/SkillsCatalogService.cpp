@@ -31,6 +31,31 @@ namespace blazeclaw::core {
 			return std::wstring(first, last);
 		}
 
+		std::vector<std::wstring> ParseEnvPathList(const std::wstring& raw) {
+			std::vector<std::wstring> values;
+			std::wstring current;
+			current.reserve(raw.size());
+
+			const auto flush = [&values, &current]() {
+				const std::wstring trimmed = Trim(current);
+				if (!trimmed.empty()) {
+					values.push_back(trimmed);
+				}
+				current.clear();
+				};
+
+			for (const wchar_t ch : raw) {
+				if (ch == L';' || ch == L',' || ch == L'|') {
+					flush();
+					continue;
+				}
+				current.push_back(ch);
+			}
+
+			flush();
+			return values;
+		}
+
 		std::wstring TrimQuotes(const std::wstring& value) {
 			const std::wstring trimmed = Trim(value);
 			if (trimmed.size() >= 2) {
@@ -420,6 +445,34 @@ namespace blazeclaw::core {
 			return false;
 		}
 
+		const auto pluginWorkspace =
+			fixturesRoot / L"s10-plugin" / L"workspace";
+		const auto pluginSkillDir =
+			fixturesRoot / L"s10-plugin" / L"plugin-skills";
+		const auto pluginEnvValue = pluginSkillDir.wstring();
+		_wputenv_s(L"BLAZECLAW_PLUGIN_SKILL_DIRS", pluginEnvValue.c_str());
+
+		blazeclaw::config::AppConfig pluginConfig;
+		pluginConfig.skills.limits.maxCandidatesPerRoot = 32;
+		pluginConfig.skills.limits.maxSkillsLoadedPerSource = 32;
+		pluginConfig.skills.limits.maxSkillFileBytes = 32 * 1024;
+
+		const auto pluginSnapshot =
+			LoadCatalog(pluginWorkspace, pluginConfig);
+		_wputenv_s(L"BLAZECLAW_PLUGIN_SKILL_DIRS", L"");
+
+		const auto pluginEntry = std::find_if(
+			pluginSnapshot.entries.begin(),
+			pluginSnapshot.entries.end(),
+			[](const SkillsCatalogEntry& entry) {
+				return ToLower(Trim(entry.skillName)) == L"plugin-added";
+			});
+		if (pluginEntry == pluginSnapshot.entries.end()) {
+			outError =
+				L"Fixture validation failed: expected plugin-contributed skill directory to be discovered.";
+			return false;
+		}
+
 		return true;
 	}
 
@@ -517,6 +570,18 @@ namespace blazeclaw::core {
 				.configuredRoot = std::filesystem::path(extraDir),
 				.resolvedRoot = ResolveRootPath(workspaceRoot, extraDir),
 				});
+		}
+
+		const auto pluginSkillDirs = ReadEnvVar(L"BLAZECLAW_PLUGIN_SKILL_DIRS");
+		if (pluginSkillDirs.has_value()) {
+			for (const auto& pluginDir : ParseEnvPathList(pluginSkillDirs.value())) {
+				roots.push_back({
+					.kind = SkillsSourceKind::Extra,
+					.precedence = 0,
+					.configuredRoot = std::filesystem::path(pluginDir),
+					.resolvedRoot = ResolveRootPath(workspaceRoot, pluginDir),
+					});
+			}
 		}
 
 		const auto bundledOverride = ReadEnvVar(L"BLAZECLAW_BUNDLED_SKILLS_DIR");
