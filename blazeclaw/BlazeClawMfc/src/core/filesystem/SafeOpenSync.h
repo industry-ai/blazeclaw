@@ -51,6 +51,10 @@ namespace blazeclaw::core::filesystem {
 		VerifiedOpenFileMetadata opened;
 	};
 
+	[[nodiscard]] bool SameFileIdentity(
+		const VerifiedOpenFileMetadata& left,
+		const VerifiedOpenFileMetadata& right);
+
 	[[nodiscard]] VerifiedOpenFileResult OpenVerifiedFileUtf8Sync(
 		const VerifiedOpenRequest& request);
 

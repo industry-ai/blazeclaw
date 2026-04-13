@@ -1,12 +1,15 @@
 #include "pch.h"
 #include "SafeOpenSync.h"
 
-#include <fstream>
 #include <vector>
 
 namespace blazeclaw::core::filesystem {
 
 	namespace {
+
+		bool IsZeroIdentityValue(const std::uint64_t value) {
+			return value == 0;
+		}
 
 		std::wstring Utf8ToWide(const std::string& value) {
 			if (value.empty()) {
@@ -49,6 +52,56 @@ namespace blazeclaw::core::filesystem {
 			return metadata.isFile;
 		}
 
+		bool ValidateAllowedType(
+			const VerifiedOpenFileMetadata& metadata,
+			const VerifiedOpenPolicy& policy,
+			const wchar_t* phase,
+			VerifiedOpenFileResult& outResult) {
+			if (IsAllowedType(metadata, policy.allowedType)) {
+				return true;
+			}
+
+			outResult.reason = VerifiedOpenFailureReason::Validation;
+			outResult.detail = std::wstring(phase) + L"-type-rejected";
+			return false;
+		}
+
+		bool ValidateHardlinkPolicy(
+			const VerifiedOpenFileMetadata& metadata,
+			const VerifiedOpenPolicy& policy,
+			const wchar_t* phase,
+			VerifiedOpenFileResult& outResult) {
+			if (!policy.rejectHardlinks || !metadata.isFile) {
+				return true;
+			}
+
+			if (metadata.hardLinkCount <= 1) {
+				return true;
+			}
+
+			outResult.reason = VerifiedOpenFailureReason::Validation;
+			outResult.detail = std::wstring(phase) + L"-hardlink-rejected";
+			return false;
+		}
+
+		bool ValidateMaxBytes(
+			const VerifiedOpenFileMetadata& metadata,
+			const VerifiedOpenPolicy& policy,
+			const wchar_t* phase,
+			VerifiedOpenFileResult& outResult) {
+			if (!policy.maxBytes.has_value() || !metadata.isFile) {
+				return true;
+			}
+
+			if (metadata.sizeBytes <= policy.maxBytes.value()) {
+				return true;
+			}
+
+			outResult.reason = VerifiedOpenFailureReason::Validation;
+			outResult.detail = std::wstring(phase) + L"-size-rejected";
+			return false;
+		}
+
 		bool IsExpectedPathError(const DWORD errorCode) {
 			return errorCode == ERROR_FILE_NOT_FOUND ||
 				errorCode == ERROR_PATH_NOT_FOUND ||
@@ -60,36 +113,6 @@ namespace blazeclaw::core::filesystem {
 			const wchar_t* phase,
 			const DWORD errorCode) {
 			return std::wstring(phase) + L":" + std::to_wstring(errorCode);
-		}
-
-		VerifiedOpenFileMetadata BuildPreOpenMetadata(
-			const std::filesystem::path& path,
-			std::error_code& outEc) {
-			VerifiedOpenFileMetadata metadata;
-
-			const auto status = std::filesystem::status(path, outEc);
-			if (outEc) {
-				return metadata;
-			}
-
-			metadata.isDirectory = std::filesystem::is_directory(status);
-			metadata.isFile = std::filesystem::is_regular_file(status);
-			if (metadata.isFile) {
-				metadata.sizeBytes = static_cast<std::uint64_t>(
-					std::filesystem::file_size(path, outEc));
-				if (outEc) {
-					return metadata;
-				}
-			}
-
-			const auto hardLinkCount = std::filesystem::hard_link_count(path, outEc);
-			if (outEc) {
-				return metadata;
-			}
-
-			metadata.hardLinkCount =
-				static_cast<std::uint32_t>(hardLinkCount);
-			return metadata;
 		}
 
 		bool IsPathChainSymlinkOrReparse(
@@ -120,16 +143,13 @@ namespace blazeclaw::core::filesystem {
 			return false;
 		}
 
-		bool PopulateOpenedMetadata(
+		bool PopulateMetadataFromHandle(
 			const HANDLE handle,
 			VerifiedOpenFileMetadata& outMetadata,
 			std::wstring& outDetail) {
 			BY_HANDLE_FILE_INFORMATION info{};
 			if (!GetFileInformationByHandle(handle, &info)) {
-				const DWORD errorCode = GetLastError();
-				outDetail = BuildWin32ErrorDetail(
-					L"fstat-failed",
-					errorCode);
+				outDetail = BuildWin32ErrorDetail(L"fstat-failed", GetLastError());
 				return false;
 			}
 
@@ -147,27 +167,97 @@ namespace blazeclaw::core::filesystem {
 			return true;
 		}
 
-		std::wstring ReadHandleUtf8Content(
-			const std::filesystem::path& resolvedPath,
+		bool PopulateMetadataFromPathHandle(
+			const std::filesystem::path& path,
+			const bool rejectPathSymlink,
+			VerifiedOpenFileMetadata& outMetadata,
+			VerifiedOpenFailureReason& outReason,
 			std::wstring& outDetail) {
-			std::ifstream input(resolvedPath, std::ios::binary);
-			if (!input.is_open()) {
-				outDetail = L"read-failed";
+			DWORD openFlags = FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS;
+			if (rejectPathSymlink) {
+				openFlags |= FILE_FLAG_OPEN_REPARSE_POINT;
+			}
+
+			const HANDLE handle = CreateFileW(
+				path.c_str(),
+				FILE_READ_ATTRIBUTES,
+				FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+				nullptr,
+				OPEN_EXISTING,
+				openFlags,
+				nullptr);
+			if (handle == INVALID_HANDLE_VALUE) {
+				const DWORD errorCode = GetLastError();
+				outReason = IsExpectedPathError(errorCode)
+					? VerifiedOpenFailureReason::Path
+					: VerifiedOpenFailureReason::Io;
+				outDetail = BuildWin32ErrorDetail(L"preopen-open-failed", errorCode);
+				return false;
+			}
+
+			const bool ok = PopulateMetadataFromHandle(handle, outMetadata, outDetail);
+			CloseHandle(handle);
+			if (!ok) {
+				outReason = VerifiedOpenFailureReason::Io;
+			}
+
+			return ok;
+		}
+
+		std::wstring ReadHandleUtf8Content(
+			const HANDLE handle,
+			std::wstring& outDetail) {
+			LARGE_INTEGER zeroOffset{};
+			if (!SetFilePointerEx(handle, zeroOffset, nullptr, FILE_BEGIN)) {
+				outDetail = BuildWin32ErrorDetail(L"seek-failed", GetLastError());
 				return {};
 			}
 
-			std::string content(
-				(std::istreambuf_iterator<char>(input)),
-				std::istreambuf_iterator<char>());
-			return Utf8ToWide(content);
+			std::string bytes;
+			bytes.reserve(4096);
+			std::vector<char> buffer(4096);
+			while (true) {
+				DWORD bytesRead = 0;
+				if (!ReadFile(
+					handle,
+					buffer.data(),
+					static_cast<DWORD>(buffer.size()),
+					&bytesRead,
+					nullptr)) {
+					outDetail = BuildWin32ErrorDetail(L"read-failed", GetLastError());
+					return {};
+				}
+
+				if (bytesRead == 0) {
+					break;
+				}
+
+				bytes.append(buffer.data(), buffer.data() + bytesRead);
+			}
+
+			return Utf8ToWide(bytes);
 		}
 
 	} // namespace
 
+	bool SameFileIdentity(
+		const VerifiedOpenFileMetadata& left,
+		const VerifiedOpenFileMetadata& right) {
+		if (left.fileIndex != right.fileIndex) {
+			return false;
+		}
+
+		if (left.volumeSerialNumber == right.volumeSerialNumber) {
+			return true;
+		}
+
+		return IsZeroIdentityValue(left.volumeSerialNumber) ||
+			IsZeroIdentityValue(right.volumeSerialNumber);
+	}
+
 	VerifiedOpenFileResult OpenVerifiedFileUtf8Sync(
 		const VerifiedOpenRequest& request) {
 		VerifiedOpenFileResult result;
-		result.reason = VerifiedOpenFailureReason::Io;
 
 		std::error_code resolveEc;
 		const std::filesystem::path resolvedPath =
@@ -182,42 +272,36 @@ namespace blazeclaw::core::filesystem {
 
 		result.resolvedPath = resolvedPath;
 
-		if (request.policy.rejectPathSymlink) {
-			if (IsPathChainSymlinkOrReparse(request.filePath, resolvedPath.parent_path())) {
-				result.reason = VerifiedOpenFailureReason::Validation;
-				result.rejectedBySymlinkPolicy = true;
-				result.detail = L"path-symlink-or-reparse-rejected";
-				return result;
-			}
-		}
-
-		std::error_code preOpenEc;
-		result.preOpen = BuildPreOpenMetadata(resolvedPath, preOpenEc);
-		if (preOpenEc) {
-			result.reason = VerifiedOpenFailureReason::Path;
-			result.detail = L"preopen-stat-failed";
+		if (request.policy.rejectPathSymlink &&
+			IsPathChainSymlinkOrReparse(request.filePath, resolvedPath.parent_path())) {
+			result.reason = VerifiedOpenFailureReason::Validation;
+			result.rejectedBySymlinkPolicy = true;
+			result.detail = L"path-symlink-or-reparse-rejected";
 			return result;
 		}
 
-		if (!IsAllowedType(result.preOpen, request.policy.allowedType)) {
-			result.reason = VerifiedOpenFailureReason::Validation;
-			result.detail = L"preopen-type-rejected";
+		VerifiedOpenFailureReason preOpenReason = VerifiedOpenFailureReason::Io;
+		std::wstring preOpenDetail;
+		if (!PopulateMetadataFromPathHandle(
+			resolvedPath,
+			request.policy.rejectPathSymlink,
+			result.preOpen,
+			preOpenReason,
+			preOpenDetail)) {
+			result.reason = preOpenReason;
+			result.detail = preOpenDetail;
 			return result;
 		}
 
-		if (request.policy.rejectHardlinks &&
-			result.preOpen.isFile &&
-			result.preOpen.hardLinkCount > 1) {
-			result.reason = VerifiedOpenFailureReason::Validation;
-			result.detail = L"preopen-hardlink-rejected";
+		if (!ValidateAllowedType(result.preOpen, request.policy, L"preopen", result)) {
 			return result;
 		}
 
-		if (request.policy.maxBytes.has_value() &&
-			result.preOpen.isFile &&
-			result.preOpen.sizeBytes > request.policy.maxBytes.value()) {
-			result.reason = VerifiedOpenFailureReason::Validation;
-			result.detail = L"preopen-size-rejected";
+		if (!ValidateHardlinkPolicy(result.preOpen, request.policy, L"preopen", result)) {
+			return result;
+		}
+
+		if (!ValidateMaxBytes(result.preOpen, request.policy, L"preopen", result)) {
 			return result;
 		}
 
@@ -243,48 +327,43 @@ namespace blazeclaw::core::filesystem {
 			result.reason = IsExpectedPathError(errorCode)
 				? VerifiedOpenFailureReason::Path
 				: VerifiedOpenFailureReason::Io;
-			result.detail = BuildWin32ErrorDetail(
-				L"open-failed",
-				errorCode);
+			result.detail = BuildWin32ErrorDetail(L"open-failed", errorCode);
 			return result;
 		}
 
 		std::wstring openedDetail;
-		if (!PopulateOpenedMetadata(handle, result.opened, openedDetail)) {
+		if (!PopulateMetadataFromHandle(handle, result.opened, openedDetail)) {
 			CloseHandle(handle);
 			result.reason = VerifiedOpenFailureReason::Io;
 			result.detail = openedDetail;
 			return result;
 		}
 
-		if (!IsAllowedType(result.opened, request.policy.allowedType)) {
+		if (!ValidateAllowedType(result.opened, request.policy, L"opened", result)) {
 			CloseHandle(handle);
-			result.reason = VerifiedOpenFailureReason::Validation;
-			result.detail = L"opened-type-rejected";
 			return result;
 		}
 
-		if (request.policy.rejectHardlinks &&
-			result.opened.isFile &&
-			result.opened.hardLinkCount > 1) {
+		if (!ValidateHardlinkPolicy(result.opened, request.policy, L"opened", result)) {
 			CloseHandle(handle);
-			result.reason = VerifiedOpenFailureReason::Validation;
-			result.detail = L"opened-hardlink-rejected";
 			return result;
 		}
 
-		if (request.policy.maxBytes.has_value() &&
-			result.opened.isFile &&
-			result.opened.sizeBytes > request.policy.maxBytes.value()) {
+		if (!ValidateMaxBytes(result.opened, request.policy, L"opened", result)) {
+			CloseHandle(handle);
+			return result;
+		}
+
+		if (!SameFileIdentity(result.preOpen, result.opened)) {
 			CloseHandle(handle);
 			result.reason = VerifiedOpenFailureReason::Validation;
-			result.detail = L"opened-size-rejected";
+			result.detail = L"identity-mismatch";
 			return result;
 		}
 
 		if (result.opened.isFile) {
 			std::wstring readDetail;
-			result.utf8Content = ReadHandleUtf8Content(resolvedPath, readDetail);
+			result.utf8Content = ReadHandleUtf8Content(handle, readDetail);
 			if (!readDetail.empty()) {
 				CloseHandle(handle);
 				result.reason = VerifiedOpenFailureReason::Io;
@@ -295,7 +374,6 @@ namespace blazeclaw::core::filesystem {
 
 		CloseHandle(handle);
 		result.ok = true;
-		result.reason = VerifiedOpenFailureReason::Io;
 		result.detail.clear();
 		return result;
 	}
