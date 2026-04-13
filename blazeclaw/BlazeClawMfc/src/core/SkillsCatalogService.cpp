@@ -240,6 +240,7 @@ namespace blazeclaw::core {
 		struct VerifiedSkillFileReadResult {
 			bool ok = false;
 			bool rejectedBySymlinkPolicy = false;
+			bool rejectedByMaxBytesPolicy = false;
 			std::wstring detail;
 			std::wstring content;
 		};
@@ -248,6 +249,7 @@ namespace blazeclaw::core {
 			const std::filesystem::path& rootRealPath,
 			const std::filesystem::path& skillFile,
 			const bool rejectPathSymlink,
+			const std::uint64_t maxBytes,
 			SkillsCatalogDiagnostics& outDiagnostics) {
 			std::error_code ec;
 			const auto canonicalFile = std::filesystem::weakly_canonical(skillFile, ec);
@@ -269,6 +271,7 @@ namespace blazeclaw::core {
 			request.filePath = skillFile;
 			request.resolvedPath = canonicalFile;
 			request.policy.rejectPathSymlink = rejectPathSymlink;
+			request.policy.maxBytes = maxBytes;
 			request.policy.allowedType =
 				blazeclaw::core::filesystem::VerifiedOpenAllowedType::File;
 
@@ -291,6 +294,9 @@ namespace blazeclaw::core {
 					.ok = false,
 					.rejectedBySymlinkPolicy =
 						verifiedOpenResult.rejectedBySymlinkPolicy,
+					.rejectedByMaxBytesPolicy =
+						verifiedOpenResult.detail.find(L"size-rejected") !=
+						std::wstring::npos,
 					.detail = verifiedOpenResult.detail,
 				};
 			}
@@ -846,23 +852,19 @@ namespace blazeclaw::core {
 					continue;
 				}
 
-				std::error_code statEc;
-				const auto size = std::filesystem::file_size(skillFile, statEc);
-				if (statEc ||
-					size > static_cast<std::uintmax_t>(
-						appConfig.skills.limits.maxSkillFileBytes)) {
-					++snapshot.diagnostics.oversizedSkillFiles;
-					continue;
-				}
-
 				const auto verifiedRead = ReadSkillFileVerified(
 					discoveryRootCanonical,
 					skillFile,
 					loaderPolicy.rejectPathSymlink,
+					static_cast<std::uint64_t>(
+						appConfig.skills.limits.maxSkillFileBytes),
 					snapshot.diagnostics);
 				if (!verifiedRead.ok) {
 					if (verifiedRead.rejectedBySymlinkPolicy) {
 						++snapshot.diagnostics.symlinkRejectedFiles;
+					}
+					if (verifiedRead.rejectedByMaxBytesPolicy) {
+						++snapshot.diagnostics.oversizedSkillFiles;
 					}
 					snapshot.diagnostics.warnings.push_back(
 						L"Failed verified SKILL.md read (" + verifiedRead.detail + L"): " +
