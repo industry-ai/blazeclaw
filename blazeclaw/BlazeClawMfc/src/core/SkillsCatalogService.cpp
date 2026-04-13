@@ -383,6 +383,14 @@ namespace blazeclaw::core {
 
 	} // namespace
 
+	SkillsLoaderPolicy SkillsCatalogService::ResolveLoaderPolicy(
+		const blazeclaw::config::AppConfig& appConfig) {
+		return SkillsLoaderPolicy{
+			.rejectPathSymlink = appConfig.skills.load.rejectPathSymlink,
+			.strictFrontmatter = appConfig.skills.load.strictFrontmatter,
+		};
+	}
+
 	std::wstring SkillsCatalogService::SourceKindLabel(const SkillsSourceKind kind) {
 		switch (kind) {
 		case SkillsSourceKind::Extra:
@@ -803,6 +811,11 @@ namespace blazeclaw::core {
 		const std::filesystem::path& workspaceRoot,
 		const blazeclaw::config::AppConfig& appConfig) const {
 		SkillsCatalogSnapshot snapshot;
+		const auto loaderPolicy = ResolveLoaderPolicy(appConfig);
+		snapshot.diagnostics.loaderPolicyRejectPathSymlinkCount =
+			loaderPolicy.rejectPathSymlink ? 1u : 0u;
+		snapshot.diagnostics.loaderPolicyStrictFrontmatterCount =
+			loaderPolicy.strictFrontmatter ? 1u : 0u;
 
 		const auto sourceRoots = BuildSourceRoots(workspaceRoot, appConfig);
 		snapshot.diagnostics.pluginRootsConfigured = static_cast<std::uint32_t>(
@@ -864,7 +877,7 @@ namespace blazeclaw::core {
 				const auto verifiedRead = ReadSkillFileVerified(
 					discoveryRootCanonical,
 					skillFile,
-					appConfig.skills.load.rejectPathSymlink);
+					loaderPolicy.rejectPathSymlink);
 				if (!verifiedRead.ok) {
 					if (verifiedRead.rejectedBySymlinkPolicy) {
 						++snapshot.diagnostics.symlinkRejectedFiles;
@@ -890,7 +903,7 @@ namespace blazeclaw::core {
 					entry.validFrontmatter = true;
 				}
 				else {
-					if (appConfig.skills.load.strictFrontmatter) {
+					if (loaderPolicy.strictFrontmatter) {
 						++snapshot.diagnostics.invalidFrontmatterFiles;
 						++snapshot.diagnostics.strictFrontmatterOmittedFiles;
 						snapshot.diagnostics.warnings.push_back(

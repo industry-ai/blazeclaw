@@ -5421,6 +5421,14 @@ namespace blazeclaw::gateway {
 					std::to_string(state.pluginRootsConfigured) +
 					",\"pluginRootsScanned\":" +
 					std::to_string(state.pluginRootsScanned) +
+				   ",\"loaderPolicyRejectPathSymlink\":" +
+					std::to_string(state.loaderPolicyRejectPathSymlinkCount) +
+					",\"loaderPolicyStrictFrontmatter\":" +
+					std::to_string(state.loaderPolicyStrictFrontmatterCount) +
+					",\"symlinkRejectedFiles\":" +
+					std::to_string(state.symlinkRejectedFiles) +
+					",\"strictFrontmatterOmittedFiles\":" +
+					std::to_string(state.strictFrontmatterOmittedFiles) +
 						",\"oversizedSkillFiles\":" +
 						std::to_string(state.oversizedSkillFiles) +
 						",\"invalidFrontmatterFiles\":" +

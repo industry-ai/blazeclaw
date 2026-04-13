@@ -71,6 +71,10 @@ namespace blazeclaw::gateway {
 		std::size_t rootsSkipped = 0;
 		std::size_t pluginRootsConfigured = 0;
 		std::size_t pluginRootsScanned = 0;
+		std::size_t loaderPolicyRejectPathSymlinkCount = 0;
+		std::size_t loaderPolicyStrictFrontmatterCount = 0;
+		std::size_t symlinkRejectedFiles = 0;
+		std::size_t strictFrontmatterOmittedFiles = 0;
 		std::size_t oversizedSkillFiles = 0;
 		std::size_t invalidFrontmatterFiles = 0;
 		std::size_t warningCount = 0;

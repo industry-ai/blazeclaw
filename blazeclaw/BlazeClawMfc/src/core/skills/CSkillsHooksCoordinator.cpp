@@ -87,6 +87,14 @@ namespace blazeclaw::core {
 			context.catalog.diagnostics.pluginRootsConfigured;
 		gatewaySkillsState.pluginRootsScanned =
 			context.catalog.diagnostics.pluginRootsScanned;
+		gatewaySkillsState.loaderPolicyRejectPathSymlinkCount =
+			context.catalog.diagnostics.loaderPolicyRejectPathSymlinkCount;
+		gatewaySkillsState.loaderPolicyStrictFrontmatterCount =
+			context.catalog.diagnostics.loaderPolicyStrictFrontmatterCount;
+		gatewaySkillsState.symlinkRejectedFiles =
+			context.catalog.diagnostics.symlinkRejectedFiles;
+		gatewaySkillsState.strictFrontmatterOmittedFiles =
+			context.catalog.diagnostics.strictFrontmatterOmittedFiles;
 		gatewaySkillsState.oversizedSkillFiles =
 			context.catalog.diagnostics.oversizedSkillFiles;
 		gatewaySkillsState.invalidFrontmatterFiles =

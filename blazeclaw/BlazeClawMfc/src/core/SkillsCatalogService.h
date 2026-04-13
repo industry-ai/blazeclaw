@@ -28,6 +28,11 @@ namespace blazeclaw::core {
 		std::filesystem::path resolvedRoot;
 	};
 
+	struct SkillsLoaderPolicy {
+		bool rejectPathSymlink = true;
+		bool strictFrontmatter = false;
+	};
+
 	struct SkillFrontmatter {
 		std::wstring name;
 		std::wstring description;
@@ -52,6 +57,8 @@ namespace blazeclaw::core {
 		std::uint32_t rootsSkipped = 0;
 		std::uint32_t pluginRootsConfigured = 0;
 		std::uint32_t pluginRootsScanned = 0;
+		std::uint32_t loaderPolicyRejectPathSymlinkCount = 0;
+		std::uint32_t loaderPolicyStrictFrontmatterCount = 0;
 		std::uint32_t symlinkRejectedFiles = 0;
 		std::uint32_t strictFrontmatterOmittedFiles = 0;
 		std::uint32_t oversizedSkillFiles = 0;
@@ -76,6 +83,9 @@ namespace blazeclaw::core {
 		[[nodiscard]] static std::wstring SourceKindLabel(SkillsSourceKind kind);
 
 	private:
+		[[nodiscard]] static SkillsLoaderPolicy ResolveLoaderPolicy(
+			const blazeclaw::config::AppConfig& appConfig);
+
 		[[nodiscard]] std::vector<SkillsSourceRoot> BuildSourceRoots(
 			const std::filesystem::path& workspaceRoot,
 			const blazeclaw::config::AppConfig& appConfig) const;
