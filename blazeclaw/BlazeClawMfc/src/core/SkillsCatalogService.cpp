@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cwctype>
 #include <fstream>
+#include <optional>
 #include <set>
 #include <unordered_map>
 
@@ -248,6 +249,77 @@ namespace blazeclaw::core {
 			return Utf8ToWide(content);
 		}
 
+		struct VerifiedSkillFileReadResult {
+			bool ok = false;
+			bool rejectedBySymlinkPolicy = false;
+			std::wstring detail;
+			std::wstring content;
+		};
+
+		VerifiedSkillFileReadResult ReadSkillFileVerified(
+			const std::filesystem::path& rootRealPath,
+			const std::filesystem::path& skillFile,
+			const bool rejectPathSymlink) {
+			std::error_code ec;
+			const auto canonicalFile = std::filesystem::weakly_canonical(skillFile, ec);
+			if (ec) {
+				return VerifiedSkillFileReadResult{
+					.ok = false,
+					.detail = L"canonicalize-failed",
+				};
+			}
+
+			if (!IsPathInside(rootRealPath, canonicalFile)) {
+				return VerifiedSkillFileReadResult{
+					.ok = false,
+					.detail = L"outside-root",
+				};
+			}
+
+			if (rejectPathSymlink) {
+				std::filesystem::path probe = skillFile;
+				while (true) {
+					const DWORD attrs = GetFileAttributesW(probe.c_str());
+					if (attrs != INVALID_FILE_ATTRIBUTES &&
+						(attrs & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+						return VerifiedSkillFileReadResult{
+							.ok = false,
+							.rejectedBySymlinkPolicy = true,
+							.detail = L"path-reparse-point-rejected",
+						};
+					}
+
+					std::error_code statusEc;
+					const auto status = std::filesystem::symlink_status(probe, statusEc);
+					if (!statusEc && std::filesystem::is_symlink(status)) {
+						return VerifiedSkillFileReadResult{
+							.ok = false,
+							.rejectedBySymlinkPolicy = true,
+							.detail = L"path-symlink-rejected",
+						};
+					}
+
+					if (probe == rootRealPath || !probe.has_relative_path()) {
+						break;
+					}
+					probe = probe.parent_path();
+				}
+			}
+
+			const auto content = ReadFileUtf8(skillFile);
+			if (!content.has_value()) {
+				return VerifiedSkillFileReadResult{
+					.ok = false,
+					.detail = L"read-failed",
+				};
+			}
+
+			return VerifiedSkillFileReadResult{
+				.ok = true,
+				.content = content.value(),
+			};
+		}
+
 		bool TryGetHomeDir(std::filesystem::path& outHomeDir) {
 			wchar_t* homeValue = nullptr;
 			std::size_t homeLength = 0;
@@ -475,6 +547,21 @@ namespace blazeclaw::core {
 			return false;
 		}
 
+		const auto symlinkFixtureWorkspace =
+			fixturesRoot / L"s11-local-loader" / L"workspace";
+		blazeclaw::config::AppConfig symlinkConfig;
+		symlinkConfig.skills.limits.maxCandidatesPerRoot = 32;
+		symlinkConfig.skills.limits.maxSkillsLoadedPerSource = 32;
+		symlinkConfig.skills.limits.maxSkillFileBytes = 32 * 1024;
+		symlinkConfig.skills.load.rejectPathSymlink = true;
+
+		const auto symlinkSnapshot = LoadCatalog(symlinkFixtureWorkspace, symlinkConfig);
+		if (symlinkSnapshot.diagnostics.symlinkRejectedFiles == 0) {
+			outError =
+				L"Fixture validation failed: expected symlink-rejected SKILL.md diagnostics in local-loader parity fixture.";
+			return false;
+		}
+
 		return true;
 	}
 
@@ -697,6 +784,7 @@ namespace blazeclaw::core {
 			const auto discoveryRoot = ResolveNestedSkillsRoot(
 				rootPath,
 				appConfig.skills.limits.maxCandidatesPerRoot);
+			const auto discoveryRootCanonical = CanonicalOrSelf(discoveryRoot);
 			const auto candidates = CollectCandidateSkillDirs(
 				discoveryRoot,
 				appConfig.skills.limits.maxCandidatesPerRoot);
@@ -727,10 +815,17 @@ namespace blazeclaw::core {
 					continue;
 				}
 
-				const auto content = ReadFileUtf8(skillFile);
-				if (!content.has_value()) {
+				const auto verifiedRead = ReadSkillFileVerified(
+					discoveryRootCanonical,
+					skillFile,
+					appConfig.skills.load.rejectPathSymlink);
+				if (!verifiedRead.ok) {
+					if (verifiedRead.rejectedBySymlinkPolicy) {
+						++snapshot.diagnostics.symlinkRejectedFiles;
+					}
 					snapshot.diagnostics.warnings.push_back(
-						L"Failed to read SKILL.md: " + skillFile.wstring());
+						L"Failed verified SKILL.md read (" + verifiedRead.detail + L"): " +
+						skillFile.wstring());
 					continue;
 				}
 
@@ -741,7 +836,7 @@ namespace blazeclaw::core {
 				entry.precedence = sourceRoot.precedence;
 
 				std::vector<std::wstring> validationErrors;
-				const auto frontmatter = ParseFrontmatter(content.value(), validationErrors);
+				const auto frontmatter = ParseFrontmatter(verifiedRead.content, validationErrors);
 				if (frontmatter.has_value()) {
 					entry.frontmatter = frontmatter.value();
 					entry.skillName = frontmatter->name;

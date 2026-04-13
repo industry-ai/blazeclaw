@@ -297,6 +297,7 @@ namespace blazeclaw::config {
 	struct SkillsLoadConfig {
 		bool watch = true;
 		std::uint32_t watchDebounceMs = 250;
+		bool rejectPathSymlink = true;
 		std::vector<std::wstring> extraDirs;
 	};
 
