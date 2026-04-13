@@ -341,6 +341,94 @@ namespace blazeclaw::gateway {
 			return compact;
 		}
 
+		std::string SerializePluginRuntimeSubagentModeLocal(
+			const PluginRuntimeSubagentMode mode) {
+			switch (mode) {
+			case PluginRuntimeSubagentMode::Explicit:
+				return "explicit";
+			case PluginRuntimeSubagentMode::GatewayBindable:
+				return "gateway-bindable";
+			case PluginRuntimeSubagentMode::Default:
+			default:
+				return "default";
+			}
+		}
+
+		std::string SerializePluginRuntimeCapabilitiesJsonLocal(
+			const std::vector<PluginRuntimeCapabilityContract>& contracts) {
+			std::string capabilitiesJson = "[";
+			for (std::size_t index = 0; index < contracts.size(); ++index) {
+				if (index > 0) {
+					capabilitiesJson += ",";
+				}
+
+				const auto& contract = contracts[index];
+				capabilitiesJson +=
+					"{\"capabilityId\":\"" +
+					EscapeJsonLocal(contract.capabilityId) +
+					"\",\"owner\":\"" +
+					EscapeJsonLocal(contract.owner) +
+					"\",\"version\":\"" +
+					EscapeJsonLocal(contract.version) +
+					"\",\"stability\":\"" +
+					EscapeJsonLocal(contract.stability) +
+					"\",\"description\":\"" +
+					EscapeJsonLocal(contract.description) +
+					"\"}";
+			}
+
+			capabilitiesJson += "]";
+			return capabilitiesJson;
+		}
+
+		std::string SerializePluginRuntimeTransitionsJsonLocal(
+			const std::vector<PluginRuntimeTransitionEntry>& transitions,
+			const std::size_t limit) {
+			const std::size_t startIndex =
+				transitions.size() > limit
+				? transitions.size() - limit
+				: 0;
+
+			std::string transitionsJson = "[";
+			for (std::size_t index = startIndex; index < transitions.size(); ++index) {
+				if (index > startIndex) {
+					transitionsJson += ",";
+				}
+
+				const auto& entry = transitions[index];
+				transitionsJson +=
+					"{\"sequence\":" +
+					std::to_string(entry.sequence) +
+					",\"timestampMs\":" +
+					std::to_string(entry.timestampMs) +
+					",\"action\":\"" +
+					EscapeJsonLocal(entry.action) +
+					"\",\"activeVersion\":" +
+					std::to_string(entry.activeVersion) +
+					",\"httpRouteVersion\":" +
+					std::to_string(entry.httpRouteVersion) +
+					",\"channelVersion\":" +
+					std::to_string(entry.channelVersion) +
+					",\"activeRegistryCount\":" +
+					std::to_string(entry.activeRegistryCount) +
+					",\"httpRoutePinned\":" +
+					std::string(entry.httpRoutePinned ? "true" : "false") +
+					",\"channelPinned\":" +
+					std::string(entry.channelPinned ? "true" : "false") +
+					",\"cacheKey\":\"" +
+					EscapeJsonLocal(entry.cacheKey) +
+					"\",\"workspaceDir\":\"" +
+					EscapeJsonLocal(entry.workspaceDir) +
+					"\",\"runtimeSubagentMode\":\"" +
+					SerializePluginRuntimeSubagentModeLocal(
+						entry.runtimeSubagentMode) +
+					"\"}";
+			}
+
+			transitionsJson += "]";
+			return transitionsJson;
+		}
+
 		std::string SerializeSkillCatalogEntry(
 			const SkillsCatalogGatewayEntry& entry) {
 			return "{\"name\":\"" +
@@ -2554,6 +2642,187 @@ namespace blazeclaw::gateway {
 	}
 
 	void GatewayHost::RegisterRuntimeHandlers() {
+		m_dispatcher.Register(
+			"gateway.runtime.plugins.capabilities",
+			[this](const protocol::RequestFrame& request) {
+				const auto contracts =
+					m_pluginRuntimeState.ListCapabilityContracts();
+
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = true,
+					.payloadJson =
+						"{\"capabilities\":" +
+						SerializePluginRuntimeCapabilitiesJsonLocal(contracts) +
+						",\"count\":" +
+						std::to_string(contracts.size()) +
+						"}",
+					.error = std::nullopt,
+				};
+			});
+
+		m_dispatcher.Register(
+			"gateway.runtime.plugins.state",
+			[this](const protocol::RequestFrame& request) {
+				const auto snapshot = m_pluginRuntimeState.Snapshot();
+				const auto importedPluginIds =
+					m_pluginRuntimeState.ListImportedRuntimePluginIds();
+
+				std::string importedJson = "[";
+				for (std::size_t index = 0; index < importedPluginIds.size(); ++index) {
+					if (index > 0) {
+						importedJson += ",";
+					}
+
+					importedJson +=
+						"\"" +
+						EscapeJsonLocal(importedPluginIds[index]) +
+						"\"";
+				}
+				importedJson += "]";
+
+				const std::size_t activeRegistryCount =
+					snapshot.activeRegistry == nullptr
+					? 0
+					: snapshot.activeRegistry->size();
+
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = true,
+					.payloadJson =
+						"{\"activeVersion\":" +
+						std::to_string(snapshot.activeVersion) +
+						",\"httpRouteVersion\":" +
+						std::to_string(m_pluginRuntimeState.GetHttpRouteVersion()) +
+						",\"channelVersion\":" +
+						std::to_string(m_pluginRuntimeState.GetChannelVersion()) +
+						",\"activeRegistryCount\":" +
+						std::to_string(activeRegistryCount) +
+						",\"httpRoutePinned\":" +
+						std::string(snapshot.httpRoute.pinned ? "true" : "false") +
+						",\"channelPinned\":" +
+						std::string(snapshot.channel.pinned ? "true" : "false") +
+						",\"cacheKey\":\"" +
+						EscapeJsonLocal(snapshot.cacheKey) +
+						"\",\"workspaceDir\":\"" +
+						EscapeJsonLocal(snapshot.workspaceDir) +
+						"\",\"runtimeSubagentMode\":\"" +
+						SerializePluginRuntimeSubagentModeLocal(
+							snapshot.runtimeSubagentMode) +
+						"\",\"importedPluginIds\":" +
+						importedJson +
+						",\"importedCount\":" +
+						std::to_string(importedPluginIds.size()) +
+						"}",
+					.error = std::nullopt,
+				};
+			});
+
+		m_dispatcher.Register(
+			"gateway.runtime.plugins.transitions",
+			[this](const protocol::RequestFrame& request) {
+				const auto requestedLimit =
+					ExtractSizeParam(request.paramsJson, "limit").value_or(20);
+				const std::size_t limit =
+					(std::max)(
+						std::size_t{ 1 },
+						(std::min)(requestedLimit, std::size_t{ 128 }));
+
+				const auto transitions =
+					m_pluginRuntimeState.GetTransitionHistory();
+
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = true,
+					.payloadJson =
+						"{\"transitions\":" +
+						SerializePluginRuntimeTransitionsJsonLocal(
+							transitions,
+							limit) +
+						",\"count\":" +
+						std::to_string((std::min)(transitions.size(), limit)) +
+						",\"total\":" +
+						std::to_string(transitions.size()) +
+						"}",
+					.error = std::nullopt,
+				};
+			});
+
+		m_dispatcher.Register(
+			"gateway.runtime.plugins.imported.list",
+			[this](const protocol::RequestFrame& request) {
+				const auto importedPluginIds =
+					m_pluginRuntimeState.ListImportedRuntimePluginIds();
+				std::string importedJson = "[";
+				for (std::size_t index = 0; index < importedPluginIds.size(); ++index) {
+					if (index > 0) {
+						importedJson += ",";
+					}
+
+					importedJson +=
+						"\"" +
+						EscapeJsonLocal(importedPluginIds[index]) +
+						"\"";
+				}
+				importedJson += "]";
+
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = true,
+					.payloadJson =
+						"{\"plugins\":" +
+						importedJson +
+						",\"count\":" +
+						std::to_string(importedPluginIds.size()) +
+						"}",
+					.error = std::nullopt,
+				};
+			});
+
+		m_dispatcher.Register(
+			"gateway.runtime.plugins.lifecycle.reset",
+			[this](const protocol::RequestFrame& request) {
+				bool forTest = false;
+				if (request.paramsJson.has_value()) {
+					json::FindBoolField(
+						request.paramsJson.value(),
+						"forTest",
+						forTest);
+				}
+
+				if (!forTest) {
+					return protocol::ResponseFrame{
+						.id = request.id,
+						.ok = false,
+						.payloadJson = std::nullopt,
+						.error = protocol::ErrorShape{
+							.code = "invalid_params",
+							.message = "Set forTest=true to reset plugin runtime lifecycle state.",
+							.detailsJson = std::nullopt,
+							.retryable = false,
+							.retryAfterMs = std::nullopt,
+						},
+					};
+				}
+
+				m_pluginRuntimeState.ResetForTest();
+				const auto snapshot = m_pluginRuntimeState.Snapshot();
+
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = true,
+					.payloadJson =
+						"{\"reset\":true,\"activeVersion\":" +
+						std::to_string(snapshot.activeVersion) +
+						",\"httpRouteVersion\":" +
+						std::to_string(m_pluginRuntimeState.GetHttpRouteVersion()) +
+						",\"channelVersion\":" +
+						std::to_string(m_pluginRuntimeState.GetChannelVersion()) +
+						"}",
+					.error = std::nullopt,
+				};
+			});
+
 		m_dispatcher.Register(
 			"gateway.runtime.governance.reportStatus",
 			[this](const protocol::RequestFrame& request) {

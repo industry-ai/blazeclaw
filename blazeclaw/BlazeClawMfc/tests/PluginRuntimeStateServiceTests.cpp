@@ -125,3 +125,61 @@ TEST_CASE(
 		deactivated.runtimeSubagentMode ==
 		PluginRuntimeSubagentMode::Default);
 }
+
+TEST_CASE(
+	"PluginRuntimeStateService exposes runtime capability contracts",
+	"[plugin-runtime-state][capability-contract]") {
+	PluginRuntimeStateService service;
+	const auto contracts = service.ListCapabilityContracts();
+	REQUIRE(contracts.size() >= 4);
+
+	REQUIRE(
+		std::any_of(
+			contracts.begin(),
+			contracts.end(),
+			[](const PluginRuntimeCapabilityContract& contract) {
+				return contract.capabilityId ==
+					"plugin-runtime.active-registry";
+			}));
+
+	REQUIRE(
+		std::any_of(
+			contracts.begin(),
+			contracts.end(),
+			[](const PluginRuntimeCapabilityContract& contract) {
+				return contract.capabilityId ==
+					"plugin-runtime.transition-history";
+			}));
+}
+
+TEST_CASE(
+	"PluginRuntimeStateService records transition telemetry history",
+	"[plugin-runtime-state][telemetry]") {
+	PluginRuntimeStateService service;
+	service.ActivateRuntimeRegistry(
+		&kFixtureRegistryA,
+		"cache-transition",
+		"workspace-transition",
+		PluginRuntimeSubagentMode::GatewayBindable,
+		true,
+		true);
+	service.RecordImportedPluginId("alpha");
+	service.DeactivateRuntimeRegistry();
+
+	const auto transitions = service.GetTransitionHistory();
+	REQUIRE_FALSE(transitions.empty());
+	REQUIRE(
+		std::any_of(
+			transitions.begin(),
+			transitions.end(),
+			[](const PluginRuntimeTransitionEntry& entry) {
+				return entry.action == "activate_runtime_registry";
+			}));
+	REQUIRE(
+		std::any_of(
+			transitions.begin(),
+			transitions.end(),
+			[](const PluginRuntimeTransitionEntry& entry) {
+				return entry.action == "deactivate_runtime_registry";
+			}));
+}

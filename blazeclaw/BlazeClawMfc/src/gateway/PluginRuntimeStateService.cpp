@@ -1,7 +1,48 @@
 #include "pch.h"
 #include "PluginRuntimeStateService.h"
 
+#include <algorithm>
+#include <chrono>
+
 namespace blazeclaw::gateway {
+
+	std::uint64_t PluginRuntimeStateService::CurrentEpochMs() {
+		return static_cast<std::uint64_t>(
+			std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::system_clock::now().time_since_epoch())
+			.count());
+	}
+
+	void PluginRuntimeStateService::RecordTransition(
+		const std::string& action) {
+		PluginRuntimeTransitionEntry entry;
+		entry.sequence = ++m_transitionSequence;
+		entry.timestampMs = CurrentEpochMs();
+		entry.action = action;
+		entry.activeVersion = m_state.activeVersion;
+		entry.httpRouteVersion = GetHttpRouteVersion();
+		entry.channelVersion = GetChannelVersion();
+		entry.activeRegistryCount =
+			m_state.activeRegistry == nullptr
+			? 0
+			: m_state.activeRegistry->size();
+		entry.httpRoutePinned = m_state.httpRoute.pinned;
+		entry.channelPinned = m_state.channel.pinned;
+		entry.cacheKey = m_state.cacheKey;
+		entry.workspaceDir = m_state.workspaceDir;
+		entry.runtimeSubagentMode = m_state.runtimeSubagentMode;
+
+		m_transitionHistory.push_back(std::move(entry));
+		constexpr std::size_t kTransitionHistoryLimit = 128;
+		if (m_transitionHistory.size() > kTransitionHistoryLimit) {
+			const std::size_t overflow =
+				m_transitionHistory.size() - kTransitionHistoryLimit;
+			m_transitionHistory.erase(
+				m_transitionHistory.begin(),
+				m_transitionHistory.begin() +
+				static_cast<std::ptrdiff_t>(overflow));
+		}
+	}
 
 	void PluginRuntimeStateService::InstallSurfaceRegistry(
 		PluginRuntimeSurfaceState& surface,
@@ -46,6 +87,7 @@ namespace blazeclaw::gateway {
 		m_state.cacheKey = cacheKey;
 		m_state.workspaceDir = workspaceDir;
 		m_state.runtimeSubagentMode = runtimeSubagentMode;
+		RecordTransition("set_active_registry");
 	}
 
 	void PluginRuntimeStateService::ActivateRuntimeRegistry(
@@ -64,6 +106,8 @@ namespace blazeclaw::gateway {
 		if (pinChannel) {
 			PinChannelRegistry(registry);
 		}
+
+		RecordTransition("activate_runtime_registry");
 	}
 
 	void PluginRuntimeStateService::DeactivateRuntimeRegistry() {
@@ -74,11 +118,13 @@ namespace blazeclaw::gateway {
 			std::string{},
 			std::string{},
 			PluginRuntimeSubagentMode::Default);
+		RecordTransition("deactivate_runtime_registry");
 	}
 
 	void PluginRuntimeStateService::PinHttpRouteRegistry(
 		const std::vector<ExtensionManifest>* registry) {
 		InstallSurfaceRegistry(m_state.httpRoute, registry, true);
+		RecordTransition("pin_http_route_registry");
 	}
 
 	void PluginRuntimeStateService::ReleasePinnedHttpRouteRegistry(
@@ -89,11 +135,13 @@ namespace blazeclaw::gateway {
 		}
 
 		InstallSurfaceRegistry(m_state.httpRoute, m_state.activeRegistry, false);
+		RecordTransition("release_http_route_registry");
 	}
 
 	void PluginRuntimeStateService::PinChannelRegistry(
 		const std::vector<ExtensionManifest>* registry) {
 		InstallSurfaceRegistry(m_state.channel, registry, true);
+		RecordTransition("pin_channel_registry");
 	}
 
 	void PluginRuntimeStateService::ReleasePinnedChannelRegistry(
@@ -104,6 +152,7 @@ namespace blazeclaw::gateway {
 		}
 
 		InstallSurfaceRegistry(m_state.channel, m_state.activeRegistry, false);
+		RecordTransition("release_channel_registry");
 	}
 
 	const std::vector<ExtensionManifest>*
@@ -235,6 +284,45 @@ namespace blazeclaw::gateway {
 			m_state.importedPluginIds.end());
 	}
 
+	std::vector<PluginRuntimeCapabilityContract>
+		PluginRuntimeStateService::ListCapabilityContracts() const {
+		return {
+			PluginRuntimeCapabilityContract{
+				.capabilityId = "plugin-runtime.active-registry",
+				.owner = "gateway/PluginRuntimeStateService",
+				.version = "v1",
+				.stability = "internal-stable",
+				.description = "Active plugin runtime registry state contract",
+			},
+			PluginRuntimeCapabilityContract{
+				.capabilityId = "plugin-runtime.surface-pinning",
+				.owner = "gateway/PluginRuntimeStateService",
+				.version = "v1",
+				.stability = "internal-stable",
+				.description = "Route/channel surface pin and release semantics",
+			},
+			PluginRuntimeCapabilityContract{
+				.capabilityId = "plugin-runtime.import-trace",
+				.owner = "gateway/PluginRuntimeStateService",
+				.version = "v1",
+				.stability = "internal-stable",
+				.description = "Imported runtime plugin id trace visibility",
+			},
+			PluginRuntimeCapabilityContract{
+				.capabilityId = "plugin-runtime.transition-history",
+				.owner = "gateway/PluginRuntimeStateService",
+				.version = "v1",
+				.stability = "experimental",
+				.description = "Runtime state transition telemetry history",
+			},
+		};
+	}
+
+	std::vector<PluginRuntimeTransitionEntry>
+		PluginRuntimeStateService::GetTransitionHistory() const {
+		return m_transitionHistory;
+	}
+
 	PluginRuntimeStateSnapshot PluginRuntimeStateService::Snapshot() const {
 		return m_state;
 	}
@@ -248,6 +336,9 @@ namespace blazeclaw::gateway {
 		m_state.workspaceDir.clear();
 		m_state.runtimeSubagentMode = PluginRuntimeSubagentMode::Default;
 		m_state.importedPluginIds.clear();
+		m_transitionHistory.clear();
+		m_transitionSequence = 0;
+		RecordTransition("reset_for_test");
 	}
 
 } // namespace blazeclaw::gateway

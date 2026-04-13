@@ -33,6 +33,30 @@ namespace blazeclaw::gateway {
 		std::set<std::string> importedPluginIds;
 	};
 
+	struct PluginRuntimeCapabilityContract {
+		std::string capabilityId;
+		std::string owner;
+		std::string version;
+		std::string stability;
+		std::string description;
+	};
+
+	struct PluginRuntimeTransitionEntry {
+		std::uint64_t sequence = 0;
+		std::uint64_t timestampMs = 0;
+		std::string action;
+		std::uint64_t activeVersion = 0;
+		std::uint64_t httpRouteVersion = 0;
+		std::uint64_t channelVersion = 0;
+		std::size_t activeRegistryCount = 0;
+		bool httpRoutePinned = false;
+		bool channelPinned = false;
+		std::string cacheKey;
+		std::string workspaceDir;
+		PluginRuntimeSubagentMode runtimeSubagentMode =
+			PluginRuntimeSubagentMode::Default;
+	};
+
 	class PluginRuntimeStateService {
 	public:
 		void SetActiveRegistry(
@@ -88,6 +112,10 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] PluginRuntimeSubagentMode GetRuntimeSubagentMode() const;
 		void RecordImportedPluginId(const std::string& pluginId);
 		[[nodiscard]] std::vector<std::string> ListImportedRuntimePluginIds() const;
+		[[nodiscard]] std::vector<PluginRuntimeCapabilityContract>
+			ListCapabilityContracts() const;
+		[[nodiscard]] std::vector<PluginRuntimeTransitionEntry>
+			GetTransitionHistory() const;
 
 		[[nodiscard]] PluginRuntimeStateSnapshot Snapshot() const;
 		void ResetForTest();
@@ -103,7 +131,12 @@ namespace blazeclaw::gateway {
 			const std::vector<ExtensionManifest>* registry,
 			bool refreshVersion = false);
 
+		void RecordTransition(const std::string& action);
+		[[nodiscard]] static std::uint64_t CurrentEpochMs();
+
 		PluginRuntimeStateSnapshot m_state;
+		std::vector<PluginRuntimeTransitionEntry> m_transitionHistory;
+		std::uint64_t m_transitionSequence = 0;
 	};
 
 } // namespace blazeclaw::gateway
