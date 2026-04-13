@@ -298,6 +298,7 @@ namespace blazeclaw::config {
 		bool watch = true;
 		std::uint32_t watchDebounceMs = 250;
 		bool rejectPathSymlink = true;
+		bool strictFrontmatter = false;
 		std::vector<std::wstring> extraDirs;
 	};
 

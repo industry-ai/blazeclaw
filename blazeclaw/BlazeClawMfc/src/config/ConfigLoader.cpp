@@ -1285,6 +1285,12 @@ namespace blazeclaw::config {
 				continue;
 			}
 
+			if (trimmedLine.rfind(L"skills.load.strictFrontmatter=", 0) == 0) {
+				outConfig.skills.load.strictFrontmatter =
+					ParseBool(trimmedLine.substr(30), false);
+				continue;
+			}
+
 			if (trimmedLine.rfind(L"skills.limits.maxCandidatesPerRoot=", 0) == 0) {
 				std::uint32_t value = 0;
 				if (TryParseUInt(trimmedLine.substr(33), value)) {

@@ -561,6 +561,52 @@ namespace blazeclaw::core {
 				L"Fixture validation failed: expected symlink-rejected SKILL.md diagnostics in local-loader parity fixture.";
 			return false;
 		}
+		const auto boundaryEscapeEntry = std::find_if(
+			symlinkSnapshot.entries.begin(),
+			symlinkSnapshot.entries.end(),
+			[](const SkillsCatalogEntry& entry) {
+				return ToLower(Trim(entry.skillName)) == L"outside";
+			});
+		if (boundaryEscapeEntry != symlinkSnapshot.entries.end()) {
+			outError =
+				L"Fixture validation failed: boundary-escape junction target should not be loadable.";
+			return false;
+		}
+
+		blazeclaw::config::AppConfig strictOffConfig = symlinkConfig;
+		strictOffConfig.skills.load.strictFrontmatter = false;
+		const auto strictOffSnapshot = LoadCatalog(symlinkFixtureWorkspace, strictOffConfig);
+		const auto strictOffInvalidEntry = std::find_if(
+			strictOffSnapshot.entries.begin(),
+			strictOffSnapshot.entries.end(),
+			[](const SkillsCatalogEntry& entry) {
+				return ToLower(Trim(entry.skillName)) == L"strict-invalid";
+			});
+		if (strictOffInvalidEntry == strictOffSnapshot.entries.end()) {
+			outError =
+				L"Fixture validation failed: strictFrontmatter=false should keep invalid entry with diagnostics.";
+			return false;
+		}
+
+		blazeclaw::config::AppConfig strictOnConfig = symlinkConfig;
+		strictOnConfig.skills.load.strictFrontmatter = true;
+		const auto strictOnSnapshot = LoadCatalog(symlinkFixtureWorkspace, strictOnConfig);
+		const auto strictOnInvalidEntry = std::find_if(
+			strictOnSnapshot.entries.begin(),
+			strictOnSnapshot.entries.end(),
+			[](const SkillsCatalogEntry& entry) {
+				return ToLower(Trim(entry.skillName)) == L"strict-invalid";
+			});
+		if (strictOnInvalidEntry != strictOnSnapshot.entries.end()) {
+			outError =
+				L"Fixture validation failed: strictFrontmatter=true should omit invalid frontmatter entries.";
+			return false;
+		}
+		if (strictOnSnapshot.diagnostics.strictFrontmatterOmittedFiles == 0) {
+			outError =
+				L"Fixture validation failed: strictFrontmatter=true should increment strict omission diagnostics counter.";
+			return false;
+		}
 
 		return true;
 	}
@@ -844,6 +890,15 @@ namespace blazeclaw::core {
 					entry.validFrontmatter = true;
 				}
 				else {
+					if (appConfig.skills.load.strictFrontmatter) {
+						++snapshot.diagnostics.invalidFrontmatterFiles;
+						++snapshot.diagnostics.strictFrontmatterOmittedFiles;
+						snapshot.diagnostics.warnings.push_back(
+							L"Omitted invalid frontmatter entry in strict mode: " +
+							skillDir.wstring());
+						continue;
+					}
+
 					entry.skillName = skillDir.filename().wstring();
 					entry.description = L"";
 					entry.validFrontmatter = false;

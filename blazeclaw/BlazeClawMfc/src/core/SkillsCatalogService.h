@@ -53,6 +53,7 @@ namespace blazeclaw::core {
 		std::uint32_t pluginRootsConfigured = 0;
 		std::uint32_t pluginRootsScanned = 0;
 		std::uint32_t symlinkRejectedFiles = 0;
+		std::uint32_t strictFrontmatterOmittedFiles = 0;
 		std::uint32_t oversizedSkillFiles = 0;
 		std::uint32_t invalidFrontmatterFiles = 0;
 	};
