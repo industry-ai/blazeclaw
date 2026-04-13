@@ -1,0 +1,1 @@
+# Gamma Bootstrap Fixture

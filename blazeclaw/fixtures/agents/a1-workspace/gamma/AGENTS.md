@@ -1,0 +1,1 @@
+# Gamma Agents Fixture

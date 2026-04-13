@@ -1,0 +1,1 @@
+# Gamma Lowercase Memory Fixture
