@@ -315,6 +315,8 @@ namespace blazeclaw::core {
 		switch (kind) {
 		case SkillsSourceKind::Extra:
 			return L"extra";
+		case SkillsSourceKind::Plugin:
+			return L"plugin";
 		case SkillsSourceKind::Bundled:
 			return L"bundled";
 		case SkillsSourceKind::Managed:
@@ -576,7 +578,7 @@ namespace blazeclaw::core {
 		if (pluginSkillDirs.has_value()) {
 			for (const auto& pluginDir : ParseEnvPathList(pluginSkillDirs.value())) {
 				roots.push_back({
-					.kind = SkillsSourceKind::Extra,
+					.kind = SkillsSourceKind::Plugin,
 					.precedence = 0,
 					.configuredRoot = std::filesystem::path(pluginDir),
 					.resolvedRoot = ResolveRootPath(workspaceRoot, pluginDir),
@@ -670,6 +672,13 @@ namespace blazeclaw::core {
 		SkillsCatalogSnapshot snapshot;
 
 		const auto sourceRoots = BuildSourceRoots(workspaceRoot, appConfig);
+		snapshot.diagnostics.pluginRootsConfigured = static_cast<std::uint32_t>(
+			std::count_if(
+				sourceRoots.begin(),
+				sourceRoots.end(),
+				[](const SkillsSourceRoot& root) {
+					return root.kind == SkillsSourceKind::Plugin;
+				}));
 		std::unordered_map<std::wstring, std::size_t> byName;
 
 		for (const auto& sourceRoot : sourceRoots) {
@@ -681,6 +690,9 @@ namespace blazeclaw::core {
 			}
 
 			++snapshot.diagnostics.rootsScanned;
+			if (sourceRoot.kind == SkillsSourceKind::Plugin) {
+				++snapshot.diagnostics.pluginRootsScanned;
+			}
 
 			const auto discoveryRoot = ResolveNestedSkillsRoot(
 				rootPath,

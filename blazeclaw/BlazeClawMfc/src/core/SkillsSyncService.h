@@ -13,6 +13,8 @@ namespace blazeclaw::core {
 		bool success = false;
 		std::filesystem::path sandboxSkillsRoot;
 		std::wstring destinationNamingMode;
+		std::uint32_t destinationNameCollisions = 0;
+		std::uint32_t sourceDirFallbackCount = 0;
 		std::uint32_t copiedSkills = 0;
 		std::uint32_t skippedSkills = 0;
 		std::vector<std::wstring> warnings;

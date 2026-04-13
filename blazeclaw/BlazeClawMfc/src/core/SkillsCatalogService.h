@@ -12,12 +12,13 @@ namespace blazeclaw::core {
 
 	enum class SkillsSourceKind {
 		Extra = 0,
-		Bundled = 1,
-		Managed = 2,
-		Personal = 3,
-		Project = 4,
-		Workspace = 5,
-		OpenClawOriginal = 6,
+		Plugin = 1,
+		Bundled = 2,
+		Managed = 3,
+		Personal = 4,
+		Project = 5,
+		Workspace = 6,
+		OpenClawOriginal = 7,
 	};
 
 	struct SkillsSourceRoot {
@@ -49,6 +50,8 @@ namespace blazeclaw::core {
 		std::vector<std::wstring> warnings;
 		std::uint32_t rootsScanned = 0;
 		std::uint32_t rootsSkipped = 0;
+		std::uint32_t pluginRootsConfigured = 0;
+		std::uint32_t pluginRootsScanned = 0;
 		std::uint32_t oversizedSkillFiles = 0;
 		std::uint32_t invalidFrontmatterFiles = 0;
 	};

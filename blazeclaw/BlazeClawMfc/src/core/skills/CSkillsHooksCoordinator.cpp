@@ -83,6 +83,10 @@ namespace blazeclaw::core {
 
 		gatewaySkillsState.rootsScanned = context.catalog.diagnostics.rootsScanned;
 		gatewaySkillsState.rootsSkipped = context.catalog.diagnostics.rootsSkipped;
+		gatewaySkillsState.pluginRootsConfigured =
+			context.catalog.diagnostics.pluginRootsConfigured;
+		gatewaySkillsState.pluginRootsScanned =
+			context.catalog.diagnostics.pluginRootsScanned;
 		gatewaySkillsState.oversizedSkillFiles =
 			context.catalog.diagnostics.oversizedSkillFiles;
 		gatewaySkillsState.invalidFrontmatterFiles =
@@ -103,6 +107,12 @@ namespace blazeclaw::core {
 		gatewaySkillsState.watchReason = toNarrow(context.watch.reason);
 		gatewaySkillsState.prompt = toNarrow(context.prompt.prompt);
 		gatewaySkillsState.sandboxSyncOk = context.sync.success;
+		gatewaySkillsState.sandboxDestinationNamingMode =
+			toNarrow(context.sync.destinationNamingMode);
+		gatewaySkillsState.sandboxDestinationCollisions =
+			context.sync.destinationNameCollisions;
+		gatewaySkillsState.sandboxSourceDirFallbacks =
+			context.sync.sourceDirFallbackCount;
 		gatewaySkillsState.sandboxSynced = context.sync.copiedSkills;
 		gatewaySkillsState.sandboxSkipped = context.sync.skippedSkills;
 		gatewaySkillsState.envAllowed = context.envOverrides.allowedCount;

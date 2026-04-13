@@ -69,6 +69,8 @@ namespace blazeclaw::gateway {
 		std::vector<SkillsCatalogGatewayEntry> entries;
 		std::size_t rootsScanned = 0;
 		std::size_t rootsSkipped = 0;
+		std::size_t pluginRootsConfigured = 0;
+		std::size_t pluginRootsScanned = 0;
 		std::size_t oversizedSkillFiles = 0;
 		std::size_t invalidFrontmatterFiles = 0;
 		std::size_t warningCount = 0;
@@ -85,6 +87,9 @@ namespace blazeclaw::gateway {
 		std::string watchReason;
 		std::string prompt;
 		bool sandboxSyncOk = false;
+		std::string sandboxDestinationNamingMode;
+		std::size_t sandboxDestinationCollisions = 0;
+		std::size_t sandboxSourceDirFallbacks = 0;
 		std::size_t sandboxSynced = 0;
 		std::size_t sandboxSkipped = 0;
 		std::size_t envAllowed = 0;

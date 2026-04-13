@@ -5417,6 +5417,10 @@ namespace blazeclaw::gateway {
 						std::to_string(state.rootsScanned) +
 						",\"rootsSkipped\":" +
 						std::to_string(state.rootsSkipped) +
+				   ",\"pluginRootsConfigured\":" +
+					std::to_string(state.pluginRootsConfigured) +
+					",\"pluginRootsScanned\":" +
+					std::to_string(state.pluginRootsScanned) +
 						",\"oversizedSkillFiles\":" +
 						std::to_string(state.oversizedSkillFiles) +
 						",\"invalidFrontmatterFiles\":" +
@@ -5446,6 +5450,13 @@ namespace blazeclaw::gateway {
 						"\"" +
 						",\"sandboxSyncOk\":" +
 						std::string(state.sandboxSyncOk ? "true" : "false") +
+				 ",\"sandboxDestinationNamingMode\":\"" +
+					EscapeJsonLocal(state.sandboxDestinationNamingMode) +
+					"\"" +
+					",\"sandboxDestinationCollisions\":" +
+					std::to_string(state.sandboxDestinationCollisions) +
+					",\"sandboxSourceDirFallbacks\":" +
+					std::to_string(state.sandboxSourceDirFallbacks) +
 						",\"sandboxSynced\":" +
 						std::to_string(state.sandboxSynced) +
 						",\"sandboxSkipped\":" +

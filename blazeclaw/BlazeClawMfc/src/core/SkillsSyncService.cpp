@@ -65,18 +65,29 @@ namespace blazeclaw::core {
 			return output;
 		}
 
-		std::wstring ResolveUniqueDirName(
+		struct UniqueDirNameResult {
+			std::wstring name;
+			bool collided = false;
+		};
+
+		struct DestinationDirResolution {
+			std::wstring name;
+			bool collided = false;
+			bool usedSourceDirFallback = false;
+		};
+
+		UniqueDirNameResult ResolveUniqueDirName(
 			const std::wstring& base,
 			std::set<std::wstring>& usedNames) {
 			if (usedNames.insert(base).second) {
-				return base;
+				return UniqueDirNameResult{ .name = base, .collided = false };
 			}
 
 			for (std::uint32_t index = 2; index < 10000; ++index) {
 				const std::wstring candidate =
 					base + L"-" + std::to_wstring(index);
 				if (usedNames.insert(candidate).second) {
-					return candidate;
+					return UniqueDirNameResult{ .name = candidate, .collided = true };
 				}
 			}
 
@@ -85,7 +96,7 @@ namespace blazeclaw::core {
 				const std::wstring fallback =
 					base + L"-" + std::to_wstring(fallbackIndex);
 				if (usedNames.insert(fallback).second) {
-					return fallback;
+					return UniqueDirNameResult{ .name = fallback, .collided = true };
 				}
 				++fallbackIndex;
 			}
@@ -118,7 +129,7 @@ namespace blazeclaw::core {
 			return SyncDestinationNamingMode::SourceDir;
 		}
 
-		std::wstring ResolveDestinationDirName(
+		DestinationDirResolution ResolveDestinationDirName(
 			const SkillsCatalogEntry& entry,
 			const SyncDestinationNamingMode mode,
 			std::set<std::wstring>& usedNames,
@@ -126,7 +137,12 @@ namespace blazeclaw::core {
 			if (mode == SyncDestinationNamingMode::SourceDir) {
 				const std::wstring sourceDirName = Trim(entry.skillDir.filename().wstring());
 				if (!sourceDirName.empty() && sourceDirName != L"." && sourceDirName != L"..") {
-					return ResolveUniqueDirName(sourceDirName, usedNames);
+					const auto resolved = ResolveUniqueDirName(sourceDirName, usedNames);
+					return DestinationDirResolution{
+						.name = resolved.name,
+						.collided = resolved.collided,
+						.usedSourceDirFallback = false,
+					};
 				}
 
 				warnings.push_back(
@@ -134,8 +150,12 @@ namespace blazeclaw::core {
 					entry.skillName);
 			}
 
-			const std::wstring sanitized = SanitizePathSegment(entry.skillName);
-			return ResolveUniqueDirName(sanitized, usedNames);
+			const auto resolved = ResolveUniqueDirName(SanitizePathSegment(entry.skillName), usedNames);
+			return DestinationDirResolution{
+				.name = resolved.name,
+				.collided = resolved.collided,
+				.usedSourceDirFallback = true,
+			};
 		}
 
 		std::wstring DestinationNamingModeLabel(const SyncDestinationNamingMode mode) {
@@ -245,12 +265,18 @@ namespace blazeclaw::core {
 				continue;
 			}
 
-			const std::wstring destinationName = ResolveDestinationDirName(
+			const DestinationDirResolution destination = ResolveDestinationDirName(
 				entry,
 				namingMode,
 				usedDestinationNames,
 				snapshot.warnings);
-			const auto targetDir = snapshot.sandboxSkillsRoot / destinationName;
+			if (destination.collided) {
+				++snapshot.destinationNameCollisions;
+			}
+			if (destination.usedSourceDirFallback) {
+				++snapshot.sourceDirFallbackCount;
+			}
+			const auto targetDir = snapshot.sandboxSkillsRoot / destination.name;
 			ec.clear();
 			std::filesystem::create_directories(targetDir, ec);
 			if (ec) {
@@ -332,6 +358,11 @@ namespace blazeclaw::core {
 		if (!std::filesystem::exists(collisionFirst) ||
 			!std::filesystem::exists(collisionSecond)) {
 			outError = L"S4 sync fixture failed: expected unique suffixing for source-dir naming collisions.";
+			return false;
+		}
+
+		if (snapshot.destinationNameCollisions == 0) {
+			outError = L"S4 sync fixture failed: expected destination naming collision counter to be incremented.";
 			return false;
 		}
 
