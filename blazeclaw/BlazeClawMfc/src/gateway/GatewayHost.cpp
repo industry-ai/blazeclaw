@@ -772,6 +772,9 @@ namespace blazeclaw::gateway {
 
 		m_extensionLifecycle.LoadCatalog(catalogPath);
 		m_extensionLifecycle.ActivateAll(m_toolRegistry);
+		for (const auto& extension : m_extensionLifecycle.GetExtensions()) {
+			m_pluginRuntimeState.RecordImportedPluginId(extension.id);
+		}
 		m_pluginRuntimeState.SetActiveRegistry(
 			&m_extensionLifecycle.GetExtensions(),
 			catalogPath,

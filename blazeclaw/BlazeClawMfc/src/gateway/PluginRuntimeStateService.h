@@ -3,6 +3,7 @@
 #include "ExtensionLifecycleManager.h"
 
 #include <cstdint>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -29,6 +30,7 @@ namespace blazeclaw::gateway {
 		std::string workspaceDir;
 		PluginRuntimeSubagentMode runtimeSubagentMode =
 			PluginRuntimeSubagentMode::Default;
+		std::set<std::string> importedPluginIds;
 	};
 
 	class PluginRuntimeStateService {
@@ -50,12 +52,32 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] const std::vector<ExtensionManifest>* GetActiveRegistry() const;
 		[[nodiscard]] const std::vector<ExtensionManifest>* GetHttpRouteRegistry() const;
 		[[nodiscard]] const std::vector<ExtensionManifest>* GetChannelRegistry() const;
+		[[nodiscard]] const std::vector<ExtensionManifest>*
+			RequireActiveRegistry(
+				const std::vector<ExtensionManifest>* fallbackRegistry,
+				const std::string& cacheKey,
+				const std::string& workspaceDir,
+				PluginRuntimeSubagentMode runtimeSubagentMode);
+		[[nodiscard]] const std::vector<ExtensionManifest>*
+			RequireHttpRouteRegistry(
+				const std::vector<ExtensionManifest>* fallbackRegistry,
+				const std::string& cacheKey,
+				const std::string& workspaceDir,
+				PluginRuntimeSubagentMode runtimeSubagentMode);
+		[[nodiscard]] const std::vector<ExtensionManifest>*
+			RequireChannelRegistry(
+				const std::vector<ExtensionManifest>* fallbackRegistry,
+				const std::string& cacheKey,
+				const std::string& workspaceDir,
+				PluginRuntimeSubagentMode runtimeSubagentMode);
 		[[nodiscard]] std::uint64_t GetActiveVersion() const;
 		[[nodiscard]] std::uint64_t GetHttpRouteVersion() const;
 		[[nodiscard]] std::uint64_t GetChannelVersion() const;
 		[[nodiscard]] const std::string& GetCacheKey() const;
 		[[nodiscard]] const std::string& GetWorkspaceDir() const;
 		[[nodiscard]] PluginRuntimeSubagentMode GetRuntimeSubagentMode() const;
+		void RecordImportedPluginId(const std::string& pluginId);
+		[[nodiscard]] std::vector<std::string> ListImportedRuntimePluginIds() const;
 
 		[[nodiscard]] PluginRuntimeStateSnapshot Snapshot() const;
 		void ResetForTest();

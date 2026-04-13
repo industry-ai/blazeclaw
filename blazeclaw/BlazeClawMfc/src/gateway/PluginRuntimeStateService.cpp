@@ -84,6 +84,64 @@ namespace blazeclaw::gateway {
 	}
 
 	const std::vector<ExtensionManifest>*
+		PluginRuntimeStateService::RequireActiveRegistry(
+			const std::vector<ExtensionManifest>* fallbackRegistry,
+			const std::string& cacheKey,
+			const std::string& workspaceDir,
+			const PluginRuntimeSubagentMode runtimeSubagentMode) {
+		if (m_state.activeRegistry != nullptr) {
+			return m_state.activeRegistry;
+		}
+
+		SetActiveRegistry(
+			fallbackRegistry,
+			cacheKey,
+			workspaceDir,
+			runtimeSubagentMode);
+		return m_state.activeRegistry;
+	}
+
+	const std::vector<ExtensionManifest>*
+		PluginRuntimeStateService::RequireHttpRouteRegistry(
+			const std::vector<ExtensionManifest>* fallbackRegistry,
+			const std::string& cacheKey,
+			const std::string& workspaceDir,
+			const PluginRuntimeSubagentMode runtimeSubagentMode) {
+		const auto* existing = GetHttpRouteRegistry();
+		if (existing != nullptr) {
+			return existing;
+		}
+
+		const auto* ensured = RequireActiveRegistry(
+			fallbackRegistry,
+			cacheKey,
+			workspaceDir,
+			runtimeSubagentMode);
+		InstallSurfaceRegistry(m_state.httpRoute, ensured, false);
+		return GetHttpRouteRegistry();
+	}
+
+	const std::vector<ExtensionManifest>*
+		PluginRuntimeStateService::RequireChannelRegistry(
+			const std::vector<ExtensionManifest>* fallbackRegistry,
+			const std::string& cacheKey,
+			const std::string& workspaceDir,
+			const PluginRuntimeSubagentMode runtimeSubagentMode) {
+		const auto* existing = GetChannelRegistry();
+		if (existing != nullptr) {
+			return existing;
+		}
+
+		const auto* ensured = RequireActiveRegistry(
+			fallbackRegistry,
+			cacheKey,
+			workspaceDir,
+			runtimeSubagentMode);
+		InstallSurfaceRegistry(m_state.channel, ensured, false);
+		return GetChannelRegistry();
+	}
+
+	const std::vector<ExtensionManifest>*
 		PluginRuntimeStateService::GetHttpRouteRegistry() const {
 		if (m_state.httpRoute.registry != nullptr) {
 			return m_state.httpRoute.registry;
@@ -133,6 +191,22 @@ namespace blazeclaw::gateway {
 		return m_state.runtimeSubagentMode;
 	}
 
+	void PluginRuntimeStateService::RecordImportedPluginId(
+		const std::string& pluginId) {
+		if (pluginId.empty()) {
+			return;
+		}
+
+		m_state.importedPluginIds.insert(pluginId);
+	}
+
+	std::vector<std::string>
+		PluginRuntimeStateService::ListImportedRuntimePluginIds() const {
+		return std::vector<std::string>(
+			m_state.importedPluginIds.begin(),
+			m_state.importedPluginIds.end());
+	}
+
 	PluginRuntimeStateSnapshot PluginRuntimeStateService::Snapshot() const {
 		return m_state;
 	}
@@ -145,6 +219,7 @@ namespace blazeclaw::gateway {
 		m_state.cacheKey.clear();
 		m_state.workspaceDir.clear();
 		m_state.runtimeSubagentMode = PluginRuntimeSubagentMode::Default;
+		m_state.importedPluginIds.clear();
 	}
 
 } // namespace blazeclaw::gateway
