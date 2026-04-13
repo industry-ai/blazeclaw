@@ -1,11 +1,11 @@
 #include "pch.h"
 #include "SkillsCatalogService.h"
+#include "filesystem/SafeOpenSync.h"
 
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <cwctype>
-#include <fstream>
 #include <optional>
 #include <set>
 #include <unordered_map>
@@ -237,18 +237,6 @@ namespace blazeclaw::core {
 			return candidates;
 		}
 
-		std::optional<std::wstring> ReadFileUtf8(const std::filesystem::path& filePath) {
-			std::ifstream input(filePath, std::ios::binary);
-			if (!input.is_open()) {
-				return std::nullopt;
-			}
-
-			std::string content(
-				(std::istreambuf_iterator<char>(input)),
-				std::istreambuf_iterator<char>());
-			return Utf8ToWide(content);
-		}
-
 		struct VerifiedSkillFileReadResult {
 			bool ok = false;
 			bool rejectedBySymlinkPolicy = false;
@@ -276,47 +264,27 @@ namespace blazeclaw::core {
 				};
 			}
 
-			if (rejectPathSymlink) {
-				std::filesystem::path probe = skillFile;
-				while (true) {
-					const DWORD attrs = GetFileAttributesW(probe.c_str());
-					if (attrs != INVALID_FILE_ATTRIBUTES &&
-						(attrs & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
-						return VerifiedSkillFileReadResult{
-							.ok = false,
-							.rejectedBySymlinkPolicy = true,
-							.detail = L"path-reparse-point-rejected",
-						};
-					}
+			blazeclaw::core::filesystem::VerifiedOpenRequest request;
+			request.filePath = skillFile;
+			request.resolvedPath = canonicalFile;
+			request.policy.rejectPathSymlink = rejectPathSymlink;
+			request.policy.allowedType =
+				blazeclaw::core::filesystem::VerifiedOpenAllowedType::File;
 
-					std::error_code statusEc;
-					const auto status = std::filesystem::symlink_status(probe, statusEc);
-					if (!statusEc && std::filesystem::is_symlink(status)) {
-						return VerifiedSkillFileReadResult{
-							.ok = false,
-							.rejectedBySymlinkPolicy = true,
-							.detail = L"path-symlink-rejected",
-						};
-					}
-
-					if (probe == rootRealPath || !probe.has_relative_path()) {
-						break;
-					}
-					probe = probe.parent_path();
-				}
-			}
-
-			const auto content = ReadFileUtf8(skillFile);
-			if (!content.has_value()) {
+			const auto verifiedOpenResult =
+				blazeclaw::core::filesystem::OpenVerifiedFileUtf8Sync(request);
+			if (!verifiedOpenResult.ok) {
 				return VerifiedSkillFileReadResult{
 					.ok = false,
-					.detail = L"read-failed",
+					.rejectedBySymlinkPolicy =
+						verifiedOpenResult.rejectedBySymlinkPolicy,
+					.detail = verifiedOpenResult.detail,
 				};
 			}
 
 			return VerifiedSkillFileReadResult{
 				.ok = true,
-				.content = content.value(),
+				.content = verifiedOpenResult.utf8Content,
 			};
 		}
 
