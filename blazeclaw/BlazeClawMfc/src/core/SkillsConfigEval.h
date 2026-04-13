@@ -4,6 +4,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 namespace blazeclaw::core {
 
@@ -16,6 +17,9 @@ namespace blazeclaw::core {
 	[[nodiscard]] std::wstring ResolveSkillsRuntimePlatform();
 
 	[[nodiscard]] bool SkillsHasBinary(const std::wstring& binName);
+
+	[[nodiscard]] std::vector<std::wstring> NormalizeSkillsAllowlistEntries(
+		const std::vector<std::wstring>& rawEntries);
 
 	[[nodiscard]] bool IsSkillsConfigPathTruthy(
 		const blazeclaw::config::AppConfig& appConfig,

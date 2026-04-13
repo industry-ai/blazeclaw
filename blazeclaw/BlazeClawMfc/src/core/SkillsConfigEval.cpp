@@ -119,6 +119,27 @@ namespace blazeclaw::core {
 		return required > 0;
 	}
 
+	std::vector<std::wstring> NormalizeSkillsAllowlistEntries(
+		const std::vector<std::wstring>& rawEntries) {
+		std::vector<std::wstring> normalized;
+		normalized.reserve(rawEntries.size());
+
+		for (const auto& entry : rawEntries) {
+			const std::wstring value = ToLower(Trim(entry));
+			if (value.empty()) {
+				continue;
+			}
+
+			normalized.push_back(value);
+		}
+
+		std::sort(normalized.begin(), normalized.end());
+		normalized.erase(
+			std::unique(normalized.begin(), normalized.end()),
+			normalized.end());
+		return normalized;
+	}
+
 	bool IsSkillsConfigPathTruthy(
 		const blazeclaw::config::AppConfig& appConfig,
 		const std::wstring& configPath,

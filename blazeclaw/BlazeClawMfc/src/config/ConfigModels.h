@@ -318,6 +318,7 @@ namespace blazeclaw::config {
 	struct SkillsConfig {
 		std::map<std::wstring, SkillEntryConfig> entries;
 		std::vector<std::wstring> allowBundled;
+		std::wstring entryResolutionMode = L"strict";
 		SkillsLoadConfig load;
 		SkillsLimitsConfig limits;
 		SkillsInstallConfig install;

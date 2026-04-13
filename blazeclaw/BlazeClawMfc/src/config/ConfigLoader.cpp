@@ -271,6 +271,15 @@ namespace blazeclaw::config {
 			return L"npm";
 		}
 
+		std::wstring NormalizeSkillsEntryResolutionMode(const std::wstring& raw) {
+			const std::wstring normalized = ToLowerTrim(raw);
+			if (normalized == L"compat") {
+				return normalized;
+			}
+
+			return L"strict";
+		}
+
 		std::wstring NormalizeEmbeddingsExecutionMode(
 			const std::wstring& raw) {
 			const std::wstring normalized = ToLowerTrim(raw);
@@ -1255,6 +1264,12 @@ namespace blazeclaw::config {
 				if (!skillName.empty()) {
 					outConfig.skills.allowBundled.push_back(skillName);
 				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"skills.entryResolutionMode=", 0) == 0) {
+				outConfig.skills.entryResolutionMode =
+					NormalizeSkillsEntryResolutionMode(trimmedLine.substr(27));
 				continue;
 			}
 

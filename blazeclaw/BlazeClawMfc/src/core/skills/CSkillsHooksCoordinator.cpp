@@ -112,6 +112,18 @@ namespace blazeclaw::core {
 			context.eligibility.blockedByAllowlistCount;
 		gatewaySkillsState.missingRequirementsCount =
 			context.eligibility.missingRequirementsCount;
+		gatewaySkillsState.strictEntryResolutionModeCount =
+			context.eligibility.strictEntryResolutionModeCount;
+		gatewaySkillsState.compatEntryResolutionModeCount =
+			context.eligibility.compatEntryResolutionModeCount;
+		gatewaySkillsState.configResolvedByKeyCount =
+			context.eligibility.configResolvedByKeyCount;
+		gatewaySkillsState.configResolvedByNameFallbackCount =
+			context.eligibility.configResolvedByNameFallbackCount;
+		gatewaySkillsState.allowlistRawCount =
+			context.eligibility.allowlistRawCount;
+		gatewaySkillsState.allowlistNormalizedCount =
+			context.eligibility.allowlistNormalizedCount;
 		gatewaySkillsState.promptIncludedCount = context.prompt.includedCount;
 		gatewaySkillsState.promptChars = context.prompt.promptChars;
 		gatewaySkillsState.promptTruncated = context.prompt.truncated;

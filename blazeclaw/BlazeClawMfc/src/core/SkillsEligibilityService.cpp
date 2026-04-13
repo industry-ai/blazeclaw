@@ -264,19 +264,18 @@ namespace blazeclaw::core {
 		bool IsBundledAllowed(
 			const SkillsCatalogEntry& catalogEntry,
 			const SkillsEligibilityEntry& eligibility,
-			const blazeclaw::config::AppConfig& appConfig) {
+			const std::vector<std::wstring>& normalizedAllowlist) {
 			if (catalogEntry.sourceKind != SkillsSourceKind::Bundled) {
 				return true;
 			}
 
-			if (appConfig.skills.allowBundled.empty()) {
+			if (normalizedAllowlist.empty()) {
 				return true;
 			}
 
-			const std::wstring normalizedKey = ToLower(eligibility.skillKey);
-			const std::wstring normalizedName = ToLower(catalogEntry.skillName);
-			for (const auto& item : appConfig.skills.allowBundled) {
-				const std::wstring normalized = ToLower(Trim(item));
+			const std::wstring normalizedKey = ToLower(Trim(eligibility.skillKey));
+			const std::wstring normalizedName = ToLower(Trim(catalogEntry.skillName));
+			for (const auto& normalized : normalizedAllowlist) {
 				if (normalized == normalizedKey || normalized == normalizedName) {
 					return true;
 				}
@@ -285,21 +284,41 @@ namespace blazeclaw::core {
 			return false;
 		}
 
-		const blazeclaw::config::SkillEntryConfig* ResolveSkillConfig(
+		bool IsCompatSkillEntryResolutionMode(
+			const blazeclaw::config::AppConfig& appConfig) {
+			return ToLower(Trim(appConfig.skills.entryResolutionMode)) == L"compat";
+		}
+
+		struct SkillConfigResolveResult {
+			const blazeclaw::config::SkillEntryConfig* config = nullptr;
+			bool resolvedByKey = false;
+			bool resolvedByNameFallback = false;
+		};
+
+		SkillConfigResolveResult ResolveSkillConfig(
 			const blazeclaw::config::AppConfig& appConfig,
 			const std::wstring& skillKey,
-			const std::wstring& skillName) {
+			const std::wstring& skillName,
+			const bool allowNameFallback) {
+			SkillConfigResolveResult result;
+
 			const auto keyIt = appConfig.skills.entries.find(skillKey);
 			if (keyIt != appConfig.skills.entries.end()) {
-				return &keyIt->second;
+				result.config = &keyIt->second;
+				result.resolvedByKey = true;
+				return result;
 			}
 
-			const auto nameIt = appConfig.skills.entries.find(skillName);
-			if (nameIt != appConfig.skills.entries.end()) {
-				return &nameIt->second;
+			if (allowNameFallback) {
+				const auto nameIt = appConfig.skills.entries.find(skillName);
+				if (nameIt != appConfig.skills.entries.end()) {
+					result.config = &nameIt->second;
+					result.resolvedByNameFallback = true;
+					return result;
+				}
 			}
 
-			return nullptr;
+			return result;
 		}
 
 	} // namespace
@@ -322,15 +341,41 @@ namespace blazeclaw::core {
 		SkillsEligibilitySnapshot snapshot;
 		snapshot.entries.reserve(catalog.entries.size());
 
+		const bool compatSkillEntryResolutionMode =
+			IsCompatSkillEntryResolutionMode(appConfig);
+		if (compatSkillEntryResolutionMode) {
+			++snapshot.compatEntryResolutionModeCount;
+		}
+		else {
+			++snapshot.strictEntryResolutionModeCount;
+		}
+
+		snapshot.allowlistRawCount = static_cast<std::uint32_t>(
+			appConfig.skills.allowBundled.size());
+		const auto normalizedBundledAllowlist = NormalizeSkillsAllowlistEntries(
+			appConfig.skills.allowBundled);
+		snapshot.allowlistNormalizedCount = static_cast<std::uint32_t>(
+			normalizedBundledAllowlist.size());
+
 		for (const auto& catalogEntry : catalog.entries) {
 			SkillsEligibilityEntry result;
 			result.skillName = catalogEntry.skillName;
 			result.skillKey = ResolveSkillKey(catalogEntry);
 
-			const auto* skillConfig = ResolveSkillConfig(
+			const auto resolvedSkillConfig = ResolveSkillConfig(
 				appConfig,
 				result.skillKey,
-				result.skillName);
+				result.skillName,
+				compatSkillEntryResolutionMode);
+			const auto* skillConfig = resolvedSkillConfig.config;
+			if (resolvedSkillConfig.resolvedByKey) {
+				++snapshot.configResolvedByKeyCount;
+			}
+
+			if (resolvedSkillConfig.resolvedByNameFallback) {
+				++snapshot.configResolvedByNameFallbackCount;
+			}
+
 			const auto persistedEnv = LoadPersistedSkillEnv(
 				result.skillKey,
 				result.skillName);
@@ -352,7 +397,10 @@ namespace blazeclaw::core {
 					{ L"disable-model-invocation", L"disable_model_invocation", L"disablemodelinvocation" }),
 				false);
 
-			if (!IsBundledAllowed(catalogEntry, result, appConfig)) {
+			if (!IsBundledAllowed(
+				catalogEntry,
+				result,
+				normalizedBundledAllowlist)) {
 				result.blockedByAllowlist = true;
 				++snapshot.blockedByAllowlistCount;
 			}

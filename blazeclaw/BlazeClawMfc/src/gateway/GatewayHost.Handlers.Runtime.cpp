@@ -5447,6 +5447,18 @@ namespace blazeclaw::gateway {
 						std::to_string(state.blockedByAllowlistCount) +
 						",\"missingRequirements\":" +
 						std::to_string(state.missingRequirementsCount) +
+						",\"strictEntryResolutionMode\":" +
+						std::to_string(state.strictEntryResolutionModeCount) +
+						",\"compatEntryResolutionMode\":" +
+						std::to_string(state.compatEntryResolutionModeCount) +
+						",\"configResolvedByKey\":" +
+						std::to_string(state.configResolvedByKeyCount) +
+						",\"configResolvedByNameFallback\":" +
+						std::to_string(state.configResolvedByNameFallbackCount) +
+						",\"allowlistRaw\":" +
+						std::to_string(state.allowlistRawCount) +
+						",\"allowlistNormalized\":" +
+						std::to_string(state.allowlistNormalizedCount) +
 						",\"promptIncluded\":" +
 						std::to_string(state.promptIncludedCount) +
 						",\"promptChars\":" +
