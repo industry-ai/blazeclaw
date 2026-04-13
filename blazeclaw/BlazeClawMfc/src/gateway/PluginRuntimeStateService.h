@@ -41,6 +41,16 @@ namespace blazeclaw::gateway {
 			const std::string& workspaceDir,
 			PluginRuntimeSubagentMode runtimeSubagentMode);
 
+		void ActivateRuntimeRegistry(
+			const std::vector<ExtensionManifest>* registry,
+			const std::string& cacheKey,
+			const std::string& workspaceDir,
+			PluginRuntimeSubagentMode runtimeSubagentMode,
+			bool pinHttpRoute,
+			bool pinChannel);
+
+		void DeactivateRuntimeRegistry();
+
 		void PinHttpRouteRegistry(const std::vector<ExtensionManifest>* registry);
 		void ReleasePinnedHttpRouteRegistry(
 			const std::vector<ExtensionManifest>* expectedRegistry = nullptr);

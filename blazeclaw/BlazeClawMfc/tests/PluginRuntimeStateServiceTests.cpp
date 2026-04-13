@@ -92,3 +92,36 @@ TEST_CASE(
 	REQUIRE(snapshot.runtimeSubagentMode == PluginRuntimeSubagentMode::Default);
 	REQUIRE(snapshot.importedPluginIds.empty());
 }
+
+TEST_CASE(
+	"PluginRuntimeStateService activation API centralizes pin transitions",
+	"[plugin-runtime-state][activation]") {
+	PluginRuntimeStateService service;
+	service.ActivateRuntimeRegistry(
+		&kFixtureRegistryA,
+		"cache-activate",
+		"workspace-activate",
+		PluginRuntimeSubagentMode::GatewayBindable,
+		true,
+		true);
+
+	const auto activated = service.Snapshot();
+	REQUIRE(activated.activeRegistry == &kFixtureRegistryA);
+	REQUIRE(activated.httpRoute.registry == &kFixtureRegistryA);
+	REQUIRE(activated.channel.registry == &kFixtureRegistryA);
+	REQUIRE(activated.httpRoute.pinned);
+	REQUIRE(activated.channel.pinned);
+
+	service.DeactivateRuntimeRegistry();
+	const auto deactivated = service.Snapshot();
+	REQUIRE(deactivated.activeRegistry == nullptr);
+	REQUIRE(deactivated.httpRoute.registry == nullptr);
+	REQUIRE(deactivated.channel.registry == nullptr);
+	REQUIRE_FALSE(deactivated.httpRoute.pinned);
+	REQUIRE_FALSE(deactivated.channel.pinned);
+	REQUIRE(deactivated.cacheKey.empty());
+	REQUIRE(deactivated.workspaceDir.empty());
+	REQUIRE(
+		deactivated.runtimeSubagentMode ==
+		PluginRuntimeSubagentMode::Default);
+}

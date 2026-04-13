@@ -772,18 +772,22 @@ namespace blazeclaw::gateway {
 
 		m_extensionLifecycle.LoadCatalog(catalogPath);
 		m_extensionLifecycle.ActivateAll(m_toolRegistry);
-		for (const auto& extension : m_extensionLifecycle.GetExtensions()) {
+		const auto* extensionRegistry =
+			m_pluginRuntimeState.RequireActiveRegistry(
+				&m_extensionLifecycle.GetExtensions(),
+				catalogPath,
+				std::filesystem::current_path().string(),
+				PluginRuntimeSubagentMode::GatewayBindable);
+		for (const auto& extension : *extensionRegistry) {
 			m_pluginRuntimeState.RecordImportedPluginId(extension.id);
 		}
-		m_pluginRuntimeState.SetActiveRegistry(
-			&m_extensionLifecycle.GetExtensions(),
+		m_pluginRuntimeState.ActivateRuntimeRegistry(
+			extensionRegistry,
 			catalogPath,
 			std::filesystem::current_path().string(),
-			PluginRuntimeSubagentMode::GatewayBindable);
-		m_pluginRuntimeState.PinHttpRouteRegistry(
-			&m_extensionLifecycle.GetExtensions());
-		m_pluginRuntimeState.PinChannelRegistry(
-			&m_extensionLifecycle.GetExtensions());
+			PluginRuntimeSubagentMode::GatewayBindable,
+			true,
+			true);
 		EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
 		m_approvalStore.Initialize(ResolveGatewayStateFilePath("approvals.json").string());
 		LoadPersistedTaskDeltas();
@@ -993,17 +997,9 @@ namespace blazeclaw::gateway {
 
 	void GatewayHost::Stop() {
 		m_transport.Stop();
-		m_pluginRuntimeState.ReleasePinnedHttpRouteRegistry(
-			&m_extensionLifecycle.GetExtensions());
-		m_pluginRuntimeState.ReleasePinnedChannelRegistry(
-			&m_extensionLifecycle.GetExtensions());
 		// Deactivate registered extension tools and clear approval state
 		m_extensionLifecycle.DeactivateAll(m_toolRegistry);
-		m_pluginRuntimeState.SetActiveRegistry(
-			nullptr,
-			std::string{},
-			std::string{},
-			PluginRuntimeSubagentMode::Default);
+		m_pluginRuntimeState.DeactivateRuntimeRegistry();
 		PersistTaskDeltas();
 		m_running = false;
 		m_initialized = false;
