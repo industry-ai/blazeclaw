@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "CToolRuntimeRegistry.h"
 
+#include <set>
+
 namespace blazeclaw::core {
 
 	void CToolRuntimeRegistry::RegisterAll(
@@ -43,9 +45,28 @@ namespace blazeclaw::core {
 				toolPolicy.enableOpenClawWebBrowsingFallback,
 		};
 
+		std::set<std::string> observedCapabilities;
+
 		for (const auto* adapter : adapters)
 		{
 			if (adapter == nullptr)
+			{
+				continue;
+			}
+
+			const auto descriptor = adapter->Describe();
+			if (descriptor.capabilityId.empty() || descriptor.owner.empty())
+			{
+				continue;
+			}
+
+			if (!observedCapabilities.insert(descriptor.capabilityId).second)
+			{
+				continue;
+			}
+
+			if (descriptor.IsPublicContract() &&
+				descriptor.stability == "deprecated")
 			{
 				continue;
 			}

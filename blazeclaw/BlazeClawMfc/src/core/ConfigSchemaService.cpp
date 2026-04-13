@@ -8,6 +8,7 @@
 #include <cctype>
 #include <chrono>
 #include <cstdint>
+#include <fstream>
 #include <numeric>
 #include <iomanip>
 #include <nlohmann/json.hpp>
@@ -978,6 +979,63 @@ namespace blazeclaw::core {
 		}
 
 		return result;
+	}
+
+	std::string ConfigSchemaService::BuildDocumentationSnapshotMarkdown(
+		const blazeclaw::gateway::ConfigSchemaGatewayState& state) const {
+		std::ostringstream markdown;
+		markdown
+			<< "# BlazeClaw Runtime Config Schema Snapshot\n\n"
+			<< "- version: `" << state.version << "`\n"
+			<< "- generatedAt: `" << state.generatedAt << "`\n\n"
+			<< "## schemaJson\n\n"
+			<< "```json\n"
+			<< (state.schemaJson.empty() ? "{}" : state.schemaJson)
+			<< "\n```\n\n"
+			<< "## uiHintsJson\n\n"
+			<< "```json\n"
+			<< (state.uiHintsJson.empty() ? "{}" : state.uiHintsJson)
+			<< "\n```\n";
+
+		return markdown.str();
+	}
+
+	bool ConfigSchemaService::WriteDocumentationSnapshot(
+		const blazeclaw::gateway::ConfigSchemaGatewayState& state,
+		const std::filesystem::path& outputPath,
+		std::wstring& outError) const {
+		outError.clear();
+		if (outputPath.empty()) {
+			outError = L"Config schema documentation snapshot path is empty.";
+			return false;
+		}
+
+		std::error_code ec;
+		std::filesystem::create_directories(outputPath.parent_path(), ec);
+		if (ec) {
+			outError =
+				L"Failed to create config schema snapshot directory: " +
+				outputPath.parent_path().wstring();
+			return false;
+		}
+
+		std::ofstream out(outputPath, std::ios::out | std::ios::trunc);
+		if (!out.is_open()) {
+			outError =
+				L"Failed to open config schema snapshot path: " +
+				outputPath.wstring();
+			return false;
+		}
+
+		out << BuildDocumentationSnapshotMarkdown(state);
+		if (!out.good()) {
+			outError =
+				L"Failed to write config schema snapshot content: " +
+				outputPath.wstring();
+			return false;
+		}
+
+		return true;
 	}
 
 } // namespace blazeclaw::core

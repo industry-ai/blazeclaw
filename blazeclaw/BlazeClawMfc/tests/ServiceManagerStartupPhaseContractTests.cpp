@@ -207,3 +207,19 @@ TEST_CASE(
 		source.find("runtime_cancellation_state.cleared") !=
 		std::string::npos);
 }
+
+TEST_CASE(
+	"ServiceManager startup contract: skills host bridge callbacks gate host/UI persistence",
+	"[servicemanager][startup][contract]")
+{
+	const std::string source = ReadServiceManagerSource();
+	REQUIRE(
+		source.find("void ServiceManager::SetSkillsHostCallbacks(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("m_skillsHostCallbacks.persistSkillConfigEnv") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("m_skillsHostCallbacks.refreshSkillView") !=
+		std::string::npos);
+}

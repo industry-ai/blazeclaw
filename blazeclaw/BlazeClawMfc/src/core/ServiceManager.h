@@ -41,6 +41,7 @@
 #include "runtime/ChatRuntimeContracts.h"
 #include "runtime/LocalModel/OnnxTextGenerationRuntime.h"
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <mutex>
 #include <optional>
@@ -51,7 +52,17 @@ namespace blazeclaw::core {
 
 	class ServiceManager {
 	public:
+		struct SkillsHostCallbacks {
+			std::function<bool(
+				const std::string& skill,
+				const std::string& envContent,
+				std::string& outError,
+				std::filesystem::path& outPath)> persistSkillConfigEnv;
+			std::function<void()> refreshSkillView;
+		};
+
 		ServiceManager();
+		void SetSkillsHostCallbacks(SkillsHostCallbacks callbacks);
 
 		bool Start(const blazeclaw::config::AppConfig& config);
 		void Stop();
@@ -89,6 +100,9 @@ namespace blazeclaw::core {
 			BuildConfigSchemaGatewayState() const;
 		[[nodiscard]] std::optional<blazeclaw::gateway::ConfigSchemaGatewayLookupResult>
 			LookupConfigSchemaGatewayPath(const std::string& path) const;
+		[[nodiscard]] bool WriteConfigSchemaDocumentationSnapshot(
+			const std::filesystem::path& outputPath,
+			std::wstring& outError) const;
 		[[nodiscard]] std::string InvokeGatewayMethod(
 			const std::string& method,
 			const std::optional<std::string>& paramsJson = std::nullopt) const;
@@ -355,6 +369,7 @@ namespace blazeclaw::core {
 		ConfigSchemaService m_configSchemaService;
 		SkillsWatchService m_skillsWatchService;
 		SkillsWatchSnapshot m_skillsWatch;
+		SkillsHostCallbacks m_skillsHostCallbacks;
 		CChatRuntime m_chatRuntime;
 		CDeepSeekClient m_deepSeekClient;
 		CSkillsHooksCoordinator m_skillsHooksCoordinator;

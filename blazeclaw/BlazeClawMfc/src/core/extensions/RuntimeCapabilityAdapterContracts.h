@@ -31,6 +31,14 @@ namespace blazeclaw::core::extensions {
 		std::string owner;
 		std::string version = "v1";
 		std::string source = "internal";
+		std::string contractScope = "internal";
+		std::string stability = "internal-stable";
+		std::string minHostVersion = "2026.0";
+		std::string documentationRef;
+
+		[[nodiscard]] bool IsPublicContract() const {
+			return contractScope == "public";
+		}
 	};
 
 	struct RuntimeToolAdapterContext {

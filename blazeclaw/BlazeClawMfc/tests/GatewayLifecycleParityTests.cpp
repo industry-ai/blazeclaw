@@ -3,6 +3,9 @@
 #include "core/bootstrap/GatewayManagedConfigReloader.h"
 #include "core/bootstrap/GatewayRuntimeBootstrapCoordinator.h"
 #include "core/diagnostics/CDiagnosticsReportBuilder.h"
+#include "gateway/GatewayProtocolSchemaValidator.h"
+#include "gateway/GatewayChannelRegistry.h"
+#include "gateway/GatewaySessionRegistry.h"
 #include "gateway/TransportRecipientRegistry.h"
 
 #include <filesystem>
@@ -452,6 +455,217 @@ TEST_CASE(
 
 	registry.PruneExpired(nowMs + (16 * 60 * 1000));
 	REQUIRE(registry.GetSnapshot().runCount == 0);
+}
+
+TEST_CASE(
+	"Gateway protocol capability checks validate schema lookup response contract",
+	"[gateway][lifecycle][p0][capability]")
+{
+	using blazeclaw::gateway::protocol::GatewayProtocolSchemaValidator;
+	using blazeclaw::gateway::protocol::ResponseFrame;
+	using blazeclaw::gateway::protocol::SchemaValidationIssue;
+
+	SchemaValidationIssue issue;
+
+	const ResponseFrame validResponse{
+		.id = "schema-lookup-ok",
+		.ok = true,
+		.payloadJson = "{\"path\":\"chat.activeProvider\",\"schema\":{},\"children\":[],\"hint\":null,\"hintPath\":\"chat.activeProvider\"}",
+		.error = std::nullopt,
+	};
+	REQUIRE(
+		GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.config.schema.lookup",
+			validResponse,
+			issue));
+
+	const ResponseFrame invalidHintType{
+		.id = "schema-lookup-bad-hint",
+		.ok = true,
+		.payloadJson = "{\"path\":\"chat.activeProvider\",\"schema\":{},\"children\":[],\"hint\":\"invalid\"}",
+		.error = std::nullopt,
+	};
+	REQUIRE_FALSE(
+		GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.config.schema.lookup",
+			invalidHintType,
+			issue));
+}
+
+TEST_CASE(
+	"Gateway protocol capability checks validate runtime diagnostics health contracts",
+	"[gateway][lifecycle][p0][capability]")
+{
+	using blazeclaw::gateway::protocol::GatewayProtocolSchemaValidator;
+	using blazeclaw::gateway::protocol::ResponseFrame;
+	using blazeclaw::gateway::protocol::SchemaValidationIssue;
+
+	SchemaValidationIssue issue;
+
+	const ResponseFrame validDependencies{
+		.id = "health-deps-ok",
+		.ok = true,
+		.payloadJson = "{\"probes\":[{\"key\":\"deepseek\",\"state\":\"healthy\",\"reasonCode\":\"ok\",\"reasonMessage\":\"ready\",\"checkedAtEpochMs\":1,\"expiresAtEpochMs\":2}],\"count\":1,\"generatedAtEpochMs\":1,\"ttlMs\":1000}",
+		.error = std::nullopt,
+	};
+	REQUIRE(
+		GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.runtime.health.dependencies",
+			validDependencies,
+			issue));
+
+	const ResponseFrame invalidDependencies{
+		.id = "health-deps-bad",
+		.ok = true,
+		.payloadJson = "{\"probes\":[{\"key\":\"deepseek\",\"state\":\"healthy\"}],\"count\":1,\"generatedAtEpochMs\":1,\"ttlMs\":1000}",
+		.error = std::nullopt,
+	};
+	REQUIRE_FALSE(
+		GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.runtime.health.dependencies",
+			invalidDependencies,
+			issue));
+}
+
+TEST_CASE(
+	"Gateway protocol capability checks validate runtime task-delta response semantics",
+	"[gateway][lifecycle][p0][capability]")
+{
+	using blazeclaw::gateway::protocol::GatewayProtocolSchemaValidator;
+	using blazeclaw::gateway::protocol::ResponseFrame;
+	using blazeclaw::gateway::protocol::SchemaValidationIssue;
+
+	SchemaValidationIssue issue;
+
+	const ResponseFrame validTaskDeltas{
+		.id = "task-delta-ok",
+		.ok = true,
+		.payloadJson = "{\"runId\":\"run-42\",\"taskDeltas\":[{\"index\":0,\"schemaVersion\":1,\"runId\":\"run-42\",\"sessionId\":\"main\",\"phase\":\"tool\",\"status\":\"completed\",\"stepLabel\":\"fetch\",\"startedAtMs\":10,\"completedAtMs\":20,\"latencyMs\":10}],\"count\":1}",
+		.error = std::nullopt,
+	};
+	REQUIRE(
+		GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.runtime.taskDeltas.get",
+			validTaskDeltas,
+			issue));
+
+	const ResponseFrame invalidTaskDeltas{
+		.id = "task-delta-bad",
+		.ok = true,
+		.payloadJson = "{\"runId\":\"run-42\",\"taskDeltas\":[{\"index\":0,\"schemaVersion\":1,\"runId\":\"run-42\",\"sessionId\":\"main\"}],\"count\":1}",
+		.error = std::nullopt,
+	};
+	REQUIRE_FALSE(
+		GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"gateway.runtime.taskDeltas.get",
+			invalidTaskDeltas,
+			issue));
+}
+
+TEST_CASE(
+	"Gateway orchestration edge test validates multi-session lifecycle compaction",
+	"[gateway][lifecycle][p0][orchestration][session]")
+{
+	blazeclaw::gateway::GatewaySessionRegistry registry;
+
+	const auto createdA = registry.Create(
+		"p0.session.agent.alpha",
+		std::optional<std::string>{ "thread" },
+		std::optional<bool>{ true });
+	const auto createdB = registry.Create(
+		"p0.session.agent.beta",
+		std::optional<std::string>{ "thread" },
+		std::optional<bool>{ true });
+
+	REQUIRE(createdA.id == "p0.session.agent.alpha");
+	REQUIRE(createdB.id == "p0.session.agent.beta");
+
+	registry.Patch(
+		"p0.session.agent.alpha",
+		std::nullopt,
+		std::optional<bool>{ false });
+
+	REQUIRE(registry.CountCompactCandidates() >= 1);
+	REQUIRE(registry.CompactInactive() >= 1);
+
+	const auto resolvedAlpha = registry.Resolve("p0.session.agent.alpha");
+	const auto resolvedBeta = registry.Resolve("p0.session.agent.beta");
+
+	REQUIRE(resolvedAlpha.id == "main");
+	REQUIRE(resolvedBeta.id == "p0.session.agent.beta");
+	REQUIRE(resolvedBeta.active);
+
+	blazeclaw::gateway::SessionEntry removed{};
+	const bool deleted = registry.Delete("p0.session.agent.beta", removed);
+	REQUIRE(deleted);
+}
+
+TEST_CASE(
+	"Gateway orchestration edge test validates multi-agent channel route updates",
+	"[gateway][lifecycle][p0][orchestration][channel]")
+{
+	blazeclaw::gateway::GatewayChannelRegistry registry;
+
+	bool createdAlpha = false;
+	const auto alphaAccount = registry.CreateAccount(
+		"telegram",
+		"telegram.p0.alpha",
+		std::optional<std::string>{ "Alpha Account" },
+		std::optional<bool>{ true },
+		std::optional<bool>{ true },
+		createdAlpha);
+
+	bool createdBeta = false;
+	const auto betaAccount = registry.CreateAccount(
+		"discord",
+		"discord.p0.beta",
+		std::optional<std::string>{ "Beta Account" },
+		std::optional<bool>{ true },
+		std::optional<bool>{ false },
+		createdBeta);
+
+	const auto alphaRoute = registry.SetRoute(
+		alphaAccount.channel,
+		alphaAccount.accountId,
+		"agent-alpha",
+		"session-alpha");
+	const auto betaRoute = registry.SetRoute(
+		betaAccount.channel,
+		betaAccount.accountId,
+		"agent-beta",
+		"session-beta");
+
+	REQUIRE(alphaRoute.agentId == "agent-alpha");
+	REQUIRE(betaRoute.agentId == "agent-beta");
+
+	bool updated = false;
+	const auto patchedRoute = registry.PatchRoute(
+		alphaAccount.channel,
+		alphaAccount.accountId,
+		std::optional<std::string>{ "agent-alpha-v2" },
+		std::optional<std::string>{ "session-alpha-v2" },
+		updated);
+
+	REQUIRE(updated);
+	REQUIRE(patchedRoute.agentId == "agent-alpha-v2");
+	REQUIRE(patchedRoute.sessionId == "session-alpha-v2");
+
+	auto resolvedRoute = registry.ResolveRoute(
+		alphaAccount.channel,
+		alphaAccount.accountId);
+	REQUIRE(resolvedRoute.agentId == "agent-alpha-v2");
+
+	blazeclaw::gateway::ChannelRouteEntry removedRoute{};
+	const bool deleted = registry.DeleteRoute(
+		betaAccount.channel,
+		betaAccount.accountId,
+		removedRoute);
+	REQUIRE(deleted);
+	REQUIRE(removedRoute.agentId == "agent-beta");
+
+	std::size_t cleared = registry.ClearRoutes(alphaAccount.channel);
+	REQUIRE(cleared >= 1);
+	REQUIRE(registry.RestoreRoutes(alphaAccount.channel) >= 1);
 }
 
 TEST_CASE(

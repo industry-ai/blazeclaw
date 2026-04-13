@@ -528,6 +528,46 @@ namespace blazeclaw::core {
 			return fallback;
 		}
 
+		bool PersistSkillConfigEnvViaHostDocument(
+			const std::string& skill,
+			const std::string& envContent,
+			std::string& outError,
+			std::filesystem::path& outPath) {
+			CBlazeClawMFCDoc* activeDoc = nullptr;
+			auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+			if (mainFrame != nullptr) {
+				auto* activeChild = DYNAMIC_DOWNCAST(
+					CMDIChildWndEx,
+					mainFrame->MDIGetActive());
+				if (activeChild != nullptr) {
+					auto* activeView = DYNAMIC_DOWNCAST(
+						CBlazeClawMFCView,
+						activeChild->GetActiveView());
+					if (activeView != nullptr) {
+						activeDoc = activeView->GetDocument();
+					}
+				}
+			}
+
+			if (activeDoc == nullptr) {
+				outError = "No active document context for skill update.";
+				return false;
+			}
+
+			return activeDoc->SaveSkillConfigEnv(
+				skill,
+				envContent,
+				outError,
+				&outPath);
+		}
+
+		void RefreshSkillViewViaHostWindow() {
+			auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
+			if (mainFrame != nullptr) {
+				mainFrame->RefreshSkillView();
+			}
+		}
+
 		std::string ToLowerAscii(const std::string& value) {
 			std::string lowered = value;
 			std::transform(
@@ -1724,7 +1764,28 @@ namespace blazeclaw::core {
 
 	} // namespace
 
-	ServiceManager::ServiceManager() = default;
+	ServiceManager::ServiceManager() {
+		m_skillsHostCallbacks.persistSkillConfigEnv =
+			[](const std::string& skill,
+				const std::string& envContent,
+				std::string& outError,
+				std::filesystem::path& outPath) {
+					return PersistSkillConfigEnvViaHostDocument(
+						skill,
+						envContent,
+						outError,
+						outPath);
+			};
+
+		m_skillsHostCallbacks.refreshSkillView = []() {
+			RefreshSkillViewViaHostWindow();
+			};
+	}
+
+	void ServiceManager::SetSkillsHostCallbacks(
+		SkillsHostCallbacks callbacks) {
+		m_skillsHostCallbacks = std::move(callbacks);
+	}
 
 	ServiceManager::EmailFallbackResolvedPolicy
 		ServiceManager::ResolveEmailFallbackPolicy(
@@ -2751,26 +2812,15 @@ namespace blazeclaw::core {
 					};
 				}
 
-				CBlazeClawMFCDoc* activeDoc = nullptr;
-				auto* mainFrame = dynamic_cast<CMainFrame*>(AfxGetMainWnd());
-				if (mainFrame != nullptr) {
-					auto* activeChild = DYNAMIC_DOWNCAST(CMDIChildWndEx, mainFrame->MDIGetActive());
-					if (activeChild != nullptr) {
-						auto* activeView = DYNAMIC_DOWNCAST(CBlazeClawMFCView, activeChild->GetActiveView());
-						if (activeView != nullptr) {
-							activeDoc = activeView->GetDocument();
-						}
-					}
-				}
-
-				if (activeDoc == nullptr) {
+				if (!m_skillsHostCallbacks.persistSkillConfigEnv) {
 					return blazeclaw::gateway::protocol::ResponseFrame{
 						.id = request.id,
 						.ok = false,
 						.payloadJson = std::nullopt,
 						.error = blazeclaw::gateway::protocol::ErrorShape{
 							.code = "doc_unavailable",
-							.message = "No active document context for skill update.",
+						  .message =
+								"No host bridge callback configured for skill update persistence.",
 							.detailsJson = std::nullopt,
 							.retryable = true,
 							.retryAfterMs = 100,
@@ -2780,7 +2830,11 @@ namespace blazeclaw::core {
 
 				std::string persistError;
 				std::filesystem::path savedPath;
-				if (!activeDoc->SaveSkillConfigEnv(skill, envContent, persistError, &savedPath)) {
+				if (!m_skillsHostCallbacks.persistSkillConfigEnv(
+					skill,
+					envContent,
+					persistError,
+					savedPath)) {
 					return blazeclaw::gateway::protocol::ResponseFrame{
 						.id = request.id,
 						.ok = false,
@@ -2799,8 +2853,8 @@ namespace blazeclaw::core {
 
 				RefreshSkillsState(m_activeConfig, true, L"skills.update");
 				PublishGatewaySkillsStateProjection();
-				if (mainFrame != nullptr) {
-					mainFrame->RefreshSkillView();
+				if (m_skillsHostCallbacks.refreshSkillView) {
+					m_skillsHostCallbacks.refreshSkillView();
 				}
 
 				const std::string payload =
@@ -4353,6 +4407,16 @@ namespace blazeclaw::core {
 			const std::string& path) const {
 		const auto state = BuildConfigSchemaGatewayState();
 		return m_configSchemaService.Lookup(state, path);
+	}
+
+	bool ServiceManager::WriteConfigSchemaDocumentationSnapshot(
+		const std::filesystem::path& outputPath,
+		std::wstring& outError) const {
+		const auto state = BuildConfigSchemaGatewayState();
+		return m_configSchemaService.WriteDocumentationSnapshot(
+			state,
+			outputPath,
+			outError);
 	}
 
 	std::string ServiceManager::InvokeGatewayMethod(

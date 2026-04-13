@@ -2,6 +2,9 @@
 
 #include <catch2/catch_all.hpp>
 
+#include <filesystem>
+#include <fstream>
+
 namespace {
 
 	blazeclaw::gateway::SkillsCatalogGatewayEntry MakeSkill(
@@ -105,6 +108,48 @@ TEST_CASE("ConfigSchemaService cache returns stable generatedAt for identical ke
 	REQUIRE(state1.generatedAt == state2.generatedAt);
 	REQUIRE(state1.schemaJson == state2.schemaJson);
 	REQUIRE(state1.uiHintsJson == state2.uiHintsJson);
+}
+
+TEST_CASE("ConfigSchemaService builds documentation snapshot markdown payload", "[schema][docs][snapshot]") {
+	blazeclaw::core::ConfigSchemaService service;
+	blazeclaw::gateway::SkillsCatalogGatewayState skills;
+	skills.entries.push_back(MakeSkill("discord", { "channels.discord.token" }));
+
+	const auto state = service.BuildGatewayState(MakeConfig({ L"discord" }), skills);
+	const auto markdown = service.BuildDocumentationSnapshotMarkdown(state);
+
+	REQUIRE(markdown.find("# BlazeClaw Runtime Config Schema Snapshot") != std::string::npos);
+	REQUIRE(markdown.find("## schemaJson") != std::string::npos);
+	REQUIRE(markdown.find("## uiHintsJson") != std::string::npos);
+	REQUIRE(markdown.find(state.version) != std::string::npos);
+	REQUIRE(markdown.find(state.generatedAt) != std::string::npos);
+}
+
+TEST_CASE("ConfigSchemaService writes documentation snapshot file", "[schema][docs][snapshot][write]") {
+	blazeclaw::core::ConfigSchemaService service;
+	blazeclaw::gateway::SkillsCatalogGatewayState skills;
+	skills.entries.push_back(MakeSkill("discord", { "channels.discord.token" }));
+
+	const auto state = service.BuildGatewayState(MakeConfig({ L"discord" }), skills);
+	const auto outputPath =
+		std::filesystem::temp_directory_path() /
+		"blazeclaw_config_schema_snapshot_test.md";
+
+	std::wstring error;
+	REQUIRE(service.WriteDocumentationSnapshot(state, outputPath, error));
+	REQUIRE(error.empty());
+
+	std::ifstream in(outputPath);
+	REQUIRE(in.is_open());
+	const std::string content(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+
+	REQUIRE(content.find("# BlazeClaw Runtime Config Schema Snapshot") != std::string::npos);
+	REQUIRE(content.find(state.version) != std::string::npos);
+
+	std::error_code ec;
+	std::filesystem::remove(outputPath, ec);
 }
 
 TEST_CASE("ConfigSchemaService cache key includes config path hint content", "[schema][cache][key]") {

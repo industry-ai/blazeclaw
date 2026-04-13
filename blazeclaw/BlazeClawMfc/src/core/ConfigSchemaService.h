@@ -4,6 +4,7 @@
 #include "../gateway/GatewayHost.h"
 
 #include <deque>
+#include <filesystem>
 #include <mutex>
 
 namespace blazeclaw::core {
@@ -21,6 +22,14 @@ namespace blazeclaw::core {
 		[[nodiscard]] std::optional<blazeclaw::gateway::ConfigSchemaGatewayLookupResult> Lookup(
 			const blazeclaw::gateway::ConfigSchemaGatewayState& state,
 			const std::string& path) const;
+
+		[[nodiscard]] std::string BuildDocumentationSnapshotMarkdown(
+			const blazeclaw::gateway::ConfigSchemaGatewayState& state) const;
+
+		[[nodiscard]] bool WriteDocumentationSnapshot(
+			const blazeclaw::gateway::ConfigSchemaGatewayState& state,
+			const std::filesystem::path& outputPath,
+			std::wstring& outError) const;
 
 	private:
 		struct CacheEntry {
