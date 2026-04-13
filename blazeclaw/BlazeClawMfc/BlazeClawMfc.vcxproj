@@ -157,6 +157,7 @@
     <ClInclude Include="src\core\HookCatalogService.h" />
     <ClInclude Include="src\core\HookEventService.h" />
     <ClInclude Include="src\core\HookExecutionService.h" />
+    <ClInclude Include="src\core\SkillsConfigEval.h" />
     <ClInclude Include="src\core\SkillsCommandService.h" />
     <ClInclude Include="src\core\SkillsCatalogService.h" />
     <ClInclude Include="src\core\SkillsEnvOverrideService.h" />
@@ -305,6 +306,7 @@
     <ClCompile Include="src\core\HookCatalogService.cpp" />
     <ClCompile Include="src\core\HookEventService.cpp" />
     <ClCompile Include="src\core\HookExecutionService.cpp" />
+    <ClCompile Include="src\core\SkillsConfigEval.cpp" />
     <ClCompile Include="src\core\SkillsCommandService.cpp" />
     <ClCompile Include="src\core\SkillsCatalogService.cpp" />
     <ClCompile Include="src\core\SkillsEnvOverrideService.cpp" />

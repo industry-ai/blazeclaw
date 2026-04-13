@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "SkillsEligibilityService.h"
+#include "SkillsConfigEval.h"
 
 #include <algorithm>
 #include <cwctype>
@@ -230,22 +231,6 @@ namespace blazeclaw::core {
 			return {};
 		}
 
-		bool HasBinary(const std::wstring& binName) {
-			const std::wstring name = Trim(binName);
-			if (name.empty()) {
-				return false;
-			}
-
-			const DWORD required = SearchPathW(
-				nullptr,
-				name.c_str(),
-				nullptr,
-				0,
-				nullptr,
-				nullptr);
-			return required > 0;
-		}
-
 		bool HasEnvironmentValue(const std::wstring& envName) {
 			wchar_t* value = nullptr;
 			std::size_t valueLength = 0;
@@ -274,33 +259,6 @@ namespace blazeclaw::core {
 			constexpr wchar_t kPlatformB[] = L"windows";
 			return std::find(osList.begin(), osList.end(), kPlatformA) != osList.end() ||
 				std::find(osList.begin(), osList.end(), kPlatformB) != osList.end();
-		}
-
-		bool IsConfigPathTruthy(
-			const blazeclaw::config::AppConfig& appConfig,
-			const std::wstring& configPath) {
-			const std::wstring path = ToLower(Trim(configPath));
-			if (path == L"gateway.bind" || path == L"gateway.bindaddress") {
-				return !appConfig.gateway.bindAddress.empty();
-			}
-
-			if (path == L"gateway.port") {
-				return appConfig.gateway.port > 0;
-			}
-
-			if (path == L"agent.model") {
-				return !appConfig.agent.model.empty();
-			}
-
-			if (path == L"agent.streaming") {
-				return appConfig.agent.enableStreaming;
-			}
-
-			if (path == L"skills.load.watch") {
-				return appConfig.skills.load.watch;
-			}
-
-			return false;
 		}
 
 		bool IsBundledAllowed(
@@ -412,7 +370,7 @@ namespace blazeclaw::core {
 					catalogEntry.frontmatter,
 					{ L"openclaw.requires.bins", L"requires.bins" }));
 			for (const auto& bin : requiredBins) {
-				if (!HasBinary(bin)) {
+				if (!SkillsHasBinary(bin)) {
 					result.missingBins.push_back(bin);
 				}
 			}
@@ -424,7 +382,7 @@ namespace blazeclaw::core {
 			if (!requiredAnyBins.empty()) {
 				bool foundAny = false;
 				for (const auto& bin : requiredAnyBins) {
-					if (HasBinary(bin)) {
+					if (SkillsHasBinary(bin)) {
 						foundAny = true;
 						break;
 					}
@@ -475,7 +433,7 @@ namespace blazeclaw::core {
 					catalogEntry.frontmatter,
 					{ L"openclaw.requires.config", L"requires.config" }));
 			for (const auto& configPath : requiredConfig) {
-				if (!IsConfigPathTruthy(
+				if (!IsSkillsConfigPathTruthy(
 					appConfig,
 					std::wstring(configPath.begin(), configPath.end()))) {
 					result.missingConfig.push_back(configPath);
