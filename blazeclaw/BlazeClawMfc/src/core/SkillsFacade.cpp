@@ -330,9 +330,19 @@ namespace blazeclaw::core {
 			appConfig,
 			std::nullopt,
 			enableSelfEvolvingPromptFallback);
-		result.commands = dependencies.commandService.BuildSnapshot(
-			result.catalog,
-			result.eligibility);
+		if (dependencies.commandSourceAdapters != nullptr) {
+			result.commands = dependencies.commandService.BuildSnapshotWithAdapters(
+				result.catalog,
+				result.eligibility,
+				{},
+				*dependencies.commandSourceAdapters,
+				{});
+		}
+		else {
+			result.commands = dependencies.commandService.BuildSnapshot(
+				result.catalog,
+				result.eligibility);
+		}
 		result.sync = dependencies.syncService.SyncToSandbox(
 			workspaceRoot,
 			result.catalog,

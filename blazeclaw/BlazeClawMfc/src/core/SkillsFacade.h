@@ -52,6 +52,8 @@ namespace blazeclaw::core {
 		SkillsEligibilityService& eligibilityService;
 		SkillsPromptService& promptService;
 		SkillsCommandService& commandService;
+		const std::vector<extensions::IRuntimeSkillCommandSourceAdapter*>*
+			commandSourceAdapters = nullptr;
 		SkillsSyncService& syncService;
 		SkillsEnvOverrideService& envOverrideService;
 		SkillsInstallService& installService;

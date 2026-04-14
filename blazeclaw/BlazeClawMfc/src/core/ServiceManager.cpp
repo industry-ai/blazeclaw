@@ -30,6 +30,154 @@ namespace blazeclaw::core {
 
 	namespace {
 
+		std::wstring Trim(const std::wstring& value) {
+			const auto first = std::find_if_not(
+				value.begin(),
+				value.end(),
+				[](const wchar_t ch) {
+					return std::iswspace(ch) != 0;
+				});
+			const auto last = std::find_if_not(
+				value.rbegin(),
+				value.rend(),
+				[](const wchar_t ch) {
+					return std::iswspace(ch) != 0;
+				}).base();
+
+			if (first >= last) {
+				return {};
+			}
+
+			return std::wstring(first, last);
+		}
+
+		std::wstring ToLower(const std::wstring& value) {
+			std::wstring lowered = value;
+			std::transform(
+				lowered.begin(),
+				lowered.end(),
+				lowered.begin(),
+				[](const wchar_t ch) {
+					return static_cast<wchar_t>(std::towlower(ch));
+				});
+			return lowered;
+		}
+
+		std::wstring Utf8ToWideLocal(const std::string& value) {
+			if (value.empty()) {
+				return {};
+			}
+
+			const int required = MultiByteToWideChar(
+				CP_UTF8,
+				0,
+				value.c_str(),
+				static_cast<int>(value.size()),
+				nullptr,
+				0);
+			if (required <= 0) {
+				return std::wstring(value.begin(), value.end());
+			}
+
+			std::wstring output(static_cast<std::size_t>(required), L'\0');
+			const int converted = MultiByteToWideChar(
+				CP_UTF8,
+				0,
+				value.c_str(),
+				static_cast<int>(value.size()),
+				output.data(),
+				required);
+			if (converted <= 0) {
+				return std::wstring(value.begin(), value.end());
+			}
+
+			return output;
+		}
+
+		std::wstring NormalizeBundleCommandName(const std::wstring& raw) {
+			std::wstring normalized;
+			normalized.reserve(raw.size());
+
+			for (const wchar_t ch : raw) {
+				if (ch == L':' || ch == L'/' || ch == L'\\') {
+					normalized.push_back(L'-');
+					continue;
+				}
+
+				normalized.push_back(ch);
+			}
+
+			const auto collapsed = std::regex_replace(
+				normalized,
+				std::wregex(L"[-_]{2,}"),
+				L"-");
+
+			std::wstring trimmed = Trim(collapsed);
+			while (!trimmed.empty() &&
+				(trimmed.front() == L'-' || trimmed.front() == L'_')) {
+				trimmed.erase(trimmed.begin());
+			}
+			while (!trimmed.empty() &&
+				(trimmed.back() == L'-' || trimmed.back() == L'_')) {
+				trimmed.pop_back();
+			}
+
+			return trimmed.empty() ? L"bundle-command" : trimmed;
+		}
+
+		std::wstring ParseBundleFrontmatterField(
+			const std::wstring& content,
+			const std::wstring& key) {
+			if (!content.starts_with(L"---")) {
+				return {};
+			}
+
+			const std::size_t end = content.find(L"\n---", 3);
+			if (end == std::wstring::npos) {
+				return {};
+			}
+
+			const std::wstring block = content.substr(3, end - 3);
+			std::wstringstream stream(block);
+			std::wstring line;
+			const std::wstring keyNormalized = ToLower(Trim(key));
+			while (std::getline(stream, line)) {
+				const std::size_t colon = line.find(L':');
+				if (colon == std::wstring::npos || colon == 0) {
+					continue;
+				}
+
+				const std::wstring fieldKey = ToLower(Trim(line.substr(0, colon)));
+				if (fieldKey != keyNormalized) {
+					continue;
+				}
+
+				std::wstring value = Trim(line.substr(colon + 1));
+				if (value.size() >= 2 &&
+					((value.front() == L'"' && value.back() == L'"') ||
+						(value.front() == L'\'' && value.back() == L'\''))) {
+					value = value.substr(1, value.size() - 2);
+				}
+
+				return value;
+			}
+
+			return {};
+		}
+
+		std::wstring StripBundleFrontmatter(const std::wstring& content) {
+			if (!content.starts_with(L"---")) {
+				return Trim(content);
+			}
+
+			const std::size_t end = content.find(L"\n---", 3);
+			if (end == std::wstring::npos) {
+				return Trim(content);
+			}
+
+			return Trim(content.substr(end + 4));
+		}
+
 		std::string ToNarrow(const std::wstring& value) {
 			std::string output;
 			output.reserve(value.size());
@@ -40,6 +188,7 @@ namespace blazeclaw::core {
 
 			return output;
 		}
+
 
 		std::wstring TrimWideLocal(const std::wstring& value) {
 			const auto first = std::find_if_not(
@@ -476,24 +625,6 @@ namespace blazeclaw::core {
 				envValue != nullptr) {
 				free(envValue);
 			}
-		}
-
-		std::wstring Trim(const std::wstring& value) {
-			const auto first = std::find_if_not(
-				value.begin(),
-				value.end(),
-				[](const wchar_t ch) { return std::iswspace(ch) != 0; });
-			const auto last = std::find_if_not(
-				value.rbegin(),
-				value.rend(),
-				[](const wchar_t ch) { return std::iswspace(ch) != 0; })
-				.base();
-
-			if (first >= last) {
-				return {};
-			}
-
-			return std::wstring(first, last);
 		}
 
 		bool ReadBoolEnvOrDefault(const wchar_t* key, const bool fallback) {
@@ -1764,6 +1895,137 @@ namespace blazeclaw::core {
 
 	} // namespace
 
+	class ServiceManager::ExtensionBundleCommandSourceAdapter final
+		: public extensions::IRuntimeSkillCommandSourceAdapter {
+	public:
+		explicit ExtensionBundleCommandSourceAdapter(
+			const std::filesystem::path& extensionsRoot)
+			: m_extensionsRoot(extensionsRoot) {}
+
+		[[nodiscard]] extensions::RuntimeCapabilityDescriptor Describe() const override {
+			return extensions::RuntimeCapabilityDescriptor{
+				.capabilityId = "skills.bundle-command-source",
+				.owner = "service-manager",
+				.version = "v1",
+				.source = "internal",
+			};
+		}
+
+		[[nodiscard]] std::vector<SkillsCommandSpec> BuildAdditionalSkillsCommands(
+			const extensions::RuntimeSkillCommandSourceAdapterContext&) const override {
+			std::vector<SkillsCommandSpec> commands;
+			if (m_extensionsRoot.empty()) {
+				return commands;
+			}
+
+			std::error_code ec;
+			if (!std::filesystem::is_directory(m_extensionsRoot, ec) || ec) {
+				return commands;
+			}
+
+			for (const auto& extensionEntry :
+				std::filesystem::directory_iterator(m_extensionsRoot, ec)) {
+				if (ec) {
+					break;
+				}
+
+				if (!extensionEntry.is_directory()) {
+					continue;
+				}
+
+				const auto commandsRoot = extensionEntry.path() / L"commands";
+				std::error_code commandsEc;
+				if (!std::filesystem::is_directory(commandsRoot, commandsEc) ||
+					commandsEc) {
+					continue;
+				}
+
+				for (const auto& commandFile :
+					std::filesystem::recursive_directory_iterator(commandsRoot, ec)) {
+					if (ec) {
+						break;
+					}
+
+					if (!commandFile.is_regular_file()) {
+						continue;
+					}
+
+					const auto extension = ToLower(commandFile.path().extension().wstring());
+					if (extension != L".md") {
+						continue;
+					}
+
+					std::wifstream input(commandFile.path());
+					if (!input.is_open()) {
+						continue;
+					}
+
+					std::wstringstream buffer;
+					buffer << input.rdbuf();
+					const std::wstring raw = buffer.str();
+					const std::wstring promptTemplate = StripBundleFrontmatter(raw);
+					if (promptTemplate.empty()) {
+						continue;
+					}
+
+					const std::filesystem::path relativePath =
+						std::filesystem::relative(commandFile.path(), commandsRoot, commandsEc);
+					if (commandsEc) {
+						continue;
+					}
+
+					std::wstring defaultName = relativePath.wstring();
+					if (defaultName.size() > 3) {
+						defaultName = defaultName.substr(0, defaultName.size() - 3);
+					}
+					std::replace(
+						defaultName.begin(),
+						defaultName.end(),
+						std::filesystem::path::preferred_separator,
+						L':');
+
+					const std::wstring configuredName =
+						ParseBundleFrontmatterField(raw, L"name");
+					const std::wstring rawName =
+						configuredName.empty() ? defaultName : configuredName;
+
+					const std::wstring configuredDescription =
+						ParseBundleFrontmatterField(raw, L"description");
+					std::wstring description = configuredDescription;
+					if (description.empty()) {
+						std::wstringstream lineStream(promptTemplate);
+						std::wstring firstLine;
+						while (std::getline(lineStream, firstLine)) {
+							firstLine = Trim(firstLine);
+							if (!firstLine.empty()) {
+								description = firstLine;
+								break;
+							}
+						}
+					}
+					if (description.empty()) {
+						description = rawName;
+					}
+
+					SkillsCommandSpec spec;
+					spec.name = NormalizeBundleCommandName(rawName);
+					spec.skillName = rawName;
+					spec.description = description;
+					spec.promptTemplate = promptTemplate;
+					spec.sourceFilePath = Utf8ToWideLocal(
+						std::filesystem::relative(commandFile.path(), m_extensionsRoot).string());
+
+					commands.push_back(std::move(spec));
+				}
+			}
+
+			return commands;
+		}
+
+	private:
+		std::filesystem::path m_extensionsRoot;
+	};
+
 	ServiceManager::ServiceManager() {
 		m_skillsHostCallbacks.persistSkillConfigEnv =
 			[](const std::string& skill,
@@ -1781,6 +2043,8 @@ namespace blazeclaw::core {
 			RefreshSkillViewViaHostWindow();
 			};
 	}
+
+	ServiceManager::~ServiceManager() = default;
 
 	void ServiceManager::SetSkillsHostCallbacks(
 		SkillsHostCallbacks callbacks) {
@@ -2077,6 +2341,7 @@ namespace blazeclaw::core {
 		const blazeclaw::config::AppConfig& config,
 		const bool forceRefresh,
 		const std::wstring& reason) {
+		const auto commandSourceAdapters = BuildRuntimeSkillCommandSourceAdapters();
 		m_skillsHooksCoordinator.RefreshSkillsState(
 			config,
 			forceRefresh,
@@ -2087,6 +2352,7 @@ namespace blazeclaw::core {
 					.eligibilityService = m_skillsEligibilityService,
 					.promptService = m_skillsPromptService,
 					.commandService = m_skillsCommandService,
+				 .commandSourceAdapters = &commandSourceAdapters,
 					.syncService = m_skillsSyncService,
 					.envOverrideService = m_skillsEnvOverrideService,
 					.installService = m_skillsInstallService,
@@ -2116,6 +2382,19 @@ namespace blazeclaw::core {
 			});
 		m_configSchemaService.Invalidate();
 		RefreshGatewaySkillsStateProjection();
+	}
+
+	std::vector<extensions::IRuntimeSkillCommandSourceAdapter*>
+		ServiceManager::BuildRuntimeSkillCommandSourceAdapters() {
+		if (!m_extensionBundleCommandSourceAdapter) {
+			m_extensionBundleCommandSourceAdapter =
+				std::make_unique<ExtensionBundleCommandSourceAdapter>(
+					std::filesystem::path(L"blazeclaw") / L"extensions");
+		}
+
+		return std::vector<extensions::IRuntimeSkillCommandSourceAdapter*>{
+			m_extensionBundleCommandSourceAdapter.get(),
+		};
 	}
 
 	bool ServiceManager::Start(const blazeclaw::config::AppConfig& config) {
@@ -2465,6 +2744,7 @@ namespace blazeclaw::core {
 		else {
 			const auto workspaceRoot =
 				ResolveWorkspaceRootForSkills(std::filesystem::current_path());
+			const auto commandSourceAdapters = BuildRuntimeSkillCommandSourceAdapters();
 			auto refresh = m_skillsFacade.RefreshSkillsState(
 				workspaceRoot,
 				m_activeConfig,
@@ -2476,6 +2756,7 @@ namespace blazeclaw::core {
 					   .eligibilityService = m_skillsEligibilityService,
 					   .promptService = m_skillsPromptService,
 					   .commandService = m_skillsCommandService,
+					 .commandSourceAdapters = &commandSourceAdapters,
 					   .syncService = m_skillsSyncService,
 					   .envOverrideService = m_skillsEnvOverrideService,
 					   .installService = m_skillsInstallService,

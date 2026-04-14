@@ -40,6 +40,7 @@
 #include "runtime/CChatRuntime.h"
 #include "runtime/ChatRuntimeContracts.h"
 #include "runtime/LocalModel/OnnxTextGenerationRuntime.h"
+#include "extensions/RuntimeCapabilityAdapterContracts.h"
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -62,6 +63,7 @@ namespace blazeclaw::core {
 		};
 
 		ServiceManager();
+		~ServiceManager();
 		void SetSkillsHostCallbacks(SkillsHostCallbacks callbacks);
 
 		bool Start(const blazeclaw::config::AppConfig& config);
@@ -275,6 +277,8 @@ namespace blazeclaw::core {
 			const SkillsEligibilityEntry* eligibility,
 			const SkillsCommandSpec* command,
 			const SkillsInstallPlanEntry* install) const;
+		[[nodiscard]] std::vector<extensions::IRuntimeSkillCommandSourceAdapter*>
+			BuildRuntimeSkillCommandSourceAdapters();
 		void RefreshSkillsState(
 			const blazeclaw::config::AppConfig& config,
 			bool forceRefresh,
@@ -365,6 +369,10 @@ namespace blazeclaw::core {
 		SkillsInstallService m_skillsInstallService;
 		SkillsInstallSnapshot m_skillsInstall;
 		SkillSecurityScanService m_skillSecurityScanService;
+
+		class ExtensionBundleCommandSourceAdapter;
+		std::unique_ptr<ExtensionBundleCommandSourceAdapter>
+			m_extensionBundleCommandSourceAdapter;
 		SkillSecurityScanSnapshot m_skillSecurityScan;
 		ConfigSchemaService m_configSchemaService;
 		SkillsWatchService m_skillsWatchService;
