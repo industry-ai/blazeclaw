@@ -168,6 +168,7 @@
     <ClInclude Include="src\core\SkillsEligibilityService.h" />
     <ClInclude Include="src\core\SkillsFacade.h" />
     <ClInclude Include="src\core\SkillsInstallService.h" />
+    <ClInclude Include="src\core\SkillsPromptFormatterCompat.h" />
     <ClInclude Include="src\core\SkillSecurityScanService.h" />
     <ClInclude Include="src\core\SkillsPromptService.h" />
     <ClInclude Include="src\core\SkillsSyncService.h" />
@@ -320,6 +321,7 @@
     <ClCompile Include="src\core\SkillsEligibilityService.cpp" />
     <ClCompile Include="src\core\SkillsFacade.cpp" />
     <ClCompile Include="src\core\SkillsInstallService.cpp" />
+    <ClCompile Include="src\core\SkillsPromptFormatterCompat.cpp" />
     <ClCompile Include="src\core\SkillSecurityScanService.cpp" />
     <ClCompile Include="src\core\SkillsPromptService.cpp" />
     <ClCompile Include="src\core\SkillsSyncService.cpp" />

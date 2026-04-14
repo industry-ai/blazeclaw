@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "SkillsPromptService.h"
+#include "SkillsPromptFormatterCompat.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -168,57 +169,32 @@ namespace blazeclaw::core {
 			return truncated;
 		}
 
-		std::wstring EscapeXml(const std::wstring& value) {
-			std::wstring escaped;
-			escaped.reserve(value.size());
-			for (const wchar_t ch : value) {
-				switch (ch) {
-				case L'&':
-					escaped += L"&amp;";
-					break;
-				case L'<':
-					escaped += L"&lt;";
-					break;
-				case L'>':
-					escaped += L"&gt;";
-					break;
-				case L'"':
-					escaped += L"&quot;";
-					break;
-				case L'\'':
-					escaped += L"&apos;";
-					break;
-				default:
-					escaped.push_back(ch);
-					break;
-				}
-			}
-
-			return escaped;
-		}
-
 		std::wstring BuildCompactPrompt(
 			const std::vector<SkillsCatalogEntry>& entries) {
 			if (entries.empty()) {
 				return {};
 			}
 
-			std::wstringstream builder;
-			builder
-				<< L"\n\nThe following skills provide specialized instructions for specific tasks.\n"
-				<< L"Use the read tool to load a skill's file when the task matches its name.\n"
-				<< L"When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.\n\n"
-				<< L"<available_skills>\n";
-
+			std::vector<SkillPromptProjectionCompat> projected;
+			projected.reserve(entries.size());
 			for (const auto& entry : entries) {
-				builder << L"  <skill>\n";
-				builder << L"    <name>" << EscapeXml(entry.skillName) << L"</name>\n";
-				builder << L"    <location>" << EscapeXml(CompactHomePath(entry.skillFile)) << L"</location>\n";
-				builder << L"  </skill>\n";
+				projected.push_back(SkillPromptProjectionCompat{
+					.name = entry.skillName,
+					.description = entry.description,
+					.filePath = CompactHomePath(entry.skillFile),
+					.baseDir = entry.skillDir,
+					.legacySource = SkillsCatalogService::SourceKindLabel(entry.sourceKind),
+					.sourceInfo = entry.sourceInfo.value_or(
+						CreateSyntheticSkillSourceInfoCompat(
+							entry.skillFile,
+							SkillsCatalogService::SourceKindLabel(entry.sourceKind),
+							SkillSourceScope::Project,
+							SkillSourceOrigin::TopLevel,
+							entry.skillDir)),
+					});
 			}
 
-			builder << L"</available_skills>";
-			return builder.str();
+			return FormatSkillsForPromptCompactCompat(projected);
 		}
 
 		std::wstring BuildFullPrompt(

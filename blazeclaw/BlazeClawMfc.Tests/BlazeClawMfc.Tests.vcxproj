@@ -60,6 +60,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillCommandInvocationServiceTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\InlineActionsOrchestrationServiceContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillContractCompatParityTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillContractPromptFormatterParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillsTypesContractsParityTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ExtensionLifecycleManager.cpp" />
@@ -141,6 +142,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\bootstrap\\GatewayManagedConfigReloader.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\SkillCommandInvocationService.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\InlineActionsOrchestrationService.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\core\\SkillsPromptFormatterCompat.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\diagnostics\\CDiagnosticsReportBuilder.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\diagnostics\\DiagnosticsRegressionComparator.cpp" />
   </ItemGroup>
