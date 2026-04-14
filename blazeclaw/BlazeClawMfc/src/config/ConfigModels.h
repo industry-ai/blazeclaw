@@ -294,6 +294,7 @@ namespace blazeclaw::config {
 		std::optional<bool> enabled;
 		std::wstring apiKey;
 		std::map<std::wstring, std::wstring> env;
+		std::map<std::wstring, std::wstring> config;
 	};
 
 	struct SkillsLoadConfig {

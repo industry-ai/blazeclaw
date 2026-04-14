@@ -1460,6 +1460,14 @@ namespace blazeclaw::config {
 					if (!envName.empty()) {
 						entry.env[envName] = value;
 					}
+					continue;
+				}
+
+				if (fieldPath.rfind(L"config.", 0) == 0) {
+					const auto configKey = Trim(fieldPath.substr(7));
+					if (!configKey.empty()) {
+						entry.config[configKey] = value;
+					}
 				}
 			}
 		}

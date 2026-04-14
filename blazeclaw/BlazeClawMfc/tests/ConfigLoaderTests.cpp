@@ -37,6 +37,42 @@ TEST_CASE("ConfigLoader parses embedded.orchestrationPath values", "[config][emb
 	std::filesystem::remove_all(root);
 }
 
+TEST_CASE("ConfigLoader parses skills entries env and config maps", "[config][skills][entries]") {
+	blazeclaw::config::ConfigLoader loader;
+
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_skills_entries_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto configPath = root / "skills-entries.conf";
+	{
+		std::wofstream out(configPath);
+		REQUIRE(out.is_open());
+		out << L"skills.entries.demo.enabled=true\n";
+		out << L"skills.entries.demo.apiKey=demo-secret\n";
+		out << L"skills.entries.demo.env.API_BASE=https://api.example.test\n";
+		out << L"skills.entries.demo.config.timeoutMs=3000\n";
+		out << L"skills.entries.demo.config.retries=2\n";
+	}
+
+	blazeclaw::config::AppConfig config;
+	REQUIRE(loader.LoadFromFile(configPath.wstring(), config));
+
+	const auto it = config.skills.entries.find(L"demo");
+	REQUIRE(it != config.skills.entries.end());
+	REQUIRE(it->second.enabled.has_value());
+	REQUIRE(it->second.enabled.value());
+	REQUIRE(it->second.apiKey == L"demo-secret");
+	REQUIRE(it->second.env.contains(L"API_BASE"));
+	REQUIRE(it->second.env.at(L"API_BASE") == L"https://api.example.test");
+	REQUIRE(it->second.config.contains(L"timeoutMs"));
+	REQUIRE(it->second.config.at(L"timeoutMs") == L"3000");
+	REQUIRE(it->second.config.contains(L"retries"));
+	REQUIRE(it->second.config.at(L"retries") == L"2");
+
+	std::filesystem::remove_all(root);
+}
+
 TEST_CASE("ConfigLoader parses agent/default skills allowlist semantics", "[config][agents][skills]") {
 	blazeclaw::config::ConfigLoader loader;
 
