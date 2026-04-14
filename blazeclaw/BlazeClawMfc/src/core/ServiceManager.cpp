@@ -3546,6 +3546,97 @@ namespace blazeclaw::core {
 		return merged;
 	}
 
+	std::optional<std::string> ServiceManager::ExtractInlineToolResultText(
+		const blazeclaw::gateway::ToolExecuteResultV2& result) const
+	{
+		const std::string trimmedResult =
+			WideToNarrowAscii(Trim(Utf8ToWideLocal(result.result)));
+		if (!trimmedResult.empty()) {
+			return trimmedResult;
+		}
+
+		const std::string trimmedError =
+			WideToNarrowAscii(Trim(Utf8ToWideLocal(result.errorMessage)));
+		if (!trimmedError.empty()) {
+			return trimmedError;
+		}
+
+		return std::nullopt;
+	}
+
+	std::optional<blazeclaw::gateway::GatewayHost::ChatRuntimeResult>
+		ServiceManager::TryExecuteInlineToolInvocation(
+			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
+			const std::string& activeModel,
+			const std::optional<std::string>& resolvedSkillInvocationToolTarget)
+	{
+		if (!request.allowInlineToolImmediateExecution ||
+			!resolvedSkillInvocationToolTarget.has_value()) {
+			return std::nullopt;
+		}
+
+		if (!request.inlineInvocationAuthorizedSender) {
+			return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+				.ok = false,
+				.assistantText = {},
+				.assistantDeltas = {},
+				.taskDeltas = {},
+				.modelId = activeModel,
+				.errorCode = "inline_invocation_unauthorized_sender",
+				.errorMessage = "inline invocation rejected: unauthorized sender",
+			};
+		}
+
+		if (!request.inlineInvocationSenderIsOwner) {
+			return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+				.ok = false,
+				.assistantText = {},
+				.assistantDeltas = {},
+				.taskDeltas = {},
+				.modelId = activeModel,
+				.errorCode = "inline_invocation_owner_required",
+				.errorMessage = "inline invocation rejected: owner-only tool policy",
+			};
+		}
+
+		const blazeclaw::gateway::ToolExecuteResultV2 toolResult =
+			m_gatewayHost.ExecuteRuntimeToolV2(
+				blazeclaw::gateway::ToolExecuteRequestV2{
+					.tool = resolvedSkillInvocationToolTarget.value(),
+					.argsJson = std::optional<std::string>(request.message),
+					.correlationId = request.runId,
+					.deadlineEpochMs = std::nullopt,
+				});
+
+		if (!toolResult.executed) {
+			return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+				.ok = false,
+				.assistantText = {},
+				.assistantDeltas = {},
+				.taskDeltas = {},
+				.modelId = activeModel,
+				.errorCode = toolResult.errorCode.empty()
+					? "inline_invocation_tool_execute_failed"
+					: toolResult.errorCode,
+				.errorMessage = toolResult.errorMessage.empty()
+					? "inline invocation tool execution failed"
+					: toolResult.errorMessage,
+			};
+		}
+
+		const auto inlineText = ExtractInlineToolResultText(toolResult).value_or(
+			"Done.");
+		return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+			.ok = true,
+			.assistantText = inlineText,
+			.assistantDeltas = {},
+			.taskDeltas = {},
+			.modelId = activeModel,
+			.errorCode = {},
+			.errorMessage = {},
+		};
+	}
+
 	std::vector<blazeclaw::gateway::GatewayHost::ChatRuntimeResult::TaskDeltaEntry>
 		ServiceManager::ConvertEmbeddedTaskDeltas(
 			const std::vector<EmbeddedTaskDelta>& taskDeltas) const
@@ -3665,6 +3756,15 @@ namespace blazeclaw::core {
 							.errorCode = runtime::contracts::kErrorCancelled,
 							.errorMessage = "chat runtime cancelled",
 						};
+					}
+
+					if (const auto inlineInvocationResult =
+						TryExecuteInlineToolInvocation(
+							request,
+							activeModel,
+							resolvedSkillInvocationToolTarget);
+						inlineInvocationResult.has_value()) {
+						return inlineInvocationResult.value();
 					}
 
 					auto toolBindings = BuildEmbeddedToolBindings();

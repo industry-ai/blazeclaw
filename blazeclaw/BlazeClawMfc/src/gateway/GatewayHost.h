@@ -195,6 +195,9 @@ namespace blazeclaw::gateway {
 			std::string runId;
 			std::string sessionKey;
 			std::string message;
+			bool inlineInvocationAuthorizedSender = true;
+			bool inlineInvocationSenderIsOwner = false;
+			bool allowInlineToolImmediateExecution = false;
 			bool enforceOrderedAllowlist = false;
 			std::vector<std::string> orderedAllowedToolTargets;
 			bool hasAttachments = false;

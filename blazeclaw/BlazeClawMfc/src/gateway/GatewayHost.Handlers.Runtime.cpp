@@ -4518,12 +4518,42 @@ namespace blazeclaw::gateway {
 						ChatRuntimeRequest{
 							.runId = runId,
 							.sessionKey = sessionKey,
-					  .message = runtimeMessage,
-						 .enforceOrderedAllowlist = enforceOrderedAllowlist,
+							.message = runtimeMessage,
+							.inlineInvocationAuthorizedSender = [&request]() {
+							bool value = true;
+							if (request.paramsJson.has_value()) {
+								json::FindBoolField(
+									request.paramsJson.value(),
+									"inlineInvocationAuthorizedSender",
+									value);
+							}
+							return value;
+						}(),
+						.inlineInvocationSenderIsOwner = [&request]() {
+							bool value = false;
+							if (request.paramsJson.has_value()) {
+								json::FindBoolField(
+									request.paramsJson.value(),
+									"inlineInvocationSenderIsOwner",
+									value);
+							}
+							return value;
+						}(),
+						.allowInlineToolImmediateExecution = [&request]() {
+							bool value = false;
+							if (request.paramsJson.has_value()) {
+								json::FindBoolField(
+									request.paramsJson.value(),
+									"allowInlineToolImmediateExecution",
+									value);
+							}
+							return value;
+						}(),
+						.enforceOrderedAllowlist = enforceOrderedAllowlist,
 							.orderedAllowedToolTargets = orderedAllowlistTargets,
 							.hasAttachments = hasAttachments,
 							.attachmentMimeTypes = attachmentMimeTypes,
-						 .onAssistantDelta =
+						.onAssistantDelta =
 								[this,
 									&streamedDeltaCount,
 									&runId,

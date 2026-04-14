@@ -277,6 +277,14 @@ namespace blazeclaw::core {
 			BuildOrderedAllowedToolTargets(
 				const std::vector<std::string>& requestedTargets,
 				const std::optional<std::string>& resolvedTarget) const;
+		[[nodiscard]] std::optional<std::string>
+			ExtractInlineToolResultText(
+				const blazeclaw::gateway::ToolExecuteResultV2& result) const;
+		[[nodiscard]] std::optional<blazeclaw::gateway::GatewayHost::ChatRuntimeResult>
+			TryExecuteInlineToolInvocation(
+				const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
+				const std::string& activeModel,
+				const std::optional<std::string>& resolvedSkillInvocationToolTarget);
 		[[nodiscard]] std::vector<
 			blazeclaw::gateway::GatewayHost::ChatRuntimeResult::TaskDeltaEntry>
 			ConvertEmbeddedTaskDeltas(

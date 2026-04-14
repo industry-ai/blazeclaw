@@ -2,10 +2,25 @@
 
 #include <catch2/catch_all.hpp>
 
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <unordered_set>
 
 using blazeclaw::core::InlineActionsOrchestrationService;
+
+namespace {
+
+	std::string ReadTextFile(const std::filesystem::path& path)
+	{
+		std::ifstream in(path.string());
+		REQUIRE(in.is_open());
+		return std::string(
+			(std::istreambuf_iterator<char>(in)),
+			std::istreambuf_iterator<char>());
+	}
+
+} // namespace
 
 TEST_CASE(
 	"InlineActionsOrchestrationService resolves slash command names",
@@ -45,4 +60,27 @@ TEST_CASE(
 	REQUIRE_FALSE(service.ShouldLoadSkillCommandsForSlash(true, "status", builtin));
 	REQUIRE(service.ShouldLoadSkillCommandsForSlash(true, "weather", builtin));
 	REQUIRE_FALSE(service.ShouldLoadSkillCommandsForSlash(true, std::string{}, builtin));
+}
+
+TEST_CASE(
+	"ServiceManager contract: inline invocation short-circuit and authorization policy are present",
+	"[inline-actions][contract][servicemanager][step3-4]") {
+	const auto serviceManagerPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	const std::string source = ReadTextFile(serviceManagerPath);
+
+	REQUIRE(source.find("TryExecuteInlineToolInvocation(") != std::string::npos);
+	REQUIRE(source.find("request.allowInlineToolImmediateExecution") !=
+		std::string::npos);
+	REQUIRE(source.find("request.inlineInvocationAuthorizedSender") !=
+		std::string::npos);
+	REQUIRE(source.find("request.inlineInvocationSenderIsOwner") !=
+		std::string::npos);
+	REQUIRE(source.find("inline_invocation_unauthorized_sender") !=
+		std::string::npos);
+	REQUIRE(source.find("inline_invocation_owner_required") !=
+		std::string::npos);
+	REQUIRE(source.find("ExtractInlineToolResultText(") != std::string::npos);
 }
