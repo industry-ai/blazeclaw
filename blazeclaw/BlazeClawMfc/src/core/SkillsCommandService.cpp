@@ -114,7 +114,29 @@ namespace blazeclaw::core {
 				}
 			}
 
-			return base;
+			std::wstring boundedBase = base;
+			if (boundedBase.size() > kMaxCommandLength - 2) {
+				boundedBase.resize(kMaxCommandLength - 2);
+			}
+
+			std::wstring fallback = boundedBase + L"_x";
+			if (fallback.empty()) {
+				fallback = L"x";
+			}
+
+			used.insert(fallback);
+			return fallback;
+		}
+
+		void SeedReservedNames(
+			const std::vector<std::wstring>& reservedNames,
+			std::set<std::wstring>& used) {
+			for (const auto& reserved : reservedNames) {
+				const auto normalized = ToLower(Trim(reserved));
+				if (!normalized.empty()) {
+					used.insert(normalized);
+				}
+			}
 		}
 
 	} // namespace
@@ -122,6 +144,13 @@ namespace blazeclaw::core {
 	SkillsCommandSnapshot SkillsCommandService::BuildSnapshot(
 		const SkillsCatalogSnapshot& catalog,
 		const SkillsEligibilitySnapshot& eligibility) const {
+		return BuildSnapshot(catalog, eligibility, {});
+	}
+
+	SkillsCommandSnapshot SkillsCommandService::BuildSnapshot(
+		const SkillsCatalogSnapshot& catalog,
+		const SkillsEligibilitySnapshot& eligibility,
+		const std::vector<std::wstring>& reservedNames) const {
 		SkillsCommandSnapshot snapshot;
 
 		std::unordered_map<std::wstring, SkillsEligibilityEntry> eligibilityBySkill;
@@ -130,6 +159,7 @@ namespace blazeclaw::core {
 		}
 
 		std::set<std::wstring> usedNames;
+		SeedReservedNames(reservedNames, usedNames);
 		for (const auto& catalogEntry : catalog.entries) {
 			const auto eligibilityIt =
 				eligibilityBySkill.find(ToLower(catalogEntry.skillName));
@@ -209,7 +239,15 @@ namespace blazeclaw::core {
 		const SkillsCatalogSnapshot& catalog,
 		const SkillsEligibilitySnapshot& eligibility,
 		const std::vector<extensions::IRuntimeSkillCapabilityAdapter*>& adapters) const {
-		auto snapshot = BuildSnapshot(catalog, eligibility);
+		return BuildSnapshotWithAdapters(catalog, eligibility, adapters, {});
+	}
+
+	SkillsCommandSnapshot SkillsCommandService::BuildSnapshotWithAdapters(
+		const SkillsCatalogSnapshot& catalog,
+		const SkillsEligibilitySnapshot& eligibility,
+		const std::vector<extensions::IRuntimeSkillCapabilityAdapter*>& adapters,
+		const std::vector<std::wstring>& reservedNames) const {
+		auto snapshot = BuildSnapshot(catalog, eligibility, reservedNames);
 		std::set<std::string> observedCapabilities;
 
 		for (const auto* adapter : adapters) {
@@ -254,6 +292,10 @@ namespace blazeclaw::core {
 		const auto catalog = catalogService.LoadCatalog(root, appConfig);
 		const auto eligibility = eligibilityService.Evaluate(catalog, appConfig);
 		const auto snapshot = BuildSnapshot(catalog, eligibility);
+		const auto snapshotWithReserved = BuildSnapshot(
+			catalog,
+			eligibility,
+			{ L"alpha_skill" });
 
 		if (snapshot.commands.size() < 2) {
 			outError = L"S3 commands fixture failed: expected at least two command specs.";
@@ -268,6 +310,49 @@ namespace blazeclaw::core {
 			});
 		if (!hasDedupe) {
 			outError = L"S3 commands fixture failed: expected deduped command name alpha_skill_2.";
+			return false;
+		}
+
+		const auto hasReservedDedupe = std::any_of(
+			snapshotWithReserved.commands.begin(),
+			snapshotWithReserved.commands.end(),
+			[](const SkillsCommandSpec& item) {
+				return item.name == L"alpha_skill_3";
+			});
+		if (!hasReservedDedupe) {
+			outError = L"S3 commands fixture failed: expected reserved-name dedupe command alpha_skill_3.";
+			return false;
+		}
+
+		SkillsCatalogSnapshot fallbackCatalog;
+		fallbackCatalog.entries.push_back(SkillsCatalogEntry{
+			.skillName = L"alpha skill",
+			.description = L"fallback collision",
+			});
+		SkillsEligibilitySnapshot fallbackEligibility;
+		fallbackEligibility.entries.push_back(SkillsEligibilityEntry{
+			.skillName = L"alpha skill",
+			.skillKey = L"alpha skill",
+			.eligible = true,
+			.disabled = false,
+			.blockedByAllowlist = false,
+			.disableModelInvocation = false,
+			.userInvocable = true,
+			});
+
+		std::vector<std::wstring> fallbackReserved;
+		fallbackReserved.push_back(L"alpha_skill");
+		for (int index = 2; index < 1000; ++index) {
+			fallbackReserved.push_back(L"alpha_skill_" + std::to_wstring(index));
+		}
+
+		const auto fallbackSnapshot = BuildSnapshot(
+			fallbackCatalog,
+			fallbackEligibility,
+			fallbackReserved);
+		if (fallbackSnapshot.commands.empty() ||
+			fallbackSnapshot.commands.front().name != L"alpha_skill_x") {
+			outError = L"S3 commands fixture failed: expected deterministic bounded fallback command alpha_skill_x.";
 			return false;
 		}
 

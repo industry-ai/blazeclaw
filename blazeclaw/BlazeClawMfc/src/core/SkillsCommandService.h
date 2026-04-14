@@ -41,10 +41,21 @@ namespace blazeclaw::core {
 			const SkillsCatalogSnapshot& catalog,
 			const SkillsEligibilitySnapshot& eligibility) const;
 
+		[[nodiscard]] SkillsCommandSnapshot BuildSnapshot(
+			const SkillsCatalogSnapshot& catalog,
+			const SkillsEligibilitySnapshot& eligibility,
+			const std::vector<std::wstring>& reservedNames) const;
+
 		[[nodiscard]] SkillsCommandSnapshot BuildSnapshotWithAdapters(
 			const SkillsCatalogSnapshot& catalog,
 			const SkillsEligibilitySnapshot& eligibility,
 			const std::vector<extensions::IRuntimeSkillCapabilityAdapter*>& adapters) const;
+
+		[[nodiscard]] SkillsCommandSnapshot BuildSnapshotWithAdapters(
+			const SkillsCatalogSnapshot& catalog,
+			const SkillsEligibilitySnapshot& eligibility,
+			const std::vector<extensions::IRuntimeSkillCapabilityAdapter*>& adapters,
+			const std::vector<std::wstring>& reservedNames) const;
 
 		[[nodiscard]] bool ValidateFixtureScenarios(
 			const std::filesystem::path& fixturesRoot,
