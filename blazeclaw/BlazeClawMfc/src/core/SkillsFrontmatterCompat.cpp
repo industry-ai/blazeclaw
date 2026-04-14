@@ -3,10 +3,18 @@
 
 #include <algorithm>
 #include <cwctype>
+#include <regex>
 
 namespace blazeclaw::core {
 
 	namespace {
+
+		const std::wregex kBrewFormulaPattern(
+			L"^[A-Za-z0-9][A-Za-z0-9@+._/-]*$");
+		const std::wregex kGoModulePattern(
+			L"^[A-Za-z0-9][A-Za-z0-9._~+\\-/]*(?:@[A-Za-z0-9][A-Za-z0-9._~+\\-/]*)?$");
+		const std::wregex kUvPackagePattern(
+			LR"(^[A-Za-z0-9][A-Za-z0-9._\-[\]=<>!~+,]*$)");
 
 		std::wstring TrimCompat(const std::wstring& value) {
 			const auto first = std::find_if_not(
@@ -88,6 +96,88 @@ namespace blazeclaw::core {
 
 			flush();
 			return values;
+		}
+
+		std::optional<std::wstring> NormalizeSafeBrewFormulaCompat(
+			const std::wstring& raw) {
+			const std::wstring formula = TrimCompat(raw);
+			if (formula.empty() ||
+				formula.starts_with(L"-") ||
+				formula.find(L"\\") != std::wstring::npos ||
+				formula.find(L"..") != std::wstring::npos) {
+				return std::nullopt;
+			}
+
+			if (!std::regex_match(formula, kBrewFormulaPattern)) {
+				return std::nullopt;
+			}
+
+			return formula;
+		}
+
+		std::optional<std::wstring> NormalizeSafeNpmSpecCompat(
+			const std::wstring& raw) {
+			const std::wstring spec = TrimCompat(raw);
+			if (spec.empty() || spec.starts_with(L"-")) {
+				return std::nullopt;
+			}
+
+			if (spec.find_first_of(L"\r\n\t") != std::wstring::npos) {
+				return std::nullopt;
+			}
+
+			return spec;
+		}
+
+		std::optional<std::wstring> NormalizeSafeGoModuleCompat(
+			const std::wstring& raw) {
+			const std::wstring moduleSpec = TrimCompat(raw);
+			if (moduleSpec.empty() ||
+				moduleSpec.starts_with(L"-") ||
+				moduleSpec.find(L"\\") != std::wstring::npos ||
+				moduleSpec.find(L"://") != std::wstring::npos) {
+				return std::nullopt;
+			}
+
+			if (!std::regex_match(moduleSpec, kGoModulePattern)) {
+				return std::nullopt;
+			}
+
+			return moduleSpec;
+		}
+
+		std::optional<std::wstring> NormalizeSafeUvPackageCompat(
+			const std::wstring& raw) {
+			const std::wstring package = TrimCompat(raw);
+			if (package.empty() ||
+				package.starts_with(L"-") ||
+				package.find(L"\\") != std::wstring::npos ||
+				package.find(L"://") != std::wstring::npos) {
+				return std::nullopt;
+			}
+
+			if (!std::regex_match(package, kUvPackagePattern)) {
+				return std::nullopt;
+			}
+
+			return package;
+		}
+
+		std::optional<std::wstring> NormalizeSafeDownloadUrlCompat(
+			const std::wstring& raw) {
+			const std::wstring url = TrimCompat(raw);
+			if (url.empty() ||
+				url.find_first_of(L" \t\r\n") != std::wstring::npos) {
+				return std::nullopt;
+			}
+
+			const std::wstring lowerUrl = ToLowerCompat(url);
+			if (!lowerUrl.starts_with(L"http://") &&
+				!lowerUrl.starts_with(L"https://")) {
+				return std::nullopt;
+			}
+
+			return url;
 		}
 
 	} // namespace
@@ -242,18 +332,53 @@ namespace blazeclaw::core {
 			install.label = GetSkillFrontmatterFieldCompat(
 				frontmatter,
 				{ L"install-label", L"install_label", L"install.label" });
-			install.formula = GetSkillFrontmatterFieldCompat(
-				frontmatter,
-				{ L"install-formula", L"install_formula", L"install.formula" });
-			install.package = GetSkillFrontmatterFieldCompat(
+			const auto formula = NormalizeSafeBrewFormulaCompat(
+				GetSkillFrontmatterFieldCompat(
+					frontmatter,
+					{ L"install-formula", L"install_formula", L"install.formula" }));
+			if (formula.has_value()) {
+				install.formula = formula.value();
+			}
+
+			const auto cask = NormalizeSafeBrewFormulaCompat(
+				GetSkillFrontmatterFieldCompat(
+					frontmatter,
+					{ L"install-cask", L"install_cask", L"install.cask" }));
+			if (install.formula.empty() && cask.has_value()) {
+				install.formula = cask.value();
+			}
+
+			const auto package = GetSkillFrontmatterFieldCompat(
 				frontmatter,
 				{ L"install-package", L"install_package", L"install.package" });
-			install.module = GetSkillFrontmatterFieldCompat(
-				frontmatter,
-				{ L"install-module", L"install_module", L"install.module" });
-			install.url = GetSkillFrontmatterFieldCompat(
-				frontmatter,
-				{ L"install-url", L"install_url", L"install.url" });
+			if (ToLowerCompat(install.kind) == L"node") {
+				const auto npm = NormalizeSafeNpmSpecCompat(package);
+				if (npm.has_value()) {
+					install.package = npm.value();
+				}
+			}
+			else if (ToLowerCompat(install.kind) == L"uv") {
+				const auto uv = NormalizeSafeUvPackageCompat(package);
+				if (uv.has_value()) {
+					install.package = uv.value();
+				}
+			}
+
+			const auto module = NormalizeSafeGoModuleCompat(
+				GetSkillFrontmatterFieldCompat(
+					frontmatter,
+					{ L"install-module", L"install_module", L"install.module" }));
+			if (module.has_value()) {
+				install.module = module.value();
+			}
+
+			const auto url = NormalizeSafeDownloadUrlCompat(
+				GetSkillFrontmatterFieldCompat(
+					frontmatter,
+					{ L"install-url", L"install_url", L"install.url" }));
+			if (url.has_value()) {
+				install.url = url.value();
+			}
 			install.archive = GetSkillFrontmatterFieldCompat(
 				frontmatter,
 				{ L"install-archive", L"install_archive", L"install.archive" });
@@ -287,7 +412,16 @@ namespace blazeclaw::core {
 				}
 			}
 
-			metadata.install.push_back(std::move(install));
+			const std::wstring normalizedKind = ToLowerCompat(install.kind);
+			const bool validInstall =
+				(normalizedKind == L"brew" && !install.formula.empty()) ||
+				(normalizedKind == L"node" && !install.package.empty()) ||
+				(normalizedKind == L"go" && !install.module.empty()) ||
+				(normalizedKind == L"uv" && !install.package.empty()) ||
+				(normalizedKind == L"download" && !install.url.empty());
+			if (validInstall) {
+				metadata.install.push_back(std::move(install));
+			}
 		}
 
 		return metadata;
@@ -338,6 +472,19 @@ namespace blazeclaw::core {
 		}
 
 		return exposure;
+	}
+
+	std::wstring ResolveSkillKeyCompat(
+		const SkillsMetadataSpec* metadata,
+		const std::wstring& skillName) {
+		if (metadata != nullptr) {
+			const std::wstring key = TrimCompat(metadata->skillKey);
+			if (!key.empty()) {
+				return key;
+			}
+		}
+
+		return skillName;
 	}
 
 } // namespace blazeclaw::core

@@ -12,6 +12,7 @@
 #include "diagnostics/DiagnosticsRegressionComparator.h"
 #include "bootstrap/StartupFixtureValidator.h"
 #include "filesystem/SafeOpenSync.h"
+#include "SkillsFrontmatterCompat.h"
 #include "tools/ToolArgumentValidators.h"
 #include "tools/ToolProcessRunner.h"
 
@@ -2495,9 +2496,12 @@ namespace blazeclaw::core {
 
 		blazeclaw::gateway::SkillsCatalogGatewayEntry gatewayEntry;
 		gatewayEntry.name = ToNarrow(entry.skillName);
-		gatewayEntry.skillKey = eligibility != nullptr
-			? ToNarrow(eligibility->skillKey)
-			: ToNarrow(entry.skillName);
+		const std::wstring resolvedSkillKey = eligibility != nullptr
+			? eligibility->skillKey
+			: ResolveSkillKeyCompat(
+				entry.metadata.has_value() ? &entry.metadata.value() : nullptr,
+				entry.skillName);
+		gatewayEntry.skillKey = ToNarrow(resolvedSkillKey);
 		gatewayEntry.commandName = commandName;
 		gatewayEntry.commandToolName = commandToolName;
 		gatewayEntry.commandArgMode = commandArgMode;

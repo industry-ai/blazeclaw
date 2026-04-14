@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "SkillsEligibilityService.h"
 #include "SkillsConfigEval.h"
+#include "SkillsFrontmatterCompat.h"
 
 #include <algorithm>
 #include <cwctype>
@@ -444,16 +445,9 @@ namespace blazeclaw::core {
 		for (const auto& catalogEntry : catalog.entries) {
 			SkillsEligibilityEntry result;
 			result.skillName = catalogEntry.skillName;
-			result.skillKey = [&catalogEntry]() {
-				if (catalogEntry.metadata.has_value()) {
-					const std::wstring key = Trim(catalogEntry.metadata->skillKey);
-					if (!key.empty()) {
-						return key;
-					}
-				}
-
-				return ResolveSkillKey(catalogEntry);
-				}();
+			result.skillKey = ResolveSkillKeyCompat(
+				catalogEntry.metadata.has_value() ? &catalogEntry.metadata.value() : nullptr,
+				ResolveSkillKey(catalogEntry));
 
 			const auto resolvedSkillConfig = ResolveSkillConfig(
 				appConfig,

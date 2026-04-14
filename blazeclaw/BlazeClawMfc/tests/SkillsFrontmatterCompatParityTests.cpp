@@ -6,6 +6,7 @@ using blazeclaw::core::ParseSkillFrontmatterCompat;
 using blazeclaw::core::ResolveOpenClawMetadataCompat;
 using blazeclaw::core::ResolveSkillExposurePolicyCompat;
 using blazeclaw::core::ResolveSkillInvocationPolicyCompat;
+using blazeclaw::core::ResolveSkillKeyCompat;
 
 TEST_CASE(
 	"Skills frontmatter compat: parser extracts required fields",
@@ -60,4 +61,27 @@ TEST_CASE(
 
 	const auto exposure = ResolveSkillExposurePolicyCompat(parsed.value(), invocation);
 	REQUIRE(exposure.userInvocable == false);
+}
+
+TEST_CASE(
+	"Skills frontmatter compat: install safety normalization and skill-key fallback",
+	"[skills][frontmatter][compat][safety]") {
+	const std::wstring content =
+		L"---\n"
+		L"name: safety\n"
+		L"description: safety desc\n"
+		L"install-kind: download\n"
+		L"install-url: javascript:alert(1)\n"
+		L"openclaw.skillkey:\n"
+		L"---\n";
+
+	std::vector<std::wstring> errors;
+	const auto parsed = ParseSkillFrontmatterCompat(content, errors);
+	REQUIRE(parsed.has_value());
+
+	const auto metadata = ResolveOpenClawMetadataCompat(parsed.value());
+	REQUIRE(metadata.install.empty());
+
+	const std::wstring fallbackKey = ResolveSkillKeyCompat(&metadata, L"safety");
+	REQUIRE(fallbackKey == L"safety");
 }

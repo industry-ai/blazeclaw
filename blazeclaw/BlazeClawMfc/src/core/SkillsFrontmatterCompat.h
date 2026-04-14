@@ -35,4 +35,8 @@ namespace blazeclaw::core {
 		const ParsedSkillFrontmatterCompat& frontmatter,
 		const SkillInvocationPolicySpec& invocation);
 
+	[[nodiscard]] std::wstring ResolveSkillKeyCompat(
+		const SkillsMetadataSpec* metadata,
+		const std::wstring& skillName);
+
 } // namespace blazeclaw::core
