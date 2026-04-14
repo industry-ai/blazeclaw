@@ -384,6 +384,34 @@ namespace blazeclaw::gateway {
 		std::string SerializePluginRuntimeTransitionsJsonLocal(
 			const std::vector<PluginRuntimeTransitionEntry>& transitions,
 			const std::size_t limit) {
+			auto serializeSeverity = [](const PluginRuntimeTransitionSeverity severity) {
+				switch (severity) {
+				case PluginRuntimeTransitionSeverity::Warn:
+					return "warn";
+				case PluginRuntimeTransitionSeverity::Error:
+					return "error";
+				case PluginRuntimeTransitionSeverity::Info:
+				default:
+					return "info";
+				}
+				};
+
+			auto serializeLifecyclePhase = [](const PluginRuntimeLifecyclePhase phase) {
+				switch (phase) {
+				case PluginRuntimeLifecyclePhase::Activation:
+					return "activation";
+				case PluginRuntimeLifecyclePhase::Mutation:
+					return "mutation";
+				case PluginRuntimeLifecyclePhase::Deactivation:
+					return "deactivation";
+				case PluginRuntimeLifecyclePhase::Maintenance:
+					return "maintenance";
+				case PluginRuntimeLifecyclePhase::SteadyState:
+				default:
+					return "steady-state";
+				}
+				};
+
 			const std::size_t startIndex =
 				transitions.size() > limit
 				? transitions.size() - limit
@@ -403,6 +431,10 @@ namespace blazeclaw::gateway {
 					std::to_string(entry.timestampMs) +
 					",\"action\":\"" +
 					EscapeJsonLocal(entry.action) +
+					"\",\"severity\":\"" +
+					serializeSeverity(entry.severity) +
+					"\",\"lifecyclePhase\":\"" +
+					serializeLifecyclePhase(entry.lifecyclePhase) +
 					"\",\"activeVersion\":" +
 					std::to_string(entry.activeVersion) +
 					",\"httpRouteVersion\":" +
@@ -2730,6 +2762,8 @@ namespace blazeclaw::gateway {
 
 				const auto transitions =
 					m_pluginRuntimeState.GetTransitionHistory();
+				const auto transitionPolicy =
+					m_pluginRuntimeState.GetTransitionPolicySettings();
 
 				return protocol::ResponseFrame{
 					.id = request.id,
@@ -2742,6 +2776,84 @@ namespace blazeclaw::gateway {
 						",\"count\":" +
 						std::to_string((std::min)(transitions.size(), limit)) +
 						",\"total\":" +
+						std::to_string(transitions.size()) +
+						",\"retention\":{\"historyLimit\":" +
+						std::to_string(transitionPolicy.historyLimit) +
+						",\"exportEnabled\":" +
+						std::string(transitionPolicy.exportEnabled ? "true" : "false") +
+						"}" +
+						"}",
+					.error = std::nullopt,
+				};
+			});
+
+		m_dispatcher.Register(
+			"gateway.runtime.plugins.transitions.policy.get",
+			[this](const protocol::RequestFrame& request) {
+				const auto transitionPolicy =
+					m_pluginRuntimeState.GetTransitionPolicySettings();
+
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = true,
+					.payloadJson =
+						"{\"historyLimit\":" +
+						std::to_string(transitionPolicy.historyLimit) +
+						",\"exportEnabled\":" +
+						std::string(transitionPolicy.exportEnabled ? "true" : "false") +
+						"}",
+					.error = std::nullopt,
+				};
+			});
+
+		m_dispatcher.Register(
+			"gateway.runtime.plugins.transitions.policy.set",
+			[this](const protocol::RequestFrame& request) {
+				const auto historyLimit =
+					ExtractSizeParam(request.paramsJson, "historyLimit").value_or(128);
+				const auto exportEnabled =
+					ExtractBoolParam(request.paramsJson, "exportEnabled").value_or(false);
+
+				m_pluginRuntimeState.SetTransitionPolicySettings(
+					PluginRuntimeStateService::TransitionPolicySettings{
+						.historyLimit = historyLimit,
+						.exportEnabled = exportEnabled,
+					});
+
+				const auto transitionPolicy =
+					m_pluginRuntimeState.GetTransitionPolicySettings();
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = true,
+					.payloadJson =
+						"{\"updated\":true,\"historyLimit\":" +
+						std::to_string(transitionPolicy.historyLimit) +
+						",\"exportEnabled\":" +
+						std::string(transitionPolicy.exportEnabled ? "true" : "false") +
+						"}",
+					.error = std::nullopt,
+				};
+			});
+
+		m_dispatcher.Register(
+			"gateway.runtime.plugins.transitions.export",
+			[this](const protocol::RequestFrame& request) {
+				const auto transitions =
+					m_pluginRuntimeState.ExportTransitionHistory();
+				const auto transitionPolicy =
+					m_pluginRuntimeState.GetTransitionPolicySettings();
+
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = true,
+					.payloadJson =
+						"{\"enabled\":" +
+						std::string(transitionPolicy.exportEnabled ? "true" : "false") +
+						",\"transitions\":" +
+						SerializePluginRuntimeTransitionsJsonLocal(
+							transitions,
+							transitions.size()) +
+						",\"count\":" +
 						std::to_string(transitions.size()) +
 						"}",
 					.error = std::nullopt,

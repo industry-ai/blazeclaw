@@ -182,4 +182,45 @@ TEST_CASE(
 			[](const PluginRuntimeTransitionEntry& entry) {
 				return entry.action == "deactivate_runtime_registry";
 			}));
+	REQUIRE(
+		std::any_of(
+			transitions.begin(),
+			transitions.end(),
+			[](const PluginRuntimeTransitionEntry& entry) {
+				return entry.lifecyclePhase ==
+					PluginRuntimeLifecyclePhase::Activation;
+			}));
+}
+
+TEST_CASE(
+	"PluginRuntimeStateService supports transition policy retention and export controls",
+	"[plugin-runtime-state][transition-policy]") {
+	PluginRuntimeStateService service;
+	service.SetTransitionPolicySettings(
+		PluginRuntimeStateService::TransitionPolicySettings{
+			.historyLimit = 3,
+			.exportEnabled = false,
+		});
+
+	service.SetActiveRegistry(
+		&kFixtureRegistryA,
+		"cache-1",
+		"workspace-1",
+		PluginRuntimeSubagentMode::Default);
+	service.PinHttpRouteRegistry(&kFixtureRegistryA);
+	service.PinChannelRegistry(&kFixtureRegistryA);
+	service.DeactivateRuntimeRegistry();
+
+	const auto retained = service.GetTransitionHistory();
+	REQUIRE(retained.size() <= 3);
+	REQUIRE(service.ExportTransitionHistory().empty());
+
+	service.SetTransitionPolicySettings(
+		PluginRuntimeStateService::TransitionPolicySettings{
+			.historyLimit = 8,
+			.exportEnabled = true,
+		});
+
+	const auto exported = service.ExportTransitionHistory();
+	REQUIRE(exported.size() == service.GetTransitionHistory().size());
 }

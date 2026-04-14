@@ -2,9 +2,31 @@
 #include "PluginRuntimeStateService.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 
 namespace blazeclaw::gateway {
+
+	namespace {
+
+		std::string ToLowerCopy(std::string value) {
+			std::transform(
+				value.begin(),
+				value.end(),
+				value.begin(),
+				[](const unsigned char ch) {
+					return static_cast<char>(std::tolower(ch));
+				});
+			return value;
+		}
+
+	} // namespace
+
+	PluginRuntimeStateService::PluginRuntimeStateService()
+		: m_transitionPolicy(TransitionPolicySettings{
+			.historyLimit = 128,
+			.exportEnabled = false,
+			}) {}
 
 	std::uint64_t PluginRuntimeStateService::CurrentEpochMs() {
 		return static_cast<std::uint64_t>(
@@ -19,6 +41,8 @@ namespace blazeclaw::gateway {
 		entry.sequence = ++m_transitionSequence;
 		entry.timestampMs = CurrentEpochMs();
 		entry.action = action;
+		entry.severity = ResolveTransitionSeverity(action);
+		entry.lifecyclePhase = ResolveTransitionLifecyclePhase(action);
 		entry.activeVersion = m_state.activeVersion;
 		entry.httpRouteVersion = GetHttpRouteVersion();
 		entry.channelVersion = GetChannelVersion();
@@ -33,15 +57,59 @@ namespace blazeclaw::gateway {
 		entry.runtimeSubagentMode = m_state.runtimeSubagentMode;
 
 		m_transitionHistory.push_back(std::move(entry));
-		constexpr std::size_t kTransitionHistoryLimit = 128;
-		if (m_transitionHistory.size() > kTransitionHistoryLimit) {
+		if (m_transitionHistory.size() > m_transitionPolicy.historyLimit) {
 			const std::size_t overflow =
-				m_transitionHistory.size() - kTransitionHistoryLimit;
+				m_transitionHistory.size() - m_transitionPolicy.historyLimit;
 			m_transitionHistory.erase(
 				m_transitionHistory.begin(),
 				m_transitionHistory.begin() +
 				static_cast<std::ptrdiff_t>(overflow));
 		}
+	}
+
+	PluginRuntimeTransitionSeverity
+		PluginRuntimeStateService::ResolveTransitionSeverity(
+			const std::string& action) {
+		const auto key = ToLowerCopy(action);
+		if (key.find("reset") != std::string::npos) {
+			return PluginRuntimeTransitionSeverity::Warn;
+		}
+
+		if (key.find("deactivate") != std::string::npos) {
+			return PluginRuntimeTransitionSeverity::Warn;
+		}
+
+		if (key.find("release") != std::string::npos) {
+			return PluginRuntimeTransitionSeverity::Warn;
+		}
+
+		return PluginRuntimeTransitionSeverity::Info;
+	}
+
+	PluginRuntimeLifecyclePhase
+		PluginRuntimeStateService::ResolveTransitionLifecyclePhase(
+			const std::string& action) {
+		const auto key = ToLowerCopy(action);
+		if (key.find("activate") != std::string::npos ||
+			key.find("set_active") != std::string::npos ||
+			key.find("require") != std::string::npos) {
+			return PluginRuntimeLifecyclePhase::Activation;
+		}
+
+		if (key.find("deactivate") != std::string::npos) {
+			return PluginRuntimeLifecyclePhase::Deactivation;
+		}
+
+		if (key.find("pin") != std::string::npos ||
+			key.find("release") != std::string::npos) {
+			return PluginRuntimeLifecyclePhase::Mutation;
+		}
+
+		if (key.find("reset") != std::string::npos) {
+			return PluginRuntimeLifecyclePhase::Maintenance;
+		}
+
+		return PluginRuntimeLifecyclePhase::SteadyState;
 	}
 
 	void PluginRuntimeStateService::InstallSurfaceRegistry(
@@ -321,6 +389,41 @@ namespace blazeclaw::gateway {
 	std::vector<PluginRuntimeTransitionEntry>
 		PluginRuntimeStateService::GetTransitionHistory() const {
 		return m_transitionHistory;
+	}
+
+	std::vector<PluginRuntimeTransitionEntry>
+		PluginRuntimeStateService::ExportTransitionHistory() const {
+		if (!m_transitionPolicy.exportEnabled) {
+			return {};
+		}
+
+		return m_transitionHistory;
+	}
+
+	void PluginRuntimeStateService::SetTransitionPolicySettings(
+		TransitionPolicySettings settings) {
+		if (settings.historyLimit == 0) {
+			settings.historyLimit = 1;
+		}
+
+		if (settings.historyLimit > 1024) {
+			settings.historyLimit = 1024;
+		}
+
+		m_transitionPolicy = settings;
+		if (m_transitionHistory.size() > m_transitionPolicy.historyLimit) {
+			const std::size_t overflow =
+				m_transitionHistory.size() - m_transitionPolicy.historyLimit;
+			m_transitionHistory.erase(
+				m_transitionHistory.begin(),
+				m_transitionHistory.begin() +
+				static_cast<std::ptrdiff_t>(overflow));
+		}
+	}
+
+	PluginRuntimeStateService::TransitionPolicySettings
+		PluginRuntimeStateService::GetTransitionPolicySettings() const {
+		return m_transitionPolicy;
 	}
 
 	PluginRuntimeStateSnapshot PluginRuntimeStateService::Snapshot() const {

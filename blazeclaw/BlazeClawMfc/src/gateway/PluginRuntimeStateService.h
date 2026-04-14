@@ -9,6 +9,20 @@
 
 namespace blazeclaw::gateway {
 
+	enum class PluginRuntimeTransitionSeverity {
+		Info,
+		Warn,
+		Error,
+	};
+
+	enum class PluginRuntimeLifecyclePhase {
+		Activation,
+		SteadyState,
+		Mutation,
+		Deactivation,
+		Maintenance,
+	};
+
 	enum class PluginRuntimeSubagentMode {
 		Default,
 		Explicit,
@@ -45,6 +59,10 @@ namespace blazeclaw::gateway {
 		std::uint64_t sequence = 0;
 		std::uint64_t timestampMs = 0;
 		std::string action;
+		PluginRuntimeTransitionSeverity severity =
+			PluginRuntimeTransitionSeverity::Info;
+		PluginRuntimeLifecyclePhase lifecyclePhase =
+			PluginRuntimeLifecyclePhase::SteadyState;
 		std::uint64_t activeVersion = 0;
 		std::uint64_t httpRouteVersion = 0;
 		std::uint64_t channelVersion = 0;
@@ -59,6 +77,13 @@ namespace blazeclaw::gateway {
 
 	class PluginRuntimeStateService {
 	public:
+		PluginRuntimeStateService();
+
+		struct TransitionPolicySettings {
+			std::size_t historyLimit = 128;
+			bool exportEnabled = false;
+		};
+
 		void SetActiveRegistry(
 			const std::vector<ExtensionManifest>* registry,
 			const std::string& cacheKey,
@@ -116,6 +141,11 @@ namespace blazeclaw::gateway {
 			ListCapabilityContracts() const;
 		[[nodiscard]] std::vector<PluginRuntimeTransitionEntry>
 			GetTransitionHistory() const;
+		[[nodiscard]] std::vector<PluginRuntimeTransitionEntry>
+			ExportTransitionHistory() const;
+
+		void SetTransitionPolicySettings(TransitionPolicySettings settings);
+		[[nodiscard]] TransitionPolicySettings GetTransitionPolicySettings() const;
 
 		[[nodiscard]] PluginRuntimeStateSnapshot Snapshot() const;
 		void ResetForTest();
@@ -130,11 +160,16 @@ namespace blazeclaw::gateway {
 			PluginRuntimeSurfaceState& surface,
 			const std::vector<ExtensionManifest>* registry,
 			bool refreshVersion = false);
+		[[nodiscard]] static PluginRuntimeTransitionSeverity
+			ResolveTransitionSeverity(const std::string& action);
+		[[nodiscard]] static PluginRuntimeLifecyclePhase
+			ResolveTransitionLifecyclePhase(const std::string& action);
 
 		void RecordTransition(const std::string& action);
 		[[nodiscard]] static std::uint64_t CurrentEpochMs();
 
 		PluginRuntimeStateSnapshot m_state;
+		TransitionPolicySettings m_transitionPolicy;
 		std::vector<PluginRuntimeTransitionEntry> m_transitionHistory;
 		std::uint64_t m_transitionSequence = 0;
 	};
