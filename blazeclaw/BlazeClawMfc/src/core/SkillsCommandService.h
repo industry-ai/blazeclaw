@@ -33,6 +33,11 @@ namespace blazeclaw::core {
 
 	struct SkillsCommandSnapshot {
 		std::vector<SkillsCommandSpec> commands;
+		std::uint32_t sanitizeCount = 0;
+		std::uint32_t dedupeCount = 0;
+		std::uint32_t missingToolDispatchCount = 0;
+		std::uint32_t invalidArgModeFallbackCount = 0;
+		std::uint32_t commandSourceContributionCount = 0;
 	};
 
 	class SkillsCommandService {
@@ -55,6 +60,21 @@ namespace blazeclaw::core {
 			const SkillsCatalogSnapshot& catalog,
 			const SkillsEligibilitySnapshot& eligibility,
 			const std::vector<extensions::IRuntimeSkillCapabilityAdapter*>& adapters,
+			const std::vector<extensions::IRuntimeSkillCommandSourceAdapter*>&
+			commandSourceAdapters) const;
+
+		[[nodiscard]] SkillsCommandSnapshot BuildSnapshotWithAdapters(
+			const SkillsCatalogSnapshot& catalog,
+			const SkillsEligibilitySnapshot& eligibility,
+			const std::vector<extensions::IRuntimeSkillCapabilityAdapter*>& adapters,
+			const std::vector<std::wstring>& reservedNames) const;
+
+		[[nodiscard]] SkillsCommandSnapshot BuildSnapshotWithAdapters(
+			const SkillsCatalogSnapshot& catalog,
+			const SkillsEligibilitySnapshot& eligibility,
+			const std::vector<extensions::IRuntimeSkillCapabilityAdapter*>& adapters,
+			const std::vector<extensions::IRuntimeSkillCommandSourceAdapter*>&
+			commandSourceAdapters,
 			const std::vector<std::wstring>& reservedNames) const;
 
 		[[nodiscard]] bool ValidateFixtureScenarios(

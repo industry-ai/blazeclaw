@@ -139,6 +139,55 @@ namespace blazeclaw::core {
 			}
 		}
 
+		void AppendContributedCommands(
+			const std::vector<SkillsCommandSpec>& contributed,
+			std::set<std::wstring>& usedNames,
+			SkillsCommandSnapshot& snapshot) {
+			for (const auto& rawSpec : contributed) {
+				const std::wstring rawCommandName =
+					!Trim(rawSpec.name).empty()
+					? Trim(rawSpec.name)
+					: Trim(rawSpec.skillName);
+				const std::wstring rawSkillName =
+					!Trim(rawSpec.skillName).empty()
+					? Trim(rawSpec.skillName)
+					: rawCommandName;
+				if (rawCommandName.empty() || rawSkillName.empty()) {
+					continue;
+				}
+
+				const auto base = SanitizeCommandName(rawCommandName);
+				if (base != rawCommandName) {
+					++snapshot.sanitizeCount;
+				}
+
+				const auto unique = ResolveUniqueName(base, usedNames);
+				if (unique != base) {
+					++snapshot.dedupeCount;
+				}
+
+				SkillsCommandSpec normalized;
+				normalized.name = unique;
+				normalized.skillName = rawSkillName;
+				normalized.description = Trim(rawSpec.description);
+				if (normalized.description.empty()) {
+					normalized.description = rawSkillName;
+				}
+
+				if (normalized.description.size() > kMaxDescriptionLength) {
+					normalized.description.resize(kMaxDescriptionLength - 3);
+					normalized.description += L"...";
+				}
+
+				normalized.dispatch = rawSpec.dispatch;
+				normalized.promptTemplate = Trim(rawSpec.promptTemplate);
+				normalized.sourceFilePath = Trim(rawSpec.sourceFilePath);
+
+				snapshot.commands.push_back(std::move(normalized));
+				++snapshot.commandSourceContributionCount;
+			}
+		}
+
 	} // namespace
 
 	SkillsCommandSnapshot SkillsCommandService::BuildSnapshot(
@@ -174,9 +223,15 @@ namespace blazeclaw::core {
 
 			SkillsCommandSpec spec;
 			spec.skillName = catalogEntry.skillName;
-			spec.name = ResolveUniqueName(
-				SanitizeCommandName(catalogEntry.skillName),
-				usedNames);
+			const auto baseCommandName = SanitizeCommandName(catalogEntry.skillName);
+			if (baseCommandName != catalogEntry.skillName) {
+				++snapshot.sanitizeCount;
+			}
+
+			spec.name = ResolveUniqueName(baseCommandName, usedNames);
+			if (spec.name != baseCommandName) {
+				++snapshot.dedupeCount;
+			}
 
 			spec.description = Trim(catalogEntry.description);
 			if (spec.description.empty()) {
@@ -203,10 +258,11 @@ namespace blazeclaw::core {
 					const auto argMode = ToLower(Trim(GetFrontmatterField(
 						catalogEntry.frontmatter,
 						{ L"command-arg-mode", L"command_arg_mode" })));
-					spec.dispatch.argMode =
-						(argMode.empty() || argMode == L"raw")
-						? L"raw"
-						: L"raw";
+					if (!argMode.empty() && argMode != L"raw") {
+						++snapshot.invalidArgModeFallbackCount;
+					}
+
+					spec.dispatch.argMode = L"raw";
 
 					spec.dispatch.argSchema = Trim(GetFrontmatterField(
 						catalogEntry.frontmatter,
@@ -224,6 +280,9 @@ namespace blazeclaw::core {
 						catalogEntry.frontmatter,
 						{ L"command-requires-approval", L"command_requires_approval" })))
 						== L"true";
+				}
+				else {
+					++snapshot.missingToolDispatchCount;
 				}
 			}
 
@@ -244,13 +303,37 @@ namespace blazeclaw::core {
 		const SkillsCatalogSnapshot& catalog,
 		const SkillsEligibilitySnapshot& eligibility,
 		const std::vector<extensions::IRuntimeSkillCapabilityAdapter*>& adapters) const {
-		return BuildSnapshotWithAdapters(catalog, eligibility, adapters, {});
+		return BuildSnapshotWithAdapters(catalog, eligibility, adapters, {}, {});
 	}
 
 	SkillsCommandSnapshot SkillsCommandService::BuildSnapshotWithAdapters(
 		const SkillsCatalogSnapshot& catalog,
 		const SkillsEligibilitySnapshot& eligibility,
 		const std::vector<extensions::IRuntimeSkillCapabilityAdapter*>& adapters,
+		const std::vector<extensions::IRuntimeSkillCommandSourceAdapter*>&
+		commandSourceAdapters) const {
+		return BuildSnapshotWithAdapters(
+			catalog,
+			eligibility,
+			adapters,
+			commandSourceAdapters,
+			{});
+	}
+
+	SkillsCommandSnapshot SkillsCommandService::BuildSnapshotWithAdapters(
+		const SkillsCatalogSnapshot& catalog,
+		const SkillsEligibilitySnapshot& eligibility,
+		const std::vector<extensions::IRuntimeSkillCapabilityAdapter*>& adapters,
+		const std::vector<std::wstring>& reservedNames) const {
+		return BuildSnapshotWithAdapters(catalog, eligibility, adapters, {}, reservedNames);
+	}
+
+	SkillsCommandSnapshot SkillsCommandService::BuildSnapshotWithAdapters(
+		const SkillsCatalogSnapshot& catalog,
+		const SkillsEligibilitySnapshot& eligibility,
+		const std::vector<extensions::IRuntimeSkillCapabilityAdapter*>& adapters,
+		const std::vector<extensions::IRuntimeSkillCommandSourceAdapter*>&
+		commandSourceAdapters,
 		const std::vector<std::wstring>& reservedNames) const {
 		auto snapshot = BuildSnapshot(catalog, eligibility, reservedNames);
 		std::set<std::string> observedCapabilities;
@@ -279,6 +362,42 @@ namespace blazeclaw::core {
 					.commandSnapshot = snapshot,
 					.mutableCommands = snapshot.commands,
 				});
+		}
+
+		std::set<std::wstring> usedNames;
+		for (const auto& command : snapshot.commands) {
+			const auto normalizedName = ToLower(Trim(command.name));
+			if (!normalizedName.empty()) {
+				usedNames.insert(normalizedName);
+			}
+		}
+
+		for (const auto* adapter : commandSourceAdapters) {
+			if (adapter == nullptr) {
+				continue;
+			}
+
+			const auto descriptor = adapter->Describe();
+			if (descriptor.capabilityId.empty() || descriptor.owner.empty()) {
+				continue;
+			}
+
+			if (!observedCapabilities.insert(descriptor.capabilityId).second) {
+				continue;
+			}
+
+			if (descriptor.IsPublicContract() &&
+				descriptor.stability == "deprecated") {
+				continue;
+			}
+
+			AppendContributedCommands(
+				adapter->BuildAdditionalSkillsCommands(
+					extensions::RuntimeSkillCommandSourceAdapterContext{
+						.commandSnapshot = snapshot,
+					}),
+					usedNames,
+					snapshot);
 		}
 
 		return snapshot;
@@ -361,6 +480,12 @@ namespace blazeclaw::core {
 			return false;
 		}
 
+		if (fallbackSnapshot.sanitizeCount == 0 ||
+			fallbackSnapshot.dedupeCount == 0) {
+			outError = L"S3 commands fixture failed: expected sanitize and dedupe diagnostics counters.";
+			return false;
+		}
+
 		const auto hasDispatch = std::any_of(
 			snapshot.commands.begin(),
 			snapshot.commands.end(),
@@ -440,6 +565,11 @@ namespace blazeclaw::core {
 			return false;
 		}
 
+		if (snapshot.missingToolDispatchCount == 0) {
+			outError = L"S3 commands fixture failed: expected missing-tool dispatch diagnostics counter.";
+			return false;
+		}
+
 		const auto invalidArgModeDispatch = std::find_if(
 			snapshot.commands.begin(),
 			snapshot.commands.end(),
@@ -451,6 +581,67 @@ namespace blazeclaw::core {
 			invalidArgModeDispatch->dispatch.toolName != L"tool.invalid-arg-mode" ||
 			invalidArgModeDispatch->dispatch.argMode != L"raw") {
 			outError = L"S3 commands fixture failed: expected invalid command-arg-mode fallback to raw.";
+			return false;
+		}
+
+		if (snapshot.invalidArgModeFallbackCount == 0) {
+			outError = L"S3 commands fixture failed: expected invalid arg-mode fallback diagnostics counter.";
+			return false;
+		}
+
+		class TestCommandSourceAdapter final
+			: public extensions::IRuntimeSkillCommandSourceAdapter {
+		public:
+			[[nodiscard]] extensions::RuntimeCapabilityDescriptor Describe() const override {
+				return extensions::RuntimeCapabilityDescriptor{
+					.capabilityId = "skills.command-source.test",
+					.owner = "tests",
+					.version = "v1",
+					.source = "internal",
+				};
+			}
+
+			[[nodiscard]] std::vector<SkillsCommandSpec> BuildAdditionalSkillsCommands(
+				const extensions::RuntimeSkillCommandSourceAdapterContext&) const override {
+				return std::vector<SkillsCommandSpec>{
+					SkillsCommandSpec{
+						.name = L"Bundle Command Sample",
+						.skillName = L"bundle-command-sample",
+						.description = L"bundle-style contributed command",
+						.dispatch = SkillsCommandDispatch{},
+						.promptTemplate = L"Bundle prompt template",
+						.sourceFilePath = L"skills/bundle-command-sample/SKILL.md",
+					},
+				};
+			}
+		};
+
+		TestCommandSourceAdapter commandSourceAdapter;
+		std::vector<extensions::IRuntimeSkillCommandSourceAdapter*> commandSourceAdapters = {
+			&commandSourceAdapter,
+		};
+		const auto commandSourceSnapshot = BuildSnapshotWithAdapters(
+			catalog,
+			eligibility,
+			{},
+			commandSourceAdapters,
+			{});
+
+		const auto contributedCommand = std::find_if(
+			commandSourceSnapshot.commands.begin(),
+			commandSourceSnapshot.commands.end(),
+			[](const SkillsCommandSpec& item) {
+				return item.skillName == L"bundle-command-sample";
+			});
+		if (contributedCommand == commandSourceSnapshot.commands.end() ||
+			contributedCommand->name != L"bundle_command_sample" ||
+			contributedCommand->promptTemplate != L"Bundle prompt template") {
+			outError = L"S3 commands fixture failed: expected command-source adapter contribution projection.";
+			return false;
+		}
+
+		if (commandSourceSnapshot.commandSourceContributionCount == 0) {
+			outError = L"S3 commands fixture failed: expected command-source contribution diagnostics counter.";
 			return false;
 		}
 

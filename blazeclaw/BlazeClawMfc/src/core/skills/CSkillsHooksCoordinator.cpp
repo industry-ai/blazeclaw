@@ -134,6 +134,16 @@ namespace blazeclaw::core {
 			context.eligibility.remoteAnyBinSatisfiedCount;
 		gatewaySkillsState.alwaysBypassCount =
 			context.eligibility.alwaysBypassCount;
+		gatewaySkillsState.commandSanitizeCount =
+			context.commands.sanitizeCount;
+		gatewaySkillsState.commandDedupeCount =
+			context.commands.dedupeCount;
+		gatewaySkillsState.commandMissingToolDispatchCount =
+			context.commands.missingToolDispatchCount;
+		gatewaySkillsState.commandInvalidArgModeFallbackCount =
+			context.commands.invalidArgModeFallbackCount;
+		gatewaySkillsState.commandSourceContributionCount =
+			context.commands.commandSourceContributionCount;
 		gatewaySkillsState.promptIncludedCount = context.prompt.includedCount;
 		gatewaySkillsState.promptChars = context.prompt.promptChars;
 		gatewaySkillsState.promptTruncated = context.prompt.truncated;

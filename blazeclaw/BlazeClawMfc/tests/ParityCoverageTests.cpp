@@ -181,6 +181,11 @@ TEST_CASE(
 	state.verifiedOpenPathFailures = 2;
 	state.verifiedOpenValidationFailures = 3;
 	state.verifiedOpenIoFailures = 4;
+	state.commandSanitizeCount = 5;
+	state.commandDedupeCount = 6;
+	state.commandMissingToolDispatchCount = 7;
+	state.commandInvalidArgModeFallbackCount = 8;
+	state.commandSourceContributionCount = 9;
 	state.scanWarnCount = 1;
 	host.SetSkillsCatalogState(state);
 
@@ -199,6 +204,19 @@ TEST_CASE(
 		std::string::npos);
 	REQUIRE(statusResponse.payloadJson->find("\"verifiedOpenIoFailures\":4") !=
 		std::string::npos);
+	REQUIRE(statusResponse.payloadJson->find("\"commandSanitize\":5") !=
+		std::string::npos);
+	REQUIRE(statusResponse.payloadJson->find("\"commandDedupe\":6") !=
+		std::string::npos);
+	REQUIRE(
+		statusResponse.payloadJson->find("\"commandMissingToolDispatch\":7") !=
+		std::string::npos);
+	REQUIRE(
+		statusResponse.payloadJson->find("\"commandInvalidArgModeFallback\":8") !=
+		std::string::npos);
+	REQUIRE(
+		statusResponse.payloadJson->find("\"commandSourceContributions\":9") !=
+		std::string::npos);
 
 	const auto diagnosticsResponse = host.RouteRequest(
 		blazeclaw::gateway::protocol::RequestFrame{
@@ -215,8 +233,24 @@ TEST_CASE(
 		std::string::npos);
 	REQUIRE(diagnosticsResponse.payloadJson->find("\"verifiedOpenIoFailures\":4") !=
 		std::string::npos);
+	REQUIRE(diagnosticsResponse.payloadJson->find("\"commandSanitize\":5") !=
+		std::string::npos);
+	REQUIRE(diagnosticsResponse.payloadJson->find("\"commandDedupe\":6") !=
+		std::string::npos);
+	REQUIRE(
+		diagnosticsResponse.payloadJson->find("\"commandMissingToolDispatch\":7") !=
+		std::string::npos);
+	REQUIRE(
+		diagnosticsResponse.payloadJson->find("\"commandInvalidArgModeFallback\":8") !=
+		std::string::npos);
+	REQUIRE(
+		diagnosticsResponse.payloadJson->find("\"commandSourceContributions\":9") !=
+		std::string::npos);
 	REQUIRE(
 		diagnosticsResponse.payloadJson->find("skills.local-loader.verified-open") !=
+		std::string::npos);
+	REQUIRE(
+		diagnosticsResponse.payloadJson->find("skills.command-specs") !=
 		std::string::npos);
 
 	host.Stop();

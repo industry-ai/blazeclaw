@@ -5969,6 +5969,12 @@ namespace blazeclaw::gateway {
 					hints.push_back("skills.local-loader.verified-open");
 				}
 
+				if (state.commandMissingToolDispatchCount > 0 ||
+					state.commandInvalidArgModeFallbackCount > 0 ||
+					state.commandSourceContributionCount > 0) {
+					hints.push_back("skills.command-specs");
+				}
+
 				if (!state.sandboxSyncOk) {
 					hints.push_back("skills.sandbox.status");
 				}
@@ -6004,6 +6010,16 @@ namespace blazeclaw::gateway {
 					std::to_string(state.verifiedOpenValidationFailures) +
 					",\"verifiedOpenIoFailures\":" +
 					std::to_string(state.verifiedOpenIoFailures) +
+					 ",\"commandSanitize\":" +
+						std::to_string(state.commandSanitizeCount) +
+						",\"commandDedupe\":" +
+						std::to_string(state.commandDedupeCount) +
+						",\"commandMissingToolDispatch\":" +
+						std::to_string(state.commandMissingToolDispatchCount) +
+						",\"commandInvalidArgModeFallback\":" +
+						std::to_string(state.commandInvalidArgModeFallbackCount) +
+						",\"commandSourceContributions\":" +
+						std::to_string(state.commandSourceContributionCount) +
 						",\"hints\":" +
 						hintsJson +
 						"}",

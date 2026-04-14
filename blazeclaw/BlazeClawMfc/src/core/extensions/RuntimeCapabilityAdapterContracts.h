@@ -51,6 +51,10 @@ namespace blazeclaw::core::extensions {
 		std::vector<blazeclaw::core::SkillsCommandSpec>& mutableCommands;
 	};
 
+	struct RuntimeSkillCommandSourceAdapterContext {
+		const blazeclaw::core::SkillsCommandSnapshot& commandSnapshot;
+	};
+
 	class IRuntimeToolCapabilityAdapter {
 	public:
 		virtual ~IRuntimeToolCapabilityAdapter() = default;
@@ -66,6 +70,16 @@ namespace blazeclaw::core::extensions {
 		[[nodiscard]] virtual RuntimeCapabilityDescriptor Describe() const = 0;
 		virtual void EnrichSkillsCommandSnapshot(
 			const RuntimeSkillAdapterContext& context) const = 0;
+	};
+
+	class IRuntimeSkillCommandSourceAdapter {
+	public:
+		virtual ~IRuntimeSkillCommandSourceAdapter() = default;
+
+		[[nodiscard]] virtual RuntimeCapabilityDescriptor Describe() const = 0;
+		[[nodiscard]] virtual std::vector<blazeclaw::core::SkillsCommandSpec>
+			BuildAdditionalSkillsCommands(
+				const RuntimeSkillCommandSourceAdapterContext& context) const = 0;
 	};
 
 } // namespace blazeclaw::core::extensions
