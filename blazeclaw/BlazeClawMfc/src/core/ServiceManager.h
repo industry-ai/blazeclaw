@@ -28,6 +28,7 @@
 #include "SkillsFacade.h"
 #include "SkillsInstallService.h"
 #include "SkillsPromptService.h"
+#include "InlineActionsOrchestrationService.h"
 #include "SkillSecurityScanService.h"
 #include "SkillsSyncService.h"
 #include "SkillsWatchService.h"
@@ -269,6 +270,9 @@ namespace blazeclaw::core {
 		[[nodiscard]] std::optional<std::string>
 			ResolveSkillInvocationToolTarget(
 				const std::string& message) const;
+		[[nodiscard]] bool ShouldLoadSkillCommandsForInlineActions(
+			bool allowTextCommands,
+			const std::string& message) const;
 		[[nodiscard]] std::vector<std::string>
 			BuildOrderedAllowedToolTargets(
 				const std::vector<std::string>& requestedTargets,
@@ -376,6 +380,7 @@ namespace blazeclaw::core {
 		SkillsPromptService m_skillsPromptService;
 		SkillsPromptSnapshot m_skillsPrompt;
 		SkillsFacade m_skillsFacade;
+		InlineActionsOrchestrationService m_inlineActionsOrchestrationService;
 		SkillsRunSnapshot m_skillsRunSnapshot;
 		SkillCommandInvocationService m_skillCommandInvocationService;
 		SkillsCommandService m_skillsCommandService;

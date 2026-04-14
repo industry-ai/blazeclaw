@@ -3504,6 +3504,26 @@ namespace blazeclaw::core {
 			resolvedSkillInvocation->command.dispatch.toolName);
 	}
 
+	bool ServiceManager::ShouldLoadSkillCommandsForInlineActions(
+		const bool allowTextCommands,
+		const std::string& message) const
+	{
+		const auto slashCommandName =
+			m_inlineActionsOrchestrationService.ResolveSlashCommandName(message);
+		std::unordered_set<std::string> reserved;
+		for (const auto& name :
+			blazeclaw::gateway::GatewayHost::ListReservedChatSlashCommandNames()) {
+			reserved.insert(ToLowerAscii(name));
+		}
+
+		const auto builtin =
+			m_inlineActionsOrchestrationService.BuildBuiltinSlashCommands(reserved);
+		return m_inlineActionsOrchestrationService.ShouldLoadSkillCommandsForSlash(
+			allowTextCommands,
+			slashCommandName,
+			builtin);
+	}
+
 	std::vector<std::string> ServiceManager::BuildOrderedAllowedToolTargets(
 		const std::vector<std::string>& requestedTargets,
 		const std::optional<std::string>& resolvedTarget) const
@@ -3587,10 +3607,22 @@ namespace blazeclaw::core {
 	{
 		m_gatewayHost.SetChatRuntimeCallback([this](
 			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
+				const bool shouldLoadInlineSkillCommands =
+					ShouldLoadSkillCommandsForInlineActions(
+						true,
+						request.message);
+				if (!shouldLoadInlineSkillCommands) {
+					TRACE(
+						"[InlineActions] slash gate skipped skill command load for message: %s\n",
+						request.message.c_str());
+				}
+
 				const std::string sessionId =
 					request.sessionKey.empty() ? "main" : request.sessionKey;
 				const auto resolvedSkillInvocationToolTarget =
-					ResolveSkillInvocationToolTarget(request.message);
+					shouldLoadInlineSkillCommands
+					? ResolveSkillInvocationToolTarget(request.message)
+					: std::nullopt;
 				const std::wstring resolvedPromptForRunWide =
 					m_skillsFacade.ResolvePromptForRun(
 						&m_skillsRunSnapshot,

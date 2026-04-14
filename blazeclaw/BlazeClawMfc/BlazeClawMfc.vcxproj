@@ -312,6 +312,7 @@
     <ClCompile Include="src\core\SkillCommandInvocationService.cpp" />
     <ClCompile Include="src\core\SkillsCommandService.cpp" />
     <ClCompile Include="src\core\SkillCommandsAggregationService.cpp" />
+    <ClCompile Include="src\core\InlineActionsOrchestrationService.cpp" />
     <ClCompile Include="src\core\SkillsCatalogService.cpp" />
     <ClCompile Include="src\core\SkillsEnvOverrideService.cpp" />
     <ClCompile Include="src\core\SkillsEligibilityService.cpp" />
