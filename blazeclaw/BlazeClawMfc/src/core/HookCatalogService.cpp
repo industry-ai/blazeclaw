@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "HookCatalogService.h"
 #include "MarkdownFrontmatterCompat.h"
+#include "SharedFrontmatterCompat.h"
 
 #include <algorithm>
 #include <cwctype>
@@ -170,21 +171,45 @@ namespace blazeclaw::core {
 		}
 
 		HookFrontmatter parsed;
+		std::map<std::wstring, std::wstring> normalizedFrontmatter;
 		for (const auto& item : parsedMarkdown.fields) {
-			const std::wstring key = ToLower(Trim(item.first));
-			const std::wstring value = Trim(item.second);
-			if (key == L"name") {
-				parsed.name = value;
+			normalizedFrontmatter[ToLower(Trim(item.first))] = Trim(item.second);
+		}
+
+		parsed.name = GetFrontmatterStringCompat(normalizedFrontmatter, L"name");
+		parsed.description = GetFrontmatterStringCompat(normalizedFrontmatter, L"description");
+
+		const auto manifest = ResolveOpenClawManifestBlockCompat(normalizedFrontmatter, L"metadata");
+		if (manifest.has_value()) {
+			if (manifest->contains("events")) {
+				const auto events = NormalizeStringListCompat((*manifest)["events"]);
+				if (!events.empty()) {
+					parsed.eventName = events.front();
+				}
 			}
-			else if (key == L"description") {
-				parsed.description = value;
+			if (parsed.eventName.empty() &&
+				manifest->contains("event") &&
+				(*manifest)["event"].is_string()) {
+				parsed.eventName = (*manifest)["event"].get<std::wstring>();
 			}
-			else if (key == L"blazeclaw.event" || key == L"event") {
-				parsed.eventName = value;
+
+			if (manifest->contains("export") && (*manifest)["export"].is_string()) {
+				parsed.handlerPath = (*manifest)["export"].get<std::wstring>();
 			}
-			else if (key == L"blazeclaw.handler" || key == L"handler") {
-				parsed.handlerPath = value;
-			}
+		}
+
+		if (parsed.eventName.empty()) {
+			parsed.eventName = GetFrontmatterStringCompat(normalizedFrontmatter, L"blazeclaw.event");
+		}
+		if (parsed.eventName.empty()) {
+			parsed.eventName = GetFrontmatterStringCompat(normalizedFrontmatter, L"event");
+		}
+
+		if (parsed.handlerPath.empty()) {
+			parsed.handlerPath = GetFrontmatterStringCompat(normalizedFrontmatter, L"blazeclaw.handler");
+		}
+		if (parsed.handlerPath.empty()) {
+			parsed.handlerPath = GetFrontmatterStringCompat(normalizedFrontmatter, L"handler");
 		}
 
 		if (Trim(parsed.name).empty()) {
