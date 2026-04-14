@@ -5469,6 +5469,16 @@ namespace blazeclaw::gateway {
 						std::to_string(state.remoteAnyBinSatisfiedCount) +
 						",\"alwaysBypass\":" +
 						std::to_string(state.alwaysBypassCount) +
+						",\"commandSanitize\":" +
+						std::to_string(state.commandSanitizeCount) +
+						",\"commandDedupe\":" +
+						std::to_string(state.commandDedupeCount) +
+						",\"commandMissingToolDispatch\":" +
+						std::to_string(state.commandMissingToolDispatchCount) +
+						",\"commandInvalidArgModeFallback\":" +
+						std::to_string(state.commandInvalidArgModeFallbackCount) +
+						",\"commandSourceContributions\":" +
+						std::to_string(state.commandSourceContributionCount) +
 						",\"promptIncluded\":" +
 						std::to_string(state.promptIncludedCount) +
 						",\"promptChars\":" +
