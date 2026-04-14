@@ -3468,6 +3468,20 @@ namespace blazeclaw::core {
 			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
 				const std::string sessionId =
 					request.sessionKey.empty() ? "main" : request.sessionKey;
+				const auto resolvedSkillInvocation =
+					m_skillCommandInvocationService.ResolveInvocation(
+						ToWide(request.message),
+						m_skillsCommands.commands);
+				std::optional<std::string> resolvedSkillInvocationToolTarget;
+				if (resolvedSkillInvocation.has_value() &&
+					resolvedSkillInvocation->command.dispatch.enabled &&
+					_wcsicmp(
+						resolvedSkillInvocation->command.dispatch.kind.c_str(),
+						L"tool") == 0 &&
+					!resolvedSkillInvocation->command.dispatch.toolName.empty()) {
+					resolvedSkillInvocationToolTarget = WideToNarrowAscii(
+						resolvedSkillInvocation->command.dispatch.toolName);
+				}
 				const std::wstring resolvedPromptForRunWide =
 					m_skillsFacade.ResolvePromptForRun(
 						&m_skillsRunSnapshot,
@@ -3493,6 +3507,7 @@ namespace blazeclaw::core {
 				auto executeRequest = [this,
 					request,
 					sessionId,
+					resolvedSkillInvocationToolTarget,
 					runtimeMessage,
 					resolvedPromptForRunNarrow,
 					activeProvider,
@@ -3548,8 +3563,31 @@ namespace blazeclaw::core {
 							.skillsPrompt = resolvedPromptForRunNarrow,
 							.toolBindings = std::move(toolBindings),
 							.runtimeTools = m_gatewayHost.ListRuntimeTools(),
-							.enforceOrderedAllowlist = request.enforceOrderedAllowlist,
-							.orderedAllowedToolTargets = request.orderedAllowedToolTargets,
+						 .enforceOrderedAllowlist =
+								request.enforceOrderedAllowlist ||
+								resolvedSkillInvocationToolTarget.has_value(),
+							.orderedAllowedToolTargets = [
+								&request,
+								&resolvedSkillInvocationToolTarget]() {
+									std::vector<std::string> merged;
+									merged.reserve(
+										request.orderedAllowedToolTargets.size() + 1);
+									if (resolvedSkillInvocationToolTarget.has_value()) {
+										merged.push_back(
+											resolvedSkillInvocationToolTarget.value());
+									}
+
+									for (const auto& target : request.orderedAllowedToolTargets) {
+										if (std::find(merged.begin(), merged.end(), target) !=
+											merged.end()) {
+											continue;
+										}
+
+										merged.push_back(target);
+									}
+
+									return merged;
+								}(),
 							.enableDynamicToolLoop = enableEmbeddedDynamicLoop,
 							.toolExecutorV2 = [this](
 								const blazeclaw::gateway::ToolExecuteRequestV2& executeRequest) {

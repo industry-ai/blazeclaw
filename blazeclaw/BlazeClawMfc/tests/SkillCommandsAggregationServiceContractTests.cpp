@@ -73,6 +73,12 @@ TEST_CASE(
 	REQUIRE(
 		source.find("GatewayHost::ListReservedChatSlashCommandNames") !=
 		std::string::npos);
+	REQUIRE(
+		source.find("m_skillCommandInvocationService.ResolveInvocation") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("resolvedSkillInvocationToolTarget") !=
+		std::string::npos);
 }
 
 TEST_CASE(
