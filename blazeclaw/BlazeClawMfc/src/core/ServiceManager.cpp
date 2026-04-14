@@ -3484,26 +3484,113 @@ namespace blazeclaw::core {
 		return toolBindings;
 	}
 
+	std::optional<std::string> ServiceManager::ResolveSkillInvocationToolTarget(
+		const std::string& message) const
+	{
+		const auto resolvedSkillInvocation =
+			m_skillCommandInvocationService.ResolveInvocation(
+				ToWide(message),
+				m_skillsCommands.commands);
+		if (!resolvedSkillInvocation.has_value() ||
+			!resolvedSkillInvocation->command.dispatch.enabled ||
+			_wcsicmp(
+				resolvedSkillInvocation->command.dispatch.kind.c_str(),
+				L"tool") != 0 ||
+			resolvedSkillInvocation->command.dispatch.toolName.empty()) {
+			return std::nullopt;
+		}
+
+		return WideToNarrowAscii(
+			resolvedSkillInvocation->command.dispatch.toolName);
+	}
+
+	std::vector<std::string> ServiceManager::BuildOrderedAllowedToolTargets(
+		const std::vector<std::string>& requestedTargets,
+		const std::optional<std::string>& resolvedTarget) const
+	{
+		std::vector<std::string> merged;
+		merged.reserve(requestedTargets.size() + 1);
+		if (resolvedTarget.has_value()) {
+			merged.push_back(resolvedTarget.value());
+		}
+
+		for (const auto& target : requestedTargets) {
+			if (std::find(merged.begin(), merged.end(), target) !=
+				merged.end()) {
+				continue;
+			}
+
+			merged.push_back(target);
+		}
+
+		return merged;
+	}
+
+	std::vector<blazeclaw::gateway::GatewayHost::ChatRuntimeResult::TaskDeltaEntry>
+		ServiceManager::ConvertEmbeddedTaskDeltas(
+			const std::vector<EmbeddedTaskDelta>& taskDeltas) const
+	{
+		std::vector<blazeclaw::gateway::GatewayHost::ChatRuntimeResult::TaskDeltaEntry>
+			runtimeDeltas;
+		runtimeDeltas.reserve(taskDeltas.size());
+		for (const auto& delta : taskDeltas) {
+			runtimeDeltas.push_back(
+				blazeclaw::gateway::GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = delta.index,
+					.runId = delta.runId,
+					.sessionId = delta.sessionId,
+					.phase = delta.phase,
+					.toolName = delta.toolName,
+					.fallbackBackend = delta.fallbackBackend,
+					.fallbackAction = delta.fallbackAction,
+					.fallbackAttempt = delta.fallbackAttempt,
+					.fallbackMaxAttempts = delta.fallbackMaxAttempts,
+					.argsJson = delta.argsJson,
+					.resultJson = delta.resultJson,
+					.status = delta.status,
+					.errorCode = delta.errorCode,
+					.startedAtMs = delta.startedAtMs,
+					.completedAtMs = delta.completedAtMs,
+					.latencyMs = delta.latencyMs,
+					.modelTurnId = delta.modelTurnId,
+					.stepLabel = delta.stepLabel,
+				});
+		}
+
+		return runtimeDeltas;
+	}
+
+	void ServiceManager::ApplyEmbeddedExecutionTelemetry(
+		const EmbeddedRuntimeExecutionResult& embeddedExecution)
+	{
+		m_state.embeddedRuntime.taskDeltaTransitionCount +=
+			static_cast<std::uint64_t>(embeddedExecution.taskDeltas.size());
+		if (embeddedExecution.success) {
+			++m_state.embeddedRuntime.runSuccessCount;
+		}
+		else {
+			++m_state.embeddedRuntime.runFailureCount;
+		}
+
+		const std::string normalizedEmbeddedError =
+			ToLowerAscii(embeddedExecution.errorCode);
+		if (normalizedEmbeddedError == "embedded_deadline_exceeded") {
+			++m_state.embeddedRuntime.runTimeoutCount;
+		}
+
+		if (normalizedEmbeddedError == "embedded_run_cancelled") {
+			++m_state.embeddedRuntime.runCancelledCount;
+		}
+	}
+
 	void ServiceManager::BindChatCallbacks()
 	{
 		m_gatewayHost.SetChatRuntimeCallback([this](
 			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
 				const std::string sessionId =
 					request.sessionKey.empty() ? "main" : request.sessionKey;
-				const auto resolvedSkillInvocation =
-					m_skillCommandInvocationService.ResolveInvocation(
-						ToWide(request.message),
-						m_skillsCommands.commands);
-				std::optional<std::string> resolvedSkillInvocationToolTarget;
-				if (resolvedSkillInvocation.has_value() &&
-					resolvedSkillInvocation->command.dispatch.enabled &&
-					_wcsicmp(
-						resolvedSkillInvocation->command.dispatch.kind.c_str(),
-						L"tool") == 0 &&
-					!resolvedSkillInvocation->command.dispatch.toolName.empty()) {
-					resolvedSkillInvocationToolTarget = WideToNarrowAscii(
-						resolvedSkillInvocation->command.dispatch.toolName);
-				}
+				const auto resolvedSkillInvocationToolTarget =
+					ResolveSkillInvocationToolTarget(request.message);
 				const std::wstring resolvedPromptForRunWide =
 					m_skillsFacade.ResolvePromptForRun(
 						&m_skillsRunSnapshot,
@@ -3529,6 +3616,9 @@ namespace blazeclaw::core {
 				auto executeRequest = [this,
 					request,
 					sessionId,
+					orderedAllowedTargets = BuildOrderedAllowedToolTargets(
+						request.orderedAllowedToolTargets,
+						resolvedSkillInvocationToolTarget),
 					resolvedSkillInvocationToolTarget,
 					runtimeMessage,
 					resolvedPromptForRunNarrow,
@@ -3573,28 +3663,7 @@ namespace blazeclaw::core {
 						 .enforceOrderedAllowlist =
 								request.enforceOrderedAllowlist ||
 								resolvedSkillInvocationToolTarget.has_value(),
-							.orderedAllowedToolTargets = [
-								&request,
-								&resolvedSkillInvocationToolTarget]() {
-									std::vector<std::string> merged;
-									merged.reserve(
-										request.orderedAllowedToolTargets.size() + 1);
-									if (resolvedSkillInvocationToolTarget.has_value()) {
-										merged.push_back(
-											resolvedSkillInvocationToolTarget.value());
-									}
-
-									for (const auto& target : request.orderedAllowedToolTargets) {
-										if (std::find(merged.begin(), merged.end(), target) !=
-											merged.end()) {
-											continue;
-										}
-
-										merged.push_back(target);
-									}
-
-									return merged;
-								}(),
+						  .orderedAllowedToolTargets = orderedAllowedTargets,
 							.enableDynamicToolLoop = enableEmbeddedDynamicLoop,
 							.toolExecutorV2 = [this](
 								const blazeclaw::gateway::ToolExecuteRequestV2& executeRequest) {
@@ -3624,51 +3693,9 @@ namespace blazeclaw::core {
 					}
 
 					if (embeddedExecution.handled) {
-						std::vector<blazeclaw::gateway::GatewayHost::ChatRuntimeResult::TaskDeltaEntry>
-							runtimeDeltas;
-						runtimeDeltas.reserve(embeddedExecution.taskDeltas.size());
-						for (const auto& delta : embeddedExecution.taskDeltas) {
-							runtimeDeltas.push_back(
-								blazeclaw::gateway::GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
-									.index = delta.index,
-									.runId = delta.runId,
-									.sessionId = delta.sessionId,
-									.phase = delta.phase,
-									.toolName = delta.toolName,
-									.fallbackBackend = delta.fallbackBackend,
-									.fallbackAction = delta.fallbackAction,
-									.fallbackAttempt = delta.fallbackAttempt,
-									.fallbackMaxAttempts = delta.fallbackMaxAttempts,
-									.argsJson = delta.argsJson,
-									.resultJson = delta.resultJson,
-									.status = delta.status,
-									.errorCode = delta.errorCode,
-									.startedAtMs = delta.startedAtMs,
-									.completedAtMs = delta.completedAtMs,
-									.latencyMs = delta.latencyMs,
-									.modelTurnId = delta.modelTurnId,
-									.stepLabel = delta.stepLabel,
-								});
-						}
-
-						m_state.embeddedRuntime.taskDeltaTransitionCount +=
-							static_cast<std::uint64_t>(embeddedExecution.taskDeltas.size());
-						if (embeddedExecution.success) {
-							++m_state.embeddedRuntime.runSuccessCount;
-						}
-						else {
-							++m_state.embeddedRuntime.runFailureCount;
-						}
-
-						const std::string normalizedEmbeddedError =
-							ToLowerAscii(embeddedExecution.errorCode);
-						if (normalizedEmbeddedError == "embedded_deadline_exceeded") {
-							++m_state.embeddedRuntime.runTimeoutCount;
-						}
-
-						if (normalizedEmbeddedError == "embedded_run_cancelled") {
-							++m_state.embeddedRuntime.runCancelledCount;
-						}
+						auto runtimeDeltas =
+							ConvertEmbeddedTaskDeltas(embeddedExecution.taskDeltas);
+						ApplyEmbeddedExecutionTelemetry(embeddedExecution);
 
 						if (!embeddedExecution.success) {
 							if (ShouldFallbackFromEmbeddedFailure(

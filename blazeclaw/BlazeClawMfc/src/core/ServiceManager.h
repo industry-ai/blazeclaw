@@ -266,6 +266,19 @@ namespace blazeclaw::core {
 		[[nodiscard]] bool IsEmbeddedDynamicLoopCanaryEligible(
 			const std::string& provider,
 			const std::string& sessionId) const;
+		[[nodiscard]] std::optional<std::string>
+			ResolveSkillInvocationToolTarget(
+				const std::string& message) const;
+		[[nodiscard]] std::vector<std::string>
+			BuildOrderedAllowedToolTargets(
+				const std::vector<std::string>& requestedTargets,
+				const std::optional<std::string>& resolvedTarget) const;
+		[[nodiscard]] std::vector<
+			blazeclaw::gateway::GatewayHost::ChatRuntimeResult::TaskDeltaEntry>
+			ConvertEmbeddedTaskDeltas(
+				const std::vector<EmbeddedTaskDelta>& taskDeltas) const;
+		void ApplyEmbeddedExecutionTelemetry(
+			const EmbeddedRuntimeExecutionResult& embeddedExecution);
 		[[nodiscard]] bool IsEmbeddedDynamicLoopPromotionReady() const;
 		[[nodiscard]] bool ShouldFallbackFromEmbeddedFailure(
 			const std::string& errorCode,
