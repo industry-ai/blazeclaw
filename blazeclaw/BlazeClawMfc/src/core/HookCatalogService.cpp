@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "HookCatalogService.h"
+#include "MarkdownFrontmatterCompat.h"
 
 #include <algorithm>
 #include <cwctype>
@@ -156,46 +157,22 @@ bool IsUnsafeRelativePath(const std::wstring& value) {
 std::optional<HookFrontmatter> HookCatalogService::ParseFrontmatter(
     const std::wstring& hookContent,
     std::vector<std::wstring>& outValidationErrors) {
-  std::vector<std::wstring> lines;
-  std::size_t cursor = 0;
-  while (cursor <= hookContent.size()) {
-    const auto next = hookContent.find(L'\n', cursor);
-    if (next == std::wstring::npos) {
-      lines.push_back(hookContent.substr(cursor));
-      break;
-    }
-
-    lines.push_back(hookContent.substr(cursor, next - cursor));
-    cursor = next + 1;
-  }
-
-  if (lines.empty() || Trim(lines[0]) != L"---") {
+  const auto parsedMarkdown = ParseMarkdownFrontmatterBlockCompat(hookContent);
+  if (!parsedMarkdown.hasFrontmatterStart) {
     outValidationErrors.push_back(
         L"Missing frontmatter start marker (---).");
     return std::nullopt;
   }
+  if (!parsedMarkdown.hasFrontmatterEnd) {
+    outValidationErrors.push_back(
+        L"Missing frontmatter closing marker (---).");
+    return std::nullopt;
+  }
 
   HookFrontmatter parsed;
-  bool closed = false;
-  for (std::size_t lineIndex = 1; lineIndex < lines.size(); ++lineIndex) {
-    const std::wstring line = Trim(lines[lineIndex]);
-    if (line == L"---") {
-      closed = true;
-      break;
-    }
-
-    if (line.empty() || line.starts_with(L"#")) {
-      continue;
-    }
-
-    const auto colonPos = line.find(L':');
-    if (colonPos == std::wstring::npos) {
-      outValidationErrors.push_back(L"Invalid frontmatter line: " + line);
-      continue;
-    }
-
-    const std::wstring key = ToLower(Trim(line.substr(0, colonPos)));
-    const std::wstring value = TrimQuotes(line.substr(colonPos + 1));
+  for (const auto& item : parsedMarkdown.fields) {
+    const std::wstring key = ToLower(Trim(item.first));
+    const std::wstring value = Trim(item.second);
     if (key == L"name") {
       parsed.name = value;
     } else if (key == L"description") {
@@ -205,11 +182,6 @@ std::optional<HookFrontmatter> HookCatalogService::ParseFrontmatter(
     } else if (key == L"blazeclaw.handler" || key == L"handler") {
       parsed.handlerPath = value;
     }
-  }
-
-  if (!closed) {
-    outValidationErrors.push_back(
-        L"Missing frontmatter closing marker (---).");
   }
 
   if (Trim(parsed.name).empty()) {

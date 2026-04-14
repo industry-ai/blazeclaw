@@ -45,6 +45,24 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Markdown frontmatter compat: parses hook-style dotted keys",
+	"[markdown][frontmatter][compat][consumer][hooks]") {
+	const std::wstring content =
+		L"---\n"
+		L"name: hook-sample\n"
+		L"description: hook desc\n"
+		L"blazeclaw.event: on_message\n"
+		L"blazeclaw.handler: hooks/handler.py\n"
+		L"---\n";
+
+	const auto parsed = ParseMarkdownFrontmatterBlockCompat(content);
+	REQUIRE(parsed.fields.contains(L"blazeclaw.event"));
+	REQUIRE(parsed.fields.at(L"blazeclaw.event") == L"on_message");
+	REQUIRE(parsed.fields.contains(L"blazeclaw.handler"));
+	REQUIRE(parsed.fields.at(L"blazeclaw.handler") == L"hooks/handler.py");
+}
+
+TEST_CASE(
 	"Markdown frontmatter compat: falls back to line parser when yaml-like parse is invalid",
 	"[markdown][frontmatter][compat][fallback]") {
 	const std::wstring content =
