@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "SkillsFrontmatterCompat.h"
+#include "MarkdownFrontmatterCompat.h"
 
 #include <algorithm>
 #include <cwctype>
@@ -185,54 +186,25 @@ namespace blazeclaw::core {
 	std::optional<ParsedSkillFrontmatterCompat> ParseSkillFrontmatterCompat(
 		const std::wstring& skillContent,
 		std::vector<std::wstring>& outValidationErrors) {
-		std::vector<std::wstring> lines;
-		std::size_t cursor = 0;
-		while (cursor <= skillContent.size()) {
-			const auto next = skillContent.find(L'\n', cursor);
-			if (next == std::wstring::npos) {
-				lines.push_back(skillContent.substr(cursor));
-				break;
-			}
-
-			lines.push_back(skillContent.substr(cursor, next - cursor));
-			cursor = next + 1;
-		}
-
-		if (lines.empty() || TrimCompat(lines[0]) != L"---") {
+		const auto parsedMarkdown =
+			ParseMarkdownFrontmatterBlockCompat(skillContent);
+		if (!parsedMarkdown.hasFrontmatterStart) {
 			outValidationErrors.push_back(
 				L"Missing frontmatter start marker (---).");
 			return std::nullopt;
 		}
+		if (!parsedMarkdown.hasFrontmatterEnd) {
+			outValidationErrors.push_back(
+				L"Missing frontmatter closing marker (---).");
+			return std::nullopt;
+		}
 
 		ParsedSkillFrontmatterCompat parsed;
-		std::size_t lineIndex = 1;
-		bool closed = false;
-		for (; lineIndex < lines.size(); ++lineIndex) {
-			const std::wstring line = TrimCompat(lines[lineIndex]);
-			if (line == L"---") {
-				closed = true;
-				++lineIndex;
-				break;
-			}
-
-			if (line.empty() || line.starts_with(L"#")) {
-				continue;
-			}
-
-			const auto colonPos = line.find(L':');
-			if (colonPos == std::wstring::npos) {
-				outValidationErrors.push_back(L"Invalid frontmatter line: " + line);
-				continue;
-			}
-
-			const std::wstring key =
-				ToLowerCompat(TrimCompat(line.substr(0, colonPos)));
-			const std::wstring value = TrimQuotesCompat(line.substr(colonPos + 1));
+		for (const auto& [rawKey, value] : parsedMarkdown.fields) {
+			const std::wstring key = ToLowerCompat(TrimCompat(rawKey));
 			if (key.empty()) {
-				outValidationErrors.push_back(L"Empty frontmatter key detected.");
 				continue;
 			}
-
 			parsed.fields[key] = value;
 			if (key == L"name") {
 				parsed.name = value;
@@ -240,11 +212,6 @@ namespace blazeclaw::core {
 			else if (key == L"description") {
 				parsed.description = value;
 			}
-		}
-
-		if (!closed) {
-			outValidationErrors.push_back(
-				L"Missing frontmatter closing marker (---).");
 		}
 
 		if (TrimCompat(parsed.name).empty()) {

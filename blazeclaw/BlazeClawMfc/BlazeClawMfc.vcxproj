@@ -158,6 +158,7 @@
     <ClInclude Include="src\core\HookEventService.h" />
     <ClInclude Include="src\core\HookExecutionService.h" />
     <ClInclude Include="src\core\SkillsConfigEval.h" />
+    <ClInclude Include="src\core\MarkdownFrontmatterCompat.h" />
     <ClInclude Include="src\core\SkillCommandInvocationService.h" />
     <ClInclude Include="src\core\SkillsCommandService.h" />
     <ClInclude Include="src\core\SkillCommandsAggregationService.h" />
@@ -313,6 +314,7 @@
     <ClCompile Include="src\core\HookEventService.cpp" />
     <ClCompile Include="src\core\HookExecutionService.cpp" />
     <ClCompile Include="src\core\SkillsConfigEval.cpp" />
+    <ClCompile Include="src\core\MarkdownFrontmatterCompat.cpp" />
     <ClCompile Include="src\core\SkillCommandInvocationService.cpp" />
     <ClCompile Include="src\core\SkillsCommandService.cpp" />
     <ClCompile Include="src\core\SkillCommandsAggregationService.cpp" />
