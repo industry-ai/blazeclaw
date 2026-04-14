@@ -284,6 +284,39 @@ namespace blazeclaw::core {
 			return lowered;
 		}
 
+		SkillSourceScope ResolveSourceScope(const SkillsSourceKind sourceKind) {
+			switch (sourceKind) {
+			case SkillsSourceKind::Personal:
+				return SkillSourceScope::User;
+			case SkillsSourceKind::Project:
+			case SkillsSourceKind::Workspace:
+			case SkillsSourceKind::Bundled:
+			case SkillsSourceKind::Managed:
+			case SkillsSourceKind::Plugin:
+			case SkillsSourceKind::OpenClawOriginal:
+				return SkillSourceScope::Project;
+			case SkillsSourceKind::Extra:
+			default:
+				return SkillSourceScope::Temporary;
+			}
+		}
+
+		SkillSourceOrigin ResolveSourceOrigin(const SkillsSourceKind sourceKind) {
+			switch (sourceKind) {
+			case SkillsSourceKind::Bundled:
+			case SkillsSourceKind::Plugin:
+			case SkillsSourceKind::OpenClawOriginal:
+				return SkillSourceOrigin::Package;
+			case SkillsSourceKind::Extra:
+			case SkillsSourceKind::Managed:
+			case SkillsSourceKind::Personal:
+			case SkillsSourceKind::Project:
+			case SkillsSourceKind::Workspace:
+			default:
+				return SkillSourceOrigin::TopLevel;
+			}
+		}
+
 		std::wstring Utf8ToWide(const std::string& value) {
 			if (value.empty()) {
 				return {};
@@ -1078,6 +1111,12 @@ namespace blazeclaw::core {
 				entry.skillFile = CanonicalOrSelf(skillFile);
 				entry.sourceKind = sourceRoot.kind;
 				entry.precedence = sourceRoot.precedence;
+				entry.sourceInfo = CreateSyntheticSkillSourceInfoCompat(
+					entry.skillFile,
+					SkillsCatalogService::SourceKindLabel(sourceRoot.kind),
+					ResolveSourceScope(sourceRoot.kind),
+					ResolveSourceOrigin(sourceRoot.kind),
+					entry.skillDir);
 
 				std::vector<std::wstring> validationErrors;
 				const auto frontmatter = ParseFrontmatter(verifiedRead.content, validationErrors);

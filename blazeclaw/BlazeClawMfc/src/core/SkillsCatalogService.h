@@ -2,6 +2,7 @@
 
 #include "../config/ConfigModels.h"
 #include "SkillsContracts.h"
+#include "SkillsSkillContractCompat.h"
 
 #include <filesystem>
 #include <map>
@@ -53,6 +54,7 @@ namespace blazeclaw::core {
 		std::optional<SkillsMetadataSpec> metadata;
 		std::optional<SkillInvocationPolicySpec> invocation;
 		std::optional<SkillExposureSpec> exposure;
+		std::optional<SkillSourceInfoCompat> sourceInfo;
 	};
 
 	struct SkillsCatalogDiagnostics {

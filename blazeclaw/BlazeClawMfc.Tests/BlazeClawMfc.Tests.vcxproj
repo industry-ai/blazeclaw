@@ -59,6 +59,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillCommandsAggregationServiceContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillCommandInvocationServiceTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\InlineActionsOrchestrationServiceContractTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillContractCompatParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillsTypesContractsParityTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ExtensionLifecycleManager.cpp" />

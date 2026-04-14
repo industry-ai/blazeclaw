@@ -162,6 +162,7 @@
     <ClInclude Include="src\core\SkillsCommandService.h" />
     <ClInclude Include="src\core\SkillCommandsAggregationService.h" />
     <ClInclude Include="src\core\SkillsContracts.h" />
+    <ClInclude Include="src\core\SkillsSkillContractCompat.h" />
     <ClInclude Include="src\core\SkillsCatalogService.h" />
     <ClInclude Include="src\core\SkillsEnvOverrideService.h" />
     <ClInclude Include="src\core\SkillsEligibilityService.h" />
