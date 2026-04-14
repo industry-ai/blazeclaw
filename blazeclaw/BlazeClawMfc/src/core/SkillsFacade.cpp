@@ -172,17 +172,33 @@ namespace blazeclaw::core {
 
 			SkillsRunSnapshotSkill runSkill;
 			runSkill.name = entry.skillName;
-			runSkill.primaryEnv = GetFrontmatterField(
-				entry.frontmatter,
-				{ L"metadata.openclaw.primaryenv",
-				  L"metadata.openclaw.primary_env",
-				  L"metadata.blazeclaw.primaryenv",
-				  L"metadata.blazeclaw.primary_env" });
-			const std::wstring requiredEnvRaw = GetFrontmatterField(
-				entry.frontmatter,
-				{ L"metadata.openclaw.requires.env",
-				  L"metadata.blazeclaw.requires.env" });
-			runSkill.requiredEnv = ParseListField(requiredEnvRaw);
+			if (entry.metadata.has_value()) {
+				runSkill.primaryEnv = Trim(entry.metadata->primaryEnv);
+				runSkill.requiredEnv = ParseListField(
+					[&entry]() {
+						std::wstring joined;
+						for (std::size_t i = 0; i < entry.metadata->requirements.env.size(); ++i) {
+							if (i > 0) {
+								joined += L",";
+							}
+							joined += entry.metadata->requirements.env[i];
+						}
+						return joined;
+					}());
+			}
+			else {
+				runSkill.primaryEnv = GetFrontmatterField(
+					entry.frontmatter,
+					{ L"metadata.openclaw.primaryenv",
+					  L"metadata.openclaw.primary_env",
+					  L"metadata.blazeclaw.primaryenv",
+					  L"metadata.blazeclaw.primary_env" });
+				const std::wstring requiredEnvRaw = GetFrontmatterField(
+					entry.frontmatter,
+					{ L"metadata.openclaw.requires.env",
+					  L"metadata.blazeclaw.requires.env" });
+				runSkill.requiredEnv = ParseListField(requiredEnvRaw);
+			}
 			snapshot.skills.push_back(std::move(runSkill));
 		}
 

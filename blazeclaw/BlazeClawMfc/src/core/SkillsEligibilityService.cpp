@@ -444,7 +444,16 @@ namespace blazeclaw::core {
 		for (const auto& catalogEntry : catalog.entries) {
 			SkillsEligibilityEntry result;
 			result.skillName = catalogEntry.skillName;
-			result.skillKey = ResolveSkillKey(catalogEntry);
+			result.skillKey = [&catalogEntry]() {
+				if (catalogEntry.metadata.has_value()) {
+					const std::wstring key = Trim(catalogEntry.metadata->skillKey);
+					if (!key.empty()) {
+						return key;
+					}
+				}
+
+				return ResolveSkillKey(catalogEntry);
+				}();
 
 			const auto resolvedSkillConfig = ResolveSkillConfig(
 				appConfig,
@@ -470,16 +479,23 @@ namespace blazeclaw::core {
 				++snapshot.disabledCount;
 			}
 
-			result.userInvocable = ParseBoolField(
-				GetFrontmatterField(
-					catalogEntry.frontmatter,
-					{ L"user-invocable", L"user_invocable" }),
-				true);
-			result.disableModelInvocation = ParseBoolField(
-				GetFrontmatterField(
-					catalogEntry.frontmatter,
-					{ L"disable-model-invocation", L"disable_model_invocation", L"disablemodelinvocation" }),
-				false);
+			if (catalogEntry.invocation.has_value()) {
+				result.userInvocable = catalogEntry.invocation->userInvocable;
+				result.disableModelInvocation =
+					catalogEntry.invocation->disableModelInvocation;
+			}
+			else {
+				result.userInvocable = ParseBoolField(
+					GetFrontmatterField(
+						catalogEntry.frontmatter,
+						{ L"user-invocable", L"user_invocable" }),
+					true);
+				result.disableModelInvocation = ParseBoolField(
+					GetFrontmatterField(
+						catalogEntry.frontmatter,
+						{ L"disable-model-invocation", L"disable_model_invocation", L"disablemodelinvocation" }),
+					false);
+			}
 
 			if (!IsBundledAllowed(
 				catalogEntry,
@@ -489,10 +505,28 @@ namespace blazeclaw::core {
 				++snapshot.blockedByAllowlistCount;
 			}
 
-			const auto requiredOs = SplitList(
-				GetFrontmatterField(
-					catalogEntry.frontmatter,
-					{ L"openclaw.os", L"os" }));
+			const auto requiredOs = [&catalogEntry]() {
+				if (catalogEntry.metadata.has_value()) {
+					std::vector<std::wstring> normalized;
+					normalized.reserve(catalogEntry.metadata->os.size());
+					for (const auto& item : catalogEntry.metadata->os) {
+						const auto value = ToLower(Trim(item));
+						if (!value.empty()) {
+							normalized.push_back(value);
+						}
+					}
+					std::sort(normalized.begin(), normalized.end());
+					normalized.erase(
+						std::unique(normalized.begin(), normalized.end()),
+						normalized.end());
+					return normalized;
+				}
+
+				return SplitList(
+					GetFrontmatterField(
+						catalogEntry.frontmatter,
+						{ L"openclaw.os", L"os" }));
+				}();
 			if (!IsCurrentPlatformAllowed(requiredOs)) {
 				if (!remotePlatforms.empty() &&
 					IsAnyPlatformAllowed(requiredOs, remotePlatforms)) {
@@ -503,10 +537,12 @@ namespace blazeclaw::core {
 				}
 			}
 
-			const auto requiredBins = SplitList(
-				GetFrontmatterField(
-					catalogEntry.frontmatter,
-					{ L"openclaw.requires.bins", L"requires.bins" }));
+			const auto requiredBins = catalogEntry.metadata.has_value()
+				? NormalizeSkillsAllowlistEntries(catalogEntry.metadata->requirements.bins)
+				: SplitList(
+					GetFrontmatterField(
+						catalogEntry.frontmatter,
+						{ L"openclaw.requires.bins", L"requires.bins" }));
 			for (const auto& bin : requiredBins) {
 				if (SkillsHasBinary(bin)) {
 					continue;
@@ -522,10 +558,13 @@ namespace blazeclaw::core {
 				}
 			}
 
-			const auto requiredAnyBins = SplitList(
-				GetFrontmatterField(
-					catalogEntry.frontmatter,
-					{ L"openclaw.requires.anybins", L"requires.anybins" }));
+			const auto requiredAnyBins = catalogEntry.metadata.has_value()
+				? NormalizeSkillsAllowlistEntries(
+					catalogEntry.metadata->requirements.anyBins)
+				: SplitList(
+					GetFrontmatterField(
+						catalogEntry.frontmatter,
+						{ L"openclaw.requires.anybins", L"requires.anybins" }));
 			if (!requiredAnyBins.empty()) {
 				bool foundAny = false;
 				for (const auto& bin : requiredAnyBins) {
@@ -549,13 +588,17 @@ namespace blazeclaw::core {
 				}
 			}
 
-			const auto primaryEnv = ToLower(Trim(GetFrontmatterField(
-				catalogEntry.frontmatter,
-				{ L"openclaw.primaryenv", L"primaryenv", L"primary-env" })));
-			const auto requiredEnv = SplitList(
-				GetFrontmatterField(
+			const auto primaryEnv = catalogEntry.metadata.has_value()
+				? ToLower(Trim(catalogEntry.metadata->primaryEnv))
+				: ToLower(Trim(GetFrontmatterField(
 					catalogEntry.frontmatter,
-					{ L"openclaw.requires.env", L"requires.env" }));
+					{ L"openclaw.primaryenv", L"primaryenv", L"primary-env" })));
+			const auto requiredEnv = catalogEntry.metadata.has_value()
+				? NormalizeSkillsAllowlistEntries(catalogEntry.metadata->requirements.env)
+				: SplitList(
+					GetFrontmatterField(
+						catalogEntry.frontmatter,
+						{ L"openclaw.requires.env", L"requires.env" }));
 			for (const auto& envName : requiredEnv) {
 				const std::wstring envWide = envName;
 				bool hasValue = HasEnvironmentValue(envWide);
@@ -584,10 +627,12 @@ namespace blazeclaw::core {
 				}
 			}
 
-			const auto requiredConfig = SplitList(
-				GetFrontmatterField(
-					catalogEntry.frontmatter,
-					{ L"openclaw.requires.config", L"requires.config" }));
+			const auto requiredConfig = catalogEntry.metadata.has_value()
+				? NormalizeSkillsAllowlistEntries(catalogEntry.metadata->requirements.config)
+				: SplitList(
+					GetFrontmatterField(
+						catalogEntry.frontmatter,
+						{ L"openclaw.requires.config", L"requires.config" }));
 			for (const auto& configPath : requiredConfig) {
 				if (!IsSkillsConfigPathTruthy(
 					appConfig,
@@ -596,11 +641,14 @@ namespace blazeclaw::core {
 				}
 			}
 
-			const bool alwaysEligible = ParseBoolField(
-				GetFrontmatterField(
-					catalogEntry.frontmatter,
-					{ L"openclaw.always", L"always" }),
-				false);
+			const bool alwaysEligible = catalogEntry.metadata.has_value() &&
+				catalogEntry.metadata->always.has_value()
+				? catalogEntry.metadata->always.value()
+				: ParseBoolField(
+					GetFrontmatterField(
+						catalogEntry.frontmatter,
+						{ L"openclaw.always", L"always" }),
+					false);
 			if (alwaysEligible) {
 				result.missingOs.clear();
 				result.missingBins.clear();

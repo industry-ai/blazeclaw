@@ -128,4 +128,22 @@ TEST_CASE(
 		std::string::npos);
 	REQUIRE(hooksCoordinator.find("installContractFallbackCount") !=
 		std::string::npos);
+
+	const auto eligibilityImplPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"SkillsEligibilityService.cpp";
+	const std::string eligibilityImpl = ReadTextFile(eligibilityImplPath);
+	REQUIRE(eligibilityImpl.find("catalogEntry.metadata.has_value()") !=
+		std::string::npos);
+	REQUIRE(eligibilityImpl.find("catalogEntry.invocation.has_value()") !=
+		std::string::npos);
+
+	const auto facadeImplPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"SkillsFacade.cpp";
+	const std::string facadeImpl = ReadTextFile(facadeImplPath);
+	REQUIRE(facadeImpl.find("entry.metadata.has_value()") !=
+		std::string::npos);
 }
