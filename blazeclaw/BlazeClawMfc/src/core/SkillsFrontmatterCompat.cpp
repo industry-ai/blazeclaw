@@ -1,10 +1,12 @@
 #include "pch.h"
 #include "SkillsFrontmatterCompat.h"
 #include "MarkdownFrontmatterCompat.h"
+#include "SharedFrontmatterCompat.h"
 
 #include <algorithm>
 #include <cwctype>
 #include <regex>
+#include <nlohmann/json.hpp>
 
 namespace blazeclaw::core {
 
@@ -62,41 +64,11 @@ namespace blazeclaw::core {
 		}
 
 		bool ParseBoolFieldCompat(const std::wstring& value, const bool fallback) {
-			const std::wstring normalized = ToLowerCompat(TrimCompat(value));
-			if (normalized == L"true" || normalized == L"1" || normalized == L"yes") {
-				return true;
-			}
-
-			if (normalized == L"false" || normalized == L"0" || normalized == L"no") {
-				return false;
-			}
-
-			return fallback;
+			return ParseFrontmatterBoolCompat(value, fallback);
 		}
 
 		std::vector<std::wstring> SplitListCompat(const std::wstring& raw) {
-			std::vector<std::wstring> values;
-			std::wstring current;
-			current.reserve(raw.size());
-
-			const auto flush = [&values, &current]() {
-				const auto trimmed = TrimCompat(current);
-				if (!trimmed.empty()) {
-					values.push_back(trimmed);
-				}
-				current.clear();
-				};
-
-			for (const auto ch : raw) {
-				if (ch == L',' || ch == L';' || ch == L'|') {
-					flush();
-					continue;
-				}
-				current.push_back(ch);
-			}
-
-			flush();
-			return values;
+			return NormalizeStringListCompat(nlohmann::json(raw));
 		}
 
 		std::optional<std::wstring> NormalizeSafeBrewFormulaCompat(

@@ -62,6 +62,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillContractCompatParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillContractPromptFormatterParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\MarkdownFrontmatterCompatParityTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\SharedFrontmatterCompatParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillsFrontmatterCompatParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillsTypesContractsParityTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.cpp" />
@@ -145,6 +146,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\SkillCommandInvocationService.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\InlineActionsOrchestrationService.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\SkillsPromptFormatterCompat.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\core\\SharedFrontmatterCompat.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\MarkdownFrontmatterCompat.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\SkillsFrontmatterCompat.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\diagnostics\\CDiagnosticsReportBuilder.cpp" />
