@@ -2548,6 +2548,16 @@ namespace blazeclaw::core {
 		const bool forceRefresh,
 		const std::wstring& reason) {
 		const auto commandSourceAdapters = BuildRuntimeSkillCommandSourceAdapters();
+		std::vector<AgentSkillCommandDescriptor> commandDescriptors;
+		commandDescriptors.reserve(m_agentsScope.entries.size());
+		for (const auto& entry : m_agentsScope.entries) {
+			commandDescriptors.push_back(AgentSkillCommandDescriptor{
+				.agentId = entry.id,
+				.workspaceDir = entry.workspaceDir,
+				.skillFilter = std::nullopt,
+				});
+		}
+
 		m_skillsHooksCoordinator.RefreshSkillsState(
 			config,
 			forceRefresh,
@@ -2586,6 +2596,22 @@ namespace blazeclaw::core {
 					std::filesystem::current_path()),
 				.hooksFallbackPromptInjection = m_state.hooks.fallbackPromptInjection,
 			});
+
+		const auto aggregatedCommands =
+			m_skillCommandsAggregationService.BuildSnapshot(
+				AgentSkillCommandAggregationContext{
+					.descriptors = commandDescriptors,
+					.appConfig = config,
+					.catalogService = m_skillsCatalogService,
+					.eligibilityService = m_skillsEligibilityService,
+					.commandService = m_skillsCommandService,
+					.commandSourceAdapters = &commandSourceAdapters,
+					.reservedNames = {},
+				});
+		if (!aggregatedCommands.commandSnapshot.commands.empty()) {
+			m_skillsCommands = aggregatedCommands.commandSnapshot;
+		}
+
 		m_configSchemaService.Invalidate();
 		RefreshGatewaySkillsStateProjection();
 	}

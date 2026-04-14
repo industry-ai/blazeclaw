@@ -20,6 +20,7 @@
 #include "HookEventService.h"
 #include "HookExecutionService.h"
 #include "SkillsCommandService.h"
+#include "SkillCommandsAggregationService.h"
 #include "SkillsCatalogService.h"
 #include "SkillsEnvOverrideService.h"
 #include "SkillsEligibilityService.h"
@@ -361,6 +362,7 @@ namespace blazeclaw::core {
 		SkillsFacade m_skillsFacade;
 		SkillsRunSnapshot m_skillsRunSnapshot;
 		SkillsCommandService m_skillsCommandService;
+		SkillCommandsAggregationService m_skillCommandsAggregationService;
 		SkillsCommandSnapshot m_skillsCommands;
 		SkillsSyncService m_skillsSyncService;
 		SkillsSyncSnapshot m_skillsSync;

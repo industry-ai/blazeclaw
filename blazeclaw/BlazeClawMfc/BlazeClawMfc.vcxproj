@@ -159,6 +159,7 @@
     <ClInclude Include="src\core\HookExecutionService.h" />
     <ClInclude Include="src\core\SkillsConfigEval.h" />
     <ClInclude Include="src\core\SkillsCommandService.h" />
+    <ClInclude Include="src\core\SkillCommandsAggregationService.h" />
     <ClInclude Include="src\core\SkillsCatalogService.h" />
     <ClInclude Include="src\core\SkillsEnvOverrideService.h" />
     <ClInclude Include="src\core\SkillsEligibilityService.h" />
@@ -308,6 +309,7 @@
     <ClCompile Include="src\core\HookExecutionService.cpp" />
     <ClCompile Include="src\core\SkillsConfigEval.cpp" />
     <ClCompile Include="src\core\SkillsCommandService.cpp" />
+    <ClCompile Include="src\core\SkillCommandsAggregationService.cpp" />
     <ClCompile Include="src\core\SkillsCatalogService.cpp" />
     <ClCompile Include="src\core\SkillsEnvOverrideService.cpp" />
     <ClCompile Include="src\core\SkillsEligibilityService.cpp" />
