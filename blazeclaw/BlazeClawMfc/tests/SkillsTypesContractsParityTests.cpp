@@ -29,6 +29,7 @@ TEST_CASE(
 
 	REQUIRE(source.find("struct SkillInstallSpec") != std::string::npos);
 	REQUIRE(source.find("struct SkillsMetadataSpec") != std::string::npos);
+	REQUIRE(source.find("struct SkillRequiresSpec") != std::string::npos);
 	REQUIRE(source.find("struct SkillInvocationPolicySpec") != std::string::npos);
 	REQUIRE(source.find("struct SkillExposureSpec") != std::string::npos);
 	REQUIRE(source.find("struct SkillSnapshotSpec") != std::string::npos);
@@ -71,5 +72,29 @@ TEST_CASE(
 	REQUIRE(facadeHeader.find("using SkillsRunSnapshotSkill = SkillRunView") !=
 		std::string::npos);
 	REQUIRE(facadeHeader.find("using SkillsRunSnapshot = SkillSnapshotSpec") !=
+		std::string::npos);
+
+	const auto catalogHeaderPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"SkillsCatalogService.h";
+	const std::string catalogHeader = ReadTextFile(catalogHeaderPath);
+	REQUIRE(catalogHeader.find("std::optional<SkillsMetadataSpec> metadata") !=
+		std::string::npos);
+	REQUIRE(catalogHeader.find("std::optional<SkillInvocationPolicySpec> invocation") !=
+		std::string::npos);
+	REQUIRE(catalogHeader.find("std::optional<SkillExposureSpec> exposure") !=
+		std::string::npos);
+
+	const auto catalogImplPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"SkillsCatalogService.cpp";
+	const std::string catalogImpl = ReadTextFile(catalogImplPath);
+	REQUIRE(catalogImpl.find("BuildNormalizedSkillsMetadata(") !=
+		std::string::npos);
+	REQUIRE(catalogImpl.find("BuildNormalizedInvocationPolicy(") !=
+		std::string::npos);
+	REQUIRE(catalogImpl.find("BuildNormalizedExposurePolicy(") !=
 		std::string::npos);
 }

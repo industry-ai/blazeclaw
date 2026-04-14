@@ -32,6 +32,207 @@ namespace blazeclaw::core {
 			return std::wstring(first, last);
 		}
 
+		std::wstring ToLower(const std::wstring& value);
+
+		bool ParseBoolField(const std::wstring& value, const bool fallback) {
+			const std::wstring normalized = ToLower(Trim(value));
+			if (normalized == L"true" || normalized == L"1" || normalized == L"yes") {
+				return true;
+			}
+
+			if (normalized == L"false" || normalized == L"0" || normalized == L"no") {
+				return false;
+			}
+
+			return fallback;
+		}
+
+		std::vector<std::wstring> SplitList(const std::wstring& raw) {
+			std::vector<std::wstring> values;
+			std::wstring current;
+			current.reserve(raw.size());
+
+			const auto flush = [&values, &current]() {
+				const auto trimmed = Trim(current);
+				if (!trimmed.empty()) {
+					values.push_back(trimmed);
+				}
+				current.clear();
+				};
+
+			for (const auto ch : raw) {
+				if (ch == L',' || ch == L';' || ch == L'|') {
+					flush();
+					continue;
+				}
+				current.push_back(ch);
+			}
+
+			flush();
+			return values;
+		}
+
+		std::wstring GetFrontmatterField(
+			const SkillFrontmatter& frontmatter,
+			std::initializer_list<const wchar_t*> keys) {
+			for (const auto* key : keys) {
+				const auto it = frontmatter.fields.find(ToLower(Trim(key)));
+				if (it != frontmatter.fields.end()) {
+					return Trim(it->second);
+				}
+			}
+
+			return {};
+		}
+
+		SkillsMetadataSpec BuildNormalizedSkillsMetadata(
+			const SkillsCatalogEntry& entry) {
+			SkillsMetadataSpec metadata;
+			metadata.skillKey = GetFrontmatterField(
+				entry.frontmatter,
+				{ L"skillkey", L"skill-key", L"openclaw.skillkey" });
+			metadata.primaryEnv = GetFrontmatterField(
+				entry.frontmatter,
+				{ L"primary-env", L"primary_env", L"openclaw.primary-env" });
+			metadata.emoji = GetFrontmatterField(
+				entry.frontmatter,
+				{ L"emoji", L"openclaw.emoji" });
+			metadata.homepage = GetFrontmatterField(
+				entry.frontmatter,
+				{ L"homepage", L"openclaw.homepage" });
+
+			const auto alwaysRaw = GetFrontmatterField(
+				entry.frontmatter,
+				{ L"always", L"openclaw.always" });
+			if (!alwaysRaw.empty()) {
+				metadata.always = ParseBoolField(alwaysRaw, false);
+			}
+
+			metadata.os = SplitList(GetFrontmatterField(
+				entry.frontmatter,
+				{ L"os", L"openclaw.os" }));
+
+			metadata.requirements.bins = SplitList(GetFrontmatterField(
+				entry.frontmatter,
+				{ L"requires-bins", L"requires_bins", L"requires.bins" }));
+			metadata.requirements.anyBins = SplitList(GetFrontmatterField(
+				entry.frontmatter,
+				{ L"requires-any-bins", L"requires_any_bins", L"requires.anybins" }));
+			metadata.requirements.env = SplitList(GetFrontmatterField(
+				entry.frontmatter,
+				{ L"requires-env", L"requires_env", L"requires.env" }));
+			metadata.requirements.config = SplitList(GetFrontmatterField(
+				entry.frontmatter,
+				{ L"requires-config", L"requires_config", L"requires.config" }));
+
+			const auto installKind = GetFrontmatterField(
+				entry.frontmatter,
+				{ L"install-kind", L"install_kind", L"install.kind" });
+			if (!installKind.empty()) {
+				SkillInstallSpec install;
+				install.kind = installKind;
+				install.id = GetFrontmatterField(
+					entry.frontmatter,
+					{ L"install-id", L"install_id", L"install.id" });
+				install.label = GetFrontmatterField(
+					entry.frontmatter,
+					{ L"install-label", L"install_label", L"install.label" });
+				install.formula = GetFrontmatterField(
+					entry.frontmatter,
+					{ L"install-formula", L"install_formula", L"install.formula" });
+				install.package = GetFrontmatterField(
+					entry.frontmatter,
+					{ L"install-package", L"install_package", L"install.package" });
+				install.module = GetFrontmatterField(
+					entry.frontmatter,
+					{ L"install-module", L"install_module", L"install.module" });
+				install.url = GetFrontmatterField(
+					entry.frontmatter,
+					{ L"install-url", L"install_url", L"install.url" });
+				install.archive = GetFrontmatterField(
+					entry.frontmatter,
+					{ L"install-archive", L"install_archive", L"install.archive" });
+				install.targetDir = GetFrontmatterField(
+					entry.frontmatter,
+					{ L"install-target-dir", L"install_target_dir", L"install.targetDir" });
+				install.bins = SplitList(GetFrontmatterField(
+					entry.frontmatter,
+					{ L"install-bins", L"install_bins", L"install.bins" }));
+				install.os = SplitList(GetFrontmatterField(
+					entry.frontmatter,
+					{ L"install-os", L"install_os", L"install.os" }));
+
+				const auto extractRaw = GetFrontmatterField(
+					entry.frontmatter,
+					{ L"install-extract", L"install_extract", L"install.extract" });
+				if (!extractRaw.empty()) {
+					install.extract = ParseBoolField(extractRaw, false);
+				}
+
+				const auto stripRaw = GetFrontmatterField(
+					entry.frontmatter,
+					{ L"install-strip-components", L"install_strip_components", L"install.stripComponents" });
+				if (!stripRaw.empty()) {
+					try {
+						install.stripComponents = static_cast<std::uint32_t>(std::stoul(stripRaw));
+					}
+					catch (...) {
+						install.stripComponents.reset();
+					}
+				}
+
+				metadata.install.push_back(std::move(install));
+			}
+
+			return metadata;
+		}
+
+		SkillInvocationPolicySpec BuildNormalizedInvocationPolicy(
+			const SkillsCatalogEntry& entry) {
+			SkillInvocationPolicySpec policy;
+			const auto userInvocableRaw = GetFrontmatterField(
+				entry.frontmatter,
+				{ L"user-invocable", L"user_invocable", L"openclaw.user-invocable" });
+			if (!userInvocableRaw.empty()) {
+				policy.userInvocable = ParseBoolField(userInvocableRaw, true);
+			}
+
+			const auto disableModelInvocationRaw = GetFrontmatterField(
+				entry.frontmatter,
+				{ L"disable-model-invocation", L"disable_model_invocation", L"disablemodelinvocation" });
+			if (!disableModelInvocationRaw.empty()) {
+				policy.disableModelInvocation =
+					ParseBoolField(disableModelInvocationRaw, false);
+			}
+
+			return policy;
+		}
+
+		SkillExposureSpec BuildNormalizedExposurePolicy(
+			const SkillsCatalogEntry& entry,
+			const SkillInvocationPolicySpec& invocation) {
+			SkillExposureSpec exposure;
+			exposure.userInvocable = invocation.userInvocable;
+
+			const auto includeRegistryRaw = GetFrontmatterField(
+				entry.frontmatter,
+				{ L"include-runtime-registry", L"include_runtime_registry", L"exposure.includeInRuntimeRegistry" });
+			if (!includeRegistryRaw.empty()) {
+				exposure.includeInRuntimeRegistry =
+					ParseBoolField(includeRegistryRaw, true);
+			}
+
+			const auto includePromptRaw = GetFrontmatterField(
+				entry.frontmatter,
+				{ L"include-available-skills-prompt", L"include_available_skills_prompt", L"exposure.includeInAvailableSkillsPrompt" });
+			if (!includePromptRaw.empty()) {
+				exposure.includeInAvailableSkillsPrompt =
+					ParseBoolField(includePromptRaw, true);
+			}
+
+			return exposure;
+		}
+
 		std::vector<std::wstring> ParseEnvPathList(const std::wstring& raw) {
 			std::vector<std::wstring> values;
 			std::wstring current;
@@ -885,6 +1086,11 @@ namespace blazeclaw::core {
 					entry.skillName = frontmatter->name;
 					entry.description = frontmatter->description;
 					entry.validFrontmatter = true;
+					entry.metadata = BuildNormalizedSkillsMetadata(entry);
+					entry.invocation = BuildNormalizedInvocationPolicy(entry);
+					entry.exposure = BuildNormalizedExposurePolicy(
+						entry,
+						entry.invocation.value());
 				}
 				else {
 					if (loaderPolicy.strictFrontmatter) {
@@ -900,6 +1106,9 @@ namespace blazeclaw::core {
 					entry.description = L"";
 					entry.validFrontmatter = false;
 					entry.validationErrors = validationErrors;
+					entry.metadata.reset();
+					entry.invocation.reset();
+					entry.exposure.reset();
 					++snapshot.diagnostics.invalidFrontmatterFiles;
 				}
 

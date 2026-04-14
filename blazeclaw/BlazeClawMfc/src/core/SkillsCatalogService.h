@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../config/ConfigModels.h"
+#include "SkillsContracts.h"
 
 #include <filesystem>
 #include <map>
@@ -49,6 +50,9 @@ namespace blazeclaw::core {
 		bool validFrontmatter = false;
 		std::vector<std::wstring> validationErrors;
 		SkillFrontmatter frontmatter;
+		std::optional<SkillsMetadataSpec> metadata;
+		std::optional<SkillInvocationPolicySpec> invocation;
+		std::optional<SkillExposureSpec> exposure;
 	};
 
 	struct SkillsCatalogDiagnostics {
