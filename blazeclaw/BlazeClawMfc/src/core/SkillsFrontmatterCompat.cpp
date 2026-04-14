@@ -12,6 +12,18 @@ namespace blazeclaw::core {
 
 	namespace {
 
+		std::optional<std::wstring> ReadJsonStringCompat(
+			const nlohmann::json& value,
+			const char* key) {
+			if (!value.is_object() ||
+				!value.contains(key) ||
+				!value[key].is_string()) {
+				return std::nullopt;
+			}
+
+			return value[key].get<std::wstring>();
+		}
+
 		const std::wregex kBrewFormulaPattern(
 			L"^[A-Za-z0-9][A-Za-z0-9@+._/-]*$");
 		const std::wregex kGoModulePattern(
@@ -153,6 +165,154 @@ namespace blazeclaw::core {
 			return url;
 		}
 
+		std::optional<SkillsMetadataSpec> ResolveOpenClawMetadataFromManifestCompat(
+			const ParsedSkillFrontmatterCompat& frontmatter) {
+			const auto manifest = ResolveOpenClawManifestBlockCompat(
+				frontmatter.fields,
+				L"metadata");
+			if (!manifest.has_value()) {
+				return std::nullopt;
+			}
+
+			SkillsMetadataSpec metadata;
+			if (manifest->contains("always") && (*manifest)["always"].is_boolean()) {
+				metadata.always = (*manifest)["always"].get<bool>();
+			}
+
+			if (const auto skillKey = ReadJsonStringCompat(*manifest, "skillKey");
+				skillKey.has_value()) {
+				metadata.skillKey = skillKey.value();
+			}
+			if (const auto primaryEnv = ReadJsonStringCompat(*manifest, "primaryEnv");
+				primaryEnv.has_value()) {
+				metadata.primaryEnv = primaryEnv.value();
+			}
+			if (const auto emoji = ReadJsonStringCompat(*manifest, "emoji");
+				emoji.has_value()) {
+				metadata.emoji = emoji.value();
+			}
+			if (const auto homepage = ReadJsonStringCompat(*manifest, "homepage");
+				homepage.has_value()) {
+				metadata.homepage = homepage.value();
+			}
+
+			metadata.os = ResolveOpenClawManifestOsCompat(*manifest);
+			if (const auto requiresResult = ResolveOpenClawManifestRequiresCompat(*manifest);
+				requiresResult.has_value()) {
+				metadata.requirements.bins = requiresResult->bins;
+				metadata.requirements.anyBins = requiresResult->anyBins;
+				metadata.requirements.env = requiresResult->env;
+				metadata.requirements.config = requiresResult->config;
+			}
+
+			const auto installs = ResolveOpenClawManifestInstallCompat(*manifest);
+			for (const auto& installEntry : installs) {
+				const auto parsedBase = ParseOpenClawManifestInstallBaseCompat(
+					installEntry,
+					std::vector<std::wstring>{
+					L"brew",
+						L"node",
+						L"go",
+						L"uv",
+						L"download",
+				});
+				if (!parsedBase.has_value()) {
+					continue;
+				}
+
+				SkillInstallSpec install;
+				install.kind = parsedBase->kind;
+				ApplyOpenClawManifestInstallCommonFieldsCompat(
+					install.id,
+					install.label,
+					install.bins,
+					parsedBase.value());
+
+				if (installEntry.contains("os")) {
+					install.os = NormalizeStringListCompat(installEntry["os"]);
+				}
+
+				if (const auto formulaRaw = ReadJsonStringCompat(installEntry, "formula");
+					formulaRaw.has_value()) {
+					const auto formula = NormalizeSafeBrewFormulaCompat(formulaRaw.value());
+					if (formula.has_value()) {
+						install.formula = formula.value();
+					}
+				}
+				if (install.formula.empty()) {
+					if (const auto caskRaw = ReadJsonStringCompat(installEntry, "cask");
+						caskRaw.has_value()) {
+						const auto cask = NormalizeSafeBrewFormulaCompat(caskRaw.value());
+						if (cask.has_value()) {
+							install.formula = cask.value();
+						}
+					}
+				}
+
+				if (const auto packageRaw = ReadJsonStringCompat(installEntry, "package");
+					packageRaw.has_value()) {
+					if (ToLowerCompat(install.kind) == L"node") {
+						const auto npm = NormalizeSafeNpmSpecCompat(packageRaw.value());
+						if (npm.has_value()) {
+							install.package = npm.value();
+						}
+					}
+					else if (ToLowerCompat(install.kind) == L"uv") {
+						const auto uv = NormalizeSafeUvPackageCompat(packageRaw.value());
+						if (uv.has_value()) {
+							install.package = uv.value();
+						}
+					}
+				}
+
+				if (const auto moduleRaw = ReadJsonStringCompat(installEntry, "module");
+					moduleRaw.has_value()) {
+					const auto module = NormalizeSafeGoModuleCompat(moduleRaw.value());
+					if (module.has_value()) {
+						install.module = module.value();
+					}
+				}
+
+				if (const auto urlRaw = ReadJsonStringCompat(installEntry, "url");
+					urlRaw.has_value()) {
+					const auto url = NormalizeSafeDownloadUrlCompat(urlRaw.value());
+					if (url.has_value()) {
+						install.url = url.value();
+					}
+				}
+
+				if (const auto archive = ReadJsonStringCompat(installEntry, "archive");
+					archive.has_value()) {
+					install.archive = archive.value();
+				}
+				if (const auto targetDir = ReadJsonStringCompat(installEntry, "targetDir");
+					targetDir.has_value()) {
+					install.targetDir = targetDir.value();
+				}
+				if (installEntry.contains("extract") && installEntry["extract"].is_boolean()) {
+					install.extract = installEntry["extract"].get<bool>();
+				}
+				if (installEntry.contains("stripComponents") &&
+					installEntry["stripComponents"].is_number_unsigned()) {
+					install.stripComponents =
+						static_cast<std::uint32_t>(installEntry["stripComponents"].get<std::uint64_t>());
+				}
+
+				const std::wstring normalizedKind = ToLowerCompat(install.kind);
+				const bool validInstall =
+					(normalizedKind == L"brew" && !install.formula.empty()) ||
+					(normalizedKind == L"node" && !install.package.empty()) ||
+					(normalizedKind == L"go" && !install.module.empty()) ||
+					(normalizedKind == L"uv" && !install.package.empty()) ||
+					(normalizedKind == L"download" && !install.url.empty());
+				if (validInstall) {
+					metadata.install.push_back(std::move(install));
+				}
+			}
+
+			return metadata;
+		}
+
 	} // namespace
 
 	std::optional<ParsedSkillFrontmatterCompat> ParseSkillFrontmatterCompat(
@@ -219,6 +379,12 @@ namespace blazeclaw::core {
 
 	SkillsMetadataSpec ResolveOpenClawMetadataCompat(
 		const ParsedSkillFrontmatterCompat& frontmatter) {
+		if (const auto manifestMetadata =
+			ResolveOpenClawMetadataFromManifestCompat(frontmatter);
+			manifestMetadata.has_value()) {
+			return manifestMetadata.value();
+		}
+
 		SkillsMetadataSpec metadata;
 		metadata.skillKey = GetSkillFrontmatterFieldCompat(
 			frontmatter,

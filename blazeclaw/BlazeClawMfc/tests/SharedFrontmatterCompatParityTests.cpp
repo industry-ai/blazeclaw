@@ -73,3 +73,20 @@ TEST_CASE(
 	};
 	REQUIRE(GetFrontmatterStringCompat(fields, L"enabled") == L"true");
 }
+
+TEST_CASE(
+	"Shared frontmatter compat: resolves legacy blazeclaw manifest key",
+	"[shared][frontmatter][compat][manifest][legacy-key]") {
+	const std::map<std::wstring, std::wstring> frontmatter = {
+		{ L"metadata", L"{ blazeclaw: { skillKey: 'legacy-key', requires: { bins: ['git'] } } }" },
+	};
+
+	const auto manifest = ResolveOpenClawManifestBlockCompat(frontmatter);
+	REQUIRE(manifest.has_value());
+	REQUIRE(manifest->contains("skillKey"));
+	REQUIRE(manifest->at("skillKey").get<std::string>() == "legacy-key");
+
+	const auto requiresResult = ResolveOpenClawManifestRequiresCompat(manifest.value());
+	REQUIRE(requiresResult.has_value());
+	REQUIRE(requiresResult->bins == std::vector<std::wstring>{L"git"});
+}

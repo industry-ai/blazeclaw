@@ -126,3 +126,27 @@ TEST_CASE(
 	REQUIRE(ResolveSkillInstallPreferBrewCompat(parsed.value(), false));
 	REQUIRE(ResolveSkillInstallNodeManagerCompat(parsed.value(), L"npm") == L"yarn");
 }
+
+TEST_CASE(
+	"Skills frontmatter compat: metadata manifest helper routing",
+	"[skills][frontmatter][compat][shared-frontmatter]") {
+	const std::wstring content =
+		L"---\n"
+		L"name: shared-manifest\n"
+		L"description: shared manifest desc\n"
+		L"metadata: { openclaw: { skillKey: 'manifest-key', primaryEnv: 'MANIFEST_ENV', requires: { bins: ['git','node'] }, install: [{ kind: 'brew', formula: 'wget', bins: ['wget'] }] } }\n"
+		L"---\n";
+
+	std::vector<std::wstring> errors;
+	const auto parsed = ParseSkillFrontmatterCompat(content, errors);
+	REQUIRE(parsed.has_value());
+	REQUIRE(errors.empty());
+
+	const auto metadata = ResolveOpenClawMetadataCompat(parsed.value());
+	REQUIRE(metadata.skillKey == L"manifest-key");
+	REQUIRE(metadata.primaryEnv == L"MANIFEST_ENV");
+	REQUIRE(metadata.requirements.bins == std::vector<std::wstring>{L"git", L"node"});
+	REQUIRE(metadata.install.size() == 1);
+	REQUIRE(metadata.install.front().kind == L"brew");
+	REQUIRE(metadata.install.front().formula == L"wget");
+}
