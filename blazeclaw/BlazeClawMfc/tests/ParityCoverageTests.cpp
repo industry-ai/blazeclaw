@@ -186,6 +186,12 @@ TEST_CASE(
 	state.commandMissingToolDispatchCount = 7;
 	state.commandInvalidArgModeFallbackCount = 8;
 	state.commandSourceContributionCount = 9;
+	state.bundleCommandRootsScannedCount = 10;
+	state.bundleCommandFilesLoadedCount = 11;
+	state.bundleCommandFilesSkippedDisabledCount = 12;
+	state.bundleCommandFilesSkippedEmptyPromptCount = 13;
+	state.bundleCommandFilesSkippedInvalidNameCount = 14;
+	state.bundleCommandFilesRejectedUnsafeCount = 15;
 	state.scanWarnCount = 1;
 	host.SetSkillsCatalogState(state);
 
@@ -217,6 +223,24 @@ TEST_CASE(
 	REQUIRE(
 		statusResponse.payloadJson->find("\"commandSourceContributions\":9") !=
 		std::string::npos);
+	REQUIRE(
+		statusResponse.payloadJson->find("\"bundleCommandRootsScanned\":10") !=
+		std::string::npos);
+	REQUIRE(
+		statusResponse.payloadJson->find("\"bundleCommandFilesLoaded\":11") !=
+		std::string::npos);
+	REQUIRE(
+		statusResponse.payloadJson->find("\"bundleCommandFilesSkippedDisabled\":12") !=
+		std::string::npos);
+	REQUIRE(
+		statusResponse.payloadJson->find("\"bundleCommandFilesSkippedEmptyPrompt\":13") !=
+		std::string::npos);
+	REQUIRE(
+		statusResponse.payloadJson->find("\"bundleCommandFilesSkippedInvalidName\":14") !=
+		std::string::npos);
+	REQUIRE(
+		statusResponse.payloadJson->find("\"bundleCommandFilesRejectedUnsafe\":15") !=
+		std::string::npos);
 
 	const auto diagnosticsResponse = host.RouteRequest(
 		blazeclaw::gateway::protocol::RequestFrame{
@@ -247,10 +271,31 @@ TEST_CASE(
 		diagnosticsResponse.payloadJson->find("\"commandSourceContributions\":9") !=
 		std::string::npos);
 	REQUIRE(
+		diagnosticsResponse.payloadJson->find("\"bundleCommandRootsScanned\":10") !=
+		std::string::npos);
+	REQUIRE(
+		diagnosticsResponse.payloadJson->find("\"bundleCommandFilesLoaded\":11") !=
+		std::string::npos);
+	REQUIRE(
+		diagnosticsResponse.payloadJson->find("\"bundleCommandFilesSkippedDisabled\":12") !=
+		std::string::npos);
+	REQUIRE(
+		diagnosticsResponse.payloadJson->find("\"bundleCommandFilesSkippedEmptyPrompt\":13") !=
+		std::string::npos);
+	REQUIRE(
+		diagnosticsResponse.payloadJson->find("\"bundleCommandFilesSkippedInvalidName\":14") !=
+		std::string::npos);
+	REQUIRE(
+		diagnosticsResponse.payloadJson->find("\"bundleCommandFilesRejectedUnsafe\":15") !=
+		std::string::npos);
+	REQUIRE(
 		diagnosticsResponse.payloadJson->find("skills.local-loader.verified-open") !=
 		std::string::npos);
 	REQUIRE(
 		diagnosticsResponse.payloadJson->find("skills.command-specs") !=
+		std::string::npos);
+	REQUIRE(
+		diagnosticsResponse.payloadJson->find("plugins.bundle-commands") !=
 		std::string::npos);
 
 	host.Stop();

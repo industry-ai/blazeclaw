@@ -5479,6 +5479,18 @@ namespace blazeclaw::gateway {
 						std::to_string(state.commandInvalidArgModeFallbackCount) +
 						",\"commandSourceContributions\":" +
 						std::to_string(state.commandSourceContributionCount) +
+						",\"bundleCommandRootsScanned\":" +
+						std::to_string(state.bundleCommandRootsScannedCount) +
+						",\"bundleCommandFilesLoaded\":" +
+						std::to_string(state.bundleCommandFilesLoadedCount) +
+						",\"bundleCommandFilesSkippedDisabled\":" +
+						std::to_string(state.bundleCommandFilesSkippedDisabledCount) +
+						",\"bundleCommandFilesSkippedEmptyPrompt\":" +
+						std::to_string(state.bundleCommandFilesSkippedEmptyPromptCount) +
+						",\"bundleCommandFilesSkippedInvalidName\":" +
+						std::to_string(state.bundleCommandFilesSkippedInvalidNameCount) +
+						",\"bundleCommandFilesRejectedUnsafe\":" +
+						std::to_string(state.bundleCommandFilesRejectedUnsafeCount) +
 						",\"promptIncluded\":" +
 						std::to_string(state.promptIncludedCount) +
 						",\"promptChars\":" +
@@ -5985,6 +5997,15 @@ namespace blazeclaw::gateway {
 					hints.push_back("skills.command-specs");
 				}
 
+				if (state.bundleCommandRootsScannedCount > 0 ||
+					state.bundleCommandFilesLoadedCount > 0 ||
+					state.bundleCommandFilesSkippedDisabledCount > 0 ||
+					state.bundleCommandFilesSkippedEmptyPromptCount > 0 ||
+					state.bundleCommandFilesSkippedInvalidNameCount > 0 ||
+					state.bundleCommandFilesRejectedUnsafeCount > 0) {
+					hints.push_back("plugins.bundle-commands");
+				}
+
 				if (!state.sandboxSyncOk) {
 					hints.push_back("skills.sandbox.status");
 				}
@@ -6030,6 +6051,18 @@ namespace blazeclaw::gateway {
 						std::to_string(state.commandInvalidArgModeFallbackCount) +
 						",\"commandSourceContributions\":" +
 						std::to_string(state.commandSourceContributionCount) +
+					 ",\"bundleCommandRootsScanned\":" +
+						std::to_string(state.bundleCommandRootsScannedCount) +
+						",\"bundleCommandFilesLoaded\":" +
+						std::to_string(state.bundleCommandFilesLoadedCount) +
+						",\"bundleCommandFilesSkippedDisabled\":" +
+						std::to_string(state.bundleCommandFilesSkippedDisabledCount) +
+						",\"bundleCommandFilesSkippedEmptyPrompt\":" +
+						std::to_string(state.bundleCommandFilesSkippedEmptyPromptCount) +
+						",\"bundleCommandFilesSkippedInvalidName\":" +
+						std::to_string(state.bundleCommandFilesSkippedInvalidNameCount) +
+						",\"bundleCommandFilesRejectedUnsafe\":" +
+						std::to_string(state.bundleCommandFilesRejectedUnsafeCount) +
 						",\"hints\":" +
 						hintsJson +
 						"}",

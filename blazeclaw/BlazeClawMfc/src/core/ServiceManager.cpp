@@ -2044,9 +2044,22 @@ namespace blazeclaw::core {
 	class ServiceManager::ExtensionBundleCommandSourceAdapter final
 		: public extensions::IRuntimeSkillCommandSourceAdapter {
 	public:
+		struct Diagnostics {
+			std::size_t rootsScanned = 0;
+			std::size_t filesLoaded = 0;
+			std::size_t filesSkippedDisabled = 0;
+			std::size_t filesSkippedEmptyPrompt = 0;
+			std::size_t filesSkippedInvalidName = 0;
+			std::size_t filesRejectedUnsafe = 0;
+		};
+
 		explicit ExtensionBundleCommandSourceAdapter(
 			const std::filesystem::path& extensionsRoot)
 			: m_extensionsRoot(extensionsRoot) {}
+
+		[[nodiscard]] const Diagnostics& LastDiagnostics() const {
+			return m_lastDiagnostics;
+		}
 
 		[[nodiscard]] extensions::RuntimeCapabilityDescriptor Describe() const override {
 			return extensions::RuntimeCapabilityDescriptor{
@@ -2059,6 +2072,7 @@ namespace blazeclaw::core {
 
 		[[nodiscard]] std::vector<SkillsCommandSpec> BuildAdditionalSkillsCommands(
 			const extensions::RuntimeSkillCommandSourceAdapterContext&) const override {
+			m_lastDiagnostics = Diagnostics{};
 			std::vector<SkillsCommandSpec> commands;
 			if (m_extensionsRoot.empty()) {
 				return commands;
@@ -2081,6 +2095,7 @@ namespace blazeclaw::core {
 
 				for (const auto& relativeRoot :
 					ResolveBundleCommandRootDirs(extensionEntry.path())) {
+					++m_lastDiagnostics.rootsScanned;
 					const auto commandsRoot = extensionEntry.path() / relativeRoot;
 					std::error_code commandsEc;
 					if (!std::filesystem::is_directory(commandsRoot, commandsEc) ||
@@ -2108,6 +2123,7 @@ namespace blazeclaw::core {
 							extensionEntry.path(),
 							2 * 1024 * 1024);
 						if (!rawContent.has_value()) {
+							++m_lastDiagnostics.filesRejectedUnsafe;
 							continue;
 						}
 						const std::wstring raw = rawContent.value();
@@ -2115,10 +2131,12 @@ namespace blazeclaw::core {
 							raw,
 							L"disable-model-invocation",
 							false)) {
+							++m_lastDiagnostics.filesSkippedDisabled;
 							continue;
 						}
 						const std::wstring promptTemplate = StripBundleFrontmatter(raw);
 						if (promptTemplate.empty()) {
+							++m_lastDiagnostics.filesSkippedEmptyPrompt;
 							continue;
 						}
 
@@ -2143,6 +2161,7 @@ namespace blazeclaw::core {
 						const std::wstring rawName =
 							configuredName.empty() ? defaultName : configuredName;
 						if (Trim(rawName).empty()) {
+							++m_lastDiagnostics.filesSkippedInvalidName;
 							continue;
 						}
 
@@ -2173,6 +2192,7 @@ namespace blazeclaw::core {
 							std::filesystem::relative(commandFile.path(), m_extensionsRoot).string());
 
 						commands.push_back(std::move(spec));
+						++m_lastDiagnostics.filesLoaded;
 					}
 				}
 			}
@@ -2182,6 +2202,7 @@ namespace blazeclaw::core {
 
 	private:
 		std::filesystem::path m_extensionsRoot;
+		mutable Diagnostics m_lastDiagnostics;
 	};
 
 	ServiceManager::ServiceManager() {
@@ -2294,7 +2315,34 @@ namespace blazeclaw::core {
 
 	void ServiceManager::RefreshGatewaySkillsStateProjection()
 	{
+		if (m_extensionBundleCommandSourceAdapter) {
+			const auto& diagnostics =
+				m_extensionBundleCommandSourceAdapter->LastDiagnostics();
+			m_bundleCommandRootsScannedCount = diagnostics.rootsScanned;
+			m_bundleCommandFilesLoadedCount = diagnostics.filesLoaded;
+			m_bundleCommandFilesSkippedDisabledCount =
+				diagnostics.filesSkippedDisabled;
+			m_bundleCommandFilesSkippedEmptyPromptCount =
+				diagnostics.filesSkippedEmptyPrompt;
+			m_bundleCommandFilesSkippedInvalidNameCount =
+				diagnostics.filesSkippedInvalidName;
+			m_bundleCommandFilesRejectedUnsafeCount =
+				diagnostics.filesRejectedUnsafe;
+		}
+
 		m_gatewaySkillsStateProjection = BuildGatewaySkillsState();
+		m_gatewaySkillsStateProjection.bundleCommandRootsScannedCount =
+			m_bundleCommandRootsScannedCount;
+		m_gatewaySkillsStateProjection.bundleCommandFilesLoadedCount =
+			m_bundleCommandFilesLoadedCount;
+		m_gatewaySkillsStateProjection.bundleCommandFilesSkippedDisabledCount =
+			m_bundleCommandFilesSkippedDisabledCount;
+		m_gatewaySkillsStateProjection.bundleCommandFilesSkippedEmptyPromptCount =
+			m_bundleCommandFilesSkippedEmptyPromptCount;
+		m_gatewaySkillsStateProjection.bundleCommandFilesSkippedInvalidNameCount =
+			m_bundleCommandFilesSkippedInvalidNameCount;
+		m_gatewaySkillsStateProjection.bundleCommandFilesRejectedUnsafeCount =
+			m_bundleCommandFilesRejectedUnsafeCount;
 	}
 
 	void ServiceManager::PublishGatewaySkillsStateProjection()

@@ -373,6 +373,12 @@ namespace blazeclaw::core {
 		class ExtensionBundleCommandSourceAdapter;
 		std::unique_ptr<ExtensionBundleCommandSourceAdapter>
 			m_extensionBundleCommandSourceAdapter;
+		std::size_t m_bundleCommandRootsScannedCount = 0;
+		std::size_t m_bundleCommandFilesLoadedCount = 0;
+		std::size_t m_bundleCommandFilesSkippedDisabledCount = 0;
+		std::size_t m_bundleCommandFilesSkippedEmptyPromptCount = 0;
+		std::size_t m_bundleCommandFilesSkippedInvalidNameCount = 0;
+		std::size_t m_bundleCommandFilesRejectedUnsafeCount = 0;
 		SkillSecurityScanSnapshot m_skillSecurityScan;
 		ConfigSchemaService m_configSchemaService;
 		SkillsWatchService m_skillsWatchService;
