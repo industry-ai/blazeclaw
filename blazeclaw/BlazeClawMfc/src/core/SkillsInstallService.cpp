@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "SkillsInstallService.h"
 #include "SkillsFacade.h"
+#include "SkillsFrontmatterCompat.h"
 
 #include <algorithm>
 #include <cwctype>
@@ -61,19 +62,6 @@ namespace blazeclaw::core {
 			return fallback;
 		}
 
-		std::wstring GetFrontmatterField(
-			const SkillFrontmatter& frontmatter,
-			std::initializer_list<const wchar_t*> keys) {
-			for (const auto* key : keys) {
-				const auto it = frontmatter.fields.find(ToLower(key));
-				if (it != frontmatter.fields.end()) {
-					return it->second;
-				}
-			}
-
-			return {};
-		}
-
 		std::wstring ResolveNodeInstallCommand(
 			const std::wstring& packageName,
 			const std::wstring& nodeManager) {
@@ -127,61 +115,45 @@ namespace blazeclaw::core {
 
 			SkillsInstallPlanEntry plan;
 			plan.skillName = entry.skillName;
+			const ParsedSkillFrontmatterCompat frontmatterCompat{
+				.name = entry.frontmatter.name,
+				.description = entry.frontmatter.description,
+				.fields = entry.frontmatter.fields,
+			};
 			const SkillInstallSpec* installSpec = ResolveInstallSpec(entry);
 
 			plan.kind = installSpec == nullptr
-				? ToLower(Trim(GetFrontmatterField(
-					entry.frontmatter,
-					{ L"openclaw.install.kind", L"install.kind" })))
+				? ResolveSkillInstallKindCompat(frontmatterCompat)
 				: ToLower(Trim(installSpec->kind));
 			if (plan.kind.empty()) {
 				continue;
 			}
 
 			plan.label = installSpec == nullptr
-				? Trim(GetFrontmatterField(
-					entry.frontmatter,
-					{ L"openclaw.install.label", L"install.label" }))
+				? ResolveSkillInstallLabelCompat(frontmatterCompat)
 				: Trim(installSpec->label);
 
 			const std::wstring formula = installSpec == nullptr
-				? Trim(GetFrontmatterField(
-					entry.frontmatter,
-					{ L"openclaw.install.formula", L"install.formula" }))
+				? ResolveSkillInstallFormulaCompat(frontmatterCompat)
 				: Trim(installSpec->formula);
 			const std::wstring packageName = installSpec == nullptr
-				? Trim(GetFrontmatterField(
-					entry.frontmatter,
-					{ L"openclaw.install.package", L"install.package" }))
+				? ResolveSkillInstallPackageCompat(frontmatterCompat, plan.kind)
 				: Trim(installSpec->package);
 			const std::wstring moduleName = installSpec == nullptr
-				? Trim(GetFrontmatterField(
-					entry.frontmatter,
-					{ L"openclaw.install.module", L"install.module" }))
+				? ResolveSkillInstallModuleCompat(frontmatterCompat)
 				: Trim(installSpec->module);
 			const std::wstring downloadUrl = installSpec == nullptr
-				? Trim(GetFrontmatterField(
-					entry.frontmatter,
-					{ L"openclaw.install.url", L"install.url" }))
+				? ResolveSkillInstallUrlCompat(frontmatterCompat)
 				: Trim(installSpec->url);
 
-			const bool installPreferBrew = ParseBoolField(
-				GetFrontmatterField(
-					entry.frontmatter,
-					{ L"openclaw.install.preferbrew", L"install.preferbrew" }),
+			const bool installPreferBrew = ResolveSkillInstallPreferBrewCompat(
+				frontmatterCompat,
 				installPreferences.preferBrew);
 
 			const std::wstring installNodeManager = [&]() {
-				const std::wstring frontmatterManager = ToLower(Trim(GetFrontmatterField(
-					entry.frontmatter,
-					{ L"openclaw.install.nodemanager", L"install.nodemanager" })));
-				if (frontmatterManager == L"pnpm" ||
-					frontmatterManager == L"yarn" ||
-					frontmatterManager == L"bun" ||
-					frontmatterManager == L"npm") {
-					return frontmatterManager;
-				}
-				return installPreferences.nodeManager;
+				return ResolveSkillInstallNodeManagerCompat(
+					frontmatterCompat,
+					installPreferences.nodeManager);
 				}();
 
 			const bool hasBrewFormula = !formula.empty();

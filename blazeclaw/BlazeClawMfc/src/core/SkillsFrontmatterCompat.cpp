@@ -474,6 +474,105 @@ namespace blazeclaw::core {
 		return exposure;
 	}
 
+	std::wstring ResolveSkillInstallKindCompat(
+		const ParsedSkillFrontmatterCompat& frontmatter) {
+		return ToLowerCompat(TrimCompat(GetSkillFrontmatterFieldCompat(
+			frontmatter,
+			{ L"openclaw.install.kind", L"install.kind" })));
+	}
+
+	std::wstring ResolveSkillInstallLabelCompat(
+		const ParsedSkillFrontmatterCompat& frontmatter) {
+		return TrimCompat(GetSkillFrontmatterFieldCompat(
+			frontmatter,
+			{ L"openclaw.install.label", L"install.label" }));
+	}
+
+	std::wstring ResolveSkillInstallFormulaCompat(
+		const ParsedSkillFrontmatterCompat& frontmatter) {
+		const auto formula = NormalizeSafeBrewFormulaCompat(
+			GetSkillFrontmatterFieldCompat(
+				frontmatter,
+				{ L"openclaw.install.formula", L"install.formula" }));
+		if (formula.has_value()) {
+			return formula.value();
+		}
+
+		const auto cask = NormalizeSafeBrewFormulaCompat(
+			GetSkillFrontmatterFieldCompat(
+				frontmatter,
+				{ L"openclaw.install.cask", L"install.cask" }));
+		if (cask.has_value()) {
+			return cask.value();
+		}
+
+		return {};
+	}
+
+	std::wstring ResolveSkillInstallPackageCompat(
+		const ParsedSkillFrontmatterCompat& frontmatter,
+		const std::wstring& installKind) {
+		const auto package = GetSkillFrontmatterFieldCompat(
+			frontmatter,
+			{ L"openclaw.install.package", L"install.package" });
+		const auto kind = ToLowerCompat(TrimCompat(installKind));
+		if (kind == L"node") {
+			const auto npm = NormalizeSafeNpmSpecCompat(package);
+			return npm.has_value() ? npm.value() : std::wstring{};
+		}
+
+		if (kind == L"uv") {
+			const auto uv = NormalizeSafeUvPackageCompat(package);
+			return uv.has_value() ? uv.value() : std::wstring{};
+		}
+
+		return {};
+	}
+
+	std::wstring ResolveSkillInstallModuleCompat(
+		const ParsedSkillFrontmatterCompat& frontmatter) {
+		const auto module = NormalizeSafeGoModuleCompat(
+			GetSkillFrontmatterFieldCompat(
+				frontmatter,
+				{ L"openclaw.install.module", L"install.module" }));
+		return module.has_value() ? module.value() : std::wstring{};
+	}
+
+	std::wstring ResolveSkillInstallUrlCompat(
+		const ParsedSkillFrontmatterCompat& frontmatter) {
+		const auto url = NormalizeSafeDownloadUrlCompat(
+			GetSkillFrontmatterFieldCompat(
+				frontmatter,
+				{ L"openclaw.install.url", L"install.url" }));
+		return url.has_value() ? url.value() : std::wstring{};
+	}
+
+	bool ResolveSkillInstallPreferBrewCompat(
+		const ParsedSkillFrontmatterCompat& frontmatter,
+		const bool fallback) {
+		return ParseBoolFieldCompat(
+			GetSkillFrontmatterFieldCompat(
+				frontmatter,
+				{ L"openclaw.install.preferbrew", L"install.preferbrew" }),
+			fallback);
+	}
+
+	std::wstring ResolveSkillInstallNodeManagerCompat(
+		const ParsedSkillFrontmatterCompat& frontmatter,
+		const std::wstring& fallback) {
+		const std::wstring manager = ToLowerCompat(TrimCompat(GetSkillFrontmatterFieldCompat(
+			frontmatter,
+			{ L"openclaw.install.nodemanager", L"install.nodemanager" })));
+		if (manager == L"pnpm" ||
+			manager == L"yarn" ||
+			manager == L"bun" ||
+			manager == L"npm") {
+			return manager;
+		}
+
+		return fallback;
+	}
+
 	std::wstring ResolveSkillKeyCompat(
 		const SkillsMetadataSpec* metadata,
 		const std::wstring& skillName) {

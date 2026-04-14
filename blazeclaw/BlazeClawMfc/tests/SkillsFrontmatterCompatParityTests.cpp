@@ -5,6 +5,12 @@
 using blazeclaw::core::ParseSkillFrontmatterCompat;
 using blazeclaw::core::ResolveOpenClawMetadataCompat;
 using blazeclaw::core::ResolveSkillExposurePolicyCompat;
+using blazeclaw::core::ResolveSkillInstallFormulaCompat;
+using blazeclaw::core::ResolveSkillInstallKindCompat;
+using blazeclaw::core::ResolveSkillInstallNodeManagerCompat;
+using blazeclaw::core::ResolveSkillInstallPackageCompat;
+using blazeclaw::core::ResolveSkillInstallPreferBrewCompat;
+using blazeclaw::core::ResolveSkillInstallUrlCompat;
 using blazeclaw::core::ResolveSkillInvocationPolicyCompat;
 using blazeclaw::core::ResolveSkillKeyCompat;
 
@@ -84,4 +90,39 @@ TEST_CASE(
 
 	const std::wstring fallbackKey = ResolveSkillKeyCompat(&metadata, L"safety");
 	REQUIRE(fallbackKey == L"safety");
+}
+
+TEST_CASE(
+	"Skills frontmatter compat: install fallback helper routing",
+	"[skills][frontmatter][compat][routing]") {
+	const std::wstring content =
+		L"---\n"
+		L"name: install-routing\n"
+		L"description: install routing desc\n"
+		L"openclaw.install.kind: node\n"
+		L"openclaw.install.package: @scope/tool\n"
+		L"openclaw.install.url: javascript:alert(1)\n"
+		L"openclaw.install.formula: wget\n"
+		L"openclaw.install.preferbrew: true\n"
+		L"openclaw.install.nodemanager: yarn\n"
+		L"---\n";
+
+	std::vector<std::wstring> errors;
+	const auto parsed = ParseSkillFrontmatterCompat(content, errors);
+	REQUIRE(parsed.has_value());
+
+	const auto kind = ResolveSkillInstallKindCompat(parsed.value());
+	REQUIRE(kind == L"node");
+
+	const auto package = ResolveSkillInstallPackageCompat(parsed.value(), kind);
+	REQUIRE(package == L"@scope/tool");
+
+	const auto formula = ResolveSkillInstallFormulaCompat(parsed.value());
+	REQUIRE(formula == L"wget");
+
+	const auto url = ResolveSkillInstallUrlCompat(parsed.value());
+	REQUIRE(url.empty());
+
+	REQUIRE(ResolveSkillInstallPreferBrewCompat(parsed.value(), false));
+	REQUIRE(ResolveSkillInstallNodeManagerCompat(parsed.value(), L"npm") == L"yarn");
 }

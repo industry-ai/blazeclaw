@@ -35,6 +35,33 @@ namespace blazeclaw::core {
 		const ParsedSkillFrontmatterCompat& frontmatter,
 		const SkillInvocationPolicySpec& invocation);
 
+	[[nodiscard]] std::wstring ResolveSkillInstallKindCompat(
+		const ParsedSkillFrontmatterCompat& frontmatter);
+
+	[[nodiscard]] std::wstring ResolveSkillInstallLabelCompat(
+		const ParsedSkillFrontmatterCompat& frontmatter);
+
+	[[nodiscard]] std::wstring ResolveSkillInstallFormulaCompat(
+		const ParsedSkillFrontmatterCompat& frontmatter);
+
+	[[nodiscard]] std::wstring ResolveSkillInstallPackageCompat(
+		const ParsedSkillFrontmatterCompat& frontmatter,
+		const std::wstring& installKind);
+
+	[[nodiscard]] std::wstring ResolveSkillInstallModuleCompat(
+		const ParsedSkillFrontmatterCompat& frontmatter);
+
+	[[nodiscard]] std::wstring ResolveSkillInstallUrlCompat(
+		const ParsedSkillFrontmatterCompat& frontmatter);
+
+	[[nodiscard]] bool ResolveSkillInstallPreferBrewCompat(
+		const ParsedSkillFrontmatterCompat& frontmatter,
+		bool fallback);
+
+	[[nodiscard]] std::wstring ResolveSkillInstallNodeManagerCompat(
+		const ParsedSkillFrontmatterCompat& frontmatter,
+		const std::wstring& fallback);
+
 	[[nodiscard]] std::wstring ResolveSkillKeyCompat(
 		const SkillsMetadataSpec* metadata,
 		const std::wstring& skillName);
