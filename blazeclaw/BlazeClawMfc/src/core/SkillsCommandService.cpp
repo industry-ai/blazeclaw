@@ -192,34 +192,39 @@ namespace blazeclaw::core {
 				catalogEntry.frontmatter,
 				{ L"command-dispatch", L"command_dispatch" })));
 			if (dispatchType == L"tool") {
-				spec.dispatch.enabled = true;
-				spec.dispatch.kind = L"tool";
-				spec.dispatch.toolName = Trim(GetFrontmatterField(
+				const auto toolName = Trim(GetFrontmatterField(
 					catalogEntry.frontmatter,
 					{ L"command-tool", L"command_tool" }));
-				spec.dispatch.argMode = Trim(GetFrontmatterField(
-					catalogEntry.frontmatter,
-					{ L"command-arg-mode", L"command_arg_mode" }));
-				if (spec.dispatch.argMode.empty()) {
-					spec.dispatch.argMode = L"raw";
-				}
+				if (!toolName.empty()) {
+					spec.dispatch.enabled = true;
+					spec.dispatch.kind = L"tool";
+					spec.dispatch.toolName = toolName;
 
-				spec.dispatch.argSchema = Trim(GetFrontmatterField(
-					catalogEntry.frontmatter,
-					{ L"command-arg-schema", L"command_arg_schema" }));
-				spec.dispatch.resultSchema = Trim(GetFrontmatterField(
-					catalogEntry.frontmatter,
-					{ L"command-result-schema", L"command_result_schema" }));
-				spec.dispatch.idempotencyHint = Trim(GetFrontmatterField(
-					catalogEntry.frontmatter,
-					{ L"command-idempotency-hint", L"command_idempotency_hint" }));
-				spec.dispatch.retryPolicyHint = Trim(GetFrontmatterField(
-					catalogEntry.frontmatter,
-					{ L"command-retry-policy-hint", L"command_retry_policy_hint" }));
-				spec.dispatch.requiresApproval = ToLower(Trim(GetFrontmatterField(
-					catalogEntry.frontmatter,
-					{ L"command-requires-approval", L"command_requires_approval" })))
-					== L"true";
+					const auto argMode = ToLower(Trim(GetFrontmatterField(
+						catalogEntry.frontmatter,
+						{ L"command-arg-mode", L"command_arg_mode" })));
+					spec.dispatch.argMode =
+						(argMode.empty() || argMode == L"raw")
+						? L"raw"
+						: L"raw";
+
+					spec.dispatch.argSchema = Trim(GetFrontmatterField(
+						catalogEntry.frontmatter,
+						{ L"command-arg-schema", L"command_arg_schema" }));
+					spec.dispatch.resultSchema = Trim(GetFrontmatterField(
+						catalogEntry.frontmatter,
+						{ L"command-result-schema", L"command_result_schema" }));
+					spec.dispatch.idempotencyHint = Trim(GetFrontmatterField(
+						catalogEntry.frontmatter,
+						{ L"command-idempotency-hint", L"command_idempotency_hint" }));
+					spec.dispatch.retryPolicyHint = Trim(GetFrontmatterField(
+						catalogEntry.frontmatter,
+						{ L"command-retry-policy-hint", L"command_retry_policy_hint" }));
+					spec.dispatch.requiresApproval = ToLower(Trim(GetFrontmatterField(
+						catalogEntry.frontmatter,
+						{ L"command-requires-approval", L"command_requires_approval" })))
+						== L"true";
+				}
 			}
 
 			spec.promptTemplate = Trim(GetFrontmatterField(
@@ -420,6 +425,32 @@ namespace blazeclaw::core {
 			});
 		if (!hasPromptTemplateMetadata) {
 			outError = L"S3 commands fixture failed: expected command prompt template/source metadata.";
+			return false;
+		}
+
+		const auto missingToolDispatch = std::find_if(
+			snapshot.commands.begin(),
+			snapshot.commands.end(),
+			[](const SkillsCommandSpec& item) {
+				return item.skillName == L"tool-dispatch-missing-tool";
+			});
+		if (missingToolDispatch == snapshot.commands.end() ||
+			missingToolDispatch->dispatch.enabled) {
+			outError = L"S3 commands fixture failed: expected missing command-tool to disable dispatch.";
+			return false;
+		}
+
+		const auto invalidArgModeDispatch = std::find_if(
+			snapshot.commands.begin(),
+			snapshot.commands.end(),
+			[](const SkillsCommandSpec& item) {
+				return item.skillName == L"tool-dispatch-invalid-arg-mode";
+			});
+		if (invalidArgModeDispatch == snapshot.commands.end() ||
+			!invalidArgModeDispatch->dispatch.enabled ||
+			invalidArgModeDispatch->dispatch.toolName != L"tool.invalid-arg-mode" ||
+			invalidArgModeDispatch->dispatch.argMode != L"raw") {
+			outError = L"S3 commands fixture failed: expected invalid command-arg-mode fallback to raw.";
 			return false;
 		}
 
