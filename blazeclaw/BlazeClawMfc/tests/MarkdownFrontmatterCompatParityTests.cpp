@@ -45,6 +45,42 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Markdown frontmatter compat: falls back to line parser when yaml-like parse is invalid",
+	"[markdown][frontmatter][compat][fallback]") {
+	const std::wstring content =
+		L"---\n"
+		L"name: sample\n"
+		L"description: sample desc\n"
+		L"raw: value:with:colon\n"
+		L"invalid_line_without_colon\n"
+		L"---\n";
+
+	const auto parsed = ParseMarkdownFrontmatterBlockCompat(content);
+	REQUIRE(parsed.hasFrontmatterStart);
+	REQUIRE(parsed.hasFrontmatterEnd);
+	REQUIRE(parsed.fields.contains(L"raw"));
+	REQUIRE(parsed.fields.at(L"raw") == L"value:with:colon");
+}
+
+TEST_CASE(
+	"Markdown frontmatter compat: parses yaml block scalar indicator",
+	"[markdown][frontmatter][compat][yaml-indicator]") {
+	const std::wstring content =
+		L"---\n"
+		L"name: sample\n"
+		L"notes: |\n"
+		L"  line one\n"
+		L"  line two\n"
+		L"description: done\n"
+		L"---\n";
+
+	const auto parsed = ParseMarkdownFrontmatterBlockCompat(content);
+	REQUIRE(parsed.fields.contains(L"notes"));
+	REQUIRE(parsed.fields.at(L"notes").find(L"line one") != std::wstring::npos);
+	REQUIRE(parsed.fields.at(L"notes").find(L"line two") != std::wstring::npos);
+}
+
+TEST_CASE(
 	"Markdown frontmatter compat: structured yaml merge prefers inline colon value",
 	"[markdown][frontmatter][compat][merge]") {
 	std::map<std::wstring, ParsedMarkdownFrontmatterLineEntryCompat> lineParsed;

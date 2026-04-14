@@ -72,6 +72,19 @@ namespace blazeclaw::core {
 			return std::regex_match(TrimFrontmatterCompat(value), pattern);
 		}
 
+		bool IsLineFrontmatterKeyCompat(const std::wstring& key) {
+			if (key.empty()) {
+				return false;
+			}
+			for (const wchar_t ch : key) {
+				if (std::iswalnum(ch) != 0 || ch == L'_' || ch == L'-') {
+					continue;
+				}
+				return false;
+			}
+			return true;
+		}
+
 		bool ShouldPreferInlineLineValueCompat(
 			const ParsedMarkdownFrontmatterLineEntryCompat& lineEntry,
 			const ParsedMarkdownFrontmatterYamlValueCompat& yamlValue) {
@@ -193,14 +206,17 @@ namespace blazeclaw::core {
 			const auto lines = SplitLinesFrontmatterCompat(block);
 			for (std::size_t i = 0; i < lines.size(); ++i) {
 				const std::wstring line = lines[i];
+				const std::wstring trimmedLine = TrimFrontmatterCompat(line);
+				if (trimmedLine.empty() || trimmedLine.starts_with(L"#")) {
+					continue;
+				}
 				const auto colonPos = line.find(L':');
 				if (colonPos == std::wstring::npos) {
 					continue;
 				}
 
-				const std::wstring key = ToLowerFrontmatterCompat(
-					TrimFrontmatterCompat(line.substr(0, colonPos)));
-				if (key.empty()) {
+				const std::wstring key = TrimFrontmatterCompat(line.substr(0, colonPos));
+				if (!IsLineFrontmatterKeyCompat(key)) {
 					continue;
 				}
 
@@ -256,14 +272,55 @@ namespace blazeclaw::core {
 			ParseYamlFrontmatterCompat(const std::wstring& block) {
 			std::map<std::wstring, ParsedMarkdownFrontmatterYamlValueCompat> result;
 			const auto lines = SplitLinesFrontmatterCompat(block);
-			for (const auto& line : lines) {
+			for (std::size_t i = 0; i < lines.size(); ++i) {
+				const auto& line = lines[i];
+				const std::wstring trimmedLine = TrimFrontmatterCompat(line);
+				if (trimmedLine.empty() || trimmedLine.starts_with(L"#")) {
+					continue;
+				}
+				if (!line.empty() && (line.starts_with(L" ") || line.starts_with(L"\t"))) {
+					continue;
+				}
+
 				const auto colonPos = line.find(L':');
 				if (colonPos == std::wstring::npos) {
-					continue;
+					return std::nullopt;
 				}
 
 				const std::wstring key = TrimFrontmatterCompat(line.substr(0, colonPos));
 				if (key.empty()) {
+					return std::nullopt;
+				}
+
+				const std::wstring valueRaw = TrimFrontmatterCompat(line.substr(colonPos + 1));
+				if (IsYamlBlockScalarIndicatorCompat(valueRaw)) {
+					std::vector<std::wstring> valueLines;
+					std::size_t j = i + 1;
+					for (; j < lines.size(); ++j) {
+						const std::wstring& next = lines[j];
+						if (!next.empty() &&
+							!next.starts_with(L" ") &&
+							!next.starts_with(L"\t")) {
+							break;
+						}
+						valueLines.push_back(next);
+					}
+
+					std::wstring combined;
+					for (std::size_t k = 0; k < valueLines.size(); ++k) {
+						if (k > 0) {
+							combined += L"\n";
+						}
+						combined += valueLines[k];
+					}
+					const std::wstring scalarValue = TrimFrontmatterCompat(combined);
+					if (!scalarValue.empty()) {
+						result[key] = ParsedMarkdownFrontmatterYamlValueCompat{
+							.value = scalarValue,
+							.kind = ParsedMarkdownFrontmatterYamlValueCompat::Kind::Scalar,
+						};
+					}
+					i = j > 0 ? j - 1 : i;
 					continue;
 				}
 
@@ -292,17 +349,17 @@ namespace blazeclaw::core {
 		}
 
 		for (const auto& [key, yamlValue] : yamlParsed.value()) {
-			const std::wstring normalizedKey = ToLowerFrontmatterCompat(TrimFrontmatterCompat(key));
-			if (normalizedKey.empty()) {
+			const std::wstring yamlKey = TrimFrontmatterCompat(key);
+			if (yamlKey.empty()) {
 				continue;
 			}
-			merged[normalizedKey] = yamlValue.value;
-			const auto lineIt = lineParsed.find(normalizedKey);
+			merged[yamlKey] = yamlValue.value;
+			const auto lineIt = lineParsed.find(yamlKey);
 			if (lineIt == lineParsed.end()) {
 				continue;
 			}
 			if (ShouldPreferInlineLineValueCompat(lineIt->second, yamlValue)) {
-				merged[normalizedKey] = lineIt->second.value;
+				merged[yamlKey] = lineIt->second.value;
 			}
 		}
 
