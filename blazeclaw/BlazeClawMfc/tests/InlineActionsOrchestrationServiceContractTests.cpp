@@ -84,3 +84,28 @@ TEST_CASE(
 		std::string::npos);
 	REQUIRE(source.find("ExtractInlineToolResultText(") != std::string::npos);
 }
+
+TEST_CASE(
+	"Gateway inline-actions contract: abort-cutoff and skip-when-config-empty seams are wired",
+	"[inline-actions][contract][gateway][step5-6]") {
+	const auto stagePath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"gateway" /
+		"ChatRunStages.cpp";
+	const std::string stageSource = ReadTextFile(stagePath);
+
+	REQUIRE(stageSource.find("skipWhenConfigEmpty") != std::string::npos);
+	REQUIRE(stageSource.find("configEmpty") != std::string::npos);
+	REQUIRE(stageSource.find("abortCutoffTimestampMs") != std::string::npos);
+	REQUIRE(stageSource.find("inboundTimestampMs") != std::string::npos);
+	REQUIRE(stageSource.find("abort_cutoff_skip") != std::string::npos);
+	REQUIRE(stageSource.find("skip_when_config_empty") != std::string::npos);
+
+	const auto runtimeHandlersPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"gateway" /
+		"GatewayHost.Handlers.Runtime.cpp";
+	const std::string runtimeHandlersSource = ReadTextFile(runtimeHandlersPath);
+	REQUIRE(runtimeHandlersSource.find("gateway.chat.inline.skip") !=
+		std::string::npos);
+}

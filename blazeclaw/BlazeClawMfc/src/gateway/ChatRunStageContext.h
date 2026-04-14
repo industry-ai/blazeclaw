@@ -48,6 +48,17 @@ namespace blazeclaw::gateway {
 		std::vector<std::string> attachmentMimeTypes;
 		bool preferChineseResponse = false;
 		std::string runtimeMessage;
+		std::string channelId;
+		std::string from;
+		std::string to;
+		bool skipWhenConfigEmpty = false;
+		bool configEmpty = false;
+		bool isStopLikeInbound = false;
+		std::uint64_t abortCutoffTimestampMs = 0;
+		std::uint64_t inboundTimestampMs = 0;
+		bool skippedByInlinePolicy = false;
+		std::string skippedReasonCode;
+		std::optional<std::string> responsePayloadJson;
 		std::uint64_t nowEpochMs = 0;
 		AttachmentValidationCallback validateAttachments;
 		IdempotencyLookupCallback findRunByIdempotency;

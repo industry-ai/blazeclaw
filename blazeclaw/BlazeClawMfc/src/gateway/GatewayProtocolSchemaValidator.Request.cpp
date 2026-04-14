@@ -1434,7 +1434,84 @@ namespace blazeclaw::gateway::protocol {
 					JsonFieldKind::Boolean,
 					issue,
 					"chat.send",
-					"boolean")) {
+					"boolean") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"inlineInvocationAuthorizedSender",
+					JsonFieldKind::Boolean,
+					issue,
+					"chat.send",
+					"boolean") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"inlineInvocationSenderIsOwner",
+					JsonFieldKind::Boolean,
+					issue,
+					"chat.send",
+					"boolean") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"allowInlineToolImmediateExecution",
+					JsonFieldKind::Boolean,
+					issue,
+					"chat.send",
+					"boolean") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"channelId",
+					JsonFieldKind::String,
+					issue,
+					"chat.send",
+					"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"from",
+					JsonFieldKind::String,
+					issue,
+					"chat.send",
+					"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"to",
+					JsonFieldKind::String,
+					issue,
+					"chat.send",
+					"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"skipWhenConfigEmpty",
+					JsonFieldKind::Boolean,
+					issue,
+					"chat.send",
+					"boolean") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"configEmpty",
+					JsonFieldKind::Boolean,
+					issue,
+					"chat.send",
+					"boolean") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"isStopLikeInbound",
+					JsonFieldKind::Boolean,
+					issue,
+					"chat.send",
+					"boolean") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"abortCutoffTimestampMs",
+					JsonFieldKind::Number,
+					issue,
+					"chat.send",
+					"number") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"inboundTimestampMs",
+					JsonFieldKind::Number,
+					issue,
+					"chat.send",
+					"number")) {
 				return false;
 			}
 
@@ -1452,7 +1529,18 @@ namespace blazeclaw::gateway::protocol {
 					field == "hasConnectedClient" ||
 					field == "mainKey" ||
 					field == "clientCaps" ||
-					field == "pushLifecycle") {
+					field == "pushLifecycle" ||
+					field == "inlineInvocationAuthorizedSender" ||
+					field == "inlineInvocationSenderIsOwner" ||
+					field == "allowInlineToolImmediateExecution" ||
+					field == "channelId" ||
+					field == "from" ||
+					field == "to" ||
+					field == "skipWhenConfigEmpty" ||
+					field == "configEmpty" ||
+					field == "isStopLikeInbound" ||
+					field == "abortCutoffTimestampMs" ||
+					field == "inboundTimestampMs") {
 					continue;
 				}
 

@@ -3671,6 +3671,22 @@ namespace blazeclaw::gateway {
 					"}");
 
 				if (stageContext.shouldReturnEarly) {
+					if (stageContext.skippedByInlinePolicy) {
+						EmitTelemetryEvent(
+							"gateway.chat.inline.skip",
+							std::string("{\"requestId\":") +
+							JsonString(request.id) +
+							",\"reason\":" +
+							JsonString(stageContext.skippedReasonCode) +
+							"}");
+						return protocol::ResponseFrame{
+							.id = request.id,
+							.ok = true,
+							.payloadJson = stageContext.responsePayloadJson,
+							.error = std::nullopt,
+						};
+					}
+
 					if (stageContext.deduped) {
 						const auto replayIt =
 							m_chatReplayByIdempotency.find(stageContext.idempotencyKey);

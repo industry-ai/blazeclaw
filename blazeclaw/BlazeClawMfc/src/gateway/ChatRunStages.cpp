@@ -239,6 +239,98 @@ namespace blazeclaw::gateway {
 			}
 		}
 
+		std::string channelId;
+		json::FindStringField(context.paramsJson.value(), "channelId", channelId);
+		context.channelId = channelId;
+
+		std::string from;
+		json::FindStringField(context.paramsJson.value(), "from", from);
+		context.from = from;
+
+		std::string to;
+		json::FindStringField(context.paramsJson.value(), "to", to);
+		context.to = to;
+
+		bool skipWhenConfigEmpty = false;
+		if (json::FindBoolField(
+			context.paramsJson.value(),
+			"skipWhenConfigEmpty",
+			skipWhenConfigEmpty)) {
+			context.skipWhenConfigEmpty = skipWhenConfigEmpty;
+		}
+		else {
+			context.skipWhenConfigEmpty = false;
+		}
+
+		bool configEmpty = false;
+		if (json::FindBoolField(
+			context.paramsJson.value(),
+			"configEmpty",
+			configEmpty)) {
+			context.configEmpty = configEmpty;
+		}
+		else {
+			context.configEmpty = false;
+		}
+
+		bool stopLikeInbound = false;
+		if (json::FindBoolField(
+			context.paramsJson.value(),
+			"isStopLikeInbound",
+			stopLikeInbound)) {
+			context.isStopLikeInbound = stopLikeInbound;
+		}
+		else {
+			context.isStopLikeInbound = false;
+		}
+
+		std::uint64_t abortCutoffTimestampMs = 0;
+		if (json::FindUInt64Field(
+			context.paramsJson.value(),
+			"abortCutoffTimestampMs",
+			abortCutoffTimestampMs)) {
+			context.abortCutoffTimestampMs = abortCutoffTimestampMs;
+		}
+		else {
+			context.abortCutoffTimestampMs = 0;
+		}
+
+		std::uint64_t inboundTimestampMs = 0;
+		if (json::FindUInt64Field(
+			context.paramsJson.value(),
+			"inboundTimestampMs",
+			inboundTimestampMs)) {
+			context.inboundTimestampMs = inboundTimestampMs;
+		}
+		else {
+			context.inboundTimestampMs = 0;
+		}
+
+		if (context.skipWhenConfigEmpty &&
+			context.configEmpty &&
+			!context.from.empty() &&
+			!context.to.empty() &&
+			context.from != context.to) {
+			context.shouldReturnEarly = true;
+			context.responseOk = true;
+			context.responsePayloadJson = std::nullopt;
+			context.skippedByInlinePolicy = true;
+			context.skippedReasonCode = "skip_when_config_empty";
+			return AppendStage(context, Name(), {}, "inline_skipped");
+		}
+
+		if (!context.isStopLikeInbound &&
+			context.abortCutoffTimestampMs > 0 &&
+			context.inboundTimestampMs > 0 &&
+			context.inboundTimestampMs <= context.abortCutoffTimestampMs) {
+			context.shouldReturnEarly = true;
+			context.responseOk = true;
+			context.responsePayloadJson = std::nullopt;
+			context.skippedByInlinePolicy = true;
+			context.skippedReasonCode = "abort_cutoff_skip";
+			return AppendStage(context, Name(), {}, "inline_skipped");
+		}
+
 		return AppendStage(context, Name(), "decomposition", "ok");
 	}
 
