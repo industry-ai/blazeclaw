@@ -5617,6 +5617,12 @@ namespace blazeclaw::gateway {
 						std::to_string(state.allowlistRawCount) +
 						",\"allowlistNormalized\":" +
 						std::to_string(state.allowlistNormalizedCount) +
+						",\"entryConfigRaw\":" +
+						std::to_string(state.entryConfigRawCount) +
+						",\"entryConfigNormalized\":" +
+						std::to_string(state.entryConfigNormalizedCount) +
+						",\"entryConfigMalformed\":" +
+						std::to_string(state.entryConfigMalformedCount) +
 						",\"remoteEligibilityEnabled\":" +
 						std::to_string(state.remoteEligibilityEnabledCount) +
 						",\"remotePlatformSatisfied\":" +
@@ -6167,6 +6173,12 @@ namespace blazeclaw::gateway {
 					hints.push_back("plugins.bundle-commands");
 				}
 
+				if (state.entryConfigRawCount > 0 ||
+					state.entryConfigNormalizedCount > 0 ||
+					state.entryConfigMalformedCount > 0) {
+					hints.push_back("skills.config.entries");
+				}
+
 				if (!state.sandboxSyncOk) {
 					hints.push_back("skills.sandbox.status");
 				}
@@ -6196,13 +6208,13 @@ namespace blazeclaw::gateway {
 						std::to_string(state.scanCriticalCount) +
 						",\"scanWarn\":" +
 						std::to_string(state.scanWarnCount) +
-				 ",\"verifiedOpenPathFailures\":" +
-					std::to_string(state.verifiedOpenPathFailures) +
-					",\"verifiedOpenValidationFailures\":" +
-					std::to_string(state.verifiedOpenValidationFailures) +
-					",\"verifiedOpenIoFailures\":" +
-					std::to_string(state.verifiedOpenIoFailures) +
-					 ",\"commandSanitize\":" +
+						",\"verifiedOpenPathFailures\":" +
+						std::to_string(state.verifiedOpenPathFailures) +
+						",\"verifiedOpenValidationFailures\":" +
+						std::to_string(state.verifiedOpenValidationFailures) +
+						",\"verifiedOpenIoFailures\":" +
+						std::to_string(state.verifiedOpenIoFailures) +
+						",\"commandSanitize\":" +
 						std::to_string(state.commandSanitizeCount) +
 						",\"commandDedupe\":" +
 						std::to_string(state.commandDedupeCount) +
@@ -6214,7 +6226,13 @@ namespace blazeclaw::gateway {
 						std::to_string(state.commandInvalidArgModeFallbackCount) +
 						",\"commandSourceContributions\":" +
 						std::to_string(state.commandSourceContributionCount) +
-					 ",\"bundleCommandRootsScanned\":" +
+						",\"entryConfigRaw\":" +
+						std::to_string(state.entryConfigRawCount) +
+						",\"entryConfigNormalized\":" +
+						std::to_string(state.entryConfigNormalizedCount) +
+						",\"entryConfigMalformed\":" +
+						std::to_string(state.entryConfigMalformedCount) +
+						",\"bundleCommandRootsScanned\":" +
 						std::to_string(state.bundleCommandRootsScannedCount) +
 						",\"bundleCommandFilesLoaded\":" +
 						std::to_string(state.bundleCommandFilesLoadedCount) +

@@ -193,6 +193,9 @@ TEST_CASE(
 	state.bundleCommandFilesSkippedEmptyPromptCount = 13;
 	state.bundleCommandFilesSkippedInvalidNameCount = 14;
 	state.bundleCommandFilesRejectedUnsafeCount = 15;
+	state.entryConfigRawCount = 21;
+	state.entryConfigNormalizedCount = 22;
+	state.entryConfigMalformedCount = 23;
 	state.scanWarnCount = 1;
 	host.SetSkillsCatalogState(state);
 
@@ -245,6 +248,12 @@ TEST_CASE(
 	REQUIRE(
 		statusResponse.payloadJson->find("\"bundleCommandFilesRejectedUnsafe\":15") !=
 		std::string::npos);
+	REQUIRE(statusResponse.payloadJson->find("\"entryConfigRaw\":21") !=
+		std::string::npos);
+	REQUIRE(statusResponse.payloadJson->find("\"entryConfigNormalized\":22") !=
+		std::string::npos);
+	REQUIRE(statusResponse.payloadJson->find("\"entryConfigMalformed\":23") !=
+		std::string::npos);
 
 	const auto diagnosticsResponse = host.RouteRequest(
 		blazeclaw::gateway::protocol::RequestFrame{
@@ -295,6 +304,12 @@ TEST_CASE(
 	REQUIRE(
 		diagnosticsResponse.payloadJson->find("\"bundleCommandFilesRejectedUnsafe\":15") !=
 		std::string::npos);
+	REQUIRE(diagnosticsResponse.payloadJson->find("\"entryConfigRaw\":21") !=
+		std::string::npos);
+	REQUIRE(diagnosticsResponse.payloadJson->find("\"entryConfigNormalized\":22") !=
+		std::string::npos);
+	REQUIRE(diagnosticsResponse.payloadJson->find("\"entryConfigMalformed\":23") !=
+		std::string::npos);
 	REQUIRE(
 		diagnosticsResponse.payloadJson->find("skills.local-loader.verified-open") !=
 		std::string::npos);
@@ -303,6 +318,9 @@ TEST_CASE(
 		std::string::npos);
 	REQUIRE(
 		diagnosticsResponse.payloadJson->find("plugins.bundle-commands") !=
+		std::string::npos);
+	REQUIRE(
+		diagnosticsResponse.payloadJson->find("skills.config.entries") !=
 		std::string::npos);
 
 	host.Stop();

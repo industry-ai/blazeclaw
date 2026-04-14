@@ -2266,6 +2266,7 @@ namespace blazeclaw::core {
 				.install = m_skillsInstall,
 				.securityScan = m_skillSecurityScan,
 				.hookExecution = m_hookExecution,
+				.skillsConfig = m_activeConfig.skills,
 				.hooksGovernanceReportingEnabled = m_state.hooks.governanceReportingEnabled,
 				.hooksLastGovernanceReportPath = m_state.hooks.lastGovernanceReportPath,
 				.hooksGovernanceReportsGenerated = m_state.hooks.governanceReportsGenerated,

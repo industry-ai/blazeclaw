@@ -62,6 +62,7 @@ namespace blazeclaw::core {
 			const SkillsInstallSnapshot& install;
 			const SkillSecurityScanSnapshot& securityScan;
 			const HookExecutionSnapshot& hookExecution;
+			const blazeclaw::config::SkillsConfig& skillsConfig;
 
 			bool hooksGovernanceReportingEnabled = false;
 			std::wstring hooksLastGovernanceReportPath;

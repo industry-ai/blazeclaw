@@ -91,6 +91,9 @@ namespace blazeclaw::gateway {
 		std::size_t configResolvedByNameFallbackCount = 0;
 		std::size_t allowlistRawCount = 0;
 		std::size_t allowlistNormalizedCount = 0;
+		std::size_t entryConfigRawCount = 0;
+		std::size_t entryConfigNormalizedCount = 0;
+		std::size_t entryConfigMalformedCount = 0;
 		std::size_t remoteEligibilityEnabledCount = 0;
 		std::size_t remotePlatformSatisfiedCount = 0;
 		std::size_t remoteBinSatisfiedCount = 0;
