@@ -11,6 +11,7 @@
 #include "diagnostics/DiagnosticsSnapshot.h"
 #include "diagnostics/DiagnosticsRegressionComparator.h"
 #include "bootstrap/StartupFixtureValidator.h"
+#include "filesystem/SafeOpenSync.h"
 #include "tools/ToolArgumentValidators.h"
 #include "tools/ToolProcessRunner.h"
 
@@ -165,17 +166,162 @@ namespace blazeclaw::core {
 			return {};
 		}
 
+		std::wstring NormalizeBundleLineEndings(const std::wstring& content) {
+			std::wstring normalized;
+			normalized.reserve(content.size());
+			for (std::size_t index = 0; index < content.size(); ++index) {
+				const wchar_t ch = content[index];
+				if (ch == L'\r') {
+					if (index + 1 < content.size() && content[index + 1] == L'\n') {
+						continue;
+					}
+					normalized.push_back(L'\n');
+					continue;
+				}
+				normalized.push_back(ch);
+			}
+			return normalized;
+		}
+
 		std::wstring StripBundleFrontmatter(const std::wstring& content) {
-			if (!content.starts_with(L"---")) {
-				return Trim(content);
+			const std::wstring normalized = NormalizeBundleLineEndings(content);
+			if (!normalized.starts_with(L"---")) {
+				return Trim(normalized);
 			}
 
-			const std::size_t end = content.find(L"\n---", 3);
+			const std::size_t end = normalized.find(L"\n---", 3);
 			if (end == std::wstring::npos) {
-				return Trim(content);
+				return Trim(normalized);
 			}
 
-			return Trim(content.substr(end + 4));
+			return Trim(normalized.substr(end + 4));
+		}
+
+		std::optional<std::wstring> ReadVerifiedBundleFile(
+			const std::filesystem::path& filePath,
+			const std::filesystem::path& rootPath,
+			const std::uint64_t maxBytes) {
+			std::error_code ec;
+			const auto canonicalFile =
+				std::filesystem::weakly_canonical(filePath, ec);
+			if (ec) {
+				return std::nullopt;
+			}
+
+			filesystem::VerifiedOpenRequest request;
+			request.filePath = filePath;
+			request.resolvedPath = canonicalFile;
+			request.policy.rejectPathSymlink = true;
+			request.policy.rejectHardlinks = true;
+			request.policy.maxBytes = maxBytes;
+			request.policy.allowedType = filesystem::VerifiedOpenAllowedType::File;
+
+			const auto result = filesystem::OpenVerifiedFileUtf8Sync(request);
+			if (!result.ok) {
+				return std::nullopt;
+			}
+
+			std::error_code insideEc;
+			const auto canonicalRoot =
+				std::filesystem::weakly_canonical(rootPath, insideEc);
+			if (insideEc) {
+				return std::nullopt;
+			}
+
+			auto rootIt = canonicalRoot.begin();
+			auto rootEnd = canonicalRoot.end();
+			auto fileIt = result.resolvedPath.begin();
+			auto fileEnd = result.resolvedPath.end();
+			for (; rootIt != rootEnd; ++rootIt, ++fileIt) {
+				if (fileIt == fileEnd || *rootIt != *fileIt) {
+					return std::nullopt;
+				}
+			}
+
+			return result.utf8Content;
+		}
+
+		std::vector<std::wstring> ResolveBundleCommandRootDirs(
+			const std::filesystem::path& extensionRoot) {
+			std::vector<std::wstring> roots;
+			const auto defaultRoot = extensionRoot / L"commands";
+			std::error_code ec;
+			if (std::filesystem::is_directory(defaultRoot, ec) && !ec) {
+				roots.push_back(L"commands");
+			}
+
+			const auto manifestPath =
+				extensionRoot / L".claude-plugin" / L"plugin.json";
+			const auto rawManifest = ReadVerifiedBundleFile(
+				manifestPath,
+				extensionRoot,
+				256 * 1024);
+			if (!rawManifest.has_value()) {
+				return roots;
+			}
+
+			auto wideToUtf8 = [](const std::wstring& value) {
+				std::string output;
+				output.reserve(value.size());
+				for (const wchar_t ch : value) {
+					output.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
+				}
+				return output;
+				};
+			std::string manifestUtf8 = wideToUtf8(rawManifest.value());
+			nlohmann::json parsed = nlohmann::json::parse(manifestUtf8, nullptr, false);
+			if (parsed.is_discarded() || !parsed.is_object()) {
+				return roots;
+			}
+
+			const auto commandsIt = parsed.find("commands");
+			if (commandsIt == parsed.end()) {
+				return roots;
+			}
+
+			auto addRoot = [&roots](const std::wstring& value) {
+				const auto trimmed = Trim(value);
+				if (trimmed.empty()) {
+					return;
+				}
+				if (std::find(roots.begin(), roots.end(), trimmed) == roots.end()) {
+					roots.push_back(trimmed);
+				}
+				};
+
+			if (commandsIt->is_string()) {
+				addRoot(Utf8ToWideLocal(commandsIt->get<std::string>()));
+			}
+			else if (commandsIt->is_array()) {
+				for (const auto& item : *commandsIt) {
+					if (!item.is_string()) {
+						continue;
+					}
+					addRoot(Utf8ToWideLocal(item.get<std::string>()));
+				}
+			}
+
+			return roots;
+		}
+
+		bool ParseBundleFrontmatterBool(
+			const std::wstring& content,
+			const std::wstring& key,
+			const bool fallback) {
+			const std::wstring value = ParseBundleFrontmatterField(content, key);
+			if (value.empty()) {
+				return fallback;
+			}
+
+			const std::wstring normalized = ToLower(Trim(value));
+			if (normalized == L"true" || normalized == L"yes" || normalized == L"1") {
+				return true;
+			}
+			if (normalized == L"false" || normalized == L"no" || normalized == L"0") {
+				return false;
+			}
+
+			return fallback;
 		}
 
 		std::string ToNarrow(const std::wstring& value) {
@@ -1933,89 +2079,101 @@ namespace blazeclaw::core {
 					continue;
 				}
 
-				const auto commandsRoot = extensionEntry.path() / L"commands";
-				std::error_code commandsEc;
-				if (!std::filesystem::is_directory(commandsRoot, commandsEc) ||
-					commandsEc) {
-					continue;
-				}
-
-				for (const auto& commandFile :
-					std::filesystem::recursive_directory_iterator(commandsRoot, ec)) {
-					if (ec) {
-						break;
-					}
-
-					if (!commandFile.is_regular_file()) {
+				for (const auto& relativeRoot :
+					ResolveBundleCommandRootDirs(extensionEntry.path())) {
+					const auto commandsRoot = extensionEntry.path() / relativeRoot;
+					std::error_code commandsEc;
+					if (!std::filesystem::is_directory(commandsRoot, commandsEc) ||
+						commandsEc) {
 						continue;
 					}
 
-					const auto extension = ToLower(commandFile.path().extension().wstring());
-					if (extension != L".md") {
-						continue;
-					}
+					for (const auto& commandFile :
+						std::filesystem::recursive_directory_iterator(commandsRoot, ec)) {
+						if (ec) {
+							break;
+						}
 
-					std::wifstream input(commandFile.path());
-					if (!input.is_open()) {
-						continue;
-					}
+						if (!commandFile.is_regular_file()) {
+							continue;
+						}
 
-					std::wstringstream buffer;
-					buffer << input.rdbuf();
-					const std::wstring raw = buffer.str();
-					const std::wstring promptTemplate = StripBundleFrontmatter(raw);
-					if (promptTemplate.empty()) {
-						continue;
-					}
+						const auto extension = ToLower(commandFile.path().extension().wstring());
+						if (extension != L".md") {
+							continue;
+						}
 
-					const std::filesystem::path relativePath =
-						std::filesystem::relative(commandFile.path(), commandsRoot, commandsEc);
-					if (commandsEc) {
-						continue;
-					}
+						const auto rawContent = ReadVerifiedBundleFile(
+							commandFile.path(),
+							extensionEntry.path(),
+							2 * 1024 * 1024);
+						if (!rawContent.has_value()) {
+							continue;
+						}
+						const std::wstring raw = rawContent.value();
+						if (ParseBundleFrontmatterBool(
+							raw,
+							L"disable-model-invocation",
+							false)) {
+							continue;
+						}
+						const std::wstring promptTemplate = StripBundleFrontmatter(raw);
+						if (promptTemplate.empty()) {
+							continue;
+						}
 
-					std::wstring defaultName = relativePath.wstring();
-					if (defaultName.size() > 3) {
-						defaultName = defaultName.substr(0, defaultName.size() - 3);
-					}
-					std::replace(
-						defaultName.begin(),
-						defaultName.end(),
-						std::filesystem::path::preferred_separator,
-						L':');
+						const std::filesystem::path relativePath =
+							std::filesystem::relative(commandFile.path(), commandsRoot, commandsEc);
+						if (commandsEc) {
+							continue;
+						}
 
-					const std::wstring configuredName =
-						ParseBundleFrontmatterField(raw, L"name");
-					const std::wstring rawName =
-						configuredName.empty() ? defaultName : configuredName;
+						std::wstring defaultName = relativePath.wstring();
+						if (defaultName.size() > 3) {
+							defaultName = defaultName.substr(0, defaultName.size() - 3);
+						}
+						std::replace(
+							defaultName.begin(),
+							defaultName.end(),
+							std::filesystem::path::preferred_separator,
+							L':');
 
-					const std::wstring configuredDescription =
-						ParseBundleFrontmatterField(raw, L"description");
-					std::wstring description = configuredDescription;
-					if (description.empty()) {
-						std::wstringstream lineStream(promptTemplate);
-						std::wstring firstLine;
-						while (std::getline(lineStream, firstLine)) {
-							firstLine = Trim(firstLine);
-							if (!firstLine.empty()) {
-								description = firstLine;
-								break;
+						const std::wstring configuredName =
+							ParseBundleFrontmatterField(raw, L"name");
+						const std::wstring rawName =
+							configuredName.empty() ? defaultName : configuredName;
+						if (Trim(rawName).empty()) {
+							continue;
+						}
+
+						const std::wstring configuredDescription =
+							ParseBundleFrontmatterField(raw, L"description");
+						std::wstring description = configuredDescription;
+						if (description.empty()) {
+							std::wstringstream lineStream(promptTemplate);
+							std::wstring firstLine;
+							while (std::getline(lineStream, firstLine)) {
+								firstLine = Trim(firstLine);
+								if (!firstLine.empty()) {
+									description = firstLine;
+									break;
+								}
 							}
 						}
-					}
-					if (description.empty()) {
-						description = rawName;
-					}
+						if (description.empty()) {
+							description = rawName;
+						}
 
-					SkillsCommandSpec spec;
-					spec.name = NormalizeBundleCommandName(rawName);
-					spec.skillName = rawName;
-					spec.description = description;
-					spec.promptTemplate = promptTemplate;
-					spec.sourceFilePath = Utf8ToWideLocal(
-						std::filesystem::relative(commandFile.path(), m_extensionsRoot).string());
+						SkillsCommandSpec spec;
+						spec.name = NormalizeBundleCommandName(rawName);
+						spec.skillName = rawName;
+						spec.description = description;
+						spec.promptTemplate = promptTemplate;
+						spec.sourceFilePath = Utf8ToWideLocal(
+							std::filesystem::relative(commandFile.path(), m_extensionsRoot).string());
 
-					commands.push_back(std::move(spec));
+						commands.push_back(std::move(spec));
+					}
 				}
 			}
 
