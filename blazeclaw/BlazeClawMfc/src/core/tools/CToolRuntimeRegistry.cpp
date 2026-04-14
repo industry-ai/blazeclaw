@@ -60,6 +60,17 @@ namespace blazeclaw::core {
 				continue;
 			}
 
+			if (!descriptor.IsValidPublicContractVersion())
+			{
+				continue;
+			}
+
+			if (descriptor.IsPublicContract() &&
+				descriptor.documentationRef.empty())
+			{
+				continue;
+			}
+
 			if (!observedCapabilities.insert(descriptor.capabilityId).second)
 			{
 				continue;

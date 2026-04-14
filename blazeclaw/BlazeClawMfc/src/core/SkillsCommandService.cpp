@@ -348,6 +348,15 @@ namespace blazeclaw::core {
 				continue;
 			}
 
+			if (!descriptor.IsValidPublicContractVersion()) {
+				continue;
+			}
+
+			if (descriptor.IsPublicContract() &&
+				descriptor.documentationRef.empty()) {
+				continue;
+			}
+
 			if (!observedCapabilities.insert(descriptor.capabilityId).second) {
 				continue;
 			}
@@ -379,6 +388,15 @@ namespace blazeclaw::core {
 
 			const auto descriptor = adapter->Describe();
 			if (descriptor.capabilityId.empty() || descriptor.owner.empty()) {
+				continue;
+			}
+
+			if (!descriptor.IsValidPublicContractVersion()) {
+				continue;
+			}
+
+			if (descriptor.IsPublicContract() &&
+				descriptor.documentationRef.empty()) {
 				continue;
 			}
 

@@ -30,6 +30,7 @@ namespace blazeclaw::core::extensions {
 		std::string capabilityId;
 		std::string owner;
 		std::string version = "v1";
+		std::string publicContractVersion = "";
 		std::string source = "internal";
 		std::string contractScope = "internal";
 		std::string stability = "internal-stable";
@@ -38,6 +39,35 @@ namespace blazeclaw::core::extensions {
 
 		[[nodiscard]] bool IsPublicContract() const {
 			return contractScope == "public";
+		}
+
+		[[nodiscard]] bool IsValidPublicContractVersion() const {
+			if (!IsPublicContract()) {
+				return true;
+			}
+
+			if (publicContractVersion.empty()) {
+				return false;
+			}
+
+			const auto firstDot = publicContractVersion.find('.');
+			if (firstDot == std::string::npos || firstDot == 0 ||
+				firstDot + 1 >= publicContractVersion.size()) {
+				return false;
+			}
+
+			for (std::size_t index = 0; index < publicContractVersion.size(); ++index) {
+				const char ch = publicContractVersion[index];
+				if (ch == '.') {
+					continue;
+				}
+
+				if (ch < '0' || ch > '9') {
+					return false;
+				}
+			}
+
+			return true;
 		}
 	};
 
