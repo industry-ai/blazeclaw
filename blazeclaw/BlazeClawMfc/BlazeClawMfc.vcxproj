@@ -162,6 +162,7 @@
     <ClInclude Include="src\core\SkillsCommandService.h" />
     <ClInclude Include="src\core\SkillCommandsAggregationService.h" />
     <ClInclude Include="src\core\SkillsContracts.h" />
+    <ClInclude Include="src\core\SkillsFrontmatterCompat.h" />
     <ClInclude Include="src\core\SkillsSkillContractCompat.h" />
     <ClInclude Include="src\core\SkillsCatalogService.h" />
     <ClInclude Include="src\core\SkillsEnvOverrideService.h" />
@@ -317,6 +318,7 @@
     <ClCompile Include="src\core\SkillCommandsAggregationService.cpp" />
     <ClCompile Include="src\core\InlineActionsOrchestrationService.cpp" />
     <ClCompile Include="src\core\SkillsCatalogService.cpp" />
+    <ClCompile Include="src\core\SkillsFrontmatterCompat.cpp" />
     <ClCompile Include="src\core\SkillsEnvOverrideService.cpp" />
     <ClCompile Include="src\core\SkillsEligibilityService.cpp" />
     <ClCompile Include="src\core\SkillsFacade.cpp" />
