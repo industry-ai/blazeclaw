@@ -197,6 +197,34 @@ namespace blazeclaw::core {
 			return FormatSkillsForPromptCompactCompat(projected);
 		}
 
+		std::wstring BuildFullFormatterPromptBody(
+			const std::vector<SkillsCatalogEntry>& entries) {
+			if (entries.empty()) {
+				return {};
+			}
+
+			std::vector<SkillPromptProjectionCompat> projected;
+			projected.reserve(entries.size());
+			for (const auto& entry : entries) {
+				projected.push_back(SkillPromptProjectionCompat{
+					.name = entry.skillName,
+					.description = entry.description,
+					.filePath = CompactHomePath(entry.skillFile),
+					.baseDir = entry.skillDir,
+					.legacySource = SkillsCatalogService::SourceKindLabel(entry.sourceKind),
+					.sourceInfo = entry.sourceInfo.value_or(
+						CreateSyntheticSkillSourceInfoCompat(
+							entry.skillFile,
+							SkillsCatalogService::SourceKindLabel(entry.sourceKind),
+							SkillSourceScope::Project,
+							SkillSourceOrigin::TopLevel,
+							entry.skillDir)),
+					});
+			}
+
+			return FormatSkillsForPromptCompat(projected);
+		}
+
 		std::wstring BuildFullPrompt(
 			const std::vector<SkillsCatalogEntry>& entries,
 			const std::vector<SkillsPromptSnapshot::PlannerSkillContext>& plannerContext,
@@ -225,10 +253,7 @@ namespace blazeclaw::core {
 				builder << compactPromptBody;
 			}
 			else {
-				for (const auto& entry : entries) {
-					builder << L"- " << entry.skillName << L": " << entry.description;
-					builder << L" (" << CompactHomePath(entry.skillFile) << L")\n";
-				}
+				builder << BuildFullFormatterPromptBody(entries);
 			}
 
 			if (!plannerContext.empty()) {
