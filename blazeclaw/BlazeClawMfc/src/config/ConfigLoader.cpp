@@ -47,6 +47,19 @@ namespace blazeclaw::config {
 			return values;
 		}
 
+		std::optional<std::vector<std::wstring>> ParseOptionalSkillFilter(
+			const std::wstring& raw) {
+			const std::wstring trimmed = Trim(raw);
+			if (trimmed.empty()) {
+				return std::vector<std::wstring>{};
+			}
+
+			auto values = SplitCsvValues(trimmed);
+			std::sort(values.begin(), values.end());
+			values.erase(std::unique(values.begin(), values.end()), values.end());
+			return values;
+		}
+
 		void NormalizeBackendList(std::vector<std::wstring>& backends) {
 			std::vector<std::wstring> normalized;
 			normalized.reserve(backends.size());
@@ -1133,6 +1146,12 @@ namespace blazeclaw::config {
 
 				if (fieldName == L"model") {
 					outConfig.agents.defaults.model = value;
+					continue;
+				}
+
+				if (fieldName == L"skills") {
+					outConfig.agents.defaults.skills = ParseOptionalSkillFilter(value);
+					continue;
 				}
 
 				continue;
@@ -1177,6 +1196,11 @@ namespace blazeclaw::config {
 
 				if (fieldName == L"model") {
 					entry.model = value;
+					continue;
+				}
+
+				if (fieldName == L"skills") {
+					entry.skills = ParseOptionalSkillFilter(value);
 					continue;
 				}
 

@@ -25,6 +25,21 @@
 
 namespace blazeclaw::gateway {
 
+	std::vector<std::string> GatewayHost::ListReservedChatSlashCommandNames() {
+		return std::vector<std::string>{
+			"help",
+				"skill",
+				"agent",
+				"agents",
+				"session",
+				"sessions",
+				"channel",
+				"channels",
+				"tool",
+				"tools",
+		};
+	}
+
 	namespace {
 		std::string EscapeJson(const std::string& value);
 

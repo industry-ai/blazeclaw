@@ -263,6 +263,9 @@ namespace blazeclaw::gateway {
 		using EmbeddingsBatchCallback =
 			std::function<EmbeddingsBatchResult(const EmbeddingsBatchRequest&)>;
 
+		[[nodiscard]] static std::vector<std::string>
+			ListReservedChatSlashCommandNames();
+
 		bool Start(const blazeclaw::config::GatewayConfig& config);
 		bool StartLocalOnly(const blazeclaw::config::GatewayConfig& config);
 		bool StartLocalDispatchOnly();

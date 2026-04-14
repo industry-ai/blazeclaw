@@ -46,6 +46,7 @@ namespace blazeclaw::config {
 		std::wstring workspace;
 		std::wstring agentDir;
 		std::wstring model;
+		std::optional<std::vector<std::wstring>> skills;
 		bool isDefault = false;
 		AgentIdentityConfig identity;
 		AgentSubagentsConfig subagents;
@@ -58,6 +59,7 @@ namespace blazeclaw::config {
 		std::wstring workspaceRoot;
 		std::wstring agentDirRoot;
 		std::wstring model;
+		std::optional<std::vector<std::wstring>> skills;
 	};
 
 	struct AgentsConfig {

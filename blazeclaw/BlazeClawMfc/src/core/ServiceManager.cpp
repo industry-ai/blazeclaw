@@ -2550,11 +2550,20 @@ namespace blazeclaw::core {
 		const auto commandSourceAdapters = BuildRuntimeSkillCommandSourceAdapters();
 		std::vector<AgentSkillCommandDescriptor> commandDescriptors;
 		commandDescriptors.reserve(m_agentsScope.entries.size());
+		const auto defaultSkillFilter = config.agents.defaults.skills;
 		for (const auto& entry : m_agentsScope.entries) {
+			std::optional<std::vector<std::wstring>> skillFilter = defaultSkillFilter;
+			const auto configEntryIt =
+				config.agents.entries.find(AgentsCatalogService::NormalizeAgentId(entry.id));
+			if (configEntryIt != config.agents.entries.end() &&
+				configEntryIt->second.skills.has_value()) {
+				skillFilter = configEntryIt->second.skills;
+			}
+
 			commandDescriptors.push_back(AgentSkillCommandDescriptor{
 				.agentId = entry.id,
 				.workspaceDir = entry.workspaceDir,
-				.skillFilter = std::nullopt,
+				.skillFilter = skillFilter,
 				});
 		}
 
@@ -2598,7 +2607,17 @@ namespace blazeclaw::core {
 			});
 
 		const auto aggregatedCommands =
-			m_skillCommandsAggregationService.BuildSnapshot(
+			[&]() {
+			std::vector<std::wstring> reservedSkillCommandNames;
+			for (const auto& name :
+				blazeclaw::gateway::GatewayHost::ListReservedChatSlashCommandNames()) {
+				const auto normalized = Trim(ToWide(name));
+				if (!normalized.empty()) {
+					reservedSkillCommandNames.push_back(normalized);
+				}
+			}
+
+			return m_skillCommandsAggregationService.BuildSnapshot(
 				AgentSkillCommandAggregationContext{
 					.descriptors = commandDescriptors,
 					.appConfig = config,
@@ -2606,8 +2625,9 @@ namespace blazeclaw::core {
 					.eligibilityService = m_skillsEligibilityService,
 					.commandService = m_skillsCommandService,
 					.commandSourceAdapters = &commandSourceAdapters,
-					.reservedNames = {},
+					.reservedNames = std::move(reservedSkillCommandNames),
 				});
+			}();
 		if (!aggregatedCommands.commandSnapshot.commands.empty()) {
 			m_skillsCommands = aggregatedCommands.commandSnapshot;
 		}
