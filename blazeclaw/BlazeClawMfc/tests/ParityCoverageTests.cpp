@@ -309,6 +309,92 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Next-cycle step 3-6: runtime readiness, mutations, and plugin transition policy endpoints are exposed",
+	"[parity][nextcycle][runtime][observability]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+
+	const auto readinessResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "nextcycle-readiness",
+			.method = "gateway.runtime.health.readiness",
+			.paramsJson = std::nullopt,
+		});
+	REQUIRE(readinessResponse.ok);
+	REQUIRE(readinessResponse.payloadJson.has_value());
+	REQUIRE(readinessResponse.payloadJson->find("\"ready\":") !=
+		std::string::npos);
+	REQUIRE(readinessResponse.payloadJson->find("\"reasons\":") !=
+		std::string::npos);
+
+	const auto mutationsResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "nextcycle-mutations",
+			.method = "gateway.runtime.mutations.status",
+			.paramsJson = std::nullopt,
+		});
+	REQUIRE(mutationsResponse.ok);
+	REQUIRE(mutationsResponse.payloadJson.has_value());
+	REQUIRE(mutationsResponse.payloadJson->find("\"agentRuns\":") !=
+		std::string::npos);
+	REQUIRE(mutationsResponse.payloadJson->find("\"chatRuns\":") !=
+		std::string::npos);
+
+	const auto policySetResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "nextcycle-policy-set",
+			.method = "gateway.runtime.plugins.transitions.policy.set",
+			.paramsJson = std::string(
+				"{\"historyLimit\":16,\"exportEnabled\":true}"),
+		});
+	REQUIRE(policySetResponse.ok);
+	REQUIRE(policySetResponse.payloadJson.has_value());
+	REQUIRE(policySetResponse.payloadJson->find("\"updated\":true") !=
+		std::string::npos);
+
+	const auto policyGetResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "nextcycle-policy-get",
+			.method = "gateway.runtime.plugins.transitions.policy.get",
+			.paramsJson = std::nullopt,
+		});
+	REQUIRE(policyGetResponse.ok);
+	REQUIRE(policyGetResponse.payloadJson.has_value());
+	REQUIRE(policyGetResponse.payloadJson->find("\"historyLimit\":16") !=
+		std::string::npos);
+	REQUIRE(policyGetResponse.payloadJson->find("\"exportEnabled\":true") !=
+		std::string::npos);
+
+	const auto transitionsResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "nextcycle-transitions",
+			.method = "gateway.runtime.plugins.transitions",
+			.paramsJson = std::string("{\"limit\":5}"),
+		});
+	REQUIRE(transitionsResponse.ok);
+	REQUIRE(transitionsResponse.payloadJson.has_value());
+	REQUIRE(transitionsResponse.payloadJson->find("\"retention\":{") !=
+		std::string::npos);
+
+	const auto transitionsExportResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "nextcycle-transitions-export",
+			.method = "gateway.runtime.plugins.transitions.export",
+			.paramsJson = std::nullopt,
+		});
+	REQUIRE(transitionsExportResponse.ok);
+	REQUIRE(transitionsExportResponse.payloadJson.has_value());
+	REQUIRE(transitionsExportResponse.payloadJson->find("\"enabled\":true") !=
+		std::string::npos);
+	REQUIRE(
+		transitionsExportResponse.payloadJson->find("\"transitions\":") !=
+		std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
 	"Phase 6: route policy blocks overlong session keys and webchat inheritance",
 	"[parity][phase-6][chat][route][deep]") {
 	ChatControlPlaneService service;

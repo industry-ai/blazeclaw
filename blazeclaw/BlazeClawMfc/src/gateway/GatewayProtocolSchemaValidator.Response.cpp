@@ -575,6 +575,22 @@ namespace blazeclaw::gateway::protocol {
 
 				return true;
 			} },
+			{ "gateway.runtime.health.readiness", [&]() {
+				if (!IsFieldBoolean(payload, "ready") ||
+					!IsFieldBoolean(payload, "running") ||
+					!IsFieldBoolean(payload, "initialized") ||
+					!IsFieldBoolean(payload, "dispatchInitialized") ||
+					!IsFieldBoolean(payload, "runtimeHandlersInitialized") ||
+					!IsFieldValueType(payload, "reasons", '[')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`gateway.runtime.health.readiness` requires readiness booleans and `reasons` array fields.");
+					return false;
+				}
+
+				return true;
+			} },
 			{ "gateway.runtime.health.capabilities", [&]() {
 				if (!IsFieldValueType(payload, "capabilities", '[') ||
 					!IsFieldNumber(payload, "count") ||
@@ -593,6 +609,70 @@ namespace blazeclaw::gateway::protocol {
 						issue,
 						"schema_invalid_response",
 						"`gateway.runtime.health.capabilities` capability entries require `name` and `state` fields.");
+					return false;
+				}
+
+				return true;
+			} },
+		 { "gateway.runtime.mutations.status", [&]() {
+				if (!IsFieldNumber(payload, "agentRuns") ||
+					!IsFieldNumber(payload, "chatRuns") ||
+					!IsFieldNumber(payload, "taskDeltaRuns") ||
+					!IsFieldNumber(payload, "activeSessions") ||
+					!IsFieldNumber(payload, "activeChannels")) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`gateway.runtime.mutations.status` requires mutation count fields.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "gateway.runtime.plugins.transitions.policy.get", [&]() {
+				if (!IsFieldNumber(payload, "historyLimit") ||
+					!IsFieldBoolean(payload, "exportEnabled")) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`gateway.runtime.plugins.transitions.policy.get` requires `historyLimit` and `exportEnabled` fields.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "gateway.runtime.plugins.transitions.policy.set", [&]() {
+				if (!IsFieldBoolean(payload, "updated") ||
+					!IsFieldNumber(payload, "historyLimit") ||
+					!IsFieldBoolean(payload, "exportEnabled")) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`gateway.runtime.plugins.transitions.policy.set` requires `updated`, `historyLimit`, and `exportEnabled` fields.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "gateway.runtime.plugins.transitions.export", [&]() {
+				if (!IsFieldBoolean(payload, "enabled") ||
+					!IsFieldValueType(payload, "transitions", '[') ||
+					!IsFieldNumber(payload, "count")) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`gateway.runtime.plugins.transitions.export` requires `enabled`, `transitions`, and `count` fields.");
+					return false;
+				}
+
+				if (!IsArrayFieldExplicitlyEmpty(payload, "transitions") &&
+					!PayloadContainsAllFieldTokens(
+						payload,
+						{ "sequence", "timestampMs", "action", "severity", "lifecyclePhase" })) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`gateway.runtime.plugins.transitions.export` transition entries require sequence/timestamp/action/severity/lifecyclePhase fields.");
 					return false;
 				}
 

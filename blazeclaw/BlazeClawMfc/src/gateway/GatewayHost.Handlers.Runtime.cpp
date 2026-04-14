@@ -6426,6 +6426,82 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register(
+			"gateway.runtime.health.readiness",
+			[this](const protocol::RequestFrame& request) {
+				const bool ready =
+					m_running &&
+					m_initialized &&
+					m_dispatchInitialized &&
+					m_runtimeHandlersInitialized;
+
+				std::string reasonsJson = "[";
+				bool first = true;
+				auto appendReason = [&reasonsJson, &first](const std::string& reason) {
+					if (!first) {
+						reasonsJson += ",";
+					}
+					reasonsJson += "\"" + EscapeJsonLocal(reason) + "\"";
+					first = false;
+					};
+
+				if (!m_running) {
+					appendReason("gateway_not_running");
+				}
+				if (!m_initialized) {
+					appendReason("runtime_not_initialized");
+				}
+				if (!m_dispatchInitialized) {
+					appendReason("dispatcher_not_initialized");
+				}
+				if (!m_runtimeHandlersInitialized) {
+					appendReason("runtime_handlers_not_initialized");
+				}
+
+				reasonsJson += "]";
+
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = true,
+					.payloadJson =
+						"{\"ready\":" +
+						std::string(ready ? "true" : "false") +
+						",\"running\":" +
+						std::string(m_running ? "true" : "false") +
+						",\"initialized\":" +
+						std::string(m_initialized ? "true" : "false") +
+						",\"dispatchInitialized\":" +
+						std::string(m_dispatchInitialized ? "true" : "false") +
+						",\"runtimeHandlersInitialized\":" +
+						std::string(m_runtimeHandlersInitialized ? "true" : "false") +
+						",\"reasons\":" + reasonsJson +
+						"}",
+					.error = std::nullopt,
+				};
+			});
+
+		m_dispatcher.Register(
+			"gateway.runtime.mutations.status",
+			[this](const protocol::RequestFrame& request) {
+				return protocol::ResponseFrame{
+					.id = request.id,
+					.ok = true,
+					.payloadJson =
+						"{\"agentRuns\":" +
+						std::to_string(m_agentRuns.size()) +
+						",\"chatRuns\":" +
+						std::to_string(m_chatRunsById.size()) +
+						",\"taskDeltaRuns\":" +
+						std::to_string(m_taskDeltasByRunId.size()) +
+						",\"activeSessions\":" +
+						std::to_string(m_sessionRegistry.List().size()) +
+						",\"activeChannels\":" +
+						std::to_string(m_channelRegistry.ListStatus().size()) +
+						"}",
+					.error = std::nullopt,
+				};
+			});
+
+		m_dispatcher.Register(
 			"gateway.runtime.health.capabilities",
 			[](const protocol::RequestFrame& request) {
 				const auto health =

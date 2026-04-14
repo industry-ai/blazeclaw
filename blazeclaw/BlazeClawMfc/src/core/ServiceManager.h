@@ -292,6 +292,8 @@ namespace blazeclaw::core {
 		void BindSkillsCallbacks();
 		void BindGatewayPolicyCallbacks();
 		void BindToolRuntimeCallbacks();
+		[[nodiscard]] std::vector<EmbeddedToolBinding>
+			BuildEmbeddedToolBindings() const;
 		void BindChatCallbacks();
 		void BindEmbeddingsCallbacks();
 		[[nodiscard]] bool FinalizeStartup(
