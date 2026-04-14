@@ -37,6 +37,40 @@ TEST_CASE("ConfigLoader parses embedded.orchestrationPath values", "[config][emb
 	std::filesystem::remove_all(root);
 }
 
+TEST_CASE("ConfigLoader normalizes and validates skills entry config keys", "[config][skills][entries][normalize]") {
+	blazeclaw::config::ConfigLoader loader;
+
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_skills_entries_normalize_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto configPath = root / "skills-entries-normalize.conf";
+	{
+		std::wofstream out(configPath);
+		REQUIRE(out.is_open());
+		out << L"skills.entries.demo.config.Timeout Ms=3000\n";
+		out << L"skills.entries.demo.config.$$$=bad\n";
+		out << L"skills.entries.demo.config.retry-count=3\n";
+	}
+
+	blazeclaw::config::AppConfig config;
+	REQUIRE(loader.LoadFromFile(configPath.wstring(), config));
+
+	const auto it = config.skills.entries.find(L"demo");
+	REQUIRE(it != config.skills.entries.end());
+	REQUIRE(it->second.config.contains(L"timeoutms"));
+	REQUIRE(it->second.config.at(L"timeoutms") == L"3000");
+	REQUIRE(it->second.config.contains(L"retry-count"));
+	REQUIRE(it->second.config.at(L"retry-count") == L"3");
+	REQUIRE_FALSE(it->second.config.contains(L"$$$"));
+
+	REQUIRE(config.skills.entryConfigRawCount == 3);
+	REQUIRE(config.skills.entryConfigNormalizedCount >= 1);
+	REQUIRE(config.skills.entryConfigMalformedCount == 1);
+
+	std::filesystem::remove_all(root);
+}
+
 TEST_CASE("ConfigLoader parses skills entries env and config maps", "[config][skills][entries]") {
 	blazeclaw::config::ConfigLoader loader;
 

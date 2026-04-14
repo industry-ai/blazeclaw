@@ -329,6 +329,9 @@ namespace blazeclaw::config {
 		std::vector<std::wstring> allowBundled;
 		std::wstring entryResolutionMode = L"strict";
 		SkillsRemoteEligibilityConfig remoteEligibility;
+		std::uint32_t entryConfigRawCount = 0;
+		std::uint32_t entryConfigNormalizedCount = 0;
+		std::uint32_t entryConfigMalformedCount = 0;
 		SkillsLoadConfig load;
 		SkillsLimitsConfig limits;
 		SkillsInstallConfig install;

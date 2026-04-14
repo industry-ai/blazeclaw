@@ -284,6 +284,27 @@ namespace blazeclaw::config {
 			return L"npm";
 		}
 
+		std::wstring NormalizeSkillEntryConfigKey(const std::wstring& raw) {
+			std::wstring normalized;
+			normalized.reserve(raw.size());
+			for (const wchar_t ch : raw) {
+				if (std::iswspace(ch) != 0) {
+					continue;
+				}
+
+				const wchar_t lowered = static_cast<wchar_t>(std::towlower(ch));
+				if ((lowered >= L'a' && lowered <= L'z') ||
+					(lowered >= L'0' && lowered <= L'9') ||
+					lowered == L'.' ||
+					lowered == L'_' ||
+					lowered == L'-') {
+					normalized.push_back(lowered);
+				}
+			}
+
+			return normalized;
+		}
+
 		std::wstring NormalizeSkillsEntryResolutionMode(const std::wstring& raw) {
 			const std::wstring normalized = ToLowerTrim(raw);
 			if (normalized == L"compat") {
@@ -1464,10 +1485,21 @@ namespace blazeclaw::config {
 				}
 
 				if (fieldPath.rfind(L"config.", 0) == 0) {
-					const auto configKey = Trim(fieldPath.substr(7));
-					if (!configKey.empty()) {
-						entry.config[configKey] = value;
+					++outConfig.skills.entryConfigRawCount;
+					const auto rawConfigKey = Trim(fieldPath.substr(7));
+					const auto configKey =
+						NormalizeSkillEntryConfigKey(rawConfigKey);
+					if (configKey.empty()) {
+						++outConfig.skills.entryConfigMalformedCount;
+						continue;
 					}
+
+					if (configKey != rawConfigKey) {
+						++outConfig.skills.entryConfigNormalizedCount;
+					}
+
+					entry.config[configKey] = value;
+					continue;
 				}
 			}
 		}
