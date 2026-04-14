@@ -2,6 +2,7 @@
 
 #include "SkillsCatalogService.h"
 #include "SkillsCommandService.h"
+#include "SkillsContracts.h"
 #include "SkillsEnvOverrideService.h"
 #include "SkillsEligibilityService.h"
 #include "SkillsInstallService.h"
@@ -20,19 +21,9 @@
 
 namespace blazeclaw::core {
 
-	struct SkillsRunSnapshotSkill {
-		std::wstring name;
-		std::wstring primaryEnv;
-		std::vector<std::wstring> requiredEnv;
-	};
+	using SkillsRunSnapshotSkill = SkillRunView;
 
-	struct SkillsRunSnapshot {
-		std::wstring prompt;
-		std::vector<SkillsRunSnapshotSkill> skills;
-		std::optional<std::vector<std::wstring>> skillFilter;
-		std::vector<std::wstring> resolvedSkills;
-		std::uint64_t version = 0;
-	};
+	using SkillsRunSnapshot = SkillSnapshotSpec;
 
 	struct SkillsRefreshResult {
 		SkillsCatalogSnapshot catalog;

@@ -1,12 +1,15 @@
 #pragma once
 
 #include "SkillsCatalogService.h"
+#include "SkillsContracts.h"
 #include "SkillsEligibilityService.h"
 
 #include <string>
 #include <vector>
 
 namespace blazeclaw::core {
+
+	using SkillsInstallSpec = SkillInstallSpec;
 
 	struct SkillsInstallPreferences {
 		bool preferBrew = true;

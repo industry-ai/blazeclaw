@@ -1,12 +1,15 @@
 #pragma once
 
 #include "SkillsCatalogService.h"
+#include "SkillsContracts.h"
 
 #include <functional>
 #include <string>
 #include <vector>
 
 namespace blazeclaw::core {
+
+	using SkillsRemoteEligibilityContext = SkillsRemoteEligibilityContract;
 
 	struct SkillsEligibilityEntry {
 		std::wstring skillName;
@@ -40,12 +43,6 @@ namespace blazeclaw::core {
 		std::uint32_t remoteBinSatisfiedCount = 0;
 		std::uint32_t remoteAnyBinSatisfiedCount = 0;
 		std::uint32_t alwaysBypassCount = 0;
-	};
-
-	struct SkillsRemoteEligibilityContext {
-		std::vector<std::wstring> platforms;
-		std::function<bool(const std::wstring&)> hasBin;
-		std::function<bool(const std::vector<std::wstring>&)> hasAnyBin;
 	};
 
 	class SkillsEligibilityService {
