@@ -28,6 +28,14 @@ namespace blazeclaw::core {
 			return std::wstring(first, last);
 		}
 
+		const SkillInstallSpec* ResolveInstallSpec(const SkillsCatalogEntry& entry) {
+			if (entry.metadata.has_value() && !entry.metadata->install.empty()) {
+				return &entry.metadata->install.front();
+			}
+
+			return nullptr;
+		}
+
 		std::wstring ToLower(const std::wstring& value) {
 			std::wstring lowered = value;
 			std::transform(
@@ -119,30 +127,43 @@ namespace blazeclaw::core {
 
 			SkillsInstallPlanEntry plan;
 			plan.skillName = entry.skillName;
+			const SkillInstallSpec* installSpec = ResolveInstallSpec(entry);
 
-			plan.kind = ToLower(Trim(GetFrontmatterField(
-				entry.frontmatter,
-				{ L"openclaw.install.kind", L"install.kind" })));
+			plan.kind = installSpec == nullptr
+				? ToLower(Trim(GetFrontmatterField(
+					entry.frontmatter,
+					{ L"openclaw.install.kind", L"install.kind" })))
+				: ToLower(Trim(installSpec->kind));
 			if (plan.kind.empty()) {
 				continue;
 			}
 
-			plan.label = Trim(GetFrontmatterField(
-				entry.frontmatter,
-				{ L"openclaw.install.label", L"install.label" }));
+			plan.label = installSpec == nullptr
+				? Trim(GetFrontmatterField(
+					entry.frontmatter,
+					{ L"openclaw.install.label", L"install.label" }))
+				: Trim(installSpec->label);
 
-			const std::wstring formula = Trim(GetFrontmatterField(
-				entry.frontmatter,
-				{ L"openclaw.install.formula", L"install.formula" }));
-			const std::wstring packageName = Trim(GetFrontmatterField(
-				entry.frontmatter,
-				{ L"openclaw.install.package", L"install.package" }));
-			const std::wstring moduleName = Trim(GetFrontmatterField(
-				entry.frontmatter,
-				{ L"openclaw.install.module", L"install.module" }));
-			const std::wstring downloadUrl = Trim(GetFrontmatterField(
-				entry.frontmatter,
-				{ L"openclaw.install.url", L"install.url" }));
+			const std::wstring formula = installSpec == nullptr
+				? Trim(GetFrontmatterField(
+					entry.frontmatter,
+					{ L"openclaw.install.formula", L"install.formula" }))
+				: Trim(installSpec->formula);
+			const std::wstring packageName = installSpec == nullptr
+				? Trim(GetFrontmatterField(
+					entry.frontmatter,
+					{ L"openclaw.install.package", L"install.package" }))
+				: Trim(installSpec->package);
+			const std::wstring moduleName = installSpec == nullptr
+				? Trim(GetFrontmatterField(
+					entry.frontmatter,
+					{ L"openclaw.install.module", L"install.module" }))
+				: Trim(installSpec->module);
+			const std::wstring downloadUrl = installSpec == nullptr
+				? Trim(GetFrontmatterField(
+					entry.frontmatter,
+					{ L"openclaw.install.url", L"install.url" }))
+				: Trim(installSpec->url);
 
 			const bool installPreferBrew = ParseBoolField(
 				GetFrontmatterField(

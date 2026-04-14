@@ -167,6 +167,27 @@ namespace blazeclaw::core {
 		gatewaySkillsState.envBlocked = context.envOverrides.blockedCount;
 		gatewaySkillsState.installExecutableCount = context.install.executableCount;
 		gatewaySkillsState.installBlockedCount = context.install.blockedCount;
+		gatewaySkillsState.installContractProjectedCount =
+			static_cast<std::size_t>(std::count_if(
+				context.catalog.entries.begin(),
+				context.catalog.entries.end(),
+				[](const SkillsCatalogEntry& entry) {
+					return entry.metadata.has_value() && !entry.metadata->install.empty();
+				}));
+		gatewaySkillsState.installContractFallbackCount =
+			static_cast<std::size_t>(std::count_if(
+				context.install.entries.begin(),
+				context.install.entries.end(),
+				[&context](const SkillsInstallPlanEntry& plan) {
+					const auto it = std::find_if(
+						context.catalog.entries.begin(),
+						context.catalog.entries.end(),
+						[&plan](const SkillsCatalogEntry& entry) {
+							return entry.skillName == plan.skillName;
+						});
+					return it == context.catalog.entries.end() ||
+						!(it->metadata.has_value() && !it->metadata->install.empty());
+				}));
 		gatewaySkillsState.scanInfoCount = context.securityScan.infoCount;
 		gatewaySkillsState.scanWarnCount = context.securityScan.warnCount;
 		gatewaySkillsState.scanCriticalCount = context.securityScan.criticalCount;

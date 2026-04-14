@@ -126,6 +126,8 @@ namespace blazeclaw::gateway {
 		std::size_t envBlocked = 0;
 		std::size_t installExecutableCount = 0;
 		std::size_t installBlockedCount = 0;
+		std::size_t installContractProjectedCount = 0;
+		std::size_t installContractFallbackCount = 0;
 		std::size_t scanInfoCount = 0;
 		std::size_t scanWarnCount = 0;
 		std::size_t scanCriticalCount = 0;

@@ -97,4 +97,35 @@ TEST_CASE(
 		std::string::npos);
 	REQUIRE(catalogImpl.find("BuildNormalizedExposurePolicy(") !=
 		std::string::npos);
+
+	const auto installImplPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"SkillsInstallService.cpp";
+	const std::string installImpl = ReadTextFile(installImplPath);
+	REQUIRE(installImpl.find("ResolveInstallSpec(") !=
+		std::string::npos);
+	REQUIRE(installImpl.find("entry.metadata.has_value() && !entry.metadata->install.empty()") !=
+		std::string::npos);
+
+	const auto gatewayHeaderPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"gateway" /
+		"GatewayHost.h";
+	const std::string gatewayHeader = ReadTextFile(gatewayHeaderPath);
+	REQUIRE(gatewayHeader.find("installContractProjectedCount") !=
+		std::string::npos);
+	REQUIRE(gatewayHeader.find("installContractFallbackCount") !=
+		std::string::npos);
+
+	const auto hooksCoordinatorPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"skills" /
+		"CSkillsHooksCoordinator.cpp";
+	const std::string hooksCoordinator = ReadTextFile(hooksCoordinatorPath);
+	REQUIRE(hooksCoordinator.find("installContractProjectedCount") !=
+		std::string::npos);
+	REQUIRE(hooksCoordinator.find("installContractFallbackCount") !=
+		std::string::npos);
 }
