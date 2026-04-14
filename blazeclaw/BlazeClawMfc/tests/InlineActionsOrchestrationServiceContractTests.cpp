@@ -78,6 +78,8 @@ TEST_CASE(
 		std::string::npos);
 	REQUIRE(source.find("request.inlineInvocationSenderIsOwner") !=
 		std::string::npos);
+	REQUIRE(source.find("inline_invocation_tool_not_allowlisted") !=
+		std::string::npos);
 	REQUIRE(source.find("inline_invocation_unauthorized_sender") !=
 		std::string::npos);
 	REQUIRE(source.find("inline_invocation_owner_required") !=

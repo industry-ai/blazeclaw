@@ -3599,11 +3599,33 @@ namespace blazeclaw::core {
 			};
 		}
 
+		if (!request.enforceOrderedAllowlist &&
+			!request.orderedAllowedToolTargets.empty()) {
+			const bool explicitAllowed =
+				std::find(
+					request.orderedAllowedToolTargets.begin(),
+					request.orderedAllowedToolTargets.end(),
+					resolvedSkillInvocationToolTarget.value()) !=
+				request.orderedAllowedToolTargets.end();
+			if (!explicitAllowed) {
+				return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+					.ok = false,
+					.assistantText = {},
+					.assistantDeltas = {},
+					.taskDeltas = {},
+					.modelId = activeModel,
+					.errorCode = "inline_invocation_tool_not_allowlisted",
+					.errorMessage = "inline invocation rejected: tool not in allowlist",
+				};
+			}
+		}
+
+		const std::string inlineArgs = request.message;
 		const blazeclaw::gateway::ToolExecuteResultV2 toolResult =
 			m_gatewayHost.ExecuteRuntimeToolV2(
 				blazeclaw::gateway::ToolExecuteRequestV2{
 					.tool = resolvedSkillInvocationToolTarget.value(),
-					.argsJson = std::optional<std::string>(request.message),
+				 .argsJson = std::optional<std::string>(inlineArgs),
 					.correlationId = request.runId,
 					.deadlineEpochMs = std::nullopt,
 				});

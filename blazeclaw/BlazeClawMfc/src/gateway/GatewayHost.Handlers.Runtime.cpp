@@ -4546,7 +4546,7 @@ namespace blazeclaw::gateway {
 							return value;
 						}(),
 						.inlineInvocationSenderIsOwner = [&request]() {
-							bool value = false;
+						 bool value = true;
 							if (request.paramsJson.has_value()) {
 								json::FindBoolField(
 									request.paramsJson.value(),
@@ -4556,7 +4556,7 @@ namespace blazeclaw::gateway {
 							return value;
 						}(),
 						.allowInlineToolImmediateExecution = [&request]() {
-							bool value = false;
+						 bool value = true;
 							if (request.paramsJson.has_value()) {
 								json::FindBoolField(
 									request.paramsJson.value(),
