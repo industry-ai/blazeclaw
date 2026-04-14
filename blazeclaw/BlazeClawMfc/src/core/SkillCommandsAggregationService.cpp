@@ -41,6 +41,28 @@ namespace blazeclaw::core {
 			return lowered;
 		}
 
+		void DedupeBySkillNameInPlace(SkillsCommandSnapshot& snapshot) {
+			std::unordered_set<std::wstring> seenSkillNames;
+			std::vector<SkillsCommandSpec> deduped;
+			deduped.reserve(snapshot.commands.size());
+
+			for (const auto& command : snapshot.commands) {
+				const auto skillKey = ToLower(Trim(command.skillName));
+				if (!skillKey.empty()) {
+					if (seenSkillNames.find(skillKey) != seenSkillNames.end()) {
+						++snapshot.skillNameDedupeCount;
+						continue;
+					}
+
+					seenSkillNames.insert(skillKey);
+				}
+
+				deduped.push_back(command);
+			}
+
+			snapshot.commands = std::move(deduped);
+		}
+
 		std::vector<std::wstring> NormalizeSkillFilter(
 			const std::vector<std::wstring>& source) {
 			std::vector<std::wstring> normalized;
@@ -226,6 +248,8 @@ namespace blazeclaw::core {
 				rollingReservedNames,
 				seenReservedNames);
 		}
+
+		DedupeBySkillNameInPlace(aggregate.commandSnapshot);
 
 		return aggregate;
 	}

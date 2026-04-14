@@ -98,6 +98,7 @@ namespace blazeclaw::gateway {
 		std::size_t alwaysBypassCount = 0;
 		std::size_t commandSanitizeCount = 0;
 		std::size_t commandDedupeCount = 0;
+		std::size_t commandSkillNameDedupeCount = 0;
 		std::size_t commandMissingToolDispatchCount = 0;
 		std::size_t commandInvalidArgModeFallbackCount = 0;
 		std::size_t commandSourceContributionCount = 0;

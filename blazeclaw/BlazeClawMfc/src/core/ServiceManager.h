@@ -21,6 +21,7 @@
 #include "HookExecutionService.h"
 #include "SkillsCommandService.h"
 #include "SkillCommandsAggregationService.h"
+#include "SkillCommandInvocationService.h"
 #include "SkillsCatalogService.h"
 #include "SkillsEnvOverrideService.h"
 #include "SkillsEligibilityService.h"
@@ -361,6 +362,7 @@ namespace blazeclaw::core {
 		SkillsPromptSnapshot m_skillsPrompt;
 		SkillsFacade m_skillsFacade;
 		SkillsRunSnapshot m_skillsRunSnapshot;
+		SkillCommandInvocationService m_skillCommandInvocationService;
 		SkillsCommandService m_skillsCommandService;
 		SkillCommandsAggregationService m_skillCommandsAggregationService;
 		SkillsCommandSnapshot m_skillsCommands;

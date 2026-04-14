@@ -5473,6 +5473,8 @@ namespace blazeclaw::gateway {
 						std::to_string(state.commandSanitizeCount) +
 						",\"commandDedupe\":" +
 						std::to_string(state.commandDedupeCount) +
+						",\"commandSkillNameDedupe\":" +
+						std::to_string(state.commandSkillNameDedupeCount) +
 						",\"commandMissingToolDispatch\":" +
 						std::to_string(state.commandMissingToolDispatchCount) +
 						",\"commandInvalidArgModeFallback\":" +
@@ -5992,6 +5994,7 @@ namespace blazeclaw::gateway {
 				}
 
 				if (state.commandMissingToolDispatchCount > 0 ||
+					state.commandSkillNameDedupeCount > 0 ||
 					state.commandInvalidArgModeFallbackCount > 0 ||
 					state.commandSourceContributionCount > 0) {
 					hints.push_back("skills.command-specs");
@@ -6045,6 +6048,8 @@ namespace blazeclaw::gateway {
 						std::to_string(state.commandSanitizeCount) +
 						",\"commandDedupe\":" +
 						std::to_string(state.commandDedupeCount) +
+						",\"commandSkillNameDedupe\":" +
+						std::to_string(state.commandSkillNameDedupeCount) +
 						",\"commandMissingToolDispatch\":" +
 						std::to_string(state.commandMissingToolDispatchCount) +
 						",\"commandInvalidArgModeFallback\":" +

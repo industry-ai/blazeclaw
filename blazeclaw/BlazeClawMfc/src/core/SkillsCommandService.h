@@ -35,6 +35,7 @@ namespace blazeclaw::core {
 		std::vector<SkillsCommandSpec> commands;
 		std::uint32_t sanitizeCount = 0;
 		std::uint32_t dedupeCount = 0;
+		std::uint32_t skillNameDedupeCount = 0;
 		std::uint32_t missingToolDispatchCount = 0;
 		std::uint32_t invalidArgModeFallbackCount = 0;
 		std::uint32_t commandSourceContributionCount = 0;

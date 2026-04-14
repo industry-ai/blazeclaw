@@ -138,6 +138,8 @@ namespace blazeclaw::core {
 			context.commands.sanitizeCount;
 		gatewaySkillsState.commandDedupeCount =
 			context.commands.dedupeCount;
+		gatewaySkillsState.commandSkillNameDedupeCount =
+			context.commands.skillNameDedupeCount;
 		gatewaySkillsState.commandMissingToolDispatchCount =
 			context.commands.missingToolDispatchCount;
 		gatewaySkillsState.commandInvalidArgModeFallbackCount =

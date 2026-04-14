@@ -183,6 +183,7 @@ TEST_CASE(
 	state.verifiedOpenIoFailures = 4;
 	state.commandSanitizeCount = 5;
 	state.commandDedupeCount = 6;
+  state.commandSkillNameDedupeCount = 16;
 	state.commandMissingToolDispatchCount = 7;
 	state.commandInvalidArgModeFallbackCount = 8;
 	state.commandSourceContributionCount = 9;
@@ -213,6 +214,9 @@ TEST_CASE(
 	REQUIRE(statusResponse.payloadJson->find("\"commandSanitize\":5") !=
 		std::string::npos);
 	REQUIRE(statusResponse.payloadJson->find("\"commandDedupe\":6") !=
+		std::string::npos);
+    REQUIRE(
+		statusResponse.payloadJson->find("\"commandSkillNameDedupe\":16") !=
 		std::string::npos);
 	REQUIRE(
 		statusResponse.payloadJson->find("\"commandMissingToolDispatch\":7") !=
@@ -260,6 +264,9 @@ TEST_CASE(
 	REQUIRE(diagnosticsResponse.payloadJson->find("\"commandSanitize\":5") !=
 		std::string::npos);
 	REQUIRE(diagnosticsResponse.payloadJson->find("\"commandDedupe\":6") !=
+		std::string::npos);
+    REQUIRE(
+		diagnosticsResponse.payloadJson->find("\"commandSkillNameDedupe\":16") !=
 		std::string::npos);
 	REQUIRE(
 		diagnosticsResponse.payloadJson->find("\"commandMissingToolDispatch\":7") !=

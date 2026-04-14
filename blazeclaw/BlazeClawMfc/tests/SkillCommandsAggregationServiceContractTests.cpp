@@ -76,6 +76,22 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"SkillCommandsAggregationService contract: post-merge skillName dedupe is applied",
+	"[skills][command-aggregation][skillname-dedupe]")
+{
+	const auto implPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"SkillCommandsAggregationService.cpp";
+	const std::string source = ReadTextFile(implPath);
+
+	REQUIRE(source.find("DedupeBySkillNameInPlace") != std::string::npos);
+	REQUIRE(source.find("snapshot.skillNameDedupeCount") != std::string::npos);
+	REQUIRE(source.find("DedupeBySkillNameInPlace(aggregate.commandSnapshot)") !=
+		std::string::npos);
+}
+
+TEST_CASE(
 	"GatewayHost contract: reserved chat slash command registry exists",
 	"[skills][command-aggregation][reserved-registry]")
 {
