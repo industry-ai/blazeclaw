@@ -9,7 +9,6 @@
 namespace blazeclaw::core {
 
 	namespace {
-
 		std::wstring Trim(const std::wstring& value) {
 			const auto first = std::find_if_not(
 				value.begin(),
@@ -359,11 +358,24 @@ namespace blazeclaw::core {
 				result.catalog,
 				result.eligibility);
 		}
-		result.sync = dependencies.syncService.SyncToSandbox(
-			workspaceRoot,
-			result.catalog,
-			result.eligibility,
-			appConfig);
+
+		const std::wstring normalizedReason = ToLower(Trim(reason));
+		const bool startupRefresh = normalizedReason.rfind(L"startup", 0) == 0;
+		if (startupRefresh) {
+			result.sync = SkillsSyncSnapshot{};
+			result.sync.success = true;
+			result.sync.destinationNamingMode = L"startup_skip";
+			result.sync.skippedSkills =
+				static_cast<std::uint32_t>(result.catalog.entries.size());
+		}
+		else {
+			result.sync = dependencies.syncService.SyncToSandbox(
+				workspaceRoot,
+				result.catalog,
+				result.eligibility,
+				appConfig);
+		}
+
 		result.envOverrides = dependencies.envOverrideService.BuildSnapshot(
 			result.catalog,
 			result.eligibility,
@@ -373,10 +385,15 @@ namespace blazeclaw::core {
 			result.eligibility,
 			appConfig,
 			ResolveInstallPreferences(appConfig));
-		result.securityScan = dependencies.securityScanService.BuildSnapshot(
-			result.catalog,
-			result.eligibility,
-			appConfig);
+		if (startupRefresh) {
+			result.securityScan = SkillSecurityScanSnapshot{};
+		}
+		else {
+			result.securityScan = dependencies.securityScanService.BuildSnapshot(
+				result.catalog,
+				result.eligibility,
+				appConfig);
+		}
 
 		dependencies.envOverrideService.Apply(result.envOverrides);
 

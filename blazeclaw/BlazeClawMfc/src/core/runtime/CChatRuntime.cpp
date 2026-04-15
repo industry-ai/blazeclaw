@@ -154,6 +154,38 @@ namespace blazeclaw::core {
 				return job->completed;
 			}))
 		{
+			bool promoteQueuedJob = false;
+			{
+				std::lock_guard<std::mutex> lock(m_queueMutex);
+				auto runStateIt = m_runsById.find(job->request.runId);
+				if (runStateIt != m_runsById.end() &&
+					runStateIt->second.status == JobLifecycleStatus::Queued)
+				{
+					std::erase_if(
+						m_queue,
+						[&](const std::shared_ptr<ChatRuntimeJob>& queuedJob)
+						{
+							return queuedJob->request.runId == job->request.runId;
+						});
+					m_jobsByRunId.erase(job->request.runId);
+					m_runsById.erase(job->request.runId);
+					promoteQueuedJob = true;
+				}
+			}
+
+			if (promoteQueuedJob)
+			{
+				if (job->execute)
+				{
+					return job->execute();
+				}
+
+				return BuildErrorResult(
+					job->model,
+					m_cfg.errorWorkerUnavailable,
+					"chat runtime worker unavailable");
+			}
+
 			m_metrics.OnQueueTimeout();
 			m_metrics.OnTimedOut();
 			if (m_deps.onQueueTimeout)

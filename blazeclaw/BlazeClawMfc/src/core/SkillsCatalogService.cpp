@@ -827,11 +827,12 @@ namespace blazeclaw::core {
 
 		for (const auto& sourceRoot : sourceRoots) {
 			std::error_code rootEc;
-			const auto rootPath = CanonicalOrSelf(sourceRoot.resolvedRoot);
-			if (!std::filesystem::is_directory(rootPath, rootEc) || rootEc) {
+			if (!std::filesystem::is_directory(sourceRoot.resolvedRoot, rootEc) || rootEc) {
 				++snapshot.diagnostics.rootsSkipped;
 				continue;
 			}
+
+			const auto rootPath = CanonicalOrSelf(sourceRoot.resolvedRoot);
 
 			++snapshot.diagnostics.rootsScanned;
 			if (sourceRoot.kind == SkillsSourceKind::Plugin) {

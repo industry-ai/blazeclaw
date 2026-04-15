@@ -379,157 +379,165 @@ namespace blazeclaw::core {
 
 	SkillsMetadataSpec ResolveOpenClawMetadataCompat(
 		const ParsedSkillFrontmatterCompat& frontmatter) {
-		if (const auto manifestMetadata =
-			ResolveOpenClawMetadataFromManifestCompat(frontmatter);
-			manifestMetadata.has_value()) {
-			return manifestMetadata.value();
+		try {
+			if (const auto manifestMetadata =
+				ResolveOpenClawMetadataFromManifestCompat(frontmatter);
+				manifestMetadata.has_value()) {
+				return manifestMetadata.value();
+			}
+
+			SkillsMetadataSpec metadata;
+			metadata.skillKey = GetSkillFrontmatterFieldCompat(
+				frontmatter,
+				{ L"skillkey", L"skill-key", L"openclaw.skillkey" });
+			metadata.primaryEnv = GetSkillFrontmatterFieldCompat(
+				frontmatter,
+				{ L"primary-env", L"primary_env", L"openclaw.primary-env" });
+			metadata.emoji = GetSkillFrontmatterFieldCompat(
+				frontmatter,
+				{ L"emoji", L"openclaw.emoji" });
+			metadata.homepage = GetSkillFrontmatterFieldCompat(
+				frontmatter,
+				{ L"homepage", L"openclaw.homepage" });
+
+			const auto alwaysRaw = GetSkillFrontmatterFieldCompat(
+				frontmatter,
+				{ L"always", L"openclaw.always" });
+			if (!alwaysRaw.empty()) {
+				metadata.always = ParseBoolFieldCompat(alwaysRaw, false);
+			}
+
+			metadata.os = SplitListCompat(GetSkillFrontmatterFieldCompat(
+				frontmatter,
+				{ L"os", L"openclaw.os" }));
+
+			metadata.requirements.bins = SplitListCompat(GetSkillFrontmatterFieldCompat(
+				frontmatter,
+				{ L"requires-bins", L"requires_bins", L"requires.bins" }));
+			metadata.requirements.anyBins = SplitListCompat(
+				GetSkillFrontmatterFieldCompat(
+					frontmatter,
+					{ L"requires-any-bins", L"requires_any_bins", L"requires.anybins" }));
+			metadata.requirements.env = SplitListCompat(GetSkillFrontmatterFieldCompat(
+				frontmatter,
+				{ L"requires-env", L"requires_env", L"requires.env" }));
+			metadata.requirements.config = SplitListCompat(
+				GetSkillFrontmatterFieldCompat(
+					frontmatter,
+					{ L"requires-config", L"requires_config", L"requires.config" }));
+
+			const auto installKind = GetSkillFrontmatterFieldCompat(
+				frontmatter,
+				{ L"install-kind", L"install_kind", L"install.kind" });
+			if (!installKind.empty()) {
+				SkillInstallSpec install;
+				install.kind = installKind;
+				install.id = GetSkillFrontmatterFieldCompat(
+					frontmatter,
+					{ L"install-id", L"install_id", L"install.id" });
+				install.label = GetSkillFrontmatterFieldCompat(
+					frontmatter,
+					{ L"install-label", L"install_label", L"install.label" });
+				const auto formula = NormalizeSafeBrewFormulaCompat(
+					GetSkillFrontmatterFieldCompat(
+						frontmatter,
+						{ L"install-formula", L"install_formula", L"install.formula" }));
+				if (formula.has_value()) {
+					install.formula = formula.value();
+				}
+
+				const auto cask = NormalizeSafeBrewFormulaCompat(
+					GetSkillFrontmatterFieldCompat(
+						frontmatter,
+						{ L"install-cask", L"install_cask", L"install.cask" }));
+				if (install.formula.empty() && cask.has_value()) {
+					install.formula = cask.value();
+				}
+
+				const auto package = GetSkillFrontmatterFieldCompat(
+					frontmatter,
+					{ L"install-package", L"install_package", L"install.package" });
+				if (ToLowerCompat(install.kind) == L"node") {
+					const auto npm = NormalizeSafeNpmSpecCompat(package);
+					if (npm.has_value()) {
+						install.package = npm.value();
+					}
+				}
+				else if (ToLowerCompat(install.kind) == L"uv") {
+					const auto uv = NormalizeSafeUvPackageCompat(package);
+					if (uv.has_value()) {
+						install.package = uv.value();
+					}
+				}
+
+				const auto module = NormalizeSafeGoModuleCompat(
+					GetSkillFrontmatterFieldCompat(
+						frontmatter,
+						{ L"install-module", L"install_module", L"install.module" }));
+				if (module.has_value()) {
+					install.module = module.value();
+				}
+
+				const auto url = NormalizeSafeDownloadUrlCompat(
+					GetSkillFrontmatterFieldCompat(
+						frontmatter,
+						{ L"install-url", L"install_url", L"install.url" }));
+				if (url.has_value()) {
+					install.url = url.value();
+				}
+				install.archive = GetSkillFrontmatterFieldCompat(
+					frontmatter,
+					{ L"install-archive", L"install_archive", L"install.archive" });
+				install.targetDir = GetSkillFrontmatterFieldCompat(
+					frontmatter,
+					{ L"install-target-dir", L"install_target_dir", L"install.targetDir" });
+				install.bins = SplitListCompat(GetSkillFrontmatterFieldCompat(
+					frontmatter,
+					{ L"install-bins", L"install_bins", L"install.bins" }));
+				install.os = SplitListCompat(GetSkillFrontmatterFieldCompat(
+					frontmatter,
+					{ L"install-os", L"install_os", L"install.os" }));
+
+				const auto extractRaw = GetSkillFrontmatterFieldCompat(
+					frontmatter,
+					{ L"install-extract", L"install_extract", L"install.extract" });
+				if (!extractRaw.empty()) {
+					install.extract = ParseBoolFieldCompat(extractRaw, false);
+				}
+
+				const auto stripRaw = GetSkillFrontmatterFieldCompat(
+					frontmatter,
+					{ L"install-strip-components", L"install_strip_components", L"install.stripComponents" });
+				if (!stripRaw.empty()) {
+					try {
+						install.stripComponents = static_cast<std::uint32_t>(
+							std::stoul(stripRaw));
+					}
+					catch (...) {
+						install.stripComponents.reset();
+					}
+				}
+
+				const std::wstring normalizedKind = ToLowerCompat(install.kind);
+				const bool validInstall =
+					(normalizedKind == L"brew" && !install.formula.empty()) ||
+					(normalizedKind == L"node" && !install.package.empty()) ||
+					(normalizedKind == L"go" && !install.module.empty()) ||
+					(normalizedKind == L"uv" && !install.package.empty()) ||
+					(normalizedKind == L"download" && !install.url.empty());
+				if (validInstall) {
+					metadata.install.push_back(std::move(install));
+				}
+			}
+
+			return metadata;
 		}
-
-		SkillsMetadataSpec metadata;
-		metadata.skillKey = GetSkillFrontmatterFieldCompat(
-			frontmatter,
-			{ L"skillkey", L"skill-key", L"openclaw.skillkey" });
-		metadata.primaryEnv = GetSkillFrontmatterFieldCompat(
-			frontmatter,
-			{ L"primary-env", L"primary_env", L"openclaw.primary-env" });
-		metadata.emoji = GetSkillFrontmatterFieldCompat(
-			frontmatter,
-			{ L"emoji", L"openclaw.emoji" });
-		metadata.homepage = GetSkillFrontmatterFieldCompat(
-			frontmatter,
-			{ L"homepage", L"openclaw.homepage" });
-
-		const auto alwaysRaw = GetSkillFrontmatterFieldCompat(
-			frontmatter,
-			{ L"always", L"openclaw.always" });
-		if (!alwaysRaw.empty()) {
-			metadata.always = ParseBoolFieldCompat(alwaysRaw, false);
+		catch (const nlohmann::json::exception&) {
+			return SkillsMetadataSpec{};
 		}
-
-		metadata.os = SplitListCompat(GetSkillFrontmatterFieldCompat(
-			frontmatter,
-			{ L"os", L"openclaw.os" }));
-
-		metadata.requirements.bins = SplitListCompat(GetSkillFrontmatterFieldCompat(
-			frontmatter,
-			{ L"requires-bins", L"requires_bins", L"requires.bins" }));
-		metadata.requirements.anyBins = SplitListCompat(
-			GetSkillFrontmatterFieldCompat(
-				frontmatter,
-				{ L"requires-any-bins", L"requires_any_bins", L"requires.anybins" }));
-		metadata.requirements.env = SplitListCompat(GetSkillFrontmatterFieldCompat(
-			frontmatter,
-			{ L"requires-env", L"requires_env", L"requires.env" }));
-		metadata.requirements.config = SplitListCompat(
-			GetSkillFrontmatterFieldCompat(
-				frontmatter,
-				{ L"requires-config", L"requires_config", L"requires.config" }));
-
-		const auto installKind = GetSkillFrontmatterFieldCompat(
-			frontmatter,
-			{ L"install-kind", L"install_kind", L"install.kind" });
-		if (!installKind.empty()) {
-			SkillInstallSpec install;
-			install.kind = installKind;
-			install.id = GetSkillFrontmatterFieldCompat(
-				frontmatter,
-				{ L"install-id", L"install_id", L"install.id" });
-			install.label = GetSkillFrontmatterFieldCompat(
-				frontmatter,
-				{ L"install-label", L"install_label", L"install.label" });
-			const auto formula = NormalizeSafeBrewFormulaCompat(
-				GetSkillFrontmatterFieldCompat(
-					frontmatter,
-					{ L"install-formula", L"install_formula", L"install.formula" }));
-			if (formula.has_value()) {
-				install.formula = formula.value();
-			}
-
-			const auto cask = NormalizeSafeBrewFormulaCompat(
-				GetSkillFrontmatterFieldCompat(
-					frontmatter,
-					{ L"install-cask", L"install_cask", L"install.cask" }));
-			if (install.formula.empty() && cask.has_value()) {
-				install.formula = cask.value();
-			}
-
-			const auto package = GetSkillFrontmatterFieldCompat(
-				frontmatter,
-				{ L"install-package", L"install_package", L"install.package" });
-			if (ToLowerCompat(install.kind) == L"node") {
-				const auto npm = NormalizeSafeNpmSpecCompat(package);
-				if (npm.has_value()) {
-					install.package = npm.value();
-				}
-			}
-			else if (ToLowerCompat(install.kind) == L"uv") {
-				const auto uv = NormalizeSafeUvPackageCompat(package);
-				if (uv.has_value()) {
-					install.package = uv.value();
-				}
-			}
-
-			const auto module = NormalizeSafeGoModuleCompat(
-				GetSkillFrontmatterFieldCompat(
-					frontmatter,
-					{ L"install-module", L"install_module", L"install.module" }));
-			if (module.has_value()) {
-				install.module = module.value();
-			}
-
-			const auto url = NormalizeSafeDownloadUrlCompat(
-				GetSkillFrontmatterFieldCompat(
-					frontmatter,
-					{ L"install-url", L"install_url", L"install.url" }));
-			if (url.has_value()) {
-				install.url = url.value();
-			}
-			install.archive = GetSkillFrontmatterFieldCompat(
-				frontmatter,
-				{ L"install-archive", L"install_archive", L"install.archive" });
-			install.targetDir = GetSkillFrontmatterFieldCompat(
-				frontmatter,
-				{ L"install-target-dir", L"install_target_dir", L"install.targetDir" });
-			install.bins = SplitListCompat(GetSkillFrontmatterFieldCompat(
-				frontmatter,
-				{ L"install-bins", L"install_bins", L"install.bins" }));
-			install.os = SplitListCompat(GetSkillFrontmatterFieldCompat(
-				frontmatter,
-				{ L"install-os", L"install_os", L"install.os" }));
-
-			const auto extractRaw = GetSkillFrontmatterFieldCompat(
-				frontmatter,
-				{ L"install-extract", L"install_extract", L"install.extract" });
-			if (!extractRaw.empty()) {
-				install.extract = ParseBoolFieldCompat(extractRaw, false);
-			}
-
-			const auto stripRaw = GetSkillFrontmatterFieldCompat(
-				frontmatter,
-				{ L"install-strip-components", L"install_strip_components", L"install.stripComponents" });
-			if (!stripRaw.empty()) {
-				try {
-					install.stripComponents = static_cast<std::uint32_t>(
-						std::stoul(stripRaw));
-				}
-				catch (...) {
-					install.stripComponents.reset();
-				}
-			}
-
-			const std::wstring normalizedKind = ToLowerCompat(install.kind);
-			const bool validInstall =
-				(normalizedKind == L"brew" && !install.formula.empty()) ||
-				(normalizedKind == L"node" && !install.package.empty()) ||
-				(normalizedKind == L"go" && !install.module.empty()) ||
-				(normalizedKind == L"uv" && !install.package.empty()) ||
-				(normalizedKind == L"download" && !install.url.empty());
-			if (validInstall) {
-				metadata.install.push_back(std::move(install));
-			}
+		catch (...) {
+			return SkillsMetadataSpec{};
 		}
-
-		return metadata;
 	}
 
 	SkillInvocationPolicySpec ResolveSkillInvocationPolicyCompat(

@@ -2997,49 +2997,91 @@ namespace blazeclaw::core {
 		}
 		const bool startupSkillsRefreshEnabled =
 			runtimeOrchestrationPolicy.startupSkillsRefreshEnabled;
-		if (startupSkillsRefreshEnabled) {
-			RefreshSkillsState(m_activeConfig, true, L"startup");
-			AppendStartupTrace("ServiceManager.Start.skills.refreshed");
+		AppendStartupTrace("ServiceManager.Start.skills.refresh.begin");
+		try {
+			if (startupSkillsRefreshEnabled) {
+				RefreshSkillsState(m_activeConfig, true, L"startup");
+				AppendStartupTrace("ServiceManager.Start.skills.refreshed");
+			}
+			else {
+				const auto workspaceRoot =
+					ResolveWorkspaceRootForSkills(std::filesystem::current_path());
+				const auto commandSourceAdapters =
+					BuildRuntimeSkillCommandSourceAdapters();
+				auto refresh = m_skillsFacade.RefreshSkillsState(
+					workspaceRoot,
+					m_activeConfig,
+					true,
+					L"startup-minimal",
+					m_state.hooks.fallbackPromptInjection,
+					SkillsRefreshDependencies{
+						   .catalogService = m_skillsCatalogService,
+						   .eligibilityService = m_skillsEligibilityService,
+						   .promptService = m_skillsPromptService,
+						   .commandService = m_skillsCommandService,
+						 .commandSourceAdapters = &commandSourceAdapters,
+						   .syncService = m_skillsSyncService,
+						   .envOverrideService = m_skillsEnvOverrideService,
+						   .installService = m_skillsInstallService,
+						   .securityScanService = m_skillSecurityScanService,
+						   .watchService = m_skillsWatchService,
+					});
+				m_skillsCatalog = std::move(refresh.catalog);
+				m_skillsEligibility = std::move(refresh.eligibility);
+				m_hookCatalog = m_hookCatalogService.BuildSnapshot(m_skillsCatalog);
+				m_hookExecution = m_hookExecutionService.Snapshot();
+				m_skillsPrompt = std::move(refresh.prompt);
+				m_skillsRunSnapshot = std::move(refresh.runSnapshot);
+				m_hookEvents = m_hookEventService.Snapshot();
+				m_skillsCommands = std::move(refresh.commands);
+				m_skillsSync = std::move(refresh.sync);
+				m_skillsEnvOverrides = std::move(refresh.envOverrides);
+				m_skillsInstall = std::move(refresh.install);
+				m_skillSecurityScan = std::move(refresh.securityScan);
+				m_skillsWatch = std::move(refresh.watch);
+				m_skillsCatalog.diagnostics.warnings.push_back(
+					L"skills startup full refresh skipped; minimal startup catalog loaded.");
+				AppendStartupTrace("ServiceManager.Start.skills.refresh.minimal");
+			}
 		}
-		else {
-			const auto workspaceRoot =
-				ResolveWorkspaceRootForSkills(std::filesystem::current_path());
-			const auto commandSourceAdapters = BuildRuntimeSkillCommandSourceAdapters();
-			auto refresh = m_skillsFacade.RefreshSkillsState(
-				workspaceRoot,
-				m_activeConfig,
-				true,
-				L"startup-minimal",
-				m_state.hooks.fallbackPromptInjection,
-				SkillsRefreshDependencies{
-					   .catalogService = m_skillsCatalogService,
-					   .eligibilityService = m_skillsEligibilityService,
-					   .promptService = m_skillsPromptService,
-					   .commandService = m_skillsCommandService,
-					 .commandSourceAdapters = &commandSourceAdapters,
-					   .syncService = m_skillsSyncService,
-					   .envOverrideService = m_skillsEnvOverrideService,
-					   .installService = m_skillsInstallService,
-					   .securityScanService = m_skillSecurityScanService,
-					   .watchService = m_skillsWatchService,
-				});
-			m_skillsCatalog = std::move(refresh.catalog);
-			m_skillsEligibility = std::move(refresh.eligibility);
+		catch (const std::exception& ex) {
+			m_skillsCatalog = SkillsCatalogSnapshot{};
+			m_skillsEligibility = SkillsEligibilitySnapshot{};
+			m_skillsPrompt = SkillsPromptSnapshot{};
+			m_skillsRunSnapshot = SkillsRunSnapshot{};
+			m_skillsCommands = SkillsCommandSnapshot{};
+			m_skillsSync = SkillsSyncSnapshot{};
+			m_skillsEnvOverrides = SkillsEnvOverrideSnapshot{};
+			m_skillsInstall = SkillsInstallSnapshot{};
+			m_skillSecurityScan = SkillSecurityScanSnapshot{};
+			m_skillsWatch = SkillsWatchSnapshot{};
 			m_hookCatalog = m_hookCatalogService.BuildSnapshot(m_skillsCatalog);
 			m_hookExecution = m_hookExecutionService.Snapshot();
-			m_skillsPrompt = std::move(refresh.prompt);
-			m_skillsRunSnapshot = std::move(refresh.runSnapshot);
 			m_hookEvents = m_hookEventService.Snapshot();
-			m_skillsCommands = std::move(refresh.commands);
-			m_skillsSync = std::move(refresh.sync);
-			m_skillsEnvOverrides = std::move(refresh.envOverrides);
-			m_skillsInstall = std::move(refresh.install);
-			m_skillSecurityScan = std::move(refresh.securityScan);
-			m_skillsWatch = std::move(refresh.watch);
 			m_skillsCatalog.diagnostics.warnings.push_back(
-				L"skills startup full refresh skipped; minimal startup catalog loaded.");
-			AppendStartupTrace("ServiceManager.Start.skills.refresh.minimal");
+				L"skills refresh failed during startup; continuing with empty skill snapshots: " +
+				ToWide(ex.what()));
+			AppendStartupTrace("ServiceManager.Start.skills.refresh.exception");
 		}
+		catch (...) {
+			m_skillsCatalog = SkillsCatalogSnapshot{};
+			m_skillsEligibility = SkillsEligibilitySnapshot{};
+			m_skillsPrompt = SkillsPromptSnapshot{};
+			m_skillsRunSnapshot = SkillsRunSnapshot{};
+			m_skillsCommands = SkillsCommandSnapshot{};
+			m_skillsSync = SkillsSyncSnapshot{};
+			m_skillsEnvOverrides = SkillsEnvOverrideSnapshot{};
+			m_skillsInstall = SkillsInstallSnapshot{};
+			m_skillSecurityScan = SkillSecurityScanSnapshot{};
+			m_skillsWatch = SkillsWatchSnapshot{};
+			m_hookCatalog = m_hookCatalogService.BuildSnapshot(m_skillsCatalog);
+			m_hookExecution = m_hookExecutionService.Snapshot();
+			m_hookEvents = m_hookEventService.Snapshot();
+			m_skillsCatalog.diagnostics.warnings.push_back(
+				L"skills refresh failed during startup with unknown exception; continuing with empty skill snapshots.");
+			AppendStartupTrace("ServiceManager.Start.skills.refresh.exception.unknown");
+		}
+		AppendStartupTrace("ServiceManager.Start.skills.refresh.end");
 
 		const bool startupHookBootstrapEnabled =
 			runtimeOrchestrationPolicy.startupHookBootstrapEnabled;

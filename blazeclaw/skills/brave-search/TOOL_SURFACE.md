@@ -76,6 +76,11 @@ Fetch a single URL and extract readable markdown content.
 - JSON contracts are defined in `tool-contracts.json`.
 - Runtime startup now loads local `tool-manifest.json` files into
   `gateway.tools.list` / `gateway.tools.catalog`.
+- Compatibility aliases currently served by this runtime:
+  - `web_browsing.search.web`
+  - `web_browsing.fetch.content`
+- These aliases are compatibility mappings and are not yet full runtime parity
+  with `skills-openclaw-original/web-browsing` primary Python execution.
 
 ## Runtime discovery checks
 
@@ -129,3 +134,5 @@ Use the gateway endpoints below to verify Phase 3 discovery:
 - `rate_limited`: upstream throttling response.
 - `upstream_unavailable`: transient upstream 5xx conditions.
 - `network_error`: connectivity or DNS failures.
+- `process_start_failed`: process bootstrap failure before script runtime;
+  typically executable resolution/environment mismatch in GUI runtime context.

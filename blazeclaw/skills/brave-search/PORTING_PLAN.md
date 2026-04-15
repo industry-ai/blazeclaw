@@ -230,6 +230,31 @@ Port these artifacts as the baseline:
   - usage highlights
   - strict preflight policy toggle reminder
 
+## Web-Browsing Parity Audit (Post Phase 6)
+
+### Audit conclusion
+
+- `web_browsing.*` tool IDs are currently routed to this skill's Node runtime
+  scripts (`scripts/search.js`, `scripts/content.js`) for compatibility.
+- This preserves tool-id surface compatibility but is not full execution parity
+  with `skills-openclaw-original/web-browsing` where `search_web.py` is the
+  primary implementation path.
+
+### Current risk
+
+- If Node process startup fails in GUI runtime context, `web_browsing.search.web`
+  returns `process_start_failed` before downstream workflow steps (for example
+  email delivery) can execute.
+
+### Required corrective actions
+
+1. add deterministic Node executable resolution and startup diagnostics in
+   process runner
+2. implement/restore primary Python-backed execution parity for
+   `web_browsing.search.web` using `search_web.py`
+3. keep Node-backed brave-search path as fallback/alternate backend
+4. add regression tests for missing-Node and fallback continuation paths
+
 ## Validation Plan
 
 ### 1) Skill asset integrity
