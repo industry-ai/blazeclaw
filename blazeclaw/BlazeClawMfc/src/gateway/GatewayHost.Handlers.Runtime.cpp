@@ -955,6 +955,25 @@ namespace blazeclaw::gateway {
 			return json;
 		}
 
+		protocol::ErrorShape BuildRuntimeErrorShape(
+			const std::string& code,
+			const std::string& message,
+			const std::string& runId,
+			const std::string& sessionKey) {
+			std::string details =
+				"{\"runId\":" + JsonString(runId) +
+				",\"sessionKey\":" + JsonString(sessionKey) + "}";
+
+			protocol::ErrorShape shape{
+				.code = code,
+				.message = message,
+				.detailsJson = details,
+				.retryable = RuntimeTranscriptGuard::IsRetryableErrorCode(code),
+				.retryAfterMs = RuntimeTranscriptGuard::SuggestedRetryAfterMs(code),
+			};
+			return shape;
+		}
+
 		std::string ResolveCurrentLocalTimeHHmm() {
 			std::time_t now = std::time(nullptr);
 			std::tm localTime = {};
@@ -3714,16 +3733,14 @@ namespace blazeclaw::gateway {
 						.id = request.id,
 						.ok = false,
 						.payloadJson = std::nullopt,
-					  .error = stageContext.responseError.has_value()
+					 .error = stageContext.responseError.has_value()
 							? stageContext.responseError
-							: std::optional<protocol::ErrorShape>(
-								protocol::ErrorShape{
-									.code = stageContext.responseErrorCode,
-									.message = stageContext.responseErrorMessage,
-									.detailsJson = std::nullopt,
-									.retryable = false,
-									.retryAfterMs = std::nullopt,
-								}),
+						  : std::optional<protocol::ErrorShape>(
+								BuildRuntimeErrorShape(
+									stageContext.responseErrorCode,
+									stageContext.responseErrorMessage,
+									stageContext.runId,
+									stageContext.sessionKey)),
 					};
 				}
 
@@ -3744,6 +3761,40 @@ namespace blazeclaw::gateway {
 						? request.id
 						: ("chat-run-" + std::to_string(nowMs) +
 							"-" + std::to_string(m_chatRunsById.size() + 1)));
+				const ChatTranscriptStore transcriptStore;
+				bool userTurnPersisted = false;
+				auto persistUserTurnIfNeeded = [&]() {
+					if (userTurnPersisted) {
+						return;
+					}
+
+					if (!normalizedMessage.empty() || hasAttachments) {
+						const auto userPersisted = transcriptStore.AppendUserMessage(
+							ChatTranscriptStore::AppendParams{
+								.sessionKey = sessionKey,
+								.role = "user",
+								.message = normalizedMessage.empty()
+									? std::string("[attachment]")
+									: normalizedMessage,
+								.label = hasAttachments ? "attachments" : std::string(),
+								.idempotencyKey = runId + ":user",
+							});
+						if (!userPersisted.ok && !userPersisted.error.empty()) {
+							EmitTelemetryEvent(
+								"gateway.chat.transcript.user.persist.error",
+								std::string("{\"runId\":") + JsonString(runId) +
+								",\"sessionKey\":" + JsonString(sessionKey) +
+								",\"error\":" + JsonString(userPersisted.error) + "}");
+						}
+					}
+
+					PushHistoryMessageIfNew(
+						m_chatHistoryBySession[sessionKey],
+						BuildUserMessageJson(normalizedMessage, hasAttachments, nowMs));
+					userTurnPersisted = true;
+					};
+
+				persistUserTurnIfNeeded();
 				const bool runAlreadyTracked =
 					m_chatRunsById.find(runId) != m_chatRunsById.end();
 				const bool lateJoinRequested =
@@ -3793,6 +3844,59 @@ namespace blazeclaw::gateway {
 					}
 					m_transportRecipientRegistry.PruneExpired(nowMs);
 				}
+
+				if (lateJoinRequested && !clientConnectionId.empty()) {
+					auto& replayQueue = m_chatEventsBySession[sessionKey];
+					const auto activeRuns =
+						m_transportRecipientRegistry.ActiveRunsForSession(sessionKey);
+					for (const auto& activeRunId : activeRuns) {
+						const auto activeRunIt = m_chatRunsById.find(activeRunId);
+						if (activeRunIt == m_chatRunsById.end()) {
+							continue;
+						}
+
+						const auto& activeRun = activeRunIt->second;
+						if (!activeRun.active ||
+							RuntimeTranscriptGuard::IsSilentReplyText(activeRun.assistantText)) {
+							continue;
+						}
+
+						std::string replayText;
+						if (activeRun.providerDeltaCursor > 0 &&
+							activeRun.providerDeltaCursor <= activeRun.providerDeltas.size()) {
+							replayText = activeRun.providerDeltas[activeRun.providerDeltaCursor - 1];
+						}
+						if (replayText.empty()) {
+							replayText = activeRun.assistantText.substr(
+								0,
+								(std::min)(activeRun.assistantText.size(), std::size_t{ 64 }));
+						}
+
+						if (replayText.empty()) {
+							continue;
+						}
+
+						const std::string replayMessage =
+							BuildAssistantDeltaMessageJson(replayText);
+						PushEventWithRetentionLimit(replayQueue, ChatEventState{
+								.runId = activeRun.runId,
+								.sessionKey = activeRun.sessionKey,
+								.state = "delta",
+								.messageJson = replayMessage,
+								.errorMessage = std::nullopt,
+								.timestampMs = nowMs,
+							});
+						BranchDecisionDiagnostics::Emit(
+							activeRun.runId,
+							"controlplane",
+							"late_join_replay",
+							"delta_replayed",
+							std::string("{\"connectionId\":") +
+							JsonString(clientConnectionId) +
+							",\"sessionKey\":" +
+							JsonString(sessionKey) + "}");
+					}
+				}
 				EmitTelemetryEvent(
 					"gateway.chat.controlplane.decision",
 					std::string("{\"runId\":") +
@@ -3835,13 +3939,11 @@ namespace blazeclaw::gateway {
 						.id = request.id,
 						.ok = false,
 						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
-							.code = "denied_send",
-							.message = "Request denied by send policy.",
-							.detailsJson = std::nullopt,
-							.retryable = false,
-							.retryAfterMs = std::nullopt,
-						},
+					  .error = BuildRuntimeErrorShape(
+							"denied_send",
+							"Request denied by send policy.",
+							runId,
+							sessionKey),
 					};
 				}
 				auto persistTaskDeltas =
@@ -4067,6 +4169,13 @@ namespace blazeclaw::gateway {
 							orderedSequencePreflight) +
 						"\n\n" + transcriptPolicyDecision.sanitizedMessage)
 					: transcriptPolicyDecision.sanitizedMessage;
+				BranchDecisionDiagnostics::EmitWithPayloadSummary(
+					runId,
+					"runtime",
+					"runtime_message",
+					"runtime_message_built",
+					runtimeMessage,
+					256);
 				std::vector<ChatRuntimeResult::TaskDeltaEntry> orderedPreflightTaskDeltas;
 
 				if (forceError) {
@@ -4834,11 +4943,23 @@ namespace blazeclaw::gateway {
 
 				const bool silentAssistantReply =
 					RuntimeTranscriptGuard::IsSilentReplyText(assistantText);
-
-				auto& sessionHistory = m_chatHistoryBySession[sessionKey];
-				PushHistoryMessageIfNew(
-					sessionHistory,
-					BuildUserMessageJson(normalizedMessage, hasAttachments, nowMs));
+				if (!assistantText.empty() && !silentAssistantReply) {
+					const auto assistantPersisted = transcriptStore.AppendAssistantMessage(
+						ChatTranscriptStore::AppendParams{
+							.sessionKey = sessionKey,
+							.role = "assistant",
+							.message = assistantText,
+							.label = std::string(),
+							.idempotencyKey = runId + ":assistant",
+						});
+					if (!assistantPersisted.ok && !assistantPersisted.error.empty()) {
+						EmitTelemetryEvent(
+							"gateway.chat.transcript.assistant.persist.error",
+							std::string("{\"runId\":") + JsonString(runId) +
+							",\"sessionKey\":" + JsonString(sessionKey) +
+							",\"error\":" + JsonString(assistantPersisted.error) + "}");
+					}
+				}
 
 				auto& sessionEvents = m_chatEventsBySession[sessionKey];
 				if (!lifecycleEventsEnqueued) {
@@ -5051,13 +5172,11 @@ namespace blazeclaw::gateway {
 						.id = request.id,
 						.ok = false,
 						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
-							.code = "invalid_params",
-							.message = "`message` must be a non-empty string.",
-							.detailsJson = std::nullopt,
-							.retryable = false,
-							.retryAfterMs = std::nullopt,
-						},
+					  .error = BuildRuntimeErrorShape(
+							"invalid_params",
+							"`message` must be a non-empty string.",
+							request.id,
+							sessionKey),
 					};
 				}
 
@@ -5074,17 +5193,14 @@ namespace blazeclaw::gateway {
 						.id = request.id,
 						.ok = false,
 						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
-							.code = "unavailable",
-							.message =
-								"failed to write transcript: " +
-								(appended.error.empty()
-									? std::string("unknown error")
-									: appended.error),
-							.detailsJson = std::nullopt,
-							.retryable = false,
-							.retryAfterMs = std::nullopt,
-						},
+					  .error = BuildRuntimeErrorShape(
+							"unavailable",
+							"failed to write transcript: " +
+							(appended.error.empty()
+								? std::string("unknown error")
+								: appended.error),
+							request.id,
+							sessionKey),
 					};
 				}
 

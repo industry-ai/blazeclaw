@@ -72,15 +72,18 @@ namespace blazeclaw::gateway {
 				.count());
 		}
 
-		std::string BuildAssistantMessageJson(
+		std::string BuildChatMessageJson(
 			const std::string& messageId,
+			const std::string& role,
 			const std::string& text,
 			const std::string& label,
 			const std::string& idempotencyKey,
 			const std::uint64_t timestampMs) {
+			const std::string normalizedRole =
+				role.empty() ? std::string("assistant") : role;
 			std::string payload =
 				"{\"id\":" + JsonString(messageId) +
-				",\"role\":\"assistant\"" +
+				",\"role\":" + JsonString(normalizedRole) +
 				",\"text\":" + JsonString(text) +
 				",\"content\":[{\"type\":\"text\",\"text\":" + JsonString(text) + "}]" +
 				",\"timestamp\":" + std::to_string(timestampMs);
@@ -93,92 +96,111 @@ namespace blazeclaw::gateway {
 			payload += "}";
 			return payload;
 		}
+
+		ChatTranscriptStore::AppendResult AppendMessageInternal(
+			const ChatTranscriptStore::AppendParams& params,
+			const std::string& fallbackRole) {
+			static std::atomic<std::uint64_t> sequence{ 0 };
+
+			const std::uint64_t timestampMs = CurrentEpochMs();
+			const std::string effectiveSessionKey =
+				params.sessionKey.empty() ? std::string("main") : params.sessionKey;
+			const std::string effectiveRole =
+				params.role.empty() ? fallbackRole : params.role;
+			const std::string messageId =
+				"msg-" + std::to_string(timestampMs) +
+				"-" + std::to_string(++sequence);
+			const std::string messageJson = BuildChatMessageJson(
+				messageId,
+				effectiveRole,
+				params.message,
+				params.label,
+				params.idempotencyKey,
+				timestampMs);
+
+			try {
+				const std::filesystem::path transcriptPath =
+					ResolveGatewayStateFilePath("chat-transcripts") /
+					(NormalizeSessionKeyForFileName(effectiveSessionKey) + ".jsonl");
+				std::filesystem::create_directories(transcriptPath.parent_path());
+				if (TranscriptHasIdempotencyKey(transcriptPath, params.idempotencyKey)) {
+					return ChatTranscriptStore::AppendResult{
+						.ok = true,
+						.messageId = {},
+						.messageJson = {},
+						.error = {},
+					};
+				}
+
+				std::ofstream output(
+					transcriptPath,
+					std::ios::out | std::ios::app | std::ios::binary);
+				if (!output.is_open()) {
+					return ChatTranscriptStore::AppendResult{
+						.ok = false,
+						.messageId = {},
+						.messageJson = {},
+						.error = "failed to open transcript file",
+					};
+				}
+
+				const std::string line =
+					"{\"messageId\":" + JsonString(messageId) +
+					",\"sessionKey\":" + JsonString(effectiveSessionKey) +
+					",\"role\":" + JsonString(effectiveRole) +
+					(params.idempotencyKey.empty()
+						? std::string()
+						: (",\"idempotencyKey\":" + JsonString(params.idempotencyKey))) +
+					",\"message\":" + messageJson + "}";
+				output << line << "\n";
+				output.flush();
+				if (!output.good()) {
+					return ChatTranscriptStore::AppendResult{
+						.ok = false,
+						.messageId = {},
+						.messageJson = {},
+						.error = "failed to flush transcript file",
+					};
+				}
+			}
+			catch (const std::exception& ex) {
+				return ChatTranscriptStore::AppendResult{
+					.ok = false,
+					.messageId = {},
+					.messageJson = {},
+					.error = ex.what(),
+				};
+			}
+			catch (...) {
+				return ChatTranscriptStore::AppendResult{
+					.ok = false,
+					.messageId = {},
+					.messageJson = {},
+					.error = "unknown transcript persistence failure",
+				};
+			}
+
+			return ChatTranscriptStore::AppendResult{
+				.ok = true,
+				.messageId = messageId,
+				.messageJson = messageJson,
+				.error = {},
+			};
+		}
+	}
+
+	ChatTranscriptStore::AppendResult ChatTranscriptStore::AppendUserMessage(
+		const AppendParams& params) const {
+		AppendParams normalized = params;
+		normalized.role = "user";
+		return AppendMessageInternal(normalized, "user");
 	}
 
 	ChatTranscriptStore::AppendResult ChatTranscriptStore::AppendAssistantMessage(
 		const AppendParams& params) const {
-		static std::atomic<std::uint64_t> sequence{ 0 };
-
-		const std::uint64_t timestampMs = CurrentEpochMs();
-		const std::string effectiveSessionKey =
-			params.sessionKey.empty() ? std::string("main") : params.sessionKey;
-		const std::string messageId =
-			"msg-" + std::to_string(timestampMs) +
-			"-" + std::to_string(++sequence);
-		const std::string messageJson = BuildAssistantMessageJson(
-			messageId,
-			params.message,
-			params.label,
-			params.idempotencyKey,
-			timestampMs);
-
-		try {
-			const std::filesystem::path transcriptPath =
-				ResolveGatewayStateFilePath("chat-transcripts") /
-				(NormalizeSessionKeyForFileName(effectiveSessionKey) + ".jsonl");
-			std::filesystem::create_directories(transcriptPath.parent_path());
-			if (TranscriptHasIdempotencyKey(transcriptPath, params.idempotencyKey)) {
-				return AppendResult{
-					.ok = true,
-					.messageId = {},
-					.messageJson = {},
-					.error = {},
-				};
-			}
-
-			std::ofstream output(
-				transcriptPath,
-				std::ios::out | std::ios::app | std::ios::binary);
-			if (!output.is_open()) {
-				return AppendResult{
-					.ok = false,
-					.messageId = {},
-					.messageJson = {},
-					.error = "failed to open transcript file",
-				};
-			}
-
-			const std::string line =
-				"{\"messageId\":" + JsonString(messageId) +
-				",\"sessionKey\":" + JsonString(effectiveSessionKey) +
-				(params.idempotencyKey.empty()
-					? std::string()
-					: (",\"idempotencyKey\":" + JsonString(params.idempotencyKey))) +
-				",\"message\":" + messageJson + "}";
-			output << line << "\n";
-			output.flush();
-			if (!output.good()) {
-				return AppendResult{
-					.ok = false,
-					.messageId = {},
-					.messageJson = {},
-					.error = "failed to flush transcript file",
-				};
-			}
-		}
-		catch (const std::exception& ex) {
-			return AppendResult{
-				.ok = false,
-				.messageId = {},
-				.messageJson = {},
-				.error = ex.what(),
-			};
-		}
-		catch (...) {
-			return AppendResult{
-				.ok = false,
-				.messageId = {},
-				.messageJson = {},
-				.error = "unknown transcript persistence failure",
-			};
-		}
-
-		return AppendResult{
-			.ok = true,
-			.messageId = messageId,
-			.messageJson = messageJson,
-			.error = {},
-		};
+		AppendParams normalized = params;
+		normalized.role = "assistant";
+		return AppendMessageInternal(normalized, "assistant");
 	}
 
 } // namespace blazeclaw::gateway

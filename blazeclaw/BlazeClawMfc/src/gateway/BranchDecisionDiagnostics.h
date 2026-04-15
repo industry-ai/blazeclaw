@@ -12,6 +12,14 @@ namespace blazeclaw::gateway {
 			const std::string& branch,
 			const std::string& reason,
 			const std::string& detailsJson = "{}");
+
+		static void EmitWithPayloadSummary(
+			const std::string& runId,
+			const std::string& stage,
+			const std::string& branch,
+			const std::string& reason,
+			const std::string& payload,
+			std::size_t maxChars = 256);
 	};
 
 } // namespace blazeclaw::gateway

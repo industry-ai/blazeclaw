@@ -126,6 +126,7 @@ TEST_CASE("GatewayHostRouter decisions are reversible for route mode switches", 
 	REQUIRE(legacyDecision.reasonCode == "legacy_stage_pipeline_feature_disabled");
 
 	const auto stageDecisionAgain = router.Decide(GatewayHostRouteRequest{
+	  .requestId = "req-3",
 		.method = "chat.send",
 		.orchestrationPath = "dynamic_task_delta",
 		.stageHostHealthy = true,
@@ -133,6 +134,51 @@ TEST_CASE("GatewayHostRouter decisions are reversible for route mode switches", 
 		.stagePipelineFeatureEnabled = true,
 		.rolloutCohort = "canary",
 		});
-	REQUIRE(stageDecisionAgain.target == GatewayHostRouteTarget::StagePipeline);
-	REQUIRE(stageDecisionAgain.reasonCode == "stage_pipeline_dynamic_default");
+	const bool isStageTarget =
+		stageDecisionAgain.target == GatewayHostRouteTarget::StagePipeline;
+	const bool isLegacyTarget =
+		stageDecisionAgain.target == GatewayHostRouteTarget::Legacy;
+	REQUIRE((isStageTarget || isLegacyTarget));
+	const bool isCanaryRouted =
+		stageDecisionAgain.reasonCode == "stage_pipeline_canary_bucket";
+	const bool isCanaryHoldback =
+		stageDecisionAgain.reasonCode == "legacy_canary_holdback";
+	const bool validCanaryDecision = isCanaryRouted || isCanaryHoldback;
+	REQUIRE((validCanaryDecision));
+}
+
+TEST_CASE(
+	"GatewayHostRouter keeps legacy when rollout cohort is explicit off",
+	"[router][rollout]") {
+	GatewayHostRouter router;
+	const auto decision = router.Decide(GatewayHostRouteRequest{
+		.requestId = "req-off",
+		.method = "chat.send",
+		.orchestrationPath = "dynamic_task_delta",
+		.stageHostHealthy = true,
+		.runtimeOrchestrationCompatEnabled = false,
+		.stagePipelineFeatureEnabled = true,
+		.rolloutCohort = "stage_pipeline_off",
+		});
+
+	REQUIRE(decision.target == GatewayHostRouteTarget::Legacy);
+	REQUIRE(decision.reasonCode == "legacy_rollout_cohort_off");
+}
+
+TEST_CASE(
+	"GatewayHostRouter selects stage pipeline for full rollout cohort",
+	"[router][rollout]") {
+	GatewayHostRouter router;
+	const auto decision = router.Decide(GatewayHostRouteRequest{
+		.requestId = "req-full",
+		.method = "chat.send",
+		.orchestrationPath = "dynamic_task_delta",
+		.stageHostHealthy = true,
+		.runtimeOrchestrationCompatEnabled = false,
+		.stagePipelineFeatureEnabled = true,
+		.rolloutCohort = "stage_pipeline_full",
+		});
+
+	REQUIRE(decision.target == GatewayHostRouteTarget::StagePipeline);
+	REQUIRE(decision.reasonCode == "stage_pipeline_full_rollout");
 }

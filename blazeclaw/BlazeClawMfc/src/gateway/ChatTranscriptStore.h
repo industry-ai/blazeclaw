@@ -8,6 +8,7 @@ namespace blazeclaw::gateway {
 	public:
 		struct AppendParams {
 			std::string sessionKey;
+			std::string role = "assistant";
 			std::string message;
 			std::string label;
 			std::string idempotencyKey;
@@ -19,6 +20,9 @@ namespace blazeclaw::gateway {
 			std::string messageJson;
 			std::string error;
 		};
+
+		[[nodiscard]] AppendResult AppendUserMessage(
+			const AppendParams& params) const;
 
 		[[nodiscard]] AppendResult AppendAssistantMessage(
 			const AppendParams& params) const;

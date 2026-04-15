@@ -174,6 +174,31 @@ namespace blazeclaw::gateway {
 		return recipients;
 	}
 
+	std::vector<std::string> TransportRecipientRegistry::ActiveRunsForSession(
+		const std::string& sessionKey) const {
+		std::vector<std::string> runIds;
+		if (sessionKey.empty()) {
+			return runIds;
+		}
+
+		const auto sessionIt = m_runsBySession.find(sessionKey);
+		if (sessionIt == m_runsBySession.end()) {
+			return runIds;
+		}
+
+		runIds.reserve(sessionIt->second.size());
+		for (const auto& runId : sessionIt->second) {
+			const auto runIt = m_recipientsByRun.find(runId);
+			if (runIt == m_recipientsByRun.end() || runIt->second.finalized) {
+				continue;
+			}
+
+			runIds.push_back(runId);
+		}
+
+		return runIds;
+	}
+
 	TransportRecipientRegistry::Snapshot TransportRecipientRegistry::GetSnapshot() const {
 		Snapshot snapshot;
 		snapshot.runCount = m_recipientsByRun.size();

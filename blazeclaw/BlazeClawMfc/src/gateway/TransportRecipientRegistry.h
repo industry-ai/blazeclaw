@@ -42,6 +42,8 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] bool HasRecipients(const std::string& runId) const;
 		[[nodiscard]] std::unordered_set<std::string> RecipientsForRun(
 			const std::string& runId) const;
+		[[nodiscard]] std::vector<std::string> ActiveRunsForSession(
+			const std::string& sessionKey) const;
 		[[nodiscard]] Snapshot GetSnapshot() const;
 
 	private:

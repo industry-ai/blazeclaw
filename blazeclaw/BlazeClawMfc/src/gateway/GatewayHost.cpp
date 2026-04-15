@@ -1053,23 +1053,30 @@ namespace blazeclaw::gateway {
 		const std::string& path) {
 		const std::string normalized = ToLowerCopy(json::Trim(path));
 		m_stagePipelineFeatureEnabled = true;
-		m_stagePipelineRolloutCohort = "default";
+		m_stagePipelineRolloutCohort = "stage_pipeline_full";
 		if (normalized == "runtime_orchestration") {
 			m_embeddedOrchestrationPath = normalized;
 			m_stagePipelineFeatureEnabled = false;
 			m_stagePipelineRolloutCohort = "compat_runtime_orchestration";
 			return;
 		}
-		if (normalized == "legacy_only") {
+		if (normalized == "legacy_only" ||
+			normalized == "stage_pipeline_off") {
 			m_embeddedOrchestrationPath = "dynamic_task_delta";
 			m_stagePipelineFeatureEnabled = false;
-			m_stagePipelineRolloutCohort = "legacy_only";
+			m_stagePipelineRolloutCohort = "stage_pipeline_off";
 			return;
 		}
 		if (normalized == "stage_pipeline_canary") {
 			m_embeddedOrchestrationPath = "dynamic_task_delta";
 			m_stagePipelineFeatureEnabled = true;
 			m_stagePipelineRolloutCohort = "canary";
+			return;
+		}
+		if (normalized == "stage_pipeline_full") {
+			m_embeddedOrchestrationPath = "dynamic_task_delta";
+			m_stagePipelineFeatureEnabled = true;
+			m_stagePipelineRolloutCohort = "stage_pipeline_full";
 			return;
 		}
 
@@ -1742,6 +1749,7 @@ namespace blazeclaw::gateway {
 			mutableThis->m_stageRuntimeHost != nullptr &&
 			mutableThis->m_stageRuntimeHost->IsHealthy();
 		const GatewayHostRouteRequest routeRequest{
+		   .requestId = request.id,
 			  .method = request.method,
 			  .orchestrationPath = m_embeddedOrchestrationPath,
 			  .stageHostHealthy = stageHealthy,

@@ -5,6 +5,7 @@
 namespace blazeclaw::gateway {
 
 	struct GatewayHostRouteRequest {
+		std::string requestId;
 		std::string method;
 		std::string orchestrationPath;
 		bool stageHostHealthy = false;
