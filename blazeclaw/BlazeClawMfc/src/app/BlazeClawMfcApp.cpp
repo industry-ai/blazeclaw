@@ -678,6 +678,85 @@ blazeclaw::core::ServiceManager& CBlazeClawMFCApp::Services() noexcept {
 	return m_serviceManager;
 }
 
+bool CBlazeClawMFCApp::EnsureServiceRunning(std::string* outError) {
+	if (m_serviceManager.IsRunning()) {
+		if (outError != nullptr) {
+			outError->clear();
+		}
+
+		return true;
+	}
+
+	std::lock_guard<std::mutex> guard(m_serviceRecoveryMutex);
+	if (m_serviceManager.IsRunning()) {
+		if (outError != nullptr) {
+			outError->clear();
+		}
+
+		return true;
+	}
+
+	std::string error;
+	try {
+		if (!m_serviceManager.Start(m_config) || !m_serviceManager.IsRunning()) {
+			error = "service startup returned not running";
+		}
+	}
+	catch (const std::exception& ex) {
+		error = std::string("service startup exception: ") + ex.what();
+	}
+	catch (...) {
+		error = "service startup unknown exception";
+	}
+
+	if (error.empty()) {
+		StartGatewayPumpWorker();
+	}
+
+	if (outError != nullptr) {
+		*outError = error;
+	}
+
+	return error.empty();
+}
+
+blazeclaw::gateway::protocol::ResponseFrame CBlazeClawMFCApp::RouteGatewayRequest(
+	const blazeclaw::gateway::protocol::RequestFrame& request) {
+	std::string startupError;
+	if (!EnsureServiceRunning(&startupError)) {
+		const std::string message = startupError.empty()
+			? "Service manager is not running."
+			: "Service manager is not running. " + startupError;
+		return blazeclaw::gateway::protocol::ResponseFrame{
+			.id = request.id,
+			.ok = false,
+			.payloadJson = std::nullopt,
+			.error = blazeclaw::gateway::protocol::ErrorShape{
+				.code = "service_not_running",
+				.message = message,
+				.detailsJson = std::nullopt,
+				.retryable = false,
+				.retryAfterMs = std::nullopt,
+			},
+		};
+	}
+
+	auto response = m_serviceManager.RouteGatewayRequest(request);
+	if (response.ok || !response.error.has_value()) {
+		return response;
+	}
+
+	if (response.error->code != "service_not_running") {
+		return response;
+	}
+
+	if (!EnsureServiceRunning(&startupError)) {
+		return response;
+	}
+
+	return m_serviceManager.RouteGatewayRequest(request);
+}
+
 CRuntimeClass* CBlazeClawMFCApp::GetWebViewMarkdownLeftViewClass() const {
 	return RUNTIME_CLASS(CBlazeClawMFCView);
 }

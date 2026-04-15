@@ -4482,15 +4482,15 @@ namespace blazeclaw::core {
 	}
 
 	void ServiceManager::Stop() {
-    m_state.gatewayLifecycle.cleanupPath = "normal_stop";
-    RecordGatewayLifecycleTransition("stop.begin");
+		m_state.gatewayLifecycle.cleanupPath = "normal_stop";
+		RecordGatewayLifecycleTransition("stop.begin");
 
-    ExecuteNonGatewayRuntimeCleanup();   // unconditional
-    ExecuteGatewayOwnedRuntimeCleanup();
+		ExecuteNonGatewayRuntimeCleanup();   // unconditional
+		ExecuteGatewayOwnedRuntimeCleanup();
 
-    m_running = false;
-    RecordGatewayLifecycleTransition("stop.done");
-}
+		m_running = false;
+		RecordGatewayLifecycleTransition("stop.done");
+	}
 
 	void ServiceManager::ResetGatewayOwnedRuntimeCleanup() {
 		m_state.gatewayLiveRuntime.ownedCleanup.clear();

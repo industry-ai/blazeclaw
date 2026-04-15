@@ -51,6 +51,9 @@ public:
 
 	blazeclaw::core::ServiceManager& Services() noexcept;
 	const blazeclaw::core::ServiceManager& Services() const noexcept;
+	bool EnsureServiceRunning(std::string* outError = nullptr);
+	blazeclaw::gateway::protocol::ResponseFrame RouteGatewayRequest(
+		const blazeclaw::gateway::protocol::RequestFrame& request);
 
 	CMultiDocTemplate* GetChatDocTemplate() const noexcept { return m_pChatDocTemplate; }
 	CSharedTabsDocTemplate* GetWebViewMarkdownSharedDocTemplate() const noexcept { return m_pWebViewMarkdownSharedDocTemplate; }
@@ -69,6 +72,7 @@ private:
 	std::thread m_gatewayPumpWorker;
 	std::mutex m_gatewayPumpWorkerMutex;
 	std::condition_variable m_gatewayPumpWorkerCv;
+	std::mutex m_serviceRecoveryMutex;
 
 	CMultiDocTemplate* m_pChatDocTemplate = nullptr;
 	CSharedTabsDocTemplate* m_pWebViewMarkdownSharedDocTemplate = nullptr;

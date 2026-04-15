@@ -360,7 +360,7 @@ void CSkillView::FillSkillView()
 		return;
 	}
 
-	const auto response = app->Services().RouteGatewayRequest(
+	const auto response = app->RouteGatewayRequest(
 		blazeclaw::gateway::protocol::RequestFrame{
 			.id = "skill-view.skills.list",
 			.method = "gateway.skills.list",
@@ -469,7 +469,7 @@ void CSkillView::FillSkillView()
 		m_skillItemPayloadByTreeItem.insert_or_assign(skillNode, entryJson);
 	}
 
-	const auto toolsResponse = app->Services().RouteGatewayRequest(
+	const auto toolsResponse = app->RouteGatewayRequest(
 		blazeclaw::gateway::protocol::RequestFrame{
 			.id = "skill-view.tools.list",
 			.method = "gateway.tools.list",
@@ -477,7 +477,7 @@ void CSkillView::FillSkillView()
 		});
 	if (!toolsResponse.ok)
 	{
-		const auto toolsCatalogResponse = app->Services().RouteGatewayRequest(
+		const auto toolsCatalogResponse = app->RouteGatewayRequest(
 			blazeclaw::gateway::protocol::RequestFrame{
 				.id = "skill-view.tools.catalog",
 				.method = "gateway.tools.catalog",

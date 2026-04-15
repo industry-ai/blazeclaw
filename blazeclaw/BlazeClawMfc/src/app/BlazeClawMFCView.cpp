@@ -1754,7 +1754,7 @@ CBlazeClawMFCView::CBlazeClawMFCView() noexcept
 				};
 			}
 
-			return app->Services().RouteGatewayRequest(request);
+			return app->RouteGatewayRequest(request);
 		};
 	bridgeDeps.appendChatStatusStage =
 		[](const wchar_t* stage)
@@ -2390,7 +2390,7 @@ void CBlazeClawMFCView::ReportRunSkillPathsToFindOutput(const std::string& runId
 			std::string("{\"runId\":\"") + normalizedRunId + "\"}",
 	};
 
-	const auto response = app->Services().RouteGatewayRequest(request);
+	const auto response = app->RouteGatewayRequest(request);
 	if (!response.ok || !response.payloadJson.has_value())
 	{
 		std::string detail =
@@ -2696,7 +2696,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 			.method = method,
 			.paramsJson = paramsJson,
 		};
-		const auto response = app->Services().RouteGatewayRequest(request);
+		const auto response = app->RouteGatewayRequest(request);
 		TraceBridgeTraffic("ws.req.route", method);
 		AppendChatProcedureStatusLine(L"bridge.req.route", method);
 		if (method == "chat.events.poll" &&
@@ -2799,7 +2799,7 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 		.method = method,
 		.paramsJson = paramsJson,
 	};
-	const auto response = app->Services().RouteGatewayRequest(request);
+	const auto response = app->RouteGatewayRequest(request);
 	if (method == "chat.events.poll" &&
 		response.ok &&
 		response.payloadJson.has_value())
@@ -3169,7 +3169,7 @@ void CBlazeClawMFCView::PersistSkillConfigFromPayload(
 	if (app != nullptr)
 	{
 		// Capture the response to avoid discarding a [[nodiscard]] return value.
-		const auto refreshResponse = app->Services().RouteGatewayRequest(
+		const auto refreshResponse = app->RouteGatewayRequest(
 			blazeclaw::gateway::protocol::RequestFrame{
 				.id = "skill.config.refresh",
 				.method = "gateway.skills.refresh",

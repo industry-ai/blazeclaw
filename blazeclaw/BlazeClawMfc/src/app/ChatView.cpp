@@ -540,7 +540,7 @@ void CChatView::OnDestroy()
 
 bool CChatView::IsGatewayConnected() const
 {
-	const auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
 	return app != nullptr && app->Services().IsRunning();
 }
 
@@ -549,7 +549,7 @@ bool CChatView::RequestGateway(
 	const std::optional<std::string>& paramsJson,
 	blazeclaw::gateway::protocol::ResponseFrame& response) const
 {
-	const auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
 	if (app == nullptr)
 	{
 		return false;
@@ -561,7 +561,7 @@ bool CChatView::RequestGateway(
 		.paramsJson = paramsJson,
 	};
 
-	response = app->Services().RouteGatewayRequest(request);
+	response = app->RouteGatewayRequest(request);
 	return true;
 }
 
@@ -744,7 +744,7 @@ void CChatView::SendChatMessageNative(const std::string& message)
 				.method = "chat.send",
 				.paramsJson = params,
 			};
-			response = app->Services().RouteGatewayRequest(request);
+			response = app->RouteGatewayRequest(request);
 
 			completion->accepted = response.ok;
 			if (!completion->accepted)
