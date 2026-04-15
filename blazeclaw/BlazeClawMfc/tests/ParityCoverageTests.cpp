@@ -2800,6 +2800,205 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Parity coverage: weather-report-email prompt continues after mocked web node process_start_failed",
+	"[parity][chat][e2e][fallback][web-browsing]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+
+	std::size_t emailInvokeCount = 0;
+
+	host.RegisterRuntimeToolV2(
+		ToolCatalogEntry{
+			.id = "web_browsing.search.web",
+			.label = "Web Browsing Search",
+			.category = "search",
+			.enabled = true,
+		},
+		[](const ToolExecuteRequestV2& request) {
+			ToolExecuteResultV2 result;
+			result.tool = request.tool;
+			result.executed = false;
+			result.status = "error";
+			result.errorCode = "process_start_failed";
+			result.errorMessage = "mocked node startup failure";
+			result.result = "mocked node startup failure";
+			return result;
+		});
+
+	host.RegisterRuntimeToolV2(
+		ToolCatalogEntry{
+			.id = "baidu-search.search.web",
+			.label = "Baidu Web Search",
+			.category = "search",
+			.enabled = true,
+		},
+		[](const ToolExecuteRequestV2& request) {
+			ToolExecuteResultV2 result;
+			result.tool = request.tool;
+			result.executed = true;
+			result.status = "ok";
+			result.result =
+				R"([{"title":"Wuhan Weather","snippet":"Tomorrow cloudy"}])";
+			return result;
+		});
+
+	host.RegisterRuntimeToolV2(
+		ToolCatalogEntry{
+			.id = "imap_smtp_email.smtp.send",
+			.label = "SMTP Send",
+			.category = "email",
+			.enabled = true,
+		},
+		[&emailInvokeCount](const ToolExecuteRequestV2& request) {
+			++emailInvokeCount;
+			ToolExecuteResultV2 result;
+			result.tool = request.tool;
+			result.executed = true;
+			result.status = "ok";
+			result.result =
+				"{\"status\":\"scheduled\",\"to\":\"jicheng@whu.edu.cn\"}";
+			return result;
+		});
+
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+	host.SetChatRuntimeCallback(
+		[&host](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+
+			const auto webSearch = host.ExecuteRuntimeToolV2(
+				ToolExecuteRequestV2{
+					.tool = "web_browsing.search.web",
+					.argsJson = std::string("{\"query\":\"Wuhan weather tomorrow\"}"),
+					.correlationId = request.runId + "-web",
+					.deadlineEpochMs = std::nullopt,
+				});
+
+			ToolExecuteResultV2 fallbackSearch;
+			if (!webSearch.executed && webSearch.errorCode == "process_start_failed") {
+				fallbackSearch = host.ExecuteRuntimeToolV2(
+					ToolExecuteRequestV2{
+						.tool = "baidu-search.search.web",
+						.argsJson = std::string("{\"query\":\"Wuhan weather tomorrow\"}"),
+						.correlationId = request.runId + "-baidu",
+						.deadlineEpochMs = std::nullopt,
+					});
+			}
+
+			ToolExecuteResultV2 emailSend;
+			if (fallbackSearch.executed && fallbackSearch.status == "ok") {
+				emailSend = host.ExecuteRuntimeToolV2(
+					ToolExecuteRequestV2{
+						.tool = "imap_smtp_email.smtp.send",
+						.argsJson = std::string(
+							"{\"to\":\"jicheng@whu.edu.cn\","
+							"\"subject\":\"Wuhan Weather Report\","
+							"\"body\":\"Tomorrow cloudy.\"}"),
+						.correlationId = request.runId + "-email",
+						.deadlineEpochMs = std::nullopt,
+					});
+			}
+
+			result.assistantText =
+				"Weather report generated and email scheduling executed via fallback.";
+			result.assistantDeltas = {
+				"tools.execute.result tool=web_browsing.search.web status=process_start_failed",
+				"tools.execute.result tool=baidu-search.search.web status=ok",
+				"tools.execute.result tool=imap_smtp_email.smtp.send status=ok",
+			};
+			result.taskDeltas = {
+				 GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					 .index = 0,
+					 .runId = request.runId,
+					 .sessionId = request.sessionKey,
+					 .phase = "tool_result",
+					 .toolName = "web_browsing.search.web",
+					 .resultJson = webSearch.result,
+					 .status = webSearch.errorCode.empty()
+						 ? webSearch.status
+						 : webSearch.errorCode,
+					 .errorCode = webSearch.errorCode,
+					 .stepLabel = "web_search_primary",
+				 },
+				 GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					 .index = 1,
+					 .runId = request.runId,
+					 .sessionId = request.sessionKey,
+					 .phase = "tool_result",
+					 .toolName = "baidu-search.search.web",
+					 .resultJson = fallbackSearch.result,
+					 .status = fallbackSearch.status,
+					 .stepLabel = "web_search_fallback",
+				 },
+				 GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					 .index = 2,
+					 .runId = request.runId,
+					 .sessionId = request.sessionKey,
+					 .phase = "tool_result",
+					 .toolName = "imap_smtp_email.smtp.send",
+					 .resultJson = emailSend.result,
+					 .status = emailSend.status,
+					 .stepLabel = "email_send",
+				 },
+				 GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					 .index = 3,
+					 .runId = request.runId,
+					 .sessionId = request.sessionKey,
+					 .phase = "final",
+					 .resultJson = result.assistantText,
+					 .status = "completed",
+					 .stepLabel = "run_terminal",
+				 },
+			};
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-weather-report-email-fallback-1",
+			.method = "chat.send",
+			.paramsJson = std::string(
+				"{\"sessionKey\":\"main\","
+				"\"message\":\"Check tomorrow's weather in Wuhan, write a short "
+				"report, and email it to jicheng@whu.edu.cn now.\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		sendResponse.payloadJson.value(),
+		"runId",
+		runId));
+	REQUIRE_FALSE(runId.empty());
+
+	const auto deltasResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-weather-report-email-fallback-1-deltas",
+			.method = "gateway.runtime.taskDeltas.get",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+
+	REQUIRE(deltasResponse.ok);
+	REQUIRE(deltasResponse.payloadJson.has_value());
+	const std::string payload = deltasResponse.payloadJson.value();
+	REQUIRE(payload.find("\"toolName\":\"web_browsing.search.web\"") !=
+		std::string::npos);
+	REQUIRE(payload.find("\"errorCode\":\"process_start_failed\"") !=
+		std::string::npos);
+	REQUIRE(payload.find("\"toolName\":\"baidu-search.search.web\"") !=
+		std::string::npos);
+	REQUIRE(payload.find("\"toolName\":\"imap_smtp_email.smtp.send\"") !=
+		std::string::npos);
+	REQUIRE(payload.find("\"phase\":\"final\"") != std::string::npos);
+	REQUIRE(emailInvokeCount == 1);
+
+	host.Stop();
+}
+
+TEST_CASE(
 	"Parity coverage: chat abort emits aborted terminal event and clears active run",
 	"[parity][chat][events][e2e]") {
 	GatewayHost host;
