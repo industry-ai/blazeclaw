@@ -264,6 +264,11 @@ Port these artifacts as the baseline:
 - Runtime preflight probes now include Python/web-browsing parity signals:
   - `runtime:python`
   - `skill:web_browsing_python`
+- Step 5 fallback continuity is now implemented for `web_browsing.search.web`:
+  when startup fails, runtime attempts deterministic fallback chain including
+  Baidu Python search backend to preserve downstream task progression.
+- Regression coverage added for Option B continuity and probe wiring via
+  runtime contract tests.
 
 ## Validation Plan
 

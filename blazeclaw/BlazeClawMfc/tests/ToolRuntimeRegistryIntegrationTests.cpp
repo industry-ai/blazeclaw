@@ -3,6 +3,9 @@
 
 #include <catch2/catch_all.hpp>
 
+#include <filesystem>
+#include <fstream>
+
 TEST_CASE("Tool runtime spec builders expose expected tool ids", "[tools][runtime][registry]") {
 	const auto imapSpecs = blazeclaw::core::tools::BuildImapSmtpToolRuntimeSpecs();
 	const auto braveSpecs = blazeclaw::core::tools::BuildBraveSearchToolRuntimeSpecs();
@@ -101,6 +104,65 @@ TEST_CASE("Tool runtime classifiers and truncation keep behavior parity", "[tool
 		"upstream_unavailable");
 	REQUIRE(
 		blazeclaw::core::tools::IsBraveNetworkTimeoutFailure("UND_ERR_CONNECT_TIMEOUT"));
+}
+
+TEST_CASE("Web browsing Option B fallback continuity contract remains wired", "[tools][runtime][fallback][contract]") {
+	const auto serviceManagerPathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	const auto serviceManagerPathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	std::ifstream in(serviceManagerPathPrimary.string());
+	if (!in.is_open()) {
+		in.open(serviceManagerPathFallback.string());
+	}
+	REQUIRE(in.is_open());
+
+	const std::string source(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+
+	REQUIRE(source.find("spec.id == \"web_browsing.search.web\"") != std::string::npos);
+	REQUIRE(source.find("[fallback=web_browsing_python_primary]") != std::string::npos);
+	REQUIRE(source.find("[fallback=baidu_search_python]") != std::string::npos);
+	REQUIRE(source.find("process.errorCode.empty()") != std::string::npos);
+	REQUIRE(source.find("? \"process_start_failed\"") != std::string::npos);
+}
+
+TEST_CASE("Runtime health dependencies include python and web-browsing probes", "[tools][runtime][health][contract]") {
+	const auto executorPathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"gateway" /
+		"executors" /
+		"EmailScheduleExecutor.cpp";
+	const auto executorPathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"gateway" /
+		"executors" /
+		"EmailScheduleExecutor.cpp";
+	std::ifstream in(executorPathPrimary.string());
+	if (!in.is_open()) {
+		in.open(executorPathFallback.string());
+	}
+	REQUIRE(in.is_open());
+
+	const std::string source(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+
+	REQUIRE(source.find("BLAZECLAW_EMAIL_PROBE_PYTHON") != std::string::npos);
+	REQUIRE(source.find("BLAZECLAW_EMAIL_PROBE_WEB_BROWSING_PYTHON_SKILL") != std::string::npos);
+	REQUIRE(source.find("\"runtime:python\"") != std::string::npos);
+	REQUIRE(source.find("\"skill:web_browsing_python\"") != std::string::npos);
 }
 
 TEST_CASE("CToolRuntimeRegistry invokes dependency registrations", "[tools][runtime][registry]") {

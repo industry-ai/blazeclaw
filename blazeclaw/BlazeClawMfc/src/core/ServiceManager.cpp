@@ -1608,6 +1608,7 @@ namespace blazeclaw::core {
 			const auto skillRoot = toolPolicy.braveSearchSkillRoot;
 			const auto openClawWebBrowsingSkillRoot = toolPolicy.openClawWebBrowsingSkillRoot;
 			const auto webBrowsingSkillRoot = toolPolicy.webBrowsingSkillRoot;
+			const auto baiduSearchSkillRoot = toolPolicy.baiduSearchSkillRoot;
 			const bool enableOpenClawWebBrowsingFallback =
 				toolPolicy.enableOpenClawWebBrowsingFallback;
 			const bool requireApiKey = toolPolicy.braveRequireApiKey;
@@ -1624,6 +1625,7 @@ namespace blazeclaw::core {
 					skillRoot,
 					openClawWebBrowsingSkillRoot,
 					webBrowsingSkillRoot,
+					baiduSearchSkillRoot,
 					enableOpenClawWebBrowsingFallback,
 					requireApiKey,
 					hasApiKey](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
@@ -1804,6 +1806,75 @@ namespace blazeclaw::core {
 												result.latencyMs =
 													result.completedAtMs - result.startedAtMs;
 												return result;
+											}
+										}
+									}
+								}
+							}
+
+							if (spec.id == "web_browsing.search.web" &&
+								baiduSearchSkillRoot.has_value() &&
+								params.contains("query") &&
+								params["query"].is_string()) {
+								const std::string query =
+									tools::TrimAsciiForBraveSearch(params["query"].get<std::string>());
+								if (!query.empty()) {
+									std::uint64_t fallbackTimeoutMs = 15000;
+									if (request.deadlineEpochMs.has_value()) {
+										const std::uint64_t now = CurrentEpochMs();
+										if (request.deadlineEpochMs.value() <= now) {
+											fallbackTimeoutMs = 0;
+										}
+										else {
+											fallbackTimeoutMs = request.deadlineEpochMs.value() - now;
+										}
+									}
+
+									if (fallbackTimeoutMs > 0) {
+										const auto fallbackScriptPath =
+											baiduSearchSkillRoot.value() /
+											L"scripts" /
+											L"search.py";
+										if (std::filesystem::exists(fallbackScriptPath)) {
+											nlohmann::json fallbackParams = nlohmann::json::object();
+											fallbackParams["query"] = query;
+											if (params.contains("count") &&
+												params["count"].is_number_integer()) {
+												fallbackParams["count"] = params["count"];
+											}
+
+											std::string fallbackArgsErrorCode;
+											std::string fallbackArgsErrorMessage;
+											const auto fallbackCliArgs =
+												tools::BuildBaiduSearchCliArgs(
+													tools::BaiduSearchToolRuntimeSpec{
+														.id = "baidu-search.search.web",
+														.label = "Baidu Web Search",
+														.script = "scripts/search.py",
+													},
+													fallbackParams,
+													fallbackArgsErrorCode,
+													fallbackArgsErrorMessage);
+											if (fallbackCliArgs.has_value()) {
+												const auto fallbackProcess = tools::ExecutePythonSkillProcess(
+													fallbackScriptPath,
+													fallbackCliArgs.value(),
+													fallbackTimeoutMs);
+												if (fallbackProcess.started &&
+													!fallbackProcess.timedOut &&
+													fallbackProcess.exitCode == 0) {
+													result.executed = true;
+													result.status = "ok";
+													result.result =
+														fallbackProcess.output +
+														"\n[fallback=baidu_search_python]";
+													result.errorCode.clear();
+													result.errorMessage.clear();
+													result.completedAtMs = CurrentEpochMs();
+													result.latencyMs =
+														result.completedAtMs - result.startedAtMs;
+													return result;
+												}
 											}
 										}
 									}
