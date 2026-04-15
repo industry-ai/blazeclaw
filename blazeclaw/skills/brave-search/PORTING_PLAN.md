@@ -249,11 +249,19 @@ Port these artifacts as the baseline:
 ### Required corrective actions
 
 1. add deterministic Node executable resolution and startup diagnostics in
-   process runner
+   process runner (**completed**)
 2. implement/restore primary Python-backed execution parity for
    `web_browsing.search.web` using `search_web.py`
 3. keep Node-backed brave-search path as fallback/alternate backend
 4. add regression tests for missing-Node and fallback continuation paths
+
+### Corrective action status notes
+
+- Process runner now emits enriched `process_start_failed` launch diagnostics
+  (last error code + executable + working directory + command context).
+- Node executable resolution now follows deterministic order:
+  `BLAZECLAW_NODE_PATH` -> `SearchPathW(node.exe)` -> `SearchPathW(node)`;
+  unresolved state returns explicit `node_not_found`.
 
 ## Validation Plan
 

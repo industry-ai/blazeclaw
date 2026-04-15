@@ -126,6 +126,9 @@ Use the gateway endpoints below to verify Phase 3 discovery:
 ## Troubleshooting quick map
 
 - `brave_api_key_missing`: missing `BRAVE_API_KEY` while strict preflight is enabled.
+- `node_not_found`: Node runtime executable could not be resolved. Set
+  `BLAZECLAW_NODE_PATH` to an absolute `node.exe` path, or ensure `node.exe`
+  is discoverable by `SearchPathW` in GUI runtime context.
 - `invalid_arguments`: invalid `query`, `count/topK`, `content`, or `url` shape/value.
 - `planner_invalid_search_query`: planner could not derive a safe compact query
   for search execution; refine the prompt or provide a direct concise query.
