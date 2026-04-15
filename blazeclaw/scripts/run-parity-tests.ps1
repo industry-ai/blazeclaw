@@ -1,6 +1,7 @@
 param(
     [string]$Configuration = "Debug",
-    [string]$Platform = "x64"
+    [string]$Platform = "x64",
+    [string]$Filter = "[parity][behavior-equivalence]"
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,8 +17,8 @@ if (-not (Test-Path $testExe)) {
     throw "Parity test executable not found: $testExe"
 }
 
-Write-Host "[ParityTests] Running behavior-equivalence and parity suites..."
-& $testExe "[parity]"
+Write-Host "[ParityTests] Running parity suites with filter: $Filter"
+& $testExe $Filter
 if ($LASTEXITCODE -ne 0) {
     throw "Parity tests failed with exit code $LASTEXITCODE"
 }

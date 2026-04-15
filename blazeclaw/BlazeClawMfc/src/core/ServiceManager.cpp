@@ -3802,10 +3802,14 @@ namespace blazeclaw::core {
 					shouldLoadInlineSkillCommands
 					? ResolveSkillInvocationPromptRewrite(commandBodyForInline)
 					: std::nullopt;
+				const std::string baseAgentMessage =
+					!request.bodyForAgent.empty()
+					? request.bodyForAgent
+					: request.message;
 				const std::string inboundMessageForAgent =
 					rewrittenSkillPromptMessage.has_value()
 					? rewrittenSkillPromptMessage.value()
-					: request.message;
+					: baseAgentMessage;
 				const std::wstring resolvedPromptForRunWide =
 					m_skillsFacade.ResolvePromptForRun(
 						&m_skillsRunSnapshot,
