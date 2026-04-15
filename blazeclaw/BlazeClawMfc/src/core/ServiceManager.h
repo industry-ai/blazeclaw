@@ -269,10 +269,13 @@ namespace blazeclaw::core {
 			const std::string& sessionId) const;
 		[[nodiscard]] std::optional<std::string>
 			ResolveSkillInvocationToolTarget(
-				const std::string& message) const;
+				const std::string& commandBodyNormalized) const;
+		[[nodiscard]] std::optional<std::string>
+			ResolveSkillInvocationPromptRewrite(
+				const std::string& commandBodyNormalized) const;
 		[[nodiscard]] bool ShouldLoadSkillCommandsForInlineActions(
 			bool allowTextCommands,
-			const std::string& message) const;
+			const std::string& commandBodyNormalized) const;
 		[[nodiscard]] std::vector<std::string>
 			BuildOrderedAllowedToolTargets(
 				const std::vector<std::string>& requestedTargets,

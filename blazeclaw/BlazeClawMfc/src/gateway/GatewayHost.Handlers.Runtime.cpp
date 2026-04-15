@@ -4521,7 +4521,7 @@ namespace blazeclaw::gateway {
 							.errorMessage = {},
 							.startedAtMs = nowMs,
 							.active = true,
-						 .terminalEventEnqueued = false,
+							.terminalEventEnqueued = false,
 							.pushLifecycleRequested = pushLifecycleEnabled,
 							.toolEventsAllowed = sendControlDecision.toolEvents.wantsToolEvents,
 							.originatingChannel = sendControlDecision.route.originatingChannel,
@@ -4535,41 +4535,24 @@ namespace blazeclaw::gateway {
 							.runId = runId,
 							.sessionKey = sessionKey,
 							.message = runtimeMessage,
-							.inlineInvocationAuthorizedSender = [&request]() {
-							bool value = true;
-							if (request.paramsJson.has_value()) {
-								json::FindBoolField(
-									request.paramsJson.value(),
-									"inlineInvocationAuthorizedSender",
-									value);
-							}
-							return value;
-						}(),
-						.inlineInvocationSenderIsOwner = [&request]() {
-						 bool value = true;
-							if (request.paramsJson.has_value()) {
-								json::FindBoolField(
-									request.paramsJson.value(),
-									"inlineInvocationSenderIsOwner",
-									value);
-							}
-							return value;
-						}(),
-						.allowInlineToolImmediateExecution = [&request]() {
-						 bool value = true;
-							if (request.paramsJson.has_value()) {
-								json::FindBoolField(
-									request.paramsJson.value(),
-									"allowInlineToolImmediateExecution",
-									value);
-							}
-							return value;
-						}(),
-						.enforceOrderedAllowlist = enforceOrderedAllowlist,
+							.bodyForCommands = stageContext.bodyForCommands,
+							.bodyForAgent = stageContext.bodyForAgent.empty()
+								? runtimeMessage
+								: stageContext.bodyForAgent,
+							.slashCommandName = stageContext.slashCommandName,
+							.shouldLoadInlineSkillCommands =
+								stageContext.shouldLoadInlineSkillCommands,
+							.inlineInvocationAuthorizedSender =
+								stageContext.inlineInvocationAuthorizedSender,
+							.inlineInvocationSenderIsOwner =
+								stageContext.inlineInvocationSenderIsOwner,
+							.allowInlineToolImmediateExecution =
+								stageContext.allowInlineToolImmediateExecution,
+							.enforceOrderedAllowlist = enforceOrderedAllowlist,
 							.orderedAllowedToolTargets = orderedAllowlistTargets,
 							.hasAttachments = hasAttachments,
 							.attachmentMimeTypes = attachmentMimeTypes,
-						.onAssistantDelta =
+							.onAssistantDelta =
 								[this,
 									&streamedDeltaCount,
 									&runId,

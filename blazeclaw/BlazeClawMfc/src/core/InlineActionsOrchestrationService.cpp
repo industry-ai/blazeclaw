@@ -94,4 +94,22 @@ namespace blazeclaw::core {
 			builtinSlashCommands.end();
 	}
 
+	InlineActionsDecisionSignals InlineActionsOrchestrationService::BuildDecisionSignals(
+		const bool allowTextCommands,
+		const std::string& commandBodyNormalized,
+		const std::unordered_set<std::string>& reservedNames) const {
+		InlineActionsDecisionSignals signals;
+		signals.slashCommandName = ResolveSlashCommandName(commandBodyNormalized);
+		signals.hasSlashCommand = !signals.slashCommandName.empty();
+		signals.hasExplicitSkillInvocation = signals.slashCommandName == "skill";
+
+		const auto builtinSlashCommands = BuildBuiltinSlashCommands(reservedNames);
+		signals.shouldLoadSkillCommands = ShouldLoadSkillCommandsForSlash(
+			allowTextCommands,
+			signals.slashCommandName,
+			builtinSlashCommands);
+
+		return signals;
+	}
+
 } // namespace blazeclaw::core

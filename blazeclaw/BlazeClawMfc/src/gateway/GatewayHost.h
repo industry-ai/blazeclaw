@@ -200,6 +200,10 @@ namespace blazeclaw::gateway {
 			std::string runId;
 			std::string sessionKey;
 			std::string message;
+			std::string bodyForCommands;
+			std::string bodyForAgent;
+			std::string slashCommandName;
+			bool shouldLoadInlineSkillCommands = false;
 			bool inlineInvocationAuthorizedSender = true;
 			bool inlineInvocationSenderIsOwner = true;
 			bool allowInlineToolImmediateExecution = true;

@@ -1353,6 +1353,20 @@ namespace blazeclaw::gateway::protocol {
 					"a string") ||
 				!RequireFieldKindIfPresent(
 					fieldKinds,
+					"bodyForCommands",
+					JsonFieldKind::String,
+					issue,
+					"chat.send",
+					"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"bodyForAgent",
+					JsonFieldKind::String,
+					issue,
+					"chat.send",
+					"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
 					"idempotencyKey",
 					JsonFieldKind::String,
 					issue,
@@ -1518,6 +1532,8 @@ namespace blazeclaw::gateway::protocol {
 			for (const auto& [field, _] : fieldKinds) {
 				if (field == "sessionKey" ||
 					field == "message" ||
+					field == "bodyForCommands" ||
+					field == "bodyForAgent" ||
 					field == "idempotencyKey" ||
 					field == "forceError" ||
 					field == "attachments" ||

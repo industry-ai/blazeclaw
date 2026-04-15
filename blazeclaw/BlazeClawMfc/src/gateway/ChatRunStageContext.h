@@ -25,6 +25,11 @@ namespace blazeclaw::gateway {
 		std::string sessionKey;
 		std::string message;
 		std::string normalizedMessage;
+		std::string bodyForCommands;
+		std::string bodyForAgent;
+		std::string slashCommandName;
+		bool shouldLoadInlineSkillCommands = false;
+		bool hasExplicitSkillInvocation = false;
 		std::string idempotencyKey;
 		bool deliver = false;
 		std::string routeChannel;
@@ -36,6 +41,9 @@ namespace blazeclaw::gateway {
 		std::string mainKey = "main";
 		bool pushLifecycleRequested = false;
 		bool forceError = false;
+		bool inlineInvocationAuthorizedSender = true;
+		bool inlineInvocationSenderIsOwner = true;
+		bool allowInlineToolImmediateExecution = true;
 		bool attachmentsValid = true;
 		bool hasAttachmentPayload = false;
 		bool deduped = false;

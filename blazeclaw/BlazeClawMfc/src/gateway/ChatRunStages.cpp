@@ -2,8 +2,10 @@
 #include "ChatRunStages.h"
 
 #include "GatewayJsonUtils.h"
+#include "../core/InlineActionsOrchestrationService.h"
 
 #include <algorithm>
+#include <unordered_set>
 #include <nlohmann/json.hpp>
 
 namespace blazeclaw::gateway {
@@ -97,11 +99,32 @@ namespace blazeclaw::gateway {
 	}
 
 	ChatRunStageResult ChatControlStage::Execute(ChatRunStageContext& context) const {
+		static const std::unordered_set<std::string> kReservedSlashNames = {
+			  "new",
+			  "reset",
+			  "stop",
+			  "status",
+			  "model",
+			  "queue",
+			  "help",
+		};
+
+		static const blazeclaw::core::InlineActionsOrchestrationService
+			kInlineActionsOrchestrationService;
+
 		if (!context.paramsJson.has_value()) {
 			context.message.clear();
 			context.normalizedMessage.clear();
+			context.bodyForCommands.clear();
+			context.bodyForAgent.clear();
+			context.slashCommandName.clear();
+			context.shouldLoadInlineSkillCommands = false;
+			context.hasExplicitSkillInvocation = false;
 			context.idempotencyKey.clear();
 			context.forceError = false;
+			context.inlineInvocationAuthorizedSender = true;
+			context.inlineInvocationSenderIsOwner = true;
+			context.allowInlineToolImmediateExecution = true;
 			return AppendStage(context, Name(), "decomposition", "ok");
 		}
 
@@ -115,7 +138,43 @@ namespace blazeclaw::gateway {
 			context.paramsJson.value(),
 			"idempotencyKey",
 			idempotencyKey);
+		if (idempotencyKey.empty() && !context.requestId.empty()) {
+			idempotencyKey = context.requestId;
+		}
 		context.idempotencyKey = idempotencyKey;
+
+		std::string bodyForCommands;
+		if (json::FindStringField(
+			context.paramsJson.value(),
+			"bodyForCommands",
+			bodyForCommands)) {
+			context.bodyForCommands = json::Trim(bodyForCommands);
+		}
+		if (context.bodyForCommands.empty()) {
+			context.bodyForCommands = context.normalizedMessage;
+		}
+
+		std::string bodyForAgent;
+		if (json::FindStringField(
+			context.paramsJson.value(),
+			"bodyForAgent",
+			bodyForAgent)) {
+			context.bodyForAgent = json::Trim(bodyForAgent);
+		}
+		if (context.bodyForAgent.empty()) {
+			context.bodyForAgent = context.normalizedMessage;
+		}
+
+		const auto inlineSignals =
+			kInlineActionsOrchestrationService.BuildDecisionSignals(
+				true,
+				context.bodyForCommands,
+				kReservedSlashNames);
+		context.slashCommandName = inlineSignals.slashCommandName;
+		context.shouldLoadInlineSkillCommands =
+			inlineSignals.shouldLoadSkillCommands;
+		context.hasExplicitSkillInvocation =
+			inlineSignals.hasExplicitSkillInvocation;
 
 		bool deliver = false;
 		if (json::FindBoolField(context.paramsJson.value(), "deliver", deliver)) {
@@ -169,6 +228,42 @@ namespace blazeclaw::gateway {
 		}
 		else {
 			context.forceError = false;
+		}
+
+		bool inlineInvocationAuthorizedSender = true;
+		if (json::FindBoolField(
+			context.paramsJson.value(),
+			"inlineInvocationAuthorizedSender",
+			inlineInvocationAuthorizedSender)) {
+			context.inlineInvocationAuthorizedSender =
+				inlineInvocationAuthorizedSender;
+		}
+		else {
+			context.inlineInvocationAuthorizedSender = true;
+		}
+
+		bool inlineInvocationSenderIsOwner = true;
+		if (json::FindBoolField(
+			context.paramsJson.value(),
+			"inlineInvocationSenderIsOwner",
+			inlineInvocationSenderIsOwner)) {
+			context.inlineInvocationSenderIsOwner =
+				inlineInvocationSenderIsOwner;
+		}
+		else {
+			context.inlineInvocationSenderIsOwner = true;
+		}
+
+		bool allowInlineToolImmediateExecution = true;
+		if (json::FindBoolField(
+			context.paramsJson.value(),
+			"allowInlineToolImmediateExecution",
+			allowInlineToolImmediateExecution)) {
+			context.allowInlineToolImmediateExecution =
+				allowInlineToolImmediateExecution;
+		}
+		else {
+			context.allowInlineToolImmediateExecution = true;
 		}
 
 		bool hasAttachments = false;
@@ -408,6 +503,10 @@ namespace blazeclaw::gateway {
 		}
 		else {
 			context.runtimeMessage = context.normalizedMessage;
+		}
+
+		if (context.bodyForAgent.empty()) {
+			context.bodyForAgent = context.runtimeMessage;
 		}
 
 		return AppendStage(context, Name(), "runtime", "ok");

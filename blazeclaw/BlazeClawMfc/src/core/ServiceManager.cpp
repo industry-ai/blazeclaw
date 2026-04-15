@@ -3490,11 +3490,11 @@ namespace blazeclaw::core {
 	}
 
 	std::optional<std::string> ServiceManager::ResolveSkillInvocationToolTarget(
-		const std::string& message) const
+		const std::string& commandBodyNormalized) const
 	{
 		const auto resolvedSkillInvocation =
 			m_skillCommandInvocationService.ResolveInvocation(
-				ToWide(message),
+				ToWide(commandBodyNormalized),
 				m_skillsCommands.commands);
 		if (!resolvedSkillInvocation.has_value() ||
 			!resolvedSkillInvocation->command.dispatch.enabled ||
@@ -3509,12 +3509,64 @@ namespace blazeclaw::core {
 			resolvedSkillInvocation->command.dispatch.toolName);
 	}
 
+	std::optional<std::string> ServiceManager::ResolveSkillInvocationPromptRewrite(
+		const std::string& commandBodyNormalized) const
+	{
+		const auto resolvedSkillInvocation =
+			m_skillCommandInvocationService.ResolveInvocation(
+				ToWide(commandBodyNormalized),
+				m_skillsCommands.commands);
+		if (!resolvedSkillInvocation.has_value()) {
+			return std::nullopt;
+		}
+
+		const auto& command = resolvedSkillInvocation->command;
+		if (command.dispatch.enabled &&
+			_wcsicmp(command.dispatch.kind.c_str(), L"tool") == 0) {
+			return std::nullopt;
+		}
+
+		const std::string skillName = WideToNarrowAscii(command.skillName);
+		const std::string args = resolvedSkillInvocation->args.has_value()
+			? WideToNarrowAscii(Trim(resolvedSkillInvocation->args.value()))
+			: std::string();
+
+		std::string rewrittenMessage;
+		const std::wstring promptTemplateWide = Trim(command.promptTemplate);
+		if (!promptTemplateWide.empty()) {
+			rewrittenMessage = WideToNarrowAscii(promptTemplateWide);
+			const std::string placeholder = "{{args}}";
+			const std::size_t placeholderPos = rewrittenMessage.find(placeholder);
+			if (placeholderPos != std::string::npos) {
+				rewrittenMessage.replace(
+					placeholderPos,
+					placeholder.size(),
+					args);
+			}
+		}
+		else {
+			rewrittenMessage =
+				"Use the \"" + skillName + "\" skill for this request.";
+			if (!args.empty()) {
+				rewrittenMessage += "\n\nUser input:\n" + args;
+			}
+		}
+
+		const std::string normalized = WideToNarrowAscii(Trim(ToWide(rewrittenMessage)));
+		if (normalized.empty()) {
+			return std::nullopt;
+		}
+
+		return normalized;
+	}
+
 	bool ServiceManager::ShouldLoadSkillCommandsForInlineActions(
 		const bool allowTextCommands,
-		const std::string& message) const
+		const std::string& commandBodyNormalized) const
 	{
 		const auto slashCommandName =
-			m_inlineActionsOrchestrationService.ResolveSlashCommandName(message);
+			m_inlineActionsOrchestrationService.ResolveSlashCommandName(
+				commandBodyNormalized);
 		std::unordered_set<std::string> reserved;
 		for (const auto& name :
 			blazeclaw::gateway::GatewayHost::ListReservedChatSlashCommandNames()) {
@@ -3725,22 +3777,35 @@ namespace blazeclaw::core {
 	{
 		m_gatewayHost.SetChatRuntimeCallback([this](
 			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
+				const std::string commandBodyForInline =
+					!request.bodyForCommands.empty()
+					? request.bodyForCommands
+					: request.message;
 				const bool shouldLoadInlineSkillCommands =
+					request.shouldLoadInlineSkillCommands ||
 					ShouldLoadSkillCommandsForInlineActions(
 						true,
-						request.message);
+						commandBodyForInline);
 				if (!shouldLoadInlineSkillCommands) {
 					TRACE(
 						"[InlineActions] slash gate skipped skill command load for message: %s\n",
-						request.message.c_str());
+						commandBodyForInline.c_str());
 				}
 
 				const std::string sessionId =
 					request.sessionKey.empty() ? "main" : request.sessionKey;
 				const auto resolvedSkillInvocationToolTarget =
 					shouldLoadInlineSkillCommands
-					? ResolveSkillInvocationToolTarget(request.message)
+					? ResolveSkillInvocationToolTarget(commandBodyForInline)
 					: std::nullopt;
+				const auto rewrittenSkillPromptMessage =
+					shouldLoadInlineSkillCommands
+					? ResolveSkillInvocationPromptRewrite(commandBodyForInline)
+					: std::nullopt;
+				const std::string inboundMessageForAgent =
+					rewrittenSkillPromptMessage.has_value()
+					? rewrittenSkillPromptMessage.value()
+					: request.message;
 				const std::wstring resolvedPromptForRunWide =
 					m_skillsFacade.ResolvePromptForRun(
 						&m_skillsRunSnapshot,
@@ -3757,7 +3822,7 @@ namespace blazeclaw::core {
 					WideToNarrowAscii(resolvedPromptForRun);
 				const std::string runtimeMessage =
 					BuildSkillsInjectedMessage(
-						request.message,
+						inboundMessageForAgent,
 						resolvedPromptForRun,
 						static_cast<std::size_t>(
 							m_activeConfig.skills.limits.maxSkillsPromptChars));
