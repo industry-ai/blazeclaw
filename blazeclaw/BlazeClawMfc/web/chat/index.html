@@ -146,6 +146,7 @@
       const pending = new Map();
       const seenBridgeSeq = new Set();
       const seenBridgeIds = new Set();
+      const bridgeAvailable = !!(window.chrome && window.chrome.webview);
 
       const statusEl = document.getElementById("status");
       const messagesEl = document.getElementById("messages");
@@ -289,10 +290,11 @@
       function updateComposerState() {
         const hasInput = inputEl.value.trim().length > 0;
         const hasAttachments = attachments.length > 0;
-        sendBtn.disabled = !connected || (!hasInput && !hasAttachments);
-        sendErrBtn.disabled = !connected || (!hasInput && !hasAttachments);
-        abortBtn.disabled = !connected || !runId;
-        attachBtn.disabled = !connected;
+        const canSend = bridgeAvailable && (hasInput || hasAttachments);
+        sendBtn.disabled = !canSend;
+        sendErrBtn.disabled = !canSend;
+        abortBtn.disabled = !bridgeAvailable || !runId;
+        attachBtn.disabled = !bridgeAvailable;
         attachBtn.textContent = attachments.length > 0
           ? `Attach(${attachments.length})`
           : "Attach";
@@ -581,7 +583,7 @@
 
       async function sendInternal(forceError) {
         const msg = inputEl.value.trim();
-        if ((!msg && attachments.length === 0) || !connected) {
+        if ((!msg && attachments.length === 0) || !bridgeAvailable) {
           return;
         }
         inputEl.value = "";
@@ -643,7 +645,7 @@
       }
 
       async function abort() {
-        if (!runId || !connected) {
+        if (!runId || !bridgeAvailable) {
           return;
         }
         try {
@@ -696,7 +698,7 @@
         }
       });
 
-      if (window.chrome && window.chrome.webview) {
+      if (bridgeAvailable) {
         window.chrome.webview.addEventListener("message", (event) => {
           const msg = normalizeInboundBridgeEvent(event && event.data);
           if (!msg || typeof msg !== "object") {

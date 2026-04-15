@@ -138,6 +138,7 @@
     <ClInclude Include="src\core\OnnxEmbeddingsService.h" />
     <ClInclude Include="src\core\PiEmbeddedService.h" />
     <ClInclude Include="src\core\RetrievalMemoryService.h" />
+    <ClInclude Include="src\core\runtime\pch.h" />
     <ClInclude Include="src\\core\\runtime\\CChatRuntime.h" />
     <ClInclude Include="src\\core\\runtime\\ChatRuntimeContracts.h" />
     <ClInclude Include="src\\core\\runtime\\ChatRuntimeMetrics.h" />

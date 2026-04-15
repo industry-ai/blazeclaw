@@ -3681,7 +3681,7 @@ void CBlazeClawMFCView::OnInitialUpdate()
 
 				env->CreateCoreWebView2Controller(this->GetSafeHwnd(),
 					Microsoft::WRL::Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
-						[&, env](HRESULT result, ICoreWebView2Controller* controller) -> HRESULT
+						[&](HRESULT result, ICoreWebView2Controller* controller) -> HRESULT
 						{
 							if (FAILED(result) || !controller)
 								return result;
@@ -3805,7 +3805,6 @@ std::wstring CBlazeClawMFCView::ResolveInitialNavigationUrl() const
 
 	return ResolveChatStartupUrl();
 }
-
 void CBlazeClawMFCView::OnBeginPrinting(CDC* /*pDC*/, CPrintInfo* /*pInfo*/)
 {
 	// TODO: add extra initialization before printing

@@ -17,6 +17,8 @@ namespace blazeclaw::core {
 
 	class CChatRuntime {
 	public:
+     ~CChatRuntime() noexcept;
+
 		enum class JobLifecycleStatus {
 			Queued,
 			Started,

@@ -411,4 +411,7 @@ namespace blazeclaw::core {
 		return m_metrics.Snapshot();
 	}
 
+	CChatRuntime::~CChatRuntime() noexcept {
+		StopWorker();
+	}
 } // namespace blazeclaw::core

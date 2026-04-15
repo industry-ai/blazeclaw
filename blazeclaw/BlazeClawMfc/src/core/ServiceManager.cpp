@@ -2224,7 +2224,10 @@ namespace blazeclaw::core {
 			};
 	}
 
-	ServiceManager::~ServiceManager() = default;
+	ServiceManager::~ServiceManager()
+	{
+		Stop();
+	}
 
 	void ServiceManager::SetSkillsHostCallbacks(
 		SkillsHostCallbacks callbacks) {
@@ -2307,7 +2310,7 @@ namespace blazeclaw::core {
 			{
 				std::string output;
 				output.reserve(value.size());
-				for (const auto ch : value)
+				for (const wchar_t ch : value)
 				{
 					output.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
 				}
@@ -4187,7 +4190,7 @@ namespace blazeclaw::core {
 						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
 							.ok = false,
 							.assistantText = {},
-							.modelId = modelSelection.selectedModel,
+							.modelId = activeModel,
 							.errorCode = "embedded_run_rejected",
 							.errorMessage = embeddedRun.reason,
 						};
@@ -4479,13 +4482,15 @@ namespace blazeclaw::core {
 	}
 
 	void ServiceManager::Stop() {
-		m_state.gatewayLifecycle.cleanupPath = "normal_stop";
-		RecordGatewayLifecycleTransition("stop.begin");
+    m_state.gatewayLifecycle.cleanupPath = "normal_stop";
+    RecordGatewayLifecycleTransition("stop.begin");
 
-		ExecuteGatewayOwnedRuntimeCleanup();
-		m_running = false;
-		RecordGatewayLifecycleTransition("stop.done");
-	}
+    ExecuteNonGatewayRuntimeCleanup();   // unconditional
+    ExecuteGatewayOwnedRuntimeCleanup();
+
+    m_running = false;
+    RecordGatewayLifecycleTransition("stop.done");
+}
 
 	void ServiceManager::ResetGatewayOwnedRuntimeCleanup() {
 		m_state.gatewayLiveRuntime.ownedCleanup.clear();
