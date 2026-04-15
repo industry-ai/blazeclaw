@@ -1965,6 +1965,282 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Parity coverage: dynamic_task_delta weather-email intent forces deterministic weather and email chain",
+	"[parity][chat][runtime][dynamic-task-delta][weather-email][deterministic]") {
+	PluginHostAdapter::RegisterExtensionAdapter(
+		"ops-tools",
+		[](const std::string&, const std::string& toolName, const std::string&) {
+			if (toolName == "weather.lookup") {
+				return GatewayToolRegistry::RuntimeToolExecutor{
+					[](const std::string& requestedTool, const std::optional<std::string>&) {
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = true,
+							.status = "ok",
+							.output =
+								"{\"ok\":true,\"forecast\":{\"condition\":\"Cloudy\",\"temperatureC\":20,\"wind\":\"NE 9 km/h\",\"humidityPct\":68}}",
+						};
+					} };
+			}
+
+			if (toolName == "email.schedule") {
+				return GatewayToolRegistry::RuntimeToolExecutor{
+					[](const std::string& requestedTool, const std::optional<std::string>& argsJson) {
+						std::string action;
+						if (argsJson.has_value()) {
+							blazeclaw::gateway::json::FindStringField(
+								argsJson.value(),
+								"action",
+								action);
+						}
+
+						if (action.empty() || action == "prepare") {
+							return ToolExecuteResult{
+								.tool = requestedTool,
+								.executed = true,
+								.status = "needs_approval",
+								.output =
+									"{\"requiresApproval\":{\"approvalToken\":\"token-dynamic-deterministic\",\"approvalTokenExpiresAtEpochMs\":1735691000000}}",
+							};
+						}
+
+						if (action == "approve") {
+							return ToolExecuteResult{
+								.tool = requestedTool,
+								.executed = true,
+								.status = "ok",
+								.output =
+									"{\"protocolVersion\":1,\"ok\":true,\"status\":\"ok\",\"output\":[{\"summary\":{\"to\":\"jicheng@whu.edu.cn\",\"subject\":\"Wuhan weather report\",\"sendAt\":\"13:00\",\"scheduled\":true,\"delivered\":true,\"engine\":\"himalaya\",\"transportStatus\":\"sent\",\"transportOutput\":\"ok\"}}],\"requiresApproval\":null}",
+							};
+						}
+
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = false,
+							.status = "invalid_args",
+							.output = "unsupported_action",
+						};
+					} };
+			}
+
+			return GatewayToolRegistry::RuntimeToolExecutor{};
+		});
+
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+
+	std::size_t callbackCalls = 0;
+	host.SetChatRuntimeCallback(
+		[&](const GatewayHost::ChatRuntimeRequest&) {
+			++callbackCalls;
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "callback should not be used for matched weather-email intent";
+			result.modelId = "default";
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-dynamic-deterministic-weather-email-1",
+			.method = "chat.send",
+			.paramsJson = std::string(
+				"{\"sessionKey\":\"main\",\"message\":\"Check tomorrow's weather in Wuhan, write a short report, and email it to jicheng@whu.edu.cn now.\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+	REQUIRE(callbackCalls == 0);
+
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		sendResponse.payloadJson.value(),
+		"runId",
+		runId));
+
+	const auto deltasResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-dynamic-deterministic-weather-email-1-deltas",
+			.method = "gateway.runtime.taskDeltas.get",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+
+	REQUIRE(deltasResponse.ok);
+	REQUIRE(deltasResponse.payloadJson.has_value());
+	const std::string payload = deltasResponse.payloadJson.value();
+	REQUIRE(payload.find("\"toolName\":\"weather.lookup\"") != std::string::npos);
+	REQUIRE(payload.find("\"toolName\":\"email.schedule\"") != std::string::npos);
+	REQUIRE(payload.find("fallback=baidu_search_python") == std::string::npos);
+	REQUIRE(payload.find("\"phase\":\"final\"") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Parity coverage: orchestration status confirms selected path and deterministic flags",
+	"[parity][chat][runtime][orchestration][status]") {
+	PluginHostAdapter::RegisterExtensionAdapter(
+		"ops-tools",
+		[](const std::string&, const std::string& toolName, const std::string&) {
+			if (toolName == "weather.lookup") {
+				return GatewayToolRegistry::RuntimeToolExecutor{
+					[](const std::string& requestedTool, const std::optional<std::string>&) {
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = true,
+							.status = "ok",
+							.output =
+								"{\"ok\":true,\"forecast\":{\"condition\":\"Cloudy\",\"temperatureC\":20,\"wind\":\"NE 9 km/h\",\"humidityPct\":68}}",
+						};
+					} };
+			}
+
+			if (toolName == "email.schedule") {
+				return GatewayToolRegistry::RuntimeToolExecutor{
+					[](const std::string& requestedTool, const std::optional<std::string>& argsJson) {
+						std::string action;
+						if (argsJson.has_value()) {
+							blazeclaw::gateway::json::FindStringField(
+								argsJson.value(),
+								"action",
+								action);
+						}
+
+						if (action.empty() || action == "prepare") {
+							return ToolExecuteResult{
+								.tool = requestedTool,
+								.executed = true,
+								.status = "needs_approval",
+								.output =
+									"{\"requiresApproval\":{\"approvalToken\":\"token-path-status\",\"approvalTokenExpiresAtEpochMs\":1735691000000}}",
+							};
+						}
+
+						if (action == "approve") {
+							return ToolExecuteResult{
+								.tool = requestedTool,
+								.executed = true,
+								.status = "ok",
+								.output =
+									"{\"protocolVersion\":1,\"ok\":true,\"status\":\"ok\",\"output\":[{\"summary\":{\"to\":\"jicheng@whu.edu.cn\",\"subject\":\"Wuhan weather report\",\"sendAt\":\"13:00\",\"scheduled\":true,\"delivered\":true,\"engine\":\"himalaya\",\"transportStatus\":\"sent\",\"transportOutput\":\"ok\"}}],\"requiresApproval\":null}",
+							};
+						}
+
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = false,
+							.status = "invalid_args",
+							.output = "unsupported_action",
+						};
+					} };
+			}
+
+			return GatewayToolRegistry::RuntimeToolExecutor{};
+		});
+
+	SECTION("dynamic_task_delta reports intent-driven deterministic selection") {
+		GatewayHost host;
+		blazeclaw::config::GatewayConfig gatewayConfig;
+		REQUIRE(host.StartLocalOnly(gatewayConfig));
+		host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+
+		host.SetChatRuntimeCallback(
+			[](const GatewayHost::ChatRuntimeRequest&) {
+				GatewayHost::ChatRuntimeResult result;
+				result.ok = true;
+				result.assistantText = "callback should not run for deterministic path";
+				result.modelId = "default";
+				return result;
+			});
+
+		const auto sendResponse = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = "chat-orchestration-status-dynamic-1",
+				.method = "chat.send",
+				.paramsJson = std::string(
+					"{\"sessionKey\":\"main\",\"message\":\"Check tomorrow's weather in Wuhan, write a short report, and email it to jicheng@whu.edu.cn now.\"}"),
+			});
+		REQUIRE(sendResponse.ok);
+
+		const auto statusResponse = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = "chat-orchestration-status-dynamic-1-status",
+				.method = "gateway.runtime.orchestration.status",
+				.paramsJson = std::nullopt,
+			});
+		REQUIRE(statusResponse.ok);
+		REQUIRE(statusResponse.payloadJson.has_value());
+		REQUIRE(
+			statusResponse.payloadJson->find(
+				"\"configured\":\"dynamic_task_delta\"") != std::string::npos);
+		REQUIRE(
+			statusResponse.payloadJson->find(
+				"\"selected\":\"dynamic_task_delta\"") != std::string::npos);
+		REQUIRE(
+			statusResponse.payloadJson->find(
+				"\"compatDeterministicEnabled\":false") != std::string::npos);
+		REQUIRE(
+			statusResponse.payloadJson->find(
+				"\"intentDeterministicEnabled\":true") != std::string::npos);
+		REQUIRE(
+			statusResponse.payloadJson->find(
+				"\"deterministicEnabled\":true") != std::string::npos);
+
+		host.Stop();
+	}
+
+	SECTION("runtime_orchestration reports compat deterministic selection") {
+		GatewayHost host;
+		blazeclaw::config::GatewayConfig gatewayConfig;
+		REQUIRE(host.StartLocalOnly(gatewayConfig));
+		host.SetEmbeddedOrchestrationPath("runtime_orchestration");
+
+		host.SetChatRuntimeCallback(
+			[](const GatewayHost::ChatRuntimeRequest&) {
+				GatewayHost::ChatRuntimeResult result;
+				result.ok = true;
+				result.assistantText = "runtime orchestration callback";
+				result.modelId = "default";
+				return result;
+			});
+
+		const auto sendResponse = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = "chat-orchestration-status-runtime-1",
+				.method = "chat.send",
+				.paramsJson = std::string(
+					"{\"sessionKey\":\"main\",\"message\":\"Check tomorrow's weather in Wuhan, write a short report, and email it to jicheng@whu.edu.cn now.\"}"),
+			});
+		REQUIRE(sendResponse.ok);
+
+		const auto statusResponse = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = "chat-orchestration-status-runtime-1-status",
+				.method = "gateway.runtime.orchestration.status",
+				.paramsJson = std::nullopt,
+			});
+		REQUIRE(statusResponse.ok);
+		REQUIRE(statusResponse.payloadJson.has_value());
+		REQUIRE(
+			statusResponse.payloadJson->find(
+				"\"configured\":\"runtime_orchestration\"") != std::string::npos);
+		REQUIRE(
+			statusResponse.payloadJson->find(
+				"\"selected\":\"runtime_orchestration\"") != std::string::npos);
+		REQUIRE(
+			statusResponse.payloadJson->find(
+				"\"compatDeterministicEnabled\":true") != std::string::npos);
+		REQUIRE(
+			statusResponse.payloadJson->find(
+				"\"deterministicEnabled\":true") != std::string::npos);
+
+		host.Stop();
+	}
+}
+
+TEST_CASE(
 	"Parity coverage: runtime orchestration reflects fallback backend when himalaya is unavailable",
 	"[parity][chat][orchestration][e2e][runtime][fallback][backend]") {
 	char* previousModeRaw = nullptr;

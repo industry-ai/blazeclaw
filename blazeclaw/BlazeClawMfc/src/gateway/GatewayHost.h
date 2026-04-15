@@ -385,6 +385,15 @@ namespace blazeclaw::gateway {
 			bool explicitDeliverRoute = false;
 		};
 
+		struct OrchestrationPathSelectionState {
+			std::string runId;
+			std::string path;
+			bool compatDeterministicEnabled = false;
+			bool intentDeterministicEnabled = false;
+			bool deterministicEnabled = false;
+			std::uint64_t observedAtEpochMs = 0;
+		};
+
 		struct ChatEventState {
 			std::string runId;
 			std::string sessionKey;
@@ -446,6 +455,7 @@ namespace blazeclaw::gateway {
 		std::uint32_t m_runtimeEmailApprovalTokenTtlMinutes = 60;
 		std::string m_runtimeEmailPolicyProfileId = "default";
 		std::string m_embeddedOrchestrationPath = "dynamic_task_delta";
+        OrchestrationPathSelectionState m_latestOrchestrationPathSelection;
 		std::string m_runtimeAssignedSessionId = "main";
 		std::string m_runtimeAssignedAgentId = "default";
 		std::size_t m_runtimeQueueDepth = 0;

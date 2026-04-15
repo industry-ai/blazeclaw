@@ -4073,6 +4073,24 @@ namespace blazeclaw::gateway {
 					ToLowerCopyLocal(m_embeddedOrchestrationPath);
 				const bool allowPromptOrchestration =
 					orchestrationPath == "runtime_orchestration";
+             const auto weatherEmailIntentProbe =
+					prompt::AnalyzeWeatherEmailPromptIntent(normalizedMessage);
+				const bool forceWeatherEmailDeterministicOrchestration =
+					!forceError &&
+					!hasAttachments &&
+					weatherEmailIntentProbe.matched;
+				const bool allowDeterministicPromptOrchestration =
+					allowPromptOrchestration ||
+					forceWeatherEmailDeterministicOrchestration;
+             m_latestOrchestrationPathSelection.runId = runId;
+				m_latestOrchestrationPathSelection.path = orchestrationPath;
+				m_latestOrchestrationPathSelection.compatDeterministicEnabled =
+					allowPromptOrchestration;
+				m_latestOrchestrationPathSelection.intentDeterministicEnabled =
+					forceWeatherEmailDeterministicOrchestration;
+				m_latestOrchestrationPathSelection.deterministicEnabled =
+					allowDeterministicPromptOrchestration;
+				m_latestOrchestrationPathSelection.observedAtEpochMs = nowMs;
 				EmitTelemetryEvent(
 					"gateway.chat.orchestration.pathSelection",
 					std::string("{\"runId\":") +
@@ -4080,13 +4098,19 @@ namespace blazeclaw::gateway {
 					",\"path\":" +
 					JsonString(orchestrationPath) +
 					",\"compatDeterministicEnabled\":" +
-					std::string(allowPromptOrchestration ? "true" : "false") +
+                  std::string(allowPromptOrchestration ? "true" : "false") +
+					",\"intentDeterministicEnabled\":" +
+					std::string(
+						forceWeatherEmailDeterministicOrchestration ? "true" : "false") +
+					",\"deterministicEnabled\":" +
+					std::string(
+						allowDeterministicPromptOrchestration ? "true" : "false") +
 					",\"dynamicRuntimeDefault\":true}");
 				BranchDecisionDiagnostics::Emit(
 					runId,
 					"runtime",
 					"orchestration.pathSelection",
-					allowPromptOrchestration
+                    allowDeterministicPromptOrchestration
 					? "compat_runtime_orchestration_enabled"
 					: "dynamic_runtime_default");
 				const auto runtimeToolsSnapshot = m_toolRegistry.List();
@@ -4412,10 +4436,76 @@ namespace blazeclaw::gateway {
 					}
 				}
 
-				if (!forceError &&
+              if (!forceError &&
 					!hasAttachments &&
 					!normalizedMessage.empty() &&
-					allowPromptOrchestration) {
+					allowDeterministicPromptOrchestration) {
+					if (forceWeatherEmailDeterministicOrchestration) {
+						const bool hasWeatherLookupTool = std::any_of(
+							runtimeToolsSnapshot.begin(),
+							runtimeToolsSnapshot.end(),
+							[](const ToolCatalogEntry& tool) {
+								return ToLowerCopyLocal(tool.id) == "weather.lookup";
+							});
+						const bool hasEmailScheduleTool = std::any_of(
+							runtimeToolsSnapshot.begin(),
+							runtimeToolsSnapshot.end(),
+							[](const ToolCatalogEntry& tool) {
+								return ToLowerCopyLocal(tool.id) == "email.schedule";
+							});
+
+						if (!hasWeatherLookupTool || !hasEmailScheduleTool) {
+							failed = true;
+							orchestrationHandled = true;
+							backendErrorCode =
+								"weather_email_required_tools_unavailable";
+							backendErrorMessage =
+								"deterministic weather-email orchestration requires weather.lookup and email.schedule";
+                           assistantText =
+								"Weather-email orchestration requires weather.lookup and email.schedule tools.";
+
+							const std::uint64_t nowMsLocal = CurrentEpochMsLocal();
+							std::vector<ChatRuntimeResult::TaskDeltaEntry> blockedTaskDeltas{
+								ChatRuntimeResult::TaskDeltaEntry{
+									.index = 0,
+									.runId = runId,
+									.sessionId = sessionKey,
+									.phase = "plan",
+									.resultJson =
+										"[\"weather.lookup\",\"report.compose\",\"email.schedule\"]",
+									.status = "blocked",
+									.startedAtMs = nowMsLocal,
+									.completedAtMs = nowMsLocal,
+									.latencyMs = 0,
+									.stepLabel = "execution_plan",
+								},
+								ChatRuntimeResult::TaskDeltaEntry{
+									.index = 1,
+									.runId = runId,
+									.sessionId = sessionKey,
+									.phase = "final",
+									.resultJson = backendErrorMessage,
+									.status = "failed",
+									.errorCode = backendErrorCode,
+									.startedAtMs = nowMsLocal,
+									.completedAtMs = nowMsLocal,
+									.latencyMs = 0,
+									.stepLabel = "run_terminal",
+								},
+							};
+							assistantDeltas =
+								buildAssistantDeltasFromTaskDeltas(blockedTaskDeltas);
+							if (assistantDeltas.empty()) {
+								assistantDeltas.push_back(assistantText);
+							}
+							persistTaskDeltas(blockedTaskDeltas, false);
+						}
+					}
+
+					if (orchestrationHandled) {
+						// blocked by deterministic preflight
+					}
+					else {
 					const auto orchestrationResult = TryOrchestrateWeatherEmailPrompt(
 						m_toolRegistry,
 						normalizedMessage);
@@ -4554,7 +4644,8 @@ namespace blazeclaw::gateway {
 							assistantDeltas =
 								buildAssistantDeltasFromTaskDeltas(legacyTaskDeltas);
 							persistTaskDeltas(legacyTaskDeltas, false);
-						}
+                   }
+					}
 					}
 				}
 
@@ -6507,6 +6598,22 @@ namespace blazeclaw::gateway {
 				: (agents.empty() ? "default" : agents.front().id);
 			const bool busy =
 				m_runtimeQueueDepth > 0 || m_runtimeRunningCount > 0;
+			const std::string configuredOrchestrationPath =
+				ToLowerCopyLocal(m_embeddedOrchestrationPath);
+			const std::string selectedOrchestrationPath =
+				m_latestOrchestrationPathSelection.path.empty()
+				? configuredOrchestrationPath
+				: m_latestOrchestrationPathSelection.path;
+			const std::string latestSelectionRunId =
+				m_latestOrchestrationPathSelection.runId;
+			const std::uint64_t latestSelectionObservedAtEpochMs =
+				m_latestOrchestrationPathSelection.observedAtEpochMs;
+			const bool latestSelectionCompatEnabled =
+				m_latestOrchestrationPathSelection.compatDeterministicEnabled;
+			const bool latestSelectionIntentEnabled =
+				m_latestOrchestrationPathSelection.intentDeterministicEnabled;
+			const bool latestSelectionDeterministicEnabled =
+				m_latestOrchestrationPathSelection.deterministicEnabled;
 
 			return protocol::ResponseFrame{
 				.id = request.id,
@@ -6520,8 +6627,23 @@ namespace blazeclaw::gateway {
 					",\"running\":" +
 					std::to_string(m_runtimeRunningCount) +
 					",\"capacity\":" +
-				   std::to_string(m_runtimeQueueCapacity) +
-					",\"dynamicLoopMetrics\":{\"success\":" +
+                 std::to_string(m_runtimeQueueCapacity) +
+					",\"orchestrationPath\":{\"configured\":\"" +
+					EscapeJsonLocal(configuredOrchestrationPath) +
+					"\",\"selected\":\"" +
+					EscapeJsonLocal(selectedOrchestrationPath) +
+					"\",\"latestRunId\":\"" +
+					EscapeJsonLocal(latestSelectionRunId) +
+					"\",\"latestObservedAtEpochMs\":" +
+					std::to_string(latestSelectionObservedAtEpochMs) +
+					",\"compatDeterministicEnabled\":" +
+					std::string(latestSelectionCompatEnabled ? "true" : "false") +
+					",\"intentDeterministicEnabled\":" +
+					std::string(latestSelectionIntentEnabled ? "true" : "false") +
+					",\"deterministicEnabled\":" +
+					std::string(
+						latestSelectionDeterministicEnabled ? "true" : "false") +
+                  "},\"dynamicLoopMetrics\":{\"success\":" +
 					std::to_string(m_taskDeltaRunSuccessCount) +
 					",\"failure\":" +
 					std::to_string(m_taskDeltaRunFailureCount) +
