@@ -16,6 +16,7 @@ namespace blazeclaw::core {
 			std::optional<std::filesystem::path> baiduSearchSkillRoot;
 			std::optional<std::filesystem::path> braveSearchSkillRoot;
 			std::optional<std::filesystem::path> openClawWebBrowsingSkillRoot;
+			std::optional<std::filesystem::path> webBrowsingSkillRoot;
 			bool braveRequireApiKey = false;
 			bool braveApiKeyPresent = false;
 			bool enableOpenClawWebBrowsingFallback = false;

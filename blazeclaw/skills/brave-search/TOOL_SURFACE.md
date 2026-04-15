@@ -79,8 +79,10 @@ Fetch a single URL and extract readable markdown content.
 - Compatibility aliases currently served by this runtime:
   - `web_browsing.search.web`
   - `web_browsing.fetch.content`
-- These aliases are compatibility mappings and are not yet full runtime parity
-  with `skills-openclaw-original/web-browsing` primary Python execution.
+- `web_browsing.search.web` now follows Option B parity routing:
+  - primary: native Python `skills/web-browsing/scripts/search_web.py`
+  - fallback: brave-search Node runtime mapping
+- `web_browsing.fetch.content` remains served by Node runtime compatibility mapping.
 
 ## Runtime discovery checks
 
@@ -129,6 +131,9 @@ Use the gateway endpoints below to verify Phase 3 discovery:
 - `node_not_found`: Node runtime executable could not be resolved. Set
   `BLAZECLAW_NODE_PATH` to an absolute `node.exe` path, or ensure `node.exe`
   is discoverable by `SearchPathW` in GUI runtime context.
+- `python runtime unavailable` indicators are visible in runtime preflight probes:
+  - `runtime:python`
+  - `skill:web_browsing_python`
 - `invalid_arguments`: invalid `query`, `count/topK`, `content`, or `url` shape/value.
 - `planner_invalid_search_query`: planner could not derive a safe compact query
   for search execution; refine the prompt or provide a direct concise query.

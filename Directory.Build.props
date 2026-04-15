@@ -2,5 +2,7 @@
   <PropertyGroup>
     <!-- Enable vcpkg manifest mode so MSBuild picks up dependencies from vcpkg.json -->
     <VcpkgEnableManifest>true</VcpkgEnableManifest>
+    <!-- Avoid pwsh.exe dependency in AppLocal step; use vcpkg built-in applocal implementation -->
+    <VcpkgXUseBuiltInApplocalDeps>true</VcpkgXUseBuiltInApplocalDeps>
   </PropertyGroup>
 </Project>

@@ -596,6 +596,15 @@ namespace blazeclaw::core::bootstrap {
 			{ L"blazeclaw", L"skills", L"brave-search" },
 			{ std::filesystem::path(L"scripts") / L"search.js",
 			  std::filesystem::path(L"scripts") / L"content.js" });
+		settings.webBrowsingSkillRoot = ResolveSkillRootFromSearchPaths(
+			{ L"blazeclaw", L"skills", L"web-browsing" },
+			{ std::filesystem::path(L"scripts") / L"search_web.py" });
+		if (!settings.webBrowsingSkillRoot.has_value())
+		{
+			settings.webBrowsingSkillRoot = ResolveSkillRootFromSearchPaths(
+				{ L"skills", L"web-browsing" },
+				{ std::filesystem::path(L"scripts") / L"search_web.py" });
+		}
 		settings.openClawWebBrowsingSkillRoot = ResolveSkillRootFromSearchPaths(
 			{ L"blazeclaw", L"skills-openclaw-original", L"web-browsing" },
 			{ std::filesystem::path(L"scripts") / L"search_web.py" });

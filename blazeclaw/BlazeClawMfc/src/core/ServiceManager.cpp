@@ -1607,6 +1607,7 @@ namespace blazeclaw::core {
 			const CToolRuntimeRegistry::ToolRuntimePolicySettings& toolPolicy) {
 			const auto skillRoot = toolPolicy.braveSearchSkillRoot;
 			const auto openClawWebBrowsingSkillRoot = toolPolicy.openClawWebBrowsingSkillRoot;
+			const auto webBrowsingSkillRoot = toolPolicy.webBrowsingSkillRoot;
 			const bool enableOpenClawWebBrowsingFallback =
 				toolPolicy.enableOpenClawWebBrowsingFallback;
 			const bool requireApiKey = toolPolicy.braveRequireApiKey;
@@ -1622,6 +1623,7 @@ namespace blazeclaw::core {
 					[spec,
 					skillRoot,
 					openClawWebBrowsingSkillRoot,
+					webBrowsingSkillRoot,
 					enableOpenClawWebBrowsingFallback,
 					requireApiKey,
 					hasApiKey](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
@@ -1755,6 +1757,58 @@ namespace blazeclaw::core {
 							result.errorMessage = process.errorMessage.empty()
 								? "failed to start tool process"
 								: process.errorMessage;
+							if (result.result.empty()) {
+								result.result = result.errorMessage;
+							}
+
+							if (tools::IsBraveSearchWebToolId(spec.id) &&
+								spec.id == "web_browsing.search.web" &&
+								webBrowsingSkillRoot.has_value() &&
+								params.contains("query") &&
+								params["query"].is_string()) {
+								const std::string query =
+									tools::TrimAsciiForBraveSearch(params["query"].get<std::string>());
+								if (!query.empty()) {
+									std::uint64_t fallbackTimeoutMs = 15000;
+									if (request.deadlineEpochMs.has_value()) {
+										const std::uint64_t now = CurrentEpochMs();
+										if (request.deadlineEpochMs.value() <= now) {
+											fallbackTimeoutMs = 0;
+										}
+										else {
+											fallbackTimeoutMs = request.deadlineEpochMs.value() - now;
+										}
+									}
+
+									if (fallbackTimeoutMs > 0) {
+										const auto primaryPythonScriptPath =
+											webBrowsingSkillRoot.value() /
+											L"scripts" /
+											L"search_web.py";
+										if (std::filesystem::exists(primaryPythonScriptPath)) {
+											const auto pythonFallbackProcess = tools::ExecutePythonSkillProcess(
+												primaryPythonScriptPath,
+												std::vector<std::string>{ query },
+												fallbackTimeoutMs);
+											if (pythonFallbackProcess.started &&
+												!pythonFallbackProcess.timedOut &&
+												pythonFallbackProcess.exitCode == 0) {
+												result.executed = true;
+												result.status = "ok";
+												result.result =
+													pythonFallbackProcess.output +
+													"\n[fallback=web_browsing_python_primary]";
+												result.errorCode.clear();
+												result.errorMessage.clear();
+												result.completedAtMs = CurrentEpochMs();
+												result.latencyMs =
+													result.completedAtMs - result.startedAtMs;
+												return result;
+											}
+										}
+									}
+								}
+							}
 							return result;
 						}
 
@@ -3485,6 +3539,7 @@ namespace blazeclaw::core {
 				.braveSearchSkillRoot = toolPolicy.braveSearchSkillRoot,
 				.openClawWebBrowsingSkillRoot =
 					toolPolicy.openClawWebBrowsingSkillRoot,
+				.webBrowsingSkillRoot = toolPolicy.webBrowsingSkillRoot,
 				.braveRequireApiKey = toolPolicy.braveRequireApiKey,
 				.braveApiKeyPresent = toolPolicy.braveApiKeyPresent,
 				.enableOpenClawWebBrowsingFallback =

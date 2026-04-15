@@ -234,11 +234,10 @@ Port these artifacts as the baseline:
 
 ### Audit conclusion
 
-- `web_browsing.*` tool IDs are currently routed to this skill's Node runtime
-  scripts (`scripts/search.js`, `scripts/content.js`) for compatibility.
-- This preserves tool-id surface compatibility but is not full execution parity
-  with `skills-openclaw-original/web-browsing` where `search_web.py` is the
-  primary implementation path.
+- `web_browsing.*` tool IDs remain available for compatibility routing.
+- Option B parity is now implemented for `web_browsing.search.web`:
+  native Python `search_web.py` is primary execution path, with Node runtime
+  fallback continuity.
 
 ### Current risk
 
@@ -251,7 +250,7 @@ Port these artifacts as the baseline:
 1. add deterministic Node executable resolution and startup diagnostics in
    process runner (**completed**)
 2. implement/restore primary Python-backed execution parity for
-   `web_browsing.search.web` using `search_web.py`
+   `web_browsing.search.web` using `search_web.py` (**completed; Option B**)
 3. keep Node-backed brave-search path as fallback/alternate backend
 4. add regression tests for missing-Node and fallback continuation paths
 
@@ -262,6 +261,9 @@ Port these artifacts as the baseline:
 - Node executable resolution now follows deterministic order:
   `BLAZECLAW_NODE_PATH` -> `SearchPathW(node.exe)` -> `SearchPathW(node)`;
   unresolved state returns explicit `node_not_found`.
+- Runtime preflight probes now include Python/web-browsing parity signals:
+  - `runtime:python`
+  - `skill:web_browsing_python`
 
 ## Validation Plan
 

@@ -6574,6 +6574,37 @@ namespace blazeclaw::gateway {
 					EscapeJsonLocal(health.emailSendState) +
 					"\"}");
 
+				std::string runtimeNodeState = "unknown";
+				std::string runtimePythonState = "unknown";
+				std::string webBrowsingPythonState = "unknown";
+				for (const auto& probe : health.probes) {
+					if (probe.key == "runtime:node") {
+						runtimeNodeState = probe.state;
+						continue;
+					}
+
+					if (probe.key == "runtime:python") {
+						runtimePythonState = probe.state;
+						continue;
+					}
+
+					if (probe.key == "skill:web_browsing_python") {
+						webBrowsingPythonState = probe.state;
+					}
+				}
+
+				EmitTelemetryEvent(
+					"gateway.runtime.preflight.executors",
+					std::string("{\"runtimeNode\":\"") +
+					EscapeJsonLocal(runtimeNodeState) +
+					"\",\"runtimePython\":\"" +
+					EscapeJsonLocal(runtimePythonState) +
+					"\",\"webBrowsingPython\":\"" +
+					EscapeJsonLocal(webBrowsingPythonState) +
+					"\",\"generatedAtEpochMs\":" +
+					std::to_string(health.generatedAtEpochMs) +
+					"}");
+
 				return protocol::ResponseFrame{
 					.id = request.id,
 					.ok = true,

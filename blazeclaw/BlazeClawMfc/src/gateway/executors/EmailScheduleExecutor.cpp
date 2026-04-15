@@ -25,7 +25,12 @@ namespace blazeclaw::gateway::executors {
 		std::string ToLowerCopy(const std::string& value);
 		bool HasHimalayaBinary();
 		bool HasNodeBinary();
+		bool HasPythonBinary();
 		bool HasImapSmtpSkill();
+		bool HasWebBrowsingPythonSkill();
+		std::string ResolveWebBrowsingPythonSkillRoot();
+		std::optional<std::string> ResolveExecutablePath(
+			const std::string& executable);
 		bool HasNodeModuleInSkillRoot(
 			const std::string& skillRoot,
 			const std::string& moduleName,
@@ -147,9 +152,15 @@ namespace blazeclaw::gateway::executors {
 			const bool hasNode = applyOverride(
 				normalizedOverride("BLAZECLAW_EMAIL_PROBE_NODE"),
 				HasNodeBinary());
+			const bool hasPython = applyOverride(
+				normalizedOverride("BLAZECLAW_EMAIL_PROBE_PYTHON"),
+				HasPythonBinary());
 			const bool hasImapSmtp = applyOverride(
 				normalizedOverride("BLAZECLAW_EMAIL_PROBE_IMAP_SMTP_SKILL"),
 				HasImapSmtpSkill());
+			const bool hasWebBrowsingPython = applyOverride(
+				normalizedOverride("BLAZECLAW_EMAIL_PROBE_WEB_BROWSING_PYTHON_SKILL"),
+				HasWebBrowsingPythonSkill());
 
 			index.probes.push_back(BuildProbe(
 				"backend:himalaya",
@@ -168,10 +179,26 @@ namespace blazeclaw::gateway::executors {
 				ttlMs));
 
 			index.probes.push_back(BuildProbe(
+				"runtime:python",
+				hasPython,
+				"python_cli_missing",
+				"python runtime not found",
+				checkedAt,
+				ttlMs));
+
+			index.probes.push_back(BuildProbe(
 				"skill:imap_smtp_email",
 				hasImapSmtp,
 				"imap_smtp_skill_missing",
 				"imap smtp skill scripts not found",
+				checkedAt,
+				ttlMs));
+
+			index.probes.push_back(BuildProbe(
+				"skill:web_browsing_python",
+				hasWebBrowsingPython,
+				"web_browsing_python_skill_missing",
+				"web-browsing python skill script not found",
 				checkedAt,
 				ttlMs));
 
@@ -612,6 +639,29 @@ namespace blazeclaw::gateway::executors {
 			return {};
 		}
 
+		std::string ResolveWebBrowsingPythonSkillRoot() {
+			const std::vector<std::filesystem::path> candidates = {
+				std::filesystem::path("blazeclaw") / "skills" / "web-browsing",
+				std::filesystem::path("skills") / "web-browsing",
+				std::filesystem::path("blazeclaw") /
+				"skills-openclaw-original" /
+				"web-browsing",
+				std::filesystem::path("skills-openclaw-original") /
+				"web-browsing",
+			};
+
+			for (const auto& candidate : candidates) {
+				std::error_code ec;
+				if (std::filesystem::exists(candidate, ec) &&
+					std::filesystem::is_directory(candidate, ec) &&
+					!ec) {
+					return candidate.string();
+				}
+			}
+
+			return {};
+		}
+
 		bool HasHimalayaBinary() {
 			const DWORD withExe = SearchPathA(
 				nullptr,
@@ -652,6 +702,28 @@ namespace blazeclaw::gateway::executors {
 			return !json::Trim(probeOutput).empty();
 		}
 
+		bool HasPythonBinary() {
+			if (ResolveExecutablePath("python").has_value()) {
+				return true;
+			}
+
+			if (ResolveExecutablePath("python.exe").has_value()) {
+				return true;
+			}
+
+			std::string probeOutput;
+			int probeExitCode = -1;
+			const bool launched = RunCommandWithOutput(
+				"cmd /C \"python -V 2>&1\"",
+				probeOutput,
+				probeExitCode);
+			if (!launched || probeExitCode != 0) {
+				return false;
+			}
+
+			return !json::Trim(probeOutput).empty();
+		}
+
 		bool HasImapSmtpSkill() {
 			const std::string root = ResolveImapSmtpSkillRoot();
 			if (root.empty()) {
@@ -661,6 +733,18 @@ namespace blazeclaw::gateway::executors {
 			std::error_code ec;
 			const auto scriptPath =
 				std::filesystem::path(root) / "scripts" / "smtp.js";
+			return std::filesystem::exists(scriptPath, ec) && !ec;
+		}
+
+		bool HasWebBrowsingPythonSkill() {
+			const std::string root = ResolveWebBrowsingPythonSkillRoot();
+			if (root.empty()) {
+				return false;
+			}
+
+			std::error_code ec;
+			const auto scriptPath =
+				std::filesystem::path(root) / "scripts" / "search_web.py";
 			return std::filesystem::exists(scriptPath, ec) && !ec;
 		}
 
