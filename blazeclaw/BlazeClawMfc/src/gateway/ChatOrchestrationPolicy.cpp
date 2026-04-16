@@ -39,13 +39,37 @@ namespace blazeclaw::gateway {
 			output.compatDeterministicEnabled ||
 			output.intentDeterministicEnabled;
 		if (output.intentDeterministicEnabled) {
+			auto addOrderedTarget = [&output](const std::string& target) {
+				if (target.empty()) {
+					return;
+				}
+
+				if (std::find(
+					output.orderedPolicyTargets.begin(),
+					output.orderedPolicyTargets.end(),
+					target) != output.orderedPolicyTargets.end()) {
+					return;
+				}
+
+				output.orderedPolicyTargets.push_back(target);
+				};
+
 			output.orderedPolicyMode = "strict";
 			output.orderedPolicyStrict = true;
-			output.orderedPolicyTargets = {
-				"weather.lookup",
-				"report.compose",
-				"email.schedule",
-			};
+
+			if (output.weatherEmailIntent.hasWeather) {
+				addOrderedTarget("weather.lookup");
+			}
+
+			if (output.weatherEmailIntent.hasEmail) {
+				addOrderedTarget("email.schedule");
+			}
+
+			if (output.orderedPolicyTargets.size() < 2) {
+				output.orderedPolicyMode = "advisory";
+				output.orderedPolicyStrict = false;
+			}
+
 			output.fallbackPolicyProfile =
 				"strict_ordered_required_capabilities";
 		}

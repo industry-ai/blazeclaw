@@ -91,6 +91,22 @@ TEST_CASE(
 		});
 	REQUIRE(sendResponse.ok);
 
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		sendResponse.payloadJson.value(),
+		"runId",
+		runId));
+
+	const auto deltasResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-orchestration-status-dynamic-1-deltas",
+			.method = "gateway.runtime.taskDeltas.get",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+	REQUIRE(deltasResponse.ok);
+	REQUIRE(deltasResponse.payloadJson.has_value());
+	REQUIRE(deltasResponse.payloadJson->find("report.compose") == std::string::npos);
+
 	const auto seqResponse = host.RouteRequest(
 		blazeclaw::gateway::protocol::RequestFrame{
 			.id = "phase7-events-sequence",
@@ -2187,6 +2203,8 @@ TEST_CASE(
 		REQUIRE(
 			statusResponse.payloadJson->find(
 				"\"deterministicEnabled\":true") != std::string::npos);
+		REQUIRE(
+			statusResponse.payloadJson->find("report.compose") == std::string::npos);
 
 		host.Stop();
 	}
@@ -2215,6 +2233,22 @@ TEST_CASE(
 			});
 		REQUIRE(sendResponse.ok);
 
+		std::string runId;
+		REQUIRE(blazeclaw::gateway::json::FindStringField(
+			sendResponse.payloadJson.value(),
+			"runId",
+			runId));
+
+		const auto deltasResponse = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = "chat-orchestration-status-runtime-1-deltas",
+				.method = "gateway.runtime.taskDeltas.get",
+				.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+			});
+		REQUIRE(deltasResponse.ok);
+		REQUIRE(deltasResponse.payloadJson.has_value());
+		REQUIRE(deltasResponse.payloadJson->find("report.compose") == std::string::npos);
+
 		const auto statusResponse = host.RouteRequest(
 			blazeclaw::gateway::protocol::RequestFrame{
 				.id = "chat-orchestration-status-runtime-1-status",
@@ -2235,6 +2269,8 @@ TEST_CASE(
 		REQUIRE(
 			statusResponse.payloadJson->find(
 				"\"deterministicEnabled\":true") != std::string::npos);
+		REQUIRE(
+			statusResponse.payloadJson->find("report.compose") == std::string::npos);
 
 		host.Stop();
 	}
