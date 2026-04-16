@@ -4117,6 +4117,14 @@ namespace blazeclaw::gateway {
 					JsonString(orchestrationPolicy.decompositionMetadataSource) +
 					",\"orderedPolicyDecision\":" +
 					JsonString(orchestrationPolicy.orderedPolicyDecision) +
+					",\"orderedPolicyMode\":" +
+					JsonString(orchestrationPolicy.orderedPolicyMode) +
+					",\"orderedPolicyStrict\":" +
+					std::string(orchestrationPolicy.orderedPolicyStrict
+						? "true"
+						: "false") +
+					",\"orderedPolicyTargets\":" +
+					SerializeStringArrayLocal(orchestrationPolicy.orderedPolicyTargets) +
 					",\"allowlistPolicyHint\":" +
 					JsonString(orchestrationPolicy.allowlistPolicyHint) +
 					",\"fallbackPolicyHint\":" +
@@ -4128,17 +4136,34 @@ namespace blazeclaw::gateway {
 					"orchestration.pathSelection",
 					orchestrationPolicy.decisionReasonCode);
 				const auto runtimeToolsSnapshot = m_toolRegistry.List();
+				OrderedSequencePolicyOverride orderedSequencePolicyOverride{};
+				const OrderedSequencePolicyOverride* orderedSequencePolicyOverridePtr =
+					nullptr;
+				if (orchestrationPolicy.orderedPolicyMode != "none" &&
+					!orchestrationPolicy.orderedPolicyTargets.empty()) {
+					orderedSequencePolicyOverride.orderedTargets =
+						orchestrationPolicy.orderedPolicyTargets;
+					orderedSequencePolicyOverride.strictAllowlist =
+						orchestrationPolicy.orderedPolicyStrict;
+					orderedSequencePolicyOverride.source =
+						orchestrationPolicy.decompositionMetadataSource;
+					orderedSequencePolicyOverridePtr = &orderedSequencePolicyOverride;
+				}
 				const auto orderedSequencePreflight =
 					RuntimeSequencingPolicy::BuildOrderedSequencePreflight(
 						normalizedMessage,
 						runtimeToolsSnapshot,
-						m_skillsCatalogState.entries);
+						m_skillsCatalogState.entries,
+						orderedSequencePolicyOverridePtr);
 				const bool preferChineseResponse =
 					stageContext.preferChineseResponse;
 				std::vector<std::string> orderedAllowlistTargets;
 				bool enforceOrderedAllowlist = false;
 				if (orderedSequencePreflight.enforced &&
-					orderedSequencePreflight.missingTargets.empty()) {
+					(!orderedSequencePreflight.resolvedToolTargets.empty()) &&
+					(orderedSequencePreflight.strictAllowlist
+						? orderedSequencePreflight.missingTargets.empty()
+						: true)) {
 					enforceOrderedAllowlist = true;
 					orderedAllowlistTargets.reserve(
 						orderedSequencePreflight.resolvedToolTargets.size());
@@ -4222,129 +4247,6 @@ namespace blazeclaw::gateway {
 					backendErrorMessage = "forced error for deterministic verification";
 				}
 
-				auto buildLegacyOrchestrationTaskDeltas =
-					[&](
-						const bool success,
-						const std::string& finalStatus,
-						const std::string& finalText,
-						const std::string& errorCode,
-						const std::string& errorMessage,
-						const ChatPromptOrchestrationResult& orchestrationResult) {
-							std::vector<ChatRuntimeResult::TaskDeltaEntry> taskDeltas;
-							const std::uint64_t baseMs = CurrentEpochMsLocal();
-
-							taskDeltas.push_back(ChatRuntimeResult::TaskDeltaEntry{
-								.index = taskDeltas.size(),
-								.runId = runId,
-								.sessionId = sessionKey,
-								.phase = "plan",
-								.resultJson =
-									"[\"weather.lookup\",\"report.compose\",\"email.schedule\"]",
-								.status = "ok",
-								.startedAtMs = baseMs,
-								.completedAtMs = baseMs,
-								.latencyMs = 0,
-								.stepLabel = "execution_plan",
-								});
-
-							if (success) {
-								taskDeltas.push_back(ChatRuntimeResult::TaskDeltaEntry{
-									.index = taskDeltas.size(),
-									.runId = runId,
-									.sessionId = sessionKey,
-									.phase = "tool_call",
-									.toolName = "weather.lookup",
-									.status = "requested",
-									.startedAtMs = baseMs + 1,
-									.completedAtMs = baseMs + 1,
-									.latencyMs = 0,
-									.stepLabel = "tool_request",
-									});
-								taskDeltas.push_back(ChatRuntimeResult::TaskDeltaEntry{
-									.index = taskDeltas.size(),
-									.runId = runId,
-									.sessionId = sessionKey,
-									.phase = "tool_result",
-									.toolName = "weather.lookup",
-									.status = "ok",
-									.startedAtMs = baseMs + 1,
-									.completedAtMs = baseMs + 2,
-									.latencyMs = 1,
-									.stepLabel = "tool_result",
-									});
-								taskDeltas.push_back(ChatRuntimeResult::TaskDeltaEntry{
-									.index = taskDeltas.size(),
-									.runId = runId,
-									.sessionId = sessionKey,
-									.phase = "tool_call",
-									.toolName = "report.compose",
-									.status = "requested",
-									.startedAtMs = baseMs + 2,
-									.completedAtMs = baseMs + 2,
-									.latencyMs = 0,
-									.stepLabel = "tool_request",
-									});
-								taskDeltas.push_back(ChatRuntimeResult::TaskDeltaEntry{
-									.index = taskDeltas.size(),
-									.runId = runId,
-									.sessionId = sessionKey,
-									.phase = "tool_result",
-									.toolName = "report.compose",
-									.status = "ok",
-									.startedAtMs = baseMs + 2,
-									.completedAtMs = baseMs + 3,
-									.latencyMs = 1,
-									.stepLabel = "tool_result",
-									});
-								taskDeltas.push_back(ChatRuntimeResult::TaskDeltaEntry{
-									.index = taskDeltas.size(),
-									.runId = runId,
-									.sessionId = sessionKey,
-									.phase = "tool_call",
-									.toolName = "email.schedule",
-									.status = "requested",
-									.startedAtMs = baseMs + 3,
-									.completedAtMs = baseMs + 3,
-									.latencyMs = 0,
-									.stepLabel = "tool_request",
-									});
-								taskDeltas.push_back(ChatRuntimeResult::TaskDeltaEntry{
-									.index = taskDeltas.size(),
-									.runId = runId,
-									.sessionId = sessionKey,
-									.phase = "tool_result",
-									.toolName = "email.schedule",
-								 .fallbackBackend = orchestrationResult.fallbackBackend,
-									.fallbackAction = orchestrationResult.fallbackAction,
-									.fallbackAttempt = orchestrationResult.fallbackAttempt,
-									.fallbackMaxAttempts = orchestrationResult.fallbackMaxAttempts,
-									.status = "needs_approval",
-									.startedAtMs = baseMs + 3,
-									.completedAtMs = baseMs + 4,
-									.latencyMs = 1,
-									.stepLabel = "tool_result",
-									});
-							}
-
-							taskDeltas.push_back(ChatRuntimeResult::TaskDeltaEntry{
-								.index = taskDeltas.size(),
-								.runId = runId,
-								.sessionId = sessionKey,
-								.phase = "final",
-								.resultJson = success ? finalText : errorMessage,
-							  .status = orchestrationResult.terminalStatus.empty()
-									? finalStatus
-									: orchestrationResult.terminalStatus,
-								.errorCode = errorCode,
-								.startedAtMs = baseMs + 4,
-								.completedAtMs = baseMs + 4,
-								.latencyMs = 0,
-								.stepLabel = "run_terminal",
-								});
-
-							return taskDeltas;
-					};
-
 				auto buildAssistantDeltasFromTaskDeltas =
 					[&runId](
 						const std::vector<ChatRuntimeResult::TaskDeltaEntry>& taskDeltas) {
@@ -4409,11 +4311,15 @@ namespace blazeclaw::gateway {
 						SerializeStringArrayLocal(orderedSequencePreflight.orderedTargets) +
 						",\"resolvedTools\":" +
 						SerializeStringArrayLocal(orderedSequencePreflight.resolvedToolTargets) +
+						",\"strictAllowlist\":" +
+						std::string(
+							orderedSequencePreflight.strictAllowlist ? "true" : "false") +
 						",\"missing\":" +
 						SerializeStringArrayLocal(orderedSequencePreflight.missingTargets) +
 						"}");
 
-					if (!orderedSequencePreflight.missingTargets.empty()) {
+					if (orderedSequencePreflight.strictAllowlist &&
+						!orderedSequencePreflight.missingTargets.empty()) {
 						failed = true;
 						orchestrationHandled = true;
 						backendErrorCode = "ordered_sequence_target_unavailable";
@@ -4448,218 +4354,20 @@ namespace blazeclaw::gateway {
 
 						persistTaskDeltas(blockedTaskDeltas, false);
 					}
-				}
-
-				if (!forceError &&
-					!hasAttachments &&
-					!normalizedMessage.empty() &&
-					allowDeterministicPromptOrchestration) {
-					if (forceWeatherEmailDeterministicOrchestration) {
-						const bool hasWeatherLookupTool = std::any_of(
-							runtimeToolsSnapshot.begin(),
-							runtimeToolsSnapshot.end(),
-							[](const ToolCatalogEntry& tool) {
-								return ToLowerCopyLocal(tool.id) == "weather.lookup";
-							});
-						const bool hasEmailScheduleTool = std::any_of(
-							runtimeToolsSnapshot.begin(),
-							runtimeToolsSnapshot.end(),
-							[](const ToolCatalogEntry& tool) {
-								return ToLowerCopyLocal(tool.id) == "email.schedule";
-							});
-
-						if (!hasWeatherLookupTool || !hasEmailScheduleTool) {
-							failed = true;
-							orchestrationHandled = true;
-							backendErrorCode =
-								"weather_email_required_tools_unavailable";
-							backendErrorMessage =
-								"deterministic weather-email orchestration requires weather.lookup and email.schedule";
-							assistantText =
-								"Weather-email orchestration requires weather.lookup and email.schedule tools.";
-
-							const std::uint64_t nowMsLocal = CurrentEpochMsLocal();
-							std::vector<ChatRuntimeResult::TaskDeltaEntry> blockedTaskDeltas{
-								ChatRuntimeResult::TaskDeltaEntry{
-									.index = 0,
-									.runId = runId,
-									.sessionId = sessionKey,
-									.phase = "plan",
-									.resultJson =
-										"[\"weather.lookup\",\"report.compose\",\"email.schedule\"]",
-									.status = "blocked",
-									.startedAtMs = nowMsLocal,
-									.completedAtMs = nowMsLocal,
-									.latencyMs = 0,
-									.stepLabel = "execution_plan",
-								},
-								ChatRuntimeResult::TaskDeltaEntry{
-									.index = 1,
-									.runId = runId,
-									.sessionId = sessionKey,
-									.phase = "final",
-									.resultJson = backendErrorMessage,
-									.status = "failed",
-									.errorCode = backendErrorCode,
-									.startedAtMs = nowMsLocal,
-									.completedAtMs = nowMsLocal,
-									.latencyMs = 0,
-									.stepLabel = "run_terminal",
-								},
-							};
-							assistantDeltas =
-								buildAssistantDeltasFromTaskDeltas(blockedTaskDeltas);
-							if (assistantDeltas.empty()) {
-								assistantDeltas.push_back(assistantText);
-							}
-							persistTaskDeltas(blockedTaskDeltas, false);
-						}
-					}
-
-					if (orchestrationHandled) {
-						// blocked by deterministic preflight
-					}
-					else {
-						const auto orchestrationResult = TryOrchestrateWeatherEmailPrompt(
-							m_toolRegistry,
-							normalizedMessage);
-
+					else if (!orderedSequencePreflight.missingTargets.empty()) {
+						BranchDecisionDiagnostics::Emit(
+							runId,
+							"runtime",
+							"ordered_preflight",
+							"advisory_missing_targets_continue");
 						EmitTelemetryEvent(
-							"gateway.chat.orchestration.intent",
+							"gateway.chat.ordered.preflight",
 							std::string("{\"runId\":") +
 							JsonString(runId) +
-							",\"path\":" +
-							JsonString(orchestrationPath) +
-							",\"matched\":" +
-							std::string(orchestrationResult.matched ? "true" : "false") +
-							",\"scheduleKind\":" +
-							JsonString(orchestrationResult.scheduleKind) +
-							",\"city\":" +
-							JsonString(orchestrationResult.city) +
-							",\"date\":" +
-							JsonString(orchestrationResult.date) +
-							",\"recipient\":" +
-							JsonString(orchestrationResult.recipient) +
-							",\"sendAt\":" +
-							JsonString(orchestrationResult.sendAt) +
-							",\"missReasons\":" +
-							SerializeStringArrayLocal(orchestrationResult.missReasons) +
-							",\"decompositionSteps\":" +
-							std::to_string(orchestrationResult.decompositionSteps) +
+							",\"advisoryContinue\":true,\"missing\":" +
+							SerializeStringArrayLocal(
+								orderedSequencePreflight.missingTargets) +
 							"}");
-
-						if (orchestrationResult.matched) {
-							orchestrationHandled = true;
-							if (orchestrationResult.success) {
-								assistantText = orchestrationResult.assistantText;
-								auto legacyTaskDeltas =
-									buildLegacyOrchestrationTaskDeltas(
-										true,
-										orchestrationResult.terminalStatus.empty()
-										? "completed"
-										: orchestrationResult.terminalStatus,
-										assistantText,
-										{},
-										{},
-										orchestrationResult);
-								assistantDeltas =
-									buildAssistantDeltasFromTaskDeltas(legacyTaskDeltas);
-								if (assistantDeltas.empty()) {
-									assistantDeltas = orchestrationResult.assistantDeltas;
-								}
-
-								EmitTelemetryEvent(
-									"gateway.chat.orchestration.execution",
-									std::string("{\"runId\":") +
-									JsonString(runId) +
-									",\"path\":" +
-									JsonString(orchestrationPath) +
-									",\"status\":\"success\",\"steps\":" +
-									std::to_string(
-										orchestrationResult.decompositionSteps) +
-									"}");
-								EmitTelemetryEvent(
-									"gateway.email.fallback.terminal",
-									std::string("{\"runId\":") +
-									JsonString(runId) +
-									",\"status\":" +
-									JsonString(orchestrationResult.terminalStatus.empty()
-										? std::string("completed")
-										: orchestrationResult.terminalStatus) +
-									",\"errorCode\":null,\"errorMessage\":null}");
-
-								m_chatRunsById.insert_or_assign(
-									runId,
-									ChatRunState{
-										.runId = runId,
-										.sessionKey = sessionKey,
-										.idempotencyKey = idempotencyKey,
-										.userMessage = message,
-										.assistantText = assistantText,
-										.providerDeltas = assistantDeltas,
-										.providerDeltaCursor = 0,
-										.streamCursor = 0,
-										.lastEmitMs = nowMs,
-										.failed = false,
-										.errorMessage = {},
-										.startedAtMs = nowMs,
-									 .active = true,
-									 .terminalEventEnqueued = false,
-										.pushLifecycleRequested = pushLifecycleEnabled,
-										.toolEventsAllowed = sendControlDecision.toolEvents.wantsToolEvents,
-										.originatingChannel = sendControlDecision.route.originatingChannel,
-										.originatingTo = sendControlDecision.route.originatingTo,
-										.explicitDeliverRoute = sendControlDecision.route.explicitDeliverRoute,
-									});
-
-								persistTaskDeltas(legacyTaskDeltas, true);
-							}
-							else {
-								failed = true;
-								assistantText.clear();
-								backendErrorCode = orchestrationResult.errorCode.empty()
-									? "chat_tool_orchestration_failed"
-									: orchestrationResult.errorCode;
-								backendErrorMessage = orchestrationResult.errorMessage.empty()
-									? "chat tool orchestration failed"
-									: orchestrationResult.errorMessage;
-
-								EmitTelemetryEvent(
-									"gateway.chat.orchestration.execution",
-									std::string("{\"runId\":") +
-									JsonString(runId) +
-									",\"path\":" +
-									JsonString(orchestrationPath) +
-									",\"status\":\"failed\",\"errorCode\":" +
-									JsonString(backendErrorCode) +
-									",\"errorMessage\":" +
-									JsonString(backendErrorMessage) +
-									"}");
-								EmitTelemetryEvent(
-									"gateway.email.fallback.terminal",
-									std::string("{\"runId\":") +
-									JsonString(runId) +
-									",\"status\":\"failed\",\"errorCode\":" +
-									JsonString(backendErrorCode) +
-									",\"errorMessage\":" +
-									JsonString(backendErrorMessage) +
-									"}");
-
-								auto legacyTaskDeltas =
-									buildLegacyOrchestrationTaskDeltas(
-										false,
-										orchestrationResult.terminalStatus.empty()
-										? "failed"
-										: orchestrationResult.terminalStatus,
-										{},
-										backendErrorCode,
-										backendErrorMessage,
-										orchestrationResult);
-								assistantDeltas =
-									buildAssistantDeltasFromTaskDeltas(legacyTaskDeltas);
-								persistTaskDeltas(legacyTaskDeltas, false);
-							}
-						}
 					}
 				}
 

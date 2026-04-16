@@ -38,6 +38,15 @@ namespace blazeclaw::gateway {
 		output.deterministicEnabled =
 			output.compatDeterministicEnabled ||
 			output.intentDeterministicEnabled;
+		if (output.intentDeterministicEnabled) {
+			output.orderedPolicyMode = "strict";
+			output.orderedPolicyStrict = true;
+			output.orderedPolicyTargets = {
+				"weather.lookup",
+				"report.compose",
+				"email.schedule",
+			};
+		}
 
 		if (output.compatDeterministicEnabled &&
 			output.intentDeterministicEnabled) {
@@ -63,11 +72,11 @@ namespace blazeclaw::gateway {
 
 		if (output.deterministicEnabled) {
 			output.orderedPolicyDecision =
-				"prefer_deterministic_orchestration_then_preflight";
+				"enforce_policy_ordered_sequence";
 			output.allowlistPolicyHint =
 				"allowlist_driven_by_ordered_sequence_policy";
 			output.fallbackPolicyHint =
-				"deterministic_first_then_runtime_recovery_policy";
+				"runtime_recovery_policy_after_ordered_sequence";
 		}
 
 		return output;

@@ -13,12 +13,19 @@ namespace blazeclaw::gateway {
 		std::vector<std::string> missingTargets;
 	};
 
+	struct OrderedSequencePolicyOverride {
+		std::vector<std::string> orderedTargets;
+		bool strictAllowlist = false;
+		std::string source;
+	};
+
 	class RuntimeSequencingPolicy {
 	public:
 		[[nodiscard]] static OrderedSequencePreflight BuildOrderedSequencePreflight(
 			const std::string& message,
 			const std::vector<ToolCatalogEntry>& tools,
-			const std::vector<SkillsCatalogGatewayEntry>& skillsCatalogEntries);
+			const std::vector<SkillsCatalogGatewayEntry>& skillsCatalogEntries,
+			const OrderedSequencePolicyOverride* policyOverride = nullptr);
 
 		[[nodiscard]] static bool IsResolvedRuntimeToolTarget(
 			const std::string& resolvedToolId,

@@ -370,27 +370,54 @@ namespace blazeclaw::gateway {
 	OrderedSequencePreflight RuntimeSequencingPolicy::BuildOrderedSequencePreflight(
 		const std::string& message,
 		const std::vector<ToolCatalogEntry>& tools,
-		const std::vector<SkillsCatalogGatewayEntry>& skillsCatalogEntries) {
+		const std::vector<SkillsCatalogGatewayEntry>& skillsCatalogEntries,
+		const OrderedSequencePolicyOverride* policyOverride) {
 		OrderedSequencePreflight preflight;
 		std::vector<std::string> inferredTargets;
 		preflight.explicitCallTargets.clear();
-		inferredTargets = ExtractOrderedTargetsFromPrompt(
-			message,
-			&preflight.explicitCallTargets);
 
-		if (!preflight.explicitCallTargets.empty()) {
-			preflight.orderedTargets = preflight.explicitCallTargets;
-			preflight.strictAllowlist = true;
-			preflight.enforced = true;
-		}
-		else {
-			if (!HasStructuralSequenceSignal(message)) {
-				return preflight;
+		if (policyOverride != nullptr &&
+			!policyOverride->orderedTargets.empty()) {
+			preflight.orderedTargets.reserve(policyOverride->orderedTargets.size());
+			for (const auto& target : policyOverride->orderedTargets) {
+				const std::string normalized = NormalizeOrderedTargetToken(target);
+				if (normalized.empty()) {
+					continue;
+				}
+
+				if (std::find(
+					preflight.orderedTargets.begin(),
+					preflight.orderedTargets.end(),
+					normalized) != preflight.orderedTargets.end()) {
+					continue;
+				}
+
+				preflight.orderedTargets.push_back(normalized);
 			}
 
-			preflight.orderedTargets = std::move(inferredTargets);
-			preflight.strictAllowlist = false;
+			preflight.strictAllowlist = policyOverride->strictAllowlist;
 			preflight.enforced = preflight.orderedTargets.size() >= 2;
+		}
+
+		if (!preflight.enforced) {
+			inferredTargets = ExtractOrderedTargetsFromPrompt(
+				message,
+				&preflight.explicitCallTargets);
+
+			if (!preflight.explicitCallTargets.empty()) {
+				preflight.orderedTargets = preflight.explicitCallTargets;
+				preflight.strictAllowlist = true;
+				preflight.enforced = true;
+			}
+			else {
+				if (!HasStructuralSequenceSignal(message)) {
+					return preflight;
+				}
+
+				preflight.orderedTargets = std::move(inferredTargets);
+				preflight.strictAllowlist = false;
+				preflight.enforced = preflight.orderedTargets.size() >= 2;
+			}
 		}
 
 		preflight.resolvedToolTargets.reserve(preflight.orderedTargets.size());

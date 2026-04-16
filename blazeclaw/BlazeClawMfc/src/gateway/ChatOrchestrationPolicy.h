@@ -3,6 +3,7 @@
 #include "GatewayJsonUtils.h"
 
 #include <string>
+#include <vector>
 
 namespace blazeclaw::gateway {
 
@@ -20,6 +21,9 @@ namespace blazeclaw::gateway {
 			bool compatDeterministicEnabled = false;
 			bool intentDeterministicEnabled = false;
 			bool deterministicEnabled = false;
+			std::string orderedPolicyMode = "none";
+			bool orderedPolicyStrict = false;
+			std::vector<std::string> orderedPolicyTargets;
 			std::string decisionReasonCode = "policy.dynamic.default";
 			std::string decompositionMetadataSource = "none";
 			std::string orderedPolicyDecision =
