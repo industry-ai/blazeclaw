@@ -20,6 +20,7 @@
 #include "ChatAbortCoordinator.h"
 #include "ChatHistoryPolicy.h"
 #include "ChatRoutePolicy.h"
+#include "ChatOrchestrationPolicy.h"
 #include "ToolEventRecipientPolicy.h"
 #include "ChatControlPlaneService.h"
 #include "GatewayEventFanoutService.h"
@@ -4069,20 +4070,23 @@ namespace blazeclaw::gateway {
 				bool orchestrationHandled = false;
 				bool lifecycleEventsEnqueued = false;
 				bool providerStreamed = false;
+				const auto orchestrationPolicy =
+					ChatOrchestrationPolicy::Evaluate(
+						ChatOrchestrationPolicy::Input{
+							.orchestrationPath = m_embeddedOrchestrationPath,
+							.message = normalizedMessage,
+							.forceError = forceError,
+							.hasAttachments = hasAttachments,
+						});
 				const std::string orchestrationPath =
-					ToLowerCopyLocal(m_embeddedOrchestrationPath);
+					orchestrationPolicy.selectedPath;
 				const bool allowPromptOrchestration =
-					orchestrationPath == "runtime_orchestration";
-             const auto weatherEmailIntentProbe =
-					prompt::AnalyzeWeatherEmailPromptIntent(normalizedMessage);
+					orchestrationPolicy.compatDeterministicEnabled;
 				const bool forceWeatherEmailDeterministicOrchestration =
-					!forceError &&
-					!hasAttachments &&
-					weatherEmailIntentProbe.matched;
+					orchestrationPolicy.intentDeterministicEnabled;
 				const bool allowDeterministicPromptOrchestration =
-					allowPromptOrchestration ||
-					forceWeatherEmailDeterministicOrchestration;
-             m_latestOrchestrationPathSelection.runId = runId;
+					orchestrationPolicy.deterministicEnabled;
+				m_latestOrchestrationPathSelection.runId = runId;
 				m_latestOrchestrationPathSelection.path = orchestrationPath;
 				m_latestOrchestrationPathSelection.compatDeterministicEnabled =
 					allowPromptOrchestration;
@@ -4090,6 +4094,8 @@ namespace blazeclaw::gateway {
 					forceWeatherEmailDeterministicOrchestration;
 				m_latestOrchestrationPathSelection.deterministicEnabled =
 					allowDeterministicPromptOrchestration;
+				m_latestOrchestrationPathSelection.decisionReasonCode =
+					orchestrationPolicy.decisionReasonCode;
 				m_latestOrchestrationPathSelection.observedAtEpochMs = nowMs;
 				EmitTelemetryEvent(
 					"gateway.chat.orchestration.pathSelection",
@@ -4098,21 +4104,29 @@ namespace blazeclaw::gateway {
 					",\"path\":" +
 					JsonString(orchestrationPath) +
 					",\"compatDeterministicEnabled\":" +
-                  std::string(allowPromptOrchestration ? "true" : "false") +
+					std::string(allowPromptOrchestration ? "true" : "false") +
 					",\"intentDeterministicEnabled\":" +
 					std::string(
 						forceWeatherEmailDeterministicOrchestration ? "true" : "false") +
 					",\"deterministicEnabled\":" +
 					std::string(
 						allowDeterministicPromptOrchestration ? "true" : "false") +
+					",\"decisionReasonCode\":" +
+					JsonString(orchestrationPolicy.decisionReasonCode) +
+					",\"decompositionMetadataSource\":" +
+					JsonString(orchestrationPolicy.decompositionMetadataSource) +
+					",\"orderedPolicyDecision\":" +
+					JsonString(orchestrationPolicy.orderedPolicyDecision) +
+					",\"allowlistPolicyHint\":" +
+					JsonString(orchestrationPolicy.allowlistPolicyHint) +
+					",\"fallbackPolicyHint\":" +
+					JsonString(orchestrationPolicy.fallbackPolicyHint) +
 					",\"dynamicRuntimeDefault\":true}");
 				BranchDecisionDiagnostics::Emit(
 					runId,
 					"runtime",
 					"orchestration.pathSelection",
-                    allowDeterministicPromptOrchestration
-					? "compat_runtime_orchestration_enabled"
-					: "dynamic_runtime_default");
+					orchestrationPolicy.decisionReasonCode);
 				const auto runtimeToolsSnapshot = m_toolRegistry.List();
 				const auto orderedSequencePreflight =
 					RuntimeSequencingPolicy::BuildOrderedSequencePreflight(
@@ -4436,7 +4450,7 @@ namespace blazeclaw::gateway {
 					}
 				}
 
-              if (!forceError &&
+				if (!forceError &&
 					!hasAttachments &&
 					!normalizedMessage.empty() &&
 					allowDeterministicPromptOrchestration) {
@@ -4461,7 +4475,7 @@ namespace blazeclaw::gateway {
 								"weather_email_required_tools_unavailable";
 							backendErrorMessage =
 								"deterministic weather-email orchestration requires weather.lookup and email.schedule";
-                           assistantText =
+							assistantText =
 								"Weather-email orchestration requires weather.lookup and email.schedule tools.";
 
 							const std::uint64_t nowMsLocal = CurrentEpochMsLocal();
@@ -4506,146 +4520,146 @@ namespace blazeclaw::gateway {
 						// blocked by deterministic preflight
 					}
 					else {
-					const auto orchestrationResult = TryOrchestrateWeatherEmailPrompt(
-						m_toolRegistry,
-						normalizedMessage);
+						const auto orchestrationResult = TryOrchestrateWeatherEmailPrompt(
+							m_toolRegistry,
+							normalizedMessage);
 
-					EmitTelemetryEvent(
-						"gateway.chat.orchestration.intent",
-						std::string("{\"runId\":") +
-						JsonString(runId) +
-						",\"path\":" +
-						JsonString(orchestrationPath) +
-						",\"matched\":" +
-						std::string(orchestrationResult.matched ? "true" : "false") +
-						",\"scheduleKind\":" +
-						JsonString(orchestrationResult.scheduleKind) +
-						",\"city\":" +
-						JsonString(orchestrationResult.city) +
-						",\"date\":" +
-						JsonString(orchestrationResult.date) +
-						",\"recipient\":" +
-						JsonString(orchestrationResult.recipient) +
-						",\"sendAt\":" +
-						JsonString(orchestrationResult.sendAt) +
-						",\"missReasons\":" +
-						SerializeStringArrayLocal(orchestrationResult.missReasons) +
-						",\"decompositionSteps\":" +
-						std::to_string(orchestrationResult.decompositionSteps) +
-						"}");
+						EmitTelemetryEvent(
+							"gateway.chat.orchestration.intent",
+							std::string("{\"runId\":") +
+							JsonString(runId) +
+							",\"path\":" +
+							JsonString(orchestrationPath) +
+							",\"matched\":" +
+							std::string(orchestrationResult.matched ? "true" : "false") +
+							",\"scheduleKind\":" +
+							JsonString(orchestrationResult.scheduleKind) +
+							",\"city\":" +
+							JsonString(orchestrationResult.city) +
+							",\"date\":" +
+							JsonString(orchestrationResult.date) +
+							",\"recipient\":" +
+							JsonString(orchestrationResult.recipient) +
+							",\"sendAt\":" +
+							JsonString(orchestrationResult.sendAt) +
+							",\"missReasons\":" +
+							SerializeStringArrayLocal(orchestrationResult.missReasons) +
+							",\"decompositionSteps\":" +
+							std::to_string(orchestrationResult.decompositionSteps) +
+							"}");
 
-					if (orchestrationResult.matched) {
-						orchestrationHandled = true;
-						if (orchestrationResult.success) {
-							assistantText = orchestrationResult.assistantText;
-							auto legacyTaskDeltas =
-								buildLegacyOrchestrationTaskDeltas(
-									true,
-									orchestrationResult.terminalStatus.empty()
-									? "completed"
-									: orchestrationResult.terminalStatus,
-									assistantText,
-									{},
-									{},
-									orchestrationResult);
-							assistantDeltas =
-								buildAssistantDeltasFromTaskDeltas(legacyTaskDeltas);
-							if (assistantDeltas.empty()) {
-								assistantDeltas = orchestrationResult.assistantDeltas;
+						if (orchestrationResult.matched) {
+							orchestrationHandled = true;
+							if (orchestrationResult.success) {
+								assistantText = orchestrationResult.assistantText;
+								auto legacyTaskDeltas =
+									buildLegacyOrchestrationTaskDeltas(
+										true,
+										orchestrationResult.terminalStatus.empty()
+										? "completed"
+										: orchestrationResult.terminalStatus,
+										assistantText,
+										{},
+										{},
+										orchestrationResult);
+								assistantDeltas =
+									buildAssistantDeltasFromTaskDeltas(legacyTaskDeltas);
+								if (assistantDeltas.empty()) {
+									assistantDeltas = orchestrationResult.assistantDeltas;
+								}
+
+								EmitTelemetryEvent(
+									"gateway.chat.orchestration.execution",
+									std::string("{\"runId\":") +
+									JsonString(runId) +
+									",\"path\":" +
+									JsonString(orchestrationPath) +
+									",\"status\":\"success\",\"steps\":" +
+									std::to_string(
+										orchestrationResult.decompositionSteps) +
+									"}");
+								EmitTelemetryEvent(
+									"gateway.email.fallback.terminal",
+									std::string("{\"runId\":") +
+									JsonString(runId) +
+									",\"status\":" +
+									JsonString(orchestrationResult.terminalStatus.empty()
+										? std::string("completed")
+										: orchestrationResult.terminalStatus) +
+									",\"errorCode\":null,\"errorMessage\":null}");
+
+								m_chatRunsById.insert_or_assign(
+									runId,
+									ChatRunState{
+										.runId = runId,
+										.sessionKey = sessionKey,
+										.idempotencyKey = idempotencyKey,
+										.userMessage = message,
+										.assistantText = assistantText,
+										.providerDeltas = assistantDeltas,
+										.providerDeltaCursor = 0,
+										.streamCursor = 0,
+										.lastEmitMs = nowMs,
+										.failed = false,
+										.errorMessage = {},
+										.startedAtMs = nowMs,
+									 .active = true,
+									 .terminalEventEnqueued = false,
+										.pushLifecycleRequested = pushLifecycleEnabled,
+										.toolEventsAllowed = sendControlDecision.toolEvents.wantsToolEvents,
+										.originatingChannel = sendControlDecision.route.originatingChannel,
+										.originatingTo = sendControlDecision.route.originatingTo,
+										.explicitDeliverRoute = sendControlDecision.route.explicitDeliverRoute,
+									});
+
+								persistTaskDeltas(legacyTaskDeltas, true);
 							}
+							else {
+								failed = true;
+								assistantText.clear();
+								backendErrorCode = orchestrationResult.errorCode.empty()
+									? "chat_tool_orchestration_failed"
+									: orchestrationResult.errorCode;
+								backendErrorMessage = orchestrationResult.errorMessage.empty()
+									? "chat tool orchestration failed"
+									: orchestrationResult.errorMessage;
 
-							EmitTelemetryEvent(
-								"gateway.chat.orchestration.execution",
-								std::string("{\"runId\":") +
-								JsonString(runId) +
-								",\"path\":" +
-								JsonString(orchestrationPath) +
-								",\"status\":\"success\",\"steps\":" +
-								std::to_string(
-									orchestrationResult.decompositionSteps) +
-								"}");
-							EmitTelemetryEvent(
-								"gateway.email.fallback.terminal",
-								std::string("{\"runId\":") +
-								JsonString(runId) +
-								",\"status\":" +
-								JsonString(orchestrationResult.terminalStatus.empty()
-									? std::string("completed")
-									: orchestrationResult.terminalStatus) +
-								",\"errorCode\":null,\"errorMessage\":null}");
+								EmitTelemetryEvent(
+									"gateway.chat.orchestration.execution",
+									std::string("{\"runId\":") +
+									JsonString(runId) +
+									",\"path\":" +
+									JsonString(orchestrationPath) +
+									",\"status\":\"failed\",\"errorCode\":" +
+									JsonString(backendErrorCode) +
+									",\"errorMessage\":" +
+									JsonString(backendErrorMessage) +
+									"}");
+								EmitTelemetryEvent(
+									"gateway.email.fallback.terminal",
+									std::string("{\"runId\":") +
+									JsonString(runId) +
+									",\"status\":\"failed\",\"errorCode\":" +
+									JsonString(backendErrorCode) +
+									",\"errorMessage\":" +
+									JsonString(backendErrorMessage) +
+									"}");
 
-							m_chatRunsById.insert_or_assign(
-								runId,
-								ChatRunState{
-									.runId = runId,
-									.sessionKey = sessionKey,
-									.idempotencyKey = idempotencyKey,
-									.userMessage = message,
-									.assistantText = assistantText,
-									.providerDeltas = assistantDeltas,
-									.providerDeltaCursor = 0,
-									.streamCursor = 0,
-									.lastEmitMs = nowMs,
-									.failed = false,
-									.errorMessage = {},
-									.startedAtMs = nowMs,
-								 .active = true,
-								 .terminalEventEnqueued = false,
-									.pushLifecycleRequested = pushLifecycleEnabled,
-									.toolEventsAllowed = sendControlDecision.toolEvents.wantsToolEvents,
-									.originatingChannel = sendControlDecision.route.originatingChannel,
-									.originatingTo = sendControlDecision.route.originatingTo,
-									.explicitDeliverRoute = sendControlDecision.route.explicitDeliverRoute,
-								});
-
-							persistTaskDeltas(legacyTaskDeltas, true);
+								auto legacyTaskDeltas =
+									buildLegacyOrchestrationTaskDeltas(
+										false,
+										orchestrationResult.terminalStatus.empty()
+										? "failed"
+										: orchestrationResult.terminalStatus,
+										{},
+										backendErrorCode,
+										backendErrorMessage,
+										orchestrationResult);
+								assistantDeltas =
+									buildAssistantDeltasFromTaskDeltas(legacyTaskDeltas);
+								persistTaskDeltas(legacyTaskDeltas, false);
+							}
 						}
-						else {
-							failed = true;
-							assistantText.clear();
-							backendErrorCode = orchestrationResult.errorCode.empty()
-								? "chat_tool_orchestration_failed"
-								: orchestrationResult.errorCode;
-							backendErrorMessage = orchestrationResult.errorMessage.empty()
-								? "chat tool orchestration failed"
-								: orchestrationResult.errorMessage;
-
-							EmitTelemetryEvent(
-								"gateway.chat.orchestration.execution",
-								std::string("{\"runId\":") +
-								JsonString(runId) +
-								",\"path\":" +
-								JsonString(orchestrationPath) +
-								",\"status\":\"failed\",\"errorCode\":" +
-								JsonString(backendErrorCode) +
-								",\"errorMessage\":" +
-								JsonString(backendErrorMessage) +
-								"}");
-							EmitTelemetryEvent(
-								"gateway.email.fallback.terminal",
-								std::string("{\"runId\":") +
-								JsonString(runId) +
-								",\"status\":\"failed\",\"errorCode\":" +
-								JsonString(backendErrorCode) +
-								",\"errorMessage\":" +
-								JsonString(backendErrorMessage) +
-								"}");
-
-							auto legacyTaskDeltas =
-								buildLegacyOrchestrationTaskDeltas(
-									false,
-									orchestrationResult.terminalStatus.empty()
-									? "failed"
-									: orchestrationResult.terminalStatus,
-									{},
-									backendErrorCode,
-									backendErrorMessage,
-									orchestrationResult);
-							assistantDeltas =
-								buildAssistantDeltasFromTaskDeltas(legacyTaskDeltas);
-							persistTaskDeltas(legacyTaskDeltas, false);
-                   }
-					}
 					}
 				}
 
@@ -6614,6 +6628,8 @@ namespace blazeclaw::gateway {
 				m_latestOrchestrationPathSelection.intentDeterministicEnabled;
 			const bool latestSelectionDeterministicEnabled =
 				m_latestOrchestrationPathSelection.deterministicEnabled;
+			const std::string latestSelectionDecisionReasonCode =
+				m_latestOrchestrationPathSelection.decisionReasonCode;
 
 			return protocol::ResponseFrame{
 				.id = request.id,
@@ -6627,7 +6643,7 @@ namespace blazeclaw::gateway {
 					",\"running\":" +
 					std::to_string(m_runtimeRunningCount) +
 					",\"capacity\":" +
-                 std::to_string(m_runtimeQueueCapacity) +
+				 std::to_string(m_runtimeQueueCapacity) +
 					",\"orchestrationPath\":{\"configured\":\"" +
 					EscapeJsonLocal(configuredOrchestrationPath) +
 					"\",\"selected\":\"" +
@@ -6642,8 +6658,10 @@ namespace blazeclaw::gateway {
 					std::string(latestSelectionIntentEnabled ? "true" : "false") +
 					",\"deterministicEnabled\":" +
 					std::string(
-						latestSelectionDeterministicEnabled ? "true" : "false") +
-                  "},\"dynamicLoopMetrics\":{\"success\":" +
+					   latestSelectionDeterministicEnabled ? "true" : "false") +
+					",\"decisionReasonCode\":" +
+					JsonString(latestSelectionDecisionReasonCode) +
+				  "},\"dynamicLoopMetrics\":{\"success\":" +
 					std::to_string(m_taskDeltaRunSuccessCount) +
 					",\"failure\":" +
 					std::to_string(m_taskDeltaRunFailureCount) +

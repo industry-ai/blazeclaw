@@ -375,6 +375,7 @@
     <ClCompile Include="src\gateway\ChatTranscriptStore.cpp" />
     <ClCompile Include="src\gateway\ChatAbortCoordinator.cpp" />
     <ClCompile Include="src\gateway\ChatHistoryPolicy.cpp" />
+    <ClCompile Include="src\gateway\ChatOrchestrationPolicy.cpp" />
     <ClCompile Include="src\gateway\ChatRoutePolicy.cpp" />
     <ClCompile Include="src\gateway\ToolEventRecipientPolicy.cpp" />
     <ClCompile Include="src\gateway\TransportRecipientRegistry.cpp" />

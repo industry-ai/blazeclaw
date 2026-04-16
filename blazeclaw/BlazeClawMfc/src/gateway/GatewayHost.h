@@ -391,6 +391,7 @@ namespace blazeclaw::gateway {
 			bool compatDeterministicEnabled = false;
 			bool intentDeterministicEnabled = false;
 			bool deterministicEnabled = false;
+			std::string decisionReasonCode;
 			std::uint64_t observedAtEpochMs = 0;
 		};
 
@@ -455,7 +456,7 @@ namespace blazeclaw::gateway {
 		std::uint32_t m_runtimeEmailApprovalTokenTtlMinutes = 60;
 		std::string m_runtimeEmailPolicyProfileId = "default";
 		std::string m_embeddedOrchestrationPath = "dynamic_task_delta";
-        OrchestrationPathSelectionState m_latestOrchestrationPathSelection;
+		OrchestrationPathSelectionState m_latestOrchestrationPathSelection;
 		std::string m_runtimeAssignedSessionId = "main";
 		std::string m_runtimeAssignedAgentId = "default";
 		std::size_t m_runtimeQueueDepth = 0;
