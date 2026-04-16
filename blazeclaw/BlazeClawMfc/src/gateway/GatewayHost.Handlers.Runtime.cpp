@@ -1490,8 +1490,6 @@ namespace blazeclaw::gateway {
 			result.assistantDeltas = {
 				"tools.execute.start tool=weather.lookup",
 				"tools.execute.result tool=weather.lookup status=ok",
-				"task.execute.start task=report.compose",
-				"task.execute.result task=report.compose status=ok",
 				"tools.execute.start tool=email.schedule action=prepare",
 				"tools.execute.result tool=email.schedule status=needs_approval",
 			};
@@ -4427,6 +4425,118 @@ namespace blazeclaw::gateway {
 							SerializeStringArrayLocal(
 								orderedSequencePreflight.missingTargets) +
 							"}");
+					}
+				}
+
+				if (!forceError &&
+					!orchestrationHandled &&
+					!hasAttachments &&
+					forceWeatherEmailDeterministicOrchestration) {
+					const auto orchestrationResult =
+						TryOrchestrateWeatherEmailPrompt(
+							m_toolRegistry,
+							normalizedMessage);
+
+					if (orchestrationResult.matched) {
+						orchestrationHandled = true;
+						assistantDeltas = orchestrationResult.assistantDeltas;
+						if (orchestrationResult.success) {
+							failed = false;
+							backendErrorCode.clear();
+							backendErrorMessage.clear();
+							assistantText = orchestrationResult.assistantText;
+							if (assistantText.empty() &&
+								!assistantDeltas.empty()) {
+								assistantText = assistantDeltas.back();
+							}
+
+							EmitTelemetryEvent(
+								"gateway.chat.orchestration.execution",
+								std::string("{\"runId\":") +
+								JsonString(runId) +
+								",\"path\":" +
+								JsonString(orchestrationPath) +
+								",\"status\":\"success\",\"steps\":" +
+								std::to_string(
+									orchestrationResult.decompositionSteps) +
+								"}");
+
+							auto orchestrationTaskDeltas =
+								RuntimeToolCallNormalizer::EnsureRuntimeTaskDeltas(
+									{},
+									runId,
+									sessionKey,
+									true,
+									assistantText,
+									{},
+									{});
+							if (!orderedPreflightTaskDeltas.empty()) {
+								std::vector<ChatRuntimeResult::TaskDeltaEntry> mergedTaskDeltas;
+								mergedTaskDeltas.reserve(
+									orderedPreflightTaskDeltas.size() +
+									orchestrationTaskDeltas.size());
+								mergedTaskDeltas.insert(
+									mergedTaskDeltas.end(),
+									orderedPreflightTaskDeltas.begin(),
+									orderedPreflightTaskDeltas.end());
+								mergedTaskDeltas.insert(
+									mergedTaskDeltas.end(),
+									orchestrationTaskDeltas.begin(),
+									orchestrationTaskDeltas.end());
+								orchestrationTaskDeltas = std::move(mergedTaskDeltas);
+							}
+
+							persistTaskDeltas(orchestrationTaskDeltas, true);
+						}
+						else {
+							failed = true;
+							assistantText.clear();
+							backendErrorCode = orchestrationResult.errorCode.empty()
+								? "chat_tool_orchestration_failed"
+								: orchestrationResult.errorCode;
+							backendErrorMessage = orchestrationResult.errorMessage.empty()
+								? "chat tool orchestration failed"
+								: orchestrationResult.errorMessage;
+
+							EmitTelemetryEvent(
+								"gateway.chat.orchestration.execution",
+								std::string("{\"runId\":") +
+								JsonString(runId) +
+								",\"path\":" +
+								JsonString(orchestrationPath) +
+								",\"status\":\"failed\",\"errorCode\":" +
+								JsonString(backendErrorCode) +
+								",\"errorMessage\":" +
+								JsonString(backendErrorMessage) +
+								"}");
+
+							auto orchestrationTaskDeltas =
+								RuntimeToolCallNormalizer::EnsureRuntimeTaskDeltas(
+									{},
+									runId,
+									sessionKey,
+									false,
+									{},
+									backendErrorCode,
+									backendErrorMessage);
+							if (!orderedPreflightTaskDeltas.empty()) {
+								std::vector<ChatRuntimeResult::TaskDeltaEntry> mergedTaskDeltas;
+								mergedTaskDeltas.reserve(
+									orderedPreflightTaskDeltas.size() +
+									orchestrationTaskDeltas.size());
+								mergedTaskDeltas.insert(
+									mergedTaskDeltas.end(),
+									orderedPreflightTaskDeltas.begin(),
+									orderedPreflightTaskDeltas.end());
+								mergedTaskDeltas.insert(
+									mergedTaskDeltas.end(),
+									orchestrationTaskDeltas.begin(),
+									orchestrationTaskDeltas.end());
+								orchestrationTaskDeltas = std::move(mergedTaskDeltas);
+							}
+
+							persistTaskDeltas(orchestrationTaskDeltas, false);
+						}
 					}
 				}
 

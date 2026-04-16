@@ -349,6 +349,38 @@ namespace blazeclaw::gateway::executors {
 				"\"}}";
 		}
 
+		std::string BuildMissingFieldsArrayJson(
+			const std::vector<std::string>& missingFields) {
+			std::string missingJson = "[";
+			for (std::size_t index = 0; index < missingFields.size(); ++index) {
+				if (index > 0) {
+					missingJson += ",";
+				}
+
+				missingJson += "\"" + EscapeJson(missingFields[index]) + "\"";
+			}
+
+			missingJson += "]";
+			return missingJson;
+		}
+
+		std::string BuildInvalidArgsEnvelope(
+			const std::string& code,
+			const std::string& message,
+			const std::string& action,
+			const std::vector<std::string>& missingFields = {}) {
+			std::string envelope = std::string("{\"protocolVersion\":1,\"ok\":false,\"status\":\"error\",\"output\":[],\"requiresApproval\":null,\"error\":{\"code\":\"") +
+				EscapeJson(code) +
+				"\",\"message\":\"" +
+				EscapeJson(message) +
+				"\",\"details\":{\"action\":\"" +
+				EscapeJson(action.empty() ? "unknown" : action) +
+				"\",\"missingFields\":" +
+				BuildMissingFieldsArrayJson(missingFields) +
+				"}}}";
+			return envelope;
+		}
+
 		std::string ReadEnvVar(const char* name) {
 			if (name == nullptr) {
 				return {};
@@ -1172,7 +1204,10 @@ namespace blazeclaw::gateway::executors {
 					.tool = requestedTool,
 					.executed = false,
 					.status = "invalid_args",
-					.output = BuildErrorEnvelope("missing_args", "missing_args"),
+				   .output = BuildInvalidArgsEnvelope(
+						"missing_args",
+						"missing_args",
+						"unknown"),
 				};
 			}
 
@@ -1196,17 +1231,30 @@ namespace blazeclaw::gateway::executors {
 				json::FindStringField(argsJson.value(), "sendAt", sendAt);
 				json::FindStringField(argsJson.value(), "account", account);
 
-				if (json::Trim(recipient).empty() ||
-					json::Trim(subject).empty() ||
-					json::Trim(body).empty() ||
-					json::Trim(sendAt).empty()) {
+				std::vector<std::string> missingFields;
+				if (json::Trim(recipient).empty()) {
+					missingFields.push_back("to");
+				}
+				if (json::Trim(subject).empty()) {
+					missingFields.push_back("subject");
+				}
+				if (json::Trim(body).empty()) {
+					missingFields.push_back("body");
+				}
+				if (json::Trim(sendAt).empty()) {
+					missingFields.push_back("sendAt");
+				}
+
+				if (!missingFields.empty()) {
 					return ToolExecuteResult{
 						.tool = requestedTool,
 						.executed = false,
 						.status = "invalid_args",
-						.output = BuildErrorEnvelope(
+					   .output = BuildInvalidArgsEnvelope(
 							"to_subject_body_sendAt_required",
-							"to_subject_body_sendAt_required"),
+						 "to_subject_body_sendAt_required",
+							"prepare",
+							missingFields),
 					};
 				}
 
@@ -1297,9 +1345,11 @@ namespace blazeclaw::gateway::executors {
 						.tool = requestedTool,
 						.executed = false,
 						.status = "invalid_args",
-						.output = BuildErrorEnvelope(
+					   .output = BuildInvalidArgsEnvelope(
 							"approvalToken_and_approve_required",
-							"approvalToken_and_approve_required"),
+						  "approvalToken_and_approve_required",
+							"approve",
+							{ "approvalToken", "approve" }),
 					};
 				}
 
@@ -1308,9 +1358,11 @@ namespace blazeclaw::gateway::executors {
 						.tool = requestedTool,
 						.executed = false,
 						.status = "invalid_args",
-						.output = BuildErrorEnvelope(
+					   .output = BuildInvalidArgsEnvelope(
 							"approvalToken_and_approve_required",
-							"approvalToken_and_approve_required"),
+						  "approvalToken_and_approve_required",
+							"approve",
+							{ "approvalToken" }),
 					};
 				}
 
@@ -1420,9 +1472,11 @@ namespace blazeclaw::gateway::executors {
 				.tool = requestedTool,
 				.executed = false,
 				.status = "invalid_args",
-				.output = BuildErrorEnvelope(
+			   .output = BuildInvalidArgsEnvelope(
 					"action_prepare_or_approve_required",
-					"action_prepare_or_approve_required"),
+				  "action_prepare_or_approve_required",
+					"unknown",
+					{ "action" }),
 			};
 			};
 	}

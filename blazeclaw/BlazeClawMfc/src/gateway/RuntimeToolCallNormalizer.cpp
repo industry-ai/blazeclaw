@@ -244,6 +244,45 @@ namespace blazeclaw::gateway {
 				return true;
 			}
 
+			if (lowerTool == "email.schedule") {
+				const auto intent = prompt::AnalyzeWeatherEmailPromptIntent(trimmedMessage);
+				std::string recipient = intent.recipient;
+				if (recipient.empty()) {
+					recipient = ExtractFirstEmailAddress(trimmedMessage);
+				}
+
+				if (recipient.empty()) {
+					return false;
+				}
+
+				std::string sendAt = json::Trim(intent.sendAt);
+				if (sendAt.empty()) {
+					sendAt = "09:00";
+				}
+
+				std::string subject = "Email update";
+				if (!json::Trim(intent.city).empty() &&
+					json::Trim(intent.date).empty()) {
+					subject = intent.city + " weather report";
+				}
+				else if (!json::Trim(intent.city).empty() &&
+					!json::Trim(intent.date).empty()) {
+					subject = intent.city + " weather report (" + intent.date + ")";
+				}
+
+				outArgsJson =
+					"{\"action\":\"prepare\",\"to\":" +
+					QuoteJson(recipient) +
+					",\"subject\":" +
+					QuoteJson(subject) +
+					",\"body\":" +
+					QuoteJson(trimmedMessage) +
+					",\"sendAt\":" +
+					QuoteJson(sendAt) +
+					"}";
+				return true;
+			}
+
 			return false;
 		}
 
