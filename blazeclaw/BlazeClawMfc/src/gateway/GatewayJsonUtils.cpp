@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "GatewayJsonUtils.h"
 
 #include <algorithm>
@@ -415,84 +415,205 @@ namespace blazeclaw::gateway::prompt {
 			return {};
 		}
 
+		std::string NormalizePromptText(const std::string& message) {
+			std::string normalized = message;
+			for (char& ch : normalized) {
+				switch (static_cast<unsigned char>(ch)) {
+				case '\t':
+				case '\r':
+				case '\n':
+					ch = ' ';
+					break;
+				default:
+					break;
+				}
+			}
+
+			return normalized;
+		}
+
+		bool ContainsAnyToken(
+			const std::string& text,
+			const std::vector<std::string>& tokens) {
+			for (const auto& token : tokens) {
+				if (token.empty()) {
+					continue;
+				}
+
+				if (text.find(token) != std::string::npos) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		std::string ResolveDateValue(const std::string& lowered) {
+         if (ContainsAnyToken(
+				lowered,
+             { "today", "今天" })) {
+				return "today";
+			}
+
+         if (ContainsAnyToken(
+				lowered,
+              { "tomorrow", "明天" })) {
+				return "tomorrow";
+			}
+
+			return "tomorrow";
+		}
+
+		std::string ResolveCityValue(const std::string& lowered) {
+         if (ContainsAnyToken(
+				lowered,
+             { "wuhan", "武汉" })) {
+				return "Wuhan";
+			}
+
+			return "Wuhan";
+		}
+
+		bool IsImmediateScheduleKeyword(const std::string& lowered) {
+			return ContainsAnyToken(
+				lowered,
+				{
+					"right now",
+					"immediately",
+					" as soon as possible",
+					" now",
+					"马上",
+					"\xE7\x8E\xB0\xE5\x9C\xA8",
+					"\xE9\xA9\xAC\xE4\xB8\x8A",
+					"\xE7\xAB\x8B\xE5\x8D\xB3",
+					"\xE5\xB0\xBD\xE5\xBF\xAB",
+					"\xE7\xAB\x8B\xE5\x88\xBB",
+					"\xE9\xA9\xAC\xE4\xB8\x8A\xE5\x8F\x91\xE9\x80\x81",
+					"\xE7\xAB\x8B\xE5\x8D\xB3\xE5\x8F\x91\xE9\x80\x81",
+				});
+		}
+
 	} // namespace
+
+	OrchestrationStructuralSignals AnalyzeOrchestrationStructuralSignals(
+		const std::string& message) {
+		OrchestrationStructuralSignals signals;
+		const std::string normalized = NormalizePromptText(message);
+		const std::string lowered = ToLowerCopy(normalized);
+
+		signals.hasWeatherCapabilityIntent = ContainsAnyToken(
+			lowered,
+			{
+				"weather",
+               "天气",
+				"气温",
+				"预报",
+				"温度",
+			});
+
+		signals.hasEmailCapabilityIntent = ContainsAnyToken(
+			lowered,
+			{
+				"email",
+				"mail",
+               "邮件",
+				"电子邮件",
+				"发邮件",
+				"发送",
+				"发到",
+			});
+
+		signals.hasReportIntent = ContainsAnyToken(
+			lowered,
+			{
+				"report",
+				"summary",
+				"write",
+               "报告",
+				"简报",
+				"总结",
+				"写",
+			});
+
+		signals.recipient = ExtractFirstEmailAddress(normalized);
+		signals.hasRecipient = !signals.recipient.empty();
+
+		const auto parsedTime = TryParsePromptSendAt(normalized);
+		if (parsedTime.has_value()) {
+			signals.hasScheduleIntent = true;
+			signals.sendAt = parsedTime.value();
+			signals.scheduleKind = "clock_time";
+		}
+		else {
+			if (IsImmediateScheduleKeyword(lowered) ||
+				lowered.rfind("now", 0) == 0) {
+				signals.hasScheduleIntent = true;
+				signals.sendAt = ResolveCurrentLocalTimeHHmm();
+				signals.scheduleKind = "immediate_keyword";
+			}
+			else {
+				signals.hasScheduleIntent = false;
+				signals.sendAt = "13:00";
+				signals.scheduleKind = "default_fallback";
+			}
+		}
+
+		signals.date = ResolveDateValue(lowered);
+		signals.hasDateIntent =
+           ContainsAnyToken(
+				lowered,
+				{
+					"today",
+					"tomorrow",
+                 "今天",
+					"明天",
+				});
+		signals.city = ResolveCityValue(lowered);
+
+		if (!signals.hasWeatherCapabilityIntent) {
+			signals.missReasons.push_back("missing_weather");
+		}
+
+		if (!signals.hasEmailCapabilityIntent) {
+			signals.missReasons.push_back("missing_email_action");
+		}
+
+		if (!signals.hasRecipient) {
+			signals.missReasons.push_back("missing_recipient_email");
+		}
+
+		if (!signals.hasReportIntent) {
+			signals.missReasons.push_back("missing_report_instruction");
+		}
+
+		if (!signals.hasScheduleIntent) {
+			signals.missReasons.push_back("missing_schedule_format");
+		}
+
+		signals.weatherEmailFlowCandidate =
+			signals.hasWeatherCapabilityIntent &&
+			signals.hasEmailCapabilityIntent &&
+			signals.hasRecipient;
+
+		return signals;
+	}
 
 	WeatherEmailPromptIntent AnalyzeWeatherEmailPromptIntent(
 		const std::string& message) {
 		WeatherEmailPromptIntent intent;
-
-		const std::string lowered = ToLowerCopy(message);
-		intent.hasWeather = lowered.find("weather") != std::string::npos;
-		intent.hasEmail = lowered.find("email") != std::string::npos ||
-			lowered.find("mail") != std::string::npos;
-		intent.hasReport = lowered.find("report") != std::string::npos ||
-			lowered.find("summary") != std::string::npos ||
-			lowered.find("write") != std::string::npos;
-
-		intent.recipient = ExtractFirstEmailAddress(message);
-		intent.hasRecipient = !intent.recipient.empty();
-
-		const auto parsedTime = TryParsePromptSendAt(message);
-		if (parsedTime.has_value()) {
-			intent.hasSchedule = true;
-			intent.sendAt = parsedTime.value();
-			intent.scheduleKind = "clock_time";
-		}
-		else {
-			const bool immediateKeyword =
-				lowered.find("right now") != std::string::npos ||
-				lowered.find("immediately") != std::string::npos ||
-				lowered.find(" as soon as possible") != std::string::npos ||
-				lowered.find(" now") != std::string::npos ||
-				lowered.rfind("now", 0) == 0;
-			if (immediateKeyword) {
-				intent.hasSchedule = true;
-				intent.sendAt = ResolveCurrentLocalTimeHHmm();
-				intent.scheduleKind = "immediate_keyword";
-			}
-			else {
-				intent.hasSchedule = false;
-				intent.sendAt = "13:00";
-				intent.scheduleKind = "default_fallback";
-			}
-		}
-
-		if (lowered.find("today") != std::string::npos) {
-			intent.date = "today";
-		}
-		else if (lowered.find("tomorrow") != std::string::npos) {
-			intent.date = "tomorrow";
-		}
-		else {
-			intent.date = "tomorrow";
-		}
-
-		intent.city = lowered.find("wuhan") != std::string::npos
-			? "Wuhan"
-			: "Wuhan";
-
-		if (!intent.hasWeather) {
-			intent.missReasons.push_back("missing_weather");
-		}
-
-		if (!intent.hasEmail) {
-			intent.missReasons.push_back("missing_email_action");
-		}
-
-		if (!intent.hasRecipient) {
-			intent.missReasons.push_back("missing_recipient_email");
-		}
-
-		if (!intent.hasReport) {
-			intent.missReasons.push_back("missing_report_instruction");
-		}
-
-		if (!intent.hasSchedule) {
-			intent.missReasons.push_back("missing_schedule_format");
-		}
-
-		intent.matched =
-			intent.hasWeather && intent.hasEmail && intent.hasRecipient;
+		const auto signals = AnalyzeOrchestrationStructuralSignals(message);
+		intent.hasWeather = signals.hasWeatherCapabilityIntent;
+		intent.hasEmail = signals.hasEmailCapabilityIntent;
+		intent.hasReport = signals.hasReportIntent;
+		intent.hasRecipient = signals.hasRecipient;
+		intent.hasSchedule = signals.hasScheduleIntent;
+		intent.city = signals.city;
+		intent.date = signals.date;
+		intent.recipient = signals.recipient;
+		intent.sendAt = signals.sendAt;
+		intent.scheduleKind = signals.scheduleKind;
+		intent.missReasons = signals.missReasons;
+		intent.matched = signals.weatherEmailFlowCandidate;
 		intent.decompositionSteps = intent.matched ? 3 : 0;
 		return intent;
 	}

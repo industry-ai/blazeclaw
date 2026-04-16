@@ -4,12 +4,13 @@
 - Prefer splitting long lines into shorter, readable multiline formatting in source files.
 - Use readable, explicit code over overly compact solutions when implementing BlazeClaw/OpenClaw porting changes.
 - Fully port OpenClaw features into BlazeClaw to avoid runtime dependency on the OpenClaw project alongside BlazeClaw.
-- For BlazeClaw changes, ensure strict OpenClaw parity implementation and explicitly avoid hard-coded workflow-specific fixes.
-- Use `msbuild` to build `BlazeClaw.sln` for validation instead of generic build commands.
+- For BlazeClaw changes, ensure strict OpenClaw workflow parity implementation and explicitly avoid hard-coded workflow-specific functions/paths; prefer flexible structural orchestration signals and parity-consistent implementation.
+- Use `msbuild` to build `BlazeClaw.sln` for validation instead of generic build commands. Always validate with: `msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001`.
 - For fixing email fallback, use Option 5 + Option 6, which includes a dependency preflight health index and configurable fallback policy profiles.
 - For BlazeClaw config UX, keep a dual mechanism: use `config.html` provided by the skill when present; otherwise, use the ported OpenClaw schema-based configuration mechanism.
 
 ## Code Style
+- Use human-readable UTF-8 characters in source text.
 - Use readable, explicit code style when doing porting and implementation work.
 
 ## Debugging Guidelines

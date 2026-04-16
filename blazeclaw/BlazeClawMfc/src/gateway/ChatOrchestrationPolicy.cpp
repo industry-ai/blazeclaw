@@ -27,14 +27,34 @@ namespace blazeclaw::gateway {
 			output.selectedPath = "dynamic_task_delta";
 		}
 
+		const auto structuralSignals =
+			prompt::AnalyzeOrchestrationStructuralSignals(input.message);
 		output.weatherEmailIntent =
 			prompt::AnalyzeWeatherEmailPromptIntent(input.message);
+		output.weatherEmailIntent.hasWeather =
+			structuralSignals.hasWeatherCapabilityIntent;
+		output.weatherEmailIntent.hasEmail =
+			structuralSignals.hasEmailCapabilityIntent;
+		output.weatherEmailIntent.hasReport =
+			structuralSignals.hasReportIntent;
+		output.weatherEmailIntent.hasRecipient =
+			structuralSignals.hasRecipient;
+		output.weatherEmailIntent.hasSchedule =
+			structuralSignals.hasScheduleIntent;
+		output.weatherEmailIntent.city = structuralSignals.city;
+		output.weatherEmailIntent.date = structuralSignals.date;
+		output.weatherEmailIntent.recipient = structuralSignals.recipient;
+		output.weatherEmailIntent.sendAt = structuralSignals.sendAt;
+		output.weatherEmailIntent.scheduleKind = structuralSignals.scheduleKind;
+		output.weatherEmailIntent.missReasons = structuralSignals.missReasons;
+		output.weatherEmailIntent.matched =
+			structuralSignals.weatherEmailFlowCandidate;
 		output.compatDeterministicEnabled =
 			output.selectedPath == "runtime_orchestration";
 		output.intentDeterministicEnabled =
 			!input.forceError &&
 			!input.hasAttachments &&
-			output.weatherEmailIntent.matched;
+			structuralSignals.weatherEmailFlowCandidate;
 		output.deterministicEnabled =
 			output.compatDeterministicEnabled ||
 			output.intentDeterministicEnabled;
@@ -92,7 +112,7 @@ namespace blazeclaw::gateway {
 		}
 
 		output.decompositionMetadataSource =
-			output.weatherEmailIntent.matched
+			structuralSignals.weatherEmailFlowCandidate
 			? "weather_email_structural_intent"
 			: "none";
 

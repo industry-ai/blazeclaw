@@ -33,6 +33,22 @@ namespace blazeclaw::gateway::json {
 
 namespace blazeclaw::gateway::prompt {
 
+	struct OrchestrationStructuralSignals {
+		bool hasWeatherCapabilityIntent = false;
+		bool hasEmailCapabilityIntent = false;
+		bool hasReportIntent = false;
+		bool hasRecipient = false;
+		bool hasScheduleIntent = false;
+		bool hasDateIntent = false;
+		bool weatherEmailFlowCandidate = false;
+		std::string city;
+		std::string date;
+		std::string recipient;
+		std::string sendAt;
+		std::string scheduleKind;
+		std::vector<std::string> missReasons;
+	};
+
 	struct WeatherEmailPromptIntent {
 		bool matched = false;
 		bool hasWeather = false;
@@ -48,6 +64,9 @@ namespace blazeclaw::gateway::prompt {
 		std::vector<std::string> missReasons;
 		std::size_t decompositionSteps = 0;
 	};
+
+	OrchestrationStructuralSignals AnalyzeOrchestrationStructuralSignals(
+		const std::string& message);
 
 	WeatherEmailPromptIntent AnalyzeWeatherEmailPromptIntent(const std::string& message);
 
