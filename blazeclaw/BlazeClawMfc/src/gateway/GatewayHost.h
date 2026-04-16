@@ -392,6 +392,10 @@ namespace blazeclaw::gateway {
 			bool intentDeterministicEnabled = false;
 			bool deterministicEnabled = false;
 			std::string decisionReasonCode;
+			std::string decompositionMetadataSource;
+			std::string orderedPolicyMode;
+			bool orderedPolicyStrict = false;
+			std::string fallbackPolicyProfile;
 			std::uint64_t observedAtEpochMs = 0;
 		};
 

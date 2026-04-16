@@ -46,6 +46,8 @@ namespace blazeclaw::gateway {
 				"report.compose",
 				"email.schedule",
 			};
+			output.fallbackPolicyProfile =
+				"strict_ordered_required_capabilities";
 		}
 
 		if (output.compatDeterministicEnabled &&
@@ -77,6 +79,9 @@ namespace blazeclaw::gateway {
 				"allowlist_driven_by_ordered_sequence_policy";
 			output.fallbackPolicyHint =
 				"runtime_recovery_policy_after_ordered_sequence";
+			if (output.fallbackPolicyProfile == "runtime_recovery_default") {
+				output.fallbackPolicyProfile = "ordered_runtime_resilience";
+			}
 		}
 
 		return output;

@@ -52,6 +52,7 @@ namespace blazeclaw::gateway {
 		outcome.normalizedDeltas = request.taskDeltas;
 
 		if (!budget.ConsumeIteration()) {
+			outcome.recoveryRoute = "budget_exhausted";
 			outcome.terminalErrorCode = "recovery_budget_exhausted";
 			outcome.terminalErrorMessage = "Recovery budget exhausted before evaluation.";
 			AppendRecoveryDelta(
@@ -77,6 +78,7 @@ namespace blazeclaw::gateway {
 			classification.canonicalCode);
 
 		if (classification.retryable && budget.ConsumeRetry()) {
+			outcome.recoveryRoute = "retry";
 			outcome.shouldRetry = true;
 			outcome.shouldReinvokeRuntime = true;
 			AppendRecoveryDelta(
@@ -97,6 +99,7 @@ namespace blazeclaw::gateway {
 					classification.canonicalCode);
 			outcome.selectedProfileId = profileDecision.selectedProfileId;
 			if (profileDecision.fallbackApplied) {
+				outcome.recoveryRoute = "profile_fallback";
 				outcome.recovered = true;
 				outcome.shouldReinvokeRuntime = true;
 				AppendRecoveryDelta(
@@ -115,6 +118,7 @@ namespace blazeclaw::gateway {
 				request.message,
 				classification.canonicalCode);
 			if (compaction.applied) {
+				outcome.recoveryRoute = "compaction";
 				outcome.compactionApplied = true;
 				outcome.recovered = true;
 				outcome.shouldReinvokeRuntime = true;
@@ -138,6 +142,7 @@ namespace blazeclaw::gateway {
 			const ToolResultTruncationResult truncation =
 				ToolResultTruncationCoordinator::TryTruncate(request.taskDeltas);
 			if (truncation.applied) {
+				outcome.recoveryRoute = "tool_result_truncation";
 				outcome.truncationApplied = true;
 				outcome.recovered = true;
 				outcome.shouldReinvokeRuntime = true;
@@ -157,6 +162,7 @@ namespace blazeclaw::gateway {
 		outcome.terminalErrorMessage = request.errorMessage.empty()
 			? "Recovery chain exhausted; terminal failure."
 			: request.errorMessage;
+		outcome.recoveryRoute = "terminal";
 		AppendRecoveryDelta(
 			outcome,
 			request,

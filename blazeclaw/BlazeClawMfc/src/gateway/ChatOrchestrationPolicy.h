@@ -28,6 +28,7 @@ namespace blazeclaw::gateway {
 			std::string decompositionMetadataSource = "none";
 			std::string orderedPolicyDecision =
 				"defer_to_runtime_sequencing_preflight";
+			std::string fallbackPolicyProfile = "runtime_recovery_default";
 			std::string allowlistPolicyHint =
 				"defer_to_tool_policy_pipeline";
 			std::string fallbackPolicyHint =

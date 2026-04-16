@@ -18,6 +18,7 @@ namespace blazeclaw::gateway {
 		bool truncationApplied = false;
 		std::string selectedProfileId = "default";
 		std::string selectedContextEngineId = "default";
+		std::string recoveryRoute = "none";
 		std::string terminalErrorCode;
 		std::string terminalErrorMessage;
 		std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry> recoveryDeltas;

@@ -4096,6 +4096,14 @@ namespace blazeclaw::gateway {
 					allowDeterministicPromptOrchestration;
 				m_latestOrchestrationPathSelection.decisionReasonCode =
 					orchestrationPolicy.decisionReasonCode;
+				m_latestOrchestrationPathSelection.decompositionMetadataSource =
+					orchestrationPolicy.decompositionMetadataSource;
+				m_latestOrchestrationPathSelection.orderedPolicyMode =
+					orchestrationPolicy.orderedPolicyMode;
+				m_latestOrchestrationPathSelection.orderedPolicyStrict =
+					orchestrationPolicy.orderedPolicyStrict;
+				m_latestOrchestrationPathSelection.fallbackPolicyProfile =
+					orchestrationPolicy.fallbackPolicyProfile;
 				m_latestOrchestrationPathSelection.observedAtEpochMs = nowMs;
 				EmitTelemetryEvent(
 					"gateway.chat.orchestration.pathSelection",
@@ -4125,6 +4133,8 @@ namespace blazeclaw::gateway {
 						: "false") +
 					",\"orderedPolicyTargets\":" +
 					SerializeStringArrayLocal(orchestrationPolicy.orderedPolicyTargets) +
+					",\"fallbackPolicyProfile\":" +
+					JsonString(orchestrationPolicy.fallbackPolicyProfile) +
 					",\"allowlistPolicyHint\":" +
 					JsonString(orchestrationPolicy.allowlistPolicyHint) +
 					",\"fallbackPolicyHint\":" +
@@ -4135,6 +4145,17 @@ namespace blazeclaw::gateway {
 					"runtime",
 					"orchestration.pathSelection",
 					orchestrationPolicy.decisionReasonCode);
+				EmitTelemetryEvent(
+					"gateway.chat.policy.decision",
+					std::string("{\"runId\":") + JsonString(runId) +
+					",\"layer\":\"orchestration\",\"reason\":" +
+					JsonString(orchestrationPolicy.decisionReasonCode) +
+					",\"decompositionSource\":" +
+					JsonString(orchestrationPolicy.decompositionMetadataSource) +
+					",\"orderingMode\":" +
+					JsonString(orchestrationPolicy.orderedPolicyMode) +
+					",\"fallbackPolicyProfile\":" +
+					JsonString(orchestrationPolicy.fallbackPolicyProfile) + "}");
 				const auto runtimeToolsSnapshot = m_toolRegistry.List();
 				OrderedSequencePolicyOverride orderedSequencePolicyOverride{};
 				const OrderedSequencePolicyOverride* orderedSequencePolicyOverridePtr =
@@ -4320,39 +4341,77 @@ namespace blazeclaw::gateway {
 
 					if (orderedSequencePreflight.strictAllowlist &&
 						!orderedSequencePreflight.missingTargets.empty()) {
-						failed = true;
-						orchestrationHandled = true;
-						backendErrorCode = "ordered_sequence_target_unavailable";
-						backendErrorMessage =
+						const std::string strictMissingErrorCode =
+							"ordered_sequence_target_unavailable";
+						const std::string strictMissingErrorMessage =
 							"Ordered execution preflight failed. Missing targets: " +
 							RuntimeSequencingPolicy::JoinOrderedTargets(
 								orderedSequencePreflight.missingTargets);
-						assistantText =
-							(preferChineseResponse
-								? (Utf8LiteralLocal(u8"\u65E0\u6CD5\u6267\u884C\u6709\u5E8F\u5DE5\u4F5C\u6D41\uFF0C\u4EE5\u4E0B\u6B65\u9AA4\u76EE\u6807\u4E0D\u53EF\u7528\uFF1A") +
-									RuntimeSequencingPolicy::JoinOrderedTargets(
-										orderedSequencePreflight.missingTargets) +
-									Utf8LiteralLocal(u8"\u3002\u8BF7\u5B89\u88C5\u6216\u542F\u7528\u8FD9\u4E9B\u6280\u80FD/\u5DE5\u5177\u540E\u91CD\u8BD5\u3002"))
-								: (std::string("Unable to execute the ordered workflow because required step targets are unavailable: ") +
-									RuntimeSequencingPolicy::JoinOrderedTargets(
-										orderedSequencePreflight.missingTargets) +
-									". Please install or enable these skills/tools and retry."));
 
-						auto blockedTaskDeltas =
-							RuntimeSequencingPolicy::BuildOrderedPreflightTaskDeltas(
-								runId,
-								sessionKey,
-								orderedSequencePreflight,
-								true,
-								backendErrorCode,
-								backendErrorMessage);
-						assistantDeltas =
-							buildAssistantDeltasFromTaskDeltas(blockedTaskDeltas);
-						if (assistantDeltas.empty()) {
-							assistantDeltas.push_back(assistantText);
+						RunLoopBudget orderedRecoveryBudget;
+						const RecoveryOutcome orderedRecoveryOutcome =
+							RecoveryPolicyEngine::Execute(
+								RecoveryRequest{
+									.runId = runId,
+									.sessionKey = sessionKey,
+									.message = normalizedMessage,
+									.errorCode = strictMissingErrorCode,
+									.errorMessage = strictMissingErrorMessage,
+									.authProfileId = "default",
+									.taskDeltas = orderedPreflightTaskDeltas,
+								},
+								orderedRecoveryBudget);
+
+						EmitTelemetryEvent(
+							"gateway.chat.policy.decision",
+							std::string("{\"runId\":") + JsonString(runId) +
+							",\"layer\":\"ordered_preflight\",\"reason\":\"strict_missing\",\"recoveryRoute\":" +
+							JsonString(orderedRecoveryOutcome.recoveryRoute) + "}");
+
+						if (orderedRecoveryOutcome.recovered ||
+							orderedRecoveryOutcome.shouldReinvokeRuntime) {
+							if (!orderedRecoveryOutcome.recoveryDeltas.empty()) {
+								orderedPreflightTaskDeltas.insert(
+									orderedPreflightTaskDeltas.end(),
+									orderedRecoveryOutcome.recoveryDeltas.begin(),
+									orderedRecoveryOutcome.recoveryDeltas.end());
+							}
+							if (!orderedRecoveryOutcome.normalizedDeltas.empty()) {
+								orderedPreflightTaskDeltas = orderedRecoveryOutcome.normalizedDeltas;
+							}
 						}
+						else {
+							failed = true;
+							orchestrationHandled = true;
+							backendErrorCode = strictMissingErrorCode;
+							backendErrorMessage = strictMissingErrorMessage;
+							assistantText =
+								(preferChineseResponse
+									? (Utf8LiteralLocal(u8"\u65E0\u6CD5\u6267\u884C\u6709\u5E8F\u5DE5\u4F5C\u6D41\uFF0C\u4EE5\u4E0B\u6B65\u9AA4\u76EE\u6807\u4E0D\u53EF\u7528\uFF1A") +
+										RuntimeSequencingPolicy::JoinOrderedTargets(
+											orderedSequencePreflight.missingTargets) +
+										Utf8LiteralLocal(u8"\u3002\u8BF7\u5B89\u88C5\u6216\u542F\u7528\u8FD9\u4E9B\u6280\u80FD/\u5DE5\u5177\u540E\u91CD\u8BD5\u3002"))
+									: (std::string("Unable to execute the ordered workflow because required step targets are unavailable: ") +
+										RuntimeSequencingPolicy::JoinOrderedTargets(
+											orderedSequencePreflight.missingTargets) +
+										". Please install or enable these skills/tools and retry."));
 
-						persistTaskDeltas(blockedTaskDeltas, false);
+							auto blockedTaskDeltas =
+								RuntimeSequencingPolicy::BuildOrderedPreflightTaskDeltas(
+									runId,
+									sessionKey,
+									orderedSequencePreflight,
+									true,
+									backendErrorCode,
+									backendErrorMessage);
+							assistantDeltas =
+								buildAssistantDeltasFromTaskDeltas(blockedTaskDeltas);
+							if (assistantDeltas.empty()) {
+								assistantDeltas.push_back(assistantText);
+							}
+
+							persistTaskDeltas(blockedTaskDeltas, false);
+						}
 					}
 					else if (!orderedSequencePreflight.missingTargets.empty()) {
 						BranchDecisionDiagnostics::Emit(
@@ -4660,10 +4719,14 @@ namespace blazeclaw::gateway {
 							std::string(recoveryOutcome.shouldRetry ? "true" : "false") +
 							",\"reinvoke\":" +
 							std::string(recoveryOutcome.shouldReinvokeRuntime ? "true" : "false") +
+							",\"recoveryRoute\":" +
+							JsonString(recoveryOutcome.recoveryRoute) +
 							",\"compaction\":" +
 							std::string(recoveryOutcome.compactionApplied ? "true" : "false") +
 							",\"truncation\":" +
 							std::string(recoveryOutcome.truncationApplied ? "true" : "false") +
+							",\"fallbackPolicyProfile\":" +
+							JsonString(orchestrationPolicy.fallbackPolicyProfile) +
 							",\"profile\":" +
 							JsonString(recoveryOutcome.selectedProfileId) +
 							",\"contextEngine\":" +
@@ -6338,6 +6401,14 @@ namespace blazeclaw::gateway {
 				m_latestOrchestrationPathSelection.deterministicEnabled;
 			const std::string latestSelectionDecisionReasonCode =
 				m_latestOrchestrationPathSelection.decisionReasonCode;
+			const std::string latestSelectionDecompositionMetadataSource =
+				m_latestOrchestrationPathSelection.decompositionMetadataSource;
+			const std::string latestSelectionOrderedPolicyMode =
+				m_latestOrchestrationPathSelection.orderedPolicyMode;
+			const bool latestSelectionOrderedPolicyStrict =
+				m_latestOrchestrationPathSelection.orderedPolicyStrict;
+			const std::string latestSelectionFallbackPolicyProfile =
+				m_latestOrchestrationPathSelection.fallbackPolicyProfile;
 
 			return protocol::ResponseFrame{
 				.id = request.id,
@@ -6369,6 +6440,14 @@ namespace blazeclaw::gateway {
 					   latestSelectionDeterministicEnabled ? "true" : "false") +
 					",\"decisionReasonCode\":" +
 					JsonString(latestSelectionDecisionReasonCode) +
+					",\"decompositionMetadataSource\":" +
+					JsonString(latestSelectionDecompositionMetadataSource) +
+					",\"orderedPolicyMode\":" +
+					JsonString(latestSelectionOrderedPolicyMode) +
+					",\"orderedPolicyStrict\":" +
+					std::string(latestSelectionOrderedPolicyStrict ? "true" : "false") +
+					",\"fallbackPolicyProfile\":" +
+					JsonString(latestSelectionFallbackPolicyProfile) +
 				  "},\"dynamicLoopMetrics\":{\"success\":" +
 					std::to_string(m_taskDeltaRunSuccessCount) +
 					",\"failure\":" +
@@ -6378,7 +6457,8 @@ namespace blazeclaw::gateway {
 					",\"cancelled\":" +
 					std::to_string(m_taskDeltaRunCancelledCount) +
 					",\"fallback\":" +
-					std::to_string(m_taskDeltaRunFallbackCount) + "}}",
+				 std::to_string(m_taskDeltaRunFallbackCount) +
+					"},\"taskDeltaLifecycleMapping\":{\"plan\":\"item.plan\",\"preflight\":\"tool.precheck\",\"tool_call\":\"tool.start\",\"tool_result\":\"tool.result\",\"final\":\"lifecycle.final\"}}",
 				.error = std::nullopt,
 			};
 			});
