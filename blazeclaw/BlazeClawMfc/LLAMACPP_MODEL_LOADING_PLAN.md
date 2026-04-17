@@ -28,7 +28,9 @@ Integrate `llama.cpp` as a first-class local inference backend in BlazeClawMfc s
 - Audit evidence (2026-04-06, commit `52f3ac0`): no llama-specific runtime classes/adapters were found in `src/core/runtime/LocalModel`, and no `llama.cpp` integration touchpoints were observed under `BlazeClawMfc` build/runtime sources.
 - Phase 1 update (2026-04-17): `BlazeClawMfc.vcxproj` now includes optional `llama.cpp` include/lib/bin wiring for Debug/Release x64 plus runtime DLL copy target. Dependency onboarding doc added at `docs/llamacpp-phase1-build-integration.md`. Required Debug x64 `msbuild` validation command passed.
 - Phase 2-3 update (2026-04-17): added `LlamaTextGenerationRuntime` adapter, ServiceManager runtime polymorphism (`ITextGenerationRuntime`), parser support for `chat.localModel.llama.*` keys, and managed-reload fallback to previous known-good local runtime settings. See `docs/llamacpp-phase2-3-runtime-config.md`.
-- Recommendation: proceed to Phase 4 active provider/model routing hardening and Phase 5 settings UI model registration for `llama/gemma-4-E2B-it`.
+- Phase 4-5 update (2026-04-17): active `local + llama/*` selection now aligns local provider to `llama.cpp` at startup/reload; Settings dialog includes `llama/gemma-4-E2B-it` and persists provider/model enablement keys.
+- Phase 6 update (2026-04-17): required Debug x64 `msbuild` validation passed; focused startup-contract and DeepSeek SSE regressions passed. Two broader chat parity suites currently fail in this environment and remain follow-up validation items for full functional sign-off.
+- Recommendation: complete end-to-end UI functional verification with actual Gemma GGUF load/stream runs and close remaining parity-suite regression items.
 
 ## Target End State
 1. A `llama.cpp` runtime backend exists behind the local runtime abstraction.

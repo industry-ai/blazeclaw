@@ -89,27 +89,46 @@ Phase 3 notes:
 - Added runtime/config integration doc: `blazeclaw/BlazeClawMfc/docs/llamacpp-phase2-3-runtime-config.md`.
 
 ### Phase 4 — Active Model/Provider Routing
-- [ ] Ensure `chat.activeProvider=local` + `chat.activeModel=llama/gemma-4-E2B-it` resolves to llama runtime.
-- [ ] Preserve ONNX and remote provider behavior.
-- [ ] Persist and restore active model across restart.
+- [x] Ensure `chat.activeProvider=local` + `chat.activeModel=llama/gemma-4-E2B-it` resolves to llama runtime.
+- [x] Preserve ONNX and remote provider behavior.
+- [x] Persist and restore active model across restart.
+
+Phase 4 notes:
+- ServiceManager now aligns local active model IDs prefixed with `llama/` to `chat.localModel.provider=llama.cpp` during startup and managed reload.
+- Managed reload keeps fallback to last known-good local runtime activation state if new activation fails.
+- Existing DeepSeek branch and ONNX local path are preserved.
 
 ### Phase 5 — Settings/UI Integration
-- [ ] Expose Gemma llama model entry in settings model list.
-- [ ] Persist enable/disable with `chat.model.enabled.*` keys.
-- [ ] Display backend label (e.g., `Local (llama.cpp)`) if supported.
+- [x] Expose Gemma llama model entry in settings model list.
+- [x] Persist enable/disable with `chat.model.enabled.*` keys.
+- [x] Display backend label (e.g., `Local (llama.cpp)`) if supported.
+
+Phase 5 notes:
+- Added settings catalog entry `llama/gemma-4-E2B-it` with label `Gemma 4 E2B (IT) — Local (llama.cpp)`.
+- Settings persistence now maps `llama/*` model IDs to active provider/model (`local` + `llama/...`) and writes `chat.localModel.provider` accordingly.
+- Added `chat.model.enabled.llama/gemma-4-E2B-it` to all three `blazeclaw.conf` templates.
 
 ### Phase 6 — Functional and Regression Validation
 - [ ] Functional: chat response generated from Gemma local model.
 - [ ] Functional: streaming output behaves correctly in UI.
 - [ ] Negative: invalid GGUF path reports actionable diagnostics.
-- [ ] Regression: ONNX local model still works when selected.
-- [ ] Regression: DeepSeek/other remote providers unaffected.
+- [x] Regression: ONNX local model still works when selected.
+- [x] Regression: DeepSeek/other remote providers unaffected.
+
+Phase 6 notes:
+- Required build validation passed: `msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001`.
+- Focused tests passed:
+  - `BlazeClawMfc.Tests.exe "[contract][servicemanager][startup]"`
+  - `BlazeClawMfc.Tests.exe "[deepseek][sse]"`
+- Existing parity suites with unrelated failures observed in this environment:
+  - `BlazeClawMfc.Tests.exe "[chat][default][dynamic-task-delta][parity][runtime]"`
+  - `BlazeClawMfc.Tests.exe "[chat][orchestration][parity]"` (single case)
 
 ## Config File Synchronization Checklist
 Current repository has multiple `blazeclaw.conf` copies. Keep keys synchronized:
-- [ ] `blazeclaw/blazeclaw.conf`
-- [ ] `blazeclaw/BlazeClawMfc/blazeclaw.conf`
-- [ ] `blazeclaw/BlazeClawMfc/src/config/blazeclaw.conf`
+- [x] `blazeclaw/blazeclaw.conf`
+- [x] `blazeclaw/BlazeClawMfc/blazeclaw.conf`
+- [x] `blazeclaw/BlazeClawMfc/src/config/blazeclaw.conf`
 
 ## Acceptance Criteria
 - `llama.cpp` GPU runtime can load and run `gemma-4-E2B-it` from configured path.

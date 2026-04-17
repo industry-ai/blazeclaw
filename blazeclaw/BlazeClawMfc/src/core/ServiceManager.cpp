@@ -97,6 +97,10 @@ namespace blazeclaw::core {
 			return output;
 		}
 
+		bool IsLlamaLocalModelId(const std::string& modelId) {
+			return modelId.rfind("llama/", 0) == 0;
+		}
+
 		std::wstring NormalizeBundleCommandName(const std::wstring& raw) {
 			std::wstring normalized;
 			normalized.reserve(raw.size());
@@ -2808,6 +2812,11 @@ namespace blazeclaw::core {
 		m_activeChatModel = config.chat.activeModel.empty()
 			? "default"
 			: ToNarrow(config.chat.activeModel);
+
+		if (m_activeChatProvider == "local" &&
+			IsLlamaLocalModelId(m_activeChatModel)) {
+			m_activeConfig.localModel.provider = L"llama.cpp";
+		}
 		const auto hooksPolicy =
 			m_serviceBootstrapCoordinator.ResolveHooksPolicySettings(m_activeConfig);
 		m_state.hooks.engineEnabled = hooksPolicy.engineEnabled;
@@ -2932,8 +2941,16 @@ namespace blazeclaw::core {
 
 		const std::wstring provider =
 			ToLower(m_activeConfig.localModel.provider);
+		const bool activeSelectionWantsLlama =
+			m_activeChatProvider == "local" &&
+			IsLlamaLocalModelId(m_activeChatModel);
 		const bool useLlamaRuntime =
-			provider == L"llama" || provider == L"llama.cpp";
+			activeSelectionWantsLlama ||
+			provider == L"llama" ||
+			provider == L"llama.cpp";
+		if (useLlamaRuntime) {
+			m_activeConfig.localModel.provider = L"llama.cpp";
+		}
 		if (useLlamaRuntime) {
 			m_localModelRuntime =
 				std::make_unique<localmodel::LlamaTextGenerationRuntime>();
@@ -4838,6 +4855,12 @@ namespace blazeclaw::core {
 
 		m_activeConfig.chat.activeProvider = nextConfig.chat.activeProvider;
 		m_activeConfig.chat.activeModel = nextConfig.chat.activeModel;
+		m_activeChatProvider = m_activeConfig.chat.activeProvider.empty()
+			? "local"
+			: ToNarrow(m_activeConfig.chat.activeProvider);
+		m_activeChatModel = m_activeConfig.chat.activeModel.empty()
+			? "default"
+			: ToNarrow(m_activeConfig.chat.activeModel);
 		const auto previousLocalModelConfig = m_activeConfig.localModel;
 		const auto previousLocalModelSnapshot = m_localModelRuntimeSnapshot;
 		const bool previousLocalModelRolloutEligible = m_localModelRolloutEligible;
@@ -4865,6 +4888,10 @@ namespace blazeclaw::core {
 			runtimeOrchestrationPolicy.localModelStartupLoadEnabled;
 
 		m_activeConfig.localModel = nextConfig.localModel;
+		if (m_activeChatProvider == "local" &&
+			IsLlamaLocalModelId(m_activeChatModel)) {
+			m_activeConfig.localModel.provider = L"llama.cpp";
+		}
 		m_localModelRolloutEligible = IsLocalModelRolloutEligible();
 		m_localModelActivationEnabled = false;
 		m_localModelActivationReason.clear();

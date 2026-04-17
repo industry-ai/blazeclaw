@@ -84,6 +84,10 @@ namespace {
 	std::pair<std::string, std::string> ResolveActiveProviderModel(
 		const CSettingsDialog::ModelItem& item)
 	{
+		if (item.id.rfind("llama/", 0) == 0) {
+			return { "local", item.id };
+		}
+
 		if (item.id.rfind("deepseek/", 0) == 0) {
 			const std::string model = item.id.substr(std::string("deepseek/").size());
 			return { "deepseek", model.empty() ? "deepseek-chat" : model };
@@ -98,6 +102,11 @@ namespace {
 		}
 
 		return { "", "" };
+	}
+
+	bool IsLlamaModelId(const std::string& modelId)
+	{
+		return modelId.rfind("llama/", 0) == 0;
 	}
 
 	bool MatchesActiveSelection(
@@ -214,31 +223,37 @@ void CSettingsDialog::LoadModels()
 		 "default",
 		 "Default Model (Local ONNX)",
 		 "Seed",
-        false
+		false
 		});
 	m_models.push_back({
 		"reasoner",
 		"Reasoner Model (Local ONNX)",
 		"Seed",
-        false
+		false
 		});
 	m_models.push_back({
 		"deepseek/deepseek-chat",
 		"DeepSeek Chat",
 		"DeepSeek",
-        false
+		false
 		});
 	m_models.push_back({
 		"deepseek/deepseek-reasoner",
 		"DeepSeek Reasoner",
 		"DeepSeek",
-        false
+		false
 		});
 	m_models.push_back({
 		"qwen3-local-onnx",
 		"Qwen3 Local ONNX",
 		"Local",
-        false
+		false
+		});
+	m_models.push_back({
+		"llama/gemma-4-E2B-it",
+		"Gemma 4 E2B (IT) — Local (llama.cpp)",
+		"Local (llama.cpp)",
+		false
 		});
 
 	// Planned / not yet fully implemented model entries (disabled by default)
@@ -273,7 +288,7 @@ void CSettingsDialog::LoadModels()
 		false
 		});
 
-  // Load enabled state from config if available
+	// Load enabled state from config if available
 	std::unordered_map<std::string, bool> enabledById;
 	std::string activeProvider;
 	std::string activeModel;
@@ -454,6 +469,29 @@ void CSettingsDialog::OnOK()
 					lines,
 					L"chat.activeModel",
 					ToWideAscii(model));
+
+				if (provider == "local") {
+					if (IsLlamaModelId(model)) {
+						UpsertConfigEntry(
+							lines,
+							L"chat.localModel.provider",
+							L"llama.cpp");
+						UpsertConfigEntry(
+							lines,
+							L"chat.localModel.storageRoot",
+							L"blazeclaw/BlazeClawMfc/models/google/gemma-4-E2B-it");
+						UpsertConfigEntry(
+							lines,
+							L"chat.localModel.modelPath",
+							L"gemma-4-E2B-it.gguf");
+					}
+					else {
+						UpsertConfigEntry(
+							lines,
+							L"chat.localModel.provider",
+							L"onnx");
+					}
+				}
 
 				for (const auto& item : m_models) {
 					UpsertConfigEntry(
