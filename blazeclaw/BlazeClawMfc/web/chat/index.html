@@ -92,6 +92,53 @@
       gap: 8px;
       padding: 10px;
       border-top: 1px solid #333;
+      position: relative;
+    }
+    .composer-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      padding: 0 10px 10px 10px;
+      border-top: 1px solid #2b2b2b;
+    }
+    select {
+      border: 1px solid #555;
+      border-radius: 8px;
+      padding: 8px;
+      background: #111;
+      color: #f0f0f0;
+    }
+    .slash-menu {
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      bottom: 88px;
+      max-height: 220px;
+      overflow: auto;
+      border: 1px solid #3a3a3a;
+      border-radius: 8px;
+      background: #181818;
+      display: none;
+      z-index: 5;
+    }
+    .slash-item {
+      padding: 8px 10px;
+      border-bottom: 1px solid #2d2d2d;
+      cursor: pointer;
+    }
+    .slash-item:last-child {
+      border-bottom: none;
+    }
+    .slash-item.active {
+      background: #2d3950;
+    }
+    .slash-name {
+      color: #d8e7ff;
+      font-weight: 600;
+    }
+    .slash-desc {
+      color: #a8a8a8;
+      font-size: 12px;
     }
     textarea {
       resize: none;
@@ -125,11 +172,17 @@
     </div>
     <div id="messages" class="messages"></div>
     <div class="composer">
+      <div id="slashMenu" class="slash-menu"></div>
       <textarea id="input" placeholder="Type a message..."></textarea>
       <button id="sendBtn">Send</button>
       <button id="sendErrBtn">Send Error</button>
       <button id="attachBtn">Attach</button>
       <button id="abortBtn" disabled>Abort</button>
+    </div>
+    <div class="composer-controls">
+      <select id="sessionSelect" title="Session"></select>
+      <select id="modelSelect" title="Model"></select>
+      <select id="thinkingSelect" title="Thinking Level"></select>
     </div>
     <input id="attachInput" type="file" accept="image/*" multiple hidden />
   </div>
@@ -162,6 +215,10 @@
       state.attachBtn = document.getElementById("attachBtn");
       state.attachInput = document.getElementById("attachInput");
       state.abortBtn = document.getElementById("abortBtn");
+      state.sessionSelect = document.getElementById("sessionSelect");
+      state.modelSelect = document.getElementById("modelSelect");
+      state.thinkingSelect = document.getElementById("thinkingSelect");
+      state.slashMenuEl = document.getElementById("slashMenu");
 
       function setStatus(text) {
         statusEl.textContent = text;
@@ -177,6 +234,16 @@
         div.textContent = text;
         messagesEl.appendChild(div);
         scrollBottom();
+      }
+
+      function clearMessages() {
+        messagesEl.innerHTML = "";
+      }
+
+      function setInputValue(text) {
+        if (state.inputEl) {
+          state.inputEl.value = String(text || "");
+        }
       }
 
       function ensureToolTimelineCard(requestId) {
@@ -293,6 +360,15 @@
         state.sendErrBtn.disabled = !canSend;
         state.abortBtn.disabled = !state.bridgeAvailable || !state.runId;
         state.attachBtn.disabled = !state.bridgeAvailable;
+        if (state.sessionSelect) {
+          state.sessionSelect.disabled = !state.bridgeAvailable;
+        }
+        if (state.modelSelect) {
+          state.modelSelect.disabled = !state.bridgeAvailable;
+        }
+        if (state.thinkingSelect) {
+          state.thinkingSelect.disabled = !state.bridgeAvailable;
+        }
         state.attachBtn.textContent = state.attachments.length > 0
           ? `Attach(${state.attachments.length})`
           : "Attach";
@@ -303,6 +379,8 @@
         addOrReplaceStream,
         finalizeStream,
         updateComposerState,
+        clearMessages,
+        setInputValue,
       });
 
       const eventsModule = window.BlazeClawChatEvents.createEventsModule({
