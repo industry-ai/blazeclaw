@@ -394,6 +394,15 @@ namespace blazeclaw::config {
 	};
 
 	struct LocalModelConfig {
+		struct LlamaRuntimeConfig {
+			std::int32_t gpuLayers = 999;
+			std::uint32_t contextLength = 8192;
+			std::uint32_t batchSize = 512;
+			std::uint32_t threads = 6;
+			bool flashAttention = true;
+			bool verboseMetrics = true;
+		};
+
 		bool enabled = false;
 		std::wstring provider = L"onnx";
 		std::wstring rolloutStage = L"dev";
@@ -409,6 +418,7 @@ namespace blazeclaw::config {
 		std::uint32_t interThreads = 0;
 		std::wstring executionMode = L"sequential";	// "parallel" or "sequential"
 		bool verboseMetrics = false;
+		LlamaRuntimeConfig llama;
 	};
 
 	struct AppConfig {

@@ -15,6 +15,7 @@
 #include "SkillsFrontmatterCompat.h"
 #include "tools/ToolArgumentValidators.h"
 #include "tools/ToolProcessRunner.h"
+#include "runtime/LocalModel/LlamaTextGenerationRuntime.h"
 
 #include <cctype>
 #include <chrono>
@@ -2332,6 +2333,9 @@ namespace blazeclaw::core {
 	};
 
 	ServiceManager::ServiceManager() {
+		m_localModelRuntime =
+			std::make_unique<localmodel::OnnxTextGenerationRuntime>();
+
 		m_skillsHostCallbacks.persistSkillConfigEnv =
 			[](const std::string& skill,
 				const std::string& envContent,
@@ -2926,7 +2930,20 @@ namespace blazeclaw::core {
 			m_localModelActivationReason = "rollout_stage_not_eligible";
 		}
 
-		m_localModelRuntime.Configure(m_activeConfig);
+		const std::wstring provider =
+			ToLower(m_activeConfig.localModel.provider);
+		const bool useLlamaRuntime =
+			provider == L"llama" || provider == L"llama.cpp";
+		if (useLlamaRuntime) {
+			m_localModelRuntime =
+				std::make_unique<localmodel::LlamaTextGenerationRuntime>();
+		}
+		else {
+			m_localModelRuntime =
+				std::make_unique<localmodel::OnnxTextGenerationRuntime>();
+		}
+
+		m_localModelRuntime->Configure(m_activeConfig);
 		const auto runtimeOrchestrationPolicy =
 			m_serviceBootstrapCoordinator.ResolveRuntimeOrchestrationPolicySettings();
 		const bool localModelStartupLoadEnabled =
@@ -2936,13 +2953,13 @@ namespace blazeclaw::core {
 		if (m_activeConfig.localModel.enabled &&
 			m_localModelRolloutEligible &&
 			localModelStartupLoadEnabled) {
-			localModelLoaded = m_localModelRuntime.LoadModel();
+			localModelLoaded = m_localModelRuntime->LoadModel();
 		}
 		else if (m_activeConfig.localModel.enabled &&
 			m_localModelRolloutEligible) {
 			m_localModelActivationReason = "startup_load_deferred";
 		}
-		m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
+		m_localModelRuntimeSnapshot = m_localModelRuntime->Snapshot();
 		AppendStartupTrace("ServiceManager.Start.localmodel.afterLoad");
 		if (!localModelLoaded && m_localModelRuntimeSnapshot.status.empty()) {
 			m_localModelRuntimeSnapshot.status = localModelStartupLoadEnabled
@@ -2976,8 +2993,8 @@ namespace blazeclaw::core {
 
 		if (m_localModelActivationEnabled && m_localModelRuntimeSnapshot.ready) {
 			std::string localContractFailure;
-			if (!m_localModelRuntime.VerifyDeterministicContract(localContractFailure)) {
-				m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
+			if (!m_localModelRuntime->VerifyDeterministicContract(localContractFailure)) {
+				m_localModelRuntimeSnapshot = m_localModelRuntime->Snapshot();
 				const bool enforceContract =
 					_wcsicmp(m_activeConfig.localModel.rolloutStage.c_str(), L"dev") != 0;
 				m_localModelRuntimeSnapshot.status = enforceContract
@@ -3091,8 +3108,13 @@ namespace blazeclaw::core {
 					{
 						if (m_localModelActivationEnabled)
 						{
-							const bool cancelled = m_localModelRuntime.Cancel(runId);
-							m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
+						   const bool cancelled =
+								m_localModelRuntime != nullptr &&
+								m_localModelRuntime->Cancel(runId);
+							if (m_localModelRuntime != nullptr) {
+								m_localModelRuntimeSnapshot =
+									m_localModelRuntime->Snapshot();
+							}
 							return cancelled;
 						}
 						return false;
@@ -4181,7 +4203,7 @@ namespace blazeclaw::core {
 							"[LocalModel] request.start runId=%s\n",
 							providerRequest.runId.c_str());
 
-						const auto localResult = m_localModelRuntime.GenerateStream(
+						const auto localResult = m_localModelRuntime->GenerateStream(
 							localmodel::TextGenerationRequest{
 								.runId = providerRequest.runId,
 								.prompt = prompt,
@@ -4199,7 +4221,7 @@ namespace blazeclaw::core {
 									request.onAssistantDelta(streamedLocalText);
 								}
 							});
-						m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
+						m_localModelRuntimeSnapshot = m_localModelRuntime->Snapshot();
 
 						if (!localResult.ok) {
 							const std::string errorCode =
@@ -4241,7 +4263,7 @@ namespace blazeclaw::core {
 								"[LocalModel] request.retry runId=%s reason=echo_detected\n",
 								providerRequest.runId.c_str());
 							const std::string retryPrompt = BuildLocalModelRetryPrompt(providerRequest);
-							const auto retryResult = m_localModelRuntime.GenerateStream(
+							const auto retryResult = m_localModelRuntime->GenerateStream(
 								localmodel::TextGenerationRequest{
 									.runId = providerRequest.runId + "-retry",
 									.prompt = retryPrompt,
@@ -4249,7 +4271,7 @@ namespace blazeclaw::core {
 									.temperature = std::nullopt,
 								},
 								nullptr);
-							m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
+							m_localModelRuntimeSnapshot = m_localModelRuntime->Snapshot();
 
 							if (retryResult.ok &&
 								!IsLikelyEchoResponse(request.message, retryResult.text)) {
@@ -4430,7 +4452,9 @@ namespace blazeclaw::core {
 				const bool cancelled = m_chatRuntime.Abort(request);
 				if (m_localModelActivationEnabled)
 				{
-					m_localModelRuntimeSnapshot = m_localModelRuntime.Snapshot();
+					if (m_localModelRuntime != nullptr) {
+						m_localModelRuntimeSnapshot = m_localModelRuntime->Snapshot();
+					}
 				}
 				return cancelled;
 			});
@@ -4814,6 +4838,101 @@ namespace blazeclaw::core {
 
 		m_activeConfig.chat.activeProvider = nextConfig.chat.activeProvider;
 		m_activeConfig.chat.activeModel = nextConfig.chat.activeModel;
+		const auto previousLocalModelConfig = m_activeConfig.localModel;
+		const auto previousLocalModelSnapshot = m_localModelRuntimeSnapshot;
+		const bool previousLocalModelRolloutEligible = m_localModelRolloutEligible;
+		const bool previousLocalModelActivationEnabled =
+			m_localModelActivationEnabled;
+		const std::string previousLocalModelActivationReason =
+			m_localModelActivationReason;
+		auto previousLocalModelRuntime = std::move(m_localModelRuntime);
+
+		auto buildLocalModelRuntime = [](
+			const std::wstring& provider)
+			-> std::unique_ptr<localmodel::ITextGenerationRuntime> {
+			const std::wstring normalizedProvider = ToLower(provider);
+			if (normalizedProvider == L"llama" ||
+				normalizedProvider == L"llama.cpp") {
+				return std::make_unique<localmodel::LlamaTextGenerationRuntime>();
+			}
+
+			return std::make_unique<localmodel::OnnxTextGenerationRuntime>();
+			};
+
+		const auto runtimeOrchestrationPolicy =
+			m_serviceBootstrapCoordinator.ResolveRuntimeOrchestrationPolicySettings();
+		const bool localModelStartupLoadEnabled =
+			runtimeOrchestrationPolicy.localModelStartupLoadEnabled;
+
+		m_activeConfig.localModel = nextConfig.localModel;
+		m_localModelRolloutEligible = IsLocalModelRolloutEligible();
+		m_localModelActivationEnabled = false;
+		m_localModelActivationReason.clear();
+
+		if (!m_activeConfig.localModel.enabled) {
+			m_localModelActivationReason = "config_disabled";
+		}
+		else if (!m_localModelRolloutEligible) {
+			m_localModelActivationReason = "rollout_stage_not_eligible";
+		}
+
+		m_localModelRuntime = buildLocalModelRuntime(m_activeConfig.localModel.provider);
+		m_localModelRuntime->Configure(m_activeConfig);
+
+		bool localModelLoaded = false;
+		if (m_activeConfig.localModel.enabled &&
+			m_localModelRolloutEligible &&
+			localModelStartupLoadEnabled) {
+			localModelLoaded = m_localModelRuntime->LoadModel();
+		}
+		else if (m_activeConfig.localModel.enabled &&
+			m_localModelRolloutEligible) {
+			m_localModelActivationReason = "startup_load_deferred";
+		}
+
+		m_localModelRuntimeSnapshot = m_localModelRuntime->Snapshot();
+		if (!localModelLoaded && m_localModelRuntimeSnapshot.status.empty()) {
+			m_localModelRuntimeSnapshot.status = localModelStartupLoadEnabled
+				? "load_failed"
+				: "startup_load_deferred";
+		}
+
+		if (m_activeConfig.localModel.enabled &&
+			m_localModelRolloutEligible &&
+			localModelLoaded &&
+			m_localModelRuntimeSnapshot.ready) {
+			m_localModelActivationEnabled = true;
+			m_localModelActivationReason = "active";
+		}
+		else if (m_activeConfig.localModel.enabled &&
+			m_localModelRolloutEligible &&
+			!m_localModelRuntimeSnapshot.ready) {
+			m_localModelActivationReason = localModelStartupLoadEnabled
+				? "initialization_failed"
+				: "startup_load_deferred";
+		}
+
+		if (nextConfig.localModel.enabled &&
+			!m_localModelActivationEnabled &&
+			previousLocalModelActivationEnabled &&
+			previousLocalModelRuntime != nullptr) {
+			m_activeConfig.localModel = previousLocalModelConfig;
+			m_localModelRuntime = std::move(previousLocalModelRuntime);
+			m_localModelRuntimeSnapshot = previousLocalModelSnapshot;
+			m_localModelRolloutEligible = previousLocalModelRolloutEligible;
+			m_localModelActivationEnabled = previousLocalModelActivationEnabled;
+			m_localModelActivationReason = previousLocalModelActivationReason;
+
+			if (!warningMessage.empty()) {
+				warningMessage += L" ";
+			}
+			warningMessage +=
+				L"local model activation failed for reloaded config; reverted to last known-good local model runtime settings.";
+			m_skillsCatalog.diagnostics.warnings.push_back(
+				L"local model activation failed on managed reload; fallback to previous active local model config.");
+			RecordGatewayLifecycleTransition("managed_reload.local_model_fallback");
+		}
+
 		m_activeConfig.embedded.orchestrationPath =
 			nextConfig.embedded.orchestrationPath;
 		m_activeConfig.email = nextConfig.email;

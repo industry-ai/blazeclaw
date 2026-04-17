@@ -65,17 +65,28 @@ Phase 1 build integration notes:
 - Required Debug x64 `msbuild` validation command completed successfully.
 
 ### Phase 2 — Runtime Adapter in LocalModel
-- [ ] Add `llama.cpp` runtime adapter in `src/core/runtime/LocalModel`.
-- [ ] Implement model lifecycle: load, warmup (optional), unload.
-- [ ] Implement generation loop: streaming + non-streaming.
-- [ ] Map runtime errors to existing diagnostics/fallback behavior.
+- [x] Add `llama.cpp` runtime adapter in `src/core/runtime/LocalModel`.
+- [x] Implement model lifecycle: load, warmup (optional), unload.
+- [x] Implement generation loop: streaming + non-streaming.
+- [x] Map runtime errors to existing diagnostics/fallback behavior.
+
+Phase 2 notes:
+- Added `LlamaTextGenerationRuntime` and wired ServiceManager runtime selection through `ITextGenerationRuntime`.
+- Added deterministic runtime error mapping for provider mismatch, missing model, runtime unavailable, invalid input, empty output, and cancellation.
+- Added cancellation flag cleanup guard across terminal generation paths.
 
 ### Phase 3 — Config Parsing and Validation
-- [ ] Add parser support for `chat.localModel.provider=llama.cpp`.
-- [ ] Add parser support for `chat.localModel.llama.*` keys.
-- [ ] Resolve model path from `storageRoot + modelPath`.
-- [ ] Add validation for missing model file and invalid numeric values.
-- [ ] Keep fallback to previous valid model when activation fails.
+- [x] Add parser support for `chat.localModel.provider=llama.cpp`.
+- [x] Add parser support for `chat.localModel.llama.*` keys.
+- [x] Resolve model path from `storageRoot + modelPath`.
+- [x] Add validation for missing model file and invalid numeric values.
+- [x] Keep fallback to previous valid model when activation fails.
+
+Phase 3 notes:
+- Added typed llama runtime settings in `ConfigModels.h` and parsing/clamping in `ConfigLoader.cpp`.
+- Added managed-reload local runtime fallback in `ServiceManager::ApplyManagedRuntimeConfigDiff`.
+- Synchronized llama runtime key comments across all three `blazeclaw.conf` templates.
+- Added runtime/config integration doc: `blazeclaw/BlazeClawMfc/docs/llamacpp-phase2-3-runtime-config.md`.
 
 ### Phase 4 — Active Model/Provider Routing
 - [ ] Ensure `chat.activeProvider=local` + `chat.activeModel=llama/gemma-4-E2B-it` resolves to llama runtime.

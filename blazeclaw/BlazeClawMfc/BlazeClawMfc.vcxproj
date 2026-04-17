@@ -182,6 +182,7 @@
     <ClInclude Include="src\core\ConfigSchemaService.h" />
     <ClInclude Include="src\core\ServiceManager.h" />
     <ClInclude Include="src\core\runtime\LocalModel\ITextGenerationRuntime.h" />
+    <ClInclude Include="src\core\runtime\LocalModel\LlamaTextGenerationRuntime.h" />
     <ClInclude Include="src\core\runtime\LocalModel\OnnxTextGenerationRuntime.h" />
     <ClInclude Include="src\core\runtime\LocalModel\TokenizerBridge.h" />
     <ClInclude Include="src\gateway\GatewayAgentRegistry.h" />
@@ -338,6 +339,7 @@
     <ClCompile Include="src\core\ConfigSchemaService.cpp" />
     <ClCompile Include="src\core\ServiceManager.cpp" />
     <ClCompile Include="src\core\runtime\LocalModel\ITextGenerationRuntime.cpp" />
+    <ClCompile Include="src\core\runtime\LocalModel\LlamaTextGenerationRuntime.cpp" />
     <ClCompile Include="src\core\runtime\LocalModel\OnnxTextGenerationRuntime.cpp" />
     <ClCompile Include="src\core\runtime\LocalModel\TokenizerBridge.cpp" />
     <ClCompile Include="src\gateway\GatewayAgentRegistry.cpp" />

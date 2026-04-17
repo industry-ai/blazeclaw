@@ -152,6 +152,17 @@ namespace blazeclaw::config {
 			}
 		}
 
+		bool TryParseInt(const std::wstring& raw, std::int32_t& outValue) {
+			try {
+				const auto parsed = std::stol(Trim(raw));
+				outValue = static_cast<std::int32_t>(parsed);
+				return true;
+			}
+			catch (...) {
+				return false;
+			}
+		}
+
 		std::vector<std::wstring> Split(
 			const std::wstring& value,
 			const wchar_t delimiter) {
@@ -341,6 +352,10 @@ namespace blazeclaw::config {
 
 			if (normalized == L"onnx") {
 				return normalized;
+			}
+
+			if (normalized == L"llama" || normalized == L"llama.cpp") {
+				return L"llama.cpp";
 			}
 
 			return L"onnx";
@@ -557,6 +572,52 @@ namespace blazeclaw::config {
 				outConfig.localModel.verboseMetrics = ParseBool(
 					trimmedLine.substr(31),
 					false);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.llama.gpuLayers=", 0) == 0) {
+				std::int32_t value = 0;
+				if (TryParseInt(trimmedLine.substr(32), value)) {
+					outConfig.localModel.llama.gpuLayers = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.llama.contextLength=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(36), value) && value > 0) {
+					outConfig.localModel.llama.contextLength = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.llama.batchSize=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(32), value) && value > 0) {
+					outConfig.localModel.llama.batchSize = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.llama.threads=", 0) == 0) {
+				std::uint32_t value = 0;
+				if (TryParseUInt(trimmedLine.substr(30), value) && value > 0) {
+					outConfig.localModel.llama.threads = value;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.llama.flashAttention=", 0) == 0) {
+				outConfig.localModel.llama.flashAttention = ParseBool(
+					trimmedLine.substr(37),
+					true);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"chat.localModel.llama.verboseMetrics=", 0) == 0) {
+				outConfig.localModel.llama.verboseMetrics = ParseBool(
+					trimmedLine.substr(37),
+					true);
 				continue;
 			}
 
@@ -1514,6 +1575,10 @@ namespace blazeclaw::config {
 			outConfig.embeddings.executionMode);
 		outConfig.localModel.provider = NormalizeLocalModelProvider(
 			outConfig.localModel.provider);
+		if (outConfig.localModel.provider == L"llama.cpp") {
+			outConfig.localModel.verboseMetrics =
+				outConfig.localModel.llama.verboseMetrics;
+		}
 		outConfig.skills.install.nodeManager =
 			NormalizeSkillsInstallNodeManager(outConfig.skills.install.nodeManager);
 
@@ -1539,6 +1604,27 @@ namespace blazeclaw::config {
 		if (outConfig.localModel.maxTokens == 0) {
 			outConfig.localModel.maxTokens = 256;
 		}
+
+		outConfig.localModel.llama.gpuLayers =
+			(std::clamp)(
+				outConfig.localModel.llama.gpuLayers,
+				std::int32_t{ -1 },
+				std::int32_t{ 4096 });
+		outConfig.localModel.llama.contextLength =
+			(std::clamp)(
+				outConfig.localModel.llama.contextLength,
+				std::uint32_t{ 256 },
+				std::uint32_t{ 131072 });
+		outConfig.localModel.llama.batchSize =
+			(std::clamp)(
+				outConfig.localModel.llama.batchSize,
+				std::uint32_t{ 1 },
+				std::uint32_t{ 8192 });
+		outConfig.localModel.llama.threads =
+			(std::clamp)(
+				outConfig.localModel.llama.threads,
+				std::uint32_t{ 1 },
+				std::uint32_t{ 256 });
 
 		const auto sanitizePolicyProfile = [](
 			EmailFallbackPolicyProfileConfig& profile,

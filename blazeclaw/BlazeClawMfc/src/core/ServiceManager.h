@@ -42,6 +42,7 @@
 #include "tools/CToolRuntimeRegistry.h"
 #include "runtime/CChatRuntime.h"
 #include "runtime/ChatRuntimeContracts.h"
+#include "runtime/LocalModel/ITextGenerationRuntime.h"
 #include "runtime/LocalModel/OnnxTextGenerationRuntime.h"
 #include "extensions/RuntimeCapabilityAdapterContracts.h"
 #include <cstdint>
@@ -369,7 +370,7 @@ namespace blazeclaw::core {
 		AcpSpawnDecision m_lastAcpDecision;
 		OnnxEmbeddingsService m_embeddingsService;
 		EmbeddingsServiceSnapshot m_embeddings;
-		localmodel::OnnxTextGenerationRuntime m_localModelRuntime;
+		std::unique_ptr<localmodel::ITextGenerationRuntime> m_localModelRuntime;
 		localmodel::LocalModelRuntimeSnapshot m_localModelRuntimeSnapshot;
 		bool m_localModelRolloutEligible = false;
 		bool m_localModelActivationEnabled = false;
