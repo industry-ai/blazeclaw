@@ -161,15 +161,36 @@ Phase F notes:
   dedicated email fallback telemetry state.
 
 ## Phase G — Test Hardening
-- [ ] Add unit tests for extracted email services.
-- [ ] Add orchestration seam tests proving `ServiceManager` delegates instead of computes.
-- [ ] Add scenario tests for fallback + approval + retry transitions.
-- [ ] Run parity-focused test suites and contract checks.
+- [x] Add unit tests for extracted email services.
+- [x] Add orchestration seam tests proving `ServiceManager` delegates instead of computes.
+- [x] Add scenario tests for fallback + approval + retry transitions.
+- [x] Run parity-focused test suites and contract checks.
+
+Phase G notes:
+- Added service unit tests in `EmailScheduleFallbackTests.cpp` for:
+  - `EmailFallbackRuntimeCoordinator` fallback classification,
+  - `EmailPreflightHealthService` health index retrieval,
+  - `EmailRuntimeDiagnosticsProjector` diagnostics field mapping.
+- Added ServiceManager orchestration seam contract coverage in
+  `ServiceManagerStartupPhaseContractTests.cpp` to verify delegation to:
+  - `EmailFallbackRuntimeCoordinator`,
+  - `EmailPreflightHealthService`,
+  - `EmailRuntimeDiagnosticsProjector`.
+- Added fallback+approval+retry scenario tests for policy action transitions:
+  - exec_error + `stop` blocks backend fallback,
+  - exec_error + `retry_then_continue` transitions to fallback backend.
 
 ## Phase H — Cleanup and Finalization
-- [ ] Remove obsolete email helper branches from `ServiceManager.cpp`.
-- [ ] Reduce `ServiceManagerState::EmailPolicyState` surface to summary-only data.
-- [ ] Update docs (`ServiceManager.md`, architecture docs, rollout notes).
+- [x] Remove obsolete email helper branches from `ServiceManager.cpp`.
+- [x] Reduce `ServiceManagerState::EmailPolicyState` surface to summary-only data.
+- [x] Update docs (`ServiceManager.md`, architecture docs, rollout notes).
+
+Phase H notes:
+- Removed obsolete in-class email helper logic from `ServiceManager.cpp` in favor of
+  extracted coordinator/service/projector delegation.
+- `EmailPolicyState` now remains summary-oriented runtime policy state used only for
+  orchestration and reporting projections.
+- Updated architecture/tracking docs to reflect full Phase A-H extraction progress.
 
 ---
 
@@ -187,7 +208,7 @@ Phase F notes:
 - [x] M1: Email policy logic fully delegated (no direct computation in `ServiceManager`).
 - [x] M2: Fallback coordinator integrated with Option 5/6 parity.
 - [x] M3: Diagnostics projection decoupled.
-- [ ] M4: Test coverage and parity checks green.
+- [x] M4: Test coverage and parity checks green.
 
 ---
 

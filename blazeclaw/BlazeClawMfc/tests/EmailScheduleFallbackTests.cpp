@@ -1,7 +1,11 @@
 #include "gateway/executors/EmailScheduleExecutor.h"
 
 #include "config/ConfigModels.h"
+#include "core/EmailFallbackRuntimeCoordinator.h"
+#include "core/EmailPreflightHealthService.h"
 #include "core/EmailPolicyOrchestrationService.h"
+#include "core/EmailRuntimeDiagnosticsProjector.h"
+#include "core/diagnostics/DiagnosticsSnapshot.h"
 
 #include <catch2/catch_all.hpp>
 #include <nlohmann/json.hpp>
@@ -408,4 +412,197 @@ TEST_CASE(
 	REQUIRE(disabledBinding.retryMaxAttempts == 1);
 	REQUIRE(disabledBinding.retryDelayMs == 0);
 	REQUIRE(disabledBinding.profileId == "legacy-policy");
+}
+
+TEST_CASE(
+	"EmailFallbackRuntimeCoordinator classifies embedded fallback cases",
+	"[email][fallback][service]") {
+	const blazeclaw::core::EmailFallbackRuntimeCoordinator coordinator;
+
+	const auto timeoutDecision = coordinator.EvaluateEmbeddedFailure(
+		"embedded_deadline_exceeded",
+		"deadline_exceeded");
+	REQUIRE(timeoutDecision.shouldFallback);
+	REQUIRE(timeoutDecision.fallbackReason == "embedded_deadline_exceeded");
+
+	const auto reasonDecision = coordinator.EvaluateEmbeddedFailure(
+		"",
+		"tool_execution_failed");
+	REQUIRE(reasonDecision.shouldFallback);
+	REQUIRE(reasonDecision.fallbackReason == "tool_execution_failed");
+
+	const auto noFallbackDecision = coordinator.EvaluateEmbeddedFailure(
+		"unknown_error",
+		"policy_blocked");
+	REQUIRE_FALSE(noFallbackDecision.shouldFallback);
+}
+
+TEST_CASE(
+	"EmailPreflightHealthService returns runtime health index",
+	"[email][fallback][service]") {
+	ScopedEnvVar probeHimalaya("BLAZECLAW_EMAIL_PROBE_HIMALAYA");
+	ScopedEnvVar probeNode("BLAZECLAW_EMAIL_PROBE_NODE");
+	ScopedEnvVar probeSkill("BLAZECLAW_EMAIL_PROBE_IMAP_SMTP_SKILL");
+	ScopedEnvVar capabilityOverride("BLAZECLAW_EMAIL_CAPABILITY_STATE_OVERRIDE");
+
+	probeHimalaya.Set("ready");
+	probeNode.Set("ready");
+	probeSkill.Set("ready");
+	capabilityOverride.Set("ready");
+
+	const blazeclaw::core::EmailPreflightHealthService service;
+	const auto health = service.BuildRuntimeHealthIndex(true);
+	REQUIRE(health.emailSendState == "ready");
+	REQUIRE_FALSE(health.probes.empty());
+}
+
+TEST_CASE(
+	"EmailRuntimeDiagnosticsProjector maps email diagnostics fields",
+	"[email][fallback][service]") {
+	blazeclaw::config::EmailFallbackConfig emailConfig;
+	emailConfig.preflight.enabled = true;
+	emailConfig.policyProfiles.enabled = true;
+	emailConfig.policyProfiles.enforce = true;
+
+	blazeclaw::core::EmailPolicyOrchestrationService::ResolvedEmailFallbackPolicy
+		resolvedPolicy;
+	resolvedPolicy.profileId = L"tool-policy";
+	resolvedPolicy.backends = { L"himalaya", L"imap-smtp-email" };
+	resolvedPolicy.onUnavailable = L"continue";
+	resolvedPolicy.onAuthError = L"stop";
+	resolvedPolicy.onExecError = L"retry_then_continue";
+	resolvedPolicy.retryMaxAttempts = 3;
+	resolvedPolicy.retryDelayMs = 150;
+	resolvedPolicy.requiresApproval = true;
+	resolvedPolicy.approvalTokenTtlMinutes = 90;
+
+	blazeclaw::gateway::executors::RuntimeHealthIndex healthIndex;
+	healthIndex.emailSendState = "degraded";
+	healthIndex.generatedAtEpochMs = 100;
+	healthIndex.ttlMs = 60000;
+	healthIndex.probes = {
+		blazeclaw::gateway::executors::DependencyProbeResult{
+			.key = "backend:himalaya",
+			.state = "ready",
+		},
+		blazeclaw::gateway::executors::DependencyProbeResult{
+			.key = "runtime:node",
+			.state = "unavailable",
+		},
+	};
+
+	blazeclaw::core::DiagnosticsSnapshot snapshot;
+	const blazeclaw::core::EmailRuntimeDiagnosticsProjector projector;
+	projector.Apply(
+		blazeclaw::core::EmailRuntimeDiagnosticsProjector::Context{
+			.emailConfig = emailConfig,
+			.policyRolloutMode = L"runtime",
+			.policyEnforceChannel = L"email.send",
+			.policyCanaryEligible = true,
+			.rollbackBridgeEnabled = false,
+			.runtimeEnabled = true,
+			.runtimeEnforce = true,
+			.resolvedPolicy = resolvedPolicy,
+			.healthIndex = healthIndex,
+			.fallbackAttempts = 5,
+			.fallbackSuccess = 3,
+			.fallbackFailure = 2,
+		},
+		snapshot);
+
+	REQUIRE(snapshot.emailPreflightEnabled);
+	REQUIRE(snapshot.emailPolicyProfilesEnabled);
+	REQUIRE(snapshot.emailPolicyProfilesEnforce);
+	REQUIRE(snapshot.emailPolicyProfilesRuntimeEnabled);
+	REQUIRE(snapshot.emailPolicyProfilesRuntimeEnforce);
+	REQUIRE(snapshot.emailResolvedPolicyId == "tool-policy");
+	REQUIRE(snapshot.emailResolvedBackends.size() == 2);
+	REQUIRE(snapshot.emailCapabilityState == "degraded");
+	REQUIRE(snapshot.emailProbeReadyCount == 1);
+	REQUIRE(snapshot.emailProbeUnavailableCount == 1);
+	REQUIRE(snapshot.emailFallbackAttempts == 5);
+	REQUIRE(snapshot.emailFallbackSuccess == 3);
+	REQUIRE(snapshot.emailFallbackFailure == 2);
+}
+
+TEST_CASE(
+	"EmailScheduleExecutor exec_error stop blocks backend fallback",
+	"[email][fallback][scenario]") {
+	ScopedEnvVar modeEnv("BLAZECLAW_EMAIL_DELIVERY_MODE");
+	ScopedEnvVar imapModeEnv("BLAZECLAW_EMAIL_IMAP_SMTP_MODE");
+	ScopedEnvVar backendsEnv("BLAZECLAW_EMAIL_DELIVERY_BACKENDS");
+	ScopedEnvVar profileEnabled("BLAZECLAW_EMAIL_POLICY_PROFILES_ENABLED");
+	ScopedEnvVar profileEnforce("BLAZECLAW_EMAIL_POLICY_PROFILES_ENFORCE");
+	ScopedEnvVar actionExec("BLAZECLAW_EMAIL_POLICY_ACTION_EXEC_ERROR");
+
+	modeEnv.Set("mock_failure");
+	imapModeEnv.Set("mock_success");
+	backendsEnv.Set("himalaya,imap-smtp-email");
+	profileEnabled.Set("true");
+	profileEnforce.Set("true");
+	actionExec.Set("stop");
+
+	const auto executor = EmailScheduleExecutor::Create();
+	const auto prepare = executor(
+		"email.schedule",
+		std::string("{\"action\":\"prepare\",\"to\":\"jicheng@whu.edu.cn\",\"subject\":\"Report\",\"body\":\"Tomorrow sunny\",\"sendAt\":\"13:00\"}"));
+	REQUIRE(prepare.executed);
+	REQUIRE(prepare.status == "needs_approval");
+
+	const auto token = nlohmann::json::parse(prepare.output)
+		.at("requiresApproval")
+		.at("approvalToken")
+		.get<std::string>();
+	REQUIRE_FALSE(token.empty());
+
+	const auto approve = executor(
+		"email.schedule",
+		std::string("{\"action\":\"approve\",\"approvalToken\":\"") + token +
+		"\",\"approve\":true}");
+	REQUIRE_FALSE(approve.executed);
+	REQUIRE(approve.status == "error");
+	REQUIRE(approve.output.find("himalaya_send_failed") != std::string::npos);
+}
+
+TEST_CASE(
+	"EmailScheduleExecutor retry_then_continue transitions to fallback backend",
+	"[email][fallback][scenario]") {
+	ScopedEnvVar modeEnv("BLAZECLAW_EMAIL_DELIVERY_MODE");
+	ScopedEnvVar imapModeEnv("BLAZECLAW_EMAIL_IMAP_SMTP_MODE");
+	ScopedEnvVar backendsEnv("BLAZECLAW_EMAIL_DELIVERY_BACKENDS");
+	ScopedEnvVar profileEnabled("BLAZECLAW_EMAIL_POLICY_PROFILES_ENABLED");
+	ScopedEnvVar profileEnforce("BLAZECLAW_EMAIL_POLICY_PROFILES_ENFORCE");
+	ScopedEnvVar actionExec("BLAZECLAW_EMAIL_POLICY_ACTION_EXEC_ERROR");
+	ScopedEnvVar retryMaxAttempts("BLAZECLAW_EMAIL_POLICY_RETRY_MAX_ATTEMPTS");
+	ScopedEnvVar retryDelayMs("BLAZECLAW_EMAIL_POLICY_RETRY_DELAY_MS");
+
+	modeEnv.Set("mock_failure");
+	imapModeEnv.Set("mock_success");
+	backendsEnv.Set("himalaya,imap-smtp-email");
+	profileEnabled.Set("true");
+	profileEnforce.Set("true");
+	actionExec.Set("retry_then_continue");
+	retryMaxAttempts.Set("2");
+	retryDelayMs.Set("0");
+
+	const auto executor = EmailScheduleExecutor::Create();
+	const auto prepare = executor(
+		"email.schedule",
+		std::string("{\"action\":\"prepare\",\"to\":\"jicheng@whu.edu.cn\",\"subject\":\"Report\",\"body\":\"Tomorrow sunny\",\"sendAt\":\"13:00\"}"));
+	REQUIRE(prepare.executed);
+	REQUIRE(prepare.status == "needs_approval");
+
+	const auto token = nlohmann::json::parse(prepare.output)
+		.at("requiresApproval")
+		.at("approvalToken")
+		.get<std::string>();
+	REQUIRE_FALSE(token.empty());
+
+	const auto approve = executor(
+		"email.schedule",
+		std::string("{\"action\":\"approve\",\"approvalToken\":\"") + token +
+		"\",\"approve\":true}");
+	REQUIRE(approve.executed);
+	REQUIRE(approve.status == "ok");
+	REQUIRE(approve.output.find("\"engine\":\"imap-smtp-email\"") != std::string::npos);
 }

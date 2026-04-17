@@ -242,3 +242,20 @@ TEST_CASE(
 		source.find("runtimeOrchestrationPolicy.startupFixtureValidationEnabled") !=
 		std::string::npos);
 }
+
+TEST_CASE(
+	"ServiceManager email contract: delegates runtime fallback, preflight health, and diagnostics projection",
+	"[servicemanager][email][contract]")
+{
+	const std::string source = ReadServiceManagerSource();
+
+	REQUIRE(
+		source.find("m_emailFallbackRuntimeCoordinator.EvaluateEmbeddedFailure(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("m_emailPreflightHealthService.BuildRuntimeHealthIndex(false)") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("m_emailRuntimeDiagnosticsProjector.Apply(") !=
+		std::string::npos);
+}

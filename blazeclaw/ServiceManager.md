@@ -178,6 +178,15 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
      `ServiceManager::BuildOperatorDiagnosticsReport()`.
    - ServiceManager now delegates projection and remains focused on composition.
 
+17. **Harden extracted email service contracts with focused tests**
+   - ✅ Implemented with unit/scenario/seam coverage updates.
+   - Added extracted service tests for:
+     - `EmailFallbackRuntimeCoordinator`
+     - `EmailPreflightHealthService`
+     - `EmailRuntimeDiagnosticsProjector`
+   - Added ServiceManager orchestration contract checks to prove delegation paths.
+   - Added fallback approval/retry transition scenarios for policy action behavior parity.
+
 7. **Reduce duplicated state projections**
    - Build snapshot DTOs once per report/tick where possible.
    - Reuse immutable snapshots across diagnostics and gateway publication.
