@@ -449,15 +449,15 @@ namespace blazeclaw::gateway::prompt {
 		}
 
 		std::string ResolveDateValue(const std::string& lowered) {
-         if (ContainsAnyToken(
+			if (ContainsAnyToken(
 				lowered,
-             { "today", "今天" })) {
+				{ "today", "今天" })) {
 				return "today";
 			}
 
-         if (ContainsAnyToken(
+			if (ContainsAnyToken(
 				lowered,
-              { "tomorrow", "明天" })) {
+				{ "tomorrow", "明天" })) {
 				return "tomorrow";
 			}
 
@@ -465,9 +465,9 @@ namespace blazeclaw::gateway::prompt {
 		}
 
 		std::string ResolveCityValue(const std::string& lowered) {
-         if (ContainsAnyToken(
+			if (ContainsAnyToken(
 				lowered,
-             { "wuhan", "武汉" })) {
+				{ "wuhan", "武汉" })) {
 				return "Wuhan";
 			}
 
@@ -480,8 +480,8 @@ namespace blazeclaw::gateway::prompt {
 				{
 					"right now",
 					"immediately",
-					" as soon as possible",
-					" now",
+					"as soon as possible",
+					"now",
 					"马上",
 					"\xE7\x8E\xB0\xE5\x9C\xA8",
 					"\xE9\xA9\xAC\xE4\xB8\x8A",
@@ -505,7 +505,7 @@ namespace blazeclaw::gateway::prompt {
 			lowered,
 			{
 				"weather",
-               "天气",
+				"天气",
 				"气温",
 				"预报",
 				"温度",
@@ -516,7 +516,7 @@ namespace blazeclaw::gateway::prompt {
 			{
 				"email",
 				"mail",
-               "邮件",
+				"邮件",
 				"电子邮件",
 				"发邮件",
 				"发送",
@@ -529,7 +529,7 @@ namespace blazeclaw::gateway::prompt {
 				"report",
 				"summary",
 				"write",
-               "报告",
+				"报告",
 				"简报",
 				"总结",
 				"写",
@@ -560,12 +560,12 @@ namespace blazeclaw::gateway::prompt {
 
 		signals.date = ResolveDateValue(lowered);
 		signals.hasDateIntent =
-           ContainsAnyToken(
+			ContainsAnyToken(
 				lowered,
 				{
 					"today",
 					"tomorrow",
-                 "今天",
+				 "今天",
 					"明天",
 				});
 		signals.city = ResolveCityValue(lowered);

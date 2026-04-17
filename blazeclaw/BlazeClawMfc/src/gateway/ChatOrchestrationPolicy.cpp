@@ -113,7 +113,7 @@ namespace blazeclaw::gateway {
 
 		output.decompositionMetadataSource =
 			structuralSignals.weatherEmailFlowCandidate
-			? "weather_email_structural_intent"
+			? "structural_orchestration_signals"
 			: "none";
 
 		if (output.deterministicEnabled) {
