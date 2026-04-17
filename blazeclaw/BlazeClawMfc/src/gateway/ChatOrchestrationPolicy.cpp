@@ -29,8 +29,6 @@ namespace blazeclaw::gateway {
 
 		const auto structuralSignals =
 			prompt::AnalyzeOrchestrationStructuralSignals(input.message);
-		output.weatherEmailIntent =
-			prompt::AnalyzeWeatherEmailPromptIntent(input.message);
 		output.weatherEmailIntent.hasWeather =
 			structuralSignals.hasWeatherCapabilityIntent;
 		output.weatherEmailIntent.hasEmail =
