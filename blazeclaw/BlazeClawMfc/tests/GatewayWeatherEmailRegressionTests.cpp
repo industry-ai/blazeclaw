@@ -287,6 +287,76 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Weather-email generalized city aliases keep deterministic parity path",
+	"[gateway][weather-email][email-schedule][city-alias][regression]") {
+	ScopedEnvVar modeEnv("BLAZECLAW_EMAIL_DELIVERY_MODE");
+	ScopedEnvVar imapModeEnv("BLAZECLAW_EMAIL_IMAP_SMTP_MODE");
+	ScopedEnvVar backendsEnv("BLAZECLAW_EMAIL_DELIVERY_BACKENDS");
+	ScopedEnvVar profileEnabled("BLAZECLAW_EMAIL_POLICY_PROFILES_ENABLED");
+	ScopedEnvVar profileEnforce("BLAZECLAW_EMAIL_POLICY_PROFILES_ENFORCE");
+	ScopedEnvVar actionUnavailable("BLAZECLAW_EMAIL_POLICY_ACTION_UNAVAILABLE");
+	ScopedEnvVar actionExec("BLAZECLAW_EMAIL_POLICY_ACTION_EXEC_ERROR");
+
+	modeEnv.Set("mock_failure");
+	imapModeEnv.Set("mock_success");
+	backendsEnv.Set("himalaya,imap-smtp-email");
+	profileEnabled.Set("true");
+	profileEnforce.Set("true");
+	actionUnavailable.Set("continue");
+	actionExec.Set("continue");
+
+	blazeclaw::gateway::GatewayHost host;
+	blazeclaw::config::GatewayConfig config;
+	REQUIRE(host.StartLocalOnly(config));
+
+	const std::string sessionKey = "weather-email-city-alias-regression";
+	const std::string requestId = "weather-email-city-alias-regression-run";
+	const std::string prompt =
+		"Check tomorrow's weather in Beijing, write a short report, and email it to jicheng@whu.edu.cn now.";
+	const std::string sendPayload =
+		std::string("{\"sessionKey\":\"") +
+		sessionKey +
+		"\",\"message\":\"" +
+		prompt +
+		"\",\"idempotencyKey\":\"weather-email-city-alias-idem\","
+		"\"hasConnectedClient\":true,\"clientConnectionId\":\"test-conn-city\","
+		"\"clientCaps\":[\"TOOL_EVENTS\"]}";
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = requestId,
+			.method = "chat.send",
+			.paramsJson = sendPayload,
+		});
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+
+	const auto pollTrace = PollChatEventsUntilTerminal(
+		host,
+		sessionKey,
+		requestId,
+		60);
+
+	REQUIRE(ContainsExactMatch(
+		pollTrace.assistantTexts,
+		"tools.execute.result tool=weather.lookup status=ok"));
+	REQUIRE(ContainsExactMatch(
+		pollTrace.assistantTexts,
+		"tools.execute.result tool=email.schedule status=needs_approval"));
+	REQUIRE(CountExactMatch(
+		pollTrace.assistantTexts,
+		"tools.execute.result tool=email.schedule status=invalid_args") == 0);
+
+	const auto orchestrationStatus =
+		GetOrchestrationStatus(host, requestId + "-orchestration-status");
+	AssertParityOrchestrationDecision(
+		orchestrationStatus,
+		"policy.deterministic.intent_override");
+
+	host.Stop();
+}
+
+TEST_CASE(
 	"Weather-email Chinese prompt follows deterministic parity path without search fallback",
 	"[gateway][weather-email][email-schedule][chinese][regression]") {
 	ScopedEnvVar modeEnv("BLAZECLAW_EMAIL_DELIVERY_MODE");

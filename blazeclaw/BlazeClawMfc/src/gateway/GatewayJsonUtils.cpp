@@ -465,13 +465,31 @@ namespace blazeclaw::gateway::prompt {
 		}
 
 		std::string ResolveCityValue(const std::string& lowered) {
-			if (ContainsAnyToken(
-				lowered,
-				{ "wuhan", "武汉" })) {
-				return "Wuhan";
+			static const std::vector<std::pair<std::vector<std::string>, std::string>>
+				kCityAliasGroups = {
+					{ { "wuhan", "武汉" }, "Wuhan" },
+					{ { "beijing", "北京" }, "Beijing" },
+					{ { "shanghai", "上海" }, "Shanghai" },
+					{ { "guangzhou", "广州" }, "Guangzhou" },
+					{ { "shenzhen", "深圳" }, "Shenzhen" },
+					{ { "hangzhou", "杭州" }, "Hangzhou" },
+					{ { "chengdu", "成都" }, "Chengdu" },
+					{ { "chongqing", "重庆" }, "Chongqing" },
+					{ { "nanjing", "南京" }, "Nanjing" },
+					{ { "tianjin", "天津" }, "Tianjin" },
+					{ { "xian", "xi'an", "西安" }, "Xi'an" },
+					{ { "suzhou", "苏州" }, "Suzhou" },
+					{ { "changsha", "长沙" }, "Changsha" },
+					{ { "zhengzhou", "郑州" }, "Zhengzhou" },
+			};
+
+			for (const auto& cityGroup : kCityAliasGroups) {
+				if (ContainsAnyToken(lowered, cityGroup.first)) {
+					return cityGroup.second;
+				}
 			}
 
-			return "Wuhan";
+			return {};
 		}
 
 		bool IsImmediateScheduleKeyword(const std::string& lowered) {
@@ -585,6 +603,10 @@ namespace blazeclaw::gateway::prompt {
 			signals.missReasons.push_back("missing_report_instruction");
 		}
 
+		if (signals.city.empty()) {
+			signals.missReasons.push_back("missing_city");
+		}
+
 		if (!signals.hasScheduleIntent) {
 			signals.missReasons.push_back("missing_schedule_format");
 		}
@@ -592,7 +614,8 @@ namespace blazeclaw::gateway::prompt {
 		signals.weatherEmailFlowCandidate =
 			signals.hasWeatherCapabilityIntent &&
 			signals.hasEmailCapabilityIntent &&
-			signals.hasRecipient;
+			signals.hasRecipient &&
+			!signals.city.empty();
 
 		return signals;
 	}

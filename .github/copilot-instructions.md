@@ -5,6 +5,7 @@
 - Use readable, explicit code over overly compact solutions when implementing BlazeClaw/OpenClaw porting changes.
 - Fully port OpenClaw features into BlazeClaw to avoid runtime dependency on the OpenClaw project alongside BlazeClaw.
 - For BlazeClaw changes, ensure strict OpenClaw workflow parity implementation and explicitly avoid hard-coded workflow-specific functions/paths; prefer flexible structural orchestration signals and parity-consistent implementation.
+- For BlazeClaw parity work, avoid hard-coded resolver functions like single-city mappings; use flexible OpenClaw-aligned structural signals and generalized extraction logic, and document plan updates in workflow markdowns.
 - Use human-readable UTF-8 characters in source code instead of escaped byte sequences in BlazeClaw files.
 - Use `msbuild` to build `BlazeClaw.sln` for validation instead of generic build commands. Always validate with: `msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001`.
 - For fixing email fallback, use Option 5 + Option 6, which includes a dependency preflight health index and configurable fallback policy profiles.
