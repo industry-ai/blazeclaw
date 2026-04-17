@@ -287,6 +287,24 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Weather lookup requires explicit city to match OpenClaw parity",
+	"[gateway][weather-email][weather-lookup][city-required][regression]") {
+	blazeclaw::gateway::GatewayHost host;
+	blazeclaw::config::GatewayConfig config;
+	REQUIRE(host.StartLocalOnly(config));
+
+	const auto executeResult = host.ExecuteRuntimeTool(
+		"weather.lookup",
+		std::string("{\"date\":\"tomorrow\"}"));
+
+	REQUIRE(executeResult.executed == false);
+	REQUIRE(executeResult.status == "invalid_args");
+	REQUIRE(executeResult.output.find("city_required") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
 	"Weather-email generalized city aliases keep deterministic parity path",
 	"[gateway][weather-email][email-schedule][city-alias][regression]") {
 	ScopedEnvVar modeEnv("BLAZECLAW_EMAIL_DELIVERY_MODE");

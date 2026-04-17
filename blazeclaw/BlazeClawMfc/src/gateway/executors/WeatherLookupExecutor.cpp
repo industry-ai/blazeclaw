@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "WeatherLookupExecutor.h"
 
 #include "../GatewayJsonUtils.h"
@@ -174,7 +174,7 @@ namespace blazeclaw::gateway::executors {
 			const std::string& city,
 			std::string& outResponse,
 			std::string& outError) {
-            if (!EnsureCurlInitialized()) {
+			if (!EnsureCurlInitialized()) {
 				outError = "curl_global_init_failed";
 				outResponse.clear();
 				return false;
@@ -205,7 +205,7 @@ namespace blazeclaw::gateway::executors {
 			return FetchJsonByUrl(url, outResponse, outError);
 		}
 
-        bool TryReadInt(const nlohmann::json& value, int& out) {
+		bool TryReadInt(const nlohmann::json& value, int& out) {
 			if (value.is_number_integer()) {
 				out = value.get<int>();
 				return true;
@@ -637,7 +637,7 @@ namespace blazeclaw::gateway::executors {
 				return false;
 			}
 
-           const nlohmann::json* forecastDayNode =
+			const nlohmann::json* forecastDayNode =
 				ResolveForecastDayNode(payload, requestedDate);
 			const nlohmann::json* observationNode =
 				ResolveObservationNode(payload, forecastDayNode);
@@ -647,7 +647,7 @@ namespace blazeclaw::gateway::executors {
 				return false;
 			}
 
-          const auto& current = *observationNode;
+			const auto& current = *observationNode;
 			outSnapshot.date = ResolveForecastDate(payload, requestedDate);
 
 			outSnapshot.condition = "Unknown";
@@ -661,12 +661,12 @@ namespace blazeclaw::gateway::executors {
 					current["weatherDesc"][0]["value"].get<std::string>();
 			}
 
-          if (!TryReadForecastTemperature(current, forecastDayNode, outSnapshot.temperatureC)) {
+			if (!TryReadForecastTemperature(current, forecastDayNode, outSnapshot.temperatureC)) {
 				outError = "weather_payload_missing_temperature";
 				return false;
 			}
 
-           if (!TryReadForecastHumidity(current, forecastDayNode, outSnapshot.humidityPct)) {
+			if (!TryReadForecastHumidity(current, forecastDayNode, outSnapshot.humidityPct)) {
 				outError = "weather_payload_missing_humidity";
 				return false;
 			}
@@ -745,8 +745,19 @@ namespace blazeclaw::gateway::executors {
 				json::FindStringField(argsJson.value(), "date", date);
 			}
 
-			const auto normalizedCity = NormalizeValue(city, "Wuhan");
+			const auto normalizedCity = json::Trim(city);
 			const auto normalizedDate = NormalizeValue(date, "tomorrow");
+
+			if (normalizedCity.empty()) {
+				return ToolExecuteResult{
+					.tool = requestedTool,
+					.executed = false,
+					.status = "invalid_args",
+					.output = BuildErrorEnvelope(
+						"city_required",
+						"weather_city_required"),
+				};
+			}
 
 			if (normalizedCity == "error-city") {
 				return ToolExecuteResult{
@@ -763,7 +774,7 @@ namespace blazeclaw::gateway::executors {
 			std::string fetchError;
 			if (!FetchWttrJson(normalizedCity, response, fetchError)) {
 				if (IsTransientProviderFailure(fetchError)) {
-                    WeatherSnapshot openMeteoSnapshot;
+					WeatherSnapshot openMeteoSnapshot;
 					std::string openMeteoError;
 					if (FetchOpenMeteoSnapshot(
 						normalizedCity,
@@ -816,8 +827,8 @@ namespace blazeclaw::gateway::executors {
 			WeatherSnapshot snapshot;
 			std::string parseError;
 			if (!ParseWttrJson(response, normalizedDate, snapshot, parseError)) {
-               if (IsRecoverableProviderPayloadFailure(parseError)) {
-                    WeatherSnapshot openMeteoSnapshot;
+				if (IsRecoverableProviderPayloadFailure(parseError)) {
+					WeatherSnapshot openMeteoSnapshot;
 					std::string openMeteoError;
 					if (FetchOpenMeteoSnapshot(
 						normalizedCity,
