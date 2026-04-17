@@ -126,19 +126,39 @@ Phase C notes:
   - runtime-gated gateway binding behavior.
 
 ## Phase D — Runtime Fallback Extraction (Option 6)
-- [ ] Move fallback decisioning/retry/approval behavior to `EmailFallbackRuntimeCoordinator`.
-- [ ] Replace `ServiceManager` branching with coordinator delegation.
-- [ ] Validate unavailable/auth/exec-error action outcomes parity.
+- [x] Move fallback decisioning/retry/approval behavior to `EmailFallbackRuntimeCoordinator`.
+- [x] Replace `ServiceManager` branching with coordinator delegation.
+- [x] Validate unavailable/auth/exec-error action outcomes parity.
+
+Phase D notes:
+- Added `EmailFallbackRuntimeCoordinator` as extracted runtime fallback decision service.
+- `ServiceManager` now delegates embedded failure fallback eligibility decisions via
+  `EmailFallbackRuntimeCoordinator::EvaluateEmbeddedFailure(...)`.
+- Replaced direct fallback decision helper method in `ServiceManager`.
+- Added explicit email fallback attempt/success/failure state counters driven by delegated decision outcomes.
 
 ## Phase E — Preflight/Health Extraction (Option 5)
-- [ ] Move dependency probe/health-index business shaping to `EmailPreflightHealthService`.
-- [ ] Keep service-level publication in `ServiceManager` as thin projection wiring.
-- [ ] Validate startup/runtime health state reporting parity.
+- [x] Move dependency probe/health-index business shaping to `EmailPreflightHealthService`.
+- [x] Keep service-level publication in `ServiceManager` as thin projection wiring.
+- [x] Validate startup/runtime health state reporting parity.
+
+Phase E notes:
+- Added `EmailPreflightHealthService` to encapsulate runtime health index retrieval.
+- `ServiceManager` diagnostics now consume preflight health via service abstraction,
+  removing direct `EmailScheduleExecutor` health call coupling.
 
 ## Phase F — Diagnostics Decoupling
-- [ ] Move email diagnostics projection assembly out of `ServiceManager`.
-- [ ] Keep `ServiceManager` report builder invocation unchanged from caller perspective.
-- [ ] Validate diagnostics fields for email rollout mode, policy state, and fallback counters.
+- [x] Move email diagnostics projection assembly out of `ServiceManager`.
+- [x] Keep `ServiceManager` report builder invocation unchanged from caller perspective.
+- [x] Validate diagnostics fields for email rollout mode, policy state, and fallback counters.
+
+Phase F notes:
+- Added `EmailRuntimeDiagnosticsProjector` to assemble email diagnostics fields into
+  `DiagnosticsSnapshot`.
+- `ServiceManager::BuildOperatorDiagnosticsReport()` now delegates email-specific field
+  projection to the projector while preserving caller-facing report flow.
+- Diagnostics now project explicit email fallback attempt/success/failure counters from
+  dedicated email fallback telemetry state.
 
 ## Phase G — Test Hardening
 - [ ] Add unit tests for extracted email services.
@@ -164,9 +184,9 @@ Phase C notes:
 ---
 
 ## Milestones
-- [ ] M1: Email policy logic fully delegated (no direct computation in `ServiceManager`).
-- [ ] M2: Fallback coordinator integrated with Option 5/6 parity.
-- [ ] M3: Diagnostics projection decoupled.
+- [x] M1: Email policy logic fully delegated (no direct computation in `ServiceManager`).
+- [x] M2: Fallback coordinator integrated with Option 5/6 parity.
+- [x] M3: Diagnostics projection decoupled.
 - [ ] M4: Test coverage and parity checks green.
 
 ---
@@ -182,11 +202,11 @@ Phase C notes:
 ---
 
 ## Validation Checklist
-- [ ] Required build command passes:
+- [x] Required build command passes:
   - `msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001`
-- [ ] Email fallback behavior parity validated for Option 5 + Option 6.
-- [ ] No email-domain branching remains in `ServiceManager` except composition/delegation.
-- [ ] `ServiceManager` remains deterministic and lifecycle-focused.
+- [x] Email fallback behavior parity validated for Option 5 + Option 6.
+- [x] No email-domain branching remains in `ServiceManager` except composition/delegation.
+- [x] `ServiceManager` remains deterministic and lifecycle-focused.
 
 ---
 

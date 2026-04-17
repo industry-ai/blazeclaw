@@ -160,6 +160,24 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
 6. **Consolidate cancellation handling strategy**
    - Consider a unified cancellation registry abstraction instead of multiple maps.
 
+14. **Extract email runtime fallback decisioning from `ServiceManager`**
+   - ✅ Implemented with `EmailFallbackRuntimeCoordinator`.
+   - `ServiceManager` now delegates embedded failure fallback classification and reason
+     derivation to coordinator contracts.
+   - Removed direct `ShouldFallbackFromEmbeddedFailure(...)` business helper from
+     `ServiceManager`.
+
+15. **Extract email preflight health access from `ServiceManager`**
+   - ✅ Implemented with `EmailPreflightHealthService`.
+   - `ServiceManager` diagnostics now consume email health via service abstraction
+     instead of direct executor calls.
+
+16. **Extract email diagnostics projection assembly from `ServiceManager`**
+   - ✅ Implemented with `EmailRuntimeDiagnosticsProjector`.
+   - Email diagnostics field mapping moved out of
+     `ServiceManager::BuildOperatorDiagnosticsReport()`.
+   - ServiceManager now delegates projection and remains focused on composition.
+
 7. **Reduce duplicated state projections**
    - Build snapshot DTOs once per report/tick where possible.
    - Reuse immutable snapshots across diagnostics and gateway publication.

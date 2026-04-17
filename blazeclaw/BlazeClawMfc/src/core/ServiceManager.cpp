@@ -4110,16 +4110,20 @@ namespace blazeclaw::core {
 						ApplyEmbeddedExecutionTelemetry(embeddedExecution);
 
 						if (!embeddedExecution.success) {
-							if (ShouldFallbackFromEmbeddedFailure(
-								embeddedExecution.errorCode,
-								embeddedExecution.reason)) {
+							++m_state.embeddedRuntime.emailFallbackAttemptCount;
+							const auto fallbackDecision =
+								m_emailFallbackRuntimeCoordinator.EvaluateEmbeddedFailure(
+									embeddedExecution.errorCode,
+									embeddedExecution.reason);
+							if (fallbackDecision.shouldFallback) {
 								m_state.embeddedRuntime.lastFallbackUsed = true;
 								++m_state.embeddedRuntime.runFallbackCount;
-								m_state.embeddedRuntime.lastFallbackReason = embeddedExecution.errorCode.empty()
-									? embeddedExecution.reason
-									: embeddedExecution.errorCode;
+								++m_state.embeddedRuntime.emailFallbackSuccessCount;
+								m_state.embeddedRuntime.lastFallbackReason =
+									fallbackDecision.fallbackReason;
 							}
 							else {
+								++m_state.embeddedRuntime.emailFallbackFailureCount;
 								return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
 									.ok = false,
 									.assistantText = {},
@@ -5160,51 +5164,26 @@ namespace blazeclaw::core {
 		const auto localModel = LocalModelRuntime();
 		const auto retrieval = RetrievalMemory();
 		const auto emailHealth =
-			blazeclaw::gateway::executors::EmailScheduleExecutor::
-			GetRuntimeHealthIndex(false);
-
-		snapshot.emailPreflightEnabled = m_activeConfig.email.preflight.enabled;
-		snapshot.emailPolicyProfilesEnabled = m_activeConfig.email.policyProfiles.enabled;
-		snapshot.emailPolicyProfilesEnforce = m_activeConfig.email.policyProfiles.enforce;
-		snapshot.emailPolicyProfilesRuntimeEnabled = m_state.emailPolicy.runtimeEnabled;
-		snapshot.emailPolicyProfilesRuntimeEnforce = m_state.emailPolicy.runtimeEnforce;
-		snapshot.emailPolicyRolloutMode = ToNarrow(m_state.emailPolicy.rolloutMode);
-		snapshot.emailPolicyEnforceChannel = ToNarrow(m_state.emailPolicy.enforceChannel);
-		snapshot.emailPolicyCanaryEligible = m_state.emailPolicy.canaryEligible;
-		snapshot.emailRollbackBridgeEnabled = m_state.emailPolicy.rollbackBridgeEnabled;
-		snapshot.emailResolvedPolicyId = ToNarrow(m_emailFallbackResolvedPolicy.profileId);
-		for (const auto& backend : m_emailFallbackResolvedPolicy.backends) {
-			snapshot.emailResolvedBackends.push_back(ToNarrow(backend));
-		}
-		snapshot.emailPolicyActionUnavailable = ToNarrow(m_emailFallbackResolvedPolicy.onUnavailable);
-		snapshot.emailPolicyActionAuthError = ToNarrow(m_emailFallbackResolvedPolicy.onAuthError);
-		snapshot.emailPolicyActionExecError = ToNarrow(m_emailFallbackResolvedPolicy.onExecError);
-		snapshot.emailRetryMaxAttempts = m_emailFallbackResolvedPolicy.retryMaxAttempts;
-		snapshot.emailRetryDelayMs = m_emailFallbackResolvedPolicy.retryDelayMs;
-		snapshot.emailRequiresApproval = m_emailFallbackResolvedPolicy.requiresApproval;
-		snapshot.emailApprovalTokenTtlMinutes = m_emailFallbackResolvedPolicy.approvalTokenTtlMinutes;
-		snapshot.emailCapabilityState = emailHealth.emailSendState;
-		snapshot.emailHealthGeneratedAtEpochMs = emailHealth.generatedAtEpochMs;
-		snapshot.emailHealthTtlMs = emailHealth.ttlMs;
-		for (const auto& probe : emailHealth.probes) {
-			if (probe.state == "ready") {
-				++snapshot.emailProbeReadyCount;
-				continue;
-			}
-
-			if (probe.state == "unavailable") {
-				++snapshot.emailProbeUnavailableCount;
-			}
-		}
-		snapshot.emailFallbackAttempts = m_state.embeddedRuntime.runFallbackCount;
-		snapshot.emailFallbackSuccess =
-			snapshot.emailFallbackAttempts >= m_state.embeddedRuntime.runFailureCount
-			? (snapshot.emailFallbackAttempts - m_state.embeddedRuntime.runFailureCount)
-			: 0;
-		snapshot.emailFallbackFailure =
-			snapshot.emailFallbackAttempts >= snapshot.emailFallbackSuccess
-			? (snapshot.emailFallbackAttempts - snapshot.emailFallbackSuccess)
-			: 0;
+			m_emailPreflightHealthService.BuildRuntimeHealthIndex(false);
+		m_emailRuntimeDiagnosticsProjector.Apply(
+			EmailRuntimeDiagnosticsProjector::Context{
+				.emailConfig = m_activeConfig.email,
+				.policyRolloutMode = m_state.emailPolicy.rolloutMode,
+				.policyEnforceChannel = m_state.emailPolicy.enforceChannel,
+				.policyCanaryEligible = m_state.emailPolicy.canaryEligible,
+				.rollbackBridgeEnabled = m_state.emailPolicy.rollbackBridgeEnabled,
+				.runtimeEnabled = m_state.emailPolicy.runtimeEnabled,
+				.runtimeEnforce = m_state.emailPolicy.runtimeEnforce,
+				.resolvedPolicy = m_emailFallbackResolvedPolicy,
+				.healthIndex = emailHealth,
+				.fallbackAttempts =
+					m_state.embeddedRuntime.emailFallbackAttemptCount,
+				.fallbackSuccess =
+					m_state.embeddedRuntime.emailFallbackSuccessCount,
+				.fallbackFailure =
+					m_state.embeddedRuntime.emailFallbackFailureCount,
+			},
+			snapshot);
 
 		snapshot.agentsCount = m_agentsScope.entries.size();
 		snapshot.agentsDefaultAgent = ToNarrow(m_agentsScope.defaultAgentId);
@@ -5669,24 +5648,6 @@ namespace blazeclaw::core {
 			static_cast<double>(m_state.embeddedRuntime.runSuccessCount) /
 			static_cast<double>(totalRuns);
 		return successRate >= m_state.embeddedRuntime.dynamicLoopPromotionMinSuccessRate;
-	}
-
-	bool ServiceManager::ShouldFallbackFromEmbeddedFailure(
-		const std::string& errorCode,
-		const std::string& reason) const {
-		const std::string normalizedError = ToLowerAscii(errorCode);
-		const std::string normalizedReason = ToLowerAscii(reason);
-
-		if (normalizedError == "embedded_deadline_exceeded" ||
-			normalizedError == "embedded_loop_detected" ||
-			normalizedError == "embedded_completion_failed" ||
-			normalizedError == "embedded_tool_execution_failed") {
-			return true;
-		}
-
-		return normalizedReason == "deadline_exceeded" ||
-			normalizedReason == "tool_execution_failed" ||
-			normalizedReason == "embedded_completion_failed";
 	}
 
 } // namespace blazeclaw::core

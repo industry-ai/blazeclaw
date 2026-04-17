@@ -12,7 +12,10 @@
 #include "AgentsToolPolicyService.h"
 #include "AgentsWorkspaceService.h"
 #include "AcpSpawnService.h"
+#include "EmailFallbackRuntimeCoordinator.h"
+#include "EmailPreflightHealthService.h"
 #include "EmailPolicyOrchestrationService.h"
+#include "EmailRuntimeDiagnosticsProjector.h"
 #include "OnnxEmbeddingsService.h"
 #include "PiEmbeddedService.h"
 #include "RetrievalMemoryService.h"
@@ -282,9 +285,6 @@ namespace blazeclaw::core {
 		void ApplyEmbeddedExecutionTelemetry(
 			const EmbeddedRuntimeExecutionResult& embeddedExecution);
 		[[nodiscard]] bool IsEmbeddedDynamicLoopPromotionReady() const;
-		[[nodiscard]] bool ShouldFallbackFromEmbeddedFailure(
-			const std::string& errorCode,
-			const std::string& reason) const;
 
 		[[nodiscard]] blazeclaw::gateway::SkillsCatalogGatewayState BuildGatewaySkillsState() const;
 		void RefreshGatewaySkillsStateProjection();
@@ -334,7 +334,10 @@ namespace blazeclaw::core {
 		std::string m_activeChatProvider = "local";
 		std::string m_activeChatModel = "default";
 		blazeclaw::config::AppConfig m_activeConfig;
+		EmailFallbackRuntimeCoordinator m_emailFallbackRuntimeCoordinator;
+		EmailPreflightHealthService m_emailPreflightHealthService;
 		EmailPolicyOrchestrationService m_emailPolicyOrchestrationService;
+		EmailRuntimeDiagnosticsProjector m_emailRuntimeDiagnosticsProjector;
 		EmailPolicyOrchestrationService::ResolvedEmailFallbackPolicy
 			m_emailFallbackResolvedPolicy;
 		FeatureRegistry m_registry;
