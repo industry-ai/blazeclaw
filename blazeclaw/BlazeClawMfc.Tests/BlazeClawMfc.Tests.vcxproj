@@ -62,6 +62,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\InlineActionsOrchestrationServiceContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayBehaviorEquivalenceTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayParityBatch34ContractTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayWebChatPhase5ParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillContractCompatParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillContractPromptFormatterParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\MarkdownFrontmatterCompatParityTests.cpp" />
