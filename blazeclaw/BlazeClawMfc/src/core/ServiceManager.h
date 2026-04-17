@@ -12,6 +12,7 @@
 #include "AgentsToolPolicyService.h"
 #include "AgentsWorkspaceService.h"
 #include "AcpSpawnService.h"
+#include "ChatRuntimeOrchestrationCoordinator.h"
 #include "EmailFallbackRuntimeCoordinator.h"
 #include "EmailPreflightHealthService.h"
 #include "EmailPolicyOrchestrationService.h"
@@ -28,6 +29,8 @@
 #include "SkillCommandInvocationService.h"
 #include "SkillsCatalogService.h"
 #include "SkillsEnvOverrideService.h"
+#include "SkillsGatewayMethodHandler.h"
+#include "SkillsGatewayProjectionService.h"
 #include "SkillsEligibilityService.h"
 #include "SkillsFacade.h"
 #include "SkillsInstallService.h"
@@ -311,6 +314,13 @@ namespace blazeclaw::core {
 			BuildEmbeddedToolBindings() const;
 		void BindChatCallbacks();
 		void BindEmbeddingsCallbacks();
+		[[nodiscard]] blazeclaw::gateway::GatewayHost::ChatRuntimeResult
+			ExecuteProviderChatRuntimePath(
+				const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
+				const std::string& sessionId,
+				const std::string& runtimeMessage,
+				const std::string& activeProvider,
+				const std::string& activeModel);
 		[[nodiscard]] bool FinalizeStartup(
 			const blazeclaw::config::AppConfig& config);
 		[[nodiscard]] bool ApplyManagedRuntimeConfigDiff(
@@ -384,6 +394,7 @@ namespace blazeclaw::core {
 		SkillsPromptSnapshot m_skillsPrompt;
 		SkillsFacade m_skillsFacade;
 		InlineActionsOrchestrationService m_inlineActionsOrchestrationService;
+		ChatRuntimeOrchestrationCoordinator m_chatRuntimeOrchestrationCoordinator;
 		SkillsRunSnapshot m_skillsRunSnapshot;
 		SkillCommandInvocationService m_skillCommandInvocationService;
 		SkillsCommandService m_skillsCommandService;
@@ -410,6 +421,8 @@ namespace blazeclaw::core {
 		ConfigSchemaService m_configSchemaService;
 		SkillsWatchService m_skillsWatchService;
 		SkillsWatchSnapshot m_skillsWatch;
+		SkillsGatewayMethodHandler m_skillsGatewayMethodHandler;
+		SkillsGatewayProjectionService m_skillsGatewayProjectionService;
 		SkillsHostCallbacks m_skillsHostCallbacks;
 		CChatRuntime m_chatRuntime;
 		CDeepSeekClient m_deepSeekClient;

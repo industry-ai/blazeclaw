@@ -259,3 +259,23 @@ TEST_CASE(
 		source.find("m_emailRuntimeDiagnosticsProjector.Apply(") !=
 		std::string::npos);
 }
+
+TEST_CASE(
+	"ServiceManager phase1 contract: delegates chat orchestration, skills update handling, and skill projection",
+	"[servicemanager][phase1][contract]")
+{
+	const std::string source = ReadServiceManagerSource();
+
+	REQUIRE(
+		source.find("m_chatRuntimeOrchestrationCoordinator.PrepareChatRequest(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("ExecuteProviderChatRuntimePath(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("m_skillsGatewayMethodHandler.HandleSkillsUpdate(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("m_skillsGatewayProjectionService.BuildGatewaySkillEntry(") !=
+		std::string::npos);
+}

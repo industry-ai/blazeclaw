@@ -187,6 +187,16 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
    - Added ServiceManager orchestration contract checks to prove delegation paths.
    - Added fallback approval/retry transition scenarios for policy action behavior parity.
 
+18. **Extract Phase 1 non-email deep logic seams from `ServiceManager`**
+   - ✅ Implemented.
+   - Added `ChatRuntimeOrchestrationCoordinator` and delegated chat request
+     preparation concerns from `BindChatCallbacks()`.
+   - Added `SkillsGatewayMethodHandler` and delegated `skills.update` request
+     parsing/persistence/response shaping from `BindSkillsCallbacks()`.
+   - Added `SkillsGatewayProjectionService` and delegated
+     `BuildGatewaySkillEntry(...)` projection/mapping logic.
+   - Added orchestration contract coverage for all Phase 1 delegation paths.
+
 7. **Reduce duplicated state projections**
    - Build snapshot DTOs once per report/tick where possible.
    - Reuse immutable snapshots across diagnostics and gateway publication.

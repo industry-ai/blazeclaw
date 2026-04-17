@@ -2471,194 +2471,11 @@ namespace blazeclaw::core {
 			const SkillsEligibilityEntry* eligibility,
 			const SkillsCommandSpec* command,
 			const SkillsInstallPlanEntry* install) const {
-		std::vector<std::string> metadataSources;
-
-		std::string commandName;
-		std::string commandToolName;
-		std::string commandArgMode;
-		std::string commandArgSchema;
-		std::string commandResultSchema;
-		std::string commandIdempotencyHint;
-		std::string commandRetryPolicyHint;
-		bool commandRequiresApproval = false;
-		if (command != nullptr) {
-			commandName = ToNarrow(command->name);
-			commandToolName = ToNarrow(command->dispatch.toolName);
-			commandArgMode = ToNarrow(command->dispatch.argMode);
-			commandArgSchema = ToNarrow(command->dispatch.argSchema);
-			commandResultSchema = ToNarrow(command->dispatch.resultSchema);
-			commandIdempotencyHint = ToNarrow(command->dispatch.idempotencyHint);
-			commandRetryPolicyHint = ToNarrow(command->dispatch.retryPolicyHint);
-			commandRequiresApproval = command->dispatch.requiresApproval;
-		}
-
-		std::string installKind;
-		std::string installCommand;
-		std::string installReason;
-		bool installExecutable = false;
-		if (install != nullptr) {
-			installKind = ToNarrow(install->kind);
-			installCommand = ToNarrow(install->command);
-			installReason = ToNarrow(install->reason);
-			installExecutable = install->executable;
-		}
-
-		std::string primaryEnv;
-		std::vector<std::string> requiresBins;
-		std::vector<std::string> requiresEnv;
-		std::vector<std::string> requiresConfig;
-		std::string pluginConfigSchemaJson;
-		std::string pluginConfigUiHintsJson;
-		std::string channelConfigSchemasJson;
-		std::string channelConfigUiHintsJson;
-
-		if (const auto* value = ResolveNormalizedField(
-			entry.frontmatter,
-			{ L"metadata.blazeclaw.primaryenv", L"metadata.blazeclaw.primary_env" },
-			{ L"metadata.openclaw.primaryenv", L"metadata.openclaw.primary_env" },
-			metadataSources);
-			value != nullptr) {
-			primaryEnv = ToNarrow(*value);
-		}
-
-		if (const auto* value = ResolveNormalizedField(
-			entry.frontmatter,
-			{ L"metadata.blazeclaw.requires.bins" },
-			{ L"metadata.openclaw.requires.bins" },
-			metadataSources);
-			value != nullptr) {
-			requiresBins = UniqueNarrowValues(SplitCommaDelimitedWide(*value));
-		}
-
-		if (const auto* value = ResolveNormalizedField(
-			entry.frontmatter,
-			{ L"metadata.blazeclaw.requires.env" },
-			{ L"metadata.openclaw.requires.env" },
-			metadataSources);
-			value != nullptr) {
-			requiresEnv = UniqueNarrowValues(SplitCommaDelimitedWide(*value));
-		}
-
-		if (const auto* value = ResolveNormalizedField(
-			entry.frontmatter,
-			{ L"metadata.blazeclaw.requires.config" },
-			{ L"metadata.openclaw.requires.config" },
-			metadataSources);
-			value != nullptr) {
-			requiresConfig = UniqueNarrowValues(SplitCommaDelimitedWide(*value));
-		}
-
-		if (const auto* value = ResolveNormalizedField(
-			entry.frontmatter,
-			{ L"metadata.blazeclaw.plugin.configschema", L"metadata.blazeclaw.plugin.config_schema" },
-			{ L"metadata.openclaw.plugin.configschema", L"metadata.openclaw.plugin.config_schema" },
-			metadataSources);
-			value != nullptr) {
-			pluginConfigSchemaJson = NarrowTrimmedOrEmpty(*value);
-		}
-
-		if (const auto* value = ResolveNormalizedField(
-			entry.frontmatter,
-			{ L"metadata.blazeclaw.plugin.configuihints", L"metadata.blazeclaw.plugin.config_ui_hints" },
-			{ L"metadata.openclaw.plugin.configuihints", L"metadata.openclaw.plugin.config_ui_hints" },
-			metadataSources);
-			value != nullptr) {
-			pluginConfigUiHintsJson = NarrowTrimmedOrEmpty(*value);
-		}
-
-		if (const auto* value = ResolveNormalizedField(
-			entry.frontmatter,
-			{ L"metadata.blazeclaw.channels.configschemas", L"metadata.blazeclaw.channels.config_schemas" },
-			{ L"metadata.openclaw.channels.configschemas", L"metadata.openclaw.channels.config_schemas" },
-			metadataSources);
-			value != nullptr) {
-			channelConfigSchemasJson = NormalizeFlatJsonMapToObject(*value);
-		}
-
-		if (const auto* value = ResolveNormalizedField(
-			entry.frontmatter,
-			{ L"metadata.blazeclaw.channels.configuihints", L"metadata.blazeclaw.channels.config_ui_hints" },
-			{ L"metadata.openclaw.channels.configuihints", L"metadata.openclaw.channels.config_ui_hints" },
-			metadataSources);
-			value != nullptr) {
-			channelConfigUiHintsJson = NormalizeFlatJsonMapToObject(*value);
-		}
-
-		std::vector<std::string> configPathHints;
-		for (const auto& configKey : requiresConfig) {
-			if (configKey == "channels.discord.token") {
-				configPathHints.push_back("credentials.discord.token");
-			}
-			else if (configKey == "channels.slack") {
-				configPathHints.push_back("channels.slack.default");
-			}
-			else if (configKey == "plugins.entries.voice-call.enabled") {
-				configPathHints.push_back("plugins.voice-call.enabled");
-			}
-			else {
-				configPathHints.push_back(configKey);
-			}
-
-			if (std::find(
-				configPathHints.begin(),
-				configPathHints.end(),
-				configKey) == configPathHints.end()) {
-				configPathHints.push_back(configKey);
-			}
-		}
-
-		blazeclaw::gateway::SkillsCatalogGatewayEntry gatewayEntry;
-		gatewayEntry.name = ToNarrow(entry.skillName);
-		const std::wstring resolvedSkillKey = eligibility != nullptr
-			? eligibility->skillKey
-			: ResolveSkillKeyCompat(
-				entry.metadata.has_value() ? &entry.metadata.value() : nullptr,
-				entry.skillName);
-		gatewayEntry.skillKey = ToNarrow(resolvedSkillKey);
-		gatewayEntry.commandName = commandName;
-		gatewayEntry.commandToolName = commandToolName;
-		gatewayEntry.commandArgMode = commandArgMode;
-		gatewayEntry.commandArgSchema = commandArgSchema;
-		gatewayEntry.commandResultSchema = commandResultSchema;
-		gatewayEntry.commandIdempotencyHint = commandIdempotencyHint;
-		gatewayEntry.commandRetryPolicyHint = commandRetryPolicyHint;
-		gatewayEntry.commandRequiresApproval = commandRequiresApproval;
-		gatewayEntry.installKind = installKind;
-		gatewayEntry.installCommand = installCommand;
-		gatewayEntry.installExecutable = installExecutable;
-		gatewayEntry.installReason = installReason;
-		gatewayEntry.description = ToNarrow(entry.description);
-		gatewayEntry.source = ToNarrow(
-			SkillsCatalogService::SourceKindLabel(entry.sourceKind));
-		gatewayEntry.precedence = entry.precedence;
-		gatewayEntry.eligible = eligibility != nullptr ? eligibility->eligible : false;
-		gatewayEntry.disabled = eligibility != nullptr ? eligibility->disabled : false;
-		gatewayEntry.blockedByAllowlist = eligibility != nullptr
-			? eligibility->blockedByAllowlist
-			: false;
-		gatewayEntry.disableModelInvocation = eligibility != nullptr
-			? eligibility->disableModelInvocation
-			: false;
-		gatewayEntry.validFrontmatter = entry.validFrontmatter;
-		gatewayEntry.validationErrorCount = entry.validationErrors.size();
-		gatewayEntry.primaryEnv = primaryEnv;
-		gatewayEntry.requiresBins = std::move(requiresBins);
-		gatewayEntry.requiresEnv = std::move(requiresEnv);
-		gatewayEntry.requiresConfig = std::move(requiresConfig);
-		gatewayEntry.configPathHints = std::move(configPathHints);
-		gatewayEntry.pluginConfigSchemaJson = std::move(pluginConfigSchemaJson);
-		gatewayEntry.pluginConfigUiHintsJson = std::move(pluginConfigUiHintsJson);
-		gatewayEntry.channelConfigSchemasJson = std::move(channelConfigSchemasJson);
-		gatewayEntry.channelConfigUiHintsJson = std::move(channelConfigUiHintsJson);
-		gatewayEntry.normalizedMetadataSources = std::move(metadataSources);
-		if (eligibility != nullptr) {
-			gatewayEntry.missingEnv = UniqueNarrowValues(eligibility->missingEnv);
-			gatewayEntry.missingConfig = UniqueNarrowValues(eligibility->missingConfig);
-			gatewayEntry.missingBins = UniqueNarrowValues(eligibility->missingBins);
-			gatewayEntry.missingAnyBins =
-				UniqueNarrowValues(eligibility->missingAnyBins);
-		}
-		return gatewayEntry;
+		return m_skillsGatewayProjectionService.BuildGatewaySkillEntry(
+			entry,
+			eligibility,
+			command,
+			install);
 	}
 
 	void ServiceManager::RefreshSkillsState(
@@ -3425,163 +3242,19 @@ namespace blazeclaw::core {
 			});
 		m_gatewayHost.SetSkillsUpdateCallback([this](
 			const blazeclaw::gateway::protocol::RequestFrame& request) {
-				std::string skill;
-				if (!request.paramsJson.has_value() ||
-					!blazeclaw::gateway::json::FindStringField(
-						request.paramsJson.value(),
-						"skill",
-						skill) ||
-					blazeclaw::gateway::json::Trim(skill).empty()) {
-					return blazeclaw::gateway::protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = blazeclaw::gateway::protocol::ErrorShape{
-							.code = "missing_skill",
-							.message = "Parameter `skill` is required.",
-							.detailsJson = std::nullopt,
-							.retryable = false,
-							.retryAfterMs = std::nullopt,
+				return m_skillsGatewayMethodHandler.HandleSkillsUpdate(
+					request,
+					SkillsGatewayMethodHandler::Dependencies{
+						.persistSkillConfigEnv =
+							m_skillsHostCallbacks.persistSkillConfigEnv,
+						.refreshSkillView = m_skillsHostCallbacks.refreshSkillView,
+						.refreshSkillsState = [this]() {
+							RefreshSkillsState(m_activeConfig, true, L"skills.update");
 						},
-					};
-				}
-
-				std::string apiKey;
-				blazeclaw::gateway::json::FindStringField(
-					request.paramsJson.value(),
-					"apiKey",
-					apiKey);
-
-				std::string envRaw;
-				blazeclaw::gateway::json::FindRawField(
-					request.paramsJson.value(),
-					"env",
-					envRaw);
-
-				std::string configKey;
-				std::string configValue;
-				blazeclaw::gateway::json::FindStringField(
-					request.paramsJson.value(),
-					"configKey",
-					configKey);
-				blazeclaw::gateway::json::FindStringField(
-					request.paramsJson.value(),
-					"configValue",
-					configValue);
-
-				std::ostringstream envOut;
-				if (!apiKey.empty()) {
-					envOut << "API_KEY=" << apiKey << "\n";
-				}
-
-				if (!envRaw.empty()) {
-					std::string compactEnv = blazeclaw::gateway::json::Trim(envRaw);
-					if (!compactEnv.empty() && compactEnv.front() == '{' && compactEnv.back() == '}') {
-						nlohmann::json envObj;
-						try {
-							envObj = nlohmann::json::parse(compactEnv);
-						}
-						catch (...) {
-							return blazeclaw::gateway::protocol::ResponseFrame{
-								.id = request.id,
-								.ok = false,
-								.payloadJson = std::nullopt,
-								.error = blazeclaw::gateway::protocol::ErrorShape{
-									.code = "invalid_env_payload",
-									.message = "Parameter `env` must be a valid JSON object.",
-									.detailsJson = std::nullopt,
-									.retryable = false,
-									.retryAfterMs = std::nullopt,
-								},
-							};
-						}
-
-						if (envObj.is_object()) {
-							for (auto it = envObj.begin(); it != envObj.end(); ++it) {
-								if (it.value().is_string()) {
-									envOut << it.key() << "=" << it.value().get<std::string>() << "\n";
-								}
-							}
-						}
-					}
-				}
-
-				if (!configKey.empty()) {
-					envOut << configKey << "=" << configValue << "\n";
-				}
-
-				const std::string envContent = envOut.str();
-				if (envContent.empty()) {
-					return blazeclaw::gateway::protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = blazeclaw::gateway::protocol::ErrorShape{
-							.code = "empty_update",
-							.message = "No update payload was provided.",
-							.detailsJson = std::nullopt,
-							.retryable = false,
-							.retryAfterMs = std::nullopt,
+						.publishGatewaySkillsStateProjection = [this]() {
+							PublishGatewaySkillsStateProjection();
 						},
-					};
-				}
-
-				if (!m_skillsHostCallbacks.persistSkillConfigEnv) {
-					return blazeclaw::gateway::protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = blazeclaw::gateway::protocol::ErrorShape{
-							.code = "doc_unavailable",
-						  .message =
-								"No host bridge callback configured for skill update persistence.",
-							.detailsJson = std::nullopt,
-							.retryable = true,
-							.retryAfterMs = 100,
-						},
-					};
-				}
-
-				std::string persistError;
-				std::filesystem::path savedPath;
-				if (!m_skillsHostCallbacks.persistSkillConfigEnv(
-					skill,
-					envContent,
-					persistError,
-					savedPath)) {
-					return blazeclaw::gateway::protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = blazeclaw::gateway::protocol::ErrorShape{
-							.code = "persist_failed",
-							.message = persistError.empty()
-								? "Failed to persist skill update payload."
-								: persistError,
-							.detailsJson = std::nullopt,
-							.retryable = false,
-							.retryAfterMs = std::nullopt,
-						},
-					};
-				}
-
-				RefreshSkillsState(m_activeConfig, true, L"skills.update");
-				PublishGatewaySkillsStateProjection();
-				if (m_skillsHostCallbacks.refreshSkillView) {
-					m_skillsHostCallbacks.refreshSkillView();
-				}
-
-				const std::string payload =
-					"{\"skill\":\"" + EscapeJsonUtf8(skill) +
-					"\",\"configPath\":\"" + EscapeJsonUtf8(ToNarrow(savedPath.wstring())) +
-					"\",\"updated\":true}";
-
-				return blazeclaw::gateway::protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson = payload,
-					.error = std::nullopt,
-				};
+					});
 			});
 	}
 
@@ -3957,43 +3630,332 @@ namespace blazeclaw::core {
 		}
 	}
 
+	blazeclaw::gateway::GatewayHost::ChatRuntimeResult
+		ServiceManager::ExecuteProviderChatRuntimePath(
+			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
+			const std::string& sessionId,
+			const std::string& runtimeMessage,
+			const std::string& activeProvider,
+			const std::string& activeModel)
+	{
+		auto providerRequest = request;
+		providerRequest.message = runtimeMessage;
+
+		if (activeProvider == "deepseek") {
+			ClearDeepSeekRunCancelled(providerRequest.runId);
+			if (!HasDeepSeekCredential()) {
+				return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+					.ok = false,
+					.assistantText = {},
+					.modelId = activeModel,
+					.errorCode = "deepseek_api_key_missing",
+					.errorMessage =
+						"DeepSeek API key missing. Configure DeepSeek extension first.",
+				};
+			}
+
+			const std::string effectiveModel = NormalizeDeepSeekApiModelId(
+				activeModel.empty() ? "deepseek-chat" : activeModel);
+			const auto apiKey = ResolveDeepSeekCredentialUtf8();
+			if (!apiKey.has_value() || apiKey->empty()) {
+				return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+					.ok = false,
+					.assistantText = {},
+					.modelId = effectiveModel,
+					.errorCode = "deepseek_api_key_missing",
+					.errorMessage =
+						"DeepSeek API key missing. Configure DeepSeek extension first.",
+				};
+			}
+
+			return InvokeDeepSeekRemoteChat(
+				providerRequest,
+				effectiveModel,
+				apiKey.value());
+		}
+
+		if (m_localModelActivationEnabled) {
+			const std::string prompt = BuildLocalModelPrompt(providerRequest);
+			std::string streamedLocalText;
+			std::vector<std::string> streamedLocalSnapshots;
+			TRACE(
+				"[LocalModel] request.enqueue runId=%s session=%s promptChars=%zu attachments=%s\n",
+				providerRequest.runId.c_str(),
+				sessionId.c_str(),
+				prompt.size(),
+				providerRequest.hasAttachments ? "true" : "false");
+			TRACE(
+				"[LocalModel] request.start runId=%s\n",
+				providerRequest.runId.c_str());
+
+			const auto localResult = m_localModelRuntime->GenerateStream(
+				localmodel::TextGenerationRequest{
+					.runId = providerRequest.runId,
+					.prompt = prompt,
+					.maxTokens = std::nullopt,
+					.temperature = std::nullopt,
+				},
+				[&](const std::string& delta) {
+					if (delta.empty()) {
+						return;
+					}
+
+					streamedLocalText += delta;
+					streamedLocalSnapshots.push_back(streamedLocalText);
+					if (request.onAssistantDelta) {
+						request.onAssistantDelta(streamedLocalText);
+					}
+				});
+			m_localModelRuntimeSnapshot = m_localModelRuntime->Snapshot();
+
+			if (!localResult.ok) {
+				const std::string errorCode =
+					localResult.error.has_value()
+					? localmodel::TextGenerationErrorCodeToString(
+						localResult.error->code)
+					: "chat_runtime_error";
+				const std::string errorMessage =
+					localResult.error.has_value() &&
+					!localResult.error->message.empty()
+					? localResult.error->message
+					: "local model generation failed";
+				TRACE(
+					"[LocalModel] request.terminal runId=%s state=%s latencyMs=%u tokens=%u reason=%s\n",
+					providerRequest.runId.c_str(),
+					localResult.cancelled ? "aborted" : "error",
+					localResult.latencyMs,
+					localResult.generatedTokens,
+					errorMessage.c_str());
+				return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+					.ok = false,
+					.assistantText = {},
+					.modelId = localResult.modelId,
+					.errorCode = errorCode,
+					.errorMessage = errorMessage,
+				};
+			}
+
+			std::string assistantText = streamedLocalText.empty()
+				? localResult.text
+				: streamedLocalText;
+			std::string modelId = localResult.modelId;
+			std::uint32_t latencyMs = localResult.latencyMs;
+			std::uint32_t generatedTokens = localResult.generatedTokens;
+			if (streamedLocalSnapshots.empty() &&
+				IsLikelyEchoResponse(request.message, assistantText)) {
+				TRACE(
+					"[LocalModel] request.retry runId=%s reason=echo_detected\n",
+					providerRequest.runId.c_str());
+				const std::string retryPrompt = BuildLocalModelRetryPrompt(providerRequest);
+				const auto retryResult = m_localModelRuntime->GenerateStream(
+					localmodel::TextGenerationRequest{
+						.runId = providerRequest.runId + "-retry",
+						.prompt = retryPrompt,
+						.maxTokens = std::nullopt,
+						.temperature = std::nullopt,
+					},
+					nullptr);
+				m_localModelRuntimeSnapshot = m_localModelRuntime->Snapshot();
+
+				if (retryResult.ok &&
+					!IsLikelyEchoResponse(request.message, retryResult.text)) {
+					assistantText = retryResult.text;
+					modelId = retryResult.modelId;
+					latencyMs = retryResult.latencyMs;
+					generatedTokens = retryResult.generatedTokens;
+				}
+			}
+
+			if (IsLikelyEchoResponse(request.message, assistantText)) {
+				TRACE(
+					"[LocalModel] request.terminal runId=%s state=error latencyMs=%u tokens=%u reason=echo_output_detected\n",
+					providerRequest.runId.c_str(),
+					latencyMs,
+					generatedTokens);
+				return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+					.ok = false,
+					.assistantText = {},
+					.modelId = modelId,
+					.errorCode = "local_model_echo_output",
+					.errorMessage = "local model echoed user input",
+				};
+			}
+
+			TRACE(
+				"[LocalModel] request.terminal runId=%s state=final latencyMs=%u tokens=%u\n",
+				providerRequest.runId.c_str(),
+				latencyMs,
+				generatedTokens);
+
+			return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+				.ok = true,
+				.assistantText = assistantText,
+				.assistantDeltas = streamedLocalSnapshots,
+				.modelId = modelId,
+				.errorCode = {},
+				.errorMessage = {},
+			};
+		}
+
+		if (m_activeConfig.localModel.enabled &&
+			!m_localModelActivationEnabled) {
+			TRACE(
+				"[LocalModel] request.fallback runId=%s reason=%s rolloutEligible=%s status=%s\n",
+				request.runId.c_str(),
+				m_localModelActivationReason.c_str(),
+				m_localModelRolloutEligible ? "true" : "false",
+				m_localModelRuntimeSnapshot.status.c_str());
+		}
+
+		const auto modelSelection = m_agentsModelRoutingService.SelectModel(
+			m_activeConfig.agent.model.empty()
+			? std::string()
+			: ToNarrow(m_activeConfig.agent.model),
+			"chat.send");
+
+		std::string retrievalContext;
+		if (m_activeConfig.embeddings.enabled && !request.message.empty()) {
+			const auto userEmbedding = m_embeddingsService.EmbedText(
+				EmbeddingRequest{
+					.text = ToWide(request.message),
+					.normalize = true,
+					.traceId = "chat-retrieval-query",
+				});
+			if (userEmbedding.ok) {
+				const auto matches = m_retrievalMemoryService.Query(
+					sessionId,
+					userEmbedding.vector,
+					2);
+				if (!matches.empty()) {
+					retrievalContext = " [ctx:";
+					for (std::size_t i = 0; i < matches.size(); ++i) {
+						if (i > 0) {
+							retrievalContext += " | ";
+						}
+
+						retrievalContext += matches[i].text;
+					}
+
+					retrievalContext += "]";
+				}
+
+				m_retrievalMemoryService.Upsert(
+					sessionId,
+					"user",
+					request.message,
+					userEmbedding.vector,
+					CurrentEpochMs());
+				m_retrievalMemory = m_retrievalMemoryService.Snapshot();
+			}
+		}
+
+		const auto embeddedRun = m_piEmbeddedService.QueueRun(
+			EmbeddedRunRequest{
+				.sessionId = sessionId,
+				.agentId = "default",
+				.message = request.message,
+			});
+
+		if (!embeddedRun.accepted) {
+			m_agentsModelRoutingService.RecordFailover(
+				modelSelection.selectedModel,
+				embeddedRun.reason,
+				embeddedRun.startedAtMs == 0
+				? 1735689800000
+				: embeddedRun.startedAtMs);
+			return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+				.ok = false,
+				.assistantText = {},
+				.modelId = activeModel,
+				.errorCode = "embedded_run_rejected",
+				.errorMessage = embeddedRun.reason,
+			};
+		}
+
+		const std::string assistantText = request.message.empty()
+			? "Received image attachment."
+			: ("Model(" + modelSelection.selectedModel + "): " +
+				request.message + retrievalContext);
+
+		if (m_activeConfig.embeddings.enabled && !assistantText.empty()) {
+			const auto assistantEmbedding = m_embeddingsService.EmbedText(
+				EmbeddingRequest{
+					.text = ToWide(assistantText),
+					.normalize = true,
+					.traceId = "chat-retrieval-index",
+				});
+			if (assistantEmbedding.ok) {
+				m_retrievalMemoryService.Upsert(
+					sessionId,
+					"assistant",
+					assistantText,
+					assistantEmbedding.vector,
+					CurrentEpochMs());
+				m_retrievalMemory = m_retrievalMemoryService.Snapshot();
+			}
+		}
+
+		const bool completed = m_piEmbeddedService.CompleteRun(
+			embeddedRun.runId,
+			"completed",
+			embeddedRun.startedAtMs + 1);
+		if (!completed) {
+			m_agentsModelRoutingService.RecordFailover(
+				modelSelection.selectedModel,
+				"embedded_completion_failed",
+				embeddedRun.startedAtMs + 1);
+			return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+				.ok = false,
+				.assistantText = {},
+				.modelId = modelSelection.selectedModel,
+				.errorCode = "embedded_completion_failed",
+				.errorMessage = "embedded completion failed",
+			};
+		}
+
+		return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
+			.ok = true,
+			.assistantText = assistantText,
+			.modelId = modelSelection.selectedModel,
+			.errorCode = {},
+			.errorMessage = {},
+		};
+	}
+
 	void ServiceManager::BindChatCallbacks()
 	{
 		m_gatewayHost.SetChatRuntimeCallback([this](
 			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
-				const std::string commandBodyForInline =
-					!request.bodyForCommands.empty()
-					? request.bodyForCommands
-					: request.message;
-				const bool shouldLoadInlineSkillCommands =
-					request.shouldLoadInlineSkillCommands ||
-					ShouldLoadSkillCommandsForInlineActions(
-						true,
-						commandBodyForInline);
-				if (!shouldLoadInlineSkillCommands) {
+				const auto preparedChatRequest =
+					m_chatRuntimeOrchestrationCoordinator.PrepareChatRequest(
+						request,
+						[this](
+							const bool allowTextCommands,
+							const std::string& commandBodyNormalized) {
+								return ShouldLoadSkillCommandsForInlineActions(
+									allowTextCommands,
+									commandBodyNormalized);
+						},
+						[this](const std::string& commandBodyNormalized) {
+							return ResolveSkillInvocationToolTarget(commandBodyNormalized);
+						},
+						[this](const std::string& commandBodyNormalized) {
+							return ResolveSkillInvocationPromptRewrite(commandBodyNormalized);
+						},
+						[this](
+							const std::vector<std::string>& requestedTargets,
+							const std::optional<std::string>& resolvedTarget) {
+								return BuildOrderedAllowedToolTargets(
+									requestedTargets,
+									resolvedTarget);
+						});
+
+				if (!preparedChatRequest.shouldLoadInlineSkillCommands) {
 					TRACE(
 						"[InlineActions] slash gate skipped skill command load for message: %s\n",
-						commandBodyForInline.c_str());
+						preparedChatRequest.commandBodyForInline.c_str());
 				}
 
-				const std::string sessionId =
-					request.sessionKey.empty() ? "main" : request.sessionKey;
-				const auto resolvedSkillInvocationToolTarget =
-					shouldLoadInlineSkillCommands
-					? ResolveSkillInvocationToolTarget(commandBodyForInline)
-					: std::nullopt;
-				const auto rewrittenSkillPromptMessage =
-					shouldLoadInlineSkillCommands
-					? ResolveSkillInvocationPromptRewrite(commandBodyForInline)
-					: std::nullopt;
-				const std::string baseAgentMessage =
-					!request.bodyForAgent.empty()
-					? request.bodyForAgent
-					: request.message;
-				const std::string inboundMessageForAgent =
-					rewrittenSkillPromptMessage.has_value()
-					? rewrittenSkillPromptMessage.value()
-					: baseAgentMessage;
 				const std::wstring resolvedPromptForRunWide =
 					m_skillsFacade.ResolvePromptForRun(
 						&m_skillsRunSnapshot,
@@ -4009,8 +3971,8 @@ namespace blazeclaw::core {
 				const std::string resolvedPromptForRunNarrow =
 					WideToNarrowAscii(resolvedPromptForRun);
 				const std::string runtimeMessage =
-					BuildSkillsInjectedMessage(
-						inboundMessageForAgent,
+					ChatRuntimeOrchestrationCoordinator::BuildSkillsInjectedMessage(
+						preparedChatRequest.inboundMessageForAgent,
 						resolvedPromptForRun,
 						static_cast<std::size_t>(
 							m_activeConfig.skills.limits.maxSkillsPromptChars));
@@ -4018,11 +3980,11 @@ namespace blazeclaw::core {
 				const std::string activeModel = m_activeChatModel;
 				auto executeRequest = [this,
 					request,
-					sessionId,
-					orderedAllowedTargets = BuildOrderedAllowedToolTargets(
-						request.orderedAllowedToolTargets,
-						resolvedSkillInvocationToolTarget),
-					resolvedSkillInvocationToolTarget,
+					sessionId = preparedChatRequest.sessionId,
+					orderedAllowedTargets =
+					preparedChatRequest.orderedAllowedTargets,
+					resolvedSkillInvocationToolTarget =
+					preparedChatRequest.resolvedSkillInvocationToolTarget,
 					runtimeMessage,
 					resolvedPromptForRunNarrow,
 					activeProvider,
@@ -4434,7 +4396,7 @@ namespace blazeclaw::core {
 				return m_chatRuntime.Execute(
 					CChatRuntime::RuntimeExecutionRequest{
 						.request = request,
-						.sessionId = sessionId,
+					 .sessionId = preparedChatRequest.sessionId,
 						.runtimeMessage = runtimeMessage,
 						.provider = activeProvider,
 						.model = activeModel,
