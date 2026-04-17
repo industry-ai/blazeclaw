@@ -24,9 +24,10 @@ Integrate `llama.cpp` as a first-class local inference backend in BlazeClawMfc s
 - This allows adding a new local provider path with minimal disruption if we preserve existing contracts.
 
 ## Implementation Status (Latest Audit)
-- Status: **not started in BlazeClawMfc runtime code path**.
+- Status: **Phase 1 build/dependency foundation started; runtime code path not started**.
 - Audit evidence (2026-04-06, commit `52f3ac0`): no llama-specific runtime classes/adapters were found in `src/core/runtime/LocalModel`, and no `llama.cpp` integration touchpoints were observed under `BlazeClawMfc` build/runtime sources.
-- Recommendation: keep this plan as backlog-ready design until dependency integration work begins.
+- Phase 1 update (2026-04-17): `BlazeClawMfc.vcxproj` now includes optional `llama.cpp` include/lib/bin wiring for Debug/Release x64 plus runtime DLL copy target. Dependency onboarding doc added at `docs/llamacpp-phase1-build-integration.md`. Required Debug x64 `msbuild` validation command passed.
+- Recommendation: proceed to runtime adapter implementation in `src/core/runtime/LocalModel` and config routing phases.
 
 ## Target End State
 1. A `llama.cpp` runtime backend exists behind the local runtime abstraction.

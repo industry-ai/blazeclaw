@@ -14,6 +14,7 @@ Debug/
 packages/
 node_modules/
 
+models/
 model.onnx.data
 /blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/model.onnx_data
 /blazeclaw/BlazeClawMfc/models/chat/Qwen3-0.6B-ONNX/model_fp16.onnx
