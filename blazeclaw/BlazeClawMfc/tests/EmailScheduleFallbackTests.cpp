@@ -1,6 +1,7 @@
 #include "gateway/executors/EmailScheduleExecutor.h"
 
 #include "config/ConfigModels.h"
+#include "core/EmailPolicyOrchestrationService.h"
 
 #include <catch2/catch_all.hpp>
 #include <nlohmann/json.hpp>
@@ -330,4 +331,81 @@ TEST_CASE(
 	REQUIRE(resolved.retryDelayMs == 50);
 	REQUIRE(resolved.requiresApproval);
 	REQUIRE(resolved.approvalTokenTtlMinutes == 90);
+}
+
+TEST_CASE(
+	"EmailPolicyOrchestrationService resolves fallback policy with config parity",
+	"[email][fallback][service]") {
+	blazeclaw::config::AppConfig config;
+	auto& defaults = config.email.policy.defaults;
+	defaults.id = L"default-policy";
+	defaults.backends = { L"himalaya" };
+	defaults.actions.execError = L"retry_then_continue";
+	defaults.retry.maxAttempts = 2;
+
+	auto& tool = config.email.policy.tool[L"email.schedule"];
+	tool.id = L"tool-policy";
+	tool.backends = { L"imap-smtp-email" };
+	tool.actions.execError = L"stop";
+	tool.retry.maxAttempts = 3;
+	tool.retry.retryDelayMs = 120;
+	tool.approval.requiresApproval = false;
+
+	const blazeclaw::core::EmailPolicyOrchestrationService service;
+	const auto resolved = service.ResolveFallbackPolicy(
+		config,
+		L"email.schedule",
+		L"email.send");
+
+	REQUIRE(resolved.profileId == L"tool-policy");
+	REQUIRE(resolved.backends.size() == 1);
+	REQUIRE(resolved.backends[0] == L"imap-smtp-email");
+	REQUIRE(resolved.onExecError == L"stop");
+	REQUIRE(resolved.retryMaxAttempts == 3);
+	REQUIRE(resolved.retryDelayMs == 120);
+	REQUIRE_FALSE(resolved.requiresApproval);
+}
+
+TEST_CASE(
+	"EmailPolicyOrchestrationService builds gateway binding with runtime gate",
+	"[email][fallback][service]") {
+	blazeclaw::config::EmailFallbackConfig emailConfig;
+	emailConfig.preflight.enabled = true;
+
+	blazeclaw::core::EmailPolicyOrchestrationService::ResolvedEmailFallbackPolicy
+		resolvedPolicy;
+	resolvedPolicy.profileId = L"tool-policy";
+	resolvedPolicy.backends = { L"himalaya", L"imap-smtp-email" };
+	resolvedPolicy.onUnavailable = L"continue";
+	resolvedPolicy.onAuthError = L"stop";
+	resolvedPolicy.onExecError = L"retry_then_continue";
+	resolvedPolicy.retryMaxAttempts = 4;
+	resolvedPolicy.retryDelayMs = 200;
+	resolvedPolicy.requiresApproval = true;
+	resolvedPolicy.approvalTokenTtlMinutes = 45;
+
+	const blazeclaw::core::EmailPolicyOrchestrationService service;
+	const auto enabledBinding = service.BuildGatewayPolicyBinding(
+		emailConfig,
+		true,
+		true,
+		resolvedPolicy);
+	REQUIRE(enabledBinding.preflightEnabled);
+	REQUIRE(enabledBinding.runtimeEnabled);
+	REQUIRE(enabledBinding.runtimeEnforce);
+	REQUIRE(enabledBinding.backends.size() == 2);
+	REQUIRE(enabledBinding.retryMaxAttempts == 4);
+	REQUIRE(enabledBinding.retryDelayMs == 200);
+	REQUIRE(enabledBinding.profileId == "tool-policy");
+
+	const auto disabledBinding = service.BuildGatewayPolicyBinding(
+		emailConfig,
+		false,
+		false,
+		resolvedPolicy);
+	REQUIRE_FALSE(disabledBinding.runtimeEnabled);
+	REQUIRE_FALSE(disabledBinding.runtimeEnforce);
+	REQUIRE(disabledBinding.retryMaxAttempts == 1);
+	REQUIRE(disabledBinding.retryDelayMs == 0);
+	REQUIRE(disabledBinding.profileId == "legacy-policy");
 }

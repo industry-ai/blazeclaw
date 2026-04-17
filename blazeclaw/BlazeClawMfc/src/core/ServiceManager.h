@@ -12,6 +12,7 @@
 #include "AgentsToolPolicyService.h"
 #include "AgentsWorkspaceService.h"
 #include "AcpSpawnService.h"
+#include "EmailPolicyOrchestrationService.h"
 #include "OnnxEmbeddingsService.h"
 #include "PiEmbeddedService.h"
 #include "RetrievalMemoryService.h"
@@ -117,18 +118,6 @@ namespace blazeclaw::core {
 		bool PumpGatewayNetworkOnce(std::string& error);
 
 	private:
-		struct EmailFallbackResolvedPolicy {
-			std::wstring profileId;
-			std::vector<std::wstring> backends;
-			std::wstring onUnavailable;
-			std::wstring onAuthError;
-			std::wstring onExecError;
-			std::uint32_t retryMaxAttempts = 1;
-			std::uint32_t retryDelayMs = 0;
-			bool requiresApproval = true;
-			std::uint32_t approvalTokenTtlMinutes = 60;
-		};
-
 		struct ServiceManagerState {
 			struct EmbeddedRuntimeState {
 				std::vector<std::string> dynamicLoopCanaryProviders;
@@ -254,9 +243,6 @@ namespace blazeclaw::core {
 			GatewayLiveRuntimeState gatewayLiveRuntime;
 		};
 
-		[[nodiscard]] EmailFallbackResolvedPolicy ResolveEmailFallbackPolicy(
-			const std::wstring& toolName,
-			const std::wstring& capabilityName) const;
 		static constexpr std::size_t kChatRuntimeQueueCapacity =
 			runtime::contracts::kDefaultQueueCapacity;
 		static constexpr std::uint64_t kChatRuntimeQueueWaitTimeoutMs =
@@ -348,7 +334,9 @@ namespace blazeclaw::core {
 		std::string m_activeChatProvider = "local";
 		std::string m_activeChatModel = "default";
 		blazeclaw::config::AppConfig m_activeConfig;
-		EmailFallbackResolvedPolicy m_emailFallbackResolvedPolicy;
+		EmailPolicyOrchestrationService m_emailPolicyOrchestrationService;
+		EmailPolicyOrchestrationService::ResolvedEmailFallbackPolicy
+			m_emailFallbackResolvedPolicy;
 		FeatureRegistry m_registry;
 		AgentsCatalogService m_agentsCatalogService;
 		AgentScopeSnapshot m_agentsScope;

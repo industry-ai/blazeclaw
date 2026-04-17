@@ -2367,29 +2367,6 @@ namespace blazeclaw::core {
 		m_skillsHostCallbacks = std::move(callbacks);
 	}
 
-	ServiceManager::EmailFallbackResolvedPolicy
-		ServiceManager::ResolveEmailFallbackPolicy(
-			const std::wstring& toolName,
-			const std::wstring& capabilityName) const {
-		const auto resolvedPolicy = blazeclaw::config::ResolveEmailFallbackPolicy(
-			m_activeConfig.email.policy,
-			toolName,
-			capabilityName);
-
-		EmailFallbackResolvedPolicy resolved;
-		resolved.profileId = resolvedPolicy.profileId;
-		resolved.backends = resolvedPolicy.backends;
-		resolved.onUnavailable = resolvedPolicy.onUnavailable;
-		resolved.onAuthError = resolvedPolicy.onAuthError;
-		resolved.onExecError = resolvedPolicy.onExecError;
-		resolved.retryMaxAttempts = resolvedPolicy.retryMaxAttempts;
-		resolved.retryDelayMs = resolvedPolicy.retryDelayMs;
-		resolved.requiresApproval = resolvedPolicy.requiresApproval;
-		resolved.approvalTokenTtlMinutes = resolvedPolicy.approvalTokenTtlMinutes;
-
-		return resolved;
-	}
-
 	blazeclaw::gateway::SkillsCatalogGatewayState ServiceManager::BuildGatewaySkillsState() const {
 		return m_skillsHooksCoordinator.BuildGatewaySkillsState(
 			CSkillsHooksCoordinator::GatewayStateContext{
@@ -2873,9 +2850,11 @@ namespace blazeclaw::core {
 
 		const auto emailPolicy =
 			m_serviceBootstrapCoordinator.ResolveEmailPolicySettings(m_activeConfig);
-		m_emailFallbackResolvedPolicy = ResolveEmailFallbackPolicy(
-			L"email.schedule",
-			L"email.send");
+		m_emailFallbackResolvedPolicy =
+			m_emailPolicyOrchestrationService.ResolveFallbackPolicy(
+				m_activeConfig,
+				L"email.schedule",
+				L"email.send");
 		m_state.emailPolicy.rolloutMode = emailPolicy.rolloutMode;
 		m_state.emailPolicy.enforceChannel = emailPolicy.enforceChannel;
 		m_state.emailPolicy.rollbackBridgeEnabled = emailPolicy.rollbackBridgeEnabled;
@@ -3610,31 +3589,26 @@ namespace blazeclaw::core {
 	{
 		m_gatewayHost.SetEmbeddedOrchestrationPath(
 			ToNarrow(m_activeConfig.embedded.orchestrationPath));
+		const auto gatewayEmailBinding =
+			m_emailPolicyOrchestrationService.BuildGatewayPolicyBinding(
+				m_activeConfig.email,
+				m_state.emailPolicy.runtimeEnabled,
+				m_state.emailPolicy.runtimeEnforce,
+				m_emailFallbackResolvedPolicy);
 		m_gatewayHost.SetEmailFallbackRuntimeFlags(
-			m_activeConfig.email.preflight.enabled,
-			m_state.emailPolicy.runtimeEnabled,
-			m_state.emailPolicy.runtimeEnforce);
-		std::vector<std::string> resolvedBackends;
-		resolvedBackends.reserve(m_emailFallbackResolvedPolicy.backends.size());
-		for (const auto& backend : m_emailFallbackResolvedPolicy.backends) {
-			resolvedBackends.push_back(ToNarrow(backend));
-		}
+			gatewayEmailBinding.preflightEnabled,
+			gatewayEmailBinding.runtimeEnabled,
+			gatewayEmailBinding.runtimeEnforce);
 		m_gatewayHost.SetEmailFallbackResolvedPolicy(
-			resolvedBackends,
-			ToNarrow(m_emailFallbackResolvedPolicy.onUnavailable),
-			ToNarrow(m_emailFallbackResolvedPolicy.onAuthError),
-			ToNarrow(m_emailFallbackResolvedPolicy.onExecError),
-			m_state.emailPolicy.runtimeEnabled
-			? m_emailFallbackResolvedPolicy.retryMaxAttempts
-			: std::uint32_t{ 1 },
-			m_state.emailPolicy.runtimeEnabled
-			? m_emailFallbackResolvedPolicy.retryDelayMs
-			: std::uint32_t{ 0 },
-			m_emailFallbackResolvedPolicy.requiresApproval,
-			m_emailFallbackResolvedPolicy.approvalTokenTtlMinutes,
-			m_state.emailPolicy.runtimeEnabled
-			? ToNarrow(m_emailFallbackResolvedPolicy.profileId)
-			: std::string("legacy-policy"));
+			gatewayEmailBinding.backends,
+			gatewayEmailBinding.onUnavailable,
+			gatewayEmailBinding.onAuthError,
+			gatewayEmailBinding.onExecError,
+			gatewayEmailBinding.retryMaxAttempts,
+			gatewayEmailBinding.retryDelayMs,
+			gatewayEmailBinding.requiresApproval,
+			gatewayEmailBinding.approvalTokenTtlMinutes,
+			gatewayEmailBinding.profileId);
 	}
 
 	void ServiceManager::BindToolRuntimeCallbacks()
@@ -4998,30 +4972,32 @@ namespace blazeclaw::core {
 		m_state.emailPolicy.rollbackBridgeEnabled = emailPolicy.rollbackBridgeEnabled;
 		m_state.emailPolicy.canaryEligible = emailPolicy.canaryEligible;
 
-		m_emailFallbackResolvedPolicy = ResolveEmailFallbackPolicy(
-			L"email.schedule",
-			L"email.send");
+		m_emailFallbackResolvedPolicy =
+			m_emailPolicyOrchestrationService.ResolveFallbackPolicy(
+				m_activeConfig,
+				L"email.schedule",
+				L"email.send");
 
-		std::vector<std::string> resolvedBackends;
-		resolvedBackends.reserve(m_emailFallbackResolvedPolicy.backends.size());
-		for (const auto& backend : m_emailFallbackResolvedPolicy.backends) {
-			resolvedBackends.push_back(ToNarrow(backend));
-		}
-
+		const auto gatewayEmailBinding =
+			m_emailPolicyOrchestrationService.BuildGatewayPolicyBinding(
+				m_activeConfig.email,
+				m_state.emailPolicy.runtimeEnabled,
+				m_state.emailPolicy.runtimeEnforce,
+				m_emailFallbackResolvedPolicy);
 		m_gatewayHost.SetEmailFallbackRuntimeFlags(
-			m_activeConfig.email.preflight.enabled,
-			m_state.emailPolicy.runtimeEnabled,
-			m_state.emailPolicy.runtimeEnforce);
+			gatewayEmailBinding.preflightEnabled,
+			gatewayEmailBinding.runtimeEnabled,
+			gatewayEmailBinding.runtimeEnforce);
 		m_gatewayHost.SetEmailFallbackResolvedPolicy(
-			resolvedBackends,
-			ToNarrow(m_emailFallbackResolvedPolicy.onUnavailable),
-			ToNarrow(m_emailFallbackResolvedPolicy.onAuthError),
-			ToNarrow(m_emailFallbackResolvedPolicy.onExecError),
-			m_emailFallbackResolvedPolicy.retryMaxAttempts,
-			m_emailFallbackResolvedPolicy.retryDelayMs,
-			m_emailFallbackResolvedPolicy.requiresApproval,
-			m_emailFallbackResolvedPolicy.approvalTokenTtlMinutes,
-			ToNarrow(m_emailFallbackResolvedPolicy.profileId));
+			gatewayEmailBinding.backends,
+			gatewayEmailBinding.onUnavailable,
+			gatewayEmailBinding.onAuthError,
+			gatewayEmailBinding.onExecError,
+			gatewayEmailBinding.retryMaxAttempts,
+			gatewayEmailBinding.retryDelayMs,
+			gatewayEmailBinding.requiresApproval,
+			gatewayEmailBinding.approvalTokenTtlMinutes,
+			gatewayEmailBinding.profileId);
 
 		m_configSchemaService.Invalidate();
 		RefreshGatewaySkillsStateProjection();

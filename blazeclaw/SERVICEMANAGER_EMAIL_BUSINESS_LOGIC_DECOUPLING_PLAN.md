@@ -1,0 +1,197 @@
+# ServiceManager Email Business Logic Decoupling Plan
+
+## Goal
+Remove email-specific business logic from `ServiceManager` and keep it as a lifecycle/composition facade.
+
+## Problem Statement
+`ServiceManager` currently owns multiple email-domain responsibilities (policy resolution details, runtime fallback wiring decisions, state shaping, and gateway-level email-specific handling). This increases coupling and makes `ServiceManager` harder to reason about, test, and evolve.
+
+## Target Architecture
+`ServiceManager` should only:
+- request resolved email policy/runtime DTOs from specialized modules,
+- wire callbacks and delegates,
+- expose summary snapshots.
+
+Email business behavior should move to dedicated email-domain services under `src/core` and/or `src/gateway/executors` composition boundaries.
+
+---
+
+## Scope
+
+### In Scope
+- Extract email business rules from `ServiceManager` into dedicated modules.
+- Keep Option 5 + Option 6 behavior parity (dependency preflight health index + configurable fallback policy profiles).
+- Preserve runtime behavior and gateway contract compatibility.
+- Add/extend tests for decoupled orchestration seams.
+
+### Out of Scope
+- Rewriting the full gateway architecture.
+- Changing external protocol contracts unless strictly necessary.
+- Broad refactors unrelated to email runtime/fallback orchestration.
+
+---
+
+## Design Principles
+- `ServiceManager` remains a composition root and lifecycle facade.
+- Business rules live in domain services, not in startup/wiring orchestrators.
+- DTO-in/DTO-out contracts between orchestration and domain modules.
+- Backward-compatible policy semantics and diagnostics.
+- OpenClaw workflow parity preserved without hardcoded flow-specific logic.
+
+---
+
+## Proposed Module Split
+
+## 1) `EmailPolicyOrchestrationService`
+**Responsibilities**
+- Resolve effective policy profile selection (default/capability/tool).
+- Normalize and validate runtime policy actions.
+- Produce resolved DTO for runtime usage.
+
+**ServiceManager interaction**
+- `ServiceManager` calls a single `ResolveRuntimePolicy(...)` method and consumes returned DTO.
+
+## 2) `EmailFallbackRuntimeCoordinator`
+**Responsibilities**
+- Runtime fallback decisioning for unavailable/auth/exec-error scenarios.
+- Retry strategy interpretation.
+- Approval-required gate handling (pre-execution decision output).
+
+**ServiceManager interaction**
+- `ServiceManager` delegates fallback outcome requests and consumes result envelopes.
+
+## 3) `EmailPreflightHealthService`
+**Responsibilities**
+- Option 5 preflight dependency probing and health index shaping.
+- Capability readiness state production.
+
+**ServiceManager interaction**
+- `ServiceManager` consumes health snapshot only for publication/diagnostics.
+
+## 4) `EmailRuntimeDiagnosticsProjector`
+**Responsibilities**
+- Build email-focused diagnostics projection from domain snapshots.
+- Keep report-field mapping out of `ServiceManager`.
+
+**ServiceManager interaction**
+- `ServiceManager` includes prebuilt projection into global diagnostics snapshot.
+
+---
+
+## Tracking Plan
+
+## Phase A — Baseline and Seam Inventory
+- [x] Enumerate all email-related fields and methods in `ServiceManager.h/.cpp`.
+- [x] Map each usage site to one of: policy resolution, fallback decisioning, preflight, diagnostics projection, gateway wiring.
+- [x] Produce dependency graph of current email orchestration calls.
+
+Phase A notes:
+- Inventory identified primary email seams in `ServiceManager`:
+  - policy resolution (`ResolveEmailFallbackPolicy` + config/profile rollover state),
+  - gateway wiring (`SetEmailFallbackRuntimeFlags`, `SetEmailFallbackResolvedPolicy`),
+  - diagnostics projection (`BuildOperatorDiagnosticsReport` email fields),
+  - state carrier fields (`m_emailFallbackResolvedPolicy`, `m_state.emailPolicy`).
+- Dependency flow baseline captured:
+  - `AppConfig.email` + `StartupPolicyResolver::EmailPolicySettings`
+  - → email fallback resolution
+  - → gateway policy binding
+  - → diagnostics projection.
+
+## Phase B — Contract Extraction
+- [x] Define DTOs/interfaces for extracted services.
+- [x] Add adapter layer where necessary to preserve current call signatures.
+- [x] Mark deprecated direct email logic paths in `ServiceManager` with migration TODO markers.
+
+Phase B notes:
+- Added `EmailPolicyOrchestrationService` with explicit DTO contracts:
+  - `ResolvedEmailFallbackPolicy`
+  - `GatewayEmailPolicyBinding`
+- Extracted service API:
+  - `ResolveFallbackPolicy(const AppConfig&, toolName, capabilityName)`
+  - `BuildGatewayPolicyBinding(const EmailFallbackConfig&, runtimeEnabled, runtimeEnforce, resolvedPolicy)`
+- Removed in-class resolver declaration/struct ownership from `ServiceManager` and replaced with service-owned DTO usage.
+
+## Phase C — Policy Resolution Extraction
+- [x] Move remaining email policy business logic into `EmailPolicyOrchestrationService`.
+- [x] Replace `ServiceManager` inline logic with single service call.
+- [x] Verify policy profile behavior parity for default/capability/tool paths.
+
+Phase C notes:
+- `ServiceManager` now delegates email fallback resolution and gateway policy projection to `EmailPolicyOrchestrationService` in:
+  - startup policy configuration path,
+  - gateway callback binding path,
+  - managed config reload apply path.
+- Added service-focused parity tests in `EmailScheduleFallbackTests.cpp` for:
+  - fallback policy resolution behavior,
+  - runtime-gated gateway binding behavior.
+
+## Phase D — Runtime Fallback Extraction (Option 6)
+- [ ] Move fallback decisioning/retry/approval behavior to `EmailFallbackRuntimeCoordinator`.
+- [ ] Replace `ServiceManager` branching with coordinator delegation.
+- [ ] Validate unavailable/auth/exec-error action outcomes parity.
+
+## Phase E — Preflight/Health Extraction (Option 5)
+- [ ] Move dependency probe/health-index business shaping to `EmailPreflightHealthService`.
+- [ ] Keep service-level publication in `ServiceManager` as thin projection wiring.
+- [ ] Validate startup/runtime health state reporting parity.
+
+## Phase F — Diagnostics Decoupling
+- [ ] Move email diagnostics projection assembly out of `ServiceManager`.
+- [ ] Keep `ServiceManager` report builder invocation unchanged from caller perspective.
+- [ ] Validate diagnostics fields for email rollout mode, policy state, and fallback counters.
+
+## Phase G — Test Hardening
+- [ ] Add unit tests for extracted email services.
+- [ ] Add orchestration seam tests proving `ServiceManager` delegates instead of computes.
+- [ ] Add scenario tests for fallback + approval + retry transitions.
+- [ ] Run parity-focused test suites and contract checks.
+
+## Phase H — Cleanup and Finalization
+- [ ] Remove obsolete email helper branches from `ServiceManager.cpp`.
+- [ ] Reduce `ServiceManagerState::EmailPolicyState` surface to summary-only data.
+- [ ] Update docs (`ServiceManager.md`, architecture docs, rollout notes).
+
+---
+
+## Candidate File Touchpoints
+- `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h`
+- `blazeclaw/BlazeClawMfc/src/core/ServiceManager.cpp`
+- `blazeclaw/BlazeClawMfc/src/core/bootstrap/StartupPolicyResolver.*`
+- `blazeclaw/BlazeClawMfc/src/core/bootstrap/CServiceBootstrapCoordinator.*`
+- `blazeclaw/BlazeClawMfc/src/gateway/executors/EmailScheduleExecutor.*`
+- `blazeclaw/BlazeClawMfc/tests/*` (new service and orchestration tests)
+
+---
+
+## Milestones
+- [ ] M1: Email policy logic fully delegated (no direct computation in `ServiceManager`).
+- [ ] M2: Fallback coordinator integrated with Option 5/6 parity.
+- [ ] M3: Diagnostics projection decoupled.
+- [ ] M4: Test coverage and parity checks green.
+
+---
+
+## Risks and Mitigations
+- **Risk:** Behavior drift in fallback policy handling.
+  - **Mitigation:** Golden-case tests for unavailable/auth/exec-error paths.
+- **Risk:** Hidden coupling to gateway state surfaces.
+  - **Mitigation:** Introduce explicit projection DTOs and seam tests.
+- **Risk:** Regression in startup/runtime diagnostics.
+  - **Mitigation:** Snapshot-based diagnostics regression comparison updates.
+
+---
+
+## Validation Checklist
+- [ ] Required build command passes:
+  - `msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001`
+- [ ] Email fallback behavior parity validated for Option 5 + Option 6.
+- [ ] No email-domain branching remains in `ServiceManager` except composition/delegation.
+- [ ] `ServiceManager` remains deterministic and lifecycle-focused.
+
+---
+
+## Definition of Done
+- Email business logic is implemented in dedicated services.
+- `ServiceManager` contains only orchestration/composition and summary projection usage.
+- Existing runtime behavior and protocol outputs are parity-compatible.
+- Tests and docs are updated and passing.

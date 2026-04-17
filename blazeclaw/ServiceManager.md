@@ -117,6 +117,13 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
    - `ServiceManager::ConfigurePolicies(...)` now consumes
      `CServiceBootstrapCoordinator::ResolveEmailPolicySettings(...)`.
    - Removed inline email rollout/enforcement policy branch logic from `ServiceManager.cpp`.
+   - ✅ Implemented for email fallback policy orchestration extraction.
+   - Added `EmailPolicyOrchestrationService` DTOs:
+     - `ResolvedEmailFallbackPolicy`
+     - `GatewayEmailPolicyBinding`
+   - `ServiceManager` now delegates email fallback policy resolution and gateway binding projection to
+     `EmailPolicyOrchestrationService` in startup, gateway callback binding, and managed reload flows.
+   - Removed `ServiceManager`-owned inline `ResolveEmailFallbackPolicy(...)` resolver logic.
    - ✅ Implemented for tool skill-root/env runtime resolver cluster.
    - Added `StartupPolicyResolver::ToolRuntimePolicySettings` DTO.
    - Runtime tool wiring now consumes
