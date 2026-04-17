@@ -264,6 +264,29 @@ namespace {
 			ToWide(runtime.effectiveExecutionProvider).c_str());
 		AppendMainFrameStatusLine(executionProviderLine);
 
+		const bool activeLocalProvider =
+			_wcsicmp(config.chat.activeProvider.c_str(), L"local") == 0;
+		const bool activeLlamaModel =
+			config.chat.activeModel.rfind(L"llama/", 0) == 0;
+		if (activeLocalProvider && activeLlamaModel) {
+			std::filesystem::path ggufPath(config.localModel.modelPath);
+			if (ggufPath.is_relative()) {
+				ggufPath =
+					std::filesystem::path(config.localModel.storageRoot) / ggufPath;
+			}
+
+			std::error_code existsError;
+			const bool ggufExists =
+				std::filesystem::exists(ggufPath, existsError) && !existsError;
+			if (!ggufExists) {
+				const CString ggufMissingLine(
+					(L"[Chat] startup.localModel.diagnostic - llama selected but gguf missing: " +
+						ggufPath.wstring())
+					.c_str());
+				AppendMainFrameStatusLine(ggufMissingLine);
+			}
+		}
+
 		CString cudaStatusLine;
 		const std::wstring cudaReason =
 			runtime.cudaExecutionProviderReason.empty()

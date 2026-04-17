@@ -402,7 +402,22 @@ void CSettingsDialog::OnOK()
 		const std::string activeModel = app->Services().ActiveChatModel();
 
 		std::optional<size_t> targetIndex;
+		const int selectedItem =
+			m_listModels.GetNextItem(-1, LVNI_SELECTED);
+		if (selectedItem >= 0) {
+			const size_t selectedIndex =
+				(size_t)m_listModels.GetItemData(selectedItem);
+			if (selectedIndex < m_models.size() &&
+				m_models[selectedIndex].enabled) {
+				targetIndex = selectedIndex;
+			}
+		}
+
 		for (size_t i = 0; i < m_models.size(); ++i) {
+			if (targetIndex.has_value()) {
+				break;
+			}
+
 			if (!m_models[i].enabled) {
 				continue;
 			}
