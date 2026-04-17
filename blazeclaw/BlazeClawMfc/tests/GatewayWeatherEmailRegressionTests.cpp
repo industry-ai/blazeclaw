@@ -305,8 +305,8 @@ TEST_CASE(
 }
 
 TEST_CASE(
-	"Weather-email generalized city aliases keep deterministic parity path",
-	"[gateway][weather-email][email-schedule][city-alias][regression]") {
+	"Weather-email explicit location extraction keeps deterministic parity path",
+	"[gateway][weather-email][email-schedule][explicit-location][regression]") {
 	ScopedEnvVar modeEnv("BLAZECLAW_EMAIL_DELIVERY_MODE");
 	ScopedEnvVar imapModeEnv("BLAZECLAW_EMAIL_IMAP_SMTP_MODE");
 	ScopedEnvVar backendsEnv("BLAZECLAW_EMAIL_DELIVERY_BACKENDS");
@@ -327,8 +327,8 @@ TEST_CASE(
 	blazeclaw::config::GatewayConfig config;
 	REQUIRE(host.StartLocalOnly(config));
 
-	const std::string sessionKey = "weather-email-city-alias-regression";
-	const std::string requestId = "weather-email-city-alias-regression-run";
+	const std::string sessionKey = "weather-email-explicit-location-regression";
+	const std::string requestId = "weather-email-explicit-location-regression-run";
 	const std::string prompt =
 		"Check tomorrow's weather in Beijing, write a short report, and email it to jicheng@whu.edu.cn now.";
 	const std::string sendPayload =
@@ -336,7 +336,7 @@ TEST_CASE(
 		sessionKey +
 		"\",\"message\":\"" +
 		prompt +
-		"\",\"idempotencyKey\":\"weather-email-city-alias-idem\","
+		"\",\"idempotencyKey\":\"weather-email-explicit-location-idem\","
 		"\"hasConnectedClient\":true,\"clientConnectionId\":\"test-conn-city\","
 		"\"clientCaps\":[\"TOOL_EVENTS\"]}";
 

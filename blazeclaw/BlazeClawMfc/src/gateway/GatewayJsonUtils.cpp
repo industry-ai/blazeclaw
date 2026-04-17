@@ -464,28 +464,32 @@ namespace blazeclaw::gateway::prompt {
 			return "tomorrow";
 		}
 
-		std::string ResolveCityValue(const std::string& lowered) {
-			static const std::vector<std::pair<std::vector<std::string>, std::string>>
-				kCityAliasGroups = {
-					{ { "wuhan", "武汉" }, "Wuhan" },
-					{ { "beijing", "北京" }, "Beijing" },
-					{ { "shanghai", "上海" }, "Shanghai" },
-					{ { "guangzhou", "广州" }, "Guangzhou" },
-					{ { "shenzhen", "深圳" }, "Shenzhen" },
-					{ { "hangzhou", "杭州" }, "Hangzhou" },
-					{ { "chengdu", "成都" }, "Chengdu" },
-					{ { "chongqing", "重庆" }, "Chongqing" },
-					{ { "nanjing", "南京" }, "Nanjing" },
-					{ { "tianjin", "天津" }, "Tianjin" },
-					{ { "xian", "xi'an", "西安" }, "Xi'an" },
-					{ { "suzhou", "苏州" }, "Suzhou" },
-					{ { "changsha", "长沙" }, "Changsha" },
-					{ { "zhengzhou", "郑州" }, "Zhengzhou" },
-			};
+		std::string ExtractExplicitLocationValue(const std::string& message) {
+			static const std::regex kEnglishLocationRegex(
+				R"(\b(?:in|at|for)\s+([A-Za-z][A-Za-z\-' ]{1,48}))",
+				std::regex_constants::icase);
+			static const std::regex kChineseLocationRegex(
+				R"((?:在|查一下|查下|查询|看一下|看下)([^，。！？；\s]{1,16})(?:的)?(?:天气|气温|预报|温度))");
 
-			for (const auto& cityGroup : kCityAliasGroups) {
-				if (ContainsAnyToken(lowered, cityGroup.first)) {
-					return cityGroup.second;
+			std::smatch chineseMatch;
+			if (std::regex_search(message, chineseMatch, kChineseLocationRegex) &&
+				chineseMatch.size() >= 2) {
+				const std::string candidate = json::Trim(chineseMatch[1].str());
+				if (!candidate.empty()) {
+					return candidate;
+				}
+			}
+
+			std::smatch englishMatch;
+			if (std::regex_search(message, englishMatch, kEnglishLocationRegex) &&
+				englishMatch.size() >= 2) {
+				std::string candidate = json::Trim(englishMatch[1].str());
+				while (!candidate.empty() && std::ispunct(static_cast<unsigned char>(candidate.back())) != 0) {
+					candidate.pop_back();
+				}
+
+				if (!candidate.empty()) {
+					return candidate;
 				}
 			}
 
@@ -585,7 +589,7 @@ namespace blazeclaw::gateway::prompt {
 				 "今天",
 					"明天",
 				});
-		signals.city = ResolveCityValue(lowered);
+		signals.city = ExtractExplicitLocationValue(normalized);
 
 		if (!signals.hasWeatherCapabilityIntent) {
 			signals.missReasons.push_back("missing_weather");
