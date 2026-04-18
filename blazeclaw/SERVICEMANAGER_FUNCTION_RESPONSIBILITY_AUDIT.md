@@ -211,8 +211,25 @@ Phase 1 implementation notes:
   - `ServiceManager phase1 contract: delegates chat orchestration, skills update handling, and skill projection`
 
 ## Phase 2 (medium risk)
-4. Split `InitializeModules()` into startup coordinators (`SkillsStartupCoordinator`, `HooksStartupCoordinator`, `FixtureStartupValidatorFacade`).
-5. Extract `ApplyManagedRuntimeConfigDiff(...)` into managed reload coordinator with explicit result DTO.
+4. ✅ Split `InitializeModules()` into startup coordinators (`SkillsStartupCoordinator`, `HooksStartupCoordinator`, `FixtureStartupValidatorFacade`).
+5. ✅ Extract `ApplyManagedRuntimeConfigDiff(...)` into managed reload coordinator with explicit result DTO.
+
+Phase 2 implementation notes:
+- Added startup orchestration seams:
+  - `SkillsStartupCoordinator`
+  - `HooksStartupCoordinator`
+  - `FixtureStartupValidatorFacade`
+- `InitializeModules()` now delegates branch gating and execution sequencing for:
+  - startup skills refresh mode,
+  - hook bootstrap gating,
+  - fixture validation gating.
+- Added `ManagedRuntimeConfigDiffCoordinator` and delegated:
+  - auth session generation guard evaluation,
+  - local model reload decision envelope.
+- `ServiceManager::ApplyManagedRuntimeConfigDiff(...)` remains the composition/state
+  facade while coordinator handles reusable decision logic.
+- Added contract test coverage:
+  - `ServiceManager phase2 contract: delegates startup and managed config diff seams`
 
 ## Phase 3 (incremental quality)
 6. Split diagnostics assembly in `BuildOperatorDiagnosticsReport()` into projector modules.

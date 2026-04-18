@@ -197,6 +197,19 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
      `BuildGatewaySkillEntry(...)` projection/mapping logic.
    - Added orchestration contract coverage for all Phase 1 delegation paths.
 
+19. **Extract Phase 2 startup and managed-reload orchestration seams**
+   - ✅ Implemented.
+   - Added startup orchestrators/facade:
+     - `SkillsStartupCoordinator`
+     - `HooksStartupCoordinator`
+     - `FixtureStartupValidatorFacade`
+   - `InitializeModules()` now delegates startup branch orchestration to
+     extracted seams while preserving behavior parity.
+   - Added `ManagedRuntimeConfigDiffCoordinator` and delegated:
+     - auth-session generation guard evaluation,
+     - local-model reload decision envelope.
+   - Added contract coverage for Phase 2 delegation seams.
+
 7. **Reduce duplicated state projections**
    - Build snapshot DTOs once per report/tick where possible.
    - Reuse immutable snapshots across diagnostics and gateway publication.

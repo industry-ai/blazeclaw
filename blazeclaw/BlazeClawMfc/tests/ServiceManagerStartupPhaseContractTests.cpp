@@ -279,3 +279,26 @@ TEST_CASE(
 		source.find("m_skillsGatewayProjectionService.BuildGatewaySkillEntry(") !=
 		std::string::npos);
 }
+
+TEST_CASE(
+	"ServiceManager phase2 contract: delegates startup and managed config diff seams",
+	"[servicemanager][phase2][contract]")
+{
+	const std::string source = ReadServiceManagerSource();
+
+	REQUIRE(
+		source.find("m_skillsStartupCoordinator.Execute(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("m_hooksStartupCoordinator.Execute(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("m_fixtureStartupValidatorFacade.Execute(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("m_managedRuntimeConfigDiffCoordinator.EvaluateAuthSessionGenerationGuard(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("m_managedRuntimeConfigDiffCoordinator.CoordinateLocalModelReload(") !=
+		std::string::npos);
+}

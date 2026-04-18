@@ -17,9 +17,13 @@
 #include "EmailPreflightHealthService.h"
 #include "EmailPolicyOrchestrationService.h"
 #include "EmailRuntimeDiagnosticsProjector.h"
+#include "FixtureStartupValidatorFacade.h"
+#include "HooksStartupCoordinator.h"
+#include "ManagedRuntimeConfigDiffCoordinator.h"
 #include "OnnxEmbeddingsService.h"
 #include "PiEmbeddedService.h"
 #include "RetrievalMemoryService.h"
+#include "SkillsStartupCoordinator.h"
 #include "SubagentRegistryService.h"
 #include "HookCatalogService.h"
 #include "HookEventService.h"
@@ -395,6 +399,9 @@ namespace blazeclaw::core {
 		SkillsFacade m_skillsFacade;
 		InlineActionsOrchestrationService m_inlineActionsOrchestrationService;
 		ChatRuntimeOrchestrationCoordinator m_chatRuntimeOrchestrationCoordinator;
+		SkillsStartupCoordinator m_skillsStartupCoordinator;
+		HooksStartupCoordinator m_hooksStartupCoordinator;
+		FixtureStartupValidatorFacade m_fixtureStartupValidatorFacade;
 		SkillsRunSnapshot m_skillsRunSnapshot;
 		SkillCommandInvocationService m_skillCommandInvocationService;
 		SkillsCommandService m_skillsCommandService;
@@ -423,6 +430,7 @@ namespace blazeclaw::core {
 		SkillsWatchSnapshot m_skillsWatch;
 		SkillsGatewayMethodHandler m_skillsGatewayMethodHandler;
 		SkillsGatewayProjectionService m_skillsGatewayProjectionService;
+		ManagedRuntimeConfigDiffCoordinator m_managedRuntimeConfigDiffCoordinator;
 		SkillsHostCallbacks m_skillsHostCallbacks;
 		CChatRuntime m_chatRuntime;
 		CDeepSeekClient m_deepSeekClient;

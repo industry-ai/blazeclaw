@@ -2957,216 +2957,248 @@ namespace blazeclaw::core {
 		}
 		const bool startupSkillsRefreshEnabled =
 			runtimeOrchestrationPolicy.startupSkillsRefreshEnabled;
-		AppendStartupTrace("ServiceManager.Start.skills.refresh.begin");
-		try {
-			if (startupSkillsRefreshEnabled) {
-				RefreshSkillsState(m_activeConfig, true, L"startup");
-				AppendStartupTrace("ServiceManager.Start.skills.refreshed");
-			}
-			else {
-				const auto workspaceRoot =
-					ResolveWorkspaceRootForSkills(std::filesystem::current_path());
-				const auto commandSourceAdapters =
-					BuildRuntimeSkillCommandSourceAdapters();
-				auto refresh = m_skillsFacade.RefreshSkillsState(
-					workspaceRoot,
-					m_activeConfig,
-					true,
-					L"startup-minimal",
-					m_state.hooks.fallbackPromptInjection,
-					SkillsRefreshDependencies{
-						   .catalogService = m_skillsCatalogService,
-						   .eligibilityService = m_skillsEligibilityService,
-						   .promptService = m_skillsPromptService,
-						   .commandService = m_skillsCommandService,
-						 .commandSourceAdapters = &commandSourceAdapters,
-						   .syncService = m_skillsSyncService,
-						   .envOverrideService = m_skillsEnvOverrideService,
-						   .installService = m_skillsInstallService,
-						   .securityScanService = m_skillSecurityScanService,
-						   .watchService = m_skillsWatchService,
-					});
-				m_skillsCatalog = std::move(refresh.catalog);
-				m_skillsEligibility = std::move(refresh.eligibility);
-				m_hookCatalog = m_hookCatalogService.BuildSnapshot(m_skillsCatalog);
-				m_hookExecution = m_hookExecutionService.Snapshot();
-				m_skillsPrompt = std::move(refresh.prompt);
-				m_skillsRunSnapshot = std::move(refresh.runSnapshot);
-				m_hookEvents = m_hookEventService.Snapshot();
-				m_skillsCommands = std::move(refresh.commands);
-				m_skillsSync = std::move(refresh.sync);
-				m_skillsEnvOverrides = std::move(refresh.envOverrides);
-				m_skillsInstall = std::move(refresh.install);
-				m_skillSecurityScan = std::move(refresh.securityScan);
-				m_skillsWatch = std::move(refresh.watch);
-				m_skillsCatalog.diagnostics.warnings.push_back(
-					L"skills startup full refresh skipped; minimal startup catalog loaded.");
-				AppendStartupTrace("ServiceManager.Start.skills.refresh.minimal");
-			}
-		}
-		catch (const std::exception& ex) {
-			m_skillsCatalog = SkillsCatalogSnapshot{};
-			m_skillsEligibility = SkillsEligibilitySnapshot{};
-			m_skillsPrompt = SkillsPromptSnapshot{};
-			m_skillsRunSnapshot = SkillsRunSnapshot{};
-			m_skillsCommands = SkillsCommandSnapshot{};
-			m_skillsSync = SkillsSyncSnapshot{};
-			m_skillsEnvOverrides = SkillsEnvOverrideSnapshot{};
-			m_skillsInstall = SkillsInstallSnapshot{};
-			m_skillSecurityScan = SkillSecurityScanSnapshot{};
-			m_skillsWatch = SkillsWatchSnapshot{};
-			m_hookCatalog = m_hookCatalogService.BuildSnapshot(m_skillsCatalog);
-			m_hookExecution = m_hookExecutionService.Snapshot();
-			m_hookEvents = m_hookEventService.Snapshot();
-			m_skillsCatalog.diagnostics.warnings.push_back(
-				L"skills refresh failed during startup; continuing with empty skill snapshots: " +
-				ToWide(ex.what()));
-			AppendStartupTrace("ServiceManager.Start.skills.refresh.exception");
-		}
-		catch (...) {
-			m_skillsCatalog = SkillsCatalogSnapshot{};
-			m_skillsEligibility = SkillsEligibilitySnapshot{};
-			m_skillsPrompt = SkillsPromptSnapshot{};
-			m_skillsRunSnapshot = SkillsRunSnapshot{};
-			m_skillsCommands = SkillsCommandSnapshot{};
-			m_skillsSync = SkillsSyncSnapshot{};
-			m_skillsEnvOverrides = SkillsEnvOverrideSnapshot{};
-			m_skillsInstall = SkillsInstallSnapshot{};
-			m_skillSecurityScan = SkillSecurityScanSnapshot{};
-			m_skillsWatch = SkillsWatchSnapshot{};
-			m_hookCatalog = m_hookCatalogService.BuildSnapshot(m_skillsCatalog);
-			m_hookExecution = m_hookExecutionService.Snapshot();
-			m_hookEvents = m_hookEventService.Snapshot();
-			m_skillsCatalog.diagnostics.warnings.push_back(
-				L"skills refresh failed during startup with unknown exception; continuing with empty skill snapshots.");
-			AppendStartupTrace("ServiceManager.Start.skills.refresh.exception.unknown");
-		}
-		AppendStartupTrace("ServiceManager.Start.skills.refresh.end");
+		m_skillsStartupCoordinator.Execute(
+			SkillsStartupCoordinator::ExecutionContext{
+				.startupSkillsRefreshEnabled = startupSkillsRefreshEnabled,
+				.runFullRefresh = [this]() {
+					RefreshSkillsState(m_activeConfig, true, L"startup");
+					AppendStartupTrace("ServiceManager.Start.skills.refreshed");
+				},
+				.runMinimalRefresh = [this]() {
+					const auto workspaceRoot =
+						ResolveWorkspaceRootForSkills(std::filesystem::current_path());
+					const auto commandSourceAdapters =
+						BuildRuntimeSkillCommandSourceAdapters();
+					auto refresh = m_skillsFacade.RefreshSkillsState(
+						workspaceRoot,
+						m_activeConfig,
+						true,
+						L"startup-minimal",
+						m_state.hooks.fallbackPromptInjection,
+						SkillsRefreshDependencies{
+							   .catalogService = m_skillsCatalogService,
+							   .eligibilityService = m_skillsEligibilityService,
+							   .promptService = m_skillsPromptService,
+							   .commandService = m_skillsCommandService,
+							 .commandSourceAdapters = &commandSourceAdapters,
+							   .syncService = m_skillsSyncService,
+							   .envOverrideService = m_skillsEnvOverrideService,
+							   .installService = m_skillsInstallService,
+							   .securityScanService = m_skillSecurityScanService,
+							   .watchService = m_skillsWatchService,
+						});
+					m_skillsCatalog = std::move(refresh.catalog);
+					m_skillsEligibility = std::move(refresh.eligibility);
+					m_hookCatalog = m_hookCatalogService.BuildSnapshot(m_skillsCatalog);
+					m_hookExecution = m_hookExecutionService.Snapshot();
+					m_skillsPrompt = std::move(refresh.prompt);
+					m_skillsRunSnapshot = std::move(refresh.runSnapshot);
+					m_hookEvents = m_hookEventService.Snapshot();
+					m_skillsCommands = std::move(refresh.commands);
+					m_skillsSync = std::move(refresh.sync);
+					m_skillsEnvOverrides = std::move(refresh.envOverrides);
+					m_skillsInstall = std::move(refresh.install);
+					m_skillSecurityScan = std::move(refresh.securityScan);
+					m_skillsWatch = std::move(refresh.watch);
+					m_skillsCatalog.diagnostics.warnings.push_back(
+						L"skills startup full refresh skipped; minimal startup catalog loaded.");
+					AppendStartupTrace("ServiceManager.Start.skills.refresh.minimal");
+				},
+				.onStdException = [this](const std::exception& ex) {
+					m_skillsCatalog = SkillsCatalogSnapshot{};
+					m_skillsEligibility = SkillsEligibilitySnapshot{};
+					m_skillsPrompt = SkillsPromptSnapshot{};
+					m_skillsRunSnapshot = SkillsRunSnapshot{};
+					m_skillsCommands = SkillsCommandSnapshot{};
+					m_skillsSync = SkillsSyncSnapshot{};
+					m_skillsEnvOverrides = SkillsEnvOverrideSnapshot{};
+					m_skillsInstall = SkillsInstallSnapshot{};
+					m_skillSecurityScan = SkillSecurityScanSnapshot{};
+					m_skillsWatch = SkillsWatchSnapshot{};
+					m_hookCatalog = m_hookCatalogService.BuildSnapshot(m_skillsCatalog);
+					m_hookExecution = m_hookExecutionService.Snapshot();
+					m_hookEvents = m_hookEventService.Snapshot();
+					m_skillsCatalog.diagnostics.warnings.push_back(
+						L"skills refresh failed during startup; continuing with empty skill snapshots: " +
+						ToWide(ex.what()));
+					AppendStartupTrace("ServiceManager.Start.skills.refresh.exception");
+				},
+				.onUnknownException = [this]() {
+					m_skillsCatalog = SkillsCatalogSnapshot{};
+					m_skillsEligibility = SkillsEligibilitySnapshot{};
+					m_skillsPrompt = SkillsPromptSnapshot{};
+					m_skillsRunSnapshot = SkillsRunSnapshot{};
+					m_skillsCommands = SkillsCommandSnapshot{};
+					m_skillsSync = SkillsSyncSnapshot{};
+					m_skillsEnvOverrides = SkillsEnvOverrideSnapshot{};
+					m_skillsInstall = SkillsInstallSnapshot{};
+					m_skillSecurityScan = SkillSecurityScanSnapshot{};
+					m_skillsWatch = SkillsWatchSnapshot{};
+					m_hookCatalog = m_hookCatalogService.BuildSnapshot(m_skillsCatalog);
+					m_hookExecution = m_hookExecutionService.Snapshot();
+					m_hookEvents = m_hookEventService.Snapshot();
+					m_skillsCatalog.diagnostics.warnings.push_back(
+						L"skills refresh failed during startup with unknown exception; continuing with empty skill snapshots.");
+					AppendStartupTrace("ServiceManager.Start.skills.refresh.exception.unknown");
+				},
+				.appendTrace = [](const char* stage) {
+					AppendStartupTrace(stage);
+				},
+			});
 
 		const bool startupHookBootstrapEnabled =
 			runtimeOrchestrationPolicy.startupHookBootstrapEnabled;
-		if (startupSkillsRefreshEnabled && startupHookBootstrapEnabled) {
-			std::wstring hookEventError;
-			const bool emittedBootstrapEvent = m_hookEventService.EmitAgentBootstrap(
-				L"main",
-				std::vector<HookBootstrapFile>{
-				HookBootstrapFile{ .path = L"BOOTSTRAP.md", .virtualFile = true },
-					HookBootstrapFile{ .path = L"MEMORY.md", .virtualFile = true }},
-				hookEventError);
-			m_hookEvents = m_hookEventService.Snapshot();
-			if (!emittedBootstrapEvent && !hookEventError.empty()) {
-				m_skillsCatalog.diagnostics.warnings.push_back(
-					L"hooks-event emission failed: " + hookEventError);
-			}
+		m_hooksStartupCoordinator.Execute(
+			HooksStartupCoordinator::ExecutionContext{
+				.startupSkillsRefreshEnabled = startupSkillsRefreshEnabled,
+				.startupHookBootstrapEnabled = startupHookBootstrapEnabled,
+				.runHookBootstrap = [this]() {
+					std::wstring hookEventError;
+					const bool emittedBootstrapEvent =
+						m_hookEventService.EmitAgentBootstrap(
+							L"main",
+							std::vector<HookBootstrapFile>{
+								HookBootstrapFile{.path = L"BOOTSTRAP.md", .virtualFile = true },
+								HookBootstrapFile{.path = L"MEMORY.md", .virtualFile = true } },
+							hookEventError);
+					m_hookEvents = m_hookEventService.Snapshot();
+					if (!emittedBootstrapEvent && !hookEventError.empty()) {
+						m_skillsCatalog.diagnostics.warnings.push_back(
+							L"hooks-event emission failed: " + hookEventError);
+					}
 
-			if (m_state.hooks.engineEnabled && emittedBootstrapEvent && !m_hookEvents.events.empty()) {
-				std::wstring dispatchError;
-				const auto& latestEvent = m_hookEvents.events.back();
-				HookLifecycleEvent eventForDispatch = latestEvent;
-				if (m_state.hooks.reminderVerbosity == L"detailed") {
-					eventForDispatch.bootstrapFiles.push_back(
-						HookBootstrapFile{ .path = L"HOOK_RUNTIME_DETAILED_CONTEXT.md", .virtualFile = true });
-				}
-				if (!m_hookExecutionService.Dispatch(
-					eventForDispatch,
-					m_hookCatalog,
-					HookExecutionPolicy{
-						.reminderEnabled = m_state.hooks.reminderEnabled,
-						.reminderVerbosity = m_state.hooks.reminderVerbosity,
-						.allowedPackages = m_state.hooks.allowedPackages,
-						.strictPolicyEnforcement = m_state.hooks.strictPolicyEnforcement },
-						dispatchError) &&
-						!dispatchError.empty()) {
-					m_skillsCatalog.diagnostics.warnings.push_back(
-						L"hooks-dispatch failed: " + dispatchError);
-				}
+					if (m_state.hooks.engineEnabled &&
+						emittedBootstrapEvent &&
+						!m_hookEvents.events.empty()) {
+						std::wstring dispatchError;
+						const auto& latestEvent = m_hookEvents.events.back();
+						HookLifecycleEvent eventForDispatch = latestEvent;
+						if (m_state.hooks.reminderVerbosity == L"detailed") {
+							eventForDispatch.bootstrapFiles.push_back(
+								HookBootstrapFile{
+									.path = L"HOOK_RUNTIME_DETAILED_CONTEXT.md",
+									.virtualFile = true,
+								});
+						}
+						if (!m_hookExecutionService.Dispatch(
+							eventForDispatch,
+							m_hookCatalog,
+							HookExecutionPolicy{
+								.reminderEnabled = m_state.hooks.reminderEnabled,
+								.reminderVerbosity = m_state.hooks.reminderVerbosity,
+								.allowedPackages = m_state.hooks.allowedPackages,
+								.strictPolicyEnforcement =
+									m_state.hooks.strictPolicyEnforcement,
+							},
+							dispatchError) &&
+							!dispatchError.empty()) {
+							m_skillsCatalog.diagnostics.warnings.push_back(
+								L"hooks-dispatch failed: " + dispatchError);
+						}
 
-				m_hookExecution = m_hookExecutionService.Snapshot();
-				m_skillsHooksCoordinator.EmitGovernanceAndRemediation(
-					HooksGovernanceEmitter::GovernanceContext{
-						.execution = m_hookExecution,
-						.governanceReportingEnabled = m_state.hooks.governanceReportingEnabled,
-						.governanceReportDir = m_state.hooks.governanceReportDir,
-						.allowedPackages = m_state.hooks.allowedPackages,
-						.strictPolicyEnforcement = m_state.hooks.strictPolicyEnforcement,
-						.governanceReportsGenerated = m_state.hooks.governanceReportsGenerated,
-						.lastGovernanceReportPath = m_state.hooks.lastGovernanceReportPath,
-					},
-					HooksGovernanceEmitter::RemediationContext{
-						.execution = m_hookExecution,
-						.autoRemediationEnabled = m_state.hooks.autoRemediationEnabled,
-						.autoRemediationTenantId = m_state.hooks.autoRemediationTenantId,
-						.autoRemediationPlaybookDir =
-							m_state.hooks.autoRemediationPlaybookDir,
-						.autoRemediationTokenMaxAgeMinutes =
-							m_state.hooks.autoRemediationTokenMaxAgeMinutes,
-						.autoRemediationApprovalToken =
-							m_state.hooks.autoRemediationApprovalToken,
-						.autoRemediationTokenRotations =
-							m_state.hooks.autoRemediationTokenRotations,
-						.remediationTelemetryEnabled =
-							m_state.hooks.remediationTelemetryEnabled,
-						.remediationTelemetryDir = m_state.hooks.remediationTelemetryDir,
-						.remediationAuditEnabled = m_state.hooks.remediationAuditEnabled,
-						.remediationAuditDir = m_state.hooks.remediationAuditDir,
-						.remediationSloMaxDriftDetected =
-							m_state.hooks.remediationSloMaxDriftDetected,
-						.remediationSloMaxPolicyBlocked =
-							m_state.hooks.remediationSloMaxPolicyBlocked,
-						.complianceAttestationEnabled =
-							m_state.hooks.complianceAttestationEnabled,
-						.complianceAttestationDir =
-							m_state.hooks.complianceAttestationDir,
-						.enterpriseSlaPolicyId = m_state.hooks.enterpriseSlaPolicyId,
-						.crossTenantAttestationAggregationEnabled =
-							m_state.hooks.crossTenantAttestationAggregationEnabled,
-						.crossTenantAttestationAggregationDir =
-							m_state.hooks.crossTenantAttestationAggregationDir,
-						.lastGovernanceReportPath = m_state.hooks.lastGovernanceReportPath,
-						.lastAutoRemediationPlaybookPath =
-							m_state.hooks.lastAutoRemediationPlaybookPath,
-						.lastAutoRemediationStatus =
-							m_state.hooks.lastAutoRemediationStatus,
-						.lastRemediationTelemetryPath =
-							m_state.hooks.lastRemediationTelemetryPath,
-						.lastRemediationAuditPath = m_state.hooks.lastRemediationAuditPath,
-						.remediationSloStatus = m_state.hooks.remediationSloStatus,
-						.lastComplianceAttestationPath =
-							m_state.hooks.lastComplianceAttestationPath,
-						.crossTenantAttestationAggregationCount =
-							m_state.hooks.crossTenantAttestationAggregationCount,
-						.crossTenantAttestationAggregationStatus =
-							m_state.hooks.crossTenantAttestationAggregationStatus,
-						.lastCrossTenantAttestationAggregationPath =
-							m_state.hooks.lastCrossTenantAttestationAggregationPath,
-					},
-					m_skillsCatalog.diagnostics.warnings);
-				auto hookBootstrapProjection =
-					CSkillsHooksCoordinator::HookBootstrapProjectionContext{
-						.bootstrapFiles = m_hookExecution.bootstrapFiles,
-						.prompt = m_skillsPrompt.prompt,
-						.promptChars = m_skillsPrompt.promptChars,
-						.promptTruncated = m_skillsPrompt.truncated,
-						.maxSkillsPromptChars =
-							m_activeConfig.skills.limits.maxSkillsPromptChars,
-						.lastReminderState =
-							m_hookExecution.diagnostics.lastReminderState,
-						.lastReminderReason =
-							m_hookExecution.diagnostics.lastReminderReason,
-						.selfEvolvingHookTriggered = m_state.hooks.selfEvolvingHookTriggered,
-				};
-				m_skillsHooksCoordinator.ApplyHookBootstrapProjection(
-					hookBootstrapProjection);
-			}
-			else if (!m_state.hooks.engineEnabled) {
-				++m_hookExecution.diagnostics.skippedCount;
-				m_hookExecution.diagnostics.lastReminderState = L"reminder_skipped";
-				m_hookExecution.diagnostics.lastReminderReason = L"hook_engine_disabled";
-			}
-		}
-		else {
-			AppendStartupTrace("ServiceManager.Start.hooks.bootstrap.skipped");
-		}
+						m_hookExecution = m_hookExecutionService.Snapshot();
+						m_skillsHooksCoordinator.EmitGovernanceAndRemediation(
+							HooksGovernanceEmitter::GovernanceContext{
+								.execution = m_hookExecution,
+								.governanceReportingEnabled =
+									m_state.hooks.governanceReportingEnabled,
+								.governanceReportDir =
+									m_state.hooks.governanceReportDir,
+								.allowedPackages = m_state.hooks.allowedPackages,
+								.strictPolicyEnforcement =
+									m_state.hooks.strictPolicyEnforcement,
+								.governanceReportsGenerated =
+									m_state.hooks.governanceReportsGenerated,
+								.lastGovernanceReportPath =
+									m_state.hooks.lastGovernanceReportPath,
+							},
+							HooksGovernanceEmitter::RemediationContext{
+								.execution = m_hookExecution,
+								.autoRemediationEnabled =
+									m_state.hooks.autoRemediationEnabled,
+								.autoRemediationTenantId =
+									m_state.hooks.autoRemediationTenantId,
+								.autoRemediationPlaybookDir =
+									m_state.hooks.autoRemediationPlaybookDir,
+								.autoRemediationTokenMaxAgeMinutes =
+									m_state.hooks.autoRemediationTokenMaxAgeMinutes,
+								.autoRemediationApprovalToken =
+									m_state.hooks.autoRemediationApprovalToken,
+								.autoRemediationTokenRotations =
+									m_state.hooks.autoRemediationTokenRotations,
+								.remediationTelemetryEnabled =
+									m_state.hooks.remediationTelemetryEnabled,
+								.remediationTelemetryDir =
+									m_state.hooks.remediationTelemetryDir,
+								.remediationAuditEnabled =
+									m_state.hooks.remediationAuditEnabled,
+								.remediationAuditDir =
+									m_state.hooks.remediationAuditDir,
+								.remediationSloMaxDriftDetected =
+									m_state.hooks.remediationSloMaxDriftDetected,
+								.remediationSloMaxPolicyBlocked =
+									m_state.hooks.remediationSloMaxPolicyBlocked,
+								.complianceAttestationEnabled =
+									m_state.hooks.complianceAttestationEnabled,
+								.complianceAttestationDir =
+									m_state.hooks.complianceAttestationDir,
+								.enterpriseSlaPolicyId =
+									m_state.hooks.enterpriseSlaPolicyId,
+								.crossTenantAttestationAggregationEnabled =
+									m_state.hooks.crossTenantAttestationAggregationEnabled,
+								.crossTenantAttestationAggregationDir =
+									m_state.hooks.crossTenantAttestationAggregationDir,
+								.lastGovernanceReportPath =
+									m_state.hooks.lastGovernanceReportPath,
+								.lastAutoRemediationPlaybookPath =
+									m_state.hooks.lastAutoRemediationPlaybookPath,
+								.lastAutoRemediationStatus =
+									m_state.hooks.lastAutoRemediationStatus,
+								.lastRemediationTelemetryPath =
+									m_state.hooks.lastRemediationTelemetryPath,
+								.lastRemediationAuditPath =
+									m_state.hooks.lastRemediationAuditPath,
+								.remediationSloStatus = m_state.hooks.remediationSloStatus,
+								.lastComplianceAttestationPath =
+									m_state.hooks.lastComplianceAttestationPath,
+								.crossTenantAttestationAggregationCount =
+									m_state.hooks.crossTenantAttestationAggregationCount,
+								.crossTenantAttestationAggregationStatus =
+									m_state.hooks.crossTenantAttestationAggregationStatus,
+								.lastCrossTenantAttestationAggregationPath =
+									m_state.hooks
+										.lastCrossTenantAttestationAggregationPath,
+							},
+							m_skillsCatalog.diagnostics.warnings);
+						auto hookBootstrapProjection =
+							CSkillsHooksCoordinator::HookBootstrapProjectionContext{
+								.bootstrapFiles = m_hookExecution.bootstrapFiles,
+								.prompt = m_skillsPrompt.prompt,
+								.promptChars = m_skillsPrompt.promptChars,
+								.promptTruncated = m_skillsPrompt.truncated,
+								.maxSkillsPromptChars =
+									m_activeConfig.skills.limits.maxSkillsPromptChars,
+								.lastReminderState =
+									m_hookExecution.diagnostics.lastReminderState,
+								.lastReminderReason =
+									m_hookExecution.diagnostics.lastReminderReason,
+								.selfEvolvingHookTriggered =
+									m_state.hooks.selfEvolvingHookTriggered,
+							};
+						m_skillsHooksCoordinator.ApplyHookBootstrapProjection(
+							hookBootstrapProjection);
+					}
+					else if (!m_state.hooks.engineEnabled) {
+						++m_hookExecution.diagnostics.skippedCount;
+						m_hookExecution.diagnostics.lastReminderState = L"reminder_skipped";
+						m_hookExecution.diagnostics.lastReminderReason =
+							L"hook_engine_disabled";
+					}
+				},
+				.appendTrace = [](const char* stage) {
+					AppendStartupTrace(stage);
+				},
+			});
 
 		const std::vector<std::filesystem::path> fixtureCandidates = {
 			  std::filesystem::current_path() / L"blazeclaw" / L"fixtures" / L"agents",
@@ -3177,43 +3209,49 @@ namespace blazeclaw::core {
 
 		const bool startupFixtureValidationEnabled =
 			runtimeOrchestrationPolicy.startupFixtureValidationEnabled;
-		if (startupFixtureValidationEnabled) {
-			m_serviceBootstrapCoordinator.ValidateStartupFixtures(
-				CServiceBootstrapCoordinator::FixtureValidationContext{
-					.enabled = startupFixtureValidationEnabled,
-					.fixtureCandidates = fixtureCandidates,
-					.warnings = m_skillsCatalog.diagnostics.warnings,
-					.agentsCatalogService = m_agentsCatalogService,
-					.agentsWorkspaceService = m_agentsWorkspaceService,
-					.agentsToolPolicyService = m_agentsToolPolicyService,
-					.agentsShellRuntimeService = m_agentsShellRuntimeService,
-					.agentsModelRoutingService = m_agentsModelRoutingService,
-					.agentsAuthProfileService = m_agentsAuthProfileService,
-					.agentsSandboxService = m_agentsSandboxService,
-					.agentsTranscriptSafetyService = m_agentsTranscriptSafetyService,
-					.subagentRegistryService = m_subagentRegistryService,
-					.acpSpawnService = m_acpSpawnService,
-					.embeddingsService = m_embeddingsService,
-					.retrievalMemoryService = m_retrievalMemoryService,
-					.piEmbeddedService = m_piEmbeddedService,
-					.skillsCatalogService = m_skillsCatalogService,
-					.skillsEligibilityService = m_skillsEligibilityService,
-					.skillsPromptService = m_skillsPromptService,
-					.skillsCommandService = m_skillsCommandService,
-					.skillsWatchService = m_skillsWatchService,
-					.skillsSyncService = m_skillsSyncService,
-					.skillsEnvOverrideService = m_skillsEnvOverrideService,
-					.skillsFacade = m_skillsFacade,
-					.skillsInstallService = m_skillsInstallService,
-					.skillSecurityScanService = m_skillSecurityScanService,
-					.hookCatalogService = m_hookCatalogService,
-					.hookEventService = m_hookEventService,
-					.hookExecutionService = m_hookExecutionService,
-				});
-		}
-		else {
-			AppendStartupTrace("ServiceManager.Start.fixtures.validation.skipped");
-		}
+		m_fixtureStartupValidatorFacade.Execute(
+			FixtureStartupValidatorFacade::ExecutionContext{
+				.startupFixtureValidationEnabled =
+					startupFixtureValidationEnabled,
+				.runValidation = [this, startupFixtureValidationEnabled, fixtureCandidates]() {
+					m_serviceBootstrapCoordinator.ValidateStartupFixtures(
+						CServiceBootstrapCoordinator::FixtureValidationContext{
+							.enabled = startupFixtureValidationEnabled,
+							.fixtureCandidates = fixtureCandidates,
+							.warnings = m_skillsCatalog.diagnostics.warnings,
+							.agentsCatalogService = m_agentsCatalogService,
+							.agentsWorkspaceService = m_agentsWorkspaceService,
+							.agentsToolPolicyService = m_agentsToolPolicyService,
+							.agentsShellRuntimeService = m_agentsShellRuntimeService,
+							.agentsModelRoutingService = m_agentsModelRoutingService,
+							.agentsAuthProfileService = m_agentsAuthProfileService,
+							.agentsSandboxService = m_agentsSandboxService,
+							.agentsTranscriptSafetyService =
+								m_agentsTranscriptSafetyService,
+							.subagentRegistryService = m_subagentRegistryService,
+							.acpSpawnService = m_acpSpawnService,
+							.embeddingsService = m_embeddingsService,
+							.retrievalMemoryService = m_retrievalMemoryService,
+							.piEmbeddedService = m_piEmbeddedService,
+							.skillsCatalogService = m_skillsCatalogService,
+							.skillsEligibilityService = m_skillsEligibilityService,
+							.skillsPromptService = m_skillsPromptService,
+							.skillsCommandService = m_skillsCommandService,
+							.skillsWatchService = m_skillsWatchService,
+							.skillsSyncService = m_skillsSyncService,
+							.skillsEnvOverrideService = m_skillsEnvOverrideService,
+							.skillsFacade = m_skillsFacade,
+							.skillsInstallService = m_skillsInstallService,
+							.skillSecurityScanService = m_skillSecurityScanService,
+							.hookCatalogService = m_hookCatalogService,
+							.hookEventService = m_hookEventService,
+							.hookExecutionService = m_hookExecutionService,
+						});
+				},
+				.appendTrace = [](const char* stage) {
+					AppendStartupTrace(stage);
+				},
+			});
 	}
 
 	void ServiceManager::WireGatewayCallbacks()
@@ -4768,15 +4806,17 @@ namespace blazeclaw::core {
 		const bool authSensitiveChanged = HasAuthSensitiveConfigChanges(
 			m_activeConfig,
 			nextConfig);
-		if (authSensitiveChanged &&
-			nextConfig.gateway.authSessionGeneration <=
-			m_state.gatewayLifecycle.authSessionGenerationCurrent) {
+		const auto authGuard =
+			m_managedRuntimeConfigDiffCoordinator.EvaluateAuthSessionGenerationGuard(
+				m_activeConfig,
+				nextConfig,
+				authSensitiveChanged,
+				m_state.gatewayLifecycle.authSessionGenerationCurrent);
+		if (!authGuard.accepted) {
 			m_state.gatewayLifecycle.authSessionGenerationRequired =
-				m_state.gatewayLifecycle.authSessionGenerationCurrent + 1;
+				authGuard.requiredGeneration;
 			++m_state.gatewayLifecycle.authSessionGenerationRejectCount;
-			warningMessage =
-				L"gateway auth/session config change requires "
-				L"gateway.authSessionGeneration to increase.";
+			warningMessage = authGuard.warningMessage;
 			m_skillsCatalog.diagnostics.warnings.push_back(warningMessage);
 			RecordGatewayLifecycleTransition("managed_reload.auth_generation_reject");
 			return false;
@@ -4827,57 +4867,61 @@ namespace blazeclaw::core {
 		const bool localModelStartupLoadEnabled =
 			runtimeOrchestrationPolicy.localModelStartupLoadEnabled;
 
-		m_activeConfig.localModel = nextConfig.localModel;
-		if (m_activeChatProvider == "local" &&
-			IsLlamaLocalModelId(m_activeChatModel)) {
-			m_activeConfig.localModel.provider = L"llama.cpp";
-		}
-		m_localModelRolloutEligible = IsLocalModelRolloutEligible();
-		m_localModelActivationEnabled = false;
-		m_localModelActivationReason.clear();
+		const auto localModelReload =
+			m_managedRuntimeConfigDiffCoordinator.CoordinateLocalModelReload(
+				m_activeConfig,
+				nextConfig,
+				m_localModelActivationEnabled,
+				[this](const blazeclaw::config::AppConfig& config) {
+					const std::wstring stage = config.localModel.rolloutStage;
+					if (_wcsicmp(stage.c_str(), L"stable") == 0) {
+						return true;
+					}
+					if (_wcsicmp(stage.c_str(), L"nightly") == 0) {
+						return IsOneOfChannels(config.enabledChannels, L"nightly");
+					}
+					return true;
+				},
+				[this,
+				&buildLocalModelRuntime,
+				localModelStartupLoadEnabled](blazeclaw::config::AppConfig& candidateConfig) {
+					if (m_activeChatProvider == "local" &&
+						IsLlamaLocalModelId(m_activeChatModel)) {
+						candidateConfig.localModel.provider = L"llama.cpp";
+					}
 
-		if (!m_activeConfig.localModel.enabled) {
-			m_localModelActivationReason = "config_disabled";
-		}
-		else if (!m_localModelRolloutEligible) {
-			m_localModelActivationReason = "rollout_stage_not_eligible";
-		}
+					m_localModelRuntime =
+						buildLocalModelRuntime(candidateConfig.localModel.provider);
+					m_localModelRuntime->Configure(candidateConfig);
 
-		m_localModelRuntime = buildLocalModelRuntime(m_activeConfig.localModel.provider);
-		m_localModelRuntime->Configure(m_activeConfig);
+					bool localModelLoaded = false;
+					const bool rolloutEligible =
+						(_wcsicmp(candidateConfig.localModel.rolloutStage.c_str(), L"stable") == 0) ||
+						((_wcsicmp(candidateConfig.localModel.rolloutStage.c_str(), L"nightly") == 0)
+							? IsOneOfChannels(candidateConfig.enabledChannels, L"nightly")
+							: true);
+					if (candidateConfig.localModel.enabled &&
+						rolloutEligible &&
+						localModelStartupLoadEnabled) {
+						localModelLoaded = m_localModelRuntime->LoadModel();
+					}
 
-		bool localModelLoaded = false;
-		if (m_activeConfig.localModel.enabled &&
-			m_localModelRolloutEligible &&
-			localModelStartupLoadEnabled) {
-			localModelLoaded = m_localModelRuntime->LoadModel();
-		}
-		else if (m_activeConfig.localModel.enabled &&
-			m_localModelRolloutEligible) {
-			m_localModelActivationReason = "startup_load_deferred";
-		}
+					m_localModelRuntimeSnapshot = m_localModelRuntime->Snapshot();
+					if (!localModelLoaded && m_localModelRuntimeSnapshot.status.empty()) {
+						m_localModelRuntimeSnapshot.status = localModelStartupLoadEnabled
+							? "load_failed"
+							: "startup_load_deferred";
+					}
 
-		m_localModelRuntimeSnapshot = m_localModelRuntime->Snapshot();
-		if (!localModelLoaded && m_localModelRuntimeSnapshot.status.empty()) {
-			m_localModelRuntimeSnapshot.status = localModelStartupLoadEnabled
-				? "load_failed"
-				: "startup_load_deferred";
-		}
+					return candidateConfig.localModel.enabled
+						? m_localModelRuntimeSnapshot.ready
+						: false;
+				});
 
-		if (m_activeConfig.localModel.enabled &&
-			m_localModelRolloutEligible &&
-			localModelLoaded &&
-			m_localModelRuntimeSnapshot.ready) {
-			m_localModelActivationEnabled = true;
-			m_localModelActivationReason = "active";
-		}
-		else if (m_activeConfig.localModel.enabled &&
-			m_localModelRolloutEligible &&
-			!m_localModelRuntimeSnapshot.ready) {
-			m_localModelActivationReason = localModelStartupLoadEnabled
-				? "initialization_failed"
-				: "startup_load_deferred";
-		}
+		m_activeConfig.localModel = localModelReload.updatedConfig.localModel;
+		m_localModelRolloutEligible = localModelReload.rolloutEligible;
+		m_localModelActivationEnabled = localModelReload.activationEnabled;
+		m_localModelActivationReason = localModelReload.activationReason;
 
 		if (nextConfig.localModel.enabled &&
 			!m_localModelActivationEnabled &&
@@ -4893,8 +4937,9 @@ namespace blazeclaw::core {
 			if (!warningMessage.empty()) {
 				warningMessage += L" ";
 			}
-			warningMessage +=
-				L"local model activation failed for reloaded config; reverted to last known-good local model runtime settings.";
+			warningMessage += localModelReload.warningMessage.empty()
+				? L"local model activation failed for reloaded config; reverted to last known-good local model runtime settings."
+				: localModelReload.warningMessage;
 			m_skillsCatalog.diagnostics.warnings.push_back(
 				L"local model activation failed on managed reload; fallback to previous active local model config.");
 			RecordGatewayLifecycleTransition("managed_reload.local_model_fallback");
