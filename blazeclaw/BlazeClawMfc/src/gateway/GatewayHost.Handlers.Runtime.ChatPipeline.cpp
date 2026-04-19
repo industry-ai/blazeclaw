@@ -375,6 +375,8 @@ void ChatPipelineHandlers::RegisterAll(GatewayHost& host) {
 							const bool upserted =
 								host.m_taskDeltaRepository.Upsert(runId, normalizedTaskDeltas);
 							(void)upserted;
+							host.m_taskDeltaRepository.EnforceRetentionLimit(
+								host.m_taskDeltasRetentionLimit);
 							host.PersistTaskDeltas();
 							for (const auto& delta : normalizedTaskDeltas) {
 								EmitTelemetryEvent(
@@ -442,13 +444,9 @@ void ChatPipelineHandlers::RegisterAll(GatewayHost& host) {
 								",\"fallback\":" + std::to_string(host.m_taskDeltaRunFallbackCount) + "}" +
 								"}");
 
-							if (host.m_taskDeltaRepository.Size() > 64) {
-								const auto& snapshot = host.m_taskDeltaRepository.Snapshot();
-								if (!snapshot.empty()) {
-									const bool cleared =
-										host.m_taskDeltaRepository.Clear(snapshot.begin()->first);
-									(void)cleared;
-								}
+							if (host.m_taskDeltaRepository.Size() > host.m_taskDeltasRetentionLimit) {
+								host.m_taskDeltaRepository.EnforceRetentionLimit(
+									host.m_taskDeltasRetentionLimit);
 								host.PersistTaskDeltas();
 							}
 					};

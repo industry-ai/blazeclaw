@@ -21,6 +21,7 @@
 #include "generated/GatewayHandlerCatalog.Generated.h"
 #include "Telemetry.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -890,22 +891,23 @@ namespace blazeclaw::gateway {
 				continue;
 			}
 
+			std::uint64_t loadActivity = 0;
+			for (const auto& d : normalizedDeltas) {
+				loadActivity = std::max(loadActivity, d.startedAtMs);
+				loadActivity = std::max(loadActivity, d.completedAtMs);
+			}
+			if (loadActivity == 0) {
+				loadActivity = 1;
+			}
+
 			const bool upserted = m_taskDeltaRepository.Upsert(
 				runId,
-				normalizedDeltas);
+				normalizedDeltas,
+				loadActivity);
 			(void)upserted;
 		}
 
-		while (m_taskDeltaRepository.Size() > m_taskDeltasRetentionLimit) {
-			const auto& snapshot = m_taskDeltaRepository.Snapshot();
-			if (snapshot.empty()) {
-				break;
-			}
-
-			const bool cleared =
-				m_taskDeltaRepository.Clear(snapshot.begin()->first);
-			(void)cleared;
-		}
+		m_taskDeltaRepository.EnforceRetentionLimit(m_taskDeltasRetentionLimit);
 
 		PersistTaskDeltas();
 	}

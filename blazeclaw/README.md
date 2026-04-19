@@ -32,4 +32,5 @@ Architecture comparison docs:
 - `blazeclaw/docs/PROTOCOL_CODEGEN.md` (gateway manifest/codegen, default handler coordinator, thin façade checklist, Phase A–B scripts §7, `OkResponse` / `ErrorResponse` / `ReplayFromStored`, `EncodeValidatedEvent`, serializers)
 - `blazeclaw/BlazeClawMfc/tools/GatewayUpstreamDiff/` (`Diff-OpenClawGateway.ps1`, `Verify-GatewayDispatcherMethods.ps1`)
 - `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md` (`ServiceManager` ↔ `GatewayHost`, `WireAllGatewayServiceCallbacks`)
+- `blazeclaw/docs/GATEWAY_CORE_WIRING.md` (Phase C wiring, Phase D task-delta recency & streaming/startup notes)
 - `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp.md` (deep dive: **thin façade** invariant—`RegisterDefaultHandlers` → `RegisterDefaultHandlerSequence` only from `GatewayHost.cpp`; split `GatewayHost.Handlers.*`; no god lambdas; shared protocol surface; named handler types)

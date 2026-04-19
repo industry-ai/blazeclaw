@@ -68,7 +68,7 @@ Consequences:
 ### Risk points
 
 - Chat history and event queues are now bounded per session, but retained payloads can still be large when message bodies are large.
-- Task-delta retention is bounded (`m_taskDeltasByRunId.size() > 64` eviction), but eviction is map-order based rather than strict recency.
+- Task-delta retention is bounded (`m_taskDeltasRetentionLimit`, default 64); eviction is **recency-aware** via `TaskDeltaRepository::EnforceRetentionLimit` (activity on upsert, load, and `gateway.runtime.taskDeltas.get`).
 - Local-model cancel flags are now cleaned up via scoped terminal cleanup across success, error, and cancel paths.
 
 ## 4) Performance Issues and Hotspots
@@ -160,7 +160,7 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 
 1. Reduce synthetic fallback staged-delta usage where true incremental emission is feasible.
 2. Continue startup-path reduction by staging additional non-critical diagnostics/validations.
-3. Improve task-delta retention eviction policy from map-order to recency-aware eviction.
+3. ~~Improve task-delta retention eviction policy from map-order to recency-aware eviction.~~ **Done:** `TaskDeltaRepository` + `docs/GATEWAY_CORE_WIRING.md`.
 
 ## 7) Validation Snapshot (2026-04-07)
 

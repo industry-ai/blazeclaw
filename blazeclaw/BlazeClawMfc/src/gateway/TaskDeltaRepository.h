@@ -36,12 +36,17 @@ namespace blazeclaw::gateway {
 
 		explicit TaskDeltaRepository(Store& backingStore);
 
+		/// Upserts task deltas for `runId`. When `lastActivityMs` is set (e.g. load from disk), it is stored as the
+		/// recency key for eviction; otherwise activity is `max(now, max timestamp from entries)`.
 		[[nodiscard]] bool Upsert(
 			const std::string& runId,
-			const std::vector<TaskDeltaEntry>& entries);
+			const std::vector<TaskDeltaEntry>& entries,
+			std::optional<std::uint64_t> lastActivityMs = std::nullopt);
 
+		/// Returns stored deltas and refreshes LRU activity (last read) unless `touchRecency` is false.
 		[[nodiscard]] std::optional<std::vector<TaskDeltaEntry>> Get(
-			const std::string& runId) const;
+			const std::string& runId,
+			bool touchRecency = true) const;
 
 		[[nodiscard]] bool Clear(const std::string& runId);
 		void ClearAll();
@@ -49,8 +54,13 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] std::size_t Size() const noexcept;
 		[[nodiscard]] const Store& Snapshot() const noexcept;
 
+		/// Drops least-recently-used runs (by `lastActivityMs`, then `runId` lexicographic tie-break) until at most
+		/// `maxRuns` remain. Replaces unordered_map iteration order eviction.
+		void EnforceRetentionLimit(std::size_t maxRuns);
+
 	private:
 		Store& m_backingStore;
+		mutable std::unordered_map<std::string, std::uint64_t> m_lastActivityMs;
 	};
 
 } // namespace blazeclaw::gateway
