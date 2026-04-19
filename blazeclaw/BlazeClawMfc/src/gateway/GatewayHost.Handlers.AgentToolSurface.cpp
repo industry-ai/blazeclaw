@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "GatewayHost.h"
 #include "GatewayHostHandlersAgentToolSurface.h"
+#include "GatewayHostHandlersToolsShared.h"
 #include "GatewayHostCatalogHelpers.h"
 #include "GatewayHostModelHelpers.h"
 #include "GatewayHostProtocolHelpers.h"
@@ -22,19 +23,7 @@ host.m_dispatcher.Register("gateway.agents.get", [&host](const protocol::Request
 			});
 
 		host.m_dispatcher.Register("gateway.tools.catalog", [&host](const protocol::RequestFrame& request) {
-			const auto tools = host.m_toolRegistry.List();
-			std::string toolsJson = "[";
-			for (std::size_t i = 0; i < tools.size(); ++i) {
-				if (i > 0) {
-					toolsJson += ",";
-				}
-
-				toolsJson += SerializeTool(tools[i]);
-			}
-
-			toolsJson += "]";
-
-			return protocol::OkResponse(request, "{\"tools\":" + toolsJson + "}");
+			return handlers::tools_shared::ToolsSharedHandlers::HandleToolsCatalog(request, host.m_toolRegistry);
 			});
 
 		host.m_dispatcher.Register("gateway.tools.call.preview", [&host](const protocol::RequestFrame& request) {

@@ -88,6 +88,7 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.ScopeCluster.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.SecurityOps.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Tools.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.ToolsShared.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Transport.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.ToolExecutionHistory.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.EventCatalogQuery.cpp" />

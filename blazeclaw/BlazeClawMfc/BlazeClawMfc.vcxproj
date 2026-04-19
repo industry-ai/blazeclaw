@@ -203,6 +203,7 @@
     <ClInclude Include="src\gateway\GatewayHostHandlersAgentToolSurface.h" />
     <ClInclude Include="src\gateway\GatewayHostHandlersConfigDiagnostics.h" />
     <ClInclude Include="src\gateway\GatewayHostHandlersSupplementaryCatalog.h" />
+    <ClInclude Include="src\gateway\GatewayHostHandlersToolsShared.h" />
     <ClInclude Include="src\gateway\GatewayHostRegistrationCoordinator.h" />
     <ClInclude Include="src\gateway\ChatRunStageContext.h" />
     <ClInclude Include="src\gateway\IChatRunStage.h" />
@@ -384,6 +385,7 @@
     <ClCompile Include="src\gateway\GatewayHost.Handlers.ScopeCluster.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Transport.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Tools.cpp" />
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.ToolsShared.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.ToolExecutionHistory.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.EventCatalogQuery.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.RegistryIntrospection.cpp" />

@@ -41,9 +41,11 @@ Defined in `GatewayProtocolModels.h`: `OkResponse(const RequestFrame& request, s
 
 **Large domain registrars** (`RegisterGatewayRegistryIntrospectionHandlers`, `RegisterGatewayAgentSessionMutationHandlers`, …) are implemented as **`handlers::<family>::*Handlers::RegisterAll(GatewayHost& host)`** in matching `GatewayHost.Handlers.*.cpp` files. `GatewayHost` **`friend`**s those handler structs so `RegisterAll` can wire `host.m_dispatcher.Register(..., [&host](...) { ... })` without exposing private members publicly. `GatewayHost.cpp` only keeps **`RegisterDefaultHandlers`** (coordinator entry) plus non-dispatcher logic.
 
+**Shared tools list/catalog:** `handlers::tools_shared::ToolsSharedHandlers` (`GatewayHostHandlersToolsShared.h` / `GatewayHost.Handlers.ToolsShared.cpp`) implements **`HandleToolsList`** / **`HandleToolsCatalog`** using `protocol::OkResponse` and `GatewayToolRegistry` only — no `friend` needed. **`StartLocalRuntimeDispatchOnly`**, **`RegisterGatewayAgentToolSurfaceHandlers`**, and **`RegisterGatewaySupplementaryCatalogHandlers`** all delegate to these static methods so the dispatch-only bootstrap path and full registration stay **wire-identical**.
+
 Workflow for manifest vs static handlers: **`blazeclaw/docs/PROTOCOL_CODEGEN.md`**.
 
-Applied across default gateway handler sources: `GatewayHost.cpp`, `GatewayHost.Handlers.*.cpp`, `GatewayHostCatalogHelpers.cpp`, `GatewayHostModelHelpers.cpp`, `GatewayHostProtocolHelpers.cpp`, and `generated/GatewayHandlerCatalog.Generated.cpp`.
+Applied across default gateway handler sources: `GatewayHost.cpp`, `GatewayHost.Handlers.*.cpp` (including **`GatewayHost.Handlers.ToolsShared.cpp`** for shared tools list/catalog), `GatewayHostCatalogHelpers.cpp`, `GatewayHostModelHelpers.cpp`, `GatewayHostProtocolHelpers.cpp`, and `generated/GatewayHandlerCatalog.Generated.cpp`.
 
 ### Table-driven static registrations
 
@@ -254,6 +256,7 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 | Channel-related handlers | `GatewayHost.Handlers.Channels.cpp` |
 | Event catalog / event handlers | `GatewayHost.Handlers.Events.cpp` |
 | Tool listing / execution handlers | `GatewayHost.Handlers.Tools.cpp` |
+| Shared `gateway.tools.list` / `gateway.tools.catalog` payloads | `GatewayHostHandlersToolsShared.h` / `GatewayHost.Handlers.ToolsShared.cpp` (`handlers::tools_shared::ToolsSharedHandlers`) |
 | Scope cluster | `GatewayHost.Handlers.ScopeCluster.cpp` + generated catalog |
 | Security ops | `GatewayHost.Handlers.SecurityOps.cpp` |
 | Chat/runtime/task-delta-heavy handlers | `GatewayHost.Handlers.Runtime.cpp` |

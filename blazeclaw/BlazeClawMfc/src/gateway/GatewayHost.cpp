@@ -8,6 +8,7 @@
 #include "GatewayHostCatalogHelpers.h"
 #include "GatewayHostModelHelpers.h"
 #include "GatewayHostProtocolHelpers.h"
+#include "GatewayHostHandlersToolsShared.h"
 #include "GatewayPersistencePaths.h"
 #include "GatewayProtocolCodec.h"
 #include "GatewayProtocolSchemaValidator.h"
@@ -317,36 +318,10 @@ namespace blazeclaw::gateway {
 		m_toolRegistry.LoadSkillToolsFromDirectory("blazeclaw/skills");
 		m_toolRegistry.LoadSkillToolsFromDirectory("skills");
 		m_dispatcher.Register("gateway.tools.list", [this](const protocol::RequestFrame& request) {
-			const std::string category = RequestParamsView(request.paramsJson).GetString("category");
-			const auto tools = m_toolRegistry.List();
-			std::string toolsJson = "[";
-			std::size_t count = 0;
-			for (std::size_t i = 0; i < tools.size(); ++i) {
-				if (!category.empty() && tools[i].category != category) {
-					continue;
-				}
-				if (count > 0) {
-					toolsJson += ",";
-				}
-				toolsJson += SerializeTool(tools[i]);
-				++count;
-			}
-			toolsJson += "]";
-
-			return protocol::OkResponse(request, "{\"tools\":" + toolsJson + ",\"count\":" + std::to_string(count) + "}");
+			return handlers::tools_shared::ToolsSharedHandlers::HandleToolsList(request, m_toolRegistry);
 			});
 		m_dispatcher.Register("gateway.tools.catalog", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			std::string toolsJson = "[";
-			for (std::size_t i = 0; i < tools.size(); ++i) {
-				if (i > 0) {
-					toolsJson += ",";
-				}
-				toolsJson += SerializeTool(tools[i]);
-			}
-			toolsJson += "]";
-
-			return protocol::OkResponse(request, "{\"tools\":" + toolsJson + "}");
+			return handlers::tools_shared::ToolsSharedHandlers::HandleToolsCatalog(request, m_toolRegistry);
 			});
 		if (!m_runtimeHandlersInitialized) {
 			RegisterRuntimeHandlers();

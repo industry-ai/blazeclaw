@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "GatewayHost.h"
 #include "GatewayHostHandlersSupplementaryCatalog.h"
+#include "GatewayHostHandlersToolsShared.h"
 #include "GatewayHostCatalogHelpers.h"
 #include "GatewayHostModelHelpers.h"
 #include "GatewayHostProtocolHelpers.h"
@@ -186,23 +187,7 @@ host.m_dispatcher.Register("gateway.session.list", [&host](const protocol::Reque
 			});
 
 		host.m_dispatcher.Register("gateway.tools.list", [&host](const protocol::RequestFrame& request) {
-			const std::string category = RequestParamsView(request.paramsJson).GetString("category");
-			const auto tools = host.m_toolRegistry.List();
-			std::string toolsJson = "[";
-			std::size_t count = 0;
-			for (std::size_t i = 0; i < tools.size(); ++i) {
-				if (!category.empty() && tools[i].category != category) {
-					continue;
-				}
-				if (count > 0) {
-					toolsJson += ",";
-				}
-				toolsJson += SerializeTool(tools[i]);
-				++count;
-			}
-			toolsJson += "]";
-
-			return protocol::OkResponse(request, "{\"tools\":" + toolsJson + ",\"count\":" + std::to_string(count) + "}");
+			return handlers::tools_shared::ToolsSharedHandlers::HandleToolsList(request, host.m_toolRegistry);
 			});
 
 		host.m_dispatcher.Register("gateway.models.listByProvider", [](const protocol::RequestFrame& request) {
