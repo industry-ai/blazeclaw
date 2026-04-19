@@ -39,11 +39,13 @@ BlazeClawMfc planning docs:
 - `blazeclaw/BlazeClawMfc/DYNAMIC_TASK_DELTA_FULL_EXECUTION_PLAN.md`
 
 Architecture comparison docs:
-- `blazeclaw/docs/README.md` (index)
+- `blazeclaw/docs/index.md` (project review: optimization summary + step-by-step Phases A–F)
+- `blazeclaw/docs/README.md` (file catalog for `blazeclaw/docs/`)
 - `blazeclaw/docs/architecture.md` (layer model; OpenClaw comparison §11; optimization recommendations §12; phased plan §13)
 - `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` (BlazeClaw vs OpenClaw stacks, mapping, gaps, optimization priorities)
 - `blazeclaw/docs/PROTOCOL_CODEGEN.md` (gateway manifest/codegen, default handler coordinator, thin façade checklist, Phase A–B scripts §7, `OkResponse` / `ErrorResponse` / `ReplayFromStored`, `EncodeValidatedEvent`, serializers)
 - `blazeclaw/BlazeClawMfc/tools/GatewayUpstreamDiff/` (`Diff-OpenClawGateway.ps1`, `Verify-GatewayDispatcherMethods.ps1`)
+- `blazeclaw/BlazeClawMfc/tools/Invoke-BlazeClawOptimizationValidation.ps1` (Phases A+B+E in one run; optional `-RunTests` — Catch2 CWD `blazeclaw/`)
 - `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md` (`ServiceManager` ↔ `GatewayHost`, `WireAllGatewayServiceCallbacks`)
 - `blazeclaw/docs/GATEWAY_CORE_WIRING.md` (Phase C wiring, Phase D task-delta recency & streaming/startup notes)
 - `blazeclaw/docs/BUILD_AND_CI.md` (Phase E: vcpkg, Azure Pipelines, stub deprecation plan)

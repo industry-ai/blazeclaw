@@ -179,6 +179,8 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 
 Cross-project architecture (BlazeClaw vs upstream OpenClaw):
 
+- `blazeclaw/docs/index.md` — project review landing page: optimization themes, phased implementation steps (A–F), and MSBuild validation.
+- `blazeclaw/docs/BUILD_AND_CI.md` — canonical MSBuild command; `Invoke-BlazeClawOptimizationValidation.ps1` (Phases A+B+E; optional `-RunTests` with CWD `blazeclaw/`).
 - `blazeclaw/docs/architecture.md` — layer model; OpenClaw comparison (§11); consolidated optimization suggestions (§12); phased implementation plan (§13).
 - `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` — technology stack, module mapping, parity gaps, detailed optimization notes and document history for the port.
 
