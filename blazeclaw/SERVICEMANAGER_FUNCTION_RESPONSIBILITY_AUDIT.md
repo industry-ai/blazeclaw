@@ -89,7 +89,7 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 | `LookupConfigSchemaGatewayPath(path)` | Schema lookup helper. |
 | `WriteConfigSchemaDocumentationSnapshot(path, error)` | Doc export. |
 
-**Assessment:** **Mixed.** Routing/pump are appropriate. Skills/chat **gateway wiring** bodies live in **`GatewayHostBindingCoordinator`** (friend of `ServiceManager`); `BindChatCallbacks` / `BindSkillsCallbacks` stay thin entry points. Remaining complexity is **nested runtime branching** inside the coordinator (candidates for further named strategies on `ChatRuntimeOrchestrationCoordinator` or helpers).
+**Assessment:** **Mixed.** Routing/pump are appropriate. Skills/chat **gateway wiring** bodies live in **`GatewayHostBindingCoordinator`** (friend of `ServiceManager`); `BindChatCallbacks` / `BindSkillsCallbacks` stay thin entry points. **`gateway.skills.update`** / **`skills.update`**: **`GatewayHost`** only registers methods and forwards **`RequestFrame`**; **`SkillsGatewayMethodHandler::HandleSkillsUpdate`** is the **single** parse/validate/response implementation (documented on the handler and at **`SetSkillsUpdateCallback`** / runtime registration). Remaining complexity is **nested runtime branching** inside the chat coordinator (candidates for further named strategies on `ChatRuntimeOrchestrationCoordinator` or helpers).
 
 ---
 
@@ -132,10 +132,10 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 
 | Function | Role |
 |----------|------|
-| `BuildEmbeddedToolBindings()` | Map `m_skillsCommands` → `EmbeddedToolBinding` list (filter tool dispatches). |
+| `BuildEmbeddedToolBindings()` | Thin: **`m_skillsCommandService.BuildEmbeddedToolBindings(m_skillsCommands)`**. |
 | `ExecuteProviderChatRuntimePath(...)` | Thin: builds `ChatProviderRuntimeBindings` via `BuildChatProviderRuntimeBindings()` and delegates to `ChatProviderRuntimeService::ExecuteProviderPath`. |
 
-**Assessment:** Provider branching and provider-local helpers live in **`ChatProviderRuntimeService`**; `ServiceManager` remains composition glue (callbacks + config snapshots passed through bindings).
+**Assessment:** Provider branching and provider-local helpers live in **`ChatProviderRuntimeService`**; embedded tool binding rows are built in **`SkillsCommandService::BuildEmbeddedToolBindings`**; `ServiceManager` remains composition glue (callbacks + config snapshots passed through bindings).
 
 ---
 
@@ -193,9 +193,9 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 | ~~**P1**~~ | ~~`InitializeModules` / `ConfigurePolicies`~~ | — | ✅ **Addressed:** sequencing and policy wiring moved to **`ServiceLifecycleStartupCoordinator`**; optional future step is a structured **`StartupReport`** DTO if reporting/testing needs it. |
 | **P1** | `ApplyManagedRuntimeConfigDiff` | May still imperative-patch many subsystems after coordinator. | Ensure coordinator returns **`ManagedRuntimeApplyPlan`**; `ServiceManager` executes plan via small private `ApplyPlan(...)` or generated visitors. |
 | ~~**P2**~~ | ~~`InvokeDeepSeekRemoteChat`~~ | — | ✅ **Done:** gateway → **`ChatRequest`** mapping moved to **`CDeepSeekClient::InvokeGatewayChat`**; **`ServiceManager`** only passes cancellation via **`BuildChatProviderRuntimeBindings`**. |
-| **P2** | `BindSkillsCallbacks` (body) | Wiring lives in **`GatewayHostBindingCoordinator`**; can regrow if new callbacks are added without a handler seam. | Keep **`SkillsGatewayMethodHandler`** as single entry for parse/validate/response. |
+| ~~**P2**~~ | ~~`BindSkillsCallbacks` (skills.update seam)~~ | — | ✅ **Invariant:** **`SkillsGatewayMethodHandler::HandleSkillsUpdate`** is the only **`skills.update`** parse/validate/response implementation; **`GatewayHost`** forwards frames only (comments in **`GatewayHost.h`**, **`GatewayHost.Handlers.Runtime.cpp`**, **`GatewayHostBindingCoordinator.cpp`**, class doc on **`SkillsGatewayMethodHandler`**). |
 | ~~**P2**~~ | ~~`BuildOperatorDiagnosticsReport`~~ | — | ✅ **Done (Phase 4):** **`OperatorDiagnosticsAssembler`** + **`OperatorDiagnosticsInputs`**; optional future shrink: dedicated **agents/features** projectors for the remaining scalars. |
-| **P3** | `BuildEmbeddedToolBindings` | Straightforward mapping — low risk. | Optional: `SkillsCommandService::BuildEmbeddedToolBindings()` if reuse needed elsewhere. |
+| ~~**P3**~~ | ~~`BuildEmbeddedToolBindings`~~ | — | ✅ **Done:** mapping lives in **`SkillsCommandService::BuildEmbeddedToolBindings(const SkillsCommandSnapshot&)`**; **`ServiceManager`** delegates. |
 
 ---
 
@@ -227,6 +227,7 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 
 - **`GatewayHostBindingCoordinator`** (`RegisterSkillsRelatedCallbacks`, `RegisterChatRuntimeCallbacks`) owns the former bodies of **`BindSkillsCallbacks`** and **`BindChatCallbacks`**.
 - **`ServiceManager`** declares **`friend class GatewayHostBindingCoordinator`**; **`BindSkillsCallbacks`** / **`BindChatCallbacks`** delegate with one call each.
+- **`skills.update`** / **`gateway.skills.update`**: **`SkillsGatewayMethodHandler::HandleSkillsUpdate`** is the **only** parse/validate/response implementation; **`GatewayHost`** forwards **`RequestFrame`** only (see source comments).
 - Contract tests: **`ReadGatewayHostBindingCoordinatorSource()`**, gateway delegation case, and phase1/email strings updated to read the coordinator/assembler sources where behavior moved.
 
 ### Phase 7 (skills refresh policy + gateway publication — completed)
@@ -241,6 +242,11 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 - **`CDeepSeekClient::InvokeGatewayChat`**: maps **`GatewayHost::ChatRuntimeRequest`** + model/API key into **`ChatRequest`**, then **`InvokeChat`** (HTTP/SSE transport unchanged).
 - **`ServiceManager`**: removed **`InvokeDeepSeekRemoteChat`**; **`BuildChatProviderRuntimeBindings`** calls **`m_deepSeekClient.InvokeGatewayChat`** with **`IsDeepSeekRunCancelled`** only.
 - Contract tests: Phase 4 block asserts **`m_deepSeekClient.InvokeGatewayChat(`** in **`ServiceManager.cpp`**.
+
+### Phase 9 (embedded tool bindings mapping — completed)
+
+- **`SkillsCommandService::BuildEmbeddedToolBindings(const SkillsCommandSnapshot&)`** holds the tool-dispatch → **`EmbeddedToolBinding`** mapping; **`ServiceManager::BuildEmbeddedToolBindings`** delegates.
+- Contract tests: **`ServiceManagerStartupPhaseContractTests`** phase1 asserts delegation string in **`ServiceManager.cpp`**.
 
 ---
 
@@ -263,8 +269,10 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 - [x] `ResolveSkillInvocationPromptRewrite` moved out of `ServiceManager` (**`RewriteInvocationPromptUtf8`**).
 - [x] `BindChatCallbacks` implementation moved out of **`ServiceManager.cpp`** (**`GatewayHostBindingCoordinator.cpp`**) — further line-count reduction inside the coordinator is **follow-up**.
 - [x] `BuildOperatorDiagnosticsReport` reduced to projector inputs + **`OperatorDiagnosticsAssembler`**.
-- [x] Contract tests updated for new seams (`ServiceManagerStartupPhaseContractTests` Phase 4–8 + **`SkillCommandInvocationServiceTests`** + **`SkillCommandsAggregationServiceContractTests`** policy path).
+- [x] Contract tests updated for new seams (`ServiceManagerStartupPhaseContractTests` Phase 4–9 + skills gateway single-entry case + **`SkillCommandInvocationServiceTests`** + **`SkillCommandsAggregationServiceContractTests`** policy path).
 - [x] DeepSeek gateway field mapping lives in **`CDeepSeekClient::InvokeGatewayChat`** (Phase 8).
 - [x] `ConfigurePolicies` / `InitializeModules` thin facades over **`ServiceLifecycleStartupCoordinator`** (Phase 5).
+- [x] **`SkillsGatewayMethodHandler`** documented as the **single** **`skills.update`** parse/validate/response entry (**`GatewayHost`** forwards only).
+- [x] **`BuildEmbeddedToolBindings`** mapping in **`SkillsCommandService`** (Phase 9).
 
-*Last updated: Phase 8 DeepSeek — `CDeepSeekClient::InvokeGatewayChat`; `ServiceManager` wires `InvokeGatewayChat` + cancel only; `PARITY_PORTING_ANALYSIS.md` aligned; BlazeClawMfc + BlazeClawMfc.Tests Debug\|x64 built with MSBuild (`PlatformToolset=v143` where v145 is unavailable).*
+*Last updated: Phase 9 **`SkillsCommandService::BuildEmbeddedToolBindings`**; **`ServiceManager`** delegates; contract test in phase1; BlazeClawMfc + BlazeClawMfc.Tests Debug\|x64 built with MSBuild (`PlatformToolset=v143` where v145 is unavailable).*

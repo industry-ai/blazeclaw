@@ -2074,24 +2074,7 @@ namespace blazeclaw::core {
 
 	std::vector<EmbeddedToolBinding> ServiceManager::BuildEmbeddedToolBindings() const
 	{
-		std::vector<EmbeddedToolBinding> toolBindings;
-		toolBindings.reserve(m_skillsCommands.commands.size());
-		for (const auto& command : m_skillsCommands.commands) {
-			if (!command.dispatch.enabled ||
-				_wcsicmp(command.dispatch.kind.c_str(), L"tool") != 0 ||
-				command.dispatch.toolName.empty()) {
-				continue;
-			}
-
-			toolBindings.push_back(EmbeddedToolBinding{
-				.commandName = WideToNarrowAscii(command.name),
-				.description = WideToNarrowAscii(command.description),
-				.toolName = WideToNarrowAscii(command.dispatch.toolName),
-				.argMode = WideToNarrowAscii(command.dispatch.argMode),
-				});
-		}
-
-		return toolBindings;
+		return m_skillsCommandService.BuildEmbeddedToolBindings(m_skillsCommands);
 	}
 
 	std::optional<std::string> ServiceManager::ResolveSkillInvocationToolTarget(

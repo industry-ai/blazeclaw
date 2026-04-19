@@ -34,6 +34,7 @@ void GatewayHostBindingCoordinator::RegisterSkillsRelatedCallbacks(ServiceManage
 			manager.RefreshSkillsState(manager.m_activeConfig, true, L"manual-refresh");
 			return manager.m_gatewaySkillsStateProjection;
 			});
+		// Single parse/validate/response path for skills.update (see SkillsGatewayMethodHandler).
 		manager.m_gatewayHost.SetSkillsUpdateCallback([&manager](
 			const blazeclaw::gateway::protocol::RequestFrame& request) {
 				return manager.m_skillsGatewayMethodHandler.HandleSkillsUpdate(

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PiEmbeddedService.h"
 #include "SkillsCatalogService.h"
 #include "SkillsEligibilityService.h"
 #include "extensions/RuntimeCapabilityAdapterContracts.h"
@@ -81,6 +82,11 @@ namespace blazeclaw::core {
 		[[nodiscard]] bool ValidateFixtureScenarios(
 			const std::filesystem::path& fixturesRoot,
 			std::wstring& outError) const;
+
+		/// Maps skill command specs with `dispatch.kind == tool` into embedded runtime tool bindings
+		/// (straightforward field narrow); shared entry if other call sites need the same list.
+		[[nodiscard]] std::vector<EmbeddedToolBinding> BuildEmbeddedToolBindings(
+			const SkillsCommandSnapshot& commands) const;
 	};
 
 } // namespace blazeclaw::core

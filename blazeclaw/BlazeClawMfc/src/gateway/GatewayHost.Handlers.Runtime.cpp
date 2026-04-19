@@ -6151,6 +6151,8 @@ namespace blazeclaw::gateway {
 				};
 			});
 
+		// Skills update: no param parsing here; forward to m_skillsUpdateCallback (BlazeClaw:
+		// SkillsGatewayMethodHandler::HandleSkillsUpdate). Alias "skills.update" below rewrites method only.
 		m_dispatcher.Register(
 			"gateway.skills.update",
 			[this](const protocol::RequestFrame& request) {

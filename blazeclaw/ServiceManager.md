@@ -194,8 +194,13 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
    - ✅ Implemented.
    - Added `ChatRuntimeOrchestrationCoordinator` and delegated chat request
      preparation concerns from `BindChatCallbacks()`.
+   - **`SkillsCommandService::BuildEmbeddedToolBindings`**: maps tool-dispatch skill commands to **`EmbeddedToolBinding`** for embedded runtime; **`ServiceManager::BuildEmbeddedToolBindings`** delegates to the service.
    - Added `SkillsGatewayMethodHandler` and delegated `skills.update` request
      parsing/persistence/response shaping from `BindSkillsCallbacks()`.
+     **Invariant:** `SkillsGatewayMethodHandler::HandleSkillsUpdate` is the **only**
+     implementation for `gateway.skills.update` / `skills.update` parse, validate, and
+     response framing; `GatewayHost` registers methods and forwards `RequestFrame` to the
+     callback (see `GatewayHost.h`, `GatewayHost.Handlers.Runtime.cpp`, `SkillsGatewayMethodHandler.h`).
    - Added `SkillsGatewayProjectionService` and delegated
      `BuildGatewaySkillEntry(...)` projection/mapping logic.
    - Added orchestration contract coverage for all Phase 1 delegation paths.

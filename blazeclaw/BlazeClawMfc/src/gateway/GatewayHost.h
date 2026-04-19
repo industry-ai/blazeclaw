@@ -292,6 +292,8 @@ namespace blazeclaw::gateway {
 		void Stop();
 		void SetSkillsCatalogState(SkillsCatalogGatewayState state);
 		void SetSkillsRefreshCallback(SkillsRefreshCallback callback);
+		/// BlazeClaw: wire SetSkillsUpdateCallback to SkillsGatewayMethodHandler::HandleSkillsUpdate
+		/// (via GatewayHostBindingCoordinator) so skills.update parse/validate/response stays in one place.
 		void SetSkillsUpdateCallback(SkillsUpdateCallback callback);
 		void SetConfigSchemaGetCallback(ConfigSchemaGetCallback callback);
 		void SetConfigSchemaLookupCallback(ConfigSchemaLookupCallback callback);

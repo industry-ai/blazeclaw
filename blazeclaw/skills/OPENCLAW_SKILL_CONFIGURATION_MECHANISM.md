@@ -131,6 +131,9 @@ BlazeClaw (current implementation path):
 
 - Skill-local WebView2 `config.html` can be opened from skill selection
 - Native bridge messages handle save/load and persist to canonical `.env`
+- Gateway `skills.update` / `gateway.skills.update`: **`SkillsGatewayMethodHandler::HandleSkillsUpdate`**
+  in `blazeclaw/BlazeClawMfc/src/core/SkillsGatewayMethodHandler.h` is the **single** parse/validate/response
+  entry; `GatewayHost` forwards protocol frames only (no duplicate param parsing in the dispatcher).
 
 ## 6) Reuse guidance for BlazeClaw evolution
 

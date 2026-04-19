@@ -13,6 +13,10 @@
 
 namespace blazeclaw::core {
 
+	/// Single entry for gateway.skills.update / skills.update protocol handling: parse paramsJson,
+	/// validate required fields and env payloads, persist via injected callbacks, and build
+	/// ResponseFrame success/error shapes. Do not duplicate this logic in GatewayHost handlers;
+	/// they should only forward RequestFrame to HandleSkillsUpdate (see GatewayHostBindingCoordinator wiring).
 	class SkillsGatewayMethodHandler {
 	public:
 		struct Dependencies {

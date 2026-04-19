@@ -10,6 +10,15 @@ namespace blazeclaw::core {
 
 	namespace {
 
+		std::string NarrowAsciiFromWide(const std::wstring& value) {
+			std::string output;
+			output.reserve(value.size());
+			for (const auto ch : value) {
+				output.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
+			}
+			return output;
+		}
+
 		constexpr std::size_t kMaxCommandLength = 32;
 		constexpr std::size_t kMaxDescriptionLength = 100;
 
@@ -664,6 +673,28 @@ namespace blazeclaw::core {
 		}
 
 		return true;
+	}
+
+	std::vector<EmbeddedToolBinding> SkillsCommandService::BuildEmbeddedToolBindings(
+		const SkillsCommandSnapshot& commands) const {
+		std::vector<EmbeddedToolBinding> toolBindings;
+		toolBindings.reserve(commands.commands.size());
+		for (const auto& command : commands.commands) {
+			if (!command.dispatch.enabled ||
+				_wcsicmp(command.dispatch.kind.c_str(), L"tool") != 0 ||
+				command.dispatch.toolName.empty()) {
+				continue;
+			}
+
+			toolBindings.push_back(EmbeddedToolBinding{
+				.commandName = NarrowAsciiFromWide(command.name),
+				.description = NarrowAsciiFromWide(command.description),
+				.toolName = NarrowAsciiFromWide(command.dispatch.toolName),
+				.argMode = NarrowAsciiFromWide(command.dispatch.argMode),
+			});
+		}
+
+		return toolBindings;
 	}
 
 } // namespace blazeclaw::core

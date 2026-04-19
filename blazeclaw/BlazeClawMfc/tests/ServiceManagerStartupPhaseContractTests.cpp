@@ -62,6 +62,34 @@ namespace {
 			std::istreambuf_iterator<char>());
 	}
 
+	std::string ReadSkillsGatewayMethodHandlerHeader()
+	{
+		const auto sourcePath = std::filesystem::path("BlazeClawMfc") /
+			"src" /
+			"core" /
+			"SkillsGatewayMethodHandler.h";
+		std::ifstream in(sourcePath.string());
+		REQUIRE(in.is_open());
+
+		return std::string(
+			(std::istreambuf_iterator<char>(in)),
+			std::istreambuf_iterator<char>());
+	}
+
+	std::string ReadGatewayHostHandlersRuntimeSource()
+	{
+		const auto sourcePath = std::filesystem::path("BlazeClawMfc") /
+			"src" /
+			"gateway" /
+			"GatewayHost.Handlers.Runtime.cpp";
+		std::ifstream in(sourcePath.string());
+		REQUIRE(in.is_open());
+
+		return std::string(
+			(std::istreambuf_iterator<char>(in)),
+			std::istreambuf_iterator<char>());
+	}
+
 } // namespace
 
 TEST_CASE(
@@ -320,6 +348,9 @@ TEST_CASE(
 
 	const std::string source = ReadServiceManagerSource();
 	REQUIRE(
+		source.find("m_skillsCommandService.BuildEmbeddedToolBindings(") !=
+		std::string::npos);
+	REQUIRE(
 		source.find("m_skillsGatewayProjectionService.BuildGatewaySkillEntry(") !=
 		std::string::npos);
 }
@@ -401,6 +432,24 @@ TEST_CASE(
 	REQUIRE(
 		source.find("GatewayHostBindingCoordinator::RegisterChatRuntimeCallbacks(*this)") !=
 		std::string::npos);
+}
+
+TEST_CASE(
+	"ServiceManager skills gateway contract: SkillsGatewayMethodHandler is single skills.update entry",
+	"[servicemanager][skills][gateway][contract]")
+{
+	const std::string handlerHeader = ReadSkillsGatewayMethodHandlerHeader();
+	REQUIRE(handlerHeader.find("Single entry") != std::string::npos);
+	REQUIRE(handlerHeader.find("HandleSkillsUpdate") != std::string::npos);
+
+	const std::string gatewayBinding = ReadGatewayHostBindingCoordinatorSource();
+	REQUIRE(
+		gatewayBinding.find("m_skillsGatewayMethodHandler.HandleSkillsUpdate(") !=
+		std::string::npos);
+
+	const std::string runtimeHandlers = ReadGatewayHostHandlersRuntimeSource();
+	REQUIRE(runtimeHandlers.find("gateway.skills.update") != std::string::npos);
+	REQUIRE(runtimeHandlers.find("m_skillsUpdateCallback(request)") != std::string::npos);
 }
 
 TEST_CASE(
