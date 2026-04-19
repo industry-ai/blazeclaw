@@ -23,4 +23,10 @@ namespace blazeclaw::gateway {
 [[nodiscard]] std::string JsonArray(std::initializer_list<std::string> elements);
 [[nodiscard]] std::string JsonArray(const std::vector<std::string>& elements);
 
+/// Compact success payloads for common gateway introspection shapes (pair with `protocol::OkResponse`).
+[[nodiscard]] std::string JsonPayloadExists(bool exists);
+[[nodiscard]] std::string JsonPayloadCount(std::uint64_t count);
+[[nodiscard]] std::string JsonPayloadFoundCount(bool found, std::uint64_t count);
+[[nodiscard]] std::string JsonPayloadPathExists(const std::string& path, bool exists);
+
 } // namespace blazeclaw::gateway

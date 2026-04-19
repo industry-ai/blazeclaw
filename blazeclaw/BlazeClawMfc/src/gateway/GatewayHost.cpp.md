@@ -1,5 +1,7 @@
 # GatewayHost — tracking notes
 
+**Related documentation:** `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` (how `GatewayHost` fits the BlazeClaw vs OpenClaw gateway model), `blazeclaw/BlazeClawMfc/PROJECT_REVIEW.md` (layering and threading).
+
 This file tracks analysis of `blazeclaw::gateway::GatewayHost` (`GatewayHost.h` / split `.cpp` sources). The section at the bottom preserves earlier **file size** guidance for `GatewayHost.cpp`.
 
 ---
@@ -33,7 +35,9 @@ Duplicate method names across registrars still overwrite the same dispatcher slo
 
 Defined in `GatewayProtocolModels.h`: `OkResponse(const RequestFrame& request, std::string payloadJson)` for the usual case, and `OkResponseOptionalPayload(const RequestFrame& request, std::optional<std::string> payloadJson)` when the body may be omitted (e.g. inline policy skip)—kept as a **separate** function name so string-literal payloads do not hit overload ambiguity with `std::optional`. Handler lambdas return `return protocol::OkResponse(request, …);` instead of spelling out `protocol::ResponseFrame{ .id = request.id, .ok = true, .payloadJson = …, .error = std::nullopt }`.
 
-**Error responses** (`ok == false`, `error` set) still use an explicit `protocol::ResponseFrame{ ... }` initializer—no change.
+**Error responses** (`ok == false`, `error` set) should use **`protocol::ErrorResponse`** (`GatewayProtocolModels.h`): `ErrorResponse(request, protocol::ErrorShape{...})`, or short forms `ErrorResponse(request, code, message)` / `ErrorResponse(request, code, message, detailsJson)` / full retry overload. Avoid ad hoc `ResponseFrame{ .id, .ok = false, ... }` in new code.
+
+Workflow for manifest vs static handlers: **`blazeclaw/docs/PROTOCOL_CODEGEN.md`**.
 
 Applied across default gateway handler sources: `GatewayHost.cpp`, `GatewayHost.Handlers.*.cpp`, and `generated/GatewayHandlerCatalog.Generated.cpp`.
 
@@ -312,7 +316,7 @@ Handlers that need **captures** (`[this]`, telemetry, registry state) stay as ex
 
 `protocol::OkResponse(request, payloadJson)` lives in `GatewayProtocolModels.h` and replaces the repeated success `protocol::ResponseFrame{ .id, .ok = true, .payloadJson, .error = nullopt }` pattern across gateway handler translation units.
 
-Optional next steps (not implemented): `ErrorResponse(...)`, `MakeExistsResponse(...)`, or small payload builders for common `exists` / `count` JSON shapes.
+**Done:** `protocol::ErrorResponse(...)` overloads and **`JsonPayloadExists` / `JsonPayloadCount` / `JsonPayloadFoundCount` / `JsonPayloadPathExists`** in `GatewayJsonBuilder.*` for common success shapes. Tests: `BlazeClawMfc/tests/GatewayProtocolResponseHelpersTests.cpp`.
 
 **Effect:** fewer lines per handler return; readability improved. Remaining bulk is still JSON string assembly, not frame wiring.
 

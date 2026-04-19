@@ -50,6 +50,64 @@ namespace blazeclaw::gateway::protocol {
 		};
 	}
 
+	/// Failed JSON-RPC-style response: copies `request.id`, sets `ok = false`, no payload, structured error.
+	[[nodiscard]] inline ResponseFrame ErrorResponse(
+		const RequestFrame& request,
+		ErrorShape error) {
+		return ResponseFrame{
+			.id = request.id,
+			.ok = false,
+			.payloadJson = std::nullopt,
+			.error = std::move(error),
+		};
+	}
+
+	/// Error with code + message only (non-retryable, no details).
+	[[nodiscard]] inline ResponseFrame ErrorResponse(
+		const RequestFrame& request,
+		std::string code,
+		std::string message) {
+		return ErrorResponse(request, ErrorShape{
+			.code = std::move(code),
+			.message = std::move(message),
+			.detailsJson = std::nullopt,
+			.retryable = false,
+			.retryAfterMs = std::nullopt,
+		});
+	}
+
+	/// Error with optional JSON details fragment (object or string shape as already encoded).
+	[[nodiscard]] inline ResponseFrame ErrorResponse(
+		const RequestFrame& request,
+		std::string code,
+		std::string message,
+		std::optional<std::string> detailsJson) {
+		return ErrorResponse(request, ErrorShape{
+			.code = std::move(code),
+			.message = std::move(message),
+			.detailsJson = std::move(detailsJson),
+			.retryable = false,
+			.retryAfterMs = std::nullopt,
+		});
+	}
+
+	/// Full control over retry hints (matches common `ErrorShape` usage in handlers).
+	[[nodiscard]] inline ResponseFrame ErrorResponse(
+		const RequestFrame& request,
+		std::string code,
+		std::string message,
+		std::optional<std::string> detailsJson,
+		std::optional<bool> retryable,
+		std::optional<std::uint64_t> retryAfterMs) {
+		return ErrorResponse(request, ErrorShape{
+			.code = std::move(code),
+			.message = std::move(message),
+			.detailsJson = std::move(detailsJson),
+			.retryable = std::move(retryable),
+			.retryAfterMs = std::move(retryAfterMs),
+		});
+	}
+
 	struct StateVersion {
 		std::optional<std::uint64_t> presence;
 		std::optional<std::uint64_t> health;

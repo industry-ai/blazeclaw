@@ -63,4 +63,30 @@ std::string JsonArray(const std::vector<std::string>& elements) {
 	return out;
 }
 
+std::string JsonPayloadExists(bool exists) {
+	return JsonObject({
+		{"exists", JsonBool(exists)},
+	});
+}
+
+std::string JsonPayloadCount(std::uint64_t count) {
+	return JsonObject({
+		{"count", JsonNumber(count)},
+	});
+}
+
+std::string JsonPayloadFoundCount(bool found, std::uint64_t count) {
+	return JsonObject({
+		{"found", JsonBool(found)},
+		{"count", JsonNumber(count)},
+	});
+}
+
+std::string JsonPayloadPathExists(const std::string& path, bool exists) {
+	return JsonObject({
+		{"path", JsonString(path)},
+		{"exists", JsonBool(exists)},
+	});
+}
+
 } // namespace blazeclaw::gateway

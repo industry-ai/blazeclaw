@@ -135,3 +135,7 @@ Implement Priority A + B first to stop incorrect Brave Search capture, then add 
     backticked skill/tool targets are present in the prompt.
   - This prevents Chinese inline numbered prompts from bypassing deterministic
     tool-chain execution and falling back to provider-only narrative responses.
+
+## See also
+
+- `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` — overall BlazeClaw vs OpenClaw architecture, module mapping, and port optimization priorities (this document is a focused behavioral mismatch case study).

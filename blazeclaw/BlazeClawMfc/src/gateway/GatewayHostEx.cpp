@@ -11,18 +11,15 @@ namespace blazeclaw::gateway {
 	protocol::ResponseFrame GatewayHostEx::RouteRequest(
 		const protocol::RequestFrame& request) const {
 		if (m_dependencies.legacyHost == nullptr) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = false,
-				.payloadJson = std::nullopt,
-				.error = protocol::ErrorShape{
+			return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 					.code = "stage_host_unavailable",
 					.message = "GatewayHostEx has no legacy host backing instance.",
 					.detailsJson = std::nullopt,
 					.retryable = true,
 					.retryAfterMs = 0,
-				},
-			};
+				});
 		}
 
 		return m_dependencies.legacyHost->RouteRequestLegacy(request);

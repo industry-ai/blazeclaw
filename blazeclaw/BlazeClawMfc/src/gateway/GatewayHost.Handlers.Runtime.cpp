@@ -2879,18 +2879,15 @@ namespace blazeclaw::gateway {
 				}
 
 				if (!forTest) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
+					return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 							.code = "invalid_params",
 							.message = "Set forTest=true to reset plugin runtime lifecycle state.",
 							.detailsJson = std::nullopt,
 							.retryable = false,
 							.retryAfterMs = std::nullopt,
-						},
-					};
+						});
 				}
 
 				m_pluginRuntimeState.ResetForTest();
@@ -3104,18 +3101,15 @@ namespace blazeclaw::gateway {
 					approvalAccepted = approved;
 					const bool tokenAccepted = !approvalToken.empty();
 					if (!approvalAccepted || !tokenAccepted) {
-						return protocol::ResponseFrame{
-							.id = request.id,
-							.ok = false,
-							.payloadJson = std::nullopt,
-							.error = protocol::ErrorShape{
+						return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 								.code = "approval_required",
 								.message = "Auto-remediation execution requires explicit approval and token.",
 								.detailsJson = std::nullopt,
 								.retryable = false,
 								.retryAfterMs = std::nullopt,
-							},
-						};
+							});
 					}
 
 					const std::uint64_t nowEpochMs = CurrentEpochMsLocal();
@@ -3125,11 +3119,9 @@ namespace blazeclaw::gateway {
 						nowEpochMs,
 						&approvalSession)) {
 						const auto existing = m_approvalStore.LoadSession(approvalToken);
-						return protocol::ResponseFrame{
-							.id = request.id,
-							.ok = false,
-							.payloadJson = std::nullopt,
-							.error = protocol::ErrorShape{
+						return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 								.code = existing.has_value()
 									? "approval_token_expired"
 									: "approval_token_invalid",
@@ -3139,23 +3131,19 @@ namespace blazeclaw::gateway {
 								.detailsJson = std::nullopt,
 								.retryable = false,
 								.retryAfterMs = std::nullopt,
-							},
-						};
+							});
 					}
 
 					if (approvalSession.type != "governance.remediation") {
-						return protocol::ResponseFrame{
-							.id = request.id,
-							.ok = false,
-							.payloadJson = std::nullopt,
-							.error = protocol::ErrorShape{
+						return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 								.code = "approval_token_orphaned",
 								.message = "Approval token type mismatch for remediation execution.",
 								.detailsJson = std::nullopt,
 								.retryable = false,
 								.retryAfterMs = std::nullopt,
-							},
-						};
+							});
 					}
 
 					std::string tokenTenantId;
@@ -3165,18 +3153,15 @@ namespace blazeclaw::gateway {
 						tokenTenantId);
 					if (!tokenTenantId.empty() &&
 						tokenTenantId != state.autoRemediationTenantId) {
-						return protocol::ResponseFrame{
-							.id = request.id,
-							.ok = false,
-							.payloadJson = std::nullopt,
-							.error = protocol::ErrorShape{
+						return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 								.code = "approval_token_orphaned",
 								.message = "Approval token tenant mismatch for remediation execution.",
 								.detailsJson = std::nullopt,
 								.retryable = false,
 								.retryAfterMs = std::nullopt,
-							},
-						};
+							});
 					}
 				}
 
@@ -3218,33 +3203,27 @@ namespace blazeclaw::gateway {
 					request.id.empty() ? "gateway.embeddings.generate" : request.id;
 
 				if (text.empty()) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
+					return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 							.code = "invalid_params",
 							.message = "`text` must be a non-empty string.",
 							.detailsJson = std::nullopt,
 							.retryable = false,
 							.retryAfterMs = std::nullopt,
-						},
-					};
+						});
 				}
 
 				if (!m_embeddingsGenerateCallback) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
+					return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 							.code = "runtime_unavailable",
 							.message = "Embeddings runtime callback is unavailable.",
 							.detailsJson = std::nullopt,
 							.retryable = false,
 							.retryAfterMs = std::nullopt,
-						},
-					};
+						});
 				}
 
 				const auto result = m_embeddingsGenerateCallback(
@@ -3256,11 +3235,9 @@ namespace blazeclaw::gateway {
 					});
 
 				if (!result.ok) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
+					return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 							.code = result.errorCode.empty()
 								? "embedding_failed"
 								: result.errorCode,
@@ -3270,8 +3247,7 @@ namespace blazeclaw::gateway {
 							.detailsJson = std::nullopt,
 							.retryable = false,
 							.retryAfterMs = std::nullopt,
-						},
-					};
+						});
 				}
 
 				return protocol::OkResponse(request, "{\"vector\":" + SerializeFloatArrayLocal(result.vector) +
@@ -3301,48 +3277,39 @@ namespace blazeclaw::gateway {
 					request.id.empty() ? "gateway.embeddings.batchGenerate" : request.id;
 
 				if (texts.empty()) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
+					return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 							.code = "invalid_params",
 							.message = "`texts` must be a non-empty string array.",
 							.detailsJson = std::nullopt,
 							.retryable = false,
 							.retryAfterMs = std::nullopt,
-						},
-					};
+						});
 				}
 
 				if (texts.size() > 64) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
+					return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 							.code = "invalid_params",
 							.message = "`texts` exceeds maximum batch size of 64.",
 							.detailsJson = std::nullopt,
 							.retryable = false,
 							.retryAfterMs = std::nullopt,
-						},
-					};
+						});
 				}
 
 				if (!m_embeddingsBatchCallback) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
+					return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 							.code = "runtime_unavailable",
 							.message = "Embeddings runtime callback is unavailable.",
 							.detailsJson = std::nullopt,
 							.retryable = false,
 							.retryAfterMs = std::nullopt,
-						},
-					};
+						});
 				}
 
 				const auto result = m_embeddingsBatchCallback(
@@ -3354,11 +3321,9 @@ namespace blazeclaw::gateway {
 					});
 
 				if (!result.ok) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
+					return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 							.code = result.errorCode.empty()
 								? "embedding_failed"
 								: result.errorCode,
@@ -3368,8 +3333,7 @@ namespace blazeclaw::gateway {
 							.detailsJson = std::nullopt,
 							.retryable = false,
 							.retryAfterMs = std::nullopt,
-						},
-					};
+						});
 				}
 
 				return protocol::OkResponse(request, "{\"vectors\":" + SerializeFloatMatrixLocal(result.vectors) +
@@ -3388,18 +3352,15 @@ namespace blazeclaw::gateway {
 				const std::string runId =
 					ExtractStringParam(request.paramsJson, "runId");
 				if (runId.empty()) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
+					return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 							.code = "missing_run_id",
 							.message = "runId is required.",
 							.detailsJson = std::nullopt,
 							.retryable = false,
 							.retryAfterMs = std::nullopt,
-						},
-					};
+						});
 				}
 
 				const auto storedDeltas = m_taskDeltaRepository.Get(runId);
@@ -3429,18 +3390,15 @@ namespace blazeclaw::gateway {
 					orderedTaskDeltas,
 					schemaErrorCode,
 					schemaErrorMessage)) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
+					return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 							.code = schemaErrorCode,
 							.message = schemaErrorMessage,
 							.detailsJson = std::nullopt,
 							.retryable = false,
 							.retryAfterMs = std::nullopt,
-						},
-					};
+						});
 				}
 
 				std::string deltasJson = "[";
@@ -3597,19 +3555,16 @@ namespace blazeclaw::gateway {
 								"\",\"queued\":false,\"deduped\":true}");
 					}
 
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-					 .error = stageContext.responseError.has_value()
-							? stageContext.responseError
-						  : std::optional<protocol::ErrorShape>(
-								BuildRuntimeErrorShape(
-									stageContext.responseErrorCode,
-									stageContext.responseErrorMessage,
-									stageContext.runId,
-									stageContext.sessionKey)),
-					};
+					if (stageContext.responseError.has_value()) {
+						return protocol::ErrorResponse(request, std::move(*stageContext.responseError));
+					}
+					return protocol::ErrorResponse(
+						request,
+						BuildRuntimeErrorShape(
+							stageContext.responseErrorCode,
+							stageContext.responseErrorMessage,
+							stageContext.runId,
+							stageContext.sessionKey));
 				}
 
 				const std::string requestedSessionKey = stageContext.requestedSessionKey;
@@ -3803,16 +3758,13 @@ namespace blazeclaw::gateway {
 						"gateway.chat.policy.decision",
 						std::string("{\"runId\":") + JsonString(runId) +
 						",\"layer\":\"send\",\"reason\":\"denied_send\"}");
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-					  .error = BuildRuntimeErrorShape(
+					return protocol::ErrorResponse(
+						request,
+						BuildRuntimeErrorShape(
 							"denied_send",
 							"Request denied by send policy.",
 							runId,
-							sessionKey),
-					};
+							sessionKey));
 				}
 				auto persistTaskDeltas =
 					[this, &runId, &sessionKey](
@@ -5018,16 +4970,13 @@ namespace blazeclaw::gateway {
 					ExtractStringParam(request.paramsJson, "label");
 
 				if (json::Trim(message).empty()) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-					  .error = BuildRuntimeErrorShape(
+					return protocol::ErrorResponse(
+						request,
+						BuildRuntimeErrorShape(
 							"invalid_params",
 							"`message` must be a non-empty string.",
 							request.id,
-							sessionKey),
-					};
+							sessionKey));
 				}
 
 				const ChatTranscriptStore transcriptStore;
@@ -5039,19 +4988,16 @@ namespace blazeclaw::gateway {
 					 .idempotencyKey = request.id,
 					});
 				if (!appended.ok) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-					  .error = BuildRuntimeErrorShape(
+					return protocol::ErrorResponse(
+						request,
+						BuildRuntimeErrorShape(
 							"unavailable",
 							"failed to write transcript: " +
 							(appended.error.empty()
 								? std::string("unknown error")
 								: appended.error),
 							request.id,
-							sessionKey),
-					};
+							sessionKey));
 				}
 
 				if (appended.messageId.empty() || appended.messageJson.empty()) {
@@ -5673,11 +5619,9 @@ namespace blazeclaw::gateway {
 					});
 
 				if (it == m_skillsCatalogState.entries.end()) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
+					return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 							.code = "skill_not_found",
 							.message = "Requested skill install target was not found.",
 							.detailsJson = "{\"skill\":\"" +
@@ -5685,8 +5629,7 @@ namespace blazeclaw::gateway {
 								"\"}",
 							.retryable = false,
 							.retryAfterMs = std::nullopt,
-						},
-					};
+						});
 				}
 
 				const auto warning = m_skillsCatalogState.scanCriticalCount > 0
@@ -5755,19 +5698,16 @@ namespace blazeclaw::gateway {
 			"gateway.config.schema.get",
 			[this](const protocol::RequestFrame& request) {
 				if (!m_configSchemaGetCallback) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
+					return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 							.code = "not_supported",
 							.message =
 								"Config schema callback is not configured.",
 							.detailsJson = std::nullopt,
 							.retryable = false,
 							.retryAfterMs = std::nullopt,
-						},
-					};
+						});
 				}
 
 				const auto state = m_configSchemaGetCallback();
@@ -5789,19 +5729,16 @@ namespace blazeclaw::gateway {
 			"gateway.config.schema.lookup",
 			[this](const protocol::RequestFrame& request) {
 				if (!m_configSchemaLookupCallback) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
+					return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 							.code = "not_supported",
 							.message =
 								"Config schema lookup callback is not configured.",
 							.detailsJson = std::nullopt,
 							.retryable = false,
 							.retryAfterMs = std::nullopt,
-						},
-					};
+						});
 				}
 
 				const std::string requestedPath =
@@ -5809,11 +5746,9 @@ namespace blazeclaw::gateway {
 				const auto normalizedPath =
 					NormalizeSchemaLookupPathRequest(requestedPath);
 				if (!normalizedPath.has_value()) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
+					return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 							.code = "invalid_lookup_path",
 							.message =
 								"Invalid schema lookup path.",
@@ -5823,18 +5758,15 @@ namespace blazeclaw::gateway {
 								"\"}",
 							.retryable = false,
 							.retryAfterMs = std::nullopt,
-						},
-					};
+						});
 				}
 
 				const auto lookupResult =
 					m_configSchemaLookupCallback(normalizedPath.value());
 				if (!lookupResult.has_value()) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
+					return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 							.code = "schema_path_not_found",
 							.message = "Schema path was not found.",
 							.detailsJson =
@@ -5843,8 +5775,7 @@ namespace blazeclaw::gateway {
 								"\"}",
 							.retryable = false,
 							.retryAfterMs = std::nullopt,
-						},
-					};
+						});
 				}
 
 				return protocol::OkResponse(request, SerializeConfigSchemaLookupResultLocal(
@@ -5857,18 +5788,15 @@ namespace blazeclaw::gateway {
 				const auto skillName =
 					ExtractStringParam(request.paramsJson, "skill");
 				if (skillName.empty()) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
+					return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 							.code = "missing_skill",
 							.message = "Parameter `skill` is required.",
 							.detailsJson = std::nullopt,
 							.retryable = false,
 							.retryAfterMs = std::nullopt,
-						},
-					};
+						});
 				}
 
 				const auto it = std::find_if(
@@ -5880,11 +5808,9 @@ namespace blazeclaw::gateway {
 					});
 
 				if (it == m_skillsCatalogState.entries.end()) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
+					return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 							.code = "skill_not_found",
 							.message = "Skill not found.",
 							.detailsJson =
@@ -5893,8 +5819,7 @@ namespace blazeclaw::gateway {
 								"\"}",
 							.retryable = false,
 							.retryAfterMs = std::nullopt,
-						},
-					};
+						});
 				}
 
 				return protocol::OkResponse(request, "{\"skill\":\"" +
@@ -5938,18 +5863,15 @@ namespace blazeclaw::gateway {
 			"gateway.skills.update",
 			[this](const protocol::RequestFrame& request) {
 				if (!m_skillsUpdateCallback) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
+					return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 							.code = "not_supported",
 							.message = "Skills update callback is not configured.",
 							.detailsJson = std::nullopt,
 						  .retryable = false,
 							.retryAfterMs = std::nullopt,
-						},
-					};
+						});
 				}
 
 				return m_skillsUpdateCallback(request);
@@ -5961,18 +5883,15 @@ namespace blazeclaw::gateway {
 				protocol::RequestFrame delegated = request;
 				delegated.method = "gateway.skills.update";
 				if (!m_skillsUpdateCallback) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = false,
-						.payloadJson = std::nullopt,
-						.error = protocol::ErrorShape{
+					return protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 							.code = "not_supported",
 							.message = "Skills update callback is not configured.",
 							.detailsJson = std::nullopt,
 							.retryable = false,
 							.retryAfterMs = std::nullopt,
-						},
-					};
+						});
 				}
 
 				return m_skillsUpdateCallback(delegated);

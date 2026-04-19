@@ -177,6 +177,10 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 - `ORCHESTRATION_PATH_ANALYSIS.md` — analysis of `dynamic_task_delta` vs `runtime_orchestration` behavior and recommended default.
 - `LLAMACPP_MODEL_LOADING_PLAN.md` — staged integration plan for GGUF/`llama.cpp` local runtime path.
 
+Cross-project architecture (BlazeClaw vs upstream OpenClaw):
+
+- `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` — technology stack, module mapping, parity gaps, and prioritized optimization suggestions for the port.
+
 ---
 
 Review date: **2026-04-07**  

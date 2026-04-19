@@ -288,18 +288,15 @@ namespace blazeclaw::gateway::protocol {
 			return false;
 		}
 
-		const ResponseFrame invalidProtocolParamsResponse{
-			.id = invalidProtocolParamsRequest.id,
-			.ok = false,
-			.payloadJson = std::nullopt,
-			.error = ErrorShape{
+		const ResponseFrame invalidProtocolParamsResponse = ErrorResponse(
+			invalidProtocolParamsRequest,
+			ErrorShape{
 				.code = validationIssue.code.empty() ? "schema_validation_failed" : validationIssue.code,
 				.message = validationIssue.message.empty() ? "Request failed schema validation." : validationIssue.message,
 				.detailsJson = "{\"method\":\"" + invalidProtocolParamsRequest.method + "\"}",
 				.retryable = false,
 				.retryAfterMs = std::nullopt,
-			},
-		};
+			});
 
 		if (!CompareFixture(
 			root / "response_invalid_protocol_params.json",

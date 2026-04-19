@@ -271,7 +271,13 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 
 ---
 
-## 5) Tracking checklist
+## 5) Related documents
+
+- `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` — BlazeClaw vs OpenClaw architecture mapping and port optimization priorities (context for where `ServiceManager` sits in the stack).
+
+---
+
+## 6) Tracking checklist
 
 - [x] `ExecuteProviderChatRuntimePath` extracted or substantially delegated (**`ChatProviderRuntimeService`**).
 - [x] `ResolveSkillInvocationPromptRewrite` moved out of `ServiceManager` (**`RewriteInvocationPromptUtf8`**).

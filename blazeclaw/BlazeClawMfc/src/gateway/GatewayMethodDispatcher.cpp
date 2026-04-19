@@ -19,18 +19,15 @@ protocol::ResponseFrame GatewayMethodDispatcher::Dispatch(const protocol::Reques
     return it->second(request);
   }
 
-  return protocol::ResponseFrame{
-      .id = request.id,
-      .ok = false,
-      .payloadJson = std::nullopt,
-      .error = protocol::ErrorShape{
+  return protocol::ErrorResponse(
+      request,
+      protocol::ErrorShape{
           .code = "method_not_implemented",
           .message = "Gateway method is not implemented in current milestone.",
           .detailsJson = "{\"method\":\"" + request.method + "\"}",
           .retryable = false,
           .retryAfterMs = std::nullopt,
-      },
-  };
+      });
 }
 
 std::size_t GatewayMethodDispatcher::RegisteredMethodCount() const noexcept {

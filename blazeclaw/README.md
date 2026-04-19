@@ -26,4 +26,6 @@ BlazeClawMfc planning docs:
 - `blazeclaw/BlazeClawMfc/DYNAMIC_TASK_DELTA_FULL_EXECUTION_PLAN.md`
 
 Architecture comparison docs:
-- `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md`
+- `blazeclaw/docs/README.md` (index)
+- `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` (BlazeClaw vs OpenClaw stacks, mapping, gaps, optimization priorities)
+- `blazeclaw/docs/PROTOCOL_CODEGEN.md` (gateway manifest/codegen, `OkResponse` / `ErrorResponse`, JSON payload helpers)

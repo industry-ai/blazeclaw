@@ -1293,36 +1293,30 @@ namespace blazeclaw::gateway {
 		protocol::RequestFrame request;
 		std::string decodeError;
 		if (!protocol::TryDecodeRequestFrame(inboundJson, request, decodeError)) {
-			const protocol::ResponseFrame errorResponse{
-				.id = "",
-				.ok = false,
-				.payloadJson = std::nullopt,
-				.error = protocol::ErrorShape{
+			const protocol::ResponseFrame errorResponse = protocol::ErrorResponse(
+				protocol::RequestFrame{},
+				protocol::ErrorShape{
 					.code = "invalid_frame",
 					.message = decodeError,
 					.detailsJson = std::nullopt,
 					.retryable = false,
 					.retryAfterMs = std::nullopt,
-				},
-			};
+				});
 
 			return protocol::EncodeResponseFrame(errorResponse);
 		}
 
 		protocol::SchemaValidationIssue validationIssue;
 		if (!protocol::GatewayProtocolSchemaValidator::ValidateRequest(request, validationIssue)) {
-			const protocol::ResponseFrame schemaErrorResponse{
-				.id = request.id,
-				.ok = false,
-				.payloadJson = std::nullopt,
-				.error = protocol::ErrorShape{
+			const protocol::ResponseFrame schemaErrorResponse = protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 					.code = validationIssue.code.empty() ? "schema_validation_failed" : validationIssue.code,
 					.message = validationIssue.message.empty() ? "Request failed schema validation." : validationIssue.message,
 					.detailsJson = "{\"method\":\"" + request.method + "\"}",
 					.retryable = false,
 					.retryAfterMs = std::nullopt,
-				},
-			};
+				});
 
 			return protocol::EncodeResponseFrame(schemaErrorResponse);
 		}
@@ -1334,12 +1328,8 @@ namespace blazeclaw::gateway {
 				.hostRunning = m_running,
 			});
 		if (policyError.has_value()) {
-			const protocol::ResponseFrame policyErrorResponse{
-				.id = request.id,
-				.ok = false,
-				.payloadJson = std::nullopt,
-				.error = policyError,
-			};
+			const protocol::ResponseFrame policyErrorResponse =
+				protocol::ErrorResponse(request, std::move(policyError.value()));
 
 			return protocol::EncodeResponseFrame(policyErrorResponse);
 		}
@@ -1349,11 +1339,9 @@ namespace blazeclaw::gateway {
 			request.method,
 			routedResponse,
 			validationIssue)) {
-			const protocol::ResponseFrame schemaErrorResponse{
-				.id = request.id,
-				.ok = false,
-				.payloadJson = std::nullopt,
-				.error = protocol::ErrorShape{
+			const protocol::ResponseFrame schemaErrorResponse = protocol::ErrorResponse(
+				request,
+				protocol::ErrorShape{
 					.code = validationIssue.code.empty() ? "schema_invalid_response" : validationIssue.code,
 					.message = validationIssue.message.empty()
 						? "Handler response failed schema validation."
@@ -1361,8 +1349,7 @@ namespace blazeclaw::gateway {
 					.detailsJson = "{\"method\":\"" + request.method + "\"}",
 					.retryable = false,
 					.retryAfterMs = std::nullopt,
-				},
-			};
+				});
 
 			return protocol::EncodeResponseFrame(schemaErrorResponse);
 		}
@@ -1752,26 +1739,22 @@ namespace blazeclaw::gateway {
 			const std::string requestedPath = RequestParamsView(request.paramsJson).GetString("path");
 			const AgentFileExistsResult result = m_agentRegistry.ExistsFile(requestedId, requestedPath);
 
-			return protocol::OkResponse(request, "{\"path\":\"" + EscapeJson(result.path) +
-					"\",\"exists\":" + std::string(result.exists ? "true" : "false") + "}");
+			return protocol::OkResponse(request, JsonPayloadPathExists(result.path, result.exists));
 			});
 
 		m_dispatcher.Register("gateway.agents.files.delete", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("agentId");
 			const std::string requestedPath = RequestParamsView(request.paramsJson).GetString("path");
 			if (IsUnsafeAgentFilePath(requestedPath)) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = false,
-					.payloadJson = std::nullopt,
-					.error = protocol::ErrorShape{
+				return protocol::ErrorResponse(
+					request,
+					protocol::ErrorShape{
 						.code = "invalid_path",
 						.message = "Agent file path is not allowed.",
 						.detailsJson = "{\"path\":\"" + EscapeJson(requestedPath) + "\"}",
 						.retryable = false,
 						.retryAfterMs = std::nullopt,
-					},
-				};
+					});
 			}
 
 			const std::string idempotencyKey = RequestParamsView(request.paramsJson).GetString("idempotencyKey");
@@ -1799,18 +1782,15 @@ namespace blazeclaw::gateway {
 			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("agentId");
 			const std::string requestedPath = RequestParamsView(request.paramsJson).GetString("path");
 			if (IsUnsafeAgentFilePath(requestedPath)) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = false,
-					.payloadJson = std::nullopt,
-					.error = protocol::ErrorShape{
+				return protocol::ErrorResponse(
+					request,
+					protocol::ErrorShape{
 						.code = "invalid_path",
 						.message = "Agent file path is not allowed.",
 						.detailsJson = "{\"path\":\"" + EscapeJson(requestedPath) + "\"}",
 						.retryable = false,
 						.retryAfterMs = std::nullopt,
-					},
-				};
+					});
 			}
 
 			const std::string content = RequestParamsView(request.paramsJson).GetString("content");
@@ -1837,18 +1817,15 @@ namespace blazeclaw::gateway {
 			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("agentId");
 			const std::string requestedPath = RequestParamsView(request.paramsJson).GetString("path");
 			if (IsUnsafeAgentFilePath(requestedPath)) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = false,
-					.payloadJson = std::nullopt,
-					.error = protocol::ErrorShape{
+				return protocol::ErrorResponse(
+					request,
+					protocol::ErrorShape{
 						.code = "invalid_path",
 						.message = "Agent file path is not allowed.",
 						.detailsJson = "{\"path\":\"" + EscapeJson(requestedPath) + "\"}",
 						.retryable = false,
 						.retryAfterMs = std::nullopt,
-					},
-				};
+					});
 			}
 			const AgentFileContentEntry file = m_agentRegistry.GetFile(requestedId, requestedPath);
 
@@ -2131,21 +2108,18 @@ namespace blazeclaw::gateway {
 			const protocol::ResponseFrame chatResponse =
 				RouteRequest(chatRequest);
 			if (!chatResponse.ok || !chatResponse.payloadJson.has_value()) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = false,
-					.payloadJson = std::nullopt,
-					.error = chatResponse.error.has_value()
-						? chatResponse.error
-						: std::optional<protocol::ErrorShape>(
-							protocol::ErrorShape{
-								.code = "chat_dispatch_failed",
-								.message = "Unable to start chat runtime flow.",
-								.detailsJson = std::nullopt,
-								.retryable = false,
-								.retryAfterMs = std::nullopt,
-							}),
-				};
+				if (chatResponse.error.has_value()) {
+					return protocol::ErrorResponse(request, std::move(*chatResponse.error));
+				}
+				return protocol::ErrorResponse(
+					request,
+					protocol::ErrorShape{
+						.code = "chat_dispatch_failed",
+						.message = "Unable to start chat runtime flow.",
+						.detailsJson = std::nullopt,
+						.retryable = false,
+						.retryAfterMs = std::nullopt,
+					});
 			}
 
 			std::string chatRunId;
@@ -2193,18 +2167,15 @@ namespace blazeclaw::gateway {
 			const std::string runId = RequestParamsView(request.paramsJson).GetString("runId");
 			const auto runIt = m_agentRuns.find(runId);
 			if (runIt == m_agentRuns.end()) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = false,
-					.payloadJson = std::nullopt,
-					.error = protocol::ErrorShape{
+				return protocol::ErrorResponse(
+					request,
+					protocol::ErrorShape{
 						.code = "run_not_found",
 						.message = "Agent run was not found.",
 						.detailsJson = "{\"runId\":\"" + EscapeJson(runId) + "\"}",
 						.retryable = false,
 						.retryAfterMs = std::nullopt,
-					},
-				};
+					});
 			}
 
 			auto& run = runIt->second;
