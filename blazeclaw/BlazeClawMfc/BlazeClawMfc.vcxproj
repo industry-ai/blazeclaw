@@ -180,6 +180,7 @@
     <ClInclude Include="src\core\SkillsSyncService.h" />
     <ClInclude Include="src\core\SkillsWatchService.h" />
     <ClInclude Include="src\core\ConfigSchemaService.h" />
+    <ClInclude Include="src\core\ExtensionBundleCommandSourceAdapter.h" />
     <ClInclude Include="src\core\ServiceManager.h" />
     <ClInclude Include="src\core\runtime\LocalModel\ITextGenerationRuntime.h" />
     <ClInclude Include="src\core\runtime\LocalModel\LlamaTextGenerationRuntime.h" />
@@ -339,6 +340,7 @@
     <ClCompile Include="src\core\SkillsSyncService.cpp" />
     <ClCompile Include="src\core\SkillsWatchService.cpp" />
     <ClCompile Include="src\core\ConfigSchemaService.cpp" />
+    <ClCompile Include="src\core\ExtensionBundleCommandSourceAdapter.cpp" />
     <ClCompile Include="src\core\ServiceManager.cpp" />
     <ClCompile Include="src\core\runtime\LocalModel\ITextGenerationRuntime.cpp" />
     <ClCompile Include="src\core\runtime\LocalModel\LlamaTextGenerationRuntime.cpp" />

@@ -8,7 +8,7 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 2. Check whether they stay within **service lifecycle / composition / delegation** responsibility.
 3. Identify **deep business or domain logic** still present in `ServiceManager` and suggest refactor seams.
 
-**Implementation note:** `ServiceManager.cpp` also defines a private nested class `ServiceManager::ExtensionBundleCommandSourceAdapter` (adapter for extension bundle command sources). It is not a `ServiceManager` member method but is part of the same composition unit; keep it in mind when reasoning about file size and responsibilities.
+**Implementation note:** Extension bundle command sources are implemented by `ExtensionBundleCommandSourceAdapter` in `ExtensionBundleCommandSourceAdapter.cpp` (owned by `ServiceManager` via `std::unique_ptr`).
 
 ---
 

@@ -17,6 +17,7 @@
 #include "EmailPreflightHealthService.h"
 #include "EmailPolicyOrchestrationService.h"
 #include "EmailRuntimeDiagnosticsProjector.h"
+#include "ExtensionBundleCommandSourceAdapter.h"
 #include "GatewayLifecycleDiagnosticsProjector.h"
 #include "EmbeddedRuntimeDiagnosticsProjector.h"
 #include "HooksDiagnosticsProjector.h"
@@ -462,7 +463,6 @@ namespace blazeclaw::core {
 		SkillsInstallSnapshot m_skillsInstall;
 		SkillSecurityScanService m_skillSecurityScanService;
 
-		class ExtensionBundleCommandSourceAdapter;
 		std::unique_ptr<ExtensionBundleCommandSourceAdapter>
 			m_extensionBundleCommandSourceAdapter;
 		std::size_t m_bundleCommandRootsScannedCount = 0;
