@@ -108,6 +108,20 @@ namespace blazeclaw::gateway::protocol {
 		});
 	}
 
+	/// Idempotency replay: same `ok` / payload / error as a stored result, with `id` taken from `request`.
+	[[nodiscard]] inline ResponseFrame ReplayFromStored(
+		const RequestFrame& request,
+		bool ok,
+		std::optional<std::string> payloadJson,
+		std::optional<ErrorShape> error) {
+		return ResponseFrame{
+			.id = request.id,
+			.ok = ok,
+			.payloadJson = std::move(payloadJson),
+			.error = std::move(error),
+		};
+	}
+
 	struct StateVersion {
 		std::optional<std::uint64_t> presence;
 		std::optional<std::uint64_t> health;

@@ -120,12 +120,11 @@ void ChatPipelineHandlers::RegisterAll(GatewayHost& host) {
 						const auto replayIt =
 							host.m_chatReplayByIdempotency.find(stageContext.idempotencyKey);
 						if (replayIt != host.m_chatReplayByIdempotency.end()) {
-							return protocol::ResponseFrame{
-								.id = request.id,
-								.ok = replayIt->second.ok,
-								.payloadJson = replayIt->second.payloadJson,
-								.error = replayIt->second.error,
-							};
+							return protocol::ReplayFromStored(
+								request,
+								replayIt->second.ok,
+								replayIt->second.payloadJson,
+								replayIt->second.error);
 						}
 
 						return protocol::OkResponse(request, "{\"runId\":\"" +

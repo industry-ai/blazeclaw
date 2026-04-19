@@ -8,7 +8,9 @@ using blazeclaw::gateway::JsonPayloadExists;
 using blazeclaw::gateway::JsonPayloadFoundCount;
 using blazeclaw::gateway::JsonPayloadPathExists;
 using blazeclaw::gateway::protocol::ErrorResponse;
+using blazeclaw::gateway::protocol::ErrorShape;
 using blazeclaw::gateway::protocol::OkResponse;
+using blazeclaw::gateway::protocol::ReplayFromStored;
 using blazeclaw::gateway::protocol::RequestFrame;
 
 TEST_CASE("ErrorResponse sets id ok payload and error", "[gateway][protocol]") {
@@ -44,4 +46,38 @@ TEST_CASE("OkResponse wraps JsonPayloadPathExists", "[gateway][protocol]") {
 
 	REQUIRE(res.ok);
 	REQUIRE(res.payloadJson == R"({"path":"p","exists":false})");
+}
+
+TEST_CASE("ReplayFromStored copies request id and replay fields", "[gateway][protocol]") {
+	const RequestFrame request{.id = "req-99", .method = "chat.send", .paramsJson = "{}"};
+	const auto res = ReplayFromStored(
+		request,
+		true,
+		std::optional<std::string>(R"({"deduped":true})"),
+		std::nullopt);
+
+	REQUIRE(res.id == "req-99");
+	REQUIRE(res.ok);
+	REQUIRE(res.payloadJson == R"({"deduped":true})");
+	REQUIRE(!res.error.has_value());
+}
+
+TEST_CASE("ReplayFromStored preserves error shape", "[gateway][protocol]") {
+	const RequestFrame request{.id = "req-err", .method = "chat.send", .paramsJson = "{}"};
+	const auto res = ReplayFromStored(
+		request,
+		false,
+		std::nullopt,
+		ErrorShape{
+			.code = "dedupe_error",
+			.message = "replay",
+			.detailsJson = std::nullopt,
+			.retryable = false,
+			.retryAfterMs = std::nullopt});
+
+	REQUIRE(res.id == "req-err");
+	REQUIRE(!res.ok);
+	REQUIRE(!res.payloadJson.has_value());
+	REQUIRE(res.error.has_value());
+	REQUIRE(res.error->code == "dedupe_error");
 }

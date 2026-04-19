@@ -179,7 +179,8 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 
 Cross-project architecture (BlazeClaw vs upstream OpenClaw):
 
-- `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` — technology stack, module mapping, parity gaps, and prioritized optimization suggestions for the port.
+- `blazeclaw/docs/architecture.md` — layer model; OpenClaw comparison (§11); consolidated optimization suggestions (§12); phased implementation plan (§13).
+- `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` — technology stack, module mapping, parity gaps, detailed optimization notes and document history for the port.
 
 ---
 

@@ -7,8 +7,9 @@ It should not be the place where deep business logic is implemented.
 
 Related cross-project architecture report:
 
+- `blazeclaw/docs/architecture.md` — reference layer model; OpenClaw vs BlazeClaw mapping (§11); optimization recommendations and phased plan (§12–§13).
 - `blazeclaw/docs/README.md` — index of `blazeclaw/docs/`.
-- `blazeclaw/docs/PROTOCOL_CODEGEN.md` — gateway manifest/codegen workflow, `GatewayHostRegistration` default handler coordinator, thin façade checklist, `OkResponse` / `ErrorResponse`, `EncodeValidatedEvent`, serializers.
+- `blazeclaw/docs/PROTOCOL_CODEGEN.md` — gateway manifest/codegen workflow, `GatewayHostRegistration` default handler coordinator, thin façade checklist, Phase A–B scripts (§7), `OkResponse` / `ErrorResponse` / `ReplayFromStored`, `EncodeValidatedEvent`, serializers.
 - `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp.md` — `GatewayHost` registration map; **thin façade invariant** (`RegisterDefaultHandlers` → `RegisterDefaultHandlerSequence`; no god lambdas in `GatewayHost.cpp`); **Ongoing architecture direction** (split `GatewayHost.Handlers.*`, shared protocol helpers, named handler types).
 - `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md` — `ServiceManager` vs `GatewayHost` roles, `WireAllGatewayServiceCallbacks` sequencing, rules for new gateway/core behavior.
 - `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md`
