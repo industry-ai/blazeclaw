@@ -16,6 +16,7 @@
 #include "ToolPolicyPipeline.h"
 #include "TranscriptPolicyResolver.h"
 #include "GatewayLifecycleEventEmitter.h"
+#include "ChatMessageLimits.h"
 #include "RunSummaryBuilder.h"
 #include "BranchDecisionDiagnostics.h"
 #include "ChatTranscriptStore.h"
@@ -1567,6 +1568,18 @@ void ChatPipelineHandlers::RegisterAll(GatewayHost& host) {
 						BuildRuntimeErrorShape(
 							"invalid_params",
 							"`message` must be a non-empty string.",
+							request.id,
+							sessionKey));
+				}
+
+				if (message.size() > kMaxChatUserMessageUtf8Bytes) {
+					return protocol::ErrorResponse(
+						request,
+						BuildRuntimeErrorShape(
+							"message_too_large",
+							"chat.inject message exceeds maximum size (" +
+							std::to_string(kMaxChatUserMessageUtf8Bytes) +
+							" UTF-8 bytes).",
 							request.id,
 							sessionKey));
 				}

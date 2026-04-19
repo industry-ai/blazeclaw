@@ -7,7 +7,7 @@ It should not be the place where deep business logic is implemented.
 
 Related cross-project architecture report:
 
-- `blazeclaw/docs/index.md` — entry point: optimization themes, step-by-step Phases A–F, MSBuild validation; links to topic docs.
+- `blazeclaw/docs/index.md` — entry point: optimization themes (core + next-wave items 7–9), step-by-step Phases A–F, MSBuild validation; links to topic docs.
 - `blazeclaw/docs/architecture.md` — reference layer model; OpenClaw vs BlazeClaw mapping (§11); optimization recommendations and phased plan (§12–§13).
 - `blazeclaw/docs/README.md` — file catalog for `blazeclaw/docs/`.
 - `blazeclaw/docs/PROTOCOL_CODEGEN.md` — gateway manifest/codegen workflow, `GatewayHostRegistration` default handler coordinator, thin façade checklist, Phase A–B scripts (§7), `OkResponse` / `ErrorResponse` / `ReplayFromStored`, `EncodeValidatedEvent`, serializers.

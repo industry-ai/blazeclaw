@@ -1,4 +1,5 @@
 #include "gateway/ChatRunPipelineOrchestrator.h"
+#include "gateway/ChatMessageLimits.h"
 
 #include <catch2/catch_all.hpp>
 
@@ -127,4 +128,27 @@ TEST_CASE("ChatRunPipelineOrchestrator control stage owns attachment MIME extrac
 	REQUIRE(result.status == "completed");
 	REQUIRE(context.hasAttachmentPayload);
 	REQUIRE(context.attachmentMimeTypes == std::vector<std::string>{"image/png"});
+}
+
+TEST_CASE("ChatRunPipelineOrchestrator control stage rejects oversized message", "[pipeline][workstream-a][parity]") {
+	ChatRunPipelineOrchestrator orchestrator;
+	ChatRunStageContext context;
+	context.requestId = "req-oversized";
+	context.method = "chat.send";
+	std::string big(kMaxChatUserMessageUtf8Bytes + 1, 'a');
+	context.paramsJson =
+		std::string("{\"sessionKey\":\"main\",\"message\":\"") + big + "\"}";
+
+	const auto result = orchestrator.Run(context);
+
+	REQUIRE(result.ok);
+	REQUIRE(result.status == "validation_failed");
+	REQUIRE(context.shouldReturnEarly);
+	REQUIRE_FALSE(context.responseOk);
+	REQUIRE(context.responseErrorCode == "message_too_large");
+	REQUIRE(context.responseError.has_value());
+	REQUIRE(context.stageTrace == std::vector<std::string>{
+		"transport",
+		"control",
+	});
 }

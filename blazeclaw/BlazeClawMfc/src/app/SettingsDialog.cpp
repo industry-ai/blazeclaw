@@ -397,11 +397,12 @@ void CSettingsDialog::OnOK()
 	updateProgress(40);
 
 	auto* app = dynamic_cast<CBlazeClawMFCApp*>(AfxGetApp());
+	std::optional<size_t> targetIndex;
+
 	if (app) {
 		const std::string activeProvider = app->Services().ActiveChatProvider();
 		const std::string activeModel = app->Services().ActiveChatModel();
 
-		std::optional<size_t> targetIndex;
 		const int selectedItem =
 			m_listModels.GetNextItem(-1, LVNI_SELECTED);
 		if (selectedItem >= 0) {
@@ -458,70 +459,73 @@ void CSettingsDialog::OnOK()
 				}
 			}
 		}
+	}
 
-		if (targetIndex.has_value() && *targetIndex < m_models.size()) {
-			const auto [provider, model] =
-				ResolveActiveProviderModel(m_models[*targetIndex]);
-			if (!provider.empty() && !model.empty()) {
-				updateProgress(75);
-				app->Services().SetActiveChatProvider(provider, model);
+	std::vector<std::wstring> lines;
+	{
+		updateProgress(50);
+		std::wifstream input(kConfigPath);
+		std::wstring line;
+		while (std::getline(input, line)) {
+			lines.push_back(line);
+		}
+	}
 
-				std::vector<std::wstring> lines;
-				{
-					updateProgress(85);
-					std::wifstream input(kConfigPath);
-					std::wstring line;
-					while (std::getline(input, line)) {
-						lines.push_back(line);
-					}
-				}
+	for (const auto& item : m_models) {
+		UpsertConfigEntry(
+			lines,
+			L"chat.model.enabled." + ToWideAscii(item.id),
+			item.enabled ? L"true" : L"false");
+	}
 
-				UpsertConfigEntry(
-					lines,
-					L"chat.activeProvider",
-					ToWideAscii(provider));
-				UpsertConfigEntry(
-					lines,
-					L"chat.activeModel",
-					ToWideAscii(model));
+	if (app && targetIndex.has_value() && *targetIndex < m_models.size()) {
+		const auto [provider, model] =
+			ResolveActiveProviderModel(m_models[*targetIndex]);
+		if (!provider.empty() && !model.empty()) {
+			updateProgress(75);
+			app->Services().SetActiveChatProvider(provider, model);
 
-				if (provider == "local") {
-					if (IsLlamaModelId(model)) {
-						UpsertConfigEntry(
-							lines,
-							L"chat.localModel.provider",
-							L"llama.cpp");
-						UpsertConfigEntry(
-							lines,
-							L"chat.localModel.storageRoot",
-							L"blazeclaw/BlazeClawMfc/models/google/gemma-4-E2B-it");
-						UpsertConfigEntry(
-							lines,
-							L"chat.localModel.modelPath",
-							L"gemma-4-E2B-it.gguf");
-					}
-					else {
-						UpsertConfigEntry(
-							lines,
-							L"chat.localModel.provider",
-							L"onnx");
-					}
-				}
+			UpsertConfigEntry(
+				lines,
+				L"chat.activeProvider",
+				ToWideAscii(provider));
+			UpsertConfigEntry(
+				lines,
+				L"chat.activeModel",
+				ToWideAscii(model));
 
-				for (const auto& item : m_models) {
+			if (provider == "local") {
+				if (IsLlamaModelId(model)) {
 					UpsertConfigEntry(
 						lines,
-						L"chat.model.enabled." + ToWideAscii(item.id),
-						item.enabled ? L"true" : L"false");
+						L"chat.localModel.provider",
+						L"llama.cpp");
+					UpsertConfigEntry(
+						lines,
+						L"chat.localModel.storageRoot",
+						L"blazeclaw/BlazeClawMfc/models/google/gemma-4-E2B-it");
+					UpsertConfigEntry(
+						lines,
+						L"chat.localModel.modelPath",
+						L"gemma-4-E2B-it.gguf");
 				}
+				else {
+					UpsertConfigEntry(
+						lines,
+						L"chat.localModel.provider",
+						L"onnx");
+				}
+			}
+		}
+	}
 
-				std::wofstream output(kConfigPath, std::ios::trunc);
-				if (output.is_open()) {
-					updateProgress(95);
-					for (const auto& line : lines) {
-						output << line << L"\n";
-					}
-				}
+	updateProgress(85);
+	{
+		std::wofstream output(kConfigPath, std::ios::trunc);
+		if (output.is_open()) {
+			updateProgress(95);
+			for (const auto& line : lines) {
+				output << line << L"\n";
 			}
 		}
 	}

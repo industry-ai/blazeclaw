@@ -9,7 +9,7 @@
   - **Phase A:** `GatewayUpstreamDiff/Diff-OpenClawGateway.ps1` (OpenClaw gateway paths).
   - **Phase B:** `GatewayUpstreamDiff/Verify-GatewayDispatcherMethods.ps1` (duplicate `.Register("method"` review).
   - **Phase E:** MSBuild `blazeclaw/BlazeClaw.sln` Debug|x64 with UTF-8 code page.
-  - **Optional:** Run `BlazeClawMfc.Tests.exe` after a successful build.
+  - **Optional:** Run `BlazeClawMfc.Tests.exe` with CWD `blazeclaw/` (after a build, or with **`-SkipBuild`** if the test EXE already exists — same pattern as Azure Pipelines after **VSBuild**).
 
   Phases C, D, and F include **runtime rules and docs** (for example Phase **D** streaming semantics in `GATEWAY_CORE_WIRING.md`, Phase **F** `PORTING_PLAN.md` under `blazeclaw/skills/`) — not all are exercised by this script.
 
@@ -84,10 +84,18 @@ if (-not $SkipBuild) {
 	if (-not $?) { throw "MSBuild failed (exit code $LASTEXITCODE)." }
 }
 
-if ($RunTests -and -not $SkipBuild) {
-	$testExe = Join-Path $RepoRoot "blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe"
-	if (-not (Test-Path -LiteralPath $testExe)) {
-		$testExe = Join-Path $RepoRoot "blazeclaw\BlazeClawMfc.Tests\x64\Debug\BlazeClawMfc.Tests.exe"
+if ($RunTests) {
+	if (-not $SkipBuild) {
+		$testExe = Join-Path $RepoRoot "blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe"
+		if (-not (Test-Path -LiteralPath $testExe)) {
+			$testExe = Join-Path $RepoRoot "blazeclaw\BlazeClawMfc.Tests\x64\Debug\BlazeClawMfc.Tests.exe"
+		}
+	}
+	else {
+		$testExe = Join-Path $RepoRoot "blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe"
+		if (-not (Test-Path -LiteralPath $testExe)) {
+			$testExe = Join-Path $RepoRoot "blazeclaw\BlazeClawMfc.Tests\x64\Debug\BlazeClawMfc.Tests.exe"
+		}
 	}
 	if (-not (Test-Path -LiteralPath $testExe)) {
 		Write-Warning "Tests executable not found (build output path may differ): $testExe"

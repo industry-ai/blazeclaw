@@ -18,7 +18,7 @@ Use **vcpkg MSBuild integration** so `$(VcpkgIncludeRoot)` resolves (e.g. `vcpkg
 ## Tests and CI
 
 - **BlazeClawMfc.Tests** uses **Catch2** and **nlohmann::json** via vcpkg includes.
-- **Azure Pipelines:** [`azure-pipelines.yml`](../azure-pipelines.yml) — vcpkg bootstrap, install with triplet **`x64-windows`**, build **`blazeclaw/BlazeClaw.sln`** (Debug|x64), run **`BlazeClawMfc.Tests.exe`**.
+- **Azure Pipelines:** [`azure-pipelines.yml`](../azure-pipelines.yml) — vcpkg bootstrap, install with triplet **`x64-windows`**, **VSBuild** **`blazeclaw/BlazeClaw.sln`**, then **`Invoke-BlazeClawOptimizationValidation.ps1 -SkipPhaseA -SkipPhaseB -SkipBuild -RunTests`** (Catch2 CWD **`blazeclaw/`**).
 - **GitHub Actions:** [`.github/workflows/blazeclaw-chat-nightly-smoke.yml`](../.github/workflows/blazeclaw-chat-nightly-smoke.yml) — smoke checks; see **BUILD_AND_CI.md** for how this differs from Azure.
 
 Local build example:
@@ -39,7 +39,7 @@ BlazeClawMfc planning docs:
 - `blazeclaw/BlazeClawMfc/DYNAMIC_TASK_DELTA_FULL_EXECUTION_PLAN.md`
 
 Architecture comparison docs:
-- `blazeclaw/docs/index.md` (project review: optimization summary + step-by-step Phases A–F)
+- `blazeclaw/docs/index.md` (project review: optimization summary + step-by-step Phases A–F + next-wave items 7–9)
 - `blazeclaw/docs/README.md` (file catalog for `blazeclaw/docs/`)
 - `blazeclaw/docs/architecture.md` (layer model; OpenClaw comparison §11; optimization recommendations §12; phased plan §13)
 - `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` (BlazeClaw vs OpenClaw stacks, mapping, gaps, optimization priorities)

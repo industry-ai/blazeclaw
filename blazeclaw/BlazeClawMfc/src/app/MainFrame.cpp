@@ -1252,16 +1252,8 @@ void CMainFrame::OnExtensionModelSet()
 {
 	CSettingsDialog dlg(this);
 	if (dlg.DoModal() == IDOK) {
-		// Save enabled models configuration
-		const auto& models = dlg.GetEnabledModels();
-		std::vector<std::string> enabledIds;
-		for (const auto& m : models) {
-			if (m.enabled) {
-				enabledIds.push_back(m.id);
-			}
-		}
-		// TODO: Save enabled model IDs to config
-		(void)enabledIds;
+		// `chat.model.enabled.*` and active provider/model lines are written by
+		// `CSettingsDialog::OnOK` to `blazeclaw.conf` (same as Settings from the dialog).
 	}
 }
 

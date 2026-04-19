@@ -38,9 +38,11 @@ steps:
     msbuildArgs: '/p:Platform=x64'
 
 - task: PowerShell@2
-  displayName: 'Run tests'
+  displayName: 'Run Catch2 (blazeclaw/ CWD, parity-friendly)'
   inputs:
     targetType: 'inline'
     script: |
-      $testExe = 'blazeclaw\BlazeClawMfc.Tests\x64\Debug\BlazeClawMfc.Tests.exe'
-      if (Test-Path $testExe) { & $testExe; exit $LASTEXITCODE } else { Write-Error "Test exe not found: $testExe"; exit 1 }
+      $ErrorActionPreference = "Stop"
+      $root = "$(System.DefaultWorkingDirectory)"
+      $script = Join-Path $root "blazeclaw\BlazeClawMfc\tools\Invoke-BlazeClawOptimizationValidation.ps1"
+      & $script -RepoRoot $root -SkipPhaseA -SkipPhaseB -SkipBuild -RunTests

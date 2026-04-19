@@ -1,7 +1,9 @@
 #include "pch.h"
 #include "ChatRunStages.h"
 
+#include "ChatMessageLimits.h"
 #include "GatewayJsonUtils.h"
+#include "Telemetry.h"
 #include "../core/InlineActionsOrchestrationService.h"
 
 #include <algorithm>
@@ -295,6 +297,34 @@ namespace blazeclaw::gateway {
 			context.responseOk = false;
 			context.responseErrorCode = attachmentsErrorCode;
 			context.responseErrorMessage = attachmentsErrorMessage;
+			context.responseError = protocol::ErrorShape{
+				 .code = context.responseErrorCode,
+				 .message = context.responseErrorMessage,
+				 .detailsJson = std::nullopt,
+				 .retryable = false,
+				 .retryAfterMs = std::nullopt,
+			};
+			return AppendStage(context, Name(), {}, "validation_failed");
+		}
+
+		const std::size_t payloadUtf8Bytes = std::max(
+			{
+				context.normalizedMessage.size(),
+				context.bodyForCommands.size(),
+				context.bodyForAgent.size(),
+			});
+		if (payloadUtf8Bytes > kMaxChatUserMessageUtf8Bytes) {
+			EmitTelemetryEvent(
+				"gateway.chat.message.size.rejected",
+				std::string("{\"bytes\":") + std::to_string(payloadUtf8Bytes) +
+				",\"maxBytes\":" +
+				std::to_string(kMaxChatUserMessageUtf8Bytes) + "}");
+			context.shouldReturnEarly = true;
+			context.responseOk = false;
+			context.responseErrorCode = "message_too_large";
+			context.responseErrorMessage =
+				"chat.send message exceeds maximum size (" +
+				std::to_string(kMaxChatUserMessageUtf8Bytes) + " UTF-8 bytes).";
 			context.responseError = protocol::ErrorShape{
 				 .code = context.responseErrorCode,
 				 .message = context.responseErrorMessage,
