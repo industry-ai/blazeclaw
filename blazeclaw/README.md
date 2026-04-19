@@ -30,4 +30,4 @@ Architecture comparison docs:
 - `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` (BlazeClaw vs OpenClaw stacks, mapping, gaps, optimization priorities)
 - `blazeclaw/docs/PROTOCOL_CODEGEN.md` (gateway manifest/codegen, default handler coordinator, thin façade checklist, `OkResponse` / `ErrorResponse`, `EncodeValidatedEvent`, serializers)
 - `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md` (`ServiceManager` ↔ `GatewayHost`, `WireAllGatewayServiceCallbacks`)
-- `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp.md` (deep dive: registration order, **Ongoing architecture direction**—split `GatewayHost.Handlers.*`, shared protocol surface, named handler types)
+- `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp.md` (deep dive: **thin façade** invariant—`RegisterDefaultHandlers` → `RegisterDefaultHandlerSequence` only from `GatewayHost.cpp`; split `GatewayHost.Handlers.*`; no god lambdas; shared protocol surface; named handler types)

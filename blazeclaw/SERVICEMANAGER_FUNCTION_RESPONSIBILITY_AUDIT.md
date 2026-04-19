@@ -275,7 +275,7 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 
 - `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` — BlazeClaw vs OpenClaw architecture mapping and port optimization priorities (context for where `ServiceManager` sits in the stack).
 - `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md` — `ServiceManager` vs `GatewayHost`, **`GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks`** sequencing, rules for new behavior.
-- `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp.md` — **`GatewayHost`** handler map and **Ongoing architecture direction** (split `GatewayHost.Handlers.*`, shared `protocol::` / serializers; complements `SERVICE_LAYER_BOUNDARIES` §3).
+- `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp.md` — **`GatewayHost`** handler map; **thin façade invariant** (`RegisterDefaultHandlers` → `RegisterDefaultHandlerSequence`; no god lambdas in `GatewayHost.cpp`); **Ongoing architecture direction** (split `GatewayHost.Handlers.*`, shared `protocol::` / serializers; complements `SERVICE_LAYER_BOUNDARIES` §3).
 - `blazeclaw/docs/PROTOCOL_CODEGEN.md` — gateway codegen, thin façade checklist.
 
 ---

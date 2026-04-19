@@ -4,6 +4,8 @@
 
 This file tracks analysis of `blazeclaw::gateway::GatewayHost` (`GatewayHost.h` / split `.cpp` sources). The section at the bottom preserves earlier **file size** guidance for `GatewayHost.cpp`.
 
+**Thin façade invariant:** `GatewayHost` / **`GatewayHost.cpp`** stay narrow: **transport**, **routing**, **lifecycle**, **event-frame helpers**, and **one** default-registration chain — **`RegisterDefaultHandlers` → `RegisterDefaultHandlerSequence`** (`GatewayHostRegistrationCoordinator.*`). Do **not** re-grow **“god lambdas”**: huge anonymous `Register` blocks or single megabyte files that mix **unrelated** gateway method families. Put new behavior in **`GatewayHost.Handlers.*`** (or manifest/generated/static tables), not back into `GatewayHost.cpp`. See §**Ongoing architecture direction** below.
+
 ---
 
 ## Ongoing architecture direction (thin façade, split TUs, shared protocol)
@@ -391,6 +393,7 @@ Moved to `GatewayJsonSerializers.h` / `GatewayJsonSerializers.cpp`: `EscapeJsonS
 ### Notes / Constraints
 
 - This file appears intentionally seed-heavy for protocol coverage; avoid changing external behavior while refactoring.
+- **Guard the façade:** `GatewayHost.cpp` must not become the home for bulk `m_dispatcher.Register` lambdas again—keep the **thin** split (coordinator entry + `GatewayHost.Handlers.*`). See §**Ongoing architecture direction** and **`blazeclaw/docs/PROTOCOL_CODEGEN.md`** §2 / §6.
 - Keep method names and payload shapes stable to preserve parity fixtures and schema validation.
 - Refactor in small steps with build + protocol tests after each stage.
 - `generated/GatewayHandlerCatalog.Generated.cpp` is emitted by `tools/GatewayHandlerCatalogGenerator/Generate-GatewayHandlerCatalog.ps1`, which now generates `protocol::OkResponse(request, std::move(payload))` for static and tools-metric handlers—re-run the script after manifest changes.

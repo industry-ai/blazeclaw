@@ -9,7 +9,7 @@ Related cross-project architecture report:
 
 - `blazeclaw/docs/README.md` — index of `blazeclaw/docs/`.
 - `blazeclaw/docs/PROTOCOL_CODEGEN.md` — gateway manifest/codegen workflow, `GatewayHostRegistration` default handler coordinator, thin façade checklist, `OkResponse` / `ErrorResponse`, `EncodeValidatedEvent`, serializers.
-- `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp.md` — `GatewayHost` registration map and **Ongoing architecture direction** (split `GatewayHost.Handlers.*`, shared protocol helpers, named handler types).
+- `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp.md` — `GatewayHost` registration map; **thin façade invariant** (`RegisterDefaultHandlers` → `RegisterDefaultHandlerSequence`; no god lambdas in `GatewayHost.cpp`); **Ongoing architecture direction** (split `GatewayHost.Handlers.*`, shared protocol helpers, named handler types).
 - `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md` — `ServiceManager` vs `GatewayHost` roles, `WireAllGatewayServiceCallbacks` sequencing, rules for new gateway/core behavior.
 - `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md`
   - BlazeClaw vs OpenClaw architecture/framework comparison, structural mapping, and prioritized optimization suggestions for the MFC port.
