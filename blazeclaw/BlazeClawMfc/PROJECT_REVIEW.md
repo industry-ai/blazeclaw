@@ -89,7 +89,9 @@ Status update (implemented): provider-to-UI incremental streaming now emits Deep
 
 Status update (extended): non-DeepSeek callback-driven runtime paths now also emit incremental snapshots via runtime delta callback wiring.
 
-Residual risk: synthetic fallback paths can still use staged/simulated deltas.
+Status update (Phase D): when the provider did not stream and **`assistantDeltas`** is empty, **`chat.send`** emits a **single** assistant **`delta`** with the full reply (no 6-character teaser plus poll-simulated 8-character steps). When **`assistantDeltas`** is non-empty (embedded/orchestration tool lines), staged assistant reveal is unchanged.
+
+Residual risk: embedded parity paths may still use additional staged `assistantDeltas` from `PiEmbeddedService` where incremental callbacks are absent.
 
 ### D) Embeddings throughput serialization
 

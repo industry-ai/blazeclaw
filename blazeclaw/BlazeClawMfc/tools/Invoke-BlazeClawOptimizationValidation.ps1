@@ -11,7 +11,7 @@
   - **Phase E:** MSBuild `blazeclaw/BlazeClaw.sln` Debug|x64 with UTF-8 code page.
   - **Optional:** Run `BlazeClawMfc.Tests.exe` after a successful build.
 
-  Phases C, D, and F are primarily **invariants and docs** — see `GATEWAY_CORE_WIRING.md`, `TaskDeltaRepository`, `SKILL_PORTING.md`.
+  Phases C, D, and F include **runtime rules and docs** (for example Phase **D** streaming semantics in `GATEWAY_CORE_WIRING.md`, Phase **F** `PORTING_PLAN.md` under `blazeclaw/skills/`) — not all are exercised by this script.
 
 .EXAMPLE
   cd E:\gitRepo\blazeClaw

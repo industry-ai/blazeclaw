@@ -1417,18 +1417,22 @@ void ChatPipelineHandlers::RegisterAll(GatewayHost& host) {
 
 				std::size_t streamCursor = 0;
 				if (!failed && !silentAssistantReply && !providerStreamed) {
-					streamCursor = (std::min)(assistantText.size(), std::size_t{ 6 });
-					if (streamCursor > 0) {
-						const std::string initialDeltaMessage = BuildAssistantDeltaMessageJson(
-							assistantText.substr(0, streamCursor));
+					const auto emitAssistantDeltaChunk = [&](
+						const std::string& chunk,
+						std::size_t cursorAfter) {
+						if (chunk.empty()) {
+							return;
+						}
+						streamCursor = cursorAfter;
+						const std::string deltaMessage = BuildAssistantDeltaMessageJson(chunk);
 						PushEventWithRetentionLimit(sessionEvents, GatewayHost::ChatEventState{
-							   .runId = runId,
-							   .sessionKey = sessionKey,
-							   .state = "delta",
-							  .messageJson = initialDeltaMessage,
-							   .errorMessage = std::nullopt,
-							   .timestampMs = nowMs,
-							});
+							.runId = runId,
+							.sessionKey = sessionKey,
+							.state = "delta",
+							.messageJson = deltaMessage,
+							.errorMessage = std::nullopt,
+							.timestampMs = nowMs,
+						});
 						GatewayLifecycleEventEmitter::EmitLifecycle(
 							"delta",
 							runId,
@@ -1450,12 +1454,25 @@ void ChatPipelineHandlers::RegisterAll(GatewayHost& host) {
 									.runId = runId,
 									.sessionKey = sessionKey,
 									.state = "delta",
-									.messageJson = initialDeltaMessage,
+									.messageJson = deltaMessage,
 									.errorMessage = std::nullopt,
 									.timestampMs = nowMs,
 								},
 								host.m_chatPushEventSeq);
 						}
+					};
+
+					if (!assistantDeltas.empty()) {
+						// Embedded / orchestration paths may publish tool-line deltas; keep staged
+						// assistant reveal for parity with chat.events.poll (8-char steps).
+						const std::size_t n =
+							(std::min)(assistantText.size(), std::size_t{ 6 });
+						emitAssistantDeltaChunk(assistantText.substr(0, n), n);
+					}
+					else if (!assistantText.empty()) {
+						// Phase D: no incremental provider stream — emit one assistant delta with
+						// full text instead of synthetic 6-char + poll-simulated streaming.
+						emitAssistantDeltaChunk(assistantText, assistantText.size());
 					}
 				}
 

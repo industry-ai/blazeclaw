@@ -1,6 +1,6 @@
 ## BlazeClaw Skills Overview
 
-**Porting from OpenClaw:** see [`blazeclaw/docs/SKILL_PORTING.md`](../docs/SKILL_PORTING.md) (Phase F — **PORTING_PLAN** template, upstream links, doc sync).
+**Porting from OpenClaw:** see [`blazeclaw/docs/SKILL_PORTING.md`](../docs/SKILL_PORTING.md) (Phase F — **PORTING_PLAN** template, index of skills with plans including `brave-search`, `imap-smtp-email`, `baidu-search`, `humanizer`, `summarize`, `web-browsing`, `self-evolving`, `self-evolving-cpp`, doc sync).
 
 This folder contains **local implemented skills** and related assets used by
 BlazeClaw.
