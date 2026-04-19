@@ -23,9 +23,9 @@ TEST_CASE("TaskDeltaRepository EnforceRetentionLimit evicts lowest activity", "[
 	TaskDeltaRepository::Store store;
 	TaskDeltaRepository repo(store);
 
-	repo.Upsert("run-old", { MakeOneDelta("run-old", 10) }, 10);
-	repo.Upsert("run-mid", { MakeOneDelta("run-mid", 50) }, 50);
-	repo.Upsert("run-new", { MakeOneDelta("run-new", 90) }, 90);
+	(void)repo.Upsert("run-old", { MakeOneDelta("run-old", 10) }, 10);
+	(void)repo.Upsert("run-mid", { MakeOneDelta("run-mid", 50) }, 50);
+	(void)repo.Upsert("run-new", { MakeOneDelta("run-new", 90) }, 90);
 
 	repo.EnforceRetentionLimit(2);
 
@@ -39,8 +39,8 @@ TEST_CASE("TaskDeltaRepository EnforceRetentionLimit tie-breaks by runId", "[gat
 	TaskDeltaRepository::Store store;
 	TaskDeltaRepository repo(store);
 
-	repo.Upsert("zebra", { MakeOneDelta("zebra", 1) }, 100);
-	repo.Upsert("apple", { MakeOneDelta("apple", 1) }, 100);
+	(void)repo.Upsert("zebra", { MakeOneDelta("zebra", 1) }, 100);
+	(void)repo.Upsert("apple", { MakeOneDelta("apple", 1) }, 100);
 
 	repo.EnforceRetentionLimit(1);
 
@@ -53,8 +53,8 @@ TEST_CASE("TaskDeltaRepository Get refreshes recency", "[gateway][taskdelta]") {
 	TaskDeltaRepository::Store store;
 	TaskDeltaRepository repo(store);
 
-	repo.Upsert("stale", { MakeOneDelta("stale", 1) }, 1);
-	repo.Upsert("fresh", { MakeOneDelta("fresh", 2) }, 2);
+	(void)repo.Upsert("stale", { MakeOneDelta("stale", 1) }, 1);
+	(void)repo.Upsert("fresh", { MakeOneDelta("fresh", 2) }, 2);
 
 	(void)repo.Get("stale", true);
 

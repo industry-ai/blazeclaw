@@ -893,8 +893,8 @@ namespace blazeclaw::gateway {
 
 			std::uint64_t loadActivity = 0;
 			for (const auto& d : normalizedDeltas) {
-				loadActivity = std::max(loadActivity, d.startedAtMs);
-				loadActivity = std::max(loadActivity, d.completedAtMs);
+				loadActivity = (std::max)(loadActivity, d.startedAtMs);
+				loadActivity = (std::max)(loadActivity, d.completedAtMs);
 			}
 			if (loadActivity == 0) {
 				loadActivity = 1;

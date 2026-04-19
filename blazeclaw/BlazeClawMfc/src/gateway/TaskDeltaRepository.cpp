@@ -3,7 +3,7 @@
 
 #include <algorithm>
 #include <chrono>
-#include <limits>
+#include <cstdint>
 
 namespace blazeclaw::gateway {
 
@@ -17,8 +17,8 @@ namespace blazeclaw::gateway {
 		std::uint64_t MaxTimestampFromEntries(const std::vector<TaskDeltaEntry>& entries) {
 			std::uint64_t m = 0;
 			for (const auto& e : entries) {
-				m = std::max(m, e.startedAtMs);
-				m = std::max(m, e.completedAtMs);
+				m = (std::max)(m, e.startedAtMs);
+				m = (std::max)(m, e.completedAtMs);
 			}
 			return m;
 		}
@@ -45,7 +45,7 @@ namespace blazeclaw::gateway {
 			}
 		}
 		else {
-			activity = std::max(NowEpochMs(), MaxTimestampFromEntries(entries));
+			activity = (std::max)(NowEpochMs(), MaxTimestampFromEntries(entries));
 			if (activity == 0) {
 				activity = NowEpochMs();
 			}
@@ -96,7 +96,7 @@ namespace blazeclaw::gateway {
 	void TaskDeltaRepository::EnforceRetentionLimit(std::size_t maxRuns) {
 		while (m_backingStore.size() > maxRuns && !m_backingStore.empty()) {
 			std::string victim;
-			std::uint64_t minTs = std::numeric_limits<std::uint64_t>::max();
+			std::uint64_t minTs = UINT64_MAX;
 			for (const auto& kv : m_backingStore) {
 				const auto rIt = m_lastActivityMs.find(kv.first);
 				const std::uint64_t ts =
