@@ -193,6 +193,9 @@
     <ClInclude Include="src\gateway\GatewayAgentRegistry.h" />
     <ClInclude Include="src\gateway\GatewayChannelRegistry.h" />
     <ClInclude Include="src\gateway\GatewayHost.h" />
+    <ClInclude Include="src\gateway\GatewayHostCatalogHelpers.h" />
+    <ClInclude Include="src\gateway\GatewayHostHandlersToolExecution.h" />
+    <ClInclude Include="src\gateway\GatewayHostHandlersEventCatalogQuery.h" />
     <ClInclude Include="src\gateway\GatewayHostRegistrationCoordinator.h" />
     <ClInclude Include="src\gateway\ChatRunStageContext.h" />
     <ClInclude Include="src\gateway\IChatRunStage.h" />
@@ -363,6 +366,7 @@
     <ClCompile Include="src\gateway\GatewayAgentRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayChannelRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.cpp" />
+    <ClCompile Include="src\gateway\GatewayHostCatalogHelpers.cpp" />
     <ClCompile Include="src\gateway\GatewayHostRegistrationCoordinator.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Events.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Channels.cpp" />
@@ -371,6 +375,8 @@
     <ClCompile Include="src\gateway\GatewayHost.Handlers.ScopeCluster.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Transport.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Tools.cpp" />
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.ToolExecutionHistory.cpp" />
+    <ClCompile Include="src\gateway\GatewayHost.Handlers.EventCatalogQuery.cpp" />
     <ClCompile Include="src\gateway\ChatRunStages.cpp" />
     <ClCompile Include="src\gateway\ChatRunPipelineOrchestrator.cpp" />
     <ClCompile Include="src\gateway\executors\EmailScheduleExecutor.cpp" />

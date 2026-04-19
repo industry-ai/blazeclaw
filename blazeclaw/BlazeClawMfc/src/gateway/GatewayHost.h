@@ -188,6 +188,10 @@ namespace blazeclaw::gateway {
 		std::string generatedAt;
 	};
 
+	namespace handlers::event_catalog_query {
+		struct EventCatalogQueryHandlers;
+	}
+
 	class GatewayHost : public IGatewayHostRuntime {
 	public:
 		using SkillsRefreshCallback = std::function<SkillsCatalogGatewayState()>;
@@ -351,6 +355,7 @@ namespace blazeclaw::gateway {
 
 	private:
 		friend class GatewayHostEx;
+		friend struct handlers::event_catalog_query::EventCatalogQueryHandlers;
 
 		[[nodiscard]] protocol::ResponseFrame RouteRequestLegacy(
 			const protocol::RequestFrame& request) const;

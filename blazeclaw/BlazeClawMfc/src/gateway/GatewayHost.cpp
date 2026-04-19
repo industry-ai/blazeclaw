@@ -5,6 +5,7 @@
 #include "GatewayJsonSerializers.h"
 #include "GatewayJsonBuilder.h"
 #include "GatewayRequestParams.h"
+#include "GatewayHostCatalogHelpers.h"
 #include "GatewayPersistencePaths.h"
 #include "GatewayProtocolCodec.h"
 #include "GatewayProtocolSchemaValidator.h"
@@ -153,18 +154,6 @@ namespace blazeclaw::gateway {
 			return value;
 		}
 
-		std::string MaskSecret(const std::string& value) {
-			if (value.empty()) {
-				return {};
-			}
-
-			if (value.size() <= 6) {
-				return "***";
-			}
-
-			return value.substr(0, 3) + "***" + value.substr(value.size() - 2);
-		}
-
 		bool IsDeepSeekModelId(const std::string& modelId) {
 			return modelId == kDeepSeekChatModelId ||
 				modelId == kDeepSeekReasonerModelId ||
@@ -214,18 +203,6 @@ namespace blazeclaw::gateway {
 				{"provider", JsonString(ResolveModelProvider(modelId))},
 				{"displayName", JsonString(ResolveModelDisplayName(modelId))},
 				{"streaming", JsonBool(ResolveModelStreaming(modelId))},
-			});
-		}
-
-		std::string BuildDeepSeekConfigJson(
-			const std::string& apiKey,
-			const std::string& baseUrl,
-			const std::string& defaultModel) {
-			return JsonObject({
-				{"configured", JsonBool(!apiKey.empty())},
-				{"apiKeyMasked", JsonString(MaskSecret(apiKey))},
-				{"baseUrl", JsonString(baseUrl)},
-				{"defaultModel", JsonString(defaultModel)},
 			});
 		}
 
@@ -291,21 +268,6 @@ namespace blazeclaw::gateway {
 				: 0;
 
 			return normalized;
-		}
-
-		const std::vector<std::string>& EventCatalogNames() {
-			static const std::vector<std::string> events = {
-				"gateway.agent.update",
-				"gateway.channels.accounts.update",
-				"gateway.channels.update",
-				"gateway.health",
-				"gateway.session.reset",
-				"gateway.shutdown",
-				"gateway.tick",
-				"gateway.tools.catalog.update",
-			};
-
-			return events;
 		}
 
 		std::uint64_t CurrentEpochMs() {
@@ -1434,134 +1396,6 @@ namespace blazeclaw::gateway {
 		GatewayHostRegistration::RegisterDefaultHandlerSequence(*this);
 	}
 
-	void GatewayHost::RegisterToolExecutionHistoryHandlers() {
-		m_dispatcher.Register("gateway.tools.executions.list", [this](const protocol::RequestFrame& request) {
-			const auto executions = m_toolRegistry.ListExecutions(20);
-			std::string executionsJson = "[";
-			for (std::size_t i = 0; i < executions.size(); ++i) {
-				if (i > 0) {
-					executionsJson += ",";
-				}
-				executionsJson += SerializeToolExecution(executions[i]);
-			}
-			executionsJson += "]";
-
-			return protocol::OkResponse(request, "{\"executions\":" + executionsJson + ",\"count\":" + std::to_string(executions.size()) + "}");
-			});
-
-		m_dispatcher.Register("gateway.tools.executions.count", [this](const protocol::RequestFrame& request) {
-			const ToolExecutionStats stats = m_toolRegistry.GetExecutionStats();
-			return protocol::OkResponse(request, "{\"count\":" + std::to_string(stats.count) +
-					",\"succeeded\":" + std::to_string(stats.succeeded) +
-					",\"failed\":" + std::to_string(stats.failed) + "}");
-			});
-
-		m_dispatcher.Register("gateway.tools.executions.latest", [this](const protocol::RequestFrame& request) {
-			const std::optional<ToolExecutionEntry> latest = m_toolRegistry.LatestExecution();
-			const ToolExecutionEntry fallback = ToolExecutionEntry{
-				.tool = "none",
-				.executed = false,
-				.status = "empty",
-				.output = "no_history",
-				.argsProvided = false,
-			};
-
-			const ToolExecutionEntry& selected = latest.has_value() ? latest.value() : fallback;
-			const ToolExecutionStats stats = m_toolRegistry.GetExecutionStats();
-
-			return protocol::OkResponse(request, "{\"found\":" + std::string(latest.has_value() ? "true" : "false") +
-					",\"execution\":" + SerializeToolExecution(selected) +
-					",\"count\":" + std::to_string(stats.count) + "}");
-			});
-
-		m_dispatcher.Register("gateway.tools.executions.clear", [this](const protocol::RequestFrame& request) {
-			const std::size_t cleared = m_toolRegistry.ClearExecutions();
-			return protocol::OkResponse(request, "{\"cleared\":" + std::to_string(cleared) +
-					",\"remaining\":0}");
-			});
-	}
-
-	void GatewayHost::RegisterGatewayEventCatalogQueryHandlers() {
-		m_dispatcher.Register("gateway.events.latestByType", [](const protocol::RequestFrame& request) {
-			const std::string type = RequestParamsView(request.paramsJson).GetString("type");
-			const bool lifecycle = type == "lifecycle";
-			const std::string event = lifecycle ? "gateway.shutdown" : "gateway.tools.catalog.update";
-			return protocol::OkResponse(request, "{\"type\":\"" + EscapeJson(type.empty() ? "update" : type) + "\",\"event\":\"" + EscapeJson(event) + "\"}");
-			});
-
-		m_dispatcher.Register("gateway.config.snapshot", [this](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"gateway\":{\"bind\":\"" + EscapeJson(m_runtimeGatewayBind) +
-					"\",\"port\":" + std::to_string(m_runtimeGatewayPort) + "},\"agent\":{\"model\":\"" +
-					EscapeJson(m_runtimeAgentModel) + "\",\"streaming\":" +
-					std::string(m_runtimeAgentStreaming ? "true" : "false") + "},\"emailFallback\":{\"preflightEnabled\":" +
-					std::string(m_runtimeEmailPreflightEnabled ? "true" : "false") +
-					",\"policyProfilesEnabled\":" +
-					std::string(m_runtimeEmailPolicyProfilesEnabled ? "true" : "false") +
-					",\"policyProfilesEnforce\":" +
-					std::string(m_runtimeEmailPolicyProfilesEnforce ? "true" : "false") +
-					"},\"deepseek\":" +
-					BuildDeepSeekConfigJson(
-						m_runtimeDeepSeekApiKey,
-						m_runtimeDeepSeekBaseUrl,
-						m_runtimeDeepSeekDefaultModel) + "}");
-			});
-
-		m_dispatcher.Register("gateway.events.summary", [](const protocol::RequestFrame& request) {
-			const auto& events = EventCatalogNames();
-			const std::size_t lifecycle = static_cast<std::size_t>(std::count_if(events.begin(), events.end(), [](const std::string& item) {
-				return item == "gateway.tick" || item == "gateway.health" || item == "gateway.shutdown";
-				}));
-			const std::size_t updates = events.size() - lifecycle;
-
-			return protocol::OkResponse(request, "{\"total\":" + std::to_string(events.size()) + ",\"lifecycle\":" + std::to_string(lifecycle) + ",\"updates\":" + std::to_string(updates) + "}");
-			});
-
-
-
-		m_dispatcher.Register("gateway.events.search", [](const protocol::RequestFrame& request) {
-			const std::string term = RequestParamsView(request.paramsJson).GetString("term");
-			const auto& events = EventCatalogNames();
-			std::string eventsJson = "[";
-			std::size_t count = 0;
-			for (std::size_t i = 0; i < events.size(); ++i) {
-				if (!term.empty() && events[i].find(term) == std::string::npos) {
-					continue;
-				}
-				if (count > 0) {
-					eventsJson += ",";
-				}
-				eventsJson += "\"" + EscapeJson(events[i]) + "\"";
-				++count;
-			}
-			eventsJson += "]";
-
-			return protocol::OkResponse(request, "{\"term\":\"" + EscapeJson(term.empty() ? "*" : term) + "\",\"events\":" + eventsJson + ",\"count\":" + std::to_string(count) + "}");
-			});
-
-		m_dispatcher.Register("gateway.events.last", [](const protocol::RequestFrame& request) {
-			const auto& events = EventCatalogNames();
-			const std::string last = events.empty() ? "none" : events.back();
-			return protocol::OkResponse(request, "{\"event\":\"" + EscapeJson(last) + "\"}");
-			});
-
-		m_dispatcher.Register("gateway.tools.categories", [this](const protocol::RequestFrame& request) {
-			const auto tools = m_toolRegistry.List();
-			std::vector<std::string> categories;
-			for (std::size_t i = 0; i < tools.size(); ++i) {
-				if (std::find(categories.begin(), categories.end(), tools[i].category) == categories.end()) {
-					categories.push_back(tools[i].category);
-				}
-			}
-
-			return protocol::OkResponse(request, "{\"categories\":" + SerializeStringArray(categories) + ",\"count\":" + std::to_string(categories.size()) + "}");
-			});
-
-		m_dispatcher.Register("gateway.events.list", [](const protocol::RequestFrame& request) {
-			const auto& events = EventCatalogNames();
-			return protocol::OkResponse(request, "{\"events\":" + SerializeStringArray(events) + ",\"count\":" + std::to_string(events.size()) + "}");
-			});
-	}
-
 	void GatewayHost::RegisterGatewayRegistryIntrospectionHandlers() {
 		m_dispatcher.Register("gateway.agents.exists", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("agentId");
@@ -1582,7 +1416,7 @@ namespace blazeclaw::gateway {
 				sectionJson = "{\"model\":\"" + EscapeJson(m_runtimeAgentModel) + "\",\"streaming\":" + std::string(m_runtimeAgentStreaming ? "true" : "false") + "}";
 			}
 			else if (resolved == "deepseek") {
-				sectionJson = BuildDeepSeekConfigJson(
+				sectionJson = BuildGatewayDeepSeekConfigJson(
 					m_runtimeDeepSeekApiKey,
 					m_runtimeDeepSeekBaseUrl,
 					m_runtimeDeepSeekDefaultModel);
@@ -1655,7 +1489,7 @@ namespace blazeclaw::gateway {
 				value = m_runtimeAgentStreaming ? "true" : "false";
 			}
 			else if (key == "deepseek.apiKey") {
-				value = MaskSecret(m_runtimeDeepSeekApiKey);
+				value = MaskGatewaySecret(m_runtimeDeepSeekApiKey);
 			}
 			else if (key == "deepseek.baseUrl") {
 				value = m_runtimeDeepSeekBaseUrl;
@@ -1996,7 +1830,7 @@ namespace blazeclaw::gateway {
 
 		m_dispatcher.Register("gateway.features.list", [this](const protocol::RequestFrame& request) {
 			const std::string methodsJson = SerializeStringArray(m_dispatcher.RegisteredMethods());
-			const std::string eventsJson = SerializeStringArray(EventCatalogNames());
+			const std::string eventsJson = SerializeStringArray(GatewayEventCatalogNames());
 
 			return protocol::OkResponse(request, "{\"methods\":" + methodsJson + ",\"events\":" + eventsJson + "}");
 			});
@@ -2385,7 +2219,7 @@ namespace blazeclaw::gateway {
 			std::string(m_runtimeEmailPolicyProfilesEnabled ? "true" : "false") +
 			",\"policyProfilesEnforce\":" +
 			std::string(m_runtimeEmailPolicyProfilesEnforce ? "true" : "false") +
-			"},\"deepseek\":" + BuildDeepSeekConfigJson(
+			"},\"deepseek\":" + BuildGatewayDeepSeekConfigJson(
 				m_runtimeDeepSeekApiKey,
 				m_runtimeDeepSeekBaseUrl,
 				m_runtimeDeepSeekDefaultModel) + "}");
@@ -2434,7 +2268,7 @@ namespace blazeclaw::gateway {
 					"\",\"port\":" + std::to_string(m_runtimeGatewayPort) +
 					"},\"agent\":{\"model\":\"" + EscapeJson(m_runtimeAgentModel) +
 					"\",\"streaming\":" + std::string(m_runtimeAgentStreaming ? "true" : "false") +
-				  "},\"deepseek\":" + BuildDeepSeekConfigJson(
+				  "},\"deepseek\":" + BuildGatewayDeepSeekConfigJson(
 						m_runtimeDeepSeekApiKey,
 						m_runtimeDeepSeekBaseUrl,
 						m_runtimeDeepSeekDefaultModel) +
@@ -2544,12 +2378,12 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.events.catalog", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"events\":" + SerializeStringArray(EventCatalogNames()) + "}");
+			return protocol::OkResponse(request, "{\"events\":" + SerializeStringArray(GatewayEventCatalogNames()) + "}");
 			});
 
 		m_dispatcher.Register("gateway.events.exists", [](const protocol::RequestFrame& request) {
 			const std::string eventName = RequestParamsView(request.paramsJson).GetString("event");
-			const auto& events = EventCatalogNames();
+			const auto& events = GatewayEventCatalogNames();
 			const bool exists = std::any_of(events.begin(), events.end(), [&](const std::string& item) {
 				return eventName.empty() || item == eventName;
 				});
@@ -2560,7 +2394,7 @@ namespace blazeclaw::gateway {
 
 		m_dispatcher.Register("gateway.events.count", [](const protocol::RequestFrame& request) {
 			const std::string eventName = RequestParamsView(request.paramsJson).GetString("event");
-			const auto& events = EventCatalogNames();
+			const auto& events = GatewayEventCatalogNames();
 			const std::size_t count = static_cast<std::size_t>(std::count_if(events.begin(), events.end(), [&](const std::string& item) {
 				return eventName.empty() || item == eventName;
 				}));
@@ -2659,7 +2493,7 @@ namespace blazeclaw::gateway {
 
 		m_dispatcher.Register("gateway.events.get", [](const protocol::RequestFrame& request) {
 			const std::string eventName = RequestParamsView(request.paramsJson).GetString("event");
-			const auto& events = EventCatalogNames();
+			const auto& events = GatewayEventCatalogNames();
 			std::string selected = events.empty() ? "unknown" : events.front();
 			for (const auto& item : events) {
 				if (!eventName.empty() && item != eventName) {
