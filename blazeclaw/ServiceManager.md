@@ -240,6 +240,12 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
    - `ServiceManager` declares **`friend class ServiceLifecycleStartupCoordinator`** for controlled access to private members.
    - Contract tests read **`ServiceLifecycleStartupCoordinator.cpp`** where startup orchestration strings moved (e.g. runtime orchestration policy, `SkillsStartupCoordinator::Execute`).
 
+23. **Gateway host binding coordinator (`GatewayHostBindingCoordinator`)**
+   - ✅ Implemented.
+   - **`GatewayHostBindingCoordinator::RegisterSkillsRelatedCallbacks`** and **`RegisterChatRuntimeCallbacks`** hold the former **`BindSkillsCallbacks`** / **`BindChatCallbacks`** bodies (config schema, skills refresh/update, chat runtime + embedded + abort wiring).
+   - **`ServiceManager`** declares **`friend class GatewayHostBindingCoordinator`**; **`BindSkillsCallbacks`** / **`BindChatCallbacks`** delegate in one call each.
+   - Contract tests read **`GatewayHostBindingCoordinator.cpp`** for Phase 1 chat/skills strings and email fallback evaluation; **`OperatorDiagnosticsAssembler.cpp`** for projector **`Apply`** delegation (phase3/email).
+
 7. **Reduce duplicated state projections**
    - Build snapshot DTOs once per report/tick where possible.
    - Reuse immutable snapshots across diagnostics and gateway publication.
@@ -316,4 +322,4 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
 ---
 
 ## Final Assessment
-`ServiceManager` is now close to its intended architecture role: a **composition and lifecycle façade**. Phase 4 moved **provider chat execution**, **invocation prompt rewrite**, and **operator diagnostics assembly** behind dedicated types. Phase 5 moved **`ConfigurePolicies`** / **`InitializeModules`** implementation into **`ServiceLifecycleStartupCoordinator`**. The next optimization wave should focus on **`BindChatCallbacks`** size/strategy extraction and wiring-level tests, while preserving runtime behavior parity.
+`ServiceManager` is now close to its intended architecture role: a **composition and lifecycle façade**. Phase 4 moved **provider chat execution**, **invocation prompt rewrite**, and **operator diagnostics assembly** behind dedicated types. Phase 5 moved **`ConfigurePolicies`** / **`InitializeModules`** implementation into **`ServiceLifecycleStartupCoordinator`**. Phase 6 moved **skills/chat gateway callback wiring** into **`GatewayHostBindingCoordinator`**, leaving thin **`Bind*`** entry points on **`ServiceManager`**. The next optimization wave should focus on **nested chat runtime logic** inside **`GatewayHostBindingCoordinator`** (named strategies / coordinator methods), while preserving runtime behavior parity.

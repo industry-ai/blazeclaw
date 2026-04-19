@@ -80,16 +80,16 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 
 | Function | Role |
 |----------|------|
-| `BindSkillsCallbacks()` | Register skills-related gateway handlers. |
+| `BindSkillsCallbacks()` | Thin: delegates to **`GatewayHostBindingCoordinator::RegisterSkillsRelatedCallbacks`**. |
 | `BindGatewayPolicyCallbacks()` | Policy hooks on gateway. |
 | `BindToolRuntimeCallbacks()` | Tool registry callbacks. |
-| `BindChatCallbacks()` | **Large:** chat runtime, inline tools, embedded, providers. |
+| `BindChatCallbacks()` | Thin: delegates to **`GatewayHostBindingCoordinator::RegisterChatRuntimeCallbacks`** (implementation lives in **`GatewayHostBindingCoordinator.cpp`**). |
 | `BindEmbeddingsCallbacks()` | Embeddings lifecycle on gateway. |
 | `BuildConfigSchemaGatewayState()` | Expose config schema state for gateway. |
 | `LookupConfigSchemaGatewayPath(path)` | Schema lookup helper. |
 | `WriteConfigSchemaDocumentationSnapshot(path, error)` | Doc export. |
 
-**Assessment:** **Mixed.** Routing/pump are appropriate. `BindChatCallbacks` and parts of `BindSkillsCallbacks` remain **high-line-count** and behavior-heavy.
+**Assessment:** **Mixed.** Routing/pump are appropriate. Skills/chat **gateway wiring** bodies live in **`GatewayHostBindingCoordinator`** (friend of `ServiceManager`); `BindChatCallbacks` / `BindSkillsCallbacks` stay thin entry points. Remaining complexity is **nested runtime branching** inside the coordinator (candidates for further named strategies on `ChatRuntimeOrchestrationCoordinator` or helpers).
 
 ---
 
@@ -188,12 +188,12 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 | Priority | Function / area | Why it is “deep” | Suggested refactor |
 |----------|-----------------|------------------|-------------------|
 | ~~**P0**~~ | ~~`ExecuteProviderChatRuntimePath`~~ | — | ✅ **Done (Phase 4):** **`ChatProviderRuntimeService`** + **`ChatProviderRuntimeBindings`**. |
-| **P0** | `BindChatCallbacks` | Still the main **wall of lambdas**: inline auth, embedded orchestration, fallbacks, coordinator calls — high cyclomatic surface. | Continue extracting **named strategies** per branch; target file-size &lt; N lines by delegating each lambda body to `ChatRuntimeOrchestrationCoordinator` methods. |
+| **P0** | `BindChatCallbacks` (body) | **Moved** to **`GatewayHostBindingCoordinator::RegisterChatRuntimeCallbacks`** — still a **large nested lambda** for chat runtime + embedded + provider handoff. | Continue extracting **named strategies** per branch; delegate inner bodies to `ChatRuntimeOrchestrationCoordinator` (or similar) methods to shrink **`GatewayHostBindingCoordinator.cpp`**. |
 | ~~**P1**~~ | ~~`ResolveSkillInvocationPromptRewrite`~~ | — | ✅ **Done (Phase 4):** **`SkillCommandInvocationService::RewriteInvocationPromptUtf8`**. |
 | ~~**P1**~~ | ~~`InitializeModules` / `ConfigurePolicies`~~ | — | ✅ **Addressed:** sequencing and policy wiring moved to **`ServiceLifecycleStartupCoordinator`**; optional future step is a structured **`StartupReport`** DTO if reporting/testing needs it. |
 | **P1** | `ApplyManagedRuntimeConfigDiff` | May still imperative-patch many subsystems after coordinator. | Ensure coordinator returns **`ManagedRuntimeApplyPlan`**; `ServiceManager` executes plan via small private `ApplyPlan(...)` or generated visitors. |
 | **P2** | `InvokeDeepSeekRemoteChat` | SSE parsing, delta callbacks — **transport**. | Already near `CDeepSeekClient`; ensure **no additional protocol logic** in `ServiceManager` beyond argument mapping. |
-| **P2** | `BindSkillsCallbacks` | Can regrow if new JSON shapes added inline. | Keep **`SkillsGatewayMethodHandler`** as single entry for parse/validate/response. |
+| **P2** | `BindSkillsCallbacks` (body) | Wiring lives in **`GatewayHostBindingCoordinator`**; can regrow if new callbacks are added without a handler seam. | Keep **`SkillsGatewayMethodHandler`** as single entry for parse/validate/response. |
 | ~~**P2**~~ | ~~`BuildOperatorDiagnosticsReport`~~ | — | ✅ **Done (Phase 4):** **`OperatorDiagnosticsAssembler`** + **`OperatorDiagnosticsInputs`**; optional future shrink: dedicated **agents/features** projectors for the remaining scalars. |
 | **P3** | `BuildEmbeddedToolBindings` | Straightforward mapping — low risk. | Optional: `SkillsCommandService::BuildEmbeddedToolBindings()` if reuse needed elsewhere. |
 
@@ -215,13 +215,19 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 3. **`OperatorDiagnosticsAssembler`** + **`OperatorDiagnosticsInputs`** own `DiagnosticsSnapshot` population and **`CDiagnosticsReportBuilder::BuildOperatorDiagnosticsReport`** emission; **`BuildOperatorDiagnosticsReport`** fills inputs and calls **`Build`**.
 4. Contract strings for these seams live in **`ServiceManagerStartupPhaseContractTests`** (including a Phase 4 block); **`SkillCommandInvocationServiceTests`** covers **`RewriteInvocationPromptUtf8`**.
 
-**Follow-up (not Phase 4):** reduce **`BindChatCallbacks`** surface area / line count via further coordinator extraction.
+**Follow-up (not Phase 4):** reduce nested chat-runtime lambda surface inside **`GatewayHostBindingCoordinator`** via further strategy extraction.
 
 ### Phase 5 (lifecycle startup thin facade — completed)
 
 - **`ServiceLifecycleStartupCoordinator`** (`ApplyConfigurePolicies`, `RunInitializeModules`) owns the former `ServiceManager` bodies for **`ConfigurePolicies`** and **`InitializeModules`**.
 - **`ServiceManager`** declares **`friend class ServiceLifecycleStartupCoordinator`** so the coordinator can update private members while keeping a single composition root.
 - Contract tests: **`ServiceManagerStartupPhaseContractTests`** includes **`ReadServiceLifecycleStartupCoordinatorSource()`** and asserts delegation strings plus coordinator-side bootstrap resolver usage.
+
+### Phase 6 (gateway host binding — completed)
+
+- **`GatewayHostBindingCoordinator`** (`RegisterSkillsRelatedCallbacks`, `RegisterChatRuntimeCallbacks`) owns the former bodies of **`BindSkillsCallbacks`** and **`BindChatCallbacks`**.
+- **`ServiceManager`** declares **`friend class GatewayHostBindingCoordinator`**; **`BindSkillsCallbacks`** / **`BindChatCallbacks`** delegate with one call each.
+- Contract tests: **`ReadGatewayHostBindingCoordinatorSource()`**, gateway delegation case, and phase1/email strings updated to read the coordinator/assembler sources where behavior moved.
 
 ---
 
@@ -231,10 +237,10 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 |-----------|--------|
 | **Lifecycle / wiring / delegation** | Strong — `ServiceManager` remains the composition root. |
 | **Pure getters** | Aligned. |
-| **Deep runtime logic** | **Further reduced:** provider path lives in **`ChatProviderRuntimeService`**; **`BindChatCallbacks`** remains the main **high-line-count** integration surface. |
+| **Deep runtime logic** | **Further reduced:** provider path lives in **`ChatProviderRuntimeService`**; chat/skills **gateway callback wiring** lives in **`GatewayHostBindingCoordinator`**. |
 | **Diagnostics** | **Assembler path:** projector contexts + scalars → **`OperatorDiagnosticsAssembler`** → report builder. |
 
-**Verdict:** `ServiceManager` remains the composition root; **provider execution**, **prompt rewrite**, **diagnostics assembly**, and **startup policy/module sequencing** are **delegated** to dedicated types. The next shrink target is **`BindChatCallbacks`** (strategies / coordinator methods).
+**Verdict:** `ServiceManager` remains the composition root; **provider execution**, **prompt rewrite**, **diagnostics assembly**, **startup policy/module sequencing**, and **skills/chat gateway binding** are **delegated** to dedicated types. The next shrink target is **nested chat runtime logic** inside **`GatewayHostBindingCoordinator`** (strategies / coordinator methods).
 
 ---
 
@@ -242,9 +248,9 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 
 - [x] `ExecuteProviderChatRuntimePath` extracted or substantially delegated (**`ChatProviderRuntimeService`**).
 - [x] `ResolveSkillInvocationPromptRewrite` moved out of `ServiceManager` (**`RewriteInvocationPromptUtf8`**).
-- [ ] `BindChatCallbacks` line count reduced (measurable threshold, e.g. &lt; 400 lines or split file) — **follow-up**.
+- [x] `BindChatCallbacks` implementation moved out of **`ServiceManager.cpp`** (**`GatewayHostBindingCoordinator.cpp`**) — further line-count reduction inside the coordinator is **follow-up**.
 - [x] `BuildOperatorDiagnosticsReport` reduced to projector inputs + **`OperatorDiagnosticsAssembler`**.
-- [x] Contract tests updated for new seams (`ServiceManagerStartupPhaseContractTests` Phase 4 + **`SkillCommandInvocationServiceTests`**).
+- [x] Contract tests updated for new seams (`ServiceManagerStartupPhaseContractTests` Phase 4–6 + **`SkillCommandInvocationServiceTests`**).
 - [x] `ConfigurePolicies` / `InitializeModules` thin facades over **`ServiceLifecycleStartupCoordinator`** (Phase 5).
 
-*Last updated: Phase 5 lifecycle facade — `ServiceLifecycleStartupCoordinator`; `ConfigurePolicies`/`InitializeModules` thin wrappers; contract tests updated; Debug\|x64 build validated with VS 18 MSBuild.*
+*Last updated: Phase 6 gateway binding — `GatewayHostBindingCoordinator`; thin `BindSkillsCallbacks`/`BindChatCallbacks`; contract tests updated (phase3/email/managed-config assertions aligned with assembler + `ApplyManagedRuntimeConfigDiff`); BlazeClawMfc + BlazeClawMfc.Tests Debug\|x64 built with MSBuild (`PlatformToolset=v143` where v145 is unavailable).*

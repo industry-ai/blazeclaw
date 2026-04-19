@@ -34,6 +34,34 @@ namespace {
 			std::istreambuf_iterator<char>());
 	}
 
+	std::string ReadGatewayHostBindingCoordinatorSource()
+	{
+		const auto sourcePath = std::filesystem::path("BlazeClawMfc") /
+			"src" /
+			"core" /
+			"GatewayHostBindingCoordinator.cpp";
+		std::ifstream in(sourcePath.string());
+		REQUIRE(in.is_open());
+
+		return std::string(
+			(std::istreambuf_iterator<char>(in)),
+			std::istreambuf_iterator<char>());
+	}
+
+	std::string ReadOperatorDiagnosticsAssemblerSource()
+	{
+		const auto sourcePath = std::filesystem::path("BlazeClawMfc") /
+			"src" /
+			"core" /
+			"OperatorDiagnosticsAssembler.cpp";
+		std::ifstream in(sourcePath.string());
+		REQUIRE(in.is_open());
+
+		return std::string(
+			(std::istreambuf_iterator<char>(in)),
+			std::istreambuf_iterator<char>());
+	}
+
 } // namespace
 
 TEST_CASE(
@@ -142,7 +170,7 @@ TEST_CASE(
 		applyDiffBody.find("authSessionGenerationRejectCount") !=
 		std::string::npos);
 	REQUIRE(
-		applyDiffBody.find("gateway auth/session config change requires") !=
+		applyDiffBody.find("authGuard.warningMessage") !=
 		std::string::npos);
 }
 
@@ -261,34 +289,36 @@ TEST_CASE(
 	"ServiceManager email contract: delegates runtime fallback, preflight health, and diagnostics projection",
 	"[servicemanager][email][contract]")
 {
-	const std::string source = ReadServiceManagerSource();
-
+	const std::string gatewayBinding = ReadGatewayHostBindingCoordinatorSource();
 	REQUIRE(
-		source.find("m_emailFallbackRuntimeCoordinator.EvaluateEmbeddedFailure(") !=
+		gatewayBinding.find("m_emailFallbackRuntimeCoordinator.EvaluateEmbeddedFailure(") !=
 		std::string::npos);
+
+	const std::string source = ReadServiceManagerSource();
+	const std::string assembler = ReadOperatorDiagnosticsAssemblerSource();
 	REQUIRE(
 		source.find("m_emailPreflightHealthService.BuildRuntimeHealthIndex(false)") !=
 		std::string::npos);
-	REQUIRE(
-		source.find("m_emailRuntimeDiagnosticsProjector.Apply(") !=
-		std::string::npos);
+	REQUIRE(assembler.find("m_email.Apply(") != std::string::npos);
 }
 
 TEST_CASE(
 	"ServiceManager phase1 contract: delegates chat orchestration, skills update handling, and skill projection",
 	"[servicemanager][phase1][contract]")
 {
-	const std::string source = ReadServiceManagerSource();
+	const std::string gatewayBinding = ReadGatewayHostBindingCoordinatorSource();
 
 	REQUIRE(
-		source.find("m_chatRuntimeOrchestrationCoordinator.PrepareChatRequest(") !=
+		gatewayBinding.find("m_chatRuntimeOrchestrationCoordinator.PrepareChatRequest(") !=
 		std::string::npos);
 	REQUIRE(
-		source.find("ExecuteProviderChatRuntimePath(") !=
+		gatewayBinding.find("ExecuteProviderChatRuntimePath(") !=
 		std::string::npos);
 	REQUIRE(
-		source.find("m_skillsGatewayMethodHandler.HandleSkillsUpdate(") !=
+		gatewayBinding.find("m_skillsGatewayMethodHandler.HandleSkillsUpdate(") !=
 		std::string::npos);
+
+	const std::string source = ReadServiceManagerSource();
 	REQUIRE(
 		source.find("m_skillsGatewayProjectionService.BuildGatewaySkillEntry(") !=
 		std::string::npos);
@@ -323,22 +353,16 @@ TEST_CASE(
 	"[servicemanager][phase3][contract]")
 {
 	const std::string source = ReadServiceManagerSource();
+	REQUIRE(
+		source.find("m_operatorDiagnosticsAssembler.Build(") !=
+		std::string::npos);
 
-	REQUIRE(
-		source.find("m_gatewayLifecycleDiagnosticsProjector.Apply(") !=
-		std::string::npos);
-	REQUIRE(
-		source.find("m_embeddedRuntimeDiagnosticsProjector.Apply(") !=
-		std::string::npos);
-	REQUIRE(
-		source.find("m_modelRuntimeDiagnosticsProjector.Apply(") !=
-		std::string::npos);
-	REQUIRE(
-		source.find("m_hooksDiagnosticsProjector.Apply(") !=
-		std::string::npos);
-	REQUIRE(
-		source.find("m_emailRuntimeDiagnosticsProjector.Apply(") !=
-		std::string::npos);
+	const std::string assembler = ReadOperatorDiagnosticsAssemblerSource();
+	REQUIRE(assembler.find("m_gatewayLifecycle.Apply(") != std::string::npos);
+	REQUIRE(assembler.find("m_embedded.Apply(") != std::string::npos);
+	REQUIRE(assembler.find("m_modelRuntime.Apply(") != std::string::npos);
+	REQUIRE(assembler.find("m_hooks.Apply(") != std::string::npos);
+	REQUIRE(assembler.find("m_email.Apply(") != std::string::npos);
 }
 
 TEST_CASE(
@@ -360,6 +384,19 @@ TEST_CASE(
 		source.find("OperatorDiagnosticsInputs") != std::string::npos);
 	REQUIRE(
 		source.find("RewriteInvocationPromptUtf8") !=
+		std::string::npos);
+}
+
+TEST_CASE(
+	"ServiceManager gateway binding contract: skills and chat callbacks delegate to GatewayHostBindingCoordinator",
+	"[servicemanager][gateway][contract]")
+{
+	const std::string source = ReadServiceManagerSource();
+	REQUIRE(
+		source.find("GatewayHostBindingCoordinator::RegisterSkillsRelatedCallbacks(*this)") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("GatewayHostBindingCoordinator::RegisterChatRuntimeCallbacks(*this)") !=
 		std::string::npos);
 }
 

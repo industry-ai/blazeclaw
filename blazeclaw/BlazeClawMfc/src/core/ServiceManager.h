@@ -95,6 +95,7 @@ namespace blazeclaw::core {
 		[[nodiscard]] bool IsRunning() const noexcept;
 
 	private:
+		friend class GatewayHostBindingCoordinator;
 		friend class ServiceLifecycleStartupCoordinator;
 
 		// Private lifecycle phases:
