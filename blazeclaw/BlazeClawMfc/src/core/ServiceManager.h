@@ -95,6 +95,8 @@ namespace blazeclaw::core {
 		[[nodiscard]] bool IsRunning() const noexcept;
 
 	private:
+		friend class ServiceLifecycleStartupCoordinator;
+
 		// Private lifecycle phases:
 		void ConfigurePolicies(
 			const blazeclaw::config::AppConfig& config);

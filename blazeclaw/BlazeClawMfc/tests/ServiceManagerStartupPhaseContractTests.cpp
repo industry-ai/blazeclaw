@@ -20,6 +20,20 @@ namespace {
 			std::istreambuf_iterator<char>());
 	}
 
+	std::string ReadServiceLifecycleStartupCoordinatorSource()
+	{
+		const auto sourcePath = std::filesystem::path("BlazeClawMfc") /
+			"src" /
+			"core" /
+			"ServiceLifecycleStartupCoordinator.cpp";
+		std::ifstream in(sourcePath.string());
+		REQUIRE(in.is_open());
+
+		return std::string(
+			(std::istreambuf_iterator<char>(in)),
+			std::istreambuf_iterator<char>());
+	}
+
 } // namespace
 
 TEST_CASE(
@@ -228,7 +242,7 @@ TEST_CASE(
 	"ServiceManager startup contract: runtime orchestration env policies resolve via bootstrap coordinator",
 	"[servicemanager][startup][contract]")
 {
-	const std::string source = ReadServiceManagerSource();
+	const std::string source = ReadServiceLifecycleStartupCoordinatorSource();
 	REQUIRE(
 		source.find("ResolveRuntimeOrchestrationPolicySettings()") !=
 		std::string::npos);
@@ -284,17 +298,18 @@ TEST_CASE(
 	"ServiceManager phase2 contract: delegates startup and managed config diff seams",
 	"[servicemanager][phase2][contract]")
 {
-	const std::string source = ReadServiceManagerSource();
+	const std::string lifecycle = ReadServiceLifecycleStartupCoordinatorSource();
+	REQUIRE(
+		lifecycle.find("m_skillsStartupCoordinator.Execute(") !=
+		std::string::npos);
+	REQUIRE(
+		lifecycle.find("m_hooksStartupCoordinator.Execute(") !=
+		std::string::npos);
+	REQUIRE(
+		lifecycle.find("m_fixtureStartupValidatorFacade.Execute(") !=
+		std::string::npos);
 
-	REQUIRE(
-		source.find("m_skillsStartupCoordinator.Execute(") !=
-		std::string::npos);
-	REQUIRE(
-		source.find("m_hooksStartupCoordinator.Execute(") !=
-		std::string::npos);
-	REQUIRE(
-		source.find("m_fixtureStartupValidatorFacade.Execute(") !=
-		std::string::npos);
+	const std::string source = ReadServiceManagerSource();
 	REQUIRE(
 		source.find("m_managedRuntimeConfigDiffCoordinator.EvaluateAuthSessionGenerationGuard(") !=
 		std::string::npos);
@@ -345,5 +360,28 @@ TEST_CASE(
 		source.find("OperatorDiagnosticsInputs") != std::string::npos);
 	REQUIRE(
 		source.find("RewriteInvocationPromptUtf8") !=
+		std::string::npos);
+}
+
+TEST_CASE(
+	"ServiceManager startup contract: policy and module phases delegate to ServiceLifecycleStartupCoordinator",
+	"[servicemanager][startup][contract][lifecycle]")
+{
+	const std::string managerSource = ReadServiceManagerSource();
+	REQUIRE(
+		managerSource.find(
+			"ServiceLifecycleStartupCoordinator::ApplyConfigurePolicies(*this, config)") !=
+		std::string::npos);
+	REQUIRE(
+		managerSource.find("ServiceLifecycleStartupCoordinator::RunInitializeModules(*this)") !=
+		std::string::npos);
+
+	const std::string lifecycleSource = ReadServiceLifecycleStartupCoordinatorSource();
+	REQUIRE(
+		lifecycleSource.find("ResolveHooksPolicySettings(") != std::string::npos);
+	REQUIRE(
+		lifecycleSource.find("ResolveEmailPolicySettings(") != std::string::npos);
+	REQUIRE(
+		lifecycleSource.find("AppendStartupTrace(\"ServiceManager.Start.policy.ready\")") !=
 		std::string::npos);
 }

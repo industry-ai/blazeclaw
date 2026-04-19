@@ -45,6 +45,8 @@ In short: **it is the core runtime orchestrator, not a domain engine**.
 
 Coordinates startup ordering, feature gates, module initialization, callback registration, and shutdown cleanup.
 
+Private phases **`ConfigurePolicies`** and **`InitializeModules`** are thin wrappers; the former **`Start`**-path policy wiring and module bootstrap sequencing live in **`ServiceLifecycleStartupCoordinator`** (`ApplyConfigurePolicies`, `RunInitializeModules`), which is a **`friend`** of `ServiceManager` so it can update private members without expanding the public API.
+
 ## 2) Runtime Routing and Execution Coordination
 - Active provider/model selection (`SetActiveChatProvider`, `ActiveChatProvider`, `ActiveChatModel`)
 - Chat runtime and abort delegation through `CChatRuntime`
@@ -102,6 +104,7 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
    - Example: `ConfigurePolicies`, `InitializeModules`, `WireGatewayCallbacks`, `FinalizeStartup`.
    - ✅ Implemented in `ServiceManager` startup path.
    - `Start(...)` now delegates to these private phase methods in order.
+   - ✅ **`ConfigurePolicies`** / **`InitializeModules`** bodies moved to **`ServiceLifecycleStartupCoordinator`**; `ServiceManager` methods forward to **`ApplyConfigurePolicies`** / **`RunInitializeModules`**.
    - Improves readability and failure isolation.
 
 2. **Move remaining env/policy resolvers out of `ServiceManager.cpp`**
@@ -109,12 +112,12 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
    - `ServiceManager` should consume resolved DTOs only.
    - ✅ Implemented for hooks policy/env resolver cluster.
    - Added `StartupPolicyResolver::HooksPolicySettings` DTO.
-   - `ServiceManager::ConfigurePolicies(...)` now consumes
+   - Hooks policy consumption runs inside **`ServiceLifecycleStartupCoordinator::ApplyConfigurePolicies`**, which calls
      `CServiceBootstrapCoordinator::ResolveHooksPolicySettings(...)`.
    - Removed migrated `ResolveHooks*` helper cluster from `ServiceManager.cpp`.
    - ✅ Implemented for non-hooks email policy resolver cluster.
    - Added `StartupPolicyResolver::EmailPolicySettings` DTO.
-   - `ServiceManager::ConfigurePolicies(...)` now consumes
+   - Email policy consumption runs in **`ApplyConfigurePolicies`**, which calls
      `CServiceBootstrapCoordinator::ResolveEmailPolicySettings(...)`.
    - Removed inline email rollout/enforcement policy branch logic from `ServiceManager.cpp`.
    - ✅ Implemented for email fallback policy orchestration extraction.
@@ -230,6 +233,13 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
    - **`OperatorDiagnosticsAssembler`** + **`OperatorDiagnosticsInputs`**: builds `DiagnosticsSnapshot` from projector contexts and scalars, then `CDiagnosticsReportBuilder::BuildOperatorDiagnosticsReport`.
    - Contract coverage: `ServiceManagerStartupPhaseContractTests` (Phase 4 strings) and `SkillCommandInvocationServiceTests` (`RewriteInvocationPromptUtf8`).
 
+22. **Thin lifecycle policy/module facades (`ServiceLifecycleStartupCoordinator`)**
+   - ✅ Implemented.
+   - **`ServiceLifecycleStartupCoordinator::ApplyConfigurePolicies`** holds hooks/email policy application and related **`m_state`** / **`m_activeConfig`** updates that previously lived in **`ServiceManager::ConfigurePolicies`**.
+   - **`ServiceLifecycleStartupCoordinator::RunInitializeModules`** holds agents/embeddings/local model/chat-runtime queue/skills/hooks/fixture startup sequencing previously in **`ServiceManager::InitializeModules`**.
+   - `ServiceManager` declares **`friend class ServiceLifecycleStartupCoordinator`** for controlled access to private members.
+   - Contract tests read **`ServiceLifecycleStartupCoordinator.cpp`** where startup orchestration strings moved (e.g. runtime orchestration policy, `SkillsStartupCoordinator::Execute`).
+
 7. **Reduce duplicated state projections**
    - Build snapshot DTOs once per report/tick where possible.
    - Reuse immutable snapshots across diagnostics and gateway publication.
@@ -306,4 +316,4 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
 ---
 
 ## Final Assessment
-`ServiceManager` is now close to its intended architecture role: a **composition and lifecycle façade**. Phase 4 moved **provider chat execution**, **invocation prompt rewrite**, and **operator diagnostics assembly** behind dedicated types. The next optimization wave should focus on **`BindChatCallbacks`** size/strategy extraction and wiring-level tests, while preserving runtime behavior parity.
+`ServiceManager` is now close to its intended architecture role: a **composition and lifecycle façade**. Phase 4 moved **provider chat execution**, **invocation prompt rewrite**, and **operator diagnostics assembly** behind dedicated types. Phase 5 moved **`ConfigurePolicies`** / **`InitializeModules`** implementation into **`ServiceLifecycleStartupCoordinator`**. The next optimization wave should focus on **`BindChatCallbacks`** size/strategy extraction and wiring-level tests, while preserving runtime behavior parity.

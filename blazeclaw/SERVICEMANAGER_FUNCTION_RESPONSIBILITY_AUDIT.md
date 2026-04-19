@@ -29,12 +29,12 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 
 | Function | Role |
 |----------|------|
-| `ConfigurePolicies(const AppConfig&)` | Apply config to policy/registry/email/hooks/chat state. |
-| `InitializeModules()` | Bootstrap catalogs, skills, hooks, fixtures, coordinators. |
+| `ConfigurePolicies(const AppConfig&)` | Thin: delegates to **`ServiceLifecycleStartupCoordinator::ApplyConfigurePolicies`**. |
+| `InitializeModules()` | Thin: delegates to **`ServiceLifecycleStartupCoordinator::RunInitializeModules`**. |
 | `WireGatewayCallbacks()` | Bind gateway to `Bind*` methods. |
 | `FinalizeStartup(const AppConfig&)` | Last startup steps after modules wired. |
 
-**Assessment:** Appropriate for a composition root; `InitializeModules` / `ConfigurePolicies` remain **large** and should stay thin facades over coordinators (see §3).
+**Assessment:** Appropriate for a composition root; policy application and module initialization **sequencing** live in **`ServiceLifecycleStartupCoordinator.cpp`** (friend of `ServiceManager`); `ConfigurePolicies` / `InitializeModules` remain **thin entry points** in `ServiceManager.cpp`.
 
 ---
 
@@ -190,7 +190,7 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 | ~~**P0**~~ | ~~`ExecuteProviderChatRuntimePath`~~ | — | ✅ **Done (Phase 4):** **`ChatProviderRuntimeService`** + **`ChatProviderRuntimeBindings`**. |
 | **P0** | `BindChatCallbacks` | Still the main **wall of lambdas**: inline auth, embedded orchestration, fallbacks, coordinator calls — high cyclomatic surface. | Continue extracting **named strategies** per branch; target file-size &lt; N lines by delegating each lambda body to `ChatRuntimeOrchestrationCoordinator` methods. |
 | ~~**P1**~~ | ~~`ResolveSkillInvocationPromptRewrite`~~ | — | ✅ **Done (Phase 4):** **`SkillCommandInvocationService::RewriteInvocationPromptUtf8`**. |
-| **P1** | `InitializeModules` | Multi-phase startup (skills modes, hooks, fixtures) — even with coordinators, sequencing + error aggregation can grow. | **`ServiceStartupOrchestrator`** returning a structured `StartupReport`; `ServiceManager` only applies report to members. |
+| ~~**P1**~~ | ~~`InitializeModules` / `ConfigurePolicies`~~ | — | ✅ **Addressed:** sequencing and policy wiring moved to **`ServiceLifecycleStartupCoordinator`**; optional future step is a structured **`StartupReport`** DTO if reporting/testing needs it. |
 | **P1** | `ApplyManagedRuntimeConfigDiff` | May still imperative-patch many subsystems after coordinator. | Ensure coordinator returns **`ManagedRuntimeApplyPlan`**; `ServiceManager` executes plan via small private `ApplyPlan(...)` or generated visitors. |
 | **P2** | `InvokeDeepSeekRemoteChat` | SSE parsing, delta callbacks — **transport**. | Already near `CDeepSeekClient`; ensure **no additional protocol logic** in `ServiceManager` beyond argument mapping. |
 | **P2** | `BindSkillsCallbacks` | Can regrow if new JSON shapes added inline. | Keep **`SkillsGatewayMethodHandler`** as single entry for parse/validate/response. |
@@ -217,6 +217,12 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 
 **Follow-up (not Phase 4):** reduce **`BindChatCallbacks`** surface area / line count via further coordinator extraction.
 
+### Phase 5 (lifecycle startup thin facade — completed)
+
+- **`ServiceLifecycleStartupCoordinator`** (`ApplyConfigurePolicies`, `RunInitializeModules`) owns the former `ServiceManager` bodies for **`ConfigurePolicies`** and **`InitializeModules`**.
+- **`ServiceManager`** declares **`friend class ServiceLifecycleStartupCoordinator`** so the coordinator can update private members while keeping a single composition root.
+- Contract tests: **`ServiceManagerStartupPhaseContractTests`** includes **`ReadServiceLifecycleStartupCoordinatorSource()`** and asserts delegation strings plus coordinator-side bootstrap resolver usage.
+
 ---
 
 ## 4) Summary conclusion
@@ -228,7 +234,7 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 | **Deep runtime logic** | **Further reduced:** provider path lives in **`ChatProviderRuntimeService`**; **`BindChatCallbacks`** remains the main **high-line-count** integration surface. |
 | **Diagnostics** | **Assembler path:** projector contexts + scalars → **`OperatorDiagnosticsAssembler`** → report builder. |
 
-**Verdict:** `ServiceManager` remains the composition root; **provider execution**, **prompt rewrite**, and **diagnostics assembly** are now **delegated** to dedicated types. The next shrink target is **`BindChatCallbacks`** (strategies / coordinator methods), not the Phase 4 extractions.
+**Verdict:** `ServiceManager` remains the composition root; **provider execution**, **prompt rewrite**, **diagnostics assembly**, and **startup policy/module sequencing** are **delegated** to dedicated types. The next shrink target is **`BindChatCallbacks`** (strategies / coordinator methods).
 
 ---
 
@@ -239,5 +245,6 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 - [ ] `BindChatCallbacks` line count reduced (measurable threshold, e.g. &lt; 400 lines or split file) — **follow-up**.
 - [x] `BuildOperatorDiagnosticsReport` reduced to projector inputs + **`OperatorDiagnosticsAssembler`**.
 - [x] Contract tests updated for new seams (`ServiceManagerStartupPhaseContractTests` Phase 4 + **`SkillCommandInvocationServiceTests`**).
+- [x] `ConfigurePolicies` / `InitializeModules` thin facades over **`ServiceLifecycleStartupCoordinator`** (Phase 5).
 
-*Last updated: Phase 4 completion; `ServiceManager.cpp`/`ServiceManager.h` delegation to `ChatProviderRuntimeService`, `SkillCommandInvocationService`, `OperatorDiagnosticsAssembler`; Debug\|x64 build validated with VS 18 MSBuild.*
+*Last updated: Phase 5 lifecycle facade — `ServiceLifecycleStartupCoordinator`; `ConfigurePolicies`/`InitializeModules` thin wrappers; contract tests updated; Debug\|x64 build validated with VS 18 MSBuild.*
