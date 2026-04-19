@@ -58,20 +58,31 @@ TEST_CASE(
 	"ServiceManager contract: aggregation seam is wired in refresh path",
 	"[skills][command-aggregation][servicemanager]")
 {
+	const auto policyPath = std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"SkillsAgentCommandDescriptorPolicy.cpp";
+	const std::string policySource = ReadTextFile(policyPath);
+
+	REQUIRE(
+		policySource.find("config.agents.defaults.skills") != std::string::npos);
+	REQUIRE(
+		policySource.find("configEntryIt->second.skills.has_value()") !=
+		std::string::npos);
+	REQUIRE(
+		policySource.find("GatewayHost::ListReservedChatSlashCommandNames") !=
+		std::string::npos);
+
 	const auto serviceManagerPath = std::filesystem::path("BlazeClawMfc") /
 		"src" /
 		"core" /
 		"ServiceManager.cpp";
 	const std::string source = ReadTextFile(serviceManagerPath);
 
-	REQUIRE(source.find("std::vector<AgentSkillCommandDescriptor> commandDescriptors") !=
+	REQUIRE(
+		source.find("SkillsAgentCommandDescriptorPolicy::BuildDescriptors(") !=
 		std::string::npos);
 	REQUIRE(source.find("m_skillCommandsAggregationService.BuildSnapshot") !=
-		std::string::npos);
-	REQUIRE(source.find("config.agents.defaults.skills") != std::string::npos);
-	REQUIRE(source.find("configEntryIt->second.skills.has_value()") != std::string::npos);
-	REQUIRE(
-		source.find("GatewayHost::ListReservedChatSlashCommandNames") !=
 		std::string::npos);
 	REQUIRE(
 		source.find("m_skillCommandInvocationService.ResolveInvocation") !=

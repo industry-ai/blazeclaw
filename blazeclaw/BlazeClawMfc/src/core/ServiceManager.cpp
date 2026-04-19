@@ -2,6 +2,8 @@
 #include "ServiceManager.h"
 #include "GatewayHostBindingCoordinator.h"
 #include "ServiceLifecycleStartupCoordinator.h"
+#include "SkillsAgentCommandDescriptorPolicy.h"
+#include "SkillsGatewayPublicationCoordinator.h"
 #include "../app/CredentialStore.h"
 #include "../app/BlazeClawMFCDoc.h"
 #include "../app/BlazeClawMFCView.h"
@@ -1865,39 +1867,12 @@ namespace blazeclaw::core {
 
 	void ServiceManager::RefreshGatewaySkillsStateProjection()
 	{
-		if (m_extensionBundleCommandSourceAdapter) {
-			const auto& diagnostics =
-				m_extensionBundleCommandSourceAdapter->LastDiagnostics();
-			m_bundleCommandRootsScannedCount = diagnostics.rootsScanned;
-			m_bundleCommandFilesLoadedCount = diagnostics.filesLoaded;
-			m_bundleCommandFilesSkippedDisabledCount =
-				diagnostics.filesSkippedDisabled;
-			m_bundleCommandFilesSkippedEmptyPromptCount =
-				diagnostics.filesSkippedEmptyPrompt;
-			m_bundleCommandFilesSkippedInvalidNameCount =
-				diagnostics.filesSkippedInvalidName;
-			m_bundleCommandFilesRejectedUnsafeCount =
-				diagnostics.filesRejectedUnsafe;
-		}
-
-		m_gatewaySkillsStateProjection = BuildGatewaySkillsState();
-		m_gatewaySkillsStateProjection.bundleCommandRootsScannedCount =
-			m_bundleCommandRootsScannedCount;
-		m_gatewaySkillsStateProjection.bundleCommandFilesLoadedCount =
-			m_bundleCommandFilesLoadedCount;
-		m_gatewaySkillsStateProjection.bundleCommandFilesSkippedDisabledCount =
-			m_bundleCommandFilesSkippedDisabledCount;
-		m_gatewaySkillsStateProjection.bundleCommandFilesSkippedEmptyPromptCount =
-			m_bundleCommandFilesSkippedEmptyPromptCount;
-		m_gatewaySkillsStateProjection.bundleCommandFilesSkippedInvalidNameCount =
-			m_bundleCommandFilesSkippedInvalidNameCount;
-		m_gatewaySkillsStateProjection.bundleCommandFilesRejectedUnsafeCount =
-			m_bundleCommandFilesRejectedUnsafeCount;
+		SkillsGatewayPublicationCoordinator::RefreshProjection(*this);
 	}
 
 	void ServiceManager::PublishGatewaySkillsStateProjection()
 	{
-		m_gatewayHost.SetSkillsCatalogState(m_gatewaySkillsStateProjection);
+		SkillsGatewayPublicationCoordinator::PublishProjection(*this);
 	}
 
 	blazeclaw::gateway::SkillsCatalogGatewayEntry
@@ -1918,24 +1893,8 @@ namespace blazeclaw::core {
 		const bool forceRefresh,
 		const std::wstring& reason) {
 		const auto commandSourceAdapters = BuildRuntimeSkillCommandSourceAdapters();
-		std::vector<AgentSkillCommandDescriptor> commandDescriptors;
-		commandDescriptors.reserve(m_agentsScope.entries.size());
-		const auto defaultSkillFilter = config.agents.defaults.skills;
-		for (const auto& entry : m_agentsScope.entries) {
-			std::optional<std::vector<std::wstring>> skillFilter = defaultSkillFilter;
-			const auto configEntryIt =
-				config.agents.entries.find(AgentsCatalogService::NormalizeAgentId(entry.id));
-			if (configEntryIt != config.agents.entries.end() &&
-				configEntryIt->second.skills.has_value()) {
-				skillFilter = configEntryIt->second.skills;
-			}
-
-			commandDescriptors.push_back(AgentSkillCommandDescriptor{
-				.agentId = entry.id,
-				.workspaceDir = entry.workspaceDir,
-				.skillFilter = skillFilter,
-				});
-		}
+		const auto commandDescriptors =
+			SkillsAgentCommandDescriptorPolicy::BuildDescriptors(config, m_agentsScope);
 
 		m_skillsHooksCoordinator.RefreshSkillsState(
 			config,
@@ -1977,17 +1936,7 @@ namespace blazeclaw::core {
 			});
 
 		const auto aggregatedCommands =
-			[&]() {
-			std::vector<std::wstring> reservedSkillCommandNames;
-			for (const auto& name :
-				blazeclaw::gateway::GatewayHost::ListReservedChatSlashCommandNames()) {
-				const auto normalized = Trim(ToWide(name));
-				if (!normalized.empty()) {
-					reservedSkillCommandNames.push_back(normalized);
-				}
-			}
-
-			return m_skillCommandsAggregationService.BuildSnapshot(
+			m_skillCommandsAggregationService.BuildSnapshot(
 				AgentSkillCommandAggregationContext{
 					.descriptors = commandDescriptors,
 					.appConfig = config,
@@ -1995,15 +1944,15 @@ namespace blazeclaw::core {
 					.eligibilityService = m_skillsEligibilityService,
 					.commandService = m_skillsCommandService,
 					.commandSourceAdapters = &commandSourceAdapters,
-					.reservedNames = std::move(reservedSkillCommandNames),
+					.reservedNames =
+						SkillsAgentCommandDescriptorPolicy::BuildReservedChatSlashCommandNamesNormalized(),
 				});
-			}();
 		if (!aggregatedCommands.commandSnapshot.commands.empty()) {
 			m_skillsCommands = aggregatedCommands.commandSnapshot;
 		}
 
 		m_configSchemaService.Invalidate();
-		RefreshGatewaySkillsStateProjection();
+		SkillsGatewayPublicationCoordinator::RefreshProjection(*this);
 	}
 
 	std::vector<extensions::IRuntimeSkillCommandSourceAdapter*>

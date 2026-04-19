@@ -169,9 +169,11 @@
     <ClInclude Include="src\core\SkillsContracts.h" />
     <ClInclude Include="src\core\SkillsFrontmatterCompat.h" />
     <ClInclude Include="src\core\SkillsSkillContractCompat.h" />
+    <ClInclude Include="src\core\SkillsAgentCommandDescriptorPolicy.h" />
     <ClInclude Include="src\core\SkillsCatalogService.h" />
     <ClInclude Include="src\core\SkillsEnvOverrideService.h" />
     <ClInclude Include="src\core\SkillsEligibilityService.h" />
+    <ClInclude Include="src\core\SkillsGatewayPublicationCoordinator.h" />
     <ClInclude Include="src\core\SkillsFacade.h" />
     <ClInclude Include="src\core\SkillsInstallService.h" />
     <ClInclude Include="src\core\SkillsPromptFormatterCompat.h" />
@@ -330,6 +332,7 @@
     <ClCompile Include="src\core\SkillsCommandService.cpp" />
     <ClCompile Include="src\core\SkillCommandsAggregationService.cpp" />
     <ClCompile Include="src\core\InlineActionsOrchestrationService.cpp" />
+    <ClCompile Include="src\core\SkillsAgentCommandDescriptorPolicy.cpp" />
     <ClCompile Include="src\core\SkillsCatalogService.cpp" />
     <ClCompile Include="src\core\SkillsFrontmatterCompat.cpp" />
     <ClCompile Include="src\core\SkillsEnvOverrideService.cpp" />
@@ -344,6 +347,7 @@
     <ClCompile Include="src\core\ConfigSchemaService.cpp" />
     <ClCompile Include="src\core\ExtensionBundleCommandSourceAdapter.cpp" />
     <ClCompile Include="src\core\GatewayHostBindingCoordinator.cpp" />
+    <ClCompile Include="src\core\SkillsGatewayPublicationCoordinator.cpp" />
     <ClCompile Include="src\core\ServiceLifecycleStartupCoordinator.cpp" />
     <ClCompile Include="src\core\ServiceManager.cpp" />
     <ClCompile Include="src\core\runtime\LocalModel\ITextGenerationRuntime.cpp" />

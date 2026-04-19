@@ -401,6 +401,25 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"ServiceManager skills refresh contract: agent descriptor policy and gateway publication coordinator",
+	"[servicemanager][skills][contract]")
+{
+	const std::string source = ReadServiceManagerSource();
+	REQUIRE(
+		source.find("SkillsAgentCommandDescriptorPolicy::BuildDescriptors(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("SkillsAgentCommandDescriptorPolicy::BuildReservedChatSlashCommandNamesNormalized(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("SkillsGatewayPublicationCoordinator::RefreshProjection(*this)") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("SkillsGatewayPublicationCoordinator::PublishProjection(*this)") !=
+		std::string::npos);
+}
+
+TEST_CASE(
 	"ServiceManager startup contract: policy and module phases delegate to ServiceLifecycleStartupCoordinator",
 	"[servicemanager][startup][contract][lifecycle]")
 {

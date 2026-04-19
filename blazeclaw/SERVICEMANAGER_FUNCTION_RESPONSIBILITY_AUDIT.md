@@ -98,13 +98,13 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 | Function | Role |
 |----------|------|
 | `BuildGatewaySkillsState()` | Build skills catalog state for gateway. |
-| `RefreshGatewaySkillsStateProjection()` | Refresh cached projection. |
-| `PublishGatewaySkillsStateProjection()` | Publish to gateway host. |
+| `RefreshGatewaySkillsStateProjection()` | Thin: **`SkillsGatewayPublicationCoordinator::RefreshProjection`**. |
+| `PublishGatewaySkillsStateProjection()` | Thin: **`SkillsGatewayPublicationCoordinator::PublishProjection`**. |
 | `BuildGatewaySkillEntry(...)` | Map catalog + eligibility + command + install → gateway entry. |
 | `BuildRuntimeSkillCommandSourceAdapters()` | Adapters for runtime skill commands. |
-| `RefreshSkillsState(config, force, reason)` | Reload skills state from config. |
+| `RefreshSkillsState(config, force, reason)` | Orchestrates hooks refresh + aggregation + schema invalidate; **per-agent skill filters** and **reserved slash names** come from **`SkillsAgentCommandDescriptorPolicy`**. |
 
-**Assessment:** **Mixed.** Delegation to `SkillsGatewayProjectionService` helps; `RefreshSkillsState` and gateway state publishing still mix orchestration with policy.
+**Assessment:** **Improved.** Per-agent skill-filter and reserved-name **policy** lives in **`SkillsAgentCommandDescriptorPolicy`**; gateway catalog projection refresh/publish **orchestration** lives in **`SkillsGatewayPublicationCoordinator`** (friend of `ServiceManager`). `RefreshSkillsState` still sequences services and applies aggregated commands to `m_skillsCommands` (composition-root duty).
 
 ---
 
@@ -229,6 +229,13 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 - **`ServiceManager`** declares **`friend class GatewayHostBindingCoordinator`**; **`BindSkillsCallbacks`** / **`BindChatCallbacks`** delegate with one call each.
 - Contract tests: **`ReadGatewayHostBindingCoordinatorSource()`**, gateway delegation case, and phase1/email strings updated to read the coordinator/assembler sources where behavior moved.
 
+### Phase 7 (skills refresh policy + gateway publication — completed)
+
+- **`SkillsAgentCommandDescriptorPolicy`**: **`BuildDescriptors`** (defaults + per-agent `config.agents.entries` skill overrides) and **`BuildReservedChatSlashCommandNamesNormalized`** (gateway reserved slash names).
+- **`SkillsGatewayPublicationCoordinator`**: **`RefreshProjection`** / **`PublishProjection`** (bundle diagnostics → `m_gatewaySkillsStateProjection`, **`SetSkillsCatalogState`**).
+- **`ServiceManager`** declares **`friend class SkillsGatewayPublicationCoordinator`**; **`RefreshSkillsState`** calls **`SkillsGatewayPublicationCoordinator::RefreshProjection`** after refresh (and thin **`Refresh*`** / **`Publish*`** wrappers delegate to the coordinator).
+- Contract tests: **`ServiceManagerStartupPhaseContractTests`** skills case; **`SkillCommandsAggregationServiceContractTests`** reads **`SkillsAgentCommandDescriptorPolicy.cpp`** for policy strings.
+
 ---
 
 ## 4) Summary conclusion
@@ -237,10 +244,10 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 |-----------|--------|
 | **Lifecycle / wiring / delegation** | Strong — `ServiceManager` remains the composition root. |
 | **Pure getters** | Aligned. |
-| **Deep runtime logic** | **Further reduced:** provider path lives in **`ChatProviderRuntimeService`**; chat/skills **gateway callback wiring** lives in **`GatewayHostBindingCoordinator`**. |
+| **Deep runtime logic** | **Further reduced:** provider path in **`ChatProviderRuntimeService`**; gateway callback wiring in **`GatewayHostBindingCoordinator`**; skills refresh **policy** + gateway **publication** in **`SkillsAgentCommandDescriptorPolicy`** / **`SkillsGatewayPublicationCoordinator`**. |
 | **Diagnostics** | **Assembler path:** projector contexts + scalars → **`OperatorDiagnosticsAssembler`** → report builder. |
 
-**Verdict:** `ServiceManager` remains the composition root; **provider execution**, **prompt rewrite**, **diagnostics assembly**, **startup policy/module sequencing**, and **skills/chat gateway binding** are **delegated** to dedicated types. The next shrink target is **nested chat runtime logic** inside **`GatewayHostBindingCoordinator`** (strategies / coordinator methods).
+**Verdict:** `ServiceManager` remains the composition root; **provider execution**, **prompt rewrite**, **diagnostics assembly**, **startup policy/module sequencing**, **skills/chat gateway binding**, and **skills refresh policy / gateway publication** are **delegated** to dedicated types. The next shrink target is **nested chat runtime logic** inside **`GatewayHostBindingCoordinator`** (strategies / coordinator methods).
 
 ---
 
@@ -250,7 +257,7 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 - [x] `ResolveSkillInvocationPromptRewrite` moved out of `ServiceManager` (**`RewriteInvocationPromptUtf8`**).
 - [x] `BindChatCallbacks` implementation moved out of **`ServiceManager.cpp`** (**`GatewayHostBindingCoordinator.cpp`**) — further line-count reduction inside the coordinator is **follow-up**.
 - [x] `BuildOperatorDiagnosticsReport` reduced to projector inputs + **`OperatorDiagnosticsAssembler`**.
-- [x] Contract tests updated for new seams (`ServiceManagerStartupPhaseContractTests` Phase 4–6 + **`SkillCommandInvocationServiceTests`**).
+- [x] Contract tests updated for new seams (`ServiceManagerStartupPhaseContractTests` Phase 4–7 + **`SkillCommandInvocationServiceTests`** + **`SkillCommandsAggregationServiceContractTests`** policy path).
 - [x] `ConfigurePolicies` / `InitializeModules` thin facades over **`ServiceLifecycleStartupCoordinator`** (Phase 5).
 
-*Last updated: Phase 6 gateway binding — `GatewayHostBindingCoordinator`; thin `BindSkillsCallbacks`/`BindChatCallbacks`; contract tests updated (phase3/email/managed-config assertions aligned with assembler + `ApplyManagedRuntimeConfigDiff`); BlazeClawMfc + BlazeClawMfc.Tests Debug\|x64 built with MSBuild (`PlatformToolset=v143` where v145 is unavailable).*
+*Last updated: Phase 7 skills policy + gateway publication — `SkillsAgentCommandDescriptorPolicy`, `SkillsGatewayPublicationCoordinator`; contract tests updated; BlazeClawMfc + BlazeClawMfc.Tests Debug\|x64 built with MSBuild (`PlatformToolset=v143` where v145 is unavailable).*
