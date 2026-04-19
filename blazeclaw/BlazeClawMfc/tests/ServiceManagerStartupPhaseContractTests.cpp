@@ -302,3 +302,26 @@ TEST_CASE(
 		source.find("m_managedRuntimeConfigDiffCoordinator.CoordinateLocalModelReload(") !=
 		std::string::npos);
 }
+
+TEST_CASE(
+	"ServiceManager phase3 contract: delegates diagnostics projection to projector modules",
+	"[servicemanager][phase3][contract]")
+{
+	const std::string source = ReadServiceManagerSource();
+
+	REQUIRE(
+		source.find("m_gatewayLifecycleDiagnosticsProjector.Apply(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("m_embeddedRuntimeDiagnosticsProjector.Apply(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("m_modelRuntimeDiagnosticsProjector.Apply(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("m_hooksDiagnosticsProjector.Apply(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("m_emailRuntimeDiagnosticsProjector.Apply(") !=
+		std::string::npos);
+}

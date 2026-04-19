@@ -232,12 +232,28 @@ Phase 2 implementation notes:
   - `ServiceManager phase2 contract: delegates startup and managed config diff seams`
 
 ## Phase 3 (incremental quality)
-6. Split diagnostics assembly in `BuildOperatorDiagnosticsReport()` into projector modules.
-7. Keep `ServiceManager` method bodies mostly as:
+6. ✅ Split diagnostics assembly in `BuildOperatorDiagnosticsReport()` into projector modules.
+7. ✅ Keep `ServiceManager` method bodies mostly as:
    - resolve DTOs
    - delegate to coordinator/service
    - store snapshot/state
    - wire callbacks
+
+Phase 3 implementation notes:
+- Added diagnostics projector seams:
+  - `GatewayLifecycleDiagnosticsProjector`
+  - `EmbeddedRuntimeDiagnosticsProjector`
+  - `ModelRuntimeDiagnosticsProjector`
+  - `HooksDiagnosticsProjector`
+  - (retained) `EmailRuntimeDiagnosticsProjector`
+- `BuildOperatorDiagnosticsReport()` now delegates projection for gateway lifecycle,
+  embedded runtime, hooks, and model/runtime diagnostics to dedicated projectors.
+- ServiceManager diagnostics flow now remains focused on:
+  - assembling high-level context DTOs,
+  - invoking projector modules,
+  - preserving output contract through `CDiagnosticsReportBuilder`.
+- Added contract test coverage:
+  - `ServiceManager phase3 contract: delegates diagnostics projection to projector modules`
 
 ---
 

@@ -17,6 +17,10 @@
 #include "EmailPreflightHealthService.h"
 #include "EmailPolicyOrchestrationService.h"
 #include "EmailRuntimeDiagnosticsProjector.h"
+#include "GatewayLifecycleDiagnosticsProjector.h"
+#include "EmbeddedRuntimeDiagnosticsProjector.h"
+#include "HooksDiagnosticsProjector.h"
+#include "ModelRuntimeDiagnosticsProjector.h"
 #include "FixtureStartupValidatorFacade.h"
 #include "HooksStartupCoordinator.h"
 #include "ManagedRuntimeConfigDiffCoordinator.h"
@@ -77,6 +81,7 @@ namespace blazeclaw::core {
 			std::function<void()> refreshSkillView;
 		};
 
+		// Lifecycle and top-level orchestration
 		ServiceManager();
 		~ServiceManager();
 		void SetSkillsHostCallbacks(SkillsHostCallbacks callbacks);
@@ -85,6 +90,18 @@ namespace blazeclaw::core {
 		void Stop();
 
 		[[nodiscard]] bool IsRunning() const noexcept;
+
+	private:
+		// Private lifecycle phases:
+		void ConfigurePolicies(
+			const blazeclaw::config::AppConfig& config);
+		void InitializeModules();
+		void WireGatewayCallbacks();
+		[[nodiscard]] bool FinalizeStartup(
+			const blazeclaw::config::AppConfig& config);
+
+	public:
+		// Read facade / snapshots / state accessors
 		[[nodiscard]] const FeatureRegistry& Registry() const noexcept;
 		[[nodiscard]] const AgentScopeSnapshot& AgentsScope() const noexcept;
 		[[nodiscard]] const AgentsWorkspaceSnapshot& AgentsWorkspace() const noexcept;
@@ -102,17 +119,29 @@ namespace blazeclaw::core {
 		[[nodiscard]] bool LocalModelActivationEnabled() const noexcept;
 		[[nodiscard]] const std::string& LocalModelActivationReason() const noexcept;
 		[[nodiscard]] const RetrievalMemorySnapshot& RetrievalMemory() const noexcept;
-		[[nodiscard]] std::string BuildOperatorDiagnosticsReport() const;
-		void SetActiveChatProvider(
-			const std::string& provider,
-			const std::string& model);
-		[[nodiscard]] const std::string& ActiveChatProvider() const noexcept;
-		[[nodiscard]] const std::string& ActiveChatModel() const noexcept;
-		[[nodiscard]] bool HasDeepSeekCredential() const;
 		[[nodiscard]] const SkillsCatalogSnapshot& SkillsCatalog() const noexcept;
 		[[nodiscard]] const SkillsEligibilitySnapshot& SkillsEligibility() const noexcept;
 		[[nodiscard]] const SkillsPromptSnapshot& SkillsPrompt() const noexcept;
 		[[nodiscard]] const SkillsRunSnapshot& RunSkillsSnapshot() const noexcept;
+
+		// Gateway integration surface
+		[[nodiscard]] std::string InvokeGatewayMethod(
+			const std::string& method,
+			const std::optional<std::string>& paramsJson = std::nullopt) const;
+		[[nodiscard]] blazeclaw::gateway::protocol::ResponseFrame RouteGatewayRequest(
+			const blazeclaw::gateway::protocol::RequestFrame& request) const;
+		bool PumpGatewayNetworkOnce(std::string& error);
+
+	private:
+		// Private gateway composition
+		void BindSkillsCallbacks();
+		void BindGatewayPolicyCallbacks();
+		void BindToolRuntimeCallbacks();
+		void BindChatCallbacks();
+		void BindEmbeddingsCallbacks();
+
+	public:
+		// gateway composition
 		[[nodiscard]] blazeclaw::gateway::ConfigSchemaGatewayState
 			BuildConfigSchemaGatewayState() const;
 		[[nodiscard]] std::optional<blazeclaw::gateway::ConfigSchemaGatewayLookupResult>
@@ -120,12 +149,88 @@ namespace blazeclaw::core {
 		[[nodiscard]] bool WriteConfigSchemaDocumentationSnapshot(
 			const std::filesystem::path& outputPath,
 			std::wstring& outError) const;
-		[[nodiscard]] std::string InvokeGatewayMethod(
-			const std::string& method,
-			const std::optional<std::string>& paramsJson = std::nullopt) const;
-		[[nodiscard]] blazeclaw::gateway::protocol::ResponseFrame RouteGatewayRequest(
-			const blazeclaw::gateway::protocol::RequestFrame& request) const;
-		bool PumpGatewayNetworkOnce(std::string& error);
+
+	private:
+		// Skills/hooks orchestration and projection
+		[[nodiscard]] blazeclaw::gateway::SkillsCatalogGatewayState BuildGatewaySkillsState() const;
+		void RefreshGatewaySkillsStateProjection();
+		void PublishGatewaySkillsStateProjection();
+		[[nodiscard]] blazeclaw::gateway::SkillsCatalogGatewayEntry BuildGatewaySkillEntry(
+			const SkillsCatalogEntry& entry,
+			const SkillsEligibilityEntry* eligibility,
+			const SkillsCommandSpec* command,
+			const SkillsInstallPlanEntry* install) const;
+		[[nodiscard]] std::vector<extensions::IRuntimeSkillCommandSourceAdapter*>
+			BuildRuntimeSkillCommandSourceAdapters();
+		void RefreshSkillsState(
+			const blazeclaw::config::AppConfig& config,
+			bool forceRefresh,
+			const std::wstring& reason);
+
+	private:
+		// Chat runtime orchestration helpers
+		[[nodiscard]] std::optional<std::string>
+			ResolveSkillInvocationToolTarget(
+				const std::string& commandBodyNormalized) const;
+		[[nodiscard]] std::optional<std::string>
+			ResolveSkillInvocationPromptRewrite(
+				const std::string& commandBodyNormalized) const;
+		[[nodiscard]] bool ShouldLoadSkillCommandsForInlineActions(
+			bool allowTextCommands,
+			const std::string& commandBodyNormalized) const;
+		[[nodiscard]] std::vector<std::string>
+			BuildOrderedAllowedToolTargets(
+				const std::vector<std::string>& requestedTargets,
+				const std::optional<std::string>& resolvedTarget) const;
+		[[nodiscard]] std::optional<std::string>
+			ExtractInlineToolResultText(
+				const blazeclaw::gateway::ToolExecuteResultV2& result) const;
+		[[nodiscard]] std::optional<blazeclaw::gateway::GatewayHost::ChatRuntimeResult>
+			TryExecuteInlineToolInvocation(
+				const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
+				const std::string& activeModel,
+				const std::optional<std::string>& resolvedSkillInvocationToolTarget);
+		[[nodiscard]] std::vector<
+			blazeclaw::gateway::GatewayHost::ChatRuntimeResult::TaskDeltaEntry>
+			ConvertEmbeddedTaskDeltas(
+				const std::vector<EmbeddedTaskDelta>& taskDeltas) const;
+		void ApplyEmbeddedExecutionTelemetry(
+			const EmbeddedRuntimeExecutionResult& embeddedExecution);
+		[[nodiscard]] bool IsEmbeddedDynamicLoopCanaryEligible(
+			const std::string& provider,
+			const std::string& sessionId) const;
+		[[nodiscard]] bool IsEmbeddedDynamicLoopPromotionReady() const;
+		[[nodiscard]] bool IsLocalModelRolloutEligible() const;
+
+	private:
+		// Managed reload / cleanup / lifecycle internals
+		[[nodiscard]] bool ApplyManagedRuntimeConfigDiff(
+			const blazeclaw::config::AppConfig& nextConfig,
+			std::wstring& warningMessage);
+		void ResetGatewayOwnedRuntimeCleanup();
+		void RegisterGatewayOwnedRuntimeCleanup(
+			const std::string& name,
+			std::function<void()> action);
+		void ExecuteGatewayOwnedRuntimeCleanup();
+		void ExecuteGatewayStartupFailureCleanup(
+			const blazeclaw::config::AppConfig& config,
+			const GatewayRuntimeBootstrapCoordinator::StartupResult& startupResult);
+		void ExecuteNonGatewayRuntimeCleanup();
+		void RecordGatewayLifecycleTransition(const std::string& transition);
+		void QueueManagedConfigInternalWriteHash(std::uint64_t hash);
+		[[nodiscard]] std::optional<std::uint64_t>
+			ConsumeManagedConfigInternalWriteHash();
+
+	public:
+		// Provider credential/cancellation integration
+		void SetActiveChatProvider(
+			const std::string& provider,
+			const std::string& model);
+		[[nodiscard]] const std::string& ActiveChatProvider() const noexcept;
+		[[nodiscard]] const std::string& ActiveChatModel() const noexcept;
+
+		[[nodiscard]] bool HasDeepSeekCredential() const;
+		[[nodiscard]] std::string BuildOperatorDiagnosticsReport() const;
 
 	private:
 		struct ServiceManagerState {
@@ -260,64 +365,9 @@ namespace blazeclaw::core {
 		static constexpr std::uint64_t kChatRuntimeExecutionTimeoutMs =
 			runtime::contracts::kDefaultExecutionTimeoutMs;
 
-		[[nodiscard]] bool IsLocalModelRolloutEligible() const;
-		[[nodiscard]] bool IsEmbeddedDynamicLoopCanaryEligible(
-			const std::string& provider,
-			const std::string& sessionId) const;
-		[[nodiscard]] std::optional<std::string>
-			ResolveSkillInvocationToolTarget(
-				const std::string& commandBodyNormalized) const;
-		[[nodiscard]] std::optional<std::string>
-			ResolveSkillInvocationPromptRewrite(
-				const std::string& commandBodyNormalized) const;
-		[[nodiscard]] bool ShouldLoadSkillCommandsForInlineActions(
-			bool allowTextCommands,
-			const std::string& commandBodyNormalized) const;
-		[[nodiscard]] std::vector<std::string>
-			BuildOrderedAllowedToolTargets(
-				const std::vector<std::string>& requestedTargets,
-				const std::optional<std::string>& resolvedTarget) const;
-		[[nodiscard]] std::optional<std::string>
-			ExtractInlineToolResultText(
-				const blazeclaw::gateway::ToolExecuteResultV2& result) const;
-		[[nodiscard]] std::optional<blazeclaw::gateway::GatewayHost::ChatRuntimeResult>
-			TryExecuteInlineToolInvocation(
-				const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
-				const std::string& activeModel,
-				const std::optional<std::string>& resolvedSkillInvocationToolTarget);
-		[[nodiscard]] std::vector<
-			blazeclaw::gateway::GatewayHost::ChatRuntimeResult::TaskDeltaEntry>
-			ConvertEmbeddedTaskDeltas(
-				const std::vector<EmbeddedTaskDelta>& taskDeltas) const;
-		void ApplyEmbeddedExecutionTelemetry(
-			const EmbeddedRuntimeExecutionResult& embeddedExecution);
-		[[nodiscard]] bool IsEmbeddedDynamicLoopPromotionReady() const;
 
-		[[nodiscard]] blazeclaw::gateway::SkillsCatalogGatewayState BuildGatewaySkillsState() const;
-		void RefreshGatewaySkillsStateProjection();
-		void PublishGatewaySkillsStateProjection();
-		[[nodiscard]] blazeclaw::gateway::SkillsCatalogGatewayEntry BuildGatewaySkillEntry(
-			const SkillsCatalogEntry& entry,
-			const SkillsEligibilityEntry* eligibility,
-			const SkillsCommandSpec* command,
-			const SkillsInstallPlanEntry* install) const;
-		[[nodiscard]] std::vector<extensions::IRuntimeSkillCommandSourceAdapter*>
-			BuildRuntimeSkillCommandSourceAdapters();
-		void RefreshSkillsState(
-			const blazeclaw::config::AppConfig& config,
-			bool forceRefresh,
-			const std::wstring& reason);
-		void ConfigurePolicies(
-			const blazeclaw::config::AppConfig& config);
-		void InitializeModules();
-		void WireGatewayCallbacks();
-		void BindSkillsCallbacks();
-		void BindGatewayPolicyCallbacks();
-		void BindToolRuntimeCallbacks();
 		[[nodiscard]] std::vector<EmbeddedToolBinding>
 			BuildEmbeddedToolBindings() const;
-		void BindChatCallbacks();
-		void BindEmbeddingsCallbacks();
 		[[nodiscard]] blazeclaw::gateway::GatewayHost::ChatRuntimeResult
 			ExecuteProviderChatRuntimePath(
 				const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
@@ -325,24 +375,6 @@ namespace blazeclaw::core {
 				const std::string& runtimeMessage,
 				const std::string& activeProvider,
 				const std::string& activeModel);
-		[[nodiscard]] bool FinalizeStartup(
-			const blazeclaw::config::AppConfig& config);
-		[[nodiscard]] bool ApplyManagedRuntimeConfigDiff(
-			const blazeclaw::config::AppConfig& nextConfig,
-			std::wstring& warningMessage);
-		void ResetGatewayOwnedRuntimeCleanup();
-		void RegisterGatewayOwnedRuntimeCleanup(
-			const std::string& name,
-			std::function<void()> action);
-		void ExecuteGatewayOwnedRuntimeCleanup();
-		void ExecuteGatewayStartupFailureCleanup(
-			const blazeclaw::config::AppConfig& config,
-			const GatewayRuntimeBootstrapCoordinator::StartupResult& startupResult);
-		void ExecuteNonGatewayRuntimeCleanup();
-		void RecordGatewayLifecycleTransition(const std::string& transition);
-		void QueueManagedConfigInternalWriteHash(std::uint64_t hash);
-		[[nodiscard]] std::optional<std::uint64_t>
-			ConsumeManagedConfigInternalWriteHash();
 
 		bool m_running = false;
 		std::string m_activeChatProvider = "local";
@@ -431,6 +463,10 @@ namespace blazeclaw::core {
 		SkillsGatewayMethodHandler m_skillsGatewayMethodHandler;
 		SkillsGatewayProjectionService m_skillsGatewayProjectionService;
 		ManagedRuntimeConfigDiffCoordinator m_managedRuntimeConfigDiffCoordinator;
+		GatewayLifecycleDiagnosticsProjector m_gatewayLifecycleDiagnosticsProjector;
+		EmbeddedRuntimeDiagnosticsProjector m_embeddedRuntimeDiagnosticsProjector;
+		HooksDiagnosticsProjector m_hooksDiagnosticsProjector;
+		ModelRuntimeDiagnosticsProjector m_modelRuntimeDiagnosticsProjector;
 		SkillsHostCallbacks m_skillsHostCallbacks;
 		CChatRuntime m_chatRuntime;
 		CDeepSeekClient m_deepSeekClient;

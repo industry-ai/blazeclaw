@@ -5105,47 +5105,46 @@ namespace blazeclaw::core {
 			};
 
 		DiagnosticsSnapshot snapshot;
-		snapshot.runtimeRunning = m_running;
-		snapshot.gatewayWarning = m_gatewayHost.LastWarning();
-		snapshot.gatewayStartupMode = m_state.gatewayLifecycle.startupMode;
-		snapshot.gatewayStartupModeSource =
-			m_state.gatewayLifecycle.startupModeSource;
-		snapshot.gatewayStartupFailedStage =
-			m_state.gatewayLifecycle.failedStage;
-		snapshot.gatewayStartupDegraded =
-			m_state.gatewayLifecycle.startupDegraded;
-		snapshot.gatewayManagedConfigReloaderStarted =
-			m_state.gatewayLifecycle.managedConfigReloaderStarted;
-		snapshot.gatewayManagedConfigReloaderRunning =
-			m_state.gatewayLiveRuntime.managedConfigReloaderRunning;
-		snapshot.gatewayClosePreludeExecuted =
-			m_state.gatewayLifecycle.closePreludeExecuted;
-		snapshot.gatewayStartupFailureCleanupExecuted =
-			m_state.gatewayLifecycle.startupFailureCleanupExecuted;
-		snapshot.gatewayCleanupPath =
-			m_state.gatewayLifecycle.cleanupPath;
-		snapshot.gatewayRuntimeStateCreated =
-			m_state.gatewayLiveRuntime.runtimeStateCreated;
-		snapshot.gatewayRuntimeServicesStarted =
-			m_state.gatewayLiveRuntime.runtimeServicesStarted;
-		snapshot.gatewayTransportHandlersAttached =
-			m_state.gatewayLiveRuntime.transportHandlersAttached;
-		snapshot.gatewayRuntimeSubscriptionsStarted =
-			m_state.gatewayLiveRuntime.runtimeSubscriptionsStarted;
-		snapshot.gatewayManagedConfigPath =
-			ToNarrow(m_state.gatewayLiveRuntime.managedConfigPath);
-		snapshot.gatewayManagedConfigApplyCount =
-			m_state.gatewayLiveRuntime.managedConfigApplyCount;
-		snapshot.gatewayManagedConfigRejectCount =
-			m_state.gatewayLiveRuntime.managedConfigRejectCount;
-		snapshot.gatewayAuthSessionGenerationCurrent =
-			m_state.gatewayLifecycle.authSessionGenerationCurrent;
-		snapshot.gatewayAuthSessionGenerationRequired =
-			m_state.gatewayLifecycle.authSessionGenerationRequired;
-		snapshot.gatewayAuthSessionGenerationRejectCount =
-			m_state.gatewayLifecycle.authSessionGenerationRejectCount;
-		snapshot.gatewayLifecycleTransitions =
-			m_state.gatewayLifecycle.transitions;
+        m_gatewayLifecycleDiagnosticsProjector.Apply(
+			GatewayLifecycleDiagnosticsProjector::Context{
+				.runtimeRunning = m_running,
+				.gatewayWarning = m_gatewayHost.LastWarning(),
+				.startupMode = m_state.gatewayLifecycle.startupMode,
+				.startupModeSource = m_state.gatewayLifecycle.startupModeSource,
+				.startupFailedStage = m_state.gatewayLifecycle.failedStage,
+				.startupDegraded = m_state.gatewayLifecycle.startupDegraded,
+				.managedConfigReloaderStarted =
+					m_state.gatewayLifecycle.managedConfigReloaderStarted,
+				.managedConfigReloaderRunning =
+					m_state.gatewayLiveRuntime.managedConfigReloaderRunning,
+				.closePreludeExecuted =
+					m_state.gatewayLifecycle.closePreludeExecuted,
+				.startupFailureCleanupExecuted =
+					m_state.gatewayLifecycle.startupFailureCleanupExecuted,
+				.cleanupPath = m_state.gatewayLifecycle.cleanupPath,
+				.runtimeStateCreated =
+					m_state.gatewayLiveRuntime.runtimeStateCreated,
+				.runtimeServicesStarted =
+					m_state.gatewayLiveRuntime.runtimeServicesStarted,
+				.transportHandlersAttached =
+					m_state.gatewayLiveRuntime.transportHandlersAttached,
+				.runtimeSubscriptionsStarted =
+					m_state.gatewayLiveRuntime.runtimeSubscriptionsStarted,
+				.managedConfigPath =
+					ToNarrow(m_state.gatewayLiveRuntime.managedConfigPath),
+				.managedConfigApplyCount =
+					m_state.gatewayLiveRuntime.managedConfigApplyCount,
+				.managedConfigRejectCount =
+					m_state.gatewayLiveRuntime.managedConfigRejectCount,
+				.authSessionGenerationCurrent =
+					m_state.gatewayLifecycle.authSessionGenerationCurrent,
+				.authSessionGenerationRequired =
+					m_state.gatewayLifecycle.authSessionGenerationRequired,
+				.authSessionGenerationRejectCount =
+					m_state.gatewayLifecycle.authSessionGenerationRejectCount,
+				.transitions = m_state.gatewayLifecycle.transitions,
+			},
+			snapshot);
 
 		std::size_t implementedCount = 0;
 		std::size_t inProgressCount = 0;
@@ -5199,25 +5198,28 @@ namespace blazeclaw::core {
 		snapshot.acpLastAllowed = m_lastAcpDecision.allowed;
 		snapshot.acpReason = m_lastAcpDecision.reason;
 
-		snapshot.embeddedActiveRuns = ActiveEmbeddedRuns();
-		snapshot.embeddedDynamicLoopEnabled = m_state.embeddedRuntime.lastDynamicLoopEnabled;
-		snapshot.embeddedCanaryEligible = m_state.embeddedRuntime.lastCanaryEligible;
-		snapshot.embeddedPromotionReady = m_state.embeddedRuntime.lastPromotionReady;
-		snapshot.embeddedPromotionMinRuns = m_state.embeddedRuntime.dynamicLoopPromotionMinRuns;
-		snapshot.embeddedPromotionMinSuccessRate = m_state.embeddedRuntime.dynamicLoopPromotionMinSuccessRate;
-		snapshot.embeddedFallbackUsed = m_state.embeddedRuntime.lastFallbackUsed;
-		snapshot.embeddedFallbackReason = m_state.embeddedRuntime.lastFallbackReason;
-		snapshot.embeddedTotalRuns = m_state.embeddedRuntime.runSuccessCount + m_state.embeddedRuntime.runFailureCount;
-		snapshot.embeddedSuccessRate = snapshot.embeddedTotalRuns == 0
-			? 0.0
-			: static_cast<double>(m_state.embeddedRuntime.runSuccessCount) /
-			static_cast<double>(snapshot.embeddedTotalRuns);
-		snapshot.embeddedRunSuccess = m_state.embeddedRuntime.runSuccessCount;
-		snapshot.embeddedRunFailure = m_state.embeddedRuntime.runFailureCount;
-		snapshot.embeddedRunTimeout = m_state.embeddedRuntime.runTimeoutCount;
-		snapshot.embeddedRunCancelled = m_state.embeddedRuntime.runCancelledCount;
-		snapshot.embeddedRunFallback = m_state.embeddedRuntime.runFallbackCount;
-		snapshot.embeddedTaskDeltaTransitions = m_state.embeddedRuntime.taskDeltaTransitionCount;
+     m_embeddedRuntimeDiagnosticsProjector.Apply(
+			EmbeddedRuntimeDiagnosticsProjector::Context{
+				.activeRuns = ActiveEmbeddedRuns(),
+				.dynamicLoopEnabled =
+					m_state.embeddedRuntime.lastDynamicLoopEnabled,
+				.canaryEligible = m_state.embeddedRuntime.lastCanaryEligible,
+				.promotionReady = m_state.embeddedRuntime.lastPromotionReady,
+				.promotionMinRuns =
+					m_state.embeddedRuntime.dynamicLoopPromotionMinRuns,
+				.promotionMinSuccessRate =
+					m_state.embeddedRuntime.dynamicLoopPromotionMinSuccessRate,
+				.fallbackUsed = m_state.embeddedRuntime.lastFallbackUsed,
+				.fallbackReason = m_state.embeddedRuntime.lastFallbackReason,
+				.runSuccess = m_state.embeddedRuntime.runSuccessCount,
+				.runFailure = m_state.embeddedRuntime.runFailureCount,
+				.runTimeout = m_state.embeddedRuntime.runTimeoutCount,
+				.runCancelled = m_state.embeddedRuntime.runCancelledCount,
+				.runFallback = m_state.embeddedRuntime.runFallbackCount,
+				.taskDeltaTransitions =
+					m_state.embeddedRuntime.taskDeltaTransitionCount,
+			},
+			snapshot);
 
 		snapshot.toolsPolicyEntries = m_agentsToolPolicy.entries.size();
 		snapshot.toolsShellProcesses = ShellProcessCount();
@@ -5230,116 +5232,91 @@ namespace blazeclaw::core {
 		snapshot.sandboxEnabledCount = sandbox.enabledCount;
 		snapshot.sandboxBrowserEnabledCount = sandbox.browserEnabledCount;
 
-		snapshot.embeddingsEnabled = embeddings.enabled;
-		snapshot.embeddingsReady = embeddings.ready;
-		snapshot.embeddingsProvider = embeddings.provider;
-		snapshot.embeddingsStatus = embeddings.status;
-		snapshot.embeddingsDimension = embeddings.dimension;
-		snapshot.embeddingsMaxSequenceLength = embeddings.maxSequenceLength;
-		snapshot.embeddingsModelPathConfigured = !embeddings.modelPath.empty();
-		snapshot.embeddingsTokenizerPathConfigured = !embeddings.tokenizerPath.empty();
-		snapshot.embeddingsConfigFeatureImplemented =
-			m_registry.IsImplemented(L"embeddings-config-foundation");
-
-		snapshot.localModelEnabled = localModel.enabled;
-		snapshot.localModelReady = localModel.ready;
-		snapshot.localModelRolloutEligible = m_localModelRolloutEligible;
-		snapshot.localModelActivationEnabled = m_localModelActivationEnabled;
-		snapshot.localModelActivationReason = m_localModelActivationReason;
-		snapshot.localModelProvider = localModel.provider;
-		snapshot.localModelRolloutStage = localModel.rolloutStage;
-		snapshot.localModelStorageRoot = localModel.storageRoot;
-		snapshot.localModelVersion = localModel.version;
-		snapshot.localModelStatus = localModel.status;
-		snapshot.localModelVerboseMetrics = localModel.verboseMetrics;
-		snapshot.localModelRuntimeDllPresent = localModel.runtimeDllPresent;
-		snapshot.localModelMaxTokens = localModel.maxTokens;
-		snapshot.localModelTemperature = localModel.temperature;
-		snapshot.localModelModelLoadAttempts = localModel.modelLoadAttempts;
-		snapshot.localModelModelLoadFailures = localModel.modelLoadFailures;
-		snapshot.localModelRequestsStarted = localModel.requestsStarted;
-		snapshot.localModelRequestsCompleted = localModel.requestsCompleted;
-		snapshot.localModelRequestsFailed = localModel.requestsFailed;
-		snapshot.localModelRequestsCancelled = localModel.requestsCancelled;
-		snapshot.localModelCumulativeTokens = localModel.cumulativeTokens;
-		snapshot.localModelCumulativeLatencyMs = localModel.cumulativeLatencyMs;
-		snapshot.localModelLastLatencyMs = localModel.lastLatencyMs;
-		snapshot.localModelLastGeneratedTokens = localModel.lastGeneratedTokens;
-		snapshot.localModelLastTokensPerSecond = localModel.lastTokensPerSecond;
-		snapshot.localModelModelPathConfigured = !localModel.modelPath.empty();
-		snapshot.localModelModelHashConfigured = !localModel.modelExpectedSha256.empty();
-		snapshot.localModelModelHashVerified = localModel.modelHashVerified;
-		snapshot.localModelTokenizerPathConfigured = !localModel.tokenizerPath.empty();
-		snapshot.localModelTokenizerHashConfigured = !localModel.tokenizerExpectedSha256.empty();
-		snapshot.localModelTokenizerHashVerified = localModel.tokenizerHashVerified;
-
-		snapshot.retrievalEnabled = retrieval.enabled;
-		snapshot.retrievalRecordCount = retrieval.recordCount;
-		snapshot.retrievalLastQueryCount = retrieval.lastQueryCount;
-		snapshot.retrievalStatus = retrieval.status;
+        m_modelRuntimeDiagnosticsProjector.Apply(
+			ModelRuntimeDiagnosticsProjector::Context{
+				.embeddings = &embeddings,
+				.localModel = &localModel,
+				.retrieval = &retrieval,
+				.localModelRolloutEligible = m_localModelRolloutEligible,
+				.localModelActivationEnabled = m_localModelActivationEnabled,
+				.localModelActivationReason = m_localModelActivationReason,
+				.embeddingsConfigFeatureImplemented =
+					m_registry.IsImplemented(L"embeddings-config-foundation"),
+			},
+			snapshot);
 
 		snapshot.skillsCatalogEntries = m_skillsCatalog.entries.size();
 		snapshot.skillsPromptIncluded = m_skillsPrompt.includedCount;
 		snapshot.skillsSelfEvolvingReminderInjected =
 			m_skillsPrompt.prompt.find(L"## Self-Evolving Reminder") != std::wstring::npos;
 
-		snapshot.hooksLoaded = m_hookCatalog.diagnostics.hooksLoaded;
-		snapshot.hooksEngineMode = WideToNarrowAscii(m_hookExecution.diagnostics.engineMode);
-		snapshot.hooksEngineEnabled = m_state.hooks.engineEnabled;
-		snapshot.hooksFallbackPromptInjection = m_state.hooks.fallbackPromptInjection;
-		snapshot.hooksReminderEnabled = m_state.hooks.reminderEnabled;
-		snapshot.hooksReminderVerbosity = WideToNarrowAscii(m_state.hooks.reminderVerbosity);
-		snapshot.hooksStrictPolicyEnforcement = m_state.hooks.strictPolicyEnforcement;
-		snapshot.hooksAllowedPackagesCount = m_state.hooks.allowedPackages.size();
-		snapshot.hooksGovernanceReportingEnabled = m_state.hooks.governanceReportingEnabled;
-		snapshot.hooksGovernanceReportsGenerated = m_state.hooks.governanceReportsGenerated;
-		snapshot.hooksLastGovernanceReportPath = WideToNarrowAscii(m_state.hooks.lastGovernanceReportPath);
-		snapshot.hooksAutoRemediationEnabled = m_state.hooks.autoRemediationEnabled;
-		snapshot.hooksAutoRemediationRequiresApproval = m_state.hooks.autoRemediationRequiresApproval;
-		snapshot.hooksAutoRemediationExecuted = m_state.hooks.autoRemediationExecuted;
-		snapshot.hooksLastAutoRemediationStatus = WideToNarrowAscii(m_state.hooks.lastAutoRemediationStatus);
-		snapshot.hooksAutoRemediationTenantId = WideToNarrowAscii(m_state.hooks.autoRemediationTenantId);
-		snapshot.hooksLastAutoRemediationPlaybookPath = WideToNarrowAscii(m_state.hooks.lastAutoRemediationPlaybookPath);
-		snapshot.hooksAutoRemediationTokenMaxAgeMinutes = m_state.hooks.autoRemediationTokenMaxAgeMinutes;
-		snapshot.hooksAutoRemediationTokenRotations = m_state.hooks.autoRemediationTokenRotations;
-		snapshot.hooksRemediationTelemetryEnabled = m_state.hooks.remediationTelemetryEnabled;
-		snapshot.hooksRemediationAuditEnabled = m_state.hooks.remediationAuditEnabled;
-		snapshot.hooksLastRemediationTelemetryPath = WideToNarrowAscii(m_state.hooks.lastRemediationTelemetryPath);
-		snapshot.hooksLastRemediationAuditPath = WideToNarrowAscii(m_state.hooks.lastRemediationAuditPath);
-		snapshot.hooksRemediationSloStatus = WideToNarrowAscii(m_state.hooks.remediationSloStatus);
-		snapshot.hooksRemediationSloMaxDriftDetected = m_state.hooks.remediationSloMaxDriftDetected;
-		snapshot.hooksRemediationSloMaxPolicyBlocked = m_state.hooks.remediationSloMaxPolicyBlocked;
-		snapshot.hooksComplianceAttestationEnabled = m_state.hooks.complianceAttestationEnabled;
-		snapshot.hooksLastComplianceAttestationPath = WideToNarrowAscii(m_state.hooks.lastComplianceAttestationPath);
-		snapshot.hooksEnterpriseSlaGovernanceEnabled = m_state.hooks.enterpriseSlaGovernanceEnabled;
-		snapshot.hooksEnterpriseSlaPolicyId = WideToNarrowAscii(m_state.hooks.enterpriseSlaPolicyId);
-		snapshot.hooksCrossTenantAttestationAggregationEnabled = m_state.hooks.crossTenantAttestationAggregationEnabled;
-		snapshot.hooksCrossTenantAttestationAggregationStatus = WideToNarrowAscii(m_state.hooks.crossTenantAttestationAggregationStatus);
-		snapshot.hooksCrossTenantAttestationAggregationCount = m_state.hooks.crossTenantAttestationAggregationCount;
-		snapshot.hooksLastCrossTenantAttestationAggregationPath = WideToNarrowAscii(m_state.hooks.lastCrossTenantAttestationAggregationPath);
-		snapshot.hooksSelfEvolvingHookTriggered = m_state.hooks.selfEvolvingHookTriggered;
-		snapshot.hooksInvalidMetadata = m_hookCatalog.diagnostics.invalidMetadataFiles;
-		snapshot.hooksUnsafeHandlerPaths = m_hookCatalog.diagnostics.unsafeHandlerPaths;
-		snapshot.hooksMissingHandlers = m_hookCatalog.diagnostics.missingHandlerFiles;
-		snapshot.hooksEventsEmitted = m_hookEvents.diagnostics.emittedCount;
-		snapshot.hooksEventValidationFailed = m_hookEvents.diagnostics.validationFailedCount;
-		snapshot.hooksEventsDropped = m_hookEvents.diagnostics.droppedCount;
-		snapshot.hooksDispatches = m_hookExecution.diagnostics.dispatchCount;
-		snapshot.hooksHookDispatchCount = m_hookExecution.diagnostics.dispatchCount;
-		snapshot.hooksDispatchSuccess = m_hookExecution.diagnostics.successCount;
-		snapshot.hooksDispatchFailures = m_hookExecution.diagnostics.failureCount;
-		snapshot.hooksHookFailureCount = m_hookExecution.diagnostics.failureCount;
-		snapshot.hooksDispatchSkipped = m_hookExecution.diagnostics.skippedCount;
-		snapshot.hooksDispatchTimeouts = m_hookExecution.diagnostics.timeoutCount;
-		snapshot.hooksGuardRejected = m_hookExecution.diagnostics.guardRejectedCount;
-		snapshot.hooksReminderTriggered = m_hookExecution.diagnostics.reminderTriggeredCount;
-		snapshot.hooksReminderInjected = m_hookExecution.diagnostics.reminderInjectedCount;
-		snapshot.hooksReminderSkipped = m_hookExecution.diagnostics.reminderSkippedCount;
-		snapshot.hooksPolicyBlocked = m_hookExecution.diagnostics.policyBlockedCount;
-		snapshot.hooksDriftDetected = m_hookExecution.diagnostics.driftDetectedCount;
-		snapshot.hooksLastDriftReason = WideToNarrowAscii(m_hookExecution.diagnostics.lastDriftReason);
-		snapshot.hooksReminderState = WideToNarrowAscii(m_hookExecution.diagnostics.lastReminderState);
-		snapshot.hooksReminderReason = WideToNarrowAscii(m_hookExecution.diagnostics.lastReminderReason);
+       m_hooksDiagnosticsProjector.Apply(
+			HooksDiagnosticsProjector::Context{
+				.engineEnabled = m_state.hooks.engineEnabled,
+				.fallbackPromptInjection =
+					m_state.hooks.fallbackPromptInjection,
+				.reminderEnabled = m_state.hooks.reminderEnabled,
+				.reminderVerbosity = m_state.hooks.reminderVerbosity,
+				.strictPolicyEnforcement =
+					m_state.hooks.strictPolicyEnforcement,
+				.allowedPackagesCount = m_state.hooks.allowedPackages.size(),
+				.governanceReportingEnabled =
+					m_state.hooks.governanceReportingEnabled,
+				.governanceReportsGenerated =
+					m_state.hooks.governanceReportsGenerated,
+				.lastGovernanceReportPath =
+					m_state.hooks.lastGovernanceReportPath,
+				.autoRemediationEnabled =
+					m_state.hooks.autoRemediationEnabled,
+				.autoRemediationRequiresApproval =
+					m_state.hooks.autoRemediationRequiresApproval,
+				.autoRemediationExecuted =
+					m_state.hooks.autoRemediationExecuted,
+				.lastAutoRemediationStatus =
+					m_state.hooks.lastAutoRemediationStatus,
+				.autoRemediationTenantId =
+					m_state.hooks.autoRemediationTenantId,
+				.lastAutoRemediationPlaybookPath =
+					m_state.hooks.lastAutoRemediationPlaybookPath,
+				.autoRemediationTokenMaxAgeMinutes =
+					m_state.hooks.autoRemediationTokenMaxAgeMinutes,
+				.autoRemediationTokenRotations =
+					m_state.hooks.autoRemediationTokenRotations,
+				.remediationTelemetryEnabled =
+					m_state.hooks.remediationTelemetryEnabled,
+				.remediationAuditEnabled =
+					m_state.hooks.remediationAuditEnabled,
+				.lastRemediationTelemetryPath =
+					m_state.hooks.lastRemediationTelemetryPath,
+				.lastRemediationAuditPath =
+					m_state.hooks.lastRemediationAuditPath,
+				.remediationSloStatus = m_state.hooks.remediationSloStatus,
+				.remediationSloMaxDriftDetected =
+					m_state.hooks.remediationSloMaxDriftDetected,
+				.remediationSloMaxPolicyBlocked =
+					m_state.hooks.remediationSloMaxPolicyBlocked,
+				.complianceAttestationEnabled =
+					m_state.hooks.complianceAttestationEnabled,
+				.lastComplianceAttestationPath =
+					m_state.hooks.lastComplianceAttestationPath,
+				.enterpriseSlaGovernanceEnabled =
+					m_state.hooks.enterpriseSlaGovernanceEnabled,
+				.enterpriseSlaPolicyId = m_state.hooks.enterpriseSlaPolicyId,
+				.crossTenantAttestationAggregationEnabled =
+					m_state.hooks.crossTenantAttestationAggregationEnabled,
+				.crossTenantAttestationAggregationStatus =
+					m_state.hooks.crossTenantAttestationAggregationStatus,
+				.crossTenantAttestationAggregationCount =
+					m_state.hooks.crossTenantAttestationAggregationCount,
+				.lastCrossTenantAttestationAggregationPath =
+					m_state.hooks.lastCrossTenantAttestationAggregationPath,
+				.selfEvolvingHookTriggered =
+					m_state.hooks.selfEvolvingHookTriggered,
+				.hookCatalog = &m_hookCatalog,
+				.hookEvents = &m_hookEvents,
+				.hookExecution = &m_hookExecution,
+			},
+			snapshot);
 
 		snapshot.featuresImplemented = implementedCount;
 		snapshot.featuresInProgress = inProgressCount;

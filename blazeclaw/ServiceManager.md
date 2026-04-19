@@ -210,6 +210,19 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
      - local-model reload decision envelope.
    - Added contract coverage for Phase 2 delegation seams.
 
+20. **Extract Phase 3 diagnostics projection seams**
+   - ✅ Implemented.
+   - Added diagnostics projector modules:
+     - `GatewayLifecycleDiagnosticsProjector`
+     - `EmbeddedRuntimeDiagnosticsProjector`
+     - `ModelRuntimeDiagnosticsProjector`
+     - `HooksDiagnosticsProjector`
+     - retained `EmailRuntimeDiagnosticsProjector`
+   - `BuildOperatorDiagnosticsReport()` now primarily builds projector contexts,
+     delegates snapshot field mapping to projectors, and keeps report emission via
+     `CDiagnosticsReportBuilder`.
+   - Added contract coverage for Phase 3 diagnostics delegation seams.
+
 7. **Reduce duplicated state projections**
    - Build snapshot DTOs once per report/tick where possible.
    - Reuse immutable snapshots across diagnostics and gateway publication.
