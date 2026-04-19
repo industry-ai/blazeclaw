@@ -41,13 +41,13 @@ Defined in `GatewayProtocolModels.h`: `OkResponse(const RequestFrame& request, s
 
 **Large domain registrars** (`RegisterGatewayRegistryIntrospectionHandlers`, `RegisterGatewayAgentSessionMutationHandlers`, …) are implemented as **`handlers::<family>::*Handlers::RegisterAll(GatewayHost& host)`** in matching `GatewayHost.Handlers.*.cpp` files. `GatewayHost` **`friend`**s those handler structs so `RegisterAll` can wire `host.m_dispatcher.Register(..., [&host](...) { ... })` without exposing private members publicly. `GatewayHost.cpp` only keeps **`RegisterDefaultHandlers`** (coordinator entry) plus non-dispatcher logic.
 
-**Runtime split:** `RegisterRuntimeHandlers` is a **thin** delegator: **`handlers::runtime::RuntimeSurfaceHandlers`**, **`ChatPipelineHandlers`**, and **`RuntimeOrchestrationStreamingHandlers`** (`GatewayHostHandlersRuntime.h`, implementations in **`GatewayHost.Handlers.Runtime.cpp`**) each implement **`RegisterAll(GatewayHost&)`** (plugins/embeddings/governance/task-delta + `chat.history`; `chat.send` / skills-heavy block; orchestration/streaming/models tail including **`RegisterGatewayRuntimeStaticOrchestrationStreamingMetrics`**). `GatewayHost` **`friend`**s all three; nested request/result types are spelled **`GatewayHost::EmbeddingsGenerateRequest`**, **`GatewayHost::ChatRuntimeResult`**, etc., where required outside member function scope.
+**Runtime split:** `RegisterRuntimeHandlers` is a **thin** delegator in **`GatewayHost.Handlers.Runtime.cpp`**: **`handlers::runtime::RuntimeSurfaceHandlers`**, **`ChatPipelineHandlers`**, and **`RuntimeOrchestrationStreamingHandlers`** (`GatewayHostHandlersRuntime.h`) each implement **`RegisterAll(GatewayHost&)`** in **`GatewayHost.Handlers.Runtime.Surface.cpp`**, **`GatewayHost.Handlers.Runtime.ChatPipeline.cpp`**, and **`GatewayHost.Handlers.Runtime.OrchestrationStreaming.cpp`** (plugins/embeddings/governance/task-delta + `chat.history`; `chat.send` / skills-heavy block; orchestration/streaming/models tail including **`RegisterGatewayRuntimeStaticOrchestrationStreamingMetrics`**). Shared runtime-local helpers are compiled once in **`GatewayHostRuntimeLocalHelpers.cpp`** (body: **`GatewayHost.Handlers.RuntimeHelpers.inl`**; declarations + `PushEventWithRetentionLimit` + shared result types in **`GatewayHostRuntimeLocalHelpers.h`** / **`GatewayHostRuntimeLocalHelpers.Types.h`**). `GatewayHost` **`friend`**s all three handler structs; nested request/result types are spelled **`GatewayHost::EmbeddingsGenerateRequest`**, **`GatewayHost::ChatRuntimeResult`**, etc., where required outside member function scope.
 
 **Shared tools list/catalog:** `handlers::tools_shared::ToolsSharedHandlers` (`GatewayHostHandlersToolsShared.h` / `GatewayHost.Handlers.ToolsShared.cpp`) implements **`HandleToolsList`** / **`HandleToolsCatalog`** using `protocol::OkResponse` and `GatewayToolRegistry` only — no `friend` needed. **`StartLocalRuntimeDispatchOnly`**, **`RegisterGatewayAgentToolSurfaceHandlers`**, and **`RegisterGatewaySupplementaryCatalogHandlers`** all delegate to these static methods so the dispatch-only bootstrap path and full registration stay **wire-identical**.
 
 Workflow for manifest vs static handlers: **`blazeclaw/docs/PROTOCOL_CODEGEN.md`**.
 
-Applied across default gateway handler sources: `GatewayHost.cpp`, `GatewayHost.Handlers.*.cpp` (including **`GatewayHost.Handlers.ToolsShared.cpp`** for shared tools list/catalog; **`GatewayHostHandlersRuntime.h`** for the runtime `RegisterAll` split), `GatewayHostCatalogHelpers.cpp`, `GatewayHostModelHelpers.cpp`, `GatewayHostProtocolHelpers.cpp`, and `generated/GatewayHandlerCatalog.Generated.cpp`.
+Applied across default gateway handler sources: `GatewayHost.cpp`, `GatewayHost.Handlers.*.cpp` (including **`GatewayHost.Handlers.ToolsShared.cpp`** for shared tools list/catalog; **`GatewayHostHandlersRuntime.h`** + **`GatewayHost.Handlers.Runtime.*.cpp`** for the runtime `RegisterAll` split; **`GatewayHostRuntimeLocalHelpers.cpp`** for shared runtime helper bodies), `GatewayHostCatalogHelpers.cpp`, `GatewayHostModelHelpers.cpp`, `GatewayHostProtocolHelpers.cpp`, and `generated/GatewayHandlerCatalog.Generated.cpp`.
 
 ### Table-driven static registrations
 
@@ -157,7 +157,7 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 | *(private)* `RegisterScopeClusterHandlers` | `GatewayHost.Handlers.ScopeCluster.cpp` |
 | *(private)* `RegisterGeneratedScopeClusterHandlers` | `generated/GatewayHandlerCatalog.Generated.cpp` |
 | *(private)* `RegisterSecurityOpsHandlers` | `GatewayHost.Handlers.SecurityOps.cpp` |
-| *(private)* `RegisterRuntimeHandlers` | `GatewayHost.Handlers.Runtime.cpp` — delegates to **`handlers::runtime::*Handlers::RegisterAll`** (`GatewayHostHandlersRuntime.h`; helpers in `GatewayHost.Handlers.RuntimeHelpers.inl`; static metric table in `GatewayHostRuntimeStaticOrchestrationStreamingMetrics.cpp`) |
+| *(private)* `RegisterRuntimeHandlers` | `GatewayHost.Handlers.Runtime.cpp` — delegates to **`handlers::runtime::*Handlers::RegisterAll`** (`GatewayHostHandlersRuntime.h`; **`RegisterAll`** bodies in **`GatewayHost.Handlers.Runtime.Surface.cpp`** / **`.ChatPipeline.cpp`** / **`.OrchestrationStreaming.cpp`**; helper implementations in **`GatewayHostRuntimeLocalHelpers.cpp`** via **`GatewayHost.Handlers.RuntimeHelpers.inl`**; static metric table in `GatewayHostRuntimeStaticOrchestrationStreamingMetrics.cpp`) |
 | *(private)* `RegisterTransportHandlers` | `GatewayHost.Handlers.Transport.cpp` |
 
 ### 4. Transport and inbound/outbound pumping
@@ -256,15 +256,15 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 | `protocol::EncodeValidatedEvent` (validate + optional schema-error fallback + encode) | `GatewayProtocolCodec.h` / `GatewayProtocolCodec.cpp` |
 | Static handler table helper `RegisterStaticPayloadHandlers` | `GatewayStaticRegistration.h` / `GatewayStaticRegistration.cpp` |
 | Runtime static orchestration/streaming metric table (`RegisterGatewayRuntimeStaticOrchestrationStreamingMetrics`) | `GatewayHostRuntimeStaticOrchestrationStreamingMetrics.h` / `GatewayHostRuntimeStaticOrchestrationStreamingMetrics.cpp` |
-| Runtime handler **local helpers** (JSON escape, chat/task-delta orchestration, plugin serialization, …) | `GatewayHost.Handlers.RuntimeHelpers.inl` (included from `GatewayHost.Handlers.Runtime.cpp` inside an anonymous namespace) |
-| Runtime **`RegisterAll` families** (`RuntimeSurfaceHandlers`, `ChatPipelineHandlers`, `RuntimeOrchestrationStreamingHandlers`) | `GatewayHostHandlersRuntime.h` (declarations); definitions in `GatewayHost.Handlers.Runtime.cpp` (`namespace handlers::runtime`) |
+| Runtime handler **local helpers** (JSON escape, chat/task-delta orchestration, plugin serialization, …) | `GatewayHost.Handlers.RuntimeHelpers.inl` (included from **`GatewayHostRuntimeLocalHelpers.cpp`** inside `namespace blazeclaw::gateway::runtime_local`); API/types in **`GatewayHostRuntimeLocalHelpers.h`** / **`GatewayHostRuntimeLocalHelpers.Types.h`** |
+| Runtime **`RegisterAll` families** (`RuntimeSurfaceHandlers`, `ChatPipelineHandlers`, `RuntimeOrchestrationStreamingHandlers`) | `GatewayHostHandlersRuntime.h` (declarations); definitions in **`GatewayHost.Handlers.Runtime.Surface.cpp`**, **`GatewayHost.Handlers.Runtime.ChatPipeline.cpp`**, **`GatewayHost.Handlers.Runtime.OrchestrationStreaming.cpp`** (`namespace handlers::runtime`) |
 | Channel-related handlers | `GatewayHost.Handlers.Channels.cpp` |
 | Event catalog / event handlers | `GatewayHost.Handlers.Events.cpp` |
 | Tool listing / execution handlers | `GatewayHost.Handlers.Tools.cpp` |
 | Shared `gateway.tools.list` / `gateway.tools.catalog` payloads | `GatewayHostHandlersToolsShared.h` / `GatewayHost.Handlers.ToolsShared.cpp` (`handlers::tools_shared::ToolsSharedHandlers`) |
 | Scope cluster | `GatewayHost.Handlers.ScopeCluster.cpp` + generated catalog |
 | Security ops | `GatewayHost.Handlers.SecurityOps.cpp` |
-| Chat/runtime/task-delta-heavy handlers | `GatewayHost.Handlers.Runtime.cpp` + `GatewayHostHandlersRuntime.h` (`handlers::runtime::*Handlers::RegisterAll`) |
+| Chat/runtime/task-delta-heavy handlers | `GatewayHost.Handlers.Runtime.cpp` (delegator) + **`GatewayHost.Handlers.Runtime.*.cpp`** + `GatewayHostHandlersRuntime.h` (`handlers::runtime::*Handlers::RegisterAll`) + **`GatewayHostRuntimeLocalHelpers.cpp`** |
 | Transport method handlers | `GatewayHost.Handlers.Transport.cpp` |
 | Staged `chat.send` path | `GatewayHostEx.cpp` / `GatewayHostEx.h` |
 

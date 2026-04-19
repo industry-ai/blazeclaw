@@ -1,5 +1,4 @@
 		constexpr std::size_t kMaxChatHistoryEntriesPerSession = 500;
-		constexpr std::size_t kMaxChatEventsPerSession = 200;
 		constexpr std::array<const char*, 3> kConfigSchemaForbiddenSegments = {
 			"__proto__",
 			"prototype",
@@ -773,29 +772,6 @@
 				"\"}";
 		}
 
-		struct ChatPromptOrchestrationResult {
-			bool matched = false;
-			bool success = false;
-			bool requiresApproval = false;
-			std::string terminalStatus;
-			std::string terminalReason;
-			std::string fallbackBackend;
-			std::string fallbackAction;
-			std::size_t fallbackAttempt = 0;
-			std::size_t fallbackMaxAttempts = 0;
-			std::string assistantText;
-			std::vector<std::string> assistantDeltas;
-			std::string errorCode;
-			std::string errorMessage;
-			std::vector<std::string> missReasons;
-			std::string city;
-			std::string date;
-			std::string recipient;
-			std::string sendAt;
-			std::string scheduleKind;
-			std::size_t decompositionSteps = 0;
-		};
-
 		std::string ToLowerCopyLocal(const std::string& value) {
 			std::string lowered = value;
 			std::transform(
@@ -949,13 +925,6 @@
 				<< std::setw(2) << std::setfill('0') << localTime.tm_min;
 			return output.str();
 		}
-
-		struct PromptScheduleResolution {
-			bool hasSchedule = false;
-			bool immediate = false;
-			std::string sendAt;
-			std::string kind;
-		};
 
 		std::optional<std::string> TryParsePromptSendAt(
 			const std::string& message) {
@@ -1571,7 +1540,7 @@
 		void EmitDeepSeekGatewayDiagnostic(
 			const char* stage,
 			const std::string& detail,
-			const bool verboseOnly = true) {
+			const bool verboseOnly) {
 			if (verboseOnly && !IsDeepSeekDiagnosticsVerboseEnabled()) {
 				return;
 			}
@@ -1618,16 +1587,6 @@
 				history.erase(
 					history.begin(),
 					history.begin() + static_cast<std::ptrdiff_t>(overflow));
-			}
-		}
-
-		template <typename T>
-		void PushEventWithRetentionLimit(
-			std::deque<T>& queue,
-			T eventState) {
-			queue.push_back(std::move(eventState));
-			while (queue.size() > kMaxChatEventsPerSession) {
-				queue.pop_front();
 			}
 		}
 
@@ -1781,15 +1740,6 @@
 
 			return values;
 		}
-
-		struct OrderedSequencePreflight {
-			bool enforced = false;
-			bool strictAllowlist = false;
-			std::vector<std::string> orderedTargets;
-			std::vector<std::string> explicitCallTargets;
-			std::vector<std::string> resolvedToolTargets;
-			std::vector<std::string> missingTargets;
-		};
 
 		std::string ResolvePreferredToolForNamespace(
 			const std::string& normalizedNamespace,
