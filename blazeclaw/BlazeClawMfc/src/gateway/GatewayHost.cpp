@@ -2,6 +2,7 @@
 #include "GatewayHost.h"
 
 #include "GatewayJsonUtils.h"
+#include "GatewayJsonSerializers.h"
 #include "GatewayPersistencePaths.h"
 #include "GatewayProtocolCodec.h"
 #include "GatewayProtocolSchemaValidator.h"
@@ -41,7 +42,9 @@ namespace blazeclaw::gateway {
 	}
 
 	namespace {
-		std::string EscapeJson(const std::string& value);
+		std::string EscapeJson(const std::string& value) {
+			return EscapeJsonString(value);
+		}
 
 		void EnsureOpsToolsRuntimeRegistered(GatewayToolRegistry& registry) {
 			const ToolPreviewResult weatherPreview = registry.Preview("weather.lookup");
@@ -232,36 +235,6 @@ namespace blazeclaw::gateway {
 			return result;
 		}
 
-		std::string EscapeJson(const std::string& value) {
-			std::string escaped;
-			escaped.reserve(value.size() + 8);
-
-			for (const char ch : value) {
-				switch (ch) {
-				case '"':
-					escaped += "\\\"";
-					break;
-				case '\\':
-					escaped += "\\\\";
-					break;
-				case '\n':
-					escaped += "\\n";
-					break;
-				case '\r':
-					escaped += "\\r";
-					break;
-				case '\t':
-					escaped += "\\t";
-					break;
-				default:
-					escaped.push_back(ch);
-					break;
-				}
-			}
-
-			return escaped;
-		}
-
 		std::optional<std::string> ExtractObjectParam(
 			const std::optional<std::string>& paramsJson,
 			const std::string& fieldName) {
@@ -294,133 +267,6 @@ namespace blazeclaw::gateway {
 			}
 
 			return value;
-		}
-
-		std::string SerializeSession(const SessionEntry& session) {
-			return "{\"id\":\"" + EscapeJson(session.id) + "\",\"scope\":\"" + EscapeJson(session.scope) +
-				"\",\"active\":" + std::string(session.active ? "true" : "false") + "}";
-		}
-
-		std::string SerializeAgent(const AgentEntry& agent) {
-			return "{\"id\":\"" + EscapeJson(agent.id) + "\",\"name\":\"" + EscapeJson(agent.name) +
-				"\",\"active\":" + std::string(agent.active ? "true" : "false") + "}";
-		}
-
-		std::string SerializeAgentFile(const AgentFileEntry& file) {
-			return "{\"path\":\"" + EscapeJson(file.path) + "\",\"size\":" + std::to_string(file.size) +
-				",\"updatedMs\":" + std::to_string(file.updatedMs) + "}";
-		}
-
-		std::string SerializeAgentFileContent(const AgentFileContentEntry& file) {
-			return "{\"path\":\"" + EscapeJson(file.path) + "\",\"size\":" + std::to_string(file.size) +
-				",\"updatedMs\":" + std::to_string(file.updatedMs) +
-				",\"content\":\"" + EscapeJson(file.content) + "\"}";
-		}
-
-		std::string SerializeChannelStatus(const ChannelStatusEntry& channel) {
-			return "{\"id\":\"" + EscapeJson(channel.id) + "\",\"label\":\"" + EscapeJson(channel.label) +
-				"\",\"connected\":" + std::string(channel.connected ? "true" : "false") +
-				",\"accounts\":" + std::to_string(channel.accountCount) + "}";
-		}
-
-		std::string SerializeChannelAccount(const ChannelAccountEntry& account) {
-			return "{\"channel\":\"" + EscapeJson(account.channel) + "\",\"accountId\":\"" +
-				EscapeJson(account.accountId) + "\",\"label\":\"" + EscapeJson(account.label) +
-				"\",\"active\":" + std::string(account.active ? "true" : "false") +
-				",\"connected\":" + std::string(account.connected ? "true" : "false") + "}";
-		}
-
-		std::string SerializeChannelRoute(const ChannelRouteEntry& route) {
-			return "{\"channel\":\"" + EscapeJson(route.channel) + "\",\"accountId\":\"" +
-				EscapeJson(route.accountId) + "\",\"agentId\":\"" + EscapeJson(route.agentId) +
-				"\",\"sessionId\":\"" + EscapeJson(route.sessionId) + "\"}";
-		}
-
-		std::string SerializeTool(const ToolCatalogEntry& tool) {
-			const auto dot = tool.id.find('.');
-			const std::string derivedSkillKey =
-				dot == std::string::npos
-				? tool.id
-				: tool.id.substr(0, dot);
-			const std::string skillKey =
-				tool.skillKey.empty() ? derivedSkillKey : tool.skillKey;
-			const std::string installKind =
-				tool.installKind.empty()
-				? (tool.category == "extension"
-					? "runtime-registered"
-					: tool.category)
-				: tool.installKind;
-			const std::string source =
-				tool.source.empty()
-				? "runtime.tool.registry"
-				: tool.source;
-			return "{\"id\":\"" + EscapeJson(tool.id) + "\",\"label\":\"" + EscapeJson(tool.label) +
-				"\",\"category\":\"" + EscapeJson(tool.category) +
-				"\",\"skillKey\":\"" + EscapeJson(skillKey) +
-				"\",\"installKind\":\"" + EscapeJson(installKind) +
-				"\",\"source\":\"" + EscapeJson(source) + "\",\"enabled\":" +
-				std::string(tool.enabled ? "true" : "false") + "}";
-		}
-
-		std::string SerializeTaskDeltaEntry(
-			const GatewayHost::ChatRuntimeResult::TaskDeltaEntry& delta) {
-			return "{\"index\":" + std::to_string(delta.index) +
-				",\"schemaVersion\":" + std::to_string(delta.schemaVersion) +
-				",\"runId\":\"" + EscapeJson(delta.runId) +
-				"\",\"sessionId\":\"" + EscapeJson(delta.sessionId) +
-				"\",\"phase\":\"" + EscapeJson(delta.phase) +
-				"\",\"toolName\":\"" + EscapeJson(delta.toolName) +
-				"\",\"fallbackBackend\":\"" + EscapeJson(delta.fallbackBackend) +
-				"\",\"fallbackAction\":\"" + EscapeJson(delta.fallbackAction) +
-				"\",\"fallbackAttempt\":" + std::to_string(delta.fallbackAttempt) +
-				",\"fallbackMaxAttempts\":" + std::to_string(delta.fallbackMaxAttempts) +
-				",\"argsJson\":\"" + EscapeJson(delta.argsJson) +
-				"\",\"resultJson\":\"" + EscapeJson(delta.resultJson) +
-				"\",\"status\":\"" + EscapeJson(delta.status) +
-				"\",\"errorCode\":\"" + EscapeJson(delta.errorCode) +
-				"\",\"startedAtMs\":" + std::to_string(delta.startedAtMs) +
-				",\"completedAtMs\":" + std::to_string(delta.completedAtMs) +
-				",\"latencyMs\":" + std::to_string(delta.latencyMs) +
-				",\"modelTurnId\":\"" + EscapeJson(delta.modelTurnId) +
-				"\",\"stepLabel\":\"" + EscapeJson(delta.stepLabel) + "\"}";
-		}
-
-		std::string SerializeTaskDeltaState(
-			const std::unordered_map<std::string, std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry>>& state) {
-			std::vector<std::string> runIds;
-			runIds.reserve(state.size());
-			for (const auto& [runId, _] : state) {
-				runIds.push_back(runId);
-			}
-
-			std::sort(runIds.begin(), runIds.end());
-
-			std::string json = "{\"runs\":[";
-			bool firstRun = true;
-			for (const auto& runId : runIds) {
-				const auto it = state.find(runId);
-				if (it == state.end()) {
-					continue;
-				}
-
-				if (!firstRun) {
-					json += ",";
-				}
-				firstRun = false;
-
-				json += "{\"runId\":\"" + EscapeJson(runId) + "\",\"taskDeltas\":[";
-				for (std::size_t i = 0; i < it->second.size(); ++i) {
-					if (i > 0) {
-						json += ",";
-					}
-
-					json += SerializeTaskDeltaEntry(it->second[i]);
-				}
-				json += "]}";
-			}
-
-			json += "]}";
-			return json;
 		}
 
 		GatewayHost::ChatRuntimeResult::TaskDeltaEntry NormalizePersistedTaskDelta(
@@ -474,34 +320,6 @@ namespace blazeclaw::gateway {
 				: 0;
 
 			return normalized;
-		}
-
-		std::string SerializeToolExecution(const ToolExecutionEntry& execution) {
-			return "{\"tool\":\"" + EscapeJson(execution.tool) + "\",\"executed\":" +
-				std::string(execution.executed ? "true" : "false") +
-				",\"status\":\"" + EscapeJson(execution.status) + "\",\"output\":\"" +
-				EscapeJson(execution.output) + "\",\"argsProvided\":" +
-				std::string(execution.argsProvided ? "true" : "false") + "}";
-		}
-
-		std::string SerializeChannelAdapter(const ChannelAdapterDescriptor& adapter) {
-			return "{\"id\":\"" + EscapeJson(adapter.id) + "\",\"label\":\"" +
-				EscapeJson(adapter.label) + "\",\"defaultAccountId\":\"" +
-				EscapeJson(adapter.defaultAccountId) + "\"}";
-		}
-
-		std::string SerializeStringArray(const std::vector<std::string>& values) {
-			std::string json = "[";
-			for (std::size_t i = 0; i < values.size(); ++i) {
-				if (i > 0) {
-					json += ",";
-				}
-
-				json += "\"" + EscapeJson(values[i]) + "\"";
-			}
-
-			json += "]";
-			return json;
 		}
 
 		const std::vector<std::string>& EventCatalogNames() {

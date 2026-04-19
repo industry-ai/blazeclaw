@@ -55,6 +55,16 @@ Builds an `EventFrame` (`stateVersion` = `seq`), runs `GatewayProtocolSchemaVali
 
 Used by `GatewayHost::Build*EventFrame` methods and by `GatewayEventFanoutService::BuildChatLifecycleEventFrame`. The `validationStage` string must stay JSON-safe (historically alphanumeric / dotted segments); it is inserted into the fallback payload without extra escaping.
 
+### `GatewayJsonSerializers` (registry / task-delta JSON helpers)
+
+Declared in `GatewayJsonSerializers.h`, implemented in `GatewayJsonSerializers.cpp`:
+
+- `EscapeJsonString` — minimal escaping for string values embedded in concatenated JSON (same rules as the former anonymous `EscapeJson` in `GatewayHost.cpp`).
+- `SerializeSession`, `SerializeAgent`, `SerializeAgentFile`, `SerializeAgentFileContent`, `SerializeChannelStatus`, `SerializeChannelAccount`, `SerializeChannelRoute`, `SerializeTool`, `SerializeToolExecution`, `SerializeChannelAdapter`, `SerializeStringArray` — stable wire shapes for gateway handler responses.
+- `SerializeTaskDeltaEntry`, `SerializeTaskDeltaState` — persistence snapshot JSON for task-delta maps (`TaskDeltaEntry` from `TaskDeltaRepository.h`).
+
+`GatewayHost.cpp` keeps a one-line anonymous wrapper `EscapeJson` → `EscapeJsonString` so existing handler code that still calls `EscapeJson(...)` for ad-hoc payloads is unchanged.
+
 ---
 
 ## Member functions — grouped by functionality
@@ -189,6 +199,7 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 | Area | Primary files |
 |------|----------------|
 | Core lifecycle, transport pump, event builders, routing, `RegisterDefaultHandlers` + domain `RegisterGateway*` / `RegisterToolExecution*` helpers | `GatewayHost.cpp` |
+| Registry / task-delta JSON serializers (`SerializeSession`, `SerializeTool`, `SerializeTaskDeltaState`, `EscapeJsonString`, …) | `GatewayJsonSerializers.h` / `GatewayJsonSerializers.cpp` |
 | Protocol success-frame helper `protocol::OkResponse` | `GatewayProtocolModels.h` |
 | `protocol::EncodeValidatedEvent` (validate + optional schema-error fallback + encode) | `GatewayProtocolCodec.h` / `GatewayProtocolCodec.cpp` |
 | Static handler table helper `RegisterStaticPayloadHandlers` | `GatewayStaticRegistration.h` / `GatewayStaticRegistration.cpp` |
@@ -220,10 +231,10 @@ These aim to keep **one clear façade** for the shell while shrinking what `Gate
    `IsHealthy()` currently reflects dispatcher initialization. If the product meaning should include transport listening, stage host, or subscriptions, either **compose** those checks or document that health is “dispatch ready” only—avoid misleading UI.
 
 5. **Task deltas**  
-   Persistence is already associated with `TaskDeltaRepository`; ensure `GatewayHost` only **orchestrates load/save timing** and does not grow more serialization logic—keep normalization/validation in dedicated units (`TaskDeltaSchemaValidator`, etc.).
+   Persistence is associated with `TaskDeltaRepository`; `GatewayHost` **orchestrates** load/save timing. Task-delta **wire JSON** is built via `SerializeTaskDeltaEntry` / `SerializeTaskDeltaState` in `GatewayJsonSerializers.cpp`; normalization/validation stay in `TaskDeltaSchemaValidator` and related units.
 
 6. **Reduce `RegisterDefaultHandlers` surface**  
-   **Done (phase 1):** inline registrations were split into `RegisterToolExecutionHistoryHandlers`, `RegisterGatewayEventCatalogQueryHandlers`, `RegisterGatewayRegistryIntrospectionHandlers`, `RegisterGatewayAgentSessionMutationHandlers`, `RegisterGatewayAgentToolSurfaceHandlers`, `RegisterGatewayConfigAndDiagnosticsHandlers`, and `RegisterGatewaySupplementaryCatalogHandlers`; `RegisterDefaultHandlers()` is now a short coordinator. **Done (phase 2):** success-path boilerplate uses `protocol::OkResponse` (see subsection above). **Done (phase 3):** table-driven static registrations via `RegisterStaticPayloadHandlers` and the manifest-driven catalog (see **Table-driven static registrations** above). **Done (phase 4):** `protocol::EncodeValidatedEvent` for event frames (see subsection above). Further work: JSON builder utilities (see size-reduction section).
+   **Done (phase 1):** inline registrations were split into `RegisterToolExecutionHistoryHandlers`, `RegisterGatewayEventCatalogQueryHandlers`, `RegisterGatewayRegistryIntrospectionHandlers`, `RegisterGatewayAgentSessionMutationHandlers`, `RegisterGatewayAgentToolSurfaceHandlers`, `RegisterGatewayConfigAndDiagnosticsHandlers`, and `RegisterGatewaySupplementaryCatalogHandlers`; `RegisterDefaultHandlers()` is now a short coordinator. **Done (phase 2):** success-path boilerplate uses `protocol::OkResponse` (see subsection above). **Done (phase 3):** table-driven static registrations via `RegisterStaticPayloadHandlers` and the manifest-driven catalog (see **Table-driven static registrations** above). **Done (phase 4):** `protocol::EncodeValidatedEvent` for event frames (see subsection above). **Done (phase 5):** registry/task-delta serializers live in `GatewayJsonSerializers.*` (see subsection above). Further work: generic JSON builder utilities (see size-reduction section).
 
 7. **Naming consistency**  
    Align “Bootstrap*” vs “CreateRuntimeState” / `InitializeRuntime` naming in docs so phased startup order is obvious to maintainers.
@@ -293,21 +304,11 @@ This can compress repeated formatting and reduce escaping mistakes.
 
 **Expected effect:** medium reduction and safer payload construction.
 
-#### 6) Separate serialization helpers into dedicated file
-Move these functions out of `GatewayHost.cpp`:
+#### 6) Separate serialization helpers into dedicated file — **done**
 
-- `SerializeSession`
-- `SerializeAgent`
-- `SerializeTool`
-- `SerializeChannel*`
-- `SerializeAgentFile*`
+Moved to `GatewayJsonSerializers.h` / `GatewayJsonSerializers.cpp`: `EscapeJsonString`, `SerializeSession`, `SerializeAgent`, `SerializeTool`, `SerializeChannel*` (`Status`, `Account`, `Route`), `SerializeAgentFile`, `SerializeAgentFileContent`, `SerializeToolExecution`, `SerializeChannelAdapter`, `SerializeStringArray`, `SerializeTaskDeltaEntry`, `SerializeTaskDeltaState`. `GatewayHost.cpp` retains a thin `EscapeJson` → `EscapeJsonString` shim for inline ad-hoc JSON in handlers.
 
-Suggested files:
-
-- `GatewayJsonSerializers.h`
-- `GatewayJsonSerializers.cpp`
-
-**Expected effect:** medium file-size reduction for `GatewayHost.cpp`.
+**Effect:** smaller `GatewayHost.cpp`; serializer behavior and payload shapes unchanged.
 
 #### 7) Centralize request parameter access
 Create a small request-params helper wrapper (still string-based if needed) so handlers call:
@@ -326,7 +327,7 @@ This trims repeated extraction boilerplate inside handlers.
 2. ~~Add `OkResponse` helper and replace boilerplate.~~ **Done** — see `protocol::OkResponse` in `GatewayProtocolModels.h` and the subsection `protocol::OkResponse` (success handler boilerplate) above.
 3. ~~Introduce table-driven static registrations.~~ **Done** — see **Table-driven static registrations** (`RegisterStaticPayloadHandlers`, manifest + `Generate-GatewayHandlerCatalog.ps1`).
 4. ~~Add `EncodeValidatedEvent(...)` helper.~~ **Done** — see **`protocol::EncodeValidatedEvent`** in `GatewayProtocolCodec.h` / `.cpp` and the subsection above.
-5. Move serializers to dedicated files.
+5. ~~Move serializers to dedicated files.~~ **Done** — see **`GatewayJsonSerializers`** (`GatewayJsonSerializers.h` / `.cpp`) and §6 in the size-reduction section below.
 6. Optionally add lightweight JSON builder and params wrapper.
 
 ### Notes / Constraints
