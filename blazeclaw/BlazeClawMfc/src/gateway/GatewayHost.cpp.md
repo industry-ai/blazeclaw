@@ -39,9 +39,11 @@ Defined in `GatewayProtocolModels.h`: `OkResponse(const RequestFrame& request, s
 
 **Error responses** (`ok == false`, `error` set) should use **`protocol::ErrorResponse`** (`GatewayProtocolModels.h`): `ErrorResponse(request, protocol::ErrorShape{...})`, or short forms `ErrorResponse(request, code, message)` / `ErrorResponse(request, code, message, detailsJson)` / full retry overload. Avoid ad hoc `ResponseFrame{ .id, .ok = false, ... }` in new code.
 
+**Large domain registrars** (`RegisterGatewayRegistryIntrospectionHandlers`, `RegisterGatewayAgentSessionMutationHandlers`, …) are implemented as **`handlers::<family>::*Handlers::RegisterAll(GatewayHost& host)`** in matching `GatewayHost.Handlers.*.cpp` files. `GatewayHost` **`friend`**s those handler structs so `RegisterAll` can wire `host.m_dispatcher.Register(..., [&host](...) { ... })` without exposing private members publicly. `GatewayHost.cpp` only keeps **`RegisterDefaultHandlers`** (coordinator entry) plus non-dispatcher logic.
+
 Workflow for manifest vs static handlers: **`blazeclaw/docs/PROTOCOL_CODEGEN.md`**.
 
-Applied across default gateway handler sources: `GatewayHost.cpp`, `GatewayHost.Handlers.*.cpp`, `GatewayHostCatalogHelpers.cpp`, and `generated/GatewayHandlerCatalog.Generated.cpp`.
+Applied across default gateway handler sources: `GatewayHost.cpp`, `GatewayHost.Handlers.*.cpp`, `GatewayHostCatalogHelpers.cpp`, `GatewayHostModelHelpers.cpp`, `GatewayHostProtocolHelpers.cpp`, and `generated/GatewayHandlerCatalog.Generated.cpp`.
 
 ### Table-driven static registrations
 
@@ -140,11 +142,11 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 | *(private)* `RegisterDefaultHandlers` | **Coordinator only** — calls the domain registrars below in order; lives in `GatewayHost.cpp` |
 | *(private)* `RegisterToolExecutionHistoryHandlers` | `gateway.tools.executions.*` (list, count, latest, clear) — `GatewayHost.Handlers.ToolExecutionHistory.cpp` (`handlers::tool_execution::ToolExecutionHistoryHandlers`) |
 | *(private)* `RegisterGatewayEventCatalogQueryHandlers` | Event catalog queries + `gateway.tools.categories` — `GatewayHost.Handlers.EventCatalogQuery.cpp` (`handlers::event_catalog_query::EventCatalogQueryHandlers`; **`friend`** on `GatewayHost` for `gateway.config.snapshot` runtime fields) |
-| *(private)* `RegisterGatewayRegistryIntrospectionHandlers` | Agents/sessions/tools/models/config/transport “probe” handlers, agent files, models list, `gateway.tools.call.execute` — `GatewayHost.cpp` |
-| *(private)* `RegisterGatewayAgentSessionMutationHandlers` | Agent CRUD/run/wait, session lifecycle, `gateway.features.list`, channel status/route — `GatewayHost.cpp` |
-| *(private)* `RegisterGatewayAgentToolSurfaceHandlers` | `gateway.agents.get`, `gateway.tools.catalog` / `call.preview`, `gateway.agents.activate` — `GatewayHost.cpp` |
-| *(private)* `RegisterGatewayConfigAndDiagnosticsHandlers` | `gateway.config.get` / `set`, `gateway.logs.tail`, session resolve/create/reset, `gateway.health` — `GatewayHost.cpp` |
-| *(private)* `RegisterGatewaySupplementaryCatalogHandlers` | Remaining catalog-style methods (`gateway.session.list`, `gateway.events.*`, `gateway.tools.*`, `gateway.models.*`, `gateway.config.*`, logs, health details) — `GatewayHost.cpp` |
+| *(private)* `RegisterGatewayRegistryIntrospectionHandlers` | Agents/sessions/tools/models/config/transport “probe” handlers, agent files, models list, `gateway.tools.call.execute` — `GatewayHost.Handlers.RegistryIntrospection.cpp` (`handlers::registry_introspection::RegistryIntrospectionHandlers::RegisterAll`; **`friend`**) |
+| *(private)* `RegisterGatewayAgentSessionMutationHandlers` | Agent CRUD/run/wait, session lifecycle, `gateway.features.list`, channel status/route — `GatewayHost.Handlers.AgentSessionMutation.cpp` (`handlers::agent_session_mutation::AgentSessionMutationHandlers::RegisterAll`; **`friend`**) |
+| *(private)* `RegisterGatewayAgentToolSurfaceHandlers` | `gateway.agents.get`, `gateway.tools.catalog` / `call.preview`, `gateway.agents.activate` — `GatewayHost.Handlers.AgentToolSurface.cpp` (`handlers::agent_tool_surface::AgentToolSurfaceHandlers::RegisterAll`; **`friend`**) |
+| *(private)* `RegisterGatewayConfigAndDiagnosticsHandlers` | `gateway.config.get` / `set`, `gateway.logs.tail`, session resolve/create/reset, `gateway.health` — `GatewayHost.Handlers.ConfigDiagnostics.cpp` (`handlers::config_diagnostics::ConfigDiagnosticsHandlers::RegisterAll`; **`friend`**) |
+| *(private)* `RegisterGatewaySupplementaryCatalogHandlers` | Remaining catalog-style methods (`gateway.session.list`, `gateway.events.*`, `gateway.tools.*`, `gateway.models.*`, `gateway.config.*`, logs, health details) — `GatewayHost.Handlers.SupplementaryCatalog.cpp` (`handlers::supplementary_catalog::SupplementaryCatalogHandlers::RegisterAll`; **`friend`**) |
 | *(private)* `RegisterChannelsHandlers` | `GatewayHost.Handlers.Channels.cpp` |
 | *(private)* `RegisterEventHandlers` | `GatewayHost.Handlers.Events.cpp` |
 | *(private)* `RegisterToolsHandlers` | `GatewayHost.Handlers.Tools.cpp` |
@@ -233,9 +235,16 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 |------|----------------|
 | Default handler **sequence** (`RegisterDefaultHandlerSequence`, domain phases) | `GatewayHostRegistrationCoordinator.h` / `GatewayHostRegistrationCoordinator.cpp` |
 | Shared **catalog** strings: `GatewayEventCatalogNames`, `BuildGatewayDeepSeekConfigJson`, `MaskGatewaySecret` | `GatewayHostCatalogHelpers.h` / `GatewayHostCatalogHelpers.cpp` |
-| Core lifecycle, transport pump, event builders, routing, remaining domain `RegisterGateway*` helpers | `GatewayHost.cpp` |
+| **Model list JSON** (`NormalizeModelId`, `BuildModelJson`, model id constants) | `GatewayHostModelHelpers.h` / `GatewayHostModelHelpers.cpp` (`blazeclaw::gateway::GatewayModel`) |
+| **Epoch ms** + **unsafe agent file path** gate (shared with handlers) | `GatewayHostProtocolHelpers.h` / `GatewayHostProtocolHelpers.cpp` (`GatewayEpochMilliseconds`, `IsUnsafeGatewayAgentFilePath`) |
+| Core lifecycle, transport pump, event builders, routing, `RegisterDefaultHandlers` only | `GatewayHost.cpp` |
 | Tool execution history handlers (`gateway.tools.executions.*`) | `GatewayHostHandlersToolExecution.h` / `GatewayHost.Handlers.ToolExecutionHistory.cpp` |
 | Event catalog query handlers + `gateway.tools.categories` | `GatewayHostHandlersEventCatalogQuery.h` / `GatewayHost.Handlers.EventCatalogQuery.cpp` |
+| Registry introspection + agent files + models list + `gateway.tools.call.execute` | `GatewayHostHandlersRegistryIntrospection.h` / `GatewayHost.Handlers.RegistryIntrospection.cpp` |
+| Agent/session/channel mutation surface (`gateway.agents.*`, `gateway.sessions.*`, `gateway.features.list`, `gateway.channels.*`) | `GatewayHostHandlersAgentSessionMutation.h` / `GatewayHost.Handlers.AgentSessionMutation.cpp` |
+| Agent/tool “surface” (`gateway.agents.get`, tools catalog/preview, `gateway.agents.activate`) | `GatewayHostHandlersAgentToolSurface.h` / `GatewayHost.Handlers.AgentToolSurface.cpp` |
+| Config + diagnostics (`gateway.config.*`, logs tail, sessions resolve/create/reset, `gateway.health`) | `GatewayHostHandlersConfigDiagnostics.h` / `GatewayHost.Handlers.ConfigDiagnostics.cpp` |
+| Supplementary catalog probes (`gateway.session.list`, `gateway.events.*`, `gateway.tools.*`, `gateway.models.*`, `gateway.health.details`, …) | `GatewayHostHandlersSupplementaryCatalog.h` / `GatewayHost.Handlers.SupplementaryCatalog.cpp` |
 | Registry / task-delta JSON serializers (`SerializeSession`, `SerializeTool`, `SerializeTaskDeltaState`, `EscapeJsonString`, …) | `GatewayJsonSerializers.h` / `GatewayJsonSerializers.cpp` |
 | Minimal JSON fragment builders (`JsonObject`, `JsonString`, `JsonArray`, …) | `GatewayJsonBuilder.h` / `GatewayJsonBuilder.cpp` |
 | Request `params` field access (`RequestParamsView::GetString` / `GetBool` / `GetSize` / `GetObject`) | `GatewayRequestParams.h` / `GatewayRequestParams.cpp` |
@@ -282,28 +291,32 @@ These aim to keep **one clear façade** for the shell while shrinking what `Gate
 
 ## GatewayHost.cpp Size-Reduction Analysis
 
-`GatewayHost.cpp` remains large because it still holds many `m_dispatcher.Register(...)` lambdas (now grouped under domain `RegisterGateway*` helpers) and repeated JSON/string assembly patterns.
+`GatewayHost.cpp` is **much smaller** than before: default gateway methods live in **`GatewayHost.Handlers.*`** translation units behind **`RegisterAll`** helpers; this file keeps routing, lifecycle, event builders, and staged runtime wiring.
 
 ### Main Size Drivers
 
-1. ~~Extremely long `RegisterDefaultHandlers()` method~~ **`RegisterDefaultHandlers()` is now a coordinator;** bulk lives in domain register helpers. Remaining volume: near-identical `m_dispatcher.Register(...)` blocks and JSON concatenation.
+1. ~~Extremely long `RegisterDefaultHandlers()` method~~ **`RegisterDefaultHandlers()` is a one-line coordinator;** domain registration is split across `GatewayHost.Handlers.*` and generated/manifest outputs. Remaining volume here: **routing** (`RouteRequest` / `GatewayHostRouter`), bootstrap, and **non-dispatcher** helpers.
 2. ~~Repeated event-frame construction + schema-validation fallback in `Build*EventFrame` methods.~~ Centralized in `protocol::EncodeValidatedEvent` (see subsection above).
 3. Repeated manual JSON string formatting in handlers (`{"x":...}` patterns). Success `ResponseFrame` construction is centralized via `protocol::OkResponse`; JSON *content* is still mostly manual concatenation.
 4. Repeated parameter extraction patterns (`ExtractStringParam`, `ExtractBooleanParam`, `ExtractNumericParam`) used the same way across handlers.
 
 ### Practical Ways to Reduce File Size
 
-#### 1) Split handler registration by domain (highest impact) — **partially done**
+#### 1) Split handler registration by domain (highest impact) — **done for default gateway surface**
 
-`RegisterDefaultHandlers()` delegates to existing split translation units **and** domain helpers in `GatewayHost.cpp`:
+`RegisterDefaultHandlers()` delegates to split translation units only (see coordinator). Implemented in `GatewayHost.cpp` **only** as `RegisterDefaultHandlers` → `RegisterDefaultHandlerSequence`.
 
-- **`RegisterToolExecutionHistoryHandlers`** → `GatewayHost.Handlers.ToolExecutionHistory.cpp` with **`handlers::tool_execution::ToolExecutionHistoryHandlers`** (static methods; registrars stay thin).
-- **`RegisterGatewayEventCatalogQueryHandlers`** → `GatewayHost.Handlers.EventCatalogQuery.cpp` with **`handlers::event_catalog_query::EventCatalogQueryHandlers`** (snapshot handler is a **`friend`** of `GatewayHost` for the same private runtime fields as before).
-- Still in `GatewayHost.cpp`: `RegisterGatewayRegistryIntrospectionHandlers`, `RegisterGatewayAgentSessionMutationHandlers`, `RegisterGatewayAgentToolSurfaceHandlers`, `RegisterGatewayConfigAndDiagnosticsHandlers`, `RegisterGatewaySupplementaryCatalogHandlers`.
+- **`RegisterToolExecutionHistoryHandlers`** → `GatewayHost.Handlers.ToolExecutionHistory.cpp` (`handlers::tool_execution::ToolExecutionHistoryHandlers`).
+- **`RegisterGatewayEventCatalogQueryHandlers`** → `GatewayHost.Handlers.EventCatalogQuery.cpp` (`handlers::event_catalog_query::EventCatalogQueryHandlers`).
+- **`RegisterGatewayRegistryIntrospectionHandlers`** → `GatewayHost.Handlers.RegistryIntrospection.cpp` (`handlers::registry_introspection::RegistryIntrospectionHandlers::RegisterAll`).
+- **`RegisterGatewayAgentSessionMutationHandlers`** → `GatewayHost.Handlers.AgentSessionMutation.cpp` (`handlers::agent_session_mutation::AgentSessionMutationHandlers::RegisterAll`).
+- **`RegisterGatewayAgentToolSurfaceHandlers`** → `GatewayHost.Handlers.AgentToolSurface.cpp` (`handlers::agent_tool_surface::AgentToolSurfaceHandlers::RegisterAll`).
+- **`RegisterGatewayConfigAndDiagnosticsHandlers`** → `GatewayHost.Handlers.ConfigDiagnostics.cpp` (`handlers::config_diagnostics::ConfigDiagnosticsHandlers::RegisterAll`).
+- **`RegisterGatewaySupplementaryCatalogHandlers`** → `GatewayHost.Handlers.SupplementaryCatalog.cpp` (`handlers::supplementary_catalog::SupplementaryCatalogHandlers::RegisterAll`).
 
-Further splits (optional): extract **agent** vs **session** registrars from `RegisterGatewayRegistryIntrospectionHandlers` / `RegisterGatewayAgentSessionMutationHandlers` if those functions grow again; add more `GatewayHost.Handlers.*` TUs with named handler types following the same pattern.
+**Further splits (optional):** sub-split very large `RegisterAll` bodies (e.g. agent vs channel) only if a single TU becomes hard to navigate.
 
-**Effect so far:** `GatewayHost.cpp` loses two large registration blocks; shared catalog/deepseek JSON moves to **`GatewayHostCatalogHelpers.*`** to avoid duplication.
+**Effect:** shared catalog/deepseek/model/path/time helpers live in **`GatewayHostCatalogHelpers.*`**, **`GatewayHostModelHelpers.*`**, **`GatewayHostProtocolHelpers.*`**; `GatewayHost.cpp` no longer carries the default handler lambda bulk.
 
 #### 2) Move static/seeded handlers to table-driven registration — **in progress / done for main static surfaces**
 

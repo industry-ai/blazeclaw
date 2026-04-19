@@ -76,6 +76,8 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayChannelRegistry.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostCatalogHelpers.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostModelHelpers.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostProtocolHelpers.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostRegistrationCoordinator.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayJsonSerializers.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayJsonBuilder.cpp" />
@@ -89,6 +91,11 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Transport.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.ToolExecutionHistory.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.EventCatalogQuery.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.RegistryIntrospection.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.AgentSessionMutation.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.AgentToolSurface.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.ConfigDiagnostics.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.SupplementaryCatalog.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ChatRunStages.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ChatRunPipelineOrchestrator.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\TaskDeltaSchemaValidator.cpp" />

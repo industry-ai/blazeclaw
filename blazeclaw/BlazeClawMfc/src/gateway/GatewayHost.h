@@ -192,6 +192,26 @@ namespace blazeclaw::gateway {
 		struct EventCatalogQueryHandlers;
 	}
 
+	namespace handlers::registry_introspection {
+		struct RegistryIntrospectionHandlers;
+	}
+
+	namespace handlers::agent_session_mutation {
+		struct AgentSessionMutationHandlers;
+	}
+
+	namespace handlers::agent_tool_surface {
+		struct AgentToolSurfaceHandlers;
+	}
+
+	namespace handlers::config_diagnostics {
+		struct ConfigDiagnosticsHandlers;
+	}
+
+	namespace handlers::supplementary_catalog {
+		struct SupplementaryCatalogHandlers;
+	}
+
 	class GatewayHost : public IGatewayHostRuntime {
 	public:
 		using SkillsRefreshCallback = std::function<SkillsCatalogGatewayState()>;
@@ -356,6 +376,11 @@ namespace blazeclaw::gateway {
 	private:
 		friend class GatewayHostEx;
 		friend struct handlers::event_catalog_query::EventCatalogQueryHandlers;
+		friend struct handlers::registry_introspection::RegistryIntrospectionHandlers;
+		friend struct handlers::agent_session_mutation::AgentSessionMutationHandlers;
+		friend struct handlers::agent_tool_surface::AgentToolSurfaceHandlers;
+		friend struct handlers::config_diagnostics::ConfigDiagnosticsHandlers;
+		friend struct handlers::supplementary_catalog::SupplementaryCatalogHandlers;
 
 		[[nodiscard]] protocol::ResponseFrame RouteRequestLegacy(
 			const protocol::RequestFrame& request) const;
