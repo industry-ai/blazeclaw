@@ -29,6 +29,14 @@ Invoked in this sequence (see `GatewayHost.cpp`):
 
 Duplicate method names across registrars still overwrite the same dispatcher slot—keep names unique or rely on last registration intentionally.
 
+### `protocol::OkResponse` (success handler boilerplate)
+
+Defined in `GatewayProtocolModels.h` as `blazeclaw::gateway::protocol::OkResponse(const RequestFrame& request, std::string payloadJson)`. Handler lambdas return `return protocol::OkResponse(request, <payload expression>);` instead of spelling out `protocol::ResponseFrame{ .id = request.id, .ok = true, .payloadJson = ..., .error = std::nullopt }`.
+
+**Error responses** (`ok == false`, `error` set) still use an explicit `protocol::ResponseFrame{ ... }` initializer—no change.
+
+Applied across default gateway handler sources: `GatewayHost.cpp`, `GatewayHost.Handlers.*.cpp`, and `generated/GatewayHandlerCatalog.Generated.cpp`.
+
 ---
 
 ## Member functions — grouped by functionality
@@ -163,6 +171,7 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 | Area | Primary files |
 |------|----------------|
 | Core lifecycle, transport pump, event builders, routing, `RegisterDefaultHandlers` + domain `RegisterGateway*` / `RegisterToolExecution*` helpers | `GatewayHost.cpp` |
+| Protocol success-frame helper `protocol::OkResponse` | `GatewayProtocolModels.h` |
 | Channel-related handlers | `GatewayHost.Handlers.Channels.cpp` |
 | Event catalog / event handlers | `GatewayHost.Handlers.Events.cpp` |
 | Tool listing / execution handlers | `GatewayHost.Handlers.Tools.cpp` |
@@ -194,7 +203,7 @@ These aim to keep **one clear façade** for the shell while shrinking what `Gate
    Persistence is already associated with `TaskDeltaRepository`; ensure `GatewayHost` only **orchestrates load/save timing** and does not grow more serialization logic—keep normalization/validation in dedicated units (`TaskDeltaSchemaValidator`, etc.).
 
 6. **Reduce `RegisterDefaultHandlers` surface**  
-   **Done (phase 1):** inline registrations were split into `RegisterToolExecutionHistoryHandlers`, `RegisterGatewayEventCatalogQueryHandlers`, `RegisterGatewayRegistryIntrospectionHandlers`, `RegisterGatewayAgentSessionMutationHandlers`, `RegisterGatewayAgentToolSurfaceHandlers`, `RegisterGatewayConfigAndDiagnosticsHandlers`, and `RegisterGatewaySupplementaryCatalogHandlers`; `RegisterDefaultHandlers()` is now a short coordinator. Further work: table-driven static handlers and `OkResponse` helpers (see size-reduction section).
+   **Done (phase 1):** inline registrations were split into `RegisterToolExecutionHistoryHandlers`, `RegisterGatewayEventCatalogQueryHandlers`, `RegisterGatewayRegistryIntrospectionHandlers`, `RegisterGatewayAgentSessionMutationHandlers`, `RegisterGatewayAgentToolSurfaceHandlers`, `RegisterGatewayConfigAndDiagnosticsHandlers`, and `RegisterGatewaySupplementaryCatalogHandlers`; `RegisterDefaultHandlers()` is now a short coordinator. **Done (phase 2):** success-path boilerplate uses `protocol::OkResponse` (see subsection above). Further work: table-driven static registrations and JSON builder utilities (see size-reduction section).
 
 7. **Naming consistency**  
    Align “Bootstrap*” vs “CreateRuntimeState” / `InitializeRuntime` naming in docs so phased startup order is obvious to maintainers.
@@ -209,7 +218,7 @@ These aim to keep **one clear façade** for the shell while shrinking what `Gate
 
 1. ~~Extremely long `RegisterDefaultHandlers()` method~~ **`RegisterDefaultHandlers()` is now a coordinator;** bulk lives in domain register helpers. Remaining volume: near-identical `m_dispatcher.Register(...)` blocks and JSON concatenation.
 2. Repeated event-frame construction + schema-validation fallback in `Build*EventFrame` methods.
-3. Repeated manual JSON string formatting in handlers (`{"x":...}` patterns).
+3. Repeated manual JSON string formatting in handlers (`{"x":...}` patterns). Success `ResponseFrame` construction is centralized via `protocol::OkResponse`; JSON *content* is still mostly manual concatenation.
 4. Repeated parameter extraction patterns (`ExtractStringParam`, `ExtractBooleanParam`, `ExtractNumericParam`) used the same way across handlers.
 
 ### Practical Ways to Reduce File Size
@@ -241,16 +250,13 @@ This can replace dozens of repetitive blocks.
 
 **Expected effect:** high line reduction in registration code.
 
-#### 3) Add reusable response helpers
-Introduce helpers such as:
+#### 3) Add reusable response helpers — **`OkResponse` done**
 
-- `OkResponse(request, payloadJson)`
-- `MakeExistsResponse(...)`
-- `MakeCountResponse(...)`
+`protocol::OkResponse(request, payloadJson)` lives in `GatewayProtocolModels.h` and replaces the repeated success `protocol::ResponseFrame{ .id, .ok = true, .payloadJson, .error = nullopt }` pattern across gateway handler translation units.
 
-Most handlers repeat the same `protocol::ResponseFrame` boilerplate.
+Optional next steps (not implemented): `ErrorResponse(...)`, `MakeExistsResponse(...)`, or small payload builders for common `exists` / `count` JSON shapes.
 
-**Expected effect:** medium-to-high reduction.
+**Effect:** fewer lines per handler return; readability improved. Remaining bulk is still JSON string assembly, not frame wiring.
 
 #### 4) Consolidate event frame build + schema fallback logic
 Current `BuildTickEventFrame`, `BuildHealthEventFrame`, `BuildShutdownEventFrame`, etc. repeat this pattern:
@@ -305,7 +311,7 @@ This trims repeated extraction boilerplate inside handlers.
 ### Recommended Execution Order
 
 1. ~~Split `RegisterDefaultHandlers()` by domain.~~ **Done** (see §1 above).
-2. Add `OkResponse` helper and replace boilerplate.
+2. ~~Add `OkResponse` helper and replace boilerplate.~~ **Done** — see `protocol::OkResponse` in `GatewayProtocolModels.h` and the subsection `protocol::OkResponse` (success handler boilerplate) above.
 3. Introduce table-driven static registrations.
 4. Add `EncodeValidatedEvent(...)` helper.
 5. Move serializers to dedicated files.
@@ -316,3 +322,4 @@ This trims repeated extraction boilerplate inside handlers.
 - This file appears intentionally seed-heavy for protocol coverage; avoid changing external behavior while refactoring.
 - Keep method names and payload shapes stable to preserve parity fixtures and schema validation.
 - Refactor in small steps with build + protocol tests after each stage.
+- `generated/GatewayHandlerCatalog.Generated.cpp` is emitted by `tools/GatewayHandlerCatalogGenerator/Generate-GatewayHandlerCatalog.ps1`, which now generates `protocol::OkResponse(request, std::move(payload))` for static and tools-metric handlers—re-run the script after manifest changes.

@@ -211,273 +211,123 @@ namespace blazeclaw::gateway {
         (void)kGeneratedMethodCatalog;
 
 		m_dispatcher.Register("gateway.ping", [payload = std::string("{\"pong\":true}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.protocol.version", [payload = std::string("{\"minProtocol\":1,\"maxProtocol\":1}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.config.keys", [payload = std::string("{\"keys\":[\"gateway.bind\",\"gateway.port\",\"agent.model\",\"agent.streaming\",\"deepseek.apiKey\",\"deepseek.baseUrl\",\"deepseek.defaultModel\"],\"count\":7}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.models.providers", [payload = std::string("{\"providers\":[\"seed\",\"deepseek\"],\"count\":2}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.events.window", [payload = std::string("{\"events\":[\"gateway.session.reset\",\"gateway.agent.update\",\"gateway.tools.catalog.update\"],\"count\":3}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.models.affinity", [payload = std::string("{\"models\":[\"default\",\"reasoner\"],\"affinity\":\"balanced\"}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.models.pool", [payload = std::string("{\"models\":[\"default\",\"reasoner\"],\"count\":2}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.models.manifest", [payload = std::string("{\"models\":[\"default\",\"reasoner\"],\"manifestVersion\":1}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.models.catalog", [payload = std::string("{\"models\":[\"default\",\"reasoner\"],\"count\":2}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.config.history", [payload = std::string("{\"revisions\":[1],\"count\":1}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.events.sample", [payload = std::string("{\"events\":[\"gateway.health\",\"gateway.tools.catalog.update\"],\"count\":2}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.models.priority", [payload = std::string("{\"models\":[\"default\",\"reasoner\"],\"count\":2}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.config.revision", [payload = std::string("{\"revision\":1,\"source\":\"runtime\"}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.models.preference", [payload = std::string("{\"model\":\"default\",\"provider\":\"seed\",\"source\":\"runtime\"}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.events.channels", [payload = std::string("{\"channelEvents\":3,\"accountEvents\":1,\"count\":4}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.models.routing", [payload = std::string("{\"primary\":\"default\",\"fallback\":\"reasoner\",\"strategy\":\"seed_priority\"}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.config.diff", [payload = std::string("{\"changed\":[],\"count\":0}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.events.timeline", [payload = std::string("{\"events\":[\"gateway.shutdown\",\"gateway.session.reset\",\"gateway.agent.update\",\"gateway.tools.catalog.update\"],\"count\":4}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.models.selection", [payload = std::string("{\"selected\":\"default\",\"strategy\":\"seed_priority\"}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.events.types", [payload = std::string("{\"types\":[\"lifecycle\",\"update\"],\"count\":2}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.config.backup", [payload = std::string("{\"saved\":true,\"version\":1,\"path\":\"config/runtime.backup.json\"}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.models.fallback", [payload = std::string("{\"preferred\":\"default\",\"fallback\":\"reasoner\",\"configured\":true}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.config.rollback", [payload = std::string("{\"rolledBack\":false,\"version\":1}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.models.recommended", [payload = std::string("{\"model\":{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true},\"reason\":\"seed_default\"}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.config.audit", [payload = std::string("{\"enabled\":true,\"source\":\"runtime\",\"lastUpdatedMs\":1735689600000}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.models.compatibility", [payload = std::string("{\"default\":\"full\",\"reasoner\":\"partial\",\"count\":2}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.config.validate", [payload = std::string("{\"valid\":true,\"errors\":[],\"count\":0}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.models.default.get", [payload = std::string("{\"model\":{\"id\":\"default\",\"provider\":\"seed\",\"displayName\":\"Default Model\",\"streaming\":true}}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.config.schema", [payload = std::string("{\"gateway\":{\"bind\":\"string\",\"port\":\"number\"},\"agent\":{\"model\":\"string\",\"streaming\":\"boolean\"},\"deepseek\":{\"apiKey\":\"string\",\"baseUrl\":\"string\",\"defaultModel\":\"string\"}}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.config.sections", [payload = std::string("{\"sections\":[\"gateway\",\"agent\",\"deepseek\"],\"count\":3}")](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 
@@ -501,12 +351,7 @@ namespace blazeclaw::gateway {
 			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
 			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
 			ReplaceToken("{healthyBool}", healthy ? "true" : "false" );
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.tools.errors", [this, templateJson = std::string("{\"errors\":0,\"tools\":{toolsCount},\"rate\":0}")](const protocol::RequestFrame& request) {
@@ -529,12 +374,7 @@ namespace blazeclaw::gateway {
 			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
 			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
 			ReplaceToken("{healthyBool}", healthy ? "true" : "false" );
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.tools.latency", [this, templateJson = std::string("{\"minMs\":0,\"maxMs\":0,\"avgMs\":0,\"samples\":{toolsCount}}")](const protocol::RequestFrame& request) {
@@ -557,12 +397,7 @@ namespace blazeclaw::gateway {
 			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
 			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
 			ReplaceToken("{healthyBool}", healthy ? "true" : "false" );
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.tools.usage", [this, templateJson = std::string("{\"calls\":0,\"tools\":{toolsCount},\"avgMs\":0}")](const protocol::RequestFrame& request) {
@@ -585,12 +420,7 @@ namespace blazeclaw::gateway {
 			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
 			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
 			ReplaceToken("{healthyBool}", healthy ? "true" : "false" );
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.tools.failures", [this, templateJson = std::string("{\"failed\":0,\"total\":{toolsCount},\"rate\":0}")](const protocol::RequestFrame& request) {
@@ -613,12 +443,7 @@ namespace blazeclaw::gateway {
 			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
 			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
 			ReplaceToken("{healthyBool}", healthy ? "true" : "false" );
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.tools.metrics", [this, templateJson = std::string("{\"invocations\":0,\"enabled\":{enabledCount},\"disabled\":{disabledCount},\"total\":{toolsCount}}")](const protocol::RequestFrame& request) {
@@ -641,12 +466,7 @@ namespace blazeclaw::gateway {
 			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
 			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
 			ReplaceToken("{healthyBool}", healthy ? "true" : "false" );
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.tools.stats", [this, templateJson = std::string("{\"enabled\":{enabledCount},\"disabled\":{disabledCount},\"total\":{toolsCount}}")](const protocol::RequestFrame& request) {
@@ -669,12 +489,7 @@ namespace blazeclaw::gateway {
 			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
 			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
 			ReplaceToken("{healthyBool}", healthy ? "true" : "false" );
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 		m_dispatcher.Register("gateway.tools.health", [this, templateJson = std::string("{\"healthy\":{healthyBool},\"enabled\":{enabledCount},\"total\":{toolsCount}}")](const protocol::RequestFrame& request) {
@@ -697,12 +512,7 @@ namespace blazeclaw::gateway {
 			ReplaceToken("{enabledCount}", std::to_string(enabledCount));
 			ReplaceToken("{disabledCount}", std::to_string(disabledCount));
 			ReplaceToken("{healthyBool}", healthy ? "true" : "false" );
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson = payload,
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, std::move(payload));
 			});
 
 

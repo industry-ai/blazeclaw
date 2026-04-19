@@ -25,6 +25,18 @@ namespace blazeclaw::gateway::protocol {
 		std::optional<ErrorShape> error;
 	};
 
+	/// Successful JSON-RPC-style response: copies `request.id`, sets `ok`, payload, no error.
+	[[nodiscard]] inline ResponseFrame OkResponse(
+		const RequestFrame& request,
+		std::string payloadJson) {
+		return ResponseFrame{
+			.id = request.id,
+			.ok = true,
+			.payloadJson = std::move(payloadJson),
+			.error = std::nullopt,
+		};
+	}
+
 	struct StateVersion {
 		std::optional<std::uint64_t> presence;
 		std::optional<std::uint64_t> health;

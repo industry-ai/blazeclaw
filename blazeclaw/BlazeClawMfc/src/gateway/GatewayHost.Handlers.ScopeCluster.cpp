@@ -6,12 +6,7 @@ namespace blazeclaw::gateway {
     void GatewayHost::RegisterScopeClusterHandlers() {
         auto registerStatic = [this](const std::string& method, const std::string& payload) {
             m_dispatcher.Register(method, [payload](const protocol::RequestFrame& request) {
-                return protocol::ResponseFrame{
-                    .id = request.id,
-                    .ok = true,
-                    .payloadJson = payload,
-                    .error = std::nullopt,
-                };
+                return protocol::OkResponse(request, payload);
                 });
             };
 
@@ -20,14 +15,8 @@ namespace blazeclaw::gateway {
             const std::string& fieldName) {
             m_dispatcher.Register(method, [this, fieldName](const protocol::RequestFrame& request) {
                 const auto tools = m_toolRegistry.List();
-                return protocol::ResponseFrame{
-                    .id = request.id,
-                    .ok = true,
-                    .payloadJson =
-                        "{\"" + fieldName + "\":0,\"fallback\":0,\"tools\":" +
-                        std::to_string(tools.size()) + "}",
-                    .error = std::nullopt,
-                };
+                return protocol::OkResponse(request, "{\"" + fieldName + "\":0,\"fallback\":0,\"tools\":" +
+                        std::to_string(tools.size()) + "}");
                 });
             };
 

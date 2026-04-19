@@ -2698,17 +2698,11 @@ namespace blazeclaw::gateway {
 				const auto contracts =
 					m_pluginRuntimeState.ListCapabilityContracts();
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"capabilities\":" +
+				return protocol::OkResponse(request, "{\"capabilities\":" +
 						SerializePluginRuntimeCapabilitiesJsonLocal(contracts) +
 						",\"count\":" +
 						std::to_string(contracts.size()) +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
@@ -2736,11 +2730,7 @@ namespace blazeclaw::gateway {
 					? 0
 					: snapshot.activeRegistry->size();
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"activeVersion\":" +
+				return protocol::OkResponse(request, "{\"activeVersion\":" +
 						std::to_string(snapshot.activeVersion) +
 						",\"httpRouteVersion\":" +
 						std::to_string(m_pluginRuntimeState.GetHttpRouteVersion()) +
@@ -2763,9 +2753,7 @@ namespace blazeclaw::gateway {
 						importedJson +
 						",\"importedCount\":" +
 						std::to_string(importedPluginIds.size()) +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
@@ -2783,11 +2771,7 @@ namespace blazeclaw::gateway {
 				const auto transitionPolicy =
 					m_pluginRuntimeState.GetTransitionPolicySettings();
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"transitions\":" +
+				return protocol::OkResponse(request, "{\"transitions\":" +
 						SerializePluginRuntimeTransitionsJsonLocal(
 							transitions,
 							limit) +
@@ -2800,9 +2784,7 @@ namespace blazeclaw::gateway {
 						",\"exportEnabled\":" +
 						std::string(transitionPolicy.exportEnabled ? "true" : "false") +
 						"}" +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
@@ -2811,17 +2793,11 @@ namespace blazeclaw::gateway {
 				const auto transitionPolicy =
 					m_pluginRuntimeState.GetTransitionPolicySettings();
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"historyLimit\":" +
+				return protocol::OkResponse(request, "{\"historyLimit\":" +
 						std::to_string(transitionPolicy.historyLimit) +
 						",\"exportEnabled\":" +
 						std::string(transitionPolicy.exportEnabled ? "true" : "false") +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
@@ -2840,17 +2816,11 @@ namespace blazeclaw::gateway {
 
 				const auto transitionPolicy =
 					m_pluginRuntimeState.GetTransitionPolicySettings();
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"updated\":true,\"historyLimit\":" +
+				return protocol::OkResponse(request, "{\"updated\":true,\"historyLimit\":" +
 						std::to_string(transitionPolicy.historyLimit) +
 						",\"exportEnabled\":" +
 						std::string(transitionPolicy.exportEnabled ? "true" : "false") +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
@@ -2861,11 +2831,7 @@ namespace blazeclaw::gateway {
 				const auto transitionPolicy =
 					m_pluginRuntimeState.GetTransitionPolicySettings();
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"enabled\":" +
+				return protocol::OkResponse(request, "{\"enabled\":" +
 						std::string(transitionPolicy.exportEnabled ? "true" : "false") +
 						",\"transitions\":" +
 						SerializePluginRuntimeTransitionsJsonLocal(
@@ -2873,9 +2839,7 @@ namespace blazeclaw::gateway {
 							transitions.size()) +
 						",\"count\":" +
 						std::to_string(transitions.size()) +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
@@ -2896,17 +2860,11 @@ namespace blazeclaw::gateway {
 				}
 				importedJson += "]";
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"plugins\":" +
+				return protocol::OkResponse(request, "{\"plugins\":" +
 						importedJson +
 						",\"count\":" +
 						std::to_string(importedPluginIds.size()) +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
@@ -2938,30 +2896,20 @@ namespace blazeclaw::gateway {
 				m_pluginRuntimeState.ResetForTest();
 				const auto snapshot = m_pluginRuntimeState.Snapshot();
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"reset\":true,\"activeVersion\":" +
+				return protocol::OkResponse(request, "{\"reset\":true,\"activeVersion\":" +
 						std::to_string(snapshot.activeVersion) +
 						",\"httpRouteVersion\":" +
 						std::to_string(m_pluginRuntimeState.GetHttpRouteVersion()) +
 						",\"channelVersion\":" +
 						std::to_string(m_pluginRuntimeState.GetChannelVersion()) +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.governance.reportStatus",
 			[this](const protocol::RequestFrame& request) {
 				const auto& state = m_skillsCatalogState;
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"governanceReportingEnabled\":" +
+				return protocol::OkResponse(request, "{\"governanceReportingEnabled\":" +
 						std::string(state.governanceReportingEnabled ? "true" : "false") +
 						",\"remediationTelemetryPath\":\"" +
 						EscapeJsonLocal(state.lastRemediationTelemetryPath) +
@@ -3002,20 +2950,14 @@ namespace blazeclaw::gateway {
 						std::to_string(state.driftDetectedCount) +
 						",\"lastDriftReason\":\"" +
 						EscapeJsonLocal(state.lastDriftReason) +
-						"\"}",
-					.error = std::nullopt,
-				};
+						"\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.governance.attestationStatus",
 			[this](const protocol::RequestFrame& request) {
 				const auto& state = m_skillsCatalogState;
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"tenantId\":\"" +
+				return protocol::OkResponse(request, "{\"tenantId\":\"" +
 						EscapeJsonLocal(state.autoRemediationTenantId) +
 						"\",\"sloStatus\":\"" +
 						EscapeJsonLocal(state.remediationSloStatus) +
@@ -3033,20 +2975,14 @@ namespace blazeclaw::gateway {
 						EscapeJsonLocal(state.lastRemediationTelemetryPath) +
 						"\",\"auditPath\":\"" +
 						EscapeJsonLocal(state.lastRemediationAuditPath) +
-						"\"}",
-					.error = std::nullopt,
-				};
+						"\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.governance.aggregationStatus",
 			[this](const protocol::RequestFrame& request) {
 				const auto& state = m_skillsCatalogState;
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"tenantId\":\"" +
+				return protocol::OkResponse(request, "{\"tenantId\":\"" +
 						EscapeJsonLocal(state.autoRemediationTenantId) +
 						"\",\"policyId\":\"" +
 						EscapeJsonLocal(state.enterpriseSlaPolicyId) +
@@ -3062,9 +2998,7 @@ namespace blazeclaw::gateway {
 						EscapeJsonLocal(state.lastComplianceAttestationPath) +
 						"\",\"sloStatus\":\"" +
 						EscapeJsonLocal(state.remediationSloStatus) +
-						"\"}",
-					.error = std::nullopt,
-				};
+						"\"}");
 			});
 
 		m_dispatcher.Register(
@@ -3124,11 +3058,7 @@ namespace blazeclaw::gateway {
 					m_approvalStore.PruneExpired(nowEpochMs);
 				}
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"severity\":\"" + EscapeJsonLocal(severity) +
+				return protocol::OkResponse(request, "{\"severity\":\"" + EscapeJsonLocal(severity) +
 						"\",\"recommendedAction\":\"" +
 						EscapeJsonLocal(recommendedAction) +
 						"\",\"policyBlocked\":" +
@@ -3147,9 +3077,7 @@ namespace blazeclaw::gateway {
 						std::to_string(ttlMinutes) +
 						",\"reportPath\":\"" +
 						EscapeJsonLocal(state.lastGovernanceReportPath) +
-						"\"}",
-					.error = std::nullopt,
-				};
+						"\"}");
 			});
 
 		m_dispatcher.Register(
@@ -3157,13 +3085,7 @@ namespace blazeclaw::gateway {
 			[this](const protocol::RequestFrame& request) {
 				const auto& state = m_skillsCatalogState;
 				if (!state.autoRemediationEnabled) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = true,
-						.payloadJson =
-							"{\"executed\":false,\"status\":\"disabled\",\"approvalAccepted\":false}",
-						.error = std::nullopt,
-					};
+					return protocol::OkResponse(request, "{\"executed\":false,\"status\":\"disabled\",\"approvalAccepted\":false}");
 				}
 
 				bool approvalAccepted = false;
@@ -3270,11 +3192,7 @@ namespace blazeclaw::gateway {
 					m_approvalStore.RemoveToken(approvalToken);
 				}
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"executed\":true,\"status\":\"applied\",\"approvalAccepted\":" +
+				return protocol::OkResponse(request, "{\"executed\":true,\"status\":\"applied\",\"approvalAccepted\":" +
 						std::string(approvalAccepted ? "true" : "false") +
 						",\"tenantId\":\"" + EscapeJsonLocal(state.autoRemediationTenantId) +
 						"\",\"playbookPath\":\"" +
@@ -3284,9 +3202,7 @@ namespace blazeclaw::gateway {
 						",\"action\":\"" + EscapeJsonLocal(action) +
 						"\",\"reportPath\":\"" +
 						EscapeJsonLocal(state.lastGovernanceReportPath) +
-						"\"}",
-					.error = std::nullopt,
-				};
+						"\"}");
 			});
 
 		m_dispatcher.Register(
@@ -3358,19 +3274,13 @@ namespace blazeclaw::gateway {
 					};
 				}
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vector\":" + SerializeFloatArrayLocal(result.vector) +
+				return protocol::OkResponse(request, "{\"vector\":" + SerializeFloatArrayLocal(result.vector) +
 						",\"dimension\":" + std::to_string(result.dimension) +
 						",\"provider\":\"" + EscapeJsonLocal(result.provider) +
 						"\",\"model\":\"" + EscapeJsonLocal(result.modelId) +
 						"\",\"latencyMs\":" + std::to_string(result.latencyMs) +
 						",\"status\":\"" + EscapeJsonLocal(result.status) +
-						"\"}",
-					.error = std::nullopt,
-				};
+						"\"}");
 			});
 
 		m_dispatcher.Register(
@@ -3462,20 +3372,14 @@ namespace blazeclaw::gateway {
 					};
 				}
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectors\":" + SerializeFloatMatrixLocal(result.vectors) +
+				return protocol::OkResponse(request, "{\"vectors\":" + SerializeFloatMatrixLocal(result.vectors) +
 						",\"count\":" + std::to_string(result.vectors.size()) +
 						",\"dimension\":" + std::to_string(result.dimension) +
 						",\"provider\":\"" + EscapeJsonLocal(result.provider) +
 						"\",\"model\":\"" + EscapeJsonLocal(result.modelId) +
 						"\",\"latencyMs\":" + std::to_string(result.latencyMs) +
 						",\"status\":\"" + EscapeJsonLocal(result.status) +
-						"\"}",
-					.error = std::nullopt,
-				};
+						"\"}");
 			});
 
 		m_dispatcher.Register(
@@ -3500,14 +3404,8 @@ namespace blazeclaw::gateway {
 
 				const auto storedDeltas = m_taskDeltaRepository.Get(runId);
 				if (!storedDeltas.has_value()) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = true,
-						.payloadJson =
-							"{\"runId\":\"" + EscapeJsonLocal(runId) +
-							"\",\"taskDeltas\":[],\"count\":0}",
-						.error = std::nullopt,
-					};
+					return protocol::OkResponse(request, "{\"runId\":\"" + EscapeJsonLocal(runId) +
+							"\",\"taskDeltas\":[],\"count\":0}");
 				}
 
 				auto orderedTaskDeltas = storedDeltas.value();
@@ -3554,15 +3452,9 @@ namespace blazeclaw::gateway {
 				}
 				deltasJson += "]";
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"runId\":\"" + EscapeJsonLocal(runId) +
+				return protocol::OkResponse(request, "{\"runId\":\"" + EscapeJsonLocal(runId) +
 						"\",\"taskDeltas\":" + deltasJson +
-						",\"count\":" + std::to_string(orderedTaskDeltas.size()) + "}",
-					.error = std::nullopt,
-				};
+						",\"count\":" + std::to_string(orderedTaskDeltas.size()) + "}");
 			});
 
 		m_dispatcher.Register(
@@ -3579,15 +3471,9 @@ namespace blazeclaw::gateway {
 					cleared = m_taskDeltaRepository.Clear(runId) ? 1 : 0;
 				}
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"runId\":\"" + EscapeJsonLocal(runId.empty() ? "*" : runId) +
+				return protocol::OkResponse(request, "{\"runId\":\"" + EscapeJsonLocal(runId.empty() ? "*" : runId) +
 						"\",\"cleared\":" + std::to_string(cleared) +
-					 ",\"remaining\":" + std::to_string(m_taskDeltaRepository.Size()) + "}",
-					.error = std::nullopt,
-				};
+					 ",\"remaining\":" + std::to_string(m_taskDeltaRepository.Size()) + "}");
 			});
 
 		m_dispatcher.Register(
@@ -3618,15 +3504,9 @@ namespace blazeclaw::gateway {
 						"}");
 				}
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"messages\":" +
+				return protocol::OkResponse(request, "{\"messages\":" +
 					  historyResult.messagesJson +
-						",\"thinkingLevel\":\"normal\"}",
-					.error = std::nullopt,
-				};
+						",\"thinkingLevel\":\"normal\"}");
 			});
 
 		m_dispatcher.Register(
@@ -3697,12 +3577,7 @@ namespace blazeclaw::gateway {
 							",\"reason\":" +
 							JsonString(stageContext.skippedReasonCode) +
 							"}");
-						return protocol::ResponseFrame{
-							.id = request.id,
-							.ok = true,
-							.payloadJson = stageContext.responsePayloadJson,
-							.error = std::nullopt,
-						};
+						return protocol::OkResponse(request, stageContext.responsePayloadJson);
 					}
 
 					if (stageContext.deduped) {
@@ -3717,15 +3592,9 @@ namespace blazeclaw::gateway {
 							};
 						}
 
-						return protocol::ResponseFrame{
-							.id = request.id,
-							.ok = true,
-							.payloadJson =
-								"{\"runId\":\"" +
+						return protocol::OkResponse(request, "{\"runId\":\"" +
 								EscapeJsonLocal(stageContext.dedupedRunId) +
-								"\",\"queued\":false,\"deduped\":true}",
-							.error = std::nullopt,
-						};
+								"\",\"queued\":false,\"deduped\":true}");
 					}
 
 					return protocol::ResponseFrame{
@@ -5114,12 +4983,7 @@ namespace blazeclaw::gateway {
 				}
 				sendPayload += "}";
 
-				const protocol::ResponseFrame sendResponse = protocol::ResponseFrame{
-					   .id = request.id,
-					   .ok = true,
-				   .payloadJson = sendPayload,
-					   .error = std::nullopt,
-				};
+				const protocol::ResponseFrame sendResponse = protocol::OkResponse(request, sendPayload);
 				if (!idempotencyKey.empty()) {
 					m_chatReplayByIdempotency.insert_or_assign(
 						idempotencyKey,
@@ -5191,13 +5055,7 @@ namespace blazeclaw::gateway {
 				}
 
 				if (appended.messageId.empty() || appended.messageJson.empty()) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = true,
-						.payloadJson =
-							"{\"ok\":true,\"deduped\":true}",
-						.error = std::nullopt,
-					};
+					return protocol::OkResponse(request, "{\"ok\":true,\"deduped\":true}");
 				}
 
 				const std::uint64_t nowMs = CurrentEpochMsLocal();
@@ -5223,14 +5081,8 @@ namespace blazeclaw::gateway {
 						appended.messageJson);
 				}
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"ok\":true,\"messageId\":" +
-						JsonString(appended.messageId) + "}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"ok\":true,\"messageId\":" +
+						JsonString(appended.messageId) + "}");
 			});
 
 		m_dispatcher.Register(
@@ -5262,15 +5114,9 @@ namespace blazeclaw::gateway {
 				}
 
 				if (runIt == m_chatRunsById.end()) {
-					return protocol::ResponseFrame{
-						.id = request.id,
-						.ok = true,
-						.payloadJson =
-							"{\"aborted\":false,\"sessionKey\":\"" +
+					return protocol::OkResponse(request, "{\"aborted\":false,\"sessionKey\":\"" +
 							EscapeJsonLocal(sessionKey) +
-							"\"}",
-						.error = std::nullopt,
-					};
+							"\"}");
 				}
 
 				const std::string runId = runIt->second.runId;
@@ -5347,19 +5193,13 @@ namespace blazeclaw::gateway {
 						"}");
 				}
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"aborted\":true,\"runId\":\"" +
+				return protocol::OkResponse(request, "{\"aborted\":true,\"runId\":\"" +
 						EscapeJsonLocal(runId) +
 						"\",\"sessionKey\":\"" +
 						EscapeJsonLocal(sessionKey) +
 					  "\",\"partialPersisted\":" +
 						std::string(persistResult.persisted ? "true" : "false") +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
@@ -5630,19 +5470,13 @@ namespace blazeclaw::gateway {
 					std::to_string(emitted) +
 					" queueRemaining=" +
 					std::to_string(queue.size()));
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"sessionKey\":\"" +
+				return protocol::OkResponse(request, "{\"sessionKey\":\"" +
 						EscapeJsonLocal(sessionKey) +
 						"\",\"events\":" +
 						eventsJson +
 						",\"count\":" +
 						std::to_string(emitted) +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
@@ -5650,11 +5484,7 @@ namespace blazeclaw::gateway {
 			[this](const protocol::RequestFrame& request) {
 				const auto& state = m_skillsCatalogState;
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"total\":" +
+				return protocol::OkResponse(request, "{\"total\":" +
 						std::to_string(state.entries.size()) +
 						",\"rootsScanned\":" +
 						std::to_string(state.rootsScanned) +
@@ -5788,9 +5618,7 @@ namespace blazeclaw::gateway {
 						std::to_string(state.scanScannedFiles) +
 						",\"warnings\":" +
 						std::to_string(state.warningCount) +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
@@ -5825,17 +5653,11 @@ namespace blazeclaw::gateway {
 				}
 
 				optionsJson += "]";
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"options\":" +
+				return protocol::OkResponse(request, "{\"options\":" +
 						optionsJson +
 						",\"count\":" +
 						std::to_string(count) +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
@@ -5873,11 +5695,7 @@ namespace blazeclaw::gateway {
 						? "security_scan_warn"
 						: "none");
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"skill\":\"" +
+				return protocol::OkResponse(request, "{\"skill\":\"" +
 						EscapeJsonLocal(it->name) +
 						"\",\"kind\":\"" +
 						EscapeJsonLocal(it->installKind) +
@@ -5891,20 +5709,14 @@ namespace blazeclaw::gateway {
 						std::to_string(m_skillsCatalogState.scanCriticalCount) +
 						",\"scanWarn\":" +
 						std::to_string(m_skillsCatalogState.scanWarnCount) +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.skills.scan.status",
 			[this](const protocol::RequestFrame& request) {
 				const auto& state = m_skillsCatalogState;
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"files\":" +
+				return protocol::OkResponse(request, "{\"files\":" +
 						std::to_string(state.scanScannedFiles) +
 						",\"info\":" +
 						std::to_string(state.scanInfoCount) +
@@ -5912,45 +5724,31 @@ namespace blazeclaw::gateway {
 						std::to_string(state.scanWarnCount) +
 						",\"critical\":" +
 						std::to_string(state.scanCriticalCount) +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.skills.sandbox.status",
 			[this](const protocol::RequestFrame& request) {
 				const auto& state = m_skillsCatalogState;
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"ok\":" +
+				return protocol::OkResponse(request, "{\"ok\":" +
 						std::string(state.sandboxSyncOk ? "true" : "false") +
 						",\"synced\":" +
 						std::to_string(state.sandboxSynced) +
 						",\"skipped\":" +
 						std::to_string(state.sandboxSkipped) +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.skills.env.status",
 			[this](const protocol::RequestFrame& request) {
 				const auto& state = m_skillsCatalogState;
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"allowed\":" +
+				return protocol::OkResponse(request, "{\"allowed\":" +
 						std::to_string(state.envAllowed) +
 						",\"blocked\":" +
 						std::to_string(state.envBlocked) +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
@@ -5984,12 +5782,7 @@ namespace blazeclaw::gateway {
 					EscapeJsonLocal(state.generatedAt) +
 					"\"}";
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson = payload,
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, payload);
 			});
 
 		m_dispatcher.Register(
@@ -6054,14 +5847,8 @@ namespace blazeclaw::gateway {
 					};
 				}
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						SerializeConfigSchemaLookupResultLocal(
-							lookupResult.value()),
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, SerializeConfigSchemaLookupResultLocal(
+							lookupResult.value()));
 			});
 
 		m_dispatcher.Register(
@@ -6110,11 +5897,7 @@ namespace blazeclaw::gateway {
 					};
 				}
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"skill\":\"" +
+				return protocol::OkResponse(request, "{\"skill\":\"" +
 						EscapeJsonLocal(it->name) +
 						"\",\"skillKey\":\"" +
 						EscapeJsonLocal(it->skillKey) +
@@ -6146,9 +5929,7 @@ namespace blazeclaw::gateway {
 						std::string(it->installExecutable ? "true" : "false") +
 						",\"scanCritical\":" +
 						std::to_string(m_skillsCatalogState.scanCriticalCount) +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		// Skills update: no param parsing here; forward to m_skillsUpdateCallback (BlazeClaw:
@@ -6206,11 +5987,7 @@ namespace blazeclaw::gateway {
 					state.installBlockedCount == 0 &&
 					state.sandboxSyncOk;
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"ok\":" +
+				return protocol::OkResponse(request, "{\"ok\":" +
 						std::string(ok ? "true" : "false") +
 						",\"sandboxSyncOk\":" +
 						std::string(state.sandboxSyncOk ? "true" : "false") +
@@ -6220,9 +5997,7 @@ namespace blazeclaw::gateway {
 						std::to_string(state.scanCriticalCount) +
 						",\"scanWarn\":" +
 						std::to_string(state.scanWarnCount) +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
@@ -6283,11 +6058,7 @@ namespace blazeclaw::gateway {
 				}
 
 				hintsJson += "]";
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"warnings\":" +
+				return protocol::OkResponse(request, "{\"warnings\":" +
 						std::to_string(state.warningCount) +
 						",\"installBlocked\":" +
 						std::to_string(state.installBlockedCount) +
@@ -6333,9 +6104,7 @@ namespace blazeclaw::gateway {
 						std::to_string(state.bundleCommandFilesRejectedUnsafeCount) +
 						",\"hints\":" +
 						hintsJson +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
@@ -6343,11 +6112,7 @@ namespace blazeclaw::gateway {
 			[this](const protocol::RequestFrame& request) {
 				const auto& state = m_skillsCatalogState;
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"prompt\":\"" +
+				return protocol::OkResponse(request, "{\"prompt\":\"" +
 						EscapeJsonLocal(state.prompt) +
 						"\",\"included\":" +
 						std::to_string(state.promptIncludedCount) +
@@ -6355,9 +6120,7 @@ namespace blazeclaw::gateway {
 						std::to_string(state.promptChars) +
 						",\"truncated\":" +
 						std::string(state.promptTruncated ? "true" : "false") +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
@@ -6403,17 +6166,11 @@ namespace blazeclaw::gateway {
 				}
 
 				commandsJson += "]";
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"commands\":" +
+				return protocol::OkResponse(request, "{\"commands\":" +
 						commandsJson +
 						",\"count\":" +
 						std::to_string(count) +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
@@ -6426,19 +6183,13 @@ namespace blazeclaw::gateway {
 				}
 
 				const auto& state = m_skillsCatalogState;
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"refreshed\":" +
+				return protocol::OkResponse(request, "{\"refreshed\":" +
 						std::string(refreshed ? "true" : "false") +
 						",\"version\":" +
 						std::to_string(state.snapshotVersion) +
 						",\"reason\":\"" +
 						EscapeJsonLocal(state.watchReason) +
-						"\"}",
-					.error = std::nullopt,
-				};
+						"\"}");
 			});
 
 		m_dispatcher.Register(
@@ -6467,19 +6218,13 @@ namespace blazeclaw::gateway {
 				}
 				entriesJson += "]";
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"skills\":" +
+				return protocol::OkResponse(request, "{\"skills\":" +
 						entriesJson +
 						",\"count\":" +
 						std::to_string(count) +
 						",\"includeInvalid\":" +
 						std::string(shouldIncludeInvalid ? "true" : "false") +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register("gateway.runtime.orchestration.status", [this](const protocol::RequestFrame& request) {
@@ -6522,11 +6267,7 @@ namespace blazeclaw::gateway {
 			const std::string latestSelectionFallbackPolicyProfile =
 				m_latestOrchestrationPathSelection.fallbackPolicyProfile;
 
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson =
-					"{\"state\":\"" + std::string(busy ? "busy" : "idle") +
+			return protocol::OkResponse(request, "{\"state\":\"" + std::string(busy ? "busy" : "idle") +
 					"\",\"activeSession\":\"" +
 					EscapeJsonLocal(activeSession) + "\",\"activeAgent\":\"" +
 					EscapeJsonLocal(activeAgent) + "\",\"queueDepth\":" +
@@ -6570,9 +6311,7 @@ namespace blazeclaw::gateway {
 					std::to_string(m_taskDeltaRunCancelledCount) +
 					",\"fallback\":" +
 				 std::to_string(m_taskDeltaRunFallbackCount) +
-					"},\"taskDeltaLifecycleMapping\":{\"plan\":\"item.plan\",\"preflight\":\"tool.precheck\",\"tool_call\":\"tool.start\",\"tool_result\":\"tool.result\",\"final\":\"lifecycle.final\"}}",
-				.error = std::nullopt,
-			};
+					"},\"taskDeltaLifecycleMapping\":{\"plan\":\"item.plan\",\"preflight\":\"tool.precheck\",\"tool_call\":\"tool.start\",\"tool_result\":\"tool.result\",\"final\":\"lifecycle.final\"}}");
 			});
 
 		m_dispatcher.Register(
@@ -6645,18 +6384,12 @@ namespace blazeclaw::gateway {
 					std::to_string(health.generatedAtEpochMs) +
 					"}");
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"probes\":" + probesJson +
+				return protocol::OkResponse(request, "{\"probes\":" + probesJson +
 						",\"count\":" +
 						std::to_string(health.probes.size()) +
 						",\"generatedAtEpochMs\":" +
 						std::to_string(health.generatedAtEpochMs) +
-						",\"ttlMs\":" + std::to_string(health.ttlMs) + "}",
-					.error = std::nullopt,
-				};
+						",\"ttlMs\":" + std::to_string(health.ttlMs) + "}");
 			});
 
 		m_dispatcher.Register(
@@ -6693,11 +6426,7 @@ namespace blazeclaw::gateway {
 
 				reasonsJson += "]";
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"ready\":" +
+				return protocol::OkResponse(request, "{\"ready\":" +
 						std::string(ready ? "true" : "false") +
 						",\"running\":" +
 						std::string(m_running ? "true" : "false") +
@@ -6708,19 +6437,13 @@ namespace blazeclaw::gateway {
 						",\"runtimeHandlersInitialized\":" +
 						std::string(m_runtimeHandlersInitialized ? "true" : "false") +
 						",\"reasons\":" + reasonsJson +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.mutations.status",
 			[this](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"agentRuns\":" +
+				return protocol::OkResponse(request, "{\"agentRuns\":" +
 						std::to_string(m_agentRuns.size()) +
 						",\"chatRuns\":" +
 						std::to_string(m_chatRunsById.size()) +
@@ -6730,9 +6453,7 @@ namespace blazeclaw::gateway {
 						std::to_string(m_sessionRegistry.List().size()) +
 						",\"activeChannels\":" +
 						std::to_string(m_channelRegistry.ListStatus().size()) +
-						"}",
-					.error = std::nullopt,
-				};
+						"}");
 			});
 
 		m_dispatcher.Register(
@@ -6740,17 +6461,11 @@ namespace blazeclaw::gateway {
 			[](const protocol::RequestFrame& request) {
 				const auto health =
 					executors::EmailScheduleExecutor::GetRuntimeHealthIndex(false);
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"capabilities\":[{\"name\":\"email.send\",\"state\":\"" +
+				return protocol::OkResponse(request, "{\"capabilities\":[{\"name\":\"email.send\",\"state\":\"" +
 						EscapeJsonLocal(health.emailSendState) +
 						"\"}],\"count\":1,\"generatedAtEpochMs\":" +
 						std::to_string(health.generatedAtEpochMs) +
-						",\"ttlMs\":" + std::to_string(health.ttlMs) + "}",
-					.error = std::nullopt,
-				};
+						",\"ttlMs\":" + std::to_string(health.ttlMs) + "}");
 			});
 
 		m_dispatcher.Register(
@@ -6781,11 +6496,7 @@ namespace blazeclaw::gateway {
 					EscapeJsonLocal(m_runtimeEmailPolicyOnExecError) +
 					"\"}}");
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"profileId\":\"" +
+				return protocol::OkResponse(request, "{\"profileId\":\"" +
 						EscapeJsonLocal(m_runtimeEmailPolicyProfileId) +
 						"\",\"backends\":" +
 						backendsJson +
@@ -6803,2712 +6514,1360 @@ namespace blazeclaw::gateway {
 						std::string(m_runtimeEmailRequiresApproval ? "true" : "false") +
 						",\"tokenTtlMinutes\":" +
 						std::to_string(m_runtimeEmailApprovalTokenTtlMinutes) +
-						"}}",
-					.error = std::nullopt,
-				};
+						"}}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseGate4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseGate4\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseGate4\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorGate4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorGate4\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorGate4\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phasePortal4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phasePortal4\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phasePortal4\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncGate4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncGate4\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncGate4\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandGate4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandGate4\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandGate4\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorPortal4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorPortal4\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorPortal4\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseBridge4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseBridge4\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseBridge4\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncPortal4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncPortal4\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncPortal4\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandPortal4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandPortal4\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandPortal4\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorBridge4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorBridge4\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorBridge4\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseLink4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseLink4\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseLink4\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncBridge4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncBridge4\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncBridge4\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandBridge4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandBridge4\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandBridge4\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorLink4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorLink4\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorLink4\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseNode5",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseNode5\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseNode5\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncLink4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncLink4\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncLink4\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandLink4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandLink4\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandLink4\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorNode5",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorNode5\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorNode5\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseHub3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseHub3\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseHub3\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncNode5",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncNode5\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncNode5\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandNode5",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandNode5\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandNode5\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorHub3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorHub3\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorHub3\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseGate3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseGate3\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseGate3\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncHub3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncHub3\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncHub3\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandHub3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandHub3\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandHub3\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorGate3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorGate3\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorGate3\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseRelay3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseRelay3\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseRelay3\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncGate3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncGate3\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncGate3\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandGate3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandGate3\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandGate3\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorRelay3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorRelay3\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorRelay3\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phasePortal3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phasePortal3\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phasePortal3\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncRelay3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncRelay3\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncRelay3\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandRelay3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandRelay3\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandRelay3\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorPortal3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorPortal3\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorPortal3\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseBridge3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseBridge3\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseBridge3\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncPortal3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncPortal3\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncPortal3\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandPortal3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandPortal3\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandPortal3\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorBridge3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorBridge3\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorBridge3\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseMesh3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseMesh3\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseMesh3\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncBridge3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncBridge3\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncBridge3\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandBridge3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandBridge3\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandBridge3\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorMesh3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorMesh3\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorMesh3\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseNode4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseNode4\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseNode4\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncMesh3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncMesh3\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncMesh3\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandMesh3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandMesh3\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandMesh3\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorNode4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorNode4\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorNode4\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseLink3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseLink3\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseLink3\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncNode4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncNode4\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncNode4\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandNode4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandNode4\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandNode4\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorLink3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorLink3\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorLink3\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseThread2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseThread2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseThread2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncLink3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncLink3\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncLink3\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandLink3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandLink3\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandLink3\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorThread2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorThread2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorThread2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseChain2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseChain2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseChain2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncThread2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncThread2\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncThread2\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandThread2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandThread2\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandThread2\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorChain2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorChain2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorChain2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseSpline2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseSpline2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseSpline2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncChain2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncChain2\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncChain2\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandChain2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandChain2\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandChain2\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorSpline2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorSpline2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorSpline2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseRail2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseRail2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseRail2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncSpline2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncSpline2\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncSpline2\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandSpline2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandSpline2\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandSpline2\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorRail2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorRail2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorRail2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseTrack2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseTrack2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseTrack2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncRail2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncRail2\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncRail2\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandRail2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandRail2\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandRail2\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorTrack2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorTrack2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorTrack2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseLane2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseLane2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseLane2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncTrack2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncTrack2\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncTrack2\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandTrack2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandTrack2\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandTrack2\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorLane2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorLane2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorLane2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseGrid2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseGrid2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseGrid2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncLane2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncLane2\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncLane2\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandLane2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandLane2\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandLane2\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorGrid2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorGrid2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorGrid2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseBand2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseBand2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseBand2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncGrid2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncGrid2\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncGrid2\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandGrid2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandGrid2\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandGrid2\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorBand2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorBand2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorBand2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseArc2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseArc2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseArc2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncBand2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncBand2\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncBand2\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandBand2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandBand2\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandBand2\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorArc2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorArc2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorArc2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseMesh2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseMesh2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseMesh2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncArc2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncArc2\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncArc2\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandArc2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandArc2\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandArc2\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorMesh2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorMesh2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorMesh2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseLink2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseLink2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseLink2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncMesh2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncMesh2\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncMesh2\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandMesh2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandMesh2\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandMesh2\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorLink2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorLink2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorLink2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseNode3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseNode3\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseNode3\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncLink2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncLink2\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncLink2\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandLink2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandLink2\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandLink2\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorNode3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorNode3\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorNode3\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseHub2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseHub2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseHub2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncNode3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncNode3\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncNode3\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandNode3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandNode3\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandNode3\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorHub2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorHub2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorHub2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseGate2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseGate2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseGate2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncHub2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncHub2\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncHub2\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandHub2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandHub2\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandHub2\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorGate2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorGate2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorGate2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseRelay2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseRelay2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseRelay2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncGate2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncGate2\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncGate2\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandGate2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandGate2\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandGate2\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorRelay2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorRelay2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorRelay2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phasePortal",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phasePortal\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phasePortal\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncRelay2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncRelay2\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncRelay2\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandRelay2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandRelay2\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandRelay2\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorPortal",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorPortal\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorPortal\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseAnchor2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseAnchor2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseAnchor2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncPortal",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncPortal\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncPortal\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandPortal",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandPortal\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandPortal\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorAnchor2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorAnchor2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorAnchor2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseBridge",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseBridge\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseBridge\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncAnchor2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncAnchor2\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncAnchor2\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandAnchor2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandAnchor2\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandAnchor2\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorBridge",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorBridge\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorBridge\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseNode",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseNode\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseNode\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncBridge",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncBridge\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncBridge\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandBridge",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandBridge\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandBridge\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorNode2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorNode2\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorNode2\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseLink",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseLink\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseLink\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncNode2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncNode2\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncNode2\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandNode2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandNode2\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandNode2\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorLink",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorLink\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorLink\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseThread",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseThread\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseThread\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncLink",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncLink\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncLink\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandLink",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandLink\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandLink\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorThread",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorThread\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorThread\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseChain",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseChain\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseChain\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncThread",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncThread\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncThread\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandThread",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandThread\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandThread\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorChain",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorChain\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorChain\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseSpline",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseSpline\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseSpline\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncChain",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncChain\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncChain\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandChain",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandChain\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandChain\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorSpline",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorSpline\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorSpline\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseRail",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseRail\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseRail\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncSpline",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncSpline\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncSpline\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandSpline",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandSpline\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandSpline\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorRail",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorRail\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorRail\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseTrack",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseTrack\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseTrack\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncRail",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncRail\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncRail\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandRail",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandRail\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandRail\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorTrack",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorTrack\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorTrack\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseLane",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseLane\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseLane\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncTrack",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncTrack\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncTrack\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandTrack",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandTrack\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandTrack\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorLane",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorLane\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorLane\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseGrid",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseGrid\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseGrid\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncLane",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncLane\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncLane\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandLane",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandLane\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandLane\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorGrid",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorGrid\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorGrid\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseSpan",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseSpan\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseSpan\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncGrid",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncGrid\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncGrid\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandGrid",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandGrid\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandGrid\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorSpan",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorSpan\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorSpan\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseFrame",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseFrame\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseFrame\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncSpan",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncSpan\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncSpan\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandSpan",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandSpan\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandSpan\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorFrame",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorFrame\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorFrame\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseCore",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseCore\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseCore\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncFrame",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncFrame\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncFrame\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandFrame",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandFrame\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandFrame\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorCore",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorCore\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorCore\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseNet",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseNet\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseNet\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncCore",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncCore\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncCore\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandCore",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandCore\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandCore\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorNode",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorNode\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorNode\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseFabric",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseFabric\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseFabric\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncNet",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncNet\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncNet\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandNode",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandNode\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandNode\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorMesh",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorMesh\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorMesh\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseMesh",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseMesh\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseMesh\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncFabric",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncFabric\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncFabric\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandArc",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandArc\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandArc\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorArc",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorArc\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorArc\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseArc",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseArc\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseArc\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncMesh",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncMesh\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncMesh\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandLattice",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandLattice\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandLattice\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorSpiral",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorSpiral\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorSpiral\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseSpiral",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseSpiral\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseSpiral\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncArc",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncArc\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncArc\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandSpiral",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandSpiral\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandSpiral\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorRibbon",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorRibbon\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorRibbon\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseHelix",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseHelix\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseHelix\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncSpiral",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncSpiral\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncSpiral\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandHelix",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandHelix\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandHelix\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorContour",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorContour\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorContour\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseRibbon",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseRibbon\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseRibbon\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncHelix",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncHelix\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncHelix\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandRibbon",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandRibbon\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandRibbon\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorEnvelope",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorEnvelope\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorEnvelope\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseContour",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseContour\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseContour\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncRibbon",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncRibbon\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncRibbon\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandContour",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandContour\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandContour\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.driftVector",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"driftVector\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"driftVector\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseLattice",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseLattice\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseLattice\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncContour",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncContour\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncContour\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandMatrix",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandMatrix\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandMatrix\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.envelopeDrift",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"envelopeDrift\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"envelopeDrift\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseVector",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseVector\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseVector\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncMatrix",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncMatrix\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncMatrix\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandVector",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandVector\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandVector\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.biasEnvelope",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"biasEnvelope\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"biasEnvelope\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorPhase",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorPhase\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorPhase\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncEnvelope",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncEnvelope\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncEnvelope\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandDrift",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandDrift\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandDrift\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.biasDrift",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"biasDrift\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"biasDrift\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorField",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectors\":2,\"magnitude\":0,\"state\":\"steady\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectors\":2,\"magnitude\":0,\"state\":\"steady\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncDrift",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncDrift\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncDrift\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandStability",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandStability\":100,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandStability\":100,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseEnvelope",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phase\":\"steady\",\"amplitude\":1,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phase\":\"steady\",\"amplitude\":1,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vectorDrift",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectorDrift\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectorDrift\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseBias",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phase\":\"steady\",\"bias\":0,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phase\":\"steady\",\"bias\":0,\"stable\":true}");
 			});
 
 		m_dispatcher.Register("gateway.runtime.streaming.status", [this](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson =
-					"{\"enabled\":" +
+			return protocol::OkResponse(request, "{\"enabled\":" +
 					std::string(m_runtimeAgentStreaming ? "true" : "false") +
 					",\"mode\":\"chunked\",\"heartbeatMs\":1500" +
 					std::string(m_streamingThrottled ? ",\"throttled\":true" : ",\"throttled\":false") +
 					",\"bufferedFrames\":" + std::to_string(m_streamingBufferedFrames) +
-					",\"bufferedBytes\":" + std::to_string(m_streamingBufferedBytes) + "}",
-				.error = std::nullopt,
-			};
+					",\"bufferedBytes\":" + std::to_string(m_streamingBufferedBytes) + "}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.cohesion",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"cohesive\":true,\"delta\":0,\"samples\":2}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"cohesive\":true,\"delta\":0,\"samples\":2}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.waveIndex",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"waveIndex\":1,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"waveIndex\":1,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncBand",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncBand\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncBand\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.waveDrift",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"waveDrift\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"waveDrift\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register("gateway.models.failover.status", [this](const protocol::RequestFrame& request) {
@@ -9516,15 +7875,9 @@ namespace blazeclaw::gateway {
 				m_failoverOverrideActive
 				? m_failoverOverrideModel
 				: m_runtimeAgentModel;
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson =
-					"{\"primary\":\"" + EscapeJsonLocal(selectedPrimary) +
+			return protocol::OkResponse(request, "{\"primary\":\"" + EscapeJsonLocal(selectedPrimary) +
 					"\",\"fallbacks\":[\"reasoner\"],\"maxRetries\":2,\"strategy\":\"ordered\",\"overrideActive\":" +
-					std::string(m_failoverOverrideActive ? "true" : "false") + "}",
-				.error = std::nullopt,
-			};
+					std::string(m_failoverOverrideActive ? "true" : "false") + "}");
 			});
 
 		m_dispatcher.Register("gateway.runtime.orchestration.queue", [this](const protocol::RequestFrame& request) {
@@ -9548,16 +7901,10 @@ namespace blazeclaw::gateway {
 				m_runtimeRunningCount = m_runtimeQueueCapacity;
 			}
 
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson =
-					"{\"queued\":" + std::to_string(m_runtimeQueueDepth) +
+			return protocol::OkResponse(request, "{\"queued\":" + std::to_string(m_runtimeQueueDepth) +
 					",\"running\":" + std::to_string(m_runtimeRunningCount) +
 					",\"capacity\":" + std::to_string(m_runtimeQueueCapacity) +
-					",\"updated\":true}",
-				.error = std::nullopt,
-			};
+					",\"updated\":true}");
 			});
 
 		m_dispatcher.Register("gateway.runtime.streaming.sample", [this](const protocol::RequestFrame& request) {
@@ -9566,16 +7913,10 @@ namespace blazeclaw::gateway {
 				: 2;
 			const bool finalChunk = !m_streamingThrottled;
 
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson =
-					"{\"chunks\":[\"hello\",\"world\"],\"count\":" +
+			return protocol::OkResponse(request, "{\"chunks\":[\"hello\",\"world\"],\"count\":" +
 					std::to_string(chunks) +
 					",\"final\":" +
-					std::string(finalChunk ? "true" : "false") + "}",
-				.error = std::nullopt,
-			};
+					std::string(finalChunk ? "true" : "false") + "}");
 			});
 
 		m_dispatcher.Register("gateway.models.failover.preview", [this](const protocol::RequestFrame& request) {
@@ -9589,16 +7930,10 @@ namespace blazeclaw::gateway {
 				? m_failoverOverrideModel
 				: requested;
 
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson =
-					"{\"model\":\"" + EscapeJsonLocal(requested) +
+			return protocol::OkResponse(request, "{\"model\":\"" + EscapeJsonLocal(requested) +
 					"\",\"attempts\":[\"" + EscapeJsonLocal(requested) +
 					"\",\"reasoner\"],\"selected\":\"" +
-					EscapeJsonLocal(selected) + "\"}",
-				.error = std::nullopt,
-			};
+					EscapeJsonLocal(selected) + "\"}");
 			});
 
 		m_dispatcher.Register("gateway.runtime.orchestration.assign", [this](const protocol::RequestFrame& request) {
@@ -9629,18 +7964,12 @@ namespace blazeclaw::gateway {
 				}
 			}
 
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson =
-					"{\"agentId\":\"" + EscapeJsonLocal(agentId) +
+			return protocol::OkResponse(request, "{\"agentId\":\"" + EscapeJsonLocal(agentId) +
 					"\",\"sessionId\":\"" + EscapeJsonLocal(sessionId) +
 					"\",\"assigned\":" +
 					std::string(assigned ? "true" : "false") +
 					",\"assignments\":" +
-					std::to_string(m_runtimeAssignmentCount) + "}",
-				.error = std::nullopt,
-			};
+					std::to_string(m_runtimeAssignmentCount) + "}");
 			});
 
 		m_dispatcher.Register("gateway.runtime.streaming.window", [this](const protocol::RequestFrame& request) {
@@ -9649,15 +7978,9 @@ namespace blazeclaw::gateway {
 				m_streamingWindowMs = windowMs.value();
 			}
 
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson =
-					"{\"windowMs\":" + std::to_string(m_streamingWindowMs) +
+			return protocol::OkResponse(request, "{\"windowMs\":" + std::to_string(m_streamingWindowMs) +
 					",\"frames\":" + std::to_string(m_streamingBufferedFrames) +
-					",\"dropped\":0}",
-				.error = std::nullopt,
-			};
+					",\"dropped\":0}");
 			});
 
 		m_dispatcher.Register("gateway.models.failover.metrics", [this](const protocol::RequestFrame& request) {
@@ -9667,15 +7990,9 @@ namespace blazeclaw::gateway {
 				: static_cast<double>(m_failoverAttempts - m_failoverFallbackHits) /
 				static_cast<double>(m_failoverAttempts);
 
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson =
-					"{\"attempts\":" + std::to_string(m_failoverAttempts) +
+			return protocol::OkResponse(request, "{\"attempts\":" + std::to_string(m_failoverAttempts) +
 					",\"fallbackHits\":" + std::to_string(m_failoverFallbackHits) +
-					",\"successRate\":" + std::to_string(successRate) + "}",
-				.error = std::nullopt,
-			};
+					",\"successRate\":" + std::to_string(successRate) + "}");
 			});
 
 		m_dispatcher.Register("gateway.runtime.orchestration.rebalance", [this](const protocol::RequestFrame& request) {
@@ -9694,18 +8011,12 @@ namespace blazeclaw::gateway {
 
 			++m_runtimeRebalanceCount;
 
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson =
-					"{\"moved\":" + std::to_string(moved) +
+			return protocol::OkResponse(request, "{\"moved\":" + std::to_string(moved) +
 					",\"remaining\":" +
 					std::to_string(m_runtimeQueueDepth + m_runtimeRunningCount) +
 					",\"strategy\":\"" + EscapeJsonLocal(strategy) +
 					"\",\"rebalances\":" +
-					std::to_string(m_runtimeRebalanceCount) + "}",
-				.error = std::nullopt,
-			};
+					std::to_string(m_runtimeRebalanceCount) + "}");
 			});
 
 		m_dispatcher.Register("gateway.runtime.streaming.backpressure", [this](const protocol::RequestFrame& request) {
@@ -9715,17 +8026,11 @@ namespace blazeclaw::gateway {
 				: (m_streamingBufferedFrames * 100) / m_streamingHighWatermark;
 			m_streamingThrottled = pressure >= 80;
 
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson =
-					"{\"pressure\":" + std::to_string(pressure) +
+			return protocol::OkResponse(request, "{\"pressure\":" + std::to_string(pressure) +
 					",\"throttled\":" +
 					std::string(m_streamingThrottled ? "true" : "false") +
 					",\"bufferedFrames\":" +
-					std::to_string(m_streamingBufferedFrames) + "}",
-				.error = std::nullopt,
-			};
+					std::to_string(m_streamingBufferedFrames) + "}");
 			});
 
 		m_dispatcher.Register("gateway.models.failover.simulate", [this](const protocol::RequestFrame& request) {
@@ -9743,16 +8048,10 @@ namespace blazeclaw::gateway {
 				++m_failoverFallbackHits;
 			}
 
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson =
-					"{\"requested\":\"" + EscapeJsonLocal(requested) +
+			return protocol::OkResponse(request, "{\"requested\":\"" + EscapeJsonLocal(requested) +
 					"\",\"resolved\":\"" + EscapeJsonLocal(resolved) +
 					"\",\"usedFallback\":" +
-					std::string(useFallback ? "true" : "false") + "}",
-				.error = std::nullopt,
-			};
+					std::string(useFallback ? "true" : "false") + "}");
 			});
 
 		m_dispatcher.Register("gateway.runtime.orchestration.drain", [this](const protocol::RequestFrame& request) {
@@ -9767,51 +8066,29 @@ namespace blazeclaw::gateway {
 			m_runtimeRunningCount = 0;
 			++m_runtimeDrainCount;
 
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson =
-					"{\"drained\":" + std::to_string(drained) +
+			return protocol::OkResponse(request, "{\"drained\":" + std::to_string(drained) +
 					",\"remaining\":0,\"reason\":\"" +
 					EscapeJsonLocal(reason) +
 					"\",\"drains\":" +
-					std::to_string(m_runtimeDrainCount) + "}",
-				.error = std::nullopt,
-			};
+					std::to_string(m_runtimeDrainCount) + "}");
 			});
 
 		m_dispatcher.Register("gateway.runtime.streaming.replay", [this](const protocol::RequestFrame& request) {
 			const std::size_t replayed =
 				(std::min)(m_streamingBufferedFrames, static_cast<std::size_t>(2));
 
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson =
-					"{\"replayed\":" + std::to_string(replayed) +
-					",\"cursor\":\"stream-cursor-1\",\"complete\":true}",
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, "{\"replayed\":" + std::to_string(replayed) +
+					",\"cursor\":\"stream-cursor-1\",\"complete\":true}");
 			});
 
 		m_dispatcher.Register("gateway.models.failover.audit", [](const protocol::RequestFrame& request) {
-			return protocol::ResponseFrame{
-				.id = request.id,
-				.ok = true,
-				.payloadJson =
-					"{\"entries\":2,\"lastModel\":\"default\",\"lastOutcome\":\"primary\"}",
-				.error = std::nullopt,
-			};
+			return protocol::OkResponse(request, "{\"entries\":2,\"lastModel\":\"default\",\"lastOutcome\":\"primary\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.snapshot",
 			[this](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"sessions\":" +
+				return protocol::OkResponse(request, "{\"sessions\":" +
 						std::to_string(m_sessionRegistry.List().size()) +
 						",\"agents\":" +
 						std::to_string(m_agentRegistry.List().size()) +
@@ -9822,9 +8099,7 @@ namespace blazeclaw::gateway {
 						"\",\"queue\":" +
 						std::to_string(m_runtimeQueueDepth) +
 						",\"running\":" +
-						std::to_string(m_runtimeRunningCount) + "}",
-					.error = std::nullopt,
-				};
+						std::to_string(m_runtimeRunningCount) + "}");
 			});
 
 		m_dispatcher.Register(
@@ -9832,76 +8107,46 @@ namespace blazeclaw::gateway {
 			[this](const protocol::RequestFrame& request) {
 				const std::size_t lagMs =
 					m_streamingBufferedFrames * 10;
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"cursor\":\"stream-cursor-1\",\"lagMs\":" +
+				return protocol::OkResponse(request, "{\"cursor\":\"stream-cursor-1\",\"lagMs\":" +
 						std::to_string(lagMs) +
 						",\"hasMore\":" +
-						std::string(m_streamingBufferedFrames > 0 ? "true" : "false") + "}",
-					.error = std::nullopt,
-				};
+						std::string(m_streamingBufferedFrames > 0 ? "true" : "false") + "}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.policy",
 			[this](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"policy\":\"ordered\",\"maxRetries\":2,\"stickyPrimary\":true,\"overrideModel\":\"" +
-						EscapeJsonLocal(m_failoverOverrideModel) + "\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"policy\":\"ordered\",\"maxRetries\":2,\"stickyPrimary\":true,\"overrideModel\":\"" +
+						EscapeJsonLocal(m_failoverOverrideModel) + "\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.timeline",
 			[this](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"ticks\":[" +
+				return protocol::OkResponse(request, "{\"ticks\":[" +
 						std::to_string(m_runtimeAssignmentCount) + "," +
 						std::to_string(m_runtimeRebalanceCount) + "," +
 						std::to_string(m_runtimeDrainCount) +
-						"],\"count\":3,\"source\":\"runtime-orchestrator\"}",
-					.error = std::nullopt,
-				};
+						"],\"count\":3,\"source\":\"runtime-orchestrator\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.metrics",
 			[this](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"frames\":" +
+				return protocol::OkResponse(request, "{\"frames\":" +
 						std::to_string(m_streamingBufferedFrames) +
 						",\"bytes\":" +
 						std::to_string(m_streamingBufferedBytes) +
-						",\"avgChunkMs\":5}",
-					.error = std::nullopt,
-				};
+						",\"avgChunkMs\":5}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.history",
 			[this](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"events\":[\"primary\",\"fallback\"],\"count\":" +
+				return protocol::OkResponse(request, "{\"events\":[\"primary\",\"fallback\"],\"count\":" +
 						std::to_string(m_failoverAttempts) +
 						",\"last\":\"" +
-						std::string(m_failoverFallbackHits > 0 ? "fallback" : "primary") + "\"}",
-					.error = std::nullopt,
-				};
+						std::string(m_failoverFallbackHits > 0 ? "fallback" : "primary") + "\"}");
 			});
 
 		m_dispatcher.Register(
@@ -9909,28 +8154,16 @@ namespace blazeclaw::gateway {
 			[this](const protocol::RequestFrame& request) {
 				const std::size_t backlog =
 					m_runtimeQueueDepth + m_runtimeRunningCount;
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"alive\":true,\"intervalMs\":1000,\"jitterMs\":" +
-						std::to_string(25 + (backlog > 0 ? 5 : 0)) + "}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"alive\":true,\"intervalMs\":1000,\"jitterMs\":" +
+						std::to_string(25 + (backlog > 0 ? 5 : 0)) + "}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.health",
 			[this](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"healthy\":" +
+				return protocol::OkResponse(request, "{\"healthy\":" +
 						std::string(m_streamingBufferedFrames <= m_streamingHighWatermark ? "true" : "false") +
-						",\"stalls\":0,\"recoveries\":0}",
-					.error = std::nullopt,
-				};
+						",\"stalls\":0,\"recoveries\":0}");
 			});
 
 		m_dispatcher.Register(
@@ -9940,15 +8173,9 @@ namespace blazeclaw::gateway {
 					m_failoverOverrideActive
 					? m_failoverOverrideModel
 					: m_runtimeAgentModel;
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"models\":[\"" + EscapeJsonLocal(m_runtimeAgentModel) +
+				return protocol::OkResponse(request, "{\"models\":[\"" + EscapeJsonLocal(m_runtimeAgentModel) +
 						"\",\"reasoner\"],\"count\":2,\"active\":\"" +
-						EscapeJsonLocal(activeModel) + "\"}",
-					.error = std::nullopt,
-				};
+						EscapeJsonLocal(activeModel) + "\"}");
 			});
 
 		m_dispatcher.Register(
@@ -9960,419 +8187,215 @@ namespace blazeclaw::gateway {
 					m_runtimeDrainCount;
 				const bool busy =
 					m_runtimeQueueDepth > 0 || m_runtimeRunningCount > 0;
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"pulse\":" + std::to_string(pulse) +
+				return protocol::OkResponse(request, "{\"pulse\":" + std::to_string(pulse) +
 						",\"driftMs\":0,\"state\":\"" +
-						std::string(busy ? "active" : "steady") + "\"}",
-					.error = std::nullopt,
-				};
+						std::string(busy ? "active" : "steady") + "\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.snapshot",
 			[this](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"frames\":" + std::to_string(m_streamingBufferedFrames) +
-						",\"cursor\":\"stream-cursor-2\",\"sealed\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"frames\":" + std::to_string(m_streamingBufferedFrames) +
+						",\"cursor\":\"stream-cursor-2\",\"sealed\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.window",
 			[this](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"windowSec\":60,\"attempts\":" +
+				return protocol::OkResponse(request, "{\"windowSec\":60,\"attempts\":" +
 						std::to_string(m_failoverAttempts) +
 						",\"fallbacks\":" +
-						std::to_string(m_failoverFallbackHits) + "}",
-					.error = std::nullopt,
-				};
+						std::to_string(m_failoverFallbackHits) + "}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.cadence",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"periodMs\":1000,\"varianceMs\":5,\"aligned\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"periodMs\":1000,\"varianceMs\":5,\"aligned\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.watermark",
 			[this](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"high\":" + std::to_string(m_streamingHighWatermark) +
+				return protocol::OkResponse(request, "{\"high\":" + std::to_string(m_streamingHighWatermark) +
 						",\"low\":4,\"current\":" +
-						std::to_string(m_streamingBufferedFrames) + "}",
-					.error = std::nullopt,
-				};
+						std::to_string(m_streamingBufferedFrames) + "}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.digest",
 			[this](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"digest\":\"sha256:failover-v1\",\"entries\":" +
+				return protocol::OkResponse(request, "{\"digest\":\"sha256:failover-v1\",\"entries\":" +
 						std::to_string(m_failoverAttempts) +
-						",\"fresh\":true}",
-					.error = std::nullopt,
-				};
+						",\"fresh\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.beacon",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"beacon\":\"orch-1\",\"seq\":1,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"beacon\":\"orch-1\",\"seq\":1,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.checkpoint",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"checkpoint\":\"cp-1\",\"frames\":2,\"persisted\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"checkpoint\":\"cp-1\",\"frames\":2,\"persisted\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.ledger",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"entries\":2,\"primaryHits\":1,\"fallbackHits\":1}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"entries\":2,\"primaryHits\":1,\"fallbackHits\":1}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.epoch",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"epoch\":1,\"startedMs\":1735689600000,\"active\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"epoch\":1,\"startedMs\":1735689600000,\"active\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.resume",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"resumed\":true,\"cursor\":\"stream-cursor-3\",\"replayed\":1}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"resumed\":true,\"cursor\":\"stream-cursor-3\",\"replayed\":1}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.profile",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"profile\":\"balanced\",\"weights\":[70,30],\"version\":1}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"profile\":\"balanced\",\"weights\":[70,30],\"version\":1}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phase",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phase\":\"steady\",\"step\":1,\"locked\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phase\":\"steady\",\"step\":1,\"locked\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.recovery",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"recovering\":false,\"attempts\":0,\"lastMs\":0}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"recovering\":false,\"attempts\":0,\"lastMs\":0}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.baseline",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"primary\":\"default\",\"secondary\":\"reasoner\",\"confidence\":100}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"primary\":\"default\",\"secondary\":\"reasoner\",\"confidence\":100}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.signal",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"signal\":\"ok\",\"priority\":1,\"latched\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"signal\":\"ok\",\"priority\":1,\"latched\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.continuity",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"continuous\":true,\"gaps\":0,\"lastSeq\":2}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"continuous\":true,\"gaps\":0,\"lastSeq\":2}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.forecast",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"windowSec\":60,\"projectedFallbacks\":1,\"risk\":\"low\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"windowSec\":60,\"projectedFallbacks\":1,\"risk\":\"low\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.vector",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"axis\":\"primary\",\"magnitude\":1,\"normalized\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"axis\":\"primary\",\"magnitude\":1,\"normalized\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.stability",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"stable\":true,\"variance\":0,\"samples\":2}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"stable\":true,\"variance\":0,\"samples\":2}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.threshold",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"minSuccessRate\":90,\"maxFallbacks\":2,\"active\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"minSuccessRate\":90,\"maxFallbacks\":2,\"active\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.matrix",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"rows\":2,\"cols\":2,\"balanced\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"rows\":2,\"cols\":2,\"balanced\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.integrity",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"valid\":true,\"violations\":0,\"checked\":2}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"valid\":true,\"violations\":0,\"checked\":2}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.guardrail",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"rule\":\"max_fallbacks\",\"limit\":2,\"enforced\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"rule\":\"max_fallbacks\",\"limit\":2,\"enforced\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.lattice",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"layers\":2,\"nodes\":4,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"layers\":2,\"nodes\":4,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.coherence",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"coherent\":true,\"drift\":0,\"segments\":2}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"coherent\":true,\"drift\":0,\"segments\":2}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.envelope",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"windowSec\":60,\"floor\":90,\"ceiling\":100}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"windowSec\":60,\"floor\":90,\"ceiling\":100}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.mesh",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"nodes\":4,\"edges\":3,\"connected\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"nodes\":4,\"edges\":3,\"connected\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.fidelity",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"fidelity\":100,\"drops\":0,\"verified\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"fidelity\":100,\"drops\":0,\"verified\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.margin",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"headroom\":10,\"buffer\":2,\"safe\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"headroom\":10,\"buffer\":2,\"safe\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.fabric",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"threads\":6,\"links\":8,\"resilient\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"threads\":6,\"links\":8,\"resilient\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.accuracy",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"accuracy\":99,\"mismatches\":0,\"calibrated\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"accuracy\":99,\"mismatches\":0,\"calibrated\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.reserve",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"reserve\":1,\"available\":true,\"priority\":2}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"reserve\":1,\"available\":true,\"priority\":2}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.load",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"queueLoad\":0,\"agentLoad\":0,\"state\":\"steady\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"queueLoad\":0,\"agentLoad\":0,\"state\":\"steady\"}");
 			});
 
 		m_dispatcher.Register(
@@ -10400,18 +8423,12 @@ namespace blazeclaw::gateway {
 				m_streamingThrottled =
 					m_streamingBufferedFrames >= m_streamingHighWatermark;
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bufferedFrames\":" +
+				return protocol::OkResponse(request, "{\"bufferedFrames\":" +
 						std::to_string(m_streamingBufferedFrames) +
 						",\"bufferedBytes\":" +
 						std::to_string(m_streamingBufferedBytes) +
 						",\"highWatermark\":" +
-						std::to_string(m_streamingHighWatermark) + "}",
-					.error = std::nullopt,
-				};
+						std::to_string(m_streamingHighWatermark) + "}");
 			});
 
 		m_dispatcher.Register(
@@ -10438,32 +8455,20 @@ namespace blazeclaw::gateway {
 				m_failoverOverrideReason = reason;
 				++m_failoverOverrideChanges;
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":" +
+				return protocol::OkResponse(request, "{\"active\":" +
 						std::string(m_failoverOverrideActive ? "true" : "false") +
 						",\"model\":\"" +
 						EscapeJsonLocal(m_failoverOverrideModel) +
 						"\",\"reason\":\"" +
 						EscapeJsonLocal(m_failoverOverrideReason) +
 						"\",\"changes\":" +
-						std::to_string(m_failoverOverrideChanges) + "}",
-					.error = std::nullopt,
-				};
+						std::to_string(m_failoverOverrideChanges) + "}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.saturation",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"saturation\":0,\"capacity\":8,\"state\":\"stable\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"saturation\":0,\"capacity\":8,\"state\":\"stable\"}");
 			});
 
 		m_dispatcher.Register(
@@ -10487,18 +8492,12 @@ namespace blazeclaw::gateway {
 					? 0
 					: (m_streamingBufferedFrames * 1000) / m_streamingWindowMs;
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"throttled\":" +
+				return protocol::OkResponse(request, "{\"throttled\":" +
 						std::string(m_streamingThrottled ? "true" : "false") +
 						",\"limitPerSec\":" +
 						std::to_string(m_streamingThrottleLimitPerSec) +
 						",\"currentPerSec\":" +
-						std::to_string(currentPerSec) + "}",
-					.error = std::nullopt,
-				};
+						std::to_string(currentPerSec) + "}");
 			});
 
 		m_dispatcher.Register(
@@ -10509,1701 +8508,855 @@ namespace blazeclaw::gateway {
 				m_failoverOverrideReason = "cleared";
 				++m_failoverOverrideChanges;
 
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"cleared\":true,\"active\":false,\"model\":\"" +
-						EscapeJsonLocal(m_failoverOverrideModel) + "\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"cleared\":true,\"active\":false,\"model\":\"" +
+						EscapeJsonLocal(m_failoverOverrideModel) + "\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.pressure",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"pressure\":0,\"threshold\":80,\"state\":\"normal\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"pressure\":0,\"threshold\":80,\"state\":\"normal\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.pacing",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"paceMs\":50,\"burst\":1,\"adaptive\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"paceMs\":50,\"burst\":1,\"adaptive\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.status",
 			[this](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":" +
+				return protocol::OkResponse(request, "{\"active\":" +
 						std::string(m_failoverOverrideActive ? "true" : "false") +
 						",\"model\":\"" +
 						EscapeJsonLocal(m_failoverOverrideModel) +
 						"\",\"reason\":\"" +
 						EscapeJsonLocal(m_failoverOverrideReason) +
 						"\",\"source\":\"runtime\",\"changes\":" +
-						std::to_string(m_failoverOverrideChanges) + "}",
-					.error = std::nullopt,
-				};
+						std::to_string(m_failoverOverrideChanges) + "}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.headroom",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"headroom\":8,\"used\":0,\"state\":\"ready\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"headroom\":8,\"used\":0,\"state\":\"ready\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.jitter",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"jitterMs\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"jitterMs\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.history",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"entries\":0,\"lastModel\":\"default\",\"active\":false}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"entries\":0,\"lastModel\":\"default\",\"active\":false}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.balance",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"balanced\":true,\"skew\":0,\"state\":\"stable\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"balanced\":true,\"skew\":0,\"state\":\"stable\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.drift",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"driftMs\":0,\"windowMs\":1000,\"corrected\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"driftMs\":0,\"windowMs\":1000,\"corrected\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.metrics",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"switches\":0,\"lastModel\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"switches\":0,\"lastModel\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.efficiency",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"efficiency\":100,\"waste\":0,\"state\":\"optimized\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"efficiency\":100,\"waste\":0,\"state\":\"optimized\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.variance",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"variance\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"variance\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.window",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"windowSec\":60,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"windowSec\":60,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.utilization",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"utilization\":0,\"capacity\":8,\"state\":\"idle\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"utilization\":0,\"capacity\":8,\"state\":\"idle\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.deviation",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"deviation\":0,\"samples\":2,\"withinBudget\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"deviation\":0,\"samples\":2,\"withinBudget\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.digest",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"digest\":\"sha256:override-v1\",\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"digest\":\"sha256:override-v1\",\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.capacity",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"capacity\":8,\"used\":0,\"state\":\"ready\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"capacity\":8,\"used\":0,\"state\":\"ready\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.alignment",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"aligned\":true,\"offsetMs\":0,\"windowMs\":1000}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"aligned\":true,\"offsetMs\":0,\"windowMs\":1000}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.timeline",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"entries\":0,\"active\":false,\"lastModel\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"entries\":0,\"active\":false,\"lastModel\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.occupancy",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"occupancy\":0,\"slots\":8,\"state\":\"idle\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"occupancy\":0,\"slots\":8,\"state\":\"idle\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.skew",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"skewMs\":0,\"samples\":2,\"bounded\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"skewMs\":0,\"samples\":2,\"bounded\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.catalog",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"count\":1,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"count\":1,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.elasticity",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"elasticity\":100,\"headroom\":8,\"state\":\"expandable\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"elasticity\":100,\"headroom\":8,\"state\":\"expandable\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.dispersion",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"dispersion\":0,\"samples\":2,\"bounded\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"dispersion\":0,\"samples\":2,\"bounded\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.registry",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"entries\":1,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"entries\":1,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.cohesion",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"cohesion\":100,\"groups\":1,\"state\":\"coherent\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"cohesion\":100,\"groups\":1,\"state\":\"coherent\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.curvature",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"curvature\":0,\"samples\":2,\"bounded\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"curvature\":0,\"samples\":2,\"bounded\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.matrix",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"rows\":1,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"rows\":1,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.resilience",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"resilience\":100,\"faults\":0,\"state\":\"steady\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"resilience\":100,\"faults\":0,\"state\":\"steady\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.smoothness",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"smoothness\":100,\"jitterMs\":0,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"smoothness\":100,\"jitterMs\":0,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.snapshot",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"revision\":1,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"revision\":1,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.readiness",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"ready\":true,\"queueDepth\":0,\"state\":\"ready\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"ready\":true,\"queueDepth\":0,\"state\":\"ready\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.harmonics",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"harmonics\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"harmonics\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.pointer",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"pointer\":\"default\",\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"pointer\":\"default\",\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.contention",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"contention\":0,\"waiters\":0,\"state\":\"clear\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"contention\":0,\"waiters\":0,\"state\":\"clear\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.phase",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phase\":\"steady\",\"step\":1,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phase\":\"steady\",\"step\":1,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.state",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"state\":\"none\",\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"state\":\"none\",\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.fairness",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"fairness\":100,\"skew\":0,\"state\":\"balanced\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"fairness\":100,\"skew\":0,\"state\":\"balanced\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.tempo",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"tempo\":1,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"tempo\":1,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.profile",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"profile\":\"default\",\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"profile\":\"default\",\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.equilibrium",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"equilibrium\":100,\"delta\":0,\"state\":\"balanced\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"equilibrium\":100,\"delta\":0,\"state\":\"balanced\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.steadiness",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"steady\":true,\"variance\":0,\"windowMs\":1000}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"steady\":true,\"variance\":0,\"windowMs\":1000}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.temporal",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"temporal\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"temporal\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.consistency",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"consistent\":true,\"deviation\":0,\"samples\":2}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"consistent\":true,\"deviation\":0,\"samples\":2}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.audit",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"entries\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"entries\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.parity",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"parity\":100,\"gap\":0,\"state\":\"aligned\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"parity\":100,\"gap\":0,\"state\":\"aligned\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.stabilityIndex",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"stabilityIndex\":100,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"stabilityIndex\":100,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.spectral",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"spectral\":0,\"samples\":2,\"bounded\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"spectral\":0,\"samples\":2,\"bounded\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.envelope",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"floor\":0,\"ceiling\":100,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"floor\":0,\"ceiling\":100,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.checkpoint",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"checkpoint\":\"cp-override-1\",\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"checkpoint\":\"cp-override-1\",\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.convergence",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"convergence\":100,\"drift\":0,\"state\":\"locked\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"convergence\":100,\"drift\":0,\"state\":\"locked\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.hysteresis",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"hysteresis\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"hysteresis\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.resonance",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"resonance\":0,\"samples\":2,\"bounded\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"resonance\":0,\"samples\":2,\"bounded\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.vectorField",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"vectors\":2,\"magnitude\":0,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"vectors\":2,\"magnitude\":0,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.baseline",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"baseline\":\"default\",\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"baseline\":\"default\",\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.balanceIndex",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"balanceIndex\":100,\"skew\":0,\"state\":\"balanced\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"balanceIndex\":100,\"skew\":0,\"state\":\"balanced\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseLock",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"locked\":true,\"phase\":\"steady\",\"drift\":0}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"locked\":true,\"phase\":\"steady\",\"drift\":0}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.waveform",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"waveform\":\"flat\",\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"waveform\":\"flat\",\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.horizon",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"horizonMs\":1000,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"horizonMs\":1000,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.manifest",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"manifest\":\"default\",\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"manifest\":\"default\",\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.symmetry",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"symmetry\":100,\"offset\":0,\"state\":\"aligned\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"symmetry\":100,\"offset\":0,\"state\":\"aligned\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.gradient",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"gradient\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"gradient\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.vectorClock",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"clock\":1,\"lag\":0,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"clock\":1,\"lag\":0,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.trend",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"trend\":\"flat\",\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"trend\":\"flat\",\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.ledger",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"entries\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"entries\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.harmonicity",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"harmonicity\":100,\"detune\":0,\"state\":\"aligned\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"harmonicity\":100,\"detune\":0,\"state\":\"aligned\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.inertia",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"inertia\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"inertia\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.coordination",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"coordinated\":true,\"lag\":0,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"coordinated\":true,\"lag\":0,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.latencyBand",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"minMs\":0,\"maxMs\":0,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"minMs\":0,\"maxMs\":0,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.snapshotIndex",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"index\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"index\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.cadenceIndex",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"cadenceIndex\":100,\"jitter\":0,\"state\":\"steady\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"cadenceIndex\":100,\"jitter\":0,\"state\":\"steady\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.damping",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"damping\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"damping\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.phaseNoise",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseNoise\":0,\"samples\":2,\"bounded\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseNoise\":0,\"samples\":2,\"bounded\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.beat",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"beatHz\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"beatHz\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.digestIndex",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"digestIndex\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"digestIndex\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.waveLock",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"locked\":true,\"phase\":\"steady\",\"slip\":0}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"locked\":true,\"phase\":\"steady\",\"slip\":0}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.flux",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"flux\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"flux\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.phaseMatrix",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"phaseMatrix\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"phaseMatrix\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.orchestration.driftEnvelope",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"driftEnvelope\":0,\"windowMs\":1000,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"driftEnvelope\":0,\"windowMs\":1000,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.modulation",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"modulation\":0,\"samples\":2,\"bounded\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"modulation\":0,\"samples\":2,\"bounded\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.syncVector",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"syncVector\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"syncVector\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.bandEnvelope",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"bandEnvelope\":0,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"bandEnvelope\":0,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.runtime.streaming.pulseTrain",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"pulseHz\":1,\"samples\":2,\"stable\":true}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"pulseHz\":1,\"samples\":2,\"stable\":true}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.cursor",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"cursor\":\"default\",\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"cursor\":\"default\",\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vector",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vector\":\"default\",\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vector\":\"default\",\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorDrift",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorDrift\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorDrift\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.phaseBias",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"phaseBias\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"phaseBias\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.biasEnvelope",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"biasEnvelope\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"biasEnvelope\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.driftEnvelope",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"driftEnvelope\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"driftEnvelope\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.envelopeDrift",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"envelopeDrift\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"envelopeDrift\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.driftVector",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"driftVector\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"driftVector\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorEnvelope",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorEnvelope\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorEnvelope\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorContour",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorContour\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorContour\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorRibbon",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorRibbon\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorRibbon\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorSpiral",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorSpiral\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorSpiral\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorArc",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorArc\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorArc\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorMesh",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorMesh\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorMesh\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorNode",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorNode\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorNode\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorCore",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorCore\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorCore\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorFrame",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorFrame\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorFrame\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorSpan",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorSpan\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorSpan\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorGrid",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorGrid\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorGrid\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorLane",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorLane\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorLane\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorTrack",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorTrack\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorTrack\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorRail",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorRail\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorRail\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorSpline",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorSpline\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorSpline\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorChain",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorChain\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorChain\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorThread",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorThread\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorThread\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorLink",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorLink\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorLink\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorNode2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorNode2\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorNode2\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorBridge",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorBridge\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorBridge\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorAnchor2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorAnchor2\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorAnchor2\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorPortal",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorPortal\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorPortal\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorRelay2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorRelay2\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorRelay2\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorGate2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorGate2\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorGate2\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorHub2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorHub2\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorHub2\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorNode3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorNode3\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorNode3\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorLink2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorLink2\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorLink2\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorMesh2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorMesh2\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorMesh2\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorArc2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorArc2\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorArc2\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorBand2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorBand2\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorBand2\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorGrid2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorGrid2\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorGrid2\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorLane2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorLane2\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorLane2\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorTrack2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorTrack2\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorTrack2\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorRail2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorRail2\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorRail2\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorSpline2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorSpline2\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorSpline2\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorChain2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorChain2\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorChain2\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorThread2",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorThread2\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorThread2\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorLink3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorLink3\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorLink3\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorNode4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorNode4\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorNode4\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorMesh3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorMesh3\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorMesh3\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorBridge3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorBridge3\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorBridge3\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorPortal3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorPortal3\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorPortal3\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorRelay3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorRelay3\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorRelay3\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorGate3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorGate3\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorGate3\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorHub3",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorHub3\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorHub3\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorNode5",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorNode5\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorNode5\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorLink4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorLink4\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorLink4\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorBridge4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorBridge4\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorBridge4\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorPortal4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorPortal4\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorPortal4\":0,\"model\":\"default\"}");
 			});
 
 		m_dispatcher.Register(
 			"gateway.models.failover.override.vectorGate4",
 			[](const protocol::RequestFrame& request) {
-				return protocol::ResponseFrame{
-					.id = request.id,
-					.ok = true,
-					.payloadJson =
-						"{\"active\":false,\"vectorGate4\":0,\"model\":\"default\"}",
-					.error = std::nullopt,
-				};
+				return protocol::OkResponse(request, "{\"active\":false,\"vectorGate4\":0,\"model\":\"default\"}");
 			});
 	}
 

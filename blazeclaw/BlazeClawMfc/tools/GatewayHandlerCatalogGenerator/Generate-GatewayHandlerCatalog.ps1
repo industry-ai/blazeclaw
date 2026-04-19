@@ -132,12 +132,7 @@ foreach ($method in $staticMethods) {
     $payloadLiteral = Convert-ToCppStringLiteral -Value $method.payload
 
     $staticLines += "`t`tm_dispatcher.Register($methodLiteral, [payload = std::string($payloadLiteral)](const protocol::RequestFrame& request) {"
-    $staticLines += "`t`t`treturn protocol::ResponseFrame{"
-    $staticLines += "`t`t`t`t.id = request.id,"
-    $staticLines += "`t`t`t`t.ok = true,"
-    $staticLines += "`t`t`t`t.payloadJson = payload,"
-    $staticLines += "`t`t`t`t.error = std::nullopt,"
-    $staticLines += "`t`t`t};"
+    $staticLines += "`t`t`treturn protocol::OkResponse(request, std::move(payload));"
     $staticLines += "`t`t`t});"
     $staticLines += ""
 }
@@ -174,12 +169,7 @@ foreach ($method in $toolsMetricMethods) {
     $toolsMetricLines += "`t`t`tReplaceToken(`"{enabledCount}`", std::to_string(enabledCount));"
     $toolsMetricLines += "`t`t`tReplaceToken(`"{disabledCount}`", std::to_string(disabledCount));"
     $toolsMetricLines += "`t`t`tReplaceToken(`"{healthyBool}`", healthy ? `"true`" : `"false`" );"
-    $toolsMetricLines += "`t`t	return protocol::ResponseFrame{"
-    $toolsMetricLines += "`t`t`t	.id = request.id,"
-    $toolsMetricLines += "`t`t`t	.ok = true,"
-    $toolsMetricLines += "`t`t`t	.payloadJson = payload,"
-    $toolsMetricLines += "`t`t`t	.error = std::nullopt,"
-    $toolsMetricLines += "`t`t	};"
+    $toolsMetricLines += "`t`t	return protocol::OkResponse(request, std::move(payload));"
     $toolsMetricLines += "`t`t	});"
     $toolsMetricLines += ""
 }

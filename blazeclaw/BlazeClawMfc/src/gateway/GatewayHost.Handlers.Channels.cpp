@@ -146,14 +146,8 @@ namespace blazeclaw::gateway {
             }
             adaptersJson += "]";
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"adapters\":" + adaptersJson +
-                    ",\"count\":" + std::to_string(adapters.size()) + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"adapters\":" + adaptersJson +
+                    ",\"count\":" + std::to_string(adapters.size()) + "}");
             });
 
         m_dispatcher.Register("gateway.channels.accounts.reset", [this](const protocol::RequestFrame& request) {
@@ -162,15 +156,9 @@ namespace blazeclaw::gateway {
             const std::size_t restored = m_channelRegistry.RestoreAccounts(channel);
             const std::size_t total = m_channelRegistry.ListAccounts().size();
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"cleared\":" + std::to_string(cleared) +
+            return protocol::OkResponse(request, "{\"cleared\":" + std::to_string(cleared) +
                     ",\"restored\":" + std::to_string(restored) +
-                    ",\"total\":" + std::to_string(total) + "}",
-                .error = std::nullopt,
-            };
+                    ",\"total\":" + std::to_string(total) + "}");
             });
 
         m_dispatcher.Register("gateway.channels.accounts.restore", [this](const protocol::RequestFrame& request) {
@@ -178,14 +166,8 @@ namespace blazeclaw::gateway {
             const std::size_t restored = m_channelRegistry.RestoreAccounts(channel);
             const std::size_t total = m_channelRegistry.ListAccounts().size();
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"restored\":" + std::to_string(restored) +
-                    ",\"total\":" + std::to_string(total) + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"restored\":" + std::to_string(restored) +
+                    ",\"total\":" + std::to_string(total) + "}");
             });
 
         m_dispatcher.Register("gateway.channels.route.reset", [this](const protocol::RequestFrame& request) {
@@ -198,15 +180,9 @@ namespace blazeclaw::gateway {
             const ChannelRouteEntry route =
                 m_channelRegistry.RestoreRoute(channel, accountId, restored);
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"route\":" + SerializeChannelRouteLocal(route) +
+            return protocol::OkResponse(request, "{\"route\":" + SerializeChannelRouteLocal(route) +
                     ",\"deleted\":" + std::string(deleted ? "true" : "false") +
-                    ",\"restored\":" + std::string(restored ? "true" : "false") + "}",
-                .error = std::nullopt,
-            };
+                    ",\"restored\":" + std::string(restored ? "true" : "false") + "}");
             });
 
         m_dispatcher.Register("gateway.channels.accounts.count", [this](const protocol::RequestFrame& request) {
@@ -219,14 +195,8 @@ namespace blazeclaw::gateway {
                     return channel.empty() || account.channel == channel;
                 }));
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"channel\":\"" + EscapeJsonLocal(channel.empty() ? "*" : channel) +
-                    "\",\"count\":" + std::to_string(count) + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"channel\":\"" + EscapeJsonLocal(channel.empty() ? "*" : channel) +
+                    "\",\"count\":" + std::to_string(count) + "}");
             });
 
         m_dispatcher.Register("gateway.channels.accounts.clear", [this](const protocol::RequestFrame& request) {
@@ -234,29 +204,17 @@ namespace blazeclaw::gateway {
             const std::size_t cleared = m_channelRegistry.ClearAccounts(channel);
             const std::size_t remaining = m_channelRegistry.ListAccounts().size();
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"cleared\":" + std::to_string(cleared) +
-                    ",\"remaining\":" + std::to_string(remaining) + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"cleared\":" + std::to_string(cleared) +
+                    ",\"remaining\":" + std::to_string(remaining) + "}");
             });
 
         m_dispatcher.Register("gateway.channels.routes.reset", [this](const protocol::RequestFrame& request) {
             const std::string channel = ExtractStringParamLocal(request.paramsJson, "channel");
             const RouteResetResult result = m_channelRegistry.ResetRoutes(channel);
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"cleared\":" + std::to_string(result.cleared) +
+            return protocol::OkResponse(request, "{\"cleared\":" + std::to_string(result.cleared) +
                     ",\"restored\":" + std::to_string(result.restored) +
-                    ",\"total\":" + std::to_string(result.total) + "}",
-                .error = std::nullopt,
-            };
+                    ",\"total\":" + std::to_string(result.total) + "}");
             });
 
         m_dispatcher.Register("gateway.channels.routes.count", [this](const protocol::RequestFrame& request) {
@@ -269,14 +227,8 @@ namespace blazeclaw::gateway {
                     return channel.empty() || route.channel == channel;
                 }));
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"channel\":\"" + EscapeJsonLocal(channel.empty() ? "*" : channel) +
-                    "\",\"count\":" + std::to_string(count) + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"channel\":\"" + EscapeJsonLocal(channel.empty() ? "*" : channel) +
+                    "\",\"count\":" + std::to_string(count) + "}");
             });
 
         m_dispatcher.Register("gateway.channels.route.restore", [this](const protocol::RequestFrame& request) {
@@ -286,14 +238,8 @@ namespace blazeclaw::gateway {
             const ChannelRouteEntry route =
                 m_channelRegistry.RestoreRoute(channel, accountId, restored);
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"route\":" + SerializeChannelRouteLocal(route) +
-                    ",\"restored\":" + std::string(restored ? "true" : "false") + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"route\":" + SerializeChannelRouteLocal(route) +
+                    ",\"restored\":" + std::string(restored ? "true" : "false") + "}");
             });
 
         m_dispatcher.Register("gateway.channels.route.patch", [this](const protocol::RequestFrame& request) {
@@ -317,14 +263,8 @@ namespace blazeclaw::gateway {
                 sessionId,
                 updated);
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"route\":" + SerializeChannelRouteLocal(route) +
-                    ",\"updated\":" + std::string(updated ? "true" : "false") + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"route\":" + SerializeChannelRouteLocal(route) +
+                    ",\"updated\":" + std::string(updated ? "true" : "false") + "}");
             });
 
         m_dispatcher.Register("gateway.channels.route.get", [this](const protocol::RequestFrame& request) {
@@ -332,12 +272,7 @@ namespace blazeclaw::gateway {
             const std::string accountId = ExtractStringParamLocal(request.paramsJson, "accountId");
             const ChannelRouteEntry route = m_channelRegistry.GetRoute(channel, accountId);
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson = "{\"route\":" + SerializeChannelRouteLocal(route) + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"route\":" + SerializeChannelRouteLocal(route) + "}");
             });
 
         m_dispatcher.Register("gateway.channels.routes.restore", [this](const protocol::RequestFrame& request) {
@@ -345,14 +280,8 @@ namespace blazeclaw::gateway {
             const std::size_t restored = m_channelRegistry.RestoreRoutes(channel);
             const std::size_t total = m_channelRegistry.ListRoutes().size();
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"restored\":" + std::to_string(restored) +
-                    ",\"total\":" + std::to_string(total) + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"restored\":" + std::to_string(restored) +
+                    ",\"total\":" + std::to_string(total) + "}");
             });
 
         m_dispatcher.Register("gateway.channels.routes.clear", [this](const protocol::RequestFrame& request) {
@@ -360,14 +289,8 @@ namespace blazeclaw::gateway {
             const std::size_t cleared = m_channelRegistry.ClearRoutes(channel);
             const std::size_t remaining = m_channelRegistry.ListRoutes().size();
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"cleared\":" + std::to_string(cleared) +
-                    ",\"remaining\":" + std::to_string(remaining) + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"cleared\":" + std::to_string(cleared) +
+                    ",\"remaining\":" + std::to_string(remaining) + "}");
             });
 
         m_dispatcher.Register("gateway.channels.accounts.delete", [this](const protocol::RequestFrame& request) {
@@ -377,14 +300,8 @@ namespace blazeclaw::gateway {
             const ChannelAccountEntry account =
                 m_channelRegistry.DeleteAccount(channel, accountId, deleted);
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"account\":" + SerializeChannelAccountLocal(account) +
-                    ",\"deleted\":" + std::string(deleted ? "true" : "false") + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"account\":" + SerializeChannelAccountLocal(account) +
+                    ",\"deleted\":" + std::string(deleted ? "true" : "false") + "}");
             });
 
         m_dispatcher.Register("gateway.channels.accounts.create", [this](const protocol::RequestFrame& request) {
@@ -407,14 +324,8 @@ namespace blazeclaw::gateway {
                 connected,
                 created);
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"account\":" + SerializeChannelAccountLocal(account) +
-                    ",\"created\":" + std::string(created ? "true" : "false") + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"account\":" + SerializeChannelAccountLocal(account) +
+                    ",\"created\":" + std::string(created ? "true" : "false") + "}");
             });
 
         m_dispatcher.Register("gateway.channels.accounts.get", [this](const protocol::RequestFrame& request) {
@@ -422,12 +333,7 @@ namespace blazeclaw::gateway {
             const std::string accountId = ExtractStringParamLocal(request.paramsJson, "accountId");
             const ChannelAccountEntry account = m_channelRegistry.GetAccount(channel, accountId);
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson = "{\"account\":" + SerializeChannelAccountLocal(account) + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"account\":" + SerializeChannelAccountLocal(account) + "}");
             });
 
         m_dispatcher.Register("gateway.channels.accounts.update", [this](const protocol::RequestFrame& request) {
@@ -450,14 +356,8 @@ namespace blazeclaw::gateway {
                 connected,
                 updated);
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"account\":" + SerializeChannelAccountLocal(account) +
-                    ",\"updated\":" + std::string(updated ? "true" : "false") + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"account\":" + SerializeChannelAccountLocal(account) +
+                    ",\"updated\":" + std::string(updated ? "true" : "false") + "}");
             });
 
         m_dispatcher.Register("gateway.channels.accounts.exists", [this](const protocol::RequestFrame& request) {
@@ -465,16 +365,10 @@ namespace blazeclaw::gateway {
             const std::string accountId = ExtractStringParamLocal(request.paramsJson, "accountId");
             const bool exists = m_channelRegistry.AccountExists(channel, accountId);
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"channel\":\"" + EscapeJsonLocal(channel.empty() ? "*" : channel) +
+            return protocol::OkResponse(request, "{\"channel\":\"" + EscapeJsonLocal(channel.empty() ? "*" : channel) +
                     "\",\"accountId\":\"" +
                     EscapeJsonLocal(accountId.empty() ? "*" : accountId) +
-                    "\",\"exists\":" + std::string(exists ? "true" : "false") + "}",
-                .error = std::nullopt,
-            };
+                    "\",\"exists\":" + std::string(exists ? "true" : "false") + "}");
             });
 
         m_dispatcher.Register("gateway.channels.accounts.deactivate", [this](const protocol::RequestFrame& request) {
@@ -484,14 +378,8 @@ namespace blazeclaw::gateway {
             const ChannelAccountEntry account =
                 m_channelRegistry.DeactivateAccount(channel, accountId, deactivated);
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"account\":" + SerializeChannelAccountLocal(account) +
-                    ",\"deactivated\":" + std::string(deactivated ? "true" : "false") + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"account\":" + SerializeChannelAccountLocal(account) +
+                    ",\"deactivated\":" + std::string(deactivated ? "true" : "false") + "}");
             });
 
         m_dispatcher.Register("gateway.channels.accounts.activate", [this](const protocol::RequestFrame& request) {
@@ -501,14 +389,8 @@ namespace blazeclaw::gateway {
             const ChannelAccountEntry account =
                 m_channelRegistry.ActivateAccount(channel, accountId, activated);
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"account\":" + SerializeChannelAccountLocal(account) +
-                    ",\"activated\":" + std::string(activated ? "true" : "false") + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"account\":" + SerializeChannelAccountLocal(account) +
+                    ",\"activated\":" + std::string(activated ? "true" : "false") + "}");
             });
 
         m_dispatcher.Register("gateway.channels.route.exists", [this](const protocol::RequestFrame& request) {
@@ -516,16 +398,10 @@ namespace blazeclaw::gateway {
             const std::string accountId = ExtractStringParamLocal(request.paramsJson, "accountId");
             const bool exists = m_channelRegistry.RouteExists(channel, accountId);
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"channel\":\"" + EscapeJsonLocal(channel.empty() ? "*" : channel) +
+            return protocol::OkResponse(request, "{\"channel\":\"" + EscapeJsonLocal(channel.empty() ? "*" : channel) +
                     "\",\"accountId\":\"" +
                     EscapeJsonLocal(accountId.empty() ? "*" : accountId) +
-                    "\",\"exists\":" + std::string(exists ? "true" : "false") + "}",
-                .error = std::nullopt,
-            };
+                    "\",\"exists\":" + std::string(exists ? "true" : "false") + "}");
             });
 
         m_dispatcher.Register("gateway.channels.route.delete", [this](const protocol::RequestFrame& request) {
@@ -534,14 +410,8 @@ namespace blazeclaw::gateway {
             ChannelRouteEntry removedRoute;
             const bool deleted = m_channelRegistry.DeleteRoute(channel, accountId, removedRoute);
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"route\":" + SerializeChannelRouteLocal(removedRoute) +
-                    ",\"deleted\":" + std::string(deleted ? "true" : "false") + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"route\":" + SerializeChannelRouteLocal(removedRoute) +
+                    ",\"deleted\":" + std::string(deleted ? "true" : "false") + "}");
             });
 
         m_dispatcher.Register("gateway.channels.route.set", [this](const protocol::RequestFrame& request) {
@@ -552,14 +422,8 @@ namespace blazeclaw::gateway {
             const ChannelRouteEntry route =
                 m_channelRegistry.SetRoute(channel, accountId, agentId, sessionId);
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"route\":" + SerializeChannelRouteLocal(route) +
-                    ",\"saved\":true}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"route\":" + SerializeChannelRouteLocal(route) +
+                    ",\"saved\":true}");
             });
 
         m_dispatcher.Register("gateway.channels.logout", [this](const protocol::RequestFrame& request) {
@@ -567,15 +431,9 @@ namespace blazeclaw::gateway {
             const std::string accountId = ExtractStringParamLocal(request.paramsJson, "accountId");
             const ChannelLogoutResult result = m_channelRegistry.Logout(channel, accountId);
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"loggedOut\":" +
+            return protocol::OkResponse(request, "{\"loggedOut\":" +
                     std::string(result.loggedOut ? "true" : "false") +
-                    ",\"affected\":" + std::to_string(result.affected) + "}",
-                .error = std::nullopt,
-            };
+                    ",\"affected\":" + std::to_string(result.affected) + "}");
             });
 
         m_dispatcher.Register("gateway.channels.accounts", [this](const protocol::RequestFrame& request) {
@@ -598,12 +456,7 @@ namespace blazeclaw::gateway {
 
             accountsJson += "]";
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson = "{\"accounts\":" + accountsJson + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"accounts\":" + accountsJson + "}");
             });
 
         m_dispatcher.Register("gateway.channels.status.get", [this](const protocol::RequestFrame& request) {
@@ -633,12 +486,7 @@ namespace blazeclaw::gateway {
                 }
             }
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson = "{\"channel\":" + SerializeChannelStatusLocal(selected) + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"channel\":" + SerializeChannelStatusLocal(selected) + "}");
             });
 
         m_dispatcher.Register("gateway.channels.status.exists", [this](const protocol::RequestFrame& request) {
@@ -651,14 +499,8 @@ namespace blazeclaw::gateway {
                     return channel.empty() || status.id == channel;
                 });
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"channel\":\"" + EscapeJsonLocal(channel.empty() ? "*" : channel) +
-                    "\",\"exists\":" + std::string(exists ? "true" : "false") + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"channel\":\"" + EscapeJsonLocal(channel.empty() ? "*" : channel) +
+                    "\",\"exists\":" + std::string(exists ? "true" : "false") + "}");
             });
 
         m_dispatcher.Register("gateway.channels.status.count", [this](const protocol::RequestFrame& request) {
@@ -671,14 +513,8 @@ namespace blazeclaw::gateway {
                     return channel.empty() || status.id == channel;
                 }));
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson =
-                    "{\"channel\":\"" + EscapeJsonLocal(channel.empty() ? "*" : channel) +
-                    "\",\"count\":" + std::to_string(count) + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"channel\":\"" + EscapeJsonLocal(channel.empty() ? "*" : channel) +
+                    "\",\"count\":" + std::to_string(count) + "}");
             });
 
         m_dispatcher.Register("gateway.channels.route.resolve", [this](const protocol::RequestFrame& request) {
@@ -699,12 +535,7 @@ namespace blazeclaw::gateway {
                 .sessionId = session.id,
             };
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson = "{\"route\":" + SerializeChannelRouteLocal(resolvedRoute) + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"route\":" + SerializeChannelRouteLocal(resolvedRoute) + "}");
             });
 
         m_dispatcher.Register("gateway.channels.routes", [this](const protocol::RequestFrame& request) {
@@ -727,12 +558,7 @@ namespace blazeclaw::gateway {
 
             routesJson += "]";
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson = "{\"routes\":" + routesJson + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"routes\":" + routesJson + "}");
             });
 
         m_dispatcher.Register("gateway.channels.status", [this](const protocol::RequestFrame& request) {
@@ -755,12 +581,7 @@ namespace blazeclaw::gateway {
 
             channelsJson += "]";
 
-            return protocol::ResponseFrame{
-                .id = request.id,
-                .ok = true,
-                .payloadJson = "{\"channels\":" + channelsJson + "}",
-                .error = std::nullopt,
-            };
+            return protocol::OkResponse(request, "{\"channels\":" + channelsJson + "}");
             });
     }
 
