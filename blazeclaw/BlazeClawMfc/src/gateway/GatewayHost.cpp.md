@@ -31,11 +31,19 @@ Duplicate method names across registrars still overwrite the same dispatcher slo
 
 ### `protocol::OkResponse` (success handler boilerplate)
 
-Defined in `GatewayProtocolModels.h` as `blazeclaw::gateway::protocol::OkResponse(const RequestFrame& request, std::string payloadJson)`. Handler lambdas return `return protocol::OkResponse(request, <payload expression>);` instead of spelling out `protocol::ResponseFrame{ .id = request.id, .ok = true, .payloadJson = ..., .error = std::nullopt }`.
+Defined in `GatewayProtocolModels.h`: `OkResponse(const RequestFrame& request, std::string payloadJson)` and an overload `OkResponse(const RequestFrame& request, std::optional<std::string> payloadJson)` for success paths that may omit a body (e.g. inline policy skip). Handler lambdas return `return protocol::OkResponse(request, …);` instead of spelling out `protocol::ResponseFrame{ .id = request.id, .ok = true, .payloadJson = …, .error = std::nullopt }`.
 
 **Error responses** (`ok == false`, `error` set) still use an explicit `protocol::ResponseFrame{ ... }` initializer—no change.
 
 Applied across default gateway handler sources: `GatewayHost.cpp`, `GatewayHost.Handlers.*.cpp`, and `generated/GatewayHandlerCatalog.Generated.cpp`.
+
+### Table-driven static registrations
+
+Two mechanisms cover **fixed JSON** success handlers:
+
+1. **`RegisterStaticPayloadHandlers` + `StaticPayloadHandlerEntry`** (`GatewayStaticRegistration.h` / `GatewayStaticRegistration.cpp`) — registers a row array `(method name, payload JSON string)` in a loop, each calling `protocol::OkResponse`. Used by `GatewayHost.Handlers.Events.cpp` for the large `gateway.events.*Key` / `*Scope*` static surface (`kEventsStaticPayloadHandlers`). Add rows to that `constexpr` array when introducing new fixed-payload event methods.
+
+2. **`GatewayHandlers.manifest.json` + `Generate-GatewayHandlerCatalog.ps1`** — already table-driven: `kind: "static"` methods emit the same pattern into `generated/GatewayHandlerCatalog.Generated.cpp`; `kind: "toolsMetric"` uses token templates. Prefer the manifest when methods belong to the generated scope-cluster catalog; use the C++ table for ad-hoc static batches (e.g. event key grid) without editing the generator.
 
 ---
 
@@ -172,6 +180,7 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 |------|----------------|
 | Core lifecycle, transport pump, event builders, routing, `RegisterDefaultHandlers` + domain `RegisterGateway*` / `RegisterToolExecution*` helpers | `GatewayHost.cpp` |
 | Protocol success-frame helper `protocol::OkResponse` | `GatewayProtocolModels.h` |
+| Static handler table helper `RegisterStaticPayloadHandlers` | `GatewayStaticRegistration.h` / `GatewayStaticRegistration.cpp` |
 | Channel-related handlers | `GatewayHost.Handlers.Channels.cpp` |
 | Event catalog / event handlers | `GatewayHost.Handlers.Events.cpp` |
 | Tool listing / execution handlers | `GatewayHost.Handlers.Tools.cpp` |
@@ -203,7 +212,7 @@ These aim to keep **one clear façade** for the shell while shrinking what `Gate
    Persistence is already associated with `TaskDeltaRepository`; ensure `GatewayHost` only **orchestrates load/save timing** and does not grow more serialization logic—keep normalization/validation in dedicated units (`TaskDeltaSchemaValidator`, etc.).
 
 6. **Reduce `RegisterDefaultHandlers` surface**  
-   **Done (phase 1):** inline registrations were split into `RegisterToolExecutionHistoryHandlers`, `RegisterGatewayEventCatalogQueryHandlers`, `RegisterGatewayRegistryIntrospectionHandlers`, `RegisterGatewayAgentSessionMutationHandlers`, `RegisterGatewayAgentToolSurfaceHandlers`, `RegisterGatewayConfigAndDiagnosticsHandlers`, and `RegisterGatewaySupplementaryCatalogHandlers`; `RegisterDefaultHandlers()` is now a short coordinator. **Done (phase 2):** success-path boilerplate uses `protocol::OkResponse` (see subsection above). Further work: table-driven static registrations and JSON builder utilities (see size-reduction section).
+   **Done (phase 1):** inline registrations were split into `RegisterToolExecutionHistoryHandlers`, `RegisterGatewayEventCatalogQueryHandlers`, `RegisterGatewayRegistryIntrospectionHandlers`, `RegisterGatewayAgentSessionMutationHandlers`, `RegisterGatewayAgentToolSurfaceHandlers`, `RegisterGatewayConfigAndDiagnosticsHandlers`, and `RegisterGatewaySupplementaryCatalogHandlers`; `RegisterDefaultHandlers()` is now a short coordinator. **Done (phase 2):** success-path boilerplate uses `protocol::OkResponse` (see subsection above). **Done (phase 3):** table-driven static registrations via `RegisterStaticPayloadHandlers` and the manifest-driven catalog (see **Table-driven static registrations** above). Further work: JSON builder utilities and `EncodeValidatedEvent` (see size-reduction section).
 
 7. **Naming consistency**  
    Align “Bootstrap*” vs “CreateRuntimeState” / `InitializeRuntime` naming in docs so phased startup order is obvious to maintainers.
@@ -239,16 +248,14 @@ Further splits (optional): move some of these helpers into new `.cpp` files (e.g
 
 **Effect so far:** readability gain; total line count in the project is essentially unchanged (code moved, not deleted).
 
-#### 2) Move static/seeded handlers to table-driven registration
-Many handlers return fixed payloads or tiny parameterized payloads. Use a table structure:
+#### 2) Move static/seeded handlers to table-driven registration — **in progress / done for main static surfaces**
 
-- method name
-- static payload
-- optional lambda for dynamic fields
+- **C++ table:** `StaticPayloadHandlerEntry` + `RegisterStaticPayloadHandlers` drives fixed JSON rows (see `GatewayHost.Handlers.Events.cpp` — `kEventsStaticPayloadHandlers`).
+- **Manifest + generator:** `GatewayHandlers.manifest.json` (`kind: "static"` / `"toolsMetric"`) continues to drive `GatewayHandlerCatalog.Generated.cpp`.
 
-This can replace dozens of repetitive blocks.
+Handlers that need **captures** (`[this]`, telemetry, registry state) stay as explicit lambdas next to the table call.
 
-**Expected effect:** high line reduction in registration code.
+**Effect:** large line reduction in `GatewayHost.Handlers.Events.cpp` for the key/scope static grid; other files can adopt the same helper where a method list is purely static JSON.
 
 #### 3) Add reusable response helpers — **`OkResponse` done**
 
@@ -312,7 +319,7 @@ This trims repeated extraction boilerplate inside handlers.
 
 1. ~~Split `RegisterDefaultHandlers()` by domain.~~ **Done** (see §1 above).
 2. ~~Add `OkResponse` helper and replace boilerplate.~~ **Done** — see `protocol::OkResponse` in `GatewayProtocolModels.h` and the subsection `protocol::OkResponse` (success handler boilerplate) above.
-3. Introduce table-driven static registrations.
+3. ~~Introduce table-driven static registrations.~~ **Done** — see **Table-driven static registrations** (`RegisterStaticPayloadHandlers`, manifest + `Generate-GatewayHandlerCatalog.ps1`).
 4. Add `EncodeValidatedEvent(...)` helper.
 5. Move serializers to dedicated files.
 6. Optionally add lightweight JSON builder and params wrapper.
@@ -323,3 +330,4 @@ This trims repeated extraction boilerplate inside handlers.
 - Keep method names and payload shapes stable to preserve parity fixtures and schema validation.
 - Refactor in small steps with build + protocol tests after each stage.
 - `generated/GatewayHandlerCatalog.Generated.cpp` is emitted by `tools/GatewayHandlerCatalogGenerator/Generate-GatewayHandlerCatalog.ps1`, which now generates `protocol::OkResponse(request, std::move(payload))` for static and tools-metric handlers—re-run the script after manifest changes.
+- Adding **new fixed-payload** methods: either append a `kind: "static"` block to `src/gateway/GatewayHandlers.manifest.json` and regenerate, **or** append a row to a `StaticPayloadHandlerEntry` array and call `RegisterStaticPayloadHandlers` (as in `GatewayHost.Handlers.Events.cpp`). Do not duplicate the same method name in both paths.

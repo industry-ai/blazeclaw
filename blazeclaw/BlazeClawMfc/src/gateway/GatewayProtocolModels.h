@@ -37,6 +37,18 @@ namespace blazeclaw::gateway::protocol {
 		};
 	}
 
+	/// Success response whose body may be omitted (`std::nullopt` payload), e.g. inline policy skip paths.
+	[[nodiscard]] inline ResponseFrame OkResponse(
+		const RequestFrame& request,
+		std::optional<std::string> payloadJson) {
+		return ResponseFrame{
+			.id = request.id,
+			.ok = true,
+			.payloadJson = std::move(payloadJson),
+			.error = std::nullopt,
+		};
+	}
+
 	struct StateVersion {
 		std::optional<std::uint64_t> presence;
 		std::optional<std::uint64_t> health;

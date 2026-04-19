@@ -1,7 +1,93 @@
 #include "pch.h"
 #include "GatewayHost.h"
+#include "GatewayStaticRegistration.h"
 
 namespace blazeclaw::gateway {
+	namespace {
+		static constexpr StaticPayloadHandlerEntry kEventsStaticPayloadHandlers[] = {
+			{ "gateway.events.stream", "{\"stream\":\"evt-stream-1\",\"event\":\"gateway.tools.catalog.update\"}" },
+			{ "gateway.events.windowId", "{\"windowId\":\"evt-window-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.sessionKey", "{\"sessionKey\":\"sess-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.scopeKey", "{\"scopeKey\":\"scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.contextKey", "{\"contextKey\":\"context-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.channelKey", "{\"channelKey\":\"channel-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.routeKey", "{\"routeKey\":\"route-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.accountKey", "{\"accountKey\":\"account-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.agentKey", "{\"agentKey\":\"agent-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.modelKey", "{\"modelKey\":\"model-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.configKey", "{\"configKey\":\"config-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.policyKey", "{\"policyKey\":\"policy-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.toolKey", "{\"toolKey\":\"tool-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.transportKey", "{\"transportKey\":\"transport-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.runtimeKey", "{\"runtimeKey\":\"runtime-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.stateKey", "{\"stateKey\":\"state-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.healthKey", "{\"healthKey\":\"health-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.logKey", "{\"logKey\":\"log-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.metricKey", "{\"metricKey\":\"metric-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.traceKey", "{\"traceKey\":\"trace-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.auditKey", "{\"auditKey\":\"audit-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.debugKey", "{\"debugKey\":\"debug-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.cacheKey", "{\"cacheKey\":\"cache-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.queueKey", "{\"queueKey\":\"queue-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.windowKey", "{\"windowKey\":\"window-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.cursorKey", "{\"cursorKey\":\"cursor-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.anchorKey", "{\"anchorKey\":\"anchor-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.offsetKey", "{\"offsetKey\":\"offset-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.markerKey", "{\"markerKey\":\"marker-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.pointerKey", "{\"pointerKey\":\"pointer-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.tokenKey", "{\"tokenKey\":\"token-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.sequenceKey", "{\"sequenceKey\":\"sequence-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.streamKey", "{\"streamKey\":\"stream-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.bundleKey", "{\"bundleKey\":\"bundle-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.packageKey", "{\"packageKey\":\"package-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.archiveKey", "{\"archiveKey\":\"archive-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.manifestKey", "{\"manifestKey\":\"manifest-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.profileKey", "{\"profileKey\":\"profile-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.templateKey", "{\"templateKey\":\"template-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.revisionKey", "{\"revisionKey\":\"revision-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.historyKey", "{\"historyKey\":\"history-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.snapshotKey", "{\"snapshotKey\":\"snapshot-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.indexKey", "{\"indexKey\":\"index-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.windowScopeKey", "{\"windowScopeKey\":\"window-scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.cursorScopeKey", "{\"cursorScopeKey\":\"cursor-scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.anchorScopeKey", "{\"anchorScopeKey\":\"anchor-scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.offsetScopeKey", "{\"offsetScopeKey\":\"offset-scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.pointerScopeKey", "{\"pointerScopeKey\":\"pointer-scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.tokenScopeKey", "{\"tokenScopeKey\":\"token-scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.streamScopeKey", "{\"streamScopeKey\":\"stream-scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.sequenceScopeKey", "{\"sequenceScopeKey\":\"sequence-scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.bundleScopeKey", "{\"bundleScopeKey\":\"bundle-scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.packageScopeKey", "{\"packageScopeKey\":\"package-scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.archiveScopeKey", "{\"archiveScopeKey\":\"archive-scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.manifestScopeKey", "{\"manifestScopeKey\":\"manifest-scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.profileScopeKey", "{\"profileScopeKey\":\"profile-scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.templateScopeKey", "{\"templateScopeKey\":\"template-scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.revisionScopeKey", "{\"revisionScopeKey\":\"revision-scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.historyScopeKey", "{\"historyScopeKey\":\"history-scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.snapshotScopeKey", "{\"snapshotScopeKey\":\"snapshot-scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.indexScopeKey", "{\"indexScopeKey\":\"index-scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.windowScopeId", "{\"windowScopeId\":\"window-scope-id-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.cursorScopeId", "{\"cursorScopeId\":\"cursor-scope-id-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.anchorScopeId", "{\"anchorScopeId\":\"anchor-scope-id-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.offsetScopeId", "{\"offsetScopeId\":\"offset-scope-id-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.pointerScopeId", "{\"pointerScopeId\":\"pointer-scope-id-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.tokenScopeId", "{\"tokenScopeId\":\"token-scope-id-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.sequenceScopeId", "{\"sequenceScopeId\":\"sequence-scope-id-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.streamScopeId", "{\"streamScopeId\":\"stream-scope-id-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.bundleScopeId", "{\"bundleScopeId\":\"bundle-scope-id-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.packageScopeId", "{\"packageScopeId\":\"package-scope-id-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.archiveScopeId", "{\"archiveScopeId\":\"archive-scope-id-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.manifestScopeId", "{\"manifestScopeId\":\"manifest-scope-id-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.profileScopeId", "{\"profileScopeId\":\"profile-scope-id-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.templateScopeId", "{\"templateScopeId\":\"template-scope-id-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.revisionScopeId", "{\"revisionScopeId\":\"revision-scope-id-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.historyScopeId", "{\"historyScopeId\":\"history-scope-id-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.snapshotScopeId", "{\"snapshotScopeId\":\"snapshot-scope-id-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.indexScopeId", "{\"indexScopeId\":\"index-scope-id-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.markerScopeId", "{\"markerScopeId\":\"marker-scope-id-1\",\"event\":\"gateway.session.reset\"}" },
+			{ "gateway.events.markerScopeKey", "{\"markerScopeKey\":\"marker-scope-key-1\",\"event\":\"gateway.session.reset\"}" },
+		};
+	}
 
 	void GatewayHost::RegisterEventHandlers() {
 		m_dispatcher.Register("gateway.events.batch", [this](const protocol::RequestFrame& request) {
@@ -55,329 +141,10 @@ namespace blazeclaw::gateway {
 					"\",\"event\":\"chat.lifecycle\"}");
 			});
 
-		m_dispatcher.Register("gateway.events.stream", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"stream\":\"evt-stream-1\",\"event\":\"gateway.tools.catalog.update\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.windowId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"windowId\":\"evt-window-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.sessionKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"sessionKey\":\"sess-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.scopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"scopeKey\":\"scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.contextKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"contextKey\":\"context-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.channelKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"channelKey\":\"channel-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.routeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"routeKey\":\"route-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.accountKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"accountKey\":\"account-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.agentKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"agentKey\":\"agent-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.modelKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"modelKey\":\"model-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.configKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"configKey\":\"config-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.policyKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"policyKey\":\"policy-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.toolKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"toolKey\":\"tool-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.transportKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"transportKey\":\"transport-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.runtimeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"runtimeKey\":\"runtime-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.stateKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"stateKey\":\"state-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.healthKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"healthKey\":\"health-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.logKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"logKey\":\"log-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.metricKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"metricKey\":\"metric-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.traceKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"traceKey\":\"trace-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.auditKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"auditKey\":\"audit-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.debugKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"debugKey\":\"debug-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.cacheKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"cacheKey\":\"cache-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.queueKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"queueKey\":\"queue-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.windowKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"windowKey\":\"window-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.cursorKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"cursorKey\":\"cursor-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.anchorKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"anchorKey\":\"anchor-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.offsetKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"offsetKey\":\"offset-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.markerKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"markerKey\":\"marker-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.pointerKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"pointerKey\":\"pointer-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.tokenKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"tokenKey\":\"token-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.sequenceKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"sequenceKey\":\"sequence-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.streamKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"streamKey\":\"stream-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.bundleKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"bundleKey\":\"bundle-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.packageKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"packageKey\":\"package-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.archiveKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"archiveKey\":\"archive-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.manifestKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"manifestKey\":\"manifest-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.profileKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"profileKey\":\"profile-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.templateKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"templateKey\":\"template-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.revisionKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"revisionKey\":\"revision-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.historyKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"historyKey\":\"history-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.snapshotKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"snapshotKey\":\"snapshot-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.indexKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"indexKey\":\"index-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.windowScopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"windowScopeKey\":\"window-scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.cursorScopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"cursorScopeKey\":\"cursor-scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.anchorScopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"anchorScopeKey\":\"anchor-scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.offsetScopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"offsetScopeKey\":\"offset-scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.pointerScopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"pointerScopeKey\":\"pointer-scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.tokenScopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"tokenScopeKey\":\"token-scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.streamScopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"streamScopeKey\":\"stream-scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.sequenceScopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"sequenceScopeKey\":\"sequence-scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.bundleScopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"bundleScopeKey\":\"bundle-scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.packageScopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"packageScopeKey\":\"package-scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.archiveScopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"archiveScopeKey\":\"archive-scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.manifestScopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"manifestScopeKey\":\"manifest-scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.profileScopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"profileScopeKey\":\"profile-scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.templateScopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"templateScopeKey\":\"template-scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.revisionScopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"revisionScopeKey\":\"revision-scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.historyScopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"historyScopeKey\":\"history-scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.snapshotScopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"snapshotScopeKey\":\"snapshot-scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.indexScopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"indexScopeKey\":\"index-scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.windowScopeId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"windowScopeId\":\"window-scope-id-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.cursorScopeId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"cursorScopeId\":\"cursor-scope-id-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.anchorScopeId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"anchorScopeId\":\"anchor-scope-id-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.offsetScopeId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"offsetScopeId\":\"offset-scope-id-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.pointerScopeId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"pointerScopeId\":\"pointer-scope-id-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.tokenScopeId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"tokenScopeId\":\"token-scope-id-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.sequenceScopeId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"sequenceScopeId\":\"sequence-scope-id-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.streamScopeId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"streamScopeId\":\"stream-scope-id-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.bundleScopeId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"bundleScopeId\":\"bundle-scope-id-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.packageScopeId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"packageScopeId\":\"package-scope-id-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.archiveScopeId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"archiveScopeId\":\"archive-scope-id-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.manifestScopeId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"manifestScopeId\":\"manifest-scope-id-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.profileScopeId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"profileScopeId\":\"profile-scope-id-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.templateScopeId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"templateScopeId\":\"template-scope-id-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.revisionScopeId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"revisionScopeId\":\"revision-scope-id-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.historyScopeId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"historyScopeId\":\"history-scope-id-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.snapshotScopeId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"snapshotScopeId\":\"snapshot-scope-id-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.indexScopeId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"indexScopeId\":\"index-scope-id-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.markerScopeId", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"markerScopeId\":\"marker-scope-id-1\",\"event\":\"gateway.session.reset\"}");
-			});
-
-		m_dispatcher.Register("gateway.events.markerScopeKey", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"markerScopeKey\":\"marker-scope-key-1\",\"event\":\"gateway.session.reset\"}");
-			});
+		RegisterStaticPayloadHandlers(
+			m_dispatcher,
+			kEventsStaticPayloadHandlers,
+			sizeof(kEventsStaticPayloadHandlers) / sizeof(kEventsStaticPayloadHandlers[0]));
 
 		m_dispatcher.Register("gateway.events.recent", [this](const protocol::RequestFrame& request) {
 			const auto recipients = m_transportRecipientRegistry.GetSnapshot();
