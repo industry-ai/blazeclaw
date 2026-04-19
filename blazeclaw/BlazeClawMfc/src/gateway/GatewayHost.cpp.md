@@ -1,8 +1,24 @@
 # GatewayHost — tracking notes
 
-**Related documentation:** `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` (how `GatewayHost` fits the BlazeClaw vs OpenClaw gateway model), `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md` (core `ServiceManager` ↔ `GatewayHost` callback boundaries), `blazeclaw/BlazeClawMfc/PROJECT_REVIEW.md` (layering and threading).
+**Related documentation:** `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` (how `GatewayHost` fits the BlazeClaw vs OpenClaw gateway model), `blazeclaw/docs/PROTOCOL_CODEGEN.md` (codegen workflow, **Thin façade checklist**), `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md` (core `ServiceManager` ↔ `GatewayHost` callback boundaries), `blazeclaw/BlazeClawMfc/PROJECT_REVIEW.md` (layering and threading).
 
 This file tracks analysis of `blazeclaw::gateway::GatewayHost` (`GatewayHost.h` / split `.cpp` sources). The section at the bottom preserves earlier **file size** guidance for `GatewayHost.cpp`.
+
+---
+
+## Ongoing architecture direction (thin façade, split TUs, shared protocol)
+
+Keep **`GatewayHost` / `GatewayHost.cpp`** as a **thin façade**: transport, routing, lifecycle, event-frame helpers, and **one** default-registration entry (`RegisterDefaultHandlers` → `RegisterDefaultHandlerSequence`). **Do not** re-grow **“god lambdas”**— huge anonymous `Register` blocks or megabyte single files that mix unrelated method families.
+
+| Pillar | Practice |
+|--------|----------|
+| **Split handler translation units** | Default gateway methods live in **`GatewayHost.Handlers.*.cpp`**, each wired from a private **`Register*Handlers`** on `GatewayHost`. Larger domains use **named types** — e.g. **`handlers::<family>::…Handlers::RegisterAll(GatewayHost&)`** with **`friend`** on `GatewayHost` so registration stays narrow without public accessors. **Runtime** is split further: **`GatewayHost.Handlers.Runtime.cpp`** (delegator only), **`GatewayHost.Handlers.Runtime.Surface.cpp`**, **`.ChatPipeline.cpp`**, **`.OrchestrationStreaming.cpp`** (`GatewayHostHandlersRuntime.h`), plus linked helpers in **`GatewayHostRuntimeLocalHelpers.*`** (implementation: **`GatewayHost.Handlers.RuntimeHelpers.inl`**). |
+| **Shared protocol surface** | **Success/error frames:** **`protocol::OkResponse`** / **`protocol::ErrorResponse`** (`GatewayProtocolModels.h`). **Push events:** **`protocol::EncodeValidatedEvent`** (`GatewayProtocolCodec.h` / `.cpp`). **Registry / task-delta JSON:** **`GatewayJsonSerializers.*`**. **Small JSON fragments / counts:** **`GatewayJsonBuilder.*`** (`JsonPayloadExists`, …). **Request `params`:** **`RequestParamsView`** (`GatewayRequestParams.*`). |
+| **Table-driven and shared bodies where it fits** | Fixed JSON success paths: **`RegisterStaticPayloadHandlers`** + **`StaticPayloadHandlerEntry`**, **`GatewayHandlers.manifest.json`** + **`Generate-GatewayHandlerCatalog.ps1`**, **`RegisterGatewayRuntimeStaticOrchestrationStreamingMetrics`**, or **`ToolsSharedHandlers`** for duplicate list/catalog payloads—same wire, less duplication. |
+| **Named handler types** | Prefer **testable, grep-friendly** struct names (`ToolExecutionHistoryHandlers`, `EventCatalogQueryHandlers`, `handlers::runtime::ChatPipelineHandlers`, …) over anonymous mega-lambdas. New method **families** can add a `…Handlers::RegisterAll` + header without changing JSON contracts. |
+| **Wire behavior** | **Stable** method names and payload shapes for fixtures and schema validation; refactors are **structure-only** unless explicitly versioning. |
+
+**Related:** `blazeclaw/docs/PROTOCOL_CODEGEN.md` (coordinator, codegen, thin-façade checklist), `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md` (core vs gateway), §**Refactoring suggestions** and §**GatewayHost.cpp Size-Reduction Analysis** below.
 
 ---
 
@@ -275,7 +291,7 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 These aim to keep **one clear façade** for the shell while shrinking what `GatewayHost` *does* itself.
 
 1. **Clarify the core responsibility**  
-   Treat `GatewayHost` as: **wire transport ↔ dispatcher ↔ policy/router ↔ optional stage host**, plus **minimal** shared state. Move domain logic that remains in lambdas toward **named handler classes** (or `Gateway*MethodHandler` types) per area—registration stays thin. **Update:** `RegisterDefaultHandlers` is now a one-line delegate to **`GatewayHostRegistration::RegisterDefaultHandlerSequence`** with **named domain phases** in `GatewayHostRegistrationCoordinator.cpp`. Further extraction of per-method logic can follow the same file boundaries (`GatewayHost.Handlers.*`).
+   Treat `GatewayHost` as: **wire transport ↔ dispatcher ↔ policy/router ↔ optional stage host**, plus **minimal** shared state. Move domain logic that remains in lambdas toward **named handler classes** (or `Gateway*MethodHandler` types) per area—registration stays thin. **Update:** `RegisterDefaultHandlers` is a one-line delegate to **`GatewayHostRegistration::RegisterDefaultHandlerSequence`** with **named domain phases** in `GatewayHostRegistrationCoordinator.cpp`. Further extraction should follow **`GatewayHost.Handlers.*`** boundaries and the **Ongoing architecture direction** section above (avoid god files; use shared protocol helpers).
 
 2. **Separate “protocol surface” from “transport surface”**  
    Public methods split roughly into: (a) `IGatewayHostRuntime` + dispatcher-backed protocol, (b) WebSocket/text pump API, (c) event JSON builders, (d) in-process tool execution. Consider a **small public façade** (`GatewayHost`) delegating to internal types, e.g. `GatewayTransportSession` (accept/pump/drain), `GatewayEventFrameCodec` (`Build*` methods), `GatewayRuntimeToolFacade` (list/execute/register), so the class does not advertise every sub-concern in one flat API unless the shell truly needs it.
@@ -322,7 +338,7 @@ These aim to keep **one clear façade** for the shell while shrinking what `Gate
 - **`RegisterGatewayConfigAndDiagnosticsHandlers`** → `GatewayHost.Handlers.ConfigDiagnostics.cpp` (`handlers::config_diagnostics::ConfigDiagnosticsHandlers::RegisterAll`).
 - **`RegisterGatewaySupplementaryCatalogHandlers`** → `GatewayHost.Handlers.SupplementaryCatalog.cpp` (`handlers::supplementary_catalog::SupplementaryCatalogHandlers::RegisterAll`).
 
-**Further splits (optional):** sub-split very large `RegisterAll` bodies (e.g. agent vs channel) only if a single TU becomes hard to navigate.
+**Further splits (optional):** sub-split very large `RegisterAll` bodies (e.g. agent vs channel) only if a single TU becomes hard to navigate. **Runtime** already uses **`GatewayHost.Handlers.Runtime.*.cpp`** + **`GatewayHostRuntimeLocalHelpers.cpp`** as the template for splitting without changing wire payloads.
 
 **Effect:** shared catalog/deepseek/model/path/time helpers live in **`GatewayHostCatalogHelpers.*`**, **`GatewayHostModelHelpers.*`**, **`GatewayHostProtocolHelpers.*`**; `GatewayHost.cpp` no longer carries the default handler lambda bulk.
 

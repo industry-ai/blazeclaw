@@ -18,7 +18,7 @@ Observed layer stack is clear and mostly consistent:
 
 - **Gateway/runtime API layer**  
   `src/gateway/*`  
-  Protocol + dispatcher + schema + transport. Handler split (`GatewayHost.Handlers.*`) is good for domain partitioning. Tool registry + extension lifecycle are integrated here.
+  Protocol + dispatcher + schema + transport. Handler split (`GatewayHost.Handlers.*`) is good for domain partitioning; keep **`GatewayHost`** a thin façade—see **`GatewayHost.cpp.md`** (*Ongoing architecture direction*) and **`blazeclaw/docs/PROTOCOL_CODEGEN.md`** (*Thin façade checklist*) so new work stays split and reuses shared `protocol::` / serializer helpers instead of monolithic lambdas. Tool registry + extension lifecycle are integrated here.
 
 - **Model/runtime layer**  
   `src/core/runtime/LocalModel/*`, `OnnxEmbeddingsService.*`  
