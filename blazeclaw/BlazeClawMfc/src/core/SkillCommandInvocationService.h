@@ -18,6 +18,11 @@ namespace blazeclaw::core {
 		[[nodiscard]] std::optional<SkillCommandInvocationResult> ResolveInvocation(
 			const std::wstring& commandBodyNormalized,
 			const std::vector<SkillsCommandSpec>& skillCommands) const;
+
+		/// Rewrites a slash/skill invocation into a prompt for the agent (template + {{args}}).
+		[[nodiscard]] std::optional<std::string> RewriteInvocationPromptUtf8(
+			const std::string& commandBodyNormalizedUtf8,
+			const std::vector<SkillsCommandSpec>& skillCommands) const;
 	};
 
 } // namespace blazeclaw::core

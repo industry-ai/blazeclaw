@@ -321,6 +321,8 @@
     <ClCompile Include="src\core\SkillsConfigEval.cpp" />
     <ClCompile Include="src\core\SharedFrontmatterCompat.cpp" />
     <ClCompile Include="src\core\MarkdownFrontmatterCompat.cpp" />
+    <ClCompile Include="src\core\ChatProviderRuntimeService.cpp" />
+    <ClCompile Include="src\core\OperatorDiagnosticsAssembler.cpp" />
     <ClCompile Include="src\core\SkillCommandInvocationService.cpp" />
     <ClCompile Include="src\core\SkillsCommandService.cpp" />
     <ClCompile Include="src\core\SkillCommandsAggregationService.cpp" />

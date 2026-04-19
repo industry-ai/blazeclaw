@@ -55,6 +55,27 @@ TEST_CASE("SkillCommandInvocationService resolves /skill with args", "[skills][i
 	REQUIRE(result->args.value() == L"run now");
 }
 
+TEST_CASE(
+	"SkillCommandInvocationService RewriteInvocationPromptUtf8 applies template and args",
+	"[skills][invocation][rewrite]")
+{
+	SkillCommandInvocationService service;
+	const std::vector<SkillsCommandSpec> commands = {
+		SkillsCommandSpec{
+			.name = L"note_skill",
+			.skillName = L"note",
+			.description = L"Notes",
+			.dispatch = {},
+			.promptTemplate = L"Do: {{args}}",
+		},
+	};
+
+	const auto rewritten =
+		service.RewriteInvocationPromptUtf8("/note_skill hello", commands);
+	REQUIRE(rewritten.has_value());
+	REQUIRE(rewritten.value() == "Do: hello");
+}
+
 TEST_CASE("SkillCommandInvocationService returns null for unknown command", "[skills][invocation][unknown]") {
 	SkillCommandInvocationService service;
 	const std::vector<SkillsCommandSpec> commands = {

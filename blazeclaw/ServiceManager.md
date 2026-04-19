@@ -62,7 +62,7 @@ This makes it the central state query point for operator and gateway-level intro
 ## 4) Diagnostics Facade
 - `BuildOperatorDiagnosticsReport()`
 
-Builds snapshot data and delegates report shaping to `CDiagnosticsReportBuilder`.
+Builds **`OperatorDiagnosticsInputs`** (projector contexts + scalar fields from live `ServiceManager` state) and delegates snapshot assembly and report text to **`OperatorDiagnosticsAssembler`** → `CDiagnosticsReportBuilder`.
 
 ## 5) Gateway Integration Layer
 - `InvokeGatewayMethod(...)`
@@ -223,6 +223,13 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
      `CDiagnosticsReportBuilder`.
    - Added contract coverage for Phase 3 diagnostics delegation seams.
 
+21. **Extract Phase 4 provider runtime, prompt rewrite, and diagnostics assembly**
+   - ✅ Implemented.
+   - **`ChatProviderRuntimeService`** + **`ChatProviderRuntimeBindings`**: multi-provider chat execution (DeepSeek, local ONNX stream, retrieval/embedded branches). `ServiceManager::ExecuteProviderChatRuntimePath` forwards via `BuildChatProviderRuntimeBindings()`.
+   - **`SkillCommandInvocationService::RewriteInvocationPromptUtf8`**: UTF-8 prompt template rewrite for slash invocations; `ResolveSkillInvocationPromptRewrite` delegates.
+   - **`OperatorDiagnosticsAssembler`** + **`OperatorDiagnosticsInputs`**: builds `DiagnosticsSnapshot` from projector contexts and scalars, then `CDiagnosticsReportBuilder::BuildOperatorDiagnosticsReport`.
+   - Contract coverage: `ServiceManagerStartupPhaseContractTests` (Phase 4 strings) and `SkillCommandInvocationServiceTests` (`RewriteInvocationPromptUtf8`).
+
 7. **Reduce duplicated state projections**
    - Build snapshot DTOs once per report/tick where possible.
    - Reuse immutable snapshots across diagnostics and gateway publication.
@@ -299,4 +306,4 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
 ---
 
 ## Final Assessment
-`ServiceManager` is now close to its intended architecture role: a **composition and lifecycle façade**. The next optimization wave should focus on reducing residual orchestration complexity, tightening boundaries, and strengthening wiring-level test coverage, while preserving current runtime behavior parity.
+`ServiceManager` is now close to its intended architecture role: a **composition and lifecycle façade**. Phase 4 moved **provider chat execution**, **invocation prompt rewrite**, and **operator diagnostics assembly** behind dedicated types. The next optimization wave should focus on **`BindChatCallbacks`** size/strategy extraction and wiring-level tests, while preserving runtime behavior parity.

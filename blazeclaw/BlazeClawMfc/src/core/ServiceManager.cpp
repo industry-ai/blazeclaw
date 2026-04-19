@@ -571,23 +571,6 @@ namespace blazeclaw::core {
 			return value.substr(0, maxChars - 24) + "...(truncated)";
 		}
 
-		std::string NormalizeDeepSeekApiModelId(
-			const std::string& modelId) {
-			if (modelId.empty() || modelId == "deepseek") {
-				return "deepseek-chat";
-			}
-
-			if (modelId == "deepseek/deepseek-chat") {
-				return "deepseek-chat";
-			}
-
-			if (modelId == "deepseek/deepseek-reasoner") {
-				return "deepseek-reasoner";
-			}
-
-			return modelId;
-		}
-
 		std::optional<std::wstring> ResolveBaiduApiKeyFromPersistedConfig() {
 			auto trimLocal = [](const std::wstring& value) {
 				const auto first = std::find_if_not(
@@ -1982,144 +1965,6 @@ namespace blazeclaw::core {
 			}
 		}
 
-		std::string BuildAttachmentSummary(
-			const std::vector<std::string>& attachmentMimeTypes) {
-			std::string summary = "[attachments]";
-			if (attachmentMimeTypes.empty()) {
-				summary += "\n- image (mimeType=unknown)";
-				return summary;
-			}
-
-			for (const auto& mimeType : attachmentMimeTypes) {
-				summary += "\n- image (mimeType=";
-				summary += mimeType.empty() ? "unknown" : mimeType;
-				summary += ")";
-			}
-
-			return summary;
-		}
-
-		std::string BuildQwen3ChatPrompt(
-			const std::string& userMessage,
-			const bool hasAttachments,
-			const std::vector<std::string>& attachmentMimeTypes,
-			const bool strictNoEcho) {
-			std::string normalizedUserMessage = userMessage;
-			if (normalizedUserMessage.empty()) {
-				normalizedUserMessage = "User sent image attachments.";
-			}
-
-			if (hasAttachments) {
-				normalizedUserMessage += "\n\n";
-				normalizedUserMessage += BuildAttachmentSummary(attachmentMimeTypes);
-				normalizedUserMessage +=
-					"\nInstruction: respond as a text assistant. "
-					"Do not repeat the user message.";
-			}
-
-			std::string prompt;
-			prompt.reserve(normalizedUserMessage.size() + 256);
-			prompt += "<|im_start|>system\n";
-			prompt += "You are a helpful assistant. Answer the user directly. ";
-			prompt += "Do not echo the user prompt verbatim. ";
-			if (strictNoEcho) {
-				prompt += "Do not quote or repeat the user's wording. ";
-				prompt += "Give only the helpful answer content. ";
-			}
-			prompt += "\n";
-			prompt += "<|im_end|>\n";
-			prompt += "<|im_start|>user\n";
-			prompt += normalizedUserMessage;
-			prompt += "\n<|im_end|>\n";
-			prompt += "<|im_start|>assistant\n";
-			return prompt;
-		}
-
-		std::string BuildLocalModelPrompt(
-			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
-			return BuildQwen3ChatPrompt(
-				request.message,
-				request.hasAttachments,
-				request.attachmentMimeTypes,
-				false);
-		}
-
-		std::string BuildLocalModelRetryPrompt(
-			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
-			return BuildQwen3ChatPrompt(
-				request.message,
-				request.hasAttachments,
-				request.attachmentMimeTypes,
-				true);
-		}
-
-		std::string TrimAsciiWhitespace(const std::string& value) {
-			const std::size_t first = value.find_first_not_of(" \t\r\n");
-			if (first == std::string::npos) {
-				return {};
-			}
-
-			const std::size_t last = value.find_last_not_of(" \t\r\n");
-			return value.substr(first, last - first + 1);
-		}
-
-		std::string NormalizeForEchoCheck(const std::string& value) {
-			const std::string trimmed = TrimAsciiWhitespace(value);
-			std::string normalized;
-			normalized.reserve(trimmed.size());
-
-			bool previousWasSpace = false;
-			for (const char ch : trimmed) {
-				const unsigned char code = static_cast<unsigned char>(ch);
-				if (std::isspace(code) != 0) {
-					if (!previousWasSpace) {
-						normalized.push_back(' ');
-						previousWasSpace = true;
-					}
-					continue;
-				}
-
-				if (std::ispunct(code) != 0) {
-					continue;
-				}
-
-				normalized.push_back(
-					static_cast<char>(std::tolower(code)));
-				previousWasSpace = false;
-			}
-
-			return TrimAsciiWhitespace(normalized);
-		}
-
-		bool IsLikelyEchoResponse(
-			const std::string& userMessage,
-			const std::string& assistantText) {
-			if (userMessage.empty() || assistantText.empty()) {
-				return false;
-			}
-
-			const std::string normalizedUser =
-				NormalizeForEchoCheck(userMessage);
-			const std::string normalizedAssistant =
-				NormalizeForEchoCheck(assistantText);
-			if (normalizedUser.empty() || normalizedAssistant.empty()) {
-				return false;
-			}
-
-			if (normalizedAssistant == normalizedUser) {
-				return true;
-			}
-
-			if (normalizedAssistant.size() > normalizedUser.size() &&
-				normalizedAssistant.rfind(normalizedUser, 0) == 0) {
-				const std::string trailing = TrimAsciiWhitespace(
-					normalizedAssistant.substr(normalizedUser.size()));
-				return trailing.empty();
-			}
-
-			return false;
-		}
-
 		std::string WideToNarrowAscii(const std::wstring& value) {
 			std::string output;
 			output.reserve(value.size());
@@ -2128,32 +1973,6 @@ namespace blazeclaw::core {
 			}
 
 			return output;
-		}
-
-		std::string BuildSkillsInjectedMessage(
-			const std::string& userMessage,
-			const std::wstring& skillsPrompt,
-			const std::size_t maxPromptChars) {
-			if (skillsPrompt.empty()) {
-				return userMessage;
-			}
-
-			std::string narrowedPrompt = WideToNarrowAscii(skillsPrompt);
-			if (narrowedPrompt.empty()) {
-				return userMessage;
-			}
-
-			if (maxPromptChars > 0 && narrowedPrompt.size() > maxPromptChars) {
-				narrowedPrompt.resize(maxPromptChars);
-			}
-
-			std::string injected;
-			injected.reserve(userMessage.size() + narrowedPrompt.size() + 64);
-			injected += "[skills_prompt]\n";
-			injected += narrowedPrompt;
-			injected += "\n\n[user_message]\n";
-			injected += userMessage;
-			return injected;
 		}
 
 		bool IsOneOfChannels(
@@ -2336,7 +2155,14 @@ namespace blazeclaw::core {
 		mutable Diagnostics m_lastDiagnostics;
 	};
 
-	ServiceManager::ServiceManager() {
+	ServiceManager::ServiceManager()
+		: m_operatorDiagnosticsAssembler(
+			m_gatewayLifecycleDiagnosticsProjector,
+			m_emailRuntimeDiagnosticsProjector,
+			m_embeddedRuntimeDiagnosticsProjector,
+			m_modelRuntimeDiagnosticsProjector,
+			m_hooksDiagnosticsProjector,
+			m_diagnosticsReportBuilder) {
 		m_localModelRuntime =
 			std::make_unique<localmodel::OnnxTextGenerationRuntime>();
 
@@ -3407,52 +3233,9 @@ namespace blazeclaw::core {
 	std::optional<std::string> ServiceManager::ResolveSkillInvocationPromptRewrite(
 		const std::string& commandBodyNormalized) const
 	{
-		const auto resolvedSkillInvocation =
-			m_skillCommandInvocationService.ResolveInvocation(
-				ToWide(commandBodyNormalized),
-				m_skillsCommands.commands);
-		if (!resolvedSkillInvocation.has_value()) {
-			return std::nullopt;
-		}
-
-		const auto& command = resolvedSkillInvocation->command;
-		if (command.dispatch.enabled &&
-			_wcsicmp(command.dispatch.kind.c_str(), L"tool") == 0) {
-			return std::nullopt;
-		}
-
-		const std::string skillName = WideToNarrowAscii(command.skillName);
-		const std::string args = resolvedSkillInvocation->args.has_value()
-			? WideToNarrowAscii(Trim(resolvedSkillInvocation->args.value()))
-			: std::string();
-
-		std::string rewrittenMessage;
-		const std::wstring promptTemplateWide = Trim(command.promptTemplate);
-		if (!promptTemplateWide.empty()) {
-			rewrittenMessage = WideToNarrowAscii(promptTemplateWide);
-			const std::string placeholder = "{{args}}";
-			const std::size_t placeholderPos = rewrittenMessage.find(placeholder);
-			if (placeholderPos != std::string::npos) {
-				rewrittenMessage.replace(
-					placeholderPos,
-					placeholder.size(),
-					args);
-			}
-		}
-		else {
-			rewrittenMessage =
-				"Use the \"" + skillName + "\" skill for this request.";
-			if (!args.empty()) {
-				rewrittenMessage += "\n\nUser input:\n" + args;
-			}
-		}
-
-		const std::string normalized = WideToNarrowAscii(Trim(ToWide(rewrittenMessage)));
-		if (normalized.empty()) {
-			return std::nullopt;
-		}
-
-		return normalized;
+		return m_skillCommandInvocationService.RewriteInvocationPromptUtf8(
+			commandBodyNormalized,
+			m_skillsCommands.commands);
 	}
 
 	bool ServiceManager::ShouldLoadSkillCommandsForInlineActions(
@@ -3668,6 +3451,41 @@ namespace blazeclaw::core {
 		}
 	}
 
+	ChatProviderRuntimeBindings ServiceManager::BuildChatProviderRuntimeBindings() {
+		ChatProviderRuntimeBindings b{};
+		b.config = &m_activeConfig;
+		b.embeddingsService = &m_embeddingsService;
+		b.retrievalMemoryService = &m_retrievalMemoryService;
+		b.retrievalMemorySnapshot = &m_retrievalMemory;
+		b.modelRouting = &m_agentsModelRoutingService;
+		b.piEmbedded = &m_piEmbeddedService;
+		b.localModelRuntime = m_localModelRuntime.get();
+		b.localModelRuntimeSnapshot = &m_localModelRuntimeSnapshot;
+		b.localModelActivationEnabled = m_localModelActivationEnabled;
+		b.localModelRolloutEligible = m_localModelRolloutEligible;
+		b.localModelActivationReason = &m_localModelActivationReason;
+		b.clearDeepSeekRunCancelled = [this](const std::string& id) {
+			ClearDeepSeekRunCancelled(id);
+		};
+		b.hasDeepSeekCredential = [this]() { return HasDeepSeekCredential(); };
+		b.resolveDeepSeekCredentialUtf8 = [this]() {
+			return ResolveDeepSeekCredentialUtf8();
+		};
+		b.invokeDeepSeekRemoteChat =
+			[this](const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& req,
+				const std::string& modelId,
+				const std::string& apiKey) {
+				return InvokeDeepSeekRemoteChat(req, modelId, apiKey);
+			};
+		b.getAgentModelUtf8 = [this]() {
+			return m_activeConfig.agent.model.empty()
+				? std::string()
+				: ToNarrow(m_activeConfig.agent.model);
+		};
+		b.currentEpochMs = [this]() { return CurrentEpochMs(); };
+		return b;
+	}
+
 	blazeclaw::gateway::GatewayHost::ChatRuntimeResult
 		ServiceManager::ExecuteProviderChatRuntimePath(
 			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
@@ -3676,289 +3494,16 @@ namespace blazeclaw::core {
 			const std::string& activeProvider,
 			const std::string& activeModel)
 	{
-		auto providerRequest = request;
-		providerRequest.message = runtimeMessage;
-
-		if (activeProvider == "deepseek") {
-			ClearDeepSeekRunCancelled(providerRequest.runId);
-			if (!HasDeepSeekCredential()) {
-				return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-					.ok = false,
-					.assistantText = {},
-					.modelId = activeModel,
-					.errorCode = "deepseek_api_key_missing",
-					.errorMessage =
-						"DeepSeek API key missing. Configure DeepSeek extension first.",
-				};
-			}
-
-			const std::string effectiveModel = NormalizeDeepSeekApiModelId(
-				activeModel.empty() ? "deepseek-chat" : activeModel);
-			const auto apiKey = ResolveDeepSeekCredentialUtf8();
-			if (!apiKey.has_value() || apiKey->empty()) {
-				return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-					.ok = false,
-					.assistantText = {},
-					.modelId = effectiveModel,
-					.errorCode = "deepseek_api_key_missing",
-					.errorMessage =
-						"DeepSeek API key missing. Configure DeepSeek extension first.",
-				};
-			}
-
-			return InvokeDeepSeekRemoteChat(
-				providerRequest,
-				effectiveModel,
-				apiKey.value());
-		}
-
-		if (m_localModelActivationEnabled) {
-			const std::string prompt = BuildLocalModelPrompt(providerRequest);
-			std::string streamedLocalText;
-			std::vector<std::string> streamedLocalSnapshots;
-			TRACE(
-				"[LocalModel] request.enqueue runId=%s session=%s promptChars=%zu attachments=%s\n",
-				providerRequest.runId.c_str(),
-				sessionId.c_str(),
-				prompt.size(),
-				providerRequest.hasAttachments ? "true" : "false");
-			TRACE(
-				"[LocalModel] request.start runId=%s\n",
-				providerRequest.runId.c_str());
-
-			const auto localResult = m_localModelRuntime->GenerateStream(
-				localmodel::TextGenerationRequest{
-					.runId = providerRequest.runId,
-					.prompt = prompt,
-					.maxTokens = std::nullopt,
-					.temperature = std::nullopt,
-				},
-				[&](const std::string& delta) {
-					if (delta.empty()) {
-						return;
-					}
-
-					streamedLocalText += delta;
-					streamedLocalSnapshots.push_back(streamedLocalText);
-					if (request.onAssistantDelta) {
-						request.onAssistantDelta(streamedLocalText);
-					}
-				});
-			m_localModelRuntimeSnapshot = m_localModelRuntime->Snapshot();
-
-			if (!localResult.ok) {
-				const std::string errorCode =
-					localResult.error.has_value()
-					? localmodel::TextGenerationErrorCodeToString(
-						localResult.error->code)
-					: "chat_runtime_error";
-				const std::string errorMessage =
-					localResult.error.has_value() &&
-					!localResult.error->message.empty()
-					? localResult.error->message
-					: "local model generation failed";
-				TRACE(
-					"[LocalModel] request.terminal runId=%s state=%s latencyMs=%u tokens=%u reason=%s\n",
-					providerRequest.runId.c_str(),
-					localResult.cancelled ? "aborted" : "error",
-					localResult.latencyMs,
-					localResult.generatedTokens,
-					errorMessage.c_str());
-				return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-					.ok = false,
-					.assistantText = {},
-					.modelId = localResult.modelId,
-					.errorCode = errorCode,
-					.errorMessage = errorMessage,
-				};
-			}
-
-			std::string assistantText = streamedLocalText.empty()
-				? localResult.text
-				: streamedLocalText;
-			std::string modelId = localResult.modelId;
-			std::uint32_t latencyMs = localResult.latencyMs;
-			std::uint32_t generatedTokens = localResult.generatedTokens;
-			if (streamedLocalSnapshots.empty() &&
-				IsLikelyEchoResponse(request.message, assistantText)) {
-				TRACE(
-					"[LocalModel] request.retry runId=%s reason=echo_detected\n",
-					providerRequest.runId.c_str());
-				const std::string retryPrompt = BuildLocalModelRetryPrompt(providerRequest);
-				const auto retryResult = m_localModelRuntime->GenerateStream(
-					localmodel::TextGenerationRequest{
-						.runId = providerRequest.runId + "-retry",
-						.prompt = retryPrompt,
-						.maxTokens = std::nullopt,
-						.temperature = std::nullopt,
-					},
-					nullptr);
-				m_localModelRuntimeSnapshot = m_localModelRuntime->Snapshot();
-
-				if (retryResult.ok &&
-					!IsLikelyEchoResponse(request.message, retryResult.text)) {
-					assistantText = retryResult.text;
-					modelId = retryResult.modelId;
-					latencyMs = retryResult.latencyMs;
-					generatedTokens = retryResult.generatedTokens;
-				}
-			}
-
-			if (IsLikelyEchoResponse(request.message, assistantText)) {
-				TRACE(
-					"[LocalModel] request.terminal runId=%s state=error latencyMs=%u tokens=%u reason=echo_output_detected\n",
-					providerRequest.runId.c_str(),
-					latencyMs,
-					generatedTokens);
-				return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-					.ok = false,
-					.assistantText = {},
-					.modelId = modelId,
-					.errorCode = "local_model_echo_output",
-					.errorMessage = "local model echoed user input",
-				};
-			}
-
-			TRACE(
-				"[LocalModel] request.terminal runId=%s state=final latencyMs=%u tokens=%u\n",
-				providerRequest.runId.c_str(),
-				latencyMs,
-				generatedTokens);
-
-			return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-				.ok = true,
-				.assistantText = assistantText,
-				.assistantDeltas = streamedLocalSnapshots,
-				.modelId = modelId,
-				.errorCode = {},
-				.errorMessage = {},
-			};
-		}
-
-		if (m_activeConfig.localModel.enabled &&
-			!m_localModelActivationEnabled) {
-			TRACE(
-				"[LocalModel] request.fallback runId=%s reason=%s rolloutEligible=%s status=%s\n",
-				request.runId.c_str(),
-				m_localModelActivationReason.c_str(),
-				m_localModelRolloutEligible ? "true" : "false",
-				m_localModelRuntimeSnapshot.status.c_str());
-		}
-
-		const auto modelSelection = m_agentsModelRoutingService.SelectModel(
-			m_activeConfig.agent.model.empty()
-			? std::string()
-			: ToNarrow(m_activeConfig.agent.model),
-			"chat.send");
-
-		std::string retrievalContext;
-		if (m_activeConfig.embeddings.enabled && !request.message.empty()) {
-			const auto userEmbedding = m_embeddingsService.EmbedText(
-				EmbeddingRequest{
-					.text = ToWide(request.message),
-					.normalize = true,
-					.traceId = "chat-retrieval-query",
-				});
-			if (userEmbedding.ok) {
-				const auto matches = m_retrievalMemoryService.Query(
-					sessionId,
-					userEmbedding.vector,
-					2);
-				if (!matches.empty()) {
-					retrievalContext = " [ctx:";
-					for (std::size_t i = 0; i < matches.size(); ++i) {
-						if (i > 0) {
-							retrievalContext += " | ";
-						}
-
-						retrievalContext += matches[i].text;
-					}
-
-					retrievalContext += "]";
-				}
-
-				m_retrievalMemoryService.Upsert(
-					sessionId,
-					"user",
-					request.message,
-					userEmbedding.vector,
-					CurrentEpochMs());
-				m_retrievalMemory = m_retrievalMemoryService.Snapshot();
-			}
-		}
-
-		const auto embeddedRun = m_piEmbeddedService.QueueRun(
-			EmbeddedRunRequest{
-				.sessionId = sessionId,
-				.agentId = "default",
-				.message = request.message,
-			});
-
-		if (!embeddedRun.accepted) {
-			m_agentsModelRoutingService.RecordFailover(
-				modelSelection.selectedModel,
-				embeddedRun.reason,
-				embeddedRun.startedAtMs == 0
-				? 1735689800000
-				: embeddedRun.startedAtMs);
-			return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-				.ok = false,
-				.assistantText = {},
-				.modelId = activeModel,
-				.errorCode = "embedded_run_rejected",
-				.errorMessage = embeddedRun.reason,
-			};
-		}
-
-		const std::string assistantText = request.message.empty()
-			? "Received image attachment."
-			: ("Model(" + modelSelection.selectedModel + "): " +
-				request.message + retrievalContext);
-
-		if (m_activeConfig.embeddings.enabled && !assistantText.empty()) {
-			const auto assistantEmbedding = m_embeddingsService.EmbedText(
-				EmbeddingRequest{
-					.text = ToWide(assistantText),
-					.normalize = true,
-					.traceId = "chat-retrieval-index",
-				});
-			if (assistantEmbedding.ok) {
-				m_retrievalMemoryService.Upsert(
-					sessionId,
-					"assistant",
-					assistantText,
-					assistantEmbedding.vector,
-					CurrentEpochMs());
-				m_retrievalMemory = m_retrievalMemoryService.Snapshot();
-			}
-		}
-
-		const bool completed = m_piEmbeddedService.CompleteRun(
-			embeddedRun.runId,
-			"completed",
-			embeddedRun.startedAtMs + 1);
-		if (!completed) {
-			m_agentsModelRoutingService.RecordFailover(
-				modelSelection.selectedModel,
-				"embedded_completion_failed",
-				embeddedRun.startedAtMs + 1);
-			return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-				.ok = false,
-				.assistantText = {},
-				.modelId = modelSelection.selectedModel,
-				.errorCode = "embedded_completion_failed",
-				.errorMessage = "embedded completion failed",
-			};
-		}
-
-		return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-			.ok = true,
-			.assistantText = assistantText,
-			.modelId = modelSelection.selectedModel,
-			.errorCode = {},
-			.errorMessage = {},
-		};
+		return m_chatProviderRuntimeService.ExecuteProviderPath(
+			BuildChatProviderRuntimeBindings(),
+			request,
+			sessionId,
+			runtimeMessage,
+			activeProvider,
+			activeModel);
 	}
+
+
 
 	void ServiceManager::BindChatCallbacks()
 	{
@@ -4151,290 +3696,18 @@ namespace blazeclaw::core {
 						};
 					}
 
-					auto providerRequest = request;
-					providerRequest.message = runtimeMessage;
-
-					if (activeProvider == "deepseek") {
-						ClearDeepSeekRunCancelled(providerRequest.runId);
-						if (!HasDeepSeekCredential()) {
-							return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-								.ok = false,
-								.assistantText = {},
-								.modelId = activeModel,
-								.errorCode = "deepseek_api_key_missing",
-								.errorMessage =
-									"DeepSeek API key missing. Configure DeepSeek extension first.",
-							};
-						}
-
-						const std::string effectiveModel = NormalizeDeepSeekApiModelId(
-							activeModel.empty() ? "deepseek-chat" : activeModel);
-						const auto apiKey = ResolveDeepSeekCredentialUtf8();
-						if (!apiKey.has_value() || apiKey->empty()) {
-							return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-								.ok = false,
-								.assistantText = {},
-								.modelId = effectiveModel,
-								.errorCode = "deepseek_api_key_missing",
-								.errorMessage =
-									"DeepSeek API key missing. Configure DeepSeek extension first.",
-							};
-						}
-
-						return InvokeDeepSeekRemoteChat(providerRequest, effectiveModel, apiKey.value());
-					}
-
-					if (m_localModelActivationEnabled) {
-						const std::string prompt = BuildLocalModelPrompt(providerRequest);
-						std::string streamedLocalText;
-						std::vector<std::string> streamedLocalSnapshots;
-						TRACE(
-							"[LocalModel] request.enqueue runId=%s session=%s promptChars=%zu attachments=%s\n",
-							providerRequest.runId.c_str(),
-							sessionId.c_str(),
-							prompt.size(),
-							providerRequest.hasAttachments ? "true" : "false");
-						TRACE(
-							"[LocalModel] request.start runId=%s\n",
-							providerRequest.runId.c_str());
-
-						const auto localResult = m_localModelRuntime->GenerateStream(
-							localmodel::TextGenerationRequest{
-								.runId = providerRequest.runId,
-								.prompt = prompt,
-								.maxTokens = std::nullopt,
-								.temperature = std::nullopt,
-							},
-							[&](const std::string& delta) {
-								if (delta.empty()) {
-									return;
-								}
-
-								streamedLocalText += delta;
-								streamedLocalSnapshots.push_back(streamedLocalText);
-								if (request.onAssistantDelta) {
-									request.onAssistantDelta(streamedLocalText);
-								}
-							});
-						m_localModelRuntimeSnapshot = m_localModelRuntime->Snapshot();
-
-						if (!localResult.ok) {
-							const std::string errorCode =
-								localResult.error.has_value()
-								? localmodel::TextGenerationErrorCodeToString(
-									localResult.error->code)
-								: "chat_runtime_error";
-							const std::string errorMessage =
-								localResult.error.has_value() &&
-								!localResult.error->message.empty()
-								? localResult.error->message
-								: "local model generation failed";
-							TRACE(
-								"[LocalModel] request.terminal runId=%s state=%s latencyMs=%u tokens=%u reason=%s\n",
-								providerRequest.runId.c_str(),
-								localResult.cancelled ? "aborted" : "error",
-								localResult.latencyMs,
-								localResult.generatedTokens,
-								errorMessage.c_str());
-							return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-								.ok = false,
-								.assistantText = {},
-								.modelId = localResult.modelId,
-								.errorCode = errorCode,
-								.errorMessage = errorMessage,
-							};
-						}
-
-						std::string assistantText =
-							streamedLocalText.empty()
-							? localResult.text
-							: streamedLocalText;
-						std::string modelId = localResult.modelId;
-						std::uint32_t latencyMs = localResult.latencyMs;
-						std::uint32_t generatedTokens = localResult.generatedTokens;
-						if (streamedLocalSnapshots.empty() &&
-							IsLikelyEchoResponse(request.message, assistantText)) {
-							TRACE(
-								"[LocalModel] request.retry runId=%s reason=echo_detected\n",
-								providerRequest.runId.c_str());
-							const std::string retryPrompt = BuildLocalModelRetryPrompt(providerRequest);
-							const auto retryResult = m_localModelRuntime->GenerateStream(
-								localmodel::TextGenerationRequest{
-									.runId = providerRequest.runId + "-retry",
-									.prompt = retryPrompt,
-									.maxTokens = std::nullopt,
-									.temperature = std::nullopt,
-								},
-								nullptr);
-							m_localModelRuntimeSnapshot = m_localModelRuntime->Snapshot();
-
-							if (retryResult.ok &&
-								!IsLikelyEchoResponse(request.message, retryResult.text)) {
-								assistantText = retryResult.text;
-								modelId = retryResult.modelId;
-								latencyMs = retryResult.latencyMs;
-								generatedTokens = retryResult.generatedTokens;
-							}
-						}
-
-						if (IsLikelyEchoResponse(request.message, assistantText)) {
-							TRACE(
-								"[LocalModel] request.terminal runId=%s state=error latencyMs=%u tokens=%u reason=echo_output_detected\n",
-								providerRequest.runId.c_str(),
-								latencyMs,
-								generatedTokens);
-							return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-								.ok = false,
-								.assistantText = {},
-								.modelId = modelId,
-								.errorCode = "local_model_echo_output",
-								.errorMessage = "local model echoed user input",
-							};
-						}
-
-						TRACE(
-							"[LocalModel] request.terminal runId=%s state=final latencyMs=%u tokens=%u\n",
-							providerRequest.runId.c_str(),
-							latencyMs,
-							generatedTokens);
-
-						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-							.ok = true,
-							.assistantText = assistantText,
-							.assistantDeltas = streamedLocalSnapshots,
-							.modelId = modelId,
-							.errorCode = {},
-							.errorMessage = {},
-						};
-					}
-
-					if (m_activeConfig.localModel.enabled &&
-						!m_localModelActivationEnabled) {
-						TRACE(
-							"[LocalModel] request.fallback runId=%s reason=%s rolloutEligible=%s status=%s\n",
-							request.runId.c_str(),
-							m_localModelActivationReason.c_str(),
-							m_localModelRolloutEligible ? "true" : "false",
-							m_localModelRuntimeSnapshot.status.c_str());
-					}
-
-					const auto modelSelection = m_agentsModelRoutingService.SelectModel(
-						m_activeConfig.agent.model.empty()
-						? std::string()
-						: ToNarrow(m_activeConfig.agent.model),
-						"chat.send");
-
-					std::string retrievalContext;
-					if (m_activeConfig.embeddings.enabled && !request.message.empty()) {
-						const auto userEmbedding = m_embeddingsService.EmbedText(
-							EmbeddingRequest{
-								.text = ToWide(request.message),
-								.normalize = true,
-								.traceId = "chat-retrieval-query",
-							});
-						if (userEmbedding.ok) {
-							const auto matches = m_retrievalMemoryService.Query(
-								sessionId,
-								userEmbedding.vector,
-								2);
-							if (!matches.empty()) {
-								retrievalContext = " [ctx:";
-								for (std::size_t i = 0; i < matches.size(); ++i) {
-									if (i > 0) {
-										retrievalContext += " | ";
-									}
-
-									retrievalContext += matches[i].text;
-								}
-
-								retrievalContext += "]";
-							}
-
-							m_retrievalMemoryService.Upsert(
-								sessionId,
-								"user",
-								request.message,
-								userEmbedding.vector,
-								CurrentEpochMs());
-							m_retrievalMemory = m_retrievalMemoryService.Snapshot();
-						}
-					}
-
-					const auto embeddedRun = m_piEmbeddedService.QueueRun(
-						EmbeddedRunRequest{
-							.sessionId = sessionId,
-							.agentId = "default",
-							.message = request.message,
-						});
-
-					if (!embeddedRun.accepted) {
-						m_agentsModelRoutingService.RecordFailover(
-							modelSelection.selectedModel,
-							embeddedRun.reason,
-							embeddedRun.startedAtMs == 0 ? 1735689800000 : embeddedRun.startedAtMs);
-						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-							.ok = false,
-							.assistantText = {},
-							.modelId = activeModel,
-							.errorCode = "embedded_run_rejected",
-							.errorMessage = embeddedRun.reason,
-						};
-					}
-
-					const std::string assistantText = request.message.empty()
-						? "Received image attachment."
-						: ("Model(" + modelSelection.selectedModel + "): " +
-							request.message + retrievalContext);
-
-					if (m_activeConfig.embeddings.enabled && !assistantText.empty()) {
-						const auto assistantEmbedding = m_embeddingsService.EmbedText(
-							EmbeddingRequest{
-								.text = ToWide(assistantText),
-								.normalize = true,
-								.traceId = "chat-retrieval-index",
-							});
-						if (assistantEmbedding.ok) {
-							m_retrievalMemoryService.Upsert(
-								sessionId,
-								"assistant",
-								assistantText,
-								assistantEmbedding.vector,
-								CurrentEpochMs());
-							m_retrievalMemory = m_retrievalMemoryService.Snapshot();
-						}
-					}
-
-					const bool completed = m_piEmbeddedService.CompleteRun(
-						embeddedRun.runId,
-						"completed",
-						embeddedRun.startedAtMs + 1);
-					if (!completed) {
-						m_agentsModelRoutingService.RecordFailover(
-							modelSelection.selectedModel,
-							"embedded_completion_failed",
-							embeddedRun.startedAtMs + 1);
-						return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-							.ok = false,
-							.assistantText = {},
-							.modelId = modelSelection.selectedModel,
-							.errorCode = "embedded_completion_failed",
-							.errorMessage = "embedded completion failed",
-						};
-					}
-
-					return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
-						.ok = true,
-						.assistantText = assistantText,
-						.modelId = modelSelection.selectedModel,
-						.errorCode = {},
-						.errorMessage = {},
-					};
-					};
+					return ExecuteProviderChatRuntimePath(
+						request,
+						sessionId,
+						runtimeMessage,
+						activeProvider,
+						activeModel);
+				};
 
 				return m_chatRuntime.Execute(
 					CChatRuntime::RuntimeExecutionRequest{
 						.request = request,
-					 .sessionId = preparedChatRequest.sessionId,
+						.sessionId = preparedChatRequest.sessionId,
 						.runtimeMessage = runtimeMessage,
 						.provider = activeProvider,
 						.model = activeModel,
@@ -5091,78 +4364,7 @@ namespace blazeclaw::core {
 		return m_retrievalMemory;
 	}
 
-	std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
-		const auto featureStateLabel = [](const FeatureState state) {
-			switch (state) {
-			case FeatureState::Implemented:
-				return "implemented";
-			case FeatureState::InProgress:
-				return "in_progress";
-			case FeatureState::Planned:
-			default:
-				return "planned";
-			}
-			};
-
-		DiagnosticsSnapshot snapshot;
-        m_gatewayLifecycleDiagnosticsProjector.Apply(
-			GatewayLifecycleDiagnosticsProjector::Context{
-				.runtimeRunning = m_running,
-				.gatewayWarning = m_gatewayHost.LastWarning(),
-				.startupMode = m_state.gatewayLifecycle.startupMode,
-				.startupModeSource = m_state.gatewayLifecycle.startupModeSource,
-				.startupFailedStage = m_state.gatewayLifecycle.failedStage,
-				.startupDegraded = m_state.gatewayLifecycle.startupDegraded,
-				.managedConfigReloaderStarted =
-					m_state.gatewayLifecycle.managedConfigReloaderStarted,
-				.managedConfigReloaderRunning =
-					m_state.gatewayLiveRuntime.managedConfigReloaderRunning,
-				.closePreludeExecuted =
-					m_state.gatewayLifecycle.closePreludeExecuted,
-				.startupFailureCleanupExecuted =
-					m_state.gatewayLifecycle.startupFailureCleanupExecuted,
-				.cleanupPath = m_state.gatewayLifecycle.cleanupPath,
-				.runtimeStateCreated =
-					m_state.gatewayLiveRuntime.runtimeStateCreated,
-				.runtimeServicesStarted =
-					m_state.gatewayLiveRuntime.runtimeServicesStarted,
-				.transportHandlersAttached =
-					m_state.gatewayLiveRuntime.transportHandlersAttached,
-				.runtimeSubscriptionsStarted =
-					m_state.gatewayLiveRuntime.runtimeSubscriptionsStarted,
-				.managedConfigPath =
-					ToNarrow(m_state.gatewayLiveRuntime.managedConfigPath),
-				.managedConfigApplyCount =
-					m_state.gatewayLiveRuntime.managedConfigApplyCount,
-				.managedConfigRejectCount =
-					m_state.gatewayLiveRuntime.managedConfigRejectCount,
-				.authSessionGenerationCurrent =
-					m_state.gatewayLifecycle.authSessionGenerationCurrent,
-				.authSessionGenerationRequired =
-					m_state.gatewayLifecycle.authSessionGenerationRequired,
-				.authSessionGenerationRejectCount =
-					m_state.gatewayLifecycle.authSessionGenerationRejectCount,
-				.transitions = m_state.gatewayLifecycle.transitions,
-			},
-			snapshot);
-
-		std::size_t implementedCount = 0;
-		std::size_t inProgressCount = 0;
-		std::size_t plannedCount = 0;
-		for (const auto& feature : m_registry.Features()) {
-			if (feature.state == FeatureState::Implemented) {
-				++implementedCount;
-				continue;
-			}
-
-			if (feature.state == FeatureState::InProgress) {
-				++inProgressCount;
-				continue;
-			}
-
-			++plannedCount;
-		}
-
+		std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
 		const auto routing = ModelRouting();
 		const auto auth = AuthProfiles();
 		const auto sandbox = Sandbox();
@@ -5171,162 +4373,179 @@ namespace blazeclaw::core {
 		const auto retrieval = RetrievalMemory();
 		const auto emailHealth =
 			m_emailPreflightHealthService.BuildRuntimeHealthIndex(false);
-		m_emailRuntimeDiagnosticsProjector.Apply(
-			EmailRuntimeDiagnosticsProjector::Context{
-				.emailConfig = m_activeConfig.email,
-				.policyRolloutMode = m_state.emailPolicy.rolloutMode,
-				.policyEnforceChannel = m_state.emailPolicy.enforceChannel,
-				.policyCanaryEligible = m_state.emailPolicy.canaryEligible,
-				.rollbackBridgeEnabled = m_state.emailPolicy.rollbackBridgeEnabled,
-				.runtimeEnabled = m_state.emailPolicy.runtimeEnabled,
-				.runtimeEnforce = m_state.emailPolicy.runtimeEnforce,
-				.resolvedPolicy = m_emailFallbackResolvedPolicy,
-				.healthIndex = emailHealth,
-				.fallbackAttempts =
-					m_state.embeddedRuntime.emailFallbackAttemptCount,
-				.fallbackSuccess =
-					m_state.embeddedRuntime.emailFallbackSuccessCount,
-				.fallbackFailure =
-					m_state.embeddedRuntime.emailFallbackFailureCount,
-			},
-			snapshot);
 
-		snapshot.agentsCount = m_agentsScope.entries.size();
-		snapshot.agentsDefaultAgent = ToNarrow(m_agentsScope.defaultAgentId);
-		snapshot.subagentsActive = m_subagentRegistry.activeRuns;
-		snapshot.subagentsPendingAnnounce = m_subagentRegistry.pendingAnnounce;
-		snapshot.acpLastAllowed = m_lastAcpDecision.allowed;
-		snapshot.acpReason = m_lastAcpDecision.reason;
+		const OperatorDiagnosticsInputs in{
+			.gatewayLifecycle = GatewayLifecycleDiagnosticsProjector::Context{
+			.runtimeRunning = m_running,
+			.gatewayWarning = m_gatewayHost.LastWarning(),
+			.startupMode = m_state.gatewayLifecycle.startupMode,
+			.startupModeSource = m_state.gatewayLifecycle.startupModeSource,
+			.startupFailedStage = m_state.gatewayLifecycle.failedStage,
+			.startupDegraded = m_state.gatewayLifecycle.startupDegraded,
+			.managedConfigReloaderStarted =
+				m_state.gatewayLifecycle.managedConfigReloaderStarted,
+			.managedConfigReloaderRunning =
+				m_state.gatewayLiveRuntime.managedConfigReloaderRunning,
+			.closePreludeExecuted =
+				m_state.gatewayLifecycle.closePreludeExecuted,
+			.startupFailureCleanupExecuted =
+				m_state.gatewayLifecycle.startupFailureCleanupExecuted,
+			.cleanupPath = m_state.gatewayLifecycle.cleanupPath,
+			.runtimeStateCreated =
+				m_state.gatewayLiveRuntime.runtimeStateCreated,
+			.runtimeServicesStarted =
+				m_state.gatewayLiveRuntime.runtimeServicesStarted,
+			.transportHandlersAttached =
+				m_state.gatewayLiveRuntime.transportHandlersAttached,
+			.runtimeSubscriptionsStarted =
+				m_state.gatewayLiveRuntime.runtimeSubscriptionsStarted,
+			.managedConfigPath =
+				ToNarrow(m_state.gatewayLiveRuntime.managedConfigPath),
+			.managedConfigApplyCount =
+				m_state.gatewayLiveRuntime.managedConfigApplyCount,
+			.managedConfigRejectCount =
+				m_state.gatewayLiveRuntime.managedConfigRejectCount,
+			.authSessionGenerationCurrent =
+				m_state.gatewayLifecycle.authSessionGenerationCurrent,
+			.authSessionGenerationRequired =
+				m_state.gatewayLifecycle.authSessionGenerationRequired,
+			.authSessionGenerationRejectCount =
+				m_state.gatewayLifecycle.authSessionGenerationRejectCount,
+			.transitions = m_state.gatewayLifecycle.transitions,
+		},
+			.email = EmailRuntimeDiagnosticsProjector::Context{
+			.emailConfig = m_activeConfig.email,
+			.policyRolloutMode = m_state.emailPolicy.rolloutMode,
+			.policyEnforceChannel = m_state.emailPolicy.enforceChannel,
+			.policyCanaryEligible = m_state.emailPolicy.canaryEligible,
+			.rollbackBridgeEnabled = m_state.emailPolicy.rollbackBridgeEnabled,
+			.runtimeEnabled = m_state.emailPolicy.runtimeEnabled,
+			.runtimeEnforce = m_state.emailPolicy.runtimeEnforce,
+			.resolvedPolicy = m_emailFallbackResolvedPolicy,
+			.healthIndex = emailHealth,
+			.fallbackAttempts =
+				m_state.embeddedRuntime.emailFallbackAttemptCount,
+			.fallbackSuccess =
+				m_state.embeddedRuntime.emailFallbackSuccessCount,
+			.fallbackFailure =
+				m_state.embeddedRuntime.emailFallbackFailureCount,
+		},
+			.embedded = EmbeddedRuntimeDiagnosticsProjector::Context{
+			.activeRuns = ActiveEmbeddedRuns(),
+			.dynamicLoopEnabled =
+				m_state.embeddedRuntime.lastDynamicLoopEnabled,
+			.canaryEligible = m_state.embeddedRuntime.lastCanaryEligible,
+			.promotionReady = m_state.embeddedRuntime.lastPromotionReady,
+			.promotionMinRuns =
+				m_state.embeddedRuntime.dynamicLoopPromotionMinRuns,
+			.promotionMinSuccessRate =
+				m_state.embeddedRuntime.dynamicLoopPromotionMinSuccessRate,
+			.fallbackUsed = m_state.embeddedRuntime.lastFallbackUsed,
+			.fallbackReason = m_state.embeddedRuntime.lastFallbackReason,
+			.runSuccess = m_state.embeddedRuntime.runSuccessCount,
+			.runFailure = m_state.embeddedRuntime.runFailureCount,
+			.runTimeout = m_state.embeddedRuntime.runTimeoutCount,
+			.runCancelled = m_state.embeddedRuntime.runCancelledCount,
+			.runFallback = m_state.embeddedRuntime.runFallbackCount,
+			.taskDeltaTransitions =
+				m_state.embeddedRuntime.taskDeltaTransitionCount,
+		},
+			.modelRuntime = ModelRuntimeDiagnosticsProjector::Context{
+			.embeddings = &embeddings,
+			.localModel = &localModel,
+			.retrieval = &retrieval,
+			.localModelRolloutEligible = m_localModelRolloutEligible,
+			.localModelActivationEnabled = m_localModelActivationEnabled,
+			.localModelActivationReason = m_localModelActivationReason,
+			.embeddingsConfigFeatureImplemented =
+				m_registry.IsImplemented(L"embeddings-config-foundation"),
+		},
+			.hooks = HooksDiagnosticsProjector::Context{
+			.engineEnabled = m_state.hooks.engineEnabled,
+			.fallbackPromptInjection =
+				m_state.hooks.fallbackPromptInjection,
+			.reminderEnabled = m_state.hooks.reminderEnabled,
+			.reminderVerbosity = m_state.hooks.reminderVerbosity,
+			.strictPolicyEnforcement =
+				m_state.hooks.strictPolicyEnforcement,
+			.allowedPackagesCount = m_state.hooks.allowedPackages.size(),
+			.governanceReportingEnabled =
+				m_state.hooks.governanceReportingEnabled,
+			.governanceReportsGenerated =
+				m_state.hooks.governanceReportsGenerated,
+			.lastGovernanceReportPath =
+				m_state.hooks.lastGovernanceReportPath,
+			.autoRemediationEnabled =
+				m_state.hooks.autoRemediationEnabled,
+			.autoRemediationRequiresApproval =
+				m_state.hooks.autoRemediationRequiresApproval,
+			.autoRemediationExecuted =
+				m_state.hooks.autoRemediationExecuted,
+			.lastAutoRemediationStatus =
+				m_state.hooks.lastAutoRemediationStatus,
+			.autoRemediationTenantId =
+				m_state.hooks.autoRemediationTenantId,
+			.lastAutoRemediationPlaybookPath =
+				m_state.hooks.lastAutoRemediationPlaybookPath,
+			.autoRemediationTokenMaxAgeMinutes =
+				m_state.hooks.autoRemediationTokenMaxAgeMinutes,
+			.autoRemediationTokenRotations =
+				m_state.hooks.autoRemediationTokenRotations,
+			.remediationTelemetryEnabled =
+				m_state.hooks.remediationTelemetryEnabled,
+			.remediationAuditEnabled =
+				m_state.hooks.remediationAuditEnabled,
+			.lastRemediationTelemetryPath =
+				m_state.hooks.lastRemediationTelemetryPath,
+			.lastRemediationAuditPath =
+				m_state.hooks.lastRemediationAuditPath,
+			.remediationSloStatus = m_state.hooks.remediationSloStatus,
+			.remediationSloMaxDriftDetected =
+				m_state.hooks.remediationSloMaxDriftDetected,
+			.remediationSloMaxPolicyBlocked =
+				m_state.hooks.remediationSloMaxPolicyBlocked,
+			.complianceAttestationEnabled =
+				m_state.hooks.complianceAttestationEnabled,
+			.lastComplianceAttestationPath =
+				m_state.hooks.lastComplianceAttestationPath,
+			.enterpriseSlaGovernanceEnabled =
+				m_state.hooks.enterpriseSlaGovernanceEnabled,
+			.enterpriseSlaPolicyId = m_state.hooks.enterpriseSlaPolicyId,
+			.crossTenantAttestationAggregationEnabled =
+				m_state.hooks.crossTenantAttestationAggregationEnabled,
+			.crossTenantAttestationAggregationStatus =
+				m_state.hooks.crossTenantAttestationAggregationStatus,
+			.crossTenantAttestationAggregationCount =
+				m_state.hooks.crossTenantAttestationAggregationCount,
+			.lastCrossTenantAttestationAggregationPath =
+				m_state.hooks.lastCrossTenantAttestationAggregationPath,
+			.selfEvolvingHookTriggered =
+				m_state.hooks.selfEvolvingHookTriggered,
+			.hookCatalog = &m_hookCatalog,
+			.hookEvents = &m_hookEvents,
+			.hookExecution = &m_hookExecution,
+		},
+			.featureRegistry = &m_registry,
+			.agentsCount = m_agentsScope.entries.size(),
+			.agentsDefaultAgent = ToNarrow(m_agentsScope.defaultAgentId),
+			.subagentsActive = m_subagentRegistry.activeRuns,
+			.subagentsPendingAnnounce = m_subagentRegistry.pendingAnnounce,
+			.acpLastAllowed = m_lastAcpDecision.allowed,
+			.acpReason = m_lastAcpDecision.reason,
+			.toolsPolicyEntries = m_agentsToolPolicy.entries.size(),
+			.toolsShellProcesses = ShellProcessCount(),
+			.modelPrimary = routing.primaryModel,
+			.modelFallback = routing.fallbackModel,
+			.modelFailovers = routing.failoverHistory.size(),
+			.authProfiles = auth.entries.size(),
+			.sandboxEnabledCount = sandbox.enabledCount,
+			.sandboxBrowserEnabledCount = sandbox.browserEnabledCount,
+			.skillsCatalogEntries = m_skillsCatalog.entries.size(),
+			.skillsPromptIncluded = m_skillsPrompt.includedCount,
+			.skillsPromptWide = &m_skillsPrompt.prompt,
+		};
 
-     m_embeddedRuntimeDiagnosticsProjector.Apply(
-			EmbeddedRuntimeDiagnosticsProjector::Context{
-				.activeRuns = ActiveEmbeddedRuns(),
-				.dynamicLoopEnabled =
-					m_state.embeddedRuntime.lastDynamicLoopEnabled,
-				.canaryEligible = m_state.embeddedRuntime.lastCanaryEligible,
-				.promotionReady = m_state.embeddedRuntime.lastPromotionReady,
-				.promotionMinRuns =
-					m_state.embeddedRuntime.dynamicLoopPromotionMinRuns,
-				.promotionMinSuccessRate =
-					m_state.embeddedRuntime.dynamicLoopPromotionMinSuccessRate,
-				.fallbackUsed = m_state.embeddedRuntime.lastFallbackUsed,
-				.fallbackReason = m_state.embeddedRuntime.lastFallbackReason,
-				.runSuccess = m_state.embeddedRuntime.runSuccessCount,
-				.runFailure = m_state.embeddedRuntime.runFailureCount,
-				.runTimeout = m_state.embeddedRuntime.runTimeoutCount,
-				.runCancelled = m_state.embeddedRuntime.runCancelledCount,
-				.runFallback = m_state.embeddedRuntime.runFallbackCount,
-				.taskDeltaTransitions =
-					m_state.embeddedRuntime.taskDeltaTransitionCount,
-			},
-			snapshot);
-
-		snapshot.toolsPolicyEntries = m_agentsToolPolicy.entries.size();
-		snapshot.toolsShellProcesses = ShellProcessCount();
-
-		snapshot.modelPrimary = routing.primaryModel;
-		snapshot.modelFallback = routing.fallbackModel;
-		snapshot.modelFailovers = routing.failoverHistory.size();
-		snapshot.authProfiles = auth.entries.size();
-
-		snapshot.sandboxEnabledCount = sandbox.enabledCount;
-		snapshot.sandboxBrowserEnabledCount = sandbox.browserEnabledCount;
-
-        m_modelRuntimeDiagnosticsProjector.Apply(
-			ModelRuntimeDiagnosticsProjector::Context{
-				.embeddings = &embeddings,
-				.localModel = &localModel,
-				.retrieval = &retrieval,
-				.localModelRolloutEligible = m_localModelRolloutEligible,
-				.localModelActivationEnabled = m_localModelActivationEnabled,
-				.localModelActivationReason = m_localModelActivationReason,
-				.embeddingsConfigFeatureImplemented =
-					m_registry.IsImplemented(L"embeddings-config-foundation"),
-			},
-			snapshot);
-
-		snapshot.skillsCatalogEntries = m_skillsCatalog.entries.size();
-		snapshot.skillsPromptIncluded = m_skillsPrompt.includedCount;
-		snapshot.skillsSelfEvolvingReminderInjected =
-			m_skillsPrompt.prompt.find(L"## Self-Evolving Reminder") != std::wstring::npos;
-
-       m_hooksDiagnosticsProjector.Apply(
-			HooksDiagnosticsProjector::Context{
-				.engineEnabled = m_state.hooks.engineEnabled,
-				.fallbackPromptInjection =
-					m_state.hooks.fallbackPromptInjection,
-				.reminderEnabled = m_state.hooks.reminderEnabled,
-				.reminderVerbosity = m_state.hooks.reminderVerbosity,
-				.strictPolicyEnforcement =
-					m_state.hooks.strictPolicyEnforcement,
-				.allowedPackagesCount = m_state.hooks.allowedPackages.size(),
-				.governanceReportingEnabled =
-					m_state.hooks.governanceReportingEnabled,
-				.governanceReportsGenerated =
-					m_state.hooks.governanceReportsGenerated,
-				.lastGovernanceReportPath =
-					m_state.hooks.lastGovernanceReportPath,
-				.autoRemediationEnabled =
-					m_state.hooks.autoRemediationEnabled,
-				.autoRemediationRequiresApproval =
-					m_state.hooks.autoRemediationRequiresApproval,
-				.autoRemediationExecuted =
-					m_state.hooks.autoRemediationExecuted,
-				.lastAutoRemediationStatus =
-					m_state.hooks.lastAutoRemediationStatus,
-				.autoRemediationTenantId =
-					m_state.hooks.autoRemediationTenantId,
-				.lastAutoRemediationPlaybookPath =
-					m_state.hooks.lastAutoRemediationPlaybookPath,
-				.autoRemediationTokenMaxAgeMinutes =
-					m_state.hooks.autoRemediationTokenMaxAgeMinutes,
-				.autoRemediationTokenRotations =
-					m_state.hooks.autoRemediationTokenRotations,
-				.remediationTelemetryEnabled =
-					m_state.hooks.remediationTelemetryEnabled,
-				.remediationAuditEnabled =
-					m_state.hooks.remediationAuditEnabled,
-				.lastRemediationTelemetryPath =
-					m_state.hooks.lastRemediationTelemetryPath,
-				.lastRemediationAuditPath =
-					m_state.hooks.lastRemediationAuditPath,
-				.remediationSloStatus = m_state.hooks.remediationSloStatus,
-				.remediationSloMaxDriftDetected =
-					m_state.hooks.remediationSloMaxDriftDetected,
-				.remediationSloMaxPolicyBlocked =
-					m_state.hooks.remediationSloMaxPolicyBlocked,
-				.complianceAttestationEnabled =
-					m_state.hooks.complianceAttestationEnabled,
-				.lastComplianceAttestationPath =
-					m_state.hooks.lastComplianceAttestationPath,
-				.enterpriseSlaGovernanceEnabled =
-					m_state.hooks.enterpriseSlaGovernanceEnabled,
-				.enterpriseSlaPolicyId = m_state.hooks.enterpriseSlaPolicyId,
-				.crossTenantAttestationAggregationEnabled =
-					m_state.hooks.crossTenantAttestationAggregationEnabled,
-				.crossTenantAttestationAggregationStatus =
-					m_state.hooks.crossTenantAttestationAggregationStatus,
-				.crossTenantAttestationAggregationCount =
-					m_state.hooks.crossTenantAttestationAggregationCount,
-				.lastCrossTenantAttestationAggregationPath =
-					m_state.hooks.lastCrossTenantAttestationAggregationPath,
-				.selfEvolvingHookTriggered =
-					m_state.hooks.selfEvolvingHookTriggered,
-				.hookCatalog = &m_hookCatalog,
-				.hookEvents = &m_hookEvents,
-				.hookExecution = &m_hookExecution,
-			},
-			snapshot);
-
-		snapshot.featuresImplemented = implementedCount;
-		snapshot.featuresInProgress = inProgressCount;
-		snapshot.featuresPlanned = plannedCount;
-		snapshot.featuresRegistryState = featureStateLabel(
-			m_registry.Features().empty()
-			? FeatureState::Planned
-			: m_registry.Features().front().state);
-
-		return m_diagnosticsReportBuilder.BuildOperatorDiagnosticsReport(snapshot);
+		return m_operatorDiagnosticsAssembler.Build(in);
 	}
 
 	void ServiceManager::SetActiveChatProvider(

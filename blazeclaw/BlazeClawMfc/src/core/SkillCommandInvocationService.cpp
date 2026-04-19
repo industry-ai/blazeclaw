@@ -1,8 +1,11 @@
 #include "pch.h"
 #include "SkillCommandInvocationService.h"
 
+#include <windows.h>
+
 #include <algorithm>
 #include <cwctype>
+#include <string>
 
 namespace blazeclaw::core {
 
@@ -65,6 +68,43 @@ namespace blazeclaw::core {
 			}
 
 			return normalized;
+		}
+
+		std::wstring Utf8ToWide(const std::string& value) {
+			if (value.empty()) {
+				return {};
+			}
+
+			const int needed = MultiByteToWideChar(
+				CP_UTF8,
+				0,
+				value.c_str(),
+				static_cast<int>(value.size()),
+				nullptr,
+				0);
+			if (needed <= 0) {
+				return {};
+			}
+
+			std::wstring output(static_cast<std::size_t>(needed), L'\0');
+			MultiByteToWideChar(
+				CP_UTF8,
+				0,
+				value.c_str(),
+				static_cast<int>(value.size()),
+				output.data(),
+				needed);
+			return output;
+		}
+
+		std::string WideToNarrowAsciiLossy(const std::wstring& value) {
+			std::string output;
+			output.reserve(value.size());
+			for (const auto ch : value) {
+				output.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
+			}
+
+			return output;
 		}
 
 		std::optional<SkillCommandInvocationResult> FindSkillCommand(
@@ -150,6 +190,57 @@ namespace blazeclaw::core {
 		}
 
 		return std::nullopt;
+	}
+
+	std::optional<std::string> SkillCommandInvocationService::RewriteInvocationPromptUtf8(
+		const std::string& commandBodyNormalizedUtf8,
+		const std::vector<SkillsCommandSpec>& skillCommands) const {
+		const auto resolvedSkillInvocation = ResolveInvocation(
+			Utf8ToWide(commandBodyNormalizedUtf8),
+			skillCommands);
+		if (!resolvedSkillInvocation.has_value()) {
+			return std::nullopt;
+		}
+
+		const auto& command = resolvedSkillInvocation->command;
+		if (command.dispatch.enabled &&
+			_wcsicmp(command.dispatch.kind.c_str(), L"tool") == 0) {
+			return std::nullopt;
+		}
+
+		const std::string skillName = WideToNarrowAsciiLossy(command.skillName);
+		const std::string args = resolvedSkillInvocation->args.has_value()
+			? WideToNarrowAsciiLossy(Trim(resolvedSkillInvocation->args.value()))
+			: std::string();
+
+		std::string rewrittenMessage;
+		const std::wstring promptTemplateWide = Trim(command.promptTemplate);
+		if (!promptTemplateWide.empty()) {
+			rewrittenMessage = WideToNarrowAsciiLossy(promptTemplateWide);
+			const std::string placeholder = "{{args}}";
+			const std::size_t placeholderPos = rewrittenMessage.find(placeholder);
+			if (placeholderPos != std::string::npos) {
+				rewrittenMessage.replace(
+					placeholderPos,
+					placeholder.size(),
+					args);
+			}
+		}
+		else {
+			rewrittenMessage =
+				"Use the \"" + skillName + "\" skill for this request.";
+			if (!args.empty()) {
+				rewrittenMessage += "\n\nUser input:\n" + args;
+			}
+		}
+
+		const std::string normalized =
+			WideToNarrowAsciiLossy(Trim(Utf8ToWide(rewrittenMessage)));
+		if (normalized.empty()) {
+			return std::nullopt;
+		}
+
+		return normalized;
 	}
 
 } // namespace blazeclaw::core

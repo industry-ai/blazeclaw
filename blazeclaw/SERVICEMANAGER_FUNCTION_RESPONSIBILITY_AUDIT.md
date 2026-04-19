@@ -1,266 +1,243 @@
 # ServiceManager Function Responsibility Audit
 
 ## Scope
-Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h/.cpp` to:
-1. List member functions grouped by functionality.
-2. Check whether they stay within service-management/composition responsibility.
-3. Identify deep business logic and recommend refactoring seams.
+
+Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.cpp` to:
+
+1. List **all** member functions grouped by functionality.
+2. Check whether they stay within **service lifecycle / composition / delegation** responsibility.
+3. Identify **deep business or domain logic** still present in `ServiceManager` and suggest refactor seams.
+
+**Implementation note:** `ServiceManager.cpp` also defines a private nested class `ServiceManager::ExtensionBundleCommandSourceAdapter` (adapter for extension bundle command sources). It is not a `ServiceManager` member method but is part of the same composition unit; keep it in mind when reasoning about file size and responsibilities.
 
 ---
 
-## 1) Member Functions Grouped by Functionality
+## 1) Complete member function inventory (by functional area)
 
-## A. Lifecycle and top-level orchestration
-- `ServiceManager()`
-- `~ServiceManager()`
-- `SetSkillsHostCallbacks(...)`
-- `Start(...)`
-- `Stop()`
-- `IsRunning()`
+### A. Lifecycle and top-level orchestration
 
-Private lifecycle phases:
-- `ConfigurePolicies(...)`
-- `InitializeModules()`
-- `WireGatewayCallbacks()`
-- `FinalizeStartup(...)`
+| Function | Role |
+|----------|------|
+| `ServiceManager()` | Construct sub-services and default state. |
+| `~ServiceManager()` | Teardown. |
+| `SetSkillsHostCallbacks(SkillsHostCallbacks)` | Inject UI persistence callbacks for skills. |
+| `Start(const AppConfig&)` | Entry: start services and gateway. |
+| `Stop()` | Shutdown: stop workers, gateway, cleanup. |
+| `IsRunning()` | Query running flag. |
 
-Assessment: Mostly service-management responsibility.
+**Private lifecycle phases**
 
----
+| Function | Role |
+|----------|------|
+| `ConfigurePolicies(const AppConfig&)` | Apply config to policy/registry/email/hooks/chat state. |
+| `InitializeModules()` | Bootstrap catalogs, skills, hooks, fixtures, coordinators. |
+| `WireGatewayCallbacks()` | Bind gateway to `Bind*` methods. |
+| `FinalizeStartup(const AppConfig&)` | Last startup steps after modules wired. |
 
-## B. Read facade / snapshots / state accessors
-- `Registry()`
-- `AgentsScope()`
-- `AgentsWorkspace()`
-- `SubagentRegistry()`
-- `LastAcpDecision()`
-- `ActiveEmbeddedRuns()`
-- `ToolPolicy()`
-- `ShellProcessCount()`
-- `ModelRouting()`
-- `AuthProfiles()`
-- `Sandbox()`
-- `Embeddings()`
-- `LocalModelRuntime()`
-- `LocalModelRolloutEligible()`
-- `LocalModelActivationEnabled()`
-- `LocalModelActivationReason()`
-- `RetrievalMemory()`
-- `SkillsCatalog()`
-- `SkillsEligibility()`
-- `SkillsPrompt()`
-- `RunSkillsSnapshot()`
-
-Assessment: Service-management responsibility.
+**Assessment:** Appropriate for a composition root; `InitializeModules` / `ConfigurePolicies` remain **large** and should stay thin facades over coordinators (see §3).
 
 ---
 
-## C. Gateway integration surface
-- `InvokeGatewayMethod(...)`
-- `RouteGatewayRequest(...)`
-- `PumpGatewayNetworkOnce(...)`
+### B. Read facade / snapshots / state accessors
 
-Private gateway composition:
-- `BindSkillsCallbacks()`
-- `BindGatewayPolicyCallbacks()`
-- `BindToolRuntimeCallbacks()`
-- `BindChatCallbacks()`
-- `BindEmbeddingsCallbacks()`
-- `BuildConfigSchemaGatewayState()`
-- `LookupConfigSchemaGatewayPath(...)`
-- `WriteConfigSchemaDocumentationSnapshot(...)`
+| Function |
+|----------|
+| `Registry()` |
+| `AgentsScope()` |
+| `AgentsWorkspace()` |
+| `SubagentRegistry()` |
+| `LastAcpDecision()` |
+| `ActiveEmbeddedRuns()` |
+| `ToolPolicy()` |
+| `ShellProcessCount()` |
+| `ModelRouting()` |
+| `AuthProfiles()` |
+| `Sandbox()` |
+| `Embeddings()` |
+| `LocalModelRuntime()` |
+| `LocalModelRolloutEligible()` |
+| `LocalModelActivationEnabled()` |
+| `LocalModelActivationReason()` |
+| `RetrievalMemory()` |
+| `SkillsCatalog()` |
+| `SkillsEligibility()` |
+| `SkillsPrompt()` |
+| `RunSkillsSnapshot()` |
 
-Assessment: Mixed. Some pure orchestration; some methods currently contain deep request/business processing.
-
----
-
-## D. Skills/hooks orchestration and projection
-- `BuildGatewaySkillsState()`
-- `RefreshGatewaySkillsStateProjection()`
-- `PublishGatewaySkillsStateProjection()`
-- `BuildGatewaySkillEntry(...)`
-- `BuildRuntimeSkillCommandSourceAdapters()`
-- `RefreshSkillsState(...)`
-
-Assessment: Mixed. `BuildGatewaySkillEntry(...)` and parts of callback wiring include domain mapping logic beyond thin composition.
-
----
-
-## E. Chat runtime orchestration helpers
-- `ResolveSkillInvocationToolTarget(...)`
-- `ResolveSkillInvocationPromptRewrite(...)`
-- `ShouldLoadSkillCommandsForInlineActions(...)`
-- `BuildOrderedAllowedToolTargets(...)`
-- `ExtractInlineToolResultText(...)`
-- `TryExecuteInlineToolInvocation(...)`
-- `ConvertEmbeddedTaskDeltas(...)`
-- `ApplyEmbeddedExecutionTelemetry(...)`
-- `IsEmbeddedDynamicLoopCanaryEligible(...)`
-- `IsEmbeddedDynamicLoopPromotionReady()`
-- `IsLocalModelRolloutEligible()`
-
-Assessment: Mixed. Several are lightweight helpers; some implement policy/behavior decisions.
+**Assessment:** Pure **facade getters** — aligned with service management.
 
 ---
 
-## F. Managed reload / cleanup / lifecycle internals
-- `ApplyManagedRuntimeConfigDiff(...)`
-- `ResetGatewayOwnedRuntimeCleanup()`
-- `RegisterGatewayOwnedRuntimeCleanup(...)`
-- `ExecuteGatewayOwnedRuntimeCleanup()`
-- `ExecuteGatewayStartupFailureCleanup(...)`
-- `ExecuteNonGatewayRuntimeCleanup()`
-- `RecordGatewayLifecycleTransition(...)`
-- `QueueManagedConfigInternalWriteHash(...)`
-- `ConsumeManagedConfigInternalWriteHash()`
+### C. Gateway integration surface
 
-Assessment: Mostly orchestration with one heavy function (`ApplyManagedRuntimeConfigDiff(...)`).
+| Function | Role |
+|----------|------|
+| `InvokeGatewayMethod(method, paramsJson?)` | Stringly-typed gateway method dispatch. |
+| `RouteGatewayRequest(RequestFrame)` | Full protocol routing. |
+| `PumpGatewayNetworkOnce(error)` | Drive transport once. |
 
----
+**Private — gateway / config schema composition**
 
-## G. Provider credential/cancellation integration
-- `SetActiveChatProvider(...)`
-- `ActiveChatProvider()`
-- `ActiveChatModel()`
-- `ResolveDeepSeekCredentialUtf8()`
-- `HasDeepSeekCredential()`
-- `InvokeDeepSeekRemoteChat(...)`
-- `IsDeepSeekRunCancelled(...)`
-- `MarkDeepSeekRunCancelled(...)`
-- `ClearDeepSeekRunCancelled(...)`
-- `IsEmbeddedRunCancelled(...)`
-- `MarkEmbeddedRunCancelled(...)`
-- `ClearEmbeddedRunCancelled(...)`
+| Function | Role |
+|----------|------|
+| `BindSkillsCallbacks()` | Register skills-related gateway handlers. |
+| `BindGatewayPolicyCallbacks()` | Policy hooks on gateway. |
+| `BindToolRuntimeCallbacks()` | Tool registry callbacks. |
+| `BindChatCallbacks()` | **Large:** chat runtime, inline tools, embedded, providers. |
+| `BindEmbeddingsCallbacks()` | Embeddings lifecycle on gateway. |
+| `BuildConfigSchemaGatewayState()` | Expose config schema state for gateway. |
+| `LookupConfigSchemaGatewayPath(path)` | Schema lookup helper. |
+| `WriteConfigSchemaDocumentationSnapshot(path, error)` | Doc export. |
 
-Assessment: Mostly service-management responsibility.
+**Assessment:** **Mixed.** Routing/pump are appropriate. `BindChatCallbacks` and parts of `BindSkillsCallbacks` remain **high-line-count** and behavior-heavy.
 
 ---
 
-## H. Diagnostics
-- `BuildOperatorDiagnosticsReport()`
+### D. Skills / hooks orchestration and projection
 
-Assessment: Partially improved (email projection extracted), but still large snapshot assembly logic remains in `ServiceManager`.
+| Function | Role |
+|----------|------|
+| `BuildGatewaySkillsState()` | Build skills catalog state for gateway. |
+| `RefreshGatewaySkillsStateProjection()` | Refresh cached projection. |
+| `PublishGatewaySkillsStateProjection()` | Publish to gateway host. |
+| `BuildGatewaySkillEntry(...)` | Map catalog + eligibility + command + install → gateway entry. |
+| `BuildRuntimeSkillCommandSourceAdapters()` | Adapters for runtime skill commands. |
+| `RefreshSkillsState(config, force, reason)` | Reload skills state from config. |
+
+**Assessment:** **Mixed.** Delegation to `SkillsGatewayProjectionService` helps; `RefreshSkillsState` and gateway state publishing still mix orchestration with policy.
 
 ---
 
-## 2) Functions that still contain deep business logic
+### E. Chat runtime / inline / embedded helpers
 
-The following methods are the main outliers relative to the goal that `ServiceManager` should be a composition/lifecycle facade:
+| Function | Role |
+|----------|------|
+| `ResolveSkillInvocationToolTarget(...)` | Delegates to `SkillCommandInvocationService` + filtering. |
+| `ResolveSkillInvocationPromptRewrite(...)` | Thin: forwards UTF-8 prompt rewrite to `SkillCommandInvocationService::RewriteInvocationPromptUtf8`. |
+| `ShouldLoadSkillCommandsForInlineActions(...)` | Slash vs builtin vs skill loading gate. |
+| `BuildOrderedAllowedToolTargets(...)` | Ordering / resolution for tool allowlist. |
+| `ExtractInlineToolResultText(...)` | Parse tool result payload for inline path. |
+| `TryExecuteInlineToolInvocation(...)` | Execute inline tool path with gateway host. |
+| `ConvertEmbeddedTaskDeltas(...)` | Map embedded deltas → gateway task deltas. |
+| `ApplyEmbeddedExecutionTelemetry(...)` | Update embedded runtime counters in `m_state`. |
+| `IsEmbeddedDynamicLoopCanaryEligible(...)` | Canary gating from state/config. |
+| `IsEmbeddedDynamicLoopPromotionReady()` | Promotion readiness from counters. |
+| `IsLocalModelRolloutEligible()` | Rollout flag (duplicate naming vs public `LocalModelRolloutEligible` accessors — see code). |
 
-1. `BindChatCallbacks()`
-- Why deep: Contains substantial runtime behavior branching (inline invocation auth, embedded fallback behavior, provider switching, local-model prompt/retry logic, retrieval memory side effects).
-- Refactor target:
-  - `ChatRuntimeOrchestrationCoordinator` (request flow and branch policy)
-  - `InlineToolInvocationService` (auth + execution envelope)
-  - `LocalModelResponseGuardService` (echo detection + retry policy)
-  - Keep `BindChatCallbacks()` as only callback registration + delegate call.
+**Assessment:** **Mixed.** Several are thin; prompt rewrite rules live in **`SkillCommandInvocationService`**; inline/tool orchestration helpers may still embed product rules over time.
 
-2. `InitializeModules()`
-- Why deep: Mixes startup wiring with domain bootstrap flows (skills refresh modes, hooks bootstrap event dispatch/remediation, fixture validation branching).
-- Refactor target:
-  - `ServiceStartupOrchestrator` with phase DTO results
-  - `SkillsStartupCoordinator` for refresh/minimal load decisions
-  - `HooksStartupCoordinator` for bootstrap+dispatch+governance flow
-  - Keep `InitializeModules()` as phase invocation and state assignment only.
+---
 
-3. `ApplyManagedRuntimeConfigDiff(...)`
-- Why deep: Includes complex policy decisions and rollback behavior (auth generation gating, local model runtime rebuild/fallback, email policy reload and gateway updates).
-- Refactor target:
-  - `ManagedRuntimeConfigDiffCoordinator`
-  - sub-components: `AuthSessionGenerationGuard`, `LocalModelReloadCoordinator`, `GatewayManagedReloadProjector`.
+### F. Embedded tooling and provider execution (high-impact paths)
 
-4. `BuildGatewaySkillEntry(...)`
-- Why deep: Contains metadata normalization, OpenClaw/BlazeClaw compatibility mapping, config hint transformations.
-- Refactor target:
-  - `GatewaySkillEntryProjector` / `SkillsGatewayProjectionService`
-  - `SkillMetadataNormalizationService` (field resolution + mapping rules)
-  - keep method as one-line delegation.
+| Function | Role |
+|----------|------|
+| `BuildEmbeddedToolBindings()` | Map `m_skillsCommands` → `EmbeddedToolBinding` list (filter tool dispatches). |
+| `ExecuteProviderChatRuntimePath(...)` | Thin: builds `ChatProviderRuntimeBindings` via `BuildChatProviderRuntimeBindings()` and delegates to `ChatProviderRuntimeService::ExecuteProviderPath`. |
 
-5. `BindSkillsCallbacks()`
-- Why deep: Large inlined request parsing/persistence/error-envelope construction for skills update path.
-- Refactor target:
-  - `SkillsGatewayMethodHandler` (e.g., `HandleSkillsUpdateRequest(...)`)
-  - callback binding should only forward request + return handler response.
+**Assessment:** Provider branching and provider-local helpers live in **`ChatProviderRuntimeService`**; `ServiceManager` remains composition glue (callbacks + config snapshots passed through bindings).
 
-6. `BuildOperatorDiagnosticsReport()` (partial)
-- Why deep: Still assembles broad cross-domain snapshot population in one method.
-- Refactor target:
-  - retain `EmailRuntimeDiagnosticsProjector`
-  - add `GatewayLifecycleDiagnosticsProjector`, `EmbeddedRuntimeDiagnosticsProjector`, `HooksDiagnosticsProjector`, `ModelRuntimeDiagnosticsProjector`.
+---
+
+### G. Managed reload / cleanup / lifecycle internals
+
+| Function | Role |
+|----------|------|
+| `ApplyManagedRuntimeConfigDiff(nextConfig, warningMessage)` | Hot reload: delegate to coordinator + apply gateway/email/model side effects. |
+| `ResetGatewayOwnedRuntimeCleanup()` | Clear cleanup registry. |
+| `RegisterGatewayOwnedRuntimeCleanup(name, action)` | Register LIFO cleanup. |
+| `ExecuteGatewayOwnedRuntimeCleanup()` | Run registered cleanups. |
+| `ExecuteGatewayStartupFailureCleanup(config, startupResult)` | Failure path cleanup. |
+| `ExecuteNonGatewayRuntimeCleanup()` | Non-gateway teardown. |
+| `RecordGatewayLifecycleTransition(transition)` | Append transition string. |
+| `QueueManagedConfigInternalWriteHash(hash)` | Pending write coordination. |
+| `ConsumeManagedConfigInternalWriteHash()` | Consume one pending hash. |
+
+**Assessment:** Registry/cleanup helpers are **orchestration**. `ApplyManagedRuntimeConfigDiff` can still be **deep** if coordinator returns and `ServiceManager` performs many imperative updates — prefer **single DTO apply** from `ManagedRuntimeConfigDiffCoordinator`.
+
+---
+
+### H. Provider credential / cancellation / active model
+
+| Function | Role |
+|----------|------|
+| `SetActiveChatProvider(provider, model)` | Updates active provider/model; auth generation side effects on certain mutations. |
+| `ActiveChatProvider()` / `ActiveChatModel()` | Getters. |
+| `ResolveDeepSeekCredentialUtf8()` | Credential resolution from config/store. |
+| `HasDeepSeekCredential()` | Boolean helper. |
+| `InvokeDeepSeekRemoteChat(request, modelId, apiKey)` | **HTTP/SSE path via `CDeepSeekClient`** — provider I/O. |
+| `IsDeepSeekRunCancelled` / `Mark` / `Clear` | Per-run cancel map. |
+| `IsEmbeddedRunCancelled` / `Mark` / `Clear` | Embedded cancel map. |
+
+**Assessment:** **Mixed.** Getters and cancel maps are **integration glue**. `InvokeDeepSeekRemoteChat` is **provider client logic**; acceptable behind a dedicated `DeepSeekChatTransport` or `RemoteLlmClient` owned by `ServiceManager` but **not** implemented as hundreds of lines inside `ServiceManager` long term.
+
+---
+
+### I. Diagnostics
+
+| Function | Role |
+|----------|------|
+| `BuildOperatorDiagnosticsReport()` | Builds **`OperatorDiagnosticsInputs`** (projector contexts + scalar fields) and delegates assembly/report string to **`OperatorDiagnosticsAssembler::Build`** → `CDiagnosticsReportBuilder`. |
+
+**Assessment:** Snapshot assembly and feature histogram logic sit in **`OperatorDiagnosticsAssembler`**; `ServiceManager` still **collects** live references and counters into the inputs struct (acceptable composition-root duty).
+
+---
+
+## 2) Functions that still contain deep business logic (prioritized)
+
+| Priority | Function / area | Why it is “deep” | Suggested refactor |
+|----------|-----------------|------------------|-------------------|
+| ~~**P0**~~ | ~~`ExecuteProviderChatRuntimePath`~~ | — | ✅ **Done (Phase 4):** **`ChatProviderRuntimeService`** + **`ChatProviderRuntimeBindings`**. |
+| **P0** | `BindChatCallbacks` | Still the main **wall of lambdas**: inline auth, embedded orchestration, fallbacks, coordinator calls — high cyclomatic surface. | Continue extracting **named strategies** per branch; target file-size &lt; N lines by delegating each lambda body to `ChatRuntimeOrchestrationCoordinator` methods. |
+| ~~**P1**~~ | ~~`ResolveSkillInvocationPromptRewrite`~~ | — | ✅ **Done (Phase 4):** **`SkillCommandInvocationService::RewriteInvocationPromptUtf8`**. |
+| **P1** | `InitializeModules` | Multi-phase startup (skills modes, hooks, fixtures) — even with coordinators, sequencing + error aggregation can grow. | **`ServiceStartupOrchestrator`** returning a structured `StartupReport`; `ServiceManager` only applies report to members. |
+| **P1** | `ApplyManagedRuntimeConfigDiff` | May still imperative-patch many subsystems after coordinator. | Ensure coordinator returns **`ManagedRuntimeApplyPlan`**; `ServiceManager` executes plan via small private `ApplyPlan(...)` or generated visitors. |
+| **P2** | `InvokeDeepSeekRemoteChat` | SSE parsing, delta callbacks — **transport**. | Already near `CDeepSeekClient`; ensure **no additional protocol logic** in `ServiceManager` beyond argument mapping. |
+| **P2** | `BindSkillsCallbacks` | Can regrow if new JSON shapes added inline. | Keep **`SkillsGatewayMethodHandler`** as single entry for parse/validate/response. |
+| ~~**P2**~~ | ~~`BuildOperatorDiagnosticsReport`~~ | — | ✅ **Done (Phase 4):** **`OperatorDiagnosticsAssembler`** + **`OperatorDiagnosticsInputs`**; optional future shrink: dedicated **agents/features** projectors for the remaining scalars. |
+| **P3** | `BuildEmbeddedToolBindings` | Straightforward mapping — low risk. | Optional: `SkillsCommandService::BuildEmbeddedToolBindings()` if reuse needed elsewhere. |
 
 ---
 
 ## 3) Refactoring roadmap (consistency with service-management role)
 
-## Phase 1 (high impact, low contract risk)
-1. ✅ Extract chat runtime flow from `BindChatCallbacks()` to `ChatRuntimeOrchestrationCoordinator`.
-2. ✅ Extract skills update request handling from `BindSkillsCallbacks()` to `SkillsGatewayMethodHandler`.
-3. ✅ Extract skill entry projection from `BuildGatewaySkillEntry(...)` to projector service.
+### Phase 1–3 (completed per prior notes)
 
-Phase 1 implementation notes:
-- Added `ChatRuntimeOrchestrationCoordinator` to prepare inline/tool orchestration
-  request context in `BindChatCallbacks`.
-- Refactored provider/local fallback runtime branch handling into
-  `ServiceManager::ExecuteProviderChatRuntimePath(...)` to keep callback wiring
-  path thinner and more deterministic.
-- Added `SkillsGatewayMethodHandler` and delegated `skills.update` request parsing,
-  host persistence, and response shaping from `BindSkillsCallbacks`.
-- Added `SkillsGatewayProjectionService` and delegated skill gateway entry mapping
-  from `BuildGatewaySkillEntry(...)`.
-- Added contract test coverage:
-  - `ServiceManager phase1 contract: delegates chat orchestration, skills update handling, and skill projection`
+- Chat/skills delegation to `ChatRuntimeOrchestrationCoordinator`, `SkillsGatewayMethodHandler`, `SkillsGatewayProjectionService`.
+- Startup seams: `SkillsStartupCoordinator`, `HooksStartupCoordinator`, `FixtureStartupValidatorFacade`.
+- Managed reload: `ManagedRuntimeConfigDiffCoordinator`.
+- Diagnostics: projector modules for gateway lifecycle, embedded, hooks, model/runtime, email.
 
-## Phase 2 (medium risk)
-4. ✅ Split `InitializeModules()` into startup coordinators (`SkillsStartupCoordinator`, `HooksStartupCoordinator`, `FixtureStartupValidatorFacade`).
-5. ✅ Extract `ApplyManagedRuntimeConfigDiff(...)` into managed reload coordinator with explicit result DTO.
+### Phase 4 (completed)
 
-Phase 2 implementation notes:
-- Added startup orchestration seams:
-  - `SkillsStartupCoordinator`
-  - `HooksStartupCoordinator`
-  - `FixtureStartupValidatorFacade`
-- `InitializeModules()` now delegates branch gating and execution sequencing for:
-  - startup skills refresh mode,
-  - hook bootstrap gating,
-  - fixture validation gating.
-- Added `ManagedRuntimeConfigDiffCoordinator` and delegated:
-  - auth session generation guard evaluation,
-  - local model reload decision envelope.
-- `ServiceManager::ApplyManagedRuntimeConfigDiff(...)` remains the composition/state
-  facade while coordinator handles reusable decision logic.
-- Added contract test coverage:
-  - `ServiceManager phase2 contract: delegates startup and managed config diff seams`
+1. **`ChatProviderRuntimeService`** implements multi-provider chat execution; **`ServiceManager::ExecuteProviderChatRuntimePath`** forwards through **`BuildChatProviderRuntimeBindings()`**.
+2. **`SkillCommandInvocationService::RewriteInvocationPromptUtf8`** owns slash-command prompt template substitution; **`ResolveSkillInvocationPromptRewrite`** delegates to it.
+3. **`OperatorDiagnosticsAssembler`** + **`OperatorDiagnosticsInputs`** own `DiagnosticsSnapshot` population and **`CDiagnosticsReportBuilder::BuildOperatorDiagnosticsReport`** emission; **`BuildOperatorDiagnosticsReport`** fills inputs and calls **`Build`**.
+4. Contract strings for these seams live in **`ServiceManagerStartupPhaseContractTests`** (including a Phase 4 block); **`SkillCommandInvocationServiceTests`** covers **`RewriteInvocationPromptUtf8`**.
 
-## Phase 3 (incremental quality)
-6. ✅ Split diagnostics assembly in `BuildOperatorDiagnosticsReport()` into projector modules.
-7. ✅ Keep `ServiceManager` method bodies mostly as:
-   - resolve DTOs
-   - delegate to coordinator/service
-   - store snapshot/state
-   - wire callbacks
-
-Phase 3 implementation notes:
-- Added diagnostics projector seams:
-  - `GatewayLifecycleDiagnosticsProjector`
-  - `EmbeddedRuntimeDiagnosticsProjector`
-  - `ModelRuntimeDiagnosticsProjector`
-  - `HooksDiagnosticsProjector`
-  - (retained) `EmailRuntimeDiagnosticsProjector`
-- `BuildOperatorDiagnosticsReport()` now delegates projection for gateway lifecycle,
-  embedded runtime, hooks, and model/runtime diagnostics to dedicated projectors.
-- ServiceManager diagnostics flow now remains focused on:
-  - assembling high-level context DTOs,
-  - invoking projector modules,
-  - preserving output contract through `CDiagnosticsReportBuilder`.
-- Added contract test coverage:
-  - `ServiceManager phase3 contract: delegates diagnostics projection to projector modules`
+**Follow-up (not Phase 4):** reduce **`BindChatCallbacks`** surface area / line count via further coordinator extraction.
 
 ---
 
 ## 4) Summary conclusion
 
-`ServiceManager` has significantly improved and many email-domain concerns are already extracted. However, several methods still contain deep runtime/business logic and should be further delegated to dedicated coordinators/handlers/projectors.
+| Criterion | Status |
+|-----------|--------|
+| **Lifecycle / wiring / delegation** | Strong — `ServiceManager` remains the composition root. |
+| **Pure getters** | Aligned. |
+| **Deep runtime logic** | **Further reduced:** provider path lives in **`ChatProviderRuntimeService`**; **`BindChatCallbacks`** remains the main **high-line-count** integration surface. |
+| **Diagnostics** | **Assembler path:** projector contexts + scalars → **`OperatorDiagnosticsAssembler`** → report builder. |
 
-Current status vs target statement (“should not be the place where deep business logic is implemented”):
-- **Partially achieved**.
-- Remaining high-priority deep-logic hotspots: `BindChatCallbacks`, `InitializeModules`, `ApplyManagedRuntimeConfigDiff`, `BuildGatewaySkillEntry`, `BindSkillsCallbacks`, and broad parts of `BuildOperatorDiagnosticsReport`.
+**Verdict:** `ServiceManager` remains the composition root; **provider execution**, **prompt rewrite**, and **diagnostics assembly** are now **delegated** to dedicated types. The next shrink target is **`BindChatCallbacks`** (strategies / coordinator methods), not the Phase 4 extractions.
+
+---
+
+## 5) Tracking checklist
+
+- [x] `ExecuteProviderChatRuntimePath` extracted or substantially delegated (**`ChatProviderRuntimeService`**).
+- [x] `ResolveSkillInvocationPromptRewrite` moved out of `ServiceManager` (**`RewriteInvocationPromptUtf8`**).
+- [ ] `BindChatCallbacks` line count reduced (measurable threshold, e.g. &lt; 400 lines or split file) — **follow-up**.
+- [x] `BuildOperatorDiagnosticsReport` reduced to projector inputs + **`OperatorDiagnosticsAssembler`**.
+- [x] Contract tests updated for new seams (`ServiceManagerStartupPhaseContractTests` Phase 4 + **`SkillCommandInvocationServiceTests`**).
+
+*Last updated: Phase 4 completion; `ServiceManager.cpp`/`ServiceManager.h` delegation to `ChatProviderRuntimeService`, `SkillCommandInvocationService`, `OperatorDiagnosticsAssembler`; Debug\|x64 build validated with VS 18 MSBuild.*

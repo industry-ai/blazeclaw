@@ -21,6 +21,8 @@
 #include "EmbeddedRuntimeDiagnosticsProjector.h"
 #include "HooksDiagnosticsProjector.h"
 #include "ModelRuntimeDiagnosticsProjector.h"
+#include "ChatProviderRuntimeService.h"
+#include "OperatorDiagnosticsAssembler.h"
 #include "FixtureStartupValidatorFacade.h"
 #include "HooksStartupCoordinator.h"
 #include "ManagedRuntimeConfigDiffCoordinator.h"
@@ -133,15 +135,12 @@ namespace blazeclaw::core {
 		bool PumpGatewayNetworkOnce(std::string& error);
 
 	private:
-		// Private gateway composition
+		// Private gateway / config schema composition
 		void BindSkillsCallbacks();
 		void BindGatewayPolicyCallbacks();
 		void BindToolRuntimeCallbacks();
 		void BindChatCallbacks();
 		void BindEmbeddingsCallbacks();
-
-	public:
-		// gateway composition
 		[[nodiscard]] blazeclaw::gateway::ConfigSchemaGatewayState
 			BuildConfigSchemaGatewayState() const;
 		[[nodiscard]] std::optional<blazeclaw::gateway::ConfigSchemaGatewayLookupResult>
@@ -221,6 +220,8 @@ namespace blazeclaw::core {
 		[[nodiscard]] std::optional<std::uint64_t>
 			ConsumeManagedConfigInternalWriteHash();
 
+		[[nodiscard]] ChatProviderRuntimeBindings BuildChatProviderRuntimeBindings();
+
 	public:
 		// Provider credential/cancellation integration
 		void SetActiveChatProvider(
@@ -228,9 +229,34 @@ namespace blazeclaw::core {
 			const std::string& model);
 		[[nodiscard]] const std::string& ActiveChatProvider() const noexcept;
 		[[nodiscard]] const std::string& ActiveChatModel() const noexcept;
-
+		[[nodiscard]] std::optional<std::string> ResolveDeepSeekCredentialUtf8() const;
 		[[nodiscard]] bool HasDeepSeekCredential() const;
+		[[nodiscard]] blazeclaw::gateway::GatewayHost::ChatRuntimeResult
+			InvokeDeepSeekRemoteChat(
+				const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
+				const std::string& modelId,
+				const std::string& apiKey) const;
+		[[nodiscard]] bool IsDeepSeekRunCancelled(const std::string& runId) const;
+		void MarkDeepSeekRunCancelled(const std::string& runId);
+		void ClearDeepSeekRunCancelled(const std::string& runId);
+		[[nodiscard]] bool IsEmbeddedRunCancelled(const std::string& runId) const;
+		void MarkEmbeddedRunCancelled(const std::string& runId);
+		void ClearEmbeddedRunCancelled(const std::string& runId);
+
+
 		[[nodiscard]] std::string BuildOperatorDiagnosticsReport() const;
+
+	private:
+		// Embedded tooling and provider execution
+		[[nodiscard]] std::vector<EmbeddedToolBinding>
+			BuildEmbeddedToolBindings() const;
+		[[nodiscard]] blazeclaw::gateway::GatewayHost::ChatRuntimeResult
+			ExecuteProviderChatRuntimePath(
+				const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
+				const std::string& sessionId,
+				const std::string& runtimeMessage,
+				const std::string& activeProvider,
+				const std::string& activeModel);
 
 	private:
 		struct ServiceManagerState {
@@ -365,17 +391,6 @@ namespace blazeclaw::core {
 		static constexpr std::uint64_t kChatRuntimeExecutionTimeoutMs =
 			runtime::contracts::kDefaultExecutionTimeoutMs;
 
-
-		[[nodiscard]] std::vector<EmbeddedToolBinding>
-			BuildEmbeddedToolBindings() const;
-		[[nodiscard]] blazeclaw::gateway::GatewayHost::ChatRuntimeResult
-			ExecuteProviderChatRuntimePath(
-				const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
-				const std::string& sessionId,
-				const std::string& runtimeMessage,
-				const std::string& activeProvider,
-				const std::string& activeModel);
-
 		bool m_running = false;
 		std::string m_activeChatProvider = "local";
 		std::string m_activeChatModel = "default";
@@ -475,22 +490,11 @@ namespace blazeclaw::core {
 		GatewayRuntimeBootstrapCoordinator m_gatewayRuntimeBootstrapCoordinator;
 		GatewayManagedConfigReloader m_gatewayManagedConfigReloader;
 		CDiagnosticsReportBuilder m_diagnosticsReportBuilder;
+		ChatProviderRuntimeService m_chatProviderRuntimeService;
+		OperatorDiagnosticsAssembler m_operatorDiagnosticsAssembler;
 		CToolRuntimeRegistry m_toolRuntimeRegistry;
 		blazeclaw::gateway::GatewayHost m_gatewayHost;
 		blazeclaw::gateway::SkillsCatalogGatewayState m_gatewaySkillsStateProjection;
-
-		[[nodiscard]] std::optional<std::string> ResolveDeepSeekCredentialUtf8() const;
-		[[nodiscard]] blazeclaw::gateway::GatewayHost::ChatRuntimeResult
-			InvokeDeepSeekRemoteChat(
-				const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
-				const std::string& modelId,
-				const std::string& apiKey) const;
-		[[nodiscard]] bool IsDeepSeekRunCancelled(const std::string& runId) const;
-		void MarkDeepSeekRunCancelled(const std::string& runId);
-		void ClearDeepSeekRunCancelled(const std::string& runId);
-		[[nodiscard]] bool IsEmbeddedRunCancelled(const std::string& runId) const;
-		void MarkEmbeddedRunCancelled(const std::string& runId);
-		void ClearEmbeddedRunCancelled(const std::string& runId);
 
 		mutable std::mutex m_deepSeekCancelMutex;
 		mutable std::unordered_map<std::string, bool> m_deepSeekCancelledRuns;

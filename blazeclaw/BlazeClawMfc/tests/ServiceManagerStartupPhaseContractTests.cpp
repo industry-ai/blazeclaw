@@ -325,3 +325,25 @@ TEST_CASE(
 		source.find("m_emailRuntimeDiagnosticsProjector.Apply(") !=
 		std::string::npos);
 }
+
+TEST_CASE(
+	"ServiceManager phase4 contract: provider runtime, diagnostics assembler, prompt rewrite",
+	"[servicemanager][phase4][contract]")
+{
+	const std::string source = ReadServiceManagerSource();
+
+	REQUIRE(
+		source.find("m_chatProviderRuntimeService.ExecuteProviderPath(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("BuildChatProviderRuntimeBindings()") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("m_operatorDiagnosticsAssembler.Build(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("OperatorDiagnosticsInputs") != std::string::npos);
+	REQUIRE(
+		source.find("RewriteInvocationPromptUtf8") !=
+		std::string::npos);
+}
