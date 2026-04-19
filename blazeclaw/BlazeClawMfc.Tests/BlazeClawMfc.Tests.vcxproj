@@ -85,6 +85,7 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Channels.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Events.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostRuntimeStaticOrchestrationStreamingMetrics.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.ScopeCluster.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.SecurityOps.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Tools.cpp" />

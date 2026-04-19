@@ -204,6 +204,7 @@
     <ClInclude Include="src\gateway\GatewayHostHandlersConfigDiagnostics.h" />
     <ClInclude Include="src\gateway\GatewayHostHandlersSupplementaryCatalog.h" />
     <ClInclude Include="src\gateway\GatewayHostHandlersToolsShared.h" />
+    <ClInclude Include="src\gateway\GatewayHostHandlersRuntime.h" />
     <ClInclude Include="src\gateway\GatewayHostRegistrationCoordinator.h" />
     <ClInclude Include="src\gateway\ChatRunStageContext.h" />
     <ClInclude Include="src\gateway\IChatRunStage.h" />
@@ -211,6 +212,7 @@
     <ClInclude Include="src\gateway\ChatRunPipelineOrchestrator.h" />
     <ClInclude Include="src\gateway\GatewayMethodDispatcher.h" />
     <ClInclude Include="src\gateway\GatewayStaticRegistration.h" />
+    <ClInclude Include="src\gateway\GatewayHostRuntimeStaticOrchestrationStreamingMetrics.h" />
     <ClInclude Include="src\gateway\GatewayPersistencePaths.h" />
     <ClInclude Include="src\gateway\GatewayProtocolContract.h" />
     <ClInclude Include="src\gateway\GatewayProtocolCodec.h" />
@@ -381,6 +383,7 @@
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Events.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Channels.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.cpp" />
+    <ClCompile Include="src\gateway\GatewayHostRuntimeStaticOrchestrationStreamingMetrics.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.SecurityOps.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.ScopeCluster.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Transport.cpp" />

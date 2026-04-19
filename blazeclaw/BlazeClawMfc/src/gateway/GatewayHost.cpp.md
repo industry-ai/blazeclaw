@@ -41,17 +41,19 @@ Defined in `GatewayProtocolModels.h`: `OkResponse(const RequestFrame& request, s
 
 **Large domain registrars** (`RegisterGatewayRegistryIntrospectionHandlers`, `RegisterGatewayAgentSessionMutationHandlers`, …) are implemented as **`handlers::<family>::*Handlers::RegisterAll(GatewayHost& host)`** in matching `GatewayHost.Handlers.*.cpp` files. `GatewayHost` **`friend`**s those handler structs so `RegisterAll` can wire `host.m_dispatcher.Register(..., [&host](...) { ... })` without exposing private members publicly. `GatewayHost.cpp` only keeps **`RegisterDefaultHandlers`** (coordinator entry) plus non-dispatcher logic.
 
+**Runtime split:** `RegisterRuntimeHandlers` is a **thin** delegator: **`handlers::runtime::RuntimeSurfaceHandlers`**, **`ChatPipelineHandlers`**, and **`RuntimeOrchestrationStreamingHandlers`** (`GatewayHostHandlersRuntime.h`, implementations in **`GatewayHost.Handlers.Runtime.cpp`**) each implement **`RegisterAll(GatewayHost&)`** (plugins/embeddings/governance/task-delta + `chat.history`; `chat.send` / skills-heavy block; orchestration/streaming/models tail including **`RegisterGatewayRuntimeStaticOrchestrationStreamingMetrics`**). `GatewayHost` **`friend`**s all three; nested request/result types are spelled **`GatewayHost::EmbeddingsGenerateRequest`**, **`GatewayHost::ChatRuntimeResult`**, etc., where required outside member function scope.
+
 **Shared tools list/catalog:** `handlers::tools_shared::ToolsSharedHandlers` (`GatewayHostHandlersToolsShared.h` / `GatewayHost.Handlers.ToolsShared.cpp`) implements **`HandleToolsList`** / **`HandleToolsCatalog`** using `protocol::OkResponse` and `GatewayToolRegistry` only — no `friend` needed. **`StartLocalRuntimeDispatchOnly`**, **`RegisterGatewayAgentToolSurfaceHandlers`**, and **`RegisterGatewaySupplementaryCatalogHandlers`** all delegate to these static methods so the dispatch-only bootstrap path and full registration stay **wire-identical**.
 
 Workflow for manifest vs static handlers: **`blazeclaw/docs/PROTOCOL_CODEGEN.md`**.
 
-Applied across default gateway handler sources: `GatewayHost.cpp`, `GatewayHost.Handlers.*.cpp` (including **`GatewayHost.Handlers.ToolsShared.cpp`** for shared tools list/catalog), `GatewayHostCatalogHelpers.cpp`, `GatewayHostModelHelpers.cpp`, `GatewayHostProtocolHelpers.cpp`, and `generated/GatewayHandlerCatalog.Generated.cpp`.
+Applied across default gateway handler sources: `GatewayHost.cpp`, `GatewayHost.Handlers.*.cpp` (including **`GatewayHost.Handlers.ToolsShared.cpp`** for shared tools list/catalog; **`GatewayHostHandlersRuntime.h`** for the runtime `RegisterAll` split), `GatewayHostCatalogHelpers.cpp`, `GatewayHostModelHelpers.cpp`, `GatewayHostProtocolHelpers.cpp`, and `generated/GatewayHandlerCatalog.Generated.cpp`.
 
 ### Table-driven static registrations
 
 Two mechanisms cover **fixed JSON** success handlers:
 
-1. **`RegisterStaticPayloadHandlers` + `StaticPayloadHandlerEntry`** (`GatewayStaticRegistration.h` / `GatewayStaticRegistration.cpp`) — registers a row array `(method name, payload JSON string)` in a loop, each calling `protocol::OkResponse`. Used by `GatewayHost.Handlers.Events.cpp` for the large `gateway.events.*Key` / `*Scope*` static surface (`kEventsStaticPayloadHandlers`). Add rows to that `constexpr` array when introducing new fixed-payload event methods.
+1. **`RegisterStaticPayloadHandlers` + `StaticPayloadHandlerEntry`** (`GatewayStaticRegistration.h` / `GatewayStaticRegistration.cpp`) — registers a row array `(method name, payload JSON string)` in a loop, each calling `protocol::OkResponse`. Used by `GatewayHost.Handlers.Events.cpp` for the large `gateway.events.*Key` / `*Scope*` static surface (`kEventsStaticPayloadHandlers`). **`RegisterGatewayRuntimeStaticOrchestrationStreamingMetrics`** (`GatewayHostRuntimeStaticOrchestrationStreamingMetrics.h` / `.cpp`) registers **220** contiguous orchestration/streaming **seed** metrics immediately **before** `gateway.runtime.streaming.status` (from `gateway.runtime.orchestration.phaseGate4` through `gateway.runtime.orchestration.phaseBias`) — same payloads as the former inline `Register` lambdas. Add rows to that `constexpr` array when extending that static grid.
 
 2. **`GatewayHandlers.manifest.json` + `Generate-GatewayHandlerCatalog.ps1`** — already table-driven: `kind: "static"` methods emit the same pattern into `generated/GatewayHandlerCatalog.Generated.cpp`; `kind: "toolsMetric"` uses token templates. Prefer the manifest when methods belong to the generated scope-cluster catalog; use the C++ table for ad-hoc static batches (e.g. event key grid) without editing the generator.
 
@@ -155,7 +157,7 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 | *(private)* `RegisterScopeClusterHandlers` | `GatewayHost.Handlers.ScopeCluster.cpp` |
 | *(private)* `RegisterGeneratedScopeClusterHandlers` | `generated/GatewayHandlerCatalog.Generated.cpp` |
 | *(private)* `RegisterSecurityOpsHandlers` | `GatewayHost.Handlers.SecurityOps.cpp` |
-| *(private)* `RegisterRuntimeHandlers` | `GatewayHost.Handlers.Runtime.cpp` (very large) |
+| *(private)* `RegisterRuntimeHandlers` | `GatewayHost.Handlers.Runtime.cpp` — delegates to **`handlers::runtime::*Handlers::RegisterAll`** (`GatewayHostHandlersRuntime.h`; helpers in `GatewayHost.Handlers.RuntimeHelpers.inl`; static metric table in `GatewayHostRuntimeStaticOrchestrationStreamingMetrics.cpp`) |
 | *(private)* `RegisterTransportHandlers` | `GatewayHost.Handlers.Transport.cpp` |
 
 ### 4. Transport and inbound/outbound pumping
@@ -253,13 +255,16 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 | Protocol success-frame helper `protocol::OkResponse` | `GatewayProtocolModels.h` |
 | `protocol::EncodeValidatedEvent` (validate + optional schema-error fallback + encode) | `GatewayProtocolCodec.h` / `GatewayProtocolCodec.cpp` |
 | Static handler table helper `RegisterStaticPayloadHandlers` | `GatewayStaticRegistration.h` / `GatewayStaticRegistration.cpp` |
+| Runtime static orchestration/streaming metric table (`RegisterGatewayRuntimeStaticOrchestrationStreamingMetrics`) | `GatewayHostRuntimeStaticOrchestrationStreamingMetrics.h` / `GatewayHostRuntimeStaticOrchestrationStreamingMetrics.cpp` |
+| Runtime handler **local helpers** (JSON escape, chat/task-delta orchestration, plugin serialization, …) | `GatewayHost.Handlers.RuntimeHelpers.inl` (included from `GatewayHost.Handlers.Runtime.cpp` inside an anonymous namespace) |
+| Runtime **`RegisterAll` families** (`RuntimeSurfaceHandlers`, `ChatPipelineHandlers`, `RuntimeOrchestrationStreamingHandlers`) | `GatewayHostHandlersRuntime.h` (declarations); definitions in `GatewayHost.Handlers.Runtime.cpp` (`namespace handlers::runtime`) |
 | Channel-related handlers | `GatewayHost.Handlers.Channels.cpp` |
 | Event catalog / event handlers | `GatewayHost.Handlers.Events.cpp` |
 | Tool listing / execution handlers | `GatewayHost.Handlers.Tools.cpp` |
 | Shared `gateway.tools.list` / `gateway.tools.catalog` payloads | `GatewayHostHandlersToolsShared.h` / `GatewayHost.Handlers.ToolsShared.cpp` (`handlers::tools_shared::ToolsSharedHandlers`) |
 | Scope cluster | `GatewayHost.Handlers.ScopeCluster.cpp` + generated catalog |
 | Security ops | `GatewayHost.Handlers.SecurityOps.cpp` |
-| Chat/runtime/task-delta-heavy handlers | `GatewayHost.Handlers.Runtime.cpp` |
+| Chat/runtime/task-delta-heavy handlers | `GatewayHost.Handlers.Runtime.cpp` + `GatewayHostHandlersRuntime.h` (`handlers::runtime::*Handlers::RegisterAll`) |
 | Transport method handlers | `GatewayHost.Handlers.Transport.cpp` |
 | Staged `chat.send` path | `GatewayHostEx.cpp` / `GatewayHostEx.h` |
 
@@ -323,7 +328,7 @@ These aim to keep **one clear façade** for the shell while shrinking what `Gate
 
 #### 2) Move static/seeded handlers to table-driven registration — **in progress / done for main static surfaces**
 
-- **C++ table:** `StaticPayloadHandlerEntry` + `RegisterStaticPayloadHandlers` drives fixed JSON rows (see `GatewayHost.Handlers.Events.cpp` — `kEventsStaticPayloadHandlers`).
+- **C++ table:** `StaticPayloadHandlerEntry` + `RegisterStaticPayloadHandlers` drives fixed JSON rows (see `GatewayHost.Handlers.Events.cpp` — `kEventsStaticPayloadHandlers`; runtime orchestration/streaming seed grid — `GatewayHostRuntimeStaticOrchestrationStreamingMetrics.cpp`).
 - **Manifest + generator:** `GatewayHandlers.manifest.json` (`kind: "static"` / `"toolsMetric"`) continues to drive `GatewayHandlerCatalog.Generated.cpp`.
 
 Handlers that need **captures** (`[this]`, telemetry, registry state) stay as explicit lambdas next to the table call.

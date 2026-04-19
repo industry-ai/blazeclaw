@@ -212,6 +212,12 @@ namespace blazeclaw::gateway {
 		struct SupplementaryCatalogHandlers;
 	}
 
+	namespace handlers::runtime {
+		struct RuntimeSurfaceHandlers;
+		struct ChatPipelineHandlers;
+		struct RuntimeOrchestrationStreamingHandlers;
+	}
+
 	class GatewayHost : public IGatewayHostRuntime {
 	public:
 		using SkillsRefreshCallback = std::function<SkillsCatalogGatewayState()>;
@@ -381,6 +387,9 @@ namespace blazeclaw::gateway {
 		friend struct handlers::agent_tool_surface::AgentToolSurfaceHandlers;
 		friend struct handlers::config_diagnostics::ConfigDiagnosticsHandlers;
 		friend struct handlers::supplementary_catalog::SupplementaryCatalogHandlers;
+		friend struct handlers::runtime::RuntimeSurfaceHandlers;
+		friend struct handlers::runtime::ChatPipelineHandlers;
+		friend struct handlers::runtime::RuntimeOrchestrationStreamingHandlers;
 
 		[[nodiscard]] protocol::ResponseFrame RouteRequestLegacy(
 			const protocol::RequestFrame& request) const;
