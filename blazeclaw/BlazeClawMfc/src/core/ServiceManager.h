@@ -211,6 +211,12 @@ namespace blazeclaw::core {
 		[[nodiscard]] bool ApplyManagedRuntimeConfigDiff(
 			const blazeclaw::config::AppConfig& nextConfig,
 			std::wstring& warningMessage);
+		void ApplyManagedRuntimeAuthReject(
+			const ManagedRuntimeConfigDiffCoordinator::AuthGuardResult& authGuard,
+			std::wstring& warningMessage);
+		[[nodiscard]] bool ApplyManagedRuntimeApplyPlan(
+			const ManagedRuntimeApplyPlan& plan,
+			std::wstring& warningMessage);
 		void ResetGatewayOwnedRuntimeCleanup();
 		void RegisterGatewayOwnedRuntimeCleanup(
 			const std::string& name,

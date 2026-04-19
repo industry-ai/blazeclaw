@@ -34,6 +34,20 @@ namespace {
 			std::istreambuf_iterator<char>());
 	}
 
+	std::string ReadManagedRuntimeConfigDiffCoordinatorHeader()
+	{
+		const auto sourcePath = std::filesystem::path("BlazeClawMfc") /
+			"src" /
+			"core" /
+			"ManagedRuntimeConfigDiffCoordinator.h";
+		std::ifstream in(sourcePath.string());
+		REQUIRE(in.is_open());
+
+		return std::string(
+			(std::istreambuf_iterator<char>(in)),
+			std::istreambuf_iterator<char>());
+	}
+
 	std::string ReadGatewayHostBindingCoordinatorSource()
 	{
 		const auto sourcePath = std::filesystem::path("BlazeClawMfc") /
@@ -199,6 +213,12 @@ TEST_CASE(
 		std::string::npos);
 	REQUIRE(
 		applyDiffBody.find("authGuard.warningMessage") !=
+		std::string::npos);
+	REQUIRE(
+		applyDiffBody.find("EvaluateApplyPlan(") !=
+		std::string::npos);
+	REQUIRE(
+		applyDiffBody.find("ApplyManagedRuntimeApplyPlan(") !=
 		std::string::npos);
 }
 
@@ -372,10 +392,20 @@ TEST_CASE(
 
 	const std::string source = ReadServiceManagerSource();
 	REQUIRE(
-		source.find("m_managedRuntimeConfigDiffCoordinator.EvaluateAuthSessionGenerationGuard(") !=
+		source.find("m_managedRuntimeConfigDiffCoordinator.EvaluateApplyPlan(") !=
 		std::string::npos);
 	REQUIRE(
 		source.find("m_managedRuntimeConfigDiffCoordinator.CoordinateLocalModelReload(") !=
+		std::string::npos);
+	REQUIRE(
+		source.find("bool ServiceManager::ApplyManagedRuntimeApplyPlan(") !=
+		std::string::npos);
+
+	const std::string managedCoordinator = ReadManagedRuntimeConfigDiffCoordinatorHeader();
+	REQUIRE(
+		managedCoordinator.find("EvaluateApplyPlan(") != std::string::npos);
+	REQUIRE(
+		managedCoordinator.find("EvaluateAuthSessionGenerationGuard(") !=
 		std::string::npos);
 }
 

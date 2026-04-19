@@ -215,7 +215,9 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
      extracted seams while preserving behavior parity.
    - Added `ManagedRuntimeConfigDiffCoordinator` and delegated:
      - auth-session generation guard evaluation,
+     - **`ManagedRuntimeApplyPlan`** via **`EvaluateApplyPlan`** (bind/port warning + next config envelope),
      - local-model reload decision envelope.
+   - **`ServiceManager`** executes plans via **`ApplyManagedRuntimeApplyPlan`** and **`ApplyManagedRuntimeAuthReject`** (thin entry from **`ApplyManagedRuntimeConfigDiff`**).
    - Added contract coverage for Phase 2 delegation seams.
 
 20. **Extract Phase 3 diagnostics projection seams**

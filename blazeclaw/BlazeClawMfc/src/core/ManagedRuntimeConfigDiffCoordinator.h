@@ -4,8 +4,11 @@
 
 #include <functional>
 #include <optional>
+#include <string>
 
 namespace blazeclaw::core {
+
+	struct ManagedRuntimeApplyPlan;
 
 	class ManagedRuntimeConfigDiffCoordinator {
 	public:
@@ -92,6 +95,56 @@ namespace blazeclaw::core {
 
 			return result;
 		}
+
+		[[nodiscard]] ManagedRuntimeApplyPlan EvaluateApplyPlan(
+			const blazeclaw::config::AppConfig& currentConfig,
+			const blazeclaw::config::AppConfig& nextConfig,
+			const bool authSensitiveChanged,
+			const std::uint64_t currentAuthGeneration) const;
 	};
+
+	/// Result of evaluating a managed config reload before any `ServiceManager` side effects.
+	/// `ServiceManager` executes via `ApplyManagedRuntimeApplyPlan` / `ApplyManagedRuntimeAuthReject`.
+	struct ManagedRuntimeApplyPlan {
+		bool accepted = true;
+		ManagedRuntimeConfigDiffCoordinator::AuthGuardResult authReject{};
+		bool authSensitiveChanged = false;
+		std::optional<std::wstring> gatewayBindPortWarning;
+		blazeclaw::config::AppConfig nextConfig{};
+	};
+
+	inline ManagedRuntimeApplyPlan ManagedRuntimeConfigDiffCoordinator::EvaluateApplyPlan(
+		const blazeclaw::config::AppConfig& currentConfig,
+		const blazeclaw::config::AppConfig& nextConfig,
+		const bool authSensitiveChanged,
+		const std::uint64_t currentAuthGeneration) const {
+		ManagedRuntimeApplyPlan plan;
+		plan.authSensitiveChanged = authSensitiveChanged;
+		plan.nextConfig = nextConfig;
+
+		const auto authGuard = EvaluateAuthSessionGenerationGuard(
+			currentConfig,
+			nextConfig,
+			authSensitiveChanged,
+			currentAuthGeneration);
+		if (!authGuard.accepted) {
+			plan.accepted = false;
+			plan.authReject = authGuard;
+			return plan;
+		}
+
+		const bool gatewayBindChanged =
+			currentConfig.gateway.bindAddress != nextConfig.gateway.bindAddress;
+		const bool gatewayPortChanged =
+			currentConfig.gateway.port != nextConfig.gateway.port;
+		if (gatewayBindChanged || gatewayPortChanged) {
+			plan.gatewayBindPortWarning =
+				L"managed gateway config reload detected bind/port change; "
+				L"restart is required for transport endpoint updates.";
+		}
+
+		plan.accepted = true;
+		return plan;
+	}
 
 } // namespace blazeclaw::core

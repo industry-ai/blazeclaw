@@ -143,7 +143,9 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 
 | Function | Role |
 |----------|------|
-| `ApplyManagedRuntimeConfigDiff(nextConfig, warningMessage)` | Hot reload: delegate to coordinator + apply gateway/email/model side effects. |
+| `ApplyManagedRuntimeConfigDiff(nextConfig, warningMessage)` | Hot reload: builds **`ManagedRuntimeApplyPlan`** via **`ManagedRuntimeConfigDiffCoordinator::EvaluateApplyPlan`**, then **`ApplyManagedRuntimeAuthReject`** or **`ApplyManagedRuntimeApplyPlan`**. |
+| `ApplyManagedRuntimeAuthReject(authGuard, warningMessage)` | Auth-session generation reject path (state + diagnostics + lifecycle transition). |
+| `ApplyManagedRuntimeApplyPlan(plan, warningMessage)` | Applies accepted plan side effects (chat/local model/gateway/email/schema/skills projection). |
 | `ResetGatewayOwnedRuntimeCleanup()` | Clear cleanup registry. |
 | `RegisterGatewayOwnedRuntimeCleanup(name, action)` | Register LIFO cleanup. |
 | `ExecuteGatewayOwnedRuntimeCleanup()` | Run registered cleanups. |
@@ -153,7 +155,7 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 | `QueueManagedConfigInternalWriteHash(hash)` | Pending write coordination. |
 | `ConsumeManagedConfigInternalWriteHash()` | Consume one pending hash. |
 
-**Assessment:** Registry/cleanup helpers are **orchestration**. `ApplyManagedRuntimeConfigDiff` can still be **deep** if coordinator returns and `ServiceManager` performs many imperative updates — prefer **single DTO apply** from `ManagedRuntimeConfigDiffCoordinator`.
+**Assessment:** Registry/cleanup helpers are **orchestration**. Managed reload uses **`ManagedRuntimeApplyPlan`** from **`ManagedRuntimeConfigDiffCoordinator`**; **`ApplyManagedRuntimeApplyPlan`** still sequences imperative subsystem updates (acceptable composition-root duty; further shrink would be visitors/strategies if needed).
 
 ---
 
@@ -191,7 +193,7 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 | **P0** | `BindChatCallbacks` (body) | **Moved** to **`GatewayHostBindingCoordinator::RegisterChatRuntimeCallbacks`** — still a **large nested lambda** for chat runtime + embedded + provider handoff. | Continue extracting **named strategies** per branch; delegate inner bodies to `ChatRuntimeOrchestrationCoordinator` (or similar) methods to shrink **`GatewayHostBindingCoordinator.cpp`**. |
 | ~~**P1**~~ | ~~`ResolveSkillInvocationPromptRewrite`~~ | — | ✅ **Done (Phase 4):** **`SkillCommandInvocationService::RewriteInvocationPromptUtf8`**. |
 | ~~**P1**~~ | ~~`InitializeModules` / `ConfigurePolicies`~~ | — | ✅ **Addressed:** sequencing and policy wiring moved to **`ServiceLifecycleStartupCoordinator`**; optional future step is a structured **`StartupReport`** DTO if reporting/testing needs it. |
-| **P1** | `ApplyManagedRuntimeConfigDiff` | May still imperative-patch many subsystems after coordinator. | Ensure coordinator returns **`ManagedRuntimeApplyPlan`**; `ServiceManager` executes plan via small private `ApplyPlan(...)` or generated visitors. |
+| ~~**P1**~~ | ~~`ApplyManagedRuntimeConfigDiff`~~ | — | ✅ **Done:** **`ManagedRuntimeApplyPlan`** + **`EvaluateApplyPlan`** in **`ManagedRuntimeConfigDiffCoordinator`**; **`ServiceManager`** uses **`ApplyManagedRuntimeApplyPlan`** / **`ApplyManagedRuntimeAuthReject`**. Optional future: generated visitors if the apply body grows again. |
 | ~~**P2**~~ | ~~`InvokeDeepSeekRemoteChat`~~ | — | ✅ **Done:** gateway → **`ChatRequest`** mapping moved to **`CDeepSeekClient::InvokeGatewayChat`**; **`ServiceManager`** only passes cancellation via **`BuildChatProviderRuntimeBindings`**. |
 | ~~**P2**~~ | ~~`BindSkillsCallbacks` (skills.update seam)~~ | — | ✅ **Invariant:** **`SkillsGatewayMethodHandler::HandleSkillsUpdate`** is the only **`skills.update`** parse/validate/response implementation; **`GatewayHost`** forwards frames only (comments in **`GatewayHost.h`**, **`GatewayHost.Handlers.Runtime.cpp`**, **`GatewayHostBindingCoordinator.cpp`**, class doc on **`SkillsGatewayMethodHandler`**). |
 | ~~**P2**~~ | ~~`BuildOperatorDiagnosticsReport`~~ | — | ✅ **Done (Phase 4):** **`OperatorDiagnosticsAssembler`** + **`OperatorDiagnosticsInputs`**; optional future shrink: dedicated **agents/features** projectors for the remaining scalars. |

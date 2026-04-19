@@ -2734,31 +2734,36 @@ namespace blazeclaw::core {
 		const bool authSensitiveChanged = HasAuthSensitiveConfigChanges(
 			m_activeConfig,
 			nextConfig);
-		const auto authGuard =
-			m_managedRuntimeConfigDiffCoordinator.EvaluateAuthSessionGenerationGuard(
-				m_activeConfig,
-				nextConfig,
-				authSensitiveChanged,
-				m_state.gatewayLifecycle.authSessionGenerationCurrent);
-		if (!authGuard.accepted) {
-			m_state.gatewayLifecycle.authSessionGenerationRequired =
-				authGuard.requiredGeneration;
-			++m_state.gatewayLifecycle.authSessionGenerationRejectCount;
-			warningMessage = authGuard.warningMessage;
-			m_skillsCatalog.diagnostics.warnings.push_back(warningMessage);
-			RecordGatewayLifecycleTransition("managed_reload.auth_generation_reject");
+		const auto plan = m_managedRuntimeConfigDiffCoordinator.EvaluateApplyPlan(
+			m_activeConfig,
+			nextConfig,
+			authSensitiveChanged,
+			m_state.gatewayLifecycle.authSessionGenerationCurrent);
+		if (!plan.accepted) {
+			ApplyManagedRuntimeAuthReject(plan.authReject, warningMessage);
 			return false;
 		}
+		return ApplyManagedRuntimeApplyPlan(plan, warningMessage);
+	}
 
-		const bool gatewayBindChanged =
-			m_activeConfig.gateway.bindAddress != nextConfig.gateway.bindAddress;
-		const bool gatewayPortChanged =
-			m_activeConfig.gateway.port != nextConfig.gateway.port;
+	void ServiceManager::ApplyManagedRuntimeAuthReject(
+		const ManagedRuntimeConfigDiffCoordinator::AuthGuardResult& authGuard,
+		std::wstring& warningMessage) {
+		m_state.gatewayLifecycle.authSessionGenerationRequired =
+			authGuard.requiredGeneration;
+		++m_state.gatewayLifecycle.authSessionGenerationRejectCount;
+		warningMessage = authGuard.warningMessage;
+		m_skillsCatalog.diagnostics.warnings.push_back(warningMessage);
+		RecordGatewayLifecycleTransition("managed_reload.auth_generation_reject");
+	}
 
-		if (gatewayBindChanged || gatewayPortChanged) {
-			warningMessage =
-				L"managed gateway config reload detected bind/port change; "
-				L"restart is required for transport endpoint updates.";
+	bool ServiceManager::ApplyManagedRuntimeApplyPlan(
+		const ManagedRuntimeApplyPlan& plan,
+		std::wstring& warningMessage) {
+		const blazeclaw::config::AppConfig& nextConfig = plan.nextConfig;
+
+		if (plan.gatewayBindPortWarning.has_value()) {
+			warningMessage = *plan.gatewayBindPortWarning;
 		}
 
 		m_activeConfig.chat.activeProvider = nextConfig.chat.activeProvider;
@@ -2884,7 +2889,7 @@ namespace blazeclaw::core {
 		m_activeConfig.gateway.authSessionGeneration =
 			nextConfig.gateway.authSessionGeneration;
 
-		if (authSensitiveChanged) {
+		if (plan.authSensitiveChanged) {
 			m_state.gatewayLifecycle.authSessionGenerationCurrent =
 				nextConfig.gateway.authSessionGeneration;
 			m_state.gatewayLifecycle.authSessionGenerationRequired =
