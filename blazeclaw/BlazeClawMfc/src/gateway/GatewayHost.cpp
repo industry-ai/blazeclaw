@@ -1809,6 +1809,32 @@ namespace blazeclaw::gateway {
 
 		RegisterEventHandlers();
 
+		RegisterToolExecutionHistoryHandlers();
+
+		RegisterToolsHandlers();
+
+		RegisterGeneratedScopeClusterHandlers();
+
+		RegisterGatewayEventCatalogQueryHandlers();
+
+		RegisterGatewayRegistryIntrospectionHandlers();
+
+		RegisterGatewayAgentSessionMutationHandlers();
+
+		RegisterGatewayAgentToolSurfaceHandlers();
+
+		RegisterGatewayConfigAndDiagnosticsHandlers();
+
+		RegisterSecurityOpsHandlers();
+
+		RegisterRuntimeHandlers();
+
+		RegisterTransportHandlers();
+
+		RegisterGatewaySupplementaryCatalogHandlers();
+	}
+
+	void GatewayHost::RegisterToolExecutionHistoryHandlers() {
 		m_dispatcher.Register("gateway.tools.executions.list", [this](const protocol::RequestFrame& request) {
 			const auto executions = m_toolRegistry.ListExecutions(20);
 			std::string executionsJson = "[";
@@ -1876,13 +1902,9 @@ namespace blazeclaw::gateway {
 				.error = std::nullopt,
 			};
 			});
+	}
 
-
-
-		RegisterToolsHandlers();
-
-		RegisterGeneratedScopeClusterHandlers();
-
+	void GatewayHost::RegisterGatewayEventCatalogQueryHandlers() {
 		m_dispatcher.Register("gateway.events.latestByType", [](const protocol::RequestFrame& request) {
 			const std::string type = ExtractStringParam(request.paramsJson, "type");
 			const bool lifecycle = type == "lifecycle";
@@ -1996,7 +2018,9 @@ namespace blazeclaw::gateway {
 				.error = std::nullopt,
 			};
 			});
+	}
 
+	void GatewayHost::RegisterGatewayRegistryIntrospectionHandlers() {
 		m_dispatcher.Register("gateway.agents.exists", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
 			const auto agents = m_agentRegistry.List();
@@ -2402,8 +2426,9 @@ namespace blazeclaw::gateway {
 				.error = std::nullopt,
 			};
 			});
+	}
 
-
+	void GatewayHost::RegisterGatewayAgentSessionMutationHandlers() {
 		m_dispatcher.Register("gateway.agents.update", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
 			const std::string requestedName = ExtractStringParam(request.paramsJson, "name");
@@ -2980,7 +3005,9 @@ namespace blazeclaw::gateway {
 				.error = std::nullopt,
 			};
 			});
+	}
 
+	void GatewayHost::RegisterGatewayAgentToolSurfaceHandlers() {
 		m_dispatcher.Register("gateway.agents.get", [this](const protocol::RequestFrame& request) {
 			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
 			const AgentEntry agent = m_agentRegistry.Get(requestedId);
@@ -3041,7 +3068,9 @@ namespace blazeclaw::gateway {
 				.error = std::nullopt,
 			};
 			});
+	}
 
+	void GatewayHost::RegisterGatewayConfigAndDiagnosticsHandlers() {
 		m_dispatcher.Register("gateway.config.get", [this](const protocol::RequestFrame& request) {
 			return protocol::ResponseFrame{
 				.id = request.id,
@@ -3204,13 +3233,9 @@ namespace blazeclaw::gateway {
 				.error = std::nullopt,
 			};
 			});
+	}
 
-		RegisterSecurityOpsHandlers();
-
-		RegisterRuntimeHandlers();
-
-		RegisterTransportHandlers();
-
+	void GatewayHost::RegisterGatewaySupplementaryCatalogHandlers() {
 		m_dispatcher.Register("gateway.session.list", [this](const protocol::RequestFrame& request) {
 			const std::optional<bool> activeFilter = ExtractBooleanParam(request.paramsJson, "active");
 			const std::string scopeFilter = ExtractStringParam(request.paramsJson, "scope");
@@ -3510,5 +3535,6 @@ namespace blazeclaw::gateway {
 			};
 			});
 	}
+
 
 } // namespace blazeclaw::gateway

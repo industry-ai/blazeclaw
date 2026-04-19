@@ -417,6 +417,13 @@ namespace blazeclaw::gateway {
 		};
 
 		void RegisterDefaultHandlers();
+		void RegisterToolExecutionHistoryHandlers();
+		void RegisterGatewayEventCatalogQueryHandlers();
+		void RegisterGatewayRegistryIntrospectionHandlers();
+		void RegisterGatewayAgentSessionMutationHandlers();
+		void RegisterGatewayAgentToolSurfaceHandlers();
+		void RegisterGatewayConfigAndDiagnosticsHandlers();
+		void RegisterGatewaySupplementaryCatalogHandlers();
 		void RegisterChannelsHandlers();
 		void RegisterEventHandlers();
 		void RegisterToolsHandlers();
