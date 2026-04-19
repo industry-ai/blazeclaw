@@ -28,4 +28,4 @@ BlazeClawMfc planning docs:
 Architecture comparison docs:
 - `blazeclaw/docs/README.md` (index)
 - `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` (BlazeClaw vs OpenClaw stacks, mapping, gaps, optimization priorities)
-- `blazeclaw/docs/PROTOCOL_CODEGEN.md` (gateway manifest/codegen, `OkResponse` / `ErrorResponse`, JSON payload helpers)
+- `blazeclaw/docs/PROTOCOL_CODEGEN.md` (gateway manifest/codegen, default handler coordinator, `OkResponse` / `ErrorResponse`, JSON payload helpers)

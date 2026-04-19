@@ -193,6 +193,7 @@
     <ClInclude Include="src\gateway\GatewayAgentRegistry.h" />
     <ClInclude Include="src\gateway\GatewayChannelRegistry.h" />
     <ClInclude Include="src\gateway\GatewayHost.h" />
+    <ClInclude Include="src\gateway\GatewayHostRegistrationCoordinator.h" />
     <ClInclude Include="src\gateway\ChatRunStageContext.h" />
     <ClInclude Include="src\gateway\IChatRunStage.h" />
     <ClInclude Include="src\gateway\ChatRunStages.h" />
@@ -362,6 +363,7 @@
     <ClCompile Include="src\gateway\GatewayAgentRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayChannelRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.cpp" />
+    <ClCompile Include="src\gateway\GatewayHostRegistrationCoordinator.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Events.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Channels.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.Handlers.Runtime.cpp" />

@@ -12,7 +12,7 @@ This file tracks analysis of `blazeclaw::gateway::GatewayHost` (`GatewayHost.h` 
 
 ### `RegisterDefaultHandlers()` call order (maintain when adding methods)
 
-Invoked in this sequence (see `GatewayHost.cpp`):
+`GatewayHost::RegisterDefaultHandlers()` delegates to **`GatewayHostRegistration::RegisterDefaultHandlerSequence`** (`GatewayHostRegistrationCoordinator.h` / `.cpp`). That **single** function is a **`friend`** of `GatewayHost` and sequences the private `Register*Handlers` calls with **comment-labelled domain phases** (the calls cannot be split into nested free functions in another TU without losing `friend` access). The **global order** of those private calls is unchanged from the list below.
 
 1. `RegisterChannelsHandlers`
 2. `RegisterEventHandlers`
@@ -28,6 +28,8 @@ Invoked in this sequence (see `GatewayHost.cpp`):
 12. `RegisterRuntimeHandlers`
 13. `RegisterTransportHandlers`
 14. `RegisterGatewaySupplementaryCatalogHandlers`
+
+**Domain phases in the coordinator** (comment blocks in `RegisterDefaultHandlerSequence`; each phase is one or more `Register*Handlers` calls, in the order above): channels + event tables → tooling + scope cluster → gateway catalog introspection → agent/session + tool surface → config/diagnostics + security → runtime + transport → supplementary catalog.
 
 Duplicate method names across registrars still overwrite the same dispatcher slot—keep names unique or rely on last registration intentionally.
 
@@ -229,7 +231,8 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 
 | Area | Primary files |
 |------|----------------|
-| Core lifecycle, transport pump, event builders, routing, `RegisterDefaultHandlers` + domain `RegisterGateway*` / `RegisterToolExecution*` helpers | `GatewayHost.cpp` |
+| Default handler **sequence** (`RegisterDefaultHandlerSequence`, domain phases) | `GatewayHostRegistrationCoordinator.h` / `GatewayHostRegistrationCoordinator.cpp` |
+| Core lifecycle, transport pump, event builders, routing, domain `RegisterGateway*` / `RegisterToolExecution*` helpers | `GatewayHost.cpp` |
 | Registry / task-delta JSON serializers (`SerializeSession`, `SerializeTool`, `SerializeTaskDeltaState`, `EscapeJsonString`, …) | `GatewayJsonSerializers.h` / `GatewayJsonSerializers.cpp` |
 | Minimal JSON fragment builders (`JsonObject`, `JsonString`, `JsonArray`, …) | `GatewayJsonBuilder.h` / `GatewayJsonBuilder.cpp` |
 | Request `params` field access (`RequestParamsView::GetString` / `GetBool` / `GetSize` / `GetObject`) | `GatewayRequestParams.h` / `GatewayRequestParams.cpp` |
@@ -252,7 +255,7 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 These aim to keep **one clear façade** for the shell while shrinking what `GatewayHost` *does* itself.
 
 1. **Clarify the core responsibility**  
-   Treat `GatewayHost` as: **wire transport ↔ dispatcher ↔ policy/router ↔ optional stage host**, plus **minimal** shared state. Move domain logic that remains in lambdas toward **named handler classes** (or `Gateway*MethodHandler` types) per area—registration stays thin. This matches the existing split files but can go further than “many lambdas in member functions.”
+   Treat `GatewayHost` as: **wire transport ↔ dispatcher ↔ policy/router ↔ optional stage host**, plus **minimal** shared state. Move domain logic that remains in lambdas toward **named handler classes** (or `Gateway*MethodHandler` types) per area—registration stays thin. **Update:** `RegisterDefaultHandlers` is now a one-line delegate to **`GatewayHostRegistration::RegisterDefaultHandlerSequence`** with **named domain phases** in `GatewayHostRegistrationCoordinator.cpp`. Further extraction of per-method logic can follow the same file boundaries (`GatewayHost.Handlers.*`).
 
 2. **Separate “protocol surface” from “transport surface”**  
    Public methods split roughly into: (a) `IGatewayHostRuntime` + dispatcher-backed protocol, (b) WebSocket/text pump API, (c) event JSON builders, (d) in-process tool execution. Consider a **small public façade** (`GatewayHost`) delegating to internal types, e.g. `GatewayTransportSession` (accept/pump/drain), `GatewayEventFrameCodec` (`Build*` methods), `GatewayRuntimeToolFacade` (list/execute/register), so the class does not advertise every sub-concern in one flat API unless the shell truly needs it.

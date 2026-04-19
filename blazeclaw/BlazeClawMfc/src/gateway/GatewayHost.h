@@ -18,6 +18,7 @@
 #include "GatewayRequestPolicyGuard.h"
 #include "GatewayEventFanoutService.h"
 #include "TransportRecipientRegistry.h"
+#include "GatewayHostRegistrationCoordinator.h"
 
 #include <memory>
 
@@ -417,6 +418,7 @@ namespace blazeclaw::gateway {
 		};
 
 		void RegisterDefaultHandlers();
+		friend void GatewayHostRegistration::RegisterDefaultHandlerSequence(GatewayHost& host);
 		void RegisterToolExecutionHistoryHandlers();
 		void RegisterGatewayEventCatalogQueryHandlers();
 		void RegisterGatewayRegistryIntrospectionHandlers();

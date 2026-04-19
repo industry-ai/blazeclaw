@@ -8,7 +8,7 @@ It should not be the place where deep business logic is implemented.
 Related cross-project architecture report:
 
 - `blazeclaw/docs/README.md` — index of `blazeclaw/docs/`.
-- `blazeclaw/docs/PROTOCOL_CODEGEN.md` — gateway manifest/codegen workflow, `OkResponse` / `ErrorResponse`, JSON payload helpers.
+- `blazeclaw/docs/PROTOCOL_CODEGEN.md` — gateway manifest/codegen workflow, `GatewayHostRegistration` default handler coordinator, `OkResponse` / `ErrorResponse`, JSON payload helpers.
 - `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md`
   - BlazeClaw vs OpenClaw architecture/framework comparison, structural mapping, and prioritized optimization suggestions for the MFC port.
 
