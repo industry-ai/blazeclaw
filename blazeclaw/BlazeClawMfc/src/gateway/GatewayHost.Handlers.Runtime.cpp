@@ -3577,7 +3577,7 @@ namespace blazeclaw::gateway {
 							",\"reason\":" +
 							JsonString(stageContext.skippedReasonCode) +
 							"}");
-						return protocol::OkResponse(request, stageContext.responsePayloadJson);
+						return protocol::OkResponseOptionalPayload(request, stageContext.responsePayloadJson);
 					}
 
 					if (stageContext.deduped) {

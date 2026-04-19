@@ -38,7 +38,8 @@ namespace blazeclaw::gateway::protocol {
 	}
 
 	/// Success response whose body may be omitted (`std::nullopt` payload), e.g. inline policy skip paths.
-	[[nodiscard]] inline ResponseFrame OkResponse(
+	/// Separate name avoids overload ambiguity with string literals (they could otherwise match `std::string` or `std::optional<std::string>`).
+	[[nodiscard]] inline ResponseFrame OkResponseOptionalPayload(
 		const RequestFrame& request,
 		std::optional<std::string> payloadJson) {
 		return ResponseFrame{

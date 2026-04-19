@@ -1431,26 +1431,13 @@ namespace blazeclaw::gateway {
 	}
 
 	std::string GatewayHost::BuildTickEventFrame(std::uint64_t timestampMs, std::uint64_t seq) const {
-		protocol::EventFrame frame{
-			.eventName = "gateway.tick",
-			.payloadJson = "{\"ts\":" + std::to_string(timestampMs) +
+		return protocol::EncodeValidatedEvent(
+			"gateway.tick",
+			"{\"ts\":" + std::to_string(timestampMs) +
 				",\"running\":" + std::string(IsRunning() ? "true" : "false") +
 				",\"connections\":" + std::to_string(m_transport.ConnectionCount()) + "}",
-			.seq = seq,
-			.stateVersion = seq,
-		};
-
-		protocol::SchemaValidationIssue issue;
-		if (!protocol::GatewayProtocolSchemaValidator::ValidateEvent(frame, issue)) {
-			frame = {
-				.eventName = "gateway.schema.error",
-				.payloadJson = "{\"stage\":\"tick\",\"message\":\"event validation failed\"}",
-				.seq = seq,
-				.stateVersion = seq,
-			};
-		}
-
-		return protocol::EncodeEventFrame(frame);
+			seq,
+			"tick");
 	}
 
 	std::string GatewayHost::BuildChannelsAccountsUpdateEventFrame(std::uint64_t seq) const {
@@ -1466,47 +1453,21 @@ namespace blazeclaw::gateway {
 
 		accountsJson += "]";
 
-		protocol::EventFrame frame{
-			.eventName = "gateway.channels.accounts.update",
-			.payloadJson = "{\"accounts\":" + accountsJson + "}",
-			.seq = seq,
-			.stateVersion = seq,
-		};
-
-		protocol::SchemaValidationIssue issue;
-		if (!protocol::GatewayProtocolSchemaValidator::ValidateEvent(frame, issue)) {
-			frame = {
-				.eventName = "gateway.schema.error",
-				.payloadJson = "{\"stage\":\"channels.accounts.update\",\"message\":\"event validation failed\"}",
-				.seq = seq,
-				.stateVersion = seq,
-			};
-		}
-
-		return protocol::EncodeEventFrame(frame);
+		return protocol::EncodeValidatedEvent(
+			"gateway.channels.accounts.update",
+			"{\"accounts\":" + accountsJson + "}",
+			seq,
+			"channels.accounts.update");
 	}
 
 	std::string GatewayHost::BuildAgentUpdateEventFrame(const std::string& agentId, std::uint64_t seq) const {
 		const AgentEntry agent = m_agentRegistry.Get(agentId);
 
-		protocol::EventFrame frame{
-			.eventName = "gateway.agent.update",
-			.payloadJson = "{\"agentId\":\"" + agent.id + "\",\"agent\":" + SerializeAgent(agent) + "}",
-			.seq = seq,
-			.stateVersion = seq,
-		};
-
-		protocol::SchemaValidationIssue issue;
-		if (!protocol::GatewayProtocolSchemaValidator::ValidateEvent(frame, issue)) {
-			frame = {
-				.eventName = "gateway.schema.error",
-				.payloadJson = "{\"stage\":\"agent.update\",\"message\":\"event validation failed\"}",
-				.seq = seq,
-				.stateVersion = seq,
-			};
-		}
-
-		return protocol::EncodeEventFrame(frame);
+		return protocol::EncodeValidatedEvent(
+			"gateway.agent.update",
+			"{\"agentId\":\"" + agent.id + "\",\"agent\":" + SerializeAgent(agent) + "}",
+			seq,
+			"agent.update");
 	}
 
 	std::string GatewayHost::BuildToolsCatalogUpdateEventFrame(std::uint64_t seq) const {
@@ -1522,24 +1483,11 @@ namespace blazeclaw::gateway {
 
 		toolsJson += "]";
 
-		protocol::EventFrame frame{
-			.eventName = "gateway.tools.catalog.update",
-			.payloadJson = "{\"tools\":" + toolsJson + "}",
-			.seq = seq,
-			.stateVersion = seq,
-		};
-
-		protocol::SchemaValidationIssue issue;
-		if (!protocol::GatewayProtocolSchemaValidator::ValidateEvent(frame, issue)) {
-			frame = {
-				.eventName = "gateway.schema.error",
-				.payloadJson = "{\"stage\":\"tools.catalog.update\",\"message\":\"event validation failed\"}",
-				.seq = seq,
-				.stateVersion = seq,
-			};
-		}
-
-		return protocol::EncodeEventFrame(frame);
+		return protocol::EncodeValidatedEvent(
+			"gateway.tools.catalog.update",
+			"{\"tools\":" + toolsJson + "}",
+			seq,
+			"tools.catalog.update");
 	}
 
 	std::string GatewayHost::BuildChannelsUpdateEventFrame(std::uint64_t seq) const {
@@ -1555,89 +1503,37 @@ namespace blazeclaw::gateway {
 
 		channelsJson += "]";
 
-		protocol::EventFrame frame{
-			.eventName = "gateway.channels.update",
-			.payloadJson = "{\"channels\":" + channelsJson + "}",
-			.seq = seq,
-			.stateVersion = seq,
-		};
-
-		protocol::SchemaValidationIssue issue;
-		if (!protocol::GatewayProtocolSchemaValidator::ValidateEvent(frame, issue)) {
-			frame = {
-				.eventName = "gateway.schema.error",
-				.payloadJson = "{\"stage\":\"channels.update\",\"message\":\"event validation failed\"}",
-				.seq = seq,
-				.stateVersion = seq,
-			};
-		}
-
-		return protocol::EncodeEventFrame(frame);
+		return protocol::EncodeValidatedEvent(
+			"gateway.channels.update",
+			"{\"channels\":" + channelsJson + "}",
+			seq,
+			"channels.update");
 	}
 
 	std::string GatewayHost::BuildSessionResetEventFrame(const std::string& sessionId, std::uint64_t seq) const {
 		const SessionEntry session = m_sessionRegistry.Resolve(sessionId);
 
-		protocol::EventFrame frame{
-			.eventName = "gateway.session.reset",
-			.payloadJson = "{\"sessionId\":\"" + session.id + "\",\"session\":" + SerializeSession(session) + "}",
-			.seq = seq,
-			.stateVersion = seq,
-		};
-
-		protocol::SchemaValidationIssue issue;
-		if (!protocol::GatewayProtocolSchemaValidator::ValidateEvent(frame, issue)) {
-			frame = {
-				.eventName = "gateway.schema.error",
-				.payloadJson = "{\"stage\":\"session.reset\",\"message\":\"event validation failed\"}",
-				.seq = seq,
-				.stateVersion = seq,
-			};
-		}
-
-		return protocol::EncodeEventFrame(frame);
+		return protocol::EncodeValidatedEvent(
+			"gateway.session.reset",
+			"{\"sessionId\":\"" + session.id + "\",\"session\":" + SerializeSession(session) + "}",
+			seq,
+			"session.reset");
 	}
 
 	std::string GatewayHost::BuildHealthEventFrame(std::uint64_t seq) const {
-		protocol::EventFrame frame{
-			.eventName = "gateway.health",
-			.payloadJson = "{\"status\":\"ok\",\"running\":true}",
-			.seq = seq,
-			.stateVersion = seq,
-		};
-
-		protocol::SchemaValidationIssue issue;
-		if (!protocol::GatewayProtocolSchemaValidator::ValidateEvent(frame, issue)) {
-			frame = {
-				.eventName = "gateway.schema.error",
-				.payloadJson = "{\"stage\":\"health\",\"message\":\"event validation failed\"}",
-				.seq = seq,
-				.stateVersion = seq,
-			};
-		}
-
-		return protocol::EncodeEventFrame(frame);
+		return protocol::EncodeValidatedEvent(
+			"gateway.health",
+			"{\"status\":\"ok\",\"running\":true}",
+			seq,
+			"health");
 	}
 
 	std::string GatewayHost::BuildShutdownEventFrame(const std::string& reason, std::uint64_t seq) const {
-		protocol::EventFrame frame{
-			.eventName = "gateway.shutdown",
-			.payloadJson = "{\"reason\":\"" + reason + "\",\"graceful\":true,\"seq\":" + std::to_string(seq) + "}",
-			.seq = seq,
-			.stateVersion = seq,
-		};
-
-		protocol::SchemaValidationIssue issue;
-		if (!protocol::GatewayProtocolSchemaValidator::ValidateEvent(frame, issue)) {
-			frame = {
-				.eventName = "gateway.schema.error",
-				.payloadJson = "{\"stage\":\"shutdown\",\"message\":\"event validation failed\"}",
-				.seq = seq,
-				.stateVersion = seq,
-			};
-		}
-
-		return protocol::EncodeEventFrame(frame);
+		return protocol::EncodeValidatedEvent(
+			"gateway.shutdown",
+			"{\"reason\":\"" + reason + "\",\"graceful\":true,\"seq\":" + std::to_string(seq) + "}",
+			seq,
+			"shutdown");
 	}
 
 	std::string GatewayHost::HandleInboundText(const std::string& inboundJson) const {

@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "GatewayEventFanoutService.h"
 
-#include "GatewayProtocolSchemaValidator.h"
+#include "GatewayProtocolCodec.h"
 
 namespace blazeclaw::gateway {
 
@@ -67,24 +67,11 @@ namespace blazeclaw::gateway {
 	std::string GatewayEventFanoutService::BuildChatLifecycleEventFrame(
 		const ChatLifecycleEvent& event,
 		const std::uint64_t seq) const {
-		protocol::EventFrame frame{
-			.eventName = "chat.lifecycle",
-			.payloadJson = BuildLifecyclePayload(event),
-			.seq = seq,
-			.stateVersion = seq,
-		};
-
-		protocol::SchemaValidationIssue issue;
-		if (!protocol::GatewayProtocolSchemaValidator::ValidateEvent(frame, issue)) {
-			frame = {
-				.eventName = "gateway.schema.error",
-				.payloadJson = "{\"stage\":\"chat.lifecycle\",\"message\":\"event validation failed\"}",
-				.seq = seq,
-				.stateVersion = seq,
-			};
-		}
-
-		return protocol::EncodeEventFrame(frame);
+		return protocol::EncodeValidatedEvent(
+			"chat.lifecycle",
+			BuildLifecyclePayload(event),
+			seq,
+			"chat.lifecycle");
 	}
 
 } // namespace blazeclaw::gateway

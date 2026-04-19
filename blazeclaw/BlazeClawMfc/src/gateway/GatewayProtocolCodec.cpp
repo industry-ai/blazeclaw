@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "GatewayProtocolCodec.h"
 #include "GatewayJsonUtils.h"
+#include "GatewayProtocolSchemaValidator.h"
 
 namespace blazeclaw::gateway::protocol {
 namespace {
@@ -182,6 +183,31 @@ std::string EncodeResponseFrame(const ResponseFrame& frame) {
 
 std::string EncodeEventFrame(const EventFrame& frame) {
   return SerializeEventFrame(frame);
+}
+
+std::string EncodeValidatedEvent(
+    std::string eventName,
+    std::string payloadJson,
+    std::uint64_t seq,
+    const std::string& validationStage) {
+  EventFrame frame{
+      .eventName = std::move(eventName),
+      .payloadJson = std::move(payloadJson),
+      .seq = seq,
+      .stateVersion = seq,
+  };
+
+  SchemaValidationIssue issue;
+  if (!GatewayProtocolSchemaValidator::ValidateEvent(frame, issue)) {
+    frame = EventFrame{
+        .eventName = "gateway.schema.error",
+        .payloadJson = "{\"stage\":\"" + validationStage + "\",\"message\":\"event validation failed\"}",
+        .seq = seq,
+        .stateVersion = seq,
+    };
+  }
+
+  return EncodeEventFrame(frame);
 }
 
 } // namespace blazeclaw::gateway::protocol

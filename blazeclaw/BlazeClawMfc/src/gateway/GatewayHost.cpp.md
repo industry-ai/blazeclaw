@@ -31,7 +31,7 @@ Duplicate method names across registrars still overwrite the same dispatcher slo
 
 ### `protocol::OkResponse` (success handler boilerplate)
 
-Defined in `GatewayProtocolModels.h`: `OkResponse(const RequestFrame& request, std::string payloadJson)` and an overload `OkResponse(const RequestFrame& request, std::optional<std::string> payloadJson)` for success paths that may omit a body (e.g. inline policy skip). Handler lambdas return `return protocol::OkResponse(request, …);` instead of spelling out `protocol::ResponseFrame{ .id = request.id, .ok = true, .payloadJson = …, .error = std::nullopt }`.
+Defined in `GatewayProtocolModels.h`: `OkResponse(const RequestFrame& request, std::string payloadJson)` for the usual case, and `OkResponseOptionalPayload(const RequestFrame& request, std::optional<std::string> payloadJson)` when the body may be omitted (e.g. inline policy skip)—kept as a **separate** function name so string-literal payloads do not hit overload ambiguity with `std::optional`. Handler lambdas return `return protocol::OkResponse(request, …);` instead of spelling out `protocol::ResponseFrame{ .id = request.id, .ok = true, .payloadJson = …, .error = std::nullopt }`.
 
 **Error responses** (`ok == false`, `error` set) still use an explicit `protocol::ResponseFrame{ ... }` initializer—no change.
 
@@ -44,6 +44,16 @@ Two mechanisms cover **fixed JSON** success handlers:
 1. **`RegisterStaticPayloadHandlers` + `StaticPayloadHandlerEntry`** (`GatewayStaticRegistration.h` / `GatewayStaticRegistration.cpp`) — registers a row array `(method name, payload JSON string)` in a loop, each calling `protocol::OkResponse`. Used by `GatewayHost.Handlers.Events.cpp` for the large `gateway.events.*Key` / `*Scope*` static surface (`kEventsStaticPayloadHandlers`). Add rows to that `constexpr` array when introducing new fixed-payload event methods.
 
 2. **`GatewayHandlers.manifest.json` + `Generate-GatewayHandlerCatalog.ps1`** — already table-driven: `kind: "static"` methods emit the same pattern into `generated/GatewayHandlerCatalog.Generated.cpp`; `kind: "toolsMetric"` uses token templates. Prefer the manifest when methods belong to the generated scope-cluster catalog; use the C++ table for ad-hoc static batches (e.g. event key grid) without editing the generator.
+
+### `protocol::EncodeValidatedEvent` (event wire encoding + schema check)
+
+Declared in `GatewayProtocolCodec.h`, implemented in `GatewayProtocolCodec.cpp`:
+
+`EncodeValidatedEvent(std::string eventName, std::string payloadJson, std::uint64_t seq, const std::string& validationStage)`
+
+Builds an `EventFrame` (`stateVersion` = `seq`), runs `GatewayProtocolSchemaValidator::ValidateEvent`, and on failure replaces the frame with `gateway.schema.error` and payload `{"stage":"<validationStage>","message":"event validation failed"}`, then returns `EncodeEventFrame(...)`.
+
+Used by `GatewayHost::Build*EventFrame` methods and by `GatewayEventFanoutService::BuildChatLifecycleEventFrame`. The `validationStage` string must stay JSON-safe (historically alphanumeric / dotted segments); it is inserted into the fallback payload without extra escaping.
 
 ---
 
@@ -180,6 +190,7 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 |------|----------------|
 | Core lifecycle, transport pump, event builders, routing, `RegisterDefaultHandlers` + domain `RegisterGateway*` / `RegisterToolExecution*` helpers | `GatewayHost.cpp` |
 | Protocol success-frame helper `protocol::OkResponse` | `GatewayProtocolModels.h` |
+| `protocol::EncodeValidatedEvent` (validate + optional schema-error fallback + encode) | `GatewayProtocolCodec.h` / `GatewayProtocolCodec.cpp` |
 | Static handler table helper `RegisterStaticPayloadHandlers` | `GatewayStaticRegistration.h` / `GatewayStaticRegistration.cpp` |
 | Channel-related handlers | `GatewayHost.Handlers.Channels.cpp` |
 | Event catalog / event handlers | `GatewayHost.Handlers.Events.cpp` |
@@ -212,7 +223,7 @@ These aim to keep **one clear façade** for the shell while shrinking what `Gate
    Persistence is already associated with `TaskDeltaRepository`; ensure `GatewayHost` only **orchestrates load/save timing** and does not grow more serialization logic—keep normalization/validation in dedicated units (`TaskDeltaSchemaValidator`, etc.).
 
 6. **Reduce `RegisterDefaultHandlers` surface**  
-   **Done (phase 1):** inline registrations were split into `RegisterToolExecutionHistoryHandlers`, `RegisterGatewayEventCatalogQueryHandlers`, `RegisterGatewayRegistryIntrospectionHandlers`, `RegisterGatewayAgentSessionMutationHandlers`, `RegisterGatewayAgentToolSurfaceHandlers`, `RegisterGatewayConfigAndDiagnosticsHandlers`, and `RegisterGatewaySupplementaryCatalogHandlers`; `RegisterDefaultHandlers()` is now a short coordinator. **Done (phase 2):** success-path boilerplate uses `protocol::OkResponse` (see subsection above). **Done (phase 3):** table-driven static registrations via `RegisterStaticPayloadHandlers` and the manifest-driven catalog (see **Table-driven static registrations** above). Further work: JSON builder utilities and `EncodeValidatedEvent` (see size-reduction section).
+   **Done (phase 1):** inline registrations were split into `RegisterToolExecutionHistoryHandlers`, `RegisterGatewayEventCatalogQueryHandlers`, `RegisterGatewayRegistryIntrospectionHandlers`, `RegisterGatewayAgentSessionMutationHandlers`, `RegisterGatewayAgentToolSurfaceHandlers`, `RegisterGatewayConfigAndDiagnosticsHandlers`, and `RegisterGatewaySupplementaryCatalogHandlers`; `RegisterDefaultHandlers()` is now a short coordinator. **Done (phase 2):** success-path boilerplate uses `protocol::OkResponse` (see subsection above). **Done (phase 3):** table-driven static registrations via `RegisterStaticPayloadHandlers` and the manifest-driven catalog (see **Table-driven static registrations** above). **Done (phase 4):** `protocol::EncodeValidatedEvent` for event frames (see subsection above). Further work: JSON builder utilities (see size-reduction section).
 
 7. **Naming consistency**  
    Align “Bootstrap*” vs “CreateRuntimeState” / `InitializeRuntime` naming in docs so phased startup order is obvious to maintainers.
@@ -226,7 +237,7 @@ These aim to keep **one clear façade** for the shell while shrinking what `Gate
 ### Main Size Drivers
 
 1. ~~Extremely long `RegisterDefaultHandlers()` method~~ **`RegisterDefaultHandlers()` is now a coordinator;** bulk lives in domain register helpers. Remaining volume: near-identical `m_dispatcher.Register(...)` blocks and JSON concatenation.
-2. Repeated event-frame construction + schema-validation fallback in `Build*EventFrame` methods.
+2. ~~Repeated event-frame construction + schema-validation fallback in `Build*EventFrame` methods.~~ Centralized in `protocol::EncodeValidatedEvent` (see subsection above).
 3. Repeated manual JSON string formatting in handlers (`{"x":...}` patterns). Success `ResponseFrame` construction is centralized via `protocol::OkResponse`; JSON *content* is still mostly manual concatenation.
 4. Repeated parameter extraction patterns (`ExtractStringParam`, `ExtractBooleanParam`, `ExtractNumericParam`) used the same way across handlers.
 
@@ -265,17 +276,11 @@ Optional next steps (not implemented): `ErrorResponse(...)`, `MakeExistsResponse
 
 **Effect:** fewer lines per handler return; readability improved. Remaining bulk is still JSON string assembly, not frame wiring.
 
-#### 4) Consolidate event frame build + schema fallback logic
-Current `BuildTickEventFrame`, `BuildHealthEventFrame`, `BuildShutdownEventFrame`, etc. repeat this pattern:
+#### 4) Consolidate event frame build + schema fallback logic — **done**
 
-- build frame
-- validate
-- fallback to `gateway.schema.error`
-- encode
+`protocol::EncodeValidatedEvent(eventName, payloadJson, seq, validationStage)` in `GatewayProtocolCodec` implements validate → fallback → `EncodeEventFrame`. `GatewayHost` `Build*EventFrame` helpers and `GatewayEventFanoutService::BuildChatLifecycleEventFrame` delegate to it.
 
-Create one helper like `EncodeValidatedEvent(eventName, payloadJson, seq, stage)`.
-
-**Expected effect:** medium reduction and less duplication risk.
+**Effect:** less duplication; same wire and fallback behavior as before.
 
 #### 5) Extract local JSON builder utilities
 Current code manually concatenates JSON in many places. Even with string-based JSON (no dependency), small helper functions can reduce repetition:
@@ -320,7 +325,7 @@ This trims repeated extraction boilerplate inside handlers.
 1. ~~Split `RegisterDefaultHandlers()` by domain.~~ **Done** (see §1 above).
 2. ~~Add `OkResponse` helper and replace boilerplate.~~ **Done** — see `protocol::OkResponse` in `GatewayProtocolModels.h` and the subsection `protocol::OkResponse` (success handler boilerplate) above.
 3. ~~Introduce table-driven static registrations.~~ **Done** — see **Table-driven static registrations** (`RegisterStaticPayloadHandlers`, manifest + `Generate-GatewayHandlerCatalog.ps1`).
-4. Add `EncodeValidatedEvent(...)` helper.
+4. ~~Add `EncodeValidatedEvent(...)` helper.~~ **Done** — see **`protocol::EncodeValidatedEvent`** in `GatewayProtocolCodec.h` / `.cpp` and the subsection above.
 5. Move serializers to dedicated files.
 6. Optionally add lightweight JSON builder and params wrapper.
 
