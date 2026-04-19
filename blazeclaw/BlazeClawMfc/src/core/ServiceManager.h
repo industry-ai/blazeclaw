@@ -96,6 +96,7 @@ namespace blazeclaw::core {
 
 	private:
 		friend class GatewayHostBindingCoordinator;
+		friend class ChatRuntimeOrchestrationCoordinator;
 		friend class SkillsGatewayPublicationCoordinator;
 		friend class ServiceLifecycleStartupCoordinator;
 

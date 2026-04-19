@@ -83,13 +83,13 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 | `BindSkillsCallbacks()` | Thin: delegates to **`GatewayHostBindingCoordinator::RegisterSkillsRelatedCallbacks`**. |
 | `BindGatewayPolicyCallbacks()` | Policy hooks on gateway. |
 | `BindToolRuntimeCallbacks()` | Tool registry callbacks. |
-| `BindChatCallbacks()` | Thin: delegates to **`GatewayHostBindingCoordinator::RegisterChatRuntimeCallbacks`** (implementation lives in **`GatewayHostBindingCoordinator.cpp`**). |
+| `BindChatCallbacks()` | Thin: delegates to **`GatewayHostBindingCoordinator::RegisterChatRuntimeCallbacks`** (registration in **`GatewayHostBindingCoordinator.cpp`**; chat branches in **`ChatRuntimeOrchestrationCoordinator.cpp`**). |
 | `BindEmbeddingsCallbacks()` | Embeddings lifecycle on gateway. |
 | `BuildConfigSchemaGatewayState()` | Expose config schema state for gateway. |
 | `LookupConfigSchemaGatewayPath(path)` | Schema lookup helper. |
 | `WriteConfigSchemaDocumentationSnapshot(path, error)` | Doc export. |
 
-**Assessment:** **Mixed.** Routing/pump are appropriate. Skills/chat **gateway wiring** bodies live in **`GatewayHostBindingCoordinator`** (friend of `ServiceManager`); `BindChatCallbacks` / `BindSkillsCallbacks` stay thin entry points. **`gateway.skills.update`** / **`skills.update`**: **`GatewayHost`** only registers methods and forwards **`RequestFrame`**; **`SkillsGatewayMethodHandler::HandleSkillsUpdate`** is the **single** parse/validate/response implementation (documented on the handler and at **`SetSkillsUpdateCallback`** / runtime registration). Remaining complexity is **nested runtime branching** inside the chat coordinator (candidates for further named strategies on `ChatRuntimeOrchestrationCoordinator` or helpers).
+**Assessment:** **Mixed.** Routing/pump are appropriate. Skills/chat **gateway wiring** is split: **`GatewayHostBindingCoordinator`** registers callbacks; **`ChatRuntimeOrchestrationCoordinator`** owns chat runtime branches (**`ExecuteChatRuntimeRequestBody`**, **`TryInlineToolInvocation`**, **`RunEmbeddedToolOrchestrationOrProvider`**, **`OnChatRuntimeAborted`**). **`ServiceManager`** declares **`friend class ChatRuntimeOrchestrationCoordinator`**. **`gateway.skills.update`** / **`skills.update`**: **`GatewayHost`** only registers methods and forwards **`RequestFrame`**; **`SkillsGatewayMethodHandler::HandleSkillsUpdate`** is the **single** parse/validate/response implementation (documented on the handler and at **`SetSkillsUpdateCallback`** / runtime registration).
 
 ---
 
@@ -190,7 +190,7 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 | Priority | Function / area | Why it is “deep” | Suggested refactor |
 |----------|-----------------|------------------|-------------------|
 | ~~**P0**~~ | ~~`ExecuteProviderChatRuntimePath`~~ | — | ✅ **Done (Phase 4):** **`ChatProviderRuntimeService`** + **`ChatProviderRuntimeBindings`**. |
-| **P0** | `BindChatCallbacks` (body) | **Moved** to **`GatewayHostBindingCoordinator::RegisterChatRuntimeCallbacks`** — still a **large nested lambda** for chat runtime + embedded + provider handoff. | Continue extracting **named strategies** per branch; delegate inner bodies to `ChatRuntimeOrchestrationCoordinator` (or similar) methods to shrink **`GatewayHostBindingCoordinator.cpp`**. |
+| ~~**P0**~~ | ~~`BindChatCallbacks` (body)~~ | — | ✅ **Done:** **`ChatRuntimeOrchestrationCoordinator.cpp`** — **`ExecuteChatRuntimeRequestBody`**, **`TryInlineToolInvocation`**, **`RunEmbeddedToolOrchestrationOrProvider`**, **`ResolveSkillsPromptForRun`**, **`OnChatRuntimeAborted`**; **`GatewayHostBindingCoordinator.cpp`** is thin registration + **`CChatRuntime::Execute`** handoff. |
 | ~~**P1**~~ | ~~`ResolveSkillInvocationPromptRewrite`~~ | — | ✅ **Done (Phase 4):** **`SkillCommandInvocationService::RewriteInvocationPromptUtf8`**. |
 | ~~**P1**~~ | ~~`InitializeModules` / `ConfigurePolicies`~~ | — | ✅ **Addressed:** sequencing and policy wiring moved to **`ServiceLifecycleStartupCoordinator`**; optional future step is a structured **`StartupReport`** DTO if reporting/testing needs it. |
 | ~~**P1**~~ | ~~`ApplyManagedRuntimeConfigDiff`~~ | — | ✅ **Done:** **`ManagedRuntimeApplyPlan`** + **`EvaluateApplyPlan`** in **`ManagedRuntimeConfigDiffCoordinator`**; **`ServiceManager`** uses **`ApplyManagedRuntimeApplyPlan`** / **`ApplyManagedRuntimeAuthReject`**. Optional future: generated visitors if the apply body grows again. |
@@ -217,7 +217,7 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 3. **`OperatorDiagnosticsAssembler`** + **`OperatorDiagnosticsInputs`** own `DiagnosticsSnapshot` population and **`CDiagnosticsReportBuilder::BuildOperatorDiagnosticsReport`** emission; **`BuildOperatorDiagnosticsReport`** fills inputs and calls **`Build`**.
 4. Contract strings for these seams live in **`ServiceManagerStartupPhaseContractTests`** (including a Phase 4 block); **`SkillCommandInvocationServiceTests`** covers **`RewriteInvocationPromptUtf8`**.
 
-**Follow-up (not Phase 4):** reduce nested chat-runtime lambda surface inside **`GatewayHostBindingCoordinator`** via further strategy extraction.
+**Follow-up (completed):** chat runtime branching moved to **`ChatRuntimeOrchestrationCoordinator.cpp`** (see Phase 6b below).
 
 ### Phase 5 (lifecycle startup thin facade — completed)
 
@@ -231,6 +231,12 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 - **`ServiceManager`** declares **`friend class GatewayHostBindingCoordinator`**; **`BindSkillsCallbacks`** / **`BindChatCallbacks`** delegate with one call each.
 - **`skills.update`** / **`gateway.skills.update`**: **`SkillsGatewayMethodHandler::HandleSkillsUpdate`** is the **only** parse/validate/response implementation; **`GatewayHost`** forwards **`RequestFrame`** only (see source comments).
 - Contract tests: **`ReadGatewayHostBindingCoordinatorSource()`**, gateway delegation case, and phase1/email strings updated to read the coordinator/assembler sources where behavior moved.
+
+### Phase 6b (chat runtime strategies — completed)
+
+- **`ChatRuntimeOrchestrationCoordinator.cpp`**: **`ExecuteChatRuntimeRequestBody`**, **`TryInlineToolInvocation`**, **`RunEmbeddedToolOrchestrationOrProvider`**, **`ResolveSkillsPromptForRun`**, **`OnChatRuntimeAborted`** (named strategies per branch; **`GatewayHostBindingCoordinator`** only wires **`SetChatRuntimeCallback`** / **`SetChatAbortCallback`** + **`m_chatRuntime.Execute`**).
+- **`ServiceManager`** declares **`friend class ChatRuntimeOrchestrationCoordinator`** for the same private surface as gateway binding.
+- Contract tests: phase1 asserts **`PrepareChatRequest`** in **`GatewayHostBindingCoordinator.cpp`** and **`ExecuteProviderChatRuntimePath`** in **`ChatRuntimeOrchestrationCoordinator.cpp`**; email contract asserts **`EvaluateEmbeddedFailure`** in **`ChatRuntimeOrchestrationCoordinator.cpp`**.
 
 ### Phase 7 (skills refresh policy + gateway publication — completed)
 
@@ -258,10 +264,10 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 |-----------|--------|
 | **Lifecycle / wiring / delegation** | Strong — `ServiceManager` remains the composition root. |
 | **Pure getters** | Aligned. |
-| **Deep runtime logic** | **Further reduced:** provider path in **`ChatProviderRuntimeService`**; gateway callback wiring in **`GatewayHostBindingCoordinator`**; skills refresh **policy** + gateway **publication** in **`SkillsAgentCommandDescriptorPolicy`** / **`SkillsGatewayPublicationCoordinator`**; DeepSeek **protocol** in **`CDeepSeekClient`** (**`InvokeGatewayChat`** / **`InvokeChat`**). |
+| **Deep runtime logic** | **Further reduced:** provider path in **`ChatProviderRuntimeService`**; gateway chat runtime branches in **`ChatRuntimeOrchestrationCoordinator`**; skills/config schema registration in **`GatewayHostBindingCoordinator`**; skills refresh **policy** + gateway **publication** in **`SkillsAgentCommandDescriptorPolicy`** / **`SkillsGatewayPublicationCoordinator`**; DeepSeek **protocol** in **`CDeepSeekClient`** (**`InvokeGatewayChat`** / **`InvokeChat`**). |
 | **Diagnostics** | **Assembler path:** projector contexts + scalars → **`OperatorDiagnosticsAssembler`** → report builder. |
 
-**Verdict:** `ServiceManager` remains the composition root; **provider execution**, **prompt rewrite**, **diagnostics assembly**, **startup policy/module sequencing**, **skills/chat gateway binding**, **skills refresh policy / gateway publication**, and **DeepSeek transport** (beyond cancel wiring) are **delegated** to dedicated types. The next shrink target is **nested chat runtime logic** inside **`GatewayHostBindingCoordinator`** (strategies / coordinator methods).
+**Verdict:** `ServiceManager` remains the composition root; **provider execution**, **prompt rewrite**, **diagnostics assembly**, **startup policy/module sequencing**, **gateway callback registration** (**`GatewayHostBindingCoordinator`**) + **chat runtime strategies** (**`ChatRuntimeOrchestrationCoordinator`**), **skills refresh policy / gateway publication**, and **DeepSeek transport** (beyond cancel wiring) are **delegated** to dedicated types.
 
 ---
 
@@ -269,7 +275,7 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 
 - [x] `ExecuteProviderChatRuntimePath` extracted or substantially delegated (**`ChatProviderRuntimeService`**).
 - [x] `ResolveSkillInvocationPromptRewrite` moved out of `ServiceManager` (**`RewriteInvocationPromptUtf8`**).
-- [x] `BindChatCallbacks` implementation moved out of **`ServiceManager.cpp`** (**`GatewayHostBindingCoordinator.cpp`**) — further line-count reduction inside the coordinator is **follow-up**.
+- [x] `BindChatCallbacks` implementation moved out of **`ServiceManager.cpp`** (**`GatewayHostBindingCoordinator.cpp`** + **`ChatRuntimeOrchestrationCoordinator.cpp`** strategies).
 - [x] `BuildOperatorDiagnosticsReport` reduced to projector inputs + **`OperatorDiagnosticsAssembler`**.
 - [x] Contract tests updated for new seams (`ServiceManagerStartupPhaseContractTests` Phase 4–9 + skills gateway single-entry case + **`SkillCommandInvocationServiceTests`** + **`SkillCommandsAggregationServiceContractTests`** policy path).
 - [x] DeepSeek gateway field mapping lives in **`CDeepSeekClient::InvokeGatewayChat`** (Phase 8).
@@ -277,4 +283,4 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 - [x] **`SkillsGatewayMethodHandler`** documented as the **single** **`skills.update`** parse/validate/response entry (**`GatewayHost`** forwards only).
 - [x] **`BuildEmbeddedToolBindings`** mapping in **`SkillsCommandService`** (Phase 9).
 
-*Last updated: Phase 9 **`SkillsCommandService::BuildEmbeddedToolBindings`**; **`ServiceManager`** delegates; contract test in phase1; BlazeClawMfc + BlazeClawMfc.Tests Debug\|x64 built with MSBuild (`PlatformToolset=v143` where v145 is unavailable).*
+*Last updated: Phase 6b **`ChatRuntimeOrchestrationCoordinator`** chat runtime strategies; **`ServiceManager`** friend + **`GatewayHostBindingCoordinator`** thin registration; contract tests read **`ChatRuntimeOrchestrationCoordinator.cpp`** for phase1/email strings; BlazeClawMfc + BlazeClawMfc.Tests Debug\|x64 built with MSBuild (`PlatformToolset=v143` where v145 is unavailable).*

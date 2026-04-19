@@ -346,6 +346,7 @@
     <ClCompile Include="src\core\SkillsWatchService.cpp" />
     <ClCompile Include="src\core\ConfigSchemaService.cpp" />
     <ClCompile Include="src\core\ExtensionBundleCommandSourceAdapter.cpp" />
+    <ClCompile Include="src\core\ChatRuntimeOrchestrationCoordinator.cpp" />
     <ClCompile Include="src\core\GatewayHostBindingCoordinator.cpp" />
     <ClCompile Include="src\core\SkillsGatewayPublicationCoordinator.cpp" />
     <ClCompile Include="src\core\ServiceLifecycleStartupCoordinator.cpp" />

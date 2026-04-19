@@ -10,6 +10,12 @@
 
 namespace blazeclaw::core {
 
+	class ServiceManager;
+
+	/// Chat request preparation (`PrepareChatRequest`), skills prompt resolution, and gateway chat runtime
+	/// execution strategies: cancellation short-circuit, inline tool invocation, embedded PI orchestration
+	/// (including email fallback evaluation), and provider handoff (`ExecuteProviderChatRuntimePath`).
+	/// Implemented in `ChatRuntimeOrchestrationCoordinator.cpp`; `GatewayHostBindingCoordinator` registers callbacks only.
 	class ChatRuntimeOrchestrationCoordinator {
 	public:
 		struct PreparedChatRequest {
@@ -74,6 +80,26 @@ namespace blazeclaw::core {
 			return prepared;
 		}
 
+		struct ResolvedSkillsPromptForRun {
+			std::wstring wide;
+			std::string narrowAscii;
+		};
+
+		[[nodiscard]] ResolvedSkillsPromptForRun ResolveSkillsPromptForRun(
+			ServiceManager& manager) const;
+
+		[[nodiscard]] blazeclaw::gateway::GatewayHost::ChatRuntimeResult
+		ExecuteChatRuntimeRequestBody(
+			ServiceManager& manager,
+			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
+			const PreparedChatRequest& prepared,
+			const std::string& runtimeMessage,
+			const std::string& resolvedPromptForRunNarrow,
+			const std::string& activeProvider,
+			const std::string& activeModel) const;
+
+		void OnChatRuntimeAborted(ServiceManager& manager) const;
+
 		[[nodiscard]] static std::string BuildSkillsInjectedMessage(
 			const std::string& userMessage,
 			const std::wstring& skillsPrompt,
@@ -101,6 +127,25 @@ namespace blazeclaw::core {
 		}
 
 	private:
+		[[nodiscard]] static std::optional<blazeclaw::gateway::GatewayHost::ChatRuntimeResult>
+		TryInlineToolInvocation(
+			ServiceManager& manager,
+			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
+			const std::string& activeModel,
+			const std::optional<std::string>& resolvedSkillInvocationToolTarget);
+
+		[[nodiscard]] static blazeclaw::gateway::GatewayHost::ChatRuntimeResult
+		RunEmbeddedToolOrchestrationOrProvider(
+			ServiceManager& manager,
+			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
+			const std::string& sessionId,
+			const std::vector<std::string>& orderedAllowedTargets,
+			const std::optional<std::string>& resolvedSkillInvocationToolTarget,
+			const std::string& resolvedPromptForRunNarrow,
+			const std::string& runtimeMessage,
+			const std::string& activeProvider,
+			const std::string& activeModel);
+
 		[[nodiscard]] static std::string WideToNarrowAscii(
 			const std::wstring& value) {
 			std::string output;

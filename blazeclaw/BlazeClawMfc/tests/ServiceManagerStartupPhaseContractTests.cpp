@@ -62,6 +62,20 @@ namespace {
 			std::istreambuf_iterator<char>());
 	}
 
+	std::string ReadChatRuntimeOrchestrationCoordinatorSource()
+	{
+		const auto sourcePath = std::filesystem::path("BlazeClawMfc") /
+			"src" /
+			"core" /
+			"ChatRuntimeOrchestrationCoordinator.cpp";
+		std::ifstream in(sourcePath.string());
+		REQUIRE(in.is_open());
+
+		return std::string(
+			(std::istreambuf_iterator<char>(in)),
+			std::istreambuf_iterator<char>());
+	}
+
 	std::string ReadOperatorDiagnosticsAssemblerSource()
 	{
 		const auto sourcePath = std::filesystem::path("BlazeClawMfc") /
@@ -337,9 +351,9 @@ TEST_CASE(
 	"ServiceManager email contract: delegates runtime fallback, preflight health, and diagnostics projection",
 	"[servicemanager][email][contract]")
 {
-	const std::string gatewayBinding = ReadGatewayHostBindingCoordinatorSource();
+	const std::string chatOrchestration = ReadChatRuntimeOrchestrationCoordinatorSource();
 	REQUIRE(
-		gatewayBinding.find("m_emailFallbackRuntimeCoordinator.EvaluateEmbeddedFailure(") !=
+		chatOrchestration.find("m_emailFallbackRuntimeCoordinator.EvaluateEmbeddedFailure(") !=
 		std::string::npos);
 
 	const std::string source = ReadServiceManagerSource();
@@ -355,12 +369,16 @@ TEST_CASE(
 	"[servicemanager][phase1][contract]")
 {
 	const std::string gatewayBinding = ReadGatewayHostBindingCoordinatorSource();
+	const std::string chatOrchestration = ReadChatRuntimeOrchestrationCoordinatorSource();
 
 	REQUIRE(
-		gatewayBinding.find("m_chatRuntimeOrchestrationCoordinator.PrepareChatRequest(") !=
+		gatewayBinding.find("PrepareChatRequest(") !=
 		std::string::npos);
 	REQUIRE(
-		gatewayBinding.find("ExecuteProviderChatRuntimePath(") !=
+		chatOrchestration.find("ExecuteProviderChatRuntimePath(") !=
+		std::string::npos);
+	REQUIRE(
+		chatOrchestration.find("ExecuteChatRuntimeRequestBody(") !=
 		std::string::npos);
 	REQUIRE(
 		gatewayBinding.find("m_skillsGatewayMethodHandler.HandleSkillsUpdate(") !=
