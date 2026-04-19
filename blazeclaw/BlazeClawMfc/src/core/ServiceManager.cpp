@@ -1994,16 +1994,7 @@ namespace blazeclaw::core {
 
 	void ServiceManager::WireGatewayCallbacks()
 	{
-		BindSkillsCallbacks();
-		BindGatewayPolicyCallbacks();
-		BindToolRuntimeCallbacks();
-		BindChatCallbacks();
-		BindEmbeddingsCallbacks();
-	}
-
-	void ServiceManager::BindSkillsCallbacks()
-	{
-		GatewayHostBindingCoordinator::RegisterSkillsRelatedCallbacks(*this);
+		GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks(*this);
 	}
 
 	void ServiceManager::BindGatewayPolicyCallbacks()
@@ -2376,12 +2367,6 @@ namespace blazeclaw::core {
 			activeModel);
 	}
 
-
-
-	void ServiceManager::BindChatCallbacks()
-	{
-		GatewayHostBindingCoordinator::RegisterChatRuntimeCallbacks(*this);
-	}
 
 	void ServiceManager::BindEmbeddingsCallbacks()
 	{

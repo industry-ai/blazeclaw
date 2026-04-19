@@ -4,12 +4,15 @@ namespace blazeclaw::core {
 
 class ServiceManager;
 
-/// Owns gateway host callback wiring for skills refresh/update and chat runtime registration,
-/// keeping `BindSkillsCallbacks` / `BindChatCallbacks` as thin delegation entry points on `ServiceManager`.
-/// Chat runtime branching (cancellation, inline tools, embedded PI, provider path, abort snapshot) is implemented
-/// on `ChatRuntimeOrchestrationCoordinator` (`ChatRuntimeOrchestrationCoordinator.cpp`).
+/// Owns **service-layer → `GatewayHost` callback wiring** so `ServiceManager::WireGatewayCallbacks` stays a thin
+/// entry point and ordering lives in one place (`WireAllGatewayServiceCallbacks`). Skills/chat specifics stay here;
+/// chat execution branching lives in `ChatRuntimeOrchestrationCoordinator`. Policy/tool/embeddings bindings remain on
+/// `ServiceManager` as `Bind*` helpers; the coordinator sequences them — see `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md`.
 class GatewayHostBindingCoordinator {
 public:
+	/// Full startup sequence for gateway delegates: skills/schema → email/policy → tool runtimes → chat/abort → embeddings.
+	static void WireAllGatewayServiceCallbacks(ServiceManager& manager);
+
 	static void RegisterSkillsRelatedCallbacks(ServiceManager& manager);
 	static void RegisterChatRuntimeCallbacks(ServiceManager& manager);
 };

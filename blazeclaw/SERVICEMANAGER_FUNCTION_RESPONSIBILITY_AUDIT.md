@@ -80,10 +80,10 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 
 | Function | Role |
 |----------|------|
-| `BindSkillsCallbacks()` | Thin: delegates to **`GatewayHostBindingCoordinator::RegisterSkillsRelatedCallbacks`**. |
+| ~~`BindSkillsCallbacks()`~~ | **Removed:** skills wiring is invoked from **`GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks`** via **`RegisterSkillsRelatedCallbacks`**. |
 | `BindGatewayPolicyCallbacks()` | Policy hooks on gateway. |
 | `BindToolRuntimeCallbacks()` | Tool registry callbacks. |
-| `BindChatCallbacks()` | Thin: delegates to **`GatewayHostBindingCoordinator::RegisterChatRuntimeCallbacks`** (registration in **`GatewayHostBindingCoordinator.cpp`**; chat branches in **`ChatRuntimeOrchestrationCoordinator.cpp`**). |
+| ~~`BindChatCallbacks()`~~ | **Removed:** chat wiring is invoked from **`WireAllGatewayServiceCallbacks`** via **`RegisterChatRuntimeCallbacks`** (registration in **`GatewayHostBindingCoordinator.cpp`**; chat branches in **`ChatRuntimeOrchestrationCoordinator.cpp`**). |
 | `BindEmbeddingsCallbacks()` | Embeddings lifecycle on gateway. |
 | `BuildConfigSchemaGatewayState()` | Expose config schema state for gateway. |
 | `LookupConfigSchemaGatewayPath(path)` | Schema lookup helper. |
@@ -227,8 +227,8 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 
 ### Phase 6 (gateway host binding — completed)
 
-- **`GatewayHostBindingCoordinator`** (`RegisterSkillsRelatedCallbacks`, `RegisterChatRuntimeCallbacks`) owns the former bodies of **`BindSkillsCallbacks`** and **`BindChatCallbacks`**.
-- **`ServiceManager`** declares **`friend class GatewayHostBindingCoordinator`**; **`BindSkillsCallbacks`** / **`BindChatCallbacks`** delegate with one call each.
+- **`GatewayHostBindingCoordinator`** (`WireAllGatewayServiceCallbacks`, `RegisterSkillsRelatedCallbacks`, `RegisterChatRuntimeCallbacks`) owns sequencing and the skills/chat callback bodies.
+- **`ServiceManager`** declares **`friend class GatewayHostBindingCoordinator`**; private **`BindGatewayPolicyCallbacks`**, **`BindToolRuntimeCallbacks`**, **`BindEmbeddingsCallbacks`** are invoked from **`WireAllGatewayServiceCallbacks`** in order.
 - **`skills.update`** / **`gateway.skills.update`**: **`SkillsGatewayMethodHandler::HandleSkillsUpdate`** is the **only** parse/validate/response implementation; **`GatewayHost`** forwards **`RequestFrame`** only (see source comments).
 - Contract tests: **`ReadGatewayHostBindingCoordinatorSource()`**, gateway delegation case, and phase1/email strings updated to read the coordinator/assembler sources where behavior moved.
 
@@ -274,6 +274,7 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 ## 5) Related documents
 
 - `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` — BlazeClaw vs OpenClaw architecture mapping and port optimization priorities (context for where `ServiceManager` sits in the stack).
+- `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md` — `ServiceManager` vs `GatewayHost`, **`GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks`** sequencing, rules for new behavior.
 
 ---
 

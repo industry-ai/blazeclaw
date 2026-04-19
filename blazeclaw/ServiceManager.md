@@ -9,6 +9,7 @@ Related cross-project architecture report:
 
 - `blazeclaw/docs/README.md` — index of `blazeclaw/docs/`.
 - `blazeclaw/docs/PROTOCOL_CODEGEN.md` — gateway manifest/codegen workflow, `GatewayHostRegistration` default handler coordinator, `OkResponse` / `ErrorResponse`, JSON payload helpers.
+- `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md` — `ServiceManager` vs `GatewayHost` roles, `WireAllGatewayServiceCallbacks` sequencing, rules for new gateway/core behavior.
 - `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md`
   - BlazeClaw vs OpenClaw architecture/framework comparison, structural mapping, and prioritized optimization suggestions for the MFC port.
 
@@ -73,7 +74,7 @@ Builds **`OperatorDiagnosticsInputs`** (projector contexts + scalar fields from 
 - `RouteGatewayRequest(...)`
 - `PumpGatewayNetworkOnce(...)`
 
-Bridges core state/runtime decisions with `GatewayHost` request handling.
+Bridges core state/runtime decisions with `GatewayHost` request handling. Callback wiring at startup is sequenced by **`GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks`** (invoked from private `WireGatewayCallbacks`); see **`blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md`**.
 
 ---
 
@@ -195,10 +196,10 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
 18. **Extract Phase 1 non-email deep logic seams from `ServiceManager`**
    - ✅ Implemented.
    - Added `ChatRuntimeOrchestrationCoordinator` and delegated chat request
-     preparation concerns from `BindChatCallbacks()`.
+     preparation concerns from chat runtime wiring (`RegisterChatRuntimeCallbacks` / `WireAllGatewayServiceCallbacks`).
    - **`SkillsCommandService::BuildEmbeddedToolBindings`**: maps tool-dispatch skill commands to **`EmbeddedToolBinding`** for embedded runtime; **`ServiceManager::BuildEmbeddedToolBindings`** delegates to the service.
    - Added `SkillsGatewayMethodHandler` and delegated `skills.update` request
-     parsing/persistence/response shaping from `BindSkillsCallbacks()`.
+     parsing/persistence/response shaping from skills gateway wiring (`RegisterSkillsRelatedCallbacks` / `WireAllGatewayServiceCallbacks`).
      **Invariant:** `SkillsGatewayMethodHandler::HandleSkillsUpdate` is the **only**
      implementation for `gateway.skills.update` / `skills.update` parse, validate, and
      response framing; `GatewayHost` registers methods and forwards `RequestFrame` to the
@@ -252,9 +253,10 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
 
 23. **Gateway host binding coordinator (`GatewayHostBindingCoordinator`)**
    - ✅ Implemented.
-   - **`GatewayHostBindingCoordinator::RegisterSkillsRelatedCallbacks`** and **`RegisterChatRuntimeCallbacks`** register gateway callbacks (config schema, skills refresh/update, **`SetChatRuntimeCallback`** / **`SetChatAbortCallback`** + **`CChatRuntime::Execute`**).
+   - **`GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks`** sequences skills, policy, tools, chat, and embeddings binding (see **`SERVICE_LAYER_BOUNDARIES.md`**).
+   - **`RegisterSkillsRelatedCallbacks`** and **`RegisterChatRuntimeCallbacks`** register gateway callbacks (config schema, skills refresh/update, **`SetChatRuntimeCallback`** / **`SetChatAbortCallback`** + **`CChatRuntime::Execute`**).
    - Chat runtime **branching** (cancellation, inline tools, embedded PI + email fallback, provider path, abort snapshot) lives in **`ChatRuntimeOrchestrationCoordinator.cpp`** (**`ExecuteChatRuntimeRequestBody`**, **`TryInlineToolInvocation`**, **`RunEmbeddedToolOrchestrationOrProvider`**, **`ResolveSkillsPromptForRun`**, **`OnChatRuntimeAborted`**).
-   - **`ServiceManager`** declares **`friend class GatewayHostBindingCoordinator`** and **`friend class ChatRuntimeOrchestrationCoordinator`**; **`BindSkillsCallbacks`** / **`BindChatCallbacks`** delegate in one call each.
+   - **`ServiceManager`** declares **`friend class GatewayHostBindingCoordinator`** and **`friend class ChatRuntimeOrchestrationCoordinator`**; private **`BindGatewayPolicyCallbacks`**, **`BindToolRuntimeCallbacks`**, **`BindEmbeddingsCallbacks`** remain on **`ServiceManager`** and are invoked from **`WireAllGatewayServiceCallbacks`** in order.
    - Contract tests: **`GatewayHostBindingCoordinator.cpp`** (Phase 1 **`PrepareChatRequest`**, skills.update); **`ChatRuntimeOrchestrationCoordinator.cpp`** (**`ExecuteProviderChatRuntimePath`**, embedded **`EvaluateEmbeddedFailure`**); **`OperatorDiagnosticsAssembler.cpp`** for projector **`Apply`** (phase3/email).
 
 24. **Skills refresh policy + gateway publication (`SkillsAgentCommandDescriptorPolicy`, `SkillsGatewayPublicationCoordinator`)**
@@ -287,17 +289,10 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
      owned by value.
 
 9. **Introduce internal wiring helpers with strict naming**
-   - Example: `BindChatCallbacks`, `BindSkillsCallbacks`, `BindEmbeddingsCallbacks`.
+   - Example: `BindGatewayPolicyCallbacks`, `BindToolRuntimeCallbacks`, `BindEmbeddingsCallbacks`, plus coordinator **`RegisterSkillsRelatedCallbacks`** / **`RegisterChatRuntimeCallbacks`**.
    - Easier code navigation and onboarding.
    - ✅ Implemented strict-named internal wiring helper decomposition.
-   - Added helper methods:
-     - `BindSkillsCallbacks()`
-     - `BindGatewayPolicyCallbacks()`
-     - `BindToolRuntimeCallbacks()`
-     - `BindChatCallbacks()`
-     - `BindEmbeddingsCallbacks()`
-   - `WireGatewayCallbacks()` now acts as a sequencing facade invoking
-     these helpers in deterministic order.
+   - **`WireGatewayCallbacks()`** delegates to **`GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks`**, which invokes **`RegisterSkillsRelatedCallbacks`**, **`BindGatewayPolicyCallbacks`**, **`BindToolRuntimeCallbacks`**, **`RegisterChatRuntimeCallbacks`**, **`BindEmbeddingsCallbacks`** in deterministic order (see **`SERVICE_LAYER_BOUNDARIES.md`**).
 
 10. **Document invariants explicitly**
    - Startup order invariants

@@ -141,11 +141,9 @@ namespace blazeclaw::core {
 		bool PumpGatewayNetworkOnce(std::string& error);
 
 	private:
-		// Private gateway / config schema composition
-		void BindSkillsCallbacks();
+		// Private gateway / config schema composition (sequenced by `GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks`)
 		void BindGatewayPolicyCallbacks();
 		void BindToolRuntimeCallbacks();
-		void BindChatCallbacks();
 		void BindEmbeddingsCallbacks();
 		[[nodiscard]] blazeclaw::gateway::ConfigSchemaGatewayState
 			BuildConfigSchemaGatewayState() const;

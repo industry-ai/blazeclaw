@@ -1,6 +1,6 @@
 # GatewayHost — tracking notes
 
-**Related documentation:** `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` (how `GatewayHost` fits the BlazeClaw vs OpenClaw gateway model), `blazeclaw/BlazeClawMfc/PROJECT_REVIEW.md` (layering and threading).
+**Related documentation:** `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` (how `GatewayHost` fits the BlazeClaw vs OpenClaw gateway model), `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md` (core `ServiceManager` ↔ `GatewayHost` callback boundaries), `blazeclaw/BlazeClawMfc/PROJECT_REVIEW.md` (layering and threading).
 
 This file tracks analysis of `blazeclaw::gateway::GatewayHost` (`GatewayHost.h` / split `.cpp` sources). The section at the bottom preserves earlier **file size** guidance for `GatewayHost.cpp`.
 

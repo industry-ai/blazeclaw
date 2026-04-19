@@ -7,6 +7,14 @@
 
 namespace blazeclaw::core {
 
+void GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks(ServiceManager& manager) {
+	RegisterSkillsRelatedCallbacks(manager);
+	manager.BindGatewayPolicyCallbacks();
+	manager.BindToolRuntimeCallbacks();
+	RegisterChatRuntimeCallbacks(manager);
+	manager.BindEmbeddingsCallbacks();
+}
+
 void GatewayHostBindingCoordinator::RegisterSkillsRelatedCallbacks(ServiceManager& manager) {
 		manager.RefreshGatewaySkillsStateProjection();
 		manager.PublishGatewaySkillsStateProjection();
