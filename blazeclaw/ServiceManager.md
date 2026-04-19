@@ -13,6 +13,8 @@ Related cross-project architecture report:
 - `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp.md` — `GatewayHost` registration map; **thin façade invariant** (`RegisterDefaultHandlers` → `RegisterDefaultHandlerSequence`; no god lambdas in `GatewayHost.cpp`); **Ongoing architecture direction** (split `GatewayHost.Handlers.*`, shared protocol helpers, named handler types).
 - `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md` — `ServiceManager` vs `GatewayHost` roles, `WireAllGatewayServiceCallbacks` sequencing, rules for new gateway/core behavior.
 - `blazeclaw/docs/GATEWAY_CORE_WIRING.md` — Phase C coordinator-first rules; Phase D task-delta recency and streaming/startup notes.
+- `blazeclaw/docs/BUILD_AND_CI.md` — Phase E vcpkg / CI / stub deprecation.
+- `blazeclaw/docs/SKILL_PORTING.md` — Phase F skill PORTING_PLAN pattern.
 - `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md`
   - BlazeClaw vs OpenClaw architecture/framework comparison, structural mapping, and prioritized optimization suggestions for the MFC port.
 

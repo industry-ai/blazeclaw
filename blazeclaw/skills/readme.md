@@ -1,5 +1,7 @@
 ## BlazeClaw Skills Overview
 
+**Porting from OpenClaw:** see [`blazeclaw/docs/SKILL_PORTING.md`](../docs/SKILL_PORTING.md) (Phase F — **PORTING_PLAN** template, upstream links, doc sync).
+
 This folder contains **local implemented skills** and related assets used by
 BlazeClaw.
 

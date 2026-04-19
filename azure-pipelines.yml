@@ -1,3 +1,4 @@
+# BlazeClaw: MSBuild + vcpkg (see blazeclaw/docs/BUILD_AND_CI.md)
 trigger:
 - main
 
@@ -6,6 +7,8 @@ pool:
 
 variables:
   buildConfiguration: 'Debug'
+  # Must match local developer docs (blazeclaw/README.md, blazeclaw/docs/BUILD_AND_CI.md)
+  VcpkgTriplet: 'x64-windows'
 
 steps:
 - task: PowerShell@2
@@ -13,18 +16,20 @@ steps:
   inputs:
     targetType: 'inline'
     script: |
-      Write-Host "Ensure vcpkg is available"
+      Write-Host "Ensure vcpkg is available at repo root (clone https://github.com/microsoft/vcpkg -> vcpkg\)"
       if (-Not (Test-Path "vcpkg\vcpkg.exe")) {
-        Write-Host "vcpkg not found; please add vcpkg to repository or install on agent"
-        exit 0
+        Write-Error "vcpkg.exe not found at .\vcpkg\vcpkg.exe — add vcpkg to the repository or agent image."
+        exit 1
       }
 
 - task: PowerShell@2
   displayName: 'Install vcpkg deps'
+  env:
+    VCPKG_DEFAULT_TRIPLET: $(VcpkgTriplet)
   inputs:
     targetType: 'inline'
     script: |
-      .\vcpkg\vcpkg.exe install nlohmann-json catch2
+      .\vcpkg\vcpkg.exe install --triplet $(VcpkgTriplet) nlohmann-json catch2
 
 - task: VSBuild@1
   inputs:

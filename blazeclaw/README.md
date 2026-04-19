@@ -1,23 +1,36 @@
 Developer notes
 
-This workspace uses vcpkg for dependency management in CI. To install dependencies locally run:
+## vcpkg (canonical)
 
-  .\vcpkg\vcpkg.exe install nlohmann-json catch2
+| Setting | Value |
+|---------|--------|
+| **Triplet** | `x64-windows` |
+| **Packages** | `nlohmann-json`, `catch2` |
 
-Test project and CI notes
+Install at the **repository root** (clone [vcpkg](https://github.com/microsoft/vcpkg) into `vcpkg\`):
 
-- The test project BlazeClawMfc.Tests uses Catch2 (v3) and nlohmann::json via vcpkg.
-- An Azure Pipelines definition (azure-pipelines.yml) has been added to install vcpkg packages, build the solution, and run the test executable.
+```powershell
+.\vcpkg\vcpkg.exe install --triplet x64-windows nlohmann-json catch2
+```
 
-Local setup example (PowerShell):
+Use **vcpkg MSBuild integration** so `$(VcpkgIncludeRoot)` resolves (e.g. `vcpkg integrate install` from that clone). Full detail: **`blazeclaw/docs/BUILD_AND_CI.md`**.
 
-  cd E:\gitRepo\blazeClaw
-  .\vcpkg\vcpkg.exe install --triplet x64-windows nlohmann-json catch2
-  msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64
+## Tests and CI
 
-Notes:
-- The project currently includes lightweight third_party stubs to ease local builds when vcpkg is not installed. It's recommended to use vcpkg as the source of truth and remove stubs once vcpkg is relied upon in CI.
-- The tests are executed as part of CI in the pipeline; the pipeline runs the produced test executable and returns its exit code.
+- **BlazeClawMfc.Tests** uses **Catch2** and **nlohmann::json** via vcpkg includes.
+- **Azure Pipelines:** [`azure-pipelines.yml`](../azure-pipelines.yml) — vcpkg bootstrap, install with triplet **`x64-windows`**, build **`blazeclaw/BlazeClaw.sln`** (Debug|x64), run **`BlazeClawMfc.Tests.exe`**.
+- **GitHub Actions:** [`.github/workflows/blazeclaw-chat-nightly-smoke.yml`](../.github/workflows/blazeclaw-chat-nightly-smoke.yml) — smoke checks; see **BUILD_AND_CI.md** for how this differs from Azure.
+
+Local build example:
+
+```powershell
+cd E:\gitRepo\blazeClaw
+msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64
+```
+
+## third_party fallbacks
+
+`BlazeClawMfc/third_party/` may include **catch2** / **nlohmann** include fallbacks when vcpkg is not configured. **CI is expected to use vcpkg.** Planned removal of those stubs is documented in **`blazeclaw/docs/BUILD_AND_CI.md`** (Phase E). Longer-lived vendor paths (ONNX, llama.cpp) stay separate.
 
 BlazeClawMfc planning docs:
 - `blazeclaw/BlazeClawMfc/PROJECT_REVIEW.md`
@@ -33,4 +46,6 @@ Architecture comparison docs:
 - `blazeclaw/BlazeClawMfc/tools/GatewayUpstreamDiff/` (`Diff-OpenClawGateway.ps1`, `Verify-GatewayDispatcherMethods.ps1`)
 - `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md` (`ServiceManager` ↔ `GatewayHost`, `WireAllGatewayServiceCallbacks`)
 - `blazeclaw/docs/GATEWAY_CORE_WIRING.md` (Phase C wiring, Phase D task-delta recency & streaming/startup notes)
+- `blazeclaw/docs/BUILD_AND_CI.md` (Phase E: vcpkg, Azure Pipelines, stub deprecation plan)
+- `blazeclaw/docs/SKILL_PORTING.md` (Phase F: PORTING_PLAN pattern, skill index)
 - `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp.md` (deep dive: **thin façade** invariant—`RegisterDefaultHandlers` → `RegisterDefaultHandlerSequence` only from `GatewayHost.cpp`; split `GatewayHost.Handlers.*`; no god lambdas; shared protocol surface; named handler types)
