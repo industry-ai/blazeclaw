@@ -3,6 +3,8 @@
 
 #include "GatewayJsonUtils.h"
 #include "GatewayJsonSerializers.h"
+#include "GatewayJsonBuilder.h"
+#include "GatewayRequestParams.h"
 #include "GatewayPersistencePaths.h"
 #include "GatewayProtocolCodec.h"
 #include "GatewayProtocolSchemaValidator.h"
@@ -207,21 +209,24 @@ namespace blazeclaw::gateway {
 
 		std::string BuildModelJson(const std::string& requestedModelId) {
 			const std::string modelId = NormalizeModelId(requestedModelId);
-			return "{\"id\":\"" + EscapeJson(modelId) +
-				"\",\"provider\":\"" + EscapeJson(ResolveModelProvider(modelId)) +
-				"\",\"displayName\":\"" + EscapeJson(ResolveModelDisplayName(modelId)) +
-				"\",\"streaming\":" +
-				std::string(ResolveModelStreaming(modelId) ? "true" : "false") + "}";
+			return JsonObject({
+				{"id", JsonString(modelId)},
+				{"provider", JsonString(ResolveModelProvider(modelId))},
+				{"displayName", JsonString(ResolveModelDisplayName(modelId))},
+				{"streaming", JsonBool(ResolveModelStreaming(modelId))},
+			});
 		}
 
 		std::string BuildDeepSeekConfigJson(
 			const std::string& apiKey,
 			const std::string& baseUrl,
 			const std::string& defaultModel) {
-			return "{\"configured\":" + std::string(!apiKey.empty() ? "true" : "false") +
-				",\"apiKeyMasked\":\"" + EscapeJson(MaskSecret(apiKey)) +
-				"\",\"baseUrl\":\"" + EscapeJson(baseUrl) +
-				"\",\"defaultModel\":\"" + EscapeJson(defaultModel) + "\"}";
+			return JsonObject({
+				{"configured", JsonBool(!apiKey.empty())},
+				{"apiKeyMasked", JsonString(MaskSecret(apiKey))},
+				{"baseUrl", JsonString(baseUrl)},
+				{"defaultModel", JsonString(defaultModel)},
+			});
 		}
 
 		std::string ToNarrow(const std::wstring& value) {
@@ -233,40 +238,6 @@ namespace blazeclaw::gateway {
 			}
 
 			return result;
-		}
-
-		std::optional<std::string> ExtractObjectParam(
-			const std::optional<std::string>& paramsJson,
-			const std::string& fieldName) {
-			if (!paramsJson.has_value()) {
-				return std::nullopt;
-			}
-
-			std::string raw;
-			if (!json::FindRawField(paramsJson.value(), fieldName, raw)) {
-				return std::nullopt;
-			}
-
-			if (!json::IsJsonObjectShape(raw)) {
-				return std::nullopt;
-			}
-
-			return raw;
-		}
-
-		std::optional<bool> ExtractBooleanParam(
-			const std::optional<std::string>& paramsJson,
-			const std::string& fieldName) {
-			if (!paramsJson.has_value()) {
-				return std::nullopt;
-			}
-
-			bool value = false;
-			if (!json::FindBoolField(paramsJson.value(), fieldName, value)) {
-				return std::nullopt;
-			}
-
-			return value;
 		}
 
 		GatewayHost::ChatRuntimeResult::TaskDeltaEntry NormalizePersistedTaskDelta(
@@ -337,34 +308,6 @@ namespace blazeclaw::gateway {
 			return events;
 		}
 
-		std::string ExtractStringParam(const std::optional<std::string>& paramsJson, const std::string& fieldName) {
-			if (!paramsJson.has_value()) {
-				return {};
-			}
-
-			std::string value;
-			if (!json::FindStringField(paramsJson.value(), fieldName, value)) {
-				return {};
-			}
-
-			return value;
-		}
-
-		std::optional<std::size_t> ExtractNumericParam(
-			const std::optional<std::string>& paramsJson,
-			const std::string& fieldName) {
-			if (!paramsJson.has_value()) {
-				return std::nullopt;
-			}
-
-			std::uint64_t value = 0;
-			if (!json::FindUInt64Field(paramsJson.value(), fieldName, value)) {
-				return std::nullopt;
-			}
-
-			return static_cast<std::size_t>(value);
-		}
-
 		std::uint64_t CurrentEpochMs() {
 			const auto now = std::chrono::system_clock::now();
 			return static_cast<std::uint64_t>(
@@ -395,25 +338,17 @@ namespace blazeclaw::gateway {
 		std::string BuildMemorySearchEnvelope(
 			const std::string& sessionKey,
 			const std::vector<std::string>& matches) {
-			std::string matchesJson = "[";
-			for (std::size_t i = 0; i < matches.size(); ++i) {
-				if (i > 0) {
-					matchesJson += ",";
-				}
-
-				matchesJson += "{\"text\":\"" +
-					EscapeJson(matches[i]) +
-					"\"}";
+			std::vector<std::string> rows;
+			rows.reserve(matches.size());
+			for (const auto& text : matches) {
+				rows.push_back(JsonObject({{"text", JsonString(text)}}));
 			}
-			matchesJson += "]";
 
-			return std::string("{\"sessionKey\":\"") +
-				EscapeJson(sessionKey) +
-				"\",\"matches\":" +
-				matchesJson +
-				",\"count\":" +
-				std::to_string(matches.size()) +
-				"}";
+			return JsonObject({
+				{"sessionKey", JsonString(sessionKey)},
+				{"matches", JsonArray(rows)},
+				{"count", JsonNumber(static_cast<std::uint64_t>(matches.size()))},
+			});
 		}
 
 		bool IsUnsafeAgentFilePath(const std::string& path) {
@@ -506,7 +441,7 @@ namespace blazeclaw::gateway {
 		m_toolRegistry.LoadSkillToolsFromDirectory("blazeclaw/skills");
 		m_toolRegistry.LoadSkillToolsFromDirectory("skills");
 		m_dispatcher.Register("gateway.tools.list", [this](const protocol::RequestFrame& request) {
-			const std::string category = ExtractStringParam(request.paramsJson, "category");
+			const std::string category = RequestParamsView(request.paramsJson).GetString("category");
 			const auto tools = m_toolRegistry.List();
 			std::string toolsJson = "[";
 			std::size_t count = 0;
@@ -1587,7 +1522,7 @@ namespace blazeclaw::gateway {
 
 	void GatewayHost::RegisterGatewayEventCatalogQueryHandlers() {
 		m_dispatcher.Register("gateway.events.latestByType", [](const protocol::RequestFrame& request) {
-			const std::string type = ExtractStringParam(request.paramsJson, "type");
+			const std::string type = RequestParamsView(request.paramsJson).GetString("type");
 			const bool lifecycle = type == "lifecycle";
 			const std::string event = lifecycle ? "gateway.shutdown" : "gateway.tools.catalog.update";
 			return protocol::OkResponse(request, "{\"type\":\"" + EscapeJson(type.empty() ? "update" : type) + "\",\"event\":\"" + EscapeJson(event) + "\"}");
@@ -1623,7 +1558,7 @@ namespace blazeclaw::gateway {
 
 
 		m_dispatcher.Register("gateway.events.search", [](const protocol::RequestFrame& request) {
-			const std::string term = ExtractStringParam(request.paramsJson, "term");
+			const std::string term = RequestParamsView(request.paramsJson).GetString("term");
 			const auto& events = EventCatalogNames();
 			std::string eventsJson = "[";
 			std::size_t count = 0;
@@ -1668,7 +1603,7 @@ namespace blazeclaw::gateway {
 
 	void GatewayHost::RegisterGatewayRegistryIntrospectionHandlers() {
 		m_dispatcher.Register("gateway.agents.exists", [this](const protocol::RequestFrame& request) {
-			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
+			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("agentId");
 			const auto agents = m_agentRegistry.List();
 			const bool exists = std::any_of(agents.begin(), agents.end(), [&](const AgentEntry& agent) {
 				return requestedId.empty() || agent.id == requestedId;
@@ -1679,7 +1614,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.config.getSection", [this](const protocol::RequestFrame& request) {
-			const std::string section = ExtractStringParam(request.paramsJson, "section");
+			const std::string section = RequestParamsView(request.paramsJson).GetString("section");
 			const std::string resolved = section.empty() ? "gateway" : section;
 			std::string sectionJson = "{\"bind\":\"" + EscapeJson(m_runtimeGatewayBind) + "\",\"port\":" + std::to_string(m_runtimeGatewayPort) + "}";
 			if (resolved == "agent") {
@@ -1696,7 +1631,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.tools.get", [this](const protocol::RequestFrame& request) {
-			const std::string requestedTool = ExtractStringParam(request.paramsJson, "tool");
+			const std::string requestedTool = RequestParamsView(request.paramsJson).GetString("tool");
 			const auto tools = m_toolRegistry.List();
 			ToolCatalogEntry selected{};
 			if (!tools.empty()) {
@@ -1714,7 +1649,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.agents.count", [this](const protocol::RequestFrame& request) {
-			const std::optional<bool> activeFilter = ExtractBooleanParam(request.paramsJson, "active");
+			const std::optional<bool> activeFilter = RequestParamsView(request.paramsJson).GetBool("active");
 			const auto agents = m_agentRegistry.List();
 			const std::size_t count = static_cast<std::size_t>(std::count_if(agents.begin(), agents.end(), [&](const AgentEntry& agent) {
 				return !activeFilter.has_value() || agent.active == activeFilter.value();
@@ -1726,14 +1661,14 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.models.get", [](const protocol::RequestFrame& request) {
-			const std::string modelId = ExtractStringParam(request.paramsJson, "modelId");
+			const std::string modelId = RequestParamsView(request.paramsJson).GetString("modelId");
 			const std::string resolvedId = NormalizeModelId(modelId);
 
 			return protocol::OkResponse(request, "{\"model\":" + BuildModelJson(resolvedId) + "}");
 			});
 
 		m_dispatcher.Register("gateway.sessions.exists", [this](const protocol::RequestFrame& request) {
-			const std::string requestedId = ExtractStringParam(request.paramsJson, "sessionId");
+			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("sessionId");
 			const auto sessions = m_sessionRegistry.List();
 			const bool exists = std::any_of(sessions.begin(), sessions.end(), [&](const SessionEntry& session) {
 				return requestedId.empty() || session.id == requestedId;
@@ -1744,7 +1679,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.config.getKey", [this](const protocol::RequestFrame& request) {
-			const std::string key = ExtractStringParam(request.paramsJson, "key");
+			const std::string key = RequestParamsView(request.paramsJson).GetString("key");
 			std::string value;
 			if (key == "gateway.bind") {
 				value = m_runtimeGatewayBind;
@@ -1773,8 +1708,8 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.sessions.count", [this](const protocol::RequestFrame& request) {
-			const std::string scope = ExtractStringParam(request.paramsJson, "scope");
-			const std::optional<bool> active = ExtractBooleanParam(request.paramsJson, "active");
+			const std::string scope = RequestParamsView(request.paramsJson).GetString("scope");
+			const std::optional<bool> active = RequestParamsView(request.paramsJson).GetBool("active");
 			const auto sessions = m_sessionRegistry.List();
 			const std::size_t count = static_cast<std::size_t>(std::count_if(sessions.begin(), sessions.end(), [&](const SessionEntry& session) {
 				if (!scope.empty() && session.scope != scope) {
@@ -1791,7 +1726,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.transport.endpoint.exists", [this](const protocol::RequestFrame& request) {
-			const std::string endpoint = ExtractStringParam(request.paramsJson, "endpoint");
+			const std::string endpoint = RequestParamsView(request.paramsJson).GetString("endpoint");
 			const std::string current = m_transport.Endpoint();
 			const bool exists = endpoint.empty() || endpoint == current;
 
@@ -1800,7 +1735,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.sessions.activate", [this](const protocol::RequestFrame& request) {
-			const std::string requestedId = ExtractStringParam(request.paramsJson, "sessionId");
+			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("sessionId");
 			const auto sessions = m_sessionRegistry.List();
 			const bool exists = std::any_of(sessions.begin(), sessions.end(), [&](const SessionEntry& session) {
 				return requestedId.empty() || session.id == requestedId;
@@ -1813,8 +1748,8 @@ namespace blazeclaw::gateway {
 
 
 		m_dispatcher.Register("gateway.agents.files.exists", [this](const protocol::RequestFrame& request) {
-			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
-			const std::string requestedPath = ExtractStringParam(request.paramsJson, "path");
+			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("agentId");
+			const std::string requestedPath = RequestParamsView(request.paramsJson).GetString("path");
 			const AgentFileExistsResult result = m_agentRegistry.ExistsFile(requestedId, requestedPath);
 
 			return protocol::OkResponse(request, "{\"path\":\"" + EscapeJson(result.path) +
@@ -1822,8 +1757,8 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.agents.files.delete", [this](const protocol::RequestFrame& request) {
-			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
-			const std::string requestedPath = ExtractStringParam(request.paramsJson, "path");
+			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("agentId");
+			const std::string requestedPath = RequestParamsView(request.paramsJson).GetString("path");
 			if (IsUnsafeAgentFilePath(requestedPath)) {
 				return protocol::ResponseFrame{
 					.id = request.id,
@@ -1839,7 +1774,7 @@ namespace blazeclaw::gateway {
 				};
 			}
 
-			const std::string idempotencyKey = ExtractStringParam(request.paramsJson, "idempotencyKey");
+			const std::string idempotencyKey = RequestParamsView(request.paramsJson).GetString("idempotencyKey");
 			const std::string mutationDedupeKey = "gateway.agents.files.delete::" + idempotencyKey;
 			if (!idempotencyKey.empty()) {
 				const auto dedupeIt = m_mutationPayloadByIdempotency.find(mutationDedupeKey);
@@ -1861,8 +1796,8 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.agents.files.set", [this](const protocol::RequestFrame& request) {
-			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
-			const std::string requestedPath = ExtractStringParam(request.paramsJson, "path");
+			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("agentId");
+			const std::string requestedPath = RequestParamsView(request.paramsJson).GetString("path");
 			if (IsUnsafeAgentFilePath(requestedPath)) {
 				return protocol::ResponseFrame{
 					.id = request.id,
@@ -1878,8 +1813,8 @@ namespace blazeclaw::gateway {
 				};
 			}
 
-			const std::string content = ExtractStringParam(request.paramsJson, "content");
-			const std::string idempotencyKey = ExtractStringParam(request.paramsJson, "idempotencyKey");
+			const std::string content = RequestParamsView(request.paramsJson).GetString("content");
+			const std::string idempotencyKey = RequestParamsView(request.paramsJson).GetString("idempotencyKey");
 			const std::string mutationDedupeKey = "gateway.agents.files.set::" + idempotencyKey;
 			if (!idempotencyKey.empty()) {
 				const auto dedupeIt = m_mutationPayloadByIdempotency.find(mutationDedupeKey);
@@ -1899,8 +1834,8 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.agents.files.get", [this](const protocol::RequestFrame& request) {
-			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
-			const std::string requestedPath = ExtractStringParam(request.paramsJson, "path");
+			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("agentId");
+			const std::string requestedPath = RequestParamsView(request.paramsJson).GetString("path");
 			if (IsUnsafeAgentFilePath(requestedPath)) {
 				return protocol::ResponseFrame{
 					.id = request.id,
@@ -1921,7 +1856,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.agents.files.list", [this](const protocol::RequestFrame& request) {
-			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
+			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("agentId");
 			const auto files = m_agentRegistry.ListFiles(requestedId);
 			std::string filesJson = "[";
 			for (std::size_t i = 0; i < files.size(); ++i) {
@@ -1946,8 +1881,8 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.tools.call.execute", [this](const protocol::RequestFrame& request) {
-			const std::string requestedTool = ExtractStringParam(request.paramsJson, "tool");
-			const std::optional<std::string> argsJson = ExtractObjectParam(request.paramsJson, "args");
+			const std::string requestedTool = RequestParamsView(request.paramsJson).GetString("tool");
+			const std::optional<std::string> argsJson = RequestParamsView(request.paramsJson).GetObject("args");
 			const bool argsProvided = request.paramsJson.has_value() &&
 				request.paramsJson.value().find("\"args\"") != std::string::npos;
 
@@ -1981,10 +1916,10 @@ namespace blazeclaw::gateway {
 
 	void GatewayHost::RegisterGatewayAgentSessionMutationHandlers() {
 		m_dispatcher.Register("gateway.agents.update", [this](const protocol::RequestFrame& request) {
-			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
-			const std::string requestedName = ExtractStringParam(request.paramsJson, "name");
-			const std::optional<bool> requestedActive = ExtractBooleanParam(request.paramsJson, "active");
-			const std::string idempotencyKey = ExtractStringParam(request.paramsJson, "idempotencyKey");
+			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("agentId");
+			const std::string requestedName = RequestParamsView(request.paramsJson).GetString("name");
+			const std::optional<bool> requestedActive = RequestParamsView(request.paramsJson).GetBool("active");
+			const std::string idempotencyKey = RequestParamsView(request.paramsJson).GetString("idempotencyKey");
 			const std::string mutationDedupeKey = "gateway.agents.update::" + idempotencyKey;
 			if (!idempotencyKey.empty()) {
 				const auto dedupeIt = m_mutationPayloadByIdempotency.find(mutationDedupeKey);
@@ -2007,8 +1942,8 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.agents.delete", [this](const protocol::RequestFrame& request) {
-			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
-			const std::string idempotencyKey = ExtractStringParam(request.paramsJson, "idempotencyKey");
+			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("agentId");
+			const std::string idempotencyKey = RequestParamsView(request.paramsJson).GetString("idempotencyKey");
 			const std::string mutationDedupeKey = "gateway.agents.delete::" + idempotencyKey;
 			if (!idempotencyKey.empty()) {
 				const auto dedupeIt = m_mutationPayloadByIdempotency.find(mutationDedupeKey);
@@ -2033,10 +1968,10 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.agents.create", [this](const protocol::RequestFrame& request) {
-			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
-			const std::string requestedName = ExtractStringParam(request.paramsJson, "name");
-			const std::optional<bool> requestedActive = ExtractBooleanParam(request.paramsJson, "active");
-			const std::string idempotencyKey = ExtractStringParam(request.paramsJson, "idempotencyKey");
+			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("agentId");
+			const std::string requestedName = RequestParamsView(request.paramsJson).GetString("name");
+			const std::optional<bool> requestedActive = RequestParamsView(request.paramsJson).GetBool("active");
+			const std::string idempotencyKey = RequestParamsView(request.paramsJson).GetString("idempotencyKey");
 			const std::string mutationDedupeKey = "gateway.agents.create::" + idempotencyKey;
 			if (!idempotencyKey.empty()) {
 				const auto dedupeIt = m_mutationPayloadByIdempotency.find(mutationDedupeKey);
@@ -2059,9 +1994,9 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.sessions.patch", [this](const protocol::RequestFrame& request) {
-			const std::string requestedId = ExtractStringParam(request.paramsJson, "sessionId");
-			const std::string requestedScope = ExtractStringParam(request.paramsJson, "scope");
-			const std::optional<bool> requestedActive = ExtractBooleanParam(request.paramsJson, "active");
+			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("sessionId");
+			const std::string requestedScope = RequestParamsView(request.paramsJson).GetString("scope");
+			const std::optional<bool> requestedActive = RequestParamsView(request.paramsJson).GetBool("active");
 			const SessionEntry patched = m_sessionRegistry.Patch(
 				requestedId,
 				requestedScope.empty() ? std::nullopt : std::optional<std::string>(requestedScope),
@@ -2071,7 +2006,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.sessions.preview", [this](const protocol::RequestFrame& request) {
-			const std::string requestedId = ExtractStringParam(request.paramsJson, "sessionId");
+			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("sessionId");
 			const SessionEntry session = m_sessionRegistry.Resolve(requestedId);
 
 			return protocol::OkResponse(request, "{\"session\":" + SerializeSession(session) +
@@ -2080,7 +2015,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.sessions.compact", [this](const protocol::RequestFrame& request) {
-			const bool dryRun = ExtractBooleanParam(request.paramsJson, "dryRun").value_or(false);
+			const bool dryRun = RequestParamsView(request.paramsJson).GetBool("dryRun").value_or(false);
 			const std::size_t compacted = dryRun ? m_sessionRegistry.CountCompactCandidates() : m_sessionRegistry.CompactInactive();
 			const std::size_t remaining = m_sessionRegistry.List().size();
 
@@ -2090,7 +2025,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.sessions.usage", [this](const protocol::RequestFrame& request) {
-			const std::string requestedId = ExtractStringParam(request.paramsJson, "sessionId");
+			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("sessionId");
 			const SessionEntry session = m_sessionRegistry.Resolve(requestedId);
 
 			return protocol::OkResponse(request, "{\"sessionId\":\"" + EscapeJson(session.id) +
@@ -2098,7 +2033,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.sessions.delete", [this](const protocol::RequestFrame& request) {
-			const std::string requestedId = ExtractStringParam(request.paramsJson, "sessionId");
+			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("sessionId");
 			SessionEntry removedSession;
 			const bool deleted = m_sessionRegistry.Delete(requestedId, removedSession);
 			const std::size_t remaining = m_sessionRegistry.List().size();
@@ -2116,7 +2051,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.agents.list", [this](const protocol::RequestFrame& request) {
-			const std::optional<bool> activeFilter = ExtractBooleanParam(request.paramsJson, "active");
+			const std::optional<bool> activeFilter = RequestParamsView(request.paramsJson).GetBool("active");
 			const auto agents = m_agentRegistry.List();
 			std::string payload = "{\"agents\":[";
 			bool first = true;
@@ -2146,10 +2081,10 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.agents.run", [this](const protocol::RequestFrame& request) {
-			const std::string requestedAgentId = ExtractStringParam(request.paramsJson, "agentId");
-			const std::string requestedSessionId = ExtractStringParam(request.paramsJson, "sessionId");
-			const std::string message = ExtractStringParam(request.paramsJson, "message");
-			const std::string idempotencyKey = ExtractStringParam(request.paramsJson, "idempotencyKey");
+			const std::string requestedAgentId = RequestParamsView(request.paramsJson).GetString("agentId");
+			const std::string requestedSessionId = RequestParamsView(request.paramsJson).GetString("sessionId");
+			const std::string message = RequestParamsView(request.paramsJson).GetString("message");
+			const std::string idempotencyKey = RequestParamsView(request.paramsJson).GetString("idempotencyKey");
 
 			if (!idempotencyKey.empty()) {
 				const auto dedupeIt = m_agentRunByIdempotency.find(idempotencyKey);
@@ -2255,7 +2190,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.agents.wait", [this](const protocol::RequestFrame& request) {
-			const std::string runId = ExtractStringParam(request.paramsJson, "runId");
+			const std::string runId = RequestParamsView(request.paramsJson).GetString("runId");
 			const auto runIt = m_agentRuns.find(runId);
 			if (runIt == m_agentRuns.end()) {
 				return protocol::ResponseFrame{
@@ -2362,7 +2297,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.channels.accounts", [this](const protocol::RequestFrame& request) {
-			const std::string channelFilter = ExtractStringParam(request.paramsJson, "channel");
+			const std::string channelFilter = RequestParamsView(request.paramsJson).GetString("channel");
 			const auto accounts = m_channelRegistry.ListAccounts();
 			std::string accountsJson = "[";
 			bool first = true;
@@ -2385,7 +2320,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.channels.status.get", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
+			const std::string channel = RequestParamsView(request.paramsJson).GetString("channel");
 			const auto statuses = m_channelRegistry.ListStatus();
 			ChannelStatusEntry selected{};
 			bool found = false;
@@ -2410,7 +2345,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.channels.status.exists", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
+			const std::string channel = RequestParamsView(request.paramsJson).GetString("channel");
 			const auto statuses = m_channelRegistry.ListStatus();
 			const bool exists = std::any_of(statuses.begin(), statuses.end(), [&](const ChannelStatusEntry& status) {
 				return channel.empty() || status.id == channel;
@@ -2421,7 +2356,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.channels.status.count", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
+			const std::string channel = RequestParamsView(request.paramsJson).GetString("channel");
 			const auto statuses = m_channelRegistry.ListStatus();
 			const std::size_t count = static_cast<std::size_t>(std::count_if(statuses.begin(), statuses.end(), [&](const ChannelStatusEntry& status) {
 				return channel.empty() || status.id == channel;
@@ -2432,10 +2367,10 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.channels.route.resolve", [this](const protocol::RequestFrame& request) {
-			const std::string channel = ExtractStringParam(request.paramsJson, "channel");
-			const std::string account = ExtractStringParam(request.paramsJson, "accountId");
-			const std::string sessionId = ExtractStringParam(request.paramsJson, "sessionId");
-			const std::string agentId = ExtractStringParam(request.paramsJson, "agentId");
+			const std::string channel = RequestParamsView(request.paramsJson).GetString("channel");
+			const std::string account = RequestParamsView(request.paramsJson).GetString("accountId");
+			const std::string sessionId = RequestParamsView(request.paramsJson).GetString("sessionId");
+			const std::string agentId = RequestParamsView(request.paramsJson).GetString("agentId");
 			const ChannelRouteEntry route = m_channelRegistry.ResolveRoute(channel, account);
 			const SessionEntry session = m_sessionRegistry.Resolve(sessionId.empty() ? route.sessionId : sessionId);
 			const AgentEntry agent = m_agentRegistry.Get(agentId.empty() ? route.agentId : agentId);
@@ -2452,7 +2387,7 @@ namespace blazeclaw::gateway {
 
 	void GatewayHost::RegisterGatewayAgentToolSurfaceHandlers() {
 		m_dispatcher.Register("gateway.agents.get", [this](const protocol::RequestFrame& request) {
-			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
+			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("agentId");
 			const AgentEntry agent = m_agentRegistry.Get(requestedId);
 			return protocol::OkResponse(request, "{\"agent\":" + SerializeAgent(agent) + "}");
 			});
@@ -2474,7 +2409,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.tools.call.preview", [this](const protocol::RequestFrame& request) {
-			const std::string requestedTool = ExtractStringParam(request.paramsJson, "tool");
+			const std::string requestedTool = RequestParamsView(request.paramsJson).GetString("tool");
 			const ToolPreviewResult preview = m_toolRegistry.Preview(requestedTool);
 			const bool argsProvided = request.paramsJson.has_value() &&
 				request.paramsJson.value().find("\"args\"") != std::string::npos;
@@ -2487,7 +2422,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.agents.activate", [this](const protocol::RequestFrame& request) {
-			const std::string requestedId = ExtractStringParam(request.paramsJson, "agentId");
+			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("agentId");
 			const AgentEntry agent = m_agentRegistry.Activate(requestedId);
 			return protocol::OkResponse(request, "{\"agent\":" + SerializeAgent(agent) + ",\"event\":\"gateway.agent.update\"}");
 			});
@@ -2512,12 +2447,13 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.config.set", [this](const protocol::RequestFrame& request) {
-			const std::string bind = ExtractStringParam(request.paramsJson, "bind");
-			const std::optional<std::size_t> port = ExtractNumericParam(request.paramsJson, "port");
-			const std::string model = ExtractStringParam(request.paramsJson, "model");
-			const std::optional<bool> streaming = ExtractBooleanParam(request.paramsJson, "streaming");
-			const std::string deepSeekApiKey = ExtractStringParam(request.paramsJson, "deepseekApiKey");
-			const std::string deepSeekBaseUrl = ExtractStringParam(request.paramsJson, "deepseekBaseUrl");
+			const RequestParamsView params(request.paramsJson);
+			const std::string bind = params.GetString("bind");
+			const std::optional<std::size_t> port = params.GetSize("port");
+			const std::string model = params.GetString("model");
+			const std::optional<bool> streaming = params.GetBool("streaming");
+			const std::string deepSeekApiKey = params.GetString("deepseekApiKey");
+			const std::string deepSeekBaseUrl = params.GetString("deepseekBaseUrl");
 
 			if (!bind.empty()) {
 				m_runtimeGatewayBind = bind;
@@ -2568,7 +2504,7 @@ namespace blazeclaw::gateway {
 				"{\"ts\":1735689600200,\"level\":\"debug\",\"source\":\"dispatcher\",\"message\":\"Method handlers registered\"}",
 			};
 
-			const std::size_t requestedLimit = ExtractNumericParam(request.paramsJson, "limit").value_or(50);
+			const std::size_t requestedLimit = RequestParamsView(request.paramsJson).GetSize("limit").value_or(50);
 			const std::size_t cappedLimit = std::max<std::size_t>(1, std::min<std::size_t>(requestedLimit, 200));
 			const std::size_t emitCount = std::min<std::size_t>(cappedLimit, seededEntries.size());
 			const std::size_t begin = seededEntries.size() - emitCount;
@@ -2588,16 +2524,17 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.sessions.resolve", [this](const protocol::RequestFrame& request) {
-			const std::string sessionId = ExtractStringParam(request.paramsJson, "sessionId");
+			const std::string sessionId = RequestParamsView(request.paramsJson).GetString("sessionId");
 
 			const SessionEntry resolved = m_sessionRegistry.Resolve(sessionId);
 			return protocol::OkResponse(request, "{\"session\":" + SerializeSession(resolved) + "}");
 			});
 
 		m_dispatcher.Register("gateway.sessions.create", [this](const protocol::RequestFrame& request) {
-			const std::string requestedId = ExtractStringParam(request.paramsJson, "sessionId");
-			const std::string requestedScope = ExtractStringParam(request.paramsJson, "scope");
-			const std::optional<bool> requestedActive = ExtractBooleanParam(request.paramsJson, "active");
+			const RequestParamsView params(request.paramsJson);
+			const std::string requestedId = params.GetString("sessionId");
+			const std::string requestedScope = params.GetString("scope");
+			const std::optional<bool> requestedActive = params.GetBool("active");
 
 			const SessionEntry created = m_sessionRegistry.Create(
 				requestedId,
@@ -2607,9 +2544,10 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.sessions.reset", [this](const protocol::RequestFrame& request) {
-			const std::string requestedId = ExtractStringParam(request.paramsJson, "sessionId");
-			const std::string requestedScope = ExtractStringParam(request.paramsJson, "scope");
-			const std::optional<bool> requestedActive = ExtractBooleanParam(request.paramsJson, "active");
+			const RequestParamsView params(request.paramsJson);
+			const std::string requestedId = params.GetString("sessionId");
+			const std::string requestedScope = params.GetString("scope");
+			const std::optional<bool> requestedActive = params.GetBool("active");
 
 			const SessionEntry reset = m_sessionRegistry.Reset(
 				requestedId,
@@ -2625,8 +2563,8 @@ namespace blazeclaw::gateway {
 
 	void GatewayHost::RegisterGatewaySupplementaryCatalogHandlers() {
 		m_dispatcher.Register("gateway.session.list", [this](const protocol::RequestFrame& request) {
-			const std::optional<bool> activeFilter = ExtractBooleanParam(request.paramsJson, "active");
-			const std::string scopeFilter = ExtractStringParam(request.paramsJson, "scope");
+			const std::optional<bool> activeFilter = RequestParamsView(request.paramsJson).GetBool("active");
+			const std::string scopeFilter = RequestParamsView(request.paramsJson).GetString("scope");
 			const auto sessions = m_sessionRegistry.List();
 			std::string sessionArray = "[";
 			bool first = true;
@@ -2665,7 +2603,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.events.exists", [](const protocol::RequestFrame& request) {
-			const std::string eventName = ExtractStringParam(request.paramsJson, "event");
+			const std::string eventName = RequestParamsView(request.paramsJson).GetString("event");
 			const auto& events = EventCatalogNames();
 			const bool exists = std::any_of(events.begin(), events.end(), [&](const std::string& item) {
 				return eventName.empty() || item == eventName;
@@ -2676,7 +2614,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.events.count", [](const protocol::RequestFrame& request) {
-			const std::string eventName = ExtractStringParam(request.paramsJson, "event");
+			const std::string eventName = RequestParamsView(request.paramsJson).GetString("event");
 			const auto& events = EventCatalogNames();
 			const std::size_t count = static_cast<std::size_t>(std::count_if(events.begin(), events.end(), [&](const std::string& item) {
 				return eventName.empty() || item == eventName;
@@ -2687,7 +2625,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.tools.exists", [this](const protocol::RequestFrame& request) {
-			const std::string requestedTool = ExtractStringParam(request.paramsJson, "tool");
+			const std::string requestedTool = RequestParamsView(request.paramsJson).GetString("tool");
 			const auto tools = m_toolRegistry.List();
 			const bool exists = std::any_of(tools.begin(), tools.end(), [&](const ToolCatalogEntry& tool) {
 				return requestedTool.empty() || tool.id == requestedTool;
@@ -2698,7 +2636,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.tools.count", [this](const protocol::RequestFrame& request) {
-			const std::optional<bool> activeFilter = ExtractBooleanParam(request.paramsJson, "active");
+			const std::optional<bool> activeFilter = RequestParamsView(request.paramsJson).GetBool("active");
 			const auto tools = m_toolRegistry.List();
 			const std::size_t count = static_cast<std::size_t>(std::count_if(tools.begin(), tools.end(), [&](const ToolCatalogEntry& tool) {
 				return !activeFilter.has_value() || tool.enabled == activeFilter.value();
@@ -2710,7 +2648,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.models.exists", [](const protocol::RequestFrame& request) {
-			const std::string modelId = ExtractStringParam(request.paramsJson, "modelId");
+			const std::string modelId = RequestParamsView(request.paramsJson).GetString("modelId");
 			const bool exists = modelId.empty() || modelId == "default" || modelId == "reasoner";
 
 			return protocol::OkResponse(request, "{\"modelId\":\"" + EscapeJson(modelId.empty() ? "*" : modelId) +
@@ -2718,7 +2656,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.config.exists", [this](const protocol::RequestFrame& request) {
-			const std::string key = ExtractStringParam(request.paramsJson, "key");
+			const std::string key = RequestParamsView(request.paramsJson).GetString("key");
 			const bool exists = key.empty() ||
 				key == "gateway.bind" ||
 				key == "gateway.port" ||
@@ -2746,7 +2684,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.logs.count", [](const protocol::RequestFrame& request) {
-			const std::string level = ExtractStringParam(request.paramsJson, "level");
+			const std::string level = RequestParamsView(request.paramsJson).GetString("level");
 			const std::vector<std::string> levels = { "info", "info", "debug" };
 			const std::size_t count = static_cast<std::size_t>(std::count_if(levels.begin(), levels.end(), [&](const std::string& item) {
 				return level.empty() || item == level;
@@ -2757,7 +2695,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.config.count", [](const protocol::RequestFrame& request) {
-			const std::string section = ExtractStringParam(request.paramsJson, "section");
+			const std::string section = RequestParamsView(request.paramsJson).GetString("section");
 			const std::size_t count = section == "gateway" || section == "agent"
 				? 2
 				: 4;
@@ -2767,7 +2705,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.models.count", [](const protocol::RequestFrame& request) {
-			const std::string provider = ExtractStringParam(request.paramsJson, "provider");
+			const std::string provider = RequestParamsView(request.paramsJson).GetString("provider");
 			const std::size_t count = provider.empty() || provider == "seed" ? 2 : 0;
 
 			return protocol::OkResponse(request, "{\"provider\":\"" + EscapeJson(provider.empty() ? "*" : provider) +
@@ -2775,7 +2713,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.events.get", [](const protocol::RequestFrame& request) {
-			const std::string eventName = ExtractStringParam(request.paramsJson, "event");
+			const std::string eventName = RequestParamsView(request.paramsJson).GetString("event");
 			const auto& events = EventCatalogNames();
 			std::string selected = events.empty() ? "unknown" : events.front();
 			for (const auto& item : events) {
@@ -2795,7 +2733,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.tools.list", [this](const protocol::RequestFrame& request) {
-			const std::string category = ExtractStringParam(request.paramsJson, "category");
+			const std::string category = RequestParamsView(request.paramsJson).GetString("category");
 			const auto tools = m_toolRegistry.List();
 			std::string toolsJson = "[";
 			std::size_t count = 0;
@@ -2815,7 +2753,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("gateway.models.listByProvider", [](const protocol::RequestFrame& request) {
-			const std::string provider = ExtractStringParam(request.paramsJson, "provider");
+			const std::string provider = RequestParamsView(request.paramsJson).GetString("provider");
 			const bool includeAll = provider.empty();
 			const bool includeSeed = includeAll || provider == "seed";
 			const bool includeDeepSeek = includeAll || provider == "deepseek";

@@ -65,6 +65,33 @@ Declared in `GatewayJsonSerializers.h`, implemented in `GatewayJsonSerializers.c
 
 `GatewayHost.cpp` keeps a one-line anonymous wrapper `EscapeJson` → `EscapeJsonString` so existing handler code that still calls `EscapeJson(...)` for ad-hoc payloads is unchanged.
 
+### Lightweight JSON builder (`GatewayJsonBuilder`)
+
+Declared in `GatewayJsonBuilder.h`, implemented in `GatewayJsonBuilder.cpp`. Helpers build **string-table JSON** (not a DOM); string values use `EscapeJsonString` from `GatewayJsonSerializers`.
+
+| API | Role |
+|-----|------|
+| `JsonString(s)` | JSON string literal (quotes + escape) — **`Telemetry.h`** (`blazeclaw::gateway::JsonString`), included via `GatewayJsonBuilder.h` |
+| `JsonBool(b)` | `true` / `false` (`GatewayJsonBuilder.cpp`) |
+| `JsonNumber(n)` | Integer (`std::uint64_t` or `std::int64_t`) |
+| `JsonObject({{ "key", fragment }, ...})` | Object; each **value** must already be a valid JSON fragment (`JsonString` / `JsonBool` / nested `JsonObject` / `JsonArray` output) |
+| `JsonArray({ ... })` / `JsonArray(vector)` | Array of JSON value fragments |
+
+Used in `GatewayHost.cpp` for `BuildModelJson`, `BuildDeepSeekConfigJson`, and `BuildMemorySearchEnvelope` (matches `JsonArray` of per-match objects).
+
+### `RequestParamsView` (params wrapper)
+
+Declared in `GatewayRequestParams.h`, implemented in `GatewayRequestParams.cpp`. Wraps `request.paramsJson` (the optional raw params object string) with the same behavior as the former `Extract*Param` helpers:
+
+| Method | Notes |
+|--------|--------|
+| `GetString(name)` | Missing / invalid → empty string |
+| `GetBool(name)` | Missing / invalid → `std::nullopt` |
+| `GetSize(name)` | Unsigned field via `json::FindUInt64Field` → `std::optional<std::size_t>` |
+| `GetObject(name)` | Raw JSON object substring, or nullopt if not an object shape |
+
+Handlers may call `RequestParamsView(request.paramsJson).GetString("field")` inline, or bind once: `const RequestParamsView params(request.paramsJson);` then `params.GetString("channel")`, `params.GetBool("active")`, `params.GetSize("limit")` (see `gateway.config.set`, `gateway.sessions.create`, `gateway.sessions.reset`).
+
 ---
 
 ## Member functions — grouped by functionality
@@ -200,6 +227,8 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 |------|----------------|
 | Core lifecycle, transport pump, event builders, routing, `RegisterDefaultHandlers` + domain `RegisterGateway*` / `RegisterToolExecution*` helpers | `GatewayHost.cpp` |
 | Registry / task-delta JSON serializers (`SerializeSession`, `SerializeTool`, `SerializeTaskDeltaState`, `EscapeJsonString`, …) | `GatewayJsonSerializers.h` / `GatewayJsonSerializers.cpp` |
+| Minimal JSON fragment builders (`JsonObject`, `JsonString`, `JsonArray`, …) | `GatewayJsonBuilder.h` / `GatewayJsonBuilder.cpp` |
+| Request `params` field access (`RequestParamsView::GetString` / `GetBool` / `GetSize` / `GetObject`) | `GatewayRequestParams.h` / `GatewayRequestParams.cpp` |
 | Protocol success-frame helper `protocol::OkResponse` | `GatewayProtocolModels.h` |
 | `protocol::EncodeValidatedEvent` (validate + optional schema-error fallback + encode) | `GatewayProtocolCodec.h` / `GatewayProtocolCodec.cpp` |
 | Static handler table helper `RegisterStaticPayloadHandlers` | `GatewayStaticRegistration.h` / `GatewayStaticRegistration.cpp` |
@@ -234,7 +263,7 @@ These aim to keep **one clear façade** for the shell while shrinking what `Gate
    Persistence is associated with `TaskDeltaRepository`; `GatewayHost` **orchestrates** load/save timing. Task-delta **wire JSON** is built via `SerializeTaskDeltaEntry` / `SerializeTaskDeltaState` in `GatewayJsonSerializers.cpp`; normalization/validation stay in `TaskDeltaSchemaValidator` and related units.
 
 6. **Reduce `RegisterDefaultHandlers` surface**  
-   **Done (phase 1):** inline registrations were split into `RegisterToolExecutionHistoryHandlers`, `RegisterGatewayEventCatalogQueryHandlers`, `RegisterGatewayRegistryIntrospectionHandlers`, `RegisterGatewayAgentSessionMutationHandlers`, `RegisterGatewayAgentToolSurfaceHandlers`, `RegisterGatewayConfigAndDiagnosticsHandlers`, and `RegisterGatewaySupplementaryCatalogHandlers`; `RegisterDefaultHandlers()` is now a short coordinator. **Done (phase 2):** success-path boilerplate uses `protocol::OkResponse` (see subsection above). **Done (phase 3):** table-driven static registrations via `RegisterStaticPayloadHandlers` and the manifest-driven catalog (see **Table-driven static registrations** above). **Done (phase 4):** `protocol::EncodeValidatedEvent` for event frames (see subsection above). **Done (phase 5):** registry/task-delta serializers live in `GatewayJsonSerializers.*` (see subsection above). Further work: generic JSON builder utilities (see size-reduction section).
+   **Done (phase 1):** inline registrations were split into `RegisterToolExecutionHistoryHandlers`, `RegisterGatewayEventCatalogQueryHandlers`, `RegisterGatewayRegistryIntrospectionHandlers`, `RegisterGatewayAgentSessionMutationHandlers`, `RegisterGatewayAgentToolSurfaceHandlers`, `RegisterGatewayConfigAndDiagnosticsHandlers`, and `RegisterGatewaySupplementaryCatalogHandlers`; `RegisterDefaultHandlers()` is now a short coordinator. **Done (phase 2):** success-path boilerplate uses `protocol::OkResponse` (see subsection above). **Done (phase 3):** table-driven static registrations via `RegisterStaticPayloadHandlers` and the manifest-driven catalog (see **Table-driven static registrations** above). **Done (phase 4):** `protocol::EncodeValidatedEvent` for event frames (see subsection above). **Done (phase 5):** registry/task-delta serializers live in `GatewayJsonSerializers.*` (see subsection above). **Done (phase 6):** `GatewayJsonBuilder` + `RequestParamsView` (see subsections above; §5 / §7 in the size-reduction section).
 
 7. **Naming consistency**  
    Align “Bootstrap*” vs “CreateRuntimeState” / `InitializeRuntime` naming in docs so phased startup order is obvious to maintainers.
@@ -293,16 +322,9 @@ Optional next steps (not implemented): `ErrorResponse(...)`, `MakeExistsResponse
 
 **Effect:** less duplication; same wire and fallback behavior as before.
 
-#### 5) Extract local JSON builder utilities
-Current code manually concatenates JSON in many places. Even with string-based JSON (no dependency), small helper functions can reduce repetition:
+#### 5) Extract local JSON builder utilities — **done**
 
-- `JsonObject({{"key", value}, ...})`
-- `JsonBool`, `JsonNumber`, `JsonString`
-- `JsonArray(items)`
-
-This can compress repeated formatting and reduce escaping mistakes.
-
-**Expected effect:** medium reduction and safer payload construction.
+`GatewayJsonBuilder` provides `JsonString`, `JsonBool`, `JsonNumber`, `JsonObject`, `JsonArray` (see subsection **Lightweight JSON builder** above). Ad-hoc handler payloads in `GatewayHost.cpp` still use `EscapeJson` / string concatenation where migration is low value; new structured blobs should prefer `JsonObject` + `JsonString` for consistent escaping.
 
 #### 6) Separate serialization helpers into dedicated file — **done**
 
@@ -310,16 +332,9 @@ Moved to `GatewayJsonSerializers.h` / `GatewayJsonSerializers.cpp`: `EscapeJsonS
 
 **Effect:** smaller `GatewayHost.cpp`; serializer behavior and payload shapes unchanged.
 
-#### 7) Centralize request parameter access
-Create a small request-params helper wrapper (still string-based if needed) so handlers call:
+#### 7) Centralize request parameter access — **done**
 
-- `params.GetString("channel")`
-- `params.GetBool("active")`
-- `params.GetSize("limit")`
-
-This trims repeated extraction boilerplate inside handlers.
-
-**Expected effect:** low-to-medium reduction.
+`RequestParamsView` replaces the former `ExtractStringParam` / `ExtractBooleanParam` / `ExtractNumericParam` / `ExtractObjectParam` helpers in `GatewayHost.cpp`. Handlers use `RequestParamsView(request.paramsJson).Get…` or a single `const RequestParamsView params(request.paramsJson);` when reading several fields (see subsection **`RequestParamsView`** above).
 
 ### Recommended Execution Order
 
@@ -328,7 +343,7 @@ This trims repeated extraction boilerplate inside handlers.
 3. ~~Introduce table-driven static registrations.~~ **Done** — see **Table-driven static registrations** (`RegisterStaticPayloadHandlers`, manifest + `Generate-GatewayHandlerCatalog.ps1`).
 4. ~~Add `EncodeValidatedEvent(...)` helper.~~ **Done** — see **`protocol::EncodeValidatedEvent`** in `GatewayProtocolCodec.h` / `.cpp` and the subsection above.
 5. ~~Move serializers to dedicated files.~~ **Done** — see **`GatewayJsonSerializers`** (`GatewayJsonSerializers.h` / `.cpp`) and §6 in the size-reduction section below.
-6. Optionally add lightweight JSON builder and params wrapper.
+6. ~~Optionally add lightweight JSON builder and params wrapper.~~ **Done** — **`GatewayJsonBuilder`** (`GatewayJsonBuilder.h` / `.cpp`) and **`RequestParamsView`** (`GatewayRequestParams.h` / `.cpp`); see subsections above and §5 / §7 below.
 
 ### Notes / Constraints
 
