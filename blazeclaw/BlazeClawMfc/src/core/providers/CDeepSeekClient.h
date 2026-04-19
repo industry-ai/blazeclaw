@@ -26,6 +26,14 @@ namespace blazeclaw::core {
 			const ChatRequest& request,
 			const std::function<bool(const std::string& runId)>& isCancelled) const;
 
+		/// Maps `GatewayHost::ChatRuntimeRequest` + resolved model/credential into `ChatRequest` and
+		/// runs the DeepSeek HTTP/SSE transport (`InvokeChat`). Keeps `ServiceManager` to cancellation wiring only.
+		blazeclaw::gateway::GatewayHost::ChatRuntimeResult InvokeGatewayChat(
+			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& gatewayRequest,
+			const std::string& modelId,
+			const std::string& apiKey,
+			const std::function<bool(const std::string& runId)>& isCancelled) const;
+
 		[[nodiscard]] std::vector<std::string> ParseAssistantDeltasForTest(
 			const std::string& responseBody) const;
 

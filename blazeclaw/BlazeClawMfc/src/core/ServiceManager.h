@@ -236,11 +236,6 @@ namespace blazeclaw::core {
 		[[nodiscard]] const std::string& ActiveChatModel() const noexcept;
 		[[nodiscard]] std::optional<std::string> ResolveDeepSeekCredentialUtf8() const;
 		[[nodiscard]] bool HasDeepSeekCredential() const;
-		[[nodiscard]] blazeclaw::gateway::GatewayHost::ChatRuntimeResult
-			InvokeDeepSeekRemoteChat(
-				const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
-				const std::string& modelId,
-				const std::string& apiKey) const;
 		[[nodiscard]] bool IsDeepSeekRunCancelled(const std::string& runId) const;
 		void MarkDeepSeekRunCancelled(const std::string& runId);
 		void ClearDeepSeekRunCancelled(const std::string& runId);

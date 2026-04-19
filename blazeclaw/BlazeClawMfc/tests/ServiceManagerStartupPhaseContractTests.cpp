@@ -385,6 +385,9 @@ TEST_CASE(
 	REQUIRE(
 		source.find("RewriteInvocationPromptUtf8") !=
 		std::string::npos);
+	REQUIRE(
+		source.find("m_deepSeekClient.InvokeGatewayChat(") !=
+		std::string::npos);
 }
 
 TEST_CASE(

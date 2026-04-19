@@ -13,10 +13,11 @@ For the same prompt:
 1. `src/gateway/GatewayHost.Handlers.Runtime.cpp`
    - `chat.send` orchestration path only attempts `TryOrchestrateWeatherEmailPrompt(...)`.
    - This orchestration is hardcoded for weather + email flow (`weather.lookup` and `email.schedule`) and not generic skill decomposition.
-2. `src/core/ServiceManager.cpp`
-   - In `SetChatRuntimeCallback`, when `m_activeChatProvider == "deepseek"`, it directly calls `InvokeDeepSeekRemoteChat(...)`.
-   - `InvokeDeepSeekRemoteChat(...)` builds a payload with only one user message and no skill/tool schema loop:
+2. `src/core/ServiceManager.cpp` + `src/core/providers/CDeepSeekClient.cpp`
+   - DeepSeek remote chat is reached via `ChatProviderRuntimeService` / `BuildChatProviderRuntimeBindings()`; `ServiceManager` only wires `m_deepSeekClient.InvokeGatewayChat(...)` with cancellation (`IsDeepSeekRunCancelled`).
+   - **`CDeepSeekClient::InvokeChat`** builds the HTTP JSON payload with only one user message and no skill/tool schema loop:
      - `{"model":"...","stream":true,"messages":[{"role":"user","content":"..."}]}`
+   - **`CDeepSeekClient::InvokeGatewayChat`** maps `GatewayHost::ChatRuntimeRequest` fields into `ChatRequest` and delegates to `InvokeChat` (no extra protocol logic in `ServiceManager`).
 3. `src/core/PiEmbeddedService.cpp`
    - Current implementation is queue bookkeeping (`QueueRun/CompleteRun`) only.
    - No agent session creation, no tool binding, no iterative tool-call runtime.

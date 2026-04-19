@@ -165,11 +165,11 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 | `ActiveChatProvider()` / `ActiveChatModel()` | Getters. |
 | `ResolveDeepSeekCredentialUtf8()` | Credential resolution from config/store. |
 | `HasDeepSeekCredential()` | Boolean helper. |
-| `InvokeDeepSeekRemoteChat(request, modelId, apiKey)` | **HTTP/SSE path via `CDeepSeekClient`** — provider I/O. |
+| `BuildChatProviderRuntimeBindings()` (DeepSeek slot) | Wires **`m_deepSeekClient.InvokeGatewayChat`** + **`IsDeepSeekRunCancelled`** only; HTTP/SSE + JSON payload live in **`CDeepSeekClient::InvokeChat`**. |
 | `IsDeepSeekRunCancelled` / `Mark` / `Clear` | Per-run cancel map. |
 | `IsEmbeddedRunCancelled` / `Mark` / `Clear` | Embedded cancel map. |
 
-**Assessment:** **Mixed.** Getters and cancel maps are **integration glue**. `InvokeDeepSeekRemoteChat` is **provider client logic**; acceptable behind a dedicated `DeepSeekChatTransport` or `RemoteLlmClient` owned by `ServiceManager` but **not** implemented as hundreds of lines inside `ServiceManager` long term.
+**Assessment:** **Mixed.** Getters and cancel maps are **integration glue**. DeepSeek **transport** (HTTP, SSE, request JSON) lives in **`CDeepSeekClient`**; **`ServiceManager`** does not map gateway fields to **`ChatRequest`** — that mapping is **`CDeepSeekClient::InvokeGatewayChat`**.
 
 ---
 
@@ -192,7 +192,7 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 | ~~**P1**~~ | ~~`ResolveSkillInvocationPromptRewrite`~~ | — | ✅ **Done (Phase 4):** **`SkillCommandInvocationService::RewriteInvocationPromptUtf8`**. |
 | ~~**P1**~~ | ~~`InitializeModules` / `ConfigurePolicies`~~ | — | ✅ **Addressed:** sequencing and policy wiring moved to **`ServiceLifecycleStartupCoordinator`**; optional future step is a structured **`StartupReport`** DTO if reporting/testing needs it. |
 | **P1** | `ApplyManagedRuntimeConfigDiff` | May still imperative-patch many subsystems after coordinator. | Ensure coordinator returns **`ManagedRuntimeApplyPlan`**; `ServiceManager` executes plan via small private `ApplyPlan(...)` or generated visitors. |
-| **P2** | `InvokeDeepSeekRemoteChat` | SSE parsing, delta callbacks — **transport**. | Already near `CDeepSeekClient`; ensure **no additional protocol logic** in `ServiceManager` beyond argument mapping. |
+| ~~**P2**~~ | ~~`InvokeDeepSeekRemoteChat`~~ | — | ✅ **Done:** gateway → **`ChatRequest`** mapping moved to **`CDeepSeekClient::InvokeGatewayChat`**; **`ServiceManager`** only passes cancellation via **`BuildChatProviderRuntimeBindings`**. |
 | **P2** | `BindSkillsCallbacks` (body) | Wiring lives in **`GatewayHostBindingCoordinator`**; can regrow if new callbacks are added without a handler seam. | Keep **`SkillsGatewayMethodHandler`** as single entry for parse/validate/response. |
 | ~~**P2**~~ | ~~`BuildOperatorDiagnosticsReport`~~ | — | ✅ **Done (Phase 4):** **`OperatorDiagnosticsAssembler`** + **`OperatorDiagnosticsInputs`**; optional future shrink: dedicated **agents/features** projectors for the remaining scalars. |
 | **P3** | `BuildEmbeddedToolBindings` | Straightforward mapping — low risk. | Optional: `SkillsCommandService::BuildEmbeddedToolBindings()` if reuse needed elsewhere. |
@@ -236,6 +236,12 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 - **`ServiceManager`** declares **`friend class SkillsGatewayPublicationCoordinator`**; **`RefreshSkillsState`** calls **`SkillsGatewayPublicationCoordinator::RefreshProjection`** after refresh (and thin **`Refresh*`** / **`Publish*`** wrappers delegate to the coordinator).
 - Contract tests: **`ServiceManagerStartupPhaseContractTests`** skills case; **`SkillCommandsAggregationServiceContractTests`** reads **`SkillsAgentCommandDescriptorPolicy.cpp`** for policy strings.
 
+### Phase 8 (DeepSeek gateway adapter — completed)
+
+- **`CDeepSeekClient::InvokeGatewayChat`**: maps **`GatewayHost::ChatRuntimeRequest`** + model/API key into **`ChatRequest`**, then **`InvokeChat`** (HTTP/SSE transport unchanged).
+- **`ServiceManager`**: removed **`InvokeDeepSeekRemoteChat`**; **`BuildChatProviderRuntimeBindings`** calls **`m_deepSeekClient.InvokeGatewayChat`** with **`IsDeepSeekRunCancelled`** only.
+- Contract tests: Phase 4 block asserts **`m_deepSeekClient.InvokeGatewayChat(`** in **`ServiceManager.cpp`**.
+
 ---
 
 ## 4) Summary conclusion
@@ -244,10 +250,10 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 |-----------|--------|
 | **Lifecycle / wiring / delegation** | Strong — `ServiceManager` remains the composition root. |
 | **Pure getters** | Aligned. |
-| **Deep runtime logic** | **Further reduced:** provider path in **`ChatProviderRuntimeService`**; gateway callback wiring in **`GatewayHostBindingCoordinator`**; skills refresh **policy** + gateway **publication** in **`SkillsAgentCommandDescriptorPolicy`** / **`SkillsGatewayPublicationCoordinator`**. |
+| **Deep runtime logic** | **Further reduced:** provider path in **`ChatProviderRuntimeService`**; gateway callback wiring in **`GatewayHostBindingCoordinator`**; skills refresh **policy** + gateway **publication** in **`SkillsAgentCommandDescriptorPolicy`** / **`SkillsGatewayPublicationCoordinator`**; DeepSeek **protocol** in **`CDeepSeekClient`** (**`InvokeGatewayChat`** / **`InvokeChat`**). |
 | **Diagnostics** | **Assembler path:** projector contexts + scalars → **`OperatorDiagnosticsAssembler`** → report builder. |
 
-**Verdict:** `ServiceManager` remains the composition root; **provider execution**, **prompt rewrite**, **diagnostics assembly**, **startup policy/module sequencing**, **skills/chat gateway binding**, and **skills refresh policy / gateway publication** are **delegated** to dedicated types. The next shrink target is **nested chat runtime logic** inside **`GatewayHostBindingCoordinator`** (strategies / coordinator methods).
+**Verdict:** `ServiceManager` remains the composition root; **provider execution**, **prompt rewrite**, **diagnostics assembly**, **startup policy/module sequencing**, **skills/chat gateway binding**, **skills refresh policy / gateway publication**, and **DeepSeek transport** (beyond cancel wiring) are **delegated** to dedicated types. The next shrink target is **nested chat runtime logic** inside **`GatewayHostBindingCoordinator`** (strategies / coordinator methods).
 
 ---
 
@@ -257,7 +263,8 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 - [x] `ResolveSkillInvocationPromptRewrite` moved out of `ServiceManager` (**`RewriteInvocationPromptUtf8`**).
 - [x] `BindChatCallbacks` implementation moved out of **`ServiceManager.cpp`** (**`GatewayHostBindingCoordinator.cpp`**) — further line-count reduction inside the coordinator is **follow-up**.
 - [x] `BuildOperatorDiagnosticsReport` reduced to projector inputs + **`OperatorDiagnosticsAssembler`**.
-- [x] Contract tests updated for new seams (`ServiceManagerStartupPhaseContractTests` Phase 4–7 + **`SkillCommandInvocationServiceTests`** + **`SkillCommandsAggregationServiceContractTests`** policy path).
+- [x] Contract tests updated for new seams (`ServiceManagerStartupPhaseContractTests` Phase 4–8 + **`SkillCommandInvocationServiceTests`** + **`SkillCommandsAggregationServiceContractTests`** policy path).
+- [x] DeepSeek gateway field mapping lives in **`CDeepSeekClient::InvokeGatewayChat`** (Phase 8).
 - [x] `ConfigurePolicies` / `InitializeModules` thin facades over **`ServiceLifecycleStartupCoordinator`** (Phase 5).
 
-*Last updated: Phase 7 skills policy + gateway publication — `SkillsAgentCommandDescriptorPolicy`, `SkillsGatewayPublicationCoordinator`; contract tests updated; BlazeClawMfc + BlazeClawMfc.Tests Debug\|x64 built with MSBuild (`PlatformToolset=v143` where v145 is unavailable).*
+*Last updated: Phase 8 DeepSeek — `CDeepSeekClient::InvokeGatewayChat`; `ServiceManager` wires `InvokeGatewayChat` + cancel only; `PARITY_PORTING_ANALYSIS.md` aligned; BlazeClawMfc + BlazeClawMfc.Tests Debug\|x64 built with MSBuild (`PlatformToolset=v143` where v145 is unavailable).*

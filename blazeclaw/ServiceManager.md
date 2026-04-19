@@ -229,9 +229,10 @@ So the goal is **not** to remove `ServiceManager`, but to keep it thin, determin
 21. **Extract Phase 4 provider runtime, prompt rewrite, and diagnostics assembly**
    - ✅ Implemented.
    - **`ChatProviderRuntimeService`** + **`ChatProviderRuntimeBindings`**: multi-provider chat execution (DeepSeek, local ONNX stream, retrieval/embedded branches). `ServiceManager::ExecuteProviderChatRuntimePath` forwards via `BuildChatProviderRuntimeBindings()`.
+   - **DeepSeek (Phase 8):** **`CDeepSeekClient::InvokeGatewayChat`** maps `GatewayHost::ChatRuntimeRequest` + model/API key into **`ChatRequest`** and calls **`InvokeChat`** (HTTP/SSE). `ServiceManager` only wires **`m_deepSeekClient.InvokeGatewayChat`** with **`IsDeepSeekRunCancelled`** in bindings — no duplicate protocol/payload logic in `ServiceManager`.
    - **`SkillCommandInvocationService::RewriteInvocationPromptUtf8`**: UTF-8 prompt template rewrite for slash invocations; `ResolveSkillInvocationPromptRewrite` delegates.
    - **`OperatorDiagnosticsAssembler`** + **`OperatorDiagnosticsInputs`**: builds `DiagnosticsSnapshot` from projector contexts and scalars, then `CDiagnosticsReportBuilder::BuildOperatorDiagnosticsReport`.
-   - Contract coverage: `ServiceManagerStartupPhaseContractTests` (Phase 4 strings) and `SkillCommandInvocationServiceTests` (`RewriteInvocationPromptUtf8`).
+   - Contract coverage: `ServiceManagerStartupPhaseContractTests` (Phase 4 strings, including `InvokeGatewayChat`) and `SkillCommandInvocationServiceTests` (`RewriteInvocationPromptUtf8`).
 
 22. **Thin lifecycle policy/module facades (`ServiceLifecycleStartupCoordinator`)**
    - ✅ Implemented.

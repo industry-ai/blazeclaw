@@ -2359,7 +2359,13 @@ namespace blazeclaw::core {
 			[this](const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& req,
 				const std::string& modelId,
 				const std::string& apiKey) {
-				return InvokeDeepSeekRemoteChat(req, modelId, apiKey);
+				return m_deepSeekClient.InvokeGatewayChat(
+					req,
+					modelId,
+					apiKey,
+					[this](const std::string& runId) {
+						return IsDeepSeekRunCancelled(runId);
+					});
 			};
 		b.getAgentModelUtf8 = [this]() {
 			return m_activeConfig.agent.model.empty()
@@ -3322,26 +3328,6 @@ namespace blazeclaw::core {
 		m_embeddedCancelledRuns.erase(runId);
 	}
 
-
-	blazeclaw::gateway::GatewayHost::ChatRuntimeResult
-		ServiceManager::InvokeDeepSeekRemoteChat(
-			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request,
-			const std::string& modelId,
-			const std::string& apiKey) const {
-		return m_deepSeekClient.InvokeChat(
-			CDeepSeekClient::ChatRequest{
-				.runId = request.runId,
-				.sessionKey = request.sessionKey,
-				.message = request.message,
-				.modelId = modelId,
-				.apiKey = apiKey,
-				.onAssistantDelta = request.onAssistantDelta,
-			},
-			[this](const std::string& runId)
-			{
-				return IsDeepSeekRunCancelled(runId);
-			});
-	}
 
 	const SkillsCatalogSnapshot& ServiceManager::SkillsCatalog() const noexcept {
 		return m_skillsCatalog;

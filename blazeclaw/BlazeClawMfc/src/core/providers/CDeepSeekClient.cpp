@@ -738,6 +738,23 @@ namespace blazeclaw::core {
 		};
 	}
 
+	blazeclaw::gateway::GatewayHost::ChatRuntimeResult CDeepSeekClient::InvokeGatewayChat(
+		const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& gatewayRequest,
+		const std::string& modelId,
+		const std::string& apiKey,
+		const std::function<bool(const std::string& runId)>& isCancelled) const {
+		return InvokeChat(
+			ChatRequest{
+				.runId = gatewayRequest.runId,
+				.sessionKey = gatewayRequest.sessionKey,
+				.message = gatewayRequest.message,
+				.modelId = modelId,
+				.apiKey = apiKey,
+				.onAssistantDelta = gatewayRequest.onAssistantDelta,
+			},
+			isCancelled);
+	}
+
 	std::vector<std::string> CDeepSeekClient::ParseAssistantDeltasForTest(
 		const std::string& responseBody) const
 	{
