@@ -134,6 +134,8 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 
 ## 6) Highest-Impact Improvements (Priority Order)
 
+**Horizon (Phase G):** For **parity gate stabilization**, **operational documentation** (config precedence, diagnostics catalog, trust boundaries), and **release/runtime layout** (WebView2, ONNX, bundled assets), follow [`blazeclaw/docs/index.md`](../docs/index.md) items **12–14** and **Phase G**—see also [`blazeclaw/docs/architecture.md`](../docs/architecture.md) §**12.9** / §13 **Phase G**.
+
 1. [Completed] Move chat runtime execution (remote/local model) off UI thread using async work queue + completion events.
    - Execution plan: `CHAT_RUNTIME_ASYNC_WORK_QUEUE_PLAN.md`
    - Status: Phase 1 (contract/state preparation) completed in code.
@@ -193,5 +195,5 @@ Cross-project architecture (BlazeClaw vs upstream OpenClaw):
 
 ---
 
-Review date: **2026-04-20** (aligned with `blazeclaw/docs/index.md` items 7–11 and `architecture.md` §12.7–§12.8)  
+Review date: **2026-04-20** (aligned with `blazeclaw/docs/index.md` items 7–14 / Phases A–G and `architecture.md` §12.7–§12.9)  
 Prior snapshot: **2026-04-07**, commit **0b08192**

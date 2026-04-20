@@ -7,8 +7,8 @@ It should not be the place where deep business logic is implemented.
 
 Related cross-project architecture report:
 
-- `blazeclaw/docs/index.md` — entry point: optimization themes (core + next-wave items 7–9), step-by-step Phases A–F, MSBuild validation; links to topic docs.
-- `blazeclaw/docs/architecture.md` — reference layer model; OpenClaw vs BlazeClaw mapping (§11); optimization recommendations and phased plan (§12–§13).
+- `blazeclaw/docs/index.md` — entry point: optimization themes (core + next-wave 7–9 + follow-on 10–11 + horizon 12–14), step-by-step Phases A–**G**, MSBuild validation; links to topic docs.
+- `blazeclaw/docs/architecture.md` — reference layer model; OpenClaw vs BlazeClaw mapping (§11); optimization recommendations and phased plan (§12–§13, incl. §**12.9** / Phase **G**).
 - `blazeclaw/docs/README.md` — file catalog for `blazeclaw/docs/`.
 - `blazeclaw/docs/PROTOCOL_CODEGEN.md` — gateway manifest/codegen workflow, `GatewayHostRegistration` default handler coordinator, thin façade checklist, Phase A–B + harness scripts (§7), `OkResponse` / `ErrorResponse` / `ReplayFromStored`, `EncodeValidatedEvent`, serializers.
 - `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp.md` — `GatewayHost` registration map; **thin façade invariant** (`RegisterDefaultHandlers` → `RegisterDefaultHandlerSequence`; no god lambdas in `GatewayHost.cpp`); **Ongoing architecture direction** (split `GatewayHost.Handlers.*`, shared protocol helpers, named handler types).

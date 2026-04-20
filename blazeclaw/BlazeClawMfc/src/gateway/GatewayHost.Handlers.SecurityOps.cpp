@@ -3,6 +3,36 @@
 
 namespace blazeclaw::gateway {
 
+namespace {
+
+void RegisterMethodAlias(
+	GatewayMethodDispatcher& dispatcher,
+	const std::string& aliasMethod,
+	const std::string& targetMethod)
+{
+	dispatcher.Register(
+		aliasMethod,
+		[&dispatcher, targetMethod](const protocol::RequestFrame& request) {
+			auto forwarded = request;
+			forwarded.method = targetMethod;
+			return dispatcher.Dispatch(forwarded);
+		});
+}
+
+void RegisterStaticMethod(
+	GatewayMethodDispatcher& dispatcher,
+	const std::string& method,
+	const std::string& payloadJson)
+{
+	dispatcher.Register(
+		method,
+		[payloadJson](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, payloadJson);
+		});
+}
+
+} // namespace
+
     void GatewayHost::RegisterSecurityOpsHandlers() {
         m_dispatcher.Register("gateway.nodes.voice.capabilities", [](const protocol::RequestFrame& request) {
             return protocol::OkResponse(request, "{\"wakeWord\":true,\"pushToTalk\":true,\"handsFree\":false,\"languages\":[\"en-US\"],\"count\":1}");
@@ -1571,6 +1601,151 @@ namespace blazeclaw::gateway {
             [](const protocol::RequestFrame& request) {
                 return protocol::OkResponse(request, "{\"tokenScopeId\":\"web.tokenScopeId.default\",\"active\":true}");
             });
+
+		// OpenClaw P0 contract-parity aliases and stubs (Phase G / P0).
+		RegisterStaticMethod(
+			m_dispatcher,
+			"exec.approvals.get",
+			"{\"scope\":\"global\",\"defaultMode\":\"manual\",\"updated\":false}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"exec.approvals.set",
+			"{\"scope\":\"global\",\"defaultMode\":\"manual\",\"updated\":true}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"exec.approvals.node.get",
+			"{\"scope\":\"node\",\"defaultMode\":\"manual\",\"updated\":false}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"exec.approvals.node.set",
+			"{\"scope\":\"node\",\"defaultMode\":\"manual\",\"updated\":true}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"exec.approval.get",
+			"{\"requestId\":\"exec-approval-1\",\"status\":\"pending\",\"found\":false}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"exec.approval.list",
+			"{\"items\":[],\"count\":0}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"exec.approval.request",
+			"{\"requestId\":\"exec-approval-1\",\"status\":\"pending\",\"queued\":true}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"exec.approval.waitDecision",
+			"{\"requestId\":\"exec-approval-1\",\"status\":\"pending\",\"resolved\":false}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"exec.approval.resolve",
+			"{\"requestId\":\"exec-approval-1\",\"status\":\"resolved\",\"resolved\":true}");
+
+		RegisterStaticMethod(
+			m_dispatcher,
+			"plugin.approval.list",
+			"{\"items\":[],\"count\":0}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"plugin.approval.request",
+			"{\"requestId\":\"plugin-approval-1\",\"status\":\"pending\",\"queued\":true}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"plugin.approval.waitDecision",
+			"{\"requestId\":\"plugin-approval-1\",\"status\":\"pending\",\"resolved\":false}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"plugin.approval.resolve",
+			"{\"requestId\":\"plugin-approval-1\",\"status\":\"resolved\",\"resolved\":true}");
+
+		RegisterStaticMethod(
+			m_dispatcher,
+			"node.pair.request",
+			"{\"nodeId\":\"node-1\",\"status\":\"pending\",\"paired\":false}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"node.pair.list",
+			"{\"pairs\":[],\"count\":0}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"node.pair.approve",
+			"{\"nodeId\":\"node-1\",\"approved\":true}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"node.pair.reject",
+			"{\"nodeId\":\"node-1\",\"rejected\":true}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"node.pair.verify",
+			"{\"nodeId\":\"node-1\",\"verified\":true}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"node.rename",
+			"{\"nodeId\":\"node-1\",\"renamed\":true}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"node.list",
+			"{\"nodes\":[{\"id\":\"voice-node\"},{\"id\":\"camera-node\"},{\"id\":\"canvas-node\"}],\"count\":3}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"node.describe",
+			"{\"nodeId\":\"node-1\",\"status\":\"idle\",\"online\":true}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"node.pending.drain",
+			"{\"drained\":0,\"remaining\":0}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"node.pending.enqueue",
+			"{\"accepted\":true,\"queueDepth\":1}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"node.pending.pull",
+			"{\"items\":[],\"count\":0}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"node.pending.ack",
+			"{\"acked\":true}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"node.invoke",
+			"{\"runId\":\"node-run-1\",\"queued\":true}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"node.invoke.result",
+			"{\"runId\":\"node-run-1\",\"accepted\":true}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"node.event",
+			"{\"accepted\":true,\"eventId\":\"node-event-1\"}");
+		RegisterMethodAlias(
+			m_dispatcher,
+			"node.canvas.capability.refresh",
+			"gateway.nodes.canvas.capabilities");
+
+		RegisterStaticMethod(
+			m_dispatcher,
+			"device.pair.list",
+			"{\"pairs\":[],\"count\":0}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"device.pair.approve",
+			"{\"deviceId\":\"device-1\",\"approved\":true}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"device.pair.reject",
+			"{\"deviceId\":\"device-1\",\"rejected\":true}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"device.pair.remove",
+			"{\"deviceId\":\"device-1\",\"removed\":true}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"device.token.rotate",
+			"{\"deviceId\":\"device-1\",\"rotated\":true}");
+		RegisterStaticMethod(
+			m_dispatcher,
+			"device.token.revoke",
+			"{\"deviceId\":\"device-1\",\"revoked\":true}");
     }
 
 } // namespace blazeclaw::gateway

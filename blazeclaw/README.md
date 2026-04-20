@@ -45,7 +45,7 @@ BlazeClawMfc planning docs:
 - `blazeclaw/BlazeClawMfc/DYNAMIC_TASK_DELTA_FULL_EXECUTION_PLAN.md`
 
 Architecture comparison docs:
-- `blazeclaw/docs/index.md` (project review: optimization summary + step-by-step Phases A–F + next-wave 7–9 + follow-on 10–11)
+- `blazeclaw/docs/index.md` (project review: optimization summary + step-by-step Phases A–G + next-wave 7–9 + follow-on 10–11 + horizon 12–14)
 - `blazeclaw/docs/README.md` (file catalog for `blazeclaw/docs/`)
 - `blazeclaw/docs/architecture.md` (layer model; OpenClaw comparison §11; optimization recommendations §12; phased plan §13)
 - `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` (BlazeClaw vs OpenClaw stacks, mapping, gaps, optimization priorities)
@@ -57,4 +57,6 @@ Architecture comparison docs:
 - `blazeclaw/docs/GATEWAY_CORE_WIRING.md` (Phase C wiring, Phase D task-delta recency & streaming/startup notes)
 - `blazeclaw/docs/BUILD_AND_CI.md` (Phase E: vcpkg, Azure Pipelines, stub deprecation plan)
 - `blazeclaw/docs/SKILL_PORTING.md` (Phase F: PORTING_PLAN pattern, skill index)
+- `blazeclaw/docs/GATEWAY_SERVER_METHODS_MECHANICAL_AUDIT.md` (OpenClaw `server-methods/*.ts` vs BlazeClaw dispatcher file-by-file parity matrix + prioritized P0/P1/P2 implementation backlog; includes P0 baseline implementation status)
+- `.github/ISSUE_TEMPLATE/p0-gateway-method-parity-checklist.md` (issue template for P0 parity execution with checkboxes, tests, and validation commands)
 - `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp.md` (deep dive: **thin façade** invariant—`RegisterDefaultHandlers` → `RegisterDefaultHandlerSequence` only from `GatewayHost.cpp`; split `GatewayHost.Handlers.*`; no god lambdas; shared protocol surface; named handler types)
