@@ -483,6 +483,29 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"ServiceManager gateway binding contract: Phase C policy and embeddings wire in GatewayHostBindingCoordinator",
+	"[servicemanager][gateway][contract][phasec]")
+{
+	const std::string binding = ReadGatewayHostBindingCoordinatorSource();
+	REQUIRE(binding.find("BindGatewayPolicyCallbacks(manager)") != std::string::npos);
+	REQUIRE(binding.find("BindEmbeddingsCallbacks(manager)") != std::string::npos);
+	REQUIRE(
+		binding.find("void GatewayHostBindingCoordinator::BindGatewayPolicyCallbacks") !=
+		std::string::npos);
+	REQUIRE(
+		binding.find("void GatewayHostBindingCoordinator::BindEmbeddingsCallbacks") !=
+		std::string::npos);
+	REQUIRE(binding.find("BuildGatewayPolicyBinding(") != std::string::npos);
+	REQUIRE(binding.find("SetEmbeddingsGenerateCallback") != std::string::npos);
+	REQUIRE(binding.find("SetEmbeddingsBatchCallback") != std::string::npos);
+
+	const std::string managerSource = ReadServiceManagerSource();
+	REQUIRE(managerSource.find("void ServiceManager::BindGatewayPolicyCallbacks") == std::string::npos);
+	REQUIRE(managerSource.find("void ServiceManager::BindEmbeddingsCallbacks") == std::string::npos);
+	REQUIRE(managerSource.find("void ServiceManager::BindToolRuntimeCallbacks") != std::string::npos);
+}
+
+TEST_CASE(
 	"ServiceManager skills gateway contract: SkillsGatewayMethodHandler is single skills.update entry",
 	"[servicemanager][skills][gateway][contract]")
 {

@@ -1997,32 +1997,6 @@ namespace blazeclaw::core {
 		GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks(*this);
 	}
 
-	void ServiceManager::BindGatewayPolicyCallbacks()
-	{
-		m_gatewayHost.SetEmbeddedOrchestrationPath(
-			ToNarrow(m_activeConfig.embedded.orchestrationPath));
-		const auto gatewayEmailBinding =
-			m_emailPolicyOrchestrationService.BuildGatewayPolicyBinding(
-				m_activeConfig.email,
-				m_state.emailPolicy.runtimeEnabled,
-				m_state.emailPolicy.runtimeEnforce,
-				m_emailFallbackResolvedPolicy);
-		m_gatewayHost.SetEmailFallbackRuntimeFlags(
-			gatewayEmailBinding.preflightEnabled,
-			gatewayEmailBinding.runtimeEnabled,
-			gatewayEmailBinding.runtimeEnforce);
-		m_gatewayHost.SetEmailFallbackResolvedPolicy(
-			gatewayEmailBinding.backends,
-			gatewayEmailBinding.onUnavailable,
-			gatewayEmailBinding.onAuthError,
-			gatewayEmailBinding.onExecError,
-			gatewayEmailBinding.retryMaxAttempts,
-			gatewayEmailBinding.retryDelayMs,
-			gatewayEmailBinding.requiresApproval,
-			gatewayEmailBinding.approvalTokenTtlMinutes,
-			gatewayEmailBinding.profileId);
-	}
-
 	void ServiceManager::BindToolRuntimeCallbacks()
 	{
 		const auto toolPolicy =
@@ -2365,70 +2339,6 @@ namespace blazeclaw::core {
 			runtimeMessage,
 			activeProvider,
 			activeModel);
-	}
-
-
-	void ServiceManager::BindEmbeddingsCallbacks()
-	{
-		m_gatewayHost.SetEmbeddingsGenerateCallback([this](
-			const blazeclaw::gateway::GatewayHost::EmbeddingsGenerateRequest& request) {
-				const auto result = m_embeddingsService.EmbedText(
-					EmbeddingRequest{
-						.text = ToWide(request.text),
-						.normalize = request.normalize,
-						.traceId = request.traceId,
-					});
-
-				blazeclaw::gateway::GatewayHost::EmbeddingsGenerateResult gatewayResult;
-				gatewayResult.ok = result.ok;
-				gatewayResult.vector = result.vector;
-				gatewayResult.dimension = result.dimension;
-				gatewayResult.provider = result.provider;
-				gatewayResult.modelId = result.modelId;
-				gatewayResult.latencyMs = result.latencyMs;
-				gatewayResult.status = m_embeddingsService.Snapshot().status;
-
-				if (result.error.has_value()) {
-					gatewayResult.errorCode =
-						EmbeddingErrorCodeToString(result.error->code);
-					gatewayResult.errorMessage = result.error->message;
-				}
-
-				return gatewayResult;
-			});
-
-		m_gatewayHost.SetEmbeddingsBatchCallback([this](
-			const blazeclaw::gateway::GatewayHost::EmbeddingsBatchRequest& request) {
-				std::vector<std::wstring> texts;
-				texts.reserve(request.texts.size());
-				for (const auto& text : request.texts) {
-					texts.push_back(ToWide(text));
-				}
-
-				const auto result = m_embeddingsService.EmbedBatch(
-					EmbeddingBatchRequest{
-						.texts = std::move(texts),
-						.normalize = request.normalize,
-						.traceId = request.traceId,
-					});
-
-				blazeclaw::gateway::GatewayHost::EmbeddingsBatchResult gatewayResult;
-				gatewayResult.ok = result.ok;
-				gatewayResult.vectors = result.vectors;
-				gatewayResult.dimension = result.dimension;
-				gatewayResult.provider = result.provider;
-				gatewayResult.modelId = result.modelId;
-				gatewayResult.latencyMs = result.latencyMs;
-				gatewayResult.status = m_embeddingsService.Snapshot().status;
-
-				if (result.error.has_value()) {
-					gatewayResult.errorCode =
-						EmbeddingErrorCodeToString(result.error->code);
-					gatewayResult.errorMessage = result.error->message;
-				}
-
-				return gatewayResult;
-			});
 	}
 
 	bool ServiceManager::FinalizeStartup(

@@ -81,10 +81,10 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 | Function | Role |
 |----------|------|
 | ~~`BindSkillsCallbacks()`~~ | **Removed:** skills wiring is invoked from **`GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks`** via **`RegisterSkillsRelatedCallbacks`**. |
-| `BindGatewayPolicyCallbacks()` | Policy hooks on gateway. |
-| `BindToolRuntimeCallbacks()` | Tool registry callbacks. |
+| ~~`BindGatewayPolicyCallbacks()`~~ | **Moved (Phase C, 2026-04-20):** embedded path + email policy snapshot on **`GatewayHost`** — **`GatewayHostBindingCoordinator::BindGatewayPolicyCallbacks`** in **`GatewayHostBindingCoordinator.cpp`**. |
+| `BindToolRuntimeCallbacks()` | Tool registry callbacks (implementation stays in **`ServiceManager.cpp`** with TU-local **`Register*RuntimeTools`** helpers). |
 | ~~`BindChatCallbacks()`~~ | **Removed:** chat wiring is invoked from **`WireAllGatewayServiceCallbacks`** via **`RegisterChatRuntimeCallbacks`** (registration in **`GatewayHostBindingCoordinator.cpp`**; chat branches in **`ChatRuntimeOrchestrationCoordinator.cpp`**). |
-| `BindEmbeddingsCallbacks()` | Embeddings lifecycle on gateway. |
+| ~~`BindEmbeddingsCallbacks()`~~ | **Moved (Phase C, 2026-04-20):** **`GatewayHostBindingCoordinator::BindEmbeddingsCallbacks`** in **`GatewayHostBindingCoordinator.cpp`**. |
 | `BuildConfigSchemaGatewayState()` | Expose config schema state for gateway. |
 | `LookupConfigSchemaGatewayPath(path)` | Schema lookup helper. |
 | `WriteConfigSchemaDocumentationSnapshot(path, error)` | Doc export. |
@@ -228,7 +228,7 @@ Audit of `blazeclaw/BlazeClawMfc/src/core/ServiceManager.h` and `ServiceManager.
 ### Phase 6 (gateway host binding — completed)
 
 - **`GatewayHostBindingCoordinator`** (`WireAllGatewayServiceCallbacks`, `RegisterSkillsRelatedCallbacks`, `RegisterChatRuntimeCallbacks`) owns sequencing and the skills/chat callback bodies.
-- **`ServiceManager`** declares **`friend class GatewayHostBindingCoordinator`**; private **`BindGatewayPolicyCallbacks`**, **`BindToolRuntimeCallbacks`**, **`BindEmbeddingsCallbacks`** are invoked from **`WireAllGatewayServiceCallbacks`** in order.
+- **`ServiceManager`** declares **`friend class GatewayHostBindingCoordinator`**. **`WireAllGatewayServiceCallbacks`** also invokes **`BindGatewayPolicyCallbacks`** / **`BindEmbeddingsCallbacks`** (static on the coordinator; **Phase C, 2026-04-20**) and **`ServiceManager::BindToolRuntimeCallbacks`** (TU-local tool registration helpers).
 - **`skills.update`** / **`gateway.skills.update`**: **`SkillsGatewayMethodHandler::HandleSkillsUpdate`** is the **only** parse/validate/response implementation; **`GatewayHost`** forwards **`RequestFrame`** only (see source comments).
 - Contract tests: **`ReadGatewayHostBindingCoordinatorSource()`**, gateway delegation case, and phase1/email strings updated to read the coordinator/assembler sources where behavior moved.
 

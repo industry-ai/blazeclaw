@@ -1,6 +1,6 @@
 # GatewayHost — tracking notes
 
-**Related documentation:** `blazeclaw/docs/index.md` (optimization summary + Phases A–F + next-wave items 7–9; MSBuild validation), `blazeclaw/docs/architecture.md` (layer model; OpenClaw comparison §11; optimizations §12 incl. §12.7; phased plan §13), `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` (how `GatewayHost` fits the BlazeClaw vs OpenClaw gateway model), `blazeclaw/docs/GATEWAY_CORE_WIRING.md` (Phase C wiring, **task-delta recency** / `TaskDeltaRepository::EnforceRetentionLimit`), `blazeclaw/docs/BUILD_AND_CI.md` (Phase E canonical MSBuild + **`Invoke-BlazeClawOptimizationValidation.ps1`**), `blazeclaw/docs/SKILL_PORTING.md` (Phase F), `blazeclaw/docs/PROTOCOL_CODEGEN.md` (codegen workflow, **Thin façade checklist**, Phase A–B scripts §7, `protocol::ReplayFromStored` for idempotency replay), `blazeclaw/BlazeClawMfc/tools/GatewayUpstreamDiff/` (`Diff-OpenClawGateway.ps1`, `Verify-GatewayDispatcherMethods.ps1`), `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md` (core `ServiceManager` ↔ `GatewayHost` callback boundaries), `blazeclaw/BlazeClawMfc/PROJECT_REVIEW.md` (layering and threading).
+**Related documentation:** `blazeclaw/docs/index.md` (optimization summary + Phases A–F + next-wave items 7–9; MSBuild validation), `blazeclaw/docs/architecture.md` (layer model; OpenClaw comparison §11; optimizations §12 incl. §12.7; phased plan §13), `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` (how `GatewayHost` fits the BlazeClaw vs OpenClaw gateway model), `blazeclaw/docs/GATEWAY_CORE_WIRING.md` (Phase C wiring — **`GatewayHostBindingCoordinator`** owns policy + embeddings **`Set*`** bodies; **task-delta recency** / `TaskDeltaRepository::EnforceRetentionLimit`), `blazeclaw/docs/BUILD_AND_CI.md` (Phase E canonical MSBuild + **`Invoke-BlazeClawOptimizationValidation.ps1`**), `blazeclaw/docs/SKILL_PORTING.md` (Phase F), `blazeclaw/docs/PROTOCOL_CODEGEN.md` (codegen workflow, **Thin façade checklist**, Phase A–B scripts §7, `protocol::ReplayFromStored` for idempotency replay), `blazeclaw/BlazeClawMfc/tools/GatewayUpstreamDiff/` (`Diff-OpenClawGateway.ps1`, `Verify-GatewayDispatcherMethods.ps1`), `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md` (core `ServiceManager` ↔ `GatewayHost` callback boundaries), `blazeclaw/BlazeClawMfc/PROJECT_REVIEW.md` (layering and threading).
 
 This file tracks analysis of `blazeclaw::gateway::GatewayHost` (`GatewayHost.h` / split `.cpp` sources). The section at the bottom preserves earlier **file size** guidance for `GatewayHost.cpp`.
 
@@ -232,8 +232,10 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 | `SetEmailFallbackResolvedPolicy` | |
 | `SetChatRuntimeCallback` | |
 | `SetChatAbortCallback` | |
-| `SetEmbeddingsGenerateCallback` | |
-| `SetEmbeddingsBatchCallback` | |
+| `SetEmbeddingsGenerateCallback` | Wired from **`blazeclaw::core::GatewayHostBindingCoordinator::BindEmbeddingsCallbacks`** (`GatewayHostBindingCoordinator.cpp`; Phase C, 2026-04-20) |
+| `SetEmbeddingsBatchCallback` | Same as **`SetEmbeddingsGenerateCallback`** |
+
+**Sequencing:** At startup, **`ServiceManager::WireGatewayCallbacks`** → **`GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks`** attaches skills/schema, **embedded + email policy** (`BindGatewayPolicyCallbacks`), **`ServiceManager::BindToolRuntimeCallbacks`** (runtime tool registration), chat/abort, then embeddings — see **`blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md`** §2 and **`blazeclaw/docs/GATEWAY_CORE_WIRING.md`**.
 
 ### 9. Introspection, warnings, and test hooks
 
