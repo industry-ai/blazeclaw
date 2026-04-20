@@ -163,7 +163,7 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 1. Reduce synthetic fallback staged-delta usage where true incremental emission is feasible (embedded/parity paths — see `docs/GATEWAY_CORE_WIRING.md`, `docs/index.md` §2 item 4).
 2. Continue startup-path reduction by staging additional non-critical diagnostics/validations.
 3. ~~Improve task-delta retention eviction policy from map-order to recency-aware eviction.~~ **Done:** `TaskDeltaRepository` + `docs/GATEWAY_CORE_WIRING.md`.
-4. Stabilize **`[parity][chat]`** / contract tests; **Azure Pipelines** runs **`Invoke-BlazeClawOptimizationValidation.ps1 -SkipPhaseA -SkipPhaseB -SkipBuild -RunTests`** after build (`docs/BUILD_AND_CI.md`). Use the same **`-RunTests`** locally before release-quality merges.
+4. Stabilize **`[parity][chat]`** / contract tests; **Azure Pipelines** runs **`Invoke-BlazeClawOptimizationValidation.ps1 -SkipPhaseA -SkipPhaseB -SkipBuild -RunTests -Configuration Debug`** after build (`docs/BUILD_AND_CI.md`); that path runs **Phase F** (`Verify-SkillPortingPlans.ps1`) before Catch2 unless **`-SkipPhaseF`**. Use the same **`-RunTests`** locally before release-quality merges.
 5. Product shell: **`chat.model.enabled.*`** persistence lives in **`CSettingsDialog::OnOK`** (`SettingsDialog.cpp`); **`MainFrame::OnExtensionModelSet`** opens that dialog. Remaining MFC **TODO**s: branding strings, printing, thumbnails, and other wizard stubs in `src/app/*` as prioritized.
 6. ~~Optional: configurable **soft limits** for oversized chat payloads~~ **Implemented:** 1 MiB UTF-8 cap for **`chat.send`** / **`chat.inject`** (`ChatMessageLimits.h`); see `docs/index.md` §2 item 9.
 7. **Release\|x64** validation: **`BlazeClawMfc.vcxproj`** Release configuration does not embed **`third_party`** JSON includes—rely on vcpkg. CI builds **Debug** only; run **Release** locally or extend CI per `docs/index.md` §2 item **10** and `docs/BUILD_AND_CI.md` §“Debug vs Release”.
@@ -187,7 +187,7 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 Cross-project architecture (BlazeClaw vs upstream OpenClaw):
 
 - `blazeclaw/docs/index.md` — project review landing page: optimization themes (items 1–9), phased steps (A–F + next-wave), and MSBuild validation.
-- `blazeclaw/docs/BUILD_AND_CI.md` — canonical MSBuild command; `Invoke-BlazeClawOptimizationValidation.ps1` (Phases A+B+E; optional `-RunTests` with CWD `blazeclaw/`).
+- `blazeclaw/docs/BUILD_AND_CI.md` — canonical MSBuild command; `Invoke-BlazeClawOptimizationValidation.ps1` (Phases A+B+F+E; **`-SkipPhaseF`** optional; optional `-RunTests` with CWD `blazeclaw/`).
 - `blazeclaw/docs/architecture.md` — layer model; OpenClaw comparison (§11); consolidated optimization suggestions (§12); phased implementation plan (§13).
 - `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` — technology stack, module mapping, parity gaps, detailed optimization notes and document history for the port.
 

@@ -18,7 +18,7 @@ Use **vcpkg MSBuild integration** so `$(VcpkgIncludeRoot)` resolves (e.g. `vcpkg
 ## Tests and CI
 
 - **BlazeClawMfc.Tests** uses **Catch2** and **nlohmann::json** via vcpkg includes.
-- **Azure Pipelines:** [`azure-pipelines.yml`](../azure-pipelines.yml) — vcpkg bootstrap, **`x64-windows`** install, **matrix** **Debug** + **Release** **VSBuild** with **`CodePage=65001`**, Catch2 on **Debug** only (**`Invoke-BlazeClawOptimizationValidation.ps1 ... -RunTests -Configuration Debug`**).
+- **Azure Pipelines:** [`azure-pipelines.yml`](../azure-pipelines.yml) — vcpkg bootstrap, **`x64-windows`** install, **matrix** **Debug** + **Release** **VSBuild** with **`CodePage=65001`**, Catch2 on **Debug** only (**`Invoke-BlazeClawOptimizationValidation.ps1 -SkipPhaseA -SkipPhaseB -SkipBuild -RunTests -Configuration Debug`** — runs **Phase F** skill-plan check before tests unless **`-SkipPhaseF`**).
 - **GitHub Actions:** [`.github/workflows/blazeclaw-chat-nightly-smoke.yml`](../.github/workflows/blazeclaw-chat-nightly-smoke.yml) — smoke checks; see **BUILD_AND_CI.md** for how this differs from Azure.
 
 Local build example (UTF-8 code page, matches CI and **`Invoke-BlazeClawOptimizationValidation.ps1`**):
@@ -51,7 +51,8 @@ Architecture comparison docs:
 - `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` (BlazeClaw vs OpenClaw stacks, mapping, gaps, optimization priorities)
 - `blazeclaw/docs/PROTOCOL_CODEGEN.md` (gateway manifest/codegen, default handler coordinator, thin façade checklist, Phase A–B scripts §7, `OkResponse` / `ErrorResponse` / `ReplayFromStored`, `EncodeValidatedEvent`, serializers)
 - `blazeclaw/BlazeClawMfc/tools/GatewayUpstreamDiff/` (`Diff-OpenClawGateway.ps1`, `Verify-GatewayDispatcherMethods.ps1`)
-- `blazeclaw/BlazeClawMfc/tools/Invoke-BlazeClawOptimizationValidation.ps1` (Phases A+B+E in one run; optional `-RunTests` — Catch2 CWD `blazeclaw/`)
+- `blazeclaw/BlazeClawMfc/tools/Verify-SkillPortingPlans.ps1` (Phase F: every `blazeclaw/skills/<name>/` has `PORTING_PLAN.md`)
+- `blazeclaw/BlazeClawMfc/tools/Invoke-BlazeClawOptimizationValidation.ps1` (Phases A+B+F+E in one run; **`-SkipPhaseF`** optional; optional `-RunTests` — Catch2 CWD `blazeclaw/`)
 - `blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md` (`ServiceManager` ↔ `GatewayHost`, `WireAllGatewayServiceCallbacks`)
 - `blazeclaw/docs/GATEWAY_CORE_WIRING.md` (Phase C wiring, Phase D task-delta recency & streaming/startup notes)
 - `blazeclaw/docs/BUILD_AND_CI.md` (Phase E: vcpkg, Azure Pipelines, stub deprecation plan)

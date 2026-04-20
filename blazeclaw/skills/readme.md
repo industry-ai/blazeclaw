@@ -1,6 +1,6 @@
 ## BlazeClaw Skills Overview
 
-**Porting from OpenClaw:** see [`blazeclaw/docs/SKILL_PORTING.md`](../docs/SKILL_PORTING.md) (Phase F — **PORTING_PLAN** template, index of skills with plans including `brave-search`, `imap-smtp-email`, `baidu-search`, `humanizer`, `summarize`, `web-browsing`, `self-evolving`, `self-evolving-cpp`, doc sync).
+**Porting from OpenClaw:** see [`blazeclaw/docs/SKILL_PORTING.md`](../docs/SKILL_PORTING.md) (Phase F — **PORTING_PLAN** template, index of skills with plans, doc sync). **Invariant:** each immediate child directory of **`blazeclaw/skills/`** must contain **`PORTING_PLAN.md`** — enforced by **`BlazeClawMfc/tools/Verify-SkillPortingPlans.ps1`** (Phase F in **`Invoke-BlazeClawOptimizationValidation.ps1`**) and Catch2 **`[skills][phasef][contract]`** in **`SkillPortingPlanPresenceTests.cpp`**.
 
 This folder contains **local implemented skills** and related assets used by
 BlazeClaw.
@@ -125,6 +125,8 @@ configuration through the generic skill-config bridge.
 
 ## Implemented Local Skills (Current)
 
+Add a **`PORTING_PLAN.md`** (and update **`docs/SKILL_PORTING.md`**) whenever you add a new folder here — see **`docs/SKILL_PORTING.md`** and the Phase F checks above.
+
 ### 1. `imap-smtp-email`
 
 **Purpose:** Email operations over IMAP/SMTP (read/search/fetch/download,
@@ -210,7 +212,21 @@ documentation lookup and general fact retrieval workflows.
 
 ---
 
-### 5. `baidu-search`
+### 5. `web-browsing`
+
+**Purpose:** Web search and readable page-content extraction (`web_browsing.search.web`, `web_browsing.fetch.content`) for ordered workflows and chat tool dispatch.
+
+**Key files:**
+- `web-browsing/SKILL.md`
+- `web-browsing/PORTING_PLAN.md`
+- `web-browsing/_meta.json`
+- `web-browsing/config.html` (bridge-based configuration)
+
+**Configuration:** canonical **`~/.config/web-browsing/.env`** (same bridge pattern as other skills with `config.html`).
+
+---
+
+### 6. `baidu-search`
 
 **Configuration:**
 - For `config.html` store/restore details, see
@@ -218,7 +234,7 @@ documentation lookup and general fact retrieval workflows.
 
 ---
 
-### 6. `summarize`
+### 7. `summarize`
 
 **Purpose:** Extract structured key points from draft text, URLs, or content
 inputs for downstream rewrite and distribution flows.
@@ -232,7 +248,7 @@ inputs for downstream rewrite and distribution flows.
 
 ---
 
-### 7. `humanizer`
+### 8. `humanizer`
 
 **Purpose:** Rewrites AI-sounding text into natural human-written language using
 Wikipedia AI-writing-pattern guidance.

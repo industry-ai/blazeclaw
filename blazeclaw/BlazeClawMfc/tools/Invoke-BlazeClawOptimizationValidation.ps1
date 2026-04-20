@@ -1,17 +1,18 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-  Runs Phase A–F validation steps: upstream file list, duplicate method review, MSBuild, optional tests.
+  Runs Phase A, B, F, and E validation steps: upstream file list, duplicate method review, skill PORTING_PLAN scan, MSBuild, optional tests (Phases C/D via docs and Catch2 when `-RunTests`).
 
 .DESCRIPTION
   Implements the workflow described in `blazeclaw/docs/architecture.md` §13 and `blazeclaw/docs/index.md` §3.
 
   - **Phase A:** `GatewayUpstreamDiff/Diff-OpenClawGateway.ps1` (OpenClaw gateway paths).
   - **Phase B:** `GatewayUpstreamDiff/Verify-GatewayDispatcherMethods.ps1` (duplicate `.Register("method"` review).
+  - **Phase F:** `Verify-SkillPortingPlans.ps1` — every **`blazeclaw/skills/<name>/`** directory must contain **`PORTING_PLAN.md`** (see **`docs/SKILL_PORTING.md`**). Skipped with **`-SkipPhaseF`**.
   - **Phase E:** MSBuild `blazeclaw/BlazeClaw.sln` **Debug|x64** or **Release|x64** (see **`-Configuration`**) with UTF-8 code page (**`/p:CodePage=65001`**).
   - **Optional:** Run `BlazeClawMfc.Tests.exe` with CWD `blazeclaw/` (after a build, or with **`-SkipBuild`** if the test EXE already exists — same pattern as Azure Pipelines after **VSBuild**). The script resolves the test binary under **`blazeclaw\bin\<Configuration>\`** first, then common fallbacks.
 
-  Phases C, D, and F include **runtime rules and docs** (for example Phase **D** streaming semantics in `GATEWAY_CORE_WIRING.md`, Phase **F** `PORTING_PLAN.md` under `blazeclaw/skills/`) — not all are exercised by this script.
+  Phases **C** and **D** are **runtime rules and docs** (for example **`GATEWAY_CORE_WIRING.md`**, task-delta telemetry) — not automated here beyond Catch2 when **`-RunTests`** is set.
 
 .EXAMPLE
   cd E:\gitRepo\blazeClaw
@@ -32,6 +33,7 @@ param(
 	[string] $Configuration = "Debug",
 	[switch] $SkipPhaseA,
 	[switch] $SkipPhaseB,
+	[switch] $SkipPhaseF,
 	[switch] $SkipBuild,
 	[switch] $RunTests
 )
@@ -44,6 +46,7 @@ if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
 
 $diffScript = Join-Path $PSScriptRoot "GatewayUpstreamDiff\Diff-OpenClawGateway.ps1"
 $verifyScript = Join-Path $PSScriptRoot "GatewayUpstreamDiff\Verify-GatewayDispatcherMethods.ps1"
+$skillPlanScript = Join-Path $PSScriptRoot "Verify-SkillPortingPlans.ps1"
 $solution = Join-Path $RepoRoot $SolutionRelative
 
 function Find-MsBuild {
@@ -70,6 +73,13 @@ if (-not $SkipPhaseB) {
 	Write-Host "=== Phase B: duplicate gateway method registration review ===" -ForegroundColor Cyan
 	& $verifyScript -RepoRoot $RepoRoot
 	if (-not $?) { throw "Verify-GatewayDispatcherMethods.ps1 failed." }
+}
+
+if (-not $SkipPhaseF) {
+	Write-Host ""
+	Write-Host "=== Phase F: skill PORTING_PLAN.md presence ===" -ForegroundColor Cyan
+	& $skillPlanScript -RepoRoot $RepoRoot
+	if (-not $?) { throw "Verify-SkillPortingPlans.ps1 failed." }
 }
 
 if (-not $SkipBuild) {
