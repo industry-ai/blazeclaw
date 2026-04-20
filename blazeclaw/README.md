@@ -57,6 +57,6 @@ Architecture comparison docs:
 - `blazeclaw/docs/GATEWAY_CORE_WIRING.md` (Phase C wiring, Phase D task-delta recency & streaming/startup notes)
 - `blazeclaw/docs/BUILD_AND_CI.md` (Phase E: vcpkg, Azure Pipelines, stub deprecation plan)
 - `blazeclaw/docs/SKILL_PORTING.md` (Phase F: PORTING_PLAN pattern, skill index)
-- `blazeclaw/docs/GATEWAY_SERVER_METHODS_MECHANICAL_AUDIT.md` (OpenClaw `server-methods/*.ts` vs BlazeClaw dispatcher file-by-file parity matrix + prioritized P0/P1/P2 implementation backlog; includes P0 baseline implementation status)
+- `blazeclaw/docs/GATEWAY_SERVER_METHODS_MECHANICAL_AUDIT.md` (OpenClaw `server-methods/*.ts` vs BlazeClaw dispatcher file-by-file parity matrix + prioritized P0/P1/P2 implementation backlog with status notes: method-surface baseline for P0/P1/P2 landed, with `doctor.memory.*` request/response schema validation)
 - `.github/ISSUE_TEMPLATE/p0-gateway-method-parity-checklist.md` (issue template for P0 parity execution with checkboxes, tests, and validation commands)
 - `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp.md` (deep dive: **thin façade** invariant—`RegisterDefaultHandlers` → `RegisterDefaultHandlerSequence` only from `GatewayHost.cpp`; split `GatewayHost.Handlers.*`; no god lambdas; shared protocol surface; named handler types)

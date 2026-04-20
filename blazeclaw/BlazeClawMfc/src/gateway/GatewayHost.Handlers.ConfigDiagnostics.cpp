@@ -72,6 +72,22 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 			return protocol::OkResponse(request, "{\"ok\":true,\"status\":\"healthy\"}");
 			});
 
+		host.m_dispatcher.Register("doctor.memory.dreamDiary", [](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, "{\"entries\":[],\"count\":0,\"source\":\"memory\"}");
+			});
+
+		host.m_dispatcher.Register("doctor.memory.backfillDreamDiary", [](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, "{\"queued\":true,\"status\":\"scheduled\"}");
+			});
+
+		host.m_dispatcher.Register("doctor.memory.resetDreamDiary", [](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, "{\"reset\":true,\"target\":\"dreamDiary\"}");
+			});
+
+		host.m_dispatcher.Register("doctor.memory.resetGroundedShortTerm", [](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, "{\"reset\":true,\"target\":\"groundedShortTerm\"}");
+			});
+
 		host.m_dispatcher.Register("doctor.memory.flush", [](const protocol::RequestFrame& request) {
 			return protocol::OkResponse(request, "{\"flushed\":true,\"status\":\"ok\"}");
 			});

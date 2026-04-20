@@ -399,6 +399,67 @@ namespace blazeclaw::gateway::protocol {
 
 				return true;
 			} },
+			{ "doctor.memory.status", [&]() {
+				if (!IsFieldBoolean(payload, "ok") ||
+					!IsFieldValueType(payload, "status", '"')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`doctor.memory.status` requires `ok` boolean and `status` string fields.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "doctor.memory.dreamDiary", [&]() {
+				if (!IsFieldValueType(payload, "entries", '[') ||
+					!IsFieldNumber(payload, "count") ||
+					!IsFieldValueType(payload, "source", '"')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`doctor.memory.dreamDiary` requires `entries`, `count`, and `source` fields.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "doctor.memory.backfillDreamDiary", [&]() {
+				if (!IsFieldBoolean(payload, "queued") ||
+					!IsFieldValueType(payload, "status", '"')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`doctor.memory.backfillDreamDiary` requires `queued` boolean and `status` string fields.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "doctor.memory.resetDreamDiary", [&]() {
+				if (!IsFieldBoolean(payload, "reset") ||
+					!IsFieldValueType(payload, "target", '"')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`doctor.memory.resetDreamDiary` requires `reset` boolean and `target` string fields.");
+					return false;
+				}
+
+				return true;
+			} },
+			{ "doctor.memory.resetGroundedShortTerm", [&]() {
+				if (!IsFieldBoolean(payload, "reset") ||
+					!IsFieldValueType(payload, "target", '"')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`doctor.memory.resetGroundedShortTerm` requires `reset` boolean and `target` string fields.");
+					return false;
+				}
+
+				return true;
+			} },
 			{ "gateway.embeddings.generate", [&]() {
 				if (!IsFieldValueType(payload, "vector", '[') ||
 					!IsFieldNumber(payload, "dimension") ||

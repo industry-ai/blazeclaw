@@ -563,6 +563,56 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Gateway protocol capability checks validate doctor memory request and response contracts",
+	"[gateway][lifecycle][p2][capability]")
+{
+	using blazeclaw::gateway::protocol::GatewayProtocolSchemaValidator;
+	using blazeclaw::gateway::protocol::RequestFrame;
+	using blazeclaw::gateway::protocol::ResponseFrame;
+	using blazeclaw::gateway::protocol::SchemaValidationIssue;
+
+	SchemaValidationIssue issue;
+
+	const RequestFrame validRequest{
+		.id = "doctor-memory-req-ok",
+		.method = "doctor.memory.dreamDiary",
+		.paramsJson = std::nullopt,
+	};
+	REQUIRE(GatewayProtocolSchemaValidator::ValidateRequest(validRequest, issue));
+
+	const RequestFrame invalidRequest{
+		.id = "doctor-memory-req-bad",
+		.method = "doctor.memory.dreamDiary",
+		.paramsJson = std::string("{}"),
+	};
+	REQUIRE_FALSE(GatewayProtocolSchemaValidator::ValidateRequest(invalidRequest, issue));
+
+	const ResponseFrame validBackfill{
+		.id = "doctor-memory-backfill-ok",
+		.ok = true,
+		.payloadJson = "{\"queued\":true,\"status\":\"scheduled\"}",
+		.error = std::nullopt,
+	};
+	REQUIRE(
+		GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"doctor.memory.backfillDreamDiary",
+			validBackfill,
+			issue));
+
+	const ResponseFrame invalidBackfill{
+		.id = "doctor-memory-backfill-bad",
+		.ok = true,
+		.payloadJson = "{\"queued\":true}",
+		.error = std::nullopt,
+	};
+	REQUIRE_FALSE(
+		GatewayProtocolSchemaValidator::ValidateResponseForMethod(
+			"doctor.memory.backfillDreamDiary",
+			invalidBackfill,
+			issue));
+}
+
+TEST_CASE(
 	"Gateway orchestration edge test validates multi-session lifecycle compaction",
 	"[gateway][lifecycle][p0][orchestration][session]")
 {
