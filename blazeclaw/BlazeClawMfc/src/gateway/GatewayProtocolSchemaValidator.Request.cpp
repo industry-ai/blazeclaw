@@ -1850,6 +1850,206 @@ namespace blazeclaw::gateway::protocol {
 				"a string");
 		}
 
+		bool ValidateNodePairRequestParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			if (!request.paramsJson.has_value()) {
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `node.pair.request` requires `params.nodeId` string.");
+				return false;
+			}
+
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "node.pair.request", fieldKinds)) {
+				return false;
+			}
+
+			const auto nodeIdIt = fieldKinds.find("nodeId");
+			if (nodeIdIt == fieldKinds.end() || nodeIdIt->second != JsonFieldKind::String) {
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `node.pair.request` requires `params.nodeId` to be a string.");
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(fieldKinds, "displayName", JsonFieldKind::String, issue, "node.pair.request", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "platform", JsonFieldKind::String, issue, "node.pair.request", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "version", JsonFieldKind::String, issue, "node.pair.request", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "coreVersion", JsonFieldKind::String, issue, "node.pair.request", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "uiVersion", JsonFieldKind::String, issue, "node.pair.request", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "deviceFamily", JsonFieldKind::String, issue, "node.pair.request", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "modelIdentifier", JsonFieldKind::String, issue, "node.pair.request", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "caps", JsonFieldKind::Array, issue, "node.pair.request", "an array") ||
+				!RequireFieldKindIfPresent(fieldKinds, "commands", JsonFieldKind::Array, issue, "node.pair.request", "an array") ||
+				!RequireFieldKindIfPresent(fieldKinds, "permissions", JsonFieldKind::Object, issue, "node.pair.request", "an object") ||
+				!RequireFieldKindIfPresent(fieldKinds, "remoteIp", JsonFieldKind::String, issue, "node.pair.request", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "silent", JsonFieldKind::Boolean, issue, "node.pair.request", "boolean")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (ContainsFieldName(
+					{ "nodeId", "displayName", "platform", "version", "coreVersion", "uiVersion", "deviceFamily", "modelIdentifier", "caps", "commands", "permissions", "remoteIp", "silent" },
+					field)) {
+					continue;
+				}
+				SetIssue(issue, "schema_invalid_params", "Method `node.pair.request` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateNodePairApproveParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			if (!request.paramsJson.has_value()) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.pair.approve` requires `params.requestId` string.");
+				return false;
+			}
+
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "node.pair.approve", fieldKinds)) {
+				return false;
+			}
+
+			const auto requestIdIt = fieldKinds.find("requestId");
+			if (requestIdIt == fieldKinds.end() || requestIdIt->second != JsonFieldKind::String) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.pair.approve` requires `params.requestId` to be a string.");
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(fieldKinds, "callerScopes", JsonFieldKind::Array, issue, "node.pair.approve", "an array") ||
+				!RequireFieldKindIfPresent(fieldKinds, "scopes", JsonFieldKind::Array, issue, "node.pair.approve", "an array")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (ContainsFieldName({ "requestId", "callerScopes", "scopes" }, field)) {
+					continue;
+				}
+				SetIssue(issue, "schema_invalid_params", "Method `node.pair.approve` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateNodePairRejectParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			if (!request.paramsJson.has_value()) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.pair.reject` requires `params.requestId` string.");
+				return false;
+			}
+
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "node.pair.reject", fieldKinds)) {
+				return false;
+			}
+
+			const auto requestIdIt = fieldKinds.find("requestId");
+			if (requestIdIt == fieldKinds.end() || requestIdIt->second != JsonFieldKind::String) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.pair.reject` requires `params.requestId` to be a string.");
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "requestId") {
+					continue;
+				}
+				SetIssue(issue, "schema_invalid_params", "Method `node.pair.reject` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateNodePairVerifyParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			if (!request.paramsJson.has_value()) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.pair.verify` requires `params.nodeId` and `params.token` strings.");
+				return false;
+			}
+
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "node.pair.verify", fieldKinds)) {
+				return false;
+			}
+
+			const auto nodeIdIt = fieldKinds.find("nodeId");
+			const auto tokenIt = fieldKinds.find("token");
+			if (nodeIdIt == fieldKinds.end() || nodeIdIt->second != JsonFieldKind::String ||
+				tokenIt == fieldKinds.end() || tokenIt->second != JsonFieldKind::String) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.pair.verify` requires `params.nodeId` and `params.token` to be strings.");
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "nodeId" || field == "token") {
+					continue;
+				}
+				SetIssue(issue, "schema_invalid_params", "Method `node.pair.verify` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateNodeRenameParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			if (!request.paramsJson.has_value()) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.rename` requires `params.nodeId` and `params.displayName` strings.");
+				return false;
+			}
+
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "node.rename", fieldKinds)) {
+				return false;
+			}
+
+			const auto nodeIdIt = fieldKinds.find("nodeId");
+			const auto displayNameIt = fieldKinds.find("displayName");
+			if (nodeIdIt == fieldKinds.end() || nodeIdIt->second != JsonFieldKind::String ||
+				displayNameIt == fieldKinds.end() || displayNameIt->second != JsonFieldKind::String) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.rename` requires `params.nodeId` and `params.displayName` to be strings.");
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "nodeId" || field == "displayName") {
+					continue;
+				}
+				SetIssue(issue, "schema_invalid_params", "Method `node.rename` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateNodeDescribeParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			if (!request.paramsJson.has_value()) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.describe` requires `params.nodeId` string.");
+				return false;
+			}
+
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "node.describe", fieldKinds)) {
+				return false;
+			}
+
+			const auto nodeIdIt = fieldKinds.find("nodeId");
+			if (nodeIdIt == fieldKinds.end() || nodeIdIt->second != JsonFieldKind::String) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.describe` requires `params.nodeId` to be a string.");
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "nodeId") {
+					continue;
+				}
+				SetIssue(issue, "schema_invalid_params", "Method `node.describe` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		bool ValidateLogsTailParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 			ParsedObjectFieldKinds fieldKinds;
 			if (!TryParseRequestParamsObject(request, issue, "gateway.logs.tail", fieldKinds)) {
@@ -2472,6 +2672,14 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.channels.status", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateOptionalChannelParam(r, i, r.method); } },
 			{ "gateway.channels.routes", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateOptionalChannelParam(r, i, r.method); } },
 			{ "gateway.channels.accounts", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateOptionalChannelParam(r, i, r.method); } },
+			{ "node.pair.request", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodePairRequestParams(r, i); } },
+			{ "node.pair.list", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
+			{ "node.pair.approve", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodePairApproveParams(r, i); } },
+			{ "node.pair.reject", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodePairRejectParams(r, i); } },
+			{ "node.pair.verify", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodePairVerifyParams(r, i); } },
+			{ "node.rename", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodeRenameParams(r, i); } },
+			{ "node.list", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
+			{ "node.describe", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodeDescribeParams(r, i); } },
 			{ "gateway.tools.call.preview", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateToolsCallPreviewParams(r, i); } },
 			{ "gateway.tools.call.execute", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateToolsCallExecuteParams(r, i); } },
 			{ "gateway.agents.create", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateAgentsCreateParams(r, i); } },

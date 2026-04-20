@@ -242,5 +242,18 @@ A minimal-risk path is:
 3. Reuse existing BlazeClaw skill catalog/eligibility/command snapshots as inputs to that adapter.
 4. Keep deepseek transport as model backend only, not as the orchestration owner.
 
+## Node-domain parity follow-up (OpenClaw `nodes.ts`)
+
+A dedicated OpenClaw-vs-BlazeClaw node capability gap analysis and parity plan is now tracked in:
+
+- `docs/compare/nodes.ts/NODES_TS_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md`
+
+Summary status:
+
+- BlazeClaw currently provides broad node method-name coverage.
+- Steps 1-4 are now implemented for node request-contract freezing, service-backed handler extraction, pairing-flow parity baseline, and list/describe catalog baseline.
+- Implementation landed in `GatewayNodePairingService`, `GatewayNodeCatalogService`, `GatewayHost.Handlers.SecurityOps.cpp`, and `GatewayProtocolSchemaValidator.Request.cpp`.
+- Remaining gaps are downstream steps (5+) including canvas capability parity, pending queue parity, invoke policy/sanitization parity, wake/reconnect orchestration parity, and node event runtime parity hardening.
+
 ---
 If needed, I can next draft a concrete file-level porting checklist (C++ target files + OpenClaw source mapping) for implementation sequencing.

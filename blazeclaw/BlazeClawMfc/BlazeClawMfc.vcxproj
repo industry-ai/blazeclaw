@@ -224,6 +224,8 @@
     <ClInclude Include="src\gateway\GatewayJsonSerializers.h" />
     <ClInclude Include="src\gateway\GatewayJsonBuilder.h" />
     <ClInclude Include="src\gateway\GatewayRequestParams.h" />
+    <ClInclude Include="src\gateway\GatewayNodePairingService.h" />
+    <ClInclude Include="src\gateway\GatewayNodeCatalogService.h" />
     <ClInclude Include="src\gateway\GatewayProtocolSchemaValidator.h" />
     <ClInclude Include="src\gateway\GatewayProtocolSchemaValidator.Internal.h" />
     <ClInclude Include="src\gateway\TaskDeltaSchemaValidator.h" />
@@ -420,6 +422,8 @@
     <ClCompile Include="src\gateway\GatewayJsonSerializers.cpp" />
     <ClCompile Include="src\gateway\GatewayJsonBuilder.cpp" />
     <ClCompile Include="src\gateway\GatewayRequestParams.cpp" />
+    <ClCompile Include="src\gateway\GatewayNodePairingService.cpp" />
+    <ClCompile Include="src\gateway\GatewayNodeCatalogService.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Request.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Event.cpp" />
     <ClCompile Include="src\gateway\GatewayProtocolSchemaValidator.Response.cpp" />

@@ -86,6 +86,8 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayJsonSerializers.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayJsonBuilder.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayRequestParams.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayNodePairingService.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayNodeCatalogService.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Channels.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Events.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.cpp" />

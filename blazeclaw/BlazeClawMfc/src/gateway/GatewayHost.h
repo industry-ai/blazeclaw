@@ -19,6 +19,8 @@
 #include "GatewayEventFanoutService.h"
 #include "TransportRecipientRegistry.h"
 #include "GatewayHostRegistrationCoordinator.h"
+#include "GatewayNodePairingService.h"
+#include "GatewayNodeCatalogService.h"
 
 #include <memory>
 
@@ -578,6 +580,8 @@ namespace blazeclaw::gateway {
 		GatewayHostRouter m_hostRouter;
 		GatewayRequestPolicyGuard m_requestPolicyGuard;
 		GatewayEventFanoutService m_eventFanoutService;
+		GatewayNodePairingService m_nodePairingService;
+		GatewayNodeCatalogService m_nodeCatalogService;
 		mutable std::unique_ptr<IGatewayHostRuntime> m_stageRuntimeHost;
 	};
 
