@@ -63,12 +63,12 @@ Consequences:
 - Chat history retention is now capped per session (`kMaxChatHistoryEntriesPerSession = 500`).
 - Chat event queue retention is now capped per session (`kMaxChatEventsPerSession = 200`).
 - Retrieval memory store is capped at 512 records (`RetrievalMemoryService.cpp:56-58`).
-- Task delta store has bounded retention intent (`m_taskDeltasByRunId.size() > 64`).
+- Task delta store has bounded retention (`m_taskDeltasRetentionLimit`, default 64) with **eviction-count** telemetry: **`gateway.taskdelta.retention.evicted`** on load and chat upsert when **`EnforceRetentionLimit`** removes runs.
 
 ### Risk points
 
 - Chat history and event queues are now bounded per session, but retained payloads can still be large when message bodies are large.
-- Task-delta retention is bounded (`m_taskDeltasRetentionLimit`, default 64); eviction is **recency-aware** via `TaskDeltaRepository::EnforceRetentionLimit` (activity on upsert, load, and `gateway.runtime.taskDeltas.get`).
+- Task-delta retention is bounded (`m_taskDeltasRetentionLimit`, default 64); eviction is **recency-aware** via `TaskDeltaRepository::EnforceRetentionLimit` (activity on upsert, load, and `gateway.runtime.taskDeltas.get`), returns **evicted run count**, and emits **`gateway.taskdelta.retention.evicted`** when that count is non-zero (Phase D, 2026-04-20).
 - Local-model cancel flags are now cleaned up via scoped terminal cleanup across success, error, and cancel paths.
 
 ## 4) Performance Issues and Hotspots

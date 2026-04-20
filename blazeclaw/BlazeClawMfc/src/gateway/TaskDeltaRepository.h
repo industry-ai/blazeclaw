@@ -55,8 +55,8 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] const Store& Snapshot() const noexcept;
 
 		/// Drops least-recently-used runs (by `lastActivityMs`, then `runId` lexicographic tie-break) until at most
-		/// `maxRuns` remain. Replaces unordered_map iteration order eviction.
-		void EnforceRetentionLimit(std::size_t maxRuns);
+		/// `maxRuns` remain. Replaces unordered_map iteration order eviction. Returns the number of runs removed.
+		[[nodiscard]] std::size_t EnforceRetentionLimit(std::size_t maxRuns);
 
 	private:
 		Store& m_backingStore;

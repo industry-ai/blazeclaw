@@ -235,7 +235,7 @@ Counts: **45 public** members + **26 private** members = **71** instance/static 
 | `SetEmbeddingsGenerateCallback` | Wired from **`blazeclaw::core::GatewayHostBindingCoordinator::BindEmbeddingsCallbacks`** (`GatewayHostBindingCoordinator.cpp`; Phase C, 2026-04-20) |
 | `SetEmbeddingsBatchCallback` | Same as **`SetEmbeddingsGenerateCallback`** |
 
-**Sequencing:** At startup, **`ServiceManager::WireGatewayCallbacks`** → **`GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks`** attaches skills/schema, **embedded + email policy** (`BindGatewayPolicyCallbacks`), **`ServiceManager::BindToolRuntimeCallbacks`** (runtime tool registration), chat/abort, then embeddings — see **`blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md`** §2 and **`blazeclaw/docs/GATEWAY_CORE_WIRING.md`**.
+**Sequencing:** At startup, **`ServiceManager::WireGatewayCallbacks`** → **`GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks`** attaches skills/schema, **embedded + email policy** (`BindGatewayPolicyCallbacks`), **`ServiceManager::BindToolRuntimeCallbacks`** (runtime tool registration), chat/abort, then embeddings — see **`blazeclaw/docs/SERVICE_LAYER_BOUNDARIES.md`** §2 and **`blazeclaw/docs/GATEWAY_CORE_WIRING.md`**. **Task-delta retention:** after **`LoadPersistedTaskDeltas`**, **`EnforceRetentionLimit`** may evict old runs; non-zero evictions emit **`gateway.taskdelta.retention.evicted`** (`reason`: **`persistence_load`**).
 
 ### 9. Introspection, warnings, and test hooks
 

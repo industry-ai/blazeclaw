@@ -376,8 +376,19 @@ void ChatPipelineHandlers::RegisterAll(GatewayHost& host) {
 							const bool upserted =
 								host.m_taskDeltaRepository.Upsert(runId, normalizedTaskDeltas);
 							(void)upserted;
-							host.m_taskDeltaRepository.EnforceRetentionLimit(
-								host.m_taskDeltasRetentionLimit);
+							const std::size_t evictedFromChat =
+								host.m_taskDeltaRepository.EnforceRetentionLimit(
+									host.m_taskDeltasRetentionLimit);
+							if (evictedFromChat > 0) {
+								EmitTelemetryEvent(
+									"gateway.taskdelta.retention.evicted",
+									std::string("{\"evictedRuns\":") +
+									std::to_string(evictedFromChat) +
+									",\"remainingRuns\":" +
+									std::to_string(host.m_taskDeltaRepository.Size()) +
+									",\"reason\":\"chat_runtime_upsert\",\"runId\":" +
+									JsonString(runId) + "}");
+							}
 							host.PersistTaskDeltas();
 							for (const auto& delta : normalizedTaskDeltas) {
 								EmitTelemetryEvent(
@@ -444,12 +455,6 @@ void ChatPipelineHandlers::RegisterAll(GatewayHost& host) {
 								",\"cancelled\":" + std::to_string(host.m_taskDeltaRunCancelledCount) +
 								",\"fallback\":" + std::to_string(host.m_taskDeltaRunFallbackCount) + "}" +
 								"}");
-
-							if (host.m_taskDeltaRepository.Size() > host.m_taskDeltasRetentionLimit) {
-								host.m_taskDeltaRepository.EnforceRetentionLimit(
-									host.m_taskDeltasRetentionLimit);
-								host.PersistTaskDeltas();
-							}
 					};
 
 				std::string assistantText;

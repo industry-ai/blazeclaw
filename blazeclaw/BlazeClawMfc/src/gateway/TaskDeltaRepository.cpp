@@ -93,7 +93,8 @@ namespace blazeclaw::gateway {
 		m_lastActivityMs.clear();
 	}
 
-	void TaskDeltaRepository::EnforceRetentionLimit(std::size_t maxRuns) {
+	std::size_t TaskDeltaRepository::EnforceRetentionLimit(std::size_t maxRuns) {
+		std::size_t evicted = 0;
 		while (m_backingStore.size() > maxRuns && !m_backingStore.empty()) {
 			std::string victim;
 			std::uint64_t minTs = UINT64_MAX;
@@ -110,7 +111,9 @@ namespace blazeclaw::gateway {
 				break;
 			}
 			(void)Clear(victim);
+			++evicted;
 		}
+		return evicted;
 	}
 
 	std::size_t TaskDeltaRepository::Size() const noexcept {

@@ -903,7 +903,15 @@ namespace blazeclaw::gateway {
 			(void)upserted;
 		}
 
-		m_taskDeltaRepository.EnforceRetentionLimit(m_taskDeltasRetentionLimit);
+		const std::size_t evictedFromLoad =
+			m_taskDeltaRepository.EnforceRetentionLimit(m_taskDeltasRetentionLimit);
+		if (evictedFromLoad > 0) {
+			EmitTelemetryEvent(
+				"gateway.taskdelta.retention.evicted",
+				std::string("{\"evictedRuns\":") + std::to_string(evictedFromLoad) +
+				",\"remainingRuns\":" + std::to_string(m_taskDeltaRepository.Size()) +
+				",\"reason\":\"persistence_load\"}");
+		}
 
 		PersistTaskDeltas();
 	}

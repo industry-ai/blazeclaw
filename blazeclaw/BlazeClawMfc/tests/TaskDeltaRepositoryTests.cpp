@@ -27,7 +27,7 @@ TEST_CASE("TaskDeltaRepository EnforceRetentionLimit evicts lowest activity", "[
 	(void)repo.Upsert("run-mid", { MakeOneDelta("run-mid", 50) }, 50);
 	(void)repo.Upsert("run-new", { MakeOneDelta("run-new", 90) }, 90);
 
-	repo.EnforceRetentionLimit(2);
+	REQUIRE(repo.EnforceRetentionLimit(2) == 1);
 
 	REQUIRE(store.size() == 2);
 	REQUIRE(store.find("run-old") == store.end());
@@ -42,11 +42,22 @@ TEST_CASE("TaskDeltaRepository EnforceRetentionLimit tie-breaks by runId", "[gat
 	(void)repo.Upsert("zebra", { MakeOneDelta("zebra", 1) }, 100);
 	(void)repo.Upsert("apple", { MakeOneDelta("apple", 1) }, 100);
 
-	repo.EnforceRetentionLimit(1);
+	REQUIRE(repo.EnforceRetentionLimit(1) == 1);
 
 	REQUIRE(store.size() == 1);
-	REQUIRE(store.find("apple") != store.end());
-	REQUIRE(store.find("zebra") == store.end());
+	// Equal activity: evict lexicographically smallest runId (apple < zebra).
+	REQUIRE(store.find("zebra") != store.end());
+	REQUIRE(store.find("apple") == store.end());
+}
+
+TEST_CASE("TaskDeltaRepository EnforceRetentionLimit returns zero when already within limit", "[gateway][taskdelta]") {
+	TaskDeltaRepository::Store store;
+	TaskDeltaRepository repo(store);
+
+	(void)repo.Upsert("only", { MakeOneDelta("only", 100) }, 100);
+
+	REQUIRE(repo.EnforceRetentionLimit(8) == 0);
+	REQUIRE(store.size() == 1);
 }
 
 TEST_CASE("TaskDeltaRepository Get refreshes recency", "[gateway][taskdelta]") {
@@ -58,7 +69,7 @@ TEST_CASE("TaskDeltaRepository Get refreshes recency", "[gateway][taskdelta]") {
 
 	(void)repo.Get("stale", true);
 
-	repo.EnforceRetentionLimit(1);
+	REQUIRE(repo.EnforceRetentionLimit(1) == 1);
 
 	REQUIRE(store.size() == 1);
 	REQUIRE(store.find("stale") != store.end());
