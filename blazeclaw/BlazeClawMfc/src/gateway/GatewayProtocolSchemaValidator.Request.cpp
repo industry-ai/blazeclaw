@@ -2050,6 +2050,141 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool ValidateNodeCanvasCapabilityRefreshParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			if (!request.paramsJson.has_value()) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.canvas.capability.refresh` requires `params.sessionKey` and `params.canvasHostUrl` strings.");
+				return false;
+			}
+
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "node.canvas.capability.refresh", fieldKinds)) {
+				return false;
+			}
+
+			const auto sessionKeyIt = fieldKinds.find("sessionKey");
+			const auto canvasHostUrlIt = fieldKinds.find("canvasHostUrl");
+			if (sessionKeyIt == fieldKinds.end() || sessionKeyIt->second != JsonFieldKind::String ||
+				canvasHostUrlIt == fieldKinds.end() || canvasHostUrlIt->second != JsonFieldKind::String) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.canvas.capability.refresh` requires `params.sessionKey` and `params.canvasHostUrl` to be strings.");
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "sessionKey" || field == "canvasHostUrl") {
+					continue;
+				}
+				SetIssue(issue, "schema_invalid_params", "Method `node.canvas.capability.refresh` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateNodePendingPullParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			if (!request.paramsJson.has_value()) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.pending.pull` requires `params.nodeId` string.");
+				return false;
+			}
+
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "node.pending.pull", fieldKinds)) {
+				return false;
+			}
+
+			const auto nodeIdIt = fieldKinds.find("nodeId");
+			if (nodeIdIt == fieldKinds.end() || nodeIdIt->second != JsonFieldKind::String) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.pending.pull` requires `params.nodeId` to be a string.");
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(fieldKinds, "declaredCommands", JsonFieldKind::Array, issue, "node.pending.pull", "an array") ||
+				!RequireFieldKindIfPresent(fieldKinds, "commands", JsonFieldKind::Array, issue, "node.pending.pull", "an array")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "nodeId" || field == "declaredCommands" || field == "commands") {
+					continue;
+				}
+				SetIssue(issue, "schema_invalid_params", "Method `node.pending.pull` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateNodePendingAckParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			if (!request.paramsJson.has_value()) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.pending.ack` requires `params.nodeId` string and optional `params.ids` array.");
+				return false;
+			}
+
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "node.pending.ack", fieldKinds)) {
+				return false;
+			}
+
+			const auto nodeIdIt = fieldKinds.find("nodeId");
+			if (nodeIdIt == fieldKinds.end() || nodeIdIt->second != JsonFieldKind::String) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.pending.ack` requires `params.nodeId` to be a string.");
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(fieldKinds, "ids", JsonFieldKind::Array, issue, "node.pending.ack", "an array")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "nodeId" || field == "ids") {
+					continue;
+				}
+				SetIssue(issue, "schema_invalid_params", "Method `node.pending.ack` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateNodeInvokeParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			if (!request.paramsJson.has_value()) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.invoke` requires `params.nodeId`, `params.command`, and `params.idempotencyKey` strings.");
+				return false;
+			}
+
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "node.invoke", fieldKinds)) {
+				return false;
+			}
+
+			const auto nodeIdIt = fieldKinds.find("nodeId");
+			const auto commandIt = fieldKinds.find("command");
+			const auto idempotencyKeyIt = fieldKinds.find("idempotencyKey");
+			if (nodeIdIt == fieldKinds.end() || nodeIdIt->second != JsonFieldKind::String ||
+				commandIt == fieldKinds.end() || commandIt->second != JsonFieldKind::String ||
+				idempotencyKeyIt == fieldKinds.end() || idempotencyKeyIt->second != JsonFieldKind::String) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.invoke` requires `params.nodeId`, `params.command`, and `params.idempotencyKey` to be strings.");
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(fieldKinds, "params", JsonFieldKind::Object, issue, "node.invoke", "an object") ||
+				!RequireFieldKindIfPresent(fieldKinds, "timeoutMs", JsonFieldKind::Number, issue, "node.invoke", "numeric") ||
+				!RequireFieldKindIfPresent(fieldKinds, "allowlist", JsonFieldKind::Array, issue, "node.invoke", "an array") ||
+				!RequireFieldKindIfPresent(fieldKinds, "declaredCommands", JsonFieldKind::Array, issue, "node.invoke", "an array") ||
+				!RequireFieldKindIfPresent(fieldKinds, "commands", JsonFieldKind::Array, issue, "node.invoke", "an array")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (ContainsFieldName({"nodeId", "command", "params", "timeoutMs", "idempotencyKey", "allowlist", "declaredCommands", "commands"}, field)) {
+					continue;
+				}
+				SetIssue(issue, "schema_invalid_params", "Method `node.invoke` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		bool ValidateLogsTailParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 			ParsedObjectFieldKinds fieldKinds;
 			if (!TryParseRequestParamsObject(request, issue, "gateway.logs.tail", fieldKinds)) {
@@ -2680,6 +2815,10 @@ namespace blazeclaw::gateway::protocol {
 			{ "node.rename", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodeRenameParams(r, i); } },
 			{ "node.list", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
 			{ "node.describe", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodeDescribeParams(r, i); } },
+			{ "node.canvas.capability.refresh", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodeCanvasCapabilityRefreshParams(r, i); } },
+			{ "node.pending.pull", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodePendingPullParams(r, i); } },
+			{ "node.pending.ack", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodePendingAckParams(r, i); } },
+			{ "node.invoke", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodeInvokeParams(r, i); } },
 			{ "gateway.tools.call.preview", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateToolsCallPreviewParams(r, i); } },
 			{ "gateway.tools.call.execute", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateToolsCallExecuteParams(r, i); } },
 			{ "gateway.agents.create", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateAgentsCreateParams(r, i); } },

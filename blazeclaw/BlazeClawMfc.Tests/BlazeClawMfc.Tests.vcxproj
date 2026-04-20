@@ -88,6 +88,9 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayRequestParams.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayNodePairingService.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayNodeCatalogService.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayNodeCanvasCapabilityService.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayNodePendingActionQueue.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayNodeWakeService.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Channels.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Events.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.cpp" />

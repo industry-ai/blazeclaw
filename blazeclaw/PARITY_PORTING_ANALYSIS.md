@@ -251,9 +251,9 @@ A dedicated OpenClaw-vs-BlazeClaw node capability gap analysis and parity plan i
 Summary status:
 
 - BlazeClaw currently provides broad node method-name coverage.
-- Steps 1-4 are now implemented for node request-contract freezing, service-backed handler extraction, pairing-flow parity baseline, and list/describe catalog baseline.
-- Implementation landed in `GatewayNodePairingService`, `GatewayNodeCatalogService`, `GatewayHost.Handlers.SecurityOps.cpp`, and `GatewayProtocolSchemaValidator.Request.cpp`.
-- Remaining gaps are downstream steps (5+) including canvas capability parity, pending queue parity, invoke policy/sanitization parity, wake/reconnect orchestration parity, and node event runtime parity hardening.
+- Steps 1-8 are now implemented with gateway-scoped parity for contracts, pairing/catalog handlers, canvas capability refresh, pending queue lifecycle, invoke guards/sanitization, and wake/retry/nudge orchestration.
+- Implementation landed in `GatewayNodePairingService`, `GatewayNodeCatalogService`, `GatewayNodeCanvasCapabilityService`, `GatewayNodePendingActionQueue`, `GatewayNodeWakeService`, `GatewayHost.Handlers.SecurityOps.cpp`, and `GatewayProtocolSchemaValidator.Request.cpp`.
+- Remaining gaps are downstream items beyond Step 8, including deeper node event runtime parity hardening and mobile/APNS infrastructure-backed behavior equivalence.
 
 ---
 If needed, I can next draft a concrete file-level porting checklist (C++ target files + OpenClaw source mapping) for implementation sequencing.

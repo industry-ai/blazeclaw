@@ -21,6 +21,9 @@
 #include "GatewayHostRegistrationCoordinator.h"
 #include "GatewayNodePairingService.h"
 #include "GatewayNodeCatalogService.h"
+#include "GatewayNodeCanvasCapabilityService.h"
+#include "GatewayNodePendingActionQueue.h"
+#include "GatewayNodeWakeService.h"
 
 #include <memory>
 
@@ -582,6 +585,9 @@ namespace blazeclaw::gateway {
 		GatewayEventFanoutService m_eventFanoutService;
 		GatewayNodePairingService m_nodePairingService;
 		GatewayNodeCatalogService m_nodeCatalogService;
+		GatewayNodeCanvasCapabilityService m_nodeCanvasCapabilityService;
+		GatewayNodePendingActionQueue m_nodePendingActionQueue;
+		GatewayNodeWakeService m_nodeWakeService;
 		mutable std::unique_ptr<IGatewayHostRuntime> m_stageRuntimeHost;
 	};
 

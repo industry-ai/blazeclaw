@@ -272,6 +272,67 @@ namespace blazeclaw::gateway {
 			return ParseStringArrayField(request.paramsJson, "scopes");
 		}
 
+		bool IsForbiddenBrowserProxyMutation(const protocol::RequestFrame& request) {
+			std::string method;
+			std::string path;
+			if (request.paramsJson.has_value()) {
+				json::FindStringField(request.paramsJson.value(), "method", method);
+				json::FindStringField(request.paramsJson.value(), "path", path);
+			}
+
+			method = TrimCopy(method);
+			path = TrimCopy(path);
+			std::transform(
+				method.begin(),
+				method.end(),
+				method.begin(),
+				[](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
+
+			if (!path.empty() && path.front() != '/') {
+				path = "/" + path;
+			}
+			while (path.size() > 1 && path.back() == '/') {
+				path.pop_back();
+			}
+
+			if (method == "POST" && (path == "/profiles/create" || path == "/reset-profile")) {
+				return true;
+			}
+
+			if (method == "DELETE") {
+				const std::string prefix = "/profiles/";
+				if (path.rfind(prefix, 0) == 0 && path.size() > prefix.size()) {
+					return path.find('/', prefix.size()) == std::string::npos;
+				}
+			}
+
+			return false;
+		}
+
+		std::vector<std::string> ResolveDeclaredCommandsFromRequest(const protocol::RequestFrame& request) {
+			const std::vector<std::string> commands = ParseStringArrayField(request.paramsJson, "declaredCommands");
+			if (!commands.empty()) {
+				return commands;
+			}
+			return ParseStringArrayField(request.paramsJson, "commands");
+		}
+
+		std::string ResolveOptionalObjectJson(
+			const std::optional<std::string>& paramsJson,
+			const std::string& fieldName) {
+			if (!paramsJson.has_value()) {
+				return "{}";
+			}
+			std::string raw;
+			if (!json::FindRawField(paramsJson.value(), fieldName, raw)) {
+				return "{}";
+			}
+			if (!json::IsJsonObjectShape(raw)) {
+				return "{}";
+			}
+			return json::Trim(raw);
+		}
+
 		void EmitBestEffortEvent(
 			GatewayHost& host,
 			const std::string& eventName,
@@ -2185,18 +2246,207 @@ namespace blazeclaw::gateway {
 			m_dispatcher,
 			"node.pending.enqueue",
 			"{\"accepted\":true,\"queueDepth\":1}");
-		RegisterStaticMethod(
-			m_dispatcher,
+		m_dispatcher.Register(
 			"node.pending.pull",
-			"{\"items\":[],\"count\":0}");
-		RegisterStaticMethod(
-			m_dispatcher,
+			[this](const protocol::RequestFrame& request) {
+				const RequestParamsView params(request.paramsJson);
+				const std::string nodeId = TrimCopy(params.GetString("nodeId"));
+				if (nodeId.empty()) {
+					return protocol::ErrorResponse(
+						request,
+						"invalid_request",
+						"nodeId required");
+				}
+				const std::vector<std::string> declaredCommands = ResolveDeclaredCommandsFromRequest(request);
+				const std::vector<PendingNodeAction> actions =
+					m_nodePendingActionQueue.PullAllowed(
+						nodeId,
+						declaredCommands,
+						GatewayEpochMilliseconds());
+
+				std::vector<std::string> actionRows;
+				actionRows.reserve(actions.size());
+				for (const auto& action : actions) {
+					actionRows.push_back(JsonObject({
+						{"id", JsonString(action.id)},
+						{"command", JsonString(action.command)},
+						{"paramsJSON", action.paramsJson.empty() ? "null" : action.paramsJson},
+						{"enqueuedAtMs", JsonNumber(action.enqueuedAtMs)},
+					}));
+				}
+
+				return protocol::OkResponse(
+					request,
+					JsonObject({
+						{"nodeId", JsonString(nodeId)},
+						{"actions", JsonArray(actionRows)},
+					}));
+			});
+		m_dispatcher.Register(
 			"node.pending.ack",
-			"{\"acked\":true}");
-		RegisterStaticMethod(
-			m_dispatcher,
+			[this](const protocol::RequestFrame& request) {
+				const RequestParamsView params(request.paramsJson);
+				const std::string nodeId = TrimCopy(params.GetString("nodeId"));
+				if (nodeId.empty()) {
+					return protocol::ErrorResponse(
+						request,
+						"invalid_request",
+						"nodeId required");
+				}
+				const std::vector<std::string> ackedIds = ParseStringArrayField(request.paramsJson, "ids");
+				const std::vector<PendingNodeAction> remaining =
+					m_nodePendingActionQueue.Ack(
+						nodeId,
+						ackedIds,
+						GatewayEpochMilliseconds());
+				return protocol::OkResponse(
+					request,
+					JsonObject({
+						{"nodeId", JsonString(nodeId)},
+						{"ackedIds", SerializeStringArrayJson(ackedIds)},
+						{"remainingCount", JsonNumber(static_cast<std::uint64_t>(remaining.size()))},
+					}));
+			});
+		m_dispatcher.Register(
 			"node.invoke",
-			"{\"runId\":\"node-run-1\",\"queued\":true}");
+			[this](const protocol::RequestFrame& request) {
+				const RequestParamsView params(request.paramsJson);
+				const std::string nodeId = TrimCopy(params.GetString("nodeId"));
+				const std::string command = TrimCopy(params.GetString("command"));
+				const std::string idempotencyKey = TrimCopy(params.GetString("idempotencyKey"));
+				if (nodeId.empty() || command.empty() || idempotencyKey.empty()) {
+					return protocol::ErrorResponse(
+						request,
+						"invalid_request",
+						"nodeId, command, and idempotencyKey required");
+				}
+
+				if (command == "system.execApprovals.get" || command == "system.execApprovals.set") {
+					return protocol::ErrorResponse(
+						request,
+						"invalid_request",
+						"node.invoke does not allow system.execApprovals.*; use exec.approvals.node.*",
+						std::optional<std::string>(JsonObject({{"command", JsonString(command)}})));
+				}
+
+				if (command == "browser.proxy" && IsForbiddenBrowserProxyMutation(request)) {
+					return protocol::ErrorResponse(
+						request,
+						"invalid_request",
+						"node.invoke cannot mutate persistent browser profiles via browser.proxy",
+						std::optional<std::string>(JsonObject({{"command", JsonString(command)}})));
+				}
+
+				const std::vector<std::string> declaredCommands = ResolveDeclaredCommandsFromRequest(request);
+				if (!declaredCommands.empty()) {
+					bool declared = false;
+					for (const auto& declaredCommand : declaredCommands) {
+						if (declaredCommand == command) {
+							declared = true;
+							break;
+						}
+					}
+					if (!declared) {
+						return protocol::ErrorResponse(
+							request,
+							"invalid_request",
+							"node command not allowed: command not declared by node",
+							std::optional<std::string>(JsonObject({
+								{"reason", JsonString("command not declared by node")},
+								{"command", JsonString(command)},
+							}))); 
+					}
+				}
+
+				const std::vector<std::string> allowlist = ParseStringArrayField(request.paramsJson, "allowlist");
+				if (!allowlist.empty()) {
+					bool allowlisted = false;
+					for (const auto& allowed : allowlist) {
+						if (allowed == command) {
+							allowlisted = true;
+							break;
+						}
+					}
+					if (!allowlisted) {
+						return protocol::ErrorResponse(
+							request,
+							"invalid_request",
+							"node command not allowed: command not allowlisted",
+							std::optional<std::string>(JsonObject({
+								{"reason", JsonString("command not allowlisted")},
+								{"command", JsonString(command)},
+							}))); 
+					}
+				}
+
+				const std::uint64_t nowMs = GatewayEpochMilliseconds();
+				const NodeWakeAttempt wake1 = m_nodeWakeService.MaybeWakeNode(
+					nodeId,
+					false,
+					"node.invoke",
+					nowMs);
+				const bool reconnected1 = wake1.available &&
+					m_nodeWakeService.WaitForNodeReconnect(
+						nodeId,
+						GatewayNodeWakeService::ReconnectWaitMs(),
+						GatewayNodeWakeService::ReconnectPollMs(),
+						nowMs + 50);
+				const NodeWakeAttempt wake2 = !reconnected1 && wake1.available
+					? m_nodeWakeService.MaybeWakeNode(nodeId, true, "node.invoke.retry", nowMs + 60)
+					: NodeWakeAttempt{};
+				const bool reconnected2 = wake2.available &&
+					m_nodeWakeService.WaitForNodeReconnect(
+						nodeId,
+						GatewayNodeWakeService::ReconnectRetryWaitMs(),
+						GatewayNodeWakeService::ReconnectPollMs(),
+						nowMs + 90);
+
+				if (!reconnected1 && !reconnected2) {
+					const std::string rawParams = ResolveOptionalObjectJson(request.paramsJson, "params");
+					const PendingNodeAction queued = m_nodePendingActionQueue.Enqueue(
+						nodeId,
+						command,
+						rawParams,
+						idempotencyKey,
+						nowMs);
+					const NodeWakeNudgeAttempt nudge =
+						m_nodeWakeService.MaybeSendWakeNudge(nodeId, nowMs + 120);
+
+					return protocol::ErrorResponse(
+						request,
+						"unavailable",
+						"node command queued until iOS returns to foreground",
+						std::optional<std::string>(JsonObject({
+							{"retryable", JsonBool(true)},
+							{"code", JsonString("QUEUED_UNTIL_FOREGROUND")},
+							{"queuedActionId", JsonString(queued.id)},
+							{"nodeId", JsonString(nodeId)},
+							{"command", JsonString(command)},
+							{"wakePath", JsonString(!wake2.path.empty() ? wake2.path : wake1.path)},
+							{"wakeAvailable", JsonBool(wake1.available || wake2.available)},
+							{"wakeThrottled", JsonBool(wake1.throttled || wake2.throttled)},
+							{"nudgeReason", JsonString(nudge.reason)},
+						})),
+						true,
+						std::nullopt);
+				}
+
+				return protocol::OkResponse(
+					request,
+					JsonObject({
+						{"ok", JsonBool(true)},
+						{"nodeId", JsonString(nodeId)},
+						{"command", JsonString(command)},
+						{"payload", JsonObject({
+							{"status", JsonString("executed")},
+							{"note", JsonString("gateway parity shim")},
+						})},
+						{"payloadJSON", JsonObject({
+							{"status", JsonString("executed")},
+							{"note", JsonString("gateway parity shim")},
+						})},
+					}));
+			});
 		RegisterStaticMethod(
 			m_dispatcher,
 			"node.invoke.result",
@@ -2205,10 +2455,30 @@ namespace blazeclaw::gateway {
 			m_dispatcher,
 			"node.event",
 			"{\"accepted\":true,\"eventId\":\"node-event-1\"}");
-		RegisterMethodAlias(
-			m_dispatcher,
+		m_dispatcher.Register(
 			"node.canvas.capability.refresh",
-			"gateway.nodes.canvas.capabilities");
+			[this](const protocol::RequestFrame& request) {
+				const RequestParamsView params(request.paramsJson);
+				const std::string sessionKey = TrimCopy(params.GetString("sessionKey"));
+				const std::string canvasHostUrl = TrimCopy(params.GetString("canvasHostUrl"));
+				const NodeCanvasCapabilityRefreshResult refreshed =
+					m_nodeCanvasCapabilityService.RefreshCapability(sessionKey, canvasHostUrl);
+				if (!refreshed.ok) {
+					return protocol::ErrorResponse(
+						request,
+						"unavailable",
+						refreshed.error.empty()
+							? "canvas host unavailable for this node session"
+							: refreshed.error);
+				}
+				return protocol::OkResponse(
+					request,
+					JsonObject({
+						{"canvasCapability", JsonString(refreshed.canvasCapability)},
+						{"canvasCapabilityExpiresAtMs", JsonNumber(refreshed.canvasCapabilityExpiresAtMs)},
+						{"canvasHostUrl", JsonString(refreshed.canvasHostUrl)},
+					}));
+			});
 
 		RegisterStaticMethod(
 			m_dispatcher,
