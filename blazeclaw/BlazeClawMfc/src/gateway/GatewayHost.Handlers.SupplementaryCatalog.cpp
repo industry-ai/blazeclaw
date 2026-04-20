@@ -16,6 +16,10 @@
 namespace blazeclaw::gateway::handlers::supplementary_catalog {
 
 void SupplementaryCatalogHandlers::RegisterAll(GatewayHost& host) {
+	host.m_dispatcher.Register("gateway.identity.get", [](const protocol::RequestFrame& request) {
+		return protocol::OkResponse(request, "{\"id\":\"blazeclaw.gateway\",\"version\":\"v1\",\"name\":\"BlazeClaw Gateway\"}");
+	});
+
 host.m_dispatcher.Register("gateway.session.list", [&host](const protocol::RequestFrame& request) {
 			const std::optional<bool> activeFilter = RequestParamsView(request.paramsJson).GetBool("active");
 			const std::string scopeFilter = RequestParamsView(request.paramsJson).GetString("scope");

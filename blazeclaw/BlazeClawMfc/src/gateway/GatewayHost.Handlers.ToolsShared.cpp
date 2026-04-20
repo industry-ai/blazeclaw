@@ -13,6 +13,12 @@ namespace blazeclaw::gateway::handlers::tools_shared {
 		dispatcher.Register("gateway.tools.list", [&registry](const protocol::RequestFrame& request) {
 			return HandleToolsList(request, registry);
 			});
+		dispatcher.Register("commands.list", [&registry](const protocol::RequestFrame& request) {
+			return HandleToolsList(request, registry);
+			});
+		dispatcher.Register("tools.effective", [&registry](const protocol::RequestFrame& request) {
+			return HandleToolsList(request, registry);
+			});
 	}
 
 	void ToolsSharedHandlers::RegisterToolsCatalog(

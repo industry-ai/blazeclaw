@@ -47,6 +47,28 @@ namespace blazeclaw::gateway {
 			using namespace blazeclaw::gateway::runtime_local;
 
 			host.m_dispatcher.Register(
+				"agent",
+				[&host](const protocol::RequestFrame& request) {
+					auto forwarded = request;
+					forwarded.method = "chat.send";
+					return host.m_dispatcher.Dispatch(forwarded);
+				});
+			host.m_dispatcher.Register(
+				"send",
+				[&host](const protocol::RequestFrame& request) {
+					auto forwarded = request;
+					forwarded.method = "chat.send";
+					return host.m_dispatcher.Dispatch(forwarded);
+				});
+			host.m_dispatcher.Register(
+				"wake",
+				[](const protocol::RequestFrame& request) {
+					return protocol::OkResponse(
+						request,
+						"{\"accepted\":true,\"wake\":true}");
+				});
+
+			host.m_dispatcher.Register(
 				"sessions.subscribe",
 				[](const protocol::RequestFrame& request) {
 					return protocol::OkResponse(

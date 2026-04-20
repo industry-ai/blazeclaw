@@ -40,6 +40,42 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 			return protocol::OkResponse(request, "{\"patched\":true,\"updated\":true}");
 			});
 
+		host.m_dispatcher.Register("skills.search", [](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, "{\"skills\":[],\"count\":0}");
+			});
+
+		host.m_dispatcher.Register("skills.detail", [](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, "{\"skill\":null,\"found\":false}");
+			});
+
+		host.m_dispatcher.Register("skills.bins", [](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, "{\"bins\":[],\"count\":0}");
+			});
+
+		host.m_dispatcher.Register("skills.install", [](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, "{\"installed\":false,\"status\":\"not_supported\"}");
+			});
+
+		host.m_dispatcher.Register("update.run", [](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, "{\"started\":false,\"status\":\"not_supported\"}");
+			});
+
+		host.m_dispatcher.Register("web.login.start", [](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, "{\"started\":false,\"status\":\"not_supported\"}");
+			});
+
+		host.m_dispatcher.Register("web.login.wait", [](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, "{\"connected\":false,\"status\":\"not_supported\"}");
+			});
+
+		host.m_dispatcher.Register("doctor.memory.status", [](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, "{\"ok\":true,\"status\":\"healthy\"}");
+			});
+
+		host.m_dispatcher.Register("doctor.memory.flush", [](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, "{\"flushed\":true,\"status\":\"ok\"}");
+			});
+
 		host.m_dispatcher.Register("gateway.config.set", [&host](const protocol::RequestFrame& request) {
 			const RequestParamsView params(request.paramsJson);
 			const std::string bind = params.GetString("bind");
