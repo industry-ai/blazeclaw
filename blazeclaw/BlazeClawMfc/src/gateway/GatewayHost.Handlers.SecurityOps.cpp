@@ -333,6 +333,50 @@ namespace blazeclaw::gateway {
 			return json::Trim(raw);
 		}
 
+		bool IsForegroundRestrictedIosCommand(const std::string& command) {
+			return command == "canvas.present" ||
+				command == "canvas.navigate" ||
+				command.rfind("canvas.", 0) == 0 ||
+				command.rfind("camera.", 0) == 0 ||
+				command.rfind("screen.", 0) == 0 ||
+				command.rfind("talk.", 0) == 0;
+		}
+
+		bool ShouldQueueAsPendingForegroundAction(
+			const std::string& platform,
+			const std::string& command,
+			const std::string& errorCode,
+			const std::string& errorMessage) {
+			std::string normalizedPlatform = platform;
+			std::transform(
+				normalizedPlatform.begin(),
+				normalizedPlatform.end(),
+				normalizedPlatform.begin(),
+				[](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+			if (normalizedPlatform.rfind("ios", 0) != 0 && normalizedPlatform.rfind("ipados", 0) != 0) {
+				return false;
+			}
+			if (!IsForegroundRestrictedIosCommand(command)) {
+				return false;
+			}
+
+			std::string normalizedCode = errorCode;
+			std::transform(
+				normalizedCode.begin(),
+				normalizedCode.end(),
+				normalizedCode.begin(),
+				[](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
+			std::string normalizedMessage = errorMessage;
+			std::transform(
+				normalizedMessage.begin(),
+				normalizedMessage.end(),
+				normalizedMessage.begin(),
+				[](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
+
+			return normalizedCode == "NODE_BACKGROUND_UNAVAILABLE" ||
+				normalizedMessage.find("BACKGROUND_UNAVAILABLE") != std::string::npos;
+		}
+
 		void EmitBestEffortEvent(
 			GatewayHost& host,
 			const std::string& eventName,
@@ -2310,11 +2354,27 @@ namespace blazeclaw::gateway {
 		m_dispatcher.Register(
 			"node.invoke",
 			[this](const protocol::RequestFrame& request) {
+				if (!m_runtimeNodeParityEnabled || m_runtimeNodeParityRolloutMode == "legacy") {
+					return protocol::OkResponse(
+						request,
+						JsonObject({
+							{"ok", JsonBool(true)},
+							{"queued", JsonBool(true)},
+							{"reason", JsonString("legacy_node_parity_mode")},
+						}));
+				}
+
+				if (m_runtimeNodeParityDiagnosticsEnabled) {
+					++m_nodeInvokeTotalCount;
+				}
 				const RequestParamsView params(request.paramsJson);
 				const std::string nodeId = TrimCopy(params.GetString("nodeId"));
 				const std::string command = TrimCopy(params.GetString("command"));
 				const std::string idempotencyKey = TrimCopy(params.GetString("idempotencyKey"));
 				if (nodeId.empty() || command.empty() || idempotencyKey.empty()) {
+					if (m_runtimeNodeParityDiagnosticsEnabled) {
+						++m_nodeInvokePolicyRejectCount;
+					}
 					return protocol::ErrorResponse(
 						request,
 						"invalid_request",
@@ -2322,6 +2382,9 @@ namespace blazeclaw::gateway {
 				}
 
 				if (command == "system.execApprovals.get" || command == "system.execApprovals.set") {
+					if (m_runtimeNodeParityDiagnosticsEnabled) {
+						++m_nodeInvokePolicyRejectCount;
+					}
 					return protocol::ErrorResponse(
 						request,
 						"invalid_request",
@@ -2330,6 +2393,9 @@ namespace blazeclaw::gateway {
 				}
 
 				if (command == "browser.proxy" && IsForbiddenBrowserProxyMutation(request)) {
+					if (m_runtimeNodeParityDiagnosticsEnabled) {
+						++m_nodeInvokePolicyRejectCount;
+					}
 					return protocol::ErrorResponse(
 						request,
 						"invalid_request",
@@ -2347,6 +2413,9 @@ namespace blazeclaw::gateway {
 						}
 					}
 					if (!declared) {
+						if (m_runtimeNodeParityDiagnosticsEnabled) {
+							++m_nodeInvokePolicyRejectCount;
+						}
 						return protocol::ErrorResponse(
 							request,
 							"invalid_request",
@@ -2368,6 +2437,9 @@ namespace blazeclaw::gateway {
 						}
 					}
 					if (!allowlisted) {
+						if (m_runtimeNodeParityDiagnosticsEnabled) {
+							++m_nodeInvokePolicyRejectCount;
+						}
 						return protocol::ErrorResponse(
 							request,
 							"invalid_request",
@@ -2380,11 +2452,23 @@ namespace blazeclaw::gateway {
 				}
 
 				const std::uint64_t nowMs = GatewayEpochMilliseconds();
+				const std::string platform = TrimCopy(params.GetString("platform"));
+				const std::string nodeErrorCode = TrimCopy(params.GetString("nodeErrorCode"));
+				const std::string nodeErrorMessage = TrimCopy(params.GetString("nodeErrorMessage"));
+				const bool foregroundDeferredEligible = ShouldQueueAsPendingForegroundAction(
+					platform,
+					command,
+					nodeErrorCode,
+					nodeErrorMessage);
+
 				const NodeWakeAttempt wake1 = m_nodeWakeService.MaybeWakeNode(
 					nodeId,
 					false,
 					"node.invoke",
 					nowMs);
+				if (m_runtimeNodeParityDiagnosticsEnabled) {
+					++m_nodeWakeAttemptCount;
+				}
 				const bool reconnected1 = wake1.available &&
 					m_nodeWakeService.WaitForNodeReconnect(
 						nodeId,
@@ -2394,6 +2478,9 @@ namespace blazeclaw::gateway {
 				const NodeWakeAttempt wake2 = !reconnected1 && wake1.available
 					? m_nodeWakeService.MaybeWakeNode(nodeId, true, "node.invoke.retry", nowMs + 60)
 					: NodeWakeAttempt{};
+				if (!wake2.path.empty() && m_runtimeNodeParityDiagnosticsEnabled) {
+					++m_nodeWakeAttemptCount;
+				}
 				const bool reconnected2 = wake2.available &&
 					m_nodeWakeService.WaitForNodeReconnect(
 						nodeId,
@@ -2409,16 +2496,29 @@ namespace blazeclaw::gateway {
 						rawParams,
 						idempotencyKey,
 						nowMs);
+					if (m_runtimeNodeParityDiagnosticsEnabled) {
+						++m_nodePendingQueueEnqueueCount;
+					}
 					const NodeWakeNudgeAttempt nudge =
 						m_nodeWakeService.MaybeSendWakeNudge(nodeId, nowMs + 120);
+					if (nudge.sent && m_runtimeNodeParityDiagnosticsEnabled) {
+						++m_nodeWakeNudgeCount;
+					}
+
+					const std::string unavailableCode = foregroundDeferredEligible
+						? "QUEUED_UNTIL_FOREGROUND"
+						: "NOT_CONNECTED";
+					const std::string unavailableMessage = foregroundDeferredEligible
+						? "node command queued until iOS returns to foreground"
+						: "node not connected";
 
 					return protocol::ErrorResponse(
 						request,
 						"unavailable",
-						"node command queued until iOS returns to foreground",
+						unavailableMessage,
 						std::optional<std::string>(JsonObject({
 							{"retryable", JsonBool(true)},
-							{"code", JsonString("QUEUED_UNTIL_FOREGROUND")},
+							{"code", JsonString(unavailableCode)},
 							{"queuedActionId", JsonString(queued.id)},
 							{"nodeId", JsonString(nodeId)},
 							{"command", JsonString(command)},
@@ -2426,6 +2526,8 @@ namespace blazeclaw::gateway {
 							{"wakeAvailable", JsonBool(wake1.available || wake2.available)},
 							{"wakeThrottled", JsonBool(wake1.throttled || wake2.throttled)},
 							{"nudgeReason", JsonString(nudge.reason)},
+							{"nodeErrorCode", JsonString(nodeErrorCode)},
+							{"nodeErrorMessage", JsonString(nodeErrorMessage)},
 						})),
 						true,
 						std::nullopt);
@@ -2447,14 +2549,79 @@ namespace blazeclaw::gateway {
 						})},
 					}));
 			});
-		RegisterStaticMethod(
-			m_dispatcher,
+		m_dispatcher.Register(
 			"node.invoke.result",
-			"{\"runId\":\"node-run-1\",\"accepted\":true}");
-		RegisterStaticMethod(
-			m_dispatcher,
+			[this](const protocol::RequestFrame& request) {
+				const RequestParamsView params(request.paramsJson);
+				const std::string runId = TrimCopy(params.GetString("runId"));
+				const std::string nodeId = TrimCopy(params.GetString("nodeId"));
+				if (runId.empty() || nodeId.empty()) {
+					return protocol::ErrorResponse(
+						request,
+						"invalid_request",
+						"runId and nodeId required");
+				}
+
+				const std::string payloadJson = request.paramsJson.has_value()
+					? json::Trim(request.paramsJson.value())
+					: "{}";
+				EmitBestEffortEvent(
+					*this,
+					"node.invoke.result",
+					JsonObject({
+						{"runId", JsonString(runId)},
+						{"nodeId", JsonString(nodeId)},
+						{"payloadJSON", payloadJson},
+					}));
+
+				return protocol::OkResponse(
+					request,
+					JsonObject({
+						{"runId", JsonString(runId)},
+						{"nodeId", JsonString(nodeId)},
+						{"accepted", JsonBool(true)},
+					}));
+			});
+		m_dispatcher.Register(
 			"node.event",
-			"{\"accepted\":true,\"eventId\":\"node-event-1\"}");
+			[this](const protocol::RequestFrame& request) {
+				const RequestParamsView params(request.paramsJson);
+				const std::string eventName = TrimCopy(params.GetString("event"));
+				const std::string nodeId = TrimCopy(params.GetString("nodeId"));
+				if (eventName.empty()) {
+					return protocol::ErrorResponse(
+						request,
+						"invalid_request",
+						"event required");
+				}
+
+				std::string payloadJson;
+				if (request.paramsJson.has_value()) {
+					json::FindRawField(request.paramsJson.value(), "payloadJSON", payloadJson);
+				}
+				if (payloadJson.empty()) {
+					payloadJson = ResolveOptionalObjectJson(request.paramsJson, "payload");
+				}
+				if (payloadJson.empty() || !json::IsJsonObjectShape(payloadJson)) {
+					payloadJson = "{}";
+				}
+
+				EmitBestEffortEvent(
+					*this,
+					"node.event",
+					JsonObject({
+						{"event", JsonString(eventName)},
+						{"nodeId", JsonString(nodeId.empty() ? "node" : nodeId)},
+						{"payloadJSON", payloadJson},
+					}));
+
+				return protocol::OkResponse(
+					request,
+					JsonObject({
+						{"ok", JsonBool(true)},
+						{"accepted", JsonBool(true)},
+					}));
+			});
 		m_dispatcher.Register(
 			"node.canvas.capability.refresh",
 			[this](const protocol::RequestFrame& request) {

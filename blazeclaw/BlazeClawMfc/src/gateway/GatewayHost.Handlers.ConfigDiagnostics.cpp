@@ -20,6 +20,16 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 				"\",\"port\":" + std::to_string(host.m_runtimeGatewayPort) +
 				"},\"agent\":{\"model\":\"" + EscapeJsonString(host.m_runtimeAgentModel) +
 				"\",\"streaming\":" + std::string(host.m_runtimeAgentStreaming ? "true" : "false") +
+				"},\"nodeParity\":{\"enabled\":" +
+				std::string(host.m_runtimeNodeParityEnabled ? "true" : "false") +
+				",\"diagnosticsEnabled\":" +
+				std::string(host.m_runtimeNodeParityDiagnosticsEnabled ? "true" : "false") +
+				",\"rolloutMode\":\"" + EscapeJsonString(host.m_runtimeNodeParityRolloutMode) +
+				"\",\"invokeTotalCount\":" + std::to_string(host.m_nodeInvokeTotalCount) +
+				",\"policyRejectCount\":" + std::to_string(host.m_nodeInvokePolicyRejectCount) +
+				",\"wakeAttemptCount\":" + std::to_string(host.m_nodeWakeAttemptCount) +
+				",\"pendingEnqueueCount\":" + std::to_string(host.m_nodePendingQueueEnqueueCount) +
+				",\"wakeNudgeCount\":" + std::to_string(host.m_nodeWakeNudgeCount) +
 				"},\"emailFallback\":{\"preflightEnabled\":" +
 				std::string(host.m_runtimeEmailPreflightEnabled ? "true" : "false") +
 				",\"policyProfilesEnabled\":" +

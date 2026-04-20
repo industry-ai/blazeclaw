@@ -240,14 +240,14 @@ namespace blazeclaw::gateway {
 			std::vector<std::string> rows;
 			rows.reserve(matches.size());
 			for (const auto& text : matches) {
-				rows.push_back(JsonObject({{"text", JsonString(text)}}));
+				rows.push_back(JsonObject({ {"text", JsonString(text)} }));
 			}
 
 			return JsonObject({
 				{"sessionKey", JsonString(sessionKey)},
 				{"matches", JsonArray(rows)},
 				{"count", JsonNumber(static_cast<std::uint64_t>(matches.size()))},
-			});
+				});
 		}
 
 	} // namespace
@@ -726,6 +726,15 @@ namespace blazeclaw::gateway {
 		_putenv_s("BLAZECLAW_EMAIL_POLICY_PROFILE_ID", m_runtimeEmailPolicyProfileId.c_str());
 	}
 
+	void GatewayHost::SetNodeParityRuntimeFlags(
+		bool enabled,
+		bool diagnosticsEnabled,
+		const std::string& rolloutMode) {
+		m_runtimeNodeParityEnabled = enabled;
+		m_runtimeNodeParityDiagnosticsEnabled = diagnosticsEnabled;
+		m_runtimeNodeParityRolloutMode = rolloutMode.empty() ? "monitor" : rolloutMode;
+	}
+
 	void GatewayHost::LoadPersistedTaskDeltas() {
 		const std::filesystem::path persistencePath =
 			ResolveGatewayStateFilePath("taskdeltas.state");
@@ -1044,8 +1053,8 @@ namespace blazeclaw::gateway {
 		return protocol::EncodeValidatedEvent(
 			"gateway.tick",
 			"{\"ts\":" + std::to_string(timestampMs) +
-				",\"running\":" + std::string(IsRunning() ? "true" : "false") +
-				",\"connections\":" + std::to_string(m_transport.ConnectionCount()) + "}",
+			",\"running\":" + std::string(IsRunning() ? "true" : "false") +
+			",\"connections\":" + std::to_string(m_transport.ConnectionCount()) + "}",
 			seq,
 			"tick");
 	}

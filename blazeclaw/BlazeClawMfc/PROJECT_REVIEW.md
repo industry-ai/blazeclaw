@@ -185,7 +185,7 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 - `DYNAMIC_TASK_DELTA_FULL_EXECUTION_PLAN.md` — dynamic task-delta orchestration hardening and rollout plan/status.
 - `ORCHESTRATION_PATH_ANALYSIS.md` — analysis of `dynamic_task_delta` vs `runtime_orchestration` behavior and recommended default.
 - `LLAMACPP_MODEL_LOADING_PLAN.md` — staged integration plan for GGUF/`llama.cpp` local runtime path.
-- `../../docs/compare/nodes.ts/NODES_TS_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md` — OpenClaw `nodes.ts` capability comparison, BlazeClaw node-domain gap closure recommendations, and step-by-step parity porting plan (Steps 1-8 implemented; post-Step-8 gaps tracked in-file).
+- `../../docs/compare/nodes.ts/NODES_TS_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md` — OpenClaw `nodes.ts` capability comparison, BlazeClaw node-domain gap closure recommendations, and canonical parity porting tracker (Steps 1-12 implemented; rollout/observability flags active with diagnostics exposure).
 
 Cross-project architecture (BlazeClaw vs upstream OpenClaw):
 

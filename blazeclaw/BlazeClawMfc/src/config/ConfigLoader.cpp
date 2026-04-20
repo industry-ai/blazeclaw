@@ -386,6 +386,17 @@ namespace blazeclaw::config {
 			return L"legacy";
 		}
 
+		std::wstring NormalizeNodeParityRolloutMode(const std::wstring& raw) {
+			const std::wstring normalized = ToLowerTrim(raw);
+			if (normalized == L"legacy" ||
+				normalized == L"monitor" ||
+				normalized == L"enforce") {
+				return normalized;
+			}
+
+			return L"monitor";
+		}
+
 	} // namespace
 
 	bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) const {
@@ -670,6 +681,26 @@ namespace blazeclaw::config {
 				outConfig.embedded.orchestrationPath =
 					NormalizeEmbeddedOrchestrationPath(
 						trimmedLine.substr(27));
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"embedded.nodeParityEnabled=", 0) == 0) {
+				outConfig.embedded.nodeParityEnabled = ParseBool(
+					trimmedLine.substr(27),
+					true);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"embedded.nodeParityDiagnosticsEnabled=", 0) == 0) {
+				outConfig.embedded.nodeParityDiagnosticsEnabled = ParseBool(
+					trimmedLine.substr(38),
+					true);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"embedded.nodeParityRolloutMode=", 0) == 0) {
+				outConfig.embedded.nodeParityRolloutMode =
+					NormalizeNodeParityRolloutMode(trimmedLine.substr(31));
 				continue;
 			}
 
@@ -1718,6 +1749,9 @@ namespace blazeclaw::config {
 				outConfig.email.policyProfiles.rolloutMode);
 		outConfig.email.policyProfiles.enforceChannel =
 			ToLowerTrim(outConfig.email.policyProfiles.enforceChannel);
+		outConfig.embedded.nodeParityRolloutMode =
+			NormalizeNodeParityRolloutMode(
+				outConfig.embedded.nodeParityRolloutMode);
 
 		return true;
 	}

@@ -2298,28 +2298,28 @@ namespace blazeclaw::core {
 		b.localModelActivationReason = &m_localModelActivationReason;
 		b.clearDeepSeekRunCancelled = [this](const std::string& id) {
 			ClearDeepSeekRunCancelled(id);
-		};
+			};
 		b.hasDeepSeekCredential = [this]() { return HasDeepSeekCredential(); };
 		b.resolveDeepSeekCredentialUtf8 = [this]() {
 			return ResolveDeepSeekCredentialUtf8();
-		};
+			};
 		b.invokeDeepSeekRemoteChat =
 			[this](const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& req,
 				const std::string& modelId,
 				const std::string& apiKey) {
-				return m_deepSeekClient.InvokeGatewayChat(
-					req,
-					modelId,
-					apiKey,
-					[this](const std::string& runId) {
-						return IsDeepSeekRunCancelled(runId);
-					});
+					return m_deepSeekClient.InvokeGatewayChat(
+						req,
+						modelId,
+						apiKey,
+						[this](const std::string& runId) {
+							return IsDeepSeekRunCancelled(runId);
+						});
 			};
 		b.getAgentModelUtf8 = [this]() {
 			return m_activeConfig.agent.model.empty()
 				? std::string()
 				: ToNarrow(m_activeConfig.agent.model);
-		};
+			};
 		b.currentEpochMs = [this]() { return CurrentEpochMs(); };
 		return b;
 	}
@@ -2775,6 +2775,12 @@ namespace blazeclaw::core {
 
 		m_activeConfig.embedded.orchestrationPath =
 			nextConfig.embedded.orchestrationPath;
+		m_activeConfig.embedded.nodeParityEnabled =
+			nextConfig.embedded.nodeParityEnabled;
+		m_activeConfig.embedded.nodeParityDiagnosticsEnabled =
+			nextConfig.embedded.nodeParityDiagnosticsEnabled;
+		m_activeConfig.embedded.nodeParityRolloutMode =
+			nextConfig.embedded.nodeParityRolloutMode;
 		m_activeConfig.email = nextConfig.email;
 		m_activeConfig.authProfiles = nextConfig.authProfiles;
 		m_activeConfig.deepseekApiKey = nextConfig.deepseekApiKey;
@@ -2801,6 +2807,10 @@ namespace blazeclaw::core {
 
 		m_gatewayHost.SetEmbeddedOrchestrationPath(
 			ToNarrow(m_activeConfig.embedded.orchestrationPath));
+		m_gatewayHost.SetNodeParityRuntimeFlags(
+			m_activeConfig.embedded.nodeParityEnabled,
+			m_activeConfig.embedded.nodeParityDiagnosticsEnabled,
+			ToNarrow(m_activeConfig.embedded.nodeParityRolloutMode));
 
 		const auto emailPolicy =
 			m_serviceBootstrapCoordinator.ResolveEmailPolicySettings(m_activeConfig);
@@ -2919,7 +2929,7 @@ namespace blazeclaw::core {
 		return m_retrievalMemory;
 	}
 
-		std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
+	std::string ServiceManager::BuildOperatorDiagnosticsReport() const {
 		const auto routing = ModelRouting();
 		const auto auth = AuthProfiles();
 		const auto sandbox = Sandbox();

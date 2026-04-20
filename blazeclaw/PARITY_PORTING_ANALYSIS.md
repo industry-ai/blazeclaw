@@ -218,6 +218,23 @@ To reduce regression risk, validation is split into two smoke lanes:
     consistency checks,
   - explicit policy-precedence unit tests now cover
     `tool > capability > default` resolution.
+
+## Node-domain parity porting status (OpenClaw `nodes.ts` → BlazeClaw)
+
+Tracking doc:
+- `docs/compare/nodes.ts/NODES_TS_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md`
+
+Latest implementation status (2026-04-20):
+- Steps 1-8: completed previously (pairing/catalog/canvas/pending/invoke policy/wake orchestration).
+- Steps 9-12: now completed.
+  - Step 9: iOS foreground-restricted deferred invoke queue parity implemented with retryable queued-unavailable payload details.
+  - Step 10: runtime `node.invoke.result` and `node.event` handlers implemented with payload normalization and explicit request schema validators.
+  - Step 11: parity hardening implemented with behavior-backed node regression tests for wake/queue lifecycle/policy rejections/event-result paths.
+  - Step 12: rollout and observability implemented with node parity feature flags and diagnostics counters surfaced via gateway config snapshot handlers.
+
+Validation:
+- Required command passed after Step 9-12 changes:
+  - `msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001`
 - Phase 8 status:
   - completed rollout/migration gate controls with monitor/enforce modes,
     canary-channel enforcement eligibility, effective runtime-vs-configured

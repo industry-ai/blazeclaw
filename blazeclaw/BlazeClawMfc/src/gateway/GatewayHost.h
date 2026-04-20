@@ -348,6 +348,10 @@ namespace blazeclaw::gateway {
 			bool requiresApproval,
 			std::uint32_t approvalTokenTtlMinutes,
 			const std::string& profileId);
+		void SetNodeParityRuntimeFlags(
+			bool enabled,
+			bool diagnosticsEnabled,
+			const std::string& rolloutMode);
 		void SetChatRuntimeCallback(ChatRuntimeCallback callback);
 		void SetChatAbortCallback(ChatAbortCallback callback);
 		void SetEmbeddingsGenerateCallback(EmbeddingsGenerateCallback callback);
@@ -514,6 +518,9 @@ namespace blazeclaw::gateway {
 		bool m_runtimeEmailRequiresApproval = true;
 		std::uint32_t m_runtimeEmailApprovalTokenTtlMinutes = 60;
 		std::string m_runtimeEmailPolicyProfileId = "default";
+		bool m_runtimeNodeParityEnabled = true;
+		bool m_runtimeNodeParityDiagnosticsEnabled = true;
+		std::string m_runtimeNodeParityRolloutMode = "monitor";
 		std::string m_embeddedOrchestrationPath = "dynamic_task_delta";
 		OrchestrationPathSelectionState m_latestOrchestrationPathSelection;
 		std::string m_runtimeAssignedSessionId = "main";
@@ -569,6 +576,11 @@ namespace blazeclaw::gateway {
 		std::uint64_t m_taskDeltaRunTimeoutCount = 0;
 		std::uint64_t m_taskDeltaRunCancelledCount = 0;
 		std::uint64_t m_taskDeltaRunFallbackCount = 0;
+		std::uint64_t m_nodeInvokeTotalCount = 0;
+		std::uint64_t m_nodeInvokePolicyRejectCount = 0;
+		std::uint64_t m_nodeWakeAttemptCount = 0;
+		std::uint64_t m_nodePendingQueueEnqueueCount = 0;
+		std::uint64_t m_nodeWakeNudgeCount = 0;
 		SkillsCatalogGatewayState m_skillsCatalogState;
 		SkillsRefreshCallback m_skillsRefreshCallback;
 		SkillsUpdateCallback m_skillsUpdateCallback;

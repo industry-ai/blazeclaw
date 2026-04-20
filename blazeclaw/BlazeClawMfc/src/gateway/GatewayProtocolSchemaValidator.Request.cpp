@@ -2185,6 +2185,84 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool ValidateNodeInvokeResultParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			if (!request.paramsJson.has_value()) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.invoke.result` requires `params.runId` and `params.nodeId` strings.");
+				return false;
+			}
+
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "node.invoke.result", fieldKinds)) {
+				return false;
+			}
+
+			const auto runIdIt = fieldKinds.find("runId");
+			const auto nodeIdIt = fieldKinds.find("nodeId");
+			if (runIdIt == fieldKinds.end() || runIdIt->second != JsonFieldKind::String ||
+				nodeIdIt == fieldKinds.end() || nodeIdIt->second != JsonFieldKind::String) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.invoke.result` requires `params.runId` and `params.nodeId` to be strings.");
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(fieldKinds, "payload", JsonFieldKind::Object, issue, "node.invoke.result", "an object") ||
+				!RequireFieldKindIfPresent(fieldKinds, "payloadJSON", JsonFieldKind::Object, issue, "node.invoke.result", "an object") ||
+				!RequireFieldKindIfPresent(fieldKinds, "status", JsonFieldKind::String, issue, "node.invoke.result", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "error", JsonFieldKind::String, issue, "node.invoke.result", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "errorCode", JsonFieldKind::String, issue, "node.invoke.result", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "errorMessage", JsonFieldKind::String, issue, "node.invoke.result", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "command", JsonFieldKind::String, issue, "node.invoke.result", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "idempotencyKey", JsonFieldKind::String, issue, "node.invoke.result", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "ts", JsonFieldKind::Number, issue, "node.invoke.result", "numeric")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (ContainsFieldName({"runId", "nodeId", "payload", "payloadJSON", "status", "error", "errorCode", "errorMessage", "command", "idempotencyKey", "ts"}, field)) {
+					continue;
+				}
+				SetIssue(issue, "schema_invalid_params", "Method `node.invoke.result` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateNodeEventParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			if (!request.paramsJson.has_value()) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.event` requires `params.event` string.");
+				return false;
+			}
+
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "node.event", fieldKinds)) {
+				return false;
+			}
+
+			const auto eventIt = fieldKinds.find("event");
+			if (eventIt == fieldKinds.end() || eventIt->second != JsonFieldKind::String) {
+				SetIssue(issue, "schema_invalid_params", "Method `node.event` requires `params.event` to be a string.");
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(fieldKinds, "nodeId", JsonFieldKind::String, issue, "node.event", "a string") ||
+				!RequireFieldKindIfPresent(fieldKinds, "payload", JsonFieldKind::Object, issue, "node.event", "an object") ||
+				!RequireFieldKindIfPresent(fieldKinds, "payloadJSON", JsonFieldKind::Object, issue, "node.event", "an object") ||
+				!RequireFieldKindIfPresent(fieldKinds, "ts", JsonFieldKind::Number, issue, "node.event", "numeric") ||
+				!RequireFieldKindIfPresent(fieldKinds, "runId", JsonFieldKind::String, issue, "node.event", "a string")) {
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (ContainsFieldName({"event", "nodeId", "payload", "payloadJSON", "ts", "runId"}, field)) {
+					continue;
+				}
+				SetIssue(issue, "schema_invalid_params", "Method `node.event` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
 		bool ValidateLogsTailParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 			ParsedObjectFieldKinds fieldKinds;
 			if (!TryParseRequestParamsObject(request, issue, "gateway.logs.tail", fieldKinds)) {
@@ -2819,6 +2897,8 @@ namespace blazeclaw::gateway::protocol {
 			{ "node.pending.pull", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodePendingPullParams(r, i); } },
 			{ "node.pending.ack", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodePendingAckParams(r, i); } },
 			{ "node.invoke", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodeInvokeParams(r, i); } },
+			{ "node.invoke.result", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodeInvokeResultParams(r, i); } },
+			{ "node.event", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodeEventParams(r, i); } },
 			{ "gateway.tools.call.preview", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateToolsCallPreviewParams(r, i); } },
 			{ "gateway.tools.call.execute", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateToolsCallExecuteParams(r, i); } },
 			{ "gateway.agents.create", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateAgentsCreateParams(r, i); } },

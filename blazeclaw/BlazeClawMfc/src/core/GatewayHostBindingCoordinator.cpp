@@ -9,142 +9,146 @@
 #include <Windows.h>
 
 namespace blazeclaw::core {
-namespace {
+	namespace {
 
-	std::wstring Utf8ToWide(const std::string& value) {
-		if (value.empty()) {
-			return {};
+		std::wstring Utf8ToWide(const std::string& value) {
+			if (value.empty()) {
+				return {};
+			}
+
+			const int needed = MultiByteToWideChar(
+				CP_UTF8,
+				0,
+				value.c_str(),
+				static_cast<int>(value.size()),
+				nullptr,
+				0);
+			if (needed <= 0) {
+				return {};
+			}
+
+			std::wstring output(static_cast<std::size_t>(needed), L'\0');
+			MultiByteToWideChar(
+				CP_UTF8,
+				0,
+				value.c_str(),
+				static_cast<int>(value.size()),
+				output.data(),
+				needed);
+			return output;
 		}
 
-		const int needed = MultiByteToWideChar(
-			CP_UTF8,
-			0,
-			value.c_str(),
-			static_cast<int>(value.size()),
-			nullptr,
-			0);
-		if (needed <= 0) {
-			return {};
+		std::string WideConfigPathToUtf8Lossy(const std::wstring& value) {
+			std::string output;
+			output.reserve(value.size());
+			for (const wchar_t ch : value) {
+				output.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
+			}
+			return output;
 		}
 
-		std::wstring output(static_cast<std::size_t>(needed), L'\0');
-		MultiByteToWideChar(
-			CP_UTF8,
-			0,
-			value.c_str(),
-			static_cast<int>(value.size()),
-			output.data(),
-			needed);
-		return output;
+	} // namespace
+
+	void GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks(ServiceManager& manager) {
+		RegisterSkillsRelatedCallbacks(manager);
+		BindGatewayPolicyCallbacks(manager);
+		manager.BindToolRuntimeCallbacks();
+		RegisterChatRuntimeCallbacks(manager);
+		BindEmbeddingsCallbacks(manager);
 	}
 
-	std::string WideConfigPathToUtf8Lossy(const std::wstring& value) {
-		std::string output;
-		output.reserve(value.size());
-		for (const wchar_t ch : value) {
-			output.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
-		}
-		return output;
+	void GatewayHostBindingCoordinator::BindGatewayPolicyCallbacks(ServiceManager& manager) {
+		manager.m_gatewayHost.SetEmbeddedOrchestrationPath(
+			WideConfigPathToUtf8Lossy(manager.m_activeConfig.embedded.orchestrationPath));
+		manager.m_gatewayHost.SetNodeParityRuntimeFlags(
+			manager.m_activeConfig.embedded.nodeParityEnabled,
+			manager.m_activeConfig.embedded.nodeParityDiagnosticsEnabled,
+			WideConfigPathToUtf8Lossy(manager.m_activeConfig.embedded.nodeParityRolloutMode));
+		const auto gatewayEmailBinding =
+			manager.m_emailPolicyOrchestrationService.BuildGatewayPolicyBinding(
+				manager.m_activeConfig.email,
+				manager.m_state.emailPolicy.runtimeEnabled,
+				manager.m_state.emailPolicy.runtimeEnforce,
+				manager.m_emailFallbackResolvedPolicy);
+		manager.m_gatewayHost.SetEmailFallbackRuntimeFlags(
+			gatewayEmailBinding.preflightEnabled,
+			gatewayEmailBinding.runtimeEnabled,
+			gatewayEmailBinding.runtimeEnforce);
+		manager.m_gatewayHost.SetEmailFallbackResolvedPolicy(
+			gatewayEmailBinding.backends,
+			gatewayEmailBinding.onUnavailable,
+			gatewayEmailBinding.onAuthError,
+			gatewayEmailBinding.onExecError,
+			gatewayEmailBinding.retryMaxAttempts,
+			gatewayEmailBinding.retryDelayMs,
+			gatewayEmailBinding.requiresApproval,
+			gatewayEmailBinding.approvalTokenTtlMinutes,
+			gatewayEmailBinding.profileId);
 	}
 
-} // namespace
+	void GatewayHostBindingCoordinator::BindEmbeddingsCallbacks(ServiceManager& manager) {
+		manager.m_gatewayHost.SetEmbeddingsGenerateCallback([&manager](
+			const blazeclaw::gateway::GatewayHost::EmbeddingsGenerateRequest& request) {
+				const auto result = manager.m_embeddingsService.EmbedText(
+					EmbeddingRequest{
+						.text = Utf8ToWide(request.text),
+						.normalize = request.normalize,
+						.traceId = request.traceId,
+					});
 
-void GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks(ServiceManager& manager) {
-	RegisterSkillsRelatedCallbacks(manager);
-	BindGatewayPolicyCallbacks(manager);
-	manager.BindToolRuntimeCallbacks();
-	RegisterChatRuntimeCallbacks(manager);
-	BindEmbeddingsCallbacks(manager);
-}
+				blazeclaw::gateway::GatewayHost::EmbeddingsGenerateResult gatewayResult;
+				gatewayResult.ok = result.ok;
+				gatewayResult.vector = result.vector;
+				gatewayResult.dimension = result.dimension;
+				gatewayResult.provider = result.provider;
+				gatewayResult.modelId = result.modelId;
+				gatewayResult.latencyMs = result.latencyMs;
+				gatewayResult.status = manager.m_embeddingsService.Snapshot().status;
 
-void GatewayHostBindingCoordinator::BindGatewayPolicyCallbacks(ServiceManager& manager) {
-	manager.m_gatewayHost.SetEmbeddedOrchestrationPath(
-		WideConfigPathToUtf8Lossy(manager.m_activeConfig.embedded.orchestrationPath));
-	const auto gatewayEmailBinding =
-		manager.m_emailPolicyOrchestrationService.BuildGatewayPolicyBinding(
-			manager.m_activeConfig.email,
-			manager.m_state.emailPolicy.runtimeEnabled,
-			manager.m_state.emailPolicy.runtimeEnforce,
-			manager.m_emailFallbackResolvedPolicy);
-	manager.m_gatewayHost.SetEmailFallbackRuntimeFlags(
-		gatewayEmailBinding.preflightEnabled,
-		gatewayEmailBinding.runtimeEnabled,
-		gatewayEmailBinding.runtimeEnforce);
-	manager.m_gatewayHost.SetEmailFallbackResolvedPolicy(
-		gatewayEmailBinding.backends,
-		gatewayEmailBinding.onUnavailable,
-		gatewayEmailBinding.onAuthError,
-		gatewayEmailBinding.onExecError,
-		gatewayEmailBinding.retryMaxAttempts,
-		gatewayEmailBinding.retryDelayMs,
-		gatewayEmailBinding.requiresApproval,
-		gatewayEmailBinding.approvalTokenTtlMinutes,
-		gatewayEmailBinding.profileId);
-}
+				if (result.error.has_value()) {
+					gatewayResult.errorCode =
+						EmbeddingErrorCodeToString(result.error->code);
+					gatewayResult.errorMessage = result.error->message;
+				}
 
-void GatewayHostBindingCoordinator::BindEmbeddingsCallbacks(ServiceManager& manager) {
-	manager.m_gatewayHost.SetEmbeddingsGenerateCallback([&manager](
-		const blazeclaw::gateway::GatewayHost::EmbeddingsGenerateRequest& request) {
-		const auto result = manager.m_embeddingsService.EmbedText(
-			EmbeddingRequest{
-				.text = Utf8ToWide(request.text),
-				.normalize = request.normalize,
-				.traceId = request.traceId,
+				return gatewayResult;
 			});
 
-		blazeclaw::gateway::GatewayHost::EmbeddingsGenerateResult gatewayResult;
-		gatewayResult.ok = result.ok;
-		gatewayResult.vector = result.vector;
-		gatewayResult.dimension = result.dimension;
-		gatewayResult.provider = result.provider;
-		gatewayResult.modelId = result.modelId;
-		gatewayResult.latencyMs = result.latencyMs;
-		gatewayResult.status = manager.m_embeddingsService.Snapshot().status;
+		manager.m_gatewayHost.SetEmbeddingsBatchCallback([&manager](
+			const blazeclaw::gateway::GatewayHost::EmbeddingsBatchRequest& request) {
+				std::vector<std::wstring> texts;
+				texts.reserve(request.texts.size());
+				for (const auto& text : request.texts) {
+					texts.push_back(Utf8ToWide(text));
+				}
 
-		if (result.error.has_value()) {
-			gatewayResult.errorCode =
-				EmbeddingErrorCodeToString(result.error->code);
-			gatewayResult.errorMessage = result.error->message;
-		}
+				const auto result = manager.m_embeddingsService.EmbedBatch(
+					EmbeddingBatchRequest{
+						.texts = std::move(texts),
+						.normalize = request.normalize,
+						.traceId = request.traceId,
+					});
 
-		return gatewayResult;
-	});
+				blazeclaw::gateway::GatewayHost::EmbeddingsBatchResult gatewayResult;
+				gatewayResult.ok = result.ok;
+				gatewayResult.vectors = result.vectors;
+				gatewayResult.dimension = result.dimension;
+				gatewayResult.provider = result.provider;
+				gatewayResult.modelId = result.modelId;
+				gatewayResult.latencyMs = result.latencyMs;
+				gatewayResult.status = manager.m_embeddingsService.Snapshot().status;
 
-	manager.m_gatewayHost.SetEmbeddingsBatchCallback([&manager](
-		const blazeclaw::gateway::GatewayHost::EmbeddingsBatchRequest& request) {
-		std::vector<std::wstring> texts;
-		texts.reserve(request.texts.size());
-		for (const auto& text : request.texts) {
-			texts.push_back(Utf8ToWide(text));
-		}
+				if (result.error.has_value()) {
+					gatewayResult.errorCode =
+						EmbeddingErrorCodeToString(result.error->code);
+					gatewayResult.errorMessage = result.error->message;
+				}
 
-		const auto result = manager.m_embeddingsService.EmbedBatch(
-			EmbeddingBatchRequest{
-				.texts = std::move(texts),
-				.normalize = request.normalize,
-				.traceId = request.traceId,
+				return gatewayResult;
 			});
+	}
 
-		blazeclaw::gateway::GatewayHost::EmbeddingsBatchResult gatewayResult;
-		gatewayResult.ok = result.ok;
-		gatewayResult.vectors = result.vectors;
-		gatewayResult.dimension = result.dimension;
-		gatewayResult.provider = result.provider;
-		gatewayResult.modelId = result.modelId;
-		gatewayResult.latencyMs = result.latencyMs;
-		gatewayResult.status = manager.m_embeddingsService.Snapshot().status;
-
-		if (result.error.has_value()) {
-			gatewayResult.errorCode =
-				EmbeddingErrorCodeToString(result.error->code);
-			gatewayResult.errorMessage = result.error->message;
-		}
-
-		return gatewayResult;
-	});
-}
-
-void GatewayHostBindingCoordinator::RegisterSkillsRelatedCallbacks(ServiceManager& manager) {
+	void GatewayHostBindingCoordinator::RegisterSkillsRelatedCallbacks(ServiceManager& manager) {
 		manager.RefreshGatewaySkillsStateProjection();
 		manager.PublishGatewaySkillsStateProjection();
 		manager.m_gatewayHost.SetConfigSchemaGetCallback([&manager]() {
@@ -176,9 +180,9 @@ void GatewayHostBindingCoordinator::RegisterSkillsRelatedCallbacks(ServiceManage
 					});
 			});
 
-}
+	}
 
-void GatewayHostBindingCoordinator::RegisterChatRuntimeCallbacks(ServiceManager& manager) {
+	void GatewayHostBindingCoordinator::RegisterChatRuntimeCallbacks(ServiceManager& manager) {
 		auto& orchestrator = manager.m_chatRuntimeOrchestrationCoordinator;
 		manager.m_gatewayHost.SetChatRuntimeCallback([&manager, &orchestrator](
 			const blazeclaw::gateway::GatewayHost::ChatRuntimeRequest& request) {
@@ -237,7 +241,7 @@ void GatewayHostBindingCoordinator::RegisterChatRuntimeCallbacks(ServiceManager&
 						resolvedPrompt.narrowAscii,
 						activeProvider,
 						activeModel);
-				};
+					};
 
 				return manager.m_chatRuntime.Execute(
 					CChatRuntime::RuntimeExecutionRequest{
@@ -257,6 +261,6 @@ void GatewayHostBindingCoordinator::RegisterChatRuntimeCallbacks(ServiceManager&
 				return cancelled;
 			});
 
-}
+	}
 
 } // namespace blazeclaw::core

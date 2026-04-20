@@ -79,6 +79,9 @@ namespace blazeclaw::config {
 		std::uint32_t maxQueueDepth = 64;
 		bool dynamicToolLoopEnabled = true;
 		std::wstring orchestrationPath = L"dynamic_task_delta";
+		bool nodeParityEnabled = true;
+		bool nodeParityDiagnosticsEnabled = true;
+		std::wstring nodeParityRolloutMode = L"monitor";
 	};
 
 	struct EmailPreflightConfig {
