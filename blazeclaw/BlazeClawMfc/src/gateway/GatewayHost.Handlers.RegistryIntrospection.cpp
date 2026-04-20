@@ -14,8 +14,24 @@
 
 namespace blazeclaw::gateway::handlers::registry_introspection {
 
-void RegistryIntrospectionHandlers::RegisterAll(GatewayHost& host) {
-host.m_dispatcher.Register("gateway.agents.exists", [&host](const protocol::RequestFrame& request) {
+	void RegistryIntrospectionHandlers::RegisterAll(GatewayHost& host) {
+		host.m_dispatcher.Register("usage.status", [](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, "{\"status\":\"ok\",\"uptime\":123456,\"active\":true}");
+			});
+
+		host.m_dispatcher.Register("usage.cost", [](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, "{\"cost\":0.0,\"currency\":\"USD\"}");
+			});
+
+		host.m_dispatcher.Register("sessions.usage.logs", [](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, "{\"logs\":[],\"count\":0}");
+			});
+
+		host.m_dispatcher.Register("sessions.usage.timeseries", [](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, "{\"timeseries\":[],\"count\":0}");
+			});
+
+		host.m_dispatcher.Register("gateway.agents.exists", [&host](const protocol::RequestFrame& request) {
 			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("agentId");
 			const auto agents = host.m_agentRegistry.List();
 			const bool exists = std::any_of(agents.begin(), agents.end(), [&](const AgentEntry& agent) {
@@ -23,7 +39,7 @@ host.m_dispatcher.Register("gateway.agents.exists", [&host](const protocol::Requ
 				});
 
 			return protocol::OkResponse(request, "{\"agentId\":\"" + EscapeJsonString(requestedId.empty() ? "*" : requestedId) +
-					"\",\"exists\":" + std::string(exists ? "true" : "false") + "}");
+				"\",\"exists\":" + std::string(exists ? "true" : "false") + "}");
 			});
 
 		host.m_dispatcher.Register("gateway.config.getSection", [&host](const protocol::RequestFrame& request) {
@@ -69,8 +85,8 @@ host.m_dispatcher.Register("gateway.agents.exists", [&host](const protocol::Requ
 				}));
 
 			return protocol::OkResponse(request, "{\"active\":" + std::string(activeFilter.value_or(false) ? "true" : "false") +
-					",\"activeFilterApplied\":" + std::string(activeFilter.has_value() ? "true" : "false") +
-					",\"count\":" + std::to_string(count) + "}");
+				",\"activeFilterApplied\":" + std::string(activeFilter.has_value() ? "true" : "false") +
+				",\"count\":" + std::to_string(count) + "}");
 			});
 
 		host.m_dispatcher.Register("gateway.models.get", [](const protocol::RequestFrame& request) {
@@ -88,7 +104,7 @@ host.m_dispatcher.Register("gateway.agents.exists", [&host](const protocol::Requ
 				});
 
 			return protocol::OkResponse(request, "{\"sessionId\":\"" + EscapeJsonString(requestedId.empty() ? "*" : requestedId) +
-					"\",\"exists\":" + std::string(exists ? "true" : "false") + "}");
+				"\",\"exists\":" + std::string(exists ? "true" : "false") + "}");
 			});
 
 		host.m_dispatcher.Register("gateway.config.getKey", [&host](const protocol::RequestFrame& request) {
@@ -117,7 +133,7 @@ host.m_dispatcher.Register("gateway.agents.exists", [&host](const protocol::Requ
 			}
 
 			return protocol::OkResponse(request, "{\"key\":\"" + EscapeJsonString(key.empty() ? "gateway.bind" : key) +
-					"\",\"value\":\"" + EscapeJsonString(value.empty() ? host.m_runtimeGatewayBind : value) + "\"}");
+				"\",\"value\":\"" + EscapeJsonString(value.empty() ? host.m_runtimeGatewayBind : value) + "\"}");
 			});
 
 		host.m_dispatcher.Register("gateway.sessions.count", [&host](const protocol::RequestFrame& request) {
@@ -135,7 +151,7 @@ host.m_dispatcher.Register("gateway.agents.exists", [&host](const protocol::Requ
 				}));
 
 			return protocol::OkResponse(request, "{\"scope\":\"" + EscapeJsonString(scope.empty() ? "*" : scope) +
-					"\",\"count\":" + std::to_string(count) + "}");
+				"\",\"count\":" + std::to_string(count) + "}");
 			});
 
 		host.m_dispatcher.Register("gateway.sessions.activate", [&host](const protocol::RequestFrame& request) {
@@ -147,7 +163,7 @@ host.m_dispatcher.Register("gateway.agents.exists", [&host](const protocol::Requ
 			const SessionEntry activated = host.m_sessionRegistry.Patch(requestedId, std::nullopt, true);
 
 			return protocol::OkResponse(request, "{\"session\":" + SerializeSession(activated) +
-					",\"activated\":" + std::string(exists ? "true" : "false") + "}");
+				",\"activated\":" + std::string(exists ? "true" : "false") + "}");
 			});
 
 
@@ -268,10 +284,10 @@ host.m_dispatcher.Register("gateway.agents.exists", [&host](const protocol::Requ
 
 		host.m_dispatcher.Register("gateway.models.list", [](const protocol::RequestFrame& request) {
 			return protocol::OkResponse(request, "{\"models\":[" +
-					GatewayModel::BuildModelJson(GatewayModel::kDefaultModelId) + "," +
-					GatewayModel::BuildModelJson(GatewayModel::kReasonerModelId) + "," +
-					GatewayModel::BuildModelJson(GatewayModel::kDeepSeekChatModelId) + "," +
-					GatewayModel::BuildModelJson(GatewayModel::kDeepSeekReasonerModelId) + "]}");
+				GatewayModel::BuildModelJson(GatewayModel::kDefaultModelId) + "," +
+				GatewayModel::BuildModelJson(GatewayModel::kReasonerModelId) + "," +
+				GatewayModel::BuildModelJson(GatewayModel::kDeepSeekChatModelId) + "," +
+				GatewayModel::BuildModelJson(GatewayModel::kDeepSeekReasonerModelId) + "]}");
 			});
 
 		host.m_dispatcher.Register("gateway.tools.call.execute", [&host](const protocol::RequestFrame& request) {
@@ -301,19 +317,19 @@ host.m_dispatcher.Register("gateway.agents.exists", [&host](const protocol::Requ
 			}
 
 			return protocol::OkResponse(request, "{\"tool\":\"" + EscapeJsonString(execution.tool) +
-					"\",\"executed\":" + std::string(execution.executed ? "true" : "false") +
-					",\"status\":\"" + EscapeJsonString(execution.status) +
-					"\",\"output\":\"" + EscapeJsonString(execution.output) +
-					"\",\"argsProvided\":" + std::string(argsProvided ? "true" : "false") + "}");
+				"\",\"executed\":" + std::string(execution.executed ? "true" : "false") +
+				",\"status\":\"" + EscapeJsonString(execution.status) +
+				"\",\"output\":\"" + EscapeJsonString(execution.output) +
+				"\",\"argsProvided\":" + std::string(argsProvided ? "true" : "false") + "}");
 			});
-}
+	}
 
 } // namespace blazeclaw::gateway::handlers::registry_introspection
 
 namespace blazeclaw::gateway {
 
-void GatewayHost::RegisterGatewayRegistryIntrospectionHandlers() {
-	handlers::registry_introspection::RegistryIntrospectionHandlers::RegisterAll(*this);
-}
+	void GatewayHost::RegisterGatewayRegistryIntrospectionHandlers() {
+		handlers::registry_introspection::RegistryIntrospectionHandlers::RegisterAll(*this);
+	}
 
 } // namespace blazeclaw::gateway

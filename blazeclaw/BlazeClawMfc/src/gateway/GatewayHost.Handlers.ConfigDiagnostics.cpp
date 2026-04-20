@@ -14,22 +14,30 @@
 
 namespace blazeclaw::gateway::handlers::config_diagnostics {
 
-void ConfigDiagnosticsHandlers::RegisterAll(GatewayHost& host) {
-host.m_dispatcher.Register("gateway.config.get", [&host](const protocol::RequestFrame& request) {
+	void ConfigDiagnosticsHandlers::RegisterAll(GatewayHost& host) {
+		host.m_dispatcher.Register("gateway.config.get", [&host](const protocol::RequestFrame& request) {
 			return protocol::OkResponse(request, "{\"gateway\":{\"bind\":\"" + EscapeJsonString(host.m_runtimeGatewayBind) +
-			"\",\"port\":" + std::to_string(host.m_runtimeGatewayPort) +
-			"},\"agent\":{\"model\":\"" + EscapeJsonString(host.m_runtimeAgentModel) +
-			"\",\"streaming\":" + std::string(host.m_runtimeAgentStreaming ? "true" : "false") +
-			"},\"emailFallback\":{\"preflightEnabled\":" +
-			std::string(host.m_runtimeEmailPreflightEnabled ? "true" : "false") +
-			",\"policyProfilesEnabled\":" +
-			std::string(host.m_runtimeEmailPolicyProfilesEnabled ? "true" : "false") +
-			",\"policyProfilesEnforce\":" +
-			std::string(host.m_runtimeEmailPolicyProfilesEnforce ? "true" : "false") +
-			"},\"deepseek\":" + BuildGatewayDeepSeekConfigJson(
-				host.m_runtimeDeepSeekApiKey,
-				host.m_runtimeDeepSeekBaseUrl,
-				host.m_runtimeDeepSeekDefaultModel) + "}");
+				"\",\"port\":" + std::to_string(host.m_runtimeGatewayPort) +
+				"},\"agent\":{\"model\":\"" + EscapeJsonString(host.m_runtimeAgentModel) +
+				"\",\"streaming\":" + std::string(host.m_runtimeAgentStreaming ? "true" : "false") +
+				"},\"emailFallback\":{\"preflightEnabled\":" +
+				std::string(host.m_runtimeEmailPreflightEnabled ? "true" : "false") +
+				",\"policyProfilesEnabled\":" +
+				std::string(host.m_runtimeEmailPolicyProfilesEnabled ? "true" : "false") +
+				",\"policyProfilesEnforce\":" +
+				std::string(host.m_runtimeEmailPolicyProfilesEnforce ? "true" : "false") +
+				"},\"deepseek\":" + BuildGatewayDeepSeekConfigJson(
+					host.m_runtimeDeepSeekApiKey,
+					host.m_runtimeDeepSeekBaseUrl,
+					host.m_runtimeDeepSeekDefaultModel) + "}");
+			});
+
+		host.m_dispatcher.Register("config.apply", [](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, "{\"applied\":true,\"updated\":true}");
+			});
+
+		host.m_dispatcher.Register("config.patch", [](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, "{\"patched\":true,\"updated\":true}");
 			});
 
 		host.m_dispatcher.Register("gateway.config.set", [&host](const protocol::RequestFrame& request) {
@@ -72,14 +80,14 @@ host.m_dispatcher.Register("gateway.config.get", [&host](const protocol::Request
 			}
 
 			return protocol::OkResponse(request, "{\"gateway\":{\"bind\":\"" + EscapeJsonString(host.m_runtimeGatewayBind) +
-					"\",\"port\":" + std::to_string(host.m_runtimeGatewayPort) +
-					"},\"agent\":{\"model\":\"" + EscapeJsonString(host.m_runtimeAgentModel) +
-					"\",\"streaming\":" + std::string(host.m_runtimeAgentStreaming ? "true" : "false") +
-				  "},\"deepseek\":" + BuildGatewayDeepSeekConfigJson(
-						host.m_runtimeDeepSeekApiKey,
-						host.m_runtimeDeepSeekBaseUrl,
-						host.m_runtimeDeepSeekDefaultModel) +
-					",\"updated\":true}");
+				"\",\"port\":" + std::to_string(host.m_runtimeGatewayPort) +
+				"},\"agent\":{\"model\":\"" + EscapeJsonString(host.m_runtimeAgentModel) +
+				"\",\"streaming\":" + std::string(host.m_runtimeAgentStreaming ? "true" : "false") +
+				"},\"deepseek\":" + BuildGatewayDeepSeekConfigJson(
+					host.m_runtimeDeepSeekApiKey,
+					host.m_runtimeDeepSeekBaseUrl,
+					host.m_runtimeDeepSeekDefaultModel) +
+				",\"updated\":true}");
 			});
 
 
@@ -145,14 +153,14 @@ host.m_dispatcher.Register("gateway.config.get", [&host](const protocol::Request
 		host.m_dispatcher.Register("gateway.health", [&host](const protocol::RequestFrame& request) {
 			return protocol::OkResponse(request, "{\"status\":\"ok\",\"running\":" + std::string(host.IsRunning() ? "true" : "false") + "}");
 			});
-}
+	}
 
 } // namespace blazeclaw::gateway::handlers::config_diagnostics
 
 namespace blazeclaw::gateway {
 
-void GatewayHost::RegisterGatewayConfigAndDiagnosticsHandlers() {
-	handlers::config_diagnostics::ConfigDiagnosticsHandlers::RegisterAll(*this);
-}
+	void GatewayHost::RegisterGatewayConfigAndDiagnosticsHandlers() {
+		handlers::config_diagnostics::ConfigDiagnosticsHandlers::RegisterAll(*this);
+	}
 
 } // namespace blazeclaw::gateway
