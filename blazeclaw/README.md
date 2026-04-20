@@ -18,14 +18,20 @@ Use **vcpkg MSBuild integration** so `$(VcpkgIncludeRoot)` resolves (e.g. `vcpkg
 ## Tests and CI
 
 - **BlazeClawMfc.Tests** uses **Catch2** and **nlohmann::json** via vcpkg includes.
-- **Azure Pipelines:** [`azure-pipelines.yml`](../azure-pipelines.yml) — vcpkg bootstrap, install with triplet **`x64-windows`**, **VSBuild** **`blazeclaw/BlazeClaw.sln`**, then **`Invoke-BlazeClawOptimizationValidation.ps1 -SkipPhaseA -SkipPhaseB -SkipBuild -RunTests`** (Catch2 CWD **`blazeclaw/`**).
+- **Azure Pipelines:** [`azure-pipelines.yml`](../azure-pipelines.yml) — vcpkg bootstrap, **`x64-windows`** install, **matrix** **Debug** + **Release** **VSBuild** with **`CodePage=65001`**, Catch2 on **Debug** only (**`Invoke-BlazeClawOptimizationValidation.ps1 ... -RunTests -Configuration Debug`**).
 - **GitHub Actions:** [`.github/workflows/blazeclaw-chat-nightly-smoke.yml`](../.github/workflows/blazeclaw-chat-nightly-smoke.yml) — smoke checks; see **BUILD_AND_CI.md** for how this differs from Azure.
 
-Local build example:
+Local build example (UTF-8 code page, matches CI and **`Invoke-BlazeClawOptimizationValidation.ps1`**):
 
 ```powershell
 cd E:\gitRepo\blazeClaw
-msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64
+msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001
+```
+
+**Release\|x64** (vcpkg headers only for JSON — catches integration gaps):
+
+```powershell
+msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Release /p:Platform=x64 /p:CodePage=65001
 ```
 
 ## third_party fallbacks

@@ -6,43 +6,53 @@ pool:
   vmImage: 'windows-latest'
 
 variables:
-  buildConfiguration: 'Debug'
   # Must match local developer docs (blazeclaw/README.md, blazeclaw/docs/BUILD_AND_CI.md)
   VcpkgTriplet: 'x64-windows'
 
-steps:
-- task: PowerShell@2
-  displayName: 'Bootstrap vcpkg'
-  inputs:
-    targetType: 'inline'
-    script: |
-      Write-Host "Ensure vcpkg is available at repo root (clone https://github.com/microsoft/vcpkg -> vcpkg\)"
-      if (-Not (Test-Path "vcpkg\vcpkg.exe")) {
-        Write-Error "vcpkg.exe not found at .\vcpkg\vcpkg.exe — add vcpkg to the repository or agent image."
-        exit 1
-      }
+jobs:
+- job: BlazeClaw_Build
+  displayName: 'BlazeClaw — vcpkg, MSBuild (Debug + Release x64)'
+  strategy:
+    matrix:
+      Debug:
+        buildConfiguration: Debug
+      Release:
+        buildConfiguration: Release
+  steps:
+  - task: PowerShell@2
+    displayName: 'Bootstrap vcpkg'
+    inputs:
+      targetType: 'inline'
+      script: |
+        Write-Host "Ensure vcpkg is available at repo root (clone https://github.com/microsoft/vcpkg -> vcpkg\)"
+        if (-Not (Test-Path "vcpkg\vcpkg.exe")) {
+          Write-Error "vcpkg.exe not found at .\vcpkg\vcpkg.exe — add vcpkg to the repository or agent image."
+          exit 1
+        }
 
-- task: PowerShell@2
-  displayName: 'Install vcpkg deps'
-  env:
-    VCPKG_DEFAULT_TRIPLET: $(VcpkgTriplet)
-  inputs:
-    targetType: 'inline'
-    script: |
-      .\vcpkg\vcpkg.exe install --triplet $(VcpkgTriplet) nlohmann-json catch2
+  - task: PowerShell@2
+    displayName: 'Install vcpkg deps'
+    env:
+      VCPKG_DEFAULT_TRIPLET: $(VcpkgTriplet)
+    inputs:
+      targetType: 'inline'
+      script: |
+        .\vcpkg\vcpkg.exe install --triplet $(VcpkgTriplet) nlohmann-json catch2
 
-- task: VSBuild@1
-  inputs:
-    solution: 'blazeclaw/BlazeClaw.sln'
-    configuration: '$(buildConfiguration)'
-    msbuildArgs: '/p:Platform=x64'
+  - task: VSBuild@1
+    displayName: 'VSBuild BlazeClaw.sln (UTF-8 code page)'
+    inputs:
+      solution: 'blazeclaw/BlazeClaw.sln'
+      configuration: '$(buildConfiguration)'
+      msbuildArgs: '/p:Platform=x64 /p:CodePage=65001'
 
-- task: PowerShell@2
-  displayName: 'Run Catch2 (blazeclaw/ CWD, parity-friendly)'
-  inputs:
-    targetType: 'inline'
-    script: |
-      $ErrorActionPreference = "Stop"
-      $root = "$(System.DefaultWorkingDirectory)"
-      $script = Join-Path $root "blazeclaw\BlazeClawMfc\tools\Invoke-BlazeClawOptimizationValidation.ps1"
-      & $script -RepoRoot $root -SkipPhaseA -SkipPhaseB -SkipBuild -RunTests
+  - task: PowerShell@2
+    displayName: 'Run Catch2 (blazeclaw/ CWD, parity-friendly; Debug only)'
+    condition: and(succeeded(), eq(variables['buildConfiguration'], 'Debug'))
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $root = "$(System.DefaultWorkingDirectory)"
+        $script = Join-Path $root "blazeclaw\BlazeClawMfc\tools\Invoke-BlazeClawOptimizationValidation.ps1"
+        & $script -RepoRoot $root -SkipPhaseA -SkipPhaseB -SkipBuild -RunTests -Configuration Debug

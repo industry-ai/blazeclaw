@@ -31,7 +31,7 @@ jobs:
 
       - name: Build BlazeClaw Debug x64
         shell: powershell
-        run: msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64
+        run: msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001
 
       - name: Verify ONNX runtime assets in build output
         shell: powershell

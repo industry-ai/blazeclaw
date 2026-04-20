@@ -8,8 +8,8 @@
 
   - **Phase A:** `GatewayUpstreamDiff/Diff-OpenClawGateway.ps1` (OpenClaw gateway paths).
   - **Phase B:** `GatewayUpstreamDiff/Verify-GatewayDispatcherMethods.ps1` (duplicate `.Register("method"` review).
-  - **Phase E:** MSBuild `blazeclaw/BlazeClaw.sln` Debug|x64 with UTF-8 code page.
-  - **Optional:** Run `BlazeClawMfc.Tests.exe` with CWD `blazeclaw/` (after a build, or with **`-SkipBuild`** if the test EXE already exists — same pattern as Azure Pipelines after **VSBuild**).
+  - **Phase E:** MSBuild `blazeclaw/BlazeClaw.sln` **Debug|x64** or **Release|x64** (see **`-Configuration`**) with UTF-8 code page (**`/p:CodePage=65001`**).
+  - **Optional:** Run `BlazeClawMfc.Tests.exe` with CWD `blazeclaw/` (after a build, or with **`-SkipBuild`** if the test EXE already exists — same pattern as Azure Pipelines after **VSBuild**). The script resolves the test binary under **`blazeclaw\bin\<Configuration>\`** first, then common fallbacks.
 
   Phases C, D, and F include **runtime rules and docs** (for example Phase **D** streaming semantics in `GATEWAY_CORE_WIRING.md`, Phase **F** `PORTING_PLAN.md` under `blazeclaw/skills/`) — not all are exercised by this script.
 
@@ -19,12 +19,17 @@
 
 .EXAMPLE
   .\Invoke-BlazeClawOptimizationValidation.ps1 -MsBuildPath "D:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" -RunTests
+
+.EXAMPLE
+  .\Invoke-BlazeClawOptimizationValidation.ps1 -Configuration Release -SkipPhaseA -SkipPhaseB
 #>
 [CmdletBinding()]
 param(
 	[string] $RepoRoot = "",
 	[string] $MsBuildPath = "",
 	[string] $SolutionRelative = "blazeclaw\BlazeClaw.sln",
+	[ValidateSet("Debug", "Release")]
+	[string] $Configuration = "Debug",
 	[switch] $SkipPhaseA,
 	[switch] $SkipPhaseB,
 	[switch] $SkipBuild,
@@ -79,26 +84,28 @@ if (-not $SkipBuild) {
 		throw "Solution not found: $solution"
 	}
 	Write-Host ""
-	Write-Host "=== Phase E: MSBuild (Debug|x64, CodePage 65001) ===" -ForegroundColor Cyan
-	& $msb $solution /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001 /m
+	Write-Host "=== Phase E: MSBuild ($Configuration|x64, CodePage 65001) ===" -ForegroundColor Cyan
+	& $msb $solution /t:Build /p:Configuration=$Configuration /p:Platform=x64 /p:CodePage=65001 /m
 	if (-not $?) { throw "MSBuild failed (exit code $LASTEXITCODE)." }
 }
 
+function Resolve-BlazeClawTestExe {
+	param([string] $Root, [string] $Cfg)
+	$candidates = @(
+		(Join-Path $Root "blazeclaw\bin\$Cfg\BlazeClawMfc.Tests.exe"),
+		(Join-Path $Root "blazeclaw\BlazeClawMfc.Tests\bin\$Cfg\BlazeClawMfc.Tests.exe"),
+		(Join-Path $Root "blazeclaw\BlazeClawMfc.Tests\x64\$Cfg\BlazeClawMfc.Tests.exe")
+	)
+	foreach ($p in $candidates) {
+		if (Test-Path -LiteralPath $p) { return $p }
+	}
+	return $null
+}
+
 if ($RunTests) {
-	if (-not $SkipBuild) {
-		$testExe = Join-Path $RepoRoot "blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe"
-		if (-not (Test-Path -LiteralPath $testExe)) {
-			$testExe = Join-Path $RepoRoot "blazeclaw\BlazeClawMfc.Tests\x64\Debug\BlazeClawMfc.Tests.exe"
-		}
-	}
-	else {
-		$testExe = Join-Path $RepoRoot "blazeclaw\bin\Debug\BlazeClawMfc.Tests.exe"
-		if (-not (Test-Path -LiteralPath $testExe)) {
-			$testExe = Join-Path $RepoRoot "blazeclaw\BlazeClawMfc.Tests\x64\Debug\BlazeClawMfc.Tests.exe"
-		}
-	}
-	if (-not (Test-Path -LiteralPath $testExe)) {
-		Write-Warning "Tests executable not found (build output path may differ): $testExe"
+	$testExe = Resolve-BlazeClawTestExe -Root $RepoRoot -Cfg $Configuration
+	if ([string]::IsNullOrWhiteSpace($testExe)) {
+		Write-Warning "Tests executable not found for configuration '$Configuration'. Build BlazeClaw.sln so BlazeClawMfc.Tests lands under blazeclaw\bin\$Configuration\, or pass -Configuration to match your build."
 	}
 	else {
 		Write-Host ""
