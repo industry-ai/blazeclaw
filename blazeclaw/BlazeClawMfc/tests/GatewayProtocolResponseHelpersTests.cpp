@@ -48,6 +48,14 @@ TEST_CASE("OkResponse wraps JsonPayloadPathExists", "[gateway][protocol]") {
 	REQUIRE(res.payloadJson == R"({"path":"p","exists":false})");
 }
 
+TEST_CASE("OkResponse by explicit response id matches request-id shape", "[gateway][protocol]") {
+	const auto res = OkResponse(std::string("fixture-1"), std::string(R"({"ok":true})"));
+	REQUIRE(res.id == "fixture-1");
+	REQUIRE(res.ok);
+	REQUIRE(res.payloadJson == R"({"ok":true})");
+	REQUIRE(!res.error.has_value());
+}
+
 TEST_CASE("ReplayFromStored copies request id and replay fields", "[gateway][protocol]") {
 	const RequestFrame request{.id = "req-99", .method = "chat.send", .paramsJson = "{}"};
 	const auto res = ReplayFromStored(

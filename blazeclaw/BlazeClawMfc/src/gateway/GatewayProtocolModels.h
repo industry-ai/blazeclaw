@@ -37,6 +37,17 @@ namespace blazeclaw::gateway::protocol {
 		};
 	}
 
+	/// Success response when only the wire correlation id is fixed (fixture parity / contract tests).
+	/// Same shape as `OkResponse(request, payload)` with `request.id == responseId`.
+	[[nodiscard]] inline ResponseFrame OkResponse(std::string responseId, std::string payloadJson) {
+		return ResponseFrame{
+			.id = std::move(responseId),
+			.ok = true,
+			.payloadJson = std::move(payloadJson),
+			.error = std::nullopt,
+		};
+	}
+
 	/// Success response whose body may be omitted (`std::nullopt` payload), e.g. inline policy skip paths.
 	/// Separate name avoids overload ambiguity with string literals (they could otherwise match `std::string` or `std::optional<std::string>`).
 	[[nodiscard]] inline ResponseFrame OkResponseOptionalPayload(

@@ -166,6 +166,8 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 4. Stabilize **`[parity][chat]`** / contract tests; **Azure Pipelines** runs **`Invoke-BlazeClawOptimizationValidation.ps1 -SkipPhaseA -SkipPhaseB -SkipBuild -RunTests`** after build (`docs/BUILD_AND_CI.md`). Use the same **`-RunTests`** locally before release-quality merges.
 5. Product shell: **`chat.model.enabled.*`** persistence lives in **`CSettingsDialog::OnOK`** (`SettingsDialog.cpp`); **`MainFrame::OnExtensionModelSet`** opens that dialog. Remaining MFC **TODO**s: branding strings, printing, thumbnails, and other wizard stubs in `src/app/*` as prioritized.
 6. ~~Optional: configurable **soft limits** for oversized chat payloads~~ **Implemented:** 1 MiB UTF-8 cap for **`chat.send`** / **`chat.inject`** (`ChatMessageLimits.h`); see `docs/index.md` §2 item 9.
+7. **Release\|x64** validation: **`BlazeClawMfc.vcxproj`** Release configuration does not embed **`third_party`** JSON includes—rely on vcpkg. CI builds **Debug** only; run **Release** locally or extend CI per `docs/index.md` §2 item **10** and `docs/BUILD_AND_CI.md` §“Debug vs Release”.
+8. **MFC scaffold triage:** `FileView`, `SkillView`, `PropertiesWnd`, and document template **`TODO`**s (`docs/index.md` §2 item **11**); align with roadmap vs. dead code removal.
 
 ## 7) Validation Snapshot (2026-04-07)
 
@@ -191,5 +193,5 @@ Cross-project architecture (BlazeClaw vs upstream OpenClaw):
 
 ---
 
-Review date: **2026-04-19** (aligned with `blazeclaw/docs/index.md` optimization items 7–9 and `architecture.md` §12.7)  
+Review date: **2026-04-20** (aligned with `blazeclaw/docs/index.md` items 7–11 and `architecture.md` §12.7–§12.8)  
 Prior snapshot: **2026-04-07**, commit **0b08192**

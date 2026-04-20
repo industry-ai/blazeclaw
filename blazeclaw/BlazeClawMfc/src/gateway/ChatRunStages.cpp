@@ -307,12 +307,9 @@ namespace blazeclaw::gateway {
 			return AppendStage(context, Name(), {}, "validation_failed");
 		}
 
-		const std::size_t payloadUtf8Bytes = std::max(
-			{
-				context.normalizedMessage.size(),
-				context.bodyForCommands.size(),
-				context.bodyForAgent.size(),
-			});
+		const std::size_t payloadUtf8Bytes = (std::max)(
+			(std::max)(context.normalizedMessage.size(), context.bodyForCommands.size()),
+			context.bodyForAgent.size());
 		if (payloadUtf8Bytes > kMaxChatUserMessageUtf8Bytes) {
 			EmitTelemetryEvent(
 				"gateway.chat.message.size.rejected",

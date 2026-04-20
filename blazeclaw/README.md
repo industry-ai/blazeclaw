@@ -39,7 +39,7 @@ BlazeClawMfc planning docs:
 - `blazeclaw/BlazeClawMfc/DYNAMIC_TASK_DELTA_FULL_EXECUTION_PLAN.md`
 
 Architecture comparison docs:
-- `blazeclaw/docs/index.md` (project review: optimization summary + step-by-step Phases A–F + next-wave items 7–9)
+- `blazeclaw/docs/index.md` (project review: optimization summary + step-by-step Phases A–F + next-wave 7–9 + follow-on 10–11)
 - `blazeclaw/docs/README.md` (file catalog for `blazeclaw/docs/`)
 - `blazeclaw/docs/architecture.md` (layer model; OpenClaw comparison §11; optimization recommendations §12; phased plan §13)
 - `blazeclaw/docs/blazeclaw-openclaw-architecture-framework-gap-analysis.md` (BlazeClaw vs OpenClaw stacks, mapping, gaps, optimization priorities)
