@@ -186,9 +186,7 @@ host.m_dispatcher.Register("gateway.session.list", [&host](const protocol::Reque
 			return protocol::OkResponse(request, "{\"levels\":[\"info\",\"debug\"],\"count\":2}");
 			});
 
-		host.m_dispatcher.Register("gateway.tools.list", [&host](const protocol::RequestFrame& request) {
-			return handlers::tools_shared::ToolsSharedHandlers::HandleToolsList(request, host.m_toolRegistry);
-			});
+		handlers::tools_shared::ToolsSharedHandlers::RegisterToolsList(host.m_dispatcher, host.m_toolRegistry);
 
 		host.m_dispatcher.Register("gateway.models.listByProvider", [](const protocol::RequestFrame& request) {
 			const std::string provider = RequestParamsView(request.paramsJson).GetString("provider");

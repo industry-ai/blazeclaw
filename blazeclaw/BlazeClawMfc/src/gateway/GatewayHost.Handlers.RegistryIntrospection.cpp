@@ -138,15 +138,6 @@ host.m_dispatcher.Register("gateway.agents.exists", [&host](const protocol::Requ
 					"\",\"count\":" + std::to_string(count) + "}");
 			});
 
-		host.m_dispatcher.Register("gateway.transport.endpoint.exists", [&host](const protocol::RequestFrame& request) {
-			const std::string endpoint = RequestParamsView(request.paramsJson).GetString("endpoint");
-			const std::string current = host.m_transport.Endpoint();
-			const bool exists = endpoint.empty() || endpoint == current;
-
-			return protocol::OkResponse(request, "{\"endpoint\":\"" + EscapeJsonString(endpoint.empty() ? current : endpoint) +
-					"\",\"exists\":" + std::string(exists ? "true" : "false") + "}");
-			});
-
 		host.m_dispatcher.Register("gateway.sessions.activate", [&host](const protocol::RequestFrame& request) {
 			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("sessionId");
 			const auto sessions = host.m_sessionRegistry.List();

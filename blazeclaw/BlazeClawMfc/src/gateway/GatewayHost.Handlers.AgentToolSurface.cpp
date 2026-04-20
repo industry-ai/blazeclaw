@@ -22,9 +22,7 @@ host.m_dispatcher.Register("gateway.agents.get", [&host](const protocol::Request
 			return protocol::OkResponse(request, "{\"agent\":" + SerializeAgent(agent) + "}");
 			});
 
-		host.m_dispatcher.Register("gateway.tools.catalog", [&host](const protocol::RequestFrame& request) {
-			return handlers::tools_shared::ToolsSharedHandlers::HandleToolsCatalog(request, host.m_toolRegistry);
-			});
+		handlers::tools_shared::ToolsSharedHandlers::RegisterToolsCatalog(host.m_dispatcher, host.m_toolRegistry);
 
 		host.m_dispatcher.Register("gateway.tools.call.preview", [&host](const protocol::RequestFrame& request) {
 			const std::string requestedTool = RequestParamsView(request.paramsJson).GetString("tool");

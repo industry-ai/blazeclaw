@@ -318,12 +318,8 @@ namespace blazeclaw::gateway {
 		EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
 		m_toolRegistry.LoadSkillToolsFromDirectory("blazeclaw/skills");
 		m_toolRegistry.LoadSkillToolsFromDirectory("skills");
-		m_dispatcher.Register("gateway.tools.list", [this](const protocol::RequestFrame& request) {
-			return handlers::tools_shared::ToolsSharedHandlers::HandleToolsList(request, m_toolRegistry);
-			});
-		m_dispatcher.Register("gateway.tools.catalog", [this](const protocol::RequestFrame& request) {
-			return handlers::tools_shared::ToolsSharedHandlers::HandleToolsCatalog(request, m_toolRegistry);
-			});
+		handlers::tools_shared::ToolsSharedHandlers::RegisterToolsList(m_dispatcher, m_toolRegistry);
+		handlers::tools_shared::ToolsSharedHandlers::RegisterToolsCatalog(m_dispatcher, m_toolRegistry);
 		if (!m_runtimeHandlersInitialized) {
 			RegisterRuntimeHandlers();
 			m_runtimeHandlersInitialized = true;

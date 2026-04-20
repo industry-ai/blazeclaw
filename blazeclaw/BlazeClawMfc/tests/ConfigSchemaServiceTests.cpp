@@ -1,4 +1,4 @@
-#include "core/ConfigSchemaService.h"
+﻿#include "core/ConfigSchemaService.h"
 
 #include <catch2/catch_all.hpp>
 

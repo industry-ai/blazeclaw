@@ -7,6 +7,22 @@
 
 namespace blazeclaw::gateway::handlers::tools_shared {
 
+void ToolsSharedHandlers::RegisterToolsList(
+	GatewayMethodDispatcher& dispatcher,
+	GatewayToolRegistry& registry) {
+	dispatcher.Register("gateway.tools.list", [&registry](const protocol::RequestFrame& request) {
+		return HandleToolsList(request, registry);
+	});
+}
+
+void ToolsSharedHandlers::RegisterToolsCatalog(
+	GatewayMethodDispatcher& dispatcher,
+	GatewayToolRegistry& registry) {
+	dispatcher.Register("gateway.tools.catalog", [&registry](const protocol::RequestFrame& request) {
+		return HandleToolsCatalog(request, registry);
+	});
+}
+
 protocol::ResponseFrame ToolsSharedHandlers::HandleToolsList(
 	const protocol::RequestFrame& request,
 	GatewayToolRegistry& registry) {
