@@ -442,6 +442,81 @@ namespace blazeclaw::gateway {
 			return m_dispatcher.Dispatch(forwarded);
 			});
 
+		m_dispatcher.Register("web.login.start", [this](const protocol::RequestFrame& request) {
+			const bool force = ExtractBooleanParamLocal(request.paramsJson, "force").value_or(false);
+			const auto statuses = m_channelRegistry.ListStatus();
+			const auto accounts = m_channelRegistry.ListAccounts();
+			const bool connected = std::any_of(
+				statuses.begin(),
+				statuses.end(),
+				[](const ChannelStatusEntry& status) {
+					return status.id == "whatsapp" && status.connected;
+				});
+
+			if (connected && !force) {
+				return protocol::OkResponse(
+					request,
+					"{\"started\":false,\"status\":\"already_connected\",\"message\":\"WhatsApp already connected.\",\"qrDataUrl\":null}");
+			}
+
+			std::string whatsappAccountId;
+			for (const auto& account : accounts) {
+				if (account.channel == "whatsapp") {
+					whatsappAccountId = account.accountId;
+					break;
+				}
+			}
+
+			if (whatsappAccountId.empty()) {
+				bool created = false;
+				const ChannelAccountEntry createdAccount = m_channelRegistry.CreateAccount(
+					"whatsapp",
+					"whatsapp.default",
+					std::optional<std::string>("WhatsApp Default"),
+					std::optional<bool>(true),
+					std::optional<bool>(false),
+					created);
+				(void)created;
+				whatsappAccountId = createdAccount.accountId;
+			}
+
+			bool updated = false;
+			m_channelRegistry.UpdateAccount(
+				"whatsapp",
+				whatsappAccountId,
+				std::nullopt,
+				std::optional<bool>(true),
+				std::optional<bool>(false),
+				updated);
+
+			const std::string qrDataUrl =
+				"data:text/plain;base64,V2hhdHNBcHAtTG9naW4tUVI6IHNjYW4gdG8gY29ubmVjdA==";
+			return protocol::OkResponse(
+				request,
+				"{\"started\":true,\"status\":\"pending_scan\",\"message\":\"Scan the QR code to connect WhatsApp.\",\"qrDataUrl\":\"" +
+				EscapeJsonLocal(qrDataUrl) + "\"}");
+			});
+
+		m_dispatcher.Register("web.login.wait", [this](const protocol::RequestFrame& request) {
+			const auto statuses = m_channelRegistry.ListStatus();
+			const bool connected = std::any_of(
+				statuses.begin(),
+				statuses.end(),
+				[](const ChannelStatusEntry& status) {
+					return status.id == "whatsapp" && status.connected;
+				});
+
+			if (connected) {
+				return protocol::OkResponse(
+					request,
+					"{\"connected\":true,\"status\":\"connected\",\"message\":\"WhatsApp connected.\"}");
+			}
+
+			return protocol::OkResponse(
+				request,
+				"{\"connected\":false,\"status\":\"pending\",\"message\":\"Waiting for WhatsApp login confirmation.\"}");
+			});
+
 		m_dispatcher.Register("gateway.channels.accounts", [this](const protocol::RequestFrame& request) {
 			const std::string channelFilter = ExtractStringParamLocal(request.paramsJson, "channel");
 			const auto accounts = m_channelRegistry.ListAccounts();

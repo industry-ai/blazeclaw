@@ -986,6 +986,142 @@
             }
         }
 
+        async function startWhatsAppLogin(options) {
+            const opts = options || {};
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            const force = Boolean(opts.force);
+            if (!request || !state.connected || state.whatsappBusy) {
+                return false;
+            }
+
+            state.whatsappBusy = true;
+            onStateUpdated();
+
+            try {
+                const res = await request("web.login.start", {
+                    force: force,
+                    timeoutMs: 30000,
+                });
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return false;
+                }
+
+                const payload = res && res.payload ? res.payload : res;
+                state.whatsappLoginMessage = payload && typeof payload.message === "string"
+                    ? payload.message
+                    : null;
+                state.whatsappLoginQrDataUrl = payload && typeof payload.qrDataUrl === "string"
+                    ? payload.qrDataUrl
+                    : null;
+                state.whatsappLoginConnected = null;
+                return true;
+            } catch (err) {
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return false;
+                }
+
+                state.whatsappLoginMessage = String(err);
+                state.whatsappLoginQrDataUrl = null;
+                state.whatsappLoginConnected = null;
+                return false;
+            } finally {
+                state.whatsappBusy = false;
+                onStateUpdated();
+            }
+        }
+
+        async function waitWhatsAppLogin(options) {
+            const opts = options || {};
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            if (!request || !state.connected || state.whatsappBusy) {
+                return false;
+            }
+
+            state.whatsappBusy = true;
+            onStateUpdated();
+
+            try {
+                const res = await request("web.login.wait", {
+                    timeoutMs: 120000,
+                });
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return false;
+                }
+
+                const payload = res && res.payload ? res.payload : res;
+                state.whatsappLoginMessage = payload && typeof payload.message === "string"
+                    ? payload.message
+                    : null;
+                state.whatsappLoginConnected = payload && typeof payload.connected === "boolean"
+                    ? payload.connected
+                    : null;
+                if (state.whatsappLoginConnected) {
+                    state.whatsappLoginQrDataUrl = null;
+                    await loadChannels({
+                        probe: true,
+                        shouldIgnoreResponse: shouldIgnoreResponse,
+                    });
+                }
+                return Boolean(state.whatsappLoginConnected);
+            } catch (err) {
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return false;
+                }
+
+                state.whatsappLoginMessage = String(err);
+                state.whatsappLoginConnected = null;
+                return false;
+            } finally {
+                state.whatsappBusy = false;
+                onStateUpdated();
+            }
+        }
+
+        async function logoutWhatsApp(options) {
+            const opts = options || {};
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            if (!request || !state.connected || state.whatsappBusy) {
+                return false;
+            }
+
+            state.whatsappBusy = true;
+            onStateUpdated();
+
+            try {
+                await request("channels.logout", {
+                    channel: "whatsapp",
+                });
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return false;
+                }
+
+                state.whatsappLoginMessage = "Logged out.";
+                state.whatsappLoginQrDataUrl = null;
+                state.whatsappLoginConnected = null;
+                await loadChannels({
+                    probe: true,
+                    shouldIgnoreResponse: shouldIgnoreResponse,
+                });
+                return true;
+            } catch (err) {
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return false;
+                }
+
+                state.whatsappLoginMessage = String(err);
+                return false;
+            } finally {
+                state.whatsappBusy = false;
+                onStateUpdated();
+            }
+        }
+
         async function loadAgentCron(agentId) {
             const resolvedAgentId = String(agentId || "").trim();
             if (!resolvedAgentId) {
@@ -1014,6 +1150,13 @@
             }
 
             await loadAgents();
+            if (state.agentsPanel === "channels") {
+                const selectedAgentId = String(state.agentsSelectedId || "").trim();
+                if (selectedAgentId) {
+                    await loadAgentChannels(selectedAgentId);
+                    return;
+                }
+            }
             await loadPanelDataForCurrentAgent();
         }
 
@@ -1241,6 +1384,9 @@
             loadAgentFileContent,
             loadAgentSkills,
             loadChannels,
+            startWhatsAppLogin,
+            waitWhatsAppLogin,
+            logoutWhatsApp,
             loadAgentChannels,
             loadAgentCron,
             loadAgentIdentity,
@@ -1652,6 +1798,365 @@
             });
             await refresh;
             summary.push("config-coupled refresh orchestration");
+        }
+
+        {
+            const state = createRegressionState();
+            state.agentsPanel = "channels";
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const pending = controller.logoutWhatsApp({});
+            const logoutCall = harness.takeNextCall("channels.logout");
+            assertRegression(logoutCall.params && logoutCall.params.channel === "whatsapp",
+                "logoutWhatsApp should target the canonical channels.logout method with whatsapp channel");
+            logoutCall.deferred.resolve({ payload: { loggedOut: true } });
+            const refreshCall = harness.takeNextCall("channels.status");
+            assertRegression(refreshCall.params && refreshCall.params.probe === true,
+                "logoutWhatsApp should refresh channels snapshot with probe=true after success");
+            refreshCall.deferred.resolve({
+                payload: {
+                    ts: 777,
+                    channelOrder: ["whatsapp"],
+                    channelLabels: {
+                        whatsapp: "WhatsApp",
+                    },
+                    channels: {
+                        whatsapp: {
+                            connected: false,
+                            accounts: 1,
+                        },
+                    },
+                    channelAccounts: {
+                        whatsapp: [
+                            {
+                                accountId: "whatsapp.default",
+                                name: "WhatsApp Default",
+                                active: false,
+                                connected: false,
+                            },
+                        ],
+                    },
+                    channelDefaultAccountId: {
+                        whatsapp: "whatsapp.default",
+                    },
+                },
+            });
+            const result = await pending;
+
+            assertRegression(result === true,
+                "logoutWhatsApp should resolve true after successful logout and refresh");
+            assertRegression(state.whatsappBusy === false,
+                "logoutWhatsApp should always reset whatsappBusy in finally");
+            assertRegression(state.whatsappLoginMessage === "Logged out.",
+                "logoutWhatsApp should set the OpenClaw-style logout message");
+            assertRegression(Boolean(state.channelsSnapshot) && state.channelsSnapshot.channels.whatsapp.connected === false,
+                "logoutWhatsApp should refresh canonical channels snapshot after success");
+            summary.push("channels logout refresh");
+        }
+
+        {
+            const state = createRegressionState();
+            state.agentsPanel = "channels";
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const refresh = controller.refreshFromConfigSnapshot();
+            const configCall = harness.takeNextCall("gateway.config.get");
+            const agentsCall = harness.takeNextCall("agents.list");
+            configCall.deferred.resolve({ payload: {} });
+            agentsCall.deferred.resolve({
+                payload: {
+                    agents: [
+                        { id: "main" },
+                    ],
+                    defaultId: "main",
+                },
+            });
+            const channelsCall = harness.takeNextCall("channels.status");
+            channelsCall.deferred.resolve({
+                payload: {
+                    ts: 888,
+                    channelOrder: ["whatsapp"],
+                    channelLabels: {
+                        whatsapp: "WhatsApp",
+                    },
+                    channels: {
+                        whatsapp: {
+                            connected: false,
+                            accounts: 1,
+                        },
+                    },
+                    channelAccounts: {
+                        whatsapp: [
+                            {
+                                accountId: "whatsapp.default",
+                                name: "WhatsApp Default",
+                                active: false,
+                                connected: false,
+                            },
+                        ],
+                    },
+                    channelDefaultAccountId: {
+                        whatsapp: "whatsapp.default",
+                    },
+                },
+            });
+            const routesCall = harness.takeNextCall("gateway.channels.routes");
+            routesCall.deferred.resolve({
+                payload: {
+                    routes: [
+                        {
+                            channel: "whatsapp",
+                            accountId: "whatsapp.default",
+                            agentId: "main",
+                            sessionId: "main",
+                        },
+                    ],
+                },
+            });
+            await refresh;
+
+            assertRegression(Boolean(state.agentChannelsResult) && state.agentChannelsResult.routes.length === 1,
+                "config refresh should explicitly rehydrate the channels panel projection when channels tab is active");
+            summary.push("channels config refresh");
+        }
+
+        {
+            const state = createRegressionState();
+            state.whatsappBusy = true;
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const result = await controller.startWhatsAppLogin({
+                force: false,
+            });
+
+            let shortCircuited = false;
+            try {
+                harness.takeNextCall("web.login.start");
+            } catch (_) {
+                shortCircuited = true;
+            }
+
+            assertRegression(shortCircuited,
+                "startWhatsAppLogin should short-circuit when whatsappBusy is already true");
+            assertRegression(result === false,
+                "startWhatsAppLogin should resolve false when it short-circuits");
+            summary.push("channels login start busy guard");
+        }
+
+        {
+            const state = createRegressionState();
+            state.agentsPanel = "channels";
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const pending = controller.startWhatsAppLogin({
+                force: true,
+            });
+            const startCall = harness.takeNextCall("web.login.start");
+            assertRegression(Boolean(startCall.params) && startCall.params.force === true,
+                "startWhatsAppLogin should forward force flag to web.login.start");
+            assertRegression(startCall.params.timeoutMs === 30000,
+                "startWhatsAppLogin should forward OpenClaw timeout semantics");
+
+            startCall.deferred.resolve({
+                payload: {
+                    started: true,
+                    status: "pending_scan",
+                    message: "Scan the QR code to connect WhatsApp.",
+                    qrDataUrl: "data:image/png;base64,abc123",
+                },
+            });
+            const result = await pending;
+
+            assertRegression(result === true,
+                "startWhatsAppLogin should resolve true after successful start response");
+            assertRegression(state.whatsappBusy === false,
+                "startWhatsAppLogin should reset whatsappBusy after completion");
+            assertRegression(state.whatsappLoginMessage === "Scan the QR code to connect WhatsApp.",
+                "startWhatsAppLogin should bind message from payload");
+            assertRegression(state.whatsappLoginQrDataUrl === "data:image/png;base64,abc123",
+                "startWhatsAppLogin should bind qrDataUrl from payload");
+            assertRegression(state.whatsappLoginConnected === null,
+                "startWhatsAppLogin should clear connected state until wait resolves");
+            summary.push("channels login start success");
+        }
+
+        {
+            const state = createRegressionState();
+            state.agentsPanel = "channels";
+            state.whatsappLoginQrDataUrl = "data:image/png;base64,abc123";
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const pending = controller.waitWhatsAppLogin({});
+            const waitCall = harness.takeNextCall("web.login.wait");
+            assertRegression(waitCall.params && waitCall.params.timeoutMs === 120000,
+                "waitWhatsAppLogin should forward OpenClaw timeout semantics");
+            waitCall.deferred.resolve({
+                payload: {
+                    connected: true,
+                    status: "connected",
+                    message: "WhatsApp connected.",
+                },
+            });
+            const refreshCall = harness.takeNextCall("channels.status");
+            assertRegression(refreshCall.params && refreshCall.params.probe === true,
+                "waitWhatsAppLogin should refresh channels snapshot after connected result");
+            refreshCall.deferred.resolve({
+                payload: {
+                    ts: 901,
+                    channelOrder: ["whatsapp"],
+                    channelLabels: {
+                        whatsapp: "WhatsApp",
+                    },
+                    channels: {
+                        whatsapp: {
+                            connected: true,
+                            accounts: 1,
+                        },
+                    },
+                    channelAccounts: {
+                        whatsapp: [
+                            {
+                                accountId: "whatsapp.default",
+                                name: "WhatsApp Default",
+                                active: true,
+                                connected: true,
+                            },
+                        ],
+                    },
+                    channelDefaultAccountId: {
+                        whatsapp: "whatsapp.default",
+                    },
+                },
+            });
+            const result = await pending;
+
+            assertRegression(result === true,
+                "waitWhatsAppLogin should resolve true when connected becomes true");
+            assertRegression(state.whatsappLoginConnected === true,
+                "waitWhatsAppLogin should bind connected state from payload");
+            assertRegression(state.whatsappLoginMessage === "WhatsApp connected.",
+                "waitWhatsAppLogin should bind message from payload");
+            assertRegression(state.whatsappLoginQrDataUrl === null,
+                "waitWhatsAppLogin should clear qrDataUrl after successful connection");
+            summary.push("channels login wait success");
+        }
+
+        {
+            const state = createRegressionState();
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const pending = controller.startWhatsAppLogin({
+                force: false,
+            });
+            const startCall = harness.takeNextCall("web.login.start");
+            startCall.deferred.reject(new Error("login unavailable"));
+            const result = await pending;
+
+            assertRegression(result === false,
+                "startWhatsAppLogin should resolve false when start request fails");
+            assertRegression(state.whatsappBusy === false,
+                "startWhatsAppLogin should reset whatsappBusy after failure");
+            assertRegression(String(state.whatsappLoginMessage || "").indexOf("login unavailable") >= 0,
+                "startWhatsAppLogin should surface stringified failure message");
+            assertRegression(state.whatsappLoginQrDataUrl === null,
+                "startWhatsAppLogin should clear qrDataUrl on failure");
+            summary.push("channels login start error lifecycle");
+        }
+
+        {
+            const state = createRegressionState();
+            state.whatsappBusy = true;
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const result = await controller.waitWhatsAppLogin({});
+
+            let shortCircuited = false;
+            try {
+                harness.takeNextCall("web.login.wait");
+            } catch (_) {
+                shortCircuited = true;
+            }
+
+            assertRegression(shortCircuited,
+                "waitWhatsAppLogin should short-circuit when whatsappBusy is already true");
+            assertRegression(result === false,
+                "waitWhatsAppLogin should resolve false when it short-circuits");
+            summary.push("channels login wait busy guard");
+        }
+
+        {
+            const state = createRegressionState();
+            state.whatsappBusy = true;
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const result = await controller.logoutWhatsApp({});
+
+            let shortCircuited = false;
+            try {
+                harness.takeNextCall("channels.logout");
+            } catch (_) {
+                shortCircuited = true;
+            }
+
+            assertRegression(shortCircuited,
+                "logoutWhatsApp should short-circuit when whatsappBusy is already true");
+            assertRegression(result === false,
+                "logoutWhatsApp should resolve false when it short-circuits");
+            summary.push("channels logout busy guard");
+        }
+
+        {
+            const state = createRegressionState();
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const pending = controller.logoutWhatsApp({});
+            const logoutCall = harness.takeNextCall("channels.logout");
+            logoutCall.deferred.reject(new Error("logout unavailable"));
+            const result = await pending;
+
+            assertRegression(result === false,
+                "logoutWhatsApp should resolve false when logout request fails");
+            assertRegression(state.whatsappBusy === false,
+                "logoutWhatsApp should reset whatsappBusy after logout failure");
+            assertRegression(String(state.whatsappLoginMessage || "").indexOf("logout unavailable") >= 0,
+                "logoutWhatsApp should surface stringified failure message");
+            summary.push("channels logout error lifecycle");
         }
 
         {

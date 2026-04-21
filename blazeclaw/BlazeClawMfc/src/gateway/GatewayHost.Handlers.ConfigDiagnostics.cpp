@@ -70,14 +70,6 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 			return protocol::OkResponse(request, "{\"started\":false,\"status\":\"not_supported\"}");
 			});
 
-		host.m_dispatcher.Register("web.login.start", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"started\":false,\"status\":\"not_supported\"}");
-			});
-
-		host.m_dispatcher.Register("web.login.wait", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"connected\":false,\"status\":\"not_supported\"}");
-			});
-
 		host.m_dispatcher.Register("doctor.memory.status", [](const protocol::RequestFrame& request) {
 			return protocol::OkResponse(request, "{\"ok\":true,\"status\":\"healthy\"}");
 			});
