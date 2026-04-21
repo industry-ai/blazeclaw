@@ -105,46 +105,51 @@
             state.agentSkillsAgentId = null;
         }
 
-        if (typeof state.channelsLoading !== "boolean") {
-            state.channelsLoading = false;
-        }
-        if (typeof state.channelsError !== "string" && state.channelsError !== null) {
-            state.channelsError = null;
-        }
-        if (!state.channelsSnapshot) {
-            state.channelsSnapshot = null;
-        }
-        if (typeof state.channelsLastSuccess !== "number" && state.channelsLastSuccess !== null) {
-            state.channelsLastSuccess = null;
-        }
-        if (typeof state.whatsappBusy !== "boolean") {
-            state.whatsappBusy = false;
-        }
-        if (typeof state.whatsappLoginMessage !== "string" && state.whatsappLoginMessage !== null) {
-            state.whatsappLoginMessage = null;
-        }
-        if (typeof state.whatsappLoginQrDataUrl !== "string" && state.whatsappLoginQrDataUrl !== null) {
-            state.whatsappLoginQrDataUrl = null;
-        }
-        if (typeof state.whatsappLoginConnected !== "boolean" && state.whatsappLoginConnected !== null) {
-            state.whatsappLoginConnected = null;
-        }
+        const channelsStateContract = window.BlazeClawChannelsStateContract;
+        if (channelsStateContract && typeof channelsStateContract.ensureChannelsStateDefaults === "function") {
+            channelsStateContract.ensureChannelsStateDefaults(state);
+        } else {
+            if (typeof state.channelsLoading !== "boolean") {
+                state.channelsLoading = false;
+            }
+            if (typeof state.channelsError !== "string" && state.channelsError !== null) {
+                state.channelsError = null;
+            }
+            if (!state.channelsSnapshot) {
+                state.channelsSnapshot = null;
+            }
+            if (typeof state.channelsLastSuccess !== "number" && state.channelsLastSuccess !== null) {
+                state.channelsLastSuccess = null;
+            }
+            if (typeof state.whatsappBusy !== "boolean") {
+                state.whatsappBusy = false;
+            }
+            if (typeof state.whatsappLoginMessage !== "string" && state.whatsappLoginMessage !== null) {
+                state.whatsappLoginMessage = null;
+            }
+            if (typeof state.whatsappLoginQrDataUrl !== "string" && state.whatsappLoginQrDataUrl !== null) {
+                state.whatsappLoginQrDataUrl = null;
+            }
+            if (typeof state.whatsappLoginConnected !== "boolean" && state.whatsappLoginConnected !== null) {
+                state.whatsappLoginConnected = null;
+            }
 
-        if (typeof state.agentChannelsLoading !== "boolean") {
-            state.agentChannelsLoading = false;
-        }
-        if (typeof state.agentChannelsError !== "string" && state.agentChannelsError !== null) {
-            state.agentChannelsError = null;
-        }
-        if (!state.agentChannelsResult) {
-            state.agentChannelsResult = null;
-        }
-        if (!state.agentChannelsCapability) {
-            state.agentChannelsCapability = {
-                method: "channels.status",
-                agentScoped: false,
-                todo: "docs/compare/channels.ts/CHANNELS_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md",
-            };
+            if (typeof state.agentChannelsLoading !== "boolean") {
+                state.agentChannelsLoading = false;
+            }
+            if (typeof state.agentChannelsError !== "string" && state.agentChannelsError !== null) {
+                state.agentChannelsError = null;
+            }
+            if (!state.agentChannelsResult) {
+                state.agentChannelsResult = null;
+            }
+            if (!state.agentChannelsCapability) {
+                state.agentChannelsCapability = {
+                    method: "channels.status",
+                    agentScoped: false,
+                    todo: "docs/compare/channels.ts/CHANNELS_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md",
+                };
+            }
         }
 
         if (typeof state.agentCronLoading !== "boolean") {
@@ -1488,6 +1493,43 @@
 
     async function runRegressionChecks() {
         const summary = [];
+
+        {
+            const state = {
+                connected: true,
+            };
+            const harness = createRegressionHarnessRequestStub();
+            createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            assertRegression(state.channelsLoading === false,
+                "channels state contract should initialize channelsLoading=false");
+            assertRegression(state.channelsSnapshot === null,
+                "channels state contract should initialize channelsSnapshot=null");
+            assertRegression(state.channelsError === null,
+                "channels state contract should initialize channelsError=null");
+            assertRegression(state.channelsLastSuccess === null,
+                "channels state contract should initialize channelsLastSuccess=null");
+            assertRegression(state.whatsappBusy === false,
+                "channels state contract should initialize whatsappBusy=false");
+            assertRegression(state.whatsappLoginMessage === null,
+                "channels state contract should initialize whatsappLoginMessage=null");
+            assertRegression(state.whatsappLoginQrDataUrl === null,
+                "channels state contract should initialize whatsappLoginQrDataUrl=null");
+            assertRegression(state.whatsappLoginConnected === null,
+                "channels state contract should initialize whatsappLoginConnected=null");
+            assertRegression(state.agentChannelsLoading === false,
+                "channels extension contract should initialize agentChannelsLoading=false");
+            assertRegression(state.agentChannelsError === null,
+                "channels extension contract should initialize agentChannelsError=null");
+            assertRegression(state.agentChannelsResult === null,
+                "channels extension contract should initialize agentChannelsResult=null");
+            assertRegression(Boolean(state.agentChannelsCapability) && state.agentChannelsCapability.method === "channels.status",
+                "channels extension contract should initialize agentChannelsCapability");
+            summary.push("channels state contract defaults");
+        }
 
         {
             const state = createRegressionState();
