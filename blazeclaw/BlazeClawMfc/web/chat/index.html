@@ -936,6 +936,32 @@
                 }
             }
 
+            function resolveConfigCoerceEnabled() {
+                const search = new URLSearchParams(window.location.search || "");
+                const queryToggle = search.get("configCoerce");
+                if (queryToggle === "0") {
+                    return false;
+                }
+                if (queryToggle === "1") {
+                    return true;
+                }
+
+                try {
+                    if (window.localStorage) {
+                        const storedToggle = window.localStorage.getItem("blazeclaw.config.coerce.enabled");
+                        if (storedToggle === "0") {
+                            return false;
+                        }
+                        if (storedToggle === "1") {
+                            return true;
+                        }
+                    }
+                } catch (_) {
+                }
+
+                return false;
+            }
+
             function loadAgentsPersistenceSnapshot() {
                 try {
                     if (!window.localStorage) {
@@ -983,6 +1009,8 @@
                 } catch (_) {
                 }
             }
+
+            state.configCoerceEnabled = resolveConfigCoerceEnabled();
 
             const agentsEnabled = resolveAgentsEnabled();
             const agentsController = agentsEnabled && window.BlazeClawAgentsController

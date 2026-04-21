@@ -97,6 +97,39 @@
         };
     }
 
+    const MODEL_SELECTION_SCHEMA = {
+        type: "object",
+        properties: {
+            model: { type: "string" },
+        },
+        additionalProperties: true,
+    };
+
+    function stableJsonNormalize(value) {
+        try {
+            return JSON.parse(JSON.stringify(value));
+        } catch (_) {
+            return value;
+        }
+    }
+
+    function coerceConfigMutationPayload(payload, schema) {
+        const normalizedPayload = payload && typeof payload === "object"
+            ? payload
+            : {};
+
+        const configCoerceEnabled = Boolean(window.BlazeClawConfigFormCoerce) &&
+            typeof window.BlazeClawConfigFormCoerce.coerceFormValues === "function";
+        if (!configCoerceEnabled) {
+            return stableJsonNormalize(normalizedPayload);
+        }
+
+        const coerced = window.BlazeClawConfigFormCoerce.coerceFormValues(
+            normalizedPayload,
+            schema || { type: "object", additionalProperties: true });
+        return stableJsonNormalize(coerced);
+    }
+
     function createController(options) {
         const opts = options || {};
         const state = opts.state;
@@ -386,7 +419,7 @@
             }
 
             try {
-                const configResponse = await request("gateway.config.get", {});
+                const configResponse = await request("config.get", {});
                 const model =
                     configResponse &&
                         configResponse.payload &&
@@ -412,17 +445,26 @@
             return state.thinkingOptions.slice();
         }
 
-        async function applyModelSelection(modelId) {
+        async function applyModelSelection(modelId, options) {
             const nextModel = String(modelId || "").trim();
             if (!nextModel) {
                 return false;
             }
 
+            const opts = options && typeof options === "object"
+                ? options
+                : {};
+
             state.selectedModel = nextModel;
             try {
-                await request("gateway.config.set", {
+                const payload = {
                     model: nextModel,
-                });
+                };
+                const shouldCoercePayload = Boolean(state.configCoerceEnabled);
+                const params = shouldCoercePayload
+                    ? coerceConfigMutationPayload(payload, MODEL_SELECTION_SCHEMA)
+                    : stableJsonNormalize(payload);
+                await requestWithOverride("config.set", params, opts.requestOverride);
             } catch (error) {
                 addMessage(`model update error: ${String(error)}`, "error");
                 return false;
@@ -919,6 +961,7 @@
             seenBridgeSeq: new Set(),
             seenBridgeIds: new Set(),
             abortBtn: { disabled: true },
+            configCoerceEnabled: false,
         };
     }
 
@@ -930,6 +973,58 @@
 
     async function runRegressionChecks() {
         const summary = [];
+
+        {
+            const baseSchema = {
+                type: "object",
+                properties: {
+                    value: { type: "number" },
+                    enabled: { type: "boolean" },
+                    unionField: {
+                        anyOf: [
+                            { type: "null" },
+                            { type: "number" },
+                            { type: "boolean" },
+                        ],
+                    },
+                    nested: {
+                        type: "object",
+                        additionalProperties: {
+                            type: "array",
+                            items: { type: "integer" },
+                        },
+                    },
+                },
+            };
+
+            const payload = {
+                value: "42.5",
+                enabled: "true",
+                unionField: "7",
+                nested: {
+                    listA: ["1", "2", "3"],
+                    listB: ["4", "x"],
+                },
+                untouched: "keep",
+            };
+
+            const coerced = coerceConfigMutationPayload(payload, baseSchema);
+            assertRegression(typeof coerced.value === "number" && coerced.value === 42.5,
+                "config payload coercion should convert numeric string fields");
+            assertRegression(typeof coerced.enabled === "boolean" && coerced.enabled === true,
+                "config payload coercion should convert boolean string fields");
+            assertRegression(typeof coerced.unionField === "number" && coerced.unionField === 7,
+                "config payload coercion should apply anyOf numeric variant when matched");
+            assertRegression(Array.isArray(coerced.nested.listA) &&
+                coerced.nested.listA[0] === 1 &&
+                coerced.nested.listA[2] === 3,
+                "config payload coercion should recurse through nested arrays and integer items");
+            assertRegression(coerced.nested.listB[1] === "x",
+                "config payload coercion should preserve non-coercible values");
+            assertRegression(coerced.untouched === "keep",
+                "config payload coercion should preserve unknown additional properties");
+            summary.push("config coercion parity fixtures");
+        }
 
         {
             const state = createRegressionState();
@@ -1032,6 +1127,30 @@
                 state.assistantAgentId === "agent-persisted",
                 "assistant identity loader should retain last known values on request failure");
             summary.push("assistant error retention");
+        }
+
+        {
+            const state = createRegressionState();
+            state.configCoerceEnabled = true;
+            const calls = [];
+            const controller = createController({
+                state,
+                addMessage: function () { },
+            });
+
+            const ok = await controller.applyModelSelection("next-model", {
+                requestOverride: async (method, params) => {
+                    calls.push({ method, params });
+                    return { payload: { updated: true } };
+                },
+            });
+            assertRegression(ok === true,
+                "config submit path should resolve success when config.set request succeeds");
+            assertRegression(calls.length === 1 && calls[0].method === "config.set",
+                "config submit path should call canonical config.set");
+            assertRegression(calls[0].params && calls[0].params.model === "next-model",
+                "config submit path should preserve model value through coercion pipeline");
+            summary.push("config submit path smoke");
         }
 
         return {
