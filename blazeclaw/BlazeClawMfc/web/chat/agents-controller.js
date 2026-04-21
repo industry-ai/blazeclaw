@@ -1387,6 +1387,123 @@
             summary.push("identity error lifecycle");
         }
 
+        {
+            const state = createRegressionState();
+            state.agentsPanel = "skills";
+            state.agentSkillsLoading = true;
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            await controller.loadAgentSkills("main");
+
+            let skippedDueToLoading = false;
+            try {
+                harness.takeNextCall("skills.status");
+            } catch (_) {
+                skippedDueToLoading = true;
+            }
+
+            assertRegression(skippedDueToLoading,
+                "agent-skills loader should skip request when loading flag is already true");
+            summary.push("agent-skills loading guard");
+        }
+
+        {
+            const state = createRegressionState();
+            state.agentsPanel = "skills";
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const pending = controller.loadAgentSkills("main");
+            const skillsCall = harness.takeNextCall("skills.status");
+            skillsCall.deferred.resolve({
+                payload: {
+                    workspaceDir: "E:/workspace",
+                    managedSkillsDir: "E:/workspace/.skills",
+                    skills: [
+                        {
+                            name: "search",
+                            description: "Search docs",
+                            skillKey: "search",
+                        },
+                    ],
+                },
+            });
+            await pending;
+
+            assertRegression(state.agentSkillsLoading === false,
+                "agent-skills loader should reset loading flag after success");
+            assertRegression(state.agentSkillsError === null,
+                "agent-skills loader should keep error cleared after success");
+            assertRegression(state.agentSkillsAgentId === "main",
+                "agent-skills loader should bind report to requested agent id");
+            assertRegression(Boolean(state.agentSkillsReport) &&
+                Array.isArray(state.agentSkillsReport.skills) &&
+                state.agentSkillsReport.skills.length === 1,
+                "agent-skills loader should populate OpenClaw-style report payload");
+            summary.push("agent-skills success binding");
+        }
+
+        {
+            const state = createRegressionState();
+            state.agentsPanel = "skills";
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const pending = controller.loadAgentSkills("main");
+            const skillsCall = harness.takeNextCall("skills.status");
+            controller.setAgentsPanel("cron");
+
+            skillsCall.deferred.resolve({
+                payload: {
+                    workspaceDir: "E:/workspace",
+                    managedSkillsDir: "E:/workspace/.skills",
+                    skills: [
+                        {
+                            name: "ignored",
+                            description: "stale",
+                            skillKey: "ignored",
+                        },
+                    ],
+                },
+            });
+            await pending;
+
+            assertRegression(state.agentSkillsReport === null && state.agentSkillsAgentId === null,
+                "agent-skills stale response should be suppressed after panel switch");
+            summary.push("agent-skills stale suppression");
+        }
+
+        {
+            const state = createRegressionState();
+            state.agentsPanel = "skills";
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const pending = controller.loadAgentSkills("main");
+            const skillsCall = harness.takeNextCall("skills.status");
+            skillsCall.deferred.reject(new Error("skills unavailable"));
+            await pending;
+
+            assertRegression(state.agentSkillsLoading === false,
+                "agent-skills loader should always reset loading flag in finally");
+            assertRegression(String(state.agentSkillsError || "").indexOf("skills unavailable") >= 0,
+                "agent-skills loader should capture stringified error semantics");
+            summary.push("agent-skills error lifecycle");
+        }
+
         return {
             ok: true,
             checks: summary,
