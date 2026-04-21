@@ -531,6 +531,44 @@
           rows.push(`<div class=\"agents-row\">Agent-scoped endpoint: ${skillsResult && skillsResult.agentScoped ? "yes" : "no (capability-gated)"}</div>`);
         }
 
+        if (panel === "channels") {
+          if (state.agentChannelsLoading) {
+            rows.push("<div class=\"agents-row\">Loading channels...</div>");
+          }
+          if (state.agentChannelsError) {
+            rows.push(`<div class=\"agents-row error\">${state.agentChannelsError}</div>`);
+          }
+
+          const channelResult = state.agentChannelsResult || null;
+          const channels = channelResult && Array.isArray(channelResult.channels)
+            ? channelResult.channels
+            : [];
+          const routes = channelResult && Array.isArray(channelResult.routes)
+            ? channelResult.routes
+            : [];
+          rows.push(`<div class=\"agents-row\">Channels: ${channels.length}</div>`);
+          rows.push(`<div class=\"agents-row\">Agent-related routes: ${routes.length}</div>`);
+          rows.push("<div class=\"agents-row\">Capability mode: shared channels status/routes (agent-scoped view via route filtering)</div>");
+          rows.push("<div class=\"agents-row\">TODO parity track: docs/compare/ui.controllers.md#2-mechanical-audit-openclawuisrcuicontrollers</div>");
+        }
+
+        if (panel === "cron") {
+          if (state.agentCronLoading) {
+            rows.push("<div class=\"agents-row\">Loading cron surface...</div>");
+          }
+          if (state.agentCronError) {
+            rows.push(`<div class=\"agents-row error\">${state.agentCronError}</div>`);
+          }
+
+          const cronResult = state.agentCronResult || null;
+          const jobs = cronResult && Array.isArray(cronResult.jobs)
+            ? cronResult.jobs
+            : [];
+          rows.push(`<div class=\"agents-row\">Cron jobs: ${jobs.length}</div>`);
+          rows.push("<div class=\"agents-row\">Capability mode: gateway cron endpoint not registered in BlazeClaw (explicitly gated)</div>");
+          rows.push("<div class=\"agents-row\">TODO parity track: docs/compare/ui.controllers.md#2-mechanical-audit-openclawuisrcuicontrollers</div>");
+        }
+
         state.agentsSurfaceEl.innerHTML = rows.join("");
 
         state.agentsSurfaceEl.querySelectorAll("[data-agent-id]").forEach((el) => {
@@ -540,6 +578,11 @@
               return;
             }
             agentsController.setSelectedAgentId(agentId);
+            persistAgentsSnapshot(agentsController.getPersistenceSnapshot());
+            emitAgentsTelemetry("agent.selected", {
+              agentId,
+              panel: state.agentsPanel,
+            });
             void agentsController.loadPanelDataForCurrentAgent();
           });
         });
@@ -560,6 +603,8 @@
           { id: "tools", label: "Tools" },
           { id: "files", label: "Files" },
           { id: "skills", label: "Skills" },
+          { id: "channels", label: "Channels" },
+          { id: "cron", label: "Cron" },
         ];
         const current = String(state.agentsPanel || "overview");
 
@@ -572,6 +617,10 @@
           el.addEventListener("click", () => {
             const panel = String(el.getAttribute("data-panel") || "").trim();
             agentsController.setAgentsPanel(panel);
+            persistAgentsSnapshot(agentsController.getPersistenceSnapshot());
+            emitAgentsTelemetry("tab.selected", {
+              panel,
+            });
             void agentsController.loadPanelDataForCurrentAgent();
           });
         });
@@ -656,6 +705,54 @@
         }
       }
 
+      function loadAgentsPersistenceSnapshot() {
+        try {
+          if (!window.localStorage) {
+            return null;
+          }
+
+          const raw = window.localStorage.getItem("blazeclaw.agents.persistence");
+          if (!raw) {
+            return null;
+          }
+
+          const parsed = JSON.parse(raw);
+          if (!parsed || typeof parsed !== "object") {
+            return null;
+          }
+
+          return {
+            panel: String(parsed.panel || "overview"),
+            selectedAgentId: typeof parsed.selectedAgentId === "string"
+              ? parsed.selectedAgentId
+              : null,
+          };
+        } catch (_) {
+          return null;
+        }
+      }
+
+      function persistAgentsSnapshot(snapshot) {
+        try {
+          if (!window.localStorage) {
+            return;
+          }
+
+          window.localStorage.setItem(
+            "blazeclaw.agents.persistence",
+            JSON.stringify(snapshot || {})
+          );
+        } catch (_) {
+        }
+      }
+
+      function emitAgentsTelemetry(eventName, payload) {
+        try {
+          console.log("[agents-control-plane]", eventName, payload || {});
+        } catch (_) {
+        }
+      }
+
       const agentsEnabled = resolveAgentsEnabled();
       const agentsController = agentsEnabled && window.BlazeClawAgentsController
         ? window.BlazeClawAgentsController.createAgentsController({
@@ -667,8 +764,17 @@
 
       if (agentsController) {
         state.agentsPanel = "overview";
+        const persisted = loadAgentsPersistenceSnapshot();
+        if (persisted) {
+          agentsController.applyPersistenceSnapshot(persisted);
+          emitAgentsTelemetry("persistence.restored", persisted);
+        }
+
         state.onSessionChanged = () => {
           agentsController.syncSessionContext({
+            sessionKey: state.sessionKey,
+          });
+          emitAgentsTelemetry("session.changed", {
             sessionKey: state.sessionKey,
           });
           void agentsController.loadPanelDataForCurrentAgent();
@@ -677,7 +783,10 @@
           agentsController.syncSessionContext({
             sessionKey: state.sessionKey,
           });
-          void agentsController.loadPanelDataForCurrentAgent();
+          emitAgentsTelemetry("model.changed", {
+            model: state.selectedModel,
+          });
+          void agentsController.refreshFromConfigSnapshot();
         };
         agentsController.syncSessionContext({
           sessionKey: state.sessionKey,
@@ -689,10 +798,16 @@
             .then((result) => {
               if (result && result.ok) {
                 console.log("[agents-regression] passed:", result.checks);
+                emitAgentsTelemetry("regression.passed", {
+                  checks: result.checks,
+                });
               }
             })
             .catch((err) => {
               console.error("[agents-regression] failed:", err);
+              emitAgentsTelemetry("regression.failed", {
+                error: String(err || ""),
+              });
             });
         }
       }
@@ -718,6 +833,11 @@
       if (agentsController) {
         void agentsController.loadAgents().then(() => {
           if (state.agentsSelectedId) {
+            persistAgentsSnapshot(agentsController.getPersistenceSnapshot());
+            emitAgentsTelemetry("initial.agent.ready", {
+              agentId: state.agentsSelectedId,
+              panel: state.agentsPanel,
+            });
             return agentsController.loadPanelDataForCurrentAgent();
           }
           return undefined;

@@ -59,7 +59,7 @@
             state.toolsEffectiveResult = null;
         }
 
-        const supportedPanels = ["overview", "tools", "files", "skills"];
+        const supportedPanels = ["overview", "tools", "files", "skills", "channels", "cron"];
         if (supportedPanels.indexOf(String(state.agentsPanel || "")) < 0) {
             state.agentsPanel = "overview";
         }
@@ -97,6 +97,47 @@
         }
         if (!state.agentSkillsResult) {
             state.agentSkillsResult = null;
+        }
+
+        if (typeof state.agentChannelsLoading !== "boolean") {
+            state.agentChannelsLoading = false;
+        }
+        if (typeof state.agentChannelsError !== "string" && state.agentChannelsError !== null) {
+            state.agentChannelsError = null;
+        }
+        if (!state.agentChannelsResult) {
+            state.agentChannelsResult = null;
+        }
+        if (!state.agentChannelsCapability) {
+            state.agentChannelsCapability = {
+                method: "gateway.channels.status",
+                agentScoped: false,
+                todo: "docs/compare/ui.controllers.md#2-mechanical-audit-openclawuisrcuicontrollers",
+            };
+        }
+
+        if (typeof state.agentCronLoading !== "boolean") {
+            state.agentCronLoading = false;
+        }
+        if (typeof state.agentCronError !== "string" && state.agentCronError !== null) {
+            state.agentCronError = null;
+        }
+        if (!state.agentCronResult) {
+            state.agentCronResult = null;
+        }
+        if (!state.agentCronCapability) {
+            state.agentCronCapability = {
+                method: "(none)",
+                agentScoped: false,
+                todo: "docs/compare/ui.controllers.md#2-mechanical-audit-openclawuisrcuicontrollers",
+            };
+        }
+
+        if (!state.agentsPersistence || typeof state.agentsPersistence !== "object") {
+            state.agentsPersistence = {
+                selectedAgentId: null,
+                panel: "overview",
+            };
         }
 
         if (!state.chatModelOverrides || typeof state.chatModelOverrides !== "object") {
@@ -408,7 +449,8 @@
 
             function shouldIgnoreResponse() {
                 return state.agentFilesLoadingAgentId !== resolvedAgentId ||
-                    hasSelectedAgentMismatch(resolvedAgentId);
+                    hasSelectedAgentMismatch(resolvedAgentId) ||
+                    state.agentsPanel !== "files";
             }
 
             state.agentFilesLoading = true;
@@ -459,7 +501,8 @@
 
             function shouldIgnoreResponse() {
                 return state.agentFileContentLoadingKey !== requestKey ||
-                    hasSelectedAgentMismatch(resolvedAgentId);
+                    hasSelectedAgentMismatch(resolvedAgentId) ||
+                    state.agentsPanel !== "files";
             }
 
             state.agentFileContentLoading = true;
@@ -499,6 +542,10 @@
                 return;
             }
 
+            function shouldIgnoreResponse() {
+                return hasSelectedAgentMismatch(resolvedAgentId) || state.agentsPanel !== "skills";
+            }
+
             state.agentSkillsLoading = true;
             state.agentSkillsError = null;
             state.agentSkillsResult = null;
@@ -508,6 +555,10 @@
                 const res = await request("gateway.skills.commands", {
                     agentId: resolvedAgentId,
                 });
+                if (shouldIgnoreResponse()) {
+                    return;
+                }
+
                 const payload = res && res.payload ? res.payload : null;
                 const commands = payload && Array.isArray(payload.commands) ? payload.commands : [];
                 state.agentSkillsResult = {
@@ -517,6 +568,10 @@
                     agentScoped: false,
                 };
             } catch (err) {
+                if (shouldIgnoreResponse()) {
+                    return;
+                }
+
                 state.agentSkillsError = resolveToolsErrorMessage(err, "agent skills");
             } finally {
                 state.agentSkillsLoading = false;
@@ -524,12 +579,93 @@
             }
         }
 
+        async function loadAgentChannels(agentId) {
+            const resolvedAgentId = String(agentId || "").trim();
+            if (!request || !state.connected || !resolvedAgentId || state.agentChannelsLoading) {
+                return;
+            }
+
+            function shouldIgnoreResponse() {
+                return hasSelectedAgentMismatch(resolvedAgentId) || state.agentsPanel !== "channels";
+            }
+
+            state.agentChannelsLoading = true;
+            state.agentChannelsError = null;
+            state.agentChannelsResult = null;
+            onStateUpdated();
+
+            try {
+                const statusRes = await request("gateway.channels.status", {});
+                const routesRes = await request("gateway.channels.routes", {});
+                if (shouldIgnoreResponse()) {
+                    return;
+                }
+
+                const payload = statusRes && statusRes.payload ? statusRes.payload : null;
+                const routePayload = routesRes && routesRes.payload ? routesRes.payload : null;
+                const channels = payload && Array.isArray(payload.channels) ? payload.channels : [];
+                const routes = routePayload && Array.isArray(routePayload.routes) ? routePayload.routes : [];
+                const filteredRoutes = routes.filter(function (route) {
+                    return route && (!route.agentId || route.agentId === resolvedAgentId);
+                });
+
+                state.agentChannelsResult = {
+                    channels,
+                    routes: filteredRoutes,
+                    capability: state.agentChannelsCapability,
+                };
+            } catch (err) {
+                if (shouldIgnoreResponse()) {
+                    return;
+                }
+
+                state.agentChannelsError = resolveToolsErrorMessage(err, "agent channels");
+            } finally {
+                state.agentChannelsLoading = false;
+                onStateUpdated();
+            }
+        }
+
+        async function loadAgentCron(agentId) {
+            const resolvedAgentId = String(agentId || "").trim();
+            if (!resolvedAgentId) {
+                return;
+            }
+
+            state.agentCronLoading = true;
+            state.agentCronError = null;
+            state.agentCronResult = {
+                jobs: [],
+                capability: state.agentCronCapability,
+                status: "not_available",
+            };
+            state.agentCronLoading = false;
+            onStateUpdated();
+        }
+
+        async function refreshFromConfigSnapshot() {
+            if (!request || !state.connected) {
+                return;
+            }
+
+            try {
+                await request("gateway.config.get", {});
+            } catch (_) {
+            }
+
+            await loadAgents();
+            await loadPanelDataForCurrentAgent();
+        }
+
         function setAgentsPanel(panel) {
             const panelValue = String(panel || "").trim();
-            const normalized = ["overview", "tools", "files", "skills"].indexOf(panelValue) >= 0
+            const normalized = ["overview", "tools", "files", "skills", "channels", "cron"].indexOf(panelValue) >= 0
                 ? panelValue
                 : "overview";
             state.agentsPanel = normalized;
+            if (state.agentsPersistence && typeof state.agentsPersistence === "object") {
+                state.agentsPersistence.panel = normalized;
+            }
             onStateUpdated();
         }
 
@@ -565,6 +701,16 @@
 
             if (state.agentsPanel === "skills") {
                 await loadAgentSkills(selectedAgentId);
+                return;
+            }
+
+            if (state.agentsPanel === "channels") {
+                await loadAgentChannels(selectedAgentId);
+                return;
+            }
+
+            if (state.agentsPanel === "cron") {
+                await loadAgentCron(selectedAgentId);
             }
         }
 
@@ -589,12 +735,17 @@
         function setSelectedAgentId(agentId) {
             const nextAgentId = String(agentId || "").trim() || null;
             state.agentsSelectedId = nextAgentId;
+            if (state.agentsPersistence && typeof state.agentsPersistence === "object") {
+                state.agentsPersistence.selectedAgentId = nextAgentId;
+            }
             state.toolsCatalogResult = null;
             state.toolsEffectiveResult = null;
             state.toolsEffectiveResultKey = null;
             state.agentFilesResult = null;
             state.agentFileContentResult = null;
             state.agentSkillsResult = null;
+            state.agentChannelsResult = null;
+            state.agentCronResult = null;
             onStateUpdated();
         }
 
@@ -612,7 +763,30 @@
             if (params && Array.isArray(params.chatModelCatalog)) {
                 state.chatModelCatalog = params.chatModelCatalog;
             }
+            if (params && params.agentsPersistence && typeof params.agentsPersistence === "object") {
+                state.agentsPersistence = params.agentsPersistence;
+            }
             onStateUpdated();
+        }
+
+        function getPersistenceSnapshot() {
+            return {
+                panel: String(state.agentsPanel || "overview"),
+                selectedAgentId: String(state.agentsSelectedId || "").trim() || null,
+            };
+        }
+
+        function applyPersistenceSnapshot(snapshot) {
+            if (!snapshot || typeof snapshot !== "object") {
+                return;
+            }
+
+            if (snapshot.panel) {
+                setAgentsPanel(snapshot.panel);
+            }
+            if (snapshot.selectedAgentId) {
+                setSelectedAgentId(snapshot.selectedAgentId);
+            }
         }
 
         return {
@@ -622,7 +796,10 @@
             loadAgentFiles,
             loadAgentFileContent,
             loadAgentSkills,
+            loadAgentChannels,
+            loadAgentCron,
             loadPanelDataForCurrentAgent,
+            refreshFromConfigSnapshot,
             resetToolsEffectiveState,
             buildToolsEffectiveRequestKey,
             buildAgentFileContentRequestKey,
@@ -631,6 +808,8 @@
             setSelectedAgentId,
             setAgentsPanel,
             syncSessionContext,
+            getPersistenceSnapshot,
+            applyPersistenceSnapshot,
         };
     }
 
@@ -688,6 +867,10 @@
                 },
             ],
             chatModelOverrides: {},
+            agentsPersistence: {
+                panel: "tools",
+                selectedAgentId: "main",
+            },
             sessionsResult: {
                 defaults: {
                     model: "gpt-4.1-mini",
@@ -814,6 +997,134 @@
                 "This connection is missing operator.read, so tools catalog cannot be loaded yet.",
                 "scope-error UX message should be normalized for tools catalog");
             summary.push("scope-error UX");
+        }
+
+        {
+            const state = createRegressionState();
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            controller.setAgentsPanel("files");
+            const firstLoad = controller.loadPanelDataForCurrentAgent();
+            const firstCall = harness.takeNextCall("gateway.agents.files.list");
+
+            controller.setAgentsPanel("skills");
+            const secondLoad = controller.loadPanelDataForCurrentAgent();
+            const secondCall = harness.takeNextCall("gateway.skills.commands");
+
+            firstCall.deferred.resolve({
+                payload: {
+                    files: [
+                        {
+                            path: "README.md",
+                        },
+                    ],
+                },
+            });
+            await firstLoad;
+            assertRegression(state.agentFilesResult === null,
+                "cross-tab stale file response should be suppressed after panel switch");
+
+            secondCall.deferred.resolve({
+                payload: {
+                    commands: [],
+                    count: 0,
+                },
+            });
+            await secondLoad;
+            assertRegression(Boolean(state.agentSkillsResult),
+                "current tab response should remain after cross-tab request overlap");
+            summary.push("cross-tab stale suppression");
+        }
+
+        {
+            const state = createRegressionState();
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            controller.setAgentsPanel("channels");
+            const channelsLoad = controller.loadPanelDataForCurrentAgent();
+            const channelsStatus = harness.takeNextCall("gateway.channels.status");
+            const channelsRoutes = harness.takeNextCall("gateway.channels.routes");
+
+            controller.setAgentsPanel("cron");
+            await controller.loadPanelDataForCurrentAgent();
+
+            channelsStatus.deferred.resolve({
+                payload: {
+                    channels: [
+                        {
+                            id: "wechat",
+                        },
+                    ],
+                },
+            });
+            channelsRoutes.deferred.resolve({
+                payload: {
+                    routes: [],
+                },
+            });
+            await channelsLoad;
+
+            assertRegression(state.agentChannelsResult === null,
+                "stale channels response should be suppressed after switching away from channels tab");
+            summary.push("channels stale suppression");
+        }
+
+        {
+            const state = createRegressionState();
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const refresh = controller.refreshFromConfigSnapshot();
+            const configCall = harness.takeNextCall("gateway.config.get");
+            const agentsCall = harness.takeNextCall("agents.list");
+            configCall.deferred.resolve({ payload: {} });
+            agentsCall.deferred.resolve({
+                payload: {
+                    agents: [
+                        { id: "main" },
+                    ],
+                    defaultId: "main",
+                },
+            });
+            await refresh;
+            summary.push("config-coupled refresh orchestration");
+        }
+
+        {
+            const state = createRegressionState();
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            controller.setAgentsPanel("channels");
+            controller.setSelectedAgentId("reviewer");
+            const snapshot = controller.getPersistenceSnapshot();
+
+            assertRegression(snapshot.panel === "channels",
+                "persistence snapshot should retain selected control-plane tab");
+            assertRegression(snapshot.selectedAgentId === "reviewer",
+                "persistence snapshot should retain selected agent id");
+
+            controller.applyPersistenceSnapshot({
+                panel: "cron",
+                selectedAgentId: "main",
+            });
+            assertRegression(state.agentsPanel === "cron" && state.agentsSelectedId === "main",
+                "persistence restore should deterministically apply panel + selected agent");
+            summary.push("persistence restore");
         }
 
         return {
