@@ -106,6 +106,14 @@
     };
 
     function stableJsonNormalize(value) {
+        const formUtils = window.BlazeClawConfigFormUtils;
+        if (formUtils && typeof formUtils.cloneConfigObject === "function") {
+            try {
+                return formUtils.cloneConfigObject(value);
+            } catch (_) {
+            }
+        }
+
         try {
             return JSON.parse(JSON.stringify(value));
         } catch (_) {
@@ -1024,6 +1032,60 @@
             assertRegression(coerced.untouched === "keep",
                 "config payload coercion should preserve unknown additional properties");
             summary.push("config coercion parity fixtures");
+        }
+
+        {
+            const formUtils = window.BlazeClawConfigFormUtils;
+            assertRegression(Boolean(formUtils),
+                "config form-utils module should be available");
+            assertRegression(typeof formUtils.cloneConfigObject === "function",
+                "config form-utils should expose cloneConfigObject");
+            assertRegression(typeof formUtils.serializeConfigForm === "function",
+                "config form-utils should expose serializeConfigForm");
+            assertRegression(typeof formUtils.setPathValue === "function",
+                "config form-utils should expose setPathValue");
+            assertRegression(typeof formUtils.removePathValue === "function",
+                "config form-utils should expose removePathValue");
+
+            const source = {
+                gateway: {
+                    auth: {
+                        token: "abc",
+                    },
+                    port: 18789,
+                },
+                list: [{ id: "a" }, { id: "b" }],
+            };
+            const cloned = formUtils.cloneConfigObject(source);
+            formUtils.setPathValue(cloned, ["gateway", "auth", "token"], "xyz");
+            formUtils.setPathValue(cloned, ["list", 1, "id"], "b2");
+            formUtils.removePathValue(cloned, ["list", 0]);
+            formUtils.setPathValue(cloned, ["__proto__", "polluted"], true);
+
+            assertRegression(source.gateway.auth.token === "abc",
+                "config form-utils clone should not mutate source object");
+            assertRegression(cloned.gateway.auth.token === "xyz",
+                "config form-utils setPathValue should update nested object paths");
+            assertRegression(Array.isArray(cloned.list) && cloned.list.length === 1,
+                "config form-utils removePathValue should splice array indexes");
+            assertRegression(cloned.list[0].id === "b2",
+                "config form-utils path updates should support mixed object-array traversal");
+            assertRegression(({}).polluted === undefined,
+                "config form-utils should reject forbidden prototype pollution path keys");
+
+            const raw = formUtils.serializeConfigForm({
+                gateway: {
+                    port: 18789,
+                },
+            });
+            assertRegression(raw.endsWith("\n"),
+                "config form-utils serializeConfigForm should append trailing newline");
+
+            const reparsed = JSON.parse(raw);
+            assertRegression(reparsed.gateway.port === 18789,
+                "config form-utils serializeConfigForm should preserve numeric values");
+
+            summary.push("config form-utils parity fixtures");
         }
 
         {
