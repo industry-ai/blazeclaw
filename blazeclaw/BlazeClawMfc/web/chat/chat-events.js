@@ -262,6 +262,11 @@
             if (state.connected && !wasConnected) {
                 void controller.loadHistory();
             }
+            if (state.connected) {
+                void controller.loadAssistantIdentity({
+                    sessionKey: state.sessionKey,
+                });
+            }
 
             updateComposerState();
         }

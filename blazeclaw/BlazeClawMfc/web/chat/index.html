@@ -1,897 +1,940 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>BlazeClaw Chat</title>
-  <style>
-    :root { color-scheme: dark; }
-    body {
-      margin: 0;
-      font-family: "Segoe UI", sans-serif;
-      background: #1e1e1e;
-      color: #f0f0f0;
-    }
-    .app {
-      display: grid;
-      grid-template-rows: auto 1fr auto;
-      height: 100vh;
-    }
-    .header {
-      padding: 10px 14px;
-      border-bottom: 1px solid #333;
-      font-weight: 600;
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      align-items: center;
-    }
-    .status {
-      font-size: 12px;
-      color: #9cc8ff;
-    }
-    .agents-control-plane {
-      border-bottom: 1px solid #2f2f2f;
-      padding: 8px 10px;
-      background: #1a1a1a;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .agents-tabs {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-    .agents-tab {
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid #4a4a4a;
-      background: #262626;
-      font-size: 12px;
-    }
-    .agents-tab.active {
-      background: #32445f;
-      border-color: #6fa1db;
-      color: #d8e8ff;
-    }
-    .agents-surface {
-      border: 1px solid #343434;
-      border-radius: 8px;
-      background: #202020;
-      padding: 8px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      font-size: 12px;
-    }
-    .agents-surface-title {
-      color: #d8e8ff;
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
-    .agents-row {
-      color: #d0d0d0;
-      line-height: 1.4;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    .agents-row.error {
-      color: #ffb3b3;
-    }
-    .agents-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-    }
-    .agents-chip {
-      border: 1px solid #4a4a4a;
-      border-radius: 999px;
-      padding: 2px 8px;
-      background: #2a2a2a;
-      font-size: 11px;
-    }
-    .agents-chip.active {
-      border-color: #80b2eb;
-      background: #314761;
-      color: #dfefff;
-    }
-    .messages {
-      overflow: auto;
-      padding: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .msg {
-      max-width: 78%;
-      padding: 8px 10px;
-      border-radius: 10px;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    .self {
-      align-self: flex-end;
-      background: #2d5f2f;
-    }
-    .peer {
-      align-self: flex-start;
-      background: #2d2d2d;
-    }
-    .error {
-      align-self: flex-start;
-      background: #7a1f1f;
-    }
-    .tool-timeline {
-      align-self: flex-start;
-      width: min(92%, 720px);
-      border: 1px solid #3a3a3a;
-      border-radius: 10px;
-      background: #242424;
-      padding: 8px 10px;
-      font-size: 12px;
-    }
-    .tool-timeline .title {
-      color: #d2e3ff;
-      font-weight: 600;
-      margin-bottom: 6px;
-    }
-    .tool-row {
-      display: flex;
-      gap: 8px;
-      margin-top: 4px;
-      color: #d0d0d0;
-    }
-    .tool-phase {
-      min-width: 110px;
-      color: #8ec7ff;
-    }
-    .tool-phase.error {
-      color: #ff9494;
-    }
-    .tool-phase.approval {
-      color: #ffd48a;
-    }
-    .composer {
-      display: grid;
-      grid-template-columns: 1fr auto auto auto auto;
-      gap: 8px;
-      padding: 10px;
-      border-top: 1px solid #333;
-      position: relative;
-    }
-    .composer-controls {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 8px;
-      padding: 0 10px 10px 10px;
-      border-top: 1px solid #2b2b2b;
-    }
-    select {
-      border: 1px solid #555;
-      border-radius: 8px;
-      padding: 8px;
-      background: #111;
-      color: #f0f0f0;
-    }
-    .slash-menu {
-      position: absolute;
-      left: 10px;
-      right: 10px;
-      bottom: 88px;
-      max-height: 220px;
-      overflow: auto;
-      border: 1px solid #3a3a3a;
-      border-radius: 8px;
-      background: #181818;
-      display: none;
-      z-index: 5;
-    }
-    .slash-item {
-      padding: 8px 10px;
-      border-bottom: 1px solid #2d2d2d;
-      cursor: pointer;
-    }
-    .slash-item:last-child {
-      border-bottom: none;
-    }
-    .slash-item.active {
-      background: #2d3950;
-    }
-    .slash-name {
-      color: #d8e7ff;
-      font-weight: 600;
-    }
-    .slash-desc {
-      color: #a8a8a8;
-      font-size: 12px;
-    }
-    textarea {
-      resize: none;
-      min-height: 56px;
-      max-height: 160px;
-      padding: 8px;
-      border-radius: 8px;
-      border: 1px solid #555;
-      background: #111;
-      color: #f0f0f0;
-    }
-    button {
-      border: 1px solid #555;
-      border-radius: 8px;
-      padding: 0 14px;
-      background: #2b2b2b;
-      color: #f0f0f0;
-      cursor: pointer;
-    }
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-  </style>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BlazeClaw Chat</title>
+    <style>
+        :root {
+            color-scheme: dark;
+        }
+
+        body {
+            margin: 0;
+            font-family: "Segoe UI", sans-serif;
+            background: #1e1e1e;
+            color: #f0f0f0;
+        }
+
+        .app {
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            height: 100vh;
+        }
+
+        .header {
+            padding: 10px 14px;
+            border-bottom: 1px solid #333;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .status {
+            font-size: 12px;
+            color: #9cc8ff;
+        }
+
+        .agents-control-plane {
+            border-bottom: 1px solid #2f2f2f;
+            padding: 8px 10px;
+            background: #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .agents-tabs {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .agents-tab {
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid #4a4a4a;
+            background: #262626;
+            font-size: 12px;
+        }
+
+            .agents-tab.active {
+                background: #32445f;
+                border-color: #6fa1db;
+                color: #d8e8ff;
+            }
+
+        .agents-surface {
+            border: 1px solid #343434;
+            border-radius: 8px;
+            background: #202020;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 12px;
+        }
+
+        .agents-surface-title {
+            color: #d8e8ff;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .agents-row {
+            color: #d0d0d0;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+            .agents-row.error {
+                color: #ffb3b3;
+            }
+
+        .agents-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .agents-chip {
+            border: 1px solid #4a4a4a;
+            border-radius: 999px;
+            padding: 2px 8px;
+            background: #2a2a2a;
+            font-size: 11px;
+        }
+
+            .agents-chip.active {
+                border-color: #80b2eb;
+                background: #314761;
+                color: #dfefff;
+            }
+
+        .messages {
+            overflow: auto;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .msg {
+            max-width: 78%;
+            padding: 8px 10px;
+            border-radius: 10px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .self {
+            align-self: flex-end;
+            background: #2d5f2f;
+        }
+
+        .peer {
+            align-self: flex-start;
+            background: #2d2d2d;
+        }
+
+        .error {
+            align-self: flex-start;
+            background: #7a1f1f;
+        }
+
+        .tool-timeline {
+            align-self: flex-start;
+            width: min(92%, 720px);
+            border: 1px solid #3a3a3a;
+            border-radius: 10px;
+            background: #242424;
+            padding: 8px 10px;
+            font-size: 12px;
+        }
+
+            .tool-timeline .title {
+                color: #d2e3ff;
+                font-weight: 600;
+                margin-bottom: 6px;
+            }
+
+        .tool-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 4px;
+            color: #d0d0d0;
+        }
+
+        .tool-phase {
+            min-width: 110px;
+            color: #8ec7ff;
+        }
+
+            .tool-phase.error {
+                color: #ff9494;
+            }
+
+            .tool-phase.approval {
+                color: #ffd48a;
+            }
+
+        .composer {
+            display: grid;
+            grid-template-columns: 1fr auto auto auto auto;
+            gap: 8px;
+            padding: 10px;
+            border-top: 1px solid #333;
+            position: relative;
+        }
+
+        .composer-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            padding: 0 10px 10px 10px;
+            border-top: 1px solid #2b2b2b;
+        }
+
+        select {
+            border: 1px solid #555;
+            border-radius: 8px;
+            padding: 8px;
+            background: #111;
+            color: #f0f0f0;
+        }
+
+        .slash-menu {
+            position: absolute;
+            left: 10px;
+            right: 10px;
+            bottom: 88px;
+            max-height: 220px;
+            overflow: auto;
+            border: 1px solid #3a3a3a;
+            border-radius: 8px;
+            background: #181818;
+            display: none;
+            z-index: 5;
+        }
+
+        .slash-item {
+            padding: 8px 10px;
+            border-bottom: 1px solid #2d2d2d;
+            cursor: pointer;
+        }
+
+            .slash-item:last-child {
+                border-bottom: none;
+            }
+
+            .slash-item.active {
+                background: #2d3950;
+            }
+
+        .slash-name {
+            color: #d8e7ff;
+            font-weight: 600;
+        }
+
+        .slash-desc {
+            color: #a8a8a8;
+            font-size: 12px;
+        }
+
+        textarea {
+            resize: none;
+            min-height: 56px;
+            max-height: 160px;
+            padding: 8px;
+            border-radius: 8px;
+            border: 1px solid #555;
+            background: #111;
+            color: #f0f0f0;
+        }
+
+        button {
+            border: 1px solid #555;
+            border-radius: 8px;
+            padding: 0 14px;
+            background: #2b2b2b;
+            color: #f0f0f0;
+            cursor: pointer;
+        }
+
+            button:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+    </style>
 </head>
 <body>
-  <div class="app">
-    <div class="header">
-      <div>BlazeClaw Chat (WebView)</div>
-      <div id="status" class="status">initializing...</div>
+    <div class="app">
+        <div class="header">
+            <div>BlazeClaw Chat (WebView)</div>
+            <div id="status" class="status">initializing...</div>
+        </div>
+        <div id="agentsControlPlane" class="agents-control-plane" hidden>
+            <div id="agentsTabs" class="agents-tabs"></div>
+            <div id="agentsSurface" class="agents-surface"></div>
+        </div>
+        <div id="messages" class="messages"></div>
+        <div class="composer">
+            <div id="slashMenu" class="slash-menu"></div>
+            <textarea id="input" placeholder="Type a message..."></textarea>
+            <button id="sendBtn">Send</button>
+            <button id="sendErrBtn">Send Error</button>
+            <button id="attachBtn">Attach</button>
+            <button id="abortBtn" disabled>Abort</button>
+        </div>
+        <div class="composer-controls">
+            <select id="sessionSelect" title="Session"></select>
+            <select id="modelSelect" title="Model"></select>
+            <select id="thinkingSelect" title="Thinking Level"></select>
+        </div>
+        <input id="attachInput" type="file" accept="image/*" multiple hidden />
     </div>
-    <div id="agentsControlPlane" class="agents-control-plane" hidden>
-      <div id="agentsTabs" class="agents-tabs"></div>
-      <div id="agentsSurface" class="agents-surface"></div>
-    </div>
-    <div id="messages" class="messages"></div>
-    <div class="composer">
-      <div id="slashMenu" class="slash-menu"></div>
-      <textarea id="input" placeholder="Type a message..."></textarea>
-      <button id="sendBtn">Send</button>
-      <button id="sendErrBtn">Send Error</button>
-      <button id="attachBtn">Attach</button>
-      <button id="abortBtn" disabled>Abort</button>
-    </div>
-    <div class="composer-controls">
-      <select id="sessionSelect" title="Session"></select>
-      <select id="modelSelect" title="Model"></select>
-      <select id="thinkingSelect" title="Thinking Level"></select>
-    </div>
-    <input id="attachInput" type="file" accept="image/*" multiple hidden />
-  </div>
 
-  <script src="./scope-errors.js"></script>
-  <script src="./agents-controller.js"></script>
-  <script src="./chat-controller.js"></script>
-  <script src="./chat-events.js"></script>
-  <script src="./chat-composer.js"></script>
+    <script src="./scope-errors.js"></script>
+    <script src="./agents-controller.js"></script>
+    <script src="./chat-controller.js"></script>
+    <script src="./chat-events.js"></script>
+    <script src="./chat-composer.js"></script>
 
-  <script>
-    (() => {
-      const state = {
-        sessionKey: "main",
-        connected: false,
-        runId: null,
-        streamText: "",
-        attachments: [],
-        toolTimelineByRequest: new Map(),
-        bridgeQueue: [],
-        pending: new Map(),
-        seenBridgeSeq: new Set(),
-        seenBridgeIds: new Set(),
-        bridgeAvailable: !!(window.chrome && window.chrome.webview),
-      };
+    <script>
+        (() => {
+            const state = {
+                sessionKey: "main",
+                connected: false,
+                runId: null,
+                streamText: "",
+                attachments: [],
+                assistantName: "Assistant",
+                assistantAvatar: "A",
+                assistantAgentId: null,
+                toolTimelineByRequest: new Map(),
+                bridgeQueue: [],
+                pending: new Map(),
+                seenBridgeSeq: new Set(),
+                seenBridgeIds: new Set(),
+                bridgeAvailable: !!(window.chrome && window.chrome.webview),
+            };
 
-      const statusEl = document.getElementById("status");
-      const messagesEl = document.getElementById("messages");
-      state.inputEl = document.getElementById("input");
-      state.sendBtn = document.getElementById("sendBtn");
-      state.sendErrBtn = document.getElementById("sendErrBtn");
-      state.attachBtn = document.getElementById("attachBtn");
-      state.attachInput = document.getElementById("attachInput");
-      state.abortBtn = document.getElementById("abortBtn");
-      state.sessionSelect = document.getElementById("sessionSelect");
-      state.modelSelect = document.getElementById("modelSelect");
-      state.thinkingSelect = document.getElementById("thinkingSelect");
-      state.slashMenuEl = document.getElementById("slashMenu");
-      state.agentsControlPlaneEl = document.getElementById("agentsControlPlane");
-      state.agentsTabsEl = document.getElementById("agentsTabs");
-      state.agentsSurfaceEl = document.getElementById("agentsSurface");
+            const statusEl = document.getElementById("status");
+            const messagesEl = document.getElementById("messages");
+            state.inputEl = document.getElementById("input");
+            state.sendBtn = document.getElementById("sendBtn");
+            state.sendErrBtn = document.getElementById("sendErrBtn");
+            state.attachBtn = document.getElementById("attachBtn");
+            state.attachInput = document.getElementById("attachInput");
+            state.abortBtn = document.getElementById("abortBtn");
+            state.sessionSelect = document.getElementById("sessionSelect");
+            state.modelSelect = document.getElementById("modelSelect");
+            state.thinkingSelect = document.getElementById("thinkingSelect");
+            state.slashMenuEl = document.getElementById("slashMenu");
+            state.agentsControlPlaneEl = document.getElementById("agentsControlPlane");
+            state.agentsTabsEl = document.getElementById("agentsTabs");
+            state.agentsSurfaceEl = document.getElementById("agentsSurface");
 
-      function setStatus(text) {
-        statusEl.textContent = text;
-      }
-
-      function scrollBottom() {
-        messagesEl.scrollTop = messagesEl.scrollHeight;
-      }
-
-      function addMessage(text, kind) {
-        const div = document.createElement("div");
-        div.className = `msg ${kind}`;
-        div.textContent = text;
-        messagesEl.appendChild(div);
-        scrollBottom();
-      }
-
-      function clearMessages() {
-        messagesEl.innerHTML = "";
-      }
-
-      function setInputValue(text) {
-        if (state.inputEl) {
-          state.inputEl.value = String(text || "");
-        }
-      }
-
-      function ensureToolTimelineCard(requestId) {
-        if (!requestId) {
-          return null;
-        }
-
-        let card = document.getElementById(`tool-card-${requestId}`);
-        if (card) {
-          return card;
-        }
-
-        card = document.createElement("div");
-        card.id = `tool-card-${requestId}`;
-        card.className = "tool-timeline";
-
-        const title = document.createElement("div");
-        title.className = "title";
-        title.textContent = `Tool timeline (${requestId})`;
-        card.appendChild(title);
-
-        const body = document.createElement("div");
-        body.className = "tool-body";
-        card.appendChild(body);
-
-        messagesEl.appendChild(card);
-        scrollBottom();
-        return card;
-      }
-
-      function appendToolLifecycleRow(payload) {
-        if (!payload || typeof payload !== "object") {
-          return;
-        }
-
-        const requestId = String(payload.id || "");
-        const card = ensureToolTimelineCard(requestId);
-        if (!card) {
-          return;
-        }
-
-        const body = card.querySelector(".tool-body");
-        if (!body) {
-          return;
-        }
-
-        const phase = String(payload.phase || "result");
-        const tool = String(payload.tool || "unknown");
-        const status = String(payload.status || "");
-        const code = String(payload.code || "");
-
-        const row = document.createElement("div");
-        row.className = "tool-row";
-
-        const phaseEl = document.createElement("span");
-        phaseEl.className = "tool-phase";
-        if (phase === "error") {
-          phaseEl.classList.add("error");
-        }
-        if (phase === "approval-needed" || phase === "approval-resolved") {
-          phaseEl.classList.add("approval");
-        }
-        phaseEl.textContent = phase;
-        row.appendChild(phaseEl);
-
-        const detailEl = document.createElement("span");
-        let detailText = `tool=${tool}`;
-        if (status) {
-          detailText += ` status=${status}`;
-        }
-        if (code) {
-          detailText += ` code=${code}`;
-        }
-        detailEl.textContent = detailText;
-        row.appendChild(detailEl);
-
-        body.appendChild(row);
-        scrollBottom();
-
-        state.toolTimelineByRequest.set(requestId, true);
-      }
-
-      function addOrReplaceStream(text) {
-        if (!text || controller.isSilentReplyText(text)) {
-          return;
-        }
-
-        const existing = document.getElementById("stream-msg");
-        if (existing) {
-          existing.textContent = text;
-          scrollBottom();
-          return;
-        }
-        const div = document.createElement("div");
-        div.id = "stream-msg";
-        div.className = "msg peer";
-        div.textContent = text;
-        messagesEl.appendChild(div);
-        scrollBottom();
-      }
-
-      function finalizeStream() {
-        const existing = document.getElementById("stream-msg");
-        if (existing) {
-          existing.removeAttribute("id");
-        }
-      }
-
-      function renderAgentsSurface() {
-        if (!state.agentsSurfaceEl) {
-          return;
-        }
-
-        if (!agentsController) {
-          state.agentsSurfaceEl.innerHTML = "";
-          return;
-        }
-
-        const selectedAgent = String(state.agentsSelectedId || "").trim();
-        const panel = String(state.agentsPanel || "overview");
-        const rows = [];
-
-        rows.push(`<div class="agents-surface-title">Agents control-plane — ${panel}</div>`);
-
-        if (state.agentsLoading) {
-          rows.push("<div class=\"agents-row\">Loading agents...</div>");
-        }
-        if (state.agentsError) {
-          rows.push(`<div class=\"agents-row error\">${state.agentsError}</div>`);
-        }
-
-        if (state.agentsList && Array.isArray(state.agentsList.agents) && state.agentsList.agents.length > 0) {
-          const chips = state.agentsList.agents.map((entry) => {
-            const id = String((entry && entry.id) || "");
-            const active = selectedAgent && selectedAgent === id ? " active" : "";
-            const label = id || "(unknown)";
-            return `<button class=\"agents-chip${active}\" data-agent-id=\"${label.replace(/\"/g, "&quot;")}\">${label}</button>`;
-          }).join("");
-          rows.push(`<div class=\"agents-list\">${chips}</div>`);
-        }
-
-        if (panel === "overview") {
-          const count = state.agentsList && Array.isArray(state.agentsList.agents)
-            ? state.agentsList.agents.length
-            : 0;
-          const identity = selectedAgent && state.agentIdentityById
-            ? state.agentIdentityById[selectedAgent] || null
-            : null;
-          const identityDisplayName = identity
-            ? String(identity.displayName || identity.name || "").trim()
-            : "";
-          const identityRole = identity
-            ? String(identity.role || identity.description || "").trim()
-            : "";
-          const identityStyle = identity
-            ? String(identity.style || identity.tone || "").trim()
-            : "";
-
-          rows.push(`<div class=\"agents-row\">Selected agent: ${selectedAgent || "(none)"}</div>`);
-          rows.push(`<div class=\"agents-row\">Agent count: ${count}</div>`);
-          rows.push(`<div class=\"agents-row\">Session key: ${String(state.sessionKey || "")}</div>`);
-
-          if (state.agentIdentityLoading) {
-            rows.push("<div class=\"agents-row\">Loading agent identity...</div>");
-          }
-          if (state.agentIdentityError) {
-            rows.push(`<div class=\"agents-row error\">${state.agentIdentityError}</div>`);
-          }
-
-          rows.push(`<div class=\"agents-row\">Identity cached: ${identity ? "yes" : "no"}</div>`);
-          if (identity) {
-            rows.push(`<div class=\"agents-row\">Identity name: ${identityDisplayName || "(n/a)"}</div>`);
-            rows.push(`<div class=\"agents-row\">Identity role: ${identityRole || "(n/a)"}</div>`);
-            rows.push(`<div class=\"agents-row\">Identity style: ${identityStyle || "(n/a)"}</div>`);
-          }
-        }
-
-        if (panel === "tools") {
-          if (state.toolsCatalogLoading || state.toolsEffectiveLoading) {
-            rows.push("<div class=\"agents-row\">Loading tools surface...</div>");
-          }
-          if (state.toolsCatalogError) {
-            rows.push(`<div class=\"agents-row error\">${state.toolsCatalogError}</div>`);
-          }
-          if (state.toolsEffectiveError) {
-            rows.push(`<div class=\"agents-row error\">${state.toolsEffectiveError}</div>`);
-          }
-
-          const catalogTools = state.toolsCatalogResult && Array.isArray(state.toolsCatalogResult.tools)
-            ? state.toolsCatalogResult.tools.length
-            : 0;
-          const effectiveTools = state.toolsEffectiveResult && Array.isArray(state.toolsEffectiveResult.tools)
-            ? state.toolsEffectiveResult.tools.length
-            : 0;
-
-          rows.push(`<div class=\"agents-row\">Catalog tools: ${catalogTools}</div>`);
-          rows.push(`<div class=\"agents-row\">Effective tools: ${effectiveTools}</div>`);
-          rows.push(`<div class=\"agents-row\">Effective key: ${String(state.toolsEffectiveResultKey || "(none)")}</div>`);
-        }
-
-        if (panel === "files") {
-          if (state.agentFilesLoading) {
-            rows.push("<div class=\"agents-row\">Loading agent files...</div>");
-          }
-          if (state.agentFilesError) {
-            rows.push(`<div class=\"agents-row error\">${state.agentFilesError}</div>`);
-          }
-
-          const files = state.agentFilesResult && Array.isArray(state.agentFilesResult.files)
-            ? state.agentFilesResult.files
-            : [];
-          rows.push(`<div class=\"agents-row\">Files count: ${files.length}</div>`);
-          if (files.length > 0) {
-            rows.push(`<div class=\"agents-row\">First file: ${String(files[0].path || files[0].name || "")}</div>`);
-          }
-          if (state.agentFileContentLoading) {
-            rows.push("<div class=\"agents-row\">Loading file content...</div>");
-          }
-          if (state.agentFileContentError) {
-            rows.push(`<div class=\"agents-row error\">${state.agentFileContentError}</div>`);
-          }
-        }
-
-        if (panel === "skills") {
-          if (state.agentSkillsLoading) {
-            rows.push("<div class=\"agents-row\">Loading skills...</div>");
-          }
-          if (state.agentSkillsError) {
-            rows.push(`<div class=\"agents-row error\">${state.agentSkillsError}</div>`);
-          }
-
-          const skillsResult = state.agentSkillsResult || null;
-          const report = state.agentSkillsReport || (skillsResult && skillsResult.report) || null;
-          const commands = skillsResult && Array.isArray(skillsResult.commands)
-            ? skillsResult.commands
-            : [];
-          const reportSkills = report && Array.isArray(report.skills)
-            ? report.skills
-            : [];
-
-          rows.push(`<div class=\"agents-row\">Agent-scoped endpoint: ${skillsResult && skillsResult.agentScoped ? "yes" : "no (capability-gated)"}</div>`);
-          rows.push(`<div class=\"agents-row\">Skills report agent: ${String(state.agentSkillsAgentId || "(none)")}</div>`);
-          rows.push(`<div class=\"agents-row\">Skills report entries: ${reportSkills.length}</div>`);
-          rows.push(`<div class=\"agents-row\">Skill commands (derived): ${commands.length}</div>`);
-        }
-
-        if (panel === "channels") {
-          if (state.agentChannelsLoading) {
-            rows.push("<div class=\"agents-row\">Loading channels...</div>");
-          }
-          if (state.agentChannelsError) {
-            rows.push(`<div class=\"agents-row error\">${state.agentChannelsError}</div>`);
-          }
-
-          const channelResult = state.agentChannelsResult || null;
-          const channels = channelResult && Array.isArray(channelResult.channels)
-            ? channelResult.channels
-            : [];
-          const routes = channelResult && Array.isArray(channelResult.routes)
-            ? channelResult.routes
-            : [];
-          rows.push(`<div class=\"agents-row\">Channels: ${channels.length}</div>`);
-          rows.push(`<div class=\"agents-row\">Agent-related routes: ${routes.length}</div>`);
-          rows.push("<div class=\"agents-row\">Capability mode: shared channels status/routes (agent-scoped view via route filtering)</div>");
-          rows.push("<div class=\"agents-row\">TODO parity track: docs/compare/ui.controllers.md#2-mechanical-audit-openclawuisrcuicontrollers</div>");
-        }
-
-        if (panel === "cron") {
-          if (state.agentCronLoading) {
-            rows.push("<div class=\"agents-row\">Loading cron surface...</div>");
-          }
-          if (state.agentCronError) {
-            rows.push(`<div class=\"agents-row error\">${state.agentCronError}</div>`);
-          }
-
-          const cronResult = state.agentCronResult || null;
-          const jobs = cronResult && Array.isArray(cronResult.jobs)
-            ? cronResult.jobs
-            : [];
-          rows.push(`<div class=\"agents-row\">Cron jobs: ${jobs.length}</div>`);
-          rows.push("<div class=\"agents-row\">Capability mode: gateway cron endpoint not registered in BlazeClaw (explicitly gated)</div>");
-          rows.push("<div class=\"agents-row\">TODO parity track: docs/compare/ui.controllers.md#2-mechanical-audit-openclawuisrcuicontrollers</div>");
-        }
-
-        state.agentsSurfaceEl.innerHTML = rows.join("");
-
-        state.agentsSurfaceEl.querySelectorAll("[data-agent-id]").forEach((el) => {
-          el.addEventListener("click", () => {
-            const agentId = String(el.getAttribute("data-agent-id") || "").trim();
-            if (!agentId) {
-              return;
+            function setStatus(text) {
+                statusEl.textContent = text;
             }
-            agentsController.setSelectedAgentId(agentId);
-            persistAgentsSnapshot(agentsController.getPersistenceSnapshot());
-            emitAgentsTelemetry("agent.selected", {
-              agentId,
-              panel: state.agentsPanel,
-            });
-            void agentsController.loadPanelDataForCurrentAgent();
-          });
-        });
-      }
 
-      function renderAgentsTabs() {
-        if (!state.agentsTabsEl) {
-          return;
-        }
-
-        if (!agentsController) {
-          state.agentsTabsEl.innerHTML = "";
-          return;
-        }
-
-        const tabs = [
-          { id: "overview", label: "Overview" },
-          { id: "tools", label: "Tools" },
-          { id: "files", label: "Files" },
-          { id: "skills", label: "Skills" },
-          { id: "channels", label: "Channels" },
-          { id: "cron", label: "Cron" },
-        ];
-        const current = String(state.agentsPanel || "overview");
-
-        state.agentsTabsEl.innerHTML = tabs.map((tab) => {
-          const active = tab.id === current ? " active" : "";
-          return `<button class=\"agents-tab${active}\" data-panel=\"${tab.id}\">${tab.label}</button>`;
-        }).join("");
-
-        state.agentsTabsEl.querySelectorAll("[data-panel]").forEach((el) => {
-          el.addEventListener("click", () => {
-            const panel = String(el.getAttribute("data-panel") || "").trim();
-            agentsController.setAgentsPanel(panel);
-            persistAgentsSnapshot(agentsController.getPersistenceSnapshot());
-            emitAgentsTelemetry("tab.selected", {
-              panel,
-            });
-            void agentsController.loadPanelDataForCurrentAgent();
-          });
-        });
-      }
-
-      function updateComposerState() {
-        const hasInput = state.inputEl.value.trim().length > 0;
-        const hasAttachments = state.attachments.length > 0;
-        const canSend = state.bridgeAvailable && (hasInput || hasAttachments);
-        state.sendBtn.disabled = !canSend;
-        state.sendErrBtn.disabled = !canSend;
-        state.abortBtn.disabled = !state.bridgeAvailable || !state.runId;
-        state.attachBtn.disabled = !state.bridgeAvailable;
-        if (state.sessionSelect) {
-          state.sessionSelect.disabled = !state.bridgeAvailable;
-        }
-        if (state.modelSelect) {
-          state.modelSelect.disabled = !state.bridgeAvailable;
-        }
-        if (state.thinkingSelect) {
-          state.thinkingSelect.disabled = !state.bridgeAvailable;
-        }
-        state.attachBtn.textContent = state.attachments.length > 0
-          ? `Attach(${state.attachments.length})`
-          : "Attach";
-
-        if (state.agentsControlPlaneEl) {
-          state.agentsControlPlaneEl.hidden = !agentsController;
-        }
-        renderAgentsTabs();
-        renderAgentsSurface();
-      }
-      const controller = window.BlazeClawChatController.createController({
-        state,
-        addMessage,
-        addOrReplaceStream,
-        finalizeStream,
-        updateComposerState,
-        clearMessages,
-        setInputValue,
-      });
-
-      function resolveAgentsEnabled() {
-        const search = new URLSearchParams(window.location.search || "");
-        const queryToggle = search.get("agents");
-        if (queryToggle === "0") {
-          return false;
-        }
-        if (queryToggle === "1") {
-          return true;
-        }
-
-        try {
-          if (window.localStorage) {
-            const storedToggle = window.localStorage.getItem("blazeclaw.agents.enabled");
-            if (storedToggle === "0") {
-              return false;
+            function scrollBottom() {
+                messagesEl.scrollTop = messagesEl.scrollHeight;
             }
-            if (storedToggle === "1") {
-              return true;
+
+            function addMessage(text, kind) {
+                const div = document.createElement("div");
+                div.className = `msg ${kind}`;
+                div.textContent = text;
+                messagesEl.appendChild(div);
+                scrollBottom();
             }
-          }
-        } catch (_) {
-        }
 
-        return true;
-      }
+            function clearMessages() {
+                messagesEl.innerHTML = "";
+            }
 
-      function resolveAgentsRegressionChecksEnabled() {
-        const search = new URLSearchParams(window.location.search || "");
-        if (search.get("agentsRegression") === "1") {
-          return true;
-        }
+            function setInputValue(text) {
+                if (state.inputEl) {
+                    state.inputEl.value = String(text || "");
+                }
+            }
 
-        try {
-          return Boolean(
-            window.localStorage &&
-            window.localStorage.getItem("blazeclaw.agents.regression") === "1"
-          );
-        } catch (_) {
-          return false;
-        }
-      }
+            function ensureToolTimelineCard(requestId) {
+                if (!requestId) {
+                    return null;
+                }
 
-      function loadAgentsPersistenceSnapshot() {
-        try {
-          if (!window.localStorage) {
-            return null;
-          }
+                let card = document.getElementById(`tool-card-${requestId}`);
+                if (card) {
+                    return card;
+                }
 
-          const raw = window.localStorage.getItem("blazeclaw.agents.persistence");
-          if (!raw) {
-            return null;
-          }
+                card = document.createElement("div");
+                card.id = `tool-card-${requestId}`;
+                card.className = "tool-timeline";
 
-          const parsed = JSON.parse(raw);
-          if (!parsed || typeof parsed !== "object") {
-            return null;
-          }
+                const title = document.createElement("div");
+                title.className = "title";
+                title.textContent = `Tool timeline (${requestId})`;
+                card.appendChild(title);
 
-          return {
-            panel: String(parsed.panel || "overview"),
-            selectedAgentId: typeof parsed.selectedAgentId === "string"
-              ? parsed.selectedAgentId
-              : null,
-          };
-        } catch (_) {
-          return null;
-        }
-      }
+                const body = document.createElement("div");
+                body.className = "tool-body";
+                card.appendChild(body);
 
-      function persistAgentsSnapshot(snapshot) {
-        try {
-          if (!window.localStorage) {
-            return;
-          }
+                messagesEl.appendChild(card);
+                scrollBottom();
+                return card;
+            }
 
-          window.localStorage.setItem(
-            "blazeclaw.agents.persistence",
-            JSON.stringify(snapshot || {})
-          );
-        } catch (_) {
-        }
-      }
+            function appendToolLifecycleRow(payload) {
+                if (!payload || typeof payload !== "object") {
+                    return;
+                }
 
-      function emitAgentsTelemetry(eventName, payload) {
-        try {
-          console.log("[agents-control-plane]", eventName, payload || {});
-        } catch (_) {
-        }
-      }
+                const requestId = String(payload.id || "");
+                const card = ensureToolTimelineCard(requestId);
+                if (!card) {
+                    return;
+                }
 
-      const agentsEnabled = resolveAgentsEnabled();
-      const agentsController = agentsEnabled && window.BlazeClawAgentsController
-        ? window.BlazeClawAgentsController.createAgentsController({
-            state,
-            request: (method, params) => controller.request(method, params),
-            onStateUpdated: () => updateComposerState(),
-          })
-        : null;
+                const body = card.querySelector(".tool-body");
+                if (!body) {
+                    return;
+                }
 
-      if (agentsController) {
-        state.agentsPanel = "overview";
-        const persisted = loadAgentsPersistenceSnapshot();
-        if (persisted) {
-          agentsController.applyPersistenceSnapshot(persisted);
-          emitAgentsTelemetry("persistence.restored", persisted);
-        }
+                const phase = String(payload.phase || "result");
+                const tool = String(payload.tool || "unknown");
+                const status = String(payload.status || "");
+                const code = String(payload.code || "");
 
-        state.onSessionChanged = () => {
-          agentsController.syncSessionContext({
-            sessionKey: state.sessionKey,
-          });
-          emitAgentsTelemetry("session.changed", {
-            sessionKey: state.sessionKey,
-          });
-          void agentsController.loadPanelDataForCurrentAgent();
-        };
-        state.onModelChanged = () => {
-          agentsController.syncSessionContext({
-            sessionKey: state.sessionKey,
-          });
-          emitAgentsTelemetry("model.changed", {
-            model: state.selectedModel,
-          });
-          void agentsController.refreshFromConfigSnapshot();
-        };
-        agentsController.syncSessionContext({
-          sessionKey: state.sessionKey,
-        });
+                const row = document.createElement("div");
+                row.className = "tool-row";
 
-        if (resolveAgentsRegressionChecksEnabled() &&
-            typeof window.BlazeClawAgentsController.runRegressionChecks === "function") {
-          window.BlazeClawAgentsController.runRegressionChecks()
-            .then((result) => {
-              if (result && result.ok) {
-                console.log("[agents-regression] passed:", result.checks);
-                emitAgentsTelemetry("regression.passed", {
-                  checks: result.checks,
+                const phaseEl = document.createElement("span");
+                phaseEl.className = "tool-phase";
+                if (phase === "error") {
+                    phaseEl.classList.add("error");
+                }
+                if (phase === "approval-needed" || phase === "approval-resolved") {
+                    phaseEl.classList.add("approval");
+                }
+                phaseEl.textContent = phase;
+                row.appendChild(phaseEl);
+
+                const detailEl = document.createElement("span");
+                let detailText = `tool=${tool}`;
+                if (status) {
+                    detailText += ` status=${status}`;
+                }
+                if (code) {
+                    detailText += ` code=${code}`;
+                }
+                detailEl.textContent = detailText;
+                row.appendChild(detailEl);
+
+                body.appendChild(row);
+                scrollBottom();
+
+                state.toolTimelineByRequest.set(requestId, true);
+            }
+
+            function addOrReplaceStream(text) {
+                if (!text || controller.isSilentReplyText(text)) {
+                    return;
+                }
+
+                const existing = document.getElementById("stream-msg");
+                if (existing) {
+                    existing.textContent = text;
+                    scrollBottom();
+                    return;
+                }
+                const div = document.createElement("div");
+                div.id = "stream-msg";
+                div.className = "msg peer";
+                div.textContent = text;
+                messagesEl.appendChild(div);
+                scrollBottom();
+            }
+
+            function finalizeStream() {
+                const existing = document.getElementById("stream-msg");
+                if (existing) {
+                    existing.removeAttribute("id");
+                }
+            }
+
+            function renderAgentsSurface() {
+                if (!state.agentsSurfaceEl) {
+                    return;
+                }
+
+                if (!agentsController) {
+                    state.agentsSurfaceEl.innerHTML = "";
+                    return;
+                }
+
+                const selectedAgent = String(state.agentsSelectedId || "").trim();
+                const panel = String(state.agentsPanel || "overview");
+                const rows = [];
+
+                rows.push(`<div class="agents-surface-title">Agents control-plane — ${panel}</div>`);
+
+                if (state.agentsLoading) {
+                    rows.push("<div class=\"agents-row\">Loading agents...</div>");
+                }
+                if (state.agentsError) {
+                    rows.push(`<div class=\"agents-row error\">${state.agentsError}</div>`);
+                }
+
+                if (state.agentsList && Array.isArray(state.agentsList.agents) && state.agentsList.agents.length > 0) {
+                    const chips = state.agentsList.agents.map((entry) => {
+                        const id = String((entry && entry.id) || "");
+                        const active = selectedAgent && selectedAgent === id ? " active" : "";
+                        const label = id || "(unknown)";
+                        return `<button class=\"agents-chip${active}\" data-agent-id=\"${label.replace(/\"/g, "&quot;")}\">${label}</button>`;
+                    }).join("");
+                    rows.push(`<div class=\"agents-list\">${chips}</div>`);
+                }
+
+                if (panel === "overview") {
+                    const count = state.agentsList && Array.isArray(state.agentsList.agents)
+                        ? state.agentsList.agents.length
+                        : 0;
+                    const identity = selectedAgent && state.agentIdentityById
+                        ? state.agentIdentityById[selectedAgent] || null
+                        : null;
+                    const identityDisplayName = identity
+                        ? String(identity.displayName || identity.name || "").trim()
+                        : "";
+                    const identityRole = identity
+                        ? String(identity.role || identity.description || "").trim()
+                        : "";
+                    const identityStyle = identity
+                        ? String(identity.style || identity.tone || "").trim()
+                        : "";
+
+                    rows.push(`<div class=\"agents-row\">Selected agent: ${selectedAgent || "(none)"}</div>`);
+                    rows.push(`<div class=\"agents-row\">Agent count: ${count}</div>`);
+                    rows.push(`<div class=\"agents-row\">Session key: ${String(state.sessionKey || "")}</div>`);
+
+                    if (state.agentIdentityLoading) {
+                        rows.push("<div class=\"agents-row\">Loading agent identity...</div>");
+                    }
+                    if (state.agentIdentityError) {
+                        rows.push(`<div class=\"agents-row error\">${state.agentIdentityError}</div>`);
+                    }
+
+                    rows.push(`<div class=\"agents-row\">Identity cached: ${identity ? "yes" : "no"}</div>`);
+                    if (identity) {
+                        rows.push(`<div class=\"agents-row\">Identity name: ${identityDisplayName || "(n/a)"}</div>`);
+                        rows.push(`<div class=\"agents-row\">Identity role: ${identityRole || "(n/a)"}</div>`);
+                        rows.push(`<div class=\"agents-row\">Identity style: ${identityStyle || "(n/a)"}</div>`);
+                    }
+                }
+
+                if (panel === "tools") {
+                    if (state.toolsCatalogLoading || state.toolsEffectiveLoading) {
+                        rows.push("<div class=\"agents-row\">Loading tools surface...</div>");
+                    }
+                    if (state.toolsCatalogError) {
+                        rows.push(`<div class=\"agents-row error\">${state.toolsCatalogError}</div>`);
+                    }
+                    if (state.toolsEffectiveError) {
+                        rows.push(`<div class=\"agents-row error\">${state.toolsEffectiveError}</div>`);
+                    }
+
+                    const catalogTools = state.toolsCatalogResult && Array.isArray(state.toolsCatalogResult.tools)
+                        ? state.toolsCatalogResult.tools.length
+                        : 0;
+                    const effectiveTools = state.toolsEffectiveResult && Array.isArray(state.toolsEffectiveResult.tools)
+                        ? state.toolsEffectiveResult.tools.length
+                        : 0;
+
+                    rows.push(`<div class=\"agents-row\">Catalog tools: ${catalogTools}</div>`);
+                    rows.push(`<div class=\"agents-row\">Effective tools: ${effectiveTools}</div>`);
+                    rows.push(`<div class=\"agents-row\">Effective key: ${String(state.toolsEffectiveResultKey || "(none)")}</div>`);
+                }
+
+                if (panel === "files") {
+                    if (state.agentFilesLoading) {
+                        rows.push("<div class=\"agents-row\">Loading agent files...</div>");
+                    }
+                    if (state.agentFilesError) {
+                        rows.push(`<div class=\"agents-row error\">${state.agentFilesError}</div>`);
+                    }
+
+                    const files = state.agentFilesResult && Array.isArray(state.agentFilesResult.files)
+                        ? state.agentFilesResult.files
+                        : [];
+                    rows.push(`<div class=\"agents-row\">Files count: ${files.length}</div>`);
+                    if (files.length > 0) {
+                        rows.push(`<div class=\"agents-row\">First file: ${String(files[0].path || files[0].name || "")}</div>`);
+                    }
+                    if (state.agentFileContentLoading) {
+                        rows.push("<div class=\"agents-row\">Loading file content...</div>");
+                    }
+                    if (state.agentFileContentError) {
+                        rows.push(`<div class=\"agents-row error\">${state.agentFileContentError}</div>`);
+                    }
+                }
+
+                if (panel === "skills") {
+                    if (state.agentSkillsLoading) {
+                        rows.push("<div class=\"agents-row\">Loading skills...</div>");
+                    }
+                    if (state.agentSkillsError) {
+                        rows.push(`<div class=\"agents-row error\">${state.agentSkillsError}</div>`);
+                    }
+
+                    const skillsResult = state.agentSkillsResult || null;
+                    const report = state.agentSkillsReport || (skillsResult && skillsResult.report) || null;
+                    const commands = skillsResult && Array.isArray(skillsResult.commands)
+                        ? skillsResult.commands
+                        : [];
+                    const reportSkills = report && Array.isArray(report.skills)
+                        ? report.skills
+                        : [];
+
+                    rows.push(`<div class=\"agents-row\">Agent-scoped endpoint: ${skillsResult && skillsResult.agentScoped ? "yes" : "no (capability-gated)"}</div>`);
+                    rows.push(`<div class=\"agents-row\">Skills report agent: ${String(state.agentSkillsAgentId || "(none)")}</div>`);
+                    rows.push(`<div class=\"agents-row\">Skills report entries: ${reportSkills.length}</div>`);
+                    rows.push(`<div class=\"agents-row\">Skill commands (derived): ${commands.length}</div>`);
+                }
+
+                if (panel === "channels") {
+                    if (state.agentChannelsLoading) {
+                        rows.push("<div class=\"agents-row\">Loading channels...</div>");
+                    }
+                    if (state.agentChannelsError) {
+                        rows.push(`<div class=\"agents-row error\">${state.agentChannelsError}</div>`);
+                    }
+
+                    const channelResult = state.agentChannelsResult || null;
+                    const channels = channelResult && Array.isArray(channelResult.channels)
+                        ? channelResult.channels
+                        : [];
+                    const routes = channelResult && Array.isArray(channelResult.routes)
+                        ? channelResult.routes
+                        : [];
+                    rows.push(`<div class=\"agents-row\">Channels: ${channels.length}</div>`);
+                    rows.push(`<div class=\"agents-row\">Agent-related routes: ${routes.length}</div>`);
+                    rows.push("<div class=\"agents-row\">Capability mode: shared channels status/routes (agent-scoped view via route filtering)</div>");
+                    rows.push("<div class=\"agents-row\">TODO parity track: docs/compare/ui.controllers.md#2-mechanical-audit-openclawuisrcuicontrollers</div>");
+                }
+
+                if (panel === "cron") {
+                    if (state.agentCronLoading) {
+                        rows.push("<div class=\"agents-row\">Loading cron surface...</div>");
+                    }
+                    if (state.agentCronError) {
+                        rows.push(`<div class=\"agents-row error\">${state.agentCronError}</div>`);
+                    }
+
+                    const cronResult = state.agentCronResult || null;
+                    const jobs = cronResult && Array.isArray(cronResult.jobs)
+                        ? cronResult.jobs
+                        : [];
+                    rows.push(`<div class=\"agents-row\">Cron jobs: ${jobs.length}</div>`);
+                    rows.push("<div class=\"agents-row\">Capability mode: gateway cron endpoint not registered in BlazeClaw (explicitly gated)</div>");
+                    rows.push("<div class=\"agents-row\">TODO parity track: docs/compare/ui.controllers.md#2-mechanical-audit-openclawuisrcuicontrollers</div>");
+                }
+
+                state.agentsSurfaceEl.innerHTML = rows.join("");
+
+                state.agentsSurfaceEl.querySelectorAll("[data-agent-id]").forEach((el) => {
+                    el.addEventListener("click", () => {
+                        const agentId = String(el.getAttribute("data-agent-id") || "").trim();
+                        if (!agentId) {
+                            return;
+                        }
+                        agentsController.setSelectedAgentId(agentId);
+                        persistAgentsSnapshot(agentsController.getPersistenceSnapshot());
+                        emitAgentsTelemetry("agent.selected", {
+                            agentId,
+                            panel: state.agentsPanel,
+                        });
+                        void agentsController.loadPanelDataForCurrentAgent();
+                    });
                 });
-              }
-            })
-            .catch((err) => {
-              console.error("[agents-regression] failed:", err);
-              emitAgentsTelemetry("regression.failed", {
-                error: String(err || ""),
-              });
+            }
+
+            function renderAgentsTabs() {
+                if (!state.agentsTabsEl) {
+                    return;
+                }
+
+                if (!agentsController) {
+                    state.agentsTabsEl.innerHTML = "";
+                    return;
+                }
+
+                const tabs = [
+                    { id: "overview", label: "Overview" },
+                    { id: "tools", label: "Tools" },
+                    { id: "files", label: "Files" },
+                    { id: "skills", label: "Skills" },
+                    { id: "channels", label: "Channels" },
+                    { id: "cron", label: "Cron" },
+                ];
+                const current = String(state.agentsPanel || "overview");
+
+                state.agentsTabsEl.innerHTML = tabs.map((tab) => {
+                    const active = tab.id === current ? " active" : "";
+                    return `<button class=\"agents-tab${active}\" data-panel=\"${tab.id}\">${tab.label}</button>`;
+                }).join("");
+
+                state.agentsTabsEl.querySelectorAll("[data-panel]").forEach((el) => {
+                    el.addEventListener("click", () => {
+                        const panel = String(el.getAttribute("data-panel") || "").trim();
+                        agentsController.setAgentsPanel(panel);
+                        persistAgentsSnapshot(agentsController.getPersistenceSnapshot());
+                        emitAgentsTelemetry("tab.selected", {
+                            panel,
+                        });
+                        void agentsController.loadPanelDataForCurrentAgent();
+                    });
+                });
+            }
+
+            function updateComposerState() {
+                const hasInput = state.inputEl.value.trim().length > 0;
+                const hasAttachments = state.attachments.length > 0;
+                const canSend = state.bridgeAvailable && (hasInput || hasAttachments);
+                state.sendBtn.disabled = !canSend;
+                state.sendErrBtn.disabled = !canSend;
+                state.abortBtn.disabled = !state.bridgeAvailable || !state.runId;
+                state.attachBtn.disabled = !state.bridgeAvailable;
+                if (state.sessionSelect) {
+                    state.sessionSelect.disabled = !state.bridgeAvailable;
+                }
+                if (state.modelSelect) {
+                    state.modelSelect.disabled = !state.bridgeAvailable;
+                }
+                if (state.thinkingSelect) {
+                    state.thinkingSelect.disabled = !state.bridgeAvailable;
+                }
+                state.attachBtn.textContent = state.attachments.length > 0
+                    ? `Attach(${state.attachments.length})`
+                    : "Attach";
+
+                if (state.agentsControlPlaneEl) {
+                    state.agentsControlPlaneEl.hidden = !agentsController;
+                }
+                renderAgentsTabs();
+                renderAgentsSurface();
+            }
+            const controller = window.BlazeClawChatController.createController({
+                state,
+                addMessage,
+                addOrReplaceStream,
+                finalizeStream,
+                updateComposerState,
+                clearMessages,
+                setInputValue,
             });
-        }
-      }
 
-      const eventsModule = window.BlazeClawChatEvents.createEventsModule({
-        state,
-        controller,
-        addMessage,
-        appendToolLifecycleRow,
-        setStatus,
-        updateComposerState,
-        finalizeStream,
-        addOrReplaceStream,
-      });
+            function resolveAgentsEnabled() {
+                const search = new URLSearchParams(window.location.search || "");
+                const queryToggle = search.get("agents");
+                if (queryToggle === "0") {
+                    return false;
+                }
+                if (queryToggle === "1") {
+                    return true;
+                }
 
-      const composerModule = window.BlazeClawChatComposer.createComposerModule({
-        state,
-        controller,
-        updateComposerState,
-      });
+                try {
+                    if (window.localStorage) {
+                        const storedToggle = window.localStorage.getItem("blazeclaw.agents.enabled");
+                        if (storedToggle === "0") {
+                            return false;
+                        }
+                        if (storedToggle === "1") {
+                            return true;
+                        }
+                    }
+                } catch (_) {
+                }
 
-      composerModule.bind();
-      if (agentsController) {
-        void agentsController.loadAgents().then(() => {
-          if (state.agentsSelectedId) {
-            persistAgentsSnapshot(agentsController.getPersistenceSnapshot());
-            emitAgentsTelemetry("initial.agent.ready", {
-              agentId: state.agentsSelectedId,
-              panel: state.agentsPanel,
+                return true;
+            }
+
+            function resolveAgentsRegressionChecksEnabled() {
+                const search = new URLSearchParams(window.location.search || "");
+                if (search.get("agentsRegression") === "1") {
+                    return true;
+                }
+
+                try {
+                    return Boolean(
+                        window.localStorage &&
+                        window.localStorage.getItem("blazeclaw.agents.regression") === "1"
+                    );
+                } catch (_) {
+                    return false;
+                }
+            }
+
+            function loadAgentsPersistenceSnapshot() {
+                try {
+                    if (!window.localStorage) {
+                        return null;
+                    }
+
+                    const raw = window.localStorage.getItem("blazeclaw.agents.persistence");
+                    if (!raw) {
+                        return null;
+                    }
+
+                    const parsed = JSON.parse(raw);
+                    if (!parsed || typeof parsed !== "object") {
+                        return null;
+                    }
+
+                    return {
+                        panel: String(parsed.panel || "overview"),
+                        selectedAgentId: typeof parsed.selectedAgentId === "string"
+                            ? parsed.selectedAgentId
+                            : null,
+                    };
+                } catch (_) {
+                    return null;
+                }
+            }
+
+            function persistAgentsSnapshot(snapshot) {
+                try {
+                    if (!window.localStorage) {
+                        return;
+                    }
+
+                    window.localStorage.setItem(
+                        "blazeclaw.agents.persistence",
+                        JSON.stringify(snapshot || {})
+                    );
+                } catch (_) {
+                }
+            }
+
+            function emitAgentsTelemetry(eventName, payload) {
+                try {
+                    console.log("[agents-control-plane]", eventName, payload || {});
+                } catch (_) {
+                }
+            }
+
+            const agentsEnabled = resolveAgentsEnabled();
+            const agentsController = agentsEnabled && window.BlazeClawAgentsController
+                ? window.BlazeClawAgentsController.createAgentsController({
+                    state,
+                    request: (method, params) => controller.request(method, params),
+                    onStateUpdated: () => updateComposerState(),
+                })
+                : null;
+
+            if (agentsController) {
+                state.agentsPanel = "overview";
+                const persisted = loadAgentsPersistenceSnapshot();
+                if (persisted) {
+                    agentsController.applyPersistenceSnapshot(persisted);
+                    emitAgentsTelemetry("persistence.restored", persisted);
+                }
+
+                state.onSessionChanged = () => {
+                    agentsController.syncSessionContext({
+                        sessionKey: state.sessionKey,
+                    });
+                    emitAgentsTelemetry("session.changed", {
+                        sessionKey: state.sessionKey,
+                    });
+                    void agentsController.loadPanelDataForCurrentAgent();
+                };
+                state.onModelChanged = () => {
+                    agentsController.syncSessionContext({
+                        sessionKey: state.sessionKey,
+                    });
+                    emitAgentsTelemetry("model.changed", {
+                        model: state.selectedModel,
+                    });
+                    void agentsController.refreshFromConfigSnapshot();
+                };
+                agentsController.syncSessionContext({
+                    sessionKey: state.sessionKey,
+                });
+
+                if (resolveAgentsRegressionChecksEnabled() &&
+                    typeof window.BlazeClawAgentsController.runRegressionChecks === "function") {
+                    window.BlazeClawAgentsController.runRegressionChecks()
+                        .then((result) => {
+                            if (result && result.ok) {
+                                console.log("[agents-regression] passed:", result.checks);
+                                emitAgentsTelemetry("regression.passed", {
+                                    checks: result.checks,
+                                });
+                            }
+                        })
+                        .catch((err) => {
+                            console.error("[agents-regression] failed:", err);
+                            emitAgentsTelemetry("regression.failed", {
+                                error: String(err || ""),
+                            });
+                        });
+                }
+            }
+
+            const eventsModule = window.BlazeClawChatEvents.createEventsModule({
+                state,
+                controller,
+                addMessage,
+                appendToolLifecycleRow,
+                setStatus,
+                updateComposerState,
+                finalizeStream,
+                addOrReplaceStream,
             });
-            return agentsController.loadPanelDataForCurrentAgent();
-          }
-          return undefined;
-        });
-      }
 
-      if (state.bridgeAvailable) {
-        window.chrome.webview.addEventListener("message", (event) => {
-          eventsModule.handleInboundMessage(event && event.data);
-        });
+            const composerModule = window.BlazeClawChatComposer.createComposerModule({
+                state,
+                controller,
+                updateComposerState,
+            });
 
-        controller.post({ channel: "blazeclaw.gateway.lifecycle.subscribe" });
-        controller.flushQueue();
-        setStatus("gateway: subscribing...");
-        updateComposerState();
-      } else {
-        setStatus("bridge unavailable");
-        updateComposerState();
-      }
-    })();
-  </script>
+            composerModule.bind();
+            if (agentsController) {
+                void agentsController.loadAgents().then(() => {
+                    if (state.agentsSelectedId) {
+                        persistAgentsSnapshot(agentsController.getPersistenceSnapshot());
+                        emitAgentsTelemetry("initial.agent.ready", {
+                            agentId: state.agentsSelectedId,
+                            panel: state.agentsPanel,
+                        });
+                        return agentsController.loadPanelDataForCurrentAgent();
+                    }
+                    return undefined;
+                });
+            }
+
+            if (state.bridgeAvailable) {
+                window.chrome.webview.addEventListener("message", (event) => {
+                    eventsModule.handleInboundMessage(event && event.data);
+                });
+
+                controller.post({ channel: "blazeclaw.gateway.lifecycle.subscribe" });
+                controller.flushQueue();
+                setStatus("gateway: subscribing...");
+                updateComposerState();
+            } else {
+                setStatus("bridge unavailable");
+                updateComposerState();
+            }
+        })();
+    </script>
 </body>
 </html>

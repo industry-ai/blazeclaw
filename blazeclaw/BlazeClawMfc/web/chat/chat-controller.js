@@ -33,6 +33,70 @@
         };
     }
 
+    const MAX_ASSISTANT_NAME = 50;
+    const MAX_ASSISTANT_AVATAR = 200;
+    const DEFAULT_ASSISTANT_NAME = "Assistant";
+
+    function coerceIdentityValue(value, maxLength) {
+        if (typeof value !== "string") {
+            return undefined;
+        }
+
+        const trimmed = value.trim();
+        if (!trimmed) {
+            return undefined;
+        }
+
+        if (trimmed.length <= maxLength) {
+            return trimmed;
+        }
+
+        return trimmed.slice(0, maxLength);
+    }
+
+    function normalizeAssistantIdentity(input) {
+        const source = input && typeof input === "object"
+            ? input
+            : {};
+
+        const name =
+            coerceIdentityValue(source.name, MAX_ASSISTANT_NAME) ||
+            DEFAULT_ASSISTANT_NAME;
+        const avatar =
+            coerceIdentityValue(source.avatar, MAX_ASSISTANT_AVATAR) ||
+            null;
+        const agentId =
+            typeof source.agentId === "string" && source.agentId.trim().length > 0
+                ? source.agentId.trim()
+                : null;
+
+        return {
+            name,
+            avatar,
+            agentId,
+        };
+    }
+
+    function extractAssistantIdentity(response) {
+        const payload =
+            response && response.payload && typeof response.payload === "object"
+                ? response.payload
+                : response;
+        if (!payload || typeof payload !== "object") {
+            return {};
+        }
+
+        const nestedAgent = payload.agent && typeof payload.agent === "object"
+            ? payload.agent
+            : null;
+
+        return {
+            name: payload.name || (nestedAgent ? nestedAgent.name : undefined),
+            avatar: payload.avatar || (nestedAgent ? nestedAgent.avatar : undefined),
+            agentId: payload.agentId || (nestedAgent ? nestedAgent.id : undefined),
+        };
+    }
+
     function createController(options) {
         const opts = options || {};
         const state = opts.state;
@@ -70,6 +134,15 @@
         state.slashCommandsLoaded = Boolean(state.slashCommandsLoaded);
         state.terminalRunStates = state.terminalRunStates || new Map();
         state.reconcileTimer = state.reconcileTimer || null;
+        if (typeof state.assistantName !== "string" || !state.assistantName.trim()) {
+            state.assistantName = DEFAULT_ASSISTANT_NAME;
+        }
+        if (typeof state.assistantAvatar !== "string" && state.assistantAvatar !== null) {
+            state.assistantAvatar = "A";
+        }
+        if (typeof state.assistantAgentId !== "string" && state.assistantAgentId !== null) {
+            state.assistantAgentId = null;
+        }
 
         function nextId() {
             return `web-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -232,6 +305,34 @@
             return state.sessionOptions;
         }
 
+        async function loadAssistantIdentity(opts) {
+            if (!state.connected || !state.bridgeAvailable) {
+                return;
+            }
+
+            const requestedSession = opts && typeof opts === "object"
+                ? opts.sessionKey
+                : "";
+            const sessionKey = normalizeSessionKey(
+                requestedSession || state.sessionKey);
+            const params = sessionKey ? { sessionKey } : {};
+
+            try {
+                const response = await request("agent.identity.get", params);
+                if (!response) {
+                    return;
+                }
+
+                const normalized = normalizeAssistantIdentity(
+                    extractAssistantIdentity(response));
+                state.assistantName = normalized.name;
+                state.assistantAvatar = normalized.avatar;
+                state.assistantAgentId = normalized.agentId;
+            } catch (_) {
+                // Keep last known assistant identity on errors.
+            }
+        }
+
         async function switchSession(sessionKey) {
             const nextSession = normalizeSessionKey(sessionKey);
             if (nextSession === state.sessionKey) {
@@ -249,6 +350,7 @@
             finalizeStream();
             restoreDraftForSession();
             await loadHistory();
+            void loadAssistantIdentity({ sessionKey: state.sessionKey });
             if (state.sessionSelect) {
                 state.sessionSelect.value = state.sessionKey;
             }
@@ -765,6 +867,7 @@
             switchSession,
             applyModelSelection,
             applyThinkingLevel,
+            loadAssistantIdentity,
             persistDraftForSession,
             restoreDraftForSession,
             recallInputHistory,
