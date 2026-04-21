@@ -140,6 +140,16 @@
             };
         }
 
+        if (typeof state.agentIdentityLoading !== "boolean") {
+            state.agentIdentityLoading = false;
+        }
+        if (typeof state.agentIdentityError !== "string" && state.agentIdentityError !== null) {
+            state.agentIdentityError = null;
+        }
+        if (!state.agentIdentityById || typeof state.agentIdentityById !== "object") {
+            state.agentIdentityById = {};
+        }
+
         if (!state.chatModelOverrides || typeof state.chatModelOverrides !== "object") {
             state.chatModelOverrides = {};
         }
@@ -657,6 +667,79 @@
             await loadPanelDataForCurrentAgent();
         }
 
+        async function loadAgentIdentity(agentId) {
+            const resolvedAgentId = String(agentId || "").trim();
+            if (!request || !state.connected || state.agentIdentityLoading || !resolvedAgentId) {
+                return;
+            }
+
+            if (state.agentIdentityById[resolvedAgentId]) {
+                return;
+            }
+
+            state.agentIdentityLoading = true;
+            state.agentIdentityError = null;
+            onStateUpdated();
+
+            try {
+                const res = await request("agent.identity.get", {
+                    agentId: resolvedAgentId,
+                });
+                const payload = res && res.payload ? res.payload : null;
+                const identity = payload && payload.agent ? payload.agent : payload;
+                if (identity) {
+                    state.agentIdentityById = Object.assign({}, state.agentIdentityById, {
+                        [resolvedAgentId]: identity,
+                    });
+                }
+            } catch (err) {
+                state.agentIdentityError = String(err);
+            } finally {
+                state.agentIdentityLoading = false;
+                onStateUpdated();
+            }
+        }
+
+        async function loadAgentIdentities(agentIds) {
+            if (!request || !state.connected || state.agentIdentityLoading) {
+                return;
+            }
+
+            const normalizedIds = Array.isArray(agentIds)
+                ? agentIds.map(function (id) { return String(id || "").trim(); }).filter(function (id) { return id.length > 0; })
+                : [];
+            const missing = normalizedIds.filter(function (id) {
+                return !state.agentIdentityById[id];
+            });
+            if (missing.length === 0) {
+                return;
+            }
+
+            state.agentIdentityLoading = true;
+            state.agentIdentityError = null;
+            onStateUpdated();
+
+            try {
+                for (const agentId of missing) {
+                    const res = await request("agent.identity.get", {
+                        agentId,
+                    });
+                    const payload = res && res.payload ? res.payload : null;
+                    const identity = payload && payload.agent ? payload.agent : payload;
+                    if (identity) {
+                        state.agentIdentityById = Object.assign({}, state.agentIdentityById, {
+                            [agentId]: identity,
+                        });
+                    }
+                }
+            } catch (err) {
+                state.agentIdentityError = String(err);
+            } finally {
+                state.agentIdentityLoading = false;
+                onStateUpdated();
+            }
+        }
+
         function setAgentsPanel(panel) {
             const panelValue = String(panel || "").trim();
             const normalized = ["overview", "tools", "files", "skills", "channels", "cron"].indexOf(panelValue) >= 0
@@ -798,6 +881,8 @@
             loadAgentSkills,
             loadAgentChannels,
             loadAgentCron,
+            loadAgentIdentity,
+            loadAgentIdentities,
             loadPanelDataForCurrentAgent,
             refreshFromConfigSnapshot,
             resetToolsEffectiveState,
