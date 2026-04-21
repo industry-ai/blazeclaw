@@ -30,6 +30,72 @@
       font-size: 12px;
       color: #9cc8ff;
     }
+    .agents-control-plane {
+      border-bottom: 1px solid #2f2f2f;
+      padding: 8px 10px;
+      background: #1a1a1a;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .agents-tabs {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .agents-tab {
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid #4a4a4a;
+      background: #262626;
+      font-size: 12px;
+    }
+    .agents-tab.active {
+      background: #32445f;
+      border-color: #6fa1db;
+      color: #d8e8ff;
+    }
+    .agents-surface {
+      border: 1px solid #343434;
+      border-radius: 8px;
+      background: #202020;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12px;
+    }
+    .agents-surface-title {
+      color: #d8e8ff;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .agents-row {
+      color: #d0d0d0;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .agents-row.error {
+      color: #ffb3b3;
+    }
+    .agents-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .agents-chip {
+      border: 1px solid #4a4a4a;
+      border-radius: 999px;
+      padding: 2px 8px;
+      background: #2a2a2a;
+      font-size: 11px;
+    }
+    .agents-chip.active {
+      border-color: #80b2eb;
+      background: #314761;
+      color: #dfefff;
+    }
     .messages {
       overflow: auto;
       padding: 12px;
@@ -170,6 +236,10 @@
       <div>BlazeClaw Chat (WebView)</div>
       <div id="status" class="status">initializing...</div>
     </div>
+    <div id="agentsControlPlane" class="agents-control-plane" hidden>
+      <div id="agentsTabs" class="agents-tabs"></div>
+      <div id="agentsSurface" class="agents-surface"></div>
+    </div>
     <div id="messages" class="messages"></div>
     <div class="composer">
       <div id="slashMenu" class="slash-menu"></div>
@@ -221,6 +291,9 @@
       state.modelSelect = document.getElementById("modelSelect");
       state.thinkingSelect = document.getElementById("thinkingSelect");
       state.slashMenuEl = document.getElementById("slashMenu");
+      state.agentsControlPlaneEl = document.getElementById("agentsControlPlane");
+      state.agentsTabsEl = document.getElementById("agentsTabs");
+      state.agentsSurfaceEl = document.getElementById("agentsSurface");
 
       function setStatus(text) {
         statusEl.textContent = text;
@@ -354,6 +427,156 @@
         }
       }
 
+      function renderAgentsSurface() {
+        if (!state.agentsSurfaceEl) {
+          return;
+        }
+
+        if (!agentsController) {
+          state.agentsSurfaceEl.innerHTML = "";
+          return;
+        }
+
+        const selectedAgent = String(state.agentsSelectedId || "").trim();
+        const panel = String(state.agentsPanel || "overview");
+        const rows = [];
+
+        rows.push(`<div class="agents-surface-title">Agents control-plane — ${panel}</div>`);
+
+        if (state.agentsLoading) {
+          rows.push("<div class=\"agents-row\">Loading agents...</div>");
+        }
+        if (state.agentsError) {
+          rows.push(`<div class=\"agents-row error\">${state.agentsError}</div>`);
+        }
+
+        if (state.agentsList && Array.isArray(state.agentsList.agents) && state.agentsList.agents.length > 0) {
+          const chips = state.agentsList.agents.map((entry) => {
+            const id = String((entry && entry.id) || "");
+            const active = selectedAgent && selectedAgent === id ? " active" : "";
+            const label = id || "(unknown)";
+            return `<button class=\"agents-chip${active}\" data-agent-id=\"${label.replace(/\"/g, "&quot;")}\">${label}</button>`;
+          }).join("");
+          rows.push(`<div class=\"agents-list\">${chips}</div>`);
+        }
+
+        if (panel === "overview") {
+          const count = state.agentsList && Array.isArray(state.agentsList.agents)
+            ? state.agentsList.agents.length
+            : 0;
+          rows.push(`<div class=\"agents-row\">Selected agent: ${selectedAgent || "(none)"}</div>`);
+          rows.push(`<div class=\"agents-row\">Agent count: ${count}</div>`);
+          rows.push(`<div class=\"agents-row\">Session key: ${String(state.sessionKey || "")}</div>`);
+        }
+
+        if (panel === "tools") {
+          if (state.toolsCatalogLoading || state.toolsEffectiveLoading) {
+            rows.push("<div class=\"agents-row\">Loading tools surface...</div>");
+          }
+          if (state.toolsCatalogError) {
+            rows.push(`<div class=\"agents-row error\">${state.toolsCatalogError}</div>`);
+          }
+          if (state.toolsEffectiveError) {
+            rows.push(`<div class=\"agents-row error\">${state.toolsEffectiveError}</div>`);
+          }
+
+          const catalogTools = state.toolsCatalogResult && Array.isArray(state.toolsCatalogResult.tools)
+            ? state.toolsCatalogResult.tools.length
+            : 0;
+          const effectiveTools = state.toolsEffectiveResult && Array.isArray(state.toolsEffectiveResult.tools)
+            ? state.toolsEffectiveResult.tools.length
+            : 0;
+
+          rows.push(`<div class=\"agents-row\">Catalog tools: ${catalogTools}</div>`);
+          rows.push(`<div class=\"agents-row\">Effective tools: ${effectiveTools}</div>`);
+          rows.push(`<div class=\"agents-row\">Effective key: ${String(state.toolsEffectiveResultKey || "(none)")}</div>`);
+        }
+
+        if (panel === "files") {
+          if (state.agentFilesLoading) {
+            rows.push("<div class=\"agents-row\">Loading agent files...</div>");
+          }
+          if (state.agentFilesError) {
+            rows.push(`<div class=\"agents-row error\">${state.agentFilesError}</div>`);
+          }
+
+          const files = state.agentFilesResult && Array.isArray(state.agentFilesResult.files)
+            ? state.agentFilesResult.files
+            : [];
+          rows.push(`<div class=\"agents-row\">Files count: ${files.length}</div>`);
+          if (files.length > 0) {
+            rows.push(`<div class=\"agents-row\">First file: ${String(files[0].path || files[0].name || "")}</div>`);
+          }
+          if (state.agentFileContentLoading) {
+            rows.push("<div class=\"agents-row\">Loading file content...</div>");
+          }
+          if (state.agentFileContentError) {
+            rows.push(`<div class=\"agents-row error\">${state.agentFileContentError}</div>`);
+          }
+        }
+
+        if (panel === "skills") {
+          if (state.agentSkillsLoading) {
+            rows.push("<div class=\"agents-row\">Loading skills...</div>");
+          }
+          if (state.agentSkillsError) {
+            rows.push(`<div class=\"agents-row error\">${state.agentSkillsError}</div>`);
+          }
+
+          const skillsResult = state.agentSkillsResult || null;
+          const commands = skillsResult && Array.isArray(skillsResult.commands)
+            ? skillsResult.commands
+            : [];
+          rows.push(`<div class=\"agents-row\">Skill commands: ${commands.length}</div>`);
+          rows.push(`<div class=\"agents-row\">Agent-scoped endpoint: ${skillsResult && skillsResult.agentScoped ? "yes" : "no (capability-gated)"}</div>`);
+        }
+
+        state.agentsSurfaceEl.innerHTML = rows.join("");
+
+        state.agentsSurfaceEl.querySelectorAll("[data-agent-id]").forEach((el) => {
+          el.addEventListener("click", () => {
+            const agentId = String(el.getAttribute("data-agent-id") || "").trim();
+            if (!agentId) {
+              return;
+            }
+            agentsController.setSelectedAgentId(agentId);
+            void agentsController.loadPanelDataForCurrentAgent();
+          });
+        });
+      }
+
+      function renderAgentsTabs() {
+        if (!state.agentsTabsEl) {
+          return;
+        }
+
+        if (!agentsController) {
+          state.agentsTabsEl.innerHTML = "";
+          return;
+        }
+
+        const tabs = [
+          { id: "overview", label: "Overview" },
+          { id: "tools", label: "Tools" },
+          { id: "files", label: "Files" },
+          { id: "skills", label: "Skills" },
+        ];
+        const current = String(state.agentsPanel || "overview");
+
+        state.agentsTabsEl.innerHTML = tabs.map((tab) => {
+          const active = tab.id === current ? " active" : "";
+          return `<button class=\"agents-tab${active}\" data-panel=\"${tab.id}\">${tab.label}</button>`;
+        }).join("");
+
+        state.agentsTabsEl.querySelectorAll("[data-panel]").forEach((el) => {
+          el.addEventListener("click", () => {
+            const panel = String(el.getAttribute("data-panel") || "").trim();
+            agentsController.setAgentsPanel(panel);
+            void agentsController.loadPanelDataForCurrentAgent();
+          });
+        });
+      }
+
       function updateComposerState() {
         const hasInput = state.inputEl.value.trim().length > 0;
         const hasAttachments = state.attachments.length > 0;
@@ -374,6 +597,12 @@
         state.attachBtn.textContent = state.attachments.length > 0
           ? `Attach(${state.attachments.length})`
           : "Attach";
+
+        if (state.agentsControlPlaneEl) {
+          state.agentsControlPlaneEl.hidden = !agentsController;
+        }
+        renderAgentsTabs();
+        renderAgentsSurface();
       }
       const controller = window.BlazeClawChatController.createController({
         state,
@@ -437,18 +666,18 @@
         : null;
 
       if (agentsController) {
-        state.agentsPanel = "tools";
+        state.agentsPanel = "overview";
         state.onSessionChanged = () => {
           agentsController.syncSessionContext({
             sessionKey: state.sessionKey,
           });
-          void agentsController.refreshVisibleToolsEffectiveForCurrentSession();
+          void agentsController.loadPanelDataForCurrentAgent();
         };
         state.onModelChanged = () => {
           agentsController.syncSessionContext({
             sessionKey: state.sessionKey,
           });
-          void agentsController.refreshVisibleToolsEffectiveForCurrentSession();
+          void agentsController.loadPanelDataForCurrentAgent();
         };
         agentsController.syncSessionContext({
           sessionKey: state.sessionKey,
@@ -489,9 +718,7 @@
       if (agentsController) {
         void agentsController.loadAgents().then(() => {
           if (state.agentsSelectedId) {
-            return agentsController.loadToolsCatalog(state.agentsSelectedId).then(() => {
-              return agentsController.refreshVisibleToolsEffectiveForCurrentSession();
-            });
+            return agentsController.loadPanelDataForCurrentAgent();
           }
           return undefined;
         });

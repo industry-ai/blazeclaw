@@ -59,6 +59,46 @@
             state.toolsEffectiveResult = null;
         }
 
+        const supportedPanels = ["overview", "tools", "files", "skills"];
+        if (supportedPanels.indexOf(String(state.agentsPanel || "")) < 0) {
+            state.agentsPanel = "overview";
+        }
+
+        if (typeof state.agentFilesLoading !== "boolean") {
+            state.agentFilesLoading = false;
+        }
+        if (typeof state.agentFilesLoadingAgentId !== "string" && state.agentFilesLoadingAgentId !== null) {
+            state.agentFilesLoadingAgentId = null;
+        }
+        if (typeof state.agentFilesError !== "string" && state.agentFilesError !== null) {
+            state.agentFilesError = null;
+        }
+        if (!state.agentFilesResult) {
+            state.agentFilesResult = null;
+        }
+        if (typeof state.agentFileContentLoading !== "boolean") {
+            state.agentFileContentLoading = false;
+        }
+        if (typeof state.agentFileContentLoadingKey !== "string" && state.agentFileContentLoadingKey !== null) {
+            state.agentFileContentLoadingKey = null;
+        }
+        if (typeof state.agentFileContentError !== "string" && state.agentFileContentError !== null) {
+            state.agentFileContentError = null;
+        }
+        if (!state.agentFileContentResult) {
+            state.agentFileContentResult = null;
+        }
+
+        if (typeof state.agentSkillsLoading !== "boolean") {
+            state.agentSkillsLoading = false;
+        }
+        if (typeof state.agentSkillsError !== "string" && state.agentSkillsError !== null) {
+            state.agentSkillsError = null;
+        }
+        if (!state.agentSkillsResult) {
+            state.agentSkillsResult = null;
+        }
+
         if (!state.chatModelOverrides || typeof state.chatModelOverrides !== "object") {
             state.chatModelOverrides = {};
         }
@@ -186,6 +226,12 @@
             const resolvedSessionKey = String(params && params.sessionKey || "").trim();
             const modelKey = resolveEffectiveToolsModelKey(resolvedSessionKey);
             return resolvedAgentId + ":" + resolvedSessionKey + ":model=" + (modelKey || "(default)");
+        }
+
+        function buildAgentFileContentRequestKey(params) {
+            const resolvedAgentId = String(params && params.agentId || "").trim() || "main";
+            const resolvedPath = String(params && params.path || "").trim();
+            return resolvedAgentId + ":path=" + resolvedPath;
         }
 
         async function loadAgents() {
@@ -351,6 +397,177 @@
             });
         }
 
+        async function loadAgentFiles(agentId) {
+            const resolvedAgentId = String(agentId || "").trim();
+            if (!request ||
+                !state.connected ||
+                !resolvedAgentId ||
+                (state.agentFilesLoading && state.agentFilesLoadingAgentId === resolvedAgentId)) {
+                return;
+            }
+
+            function shouldIgnoreResponse() {
+                return state.agentFilesLoadingAgentId !== resolvedAgentId ||
+                    hasSelectedAgentMismatch(resolvedAgentId);
+            }
+
+            state.agentFilesLoading = true;
+            state.agentFilesLoadingAgentId = resolvedAgentId;
+            state.agentFilesError = null;
+            state.agentFilesResult = null;
+            onStateUpdated();
+
+            try {
+                const res = await request("gateway.agents.files.list", {
+                    agentId: resolvedAgentId,
+                });
+                if (shouldIgnoreResponse()) {
+                    return;
+                }
+
+                state.agentFilesResult = res && res.payload ? res.payload : null;
+            } catch (err) {
+                if (shouldIgnoreResponse()) {
+                    return;
+                }
+
+                state.agentFilesError = resolveToolsErrorMessage(err, "agent files");
+            } finally {
+                if (state.agentFilesLoadingAgentId === resolvedAgentId) {
+                    state.agentFilesLoadingAgentId = null;
+                    state.agentFilesLoading = false;
+                }
+                onStateUpdated();
+            }
+        }
+
+        async function loadAgentFileContent(params) {
+            const resolvedAgentId = String(params && params.agentId || "").trim();
+            const resolvedPath = String(params && params.path || "").trim();
+            const requestKey = buildAgentFileContentRequestKey({
+                agentId: resolvedAgentId,
+                path: resolvedPath,
+            });
+
+            if (!request ||
+                !state.connected ||
+                !resolvedAgentId ||
+                !resolvedPath ||
+                (state.agentFileContentLoading && state.agentFileContentLoadingKey === requestKey)) {
+                return;
+            }
+
+            function shouldIgnoreResponse() {
+                return state.agentFileContentLoadingKey !== requestKey ||
+                    hasSelectedAgentMismatch(resolvedAgentId);
+            }
+
+            state.agentFileContentLoading = true;
+            state.agentFileContentLoadingKey = requestKey;
+            state.agentFileContentError = null;
+            state.agentFileContentResult = null;
+            onStateUpdated();
+
+            try {
+                const res = await request("gateway.agents.files.get", {
+                    agentId: resolvedAgentId,
+                    path: resolvedPath,
+                });
+                if (shouldIgnoreResponse()) {
+                    return;
+                }
+
+                state.agentFileContentResult = res && res.payload ? res.payload : null;
+            } catch (err) {
+                if (shouldIgnoreResponse()) {
+                    return;
+                }
+
+                state.agentFileContentError = resolveToolsErrorMessage(err, "agent file content");
+            } finally {
+                if (state.agentFileContentLoadingKey === requestKey) {
+                    state.agentFileContentLoadingKey = null;
+                    state.agentFileContentLoading = false;
+                }
+                onStateUpdated();
+            }
+        }
+
+        async function loadAgentSkills(agentId) {
+            const resolvedAgentId = String(agentId || "").trim();
+            if (!request || !state.connected || !resolvedAgentId || state.agentSkillsLoading) {
+                return;
+            }
+
+            state.agentSkillsLoading = true;
+            state.agentSkillsError = null;
+            state.agentSkillsResult = null;
+            onStateUpdated();
+
+            try {
+                const res = await request("gateway.skills.commands", {
+                    agentId: resolvedAgentId,
+                });
+                const payload = res && res.payload ? res.payload : null;
+                const commands = payload && Array.isArray(payload.commands) ? payload.commands : [];
+                state.agentSkillsResult = {
+                    commands,
+                    count: typeof payload.count === "number" ? payload.count : commands.length,
+                    capability: "gateway.skills.commands",
+                    agentScoped: false,
+                };
+            } catch (err) {
+                state.agentSkillsError = resolveToolsErrorMessage(err, "agent skills");
+            } finally {
+                state.agentSkillsLoading = false;
+                onStateUpdated();
+            }
+        }
+
+        function setAgentsPanel(panel) {
+            const panelValue = String(panel || "").trim();
+            const normalized = ["overview", "tools", "files", "skills"].indexOf(panelValue) >= 0
+                ? panelValue
+                : "overview";
+            state.agentsPanel = normalized;
+            onStateUpdated();
+        }
+
+        async function loadPanelDataForCurrentAgent() {
+            const selectedAgentId = String(state.agentsSelectedId || "").trim();
+            if (!selectedAgentId) {
+                return;
+            }
+
+            if (state.agentsPanel === "tools") {
+                await loadToolsCatalog(selectedAgentId);
+                await refreshVisibleToolsEffectiveForCurrentSession();
+                return;
+            }
+
+            if (state.agentsPanel === "files") {
+                await loadAgentFiles(selectedAgentId);
+                const files = state.agentFilesResult && Array.isArray(state.agentFilesResult.files)
+                    ? state.agentFilesResult.files
+                    : [];
+                if (files.length > 0) {
+                    const first = files[0] || {};
+                    const path = String(first.path || first.name || "").trim();
+                    if (path) {
+                        await loadAgentFileContent({
+                            agentId: selectedAgentId,
+                            path,
+                        });
+                    }
+                }
+                return;
+            }
+
+            if (state.agentsPanel === "skills") {
+                await loadAgentSkills(selectedAgentId);
+            }
+        }
+
         async function saveAgentsConfig(saveConfigFn) {
             if (typeof saveConfigFn !== "function") {
                 throw new Error("saveAgentsConfig requires saveConfig function");
@@ -372,6 +589,12 @@
         function setSelectedAgentId(agentId) {
             const nextAgentId = String(agentId || "").trim() || null;
             state.agentsSelectedId = nextAgentId;
+            state.toolsCatalogResult = null;
+            state.toolsEffectiveResult = null;
+            state.toolsEffectiveResultKey = null;
+            state.agentFilesResult = null;
+            state.agentFileContentResult = null;
+            state.agentSkillsResult = null;
             onStateUpdated();
         }
 
@@ -396,11 +619,17 @@
             loadAgents,
             loadToolsCatalog,
             loadToolsEffective,
+            loadAgentFiles,
+            loadAgentFileContent,
+            loadAgentSkills,
+            loadPanelDataForCurrentAgent,
             resetToolsEffectiveState,
             buildToolsEffectiveRequestKey,
+            buildAgentFileContentRequestKey,
             refreshVisibleToolsEffectiveForCurrentSession,
             saveAgentsConfig,
             setSelectedAgentId,
+            setAgentsPanel,
             syncSessionContext,
         };
     }
