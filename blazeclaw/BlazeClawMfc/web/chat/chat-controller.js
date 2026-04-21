@@ -36,6 +36,7 @@
     const MAX_ASSISTANT_NAME = 50;
     const MAX_ASSISTANT_AVATAR = 200;
     const DEFAULT_ASSISTANT_NAME = "Assistant";
+    const DEFAULT_CONTROL_UI_BOOTSTRAP_BASE_PATH = "";
 
     function coerceIdentityValue(value, maxLength) {
         if (typeof value !== "string") {
@@ -94,6 +95,32 @@
             name: payload.name || (nestedAgent ? nestedAgent.name : undefined),
             avatar: payload.avatar || (nestedAgent ? nestedAgent.avatar : undefined),
             agentId: payload.agentId || (nestedAgent ? nestedAgent.id : undefined),
+        };
+    }
+
+    function normalizeBootstrapBasePath(basePath) {
+        if (typeof basePath !== "string") {
+            return DEFAULT_CONTROL_UI_BOOTSTRAP_BASE_PATH;
+        }
+
+        const trimmed = basePath.trim();
+        return trimmed;
+    }
+
+    function buildControlUiBootstrapConfigSnapshot(input) {
+        const source = input && typeof input === "object"
+            ? input
+            : {};
+        const normalizedIdentity = normalizeAssistantIdentity({
+            name: source.assistantName,
+            avatar: source.assistantAvatar,
+            agentId: source.assistantAgentId,
+        });
+
+        return {
+            basePath: normalizeBootstrapBasePath(source.basePath),
+            assistantName: normalizedIdentity.name,
+            assistantAvatar: normalizedIdentity.avatar,
         };
     }
 
@@ -383,6 +410,26 @@
             } catch (_) {
                 // Keep last known assistant identity on errors.
             }
+        }
+
+        async function getControlUiBootstrapConfig(opts) {
+            const options = opts && typeof opts === "object"
+                ? opts
+                : {};
+
+            if (options.refreshIdentity === true) {
+                await loadAssistantIdentity({
+                    sessionKey: options.sessionKey,
+                    requestOverride: options.requestOverride,
+                });
+            }
+
+            return buildControlUiBootstrapConfigSnapshot({
+                basePath: options.basePath,
+                assistantName: state.assistantName,
+                assistantAvatar: state.assistantAvatar,
+                assistantAgentId: state.assistantAgentId,
+            });
         }
 
         async function switchSession(sessionKey) {
@@ -929,6 +976,7 @@
             applyModelSelection,
             applyThinkingLevel,
             loadAssistantIdentity,
+            getControlUiBootstrapConfig,
             persistDraftForSession,
             restoreDraftForSession,
             recallInputHistory,
@@ -945,6 +993,7 @@
             connected: true,
             bridgeAvailable: true,
             sessionKey: "main",
+            basePath: "",
             assistantName: "Assistant",
             assistantAvatar: "A",
             assistantAgentId: null,
@@ -1189,6 +1238,52 @@
                 state.assistantAgentId === "agent-persisted",
                 "assistant identity loader should retain last known values on request failure");
             summary.push("assistant error retention");
+        }
+
+        {
+            const state = createRegressionState();
+            state.basePath = " /openclaw ";
+            const controller = createController({
+                state,
+            });
+
+            const snapshot = await controller.getControlUiBootstrapConfig();
+            assertRegression(snapshot.basePath === "" &&
+                snapshot.assistantName === "Assistant" &&
+                snapshot.assistantAvatar === "A",
+                "bootstrap snapshot should normalize to control-ui field names and preserve default identity values");
+            summary.push("control-ui bootstrap snapshot defaults");
+        }
+
+        {
+            const state = createRegressionState();
+            state.assistantName = "Persisted";
+            state.assistantAvatar = "P";
+            state.assistantAgentId = "agent-persisted";
+            const calls = [];
+            const controller = createController({
+                state,
+            });
+
+            const snapshot = await controller.getControlUiBootstrapConfig({
+                refreshIdentity: true,
+                sessionKey: "  s-bootstrap ",
+                basePath: " /openclaw ",
+                requestOverride: async (method, params) => {
+                    calls.push({ method, params });
+                    throw new Error("bridge identity unavailable");
+                },
+            });
+
+            assertRegression(calls.length === 1 &&
+                calls[0].method === "agent.identity.get" &&
+                calls[0].params && calls[0].params.sessionKey === "s-bootstrap",
+                "bootstrap adapter refresh should delegate to session-aware assistant identity loader");
+            assertRegression(snapshot.basePath === "/openclaw" &&
+                snapshot.assistantName === "Persisted" &&
+                snapshot.assistantAvatar === "P",
+                "bootstrap adapter should retain last-known identity when refresh path fails");
+            summary.push("control-ui bootstrap refresh retention");
         }
 
         {
