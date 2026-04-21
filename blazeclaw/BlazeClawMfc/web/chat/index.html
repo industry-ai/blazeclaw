@@ -464,9 +464,36 @@
           const count = state.agentsList && Array.isArray(state.agentsList.agents)
             ? state.agentsList.agents.length
             : 0;
+          const identity = selectedAgent && state.agentIdentityById
+            ? state.agentIdentityById[selectedAgent] || null
+            : null;
+          const identityDisplayName = identity
+            ? String(identity.displayName || identity.name || "").trim()
+            : "";
+          const identityRole = identity
+            ? String(identity.role || identity.description || "").trim()
+            : "";
+          const identityStyle = identity
+            ? String(identity.style || identity.tone || "").trim()
+            : "";
+
           rows.push(`<div class=\"agents-row\">Selected agent: ${selectedAgent || "(none)"}</div>`);
           rows.push(`<div class=\"agents-row\">Agent count: ${count}</div>`);
           rows.push(`<div class=\"agents-row\">Session key: ${String(state.sessionKey || "")}</div>`);
+
+          if (state.agentIdentityLoading) {
+            rows.push("<div class=\"agents-row\">Loading agent identity...</div>");
+          }
+          if (state.agentIdentityError) {
+            rows.push(`<div class=\"agents-row error\">${state.agentIdentityError}</div>`);
+          }
+
+          rows.push(`<div class=\"agents-row\">Identity cached: ${identity ? "yes" : "no"}</div>`);
+          if (identity) {
+            rows.push(`<div class=\"agents-row\">Identity name: ${identityDisplayName || "(n/a)"}</div>`);
+            rows.push(`<div class=\"agents-row\">Identity role: ${identityRole || "(n/a)"}</div>`);
+            rows.push(`<div class=\"agents-row\">Identity style: ${identityStyle || "(n/a)"}</div>`);
+          }
         }
 
         if (panel === "tools") {

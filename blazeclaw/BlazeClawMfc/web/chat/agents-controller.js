@@ -307,6 +307,20 @@
                     if (!hasSelected) {
                         state.agentsSelectedId = res.payload.defaultId || (agents[0] && agents[0].id) || null;
                     }
+
+                    const agentIds = agents
+                        .map(function (entry) {
+                            return String(entry && entry.id || "").trim();
+                        })
+                        .filter(function (id) {
+                            return id.length > 0;
+                        });
+                    void loadAgentIdentities(agentIds);
+
+                    const selectedAgentId = String(state.agentsSelectedId || "").trim();
+                    if (selectedAgentId) {
+                        void loadAgentIdentity(selectedAgentId);
+                    }
                 }
             } catch (err) {
                 const scopeErrors = window.BlazeClawScopeErrors;
@@ -794,6 +808,11 @@
 
             if (state.agentsPanel === "cron") {
                 await loadAgentCron(selectedAgentId);
+                return;
+            }
+
+            if (state.agentsPanel === "overview") {
+                await loadAgentIdentity(selectedAgentId);
             }
         }
 
@@ -830,6 +849,10 @@
             state.agentChannelsResult = null;
             state.agentCronResult = null;
             onStateUpdated();
+
+            if (nextAgentId) {
+                void loadAgentIdentity(nextAgentId);
+            }
         }
 
         function syncSessionContext(params) {
@@ -1210,6 +1233,89 @@
             assertRegression(state.agentsPanel === "cron" && state.agentsSelectedId === "main",
                 "persistence restore should deterministically apply panel + selected agent");
             summary.push("persistence restore");
+        }
+
+        {
+            const state = createRegressionState();
+            state.agentIdentityById = {
+                main: {
+                    id: "main",
+                    displayName: "Main Agent",
+                },
+            };
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            await controller.loadAgentIdentity("main");
+
+            let cacheShortCircuited = false;
+            try {
+                harness.takeNextCall("agent.identity.get");
+            } catch (_) {
+                cacheShortCircuited = true;
+            }
+
+            assertRegression(cacheShortCircuited,
+                "identity cache short-circuit should avoid rpc call when cached");
+            assertRegression(Boolean(state.agentIdentityById.main),
+                "identity cache short-circuit should preserve existing identity");
+            summary.push("identity cache short-circuit");
+        }
+
+        {
+            const state = createRegressionState();
+            state.agentIdentityById = {
+                main: {
+                    id: "main",
+                },
+            };
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const pending = controller.loadAgentIdentities(["main", "", "reviewer"]);
+            const identityCall = harness.takeNextCall("agent.identity.get");
+            assertRegression(identityCall.params && identityCall.params.agentId === "reviewer",
+                "batch identity loading should request only missing normalized ids");
+
+            identityCall.deferred.resolve({
+                payload: {
+                    agent: {
+                        id: "reviewer",
+                        displayName: "Reviewer",
+                    },
+                },
+            });
+            await pending;
+
+            assertRegression(Boolean(state.agentIdentityById.main) && Boolean(state.agentIdentityById.reviewer),
+                "batch identity loading should merge newly fetched identities into cache");
+            summary.push("identity missing-id filtering");
+        }
+
+        {
+            const state = createRegressionState();
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const pending = controller.loadAgentIdentity("main");
+            const identityCall = harness.takeNextCall("agent.identity.get");
+            identityCall.deferred.reject(new Error("identity unavailable"));
+            await pending;
+
+            assertRegression(state.agentIdentityLoading === false,
+                "identity loader should always reset loading flag in finally");
+            assertRegression(String(state.agentIdentityError || "").indexOf("identity unavailable") >= 0,
+                "identity loader should capture stringified error semantics");
+            summary.push("identity error lifecycle");
         }
 
         return {
