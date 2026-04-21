@@ -98,6 +98,12 @@
         if (!state.agentSkillsResult) {
             state.agentSkillsResult = null;
         }
+        if (!state.agentSkillsReport) {
+            state.agentSkillsReport = null;
+        }
+        if (typeof state.agentSkillsAgentId !== "string" && state.agentSkillsAgentId !== null) {
+            state.agentSkillsAgentId = null;
+        }
 
         if (typeof state.agentChannelsLoading !== "boolean") {
             state.agentChannelsLoading = false;
@@ -560,6 +566,40 @@
             }
         }
 
+        function isMethodNotFoundError(err) {
+            if (!err) {
+                return false;
+            }
+
+            if (typeof err === "object") {
+                const candidate = err;
+                const code = String(candidate.code || candidate.detailCode || "").toLowerCase();
+                const message = String(candidate.message || "").toLowerCase();
+                return code.indexOf("method") >= 0 && code.indexOf("not") >= 0 ||
+                    message.indexOf("method_not_found") >= 0 ||
+                    message.indexOf("unknown method") >= 0;
+            }
+
+            const text = String(err).toLowerCase();
+            return text.indexOf("method_not_found") >= 0 || text.indexOf("unknown method") >= 0;
+        }
+
+        function normalizeAgentSkillsReportPayload(payload) {
+            const candidate = payload && typeof payload === "object" ? payload : {};
+            const skills = Array.isArray(candidate.skills)
+                ? candidate.skills
+                : [];
+
+            const workspaceDir = String(candidate.workspaceDir || "").trim();
+            const managedSkillsDir = String(candidate.managedSkillsDir || "").trim();
+
+            return {
+                workspaceDir,
+                managedSkillsDir,
+                skills,
+            };
+        }
+
         async function loadAgentSkills(agentId) {
             const resolvedAgentId = String(agentId || "").trim();
             if (!request || !state.connected || !resolvedAgentId || state.agentSkillsLoading) {
@@ -572,24 +612,50 @@
 
             state.agentSkillsLoading = true;
             state.agentSkillsError = null;
-            state.agentSkillsResult = null;
             onStateUpdated();
 
             try {
-                const res = await request("gateway.skills.commands", {
-                    agentId: resolvedAgentId,
-                });
+                let res = null;
+                try {
+                    res = await request("skills.status", {
+                        agentId: resolvedAgentId,
+                    });
+                } catch (primaryError) {
+                    if (!isMethodNotFoundError(primaryError)) {
+                        throw primaryError;
+                    }
+
+                    res = await request("gateway.skills.status", {
+                        agentId: resolvedAgentId,
+                    });
+                }
+
                 if (shouldIgnoreResponse()) {
                     return;
                 }
 
                 const payload = res && res.payload ? res.payload : null;
-                const commands = payload && Array.isArray(payload.commands) ? payload.commands : [];
+                const report = normalizeAgentSkillsReportPayload(payload);
+                const commandLikeEntries = Array.isArray(report.skills)
+                    ? report.skills.map(function (entry) {
+                        return {
+                            name: String(entry && entry.name || "").trim(),
+                            description: String(entry && entry.description || "").trim(),
+                            skill: String(entry && entry.skillKey || entry && entry.name || "").trim(),
+                        };
+                    }).filter(function (entry) {
+                        return entry.name.length > 0;
+                    })
+                    : [];
+
+                state.agentSkillsReport = report;
+                state.agentSkillsAgentId = resolvedAgentId;
                 state.agentSkillsResult = {
-                    commands,
-                    count: typeof payload.count === "number" ? payload.count : commands.length,
-                    capability: "gateway.skills.commands",
-                    agentScoped: false,
+                    commands: commandLikeEntries,
+                    count: report.skills.length,
+                    capability: "skills.status",
+                    agentScoped: true,
+                    report,
                 };
             } catch (err) {
                 if (shouldIgnoreResponse()) {
@@ -846,6 +912,8 @@
             state.agentFilesResult = null;
             state.agentFileContentResult = null;
             state.agentSkillsResult = null;
+            state.agentSkillsReport = null;
+            state.agentSkillsAgentId = null;
             state.agentChannelsResult = null;
             state.agentCronResult = null;
             onStateUpdated();
@@ -1121,7 +1189,7 @@
 
             controller.setAgentsPanel("skills");
             const secondLoad = controller.loadPanelDataForCurrentAgent();
-            const secondCall = harness.takeNextCall("gateway.skills.commands");
+            const secondCall = harness.takeNextCall("skills.status");
 
             firstCall.deferred.resolve({
                 payload: {
@@ -1138,8 +1206,9 @@
 
             secondCall.deferred.resolve({
                 payload: {
-                    commands: [],
-                    count: 0,
+                    workspaceDir: "E:/workspace",
+                    managedSkillsDir: "E:/workspace/.skills",
+                    skills: [],
                 },
             });
             await secondLoad;

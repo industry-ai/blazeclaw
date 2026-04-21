@@ -551,11 +551,18 @@
           }
 
           const skillsResult = state.agentSkillsResult || null;
+          const report = state.agentSkillsReport || (skillsResult && skillsResult.report) || null;
           const commands = skillsResult && Array.isArray(skillsResult.commands)
             ? skillsResult.commands
             : [];
-          rows.push(`<div class=\"agents-row\">Skill commands: ${commands.length}</div>`);
+          const reportSkills = report && Array.isArray(report.skills)
+            ? report.skills
+            : [];
+
           rows.push(`<div class=\"agents-row\">Agent-scoped endpoint: ${skillsResult && skillsResult.agentScoped ? "yes" : "no (capability-gated)"}</div>`);
+          rows.push(`<div class=\"agents-row\">Skills report agent: ${String(state.agentSkillsAgentId || "(none)")}</div>`);
+          rows.push(`<div class=\"agents-row\">Skills report entries: ${reportSkills.length}</div>`);
+          rows.push(`<div class=\"agents-row\">Skill commands (derived): ${commands.length}</div>`);
         }
 
         if (panel === "channels") {

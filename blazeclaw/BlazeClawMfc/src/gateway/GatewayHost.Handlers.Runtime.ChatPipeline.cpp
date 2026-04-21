@@ -2271,6 +2271,14 @@ namespace blazeclaw::gateway {
 				});
 
 			host.m_dispatcher.Register(
+				"skills.status",
+				[&host](const protocol::RequestFrame& request) {
+					protocol::RequestFrame delegated = request;
+					delegated.method = "gateway.skills.status";
+					return host.m_dispatcher.Dispatch(delegated);
+				});
+
+			host.m_dispatcher.Register(
 				"gateway.skills.install.options",
 				[&host](const protocol::RequestFrame& request) {
 					std::string optionsJson = "[";
