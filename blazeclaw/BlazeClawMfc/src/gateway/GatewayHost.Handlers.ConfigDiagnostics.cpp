@@ -42,6 +42,18 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 					host.m_runtimeDeepSeekDefaultModel) + "}");
 			});
 
+		host.m_dispatcher.Register("config.get", [&host](const protocol::RequestFrame& request) {
+			auto forwarded = request;
+			forwarded.method = "gateway.config.get";
+			return host.m_dispatcher.Dispatch(forwarded);
+			});
+
+		host.m_dispatcher.Register("config.schema", [&host](const protocol::RequestFrame& request) {
+			auto forwarded = request;
+			forwarded.method = "gateway.config.schema";
+			return host.m_dispatcher.Dispatch(forwarded);
+			});
+
 		host.m_dispatcher.Register("config.apply", [](const protocol::RequestFrame& request) {
 			return protocol::OkResponse(request, "{\"applied\":true,\"updated\":true}");
 			});
@@ -142,6 +154,12 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 					host.m_runtimeDeepSeekBaseUrl,
 					host.m_runtimeDeepSeekDefaultModel) +
 				",\"updated\":true}");
+			});
+
+		host.m_dispatcher.Register("config.set", [&host](const protocol::RequestFrame& request) {
+			auto forwarded = request;
+			forwarded.method = "gateway.config.set";
+			return host.m_dispatcher.Dispatch(forwarded);
 			});
 
 
