@@ -385,24 +385,50 @@
         setInputValue,
       });
 
-      function resolveAgentsExperimentalEnabled() {
+      function resolveAgentsEnabled() {
         const search = new URLSearchParams(window.location.search || "");
-        if (search.get("agentsExperimental") === "1") {
+        const queryToggle = search.get("agents");
+        if (queryToggle === "0") {
+          return false;
+        }
+        if (queryToggle === "1") {
           return true;
         }
 
         try {
-          if (window.localStorage && window.localStorage.getItem("blazeclaw.agents.experimental") === "1") {
-            return true;
+          if (window.localStorage) {
+            const storedToggle = window.localStorage.getItem("blazeclaw.agents.enabled");
+            if (storedToggle === "0") {
+              return false;
+            }
+            if (storedToggle === "1") {
+              return true;
+            }
           }
         } catch (_) {
         }
 
-        return false;
+        return true;
       }
 
-      const agentsExperimentalEnabled = resolveAgentsExperimentalEnabled();
-      const agentsController = agentsExperimentalEnabled && window.BlazeClawAgentsController
+      function resolveAgentsRegressionChecksEnabled() {
+        const search = new URLSearchParams(window.location.search || "");
+        if (search.get("agentsRegression") === "1") {
+          return true;
+        }
+
+        try {
+          return Boolean(
+            window.localStorage &&
+            window.localStorage.getItem("blazeclaw.agents.regression") === "1"
+          );
+        } catch (_) {
+          return false;
+        }
+      }
+
+      const agentsEnabled = resolveAgentsEnabled();
+      const agentsController = agentsEnabled && window.BlazeClawAgentsController
         ? window.BlazeClawAgentsController.createAgentsController({
             state,
             request: (method, params) => controller.request(method, params),
@@ -427,6 +453,19 @@
         agentsController.syncSessionContext({
           sessionKey: state.sessionKey,
         });
+
+        if (resolveAgentsRegressionChecksEnabled() &&
+            typeof window.BlazeClawAgentsController.runRegressionChecks === "function") {
+          window.BlazeClawAgentsController.runRegressionChecks()
+            .then((result) => {
+              if (result && result.ok) {
+                console.log("[agents-regression] passed:", result.checks);
+              }
+            })
+            .catch((err) => {
+              console.error("[agents-regression] failed:", err);
+            });
+        }
       }
 
       const eventsModule = window.BlazeClawChatEvents.createEventsModule({

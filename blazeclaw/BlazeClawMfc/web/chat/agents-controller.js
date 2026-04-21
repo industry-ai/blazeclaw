@@ -405,7 +405,196 @@
         };
     }
 
+    function createDeferred() {
+        let resolve;
+        let reject;
+        const promise = new Promise(function (res, rej) {
+            resolve = res;
+            reject = rej;
+        });
+
+        return {
+            promise,
+            resolve,
+            reject,
+        };
+    }
+
+    function createRegressionHarnessRequestStub() {
+        const queue = {};
+
+        return {
+            request: function (method, params) {
+                if (!queue[method]) {
+                    queue[method] = [];
+                }
+
+                const call = {
+                    method,
+                    params,
+                    deferred: createDeferred(),
+                };
+                queue[method].push(call);
+                return call.deferred.promise;
+            },
+            takeNextCall: function (method) {
+                const calls = queue[method] || [];
+                if (!calls.length) {
+                    throw new Error("No queued call for method: " + method);
+                }
+                return calls.shift();
+            },
+        };
+    }
+
+    function createRegressionState() {
+        return {
+            connected: true,
+            sessionKey: "agent:main:default",
+            agentsPanel: "tools",
+            agentsSelectedId: "main",
+            chatModelCatalog: [
+                {
+                    id: "openai:gpt-4.1-mini",
+                },
+            ],
+            chatModelOverrides: {},
+            sessionsResult: {
+                defaults: {
+                    model: "gpt-4.1-mini",
+                    modelProvider: "openai",
+                },
+                sessions: [
+                    {
+                        key: "agent:main:default",
+                        model: "gpt-4.1-mini",
+                        modelProvider: "openai",
+                    },
+                ],
+            },
+        };
+    }
+
+    function assertRegression(condition, message) {
+        if (!condition) {
+            throw new Error(message);
+        }
+    }
+
+    async function runRegressionChecks() {
+        const summary = [];
+
+        {
+            const state = createRegressionState();
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const baselineKey = controller.buildToolsEffectiveRequestKey({
+                agentId: "main",
+                sessionKey: state.sessionKey,
+            });
+
+            state.chatModelOverrides[state.sessionKey] = {
+                model: "claude-3-7-sonnet",
+                modelProvider: "anthropic",
+            };
+            const overrideKey = controller.buildToolsEffectiveRequestKey({
+                agentId: "main",
+                sessionKey: state.sessionKey,
+            });
+
+            state.chatModelOverrides[state.sessionKey] = null;
+            const fallbackKey = controller.buildToolsEffectiveRequestKey({
+                agentId: "main",
+                sessionKey: state.sessionKey,
+            });
+
+            assertRegression(baselineKey !== overrideKey,
+                "request-key transition must change when model override changes");
+            assertRegression(fallbackKey === baselineKey,
+                "request-key transition must fallback to default model when override is null");
+            summary.push("request-key transitions");
+        }
+
+        {
+            const state = createRegressionState();
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const first = controller.loadToolsEffective({
+                agentId: "main",
+                sessionKey: state.sessionKey,
+            });
+            const firstCall = harness.takeNextCall("tools.effective");
+
+            state.chatModelOverrides[state.sessionKey] = {
+                model: "claude-3-7-sonnet",
+                modelProvider: "anthropic",
+            };
+            const second = controller.loadToolsEffective({
+                agentId: "main",
+                sessionKey: state.sessionKey,
+            });
+            const secondCall = harness.takeNextCall("tools.effective");
+
+            firstCall.deferred.resolve({
+                payload: {
+                    source: "stale",
+                },
+            });
+            await first;
+            assertRegression(state.toolsEffectiveResult === null,
+                "stale response should be suppressed when request key changes");
+
+            secondCall.deferred.resolve({
+                payload: {
+                    source: "fresh",
+                },
+            });
+            await second;
+            assertRegression(Boolean(state.toolsEffectiveResult) &&
+                state.toolsEffectiveResult.source === "fresh",
+                "fresh response should win after request key transition");
+            summary.push("stale-response suppression");
+        }
+
+        {
+            const state = createRegressionState();
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const pending = controller.loadToolsCatalog("main");
+            const call = harness.takeNextCall("tools.catalog");
+            call.deferred.reject({
+                detailCode: "AUTH_UNAUTHORIZED",
+                message: "missing scope: operator.read",
+            });
+            await pending;
+
+            assertRegression(
+                state.toolsCatalogError ===
+                "This connection is missing operator.read, so tools catalog cannot be loaded yet.",
+                "scope-error UX message should be normalized for tools catalog");
+            summary.push("scope-error UX");
+        }
+
+        return {
+            ok: true,
+            checks: summary,
+        };
+    }
+
     window.BlazeClawAgentsController = {
         createAgentsController,
+        runRegressionChecks,
     };
 })();
