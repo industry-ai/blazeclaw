@@ -2175,7 +2175,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			for (const auto& [field, _] : fieldKinds) {
-				if (ContainsFieldName({"nodeId", "command", "params", "timeoutMs", "idempotencyKey", "allowlist", "declaredCommands", "commands"}, field)) {
+				if (ContainsFieldName({ "nodeId", "command", "params", "timeoutMs", "idempotencyKey", "allowlist", "declaredCommands", "commands" }, field)) {
 					continue;
 				}
 				SetIssue(issue, "schema_invalid_params", "Method `node.invoke` does not allow `params." + field + "`.");
@@ -2217,7 +2217,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			for (const auto& [field, _] : fieldKinds) {
-				if (ContainsFieldName({"runId", "nodeId", "payload", "payloadJSON", "status", "error", "errorCode", "errorMessage", "command", "idempotencyKey", "ts"}, field)) {
+				if (ContainsFieldName({ "runId", "nodeId", "payload", "payloadJSON", "status", "error", "errorCode", "errorMessage", "command", "idempotencyKey", "ts" }, field)) {
 					continue;
 				}
 				SetIssue(issue, "schema_invalid_params", "Method `node.invoke.result` does not allow `params." + field + "`.");
@@ -2253,7 +2253,7 @@ namespace blazeclaw::gateway::protocol {
 			}
 
 			for (const auto& [field, _] : fieldKinds) {
-				if (ContainsFieldName({"event", "nodeId", "payload", "payloadJSON", "ts", "runId"}, field)) {
+				if (ContainsFieldName({ "event", "nodeId", "payload", "payloadJSON", "ts", "runId" }, field)) {
 					continue;
 				}
 				SetIssue(issue, "schema_invalid_params", "Method `node.event` does not allow `params." + field + "`.");
@@ -2911,7 +2911,9 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.channels.logout", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateChannelsLogoutParams(r, i); } },
 			{ "gateway.config.set", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateConfigSetParams(r, i); } },
 			{ "gateway.tools.count", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateOptionalActiveParam(r, i, r.method); } },
+			{ "tools.catalog", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
 			{ "gateway.agents.list", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateOptionalActiveParam(r, i, r.method); } },
+			{ "agents.list", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateOptionalActiveParam(r, i, r.method); } },
 			{ "gateway.agents.count", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateOptionalActiveParam(r, i, r.method); } },
 			{ "gateway.session.list", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateOptionalSessionListParams(r, i, r.method); } },
 		};

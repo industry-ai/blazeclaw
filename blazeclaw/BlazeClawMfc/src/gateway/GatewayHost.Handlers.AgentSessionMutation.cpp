@@ -14,8 +14,8 @@
 
 namespace blazeclaw::gateway::handlers::agent_session_mutation {
 
-void AgentSessionMutationHandlers::RegisterAll(GatewayHost& host) {
-host.m_dispatcher.Register("gateway.agents.update", [&host](const protocol::RequestFrame& request) {
+	void AgentSessionMutationHandlers::RegisterAll(GatewayHost& host) {
+		host.m_dispatcher.Register("gateway.agents.update", [&host](const protocol::RequestFrame& request) {
 			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("agentId");
 			const std::string requestedName = RequestParamsView(request.paramsJson).GetString("name");
 			const std::optional<bool> requestedActive = RequestParamsView(request.paramsJson).GetBool("active");
@@ -110,8 +110,8 @@ host.m_dispatcher.Register("gateway.agents.update", [&host](const protocol::Requ
 			const SessionEntry session = host.m_sessionRegistry.Resolve(requestedId);
 
 			return protocol::OkResponse(request, "{\"session\":" + SerializeSession(session) +
-					",\"title\":\"Session " + EscapeJsonString(session.id) +
-					"\",\"hasMessages\":true,\"unread\":0}");
+				",\"title\":\"Session " + EscapeJsonString(session.id) +
+				"\",\"hasMessages\":true,\"unread\":0}");
 			});
 
 		host.m_dispatcher.Register("gateway.sessions.compact", [&host](const protocol::RequestFrame& request) {
@@ -120,8 +120,8 @@ host.m_dispatcher.Register("gateway.agents.update", [&host](const protocol::Requ
 			const std::size_t remaining = host.m_sessionRegistry.List().size();
 
 			return protocol::OkResponse(request, "{\"compacted\":" + std::to_string(compacted) +
-					",\"remaining\":" + std::to_string(remaining) +
-					",\"dryRun\":" + std::string(dryRun ? "true" : "false") + "}");
+				",\"remaining\":" + std::to_string(remaining) +
+				",\"dryRun\":" + std::string(dryRun ? "true" : "false") + "}");
 			});
 
 		host.m_dispatcher.Register("gateway.sessions.usage", [&host](const protocol::RequestFrame& request) {
@@ -129,7 +129,7 @@ host.m_dispatcher.Register("gateway.agents.update", [&host](const protocol::Requ
 			const SessionEntry session = host.m_sessionRegistry.Resolve(requestedId);
 
 			return protocol::OkResponse(request, "{\"sessionId\":\"" + EscapeJsonString(session.id) +
-					"\",\"messages\":42,\"tokens\":{\"input\":1024,\"output\":512,\"total\":1536},\"lastActiveMs\":1735689600200}");
+				"\",\"messages\":42,\"tokens\":{\"input\":1024,\"output\":512,\"total\":1536},\"lastActiveMs\":1735689600200}");
 			});
 
 		host.m_dispatcher.Register("gateway.sessions.delete", [&host](const protocol::RequestFrame& request) {
@@ -139,8 +139,8 @@ host.m_dispatcher.Register("gateway.agents.update", [&host](const protocol::Requ
 			const std::size_t remaining = host.m_sessionRegistry.List().size();
 
 			return protocol::OkResponse(request, "{\"session\":" + SerializeSession(removedSession) +
-					",\"deleted\":" + std::string(deleted ? "true" : "false") +
-					",\"remaining\":" + std::to_string(remaining) + "}");
+				",\"deleted\":" + std::string(deleted ? "true" : "false") +
+				",\"remaining\":" + std::to_string(remaining) + "}");
 			});
 
 		host.m_dispatcher.Register("gateway.features.list", [&host](const protocol::RequestFrame& request) {
@@ -150,35 +150,39 @@ host.m_dispatcher.Register("gateway.agents.update", [&host](const protocol::Requ
 			return protocol::OkResponse(request, "{\"methods\":" + methodsJson + ",\"events\":" + eventsJson + "}");
 			});
 
-		host.m_dispatcher.Register("gateway.agents.list", [&host](const protocol::RequestFrame& request) {
-			const std::optional<bool> activeFilter = RequestParamsView(request.paramsJson).GetBool("active");
-			const auto agents = host.m_agentRegistry.List();
-			std::string payload = "{\"agents\":[";
-			bool first = true;
-			std::string activeAgentId = "none";
-			std::size_t count = 0;
-			for (std::size_t i = 0; i < agents.size(); ++i) {
-				if (activeFilter.has_value() && agents[i].active != activeFilter.value()) {
-					continue;
+		auto registerAgentsList = [&host](const std::string& methodName) {
+			host.m_dispatcher.Register(methodName, [&host](const protocol::RequestFrame& request) {
+				const std::optional<bool> activeFilter = RequestParamsView(request.paramsJson).GetBool("active");
+				const auto agents = host.m_agentRegistry.List();
+				std::string payload = "{\"agents\":[";
+				bool first = true;
+				std::string activeAgentId = "none";
+				std::size_t count = 0;
+				for (std::size_t i = 0; i < agents.size(); ++i) {
+					if (activeFilter.has_value() && agents[i].active != activeFilter.value()) {
+						continue;
+					}
+
+					if (!first) {
+						payload += ",";
+					}
+
+					payload += SerializeAgent(agents[i]);
+					if (activeAgentId == "none" && agents[i].active) {
+						activeAgentId = agents[i].id;
+					}
+
+					first = false;
+					++count;
 				}
 
-				if (!first) {
-					payload += ",";
-				}
+				payload += "],\"count\":" + std::to_string(count) + ",\"activeAgentId\":\"" + EscapeJsonString(activeAgentId) + "\"}";
 
-				payload += SerializeAgent(agents[i]);
-				if (activeAgentId == "none" && agents[i].active) {
-					activeAgentId = agents[i].id;
-				}
-
-				first = false;
-				++count;
-			}
-
-			payload += "],\"count\":" + std::to_string(count) + ",\"activeAgentId\":\"" + EscapeJsonString(activeAgentId) + "\"}";
-
-			return protocol::OkResponse(request, payload);
-			});
+				return protocol::OkResponse(request, payload);
+				});
+			};
+		registerAgentsList("gateway.agents.list");
+		registerAgentsList("agents.list");
 
 		host.m_dispatcher.Register("gateway.agents.run", [&host](const protocol::RequestFrame& request) {
 			const std::string requestedAgentId = RequestParamsView(request.paramsJson).GetString("agentId");
@@ -196,13 +200,13 @@ host.m_dispatcher.Register("gateway.agents.update", [&host](const protocol::Requ
 							? std::to_string(run.completedAtMs.value())
 							: "null";
 						return protocol::OkResponse(request, "{\"runId\":\"" + EscapeJsonString(run.runId) +
-								"\",\"status\":\"" + EscapeJsonString(run.status) +
-								"\",\"agentId\":\"" + EscapeJsonString(run.agentId) +
-								"\",\"sessionId\":\"" + EscapeJsonString(run.sessionId) +
-								"\",\"summary\":\"" + EscapeJsonString(run.summary) +
-								"\",\"deduped\":true,\"startedAtMs\":" +
-								std::to_string(run.startedAtMs) +
-								",\"completedAtMs\":" + completedMsJson + "}");
+							"\",\"status\":\"" + EscapeJsonString(run.status) +
+							"\",\"agentId\":\"" + EscapeJsonString(run.agentId) +
+							"\",\"sessionId\":\"" + EscapeJsonString(run.sessionId) +
+							"\",\"summary\":\"" + EscapeJsonString(run.summary) +
+							"\",\"deduped\":true,\"startedAtMs\":" +
+							std::to_string(run.startedAtMs) +
+							",\"completedAtMs\":" + completedMsJson + "}");
 					}
 				}
 			}
@@ -277,13 +281,13 @@ host.m_dispatcher.Register("gateway.agents.update", [&host](const protocol::Requ
 			}
 
 			return protocol::OkResponse(request, "{\"runId\":\"" + EscapeJsonString(run.runId) +
-					"\",\"status\":\"" + EscapeJsonString(run.status) +
-					"\",\"agentId\":\"" + EscapeJsonString(run.agentId) +
-					"\",\"sessionId\":\"" + EscapeJsonString(run.sessionId) +
-					"\",\"summary\":\"" + EscapeJsonString(run.summary) +
-					"\",\"deduped\":false,\"startedAtMs\":" +
-					std::to_string(run.startedAtMs) +
-				 ",\"completedAtMs\":null}");
+				"\",\"status\":\"" + EscapeJsonString(run.status) +
+				"\",\"agentId\":\"" + EscapeJsonString(run.agentId) +
+				"\",\"sessionId\":\"" + EscapeJsonString(run.sessionId) +
+				"\",\"summary\":\"" + EscapeJsonString(run.summary) +
+				"\",\"deduped\":false,\"startedAtMs\":" +
+				std::to_string(run.startedAtMs) +
+				",\"completedAtMs\":null}");
 			});
 
 		host.m_dispatcher.Register("gateway.agents.wait", [&host](const protocol::RequestFrame& request) {
@@ -381,22 +385,22 @@ host.m_dispatcher.Register("gateway.agents.update", [&host](const protocol::Requ
 				: "false";
 
 			return protocol::OkResponse(request, "{\"runId\":\"" + EscapeJsonString(run.runId) +
-					"\",\"status\":\"" + EscapeJsonString(run.status) +
-					"\",\"summary\":\"" + EscapeJsonString(run.summary) +
-					"\",\"terminal\":" + terminal +
-					",\"agentId\":\"" + EscapeJsonString(run.agentId) +
-					"\",\"sessionId\":\"" + EscapeJsonString(run.sessionId) +
-					"\",\"startedAtMs\":" + std::to_string(run.startedAtMs) +
-					",\"completedAtMs\":" + completedMsJson + "}");
+				"\",\"status\":\"" + EscapeJsonString(run.status) +
+				"\",\"summary\":\"" + EscapeJsonString(run.summary) +
+				"\",\"terminal\":" + terminal +
+				",\"agentId\":\"" + EscapeJsonString(run.agentId) +
+				"\",\"sessionId\":\"" + EscapeJsonString(run.sessionId) +
+				"\",\"startedAtMs\":" + std::to_string(run.startedAtMs) +
+				",\"completedAtMs\":" + completedMsJson + "}");
 			});
-}
+	}
 
 } // namespace blazeclaw::gateway::handlers::agent_session_mutation
 
 namespace blazeclaw::gateway {
 
-void GatewayHost::RegisterGatewayAgentSessionMutationHandlers() {
-	handlers::agent_session_mutation::AgentSessionMutationHandlers::RegisterAll(*this);
-}
+	void GatewayHost::RegisterGatewayAgentSessionMutationHandlers() {
+		handlers::agent_session_mutation::AgentSessionMutationHandlers::RegisterAll(*this);
+	}
 
 } // namespace blazeclaw::gateway

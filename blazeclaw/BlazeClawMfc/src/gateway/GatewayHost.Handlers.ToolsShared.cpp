@@ -24,9 +24,13 @@ namespace blazeclaw::gateway::handlers::tools_shared {
 	void ToolsSharedHandlers::RegisterToolsCatalog(
 		GatewayMethodDispatcher& dispatcher,
 		GatewayToolRegistry& registry) {
-		dispatcher.Register("gateway.tools.catalog", [&registry](const protocol::RequestFrame& request) {
-			return HandleToolsCatalog(request, registry);
-			});
+		auto registerToolsCatalog = [&dispatcher, &registry](const std::string& methodName) {
+			dispatcher.Register(methodName, [&registry](const protocol::RequestFrame& request) {
+				return HandleToolsCatalog(request, registry);
+				});
+			};
+		registerToolsCatalog("gateway.tools.catalog");
+		registerToolsCatalog("tools.catalog");
 	}
 
 	protocol::ResponseFrame ToolsSharedHandlers::HandleToolsList(

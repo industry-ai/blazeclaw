@@ -186,6 +186,7 @@ This removes synthetic baseline time drift and prevents immediate/incorrect dead
 - `ORCHESTRATION_PATH_ANALYSIS.md` — analysis of `dynamic_task_delta` vs `runtime_orchestration` behavior and recommended default.
 - `LLAMACPP_MODEL_LOADING_PLAN.md` — staged integration plan for GGUF/`llama.cpp` local runtime path.
 - `../../docs/compare/nodes.ts/NODES_TS_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md` — OpenClaw `nodes.ts` capability comparison, BlazeClaw node-domain gap closure recommendations, and canonical parity porting tracker (Steps 1-12 implemented; rollout/observability flags active with diagnostics exposure).
+- `../../docs/compare/ui.controllers.md` — OpenClaw `openclaw/ui/src/ui/controllers/` vs BlazeClaw `web/chat` + WebView2 RPC bridge: composer, `chat.send` / chat events, and control-plane tab gaps (Lit `app-render` vs embedded chat only).
 
 Cross-project architecture (BlazeClaw vs upstream OpenClaw):
 

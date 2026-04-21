@@ -265,6 +265,8 @@ A dedicated OpenClaw-vs-BlazeClaw node capability gap analysis and parity plan i
 
 - `docs/compare/nodes.ts/NODES_TS_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md`
 
+**Control UI (Lit controllers vs WebView chat):** [`blazeclaw/docs/compare/ui.controllers.md`](docs/compare/ui.controllers.md) — end-to-end prompt/send/response comparison and phased UI parity plan (separate from node-domain work above).
+
 Summary status:
 
 - BlazeClaw currently provides broad node method-name coverage.
