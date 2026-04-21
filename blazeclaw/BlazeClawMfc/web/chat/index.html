@@ -719,14 +719,62 @@
                     if (state.agentCronError) {
                         rows.push(`<div class=\"agents-row error\">${state.agentCronError}</div>`);
                     }
+                    if (state.agentCronStatusError) {
+                        rows.push(`<div class=\"agents-row error\">${state.agentCronStatusError}</div>`);
+                    }
+                    if (state.agentCronJobsError) {
+                        rows.push(`<div class=\"agents-row error\">${state.agentCronJobsError}</div>`);
+                    }
+                    if (state.agentCronRunsError) {
+                        rows.push(`<div class=\"agents-row error\">${state.agentCronRunsError}</div>`);
+                    }
 
-                    const cronResult = state.agentCronResult || null;
-                    const jobs = cronResult && Array.isArray(cronResult.jobs)
-                        ? cronResult.jobs
+                    const cronStatus = state.agentCronStatusResult || null;
+                    const jobs = Array.isArray(state.agentCronJobs)
+                        ? state.agentCronJobs
                         : [];
-                    rows.push(`<div class=\"agents-row\">Cron jobs: ${jobs.length}</div>`);
-                    rows.push("<div class=\"agents-row\">Capability mode: gateway cron endpoint not registered in BlazeClaw (explicitly gated)</div>");
-                    rows.push("<div class=\"agents-row\">TODO parity track: docs/compare/ui.controllers.md#2-mechanical-audit-openclawuisrcuicontrollers</div>");
+                    const runs = Array.isArray(state.agentCronRuns)
+                        ? state.agentCronRuns
+                        : [];
+                    const selectedJobId = typeof state.agentCronSelectedJobId === "string"
+                        ? state.agentCronSelectedJobId
+                        : "";
+
+                    rows.push(`<div class=\"agents-row\">Cron enabled: ${cronStatus ? (cronStatus.enabled ? "yes" : "no") : "unknown"}</div>`);
+                    rows.push(`<div class=\"agents-row\">Cron jobs total: ${Number.isFinite(Number(state.agentCronJobsTotal)) ? state.agentCronJobsTotal : jobs.length}</div>`);
+                    rows.push(`<div class=\"agents-row\">Cron next wake: ${cronStatus && Number.isFinite(Number(cronStatus.nextWakeAtMs)) ? cronStatus.nextWakeAtMs : "(none)"}</div>`);
+
+                    rows.push(`<div class=\"agents-row\">Jobs loaded: ${jobs.length}</div>`);
+                    rows.push(`<div class=\"agents-row\">Jobs has more: ${state.agentCronJobsHasMore ? "yes" : "no"}</div>`);
+                    rows.push(`<div class=\"agents-row\">Jobs filter: enabled=${state.agentCronJobsEnabledFilter}, sort=${state.agentCronJobsSortBy}/${state.agentCronJobsSortDir}</div>`);
+                    rows.push(`<div class=\"agents-row\">Runs loaded: ${runs.length}</div>`);
+                    rows.push(`<div class=\"agents-row\">Runs has more: ${state.agentCronRunsHasMore ? "yes" : "no"}</div>`);
+                    rows.push(`<div class=\"agents-row\">Runs filter: scope=${state.agentCronRunsScope}, status=${state.agentCronRunsStatusFilter}, sort=${state.agentCronRunsSortDir}</div>`);
+                    rows.push(`<div class=\"agents-row\">Selected cron job: ${selectedJobId || "(none)"}</div>`);
+
+                    if (jobs.length > 0) {
+                        const firstJob = jobs[0] || {};
+                        rows.push(`<div class=\"agents-row\">First job id: ${String(firstJob.id || "(n/a)")}</div>`);
+                        rows.push(`<div class=\"agents-row\">First job name: ${String(firstJob.name || "(n/a)")}</div>`);
+                        rows.push(`<div class=\"agents-row\">First job schedule: ${firstJob.schedule && firstJob.schedule.kind ? String(firstJob.schedule.kind) : "(n/a)"}</div>`);
+                    }
+                    if (runs.length > 0) {
+                        const firstRun = runs[0] || {};
+                        rows.push(`<div class=\"agents-row\">First run job: ${String(firstRun.jobId || "(n/a)")}</div>`);
+                        rows.push(`<div class=\"agents-row\">First run status: ${String(firstRun.status || "(n/a)")}</div>`);
+                        rows.push(`<div class=\"agents-row\">First run ts: ${String(firstRun.ts || "(n/a)")}</div>`);
+                    }
+
+                    rows.push(`<div class=\"agents-row\">`
+                        + `<button class=\"agents-chip\" data-cron-action=\"refresh\">Refresh</button> `
+                        + `<button class=\"agents-chip\" data-cron-action=\"jobs-more\"${state.agentCronJobsHasMore ? "" : " disabled"}>Load More Jobs</button> `
+                        + `<button class=\"agents-chip\" data-cron-action=\"runs-more\"${state.agentCronRunsHasMore ? "" : " disabled"}>Load More Runs</button> `
+                        + `<button class=\"agents-chip\" data-cron-action=\"scope-all\">Scope All Runs</button> `
+                        + `<button class=\"agents-chip\" data-cron-action=\"scope-job\"${selectedJobId ? "" : " disabled"}>Scope Selected Job</button>`
+                        + `</div>`);
+
+                    rows.push("<div class=\"agents-row\">Capability mode: cron read-surface parity baseline via cron.status/list/runs</div>");
+                    rows.push("<div class=\"agents-row\">Parity track: docs/compare/cron.ts/CRON_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md</div>");
                 }
 
                 state.agentsSurfaceEl.innerHTML = rows.join("");
@@ -785,6 +833,51 @@
                             void agentsController.logoutWhatsApp({}).then(() => {
                                 return agentsController.loadPanelDataForCurrentAgent();
                             });
+                        }
+                    });
+                });
+
+                state.agentsSurfaceEl.querySelectorAll("[data-cron-action]").forEach((el) => {
+                    el.addEventListener("click", () => {
+                        const action = String(el.getAttribute("data-cron-action") || "").trim();
+                        if (!action) {
+                            return;
+                        }
+
+                        emitAgentsTelemetry("cron.action", {
+                            action,
+                            panel: state.agentsPanel,
+                        });
+
+                        if (action === "refresh") {
+                            void agentsController.loadPanelDataForCurrentAgent();
+                            return;
+                        }
+                        if (action === "jobs-more") {
+                            void agentsController.loadMoreCronJobs();
+                            return;
+                        }
+                        if (action === "runs-more") {
+                            void agentsController.loadMoreCronRuns();
+                            return;
+                        }
+                        if (action === "scope-all") {
+                            agentsController.updateCronRunsFilter({
+                                scope: "all",
+                            });
+                            void agentsController.loadCronRuns({ append: false });
+                            return;
+                        }
+                        if (action === "scope-job") {
+                            const selectedJobId = String(state.agentCronSelectedJobId || "").trim();
+                            if (!selectedJobId) {
+                                return;
+                            }
+                            agentsController.updateCronRunsFilter({
+                                scope: "job",
+                                selectedJobId,
+                            });
+                            void agentsController.loadCronRuns({ append: false });
                         }
                     });
                 });

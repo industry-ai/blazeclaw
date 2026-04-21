@@ -44,12 +44,26 @@ namespace blazeclaw::gateway {
 
 		void RuntimeSurfaceHandlers::RegisterAll(GatewayHost& host) {
 			using namespace blazeclaw::gateway::runtime_local;
-			// P1: Scheduler / cron contract stubs
+			// P1: Scheduler / cron contract stubs (OpenClaw-compatible envelope fields)
 			host.m_dispatcher.Register("cron.list", [](const protocol::RequestFrame& request) {
-				return protocol::OkResponse(request, "{\"crons\":[],\"count\":0}");
+				const auto requestedLimit =
+					ExtractSizeParam(request.paramsJson, "limit").value_or(20);
+				const auto requestedOffset =
+					ExtractSizeParam(request.paramsJson, "offset").value_or(0);
+				const std::size_t limit =
+					(std::max)(std::size_t{ 1 }, (std::min)(requestedLimit, std::size_t{ 200 }));
+				const std::size_t offset = requestedOffset;
+
+				return protocol::OkResponse(
+					request,
+					"{\"jobs\":[],\"total\":0,\"limit\":" + std::to_string(limit) +
+					",\"offset\":" + std::to_string(offset) +
+					",\"nextOffset\":null,\"hasMore\":false}");
 				});
 			host.m_dispatcher.Register("cron.status", [](const protocol::RequestFrame& request) {
-				return protocol::OkResponse(request, "{\"status\":\"ok\",\"active\":false}");
+				return protocol::OkResponse(
+					request,
+					"{\"enabled\":false,\"jobs\":0,\"nextWakeAtMs\":null}");
 				});
 			host.m_dispatcher.Register("cron.add", [](const protocol::RequestFrame& request) {
 				return protocol::OkResponse(request, "{\"added\":true,\"cronId\":\"cron-1\"}");
@@ -64,7 +78,19 @@ namespace blazeclaw::gateway {
 				return protocol::OkResponse(request, "{\"runId\":\"cron-run-1\",\"started\":true}");
 				});
 			host.m_dispatcher.Register("cron.runs", [](const protocol::RequestFrame& request) {
-				return protocol::OkResponse(request, "{\"runs\":[],\"count\":0}");
+				const auto requestedLimit =
+					ExtractSizeParam(request.paramsJson, "limit").value_or(20);
+				const auto requestedOffset =
+					ExtractSizeParam(request.paramsJson, "offset").value_or(0);
+				const std::size_t limit =
+					(std::max)(std::size_t{ 1 }, (std::min)(requestedLimit, std::size_t{ 200 }));
+				const std::size_t offset = requestedOffset;
+
+				return protocol::OkResponse(
+					request,
+					"{\"entries\":[],\"total\":0,\"limit\":" + std::to_string(limit) +
+					",\"offset\":" + std::to_string(offset) +
+					",\"nextOffset\":null,\"hasMore\":false}");
 				});
 			host.m_dispatcher.Register("wizard.start", [](const protocol::RequestFrame& request) {
 				return protocol::OkResponse(request, "{\"started\":true,\"wizardId\":\"wizard-1\"}");

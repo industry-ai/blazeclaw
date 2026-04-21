@@ -106,3 +106,41 @@ TEST_CASE("P2 parity methods: skills, web login, update, and doctor memory metho
 	REQUIRE(doctorMemoryStatus.payloadJson.has_value());
 	REQUIRE(doctorMemoryStatus.payloadJson.value().find("\"status\":\"healthy\"") != std::string::npos);
 }
+
+TEST_CASE("P2 parity methods: cron contract read-surface fields are routable", "[gateway][parity][p2][cron]")
+{
+	GatewayHost host;
+	REQUIRE(host.StartLocalRuntimeDispatchOnly());
+
+	const auto cronStatus = Route(host, "p2-cron-status", "cron.status");
+	REQUIRE(cronStatus.ok);
+	REQUIRE(cronStatus.payloadJson.has_value());
+	REQUIRE(cronStatus.payloadJson.value().find("\"enabled\":") != std::string::npos);
+	REQUIRE(cronStatus.payloadJson.value().find("\"jobs\":") != std::string::npos);
+
+	const auto cronList = Route(
+		host,
+		"p2-cron-list",
+		"cron.list",
+		std::string("{\"limit\":25,\"offset\":10,\"sortBy\":\"updatedAtMs\",\"sortDir\":\"desc\"}"));
+	REQUIRE(cronList.ok);
+	REQUIRE(cronList.payloadJson.has_value());
+	REQUIRE(cronList.payloadJson.value().find("\"jobs\":") != std::string::npos);
+	REQUIRE(cronList.payloadJson.value().find("\"total\":") != std::string::npos);
+	REQUIRE(cronList.payloadJson.value().find("\"limit\":25") != std::string::npos);
+	REQUIRE(cronList.payloadJson.value().find("\"offset\":10") != std::string::npos);
+	REQUIRE(cronList.payloadJson.value().find("\"hasMore\":false") != std::string::npos);
+
+	const auto cronRuns = Route(
+		host,
+		"p2-cron-runs",
+		"cron.runs",
+		std::string("{\"scope\":\"all\",\"limit\":40,\"offset\":5,\"sortDir\":\"desc\"}"));
+	REQUIRE(cronRuns.ok);
+	REQUIRE(cronRuns.payloadJson.has_value());
+	REQUIRE(cronRuns.payloadJson.value().find("\"entries\":") != std::string::npos);
+	REQUIRE(cronRuns.payloadJson.value().find("\"total\":") != std::string::npos);
+	REQUIRE(cronRuns.payloadJson.value().find("\"limit\":40") != std::string::npos);
+	REQUIRE(cronRuns.payloadJson.value().find("\"offset\":5") != std::string::npos);
+	REQUIRE(cronRuns.payloadJson.value().find("\"hasMore\":false") != std::string::npos);
+}

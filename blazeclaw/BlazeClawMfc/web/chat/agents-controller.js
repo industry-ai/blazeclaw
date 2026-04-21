@@ -163,10 +163,95 @@
         }
         if (!state.agentCronCapability) {
             state.agentCronCapability = {
-                method: "(none)",
+                method: "cron.status/list/runs",
                 agentScoped: false,
-                todo: "docs/compare/ui.controllers.md#2-mechanical-audit-openclawuisrcuicontrollers",
+                todo: "docs/compare/cron.ts/CRON_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md",
             };
+        }
+        if (typeof state.agentCronStatusLoading !== "boolean") {
+            state.agentCronStatusLoading = false;
+        }
+        if (typeof state.agentCronStatusError !== "string" && state.agentCronStatusError !== null) {
+            state.agentCronStatusError = null;
+        }
+        if (!state.agentCronStatusResult) {
+            state.agentCronStatusResult = null;
+        }
+        if (typeof state.agentCronJobsLoading !== "boolean") {
+            state.agentCronJobsLoading = false;
+        }
+        if (typeof state.agentCronJobsLoadingMore !== "boolean") {
+            state.agentCronJobsLoadingMore = false;
+        }
+        if (typeof state.agentCronJobsError !== "string" && state.agentCronJobsError !== null) {
+            state.agentCronJobsError = null;
+        }
+        if (!Array.isArray(state.agentCronJobs)) {
+            state.agentCronJobs = [];
+        }
+        if (typeof state.agentCronJobsTotal !== "number") {
+            state.agentCronJobsTotal = 0;
+        }
+        if (typeof state.agentCronJobsHasMore !== "boolean") {
+            state.agentCronJobsHasMore = false;
+        }
+        if (typeof state.agentCronJobsNextOffset !== "number" && state.agentCronJobsNextOffset !== null) {
+            state.agentCronJobsNextOffset = null;
+        }
+        if (typeof state.agentCronJobsLimit !== "number" || !Number.isFinite(state.agentCronJobsLimit) || state.agentCronJobsLimit <= 0) {
+            state.agentCronJobsLimit = 20;
+        }
+        if (typeof state.agentCronJobsQuery !== "string") {
+            state.agentCronJobsQuery = "";
+        }
+        if (state.agentCronJobsEnabledFilter !== "enabled" &&
+            state.agentCronJobsEnabledFilter !== "disabled" &&
+            state.agentCronJobsEnabledFilter !== "all") {
+            state.agentCronJobsEnabledFilter = "all";
+        }
+        if (state.agentCronJobsSortBy !== "nextRunAtMs" &&
+            state.agentCronJobsSortBy !== "updatedAtMs" &&
+            state.agentCronJobsSortBy !== "name") {
+            state.agentCronJobsSortBy = "updatedAtMs";
+        }
+        if (state.agentCronJobsSortDir !== "asc" && state.agentCronJobsSortDir !== "desc") {
+            state.agentCronJobsSortDir = "desc";
+        }
+        if (typeof state.agentCronRunsLoading !== "boolean") {
+            state.agentCronRunsLoading = false;
+        }
+        if (typeof state.agentCronRunsLoadingMore !== "boolean") {
+            state.agentCronRunsLoadingMore = false;
+        }
+        if (typeof state.agentCronRunsError !== "string" && state.agentCronRunsError !== null) {
+            state.agentCronRunsError = null;
+        }
+        if (!Array.isArray(state.agentCronRuns)) {
+            state.agentCronRuns = [];
+        }
+        if (typeof state.agentCronRunsTotal !== "number") {
+            state.agentCronRunsTotal = 0;
+        }
+        if (typeof state.agentCronRunsHasMore !== "boolean") {
+            state.agentCronRunsHasMore = false;
+        }
+        if (typeof state.agentCronRunsNextOffset !== "number" && state.agentCronRunsNextOffset !== null) {
+            state.agentCronRunsNextOffset = null;
+        }
+        if (typeof state.agentCronRunsLimit !== "number" || !Number.isFinite(state.agentCronRunsLimit) || state.agentCronRunsLimit <= 0) {
+            state.agentCronRunsLimit = 20;
+        }
+        if (state.agentCronRunsScope !== "all" && state.agentCronRunsScope !== "job") {
+            state.agentCronRunsScope = "all";
+        }
+        if (typeof state.agentCronRunsStatusFilter !== "string") {
+            state.agentCronRunsStatusFilter = "all";
+        }
+        if (typeof state.agentCronRunsQuery !== "string") {
+            state.agentCronRunsQuery = "";
+        }
+        if (state.agentCronRunsSortDir !== "asc" && state.agentCronRunsSortDir !== "desc") {
+            state.agentCronRunsSortDir = "desc";
         }
 
         if (!state.agentsPersistence || typeof state.agentsPersistence !== "object") {
@@ -1127,21 +1212,314 @@
             }
         }
 
+        function normalizeCronPaginationMeta(payload, entriesLength, fallbackLimit, fallbackOffset) {
+            const safePayload = payload && typeof payload === "object"
+                ? payload
+                : {};
+            const totalRaw = Number(safePayload.total);
+            const limitRaw = Number(safePayload.limit);
+            const offsetRaw = Number(safePayload.offset);
+            const hasMoreRaw = safePayload.hasMore;
+            const nextOffsetRaw = safePayload.nextOffset;
+
+            const total = Number.isFinite(totalRaw)
+                ? Math.max(0, Math.floor(totalRaw))
+                : entriesLength;
+            const limit = Number.isFinite(limitRaw) && limitRaw > 0
+                ? Math.floor(limitRaw)
+                : fallbackLimit;
+            const offset = Number.isFinite(offsetRaw) && offsetRaw >= 0
+                ? Math.floor(offsetRaw)
+                : fallbackOffset;
+            const hasMore = typeof hasMoreRaw === "boolean"
+                ? hasMoreRaw
+                : offset + entriesLength < Math.max(total, offset + entriesLength);
+            const nextOffset = Number.isFinite(Number(nextOffsetRaw))
+                ? Math.max(0, Math.floor(Number(nextOffsetRaw)))
+                : hasMore
+                    ? offset + entriesLength
+                    : null;
+
+            return {
+                total,
+                limit,
+                offset,
+                hasMore,
+                nextOffset,
+            };
+        }
+
+        async function loadCronStatus(options) {
+            const opts = options || {};
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            if (!request || !state.connected || state.agentCronStatusLoading) {
+                return state.agentCronStatusResult;
+            }
+
+            state.agentCronStatusLoading = true;
+            state.agentCronStatusError = null;
+            onStateUpdated();
+
+            try {
+                const res = await request("cron.status", {});
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return null;
+                }
+
+                const payload = res && res.payload ? res.payload : res;
+                const normalizedStatus = payload && typeof payload === "object"
+                    ? {
+                        enabled: Boolean(payload.enabled),
+                        jobs: Number.isFinite(Number(payload.jobs))
+                            ? Math.max(0, Math.floor(Number(payload.jobs)))
+                            : 0,
+                        nextWakeAtMs: Number.isFinite(Number(payload.nextWakeAtMs))
+                            ? Math.floor(Number(payload.nextWakeAtMs))
+                            : null,
+                    }
+                    : {
+                        enabled: false,
+                        jobs: 0,
+                        nextWakeAtMs: null,
+                    };
+                state.agentCronStatusResult = normalizedStatus;
+                return normalizedStatus;
+            } catch (err) {
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return null;
+                }
+
+                state.agentCronStatusError = resolveToolsErrorMessage(err, "cron status");
+                return null;
+            } finally {
+                state.agentCronStatusLoading = false;
+                onStateUpdated();
+            }
+        }
+
+        async function loadCronJobsPage(options) {
+            const opts = options || {};
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            const append = Boolean(opts.append);
+            if (!request || !state.connected) {
+                return;
+            }
+            if (!append && state.agentCronJobsLoading) {
+                return;
+            }
+            if (append && state.agentCronJobsLoadingMore) {
+                return;
+            }
+            if (append && !state.agentCronJobsHasMore) {
+                return;
+            }
+
+            const offset = append
+                ? Math.max(0, Number(state.agentCronJobsNextOffset || state.agentCronJobs.length || 0))
+                : 0;
+            if (append) {
+                state.agentCronJobsLoadingMore = true;
+            } else {
+                state.agentCronJobsLoading = true;
+            }
+            state.agentCronJobsError = null;
+            onStateUpdated();
+
+            try {
+                const res = await request("cron.list", {
+                    includeDisabled: state.agentCronJobsEnabledFilter === "all",
+                    enabled: state.agentCronJobsEnabledFilter,
+                    limit: state.agentCronJobsLimit,
+                    offset: offset,
+                    query: String(state.agentCronJobsQuery || "").trim() || undefined,
+                    sortBy: state.agentCronJobsSortBy,
+                    sortDir: state.agentCronJobsSortDir,
+                });
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return;
+                }
+
+                const payload = res && res.payload ? res.payload : res;
+                const jobs = payload && Array.isArray(payload.jobs)
+                    ? payload.jobs
+                    : [];
+                state.agentCronJobs = append
+                    ? state.agentCronJobs.concat(jobs)
+                    : jobs;
+
+                const meta = normalizeCronPaginationMeta(
+                    payload,
+                    jobs.length,
+                    state.agentCronJobsLimit,
+                    offset
+                );
+                state.agentCronJobsTotal = Math.max(meta.total, state.agentCronJobs.length);
+                state.agentCronJobsHasMore = meta.hasMore;
+                state.agentCronJobsNextOffset = meta.nextOffset;
+            } catch (err) {
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return;
+                }
+
+                state.agentCronJobsError = resolveToolsErrorMessage(err, "cron jobs");
+            } finally {
+                if (append) {
+                    state.agentCronJobsLoadingMore = false;
+                } else {
+                    state.agentCronJobsLoading = false;
+                }
+                onStateUpdated();
+            }
+        }
+
+        async function loadCronRuns(options) {
+            const opts = options || {};
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            const append = Boolean(opts.append);
+            if (!request || !state.connected) {
+                return;
+            }
+            if (!append && state.agentCronRunsLoading) {
+                return;
+            }
+            if (append && state.agentCronRunsLoadingMore) {
+                return;
+            }
+            if (append && !state.agentCronRunsHasMore) {
+                return;
+            }
+
+            const offset = append
+                ? Math.max(0, Number(state.agentCronRunsNextOffset || state.agentCronRuns.length || 0))
+                : 0;
+            if (append) {
+                state.agentCronRunsLoadingMore = true;
+            } else {
+                state.agentCronRunsLoading = true;
+            }
+            state.agentCronRunsError = null;
+            onStateUpdated();
+
+            try {
+                const scope = state.agentCronRunsScope === "job"
+                    ? "job"
+                    : "all";
+                const selectedJobId = String(state.agentCronSelectedJobId || "").trim();
+                const res = await request("cron.runs", {
+                    scope: scope,
+                    id: scope === "job" && selectedJobId ? selectedJobId : undefined,
+                    limit: state.agentCronRunsLimit,
+                    offset: offset,
+                    status: state.agentCronRunsStatusFilter,
+                    query: String(state.agentCronRunsQuery || "").trim() || undefined,
+                    sortDir: state.agentCronRunsSortDir,
+                });
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return;
+                }
+
+                const payload = res && res.payload ? res.payload : res;
+                const entries = payload && Array.isArray(payload.entries)
+                    ? payload.entries
+                    : [];
+                state.agentCronRuns = append
+                    ? state.agentCronRuns.concat(entries)
+                    : entries;
+
+                const meta = normalizeCronPaginationMeta(
+                    payload,
+                    entries.length,
+                    state.agentCronRunsLimit,
+                    offset
+                );
+                state.agentCronRunsTotal = Math.max(meta.total, state.agentCronRuns.length);
+                state.agentCronRunsHasMore = meta.hasMore;
+                state.agentCronRunsNextOffset = meta.nextOffset;
+            } catch (err) {
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return;
+                }
+
+                state.agentCronRunsError = resolveToolsErrorMessage(err, "cron runs");
+            } finally {
+                if (append) {
+                    state.agentCronRunsLoadingMore = false;
+                } else {
+                    state.agentCronRunsLoading = false;
+                }
+                onStateUpdated();
+            }
+        }
+
         async function loadAgentCron(agentId) {
             const resolvedAgentId = String(agentId || "").trim();
-            if (!resolvedAgentId) {
+            if (!resolvedAgentId || !request || !state.connected) {
                 return;
+            }
+
+            function shouldIgnoreResponse() {
+                return hasSelectedAgentMismatch(resolvedAgentId) || state.agentsPanel !== "cron";
             }
 
             state.agentCronLoading = true;
             state.agentCronError = null;
-            state.agentCronResult = {
-                jobs: [],
-                capability: state.agentCronCapability,
-                status: "not_available",
-            };
-            state.agentCronLoading = false;
             onStateUpdated();
+
+            try {
+                const cronStatus = await loadCronStatus({
+                    shouldIgnoreResponse: shouldIgnoreResponse,
+                });
+                if (shouldIgnoreResponse()) {
+                    return;
+                }
+
+                await loadCronJobsPage({
+                    append: false,
+                    shouldIgnoreResponse: shouldIgnoreResponse,
+                });
+                if (shouldIgnoreResponse()) {
+                    return;
+                }
+
+                if (!state.agentCronSelectedJobId && Array.isArray(state.agentCronJobs) && state.agentCronJobs.length > 0) {
+                    const firstJob = state.agentCronJobs[0] || {};
+                    state.agentCronSelectedJobId = String(firstJob.id || "").trim() || null;
+                }
+
+                await loadCronRuns({
+                    append: false,
+                    shouldIgnoreResponse: shouldIgnoreResponse,
+                });
+                if (shouldIgnoreResponse()) {
+                    return;
+                }
+
+                state.agentCronResult = {
+                    status: cronStatus,
+                    jobs: state.agentCronJobs,
+                    jobsTotal: state.agentCronJobsTotal,
+                    jobsHasMore: state.agentCronJobsHasMore,
+                    runs: state.agentCronRuns,
+                    runsTotal: state.agentCronRunsTotal,
+                    runsHasMore: state.agentCronRunsHasMore,
+                    capability: state.agentCronCapability,
+                };
+            } catch (err) {
+                if (shouldIgnoreResponse()) {
+                    return;
+                }
+
+                state.agentCronError = resolveToolsErrorMessage(err, "cron surface");
+            } finally {
+                state.agentCronLoading = false;
+                onStateUpdated();
+            }
         }
 
         async function refreshFromConfigSnapshot() {
@@ -1381,6 +1759,55 @@
             }
         }
 
+        function updateCronJobsFilter(patch) {
+            const next = patch || {};
+            if (typeof next.query === "string") {
+                state.agentCronJobsQuery = next.query;
+            }
+            if (next.enabledFilter === "all" || next.enabledFilter === "enabled" || next.enabledFilter === "disabled") {
+                state.agentCronJobsEnabledFilter = next.enabledFilter;
+            }
+            if (next.sortBy === "nextRunAtMs" || next.sortBy === "updatedAtMs" || next.sortBy === "name") {
+                state.agentCronJobsSortBy = next.sortBy;
+            }
+            if (next.sortDir === "asc" || next.sortDir === "desc") {
+                state.agentCronJobsSortDir = next.sortDir;
+            }
+            state.agentCronJobsNextOffset = null;
+            state.agentCronJobsHasMore = false;
+            onStateUpdated();
+        }
+
+        function updateCronRunsFilter(patch) {
+            const next = patch || {};
+            if (next.scope === "all" || next.scope === "job") {
+                state.agentCronRunsScope = next.scope;
+            }
+            if (next.statusFilter === "all" || next.statusFilter === "ok" || next.statusFilter === "error" || next.statusFilter === "skipped") {
+                state.agentCronRunsStatusFilter = next.statusFilter;
+            }
+            if (typeof next.query === "string") {
+                state.agentCronRunsQuery = next.query;
+            }
+            if (next.sortDir === "asc" || next.sortDir === "desc") {
+                state.agentCronRunsSortDir = next.sortDir;
+            }
+            if (Object.prototype.hasOwnProperty.call(next, "selectedJobId")) {
+                state.agentCronSelectedJobId = next.selectedJobId ? String(next.selectedJobId).trim() : null;
+            }
+            state.agentCronRunsNextOffset = null;
+            state.agentCronRunsHasMore = false;
+            onStateUpdated();
+        }
+
+        async function loadMoreCronJobs() {
+            await loadCronJobsPage({ append: true });
+        }
+
+        async function loadMoreCronRuns() {
+            await loadCronRuns({ append: true });
+        }
+
         return {
             loadAgents,
             loadToolsCatalog,
@@ -1394,6 +1821,13 @@
             logoutWhatsApp,
             loadAgentChannels,
             loadAgentCron,
+            loadCronStatus,
+            loadCronJobsPage,
+            loadCronRuns,
+            loadMoreCronJobs,
+            loadMoreCronRuns,
+            updateCronJobsFilter,
+            updateCronRunsFilter,
             loadAgentIdentity,
             loadAgentIdentities,
             loadPanelDataForCurrentAgent,
