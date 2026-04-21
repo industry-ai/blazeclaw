@@ -237,6 +237,13 @@
             });
         }
 
+        function requestWithOverride(method, params, overrideRequest) {
+            if (typeof overrideRequest === "function") {
+                return overrideRequest(method, params);
+            }
+            return request(method, params);
+        }
+
         async function loadHistory() {
             try {
                 state.streamText = "";
@@ -310,15 +317,19 @@
                 return;
             }
 
-            const requestedSession = opts && typeof opts === "object"
-                ? opts.sessionKey
-                : "";
+            const options = opts && typeof opts === "object"
+                ? opts
+                : {};
+            const requestedSession = options.sessionKey;
             const sessionKey = normalizeSessionKey(
                 requestedSession || state.sessionKey);
             const params = sessionKey ? { sessionKey } : {};
 
             try {
-                const response = await request("agent.identity.get", params);
+                const response = await requestWithOverride(
+                    "agent.identity.get",
+                    params,
+                    options.requestOverride);
                 if (!response) {
                     return;
                 }
@@ -879,7 +890,158 @@
         };
     }
 
+    function createRegressionState() {
+        return {
+            connected: true,
+            bridgeAvailable: true,
+            sessionKey: "main",
+            assistantName: "Assistant",
+            assistantAvatar: "A",
+            assistantAgentId: null,
+            pending: new Map(),
+            bridgeQueue: [],
+            terminalRunStates: new Map(),
+            reconcileTimer: null,
+            draftsBySession: new Map(),
+            inputHistory: [],
+            inputHistoryIndex: -1,
+            sendQueue: [],
+            slashCommands: [],
+            slashCommandsLoaded: false,
+            sessionOptions: [],
+            modelOptions: [],
+            selectedModel: "default",
+            thinkingLevel: "normal",
+            inputEl: { value: "" },
+            attachInput: { value: "" },
+            attachments: [],
+            toolTimelineByRequest: new Map(),
+            seenBridgeSeq: new Set(),
+            seenBridgeIds: new Set(),
+            abortBtn: { disabled: true },
+        };
+    }
+
+    function assertRegression(condition, message) {
+        if (!condition) {
+            throw new Error(message);
+        }
+    }
+
+    async function runRegressionChecks() {
+        const summary = [];
+
+        {
+            const state = createRegressionState();
+            state.connected = false;
+            const calls = [];
+            const controller = createController({
+                state,
+            });
+
+            await controller.loadAssistantIdentity({
+                requestOverride: async (method, params) => {
+                    calls.push({ method, params });
+                    return {
+                        payload: {
+                            name: "ShouldNotLoad",
+                        },
+                    };
+                },
+            });
+
+            assertRegression(calls.length === 0,
+                "assistant identity loader should short-circuit when disconnected");
+            summary.push("assistant guard disconnected");
+        }
+
+        {
+            const state = createRegressionState();
+            const calls = [];
+            const controller = createController({
+                state,
+            });
+
+            await controller.loadAssistantIdentity({
+                sessionKey: "  session-a ",
+                requestOverride: async (method, params) => {
+                    calls.push({ method, params });
+                    return {
+                        payload: {
+                            name: "Alpha",
+                            avatar: "⚡",
+                            agentId: "agent-alpha",
+                        },
+                    };
+                },
+            });
+
+            assertRegression(calls.length === 1,
+                "assistant identity loader should issue exactly one request");
+            assertRegression(calls[0].method === "agent.identity.get",
+                "assistant identity loader should call agent.identity.get");
+            assertRegression(calls[0].params && calls[0].params.sessionKey === "session-a",
+                "assistant identity loader should pass trimmed session key param");
+            assertRegression(state.assistantName === "Alpha" &&
+                state.assistantAvatar === "⚡" &&
+                state.assistantAgentId === "agent-alpha",
+                "assistant identity loader should apply normalized identity values");
+            summary.push("assistant session-key propagation");
+        }
+
+        {
+            const state = createRegressionState();
+            const controller = createController({
+                state,
+            });
+
+            await controller.loadAssistantIdentity({
+                requestOverride: async () => ({
+                    payload: {
+                        name: "",
+                        avatar: "",
+                        agentId: "",
+                    },
+                }),
+            });
+
+            assertRegression(state.assistantName === "Assistant" &&
+                state.assistantAvatar === null &&
+                state.assistantAgentId === null,
+                "assistant identity loader should normalize empty payload values to defaults");
+            summary.push("assistant normalization defaults");
+        }
+
+        {
+            const state = createRegressionState();
+            state.assistantName = "Persisted";
+            state.assistantAvatar = "P";
+            state.assistantAgentId = "agent-persisted";
+            const controller = createController({
+                state,
+            });
+
+            await controller.loadAssistantIdentity({
+                requestOverride: async () => {
+                    throw new Error("assistant identity unavailable");
+                },
+            });
+
+            assertRegression(state.assistantName === "Persisted" &&
+                state.assistantAvatar === "P" &&
+                state.assistantAgentId === "agent-persisted",
+                "assistant identity loader should retain last known values on request failure");
+            summary.push("assistant error retention");
+        }
+
+        return {
+            ok: true,
+            checks: summary,
+        };
+    }
+
     window.BlazeClawChatController = {
         createController,
+        runRegressionChecks,
     };
 })();

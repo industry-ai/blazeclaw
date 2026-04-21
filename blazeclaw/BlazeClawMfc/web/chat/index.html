@@ -32,6 +32,24 @@
             align-items: center;
         }
 
+        .header-title {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+
+        .assistant-identity {
+            font-size: 11px;
+            color: #d7e8ff;
+            font-weight: 500;
+            opacity: 0.9;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: min(52vw, 520px);
+        }
+
         .status {
             font-size: 12px;
             color: #9cc8ff;
@@ -273,7 +291,10 @@
 <body>
     <div class="app">
         <div class="header">
-            <div>BlazeClaw Chat (WebView)</div>
+            <div class="header-title">
+                <div>BlazeClaw Chat (WebView)</div>
+                <div id="assistantIdentity" class="assistant-identity">A Assistant</div>
+            </div>
             <div id="status" class="status">initializing...</div>
         </div>
         <div id="agentsControlPlane" class="agents-control-plane" hidden>
@@ -323,6 +344,7 @@
             };
 
             const statusEl = document.getElementById("status");
+            const assistantIdentityEl = document.getElementById("assistantIdentity");
             const messagesEl = document.getElementById("messages");
             state.inputEl = document.getElementById("input");
             state.sendBtn = document.getElementById("sendBtn");
@@ -340,6 +362,23 @@
 
             function setStatus(text) {
                 statusEl.textContent = text;
+            }
+
+            function renderAssistantIdentity() {
+                if (!assistantIdentityEl) {
+                    return;
+                }
+
+                const assistantName = String(state.assistantName || "").trim() || "Assistant";
+                const rawAvatar = typeof state.assistantAvatar === "string"
+                    ? state.assistantAvatar.trim()
+                    : "";
+                const assistantAvatar = rawAvatar || "A";
+                const assistantAgentId = typeof state.assistantAgentId === "string"
+                    ? state.assistantAgentId.trim()
+                    : "";
+                const suffix = assistantAgentId ? ` (${assistantAgentId})` : "";
+                assistantIdentityEl.textContent = `${assistantAvatar} ${assistantName}${suffix}`;
             }
 
             function scrollBottom() {
@@ -617,6 +656,9 @@
                     }
 
                     const channelResult = state.agentChannelsResult || null;
+                    const snapshot = channelResult && channelResult.snapshot
+                        ? channelResult.snapshot
+                        : null;
                     const channels = channelResult && Array.isArray(channelResult.channels)
                         ? channelResult.channels
                         : [];
@@ -625,8 +667,21 @@
                         : [];
                     rows.push(`<div class=\"agents-row\">Channels: ${channels.length}</div>`);
                     rows.push(`<div class=\"agents-row\">Agent-related routes: ${routes.length}</div>`);
-                    rows.push("<div class=\"agents-row\">Capability mode: shared channels status/routes (agent-scoped view via route filtering)</div>");
-                    rows.push("<div class=\"agents-row\">TODO parity track: docs/compare/ui.controllers.md#2-mechanical-audit-openclawuisrcuicontrollers</div>");
+                    rows.push(`<div class=\"agents-row\">Snapshot loaded: ${snapshot ? "yes" : "no"}</div>`);
+                    rows.push(`<div class=\"agents-row\">Last success: ${typeof state.channelsLastSuccess === "number" ? state.channelsLastSuccess : "(none)"}</div>`);
+                    rows.push(`<div class=\"agents-row\">Scope-aware status loader: ${state.agentChannelsCapability && state.agentChannelsCapability.method ? state.agentChannelsCapability.method : "channels.status"}</div>`);
+                    rows.push(`<div class=\"agents-row\">WhatsApp busy: ${state.whatsappBusy ? "yes" : "no (login parity deferred)"}</div>`);
+                    if (channels.length > 0) {
+                        const firstChannel = channels[0] || {};
+                        const firstChannelAccounts = Array.isArray(firstChannel.accounts)
+                            ? firstChannel.accounts
+                            : [];
+                        rows.push(`<div class=\"agents-row\">First channel: ${String(firstChannel.label || firstChannel.id || "(n/a)")}</div>`);
+                        rows.push(`<div class=\"agents-row\">First channel accounts: ${firstChannelAccounts.length}</div>`);
+                        rows.push(`<div class=\"agents-row\">First channel default account: ${String(firstChannel.defaultAccountId || "(n/a)")}</div>`);
+                    }
+                    rows.push("<div class=\"agents-row\">Capability mode: canonical channels snapshot + shared route projection</div>");
+                    rows.push("<div class=\"agents-row\">TODO parity track: docs/compare/channels.ts/CHANNELS_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md</div>");
                 }
 
                 if (panel === "cron") {
@@ -724,6 +779,7 @@
                     ? `Attach(${state.attachments.length})`
                     : "Attach";
 
+                renderAssistantIdentity();
                 if (state.agentsControlPlaneEl) {
                     state.agentsControlPlaneEl.hidden = !agentsController;
                 }
@@ -739,6 +795,19 @@
                 clearMessages,
                 setInputValue,
             });
+
+            if (resolveAssistantRegressionChecksEnabled() &&
+                typeof window.BlazeClawChatController.runRegressionChecks === "function") {
+                window.BlazeClawChatController.runRegressionChecks()
+                    .then((result) => {
+                        if (result && result.ok) {
+                            console.log("[assistant-regression] passed:", result.checks);
+                        }
+                    })
+                    .catch((err) => {
+                        console.error("[assistant-regression] failed:", err);
+                    });
+            }
 
             function resolveAgentsEnabled() {
                 const search = new URLSearchParams(window.location.search || "");
@@ -776,6 +845,22 @@
                     return Boolean(
                         window.localStorage &&
                         window.localStorage.getItem("blazeclaw.agents.regression") === "1"
+                    );
+                } catch (_) {
+                    return false;
+                }
+            }
+
+            function resolveAssistantRegressionChecksEnabled() {
+                const search = new URLSearchParams(window.location.search || "");
+                if (search.get("assistantRegression") === "1") {
+                    return true;
+                }
+
+                try {
+                    return Boolean(
+                        window.localStorage &&
+                        window.localStorage.getItem("blazeclaw.assistant.regression") === "1"
                     );
                 } catch (_) {
                     return false;

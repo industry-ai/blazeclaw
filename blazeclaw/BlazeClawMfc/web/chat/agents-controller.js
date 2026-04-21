@@ -105,6 +105,31 @@
             state.agentSkillsAgentId = null;
         }
 
+        if (typeof state.channelsLoading !== "boolean") {
+            state.channelsLoading = false;
+        }
+        if (typeof state.channelsError !== "string" && state.channelsError !== null) {
+            state.channelsError = null;
+        }
+        if (!state.channelsSnapshot) {
+            state.channelsSnapshot = null;
+        }
+        if (typeof state.channelsLastSuccess !== "number" && state.channelsLastSuccess !== null) {
+            state.channelsLastSuccess = null;
+        }
+        if (typeof state.whatsappBusy !== "boolean") {
+            state.whatsappBusy = false;
+        }
+        if (typeof state.whatsappLoginMessage !== "string" && state.whatsappLoginMessage !== null) {
+            state.whatsappLoginMessage = null;
+        }
+        if (typeof state.whatsappLoginQrDataUrl !== "string" && state.whatsappLoginQrDataUrl !== null) {
+            state.whatsappLoginQrDataUrl = null;
+        }
+        if (typeof state.whatsappLoginConnected !== "boolean" && state.whatsappLoginConnected !== null) {
+            state.whatsappLoginConnected = null;
+        }
+
         if (typeof state.agentChannelsLoading !== "boolean") {
             state.agentChannelsLoading = false;
         }
@@ -116,9 +141,9 @@
         }
         if (!state.agentChannelsCapability) {
             state.agentChannelsCapability = {
-                method: "gateway.channels.status",
+                method: "channels.status",
                 agentScoped: false,
-                todo: "docs/compare/ui.controllers.md#2-mechanical-audit-openclawuisrcuicontrollers",
+                todo: "docs/compare/channels.ts/CHANNELS_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md",
             };
         }
 
@@ -181,6 +206,197 @@
                 return err.message;
             }
             return String(err);
+        }
+
+        function isMissingOperatorReadScopeError(err) {
+            const scopeErrors = window.BlazeClawScopeErrors;
+            return Boolean(
+                scopeErrors &&
+                typeof scopeErrors.isMissingOperatorReadScopeError === "function" &&
+                scopeErrors.isMissingOperatorReadScopeError(err)
+            );
+        }
+
+        function normalizeBooleanFlag(value, fallback) {
+            if (typeof value === "boolean") {
+                return value;
+            }
+            if (typeof fallback === "boolean") {
+                return fallback;
+            }
+            return false;
+        }
+
+        function normalizeChannelStatusEntry(entry, channelId, labelFallback) {
+            const resolvedId = String(channelId || entry && entry.id || "").trim();
+            if (!resolvedId) {
+                return null;
+            }
+
+            const resolvedLabel = String(entry && entry.label || labelFallback || resolvedId).trim() || resolvedId;
+            const accountCount = Number(entry && entry.accounts);
+            return {
+                id: resolvedId,
+                label: resolvedLabel,
+                connected: normalizeBooleanFlag(entry && entry.connected, false),
+                accounts: Number.isFinite(accountCount) ? accountCount : 0,
+            };
+        }
+
+        function normalizeChannelAccountEntry(entry) {
+            const resolvedAccountId = String(entry && entry.accountId || "").trim();
+            if (!resolvedAccountId) {
+                return null;
+            }
+
+            return {
+                accountId: resolvedAccountId,
+                name: String(entry && (entry.name || entry.label) || "").trim() || resolvedAccountId,
+                enabled: normalizeBooleanFlag(entry && entry.enabled, normalizeBooleanFlag(entry && entry.active, false)),
+                configured: normalizeBooleanFlag(entry && entry.configured, true),
+                linked: normalizeBooleanFlag(entry && entry.linked, normalizeBooleanFlag(entry && entry.active, false)),
+                running: normalizeBooleanFlag(entry && entry.running, normalizeBooleanFlag(entry && entry.connected, false)),
+                connected: normalizeBooleanFlag(entry && entry.connected, false),
+                lastError: entry && typeof entry.lastError === "string"
+                    ? entry.lastError
+                    : null,
+                lastProbeAt: entry && typeof entry.lastProbeAt === "number"
+                    ? entry.lastProbeAt
+                    : null,
+            };
+        }
+
+        function normalizeChannelsSnapshot(payload) {
+            if (!payload || typeof payload !== "object") {
+                return null;
+            }
+
+            const source = payload;
+            const rawLabels = source.channelLabels && typeof source.channelLabels === "object"
+                ? source.channelLabels
+                : {};
+            const rawAccountsMap = source.channelAccounts && typeof source.channelAccounts === "object"
+                ? source.channelAccounts
+                : {};
+            const rawDefaultAccountMap = source.channelDefaultAccountId && typeof source.channelDefaultAccountId === "object"
+                ? source.channelDefaultAccountId
+                : {};
+            const normalized = {
+                ts: typeof source.ts === "number" ? source.ts : Date.now(),
+                channelOrder: [],
+                channelLabels: {},
+                channels: {},
+                channelAccounts: {},
+                channelDefaultAccountId: {},
+            };
+
+            function assignChannel(channelId, entry) {
+                const normalizedEntry = normalizeChannelStatusEntry(entry, channelId, rawLabels[channelId]);
+                if (!normalizedEntry) {
+                    return;
+                }
+
+                const resolvedChannelId = normalizedEntry.id;
+                normalized.channelOrder.push(resolvedChannelId);
+                normalized.channelLabels[resolvedChannelId] = normalizedEntry.label;
+                normalized.channels[resolvedChannelId] = normalizedEntry;
+
+                const rawAccounts = Array.isArray(rawAccountsMap[resolvedChannelId])
+                    ? rawAccountsMap[resolvedChannelId]
+                    : [];
+                const normalizedAccounts = rawAccounts
+                    .map(normalizeChannelAccountEntry)
+                    .filter(function (account) {
+                        return Boolean(account);
+                    });
+                normalized.channelAccounts[resolvedChannelId] = normalizedAccounts;
+
+                const explicitDefaultAccountId = String(rawDefaultAccountMap[resolvedChannelId] || "").trim();
+                if (explicitDefaultAccountId) {
+                    normalized.channelDefaultAccountId[resolvedChannelId] = explicitDefaultAccountId;
+                } else if (normalizedAccounts.length > 0) {
+                    normalized.channelDefaultAccountId[resolvedChannelId] = normalizedAccounts[0].accountId;
+                }
+            }
+
+            if (Array.isArray(source.channels)) {
+                source.channels.forEach(function (entry) {
+                    const resolvedId = String(entry && entry.id || "").trim();
+                    assignChannel(resolvedId, entry);
+                });
+                return normalized;
+            }
+
+            const rawChannelMap = source.channels && typeof source.channels === "object"
+                ? source.channels
+                : {};
+            const rawOrder = Array.isArray(source.channelOrder)
+                ? source.channelOrder
+                : Object.keys(rawChannelMap);
+            rawOrder.forEach(function (channelId) {
+                const resolvedId = String(channelId || "").trim();
+                if (!resolvedId) {
+                    return;
+                }
+                assignChannel(resolvedId, rawChannelMap[resolvedId]);
+            });
+
+            return normalized;
+        }
+
+        function buildAgentChannelsResult(snapshot, routes, agentId) {
+            const normalizedSnapshot = snapshot || null;
+            const resolvedAgentId = String(agentId || "").trim();
+            const normalizedRoutes = Array.isArray(routes)
+                ? routes.map(function (entry) {
+                    return {
+                        channel: String(entry && entry.channel || "").trim(),
+                        accountId: String(entry && entry.accountId || "").trim(),
+                        agentId: String(entry && entry.agentId || "").trim(),
+                        sessionId: String(entry && entry.sessionId || "").trim(),
+                    };
+                }).filter(function (entry) {
+                    return entry.channel.length > 0 &&
+                        entry.accountId.length > 0 &&
+                        (!resolvedAgentId || !entry.agentId || entry.agentId === resolvedAgentId);
+                })
+                : [];
+            const channelOrder = normalizedSnapshot && Array.isArray(normalizedSnapshot.channelOrder)
+                ? normalizedSnapshot.channelOrder
+                : [];
+            const channels = channelOrder.map(function (channelId) {
+                const statusEntry = normalizedSnapshot.channels && normalizedSnapshot.channels[channelId]
+                    ? normalizedSnapshot.channels[channelId]
+                    : {
+                        id: channelId,
+                        label: String(normalizedSnapshot.channelLabels && normalizedSnapshot.channelLabels[channelId] || channelId),
+                        connected: false,
+                        accounts: 0,
+                    };
+                const accountEntries = normalizedSnapshot.channelAccounts && Array.isArray(normalizedSnapshot.channelAccounts[channelId])
+                    ? normalizedSnapshot.channelAccounts[channelId]
+                    : [];
+                const defaultAccountId = normalizedSnapshot.channelDefaultAccountId &&
+                    typeof normalizedSnapshot.channelDefaultAccountId[channelId] === "string"
+                    ? normalizedSnapshot.channelDefaultAccountId[channelId]
+                    : (accountEntries[0] && accountEntries[0].accountId) || "";
+                return {
+                    id: channelId,
+                    label: String(statusEntry.label || channelId),
+                    connected: Boolean(statusEntry.connected),
+                    accountCount: accountEntries.length,
+                    accounts: accountEntries,
+                    defaultAccountId: defaultAccountId,
+                };
+            });
+
+            return {
+                snapshot: normalizedSnapshot,
+                channels: channels,
+                routes: normalizedRoutes,
+                selectedAgentId: resolvedAgentId || null,
+                capability: state.agentChannelsCapability,
+            };
         }
 
         function resolvePreferredServerChatModelValue(model, modelProvider, catalog) {
@@ -669,6 +885,50 @@
             }
         }
 
+        async function loadChannels(options) {
+            const opts = options || {};
+            const probe = Boolean(opts.probe);
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            if (!request || !state.connected || state.channelsLoading) {
+                return state.channelsSnapshot || null;
+            }
+
+            state.channelsLoading = true;
+            state.channelsError = null;
+            onStateUpdated();
+
+            try {
+                const res = await request("channels.status", {
+                    probe: probe,
+                    timeoutMs: 8000,
+                });
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return null;
+                }
+
+                const payload = res && res.payload ? res.payload : res;
+                const snapshot = normalizeChannelsSnapshot(payload);
+                state.channelsSnapshot = snapshot;
+                state.channelsLastSuccess = Date.now();
+                return snapshot;
+            } catch (err) {
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return null;
+                }
+
+                if (isMissingOperatorReadScopeError(err)) {
+                    state.channelsSnapshot = null;
+                }
+                state.channelsError = resolveToolsErrorMessage(err, "channel status");
+                return null;
+            } finally {
+                state.channelsLoading = false;
+                onStateUpdated();
+            }
+        }
+
         async function loadAgentChannels(agentId) {
             const resolvedAgentId = String(agentId || "").trim();
             if (!request || !state.connected || !resolvedAgentId || state.agentChannelsLoading) {
@@ -681,35 +941,45 @@
 
             state.agentChannelsLoading = true;
             state.agentChannelsError = null;
-            state.agentChannelsResult = null;
             onStateUpdated();
 
             try {
-                const statusRes = await request("gateway.channels.status", {});
+                const snapshot = await loadChannels({
+                    probe: true,
+                    shouldIgnoreResponse: shouldIgnoreResponse,
+                });
+                if (shouldIgnoreResponse()) {
+                    return;
+                }
+
+                if (!snapshot && state.channelsError) {
+                    state.agentChannelsError = state.channelsError;
+                    state.agentChannelsResult = null;
+                    return;
+                }
+
                 const routesRes = await request("gateway.channels.routes", {});
                 if (shouldIgnoreResponse()) {
                     return;
                 }
 
-                const payload = statusRes && statusRes.payload ? statusRes.payload : null;
                 const routePayload = routesRes && routesRes.payload ? routesRes.payload : null;
-                const channels = payload && Array.isArray(payload.channels) ? payload.channels : [];
-                const routes = routePayload && Array.isArray(routePayload.routes) ? routePayload.routes : [];
-                const filteredRoutes = routes.filter(function (route) {
-                    return route && (!route.agentId || route.agentId === resolvedAgentId);
-                });
-
-                state.agentChannelsResult = {
-                    channels,
-                    routes: filteredRoutes,
-                    capability: state.agentChannelsCapability,
-                };
+                const routes = routePayload && Array.isArray(routePayload.routes)
+                    ? routePayload.routes
+                    : [];
+                const effectiveSnapshot = snapshot || state.channelsSnapshot;
+                state.agentChannelsResult = buildAgentChannelsResult(
+                    effectiveSnapshot,
+                    routes,
+                    resolvedAgentId
+                );
+                state.agentChannelsError = null;
             } catch (err) {
                 if (shouldIgnoreResponse()) {
                     return;
                 }
 
-                state.agentChannelsError = resolveToolsErrorMessage(err, "agent channels");
+                state.agentChannelsError = resolveToolsErrorMessage(err, "channel status");
             } finally {
                 state.agentChannelsLoading = false;
                 onStateUpdated();
@@ -970,6 +1240,7 @@
             loadAgentFiles,
             loadAgentFileContent,
             loadAgentSkills,
+            loadChannels,
             loadAgentChannels,
             loadAgentCron,
             loadAgentIdentity,
@@ -1227,7 +1498,7 @@
 
             controller.setAgentsPanel("channels");
             const channelsLoad = controller.loadPanelDataForCurrentAgent();
-            const channelsStatus = harness.takeNextCall("gateway.channels.status");
+            const channelsStatus = harness.takeNextCall("channels.status");
             const channelsRoutes = harness.takeNextCall("gateway.channels.routes");
 
             controller.setAgentsPanel("cron");
@@ -1235,11 +1506,29 @@
 
             channelsStatus.deferred.resolve({
                 payload: {
-                    channels: [
-                        {
-                            id: "wechat",
+                    ts: 123,
+                    channelOrder: ["wechat"],
+                    channelLabels: {
+                        wechat: "WeChat",
+                    },
+                    channels: {
+                        wechat: {
+                            connected: true,
+                            accounts: 1,
                         },
-                    ],
+                    },
+                    channelAccounts: {
+                        wechat: [
+                            {
+                                accountId: "wechat.default",
+                                name: "WeChat Default",
+                                connected: true,
+                            },
+                        ],
+                    },
+                    channelDefaultAccountId: {
+                        wechat: "wechat.default",
+                    },
                 },
             });
             channelsRoutes.deferred.resolve({
@@ -1252,6 +1541,93 @@
             assertRegression(state.agentChannelsResult === null,
                 "stale channels response should be suppressed after switching away from channels tab");
             summary.push("channels stale suppression");
+        }
+
+        {
+            const state = createRegressionState();
+            state.agentsPanel = "channels";
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const pending = controller.loadChannels({
+                probe: true,
+            });
+            const channelsCall = harness.takeNextCall("channels.status");
+            assertRegression(Boolean(channelsCall.params) && channelsCall.params.probe === true,
+                "channels loader should forward probe flag to canonical channels.status method");
+            assertRegression(channelsCall.params.timeoutMs === 8000,
+                "channels loader should forward OpenClaw timeout semantics");
+
+            channelsCall.deferred.resolve({
+                payload: {
+                    ts: 321,
+                    channelOrder: ["whatsapp"],
+                    channelLabels: {
+                        whatsapp: "WhatsApp",
+                    },
+                    channels: {
+                        whatsapp: {
+                            connected: true,
+                            accounts: 1,
+                        },
+                    },
+                    channelAccounts: {
+                        whatsapp: [
+                            {
+                                accountId: "whatsapp.default",
+                                name: "WhatsApp Default",
+                                active: true,
+                                connected: true,
+                            },
+                        ],
+                    },
+                    channelDefaultAccountId: {
+                        whatsapp: "whatsapp.default",
+                    },
+                },
+            });
+            const snapshot = await pending;
+
+            assertRegression(state.channelsLoading === false,
+                "channels loader should reset loading flag after success");
+            assertRegression(state.channelsError === null,
+                "channels loader should keep error cleared after success");
+            assertRegression(Boolean(snapshot) && Array.isArray(snapshot.channelOrder) && snapshot.channelOrder[0] === "whatsapp",
+                "channels loader should normalize canonical snapshot payload");
+            assertRegression(typeof state.channelsLastSuccess === "number",
+                "channels loader should record last success timestamp");
+            summary.push("channels success binding");
+        }
+
+        {
+            const state = createRegressionState();
+            state.agentsPanel = "channels";
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const pending = controller.loadChannels({
+                probe: true,
+            });
+            const channelsCall = harness.takeNextCall("channels.status");
+            channelsCall.deferred.reject({
+                detailCode: "AUTH_UNAUTHORIZED",
+                message: "missing scope: operator.read",
+            });
+            await pending;
+
+            assertRegression(state.channelsSnapshot === null,
+                "channels loader should clear snapshot for missing operator.read scope");
+            assertRegression(
+                state.channelsError ===
+                "This connection is missing operator.read, so channel status cannot be loaded yet.",
+                "channels loader should normalize missing-scope message for channel status");
+            summary.push("channels scope-error UX");
         }
 
         {
