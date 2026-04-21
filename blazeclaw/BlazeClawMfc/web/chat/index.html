@@ -665,12 +665,37 @@
                     const routes = channelResult && Array.isArray(channelResult.routes)
                         ? channelResult.routes
                         : [];
+                    const whatsappMessage = typeof state.whatsappLoginMessage === "string"
+                        ? state.whatsappLoginMessage
+                        : "(none)";
+                    const whatsappConnected = typeof state.whatsappLoginConnected === "boolean"
+                        ? (state.whatsappLoginConnected ? "yes" : "no")
+                        : "unknown";
+                    const whatsappQrDataUrl = typeof state.whatsappLoginQrDataUrl === "string"
+                        ? state.whatsappLoginQrDataUrl
+                        : "";
+
                     rows.push(`<div class=\"agents-row\">Channels: ${channels.length}</div>`);
                     rows.push(`<div class=\"agents-row\">Agent-related routes: ${routes.length}</div>`);
                     rows.push(`<div class=\"agents-row\">Snapshot loaded: ${snapshot ? "yes" : "no"}</div>`);
                     rows.push(`<div class=\"agents-row\">Last success: ${typeof state.channelsLastSuccess === "number" ? state.channelsLastSuccess : "(none)"}</div>`);
                     rows.push(`<div class=\"agents-row\">Scope-aware status loader: ${state.agentChannelsCapability && state.agentChannelsCapability.method ? state.agentChannelsCapability.method : "channels.status"}</div>`);
-                    rows.push(`<div class=\"agents-row\">WhatsApp busy: ${state.whatsappBusy ? "yes" : "no (login parity deferred)"}</div>`);
+                    rows.push(`<div class=\"agents-row\">WhatsApp busy: ${state.whatsappBusy ? "yes" : "no"}</div>`);
+                    rows.push(`<div class=\"agents-row\">WhatsApp connected: ${whatsappConnected}</div>`);
+                    rows.push(`<div class=\"agents-row\">WhatsApp message: ${whatsappMessage}</div>`);
+                    if (whatsappQrDataUrl) {
+                        rows.push(`<div class=\"agents-row\">WhatsApp QR: <a href=\"${whatsappQrDataUrl}\" target=\"_blank\" rel=\"noopener noreferrer\">open</a></div>`);
+                    }
+
+                    const buttonsDisabled = state.whatsappBusy ? " disabled" : "";
+                    rows.push(`<div class=\"agents-row\">`
+                        + `<button class=\"agents-chip\" data-channels-action=\"refresh\">Refresh</button> `
+                        + `<button class=\"agents-chip\" data-channels-action=\"start\"${buttonsDisabled}>Start Login</button> `
+                        + `<button class=\"agents-chip\" data-channels-action=\"start-force\"${buttonsDisabled}>Force Start</button> `
+                        + `<button class=\"agents-chip\" data-channels-action=\"wait\"${buttonsDisabled}>Wait Login</button> `
+                        + `<button class=\"agents-chip\" data-channels-action=\"logout\"${buttonsDisabled}>Logout</button>`
+                        + `</div>`);
+
                     if (channels.length > 0) {
                         const firstChannel = channels[0] || {};
                         const firstChannelAccounts = Array.isArray(firstChannel.accounts)
@@ -681,7 +706,7 @@
                         rows.push(`<div class=\"agents-row\">First channel default account: ${String(firstChannel.defaultAccountId || "(n/a)")}</div>`);
                     }
                     rows.push("<div class=\"agents-row\">Capability mode: canonical channels snapshot + shared route projection</div>");
-                    rows.push("<div class=\"agents-row\">TODO parity track: docs/compare/channels.ts/CHANNELS_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md</div>");
+                    rows.push("<div class=\"agents-row\">Parity track: docs/compare/channels.ts/CHANNELS_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md</div>");
                 }
 
                 if (panel === "cron") {
@@ -716,6 +741,48 @@
                             panel: state.agentsPanel,
                         });
                         void agentsController.loadPanelDataForCurrentAgent();
+                    });
+                });
+
+                state.agentsSurfaceEl.querySelectorAll("[data-channels-action]").forEach((el) => {
+                    el.addEventListener("click", () => {
+                        const action = String(el.getAttribute("data-channels-action") || "").trim();
+                        if (!action) {
+                            return;
+                        }
+
+                        emitAgentsTelemetry("channels.action", {
+                            action,
+                            panel: state.agentsPanel,
+                        });
+
+                        if (action === "refresh") {
+                            void agentsController.loadPanelDataForCurrentAgent();
+                            return;
+                        }
+                        if (action === "start") {
+                            void agentsController.startWhatsAppLogin({ force: false }).then(() => {
+                                return agentsController.loadPanelDataForCurrentAgent();
+                            });
+                            return;
+                        }
+                        if (action === "start-force") {
+                            void agentsController.startWhatsAppLogin({ force: true }).then(() => {
+                                return agentsController.loadPanelDataForCurrentAgent();
+                            });
+                            return;
+                        }
+                        if (action === "wait") {
+                            void agentsController.waitWhatsAppLogin({}).then(() => {
+                                return agentsController.loadPanelDataForCurrentAgent();
+                            });
+                            return;
+                        }
+                        if (action === "logout") {
+                            void agentsController.logoutWhatsApp({}).then(() => {
+                                return agentsController.loadPanelDataForCurrentAgent();
+                            });
+                        }
                     });
                 });
             }

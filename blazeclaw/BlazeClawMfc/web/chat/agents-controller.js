@@ -2114,6 +2114,63 @@
 
         {
             const state = createRegressionState();
+            state.agentsPanel = "channels";
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const started = controller.startWhatsAppLogin({
+                shouldIgnoreResponse: function () {
+                    return true;
+                },
+                force: false,
+            });
+            const startCall = harness.takeNextCall("web.login.start");
+            startCall.deferred.resolve({
+                payload: {
+                    started: true,
+                    message: "ignored",
+                    qrDataUrl: "data:image/png;base64,ignored",
+                },
+            });
+            const startResult = await started;
+
+            assertRegression(startResult === false,
+                "startWhatsAppLogin should resolve false when response is ignored");
+
+            const waited = controller.waitWhatsAppLogin({
+                shouldIgnoreResponse: function () {
+                    return true;
+                },
+            });
+            const waitCall = harness.takeNextCall("web.login.wait");
+            waitCall.deferred.resolve({
+                payload: {
+                    connected: true,
+                    message: "ignored",
+                },
+            });
+            const waitResult = await waited;
+
+            assertRegression(waitResult === false,
+                "waitWhatsAppLogin should resolve false when response is ignored");
+
+            let refreshQueued = true;
+            try {
+                harness.takeNextCall("channels.status");
+            } catch (_) {
+                refreshQueued = false;
+            }
+
+            assertRegression(refreshQueued === false,
+                "waitWhatsAppLogin should not queue channels refresh when response is ignored");
+            summary.push("channels login response-ignore guard");
+        }
+
+        {
+            const state = createRegressionState();
             state.whatsappBusy = true;
             const harness = createRegressionHarnessRequestStub();
             const controller = createAgentsController({
