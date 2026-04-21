@@ -385,6 +385,50 @@
         setInputValue,
       });
 
+      function resolveAgentsExperimentalEnabled() {
+        const search = new URLSearchParams(window.location.search || "");
+        if (search.get("agentsExperimental") === "1") {
+          return true;
+        }
+
+        try {
+          if (window.localStorage && window.localStorage.getItem("blazeclaw.agents.experimental") === "1") {
+            return true;
+          }
+        } catch (_) {
+        }
+
+        return false;
+      }
+
+      const agentsExperimentalEnabled = resolveAgentsExperimentalEnabled();
+      const agentsController = agentsExperimentalEnabled && window.BlazeClawAgentsController
+        ? window.BlazeClawAgentsController.createAgentsController({
+            state,
+            request: (method, params) => controller.request(method, params),
+            onStateUpdated: () => updateComposerState(),
+          })
+        : null;
+
+      if (agentsController) {
+        state.agentsPanel = "tools";
+        state.onSessionChanged = () => {
+          agentsController.syncSessionContext({
+            sessionKey: state.sessionKey,
+          });
+          void agentsController.refreshVisibleToolsEffectiveForCurrentSession();
+        };
+        state.onModelChanged = () => {
+          agentsController.syncSessionContext({
+            sessionKey: state.sessionKey,
+          });
+          void agentsController.refreshVisibleToolsEffectiveForCurrentSession();
+        };
+        agentsController.syncSessionContext({
+          sessionKey: state.sessionKey,
+        });
+      }
+
       const eventsModule = window.BlazeClawChatEvents.createEventsModule({
         state,
         controller,
@@ -403,6 +447,16 @@
       });
 
       composerModule.bind();
+      if (agentsController) {
+        void agentsController.loadAgents().then(() => {
+          if (state.agentsSelectedId) {
+            return agentsController.loadToolsCatalog(state.agentsSelectedId).then(() => {
+              return agentsController.refreshVisibleToolsEffectiveForCurrentSession();
+            });
+          }
+          return undefined;
+        });
+      }
 
       if (state.bridgeAvailable) {
         window.chrome.webview.addEventListener("message", (event) => {

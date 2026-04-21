@@ -190,7 +190,11 @@
                 state.sessionSelect.addEventListener("change", () => {
                     const target = state.sessionSelect.value;
                     hideSlashMenu();
-                    void controller.switchSession(target);
+                    void controller.switchSession(target).finally(() => {
+                        if (typeof state.onSessionChanged === "function") {
+                            state.onSessionChanged(state.sessionKey);
+                        }
+                    });
                 });
             }
 
@@ -198,7 +202,11 @@
                 state.modelSelect.addEventListener("change", () => {
                     const target = state.modelSelect.value;
                     hideSlashMenu();
-                    void controller.applyModelSelection(target);
+                    void controller.applyModelSelection(target).finally(() => {
+                        if (typeof state.onModelChanged === "function") {
+                            state.onModelChanged(state.selectedModel);
+                        }
+                    });
                 });
             }
 

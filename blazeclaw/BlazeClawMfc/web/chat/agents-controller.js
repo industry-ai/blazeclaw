@@ -123,18 +123,20 @@
         function resolveAgentIdFromSessionKey(sessionKey) {
             const key = String(sessionKey || "").trim();
             if (!key) {
-                return "";
+                return "main";
             }
 
-            const marker = "agent:";
-            const markerIndex = key.indexOf(marker);
-            if (markerIndex < 0) {
-                return "";
+            const normalized = key.toLowerCase();
+            const parts = normalized.split(":").filter(function (part) {
+                return part.length > 0;
+            });
+
+            if (parts.length >= 3 && parts[0] === "agent") {
+                const parsedAgentId = String(parts[1] || "").trim();
+                return parsedAgentId || "main";
             }
 
-            const afterMarker = key.substring(markerIndex + marker.length);
-            const separatorIndex = afterMarker.indexOf(":");
-            return separatorIndex >= 0 ? afterMarker.substring(0, separatorIndex) : afterMarker;
+            return "main";
         }
 
         function resolveEffectiveToolsModelKey(sessionKey) {
@@ -180,7 +182,7 @@
         }
 
         function buildToolsEffectiveRequestKey(params) {
-            const resolvedAgentId = String(params && params.agentId || "").trim();
+            const resolvedAgentId = String(params && params.agentId || "").trim() || "main";
             const resolvedSessionKey = String(params && params.sessionKey || "").trim();
             const modelKey = resolveEffectiveToolsModelKey(resolvedSessionKey);
             return resolvedAgentId + ":" + resolvedSessionKey + ":model=" + (modelKey || "(default)");
@@ -339,7 +341,7 @@
             }
 
             const sessionAgentId = resolveAgentIdFromSessionKey(resolvedSessionKey);
-            if (!sessionAgentId || state.agentsSelectedId !== sessionAgentId) {
+            if (state.agentsSelectedId !== sessionAgentId) {
                 return undefined;
             }
 
@@ -373,6 +375,23 @@
             onStateUpdated();
         }
 
+        function syncSessionContext(params) {
+            const normalizedSessionKey = String(params && params.sessionKey || state.sessionKey || "").trim();
+            if (normalizedSessionKey) {
+                state.sessionKey = normalizedSessionKey;
+            }
+            if (params && Object.prototype.hasOwnProperty.call(params, "sessionsResult")) {
+                state.sessionsResult = params.sessionsResult || null;
+            }
+            if (params && params.chatModelOverrides && typeof params.chatModelOverrides === "object") {
+                state.chatModelOverrides = params.chatModelOverrides;
+            }
+            if (params && Array.isArray(params.chatModelCatalog)) {
+                state.chatModelCatalog = params.chatModelCatalog;
+            }
+            onStateUpdated();
+        }
+
         return {
             loadAgents,
             loadToolsCatalog,
@@ -382,6 +401,7 @@
             refreshVisibleToolsEffectiveForCurrentSession,
             saveAgentsConfig,
             setSelectedAgentId,
+            syncSessionContext,
         };
     }
 
