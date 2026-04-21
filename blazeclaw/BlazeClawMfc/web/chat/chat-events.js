@@ -263,7 +263,8 @@
                 void controller.loadHistory();
             }
             if (state.connected) {
-                void controller.loadAssistantIdentity({
+                void controller.getControlUiBootstrapConfig({
+                    refreshIdentity: true,
                     sessionKey: state.sessionKey,
                 });
             }

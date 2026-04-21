@@ -202,6 +202,9 @@
         state.slashCommandsLoaded = Boolean(state.slashCommandsLoaded);
         state.terminalRunStates = state.terminalRunStates || new Map();
         state.reconcileTimer = state.reconcileTimer || null;
+        state.assistantIdentityRequestSeq = Number.isInteger(state.assistantIdentityRequestSeq)
+            ? state.assistantIdentityRequestSeq
+            : 0;
         if (typeof state.assistantName !== "string" || !state.assistantName.trim()) {
             state.assistantName = DEFAULT_ASSISTANT_NAME;
         }
@@ -392,6 +395,8 @@
             const sessionKey = normalizeSessionKey(
                 requestedSession || state.sessionKey);
             const params = sessionKey ? { sessionKey } : {};
+            const requestSeq = state.assistantIdentityRequestSeq + 1;
+            state.assistantIdentityRequestSeq = requestSeq;
 
             try {
                 const response = await requestWithOverride(
@@ -399,6 +404,10 @@
                     params,
                     options.requestOverride);
                 if (!response) {
+                    return;
+                }
+
+                if (requestSeq !== state.assistantIdentityRequestSeq) {
                     return;
                 }
 
@@ -439,6 +448,12 @@
                 if (state.sessionSelect) {
                     state.sessionSelect.value = state.sessionKey;
                 }
+                if (state.connected && state.bridgeAvailable) {
+                    void getControlUiBootstrapConfig({
+                        refreshIdentity: true,
+                        sessionKey: state.sessionKey,
+                    });
+                }
                 return;
             }
 
@@ -449,7 +464,10 @@
             finalizeStream();
             restoreDraftForSession();
             await loadHistory();
-            void loadAssistantIdentity({ sessionKey: state.sessionKey });
+            void getControlUiBootstrapConfig({
+                refreshIdentity: true,
+                sessionKey: state.sessionKey,
+            });
             if (state.sessionSelect) {
                 state.sessionSelect.value = state.sessionKey;
             }
@@ -1019,6 +1037,7 @@
             seenBridgeIds: new Set(),
             abortBtn: { disabled: true },
             configCoerceEnabled: false,
+            assistantIdentityRequestSeq: 0,
         };
     }
 
@@ -1284,6 +1303,60 @@
                 snapshot.assistantAvatar === "P",
                 "bootstrap adapter should retain last-known identity when refresh path fails");
             summary.push("control-ui bootstrap refresh retention");
+        }
+
+        {
+            const state = createRegressionState();
+            const controller = createController({
+                state,
+            });
+
+            let resolveOlder;
+            const olderPromise = new Promise((resolve) => {
+                resolveOlder = resolve;
+            });
+            const newerPromise = Promise.resolve({
+                payload: {
+                    name: "Newer",
+                    avatar: "N",
+                    agentId: "agent-newer",
+                },
+            });
+            let callIndex = 0;
+
+            const first = controller.loadAssistantIdentity({
+                requestOverride: async () => {
+                    callIndex += 1;
+                    if (callIndex === 1) {
+                        return olderPromise;
+                    }
+                    return newerPromise;
+                },
+            });
+            const second = controller.loadAssistantIdentity({
+                requestOverride: async () => {
+                    callIndex += 1;
+                    if (callIndex === 1) {
+                        return olderPromise;
+                    }
+                    return newerPromise;
+                },
+            });
+
+            resolveOlder({
+                payload: {
+                    name: "Older",
+                    avatar: "O",
+                    agentId: "agent-older",
+                },
+            });
+            await Promise.all([first, second]);
+
+            assertRegression(state.assistantName === "Newer" &&
+                state.assistantAvatar === "N" &&
+                state.assistantAgentId === "agent-newer",
+                "assistant identity loader should ignore stale out-of-order responses");
+            summary.push("assistant stale-response suppression");
         }
 
         {
