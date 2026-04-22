@@ -314,6 +314,30 @@
         if (typeof state.dreamDiaryContent !== "string" && state.dreamDiaryContent !== null) {
             state.dreamDiaryContent = null;
         }
+        if (state.dreamingUiSubTab !== "scene" &&
+            state.dreamingUiSubTab !== "diary" &&
+            state.dreamingUiSubTab !== "advanced") {
+            state.dreamingUiSubTab = "scene";
+        }
+        if (state.dreamingAdvancedWaitingSort !== "recent" &&
+            state.dreamingAdvancedWaitingSort !== "signals") {
+            state.dreamingAdvancedWaitingSort = "recent";
+        }
+        if (!Array.isArray(state.dreamDiaryParsedEntries)) {
+            state.dreamDiaryParsedEntries = [];
+        }
+        if (!Array.isArray(state.dreamDiaryNavigation)) {
+            state.dreamDiaryNavigation = [];
+        }
+        if (typeof state.dreamDiaryPage !== "number" || !Number.isFinite(state.dreamDiaryPage)) {
+            state.dreamDiaryPage = 0;
+        }
+        if (typeof state.dreamingPhraseIndex !== "number" || !Number.isFinite(state.dreamingPhraseIndex)) {
+            state.dreamingPhraseIndex = 0;
+        }
+        if (typeof state.dreamingPhraseLastSwapMs !== "number" || !Number.isFinite(state.dreamingPhraseLastSwapMs)) {
+            state.dreamingPhraseLastSwapMs = 0;
+        }
         if (typeof state.dreamingConfigSnapshotHash !== "string" && state.dreamingConfigSnapshotHash !== null) {
             state.dreamingConfigSnapshotHash = null;
         }
@@ -491,6 +515,293 @@
             return raw.map(normalizeDreamingEntry).filter(function (entry) {
                 return Boolean(entry);
             });
+        }
+
+        const DREAM_PHRASES = [
+            "Consolidating memories...",
+            "Tidying the knowledge graph...",
+            "Replaying conversations...",
+            "Weaving short-term signals...",
+            "Defragmenting the mind palace...",
+            "Filing loose thoughts...",
+            "Connecting distant dots...",
+            "Composting stale context...",
+            "Promoting durable insights...",
+            "Forgetting noisy traces...",
+        ];
+        const DREAM_SWAP_MS = 6000;
+        const DIARY_START_RE = /<!--\s*openclaw:dreaming:diary:start\s*-->/;
+        const DIARY_END_RE = /<!--\s*openclaw:dreaming:diary:end\s*-->/;
+
+        function normalizeTimestampMs(value) {
+            const parsed = Number(value);
+            return Number.isFinite(parsed)
+                ? Math.floor(parsed)
+                : Number.NEGATIVE_INFINITY;
+        }
+
+        function parseDiaryEntries(raw) {
+            const text = typeof raw === "string" ? raw : "";
+            if (!text.trim()) {
+                return [];
+            }
+
+            let content = text;
+            const startMatch = DIARY_START_RE.exec(text);
+            const endMatch = DIARY_END_RE.exec(text);
+            if (startMatch && endMatch && endMatch.index > startMatch.index) {
+                content = text.slice(startMatch.index + startMatch[0].length, endMatch.index);
+            }
+
+            return content
+                .split(/\n---\n/)
+                .map(function (block) {
+                    const lines = String(block || "")
+                        .trim()
+                        .split("\n");
+                    let date = "";
+                    const bodyLines = [];
+                    lines.forEach(function (line) {
+                        const trimmed = String(line || "").trim();
+                        if (!trimmed) {
+                            return;
+                        }
+                        if (!date &&
+                            trimmed.startsWith("*") &&
+                            trimmed.endsWith("*") &&
+                            trimmed.length > 2) {
+                            date = trimmed.slice(1, -1);
+                            return;
+                        }
+                        if (trimmed.startsWith("#") || trimmed.startsWith("<!--")) {
+                            return;
+                        }
+                        bodyLines.push(trimmed);
+                    });
+
+                    return bodyLines.length > 0
+                        ? {
+                            date,
+                            body: bodyLines.join("\n"),
+                        }
+                        : null;
+                })
+                .filter(function (entry) {
+                    return Boolean(entry);
+                });
+        }
+
+        function parseDiaryTimestamp(date) {
+            const parsed = Date.parse(String(date || ""));
+            return Number.isFinite(parsed) ? parsed : null;
+        }
+
+        function formatDiaryChipLabel(date) {
+            const parsed = parseDiaryTimestamp(date);
+            if (parsed === null) {
+                return String(date || "");
+            }
+            const value = new Date(parsed);
+            return String(value.getMonth() + 1) + "/" + String(value.getDate());
+        }
+
+        function buildDreamDiaryNavigation(entries) {
+            return entries.slice().reverse().map(function (entry, page) {
+                return {
+                    date: entry.date,
+                    body: entry.body,
+                    page,
+                };
+            });
+        }
+
+        function flattenDreamDiaryBody(body) {
+            return String(body || "")
+                .split("\n")
+                .map(function (line) {
+                    return String(line || "").trim();
+                })
+                .filter(function (line) {
+                    return line.length > 0 &&
+                        line !== "What Happened" &&
+                        line !== "Reflections" &&
+                        line !== "Candidates" &&
+                        line !== "Possible Lasting Updates";
+                })
+                .map(function (line) {
+                    return line.replace(/\s*\[memory\/[^[\]]+\]/g, "");
+                })
+                .map(function (line) {
+                    return line
+                        .replace(/^(?:\d+\.\s+|-\s+(?:\[[^\]]+\]\s+)?(?:[a-z_]+:\s+)?)/i, "")
+                        .replace(/^(?:likely_durable|likely_situational|unclear):\s+/i, "")
+                        .trim();
+                })
+                .filter(function (line) {
+                    return line.length > 0;
+                });
+        }
+
+        function formatCompactDateTime(value) {
+            const parsed = Date.parse(String(value || ""));
+            if (!Number.isFinite(parsed)) {
+                return String(value || "");
+            }
+            return new Date(parsed).toLocaleString([], {
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+            });
+        }
+
+        function compareWaitingEntryByRecency(a, b) {
+            const aMs = normalizeTimestampMs(a && a.lastRecalledAt);
+            const bMs = normalizeTimestampMs(b && b.lastRecalledAt);
+            if (bMs !== aMs) {
+                return bMs - aMs;
+            }
+            const aSignals = normalizeFiniteInt(a && a.totalSignalCount, 0);
+            const bSignals = normalizeFiniteInt(b && b.totalSignalCount, 0);
+            if (bSignals !== aSignals) {
+                return bSignals - aSignals;
+            }
+            return String(a && a.path || "").localeCompare(String(b && b.path || ""));
+        }
+
+        function compareWaitingEntryBySignals(a, b) {
+            const aSignals = normalizeFiniteInt(a && a.totalSignalCount, 0);
+            const bSignals = normalizeFiniteInt(b && b.totalSignalCount, 0);
+            if (bSignals !== aSignals) {
+                return bSignals - aSignals;
+            }
+            const aPhaseHits = normalizeFiniteInt(a && a.phaseHitCount, 0);
+            const bPhaseHits = normalizeFiniteInt(b && b.phaseHitCount, 0);
+            if (bPhaseHits !== aPhaseHits) {
+                return bPhaseHits - aPhaseHits;
+            }
+            return compareWaitingEntryByRecency(a, b);
+        }
+
+        function sortWaitingEntries(entries, sortMode) {
+            const source = Array.isArray(entries) ? entries.slice() : [];
+            return source.sort(sortMode === "signals"
+                ? compareWaitingEntryBySignals
+                : compareWaitingEntryByRecency);
+        }
+
+        function describeWaitingEntryOrigin(entry) {
+            const grounded = normalizeFiniteInt(entry && entry.groundedCount, 0) > 0;
+            const hasLiveSupport = normalizeFiniteInt(entry && entry.recallCount, 0) > 0 ||
+                normalizeFiniteInt(entry && entry.dailyCount, 0) > 0;
+            if (grounded && hasLiveSupport) {
+                return "Mixed";
+            }
+            if (grounded) {
+                return "Daily log";
+            }
+            return "Live";
+        }
+
+        function formatRange(path, startLine, endLine) {
+            const safePath = String(path || "").trim() || "(unknown)";
+            const start = Math.max(1, normalizeFiniteInt(startLine, 1));
+            const end = Math.max(1, normalizeFiniteInt(endLine, start));
+            return start === end
+                ? safePath + ":" + String(start)
+                : safePath + ":" + String(start) + "-" + String(end);
+        }
+
+        function currentDreamPhrase() {
+            const now = Date.now();
+            if (now - Number(state.dreamingPhraseLastSwapMs || 0) > DREAM_SWAP_MS) {
+                state.dreamingPhraseLastSwapMs = now;
+                state.dreamingPhraseIndex =
+                    (normalizeFiniteInt(state.dreamingPhraseIndex, 0) + 1) % DREAM_PHRASES.length;
+            }
+            const index = normalizeFiniteInt(state.dreamingPhraseIndex, 0) % DREAM_PHRASES.length;
+            return DREAM_PHRASES[index] || DREAM_PHRASES[0];
+        }
+
+        function getDreamingUiModel() {
+            const dreamingStatus = state.dreamingStatus && typeof state.dreamingStatus === "object"
+                ? state.dreamingStatus
+                : null;
+            const dreamDiaryContent = typeof state.dreamDiaryContent === "string"
+                ? state.dreamDiaryContent
+                : "";
+            const parsedEntries = parseDiaryEntries(dreamDiaryContent);
+            const navigation = buildDreamDiaryNavigation(parsedEntries);
+            const entryCount = navigation.length;
+            const page = entryCount > 0
+                ? Math.max(0, Math.min(normalizeFiniteInt(state.dreamDiaryPage, 0), entryCount - 1))
+                : 0;
+            state.dreamDiaryParsedEntries = parsedEntries;
+            state.dreamDiaryNavigation = navigation;
+            state.dreamDiaryPage = page;
+
+            const waitingSort = state.dreamingAdvancedWaitingSort === "signals"
+                ? "signals"
+                : "recent";
+            const shortTermEntries = dreamingStatus && Array.isArray(dreamingStatus.shortTermEntries)
+                ? dreamingStatus.shortTermEntries
+                : [];
+            const promotedEntries = dreamingStatus && Array.isArray(dreamingStatus.promotedEntries)
+                ? dreamingStatus.promotedEntries
+                : [];
+            const groundedEntries = shortTermEntries.filter(function (entry) {
+                return normalizeFiniteInt(entry && entry.groundedCount, 0) > 0;
+            });
+
+            return {
+                subTab: state.dreamingUiSubTab === "diary" || state.dreamingUiSubTab === "advanced"
+                    ? state.dreamingUiSubTab
+                    : "scene",
+                waitingSort,
+                phrase: currentDreamPhrase(),
+                entryCount,
+                diaryPage: page,
+                diaryEntry: navigation[page] || null,
+                shortTermEntries,
+                groundedEntries,
+                waitingEntries: sortWaitingEntries(shortTermEntries, waitingSort),
+                promotedEntries,
+                status: dreamingStatus,
+                diaryPath: state.dreamDiaryPath,
+                diaryContent: dreamDiaryContent,
+                diaryChipLabel: formatDiaryChipLabel,
+                flattenDiaryBody,
+                describeWaitingEntryOrigin,
+                formatRange,
+                formatCompactDateTime,
+            };
+        }
+
+        function setDreamingSubTab(tab) {
+            const normalized = String(tab || "").trim();
+            if (normalized !== "scene" && normalized !== "diary" && normalized !== "advanced") {
+                return;
+            }
+            state.dreamingUiSubTab = normalized;
+            onStateUpdated();
+        }
+
+        function setDreamingAdvancedWaitingSort(sort) {
+            const normalized = String(sort || "").trim();
+            if (normalized !== "recent" && normalized !== "signals") {
+                return;
+            }
+            state.dreamingAdvancedWaitingSort = normalized;
+            onStateUpdated();
+        }
+
+        function setDreamDiaryPage(page) {
+            const nav = Array.isArray(state.dreamDiaryNavigation)
+                ? state.dreamDiaryNavigation
+                : [];
+            const maxPage = Math.max(0, nav.length - 1);
+            state.dreamDiaryPage = Math.max(0, Math.min(normalizeFiniteInt(page, 0), maxPage));
+            onStateUpdated();
         }
 
         function normalizeDreamingStatus(raw) {
@@ -3070,6 +3381,10 @@
             loadAgentDreaming,
             loadDreamingStatus,
             loadDreamDiary,
+            getDreamingUiModel,
+            setDreamingSubTab,
+            setDreamingAdvancedWaitingSort,
+            setDreamDiaryPage,
             loadDreamingConfigSnapshot,
             updateDreamingEnabled,
             backfillDreamDiary,
@@ -3255,7 +3570,17 @@
                 "dreaming extension contract should initialize agentDreamingResult=null");
             assertRegression(Boolean(state.agentDreamingCapability) && typeof state.agentDreamingCapability.methods === "string",
                 "dreaming extension contract should initialize agentDreamingCapability");
-            summary.push("channels + cron + dreaming state contract defaults");
+            assertRegression(state.dreamingUiSubTab === "scene",
+                "dreaming UI state contract should initialize dreamingUiSubTab=scene");
+            assertRegression(state.dreamingAdvancedWaitingSort === "recent",
+                "dreaming UI state contract should initialize dreamingAdvancedWaitingSort=recent");
+            assertRegression(Array.isArray(state.dreamDiaryParsedEntries) && state.dreamDiaryParsedEntries.length === 0,
+                "dreaming UI state contract should initialize dreamDiaryParsedEntries=[]");
+            assertRegression(Array.isArray(state.dreamDiaryNavigation) && state.dreamDiaryNavigation.length === 0,
+                "dreaming UI state contract should initialize dreamDiaryNavigation=[]");
+            assertRegression(state.dreamDiaryPage === 0,
+                "dreaming UI state contract should initialize dreamDiaryPage=0");
+            summary.push("channels + cron + dreaming state/UI contract defaults");
         }
 
         {
@@ -4442,7 +4767,20 @@
             assertRegression(noDiaryReloadQueued,
                 "resetGroundedShortTerm should not reload dream diary when reloadDiary=false");
 
-            summary.push("dreaming controller parity baseline");
+            controller.setDreamingSubTab("advanced");
+            controller.setDreamingAdvancedWaitingSort("signals");
+            controller.setDreamDiaryPage(2);
+            const uiModel = controller.getDreamingUiModel();
+            assertRegression(uiModel.subTab === "advanced",
+                "dreaming ui model should expose selected sub-tab");
+            assertRegression(uiModel.waitingSort === "signals",
+                "dreaming ui model should expose selected waiting sort");
+            assertRegression(Array.isArray(uiModel.waitingEntries),
+                "dreaming ui model should include waitingEntries array");
+            assertRegression(typeof uiModel.phrase === "string" && uiModel.phrase.length > 0,
+                "dreaming ui model should include rotating phrase text");
+
+            summary.push("dreaming controller parity baseline + ui model");
         }
 
         {

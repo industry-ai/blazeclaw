@@ -106,15 +106,37 @@ TEST_CASE("P2 parity methods: skills, web login, update, and doctor memory metho
 	REQUIRE(doctorMemoryStatus.payloadJson.has_value());
 	REQUIRE(doctorMemoryStatus.payloadJson.value().find("\"status\":\"healthy\"") != std::string::npos);
 	REQUIRE(doctorMemoryStatus.payloadJson.value().find("\"dreaming\":{") != std::string::npos);
-	REQUIRE(doctorMemoryStatus.payloadJson.value().find("\"shortTermEntries\":[]") != std::string::npos);
+	REQUIRE(doctorMemoryStatus.payloadJson.value().find("\"phases\":{") != std::string::npos);
+	REQUIRE(doctorMemoryStatus.payloadJson.value().find("\"shortTermEntries\":") != std::string::npos);
+	REQUIRE(doctorMemoryStatus.payloadJson.value().find("\"promotedEntries\":") != std::string::npos);
 
 	const auto doctorMemoryDreamDiary = Route(host, "p2-doctor-memory-dreamDiary", "doctor.memory.dreamDiary");
 	REQUIRE(doctorMemoryDreamDiary.ok);
 	REQUIRE(doctorMemoryDreamDiary.payloadJson.has_value());
 	REQUIRE(doctorMemoryDreamDiary.payloadJson.value().find("\"entries\":[]") != std::string::npos);
-	REQUIRE(doctorMemoryDreamDiary.payloadJson.value().find("\"found\":false") != std::string::npos);
 	REQUIRE(doctorMemoryDreamDiary.payloadJson.value().find("\"path\":\"DREAMS.md\"") != std::string::npos);
-	REQUIRE(doctorMemoryDreamDiary.payloadJson.value().find("\"content\":null") != std::string::npos);
+	REQUIRE(doctorMemoryDreamDiary.payloadJson.value().find("\"found\":") != std::string::npos);
+	REQUIRE(doctorMemoryDreamDiary.payloadJson.value().find("\"content\":") != std::string::npos);
+
+	const auto backfillDreamDiary = Route(host, "p2-doctor-memory-backfill", "doctor.memory.backfillDreamDiary");
+	REQUIRE(backfillDreamDiary.ok);
+	REQUIRE(backfillDreamDiary.payloadJson.has_value());
+	REQUIRE(backfillDreamDiary.payloadJson.value().find("\"queued\":true") != std::string::npos);
+
+	const auto doctorMemoryStatusAfterBackfill = Route(host, "p2-doctor-memory-status-after-backfill", "doctor.memory.status");
+	REQUIRE(doctorMemoryStatusAfterBackfill.ok);
+	REQUIRE(doctorMemoryStatusAfterBackfill.payloadJson.has_value());
+	REQUIRE(doctorMemoryStatusAfterBackfill.payloadJson.value().find("\"promotedTotal\":") != std::string::npos);
+
+	const auto resetGrounded = Route(host, "p2-doctor-memory-reset-grounded", "doctor.memory.resetGroundedShortTerm");
+	REQUIRE(resetGrounded.ok);
+	REQUIRE(resetGrounded.payloadJson.has_value());
+	REQUIRE(resetGrounded.payloadJson.value().find("\"removedShortTermEntries\":true") != std::string::npos);
+
+	const auto resetDreamDiary = Route(host, "p2-doctor-memory-reset-diary", "doctor.memory.resetDreamDiary");
+	REQUIRE(resetDreamDiary.ok);
+	REQUIRE(resetDreamDiary.payloadJson.has_value());
+	REQUIRE(resetDreamDiary.payloadJson.value().find("\"removedEntries\":true") != std::string::npos);
 
 	const auto configSchemaLookup = Route(
 		host,

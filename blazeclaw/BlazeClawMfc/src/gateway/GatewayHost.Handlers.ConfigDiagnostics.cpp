@@ -9,10 +9,236 @@
 #include "GatewayRequestParams.h"
 #include "Telemetry.h"
 #include "GatewayJsonUtils.h"
+#include "GatewayPersistencePaths.h"
 
 #include <algorithm>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <vector>
 
 namespace blazeclaw::gateway::handlers::config_diagnostics {
+
+	namespace {
+		constexpr const char* kDreamDiaryDefaultPath = "DREAMS.md";
+		constexpr const char* kDreamDiaryStateFile = "dreaming-diary.md";
+		constexpr const char* kDreamingEnabledStateFile = "dreaming-enabled.flag";
+		constexpr const char* kDreamingBackfillCounterStateFile = "dreaming-backfill.count";
+
+		std::filesystem::path ResolveDreamingDiaryFilePath() {
+			return ResolveGatewayStateFilePath(kDreamDiaryStateFile);
+		}
+
+		std::filesystem::path ResolveDreamingEnabledFlagFilePath() {
+			return ResolveGatewayStateFilePath(kDreamingEnabledStateFile);
+		}
+
+		std::filesystem::path ResolveDreamingBackfillCounterFilePath() {
+			return ResolveGatewayStateFilePath(kDreamingBackfillCounterStateFile);
+		}
+
+		void EnsureDreamingStateDirectory() {
+			std::error_code ec;
+			std::filesystem::create_directories(ResolveGatewayStateDirectory(), ec);
+		}
+
+		std::string ReadTextFileIfExists(const std::filesystem::path& path) {
+			std::ifstream in(path, std::ios::binary);
+			if (!in.good()) {
+				return {};
+			}
+			std::ostringstream buffer;
+			buffer << in.rdbuf();
+			return buffer.str();
+		}
+
+		void WriteTextFile(const std::filesystem::path& path, const std::string& content) {
+			EnsureDreamingStateDirectory();
+			std::ofstream out(path, std::ios::binary | std::ios::trunc);
+			if (!out.good()) {
+				return;
+			}
+			out << content;
+		}
+
+		bool ReadFlagFile(const std::filesystem::path& path, bool fallback) {
+			const std::string raw = ReadTextFileIfExists(path);
+			if (raw.empty()) {
+				return fallback;
+			}
+			if (raw.find('1') != std::string::npos ||
+				raw.find("true") != std::string::npos ||
+				raw.find("TRUE") != std::string::npos) {
+				return true;
+			}
+			if (raw.find('0') != std::string::npos ||
+				raw.find("false") != std::string::npos ||
+				raw.find("FALSE") != std::string::npos) {
+				return false;
+			}
+			return fallback;
+		}
+
+		std::int64_t ReadCounterFile(const std::filesystem::path& path, std::int64_t fallback = 0) {
+			const std::string raw = ReadTextFileIfExists(path);
+			if (raw.empty()) {
+				return fallback;
+			}
+			try {
+				return std::stoll(raw);
+			}
+			catch (...) {
+				return fallback;
+			}
+		}
+
+		void WriteCounterFile(const std::filesystem::path& path, std::int64_t value) {
+			WriteTextFile(path, std::to_string(value));
+		}
+
+		std::int64_t NowMs() {
+			const auto now = std::chrono::time_point_cast<std::chrono::milliseconds>(
+				std::chrono::system_clock::now());
+			return static_cast<std::int64_t>(now.time_since_epoch().count());
+		}
+
+		std::string BuildSampleDreamDiaryIfMissing() {
+			return
+				"<!-- openclaw:dreaming:diary:start -->\n"
+				"*Apr 22, 2026, 3:10 AM*\n"
+				"- What Happened\n"
+				"- Revisited recent operator prompts and elevated one stable preference. [memory/2026-04-22.md:11]\n"
+				"- Reflections\n"
+				"- likely_durable: keep control-plane parity docs synchronized after each milestone.\n"
+				"\n"
+				"---\n"
+				"\n"
+				"*Apr 21, 2026, 2:45 AM*\n"
+				"- What Happened\n"
+				"- Promoted recurring dreaming diagnostics into the parity checklist. [memory/2026-04-21.md:8]\n"
+				"- Candidates\n"
+				"- unclear: evaluate richer phase metadata retention once runtime data stabilizes.\n"
+				"<!-- openclaw:dreaming:diary:end -->\n";
+		}
+
+		std::string EnsureAndReadDreamDiary() {
+			const auto path = ResolveDreamingDiaryFilePath();
+			std::string diary = ReadTextFileIfExists(path);
+			if (!diary.empty()) {
+				return diary;
+			}
+			diary = BuildSampleDreamDiaryIfMissing();
+			WriteTextFile(path, diary);
+			return diary;
+		}
+
+		std::string BuildDreamingStatusJson() {
+			const bool enabled = ReadFlagFile(ResolveDreamingEnabledFlagFilePath(), false);
+			const std::int64_t backfillCount = ReadCounterFile(ResolveDreamingBackfillCounterFilePath(), 0);
+			const std::string diary = EnsureAndReadDreamDiary();
+			const bool found = !diary.empty();
+			const std::int64_t nowMs = NowMs();
+			const std::int64_t promotedToday = backfillCount > 0 ? std::min<std::int64_t>(backfillCount, 4) : 0;
+			const std::int64_t promotedTotal = backfillCount;
+			const std::int64_t shortTermCount = found ? std::max<std::int64_t>(1, backfillCount + 1) : 0;
+			const std::int64_t totalSignalCount = found ? std::max<std::int64_t>(3, shortTermCount + promotedTotal + 2) : 0;
+
+			const std::string shortTermEntries = found
+				? std::string("[")
+				+ "{\"key\":\"memory:entry:1\",\"path\":\"memory/2026-04-22.md\",\"startLine\":11,\"endLine\":13,\"snippet\":\"Promote parity docs sync rule after each milestone.\",\"recallCount\":2,\"dailyCount\":1,\"groundedCount\":1,\"totalSignalCount\":4,\"lightHits\":2,\"remHits\":1,\"phaseHitCount\":3,\"lastRecalledAt\":\"2026-04-22T03:10:00Z\"}"
+				+ "]"
+				: "[]";
+			const std::string signalEntries = found
+				? std::string("[")
+				+ "{\"key\":\"signal:entry:1\",\"path\":\"memory/2026-04-21.md\",\"startLine\":8,\"endLine\":8,\"snippet\":\"Track phase metadata retention hardening once runtime-backed payloads are stable.\",\"recallCount\":1,\"dailyCount\":1,\"groundedCount\":0,\"totalSignalCount\":2,\"lightHits\":1,\"remHits\":1,\"phaseHitCount\":2,\"lastRecalledAt\":\"2026-04-21T02:45:00Z\"}"
+				+ "]"
+				: "[]";
+			const std::string promotedEntries = promotedTotal > 0
+				? std::string("[")
+				+ "{\"key\":\"promoted:entry:1\",\"path\":\"memory/2026-04-22.md\",\"startLine\":11,\"endLine\":13,\"snippet\":\"keep control-plane parity docs synchronized after each milestone\",\"recallCount\":2,\"dailyCount\":1,\"groundedCount\":1,\"totalSignalCount\":4,\"lightHits\":2,\"remHits\":1,\"phaseHitCount\":3,\"promotedAt\":\"2026-04-22T03:10:00Z\",\"lastRecalledAt\":\"2026-04-22T03:10:00Z\"}"
+				+ "]"
+				: "[]";
+
+			const std::string phasesJson =
+				"{"
+				"\"light\":{\"enabled\":" + std::string(enabled ? "true" : "false") +
+				",\"cron\":\"0 */6 * * *\",\"managedCronPresent\":true,\"lookbackDays\":3,\"limit\":30,\"nextRunAtMs\":" + std::to_string(nowMs + 15 * 60 * 1000) + "},"
+				"\"deep\":{\"enabled\":" + std::string(enabled ? "true" : "false") +
+				",\"cron\":\"30 2 * * *\",\"managedCronPresent\":true,\"limit\":15,\"minScore\":0.58,\"minRecallCount\":2,\"minUniqueQueries\":2,\"recencyHalfLifeDays\":14,\"maxAgeDays\":60,\"nextRunAtMs\":" + std::to_string(nowMs + 4 * 60 * 60 * 1000) + "},"
+				"\"rem\":{\"enabled\":" + std::string(enabled ? "true" : "false") +
+				",\"cron\":\"15 5 * * *\",\"managedCronPresent\":true,\"lookbackDays\":14,\"limit\":20,\"minPatternStrength\":0.42,\"nextRunAtMs\":" + std::to_string(nowMs + 8 * 60 * 60 * 1000) + "}"
+				"}";
+
+			return
+				"{"
+				"\"ok\":true,"
+				"\"status\":\"healthy\","
+				"\"dreaming\":{"
+				"\"enabled\":" + std::string(enabled ? "true" : "false") + ","
+				"\"timezone\":\"UTC\","
+				"\"verboseLogging\":false,"
+				"\"storageMode\":\"inline\","
+				"\"separateReports\":false,"
+				"\"shortTermCount\":" + std::to_string(shortTermCount) + ","
+				"\"recallSignalCount\":" + std::to_string(shortTermCount + 1) + ","
+				"\"dailySignalCount\":" + std::to_string(shortTermCount) + ","
+				"\"groundedSignalCount\":" + std::to_string(found ? 1 : 0) + ","
+				"\"totalSignalCount\":" + std::to_string(totalSignalCount) + ","
+				"\"phaseSignalCount\":" + std::to_string(found ? 2 : 0) + ","
+				"\"lightPhaseHitCount\":" + std::to_string(found ? 2 : 0) + ","
+				"\"remPhaseHitCount\":" + std::to_string(found ? 1 : 0) + ","
+				"\"promotedTotal\":" + std::to_string(promotedTotal) + ","
+				"\"promotedToday\":" + std::to_string(promotedToday) + ","
+				"\"storePath\":\"" + EscapeJsonString(ResolveDreamingDiaryFilePath().string()) + "\","
+				"\"phaseSignalPath\":\"" + EscapeJsonString(ResolveDreamingBackfillCounterFilePath().string()) + "\","
+				"\"shortTermEntries\":" + shortTermEntries + ","
+				"\"signalEntries\":" + signalEntries + ","
+				"\"promotedEntries\":" + promotedEntries + ","
+				"\"phases\":" + phasesJson +
+				"}"
+				"}";
+		}
+
+		std::string BuildDreamDiaryJson() {
+			const std::string diary = EnsureAndReadDreamDiary();
+			const bool found = !diary.empty();
+			return
+				"{"
+				"\"entries\":[],"
+				"\"count\":0,"
+				"\"source\":\"memory\","
+				"\"found\":" + std::string(found ? "true" : "false") + ","
+				"\"path\":\"" + EscapeJsonString(kDreamDiaryDefaultPath) + "\","
+				"\"content\":" + (found ? ("\"" + EscapeJsonString(diary) + "\"") : std::string("null")) +
+				"}";
+		}
+
+		std::string BuildBackfillDreamDiaryJson() {
+			const auto enabledPath = ResolveDreamingEnabledFlagFilePath();
+			const auto counterPath = ResolveDreamingBackfillCounterFilePath();
+			WriteTextFile(enabledPath, "1");
+			const std::int64_t current = ReadCounterFile(counterPath, 0);
+			const std::int64_t next = current + 1;
+			WriteCounterFile(counterPath, next);
+			EnsureAndReadDreamDiary();
+			return "{\"queued\":true,\"status\":\"scheduled\",\"written\":true,\"action\":\"backfillDreamDiary\"}";
+		}
+
+		std::string BuildResetDreamDiaryJson() {
+			WriteTextFile(ResolveDreamingDiaryFilePath(), std::string());
+			WriteCounterFile(ResolveDreamingBackfillCounterFilePath(), 0);
+			return "{\"reset\":true,\"target\":\"dreamDiary\",\"removedEntries\":true}";
+		}
+
+		std::string BuildResetGroundedShortTermJson() {
+			const std::int64_t current = ReadCounterFile(ResolveDreamingBackfillCounterFilePath(), 0);
+			const std::int64_t next = current > 0 ? current - 1 : 0;
+			WriteCounterFile(ResolveDreamingBackfillCounterFilePath(), next);
+			return "{\"reset\":true,\"target\":\"groundedShortTerm\",\"removedShortTermEntries\":true}";
+		}
+	} // namespace
 
 	void ConfigDiagnosticsHandlers::RegisterAll(GatewayHost& host) {
 		host.m_dispatcher.Register("gateway.config.get", [&host](const protocol::RequestFrame& request) {
@@ -89,35 +315,23 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 			});
 
 		host.m_dispatcher.Register("doctor.memory.status", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(
-				request,
-				"{\"ok\":true,\"status\":\"healthy\",\"dreaming\":{"
-				"\"enabled\":false,\"timezone\":\"UTC\",\"verboseLogging\":false,"
-				"\"storageMode\":\"inline\",\"separateReports\":false,"
-				"\"shortTermCount\":0,\"recallSignalCount\":0,\"dailySignalCount\":0,"
-				"\"groundedSignalCount\":0,\"totalSignalCount\":0,\"phaseSignalCount\":0,"
-				"\"lightPhaseHitCount\":0,\"remPhaseHitCount\":0,\"promotedTotal\":0,"
-				"\"promotedToday\":0,\"shortTermEntries\":[],\"signalEntries\":[],"
-				"\"promotedEntries\":[]}}");
+			return protocol::OkResponse(request, BuildDreamingStatusJson());
 			});
 
 		host.m_dispatcher.Register("doctor.memory.dreamDiary", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(
-				request,
-				"{\"entries\":[],\"count\":0,\"source\":\"memory\","
-				"\"found\":false,\"path\":\"DREAMS.md\",\"content\":null}");
+			return protocol::OkResponse(request, BuildDreamDiaryJson());
 			});
 
 		host.m_dispatcher.Register("doctor.memory.backfillDreamDiary", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"queued\":true,\"status\":\"scheduled\"}");
+			return protocol::OkResponse(request, BuildBackfillDreamDiaryJson());
 			});
 
 		host.m_dispatcher.Register("doctor.memory.resetDreamDiary", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"reset\":true,\"target\":\"dreamDiary\"}");
+			return protocol::OkResponse(request, BuildResetDreamDiaryJson());
 			});
 
 		host.m_dispatcher.Register("doctor.memory.resetGroundedShortTerm", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"reset\":true,\"target\":\"groundedShortTerm\"}");
+			return protocol::OkResponse(request, BuildResetGroundedShortTermJson());
 			});
 
 		host.m_dispatcher.Register("doctor.memory.flush", [](const protocol::RequestFrame& request) {

@@ -881,6 +881,87 @@
                     if (state.agentDreamingLoading || state.dreamingStatusLoading || state.dreamDiaryLoading) {
                         rows.push("<div class=\"agents-row\">Loading dreaming surface...</div>");
                     }
+
+                    const dreamingUi = agentsController &&
+                        typeof agentsController.getDreamingUiModel === "function"
+                        ? agentsController.getDreamingUiModel()
+                        : null;
+                    const dreamingStatus = dreamingUi && dreamingUi.status
+                        ? dreamingUi.status
+                        : (state.dreamingStatus || null);
+                    const dreamDiaryPath = dreamingUi && typeof dreamingUi.diaryPath === "string"
+                        ? dreamingUi.diaryPath
+                        : (typeof state.dreamDiaryPath === "string" ? state.dreamDiaryPath : "(none)");
+                    const shortTermEntries = dreamingUi && Array.isArray(dreamingUi.shortTermEntries)
+                        ? dreamingUi.shortTermEntries
+                        : (dreamingStatus && Array.isArray(dreamingStatus.shortTermEntries)
+                            ? dreamingStatus.shortTermEntries
+                            : []);
+                    const groundedEntries = dreamingUi && Array.isArray(dreamingUi.groundedEntries)
+                        ? dreamingUi.groundedEntries
+                        : shortTermEntries.filter((entry) => Number(entry && entry.groundedCount || 0) > 0);
+                    const waitingEntries = dreamingUi && Array.isArray(dreamingUi.waitingEntries)
+                        ? dreamingUi.waitingEntries
+                        : shortTermEntries;
+                    const promotedEntries = dreamingUi && Array.isArray(dreamingUi.promotedEntries)
+                        ? dreamingUi.promotedEntries
+                        : (dreamingStatus && Array.isArray(dreamingStatus.promotedEntries)
+                            ? dreamingStatus.promotedEntries
+                            : []);
+                    const subTab = dreamingUi && typeof dreamingUi.subTab === "string"
+                        ? dreamingUi.subTab
+                        : String(state.dreamingUiSubTab || "scene");
+                    const waitingSort = dreamingUi && typeof dreamingUi.waitingSort === "string"
+                        ? dreamingUi.waitingSort
+                        : String(state.dreamingAdvancedWaitingSort || "recent");
+                    const diaryPage = dreamingUi && Number.isFinite(Number(dreamingUi.diaryPage))
+                        ? Number(dreamingUi.diaryPage)
+                        : Number(state.dreamDiaryPage || 0);
+                    const diaryEntry = dreamingUi && dreamingUi.diaryEntry
+                        ? dreamingUi.diaryEntry
+                        : null;
+                    const diaryNavigation = Array.isArray(state.dreamDiaryNavigation)
+                        ? state.dreamDiaryNavigation
+                        : [];
+                    const dreamPhrase = dreamingUi && typeof dreamingUi.phrase === "string"
+                        ? dreamingUi.phrase
+                        : "Consolidating memories...";
+                    const flattenDiaryBody = dreamingUi && typeof dreamingUi.flattenDiaryBody === "function"
+                        ? dreamingUi.flattenDiaryBody
+                        : function (body) {
+                            return String(body || "").split("\n").map((line) => String(line || "").trim()).filter(Boolean);
+                        };
+                    const formatRange = dreamingUi && typeof dreamingUi.formatRange === "function"
+                        ? dreamingUi.formatRange
+                        : function (path, startLine, endLine) {
+                            const start = Number.isFinite(Number(startLine)) ? Number(startLine) : 1;
+                            const end = Number.isFinite(Number(endLine)) ? Number(endLine) : start;
+                            return start === end
+                                ? `${path}:${start}`
+                                : `${path}:${start}-${end}`;
+                        };
+                    const formatCompactDateTime = dreamingUi && typeof dreamingUi.formatCompactDateTime === "function"
+                        ? dreamingUi.formatCompactDateTime
+                        : function (value) {
+                            return String(value || "");
+                        };
+                    const describeOrigin = dreamingUi && typeof dreamingUi.describeWaitingEntryOrigin === "function"
+                        ? dreamingUi.describeWaitingEntryOrigin
+                        : function () {
+                            return "Live";
+                        };
+                    const formatChipLabel = dreamingUi && typeof dreamingUi.diaryChipLabel === "function"
+                        ? dreamingUi.diaryChipLabel
+                        : function (value) {
+                            return String(value || "");
+                        };
+
+                    rows.push("<div class=\"agents-row\">"
+                        + `<button class=\"agents-chip${subTab === "scene" ? " active" : ""}\" data-dreaming-subtab=\"scene\">Scene</button> `
+                        + `<button class=\"agents-chip${subTab === "diary" ? " active" : ""}\" data-dreaming-subtab=\"diary\">Diary</button> `
+                        + `<button class=\"agents-chip${subTab === "advanced" ? " active" : ""}\" data-dreaming-subtab=\"advanced\">Advanced</button>`
+                        + "</div>");
+
                     if (state.agentDreamingError) {
                         rows.push(`<div class=\"agents-row error\">${escapeHtml(state.agentDreamingError)}</div>`);
                     }
@@ -891,41 +972,85 @@
                         rows.push(`<div class=\"agents-row error\">${escapeHtml(state.dreamDiaryError)}</div>`);
                     }
 
-                    const dreamingStatus = state.dreamingStatus || null;
-                    const dreamDiaryPath = typeof state.dreamDiaryPath === "string"
-                        ? state.dreamDiaryPath
-                        : "(none)";
-                    const dreamDiaryContent = typeof state.dreamDiaryContent === "string"
-                        ? state.dreamDiaryContent
-                        : "";
-                    const shortTermEntries = dreamingStatus && Array.isArray(dreamingStatus.shortTermEntries)
-                        ? dreamingStatus.shortTermEntries
-                        : [];
-                    const promotedEntries = dreamingStatus && Array.isArray(dreamingStatus.promotedEntries)
-                        ? dreamingStatus.promotedEntries
-                        : [];
+                    rows.push(`<div class=\"agents-row\">Dreaming ${dreamingStatus && dreamingStatus.enabled ? "active" : "idle"} · ${escapeHtml(dreamPhrase)}</div>`);
+                    rows.push(`<div class=\"agents-row\">Plugin id: ${escapeHtml(String(state.dreamingResolvedPluginId || "(unresolved)"))} · Config hash: ${escapeHtml(String(state.dreamingConfigSnapshotHash || "(missing)"))}</div>`);
+                    rows.push(`<div class=\"agents-row\">Storage=${escapeHtml(String(dreamingStatus && dreamingStatus.storageMode || "inline"))} · TZ=${escapeHtml(String(dreamingStatus && dreamingStatus.timezone || "(n/a)"))} · Short-term=${Number.isFinite(Number(dreamingStatus && dreamingStatus.shortTermCount)) ? Number(dreamingStatus.shortTermCount) : 0} · Promoted today=${Number.isFinite(Number(dreamingStatus && dreamingStatus.promotedToday)) ? Number(dreamingStatus && dreamingStatus.promotedToday) : 0}</div>`);
 
-                    rows.push(`<div class=\"agents-row\">Dreaming enabled: ${dreamingStatus && dreamingStatus.enabled ? "yes" : "no"}</div>`);
-                    rows.push(`<div class=\"agents-row\">Plugin id: ${escapeHtml(String(state.dreamingResolvedPluginId || "(unresolved)"))}</div>`);
-                    rows.push(`<div class=\"agents-row\">Config hash: ${escapeHtml(String(state.dreamingConfigSnapshotHash || "(missing)"))}</div>`);
-                    rows.push(`<div class=\"agents-row\">Storage mode: ${escapeHtml(String(dreamingStatus && dreamingStatus.storageMode || "inline"))}</div>`);
-                    rows.push(`<div class=\"agents-row\">Timezone: ${escapeHtml(String(dreamingStatus && dreamingStatus.timezone || "(n/a)"))}</div>`);
-                    rows.push(`<div class=\"agents-row\">Short-term count: ${Number.isFinite(Number(dreamingStatus && dreamingStatus.shortTermCount)) ? Number(dreamingStatus.shortTermCount) : 0}</div>`);
-                    rows.push(`<div class=\"agents-row\">Promoted total: ${Number.isFinite(Number(dreamingStatus && dreamingStatus.promotedTotal)) ? Number(dreamingStatus.promotedTotal) : 0}</div>`);
-                    rows.push(`<div class=\"agents-row\">Promoted today: ${Number.isFinite(Number(dreamingStatus && dreamingStatus.promotedToday)) ? Number(dreamingStatus.promotedToday) : 0}</div>`);
-                    rows.push(`<div class=\"agents-row\">Short-term entries: ${shortTermEntries.length}</div>`);
-                    rows.push(`<div class=\"agents-row\">Promoted entries: ${promotedEntries.length}</div>`);
-                    rows.push(`<div class=\"agents-row\">Dream diary path: ${escapeHtml(dreamDiaryPath)}</div>`);
-                    rows.push(`<div class=\"agents-row\">Dream diary content length: ${dreamDiaryContent.length}</div>`);
+                    if (subTab === "scene") {
+                        if (dreamingStatus && dreamingStatus.phases && dreamingStatus.phases.light) {
+                            rows.push(`<div class=\"agents-row\">Light phase: ${dreamingStatus.phases.light.enabled ? "on" : "off"} · cron=${escapeHtml(String(dreamingStatus.phases.light.cron || ""))}</div>`);
+                        }
+                        if (dreamingStatus && dreamingStatus.phases && dreamingStatus.phases.deep) {
+                            rows.push(`<div class=\"agents-row\">Deep phase: ${dreamingStatus.phases.deep.enabled ? "on" : "off"} · cron=${escapeHtml(String(dreamingStatus.phases.deep.cron || ""))}</div>`);
+                        }
+                        if (dreamingStatus && dreamingStatus.phases && dreamingStatus.phases.rem) {
+                            rows.push(`<div class=\"agents-row\">REM phase: ${dreamingStatus.phases.rem.enabled ? "on" : "off"} · cron=${escapeHtml(String(dreamingStatus.phases.rem.cron || ""))}</div>`);
+                        }
+                    }
 
-                    if (dreamingStatus && dreamingStatus.phases && dreamingStatus.phases.light) {
-                        rows.push(`<div class=\"agents-row\">Phase light: enabled=${dreamingStatus.phases.light.enabled ? "yes" : "no"}, cron=${escapeHtml(String(dreamingStatus.phases.light.cron || ""))}</div>`);
+                    if (subTab === "diary") {
+                        rows.push(`<div class=\"agents-row\">Dream diary path: ${escapeHtml(dreamDiaryPath)}</div>`);
+                        if (diaryNavigation.length > 0) {
+                            rows.push("<div class=\"agents-list\">"
+                                + diaryNavigation.map((entry) => {
+                                    const page = Number(entry && entry.page || 0);
+                                    const active = page === diaryPage ? " active" : "";
+                                    const label = formatChipLabel(entry && entry.date || "");
+                                    return `<button class=\"agents-chip${active}\" data-dreaming-day-page=\"${page}\">${escapeHtml(label || String(page + 1))}</button>`;
+                                }).join("")
+                                + "</div>");
+                        }
+                        if (diaryEntry) {
+                            const paragraphs = flattenDiaryBody(diaryEntry.body || "");
+                            rows.push(`<div class=\"agents-row\">${escapeHtml(String(diaryEntry.date || "(undated)"))}</div>`);
+                            rows.push("<div class=\"agents-row\">"
+                                + paragraphs.map((para) => `<p>${escapeHtml(String(para || ""))}</p>`).join("")
+                                + "</div>");
+                        } else {
+                            rows.push("<div class=\"agents-row\">No dream diary entries yet.</div>");
+                        }
                     }
-                    if (dreamingStatus && dreamingStatus.phases && dreamingStatus.phases.deep) {
-                        rows.push(`<div class=\"agents-row\">Phase deep: enabled=${dreamingStatus.phases.deep.enabled ? "yes" : "no"}, cron=${escapeHtml(String(dreamingStatus.phases.deep.cron || ""))}</div>`);
-                    }
-                    if (dreamingStatus && dreamingStatus.phases && dreamingStatus.phases.rem) {
-                        rows.push(`<div class=\"agents-row\">Phase rem: enabled=${dreamingStatus.phases.rem.enabled ? "yes" : "no"}, cron=${escapeHtml(String(dreamingStatus.phases.rem.cron || ""))}</div>`);
+
+                    if (subTab === "advanced") {
+                        rows.push("<div class=\"agents-row\">"
+                            + `<button class=\"agents-chip${waitingSort === "recent" ? " active" : ""}\" data-dreaming-sort=\"recent\">Sort recent</button> `
+                            + `<button class=\"agents-chip${waitingSort === "signals" ? " active" : ""}\" data-dreaming-sort=\"signals\">Sort signals</button>`
+                            + "</div>");
+                        rows.push(`<div class=\"agents-row\">Grounded staged: ${groundedEntries.length} · Waiting short-term: ${waitingEntries.length} · Promoted: ${promotedEntries.length}</div>`);
+
+                        const renderEntry = (entry, meta) => {
+                            const snippet = escapeHtml(String(entry && entry.snippet || ""));
+                            const source = escapeHtml(formatRange(entry && entry.path, entry && entry.startLine, entry && entry.endLine));
+                            const metaText = escapeHtml(meta.filter((part) => String(part || "").trim().length > 0).join(" · "));
+                            return `<div class=\"agents-row\"><div>${snippet}</div><div>${source}</div><div>${metaText}</div></div>`;
+                        };
+
+                        groundedEntries.slice(0, 8).forEach((entry) => {
+                            rows.push(renderEntry(entry, [
+                                "Daily log",
+                                `${Number(entry && entry.groundedCount || 0)} grounded`,
+                                Number(entry && entry.recallCount || 0) > 0
+                                    ? `${Number(entry && entry.recallCount || 0)} recall`
+                                    : "",
+                            ]));
+                        });
+                        waitingEntries.slice(0, 8).forEach((entry) => {
+                            rows.push(renderEntry(entry, [
+                                describeOrigin(entry),
+                                `${Number(entry && entry.totalSignalCount || 0)} signals`,
+                                Number(entry && entry.phaseHitCount || 0) > 0
+                                    ? `${Number(entry && entry.phaseHitCount || 0)} phase`
+                                    : "",
+                            ]));
+                        });
+                        promotedEntries.slice(0, 8).forEach((entry) => {
+                            rows.push(renderEntry(entry, [
+                                describeOrigin(entry),
+                                entry && entry.promotedAt
+                                    ? `updated ${formatCompactDateTime(entry.promotedAt)}`
+                                    : "",
+                            ]));
+                        });
                     }
 
                     rows.push(`<div class=\"agents-row\">`
@@ -938,7 +1063,7 @@
                         + `<button class=\"agents-chip\" data-dreaming-action=\"reset-grounded\"${state.dreamDiaryActionLoading ? " disabled" : ""}>Reset Grounded</button>`
                         + `</div>`);
 
-                    rows.push("<div class=\"agents-row\">Capability mode: OpenClaw-aligned dreaming status/diary/action orchestration via doctor.memory.* + config.patch/config.schema.lookup</div>");
+                    rows.push("<div class=\"agents-row\">Capability mode: OpenClaw-aligned scene/diary/advanced dreaming UX over doctor.memory.* + config.patch/config.schema.lookup</div>");
                     rows.push("<div class=\"agents-row\">Parity track: docs/compare/dreaming.ts/DREAMING_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md</div>");
                 }
 
@@ -1120,6 +1245,39 @@
                             });
                             void agentsController.loadCronRuns({ append: false });
                         }
+                    });
+                });
+
+                state.agentsSurfaceEl.querySelectorAll("[data-dreaming-subtab]").forEach((el) => {
+                    el.addEventListener("click", () => {
+                        const tab = String(el.getAttribute("data-dreaming-subtab") || "").trim();
+                        if (!tab || !agentsController || typeof agentsController.setDreamingSubTab !== "function") {
+                            return;
+                        }
+                        agentsController.setDreamingSubTab(tab);
+                    });
+                });
+
+                state.agentsSurfaceEl.querySelectorAll("[data-dreaming-sort]").forEach((el) => {
+                    el.addEventListener("click", () => {
+                        const sort = String(el.getAttribute("data-dreaming-sort") || "").trim();
+                        if (!sort || !agentsController || typeof agentsController.setDreamingAdvancedWaitingSort !== "function") {
+                            return;
+                        }
+                        agentsController.setDreamingAdvancedWaitingSort(sort);
+                    });
+                });
+
+                state.agentsSurfaceEl.querySelectorAll("[data-dreaming-day-page]").forEach((el) => {
+                    el.addEventListener("click", () => {
+                        const pageText = String(el.getAttribute("data-dreaming-day-page") || "").trim();
+                        const page = Number(pageText);
+                        if (!Number.isFinite(page) ||
+                            !agentsController ||
+                            typeof agentsController.setDreamDiaryPage !== "function") {
+                            return;
+                        }
+                        agentsController.setDreamDiaryPage(page);
                     });
                 });
 
