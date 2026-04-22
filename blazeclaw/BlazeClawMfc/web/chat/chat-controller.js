@@ -172,7 +172,44 @@
             throw new Error("chat-controller requires state");
         }
 
-        const addMessage = opts.addMessage || function () { };
+        const rawAddMessage = typeof opts.addMessage === "function" ? opts.addMessage : function () { };
+        const MAX_STRUCTURED_TRANSCRIPT = 500;
+        if (!Array.isArray(state.structuredTranscript)) {
+            state.structuredTranscript = [];
+        }
+
+        function bubbleKindToTranscriptRole(kind) {
+            if (kind === "self") {
+                return "user";
+            }
+            if (kind === "error") {
+                return "error";
+            }
+            return "assistant";
+        }
+
+        function recordStructuredTranscript(role, text) {
+            const body = String(text || "").trim();
+            if (!body || isSilentReplyText(body)) {
+                return;
+            }
+            state.structuredTranscript.push({
+                role,
+                text: body,
+                ts: Date.now(),
+            });
+            if (state.structuredTranscript.length > MAX_STRUCTURED_TRANSCRIPT) {
+                state.structuredTranscript.splice(
+                    0,
+                    state.structuredTranscript.length - MAX_STRUCTURED_TRANSCRIPT);
+            }
+        }
+
+        function addMessage(text, kind) {
+            recordStructuredTranscript(bubbleKindToTranscriptRole(kind), text);
+            rawAddMessage(text, kind);
+        }
+
         const addOrReplaceStream = opts.addOrReplaceStream || function () { };
         const finalizeStream = opts.finalizeStream || function () { };
         const updateComposerState = opts.updateComposerState || function () { };
@@ -321,6 +358,7 @@
                 state.runId = null;
                 finalizeStream();
                 clearMessages();
+                state.structuredTranscript = [];
 
                 const response = await request("chat.history", {
                     sessionKey: state.sessionKey,
@@ -356,7 +394,7 @@
 
         async function loadSessionOptions() {
             try {
-                const response = await request("gateway.session.list", {
+                const response = await request("sessions.list", {
                     active: true,
                 });
 
@@ -476,7 +514,7 @@
 
         async function loadModelOptions() {
             try {
-                const response = await request("gateway.models.list", {});
+                const response = await request("models.list", {});
                 const models = Array.isArray(response && response.payload && response.payload.models)
                     ? response.payload.models
                     : [];
@@ -573,7 +611,7 @@
 
             let skillCommands = [];
             try {
-                const response = await request("gateway.skills.commands", {});
+                const response = await request("skills.commands", {});
                 const commands = Array.isArray(response && response.payload && response.payload.commands)
                     ? response.payload.commands
                     : [];
@@ -617,7 +655,7 @@
         async function createSession(optionalId) {
             const requestedId = String(optionalId || "").trim();
             try {
-                const response = await request("gateway.sessions.create", {
+                const response = await request("sessions.create", {
                     sessionId: requestedId,
                     scope: "chat",
                     active: true,
@@ -1003,6 +1041,11 @@
             markTerminalRun,
             hasTerminalRun,
             scheduleHistoryReconcile,
+            getStructuredTranscript: function () {
+                return Array.isArray(state.structuredTranscript)
+                    ? state.structuredTranscript.slice()
+                    : [];
+            },
         };
     }
 
@@ -1038,6 +1081,7 @@
             abortBtn: { disabled: true },
             configCoerceEnabled: false,
             assistantIdentityRequestSeq: 0,
+            structuredTranscript: [],
         };
     }
 
@@ -1381,6 +1425,19 @@
             assertRegression(calls[0].params && calls[0].params.model === "next-model",
                 "config submit path should preserve model value through coercion pipeline");
             summary.push("config submit path smoke");
+        }
+
+        {
+            const state = createRegressionState();
+            const controller = createController({
+                state,
+                addMessage: function () { },
+            });
+            assertRegression(typeof controller.getStructuredTranscript === "function",
+                "chat controller should expose structured transcript snapshot accessor");
+            assertRegression(controller.getStructuredTranscript().length === 0,
+                "structured transcript should start empty before history load");
+            summary.push("structured transcript smoke");
         }
 
         return {

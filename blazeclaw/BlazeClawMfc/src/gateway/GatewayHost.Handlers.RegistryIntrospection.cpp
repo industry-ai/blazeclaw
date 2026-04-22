@@ -290,6 +290,12 @@ namespace blazeclaw::gateway::handlers::registry_introspection {
 				GatewayModel::BuildModelJson(GatewayModel::kDeepSeekReasonerModelId) + "]}");
 			});
 
+		host.m_dispatcher.Register("models.list", [&host](const protocol::RequestFrame& request) {
+			auto forwarded = request;
+			forwarded.method = "gateway.models.list";
+			return host.m_dispatcher.Dispatch(forwarded);
+			});
+
 		host.m_dispatcher.Register("gateway.tools.call.execute", [&host](const protocol::RequestFrame& request) {
 			const std::string requestedTool = RequestParamsView(request.paramsJson).GetString("tool");
 			const std::optional<std::string> argsJson = RequestParamsView(request.paramsJson).GetObject("args");

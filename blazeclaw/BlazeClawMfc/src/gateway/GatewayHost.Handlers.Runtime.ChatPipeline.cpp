@@ -2804,6 +2804,14 @@ namespace blazeclaw::gateway {
 				});
 
 			host.m_dispatcher.Register(
+				"skills.commands",
+				[&host](const protocol::RequestFrame& request) {
+					auto forwarded = request;
+					forwarded.method = "gateway.skills.commands";
+					return host.m_dispatcher.Dispatch(forwarded);
+				});
+
+			host.m_dispatcher.Register(
 				"gateway.skills.refresh",
 				[&host](const protocol::RequestFrame& request) {
 					bool refreshed = false;

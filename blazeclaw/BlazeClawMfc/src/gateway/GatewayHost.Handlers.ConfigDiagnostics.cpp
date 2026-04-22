@@ -560,6 +560,12 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 			return protocol::OkResponse(request, "{\"session\":" + SerializeSession(created) + "}");
 			});
 
+		host.m_dispatcher.Register("sessions.create", [&host](const protocol::RequestFrame& request) {
+			auto forwarded = request;
+			forwarded.method = "gateway.sessions.create";
+			return host.m_dispatcher.Dispatch(forwarded);
+			});
+
 		host.m_dispatcher.Register("gateway.sessions.reset", [&host](const protocol::RequestFrame& request) {
 			const RequestParamsView params(request.paramsJson);
 			const std::string requestedId = params.GetString("sessionId");

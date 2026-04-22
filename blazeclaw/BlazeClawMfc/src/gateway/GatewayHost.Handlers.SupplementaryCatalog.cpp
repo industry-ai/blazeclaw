@@ -56,6 +56,12 @@ host.m_dispatcher.Register("gateway.session.list", [&host](const protocol::Reque
 					",\"activeSessionId\":\"" + EscapeJsonString(activeSessionId) + "\"}");
 			});
 
+		host.m_dispatcher.Register("sessions.list", [&host](const protocol::RequestFrame& request) {
+			auto forwarded = request;
+			forwarded.method = "gateway.session.list";
+			return host.m_dispatcher.Dispatch(forwarded);
+			});
+
 		host.m_dispatcher.Register("gateway.events.catalog", [](const protocol::RequestFrame& request) {
 			return protocol::OkResponse(request, "{\"events\":" + SerializeStringArray(GatewayEventCatalogNames()) + "}");
 			});

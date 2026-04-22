@@ -2920,6 +2920,12 @@ namespace blazeclaw::gateway::protocol {
 			{ "agents.list", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateOptionalActiveParam(r, i, r.method); } },
 			{ "gateway.agents.count", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateOptionalActiveParam(r, i, r.method); } },
 			{ "gateway.session.list", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateOptionalSessionListParams(r, i, r.method); } },
+			{ "sessions.list", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateOptionalSessionListParams(r, i, r.method); } },
+			{ "sessions.create", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateSessionMutationParams(r, i, r.method); } },
+			{ "models.list", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
+			{ "gateway.models.list", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
+			{ "skills.commands", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
+			{ "gateway.skills.commands", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
 		};
 
 		if (const auto it = directValidators.find(request.method); it != directValidators.end()) {

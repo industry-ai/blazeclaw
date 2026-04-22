@@ -168,7 +168,7 @@
                     if (event.state === "final") {
                         const otherFinal = normalizeFinalAssistantMessage(event.message);
                         const text = controller.parseTextFromMessage(otherFinal);
-                        if (otherFinal && !controller.isSilentReplyText(text)) {
+                        if (otherFinal && text && !controller.isSilentReplyText(text)) {
                             addMessage(text, "peer");
                         }
                     }
