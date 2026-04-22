@@ -297,6 +297,9 @@
         const onDetachedNotice = typeof opts.onDetachedNotice === "function"
             ? opts.onDetachedNotice
             : function () { };
+        const onSessionControlStateChanged = typeof opts.onSessionControlStateChanged === "function"
+            ? opts.onSessionControlStateChanged
+            : function () { };
 
         state.sessionOptions = Array.isArray(state.sessionOptions)
             ? state.sessionOptions
@@ -321,6 +324,16 @@
         state.slashCommandsLoaded = Boolean(state.slashCommandsLoaded);
         state.terminalRunStates = state.terminalRunStates || new Map();
         state.reconcileTimer = state.reconcileTimer || null;
+        state.sessionSubscribed = Boolean(state.sessionSubscribed);
+        state.sessionCompactionItems = Array.isArray(state.sessionCompactionItems)
+            ? state.sessionCompactionItems
+            : [];
+        state.sessionCompactionSelection = typeof state.sessionCompactionSelection === "string"
+            ? state.sessionCompactionSelection
+            : "";
+        state.sessionCompactionStatus = typeof state.sessionCompactionStatus === "string"
+            ? state.sessionCompactionStatus
+            : "";
         state.assistantIdentityRequestSeq = Number.isInteger(state.assistantIdentityRequestSeq)
             ? state.assistantIdentityRequestSeq
             : 0;
@@ -422,7 +435,11 @@
         function request(method, params) {
             return new Promise((resolve, reject) => {
                 const id = nextId();
-                state.pending.set(id, { resolve, reject });
+                state.pending.set(id, {
+                    resolve,
+                    reject,
+                    method: String(method || ""),
+                });
                 post({ channel: "blazeclaw.gateway.rpc", id, method, params });
             });
         }
@@ -432,6 +449,18 @@
                 return overrideRequest(method, params);
             }
             return request(method, params);
+        }
+
+        function emitSessionControlState() {
+            onSessionControlStateChanged({
+                sessionKey: normalizeSessionKey(state.sessionKey),
+                subscribed: Boolean(state.sessionSubscribed),
+                compactions: Array.isArray(state.sessionCompactionItems)
+                    ? state.sessionCompactionItems.slice()
+                    : [],
+                selectedCompactionId: String(state.sessionCompactionSelection || ""),
+                status: String(state.sessionCompactionStatus || ""),
+            });
         }
 
         async function loadHistory() {
@@ -516,6 +545,184 @@
             return state.sessionOptions;
         }
 
+        async function subscribeSessionUpdates(options) {
+            const opts = options && typeof options === "object"
+                ? options
+                : {};
+            const requestOverride = typeof opts.requestOverride === "function"
+                ? opts.requestOverride
+                : null;
+            try {
+                await requestWithOverride("sessions.subscribe", {
+                    sessionKey: state.sessionKey,
+                }, requestOverride);
+                state.sessionSubscribed = true;
+                state.sessionCompactionStatus = `subscribed to ${normalizeSessionKey(state.sessionKey)}`;
+                emitSessionControlState();
+                updateComposerState();
+                return true;
+            } catch (error) {
+                state.sessionSubscribed = false;
+                state.sessionCompactionStatus = `subscribe error: ${String(error)}`;
+                emitSessionControlState();
+                updateComposerState();
+                return false;
+            }
+        }
+
+        async function unsubscribeSessionUpdates(options) {
+            const opts = options && typeof options === "object"
+                ? options
+                : {};
+            const requestOverride = typeof opts.requestOverride === "function"
+                ? opts.requestOverride
+                : null;
+            try {
+                await requestWithOverride("sessions.unsubscribe", {
+                    sessionKey: state.sessionKey,
+                }, requestOverride);
+                state.sessionSubscribed = false;
+                state.sessionCompactionStatus = `unsubscribed from ${normalizeSessionKey(state.sessionKey)}`;
+                emitSessionControlState();
+                updateComposerState();
+                return true;
+            } catch (error) {
+                state.sessionCompactionStatus = `unsubscribe error: ${String(error)}`;
+                emitSessionControlState();
+                updateComposerState();
+                return false;
+            }
+        }
+
+        async function loadSessionCompactions(options) {
+            const opts = options && typeof options === "object"
+                ? options
+                : {};
+            const requestOverride = typeof opts.requestOverride === "function"
+                ? opts.requestOverride
+                : null;
+            const quiet = opts.quiet === true;
+            try {
+                const response = await requestWithOverride("sessions.compaction.list", {
+                    sessionKey: state.sessionKey,
+                }, requestOverride);
+                const rawItems = Array.isArray(response && response.payload && response.payload.compactions)
+                    ? response.payload.compactions
+                    : Array.isArray(response && response.compactions)
+                        ? response.compactions
+                        : [];
+                state.sessionCompactionItems = rawItems.map((item, index) => {
+                    const row = item && typeof item === "object" ? item : {};
+                    const id = String(row.id || row.branchId || `compaction-${index + 1}`);
+                    const label = String(row.label || row.summary || row.title || id);
+                    return {
+                        id,
+                        label,
+                    };
+                });
+                const selectedExists = state.sessionCompactionItems.some((item) => item.id === state.sessionCompactionSelection);
+                if (!selectedExists) {
+                    state.sessionCompactionSelection = state.sessionCompactionItems.length > 0
+                        ? state.sessionCompactionItems[0].id
+                        : "";
+                }
+                if (!quiet) {
+                    state.sessionCompactionStatus = state.sessionCompactionItems.length > 0
+                        ? `loaded ${state.sessionCompactionItems.length} compactions`
+                        : "no compactions available";
+                }
+                emitSessionControlState();
+                updateComposerState();
+                return state.sessionCompactionItems.slice();
+            } catch (error) {
+                state.sessionCompactionItems = [];
+                state.sessionCompactionSelection = "";
+                if (!quiet) {
+                    state.sessionCompactionStatus = `compaction load error: ${String(error)}`;
+                }
+                emitSessionControlState();
+                updateComposerState();
+                return [];
+            }
+        }
+
+        async function refreshSessionControlState(options) {
+            const opts = options && typeof options === "object"
+                ? options
+                : {};
+            await loadSessionOptions();
+            await loadSessionCompactions({
+                quiet: opts.quiet === true,
+            });
+            emitSessionControlState();
+            updateComposerState();
+        }
+
+        function selectSessionCompaction(compactionId) {
+            const normalized = String(compactionId || "").trim();
+            state.sessionCompactionSelection = normalized;
+            emitSessionControlState();
+            updateComposerState();
+        }
+
+        async function branchSessionCompaction(options) {
+            const opts = options && typeof options === "object"
+                ? options
+                : {};
+            const requestOverride = typeof opts.requestOverride === "function"
+                ? opts.requestOverride
+                : null;
+            const compactionId = String(opts.compactionId || state.sessionCompactionSelection || "").trim();
+            try {
+                const response = await requestWithOverride("sessions.compaction.branch", {
+                    sessionKey: state.sessionKey,
+                    compactionId,
+                }, requestOverride);
+                const branchId = response && response.payload && typeof response.payload.branchId === "string"
+                    ? response.payload.branchId
+                    : (response && typeof response.branchId === "string" ? response.branchId : "");
+                state.sessionCompactionStatus = branchId
+                    ? `branched compaction: ${branchId}`
+                    : "branched compaction";
+                emitSessionControlState();
+                updateComposerState();
+                return true;
+            } catch (error) {
+                state.sessionCompactionStatus = `branch error: ${String(error)}`;
+                emitSessionControlState();
+                updateComposerState();
+                return false;
+            }
+        }
+
+        async function restoreSessionCompaction(options) {
+            const opts = options && typeof options === "object"
+                ? options
+                : {};
+            const requestOverride = typeof opts.requestOverride === "function"
+                ? opts.requestOverride
+                : null;
+            const compactionId = String(opts.compactionId || state.sessionCompactionSelection || "").trim();
+            try {
+                await requestWithOverride("sessions.compaction.restore", {
+                    sessionKey: state.sessionKey,
+                    compactionId,
+                }, requestOverride);
+                state.sessionCompactionStatus = compactionId
+                    ? `restored compaction: ${compactionId}`
+                    : "restored compaction";
+                emitSessionControlState();
+                updateComposerState();
+                await loadHistory();
+                return true;
+            } catch (error) {
+                state.sessionCompactionStatus = `restore error: ${String(error)}`;
+                emitSessionControlState();
+                updateComposerState();
+                return false;
+            }
+        }
+
         async function loadAssistantIdentity(opts) {
             if (!state.connected || !state.bridgeAvailable) {
                 return;
@@ -597,6 +804,10 @@
             finalizeStream();
             restoreDraftForSession();
             await loadHistory();
+            if (state.sessionSubscribed) {
+                await subscribeSessionUpdates();
+            }
+            await loadSessionCompactions();
             void getControlUiBootstrapConfig({
                 refreshIdentity: true,
                 sessionKey: state.sessionKey,
@@ -1044,6 +1255,62 @@
             updateComposerState();
         }
 
+        function resolveScopeErrorFeatureLabel(method) {
+            const normalized = String(method || "").trim().toLowerCase();
+            if (normalized.startsWith("sessions.")) {
+                return "sessions";
+            }
+            if (normalized.startsWith("chat.")) {
+                return "chat history";
+            }
+            if (normalized.startsWith("skills.")) {
+                return "skills";
+            }
+            if (normalized.startsWith("agents.") || normalized.startsWith("agent.")) {
+                return "agents";
+            }
+            if (normalized.startsWith("channels.")) {
+                return "channels";
+            }
+            if (normalized.startsWith("cron.")) {
+                return "cron";
+            }
+            if (normalized.startsWith("nodes.") || normalized.startsWith("node.")) {
+                return "nodes";
+            }
+            if (normalized.startsWith("usage.") || normalized.startsWith("sessions.usage")) {
+                return "usage";
+            }
+            return "this feature";
+        }
+
+        function formatRpcErrorForSurface(method, errorShape) {
+            const scopeErrors = window.BlazeClawScopeErrors;
+            if (scopeErrors &&
+                typeof scopeErrors.isMissingOperatorReadScopeError === "function" &&
+                typeof scopeErrors.formatMissingOperatorReadScopeMessage === "function" &&
+                scopeErrors.isMissingOperatorReadScopeError(errorShape)) {
+                return scopeErrors.formatMissingOperatorReadScopeMessage(
+                    resolveScopeErrorFeatureLabel(method));
+            }
+
+            if (errorShape && typeof errorShape === "object") {
+                const message = typeof errorShape.message === "string"
+                    ? errorShape.message.trim()
+                    : "";
+                if (message) {
+                    return message;
+                }
+                const code = typeof errorShape.code === "string"
+                    ? errorShape.code.trim()
+                    : "";
+                if (code) {
+                    return `request failed (${code})`;
+                }
+            }
+            return "request failed";
+        }
+
         function handleRpcResult(message) {
             const slot = state.pending.get(message.id);
             if (!slot) {
@@ -1054,8 +1321,8 @@
             if (message.ok) {
                 slot.resolve(message);
             } else {
-                slot.reject(
-                    message.error ? message.error.message || "request failed" : "request failed");
+                const method = slot.method || "";
+                slot.reject(formatRpcErrorForSurface(method, message.error));
             }
         }
 
@@ -1223,6 +1490,13 @@
             isSilentReplyText,
             addAttachmentFiles,
             loadSessionOptions,
+            subscribeSessionUpdates,
+            unsubscribeSessionUpdates,
+            loadSessionCompactions,
+            refreshSessionControlState,
+            selectSessionCompaction,
+            branchSessionCompaction,
+            restoreSessionCompaction,
             loadModelOptions,
             loadThinkingOptions,
             switchSession,
@@ -1268,6 +1542,10 @@
             slashCommandsLoaded: false,
             sessionOptions: [],
             modelOptions: [],
+            sessionSubscribed: false,
+            sessionCompactionItems: [],
+            sessionCompactionSelection: "",
+            sessionCompactionStatus: "",
             selectedModel: "default",
             thinkingLevel: "normal",
             inputEl: { value: "" },
@@ -1702,6 +1980,53 @@
 
         {
             const state = createRegressionState();
+            const calls = [];
+            const sessionSnapshots = [];
+            const controller = createController({
+                state,
+                addMessage: function () { },
+                onSessionControlStateChanged: (snapshot) => {
+                    sessionSnapshots.push(snapshot);
+                },
+            });
+            const subscribed = await controller.subscribeSessionUpdates({
+                requestOverride: async (method, params) => {
+                    calls.push({ method, params });
+                    return { payload: { subscribed: true } };
+                },
+            });
+            assertRegression(subscribed === true,
+                "session subscribe helper should resolve true on successful request");
+            assertRegression(calls.length === 1 &&
+                calls[0].method === "sessions.subscribe" &&
+                calls[0].params &&
+                calls[0].params.sessionKey === "main",
+            "session subscribe helper should call sessions.subscribe with active session");
+
+            const compactions = await controller.loadSessionCompactions({
+                requestOverride: async (method) => {
+                    calls.push({ method });
+                    return {
+                        payload: {
+                            compactions: [
+                                { id: "cmp-1", label: "checkpoint one" },
+                                { branchId: "br-2", summary: "checkpoint two" },
+                            ],
+                        },
+                    };
+                },
+            });
+            assertRegression(Array.isArray(compactions) && compactions.length === 2 &&
+                compactions[0].id === "cmp-1" && compactions[1].id === "br-2",
+            "compaction loader should normalize compaction ids from payload");
+            assertRegression(sessionSnapshots.length >= 2 &&
+                sessionSnapshots[sessionSnapshots.length - 1].selectedCompactionId === "cmp-1",
+            "session control callback should receive normalized compaction selection state");
+            summary.push("session subscribe + compaction controls");
+        }
+
+        {
+            const state = createRegressionState();
             const streamSnapshots = [];
             let streamFinalized = 0;
             const controller = createController({
@@ -1789,6 +2114,35 @@
             assertRegression(reconcileCalls.length === 1,
                 "history reconcile should run only as repair when terminal text is unavailable");
             summary.push("history reconcile repair-only");
+        }
+
+        {
+            const state = createRegressionState();
+            const controller = createController({
+                state,
+                addMessage: function () { },
+            });
+            const pendingId = "rpc-scope-1";
+            let rejectionText = "";
+            state.pending.set(pendingId, {
+                method: "sessions.list",
+                resolve: function () { },
+                reject: function (reason) {
+                    rejectionText = String(reason || "");
+                },
+            });
+            controller.handleRpcResult({
+                id: pendingId,
+                ok: false,
+                error: {
+                    code: "unauthorized",
+                    message: "missing scope: operator.read",
+                    detailCode: "AUTH_UNAUTHORIZED",
+                },
+            });
+            assertRegression(rejectionText.toLowerCase().includes("operator.read"),
+                "rpc scope failures should map to operator-readable scope guidance");
+            summary.push("scope-aware rpc error formatting");
         }
 
         return {

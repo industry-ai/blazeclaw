@@ -249,6 +249,24 @@
             border-top: 1px solid #2b2b2b;
         }
 
+        .session-controls {
+            border-top: 1px solid #2b2b2b;
+            background: #1b1b1b;
+            padding: 8px 10px;
+            display: grid;
+            grid-template-columns: auto auto auto auto 1fr;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .session-control-status {
+            grid-column: 1 / -1;
+            font-size: 12px;
+            color: #b9d8ff;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
         select {
             border: 1px solid #555;
             border-radius: 8px;
@@ -349,6 +367,17 @@
             <select id="modelSelect" title="Model"></select>
             <select id="thinkingSelect" title="Thinking Level"></select>
         </div>
+        <div class="session-controls">
+            <button id="sessionSubscribeBtn">Subscribe</button>
+            <button id="sessionUnsubscribeBtn">Unsubscribe</button>
+            <button id="sessionCompactionRefreshBtn">Compactions</button>
+            <select id="sessionCompactionSelect" title="Session compactions"></select>
+            <div style="display:flex;gap:8px;">
+                <button id="sessionCompactionBranchBtn">Branch</button>
+                <button id="sessionCompactionRestoreBtn">Restore</button>
+            </div>
+            <div id="sessionControlStatus" class="session-control-status"></div>
+        </div>
         <input id="attachInput" type="file" accept="image/*" multiple hidden />
     </div>
 
@@ -395,6 +424,13 @@
             state.sessionSelect = document.getElementById("sessionSelect");
             state.modelSelect = document.getElementById("modelSelect");
             state.thinkingSelect = document.getElementById("thinkingSelect");
+            state.sessionSubscribeBtn = document.getElementById("sessionSubscribeBtn");
+            state.sessionUnsubscribeBtn = document.getElementById("sessionUnsubscribeBtn");
+            state.sessionCompactionRefreshBtn = document.getElementById("sessionCompactionRefreshBtn");
+            state.sessionCompactionSelect = document.getElementById("sessionCompactionSelect");
+            state.sessionCompactionBranchBtn = document.getElementById("sessionCompactionBranchBtn");
+            state.sessionCompactionRestoreBtn = document.getElementById("sessionCompactionRestoreBtn");
+            state.sessionControlStatusEl = document.getElementById("sessionControlStatus");
             state.slashMenuEl = document.getElementById("slashMenu");
             state.agentsControlPlaneEl = document.getElementById("agentsControlPlane");
             state.agentsTabsEl = document.getElementById("agentsTabs");
@@ -553,6 +589,42 @@
             function setInputValue(text) {
                 if (state.inputEl) {
                     state.inputEl.value = String(text || "");
+                }
+            }
+
+            function renderSessionControls() {
+                const compactionItems = Array.isArray(state.sessionCompactionItems)
+                    ? state.sessionCompactionItems
+                    : [];
+                const selectedCompaction = String(state.sessionCompactionSelection || "");
+                if (state.sessionCompactionSelect) {
+                    state.sessionCompactionSelect.innerHTML = "";
+                    if (!compactionItems.length) {
+                        const optionEl = document.createElement("option");
+                        optionEl.value = "";
+                        optionEl.textContent = "no compactions";
+                        state.sessionCompactionSelect.appendChild(optionEl);
+                    } else {
+                        for (const item of compactionItems) {
+                            const optionEl = document.createElement("option");
+                            optionEl.value = String(item.id || "");
+                            optionEl.textContent = String(item.label || item.id || "");
+                            if (optionEl.value === selectedCompaction) {
+                                optionEl.selected = true;
+                            }
+                            state.sessionCompactionSelect.appendChild(optionEl);
+                        }
+                    }
+                }
+
+                if (state.sessionControlStatusEl) {
+                    const subscription = state.sessionSubscribed
+                        ? "subscription: active"
+                        : "subscription: inactive";
+                    const status = String(state.sessionCompactionStatus || "").trim();
+                    state.sessionControlStatusEl.textContent = status
+                        ? `${subscription} — ${status}`
+                        : subscription;
                 }
             }
 
@@ -1768,17 +1840,37 @@
                 if (state.thinkingSelect) {
                     state.thinkingSelect.disabled = !state.bridgeAvailable;
                 }
+                if (state.sessionSubscribeBtn) {
+                    state.sessionSubscribeBtn.disabled = !state.bridgeAvailable;
+                }
+                if (state.sessionUnsubscribeBtn) {
+                    state.sessionUnsubscribeBtn.disabled = !state.bridgeAvailable;
+                }
+                if (state.sessionCompactionRefreshBtn) {
+                    state.sessionCompactionRefreshBtn.disabled = !state.bridgeAvailable;
+                }
+                if (state.sessionCompactionSelect) {
+                    state.sessionCompactionSelect.disabled = !state.bridgeAvailable;
+                }
+                if (state.sessionCompactionBranchBtn) {
+                    state.sessionCompactionBranchBtn.disabled = !state.bridgeAvailable;
+                }
+                if (state.sessionCompactionRestoreBtn) {
+                    state.sessionCompactionRestoreBtn.disabled = !state.bridgeAvailable;
+                }
                 state.attachBtn.textContent = state.attachments.length > 0
                     ? `Attach(${state.attachments.length})`
                     : "Attach";
 
                 renderAssistantIdentity();
+                renderSessionControls();
                 if (state.agentsControlPlaneEl) {
                     state.agentsControlPlaneEl.hidden = !agentsController;
                 }
                 renderAgentsTabs();
                 renderAgentsSurface();
                 syncNodesPolling();
+                syncSessionControlsPolling();
                 renderDetachedNotices();
             }
             const controller = window.BlazeClawChatController.createController({
@@ -1790,7 +1882,59 @@
                 clearMessages,
                 setInputValue,
                 onDetachedNotice: appendDetachedNotice,
+                onSessionControlStateChanged: (snapshot) => {
+                    const source = snapshot && typeof snapshot === "object"
+                        ? snapshot
+                        : {};
+                    state.sessionSubscribed = Boolean(source.subscribed);
+                    state.sessionCompactionItems = Array.isArray(source.compactions)
+                        ? source.compactions.slice()
+                        : [];
+                    state.sessionCompactionSelection = String(source.selectedCompactionId || "");
+                    state.sessionCompactionStatus = String(source.status || "");
+                    syncSessionControlsPolling();
+                    updateComposerState();
+                },
             });
+
+            if (state.sessionSubscribeBtn) {
+                state.sessionSubscribeBtn.addEventListener("click", () => {
+                    void controller.subscribeSessionUpdates().then(() => {
+                        syncSessionControlsPolling();
+                    });
+                });
+            }
+            if (state.sessionUnsubscribeBtn) {
+                state.sessionUnsubscribeBtn.addEventListener("click", () => {
+                    void controller.unsubscribeSessionUpdates().then(() => {
+                        syncSessionControlsPolling();
+                    });
+                });
+            }
+            if (state.sessionCompactionRefreshBtn) {
+                state.sessionCompactionRefreshBtn.addEventListener("click", () => {
+                    void controller.loadSessionCompactions();
+                });
+            }
+            if (state.sessionCompactionSelect) {
+                state.sessionCompactionSelect.addEventListener("change", () => {
+                    controller.selectSessionCompaction(state.sessionCompactionSelect.value);
+                });
+            }
+            if (state.sessionCompactionBranchBtn) {
+                state.sessionCompactionBranchBtn.addEventListener("click", () => {
+                    void controller.branchSessionCompaction({
+                        compactionId: state.sessionCompactionSelection,
+                    });
+                });
+            }
+            if (state.sessionCompactionRestoreBtn) {
+                state.sessionCompactionRestoreBtn.addEventListener("click", () => {
+                    void controller.restoreSessionCompaction({
+                        compactionId: state.sessionCompactionSelection,
+                    });
+                });
+            }
 
             if (resolveAssistantRegressionChecksEnabled() &&
                 typeof window.BlazeClawChatController.runRegressionChecks === "function") {
@@ -1960,6 +2104,9 @@
             let nodesPollingTimer = null;
             let nodesPollingInFlight = false;
             const NODES_POLLING_MS = 5000;
+            let sessionControlsPollingTimer = null;
+            let sessionControlsPollingInFlight = false;
+            const SESSION_CONTROLS_POLLING_MS = 5000;
 
             function stopNodesPolling() {
                 if (nodesPollingTimer !== null) {
@@ -2014,6 +2161,56 @@
                         quiet: true,
                     });
                 }, NODES_POLLING_MS);
+            }
+
+            function stopSessionControlsPolling() {
+                if (sessionControlsPollingTimer !== null) {
+                    window.clearInterval(sessionControlsPollingTimer);
+                    sessionControlsPollingTimer = null;
+                }
+            }
+
+            function shouldRunSessionControlsPolling() {
+                return Boolean(
+                    state.connected &&
+                    state.bridgeAvailable &&
+                    state.sessionSubscribed
+                );
+            }
+
+            function triggerSessionControlsRefresh(options) {
+                if (sessionControlsPollingInFlight) {
+                    return;
+                }
+                sessionControlsPollingInFlight = true;
+                const opts = options || {};
+                void controller.refreshSessionControlState({
+                    quiet: opts.quiet === true,
+                })
+                    .catch(() => {
+                    })
+                    .finally(() => {
+                        sessionControlsPollingInFlight = false;
+                    });
+            }
+
+            function syncSessionControlsPolling() {
+                if (!shouldRunSessionControlsPolling()) {
+                    stopSessionControlsPolling();
+                    return;
+                }
+                if (sessionControlsPollingTimer !== null) {
+                    return;
+                }
+                sessionControlsPollingTimer = window.setInterval(() => {
+                    if (!shouldRunSessionControlsPolling()) {
+                        stopSessionControlsPolling();
+                        return;
+                    }
+                    triggerSessionControlsRefresh({
+                        quiet: true,
+                    });
+                }, SESSION_CONTROLS_POLLING_MS);
             }
 
             state.configCoerceEnabled = resolveConfigCoerceEnabled();
@@ -2132,6 +2329,8 @@
             });
 
             composerModule.bind();
+            void controller.loadSessionCompactions();
+            syncSessionControlsPolling();
             if (agentsController) {
                 void agentsController.loadAgents().then(() => {
                     if (state.agentsSelectedId) {

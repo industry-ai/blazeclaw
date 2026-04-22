@@ -279,6 +279,9 @@
             setStatus(status);
             if (state.connected && !wasConnected) {
                 void controller.loadHistory();
+                void controller.refreshSessionControlState({
+                    quiet: true,
+                });
             }
             if (state.connected) {
                 void controller.getControlUiBootstrapConfig({
@@ -295,6 +298,21 @@
             }
 
             updateComposerState();
+        }
+
+        function handleSessionReset(message) {
+            const payload = message && typeof message === "object" ? message : {};
+            const payloadSession = typeof payload.sessionId === "string"
+                ? payload.sessionId
+                : (payload.session && typeof payload.session.id === "string"
+                    ? payload.session.id
+                    : "");
+            if (!payloadSession || payloadSession === state.sessionKey) {
+                void controller.loadHistory();
+            }
+            void controller.refreshSessionControlState({
+                quiet: true,
+            });
         }
 
         function handleInboundMessage(rawMessage) {
@@ -331,6 +349,13 @@
                     }
                 }
                 appendToolLifecycleRow(message);
+                return;
+            }
+
+            if (message.channel === "gateway.session.reset" ||
+                message.channel === "session.reset" ||
+                message.event === "gateway.session.reset") {
+                handleSessionReset(message);
             }
         }
 
