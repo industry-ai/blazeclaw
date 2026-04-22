@@ -80,6 +80,34 @@ function extractArrayLiteralStrings(content, constName) {
   return Array.from(values);
 }
 
+const KNOWN_SINGLE_TOKEN_METHODS = new Set([
+  "agent",
+  "send",
+  "wake",
+  "status",
+  "health",
+  "connect",
+]);
+
+function isLikelyGatewayMethodName(value) {
+  if (!value || value.length > 160) {
+    return false;
+  }
+  if (!/^[a-z0-9.-]+$/.test(value)) {
+    return false;
+  }
+  if (value.startsWith(".") || value.endsWith(".")) {
+    return false;
+  }
+  if (value.includes("..")) {
+    return false;
+  }
+  if (value.includes(".")) {
+    return true;
+  }
+  return KNOWN_SINGLE_TOKEN_METHODS.has(value) || value.includes("-");
+}
+
 function extractHandlerObjectMethodKeys(content) {
   // Extract keys from patterns like:
   // export const xyzHandlers: GatewayRequestHandlers = { "chat.send": async (...) => ... }
@@ -91,9 +119,7 @@ function extractHandlerObjectMethodKeys(content) {
     let keyMatch;
     while ((keyMatch = keyRegex.exec(block[1])) !== null) {
       const method = keyMatch[1];
-      // Defensive filter: handler methods are gateway method names and
-      // always include dot segments; skip object keys like "new"/"ok".
-      if (method.includes(".")) {
+      if (isLikelyGatewayMethodName(method)) {
         values.add(method);
       }
     }
@@ -170,7 +196,7 @@ function collectBlazeClawRegisteredMethods(workspaceRoot, blazeGatewayDir) {
       let literalMatch;
       while ((literalMatch = methodLiteralRegex.exec(match[1])) !== null) {
         const method = literalMatch[1];
-        if (!method.includes(".")) {
+        if (!isLikelyGatewayMethodName(method)) {
           continue;
         }
         local.add(method);

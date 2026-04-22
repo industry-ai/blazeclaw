@@ -87,6 +87,7 @@ Quick drill-down references:
 - Parity artifact accuracy hardening (from deep audit P0): ✅ completed (extractor/normalization hardening shipped; parity artifacts regenerated with expected-by-design missing classification).
 - Deep audit P1 semantic hardening: ✅ completed (`config.apply` stateful contract, runtime-backed `node.pending.enqueue/drain`, helper-registration extraction coverage); residual actionable method gap is now `sessions.steer`.
 - Deep audit P2 residual completeness: ✅ completed (`sessions.steer` runtime steering flow implemented and tested); parity artifacts now show `actionableMissingCount=0`.
+- Deep audit P3 semantic closure: ◐ in progress (route-level parity is complete, but remaining behavior-depth `partial` families are now tracked with step-by-step closure tasks in the deep mechanical audit document).
 
 ## Phase A baseline freeze (2026-04-22)
 

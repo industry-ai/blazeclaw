@@ -15,7 +15,7 @@ Use this file as a **working checklist**. Update the status column when work lan
 | 1 | Close remaining RPC naming drift | ☑ Done | Canonical `sessions.list` / `sessions.create` / `models.list` / `skills.commands` in `chat-controller.js`; gateway aliases + request validators; see `OPERATOR_WEBVIEW_GATEWAY_TRANSPORT.md`. |
 | 2 | Share chat event semantics (+ optional golden tests) | ☑ Done | `NO_REPLY` on cross-run finals, deterministic stream-final transcript commit, and repair-only reconcile in `chat-events.js`; matrix in `CHAT_EVENTS_SEMANTICS_MATRIX.md`. Additional golden fixtures are optional backlog, not a parity gate for this scope. |
 | 3 | Structured transcript in WebView (optional) | ☑ Done | Structured schema widened (`id`/`sessionKey`/`runId`/`source`/`terminalState`), stream-final deterministic commits, and transcript-driven renderer behind feature flag (`?structuredTranscript=1` / localStorage toggle). |
-| 4 | Port high-value controllers incrementally | ☑ Done | Deep gateway semantic follow-up is now closed through P2 (`sessions.steer` runtime implementation landed); parity artifacts report zero actionable missing methods. |
+| 4 | Port high-value controllers incrementally | ◐ In progress | Route-level parity is closed, but deep semantic follow-up reopened for remaining `partial` families (`device.pair.*`, `config.apply/patch` depth, `tools.effective`, `skills/update` depth, `tts.*`, `secrets.*`, system/event envelope parity). |
 | 5 | Document transport modes for operators | ☑ Done | `blazeclaw/docs/OPERATOR_WEBVIEW_GATEWAY_TRANSPORT.md`. |
 
 Status legend: ☐ Not started · ◐ In progress · ☑ Done  
@@ -207,6 +207,41 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 - [x] Deepen partial families (`config.apply`, `config.patch` depth, `tools.effective`, `tts.*`, `secrets.*`) to behavior-equivalent parity.
 - [x] Close residual completeness by implementing `sessions.steer` runtime steering flow and validating with parity tests/artifacts.
 
+### Deep gateway semantic follow-up (P3 reopened 2026-04-22)
+
+- [ ] Replace `device.pair.*` unsupported handlers with runtime-backed pairing lifecycle parity.
+- [ ] Upgrade `config.apply` / `config.patch` from dreaming-toggle baseline to full OpenClaw-style config write/patch semantics.
+- [ ] Implement context-sensitive `tools.effective` resolver (session/agent/model/scope aware) rather than aliasing to tools list.
+- [ ] Replace baseline `skills.*` / `update.run` stubs with workspace + remote-backed runtime parity depth.
+- [ ] Replace placeholder-depth `tts.*` and `secrets.*` implementations with production contract-equivalent behavior.
+- [ ] Normalize `status`/`health`/heartbeat/system-event envelope and error contracts to match OpenClaw parity fixtures.
+
+#### P3 ordered execution plan (`P3.1` -> `P3.6`)
+
+- [ ] **`P3.1` `device.pair.*` runtime lifecycle**
+  - Files: `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.SecurityOps.cpp`, `blazeclaw/BlazeClawMfc/src/gateway/GatewayProtocolSchemaValidator.Request.cpp`, `blazeclaw/BlazeClawMfc/src/gateway/GatewayProtocolSchemaValidator.Response.cpp`
+  - Tests: add `device.pair.list/approve/reject/remove` success + unknown-id + authz-denied cases in `blazeclaw/BlazeClawMfc/tests/GatewayP3ParityMethodTests.cpp`.
+
+- [ ] **`P3.2` `config.apply` / `config.patch` full write semantics**
+  - Files: `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.ConfigDiagnostics.cpp`, `blazeclaw/BlazeClawMfc/src/gateway/GatewayProtocolSchemaValidator.Request.cpp`, `blazeclaw/BlazeClawMfc/src/gateway/GatewayProtocolSchemaValidator.Response.cpp`
+  - Tests: hash mismatch, invalid raw/patch shape, no-op patch behavior, secret-ref resolution failure, restart/sentinel metadata fields in `GatewayP3ParityMethodTests.cpp`.
+
+- [ ] **`P3.3` `tools.effective` trusted-context filtering**
+  - Files: `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.ToolsShared.cpp` (or dedicated effective handler file), plus schema validators.
+  - Tests: unknown session, agent mismatch, scope-dependent effective inventory, model/provider-context filtering, and non-regression for `tools.list`/`tools.catalog`.
+
+- [ ] **`P3.4` `skills.*` + `update.run` production-depth parity**
+  - Files: `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.ConfigDiagnostics.cpp`, `blazeclaw/BlazeClawMfc/src/gateway/GatewayProtocolSchemaValidator.*.cpp`
+  - Tests: workspace/remote search-detail-install-update coverage, partial update failures, unknown skill, and persisted state behavior in `GatewayP3ParityMethodTests.cpp`.
+
+- [ ] **`P3.5` `tts.*` + `secrets.*` production-depth parity**
+  - Files: `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.Runtime.Surface.cpp`, `blazeclaw/BlazeClawMfc/src/gateway/GatewayProtocolSchemaValidator.*.cpp`
+  - Tests: provider/config validation errors, convert fallback behavior, persisted enable/provider state, secrets target validation, and resolve assignment payload shape.
+
+- [ ] **`P3.6` system/event envelope normalization + docs/artifacts**
+  - Files: `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.ConfigDiagnostics.cpp`, `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.Transport.cpp`, docs under `docs/compare/*` and `blazeclaw/docs/*`
+  - Tests: envelope snapshot parity for `status`/`health`/heartbeat/presence/system-event, error-shape parity assertions, plus parity artifact/doc regeneration.
+
 ---
 
 ## 5. Document transport modes for operators
@@ -253,3 +288,4 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 | 2026-04-22 | Deep audit P0 completed: parity extractor hardened and artifacts regenerated from corrected pipeline with expected-by-design missing classification (`device.pair.*`, `push.test`) separated from actionable gaps. |
 | 2026-04-22 | Deep audit P1 completed: `config.apply` moved to hash-aware stateful apply, `node.pending.enqueue/drain` moved to runtime queue behavior, helper-registration extraction added, and regenerated artifacts reduced actionable missing to `sessions.steer` only. |
 | 2026-04-22 | Deep audit P2 completed: `sessions.steer` implemented as runtime steer flow (`chat.abort` + `chat.send`), P2 parity tests added, and regenerated artifacts now show `actionableMissingCount=0` (only expected-by-design `push.test` remains). |
+| 2026-04-22 | Deep audit follow-up reopened for P3 semantic closure: method-surface parity remains clean, but remaining `partial` families now tracked as active implementation backlog with step-by-step closure plan in deep mechanical audit doc. |

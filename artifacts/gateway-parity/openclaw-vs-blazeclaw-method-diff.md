@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Gateway Method Diff
 
-Generated: 2026-04-22T11:35:47.658Z
+Generated: 2026-04-22T11:54:08.334Z
 
 ## Inputs
 
@@ -12,13 +12,13 @@ Generated: 2026-04-22T11:35:47.658Z
 ## Summary
 
 - OpenClaw method count: **128**
-- BlazeClaw method count: **904**
-- BlazeClaw raw method count (before normalization): **918**
+- BlazeClaw method count: **909**
+- BlazeClaw raw method count (before normalization): **923**
 - Overlap: **127**
 - Missing in BlazeClaw: **1**
   - Expected missing by design: **1**
   - Actionable missing: **0**
-- BlazeClaw-only: **777**
+- BlazeClaw-only: **782**
 
 ## Missing in BlazeClaw (Actionable)
 
@@ -38,6 +38,11 @@ Generated: 2026-04-22T11:35:47.658Z
 - `doctor.memory.resetDreamDiary`
 - `doctor.memory.resetGroundedShortTerm`
 - `email.schedule`
+- `evt-`
+- `evt-marker-`
+- `evt-pointer-`
+- `evt-token-`
+- `exec-approval-`
 - `exec.approval`
 - `extensions.lifecycle`
 - `gateway.agents.activate`
@@ -77,7 +82,6 @@ Generated: 2026-04-22T11:35:47.658Z
 - `gateway.channels.status.count`
 - `gateway.channels.status.exists`
 - `gateway.channels.status.get`
-- `gateway.config.`
 - `gateway.config.audit`
 - `gateway.config.backup`
 - `gateway.config.count`
@@ -122,7 +126,6 @@ Generated: 2026-04-22T11:35:47.658Z
 - `gateway.health.details`
 - `gateway.logs.count`
 - `gateway.logs.levels`
-- `gateway.models.`
 - `gateway.models.affinity`
 - `gateway.models.catalog`
 - `gateway.models.compatibility`
@@ -731,7 +734,6 @@ Generated: 2026-04-22T11:35:47.658Z
 - `gateway.skills.refresh`
 - `gateway.skills.sandbox.status`
 - `gateway.skills.scan.status`
-- `gateway.tools.`
 - `gateway.tools.account`
 - `gateway.tools.agent`
 - `gateway.tools.audit`
@@ -786,7 +788,6 @@ Generated: 2026-04-22T11:35:47.658Z
 - `gateway.transport.endpoint.get`
 - `gateway.transport.endpoint.set`
 - `gateway.transport.endpoints.list`
-- `gateway.transport.policy.`
 - `gateway.transport.policy.commit`
 - `gateway.transport.policy.digest`
 - `gateway.transport.policy.export`
@@ -801,9 +802,13 @@ Generated: 2026-04-22T11:35:47.658Z
 - `gateway.transport.policy.validate`
 - `gateway.transport.status`
 - `memory.search`
+- `plugin-approval-`
 - `plugin.approval`
 - `python.runtime.health`
 - `python.script.run`
+- `runtime-registered`
 - `skills.commands`
 - `skills.install.options`
+- `tool-runtime-`
+- `update-run-`
 - `weather.lookup`

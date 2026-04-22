@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-22T11:35:47.658Z",
+  "generatedAt": "2026-04-22T11:54:08.334Z",
   "inputs": {
     "openclawServerMethodsDir": "openclaw/src/gateway/server-methods",
     "openclawMethodsList": "openclaw/src/gateway/server-methods-list.ts",
@@ -14,13 +14,13 @@
   },
   "summary": {
     "openclawMethodCount": 128,
-    "blazeclawMethodCount": 904,
-    "blazeclawRawMethodCount": 918,
+    "blazeclawMethodCount": 909,
+    "blazeclawRawMethodCount": 923,
     "overlapCount": 127,
     "missingInBlazeclawCount": 1,
     "expectedMissingByDesignCount": 1,
     "actionableMissingCount": 0,
-    "blazeOnlyCount": 777
+    "blazeOnlyCount": 782
   },
   "overlap": [
     "agent",
@@ -171,6 +171,11 @@
     "doctor.memory.resetDreamDiary",
     "doctor.memory.resetGroundedShortTerm",
     "email.schedule",
+    "evt-",
+    "evt-marker-",
+    "evt-pointer-",
+    "evt-token-",
+    "exec-approval-",
     "exec.approval",
     "extensions.lifecycle",
     "gateway.agents.activate",
@@ -210,7 +215,6 @@
     "gateway.channels.status.count",
     "gateway.channels.status.exists",
     "gateway.channels.status.get",
-    "gateway.config.",
     "gateway.config.audit",
     "gateway.config.backup",
     "gateway.config.count",
@@ -255,7 +259,6 @@
     "gateway.health.details",
     "gateway.logs.count",
     "gateway.logs.levels",
-    "gateway.models.",
     "gateway.models.affinity",
     "gateway.models.catalog",
     "gateway.models.compatibility",
@@ -864,7 +867,6 @@
     "gateway.skills.refresh",
     "gateway.skills.sandbox.status",
     "gateway.skills.scan.status",
-    "gateway.tools.",
     "gateway.tools.account",
     "gateway.tools.agent",
     "gateway.tools.audit",
@@ -919,7 +921,6 @@
     "gateway.transport.endpoint.get",
     "gateway.transport.endpoint.set",
     "gateway.transport.endpoints.list",
-    "gateway.transport.policy.",
     "gateway.transport.policy.commit",
     "gateway.transport.policy.digest",
     "gateway.transport.policy.export",
@@ -934,11 +935,15 @@
     "gateway.transport.policy.validate",
     "gateway.transport.status",
     "memory.search",
+    "plugin-approval-",
     "plugin.approval",
     "python.runtime.health",
     "python.script.run",
+    "runtime-registered",
     "skills.commands",
     "skills.install.options",
+    "tool-runtime-",
+    "update-run-",
     "weather.lookup"
   ],
   "openclawMethodsByFile": {
@@ -1182,7 +1187,11 @@
       "skills.update"
     ],
     "openclaw/src/gateway/server-methods/system.ts": [
-      "gateway.identity.get"
+      "gateway.identity.get",
+      "last-heartbeat",
+      "set-heartbeats",
+      "system-event",
+      "system-presence"
     ],
     "openclaw/src/gateway/server-methods/talk.ts": [
       "talk.config",
@@ -1229,7 +1238,8 @@
   },
   "blazeclawMethodsByFile": {
     "blazeclaw/BlazeClawMfc/src/gateway/ExtensionLifecycleManager.cpp": [
-      "extensions.lifecycle"
+      "extensions.lifecycle",
+      "runtime-registered"
     ],
     "blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp": [
       "chat.send",
@@ -1237,6 +1247,7 @@
       "memory.search",
       "python.runtime.health",
       "python.script.run",
+      "tool-runtime-",
       "weather.lookup"
     ],
     "blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.AgentSessionMutation.cpp": [
@@ -1328,6 +1339,7 @@
       "skills.install",
       "skills.search",
       "status",
+      "update-run-",
       "update.run"
     ],
     "blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.EventCatalogQuery.cpp": [
@@ -1340,6 +1352,10 @@
       "gateway.tools.categories"
     ],
     "blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.Events.cpp": [
+      "evt-",
+      "evt-marker-",
+      "evt-pointer-",
+      "evt-token-",
       "gateway.events.anchor",
       "gateway.events.batch",
       "gateway.events.cursor",
@@ -1670,12 +1686,6 @@
       "wizard.start",
       "wizard.status"
     ],
-    "blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.ScopeCluster.cpp": [
-      "gateway.config.",
-      "gateway.models.",
-      "gateway.tools.",
-      "gateway.transport.policy."
-    ],
     "blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.SecurityOps.cpp": [
       "device.pair.approve",
       "device.pair.list",
@@ -1683,6 +1693,7 @@
       "device.pair.remove",
       "device.token.revoke",
       "device.token.rotate",
+      "exec-approval-",
       "exec.approval",
       "exec.approval.get",
       "exec.approval.list",
@@ -2055,6 +2066,7 @@
       "node.pending.enqueue",
       "node.pending.pull",
       "node.rename",
+      "plugin-approval-",
       "plugin.approval",
       "plugin.approval.list",
       "plugin.approval.request",
@@ -2125,6 +2137,7 @@
       "tools.effective"
     ],
     "blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.Transport.cpp": [
+      "agent",
       "connect",
       "gateway.transport.connections.count",
       "gateway.transport.endpoint.exists",
