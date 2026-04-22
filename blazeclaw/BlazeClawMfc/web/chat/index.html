@@ -349,6 +349,7 @@
             const statusEl = document.getElementById("status");
             const assistantIdentityEl = document.getElementById("assistantIdentity");
             const messagesEl = document.getElementById("messages");
+            const structuredTranscriptRenderEnabled = resolveStructuredTranscriptRenderEnabled();
             state.inputEl = document.getElementById("input");
             state.sendBtn = document.getElementById("sendBtn");
             state.sendErrBtn = document.getElementById("sendErrBtn");
@@ -388,7 +389,56 @@
                 messagesEl.scrollTop = messagesEl.scrollHeight;
             }
 
+            function renderMessagesFromStructuredTranscript(streamTextOverride) {
+                if (!structuredTranscriptRenderEnabled || !controller) {
+                    return;
+                }
+
+                const transcript = typeof controller.getStructuredTranscript === "function"
+                    ? controller.getStructuredTranscript()
+                    : [];
+                const rows = Array.isArray(transcript) ? transcript : [];
+                const streamText = String(streamTextOverride || "").trim();
+
+                messagesEl.innerHTML = "";
+                for (const entry of rows) {
+                    if (!entry || typeof entry !== "object") {
+                        continue;
+                    }
+                    const text = String(entry.text || "").trim();
+                    if (!text) {
+                        continue;
+                    }
+
+                    const role = typeof entry.role === "string"
+                        ? entry.role.trim().toLowerCase()
+                        : "assistant";
+                    const kind = role === "user"
+                        ? "self"
+                        : (role === "error" ? "error" : "peer");
+                    const div = document.createElement("div");
+                    div.className = `msg ${kind}`;
+                    div.textContent = text;
+                    messagesEl.appendChild(div);
+                }
+
+                if (streamText && !controller.isSilentReplyText(streamText)) {
+                    const streamDiv = document.createElement("div");
+                    streamDiv.id = "stream-msg";
+                    streamDiv.className = "msg peer";
+                    streamDiv.textContent = streamText;
+                    messagesEl.appendChild(streamDiv);
+                }
+
+                scrollBottom();
+            }
+
             function addMessage(text, kind) {
+                if (structuredTranscriptRenderEnabled) {
+                    const stream = String(state.streamText || "").trim();
+                    renderMessagesFromStructuredTranscript(stream);
+                    return;
+                }
                 const div = document.createElement("div");
                 div.className = `msg ${kind}`;
                 div.textContent = text;
@@ -397,6 +447,10 @@
             }
 
             function clearMessages() {
+                if (structuredTranscriptRenderEnabled) {
+                    renderMessagesFromStructuredTranscript("");
+                    return;
+                }
                 messagesEl.innerHTML = "";
             }
 
@@ -500,6 +554,11 @@
                     return;
                 }
 
+                if (structuredTranscriptRenderEnabled) {
+                    renderMessagesFromStructuredTranscript(text);
+                    return;
+                }
+
                 const existing = document.getElementById("stream-msg");
                 if (existing) {
                     existing.textContent = text;
@@ -515,6 +574,10 @@
             }
 
             function finalizeStream() {
+                if (structuredTranscriptRenderEnabled) {
+                    renderMessagesFromStructuredTranscript("");
+                    return;
+                }
                 const existing = document.getElementById("stream-msg");
                 if (existing) {
                     existing.removeAttribute("id");
@@ -1705,6 +1768,26 @@
                     return Boolean(
                         window.localStorage &&
                         window.localStorage.getItem("blazeclaw.assistant.regression") === "1"
+                    );
+                } catch (_) {
+                    return false;
+                }
+            }
+
+            function resolveStructuredTranscriptRenderEnabled() {
+                const search = new URLSearchParams(window.location.search || "");
+                const queryToggle = search.get("structuredTranscript");
+                if (queryToggle === "0") {
+                    return false;
+                }
+                if (queryToggle === "1") {
+                    return true;
+                }
+
+                try {
+                    return Boolean(
+                        window.localStorage &&
+                        window.localStorage.getItem("blazeclaw.chat.structuredTranscript") === "1"
                     );
                 } catch (_) {
                     return false;

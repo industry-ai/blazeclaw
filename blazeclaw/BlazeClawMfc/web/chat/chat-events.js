@@ -184,8 +184,14 @@
                 if (event.state === "final") {
                     const normalizedFinal = normalizeFinalAssistantMessage(event.message);
                     const text = controller.consumeTerminalText(normalizedFinal || event.message);
+                    let shouldReconcile = false;
                     if (text) {
                         if (state.streamText) {
+                            controller.commitStreamTranscriptFinal({
+                                runId,
+                                text,
+                                terminalState: "final",
+                            });
                             addOrReplaceStream(text);
                             finalizeStream();
                         } else {
@@ -193,29 +199,42 @@
                         }
                     } else {
                         finalizeStream();
+                        shouldReconcile = true;
                     }
 
                     if (runId) {
                         controller.markTerminalRun(runId, "final");
                     }
                     controller.clearRunState();
-                    controller.scheduleHistoryReconcile();
+                    if (shouldReconcile) {
+                        controller.scheduleHistoryReconcile();
+                    }
                     continue;
                 }
 
                 if (event.state === "aborted") {
                     const normalizedAborted = normalizeAbortedAssistantMessage(event.message);
                     const text = controller.consumeTerminalText(normalizedAborted || event.message);
+                    let shouldReconcile = false;
                     if (text) {
+                        controller.commitStreamTranscriptFinal({
+                            runId,
+                            text,
+                            terminalState: "aborted",
+                        });
                         addOrReplaceStream(text);
                         finalizeStream();
+                    } else {
+                        shouldReconcile = true;
                     }
 
                     if (runId) {
                         controller.markTerminalRun(runId, "aborted");
                     }
                     controller.clearRunState();
-                    controller.scheduleHistoryReconcile();
+                    if (shouldReconcile) {
+                        controller.scheduleHistoryReconcile();
+                    }
                     continue;
                 }
 
@@ -225,7 +244,6 @@
                         controller.markTerminalRun(runId, "error");
                     }
                     controller.clearRunState();
-                    controller.scheduleHistoryReconcile();
                 }
             }
 

@@ -3,6 +3,41 @@
         return typeof text === "string" && /^\s*NO_REPLY\s*$/i.test(text);
     }
 
+    function normalizeContentTextItem(item) {
+        if (!item || typeof item !== "object") {
+            return "";
+        }
+
+        const type = typeof item.type === "string"
+            ? item.type.trim().toLowerCase()
+            : "";
+        if (type === "text" && typeof item.text === "string") {
+            return item.text;
+        }
+        if (type === "image") {
+            const mimeType = typeof item.mimeType === "string" && item.mimeType.trim()
+                ? item.mimeType.trim()
+                : "image/*";
+            return `[Image attachment: ${mimeType}]`;
+        }
+        if (type === "tool-call") {
+            const toolName = typeof item.tool === "string" && item.tool.trim()
+                ? item.tool.trim()
+                : "tool";
+            return `[Tool call: ${toolName}]`;
+        }
+        if (type === "tool-result") {
+            const toolName = typeof item.tool === "string" && item.tool.trim()
+                ? item.tool.trim()
+                : "tool";
+            return `[Tool result: ${toolName}]`;
+        }
+        if (type) {
+            return `[${type}]`;
+        }
+        return "";
+    }
+
     function parseTextFromMessage(message) {
         if (!message || typeof message !== "object") {
             return "";
@@ -13,9 +48,14 @@
         }
 
         if (Array.isArray(message.content)) {
-            const item = message.content.find(
-                (x) => x && x.type === "text" && typeof x.text === "string");
-            return item ? item.text : "";
+            const lines = [];
+            for (const item of message.content) {
+                const line = normalizeContentTextItem(item);
+                if (line) {
+                    lines.push(line);
+                }
+            }
+            return lines.join("\n").trim();
         }
 
         return "";
@@ -188,25 +228,64 @@
             return "assistant";
         }
 
-        function recordStructuredTranscript(role, text) {
-            const body = String(text || "").trim();
-            if (!body || isSilentReplyText(body)) {
-                return;
+        function toStructuredTranscriptEntry(input) {
+            const source = input && typeof input === "object"
+                ? input
+                : {};
+            const role = typeof source.role === "string"
+                ? source.role.trim().toLowerCase()
+                : "assistant";
+            const text = String(source.text || "").trim();
+            if (!text || isSilentReplyText(text)) {
+                return null;
             }
-            state.structuredTranscript.push({
-                role,
-                text: body,
-                ts: Date.now(),
-            });
+
+            const runId = typeof source.runId === "string" ? source.runId.trim() : "";
+            const entry = {
+                id: typeof source.id === "string" && source.id.trim()
+                    ? source.id.trim()
+                    : `tx-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+                role: role === "user" || role === "assistant" || role === "error"
+                    ? role
+                    : "assistant",
+                text,
+                ts: Number.isFinite(source.ts) ? Number(source.ts) : Date.now(),
+                sessionKey: normalizeSessionKey(source.sessionKey || state.sessionKey),
+                source: typeof source.source === "string" && source.source.trim()
+                    ? source.source.trim()
+                    : "ui",
+            };
+
+            if (runId) {
+                entry.runId = runId;
+            }
+            if (typeof source.terminalState === "string" && source.terminalState.trim()) {
+                entry.terminalState = source.terminalState.trim();
+            }
+
+            return entry;
+        }
+
+        function recordStructuredTranscript(input) {
+            const entry = toStructuredTranscriptEntry(input);
+            if (!entry) {
+                return false;
+            }
+            state.structuredTranscript.push(entry);
             if (state.structuredTranscript.length > MAX_STRUCTURED_TRANSCRIPT) {
                 state.structuredTranscript.splice(
                     0,
                     state.structuredTranscript.length - MAX_STRUCTURED_TRANSCRIPT);
             }
+            return true;
         }
 
         function addMessage(text, kind) {
-            recordStructuredTranscript(bubbleKindToTranscriptRole(kind), text);
+            recordStructuredTranscript({
+                role: bubbleKindToTranscriptRole(kind),
+                text,
+                source: "ui",
+            });
             rawAddMessage(text, kind);
         }
 
@@ -359,6 +438,7 @@
                 finalizeStream();
                 clearMessages();
                 state.structuredTranscript = [];
+                state.streamTranscriptDraft = null;
 
                 const response = await request("chat.history", {
                     sessionKey: state.sessionKey,
@@ -385,7 +465,19 @@
                         continue;
                     }
 
-                    addMessage(text, role === "user" ? "self" : "peer");
+                    recordStructuredTranscript({
+                        id: typeof message.id === "string" ? message.id : undefined,
+                        role,
+                        text,
+                        runId: typeof message.runId === "string" ? message.runId : undefined,
+                        sessionKey: typeof message.sessionKey === "string"
+                            ? message.sessionKey
+                            : state.sessionKey,
+                        ts: Number.isFinite(message.ts) ? Number(message.ts) : Date.now(),
+                        source: "history",
+                        terminalState: typeof message.state === "string" ? message.state : undefined,
+                    });
+                    rawAddMessage(text, role === "user" ? "self" : "peer");
                 }
             } catch (error) {
                 addMessage(`history error: ${String(error)}`, "error");
@@ -922,13 +1014,52 @@
 
             if (text.length >= state.streamText.length) {
                 state.streamText = text;
+                state.streamTranscriptDraft = {
+                    role: "assistant",
+                    text: state.streamText,
+                    runId: typeof state.runId === "string" ? state.runId : "",
+                    sessionKey: state.sessionKey,
+                    source: "stream",
+                    terminalState: "delta",
+                };
                 addOrReplaceStream(state.streamText);
             }
+        }
+
+        function commitStreamTranscriptFinal(payload) {
+            const source = payload && typeof payload === "object"
+                ? payload
+                : {};
+            const text = String(source.text || "").trim();
+            if (!text || isSilentReplyText(text)) {
+                state.streamTranscriptDraft = null;
+                return false;
+            }
+
+            const runId = typeof source.runId === "string" && source.runId.trim()
+                ? source.runId.trim()
+                : (state.streamTranscriptDraft && typeof state.streamTranscriptDraft.runId === "string"
+                    ? state.streamTranscriptDraft.runId
+                    : "");
+            const terminalState = typeof source.terminalState === "string" && source.terminalState.trim()
+                ? source.terminalState.trim()
+                : "final";
+            const committed = recordStructuredTranscript({
+                role: "assistant",
+                text,
+                runId,
+                sessionKey: state.sessionKey,
+                source: "stream",
+                terminalState,
+            });
+            state.streamTranscriptDraft = null;
+            return committed;
         }
 
         function clearRunState() {
             state.streamText = "";
             state.runId = null;
+            state.streamTranscriptDraft = null;
             if (state.abortBtn) {
                 state.abortBtn.disabled = true;
             }
@@ -1021,6 +1152,7 @@
             handleRpcResult,
             consumeTerminalText,
             applyDeltaText,
+            commitStreamTranscriptFinal,
             clearRunState,
             parseTextFromMessage,
             isSilentReplyText,
@@ -1082,6 +1214,7 @@
             configCoerceEnabled: false,
             assistantIdentityRequestSeq: 0,
             structuredTranscript: [],
+            streamTranscriptDraft: null,
         };
     }
 
@@ -1438,6 +1571,116 @@
             assertRegression(controller.getStructuredTranscript().length === 0,
                 "structured transcript should start empty before history load");
             summary.push("structured transcript smoke");
+        }
+
+        {
+            const parsed = parseTextFromMessage({
+                content: [
+                    { type: "text", text: "Assistant response" },
+                    { type: "image", mimeType: "image/png" },
+                    { type: "tool-call", tool: "search_docs" },
+                    { type: "tool-result", tool: "search_docs" },
+                ],
+            });
+            assertRegression(parsed.includes("Assistant response"),
+                "message parser should preserve text blocks");
+            assertRegression(parsed.includes("[Image attachment: image/png]"),
+                "message parser should degrade image blocks to stable text markers");
+            assertRegression(parsed.includes("[Tool call: search_docs]") &&
+                parsed.includes("[Tool result: search_docs]"),
+            "message parser should degrade tool blocks to stable text markers");
+            summary.push("structured content degraded-text rendering");
+        }
+
+        {
+            const state = createRegressionState();
+            const streamSnapshots = [];
+            let streamFinalized = 0;
+            const controller = createController({
+                state,
+                addOrReplaceStream: (text) => streamSnapshots.push(String(text || "")),
+            });
+            const eventsModule = window.BlazeClawChatEvents
+                ? window.BlazeClawChatEvents.createEventsModule({
+                    state,
+                    controller,
+                    addMessage: function () { },
+                    addOrReplaceStream: (text) => streamSnapshots.push(String(text || "")),
+                    finalizeStream: function () { streamFinalized += 1; },
+                })
+                : null;
+            assertRegression(Boolean(eventsModule),
+                "chat events module should be available for transcript parity checks");
+
+            state.runId = "run-1";
+            eventsModule.handleChatEvents([{
+                sessionKey: "main",
+                runId: "run-1",
+                state: "delta",
+                message: { text: "Hello wor" },
+            }]);
+            eventsModule.handleChatEvents([{
+                sessionKey: "main",
+                runId: "run-1",
+                state: "final",
+                message: { role: "assistant", text: "Hello world" },
+            }]);
+
+            const transcript = controller.getStructuredTranscript();
+            const finalEntry = transcript[transcript.length - 1];
+            assertRegression(Boolean(finalEntry) &&
+                finalEntry.role === "assistant" &&
+                finalEntry.text === "Hello world" &&
+                finalEntry.runId === "run-1" &&
+                finalEntry.terminalState === "final" &&
+                finalEntry.source === "stream",
+            "terminal final events should commit deterministic structured transcript entries");
+            assertRegression(streamSnapshots.includes("Hello wor") &&
+                streamSnapshots.includes("Hello world") &&
+                streamFinalized === 1,
+            "delta/final flow should still drive stream rendering transitions");
+            summary.push("stream final transcript commit");
+        }
+
+        {
+            const state = createRegressionState();
+            const reconcileCalls = [];
+            const controller = createController({
+                state,
+                addMessage: function () { },
+            });
+            controller.scheduleHistoryReconcile = function () {
+                reconcileCalls.push("scheduled");
+            };
+            const eventsModule = window.BlazeClawChatEvents
+                ? window.BlazeClawChatEvents.createEventsModule({
+                    state,
+                    controller,
+                    addMessage: function () { },
+                    finalizeStream: function () { },
+                    addOrReplaceStream: function () { },
+                })
+                : null;
+            assertRegression(Boolean(eventsModule),
+                "chat events module should be available for reconcile guard checks");
+
+            state.runId = "run-2";
+            eventsModule.handleChatEvents([{
+                sessionKey: "main",
+                runId: "run-2",
+                state: "final",
+                message: { role: "assistant", text: "done" },
+            }]);
+            eventsModule.handleChatEvents([{
+                sessionKey: "main",
+                runId: "run-3",
+                state: "final",
+                message: { role: "assistant", text: "" },
+            }]);
+
+            assertRegression(reconcileCalls.length === 1,
+                "history reconcile should run only as repair when terminal text is unavailable");
+            summary.push("history reconcile repair-only");
         }
 
         return {
