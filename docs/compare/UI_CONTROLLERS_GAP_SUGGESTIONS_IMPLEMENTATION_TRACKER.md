@@ -235,3 +235,4 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 | 2026-04-22 | Phase I completion: WebView skills-depth baseline landed (`skills.search`, `skills.detail`/`gateway.skills.info`, install execute fallback, and `skills.update`) with action guards and regression coverage. |
 | 2026-04-22 | Phase J completion: WebView agent-files write baseline landed (`gateway.agents.files.set` save/reload editing flow) with optimistic rollback semantics and regression coverage. |
 | 2026-04-22 | Phase K completion: control-plane depth/polish triage landed, shrinking K-scope matrix pending entries to explicit polish-only bullets in `ui.controllers.md`. |
+| 2026-04-22 | Phase L completion: JS harness decision closed as “no new Vitest-equivalent runner for current scope”; keep dual-track `runRegressionChecks` + gateway/Catch2 strategy per Phase 0 closure. |

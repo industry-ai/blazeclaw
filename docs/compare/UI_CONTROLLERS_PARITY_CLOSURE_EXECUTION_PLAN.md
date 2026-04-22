@@ -214,8 +214,8 @@ Parity is **“closed”** for a controller when all of the following hold:
 
 | Step | Procedure | Done |
 |------|-----------|------|
-| L.1 | Decision: adopt JS runner vs stay on Catch2 + `runRegressionChecks` only. | [ ] |
-| L.2 | If adopted: scaffold runner, CI hook, one pilot test ported from OpenClaw. | [ ] |
+| L.1 | Decision: adopt JS runner vs stay on Catch2 + `runRegressionChecks` only. | [x] |
+| L.2 | If adopted: scaffold runner, CI hook, one pilot test ported from OpenClaw. | [x] *(not required for current scope; decision = no)* |
 
 **Acceptance:** Decision recorded in Phase 0 tracker; if “no,” document rationale and close L.
 
@@ -254,6 +254,7 @@ Append a row per meaningful milestone (merge or doc freeze).
 | 2026-04-22 | I (complete) | Landed WebView skills-depth baseline in agents control-plane with hub search (`skills.search`), detail (`skills.detail` + `gateway.skills.info` fallback), install (`gateway.skills.install.execute` with `skills.install` fallback), and JSON edit/update (`skills.update`) actions, plus busy/error guards and synthetic regressions for search-empty/install success-install failure/edit round-trip. | `blazeclaw/BlazeClawMfc/web/chat/agents-controller.js`, `blazeclaw/BlazeClawMfc/web/chat/index.html`, `docs/compare/ui.controllers.md` |
 | 2026-04-22 | J (complete) | Landed agent-files write baseline in WebView (`files` tab): selectable file list, editable content textarea, save/reload controls, and optimistic save with rollback on error via `gateway.agents.files.set`, plus synthetic regressions for save success and conflict rollback. | `blazeclaw/BlazeClawMfc/web/chat/agents-controller.js`, `blazeclaw/BlazeClawMfc/web/chat/index.html`, `docs/compare/ui.controllers.md` |
 | 2026-04-22 | K (complete) | Closed control-plane depth triage for agents/channels/cron/dreaming/nodes/presence/usage by shrinking `ui.controllers.md` §5 pending column to explicit polish-only bullets and syncing tracker language to reflect no remaining Tier-1 blockers in these rows. | `docs/compare/ui.controllers.md`, `docs/compare/UI_CONTROLLERS_GAP_SUGGESTIONS_IMPLEMENTATION_TRACKER.md`, `docs/compare/UI_CONTROLLERS_PHASE0_DECISION_TRACKER.md` |
+| 2026-04-22 | L (complete) | Closed JS harness decision: keep existing dual-track regression strategy (`runRegressionChecks` + gateway/Catch2) and do not add a Vitest-equivalent harness for current scope; documented rationale and decision links in tracker docs. | `docs/compare/UI_CONTROLLERS_PHASE0_DECISION_TRACKER.md`, `docs/compare/UI_CONTROLLERS_GAP_SUGGESTIONS_IMPLEMENTATION_TRACKER.md`, `docs/compare/ui.controllers.md` |
 
 ---
 

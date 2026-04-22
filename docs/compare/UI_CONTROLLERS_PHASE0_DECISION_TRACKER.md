@@ -76,6 +76,7 @@ Quick drill-down references:
 - Phase I skills parity (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for baseline scope (WebView skills panel now supports `skills.search`, `skills.detail`/`gateway.skills.info`, `gateway.skills.install.execute`/`skills.install`, and `skills.update` with regression coverage)
 - Phase J agent-files write parity (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for baseline scope (WebView files panel now supports editable file content + save/reload flow using `gateway.agents.files.set` with optimistic rollback-on-error behavior and regression coverage)
 - Phase K control-plane depth/polish triage (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for this scope (agents/channels/cron/dreaming/nodes/presence/usage rows now carry explicit polish-only follow-up bullets; no remaining Tier-1 blockers in these matrix rows)
+- Phase L harness decision (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for this scope (retain dual-track regression approach: WebView `runRegressionChecks` + gateway/Catch2 replay coverage; no Vitest-equivalent harness added)
 
 ## Phase A baseline freeze (2026-04-22)
 
