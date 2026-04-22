@@ -139,6 +139,19 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 - [x] Added regression fixtures for token parsing, approve path, deny path, and expired-token classification.
 - [x] Linked approval queue behavior to chat/tool lifecycle visibility (assistant text + timeline context) so approval-required runs become actionable.
 
+### Phase G observability landing (2026-04-22)
+
+- [x] Added secured `observability` panel in WebView agents control-plane (`index.html`), gated by `?observability=1` or localStorage `blazeclaw.observability.enabled=1`.
+- [x] Wired health/transport heartbeat summary calls in `agents-controller.js`:
+  - `gateway.health`
+  - `gateway.health.details`
+  - `gateway.transport.status`
+  - `last-heartbeat`
+  - `models.list`
+- [x] Wired logs baseline via `gateway.logs.tail` with level filter, limit, pause/resume toggle, and export text snapshot.
+- [x] Wired debug baseline method invoke (`method + params JSON`) with busy/error/result state guards.
+- [x] Added observability panel regressions for state defaults + load/invoke behavior.
+
 ### Phase C detached-send landing (2026-04-22)
 
 - [x] Added `/btw` local command and `sendDetachedMessage()` helper in `chat-controller.js`.
@@ -185,3 +198,4 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 | 2026-04-22 | Phase E partial landing: session subscribe/unsubscribe + compaction list/branch/restore controls added in WebView with session-control state wiring and regression checks; event-driven session update stream remains follow-up. |
 | 2026-04-22 | Phase E completion: session refresh now stays synchronized via lifecycle/session-reset hooks and subscribed-state polling guards (stale guard path). |
 | 2026-04-22 | Phase F completion: WebView exec-approval baseline landed (approval token queue + approve/deny controls via `gateway.tools.call.execute`) with parser/action regression fixtures for approve/deny/expired flows. |
+| 2026-04-22 | Phase G completion: secured WebView observability baseline landed (health/transport/heartbeat/models snapshot, logs tail filter/pause/export, debug method invoke, and polling/regression coverage). |

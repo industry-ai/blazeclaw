@@ -46,6 +46,8 @@ Session controls now expose `sessions.subscribe` / `sessions.unsubscribe` and `s
 
 Exec approval baseline is now available in WebView chat: assistant text containing `approvalToken=...` is captured into an approval queue, and approve/deny actions execute `gateway.tools.call.execute` with `tool=email.schedule` and action payloads (`approve=true/false`).
 
+Observability baseline is available in the WebView agents control-plane as a secured `Observability` tab (enable via `?observability=1` or localStorage `blazeclaw.observability.enabled=1`), wiring `gateway.health`, `gateway.health.details`, `gateway.transport.status`, `last-heartbeat`, `models.list`, and `gateway.logs.tail` with method-invoke debugging controls.
+
 ---
 
 ## Quick diagnostic checklist
@@ -78,3 +80,4 @@ Exec approval baseline is now available in WebView chat: assistant text containi
 | 2026-04-22 | Initial operator transport doc; aligned WebView chat bootstrap RPC names with gateway aliases. |
 | 2026-04-22 | Phase D update: documented intentional embedded-vs-shim deltas, added external shim smoke checklist, and noted scope-error guidance parity. |
 | 2026-04-22 | Phase F update: documented WebView exec-approval queue/actions using `gateway.tools.call.execute` for `email.schedule` tokens. |
+| 2026-04-22 | Phase G update: documented secured WebView observability tab and its health/logs/debug RPC bindings. |

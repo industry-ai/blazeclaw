@@ -143,10 +143,10 @@ Parity is **“closed”** for a controller when all of the following hold:
 
 | Step | Procedure | Done |
 |------|-----------|------|
-| G.1 | **debug.ts parity:** arbitrary method invoke (dev-only guard), last heartbeat, model list shortcuts if not duplicated elsewhere — **native panel** or secured WebView. | [ ] |
-| G.2 | **logs.ts parity:** `logs.tail` viewer, filtering, pause/resume, copy/export. | [ ] |
-| G.3 | **health.ts parity:** dedicated summary view (`health` RPC), link from help/about. | [ ] |
-| G.4 | **Security:** gate debug/log surfaces behind build flag or role if product requires. | [ ] |
+| G.1 | **debug.ts parity:** arbitrary method invoke (dev-only guard), last heartbeat, model list shortcuts if not duplicated elsewhere — **native panel** or secured WebView. | [x] |
+| G.2 | **logs.ts parity:** `logs.tail` viewer, filtering, pause/resume, copy/export. | [x] |
+| G.3 | **health.ts parity:** dedicated summary view (`health` RPC), link from help/about. | [x] |
+| G.4 | **Security:** gate debug/log surfaces behind build flag or role if product requires. | [x] |
 
 **Acceptance:** `ui.controllers.md` §2 rows updated; gateway audit lists any new RPC exposure; operator doc has “where to click” for diagnostics.
 
@@ -249,6 +249,7 @@ Append a row per meaningful milestone (merge or doc freeze).
 | 2026-04-22 | E (partial) | Added WebView session controls for `sessions.subscribe` / `sessions.unsubscribe` and compaction list/branch/restore workflows with state/status wiring + regression coverage; event-driven session updates still pending. | `blazeclaw/BlazeClawMfc/web/chat/chat-controller.js`, `blazeclaw/BlazeClawMfc/web/chat/index.html` |
 | 2026-04-22 | E (complete) | Completed session update wiring using lifecycle/session-reset refresh hooks plus subscribed-state polling guards; sessions control state now stays synchronized without manual-only refresh. | `blazeclaw/BlazeClawMfc/web/chat/chat-events.js`, `blazeclaw/BlazeClawMfc/web/chat/chat-controller.js`, `blazeclaw/BlazeClawMfc/web/chat/index.html` |
 | 2026-04-22 | F (complete) | Landed WebView exec-approval queue for `email.schedule` tokens discovered from assistant/tool output, wired approve/deny actions through `gateway.tools.call.execute`, and connected chat timeline/tool-lifecycle visibility to actionable approval controls with busy/stale guards plus synthetic regression checks. | `blazeclaw/BlazeClawMfc/web/chat/index.html`, `docs/compare/ui.controllers.md`, `docs/compare/UI_CONTROLLERS_PHASE0_DECISION_TRACKER.md` |
+| 2026-04-22 | G (complete) | Landed secured WebView observability surface (`observability` tab) with health summary (`gateway.health` + `gateway.health.details` + `gateway.transport.status` + `last-heartbeat`), logs tail filtering/pause/export (`gateway.logs.tail`), and dev-only arbitrary method invoke controls plus polling/stale guards and regression fixtures. | `blazeclaw/BlazeClawMfc/web/chat/agents-controller.js`, `blazeclaw/BlazeClawMfc/web/chat/index.html`, `docs/compare/ui.controllers.md` |
 
 ---
 

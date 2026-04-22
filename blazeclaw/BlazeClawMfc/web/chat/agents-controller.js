@@ -59,7 +59,7 @@
             state.toolsEffectiveResult = null;
         }
 
-        const supportedPanels = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming", "nodes", "instances", "usage"];
+        const supportedPanels = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming", "nodes", "instances", "usage", "observability"];
         if (supportedPanels.indexOf(String(state.agentsPanel || "")) < 0) {
             state.agentsPanel = "overview";
         }
@@ -418,6 +418,61 @@
         }
         if (state.usageTimeZone !== "local" && state.usageTimeZone !== "utc") {
             state.usageTimeZone = "local";
+        }
+        state.observabilityEnabled = Boolean(state.observabilityEnabled);
+        if (typeof state.observabilityLoading !== "boolean") {
+            state.observabilityLoading = false;
+        }
+        if (typeof state.observabilityError !== "string" && state.observabilityError !== null) {
+            state.observabilityError = null;
+        }
+        if (!state.observabilityHealth || typeof state.observabilityHealth !== "object") {
+            state.observabilityHealth = null;
+        }
+        if (!state.observabilityHealthDetails || typeof state.observabilityHealthDetails !== "object") {
+            state.observabilityHealthDetails = null;
+        }
+        if (!state.observabilityTransportStatus || typeof state.observabilityTransportStatus !== "object") {
+            state.observabilityTransportStatus = null;
+        }
+        if (!state.observabilityHeartbeat || typeof state.observabilityHeartbeat !== "object") {
+            state.observabilityHeartbeat = null;
+        }
+        if (!Array.isArray(state.observabilityModels)) {
+            state.observabilityModels = [];
+        }
+        if (!Array.isArray(state.observabilityLogs)) {
+            state.observabilityLogs = [];
+        }
+        if (typeof state.observabilityLogLevel !== "string") {
+            state.observabilityLogLevel = "all";
+        }
+        if (!Number.isFinite(Number(state.observabilityLogLimit)) || Number(state.observabilityLogLimit) <= 0) {
+            state.observabilityLogLimit = 50;
+        }
+        if (typeof state.observabilityPaused !== "boolean") {
+            state.observabilityPaused = false;
+        }
+        if (typeof state.observabilityMethod !== "string" || !state.observabilityMethod.trim()) {
+            state.observabilityMethod = "gateway.health";
+        }
+        if (typeof state.observabilityMethodParams !== "string") {
+            state.observabilityMethodParams = "{}";
+        }
+        if (typeof state.observabilityMethodBusy !== "boolean") {
+            state.observabilityMethodBusy = false;
+        }
+        if (typeof state.observabilityMethodError !== "string" && state.observabilityMethodError !== null) {
+            state.observabilityMethodError = null;
+        }
+        if (typeof state.observabilityMethodResult !== "string" && state.observabilityMethodResult !== null) {
+            state.observabilityMethodResult = null;
+        }
+        if (typeof state.observabilityExportText !== "string" && state.observabilityExportText !== null) {
+            state.observabilityExportText = null;
+        }
+        if (typeof state.observabilityLastUpdatedMs !== "number" && state.observabilityLastUpdatedMs !== null) {
+            state.observabilityLastUpdatedMs = null;
         }
 
         if (typeof state.agentDreamingLoading !== "boolean") {
@@ -2030,6 +2085,191 @@
             }, shouldIgnoreResponse);
         }
 
+        function parseObservabilityMethodParams(raw) {
+            const text = String(raw || "").trim();
+            if (!text) {
+                return {};
+            }
+            const parsed = JSON.parse(text);
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+                throw new Error("method params must be a JSON object");
+            }
+            return parsed;
+        }
+
+        function normalizeObservabilityLogs(entries, level) {
+            const list = Array.isArray(entries) ? entries : [];
+            const targetLevel = String(level || "all").trim().toLowerCase();
+            return list.filter((entry) => {
+                if (!entry || typeof entry !== "object") {
+                    return false;
+                }
+                if (targetLevel === "all") {
+                    return true;
+                }
+                const entryLevel = String(entry.level || "").trim().toLowerCase();
+                return entryLevel === targetLevel;
+            });
+        }
+
+        async function loadObservability(options) {
+            const opts = options || {};
+            const quiet = Boolean(opts.quiet);
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            if (!request || !state.connected || state.observabilityLoading || !state.observabilityEnabled) {
+                return state.observabilityHealth;
+            }
+
+            state.observabilityLoading = true;
+            if (!quiet) {
+                state.observabilityError = null;
+                state.lastError = null;
+            }
+            onStateUpdated();
+
+            try {
+                const logLimit = Math.max(1, Math.min(200, Number(state.observabilityLogLimit) || 50));
+                const calls = await Promise.all([
+                    request("gateway.health", {}),
+                    request("gateway.health.details", {}),
+                    request("gateway.transport.status", {}),
+                    request("last-heartbeat", {}),
+                    request("models.list", {}),
+                    state.observabilityPaused
+                        ? Promise.resolve({ payload: { entries: state.observabilityLogs || [] } })
+                        : request("gateway.logs.tail", { limit: logLimit }),
+                ]);
+
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return state.observabilityHealth;
+                }
+
+                const healthPayload = calls[0] && calls[0].payload ? calls[0].payload : calls[0];
+                const detailsPayload = calls[1] && calls[1].payload ? calls[1].payload : calls[1];
+                const transportPayload = calls[2] && calls[2].payload ? calls[2].payload : calls[2];
+                const heartbeatPayload = calls[3] && calls[3].payload ? calls[3].payload : calls[3];
+                const modelsPayload = calls[4] && calls[4].payload ? calls[4].payload : calls[4];
+                const logsPayload = calls[5] && calls[5].payload ? calls[5].payload : calls[5];
+                const models = Array.isArray(modelsPayload && modelsPayload.models)
+                    ? modelsPayload.models
+                    : [];
+                const entries = Array.isArray(logsPayload && logsPayload.entries)
+                    ? logsPayload.entries
+                    : [];
+
+                state.observabilityHealth = healthPayload && typeof healthPayload === "object"
+                    ? healthPayload
+                    : null;
+                state.observabilityHealthDetails = detailsPayload && typeof detailsPayload === "object"
+                    ? detailsPayload
+                    : null;
+                state.observabilityTransportStatus = transportPayload && typeof transportPayload === "object"
+                    ? transportPayload
+                    : null;
+                state.observabilityHeartbeat = heartbeatPayload && typeof heartbeatPayload === "object"
+                    ? heartbeatPayload
+                    : null;
+                state.observabilityModels = models;
+                state.observabilityLogs = normalizeObservabilityLogs(entries, state.observabilityLogLevel);
+                state.observabilityLastUpdatedMs = Date.now();
+                if (!quiet) {
+                    state.observabilityError = null;
+                }
+                return state.observabilityHealth;
+            } catch (err) {
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return state.observabilityHealth;
+                }
+
+                if (!quiet) {
+                    state.observabilityError = resolveToolsErrorMessage(err, "observability");
+                    state.lastError = state.observabilityError;
+                }
+                return state.observabilityHealth;
+            } finally {
+                state.observabilityLoading = false;
+                onStateUpdated();
+            }
+        }
+
+        function updateObservabilityField(field, value) {
+            const key = String(field || "").trim();
+            if (!key) {
+                return;
+            }
+
+            if (key === "method") {
+                state.observabilityMethod = String(value || "");
+            } else if (key === "params") {
+                state.observabilityMethodParams = String(value || "");
+            } else if (key === "logLevel") {
+                state.observabilityLogLevel = String(value || "all").trim().toLowerCase() || "all";
+            } else if (key === "logLimit") {
+                const nextLimit = Number(value);
+                if (Number.isFinite(nextLimit) && nextLimit > 0) {
+                    state.observabilityLogLimit = Math.max(1, Math.min(200, Math.floor(nextLimit)));
+                }
+            } else if (key === "paused") {
+                state.observabilityPaused = Boolean(value);
+            }
+            onStateUpdated();
+        }
+
+        async function invokeObservabilityMethod(options) {
+            const opts = options || {};
+            const requestOverride = typeof opts.requestOverride === "function"
+                ? opts.requestOverride
+                : request;
+            if (!requestOverride || state.observabilityMethodBusy || !state.observabilityEnabled) {
+                return null;
+            }
+
+            const method = String(state.observabilityMethod || "").trim();
+            if (!method) {
+                state.observabilityMethodError = "method is required";
+                state.observabilityMethodResult = null;
+                onStateUpdated();
+                return null;
+            }
+
+            state.observabilityMethodBusy = true;
+            state.observabilityMethodError = null;
+            onStateUpdated();
+            try {
+                const params = parseObservabilityMethodParams(state.observabilityMethodParams);
+                const response = await requestOverride(method, params);
+                state.observabilityMethodResult = JSON.stringify(response, null, 2);
+                state.observabilityMethodError = null;
+                return response;
+            } catch (err) {
+                state.observabilityMethodResult = null;
+                state.observabilityMethodError = resolveToolsErrorMessage(err, "debug method invoke");
+                return null;
+            } finally {
+                state.observabilityMethodBusy = false;
+                onStateUpdated();
+            }
+        }
+
+        function buildObservabilityLogsExportText() {
+            const rows = Array.isArray(state.observabilityLogs) ? state.observabilityLogs : [];
+            return rows.map((entry) => {
+                const ts = Number(entry && entry.ts || 0);
+                const level = String(entry && entry.level || "info");
+                const source = String(entry && entry.source || "gateway");
+                const message = String(entry && entry.message || "");
+                return `${ts}\t${level}\t${source}\t${message}`;
+            }).join("\n");
+        }
+
+        function exportObservabilityLogs() {
+            state.observabilityExportText = buildObservabilityLogsExportText();
+            onStateUpdated();
+            return state.observabilityExportText;
+        }
+
         async function loadChannels(options) {
             const opts = options || {};
             const probe = Boolean(opts.probe);
@@ -3599,7 +3839,7 @@
 
         function setAgentsPanel(panel) {
             const panelValue = String(panel || "").trim();
-            const normalized = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming", "nodes", "instances", "usage"].indexOf(panelValue) >= 0
+            const normalized = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming", "nodes", "instances", "usage", "observability"].indexOf(panelValue) >= 0
                 ? panelValue
                 : "overview";
             state.agentsPanel = normalized;
@@ -3681,6 +3921,15 @@
                 await loadUsage({
                     shouldIgnoreResponse: function () {
                         return state.agentsPanel !== "usage";
+                    },
+                });
+                return;
+            }
+
+            if (state.agentsPanel === "observability") {
+                await loadObservability({
+                    shouldIgnoreResponse: function () {
+                        return state.agentsPanel !== "observability";
                     },
                 });
                 return;
@@ -3834,6 +4083,10 @@
             loadUsage,
             loadUsageTimeSeries,
             loadUsageSessionLogs,
+            loadObservability,
+            updateObservabilityField,
+            invokeObservabilityMethod,
+            exportObservabilityLogs,
             loadChannels,
             startWhatsAppLogin,
             waitWhatsAppLogin,
@@ -4078,7 +4331,61 @@
                 "usage state contract should initialize usageSessionLogsLoading=false");
             assertRegression(state.usageTimeZone === "local",
                 "usage state contract should initialize usageTimeZone=local");
+            assertRegression(state.observabilityEnabled === false,
+                "observability state contract should initialize observabilityEnabled=false");
+            assertRegression(state.observabilityLoading === false &&
+                state.observabilityError === null &&
+                state.observabilityHealth === null &&
+                Array.isArray(state.observabilityLogs),
+                "observability state contract should initialize health/logs defaults");
             summary.push("channels + cron + dreaming + nodes + presence + usage state/UI contract defaults");
+        }
+
+        {
+            const state = createRegressionState();
+            state.observabilityEnabled = true;
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            controller.setAgentsPanel("observability");
+            const panelLoad = controller.loadPanelDataForCurrentAgent();
+            const healthCall = harness.takeNextCall("gateway.health");
+            const detailsCall = harness.takeNextCall("gateway.health.details");
+            const transportCall = harness.takeNextCall("gateway.transport.status");
+            const heartbeatCall = harness.takeNextCall("last-heartbeat");
+            const modelsCall = harness.takeNextCall("models.list");
+            const logsCall = harness.takeNextCall("gateway.logs.tail");
+            logsCall.deferred.resolve({
+                payload: {
+                    entries: [
+                        { ts: 1, level: "info", source: "gateway", message: "started" },
+                    ],
+                },
+            });
+            healthCall.deferred.resolve({ payload: { status: "ok", running: true } });
+            detailsCall.deferred.resolve({ payload: { status: "ok" } });
+            transportCall.deferred.resolve({ payload: { running: true, endpoint: "ws://127.0.0.1:18789" } });
+            heartbeatCall.deferred.resolve({ payload: { connected: true, lastHeartbeatMs: 11 } });
+            modelsCall.deferred.resolve({ payload: { models: [{ id: "default" }] } });
+            await panelLoad;
+            assertRegression(state.observabilityHealth && state.observabilityHealth.status === "ok",
+                "observability panel should bind gateway.health payload");
+            assertRegression(Array.isArray(state.observabilityLogs) && state.observabilityLogs.length === 1,
+                "observability panel should bind logs.tail payload");
+
+            controller.updateObservabilityField("method", "gateway.health");
+            controller.updateObservabilityField("params", "{}");
+            const invokePending = controller.invokeObservabilityMethod();
+            const invokeCall = harness.takeNextCall("gateway.health");
+            invokeCall.deferred.resolve({ payload: { status: "ok" } });
+            await invokePending;
+            assertRegression(typeof state.observabilityMethodResult === "string" &&
+                state.observabilityMethodResult.indexOf("\"status\": \"ok\"") >= 0,
+                "observability method invoke should capture JSON response text");
+            summary.push("observability panel load + invoke");
         }
 
         {

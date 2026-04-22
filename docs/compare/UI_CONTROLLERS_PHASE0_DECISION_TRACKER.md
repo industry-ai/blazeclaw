@@ -37,13 +37,13 @@ Freeze an implementation decision for each OpenClaw UI controller file:
 | `config/form-utils.ts` | WebView utility (architecture closed) | Utility parity implemented for current WebView scope | **Architecture closure cleared (2026-04-22):** parity + guards + regressions sufficient; no full OpenClaw port in current scope |
 | `control-ui-bootstrap.ts` | WebView adapter (architecture closed) | Bootstrap-shaped WebView adapter implemented | **Architecture closure cleared (2026-04-22):** semantic parity via adapter + operator doc; HTTP bootstrap transport intentionally not mirrored |
 | `cron.ts` | WebView JS (architecture closed) | Phase baseline implemented (`cron.status/list/add/update/remove/run/runs`) | **Architecture closure cleared (2026-04-22):** further work is normal hardening backlog, not open “defer architecture” debt |
-| `debug.ts` | MFC/C++ | Not implemented as WebView parity surface | Native diagnostics if prioritized |
+| `debug.ts` | Secured WebView baseline + MFC/C++ follow-on | WebView observability baseline implemented (method invoke + heartbeat/models shortcuts) | Native diagnostics depth remains optional follow-on |
 | `devices.ts` | MFC/C++ | Not implemented as WebView parity surface | Native pairing if prioritized |
 | `dreaming.ts` | WebView JS (architecture closed) | Phase baseline implemented (`doctor.memory.*` + config hooks) | **Architecture closure cleared (2026-04-22):** deltas vs OpenClaw are product polish backlog, not open architecture defer |
 | `exec-approval.ts` | WebView JS (Phase F bridge) + MFC/C++ follow-on | WebView baseline implemented (token queue + approve/deny actions) | Native approval UX still preferred for deeper policy workflows |
 | `exec-approvals.ts` | WebView JS (Phase F bridge) + MFC/C++ follow-on | WebView baseline implemented via runtime approval action wiring | Native governance/config surface remains follow-on |
-| `health.ts` | MFC/C++ | Partial/indirect visibility only | Dedicated health surface if needed |
-| `logs.ts` | MFC/C++ | Not implemented as parity surface | Native log tail if prioritized |
+| `health.ts` | Secured WebView baseline + MFC/C++ follow-on | WebView observability health summary implemented (`gateway.health`, `gateway.health.details`, `gateway.transport.status`) | Native health surface remains optional follow-on |
+| `logs.ts` | Secured WebView baseline + MFC/C++ follow-on | WebView observability logs tail baseline implemented (`gateway.logs.tail` with filter/pause/export controls) | Native log tail depth remains optional follow-on |
 | `models.ts` | WebView JS | Implemented (`models.list` in chat flow; alias → `gateway.models.list`) | Optional catalog depth |
 | `nodes.ts` | WebView JS | Baseline implemented (`node.list`, nodes tab) | Richer node operations backlog |
 | `presence.ts` | WebView JS | Baseline implemented (`system-presence`, instances tab) | Optional UX depth |
@@ -71,6 +71,7 @@ Quick drill-down references:
 - Phase D gateway client parity baseline (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for this scope (embedded-vs-shim delta documentation, external shim smoke checklist, scope-aware RPC error messaging via `scope-errors.js`)
 - Phase E sessions parity (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed (WebView session subscribe/unsubscribe + compaction list/branch/restore controls, lifecycle/session-reset refresh handling, subscribed-state polling guards, and regression coverage)
 - Phase F exec approvals parity (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for baseline scope (WebView approval queue detects `approvalToken`, approve/deny actions call `gateway.tools.call.execute` for `email.schedule`, and token parser/approve-deny-expired regression fixtures added)
+- Phase G observability parity (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for baseline scope (secured WebView observability tab with `gateway.health`/`gateway.health.details`/`gateway.transport.status`/`last-heartbeat`, logs tail filter/pause/export, and debug method invoke controls)
 
 ## Phase A baseline freeze (2026-04-22)
 

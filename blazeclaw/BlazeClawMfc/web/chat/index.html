@@ -1402,6 +1402,76 @@
                     rows.push("<div class=\"agents-row\">Parity track: docs/compare/usage.ts/USAGE_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md</div>");
                 }
 
+                if (panel === "observability") {
+                    if (!state.observabilityEnabled) {
+                        rows.push("<div class=\"agents-row\">Observability panel is disabled. Enable with `?observability=1` or localStorage `blazeclaw.observability.enabled=1`.</div>");
+                    } else {
+                        if (state.observabilityLoading) {
+                            rows.push("<div class=\"agents-row\">Loading observability snapshot...</div>");
+                        }
+                        if (state.observabilityError) {
+                            rows.push(`<div class=\"agents-row error\">${escapeHtml(state.observabilityError)}</div>`);
+                        }
+
+                        const health = state.observabilityHealth || null;
+                        const details = state.observabilityHealthDetails || null;
+                        const transport = state.observabilityTransportStatus || null;
+                        const heartbeat = state.observabilityHeartbeat || null;
+                        const models = Array.isArray(state.observabilityModels) ? state.observabilityModels : [];
+                        const logs = Array.isArray(state.observabilityLogs) ? state.observabilityLogs : [];
+                        const paused = Boolean(state.observabilityPaused);
+                        const lastUpdated = Number.isFinite(Number(state.observabilityLastUpdatedMs))
+                            ? Number(state.observabilityLastUpdatedMs)
+                            : 0;
+
+                        rows.push(`<div class=\"agents-row\">Health: ${escapeHtml(String(health && health.status || "(unknown)"))} · running=${health && health.running ? "yes" : "no"}</div>`);
+                        rows.push(`<div class=\"agents-row\">Transport: ${transport && transport.running ? "running" : "idle"} · endpoint=${escapeHtml(String(transport && transport.endpoint || "(n/a)"))} · connections=${escapeHtml(String(transport && transport.connections || 0))}</div>`);
+                        rows.push(`<div class=\"agents-row\">Heartbeat: connected=${heartbeat && heartbeat.connected ? "yes" : "no"} · lastHeartbeatMs=${escapeHtml(String(heartbeat && heartbeat.lastHeartbeatMs || 0))}</div>`);
+                        rows.push(`<div class=\"agents-row\">Health details endpoint: ${escapeHtml(String(details && details.transport && details.transport.endpoint || "(n/a)"))}</div>`);
+                        rows.push(`<div class=\"agents-row\">Models available: ${models.length}</div>`);
+                        rows.push(`<div class=\"agents-row\">Logs entries: ${logs.length} · paused=${paused ? "yes" : "no"} · lastUpdatedMs=${lastUpdated || "(none)"}</div>`);
+                        if (logs.length > 0) {
+                            const firstLog = logs[0] || {};
+                            rows.push(`<div class=\"agents-row\">Latest log: [${escapeHtml(String(firstLog.level || "info"))}] ${escapeHtml(String(firstLog.message || ""))}</div>`);
+                        }
+
+                        rows.push(`<div class=\"agents-row\">`
+                            + `<label>Log level <select data-observability-field=\"logLevel\">`
+                            + `<option value=\"all\"${String(state.observabilityLogLevel || "all") === "all" ? " selected" : ""}>all</option>`
+                            + `<option value=\"info\"${String(state.observabilityLogLevel || "") === "info" ? " selected" : ""}>info</option>`
+                            + `<option value=\"debug\"${String(state.observabilityLogLevel || "") === "debug" ? " selected" : ""}>debug</option>`
+                            + `<option value=\"warn\"${String(state.observabilityLogLevel || "") === "warn" ? " selected" : ""}>warn</option>`
+                            + `<option value=\"error\"${String(state.observabilityLogLevel || "") === "error" ? " selected" : ""}>error</option>`
+                            + `</select></label> `
+                            + `<label>Log limit <input class=\"agents-input\" data-observability-field=\"logLimit\" type=\"number\" min=\"1\" max=\"200\" value=\"${escapeHtml(String(state.observabilityLogLimit || 50))}\" /></label>`
+                            + `</div>`);
+
+                        rows.push(`<div class=\"agents-row\">`
+                            + `<label>Method <input class=\"agents-input\" data-observability-field=\"method\" value=\"${escapeHtml(String(state.observabilityMethod || ""))}\" /></label>`
+                            + `</div>`);
+                        rows.push(`<div class=\"agents-row\">`
+                            + `<label>Params JSON <input class=\"agents-input\" data-observability-field=\"params\" value=\"${escapeHtml(String(state.observabilityMethodParams || "{}"))}\" /></label>`
+                            + `</div>`);
+                        rows.push(`<div class=\"agents-row\">`
+                            + `<button class=\"agents-chip\" data-observability-action=\"refresh\">Refresh</button> `
+                            + `<button class=\"agents-chip\" data-observability-action=\"toggle-pause\">${paused ? "Resume logs" : "Pause logs"}</button> `
+                            + `<button class=\"agents-chip\" data-observability-action=\"invoke\"${state.observabilityMethodBusy ? " disabled" : ""}>Invoke Method</button> `
+                            + `<button class=\"agents-chip\" data-observability-action=\"export\">Export Logs</button>`
+                            + `</div>`);
+
+                        if (state.observabilityMethodError) {
+                            rows.push(`<div class=\"agents-row error\">Method error: ${escapeHtml(String(state.observabilityMethodError || ""))}</div>`);
+                        }
+                        if (state.observabilityMethodResult) {
+                            rows.push(`<div class=\"agents-row\">Method result:<pre>${escapeHtml(String(state.observabilityMethodResult || ""))}</pre></div>`);
+                        }
+                        if (state.observabilityExportText) {
+                            rows.push(`<div class=\"agents-row\">Logs export:<pre>${escapeHtml(String(state.observabilityExportText || ""))}</pre></div>`);
+                        }
+                        rows.push("<div class=\"agents-row\">Capability mode: debug/logs/health baseline (gateway.health, gateway.health.details, gateway.transport.status, last-heartbeat, models.list, gateway.logs.tail)</div>");
+                    }
+                }
+
                 if (panel === "dreaming") {
                     if (state.agentDreamingLoading || state.dreamingStatusLoading || state.dreamDiaryLoading) {
                         rows.push("<div class=\"agents-row\">Loading dreaming surface...</div>");
@@ -1889,6 +1959,64 @@
                     });
                 });
 
+                state.agentsSurfaceEl.querySelectorAll("[data-observability-field]").forEach((el) => {
+                    const field = String(el.getAttribute("data-observability-field") || "").trim();
+                    if (!field) {
+                        return;
+                    }
+                    const eventName = field === "logLevel" ? "change" : "input";
+                    el.addEventListener(eventName, () => {
+                        const value = String(el.value || "");
+                        agentsController.updateObservabilityField(field, value);
+                    });
+                });
+
+                state.agentsSurfaceEl.querySelectorAll("[data-observability-action]").forEach((el) => {
+                    el.addEventListener("click", () => {
+                        const action = String(el.getAttribute("data-observability-action") || "").trim();
+                        if (!action) {
+                            return;
+                        }
+
+                        emitAgentsTelemetry("observability.action", {
+                            action,
+                            panel: state.agentsPanel,
+                        });
+
+                        if (action === "refresh") {
+                            void agentsController.loadObservability({
+                                quiet: false,
+                                shouldIgnoreResponse: function () {
+                                    return String(state.agentsPanel || "") !== "observability";
+                                },
+                            });
+                            return;
+                        }
+
+                        if (action === "toggle-pause") {
+                            agentsController.updateObservabilityField("paused", !state.observabilityPaused);
+                            if (!state.observabilityPaused) {
+                                void agentsController.loadObservability({
+                                    quiet: false,
+                                    shouldIgnoreResponse: function () {
+                                        return String(state.agentsPanel || "") !== "observability";
+                                    },
+                                });
+                            }
+                            return;
+                        }
+
+                        if (action === "invoke") {
+                            void agentsController.invokeObservabilityMethod();
+                            return;
+                        }
+
+                        if (action === "export") {
+                            agentsController.exportObservabilityLogs();
+                        }
+                    });
+                });
+
                 state.agentsSurfaceEl.querySelectorAll("[data-dreaming-subtab]").forEach((el) => {
                     el.addEventListener("click", () => {
                         const tab = String(el.getAttribute("data-dreaming-subtab") || "").trim();
@@ -1998,6 +2126,9 @@
                     { id: "instances", label: "Instances" },
                     { id: "usage", label: "Usage" },
                 ];
+                if (state.observabilityEnabled) {
+                    tabs.push({ id: "observability", label: "Observability" });
+                }
                 const current = String(state.agentsPanel || "overview");
 
                 state.agentsTabsEl.innerHTML = tabs.map((tab) => {
@@ -2066,6 +2197,7 @@
                 renderAgentsSurface();
                 syncNodesPolling();
                 syncSessionControlsPolling();
+                syncObservabilityPolling();
                 renderApprovalQueue();
                 renderDetachedNotices();
             }
@@ -2169,6 +2301,30 @@
                 }
 
                 return true;
+            }
+
+            function resolveObservabilityEnabled() {
+                const search = new URLSearchParams(window.location.search || "");
+                const queryToggle = search.get("observability");
+                if (queryToggle === "0") {
+                    return false;
+                }
+                if (queryToggle === "1") {
+                    return true;
+                }
+                try {
+                    if (window.localStorage) {
+                        const storedToggle = window.localStorage.getItem("blazeclaw.observability.enabled");
+                        if (storedToggle === "0") {
+                            return false;
+                        }
+                        if (storedToggle === "1") {
+                            return true;
+                        }
+                    }
+                } catch (_) {
+                }
+                return false;
             }
 
             function resolveAgentsRegressionChecksEnabled() {
@@ -2300,6 +2456,9 @@
             let nodesPollingTimer = null;
             let nodesPollingInFlight = false;
             const NODES_POLLING_MS = 5000;
+            let observabilityPollingTimer = null;
+            let observabilityPollingInFlight = false;
+            const OBSERVABILITY_POLLING_MS = 5000;
             let sessionControlsPollingTimer = null;
             let sessionControlsPollingInFlight = false;
             const SESSION_CONTROLS_POLLING_MS = 5000;
@@ -2359,6 +2518,68 @@
                 }, NODES_POLLING_MS);
             }
 
+            function stopObservabilityPolling() {
+                if (observabilityPollingTimer !== null) {
+                    window.clearInterval(observabilityPollingTimer);
+                    observabilityPollingTimer = null;
+                }
+            }
+
+            function shouldRunObservabilityPolling() {
+                return Boolean(
+                    agentsController &&
+                    state.connected &&
+                    state.observabilityEnabled &&
+                    String(state.agentsPanel || "") === "observability"
+                );
+            }
+
+            function triggerObservabilityRefresh(options) {
+                if (!agentsController || typeof agentsController.loadObservability !== "function") {
+                    return;
+                }
+                if (observabilityPollingInFlight) {
+                    return;
+                }
+                observabilityPollingInFlight = true;
+                const opts = options || {};
+                void agentsController.loadObservability({
+                    quiet: opts.quiet === true,
+                    shouldIgnoreResponse: function () {
+                        return String(state.agentsPanel || "") !== "observability";
+                    },
+                })
+                    .catch(() => {
+                    })
+                    .finally(() => {
+                        observabilityPollingInFlight = false;
+                    });
+            }
+
+            function syncObservabilityPolling() {
+                if (!shouldRunObservabilityPolling()) {
+                    stopObservabilityPolling();
+                    return;
+                }
+
+                if (observabilityPollingTimer !== null) {
+                    return;
+                }
+
+                observabilityPollingTimer = window.setInterval(() => {
+                    if (!shouldRunObservabilityPolling()) {
+                        stopObservabilityPolling();
+                        return;
+                    }
+                    if (state.observabilityPaused) {
+                        return;
+                    }
+                    triggerObservabilityRefresh({
+                        quiet: true,
+                    });
+                }, OBSERVABILITY_POLLING_MS);
+            }
+
             function stopSessionControlsPolling() {
                 if (sessionControlsPollingTimer !== null) {
                     window.clearInterval(sessionControlsPollingTimer);
@@ -2410,6 +2631,7 @@
             }
 
             state.configCoerceEnabled = resolveConfigCoerceEnabled();
+            state.observabilityEnabled = resolveObservabilityEnabled();
 
             const agentsEnabled = resolveAgentsEnabled();
             const agentsController = agentsEnabled && window.BlazeClawAgentsController
@@ -2437,6 +2659,7 @@
                     });
                     void agentsController.loadPanelDataForCurrentAgent();
                     syncNodesPolling();
+                    syncObservabilityPolling();
                 };
                 state.onModelChanged = () => {
                     agentsController.syncSessionContext({
@@ -2447,6 +2670,7 @@
                     });
                     void agentsController.refreshFromConfigSnapshot();
                     syncNodesPolling();
+                    syncObservabilityPolling();
                 };
                 agentsController.syncSessionContext({
                     sessionKey: state.sessionKey,
@@ -2455,6 +2679,7 @@
                 state.onGatewayLifecycleChanged = (lifecycle) => {
                     if (!lifecycle || !lifecycle.connected) {
                         syncNodesPolling();
+                        syncObservabilityPolling();
                         return;
                     }
 
@@ -2484,7 +2709,18 @@
                         });
                     }
 
+                    if (activePanel === "observability") {
+                        emitAgentsTelemetry("observability.lifecycle.refresh", {
+                            state: lifecycle.state,
+                            wasConnected: Boolean(lifecycle.wasConnected),
+                        });
+                        triggerObservabilityRefresh({
+                            quiet: true,
+                        });
+                    }
+
                     syncNodesPolling();
+                    syncObservabilityPolling();
                 };
 
                 if (resolveAgentsRegressionChecksEnabled() &&
