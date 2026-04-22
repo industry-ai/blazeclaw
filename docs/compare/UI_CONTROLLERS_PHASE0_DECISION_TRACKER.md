@@ -48,7 +48,7 @@ Freeze an implementation decision for each OpenClaw UI controller file:
 | `nodes.ts` | WebView JS | Baseline implemented (`node.list`, nodes tab) | Richer node operations backlog |
 | `presence.ts` | WebView JS | Baseline implemented (`system-presence`, instances tab) | Optional UX depth |
 | `scope-errors.ts` | WebView JS | Implemented shared scope error utility | Keep coverage as new panels land |
-| `skills.ts` | WebView JS | Partial (`skills.status`/report + commands) | Product backlog: edit/install/ClawHub |
+| `skills.ts` | WebView JS | WebView skills-depth baseline implemented (`skills.status` + search/detail/install/update actions) | Advanced skills UX polish remains follow-on |
 | `usage.ts` | WebView JS | Baseline implemented (`sessions.usage*`) | Analytics depth backlog |
 | `*.test.ts` | Harness strategy (architecture closed) | Targeted WebView / gateway regressions in-repo | **Architecture closure cleared (2026-04-22):** no Vitest parity harness required for current scope; revisit if full OpenClaw-style suite becomes a product requirement |
 
@@ -73,6 +73,7 @@ Quick drill-down references:
 - Phase F exec approvals parity (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for baseline scope (WebView approval queue detects `approvalToken`, approve/deny actions call `gateway.tools.call.execute` for `email.schedule`, and token parser/approve-deny-expired regression fixtures added)
 - Phase G observability parity (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for baseline scope (secured WebView observability tab with `gateway.health`/`gateway.health.details`/`gateway.transport.status`/`last-heartbeat`, logs tail filter/pause/export, and debug method invoke controls)
 - Phase H devices parity (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for baseline scope (WebView devices tab with `device.pair.list` inventory + approve/reject/remove actions and regression coverage)
+- Phase I skills parity (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for baseline scope (WebView skills panel now supports `skills.search`, `skills.detail`/`gateway.skills.info`, `gateway.skills.install.execute`/`skills.install`, and `skills.update` with regression coverage)
 
 ## Phase A baseline freeze (2026-04-22)
 

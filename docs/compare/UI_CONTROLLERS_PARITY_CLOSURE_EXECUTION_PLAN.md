@@ -172,10 +172,10 @@ Parity is **“closed”** for a controller when all of the following hold:
 
 | Step | Procedure | Done |
 |------|-----------|------|
-| I.1 | Inventory OpenClaw `skills.ts` hub + install + edit RPCs and UI states. | [ ] |
-| I.2 | Gateway: ensure each RPC or documented alias exists; extend BlazeClaw if OpenClaw depends on server features. | [ ] |
-| I.3 | WebView: extend `agents-controller.js` + `index.html` (or dedicated skills panel) for flows with busy/error guards. | [ ] |
-| I.4 | **Regression:** install success, install failure, search empty, edit round-trip. | [ ] |
+| I.1 | Inventory OpenClaw `skills.ts` hub + install + edit RPCs and UI states. | [x] |
+| I.2 | Gateway: ensure each RPC or documented alias exists; extend BlazeClaw if OpenClaw depends on server features. | [x] |
+| I.3 | WebView: extend `agents-controller.js` + `index.html` (or dedicated skills panel) for flows with busy/error guards. | [x] |
+| I.4 | **Regression:** install success, install failure, search empty, edit round-trip. | [x] |
 
 **Acceptance:** `ui.controllers.md` skills row reads “implemented” for agreed depth; remaining deltas explicitly listed as polish only.
 
@@ -251,6 +251,7 @@ Append a row per meaningful milestone (merge or doc freeze).
 | 2026-04-22 | F (complete) | Landed WebView exec-approval queue for `email.schedule` tokens discovered from assistant/tool output, wired approve/deny actions through `gateway.tools.call.execute`, and connected chat timeline/tool-lifecycle visibility to actionable approval controls with busy/stale guards plus synthetic regression checks. | `blazeclaw/BlazeClawMfc/web/chat/index.html`, `docs/compare/ui.controllers.md`, `docs/compare/UI_CONTROLLERS_PHASE0_DECISION_TRACKER.md` |
 | 2026-04-22 | G (complete) | Landed secured WebView observability surface (`observability` tab) with health summary (`gateway.health` + `gateway.health.details` + `gateway.transport.status` + `last-heartbeat`), logs tail filtering/pause/export (`gateway.logs.tail`), and dev-only arbitrary method invoke controls plus polling/stale guards and regression fixtures. | `blazeclaw/BlazeClawMfc/web/chat/agents-controller.js`, `blazeclaw/BlazeClawMfc/web/chat/index.html`, `docs/compare/ui.controllers.md` |
 | 2026-04-22 | H (complete) | Landed devices baseline in WebView control-plane (`devices` tab) with `device.pair.list` inventory, selection controls, approve/reject/remove actions, and synthetic regressions for list + action flows. | `blazeclaw/BlazeClawMfc/web/chat/agents-controller.js`, `blazeclaw/BlazeClawMfc/web/chat/index.html`, `docs/compare/ui.controllers.md` |
+| 2026-04-22 | I (complete) | Landed WebView skills-depth baseline in agents control-plane with hub search (`skills.search`), detail (`skills.detail` + `gateway.skills.info` fallback), install (`gateway.skills.install.execute` with `skills.install` fallback), and JSON edit/update (`skills.update`) actions, plus busy/error guards and synthetic regressions for search-empty/install success-install failure/edit round-trip. | `blazeclaw/BlazeClawMfc/web/chat/agents-controller.js`, `blazeclaw/BlazeClawMfc/web/chat/index.html`, `docs/compare/ui.controllers.md` |
 
 ---
 

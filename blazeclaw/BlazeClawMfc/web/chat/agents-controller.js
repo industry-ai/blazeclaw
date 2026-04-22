@@ -104,6 +104,45 @@
         if (typeof state.agentSkillsAgentId !== "string" && state.agentSkillsAgentId !== null) {
             state.agentSkillsAgentId = null;
         }
+        if (typeof state.skillsHubLoading !== "boolean") {
+            state.skillsHubLoading = false;
+        }
+        if (typeof state.skillsHubError !== "string" && state.skillsHubError !== null) {
+            state.skillsHubError = null;
+        }
+        if (!Array.isArray(state.skillsHubResults)) {
+            state.skillsHubResults = [];
+        }
+        if (typeof state.skillsHubQuery !== "string") {
+            state.skillsHubQuery = "";
+        }
+        if (typeof state.skillsDetailLoading !== "boolean") {
+            state.skillsDetailLoading = false;
+        }
+        if (typeof state.skillsDetailError !== "string" && state.skillsDetailError !== null) {
+            state.skillsDetailError = null;
+        }
+        if (!state.skillsDetailResult || typeof state.skillsDetailResult !== "object") {
+            state.skillsDetailResult = null;
+        }
+        if (typeof state.skillsInstallBusy !== "boolean") {
+            state.skillsInstallBusy = false;
+        }
+        if (typeof state.skillsInstallStatus !== "string" && state.skillsInstallStatus !== null) {
+            state.skillsInstallStatus = null;
+        }
+        if (typeof state.skillsEditBusy !== "boolean") {
+            state.skillsEditBusy = false;
+        }
+        if (typeof state.skillsEditError !== "string" && state.skillsEditError !== null) {
+            state.skillsEditError = null;
+        }
+        if (typeof state.skillsEditStatus !== "string" && state.skillsEditStatus !== null) {
+            state.skillsEditStatus = null;
+        }
+        if (typeof state.skillsEditPayload !== "string") {
+            state.skillsEditPayload = "{}";
+        }
 
         const channelsStateContract = window.BlazeClawChannelsStateContract;
         if (channelsStateContract && typeof channelsStateContract.ensureChannelsStateDefaults === "function") {
@@ -1842,6 +1881,18 @@
                     agentScoped: true,
                     report,
                 };
+                if (!state.skillsHubResults.length) {
+                    state.skillsHubResults = report.skills.slice(0, 20).map(function (entry) {
+                        const skillName = String(entry && (entry.skillKey || entry.name) || "").trim();
+                        return {
+                            skill: skillName,
+                            name: String(entry && entry.name || skillName).trim(),
+                            description: String(entry && entry.description || "").trim(),
+                        };
+                    }).filter(function (entry) {
+                        return entry.skill.length > 0;
+                    });
+                }
             } catch (err) {
                 if (shouldIgnoreResponse()) {
                     return;
@@ -1850,6 +1901,179 @@
                 state.agentSkillsError = resolveToolsErrorMessage(err, "agent skills");
             } finally {
                 state.agentSkillsLoading = false;
+                onStateUpdated();
+            }
+        }
+
+        function normalizeSkillsSearchPayload(payload) {
+            const source = payload && typeof payload === "object" ? payload : {};
+            const entries = Array.isArray(source.skills)
+                ? source.skills
+                : [];
+            return entries.map(function (entry, index) {
+                const row = entry && typeof entry === "object" ? entry : {};
+                const skill = String(row.skill || row.skillKey || row.name || `skill-${index + 1}`).trim();
+                return {
+                    skill: skill || `skill-${index + 1}`,
+                    name: String(row.name || row.skill || row.skillKey || skill || "").trim(),
+                    description: String(row.description || row.summary || "").trim(),
+                };
+            });
+        }
+
+        async function searchSkillsHub(options) {
+            const opts = options || {};
+            const query = String(opts.query != null ? opts.query : state.skillsHubQuery).trim();
+            const requestOverride = typeof opts.requestOverride === "function"
+                ? opts.requestOverride
+                : request;
+            if (!requestOverride || !state.connected || state.skillsHubLoading) {
+                return state.skillsHubResults;
+            }
+
+            state.skillsHubLoading = true;
+            state.skillsHubError = null;
+            onStateUpdated();
+            try {
+                const res = await requestOverride("skills.search", {
+                    query,
+                });
+                const payload = res && res.payload ? res.payload : res;
+                state.skillsHubResults = normalizeSkillsSearchPayload(payload);
+                state.skillsHubQuery = query;
+                return state.skillsHubResults;
+            } catch (err) {
+                state.skillsHubError = resolveToolsErrorMessage(err, "skills search");
+                state.lastError = state.skillsHubError;
+                return state.skillsHubResults;
+            } finally {
+                state.skillsHubLoading = false;
+                onStateUpdated();
+            }
+        }
+
+        async function loadSkillDetail(skill, options) {
+            const skillName = String(skill || "").trim();
+            const opts = options || {};
+            const requestOverride = typeof opts.requestOverride === "function"
+                ? opts.requestOverride
+                : request;
+            if (!skillName || !requestOverride || !state.connected || state.skillsDetailLoading) {
+                return state.skillsDetailResult;
+            }
+
+            state.skillsDetailLoading = true;
+            state.skillsDetailError = null;
+            onStateUpdated();
+            try {
+                let response;
+                try {
+                    response = await requestOverride("skills.detail", {
+                        skill: skillName,
+                    });
+                } catch (detailErr) {
+                    if (!isMethodNotFoundError(detailErr)) {
+                        throw detailErr;
+                    }
+                    response = await requestOverride("gateway.skills.info", {
+                        skill: skillName,
+                    });
+                }
+                const payload = response && response.payload ? response.payload : response;
+                state.skillsDetailResult = payload && typeof payload === "object"
+                    ? payload
+                    : null;
+                return state.skillsDetailResult;
+            } catch (err) {
+                state.skillsDetailError = resolveToolsErrorMessage(err, "skill detail");
+                state.lastError = state.skillsDetailError;
+                return state.skillsDetailResult;
+            } finally {
+                state.skillsDetailLoading = false;
+                onStateUpdated();
+            }
+        }
+
+        async function installSkill(skill, options) {
+            const skillName = String(skill || "").trim();
+            const opts = options || {};
+            const requestOverride = typeof opts.requestOverride === "function"
+                ? opts.requestOverride
+                : request;
+            if (!skillName || !requestOverride || !state.connected || state.skillsInstallBusy) {
+                return null;
+            }
+
+            state.skillsInstallBusy = true;
+            state.skillsInstallStatus = null;
+            state.skillsHubError = null;
+            onStateUpdated();
+            try {
+                let response;
+                try {
+                    response = await requestOverride("gateway.skills.install.execute", {
+                        skill: skillName,
+                    });
+                } catch (execErr) {
+                    if (!isMethodNotFoundError(execErr)) {
+                        throw execErr;
+                    }
+                    response = await requestOverride("skills.install", {
+                        skill: skillName,
+                    });
+                }
+                const payload = response && response.payload ? response.payload : response;
+                state.skillsInstallStatus = JSON.stringify(payload || {}, null, 2);
+                return payload;
+            } catch (err) {
+                state.skillsInstallStatus = null;
+                state.skillsHubError = resolveToolsErrorMessage(err, "skills install");
+                state.lastError = state.skillsHubError;
+                return null;
+            } finally {
+                state.skillsInstallBusy = false;
+                onStateUpdated();
+            }
+        }
+
+        async function updateSkillConfig(options) {
+            const opts = options || {};
+            const requestOverride = typeof opts.requestOverride === "function"
+                ? opts.requestOverride
+                : request;
+            const rawPayload = String(opts.payload != null ? opts.payload : state.skillsEditPayload || "").trim();
+            if (!requestOverride || !state.connected || state.skillsEditBusy) {
+                return null;
+            }
+
+            let parsedPayload = {};
+            try {
+                parsedPayload = rawPayload ? JSON.parse(rawPayload) : {};
+                if (!parsedPayload || typeof parsedPayload !== "object" || Array.isArray(parsedPayload)) {
+                    throw new Error("payload must be JSON object");
+                }
+            } catch (parseErr) {
+                state.skillsEditError = `Invalid JSON payload: ${String(parseErr.message || parseErr)}`;
+                state.skillsEditStatus = null;
+                onStateUpdated();
+                return null;
+            }
+
+            state.skillsEditBusy = true;
+            state.skillsEditError = null;
+            state.skillsEditStatus = null;
+            onStateUpdated();
+            try {
+                const response = await requestOverride("skills.update", parsedPayload);
+                const payload = response && response.payload ? response.payload : response;
+                state.skillsEditStatus = JSON.stringify(payload || {}, null, 2);
+                return payload;
+            } catch (err) {
+                state.skillsEditError = resolveToolsErrorMessage(err, "skills update");
+                state.lastError = state.skillsEditError;
+                return null;
+            } finally {
+                state.skillsEditBusy = false;
                 onStateUpdated();
             }
         }
@@ -4117,6 +4341,13 @@
             state.agentSkillsResult = null;
             state.agentSkillsReport = null;
             state.agentSkillsAgentId = null;
+            state.skillsHubResults = [];
+            state.skillsHubError = null;
+            state.skillsDetailResult = null;
+            state.skillsDetailError = null;
+            state.skillsInstallStatus = null;
+            state.skillsEditError = null;
+            state.skillsEditStatus = null;
             state.agentChannelsResult = null;
             state.agentCronResult = null;
             state.agentDreamingResult = null;
@@ -4223,6 +4454,10 @@
             loadAgentFiles,
             loadAgentFileContent,
             loadAgentSkills,
+            searchSkillsHub,
+            loadSkillDetail,
+            installSkill,
+            updateSkillConfig,
             loadNodes,
             loadPresence,
             loadUsage,
@@ -5869,6 +6104,92 @@
             assertRegression(String(state.agentSkillsError || "").indexOf("skills unavailable") >= 0,
                 "agent-skills loader should capture stringified error semantics");
             summary.push("agent-skills error lifecycle");
+        }
+
+        {
+            const state = createRegressionState();
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+            state.skillsHubQuery = "weather";
+            const pending = controller.searchSkillsHub();
+            const searchCall = harness.takeNextCall("skills.search");
+            searchCall.deferred.resolve({
+                payload: {
+                    skills: [],
+                    count: 0,
+                },
+            });
+            await pending;
+
+            assertRegression(Array.isArray(state.skillsHubResults) && state.skillsHubResults.length === 0,
+                "skills search should preserve explicit empty payload result");
+            summary.push("skills search empty");
+        }
+
+        {
+            const state = createRegressionState();
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+            const pending = controller.installSkill("weather");
+            const installCall = harness.takeNextCall("gateway.skills.install.execute");
+            installCall.deferred.resolve({
+                payload: {
+                    skill: "weather",
+                    executed: true,
+                    warning: "none",
+                },
+            });
+            await pending;
+
+            assertRegression(state.skillsInstallBusy === false && String(state.skillsInstallStatus || "").indexOf("\"skill\": \"weather\"") >= 0,
+                "skills install success should capture payload status");
+            summary.push("skills install success");
+        }
+
+        {
+            const state = createRegressionState();
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+            const pending = controller.installSkill("weather");
+            const installCall = harness.takeNextCall("gateway.skills.install.execute");
+            installCall.deferred.reject(new Error("install denied"));
+            await pending;
+
+            assertRegression(state.skillsInstallBusy === false && String(state.skillsHubError || "").indexOf("install denied") >= 0,
+                "skills install failure should bind error text");
+            summary.push("skills install failure");
+        }
+
+        {
+            const state = createRegressionState();
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+            state.skillsEditPayload = "{\"skill\":\"weather\",\"enabled\":true}";
+            const pending = controller.updateSkillConfig();
+            const updateCall = harness.takeNextCall("skills.update");
+            updateCall.deferred.resolve({
+                payload: {
+                    updated: true,
+                    hash: "skills-1",
+                },
+            });
+            await pending;
+
+            assertRegression(state.skillsEditBusy === false && String(state.skillsEditStatus || "").indexOf("\"updated\": true") >= 0,
+                "skills edit should store round-trip response payload");
+            summary.push("skills edit roundtrip");
         }
 
         {

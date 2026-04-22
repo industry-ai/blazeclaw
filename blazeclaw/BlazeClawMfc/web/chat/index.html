@@ -1058,7 +1058,7 @@
                         rows.push("<div class=\"agents-row\">Loading skills...</div>");
                     }
                     if (state.agentSkillsError) {
-                        rows.push(`<div class=\"agents-row error\">${state.agentSkillsError}</div>`);
+                        rows.push(`<div class=\"agents-row error\">${escapeHtml(state.agentSkillsError)}</div>`);
                     }
 
                     const skillsResult = state.agentSkillsResult || null;
@@ -1074,6 +1074,63 @@
                     rows.push(`<div class=\"agents-row\">Skills report agent: ${String(state.agentSkillsAgentId || "(none)")}</div>`);
                     rows.push(`<div class=\"agents-row\">Skills report entries: ${reportSkills.length}</div>`);
                     rows.push(`<div class=\"agents-row\">Skill commands (derived): ${commands.length}</div>`);
+                    rows.push("<div class=\"agents-row\">Hub/Install/Edit baseline: skills.search + skills.detail/gateway.skills.info + gateway.skills.install.execute + skills.update</div>");
+
+                    const hubQuery = String(state.skillsHubQuery || "");
+                    const hubResults = Array.isArray(state.skillsHubResults)
+                        ? state.skillsHubResults
+                        : [];
+                    const selectedSkill = state.skillsDetailResult && typeof state.skillsDetailResult === "object"
+                        ? String(state.skillsDetailResult.skill || state.skillsDetailResult.skillKey || "").trim()
+                        : "";
+                    rows.push("<div class=\"agents-row\">"
+                        + `<input type=\"text\" data-skills-field=\"query\" placeholder=\"Search skills (optional query)\" value=\"${escapeHtml(hubQuery)}\" style=\"min-width:260px;\"/> `
+                        + `<button class=\"agents-chip\" data-skills-action=\"search\"${state.skillsHubLoading ? " disabled" : ""}>Search</button> `
+                        + `<button class=\"agents-chip\" data-skills-action=\"refresh\">Refresh Status</button>`
+                        + "</div>");
+                    if (state.skillsHubLoading) {
+                        rows.push("<div class=\"agents-row\">Searching skills hub...</div>");
+                    }
+                    if (state.skillsHubError) {
+                        rows.push(`<div class=\"agents-row error\">${escapeHtml(state.skillsHubError)}</div>`);
+                    }
+
+                    rows.push(`<div class=\"agents-row\">Hub matches: ${hubResults.length}</div>`);
+                    if (hubResults.length > 0) {
+                        const preview = hubResults.slice(0, 8).map((entry) => {
+                            const skill = String(entry && entry.skill || entry && entry.name || "").trim();
+                            const label = String(entry && entry.name || skill || "(unnamed)");
+                            const description = String(entry && entry.description || "").trim();
+                            return `<button class=\"agents-chip\" data-skills-action=\"detail\" data-skill-key=\"${escapeHtml(skill)}\" title=\"${escapeHtml(description)}\">${escapeHtml(label)}</button>`;
+                        }).join(" ");
+                        rows.push(`<div class=\"agents-row\">${preview}</div>`);
+                    }
+
+                    rows.push("<div class=\"agents-row\">"
+                        + `<button class=\"agents-chip\" data-skills-action=\"install\" data-skill-key=\"${escapeHtml(selectedSkill)}\"${selectedSkill ? "" : " disabled"}${state.skillsInstallBusy ? " disabled" : ""}>Install Selected</button> `
+                        + `<button class=\"agents-chip\" data-skills-action=\"edit\"${state.skillsEditBusy ? " disabled" : ""}>Apply JSON Update</button>`
+                        + "</div>");
+                    rows.push("<div class=\"agents-row\">"
+                        + `<textarea data-skills-field=\"editPayload\" rows=\"5\" style=\"width:100%;\" placeholder='{\"skill\":\"example\",\"enabled\":true}'>${escapeHtml(String(state.skillsEditPayload || "{}"))}</textarea>`
+                        + "</div>");
+                    if (state.skillsDetailLoading) {
+                        rows.push("<div class=\"agents-row\">Loading skill detail...</div>");
+                    }
+                    if (state.skillsDetailError) {
+                        rows.push(`<div class=\"agents-row error\">${escapeHtml(state.skillsDetailError)}</div>`);
+                    }
+                    if (state.skillsDetailResult) {
+                        rows.push(`<div class=\"agents-row\"><pre style=\"white-space:pre-wrap;margin:0;\">${escapeHtml(JSON.stringify(state.skillsDetailResult, null, 2))}</pre></div>`);
+                    }
+                    if (state.skillsInstallStatus) {
+                        rows.push(`<div class=\"agents-row\"><pre style=\"white-space:pre-wrap;margin:0;\">${escapeHtml(String(state.skillsInstallStatus))}</pre></div>`);
+                    }
+                    if (state.skillsEditError) {
+                        rows.push(`<div class=\"agents-row error\">${escapeHtml(state.skillsEditError)}</div>`);
+                    }
+                    if (state.skillsEditStatus) {
+                        rows.push(`<div class=\"agents-row\"><pre style=\"white-space:pre-wrap;margin:0;\">${escapeHtml(String(state.skillsEditStatus))}</pre></div>`);
+                    }
                 }
 
                 if (panel === "channels") {
@@ -1713,6 +1770,68 @@
                             panel: state.agentsPanel,
                         });
                         void agentsController.loadPanelDataForCurrentAgent();
+                    });
+                });
+
+                state.agentsSurfaceEl.querySelectorAll("[data-skills-field]").forEach((el) => {
+                    const field = String(el.getAttribute("data-skills-field") || "").trim();
+                    if (!field) {
+                        return;
+                    }
+                    el.addEventListener("input", () => {
+                        const value = String(el.value || "");
+                        if (field === "query") {
+                            state.skillsHubQuery = value;
+                            return;
+                        }
+                        if (field === "editPayload") {
+                            state.skillsEditPayload = value;
+                        }
+                    });
+                });
+
+                state.agentsSurfaceEl.querySelectorAll("[data-skills-action]").forEach((el) => {
+                    el.addEventListener("click", () => {
+                        const action = String(el.getAttribute("data-skills-action") || "").trim();
+                        if (!action) {
+                            return;
+                        }
+                        const skill = String(el.getAttribute("data-skill-key") || "").trim();
+                        emitAgentsTelemetry("skills.action", {
+                            action,
+                            panel: state.agentsPanel,
+                            skill: skill || null,
+                        });
+
+                        if (action === "refresh") {
+                            void agentsController.loadPanelDataForCurrentAgent();
+                            return;
+                        }
+                        if (action === "search") {
+                            void agentsController.searchSkillsHub({
+                                query: String(state.skillsHubQuery || ""),
+                            });
+                            return;
+                        }
+                        if (action === "detail") {
+                            if (!skill) {
+                                return;
+                            }
+                            void agentsController.loadSkillDetail(skill);
+                            return;
+                        }
+                        if (action === "install") {
+                            if (!skill) {
+                                return;
+                            }
+                            void agentsController.installSkill(skill);
+                            return;
+                        }
+                        if (action === "edit") {
+                            void agentsController.updateSkillConfig({
+                                payload: String(state.skillsEditPayload || ""),
+                            });
+                        }
                     });
                 });
 

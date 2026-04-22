@@ -50,6 +50,8 @@ Observability baseline is available in the WebView agents control-plane as a sec
 
 Devices baseline is available in the WebView agents control-plane as a `Devices` tab, wiring `device.pair.list` with approve/reject/remove actions (`device.pair.approve`, `device.pair.reject`, `device.pair.remove`) for operator smoke coverage.
 
+Skills-depth baseline is available in the WebView agents control-plane as a `Skills` panel surface, wiring `skills.search`, `skills.detail` (with `gateway.skills.info` fallback), `gateway.skills.install.execute` (with `skills.install` fallback), and `skills.update` for JSON edit/install smoke coverage.
+
 ---
 
 ## Quick diagnostic checklist
@@ -84,3 +86,4 @@ Devices baseline is available in the WebView agents control-plane as a `Devices`
 | 2026-04-22 | Phase F update: documented WebView exec-approval queue/actions using `gateway.tools.call.execute` for `email.schedule` tokens. |
 | 2026-04-22 | Phase G update: documented secured WebView observability tab and its health/logs/debug RPC bindings. |
 | 2026-04-22 | Phase H update: documented WebView devices tab baseline and `device.pair.*` action bindings. |
+| 2026-04-22 | Phase I update: documented WebView skills-depth baseline with search/detail/install/update RPC bindings and fallback aliases. |
