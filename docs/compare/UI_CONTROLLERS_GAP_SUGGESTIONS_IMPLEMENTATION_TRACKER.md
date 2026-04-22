@@ -15,7 +15,7 @@ Use this file as a **working checklist**. Update the status column when work lan
 | 1 | Close remaining RPC naming drift | ☑ Done | Canonical `sessions.list` / `sessions.create` / `models.list` / `skills.commands` in `chat-controller.js`; gateway aliases + request validators; see `OPERATOR_WEBVIEW_GATEWAY_TRANSPORT.md`. |
 | 2 | Share chat event semantics (+ optional golden tests) | ◐ In progress | `NO_REPLY` on cross-run finals, deterministic stream-final transcript commit, and repair-only reconcile in `chat-events.js`; matrix in `CHAT_EVENTS_SEMANTICS_MATRIX.md`; golden OpenClaw fixtures still optional. |
 | 3 | Structured transcript in WebView (optional) | ☑ Done | Structured schema widened (`id`/`sessionKey`/`runId`/`source`/`terminalState`), stream-final deterministic commits, and transcript-driven renderer behind feature flag (`?structuredTranscript=1` / localStorage toggle). |
-| 4 | Port high-value controllers incrementally | ◐ In progress | Sessions + exec-approval + observability + devices + skills-depth + agent-files write WebView baselines landed; tracked in `UI_CONTROLLERS_PHASE0_DECISION_TRACKER.md` for remaining deeper governance/native UX work. |
+| 4 | Port high-value controllers incrementally | ◐ In progress | Sessions + exec-approval + observability + devices + skills-depth + agent-files write WebView baselines landed; Phase K reduced agents/channels/cron/dreaming/nodes/presence/usage to polish-only follow-ups. Remaining work is deeper governance/native UX scope tracked in `UI_CONTROLLERS_PHASE0_DECISION_TRACKER.md`. |
 | 5 | Document transport modes for operators | ☑ Done | `blazeclaw/docs/OPERATOR_WEBVIEW_GATEWAY_TRANSPORT.md`. |
 
 Status legend: ☐ Not started · ◐ In progress · ☑ Done  
@@ -178,6 +178,12 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 - [x] Added optimistic save path via `gateway.agents.files.set` with rollback-on-error behavior and status/error feedback.
 - [x] Added synthetic regressions for save success and conflict/error rollback flows in `agents-controller.js`.
 
+### Phase K control-plane depth/polish triage (2026-04-22)
+
+- [x] Audited control-plane rows for agents/channels/cron/dreaming/nodes/presence/usage against current parity status.
+- [x] Converted remaining K-scope follow-ups in `ui.controllers.md` §5 from broad “depth” wording into explicit polish-only bullets.
+- [x] Confirmed no remaining Tier-1 blocker phrasing remains in those K-scope rows; residual work is now explicitly polish/backlog.
+
 ### Phase C detached-send landing (2026-04-22)
 
 - [x] Added `/btw` local command and `sendDetachedMessage()` helper in `chat-controller.js`.
@@ -228,3 +234,4 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 | 2026-04-22 | Phase H completion: WebView devices baseline landed (`device.pair.list` + approve/reject/remove actions) with device panel interaction and regression coverage. |
 | 2026-04-22 | Phase I completion: WebView skills-depth baseline landed (`skills.search`, `skills.detail`/`gateway.skills.info`, install execute fallback, and `skills.update`) with action guards and regression coverage. |
 | 2026-04-22 | Phase J completion: WebView agent-files write baseline landed (`gateway.agents.files.set` save/reload editing flow) with optimistic rollback semantics and regression coverage. |
+| 2026-04-22 | Phase K completion: control-plane depth/polish triage landed, shrinking K-scope matrix pending entries to explicit polish-only bullets in `ui.controllers.md`. |

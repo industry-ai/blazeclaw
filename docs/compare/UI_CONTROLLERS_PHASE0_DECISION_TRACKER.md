@@ -75,6 +75,7 @@ Quick drill-down references:
 - Phase H devices parity (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for baseline scope (WebView devices tab with `device.pair.list` inventory + approve/reject/remove actions and regression coverage)
 - Phase I skills parity (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for baseline scope (WebView skills panel now supports `skills.search`, `skills.detail`/`gateway.skills.info`, `gateway.skills.install.execute`/`skills.install`, and `skills.update` with regression coverage)
 - Phase J agent-files write parity (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for baseline scope (WebView files panel now supports editable file content + save/reload flow using `gateway.agents.files.set` with optimistic rollback-on-error behavior and regression coverage)
+- Phase K control-plane depth/polish triage (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for this scope (agents/channels/cron/dreaming/nodes/presence/usage rows now carry explicit polish-only follow-up bullets; no remaining Tier-1 blockers in these matrix rows)
 
 ## Phase A baseline freeze (2026-04-22)
 
