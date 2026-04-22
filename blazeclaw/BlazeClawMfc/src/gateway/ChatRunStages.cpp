@@ -186,6 +186,14 @@ namespace blazeclaw::gateway {
 			context.deliver = false;
 		}
 
+		bool detached = false;
+		if (json::FindBoolField(context.paramsJson.value(), "detached", detached)) {
+			context.detached = detached;
+		}
+		else {
+			context.detached = false;
+		}
+
 		std::string routeChannel;
 		json::FindStringField(context.paramsJson.value(), "originatingChannel", routeChannel);
 		context.routeChannel = routeChannel;

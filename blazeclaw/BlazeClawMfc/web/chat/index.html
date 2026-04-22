@@ -199,6 +199,39 @@
                 color: #ffd48a;
             }
 
+        .detached-notices {
+            border-top: 1px solid #2b2b2b;
+            border-bottom: 1px solid #2b2b2b;
+            background: #1a1a1a;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 120px;
+            overflow: auto;
+        }
+
+            .detached-notices[hidden] {
+                display: none;
+            }
+
+        .detached-notice {
+            border: 1px solid #3b3b3b;
+            border-left: 3px solid #7db8ff;
+            border-radius: 6px;
+            padding: 6px 8px;
+            font-size: 12px;
+            color: #cfe5ff;
+            background: #232323;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+            .detached-notice.queued {
+                border-left-color: #ffd48a;
+                color: #ffe3b4;
+            }
+
         .composer {
             display: grid;
             grid-template-columns: 1fr auto auto auto auto;
@@ -302,6 +335,7 @@
             <div id="agentsSurface" class="agents-surface"></div>
         </div>
         <div id="messages" class="messages"></div>
+        <div id="detachedNotices" class="detached-notices" hidden></div>
         <div class="composer">
             <div id="slashMenu" class="slash-menu"></div>
             <textarea id="input" placeholder="Type a message..."></textarea>
@@ -338,6 +372,7 @@
                 assistantName: "Assistant",
                 assistantAvatar: "A",
                 assistantAgentId: null,
+                detachedNotices: [],
                 toolTimelineByRequest: new Map(),
                 bridgeQueue: [],
                 pending: new Map(),
@@ -349,6 +384,7 @@
             const statusEl = document.getElementById("status");
             const assistantIdentityEl = document.getElementById("assistantIdentity");
             const messagesEl = document.getElementById("messages");
+            const detachedNoticesEl = document.getElementById("detachedNotices");
             const structuredTranscriptRenderEnabled = resolveStructuredTranscriptRenderEnabled();
             state.inputEl = document.getElementById("input");
             state.sendBtn = document.getElementById("sendBtn");
@@ -366,6 +402,57 @@
 
             function setStatus(text) {
                 statusEl.textContent = text;
+            }
+
+            function renderDetachedNotices() {
+                if (!detachedNoticesEl) {
+                    return;
+                }
+
+                const notices = Array.isArray(state.detachedNotices)
+                    ? state.detachedNotices
+                    : [];
+                if (!notices.length) {
+                    detachedNoticesEl.hidden = true;
+                    detachedNoticesEl.innerHTML = "";
+                    return;
+                }
+
+                detachedNoticesEl.hidden = false;
+                detachedNoticesEl.innerHTML = "";
+                for (const notice of notices) {
+                    const row = document.createElement("div");
+                    const kind = String(notice && notice.kind || "sent");
+                    row.className = `detached-notice ${kind}`;
+                    row.textContent = String(notice && notice.text || "");
+                    detachedNoticesEl.appendChild(row);
+                }
+                detachedNoticesEl.scrollTop = detachedNoticesEl.scrollHeight;
+            }
+
+            function appendDetachedNotice(input) {
+                const source = input && typeof input === "object"
+                    ? input
+                    : {};
+                const kind = String(source.kind || "sent").trim().toLowerCase();
+                const text = String(source.text || "").trim();
+                if (!text) {
+                    return;
+                }
+
+                if (!Array.isArray(state.detachedNotices)) {
+                    state.detachedNotices = [];
+                }
+                const prefix = kind === "queued" ? "[queued] " : "[sent] ";
+                state.detachedNotices.push({
+                    kind: kind === "queued" ? "queued" : "sent",
+                    text: `${prefix}${text}`,
+                    ts: Date.now(),
+                });
+                if (state.detachedNotices.length > 20) {
+                    state.detachedNotices.splice(0, state.detachedNotices.length - 20);
+                }
+                renderDetachedNotices();
             }
 
             function renderAssistantIdentity() {
@@ -1692,6 +1779,7 @@
                 renderAgentsTabs();
                 renderAgentsSurface();
                 syncNodesPolling();
+                renderDetachedNotices();
             }
             const controller = window.BlazeClawChatController.createController({
                 state,
@@ -1701,6 +1789,7 @@
                 updateComposerState,
                 clearMessages,
                 setInputValue,
+                onDetachedNotice: appendDetachedNotice,
             });
 
             if (resolveAssistantRegressionChecksEnabled() &&

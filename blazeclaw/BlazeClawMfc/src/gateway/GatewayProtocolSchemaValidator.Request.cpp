@@ -1395,6 +1395,13 @@ namespace blazeclaw::gateway::protocol {
 					"boolean") ||
 				!RequireFieldKindIfPresent(
 					fieldKinds,
+					"detached",
+					JsonFieldKind::Boolean,
+					issue,
+					"chat.send",
+					"boolean") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
 					"originatingChannel",
 					JsonFieldKind::String,
 					issue,
@@ -1538,6 +1545,7 @@ namespace blazeclaw::gateway::protocol {
 					field == "forceError" ||
 					field == "attachments" ||
 					field == "deliver" ||
+					field == "detached" ||
 					field == "originatingChannel" ||
 					field == "originatingTo" ||
 					field == "clientMode" ||

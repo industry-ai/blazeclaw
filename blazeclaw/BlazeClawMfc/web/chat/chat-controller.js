@@ -294,6 +294,9 @@
         const updateComposerState = opts.updateComposerState || function () { };
         const clearMessages = opts.clearMessages || function () { };
         const setInputValue = opts.setInputValue || function () { };
+        const onDetachedNotice = typeof opts.onDetachedNotice === "function"
+            ? opts.onDetachedNotice
+            : function () { };
 
         state.sessionOptions = Array.isArray(state.sessionOptions)
             ? state.sessionOptions
@@ -698,6 +701,7 @@
                 { name: "session", description: "Switch active session" },
                 { name: "model", description: "Switch active model" },
                 { name: "thinking", description: "Set thinking level: low, normal, high" },
+                { name: "btw", description: "Send detached side-channel message (no local user bubble)" },
                 { name: "abort", description: "Abort active run" },
             ];
 
@@ -834,6 +838,16 @@
                 return { handled: true };
             }
 
+            if (command === "btw") {
+                const detachedMessage = args.join(" ").trim();
+                if (!detachedMessage) {
+                    addMessage("usage: /btw <message>", "error");
+                    return { handled: true };
+                }
+                await sendDetachedMessage(detachedMessage);
+                return { handled: true };
+            }
+
             if (command === "abort") {
                 await abort();
                 return { handled: true };
@@ -842,16 +856,34 @@
             return { handled: false };
         }
 
-        function queuePendingSend(message, attachments, forceError) {
+        function queuePendingSend(message, attachments, forceError, options) {
+            const sendOptions = options && typeof options === "object"
+                ? options
+                : {};
             state.sendQueue.push({
                 message,
                 attachments,
                 forceError,
+                detached: sendOptions.detached === true,
             });
             addMessage(`queued message (${state.sendQueue.length})`, "peer");
+            if (sendOptions.detached === true) {
+                onDetachedNotice({
+                    kind: "queued",
+                    text: String(message || "").trim(),
+                    sessionKey: state.sessionKey,
+                });
+            }
         }
 
-        async function sendPayload(message, attachments, forceError) {
+        async function sendPayload(message, attachments, forceError, options) {
+            const sendOptions = options && typeof options === "object"
+                ? options
+                : {};
+            const detached = sendOptions.detached === true;
+            const requestOverride = typeof sendOptions.requestOverride === "function"
+                ? sendOptions.requestOverride
+                : null;
             const userMessage = String(message || "").trim();
             const payloadAttachments = Array.isArray(attachments) ? attachments : [];
 
@@ -859,12 +891,12 @@
                 return;
             }
 
-            if (userMessage) {
+            if (userMessage && !detached) {
                 pushInputHistory(userMessage);
                 addMessage(userMessage, "self");
             }
 
-            if (payloadAttachments.length > 0) {
+            if (payloadAttachments.length > 0 && !detached) {
                 addMessage(
                     `[Attachment] ${payloadAttachments.map((item) => item.name).join(", ")}`,
                     "self");
@@ -890,16 +922,20 @@
                 .filter((x) => x !== null);
 
             try {
-                const sendResult = await request("chat.send", {
+                const sendResult = await requestWithOverride("chat.send", {
                     sessionKey: state.sessionKey,
                     message: userMessage,
-                    deliver: false,
+                    deliver: detached,
+                    detached,
                     idempotencyKey: state.runId,
                     forceError: Boolean(forceError),
                     model: state.selectedModel,
                     thinkingLevel: state.thinkingLevel,
+                    bodyForCommands: userMessage,
+                    bodyForAgent: userMessage,
+                    clientMode: "webchat",
                     attachments: apiAttachments,
-                });
+                }, requestOverride);
 
                 const serverRunId =
                     sendResult &&
@@ -941,12 +977,12 @@
             persistDraftForSession();
 
             if (state.runId) {
-                queuePendingSend(message, pendingAttachments, forceError);
+                queuePendingSend(message, pendingAttachments, forceError, { detached: false });
                 updateComposerState();
                 return;
             }
 
-            await sendPayload(message, pendingAttachments, forceError);
+            await sendPayload(message, pendingAttachments, forceError, { detached: false });
         }
 
         async function processSendQueue() {
@@ -959,7 +995,36 @@
                 return;
             }
 
-            await sendPayload(next.message, next.attachments, next.forceError);
+            await sendPayload(next.message, next.attachments, next.forceError, {
+                detached: next.detached === true,
+            });
+        }
+
+        async function sendDetachedMessage(message, options) {
+            const detachedMessage = String(message || "").trim();
+            if (!detachedMessage || !state.bridgeAvailable) {
+                return false;
+            }
+
+            const opts = options && typeof options === "object"
+                ? options
+                : {};
+            if (state.runId) {
+                queuePendingSend(detachedMessage, [], false, { detached: true });
+                updateComposerState();
+                return true;
+            }
+
+            await sendPayload(detachedMessage, [], false, {
+                detached: true,
+                requestOverride: opts.requestOverride,
+            });
+            onDetachedNotice({
+                kind: "sent",
+                text: detachedMessage,
+                sessionKey: state.sessionKey,
+            });
+            return true;
         }
 
         async function abort() {
@@ -1170,6 +1235,7 @@
             recallInputHistory,
             getSlashCommandHints,
             processSendQueue,
+            sendDetachedMessage,
             markTerminalRun,
             hasTerminalRun,
             scheduleHistoryReconcile,
@@ -1590,6 +1656,48 @@
                 parsed.includes("[Tool result: search_docs]"),
             "message parser should degrade tool blocks to stable text markers");
             summary.push("structured content degraded-text rendering");
+        }
+
+        {
+            const state = createRegressionState();
+            const messageRows = [];
+            const sendCalls = [];
+            const detachedNotices = [];
+            const controller = createController({
+                state,
+                addMessage: (text, kind) => {
+                    messageRows.push({ text: String(text || ""), kind: String(kind || "") });
+                },
+                onDetachedNotice: (notice) => {
+                    detachedNotices.push(notice);
+                },
+            });
+            const sent = await controller.sendDetachedMessage("side channel note", {
+                requestOverride: async (method, params) => {
+                    sendCalls.push({ method, params });
+                    return {
+                        payload: {
+                            runId: "detached-run-1",
+                        },
+                    };
+                },
+            });
+            assertRegression(sent === true,
+                "detached send helper should report success for non-empty messages");
+            assertRegression(sendCalls.length === 1 &&
+                sendCalls[0].method === "chat.send",
+            "detached send helper should call chat.send");
+            assertRegression(sendCalls[0].params &&
+                sendCalls[0].params.detached === true &&
+                sendCalls[0].params.deliver === true &&
+                sendCalls[0].params.clientMode === "webchat",
+            "detached send helper should set detached/deliver/clientMode request params");
+            assertRegression(messageRows.every((row) => row.kind !== "self"),
+                "detached send helper should avoid local self bubble rendering");
+            assertRegression(detachedNotices.length === 1 &&
+                detachedNotices[0].kind === "sent",
+            "detached send helper should emit side-channel notice callback events");
+            summary.push("detached send semantics");
         }
 
         {

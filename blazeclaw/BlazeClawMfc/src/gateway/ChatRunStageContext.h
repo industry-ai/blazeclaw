@@ -32,6 +32,7 @@ namespace blazeclaw::gateway {
 		bool hasExplicitSkillInvocation = false;
 		std::string idempotencyKey;
 		bool deliver = false;
+		bool detached = false;
 		std::string routeChannel;
 		std::string routeTo;
 		std::string clientMode;

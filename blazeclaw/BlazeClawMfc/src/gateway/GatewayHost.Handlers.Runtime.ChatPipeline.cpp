@@ -243,6 +243,7 @@ namespace blazeclaw::gateway {
 					const std::string message = stageContext.message;
 					const std::string normalizedMessage = stageContext.normalizedMessage;
 					const std::string idempotencyKey = stageContext.idempotencyKey;
+					const bool detachedSend = stageContext.detached;
 					const std::string clientConnectionId = stageContext.clientConnectionId;
 					const bool forceError = stageContext.forceError;
 					const bool hasAttachments = stageContext.hasAttachmentPayload;
@@ -262,7 +263,7 @@ namespace blazeclaw::gateway {
 							return;
 						}
 
-						if (!normalizedMessage.empty() || hasAttachments) {
+						if (!detachedSend && (!normalizedMessage.empty() || hasAttachments)) {
 							const auto userPersisted = transcriptStore.AppendUserMessage(
 								ChatTranscriptStore::AppendParams{
 									.sessionKey = sessionKey,
@@ -282,9 +283,11 @@ namespace blazeclaw::gateway {
 							}
 						}
 
-						PushHistoryMessageIfNew(
-							host.m_chatHistoryBySession[sessionKey],
-							BuildUserMessageJson(normalizedMessage, hasAttachments, nowMs));
+						if (!detachedSend) {
+							PushHistoryMessageIfNew(
+								host.m_chatHistoryBySession[sessionKey],
+								BuildUserMessageJson(normalizedMessage, hasAttachments, nowMs));
+						}
 						userTurnPersisted = true;
 						};
 
