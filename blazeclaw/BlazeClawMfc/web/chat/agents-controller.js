@@ -88,6 +88,24 @@
         if (!state.agentFileContentResult) {
             state.agentFileContentResult = null;
         }
+        if (typeof state.agentFileSelectedPath !== "string" && state.agentFileSelectedPath !== null) {
+            state.agentFileSelectedPath = null;
+        }
+        if (typeof state.agentFileEditDraft !== "string") {
+            state.agentFileEditDraft = "";
+        }
+        if (typeof state.agentFileEditBaseContent !== "string") {
+            state.agentFileEditBaseContent = "";
+        }
+        if (typeof state.agentFileSaveBusy !== "boolean") {
+            state.agentFileSaveBusy = false;
+        }
+        if (typeof state.agentFileSaveError !== "string" && state.agentFileSaveError !== null) {
+            state.agentFileSaveError = null;
+        }
+        if (typeof state.agentFileSaveStatus !== "string" && state.agentFileSaveStatus !== null) {
+            state.agentFileSaveStatus = null;
+        }
 
         if (typeof state.agentSkillsLoading !== "boolean") {
             state.agentSkillsLoading = false;
@@ -1775,6 +1793,17 @@
                 }
 
                 state.agentFileContentResult = res && res.payload ? res.payload : null;
+                const file = state.agentFileContentResult && state.agentFileContentResult.file &&
+                    typeof state.agentFileContentResult.file === "object"
+                    ? state.agentFileContentResult.file
+                    : null;
+                const resolvedFilePath = String(file && (file.path || file.name) || resolvedPath).trim();
+                const resolvedContent = String(file && file.content || "");
+                state.agentFileSelectedPath = resolvedFilePath || resolvedPath;
+                state.agentFileEditDraft = resolvedContent;
+                state.agentFileEditBaseContent = resolvedContent;
+                state.agentFileSaveError = null;
+                state.agentFileSaveStatus = null;
             } catch (err) {
                 if (shouldIgnoreResponse()) {
                     return;
@@ -1786,6 +1815,85 @@
                     state.agentFileContentLoadingKey = null;
                     state.agentFileContentLoading = false;
                 }
+                onStateUpdated();
+            }
+        }
+
+        function updateAgentFileDraft(content) {
+            state.agentFileEditDraft = String(content || "");
+            state.agentFileSaveError = null;
+            state.agentFileSaveStatus = null;
+            onStateUpdated();
+        }
+
+        async function selectAgentFile(params) {
+            const resolvedAgentId = String(params && params.agentId || state.agentsSelectedId || "").trim();
+            const resolvedPath = String(params && params.path || "").trim();
+            if (!resolvedAgentId || !resolvedPath) {
+                return;
+            }
+            await loadAgentFileContent({
+                agentId: resolvedAgentId,
+                path: resolvedPath,
+            });
+        }
+
+        async function saveAgentFileContent(params) {
+            const resolvedAgentId = String(params && params.agentId || state.agentsSelectedId || "").trim();
+            const resolvedPath = String(params && params.path || state.agentFileSelectedPath || "").trim();
+            const nextContent = String(params && Object.prototype.hasOwnProperty.call(params, "content")
+                ? params.content
+                : state.agentFileEditDraft || "");
+            if (!request ||
+                !state.connected ||
+                !resolvedAgentId ||
+                !resolvedPath ||
+                state.agentsPanel !== "files" ||
+                state.agentFileSaveBusy) {
+                return null;
+            }
+
+            const previousResult = state.agentFileContentResult && typeof state.agentFileContentResult === "object"
+                ? JSON.parse(JSON.stringify(state.agentFileContentResult))
+                : null;
+            const previousBaseContent = String(state.agentFileEditBaseContent || "");
+
+            state.agentFileSaveBusy = true;
+            state.agentFileSaveError = null;
+            state.agentFileSaveStatus = "Saving...";
+            if (state.agentFileContentResult &&
+                state.agentFileContentResult.file &&
+                typeof state.agentFileContentResult.file === "object") {
+                state.agentFileContentResult.file.content = nextContent;
+            }
+            onStateUpdated();
+
+            try {
+                const response = await request("gateway.agents.files.set", {
+                    agentId: resolvedAgentId,
+                    path: resolvedPath,
+                    content: nextContent,
+                });
+                const payload = response && response.payload ? response.payload : null;
+                state.agentFileContentResult = payload;
+                const savedFile = payload && payload.file && typeof payload.file === "object"
+                    ? payload.file
+                    : null;
+                const savedContent = String(savedFile && savedFile.content || nextContent);
+                state.agentFileEditBaseContent = savedContent;
+                state.agentFileEditDraft = savedContent;
+                state.agentFileSelectedPath = String(savedFile && (savedFile.path || savedFile.name) || resolvedPath).trim() || resolvedPath;
+                state.agentFileSaveStatus = "Saved";
+                return payload;
+            } catch (err) {
+                state.agentFileContentResult = previousResult;
+                state.agentFileEditBaseContent = previousBaseContent;
+                state.agentFileSaveError = resolveToolsErrorMessage(err, "agent file save");
+                state.lastError = state.agentFileSaveError;
+                state.agentFileSaveStatus = null;
+                return null;
+            } finally {
+                state.agentFileSaveBusy = false;
                 onStateUpdated();
             }
         }
@@ -4338,6 +4446,11 @@
             state.toolsEffectiveResultKey = null;
             state.agentFilesResult = null;
             state.agentFileContentResult = null;
+            state.agentFileSelectedPath = null;
+            state.agentFileEditDraft = "";
+            state.agentFileEditBaseContent = "";
+            state.agentFileSaveError = null;
+            state.agentFileSaveStatus = null;
             state.agentSkillsResult = null;
             state.agentSkillsReport = null;
             state.agentSkillsAgentId = null;
@@ -4453,6 +4566,9 @@
             loadToolsEffective,
             loadAgentFiles,
             loadAgentFileContent,
+            selectAgentFile,
+            updateAgentFileDraft,
+            saveAgentFileContent,
             loadAgentSkills,
             searchSkillsHub,
             loadSkillDetail,
@@ -5296,6 +5412,99 @@
             assertRegression(Boolean(state.agentSkillsResult),
                 "current tab response should remain after cross-tab request overlap");
             summary.push("cross-tab stale suppression");
+        }
+
+        {
+            const state = createRegressionState();
+            state.agentsPanel = "files";
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const loadPending = controller.loadPanelDataForCurrentAgent();
+            const listCall = harness.takeNextCall("gateway.agents.files.list");
+            listCall.deferred.resolve({
+                payload: {
+                    files: [
+                        {
+                            path: "README.md",
+                        },
+                    ],
+                },
+            });
+            const getCall = harness.takeNextCall("gateway.agents.files.get");
+            getCall.deferred.resolve({
+                payload: {
+                    file: {
+                        path: "README.md",
+                        content: "old content",
+                    },
+                },
+            });
+            await loadPending;
+            controller.updateAgentFileDraft("new content");
+
+            const savePending = controller.saveAgentFileContent({
+                agentId: "main",
+                path: "README.md",
+                content: "new content",
+            });
+            const setCall = harness.takeNextCall("gateway.agents.files.set");
+            setCall.deferred.resolve({
+                payload: {
+                    file: {
+                        path: "README.md",
+                        content: "new content",
+                    },
+                    saved: true,
+                },
+            });
+            await savePending;
+
+            assertRegression(state.agentFileSaveBusy === false &&
+                state.agentFileSaveStatus === "Saved" &&
+                state.agentFileEditBaseContent === "new content" &&
+                state.agentFileEditDraft === "new content",
+            "agent file save should update draft/base content after success");
+            summary.push("agent-files save success");
+        }
+
+        {
+            const state = createRegressionState();
+            state.agentsPanel = "files";
+            state.agentFileSelectedPath = "README.md";
+            state.agentFileEditDraft = "next content";
+            state.agentFileEditBaseContent = "stable content";
+            state.agentFileContentResult = {
+                file: {
+                    path: "README.md",
+                    content: "stable content",
+                },
+            };
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const savePending = controller.saveAgentFileContent({
+                agentId: "main",
+                path: "README.md",
+                content: "next content",
+            });
+            const setCall = harness.takeNextCall("gateway.agents.files.set");
+            setCall.deferred.reject(new Error("conflict detected"));
+            await savePending;
+
+            assertRegression(state.agentFileSaveBusy === false &&
+                String(state.agentFileSaveError || "").indexOf("conflict detected") >= 0 &&
+                state.agentFileContentResult &&
+                state.agentFileContentResult.file &&
+                state.agentFileContentResult.file.content === "stable content",
+            "agent file save should rollback optimistic content on error");
+            summary.push("agent-files save rollback");
         }
 
         {

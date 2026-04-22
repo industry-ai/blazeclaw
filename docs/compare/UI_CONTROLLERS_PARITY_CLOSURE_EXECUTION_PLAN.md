@@ -187,9 +187,9 @@ Parity is **“closed”** for a controller when all of the following hold:
 
 | Step | Procedure | Done |
 |------|-----------|------|
-| J.1 | Confirm gateway handler + validator for set/write. | [ ] |
-| J.2 | WebView: wire save from editor with optimistic UI + rollback on error. | [ ] |
-| J.3 | **Regression:** small file edit, conflict/error path. | [ ] |
+| J.1 | Confirm gateway handler + validator for set/write. | [x] |
+| J.2 | WebView: wire save from editor with optimistic UI + rollback on error. | [x] |
+| J.3 | **Regression:** small file edit, conflict/error path. | [x] |
 
 **Acceptance:** Mechanical row `agent-files.ts` updated to include `set`.
 
@@ -252,6 +252,7 @@ Append a row per meaningful milestone (merge or doc freeze).
 | 2026-04-22 | G (complete) | Landed secured WebView observability surface (`observability` tab) with health summary (`gateway.health` + `gateway.health.details` + `gateway.transport.status` + `last-heartbeat`), logs tail filtering/pause/export (`gateway.logs.tail`), and dev-only arbitrary method invoke controls plus polling/stale guards and regression fixtures. | `blazeclaw/BlazeClawMfc/web/chat/agents-controller.js`, `blazeclaw/BlazeClawMfc/web/chat/index.html`, `docs/compare/ui.controllers.md` |
 | 2026-04-22 | H (complete) | Landed devices baseline in WebView control-plane (`devices` tab) with `device.pair.list` inventory, selection controls, approve/reject/remove actions, and synthetic regressions for list + action flows. | `blazeclaw/BlazeClawMfc/web/chat/agents-controller.js`, `blazeclaw/BlazeClawMfc/web/chat/index.html`, `docs/compare/ui.controllers.md` |
 | 2026-04-22 | I (complete) | Landed WebView skills-depth baseline in agents control-plane with hub search (`skills.search`), detail (`skills.detail` + `gateway.skills.info` fallback), install (`gateway.skills.install.execute` with `skills.install` fallback), and JSON edit/update (`skills.update`) actions, plus busy/error guards and synthetic regressions for search-empty/install success-install failure/edit round-trip. | `blazeclaw/BlazeClawMfc/web/chat/agents-controller.js`, `blazeclaw/BlazeClawMfc/web/chat/index.html`, `docs/compare/ui.controllers.md` |
+| 2026-04-22 | J (complete) | Landed agent-files write baseline in WebView (`files` tab): selectable file list, editable content textarea, save/reload controls, and optimistic save with rollback on error via `gateway.agents.files.set`, plus synthetic regressions for save success and conflict rollback. | `blazeclaw/BlazeClawMfc/web/chat/agents-controller.js`, `blazeclaw/BlazeClawMfc/web/chat/index.html`, `docs/compare/ui.controllers.md` |
 
 ---
 

@@ -52,6 +52,8 @@ Devices baseline is available in the WebView agents control-plane as a `Devices`
 
 Skills-depth baseline is available in the WebView agents control-plane as a `Skills` panel surface, wiring `skills.search`, `skills.detail` (with `gateway.skills.info` fallback), `gateway.skills.install.execute` (with `skills.install` fallback), and `skills.update` for JSON edit/install smoke coverage.
 
+Agent-files write baseline is available in the WebView agents control-plane as a `Files` panel surface, wiring `gateway.agents.files.list`, `gateway.agents.files.get`, and `gateway.agents.files.set` with editable content + save/reload controls (including optimistic rollback on save errors).
+
 ---
 
 ## Quick diagnostic checklist
@@ -87,3 +89,4 @@ Skills-depth baseline is available in the WebView agents control-plane as a `Ski
 | 2026-04-22 | Phase G update: documented secured WebView observability tab and its health/logs/debug RPC bindings. |
 | 2026-04-22 | Phase H update: documented WebView devices tab baseline and `device.pair.*` action bindings. |
 | 2026-04-22 | Phase I update: documented WebView skills-depth baseline with search/detail/install/update RPC bindings and fallback aliases. |
+| 2026-04-22 | Phase J update: documented WebView agent-files write baseline with `gateway.agents.files.set` save/reload editing flow. |

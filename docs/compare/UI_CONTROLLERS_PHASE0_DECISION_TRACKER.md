@@ -26,7 +26,7 @@ Freeze an implementation decision for each OpenClaw UI controller file:
 | `chat.ts` | WebView JS | Implemented baseline (`chat.send/history/abort`, stream handlers) | Product backlog: detached send + richer transcript parity |
 | `sessions.ts` | WebView JS | Not implemented as OpenClaw controller-equivalent | Product backlog: `sessions.list/subscribe/compaction` UI |
 | `agents.ts` | WebView JS | Implemented baseline multi-tab shell | Product backlog: Lit-depth polish |
-| `agent-files.ts` | WebView JS + MFC/C++ | Partial (`gateway.agents.files.list/get`) | Product backlog: `set` + deeper file UX |
+| `agent-files.ts` | WebView JS + MFC/C++ | WebView write baseline implemented (`gateway.agents.files.list/get/set`) | Richer file UX (conflict/diff ergonomics) remains follow-on |
 | `agent-identity.ts` | WebView JS | Focused parity implemented | Optional polish |
 | `agent-skills.ts` | WebView JS | Focused parity implemented | Product backlog: advanced skill management |
 | `assistant-identity.ts` | WebView JS | Focused parity implemented | Optional polish |
@@ -74,6 +74,7 @@ Quick drill-down references:
 - Phase G observability parity (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for baseline scope (secured WebView observability tab with `gateway.health`/`gateway.health.details`/`gateway.transport.status`/`last-heartbeat`, logs tail filter/pause/export, and debug method invoke controls)
 - Phase H devices parity (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for baseline scope (WebView devices tab with `device.pair.list` inventory + approve/reject/remove actions and regression coverage)
 - Phase I skills parity (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for baseline scope (WebView skills panel now supports `skills.search`, `skills.detail`/`gateway.skills.info`, `gateway.skills.install.execute`/`skills.install`, and `skills.update` with regression coverage)
+- Phase J agent-files write parity (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for baseline scope (WebView files panel now supports editable file content + save/reload flow using `gateway.agents.files.set` with optimistic rollback-on-error behavior and regression coverage)
 
 ## Phase A baseline freeze (2026-04-22)
 
