@@ -507,9 +507,16 @@ Assert-Contains -Text $webChatHtml -Needle 'id="abortBtn"' -Label "abort button 
 Assert-Contains -Text $webChatHtml -Needle 'id="sendErrBtn"' -Label "send error button present"
 Assert-Contains -Text $webChatHtml -Needle 'id="attachBtn"' -Label "attach button present"
 Assert-Contains -Text $webChatHtml -Needle 'id="attachInput"' -Label "attachment input present"
-Assert-Contains -Text $webChatHtml -Needle 'forceError' -Label "force error request path present"
-Assert-Contains -Text $webChatHtml -Needle 'mimeType' -Label "attachment mimeType mapping present"
-Assert-Contains -Text $webChatHtml -Needle 'content' -Label "attachment base64 content mapping present"
+
+$chatControllerPath = "blazeclaw/BlazeClawMfc/web/chat/chat-controller.js"
+if (-not (Test-Path $chatControllerPath)) {
+    throw "missing chat controller: $chatControllerPath"
+}
+
+$chatControllerJs = Get-Content -Path $chatControllerPath -Raw
+Assert-Contains -Text $chatControllerJs -Needle 'forceError' -Label "force error request path present"
+Assert-Contains -Text $chatControllerJs -Needle 'mimeType' -Label "attachment mimeType mapping present"
+Assert-Contains -Text $chatControllerJs -Needle 'content' -Label "attachment base64 content mapping present"
 
 if (-not (Test-GatewayReachability -Url $GatewayUrl)) {
     Write-Output "[INFO] Gateway endpoint is not reachable: $GatewayUrl"
@@ -816,7 +823,59 @@ Invoke-FlowWithSocket -FlowName "weatherEmailExecute" -FlowBody {
         throw "email.schedule approve output envelope mismatch"
     }
 
-    Write-Output "[PASS] weather + email execute flow"
+    $emailPrepareDenyReq = New-ReqFrame -Method "gateway.tools.call.execute" -Params @{
+        tool = "email.schedule"
+        args = @{
+            action = "prepare"
+            to = "jicheng@whu.edu.cn"
+            subject = "Wuhan weather report deny path"
+            body = "Deny-path smoke check for email approval."
+            sendAt = "14:00"
+        }
+    }
+
+    Send-Req -Socket $socket -Frame $emailPrepareDenyReq
+    $emailPrepareDenyRes = Wait-Response -Socket $socket -RequestId $emailPrepareDenyReq.id -CapturedEvents ([ref]$events.Value)
+    if (-not $emailPrepareDenyRes.ok) {
+        throw "gateway.tools.call.execute email.schedule prepare (deny path) failed"
+    }
+
+    if ([string]$emailPrepareDenyRes.payload.status -ne "needs_approval") {
+        throw "email.schedule prepare (deny path) did not return needs_approval"
+    }
+
+    $emailPrepareDenyEnvelope = [string]$emailPrepareDenyRes.payload.output | ConvertFrom-Json
+    $denyApprovalToken = [string]$emailPrepareDenyEnvelope.requiresApproval.approvalToken
+    if ([string]::IsNullOrWhiteSpace($denyApprovalToken)) {
+        throw "email.schedule prepare (deny path) output missing approvalToken"
+    }
+
+    $emailDenyReq = New-ReqFrame -Method "gateway.tools.call.execute" -Params @{
+        tool = "email.schedule"
+        args = @{
+            action = "approve"
+            approvalToken = $denyApprovalToken
+            approve = $false
+        }
+    }
+
+    Send-Req -Socket $socket -Frame $emailDenyReq
+    $emailDenyRes = Wait-Response -Socket $socket -RequestId $emailDenyReq.id -CapturedEvents ([ref]$events.Value)
+    if (-not $emailDenyRes.ok) {
+        throw "gateway.tools.call.execute email.schedule deny failed"
+    }
+
+    if ([string]$emailDenyRes.payload.status -ne "cancelled") {
+        throw "email.schedule deny did not return cancelled"
+    }
+
+    $emailDenyEnvelope = [string]$emailDenyRes.payload.output | ConvertFrom-Json
+    if ([string]$emailDenyEnvelope.status -ne "cancelled") {
+        throw "email.schedule deny output envelope mismatch"
+    }
+
+    Write-Output "[PASS] weather + email execute flow (pending->deny)"
+    Write-Output "[PASS] weather + email execute flow (pending->approve + pending->deny)"
 }
 }
 
@@ -939,6 +998,7 @@ Write-Output "- abort: pass"
 Write-Output "- forceError: pass"
 Write-Output "- lobsterExecute: pass"
 Write-Output "- weatherEmailExecute: pass"
+Write-Output "- weatherEmailExecute.denyBranch: pass"
 Write-Output "- lifecycleCatalog: pass"
 Write-Output "- orchestrationPrompt: pass"
 Write-Output "- lobsterExecute: (verified when run)"
