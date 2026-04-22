@@ -479,6 +479,71 @@ TEST_CASE("P1 parity methods: skills and update-run are runtime-backed", "[gatew
 	CHECK(updateRun.payloadJson.value().find("\"runId\":\"update-run-") != std::string::npos);
 }
 
+TEST_CASE("P1 parity methods: config.apply and node.pending enqueue-drain are stateful", "[gateway][parity][p1]")
+{
+	GatewayHost host;
+	REQUIRE(host.StartLocalDispatchOnly());
+
+	const auto configGetBefore = Route(host, "p1-config-get-before", "config.get");
+	REQUIRE(configGetBefore.ok);
+	REQUIRE(configGetBefore.payloadJson.has_value());
+	const std::string hashBefore = ExtractJsonStringField(configGetBefore.payloadJson.value(), "hash");
+	REQUIRE_FALSE(hashBefore.empty());
+
+	const auto configApply = Route(
+		host,
+		"p1-config-apply",
+		"config.apply",
+		"{\"baseHash\":\"" + hashBefore + "\",\"raw\":\"{\\\"dreaming\\\":{\\\"enabled\\\":true}}\"}");
+	REQUIRE(configApply.ok);
+	REQUIRE(configApply.payloadJson.has_value());
+	CHECK(configApply.payloadJson.value().find("\"applied\":true") != std::string::npos);
+	CHECK(configApply.payloadJson.value().find("\"updated\":true") != std::string::npos);
+	CHECK(configApply.payloadJson.value().find("\"dreamingEnabled\":true") != std::string::npos);
+	const std::string hashAfter = ExtractJsonStringField(configApply.payloadJson.value(), "hash");
+	REQUIRE_FALSE(hashAfter.empty());
+	CHECK(hashAfter != hashBefore);
+
+	const auto enqueue = Route(
+		host,
+		"p1-node-pending-enqueue",
+		"node.pending.enqueue",
+		R"({"nodeId":"ios-offline-node-3","command":"canvas.present","idempotencyKey":"idem-p1-enqueue"})");
+	REQUIRE(enqueue.ok);
+	REQUIRE(enqueue.payloadJson.has_value());
+	CHECK(enqueue.payloadJson.value().find("\"accepted\":true") != std::string::npos);
+	CHECK(enqueue.payloadJson.value().find("\"queueDepth\":1") != std::string::npos);
+
+	const auto drain = Route(
+		host,
+		"p1-node-pending-drain",
+		"node.pending.drain",
+		R"({"nodeId":"ios-offline-node-3"})");
+	REQUIRE(drain.ok);
+	REQUIRE(drain.payloadJson.has_value());
+	CHECK(drain.payloadJson.value().find("\"drained\":1") != std::string::npos);
+	CHECK(drain.payloadJson.value().find("\"remaining\":1") != std::string::npos);
+
+	const auto actionPull = Route(
+		host,
+		"p1-node-pending-pull-after-drain",
+		"node.pending.pull",
+		R"({"nodeId":"ios-offline-node-3","declaredCommands":["canvas.present"]})");
+	REQUIRE(actionPull.ok);
+	REQUIRE(actionPull.payloadJson.has_value());
+	const std::string drainedActionId = ExtractFirstActionId(actionPull.payloadJson.value());
+	REQUIRE_FALSE(drainedActionId.empty());
+
+	const auto drainAck = Route(
+		host,
+		"p1-node-pending-drain-ack",
+		"node.pending.drain",
+		"{\"nodeId\":\"ios-offline-node-3\",\"drainedIds\":[\"" + drainedActionId + "\"]}");
+	REQUIRE(drainAck.ok);
+	REQUIRE(drainAck.payloadJson.has_value());
+	CHECK(drainAck.payloadJson.value().find("\"remaining\":0") != std::string::npos);
+}
+
 TEST_CASE("P2 parity methods: tts and secrets families are runtime-backed", "[gateway][parity][p2]")
 {
 	GatewayHost host;
@@ -576,4 +641,22 @@ TEST_CASE("P2 parity methods: doctor memory method family is routable", "[gatewa
 	REQUIRE(resetGroundedShortTerm.ok);
 	REQUIRE(resetGroundedShortTerm.payloadJson.has_value());
 	REQUIRE(resetGroundedShortTerm.payloadJson.value().find("\"target\":\"groundedShortTerm\"") != std::string::npos);
+}
+
+TEST_CASE("P2 parity methods: sessions.steer is runtime-backed", "[gateway][parity][p2]")
+{
+	GatewayHost host;
+	REQUIRE(host.StartLocalDispatchOnly());
+
+	const auto steer = Route(
+		host,
+		"p2-sessions-steer",
+		"sessions.steer",
+		R"({"sessionId":"main","message":"steer this run"})");
+	REQUIRE(steer.ok);
+	REQUIRE(steer.payloadJson.has_value());
+	REQUIRE(steer.payloadJson.value().find("\"sessionId\":\"main\"") != std::string::npos);
+	REQUIRE(steer.payloadJson.value().find("\"runId\":\"run-") != std::string::npos);
+	REQUIRE(steer.payloadJson.value().find("\"queued\":true") != std::string::npos);
+	REQUIRE(steer.payloadJson.value().find("\"interruptedActiveRun\":") != std::string::npos);
 }

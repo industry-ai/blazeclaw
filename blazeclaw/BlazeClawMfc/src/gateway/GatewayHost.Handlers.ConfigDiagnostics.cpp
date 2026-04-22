@@ -385,7 +385,42 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 			});
 
 		host.m_dispatcher.Register("config.apply", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"applied\":true,\"updated\":true}");
+			const RequestParamsView params(request.paramsJson);
+			const std::string baseHash = params.GetString("baseHash");
+			const std::string raw = params.GetString("raw");
+			if (raw.empty()) {
+				return protocol::ErrorResponse(
+					request,
+					protocol::ErrorShape{
+						.code = "invalid_request",
+						.message = "raw config payload required",
+						.detailsJson = std::nullopt,
+						.retryable = false,
+						.retryAfterMs = std::nullopt,
+					});
+			}
+
+			const bool currentEnabled = ReadFlagFile(ResolveDreamingEnabledFlagFilePath(), false);
+			const std::string currentHash = ReadOrCreateDreamingConfigHash();
+			if (!baseHash.empty() && baseHash != currentHash) {
+				return protocol::ErrorResponse(
+					request,
+					protocol::ErrorShape{
+						.code = "config_hash_mismatch",
+						.message = "Config hash mismatch. Refresh and retry.",
+						.detailsJson = "{\"expectedHash\":\"" + EscapeJsonString(currentHash) + "\"}",
+						.retryable = true,
+						.retryAfterMs = std::nullopt,
+					});
+			}
+
+			const bool nextEnabled = ExtractDreamingEnabledFromRawPatch(raw, currentEnabled);
+			WriteTextFile(ResolveDreamingEnabledFlagFilePath(), nextEnabled ? "1" : "0");
+			const std::string nextHash = BumpDreamingConfigHash();
+			return protocol::OkResponse(
+				request,
+				"{\"applied\":true,\"updated\":true,\"hash\":\"" + EscapeJsonString(nextHash) +
+				"\",\"dreamingEnabled\":" + std::string(nextEnabled ? "true" : "false") + "}");
 			});
 
 		host.m_dispatcher.Register("config.patch", [](const protocol::RequestFrame& request) {
@@ -663,6 +698,11 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 			const SessionEntry resolved = host.m_sessionRegistry.Resolve(sessionId);
 			return protocol::OkResponse(request, "{\"session\":" + SerializeSession(resolved) + "}");
 			});
+		host.m_dispatcher.Register("sessions.get", [&host](const protocol::RequestFrame& request) {
+			auto forwarded = request;
+			forwarded.method = "gateway.sessions.resolve";
+			return host.m_dispatcher.Dispatch(forwarded);
+			});
 
 		host.m_dispatcher.Register("gateway.sessions.create", [&host](const protocol::RequestFrame& request) {
 			const RequestParamsView params(request.paramsJson);
@@ -698,6 +738,11 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 
 		host.m_dispatcher.Register("gateway.health", [&host](const protocol::RequestFrame& request) {
 			return protocol::OkResponse(request, "{\"status\":\"ok\",\"running\":" + std::string(host.IsRunning() ? "true" : "false") + "}");
+			});
+		host.m_dispatcher.Register("status", [&host](const protocol::RequestFrame& request) {
+			auto forwarded = request;
+			forwarded.method = "gateway.health";
+			return host.m_dispatcher.Dispatch(forwarded);
 			});
 	}
 

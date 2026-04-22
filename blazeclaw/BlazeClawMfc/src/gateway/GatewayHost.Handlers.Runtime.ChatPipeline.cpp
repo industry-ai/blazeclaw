@@ -199,6 +199,49 @@ namespace blazeclaw::gateway {
 							}));
 				});
 			host.m_dispatcher.Register(
+				"sessions.steer",
+				[&host](const protocol::RequestFrame& request) {
+					auto abortForwarded = request;
+					abortForwarded.method = "chat.abort";
+					const protocol::ResponseFrame abortResponse = host.m_dispatcher.Dispatch(abortForwarded);
+					if (!abortResponse.ok) {
+						return abortResponse;
+					}
+
+					auto sendForwarded = request;
+					sendForwarded.method = "chat.send";
+					const protocol::ResponseFrame sendResponse = host.m_dispatcher.Dispatch(sendForwarded);
+					if (!sendResponse.ok) {
+						return sendResponse;
+					}
+
+					const bool interruptedActiveRun =
+						abortResponse.payloadJson.has_value() &&
+						abortResponse.payloadJson.value().find("\"aborted\":true") != std::string::npos;
+					const std::string sessionId =
+						host.m_sessionRegistry.Resolve(RequestParamsView(request.paramsJson).GetString("sessionId")).id;
+					const std::string sendPayload = sendResponse.payloadJson.value_or(std::string("{}"));
+					const std::string trimmed = json::Trim(sendPayload);
+					if (!trimmed.empty() && trimmed.front() == '{' && trimmed.back() == '}') {
+						std::string merged = trimmed;
+						merged.pop_back();
+						if (merged.size() > 1) {
+							merged += ",";
+						}
+						merged += "\"sessionId\":" + JsonString(sessionId) + ",";
+						merged += "\"interruptedActiveRun\":" + std::string(interruptedActiveRun ? "true" : "false") + "}";
+						return protocol::OkResponse(request, merged);
+					}
+
+					return protocol::OkResponse(
+						request,
+						JsonObject({
+							{"sessionId", JsonString(sessionId)},
+							{"interruptedActiveRun", JsonBool(interruptedActiveRun)},
+							{"response", sendPayload},
+							}));
+				});
+			host.m_dispatcher.Register(
 				"sessions.abort",
 				[&host](const protocol::RequestFrame& request) {
 					auto forwarded = request;

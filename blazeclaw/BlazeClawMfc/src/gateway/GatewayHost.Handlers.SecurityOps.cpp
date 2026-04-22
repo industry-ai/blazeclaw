@@ -2544,14 +2544,73 @@ namespace blazeclaw::gateway {
 				payload += ",\"ts\":" + JsonNumber(GatewayEpochMilliseconds()) + "}";
 				return protocol::OkResponse(request, payload);
 			});
-		RegisterStaticMethod(
-			m_dispatcher,
+		m_dispatcher.Register(
 			"node.pending.drain",
-			"{\"drained\":0,\"remaining\":0}");
-		RegisterStaticMethod(
-			m_dispatcher,
+			[this](const protocol::RequestFrame& request) {
+				const RequestParamsView params(request.paramsJson);
+				const std::string nodeId = TrimCopy(params.GetString("nodeId"));
+				if (nodeId.empty()) {
+					return protocol::ErrorResponse(
+						request,
+						"invalid_request",
+						"nodeId required");
+				}
+
+				const std::vector<PendingNodeAction> drained =
+					m_nodePendingActionQueue.PullAllowed(
+						nodeId,
+						{},
+						GatewayEpochMilliseconds());
+				const std::vector<std::string> drainedIds = ParseStringArrayField(request.paramsJson, "drainedIds");
+				const std::vector<PendingNodeAction> remaining =
+					m_nodePendingActionQueue.Ack(
+						nodeId,
+						drainedIds,
+						GatewayEpochMilliseconds());
+				return protocol::OkResponse(
+					request,
+					JsonObject({
+						{"nodeId", JsonString(nodeId)},
+						{"drained", JsonNumber(static_cast<std::uint64_t>(drainedIds.empty() ? drained.size() : drainedIds.size()))},
+						{"remaining", JsonNumber(static_cast<std::uint64_t>(remaining.size()))},
+						}));
+			});
+		m_dispatcher.Register(
 			"node.pending.enqueue",
-			"{\"accepted\":true,\"queueDepth\":1}");
+			[this](const protocol::RequestFrame& request) {
+				const RequestParamsView params(request.paramsJson);
+				const std::string nodeId = TrimCopy(params.GetString("nodeId"));
+				const std::string command = TrimCopy(params.GetString("command"));
+				const std::string idempotencyKey = TrimCopy(params.GetString("idempotencyKey"));
+				const std::string rawParams = ResolveOptionalObjectJson(request.paramsJson, "params");
+				if (nodeId.empty() || command.empty() || idempotencyKey.empty()) {
+					return protocol::ErrorResponse(
+						request,
+						"invalid_request",
+						"nodeId, command, and idempotencyKey required");
+				}
+				const PendingNodeAction queued = m_nodePendingActionQueue.Enqueue(
+					nodeId,
+					command,
+					rawParams,
+					idempotencyKey,
+					GatewayEpochMilliseconds());
+				if (queued.id.empty()) {
+					return protocol::ErrorResponse(
+						request,
+						"invalid_request",
+						"node.pending.enqueue could not enqueue action");
+				}
+				const std::vector<PendingNodeAction> current =
+					m_nodePendingActionQueue.List(nodeId, GatewayEpochMilliseconds());
+				return protocol::OkResponse(
+					request,
+					JsonObject({
+						{"accepted", JsonBool(true)},
+						{"queuedActionId", JsonString(queued.id)},
+						{"queueDepth", JsonNumber(static_cast<std::uint64_t>(current.size()))},
+						}));
+			});
 		m_dispatcher.Register(
 			"node.pending.pull",
 			[this](const protocol::RequestFrame& request) {

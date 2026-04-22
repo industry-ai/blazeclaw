@@ -155,6 +155,8 @@ function collectBlazeClawRegisteredMethods(workspaceRoot, blazeGatewayDir) {
   const methods = new Set();
   const byFile = {};
   const registerRegex = /Register\(\s*"([^"]+)"/g;
+  const helperRegistrationCallRegex = /\b(?:Register|register)[A-Za-z0-9_]*\s*\(([\s\S]{0,800}?)\);/g;
+  const methodLiteralRegex = /"([a-z0-9_.-]+)"/g;
 
   for (const file of files) {
     const content = fs.readFileSync(file, "utf8");
@@ -163,6 +165,17 @@ function collectBlazeClawRegisteredMethods(workspaceRoot, blazeGatewayDir) {
     while ((match = registerRegex.exec(content)) !== null) {
       local.add(match[1]);
       methods.add(match[1]);
+    }
+    while ((match = helperRegistrationCallRegex.exec(content)) !== null) {
+      let literalMatch;
+      while ((literalMatch = methodLiteralRegex.exec(match[1])) !== null) {
+        const method = literalMatch[1];
+        if (!method.includes(".")) {
+          continue;
+        }
+        local.add(method);
+        methods.add(method);
+      }
     }
     if (local.size > 0) {
       byFile[relativePosix(workspaceRoot, file)] = Array.from(local).sort();
@@ -296,7 +309,7 @@ function main() {
       blazeclawManifestVersion: blazeManifest.manifestVersion,
       extraction: {
         openclaw: "BASE_METHODS + handler object keys (non-test files)",
-        blazeclaw: "manifest methods + Register(\"...\") scan in gateway sources",
+        blazeclaw: "manifest methods + Register(\"...\") scan + helper registration call scan in gateway sources",
         normalization: "gateway.* stripped only when canonical OpenClaw method exists; gateway.session.list -> sessions.list alias",
       },
     },

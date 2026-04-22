@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Gateway Method Diff
 
-Generated: 2026-04-22T11:23:05.036Z
+Generated: 2026-04-22T11:35:47.658Z
 
 ## Inputs
 
@@ -12,36 +12,20 @@ Generated: 2026-04-22T11:23:05.036Z
 ## Summary
 
 - OpenClaw method count: **128**
-- BlazeClaw method count: **851**
-- BlazeClaw raw method count (before normalization): **862**
-- Overlap: **110**
-- Missing in BlazeClaw: **18**
-  - Expected missing by design: **5**
-  - Actionable missing: **13**
-- BlazeClaw-only: **741**
+- BlazeClaw method count: **904**
+- BlazeClaw raw method count (before normalization): **918**
+- Overlap: **127**
+- Missing in BlazeClaw: **1**
+  - Expected missing by design: **1**
+  - Actionable missing: **0**
+- BlazeClaw-only: **777**
 
 ## Missing in BlazeClaw (Actionable)
 
-- `exec.approval.get`
-- `exec.approval.list`
-- `exec.approval.request`
-- `exec.approval.resolve`
-- `node.pending.drain`
-- `node.pending.enqueue`
-- `plugin.approval.list`
-- `plugin.approval.request`
-- `plugin.approval.resolve`
-- `sessions.get`
-- `sessions.steer`
-- `sessions.usage`
-- `status`
+- _None_
 
 ## Missing in BlazeClaw (Expected by Design)
 
-- `device.pair.approve` — explicitly_unsupported: Device pairing family is intentionally unsupported in current BlazeClaw runtime.
-- `device.pair.list` — explicitly_unsupported: Device pairing family is intentionally unsupported in current BlazeClaw runtime.
-- `device.pair.reject` — explicitly_unsupported: Device pairing family is intentionally unsupported in current BlazeClaw runtime.
-- `device.pair.remove` — explicitly_unsupported: Device pairing family is intentionally unsupported in current BlazeClaw runtime.
 - `push.test` — out_of_scope: OpenClaw push test helper is not in current BlazeClaw product scope.
 
 ## BlazeClaw-only
@@ -53,6 +37,9 @@ Generated: 2026-04-22T11:23:05.036Z
 - `doctor.memory.flush`
 - `doctor.memory.resetDreamDiary`
 - `doctor.memory.resetGroundedShortTerm`
+- `email.schedule`
+- `exec.approval`
+- `extensions.lifecycle`
 - `gateway.agents.activate`
 - `gateway.agents.count`
 - `gateway.agents.exists`
@@ -90,6 +77,7 @@ Generated: 2026-04-22T11:23:05.036Z
 - `gateway.channels.status.count`
 - `gateway.channels.status.exists`
 - `gateway.channels.status.get`
+- `gateway.config.`
 - `gateway.config.audit`
 - `gateway.config.backup`
 - `gateway.config.count`
@@ -134,6 +122,7 @@ Generated: 2026-04-22T11:23:05.036Z
 - `gateway.health.details`
 - `gateway.logs.count`
 - `gateway.logs.levels`
+- `gateway.models.`
 - `gateway.models.affinity`
 - `gateway.models.catalog`
 - `gateway.models.compatibility`
@@ -742,12 +731,21 @@ Generated: 2026-04-22T11:23:05.036Z
 - `gateway.skills.refresh`
 - `gateway.skills.sandbox.status`
 - `gateway.skills.scan.status`
+- `gateway.tools.`
+- `gateway.tools.account`
+- `gateway.tools.agent`
+- `gateway.tools.audit`
 - `gateway.tools.backlog`
+- `gateway.tools.binding`
+- `gateway.tools.cache`
 - `gateway.tools.call.execute`
 - `gateway.tools.call.preview`
 - `gateway.tools.capacity`
 - `gateway.tools.categories`
+- `gateway.tools.channel`
+- `gateway.tools.config`
 - `gateway.tools.count`
+- `gateway.tools.debug`
 - `gateway.tools.dispatch`
 - `gateway.tools.errors`
 - `gateway.tools.executions.clear`
@@ -760,12 +758,27 @@ Generated: 2026-04-22T11:23:05.036Z
 - `gateway.tools.health`
 - `gateway.tools.latency`
 - `gateway.tools.list`
+- `gateway.tools.log`
+- `gateway.tools.mapper`
+- `gateway.tools.metric`
 - `gateway.tools.metrics`
+- `gateway.tools.model`
 - `gateway.tools.pipeline`
+- `gateway.tools.policy`
+- `gateway.tools.profile`
 - `gateway.tools.queue`
+- `gateway.tools.resolver`
+- `gateway.tools.route`
+- `gateway.tools.router`
+- `gateway.tools.runtime`
 - `gateway.tools.scheduler`
+- `gateway.tools.selector`
+- `gateway.tools.state`
 - `gateway.tools.stats`
 - `gateway.tools.throughput`
+- `gateway.tools.tool`
+- `gateway.tools.trace`
+- `gateway.tools.transport`
 - `gateway.tools.usage`
 - `gateway.tools.window`
 - `gateway.transport.connections.count`
@@ -773,6 +786,7 @@ Generated: 2026-04-22T11:23:05.036Z
 - `gateway.transport.endpoint.get`
 - `gateway.transport.endpoint.set`
 - `gateway.transport.endpoints.list`
+- `gateway.transport.policy.`
 - `gateway.transport.policy.commit`
 - `gateway.transport.policy.digest`
 - `gateway.transport.policy.export`
@@ -786,4 +800,10 @@ Generated: 2026-04-22T11:23:05.036Z
 - `gateway.transport.policy.status`
 - `gateway.transport.policy.validate`
 - `gateway.transport.status`
+- `memory.search`
+- `plugin.approval`
+- `python.runtime.health`
+- `python.script.run`
 - `skills.commands`
+- `skills.install.options`
+- `weather.lookup`

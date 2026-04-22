@@ -16,7 +16,7 @@ Freeze an implementation decision for each OpenClaw UI controller file:
 Semantic caveat (2026-04-22 deep audit): destination decisions and method routability do not imply behavior-equivalent parity.  
 See `docs/compare/OPENCLAW_SERVER_METHODS_DEEP_MECHANICAL_AUDIT_AND_OPTIMIZATION.md` for current `semantically-implemented` vs `partial` vs `stub/static` vs `missing` classification.
 
-Tooling caveat: current parity diff artifacts under `artifacts/gateway-parity/` are route-inventory aids only until extraction/alias normalization is fixed in `scripts/gateway-method-parity-diff.mjs`.
+Tooling caveat (resolved 2026-04-22): parity diff artifacts under `artifacts/gateway-parity/` are now generated from the hardened extractor/normalization pipeline in `scripts/gateway-method-parity-diff.mjs` and can be used as the method-surface baseline for semantic closure tracking.
 
 ## Decision rules used
 
@@ -85,6 +85,8 @@ Quick drill-down references:
 - Phase M reconciliation (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ docs reconciled through M.5 for current scope (matrix/tracker/audit alignment complete + embedded smoke sign-off captured for debugged chat.send timeout path)
 - Deep gateway semantic audit (from `OPENCLAW_SERVER_METHODS_DEEP_MECHANICAL_AUDIT_AND_OPTIMIZATION.md`): ✅ completed; several high-impact families reclassified from route-complete to semantic `partial`/`stub-static`, and follow-up execution is tracked as active backlog.
 - Parity artifact accuracy hardening (from deep audit P0): ✅ completed (extractor/normalization hardening shipped; parity artifacts regenerated with expected-by-design missing classification).
+- Deep audit P1 semantic hardening: ✅ completed (`config.apply` stateful contract, runtime-backed `node.pending.enqueue/drain`, helper-registration extraction coverage); residual actionable method gap is now `sessions.steer`.
+- Deep audit P2 residual completeness: ✅ completed (`sessions.steer` runtime steering flow implemented and tested); parity artifacts now show `actionableMissingCount=0`.
 
 ## Phase A baseline freeze (2026-04-22)
 
