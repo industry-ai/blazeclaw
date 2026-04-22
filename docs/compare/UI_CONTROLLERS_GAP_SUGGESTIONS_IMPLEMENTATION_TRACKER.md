@@ -15,7 +15,7 @@ Use this file as a **working checklist**. Update the status column when work lan
 | 1 | Close remaining RPC naming drift | ☑ Done | Canonical `sessions.list` / `sessions.create` / `models.list` / `skills.commands` in `chat-controller.js`; gateway aliases + request validators; see `OPERATOR_WEBVIEW_GATEWAY_TRANSPORT.md`. |
 | 2 | Share chat event semantics (+ optional golden tests) | ☑ Done | `NO_REPLY` on cross-run finals, deterministic stream-final transcript commit, and repair-only reconcile in `chat-events.js`; matrix in `CHAT_EVENTS_SEMANTICS_MATRIX.md`. Additional golden fixtures are optional backlog, not a parity gate for this scope. |
 | 3 | Structured transcript in WebView (optional) | ☑ Done | Structured schema widened (`id`/`sessionKey`/`runId`/`source`/`terminalState`), stream-final deterministic commits, and transcript-driven renderer behind feature flag (`?structuredTranscript=1` / localStorage toggle). |
-| 4 | Port high-value controllers incrementally | ☑ Done | Sessions + exec-approval + observability + devices + skills-depth + agent-files write WebView baselines landed; Phase K reduced agents/channels/cron/dreaming/nodes/presence/usage to polish-only follow-ups. Remaining work is deeper governance/native UX scope tracked as product backlog in `UI_CONTROLLERS_PHASE0_DECISION_TRACKER.md`. |
+| 4 | Port high-value controllers incrementally | ◐ In progress | Route-level controller parity is broadly landed, but deep gateway semantic audit shows several method families still `stub/static` or `partial` in BlazeClaw (approvals, sessions subscription/send/compaction, device token lifecycle, skills runtime depth). See deep audit follow-up checklist below. |
 | 5 | Document transport modes for operators | ☑ Done | `blazeclaw/docs/OPERATOR_WEBVIEW_GATEWAY_TRANSPORT.md`. |
 
 Status legend: ☐ Not started · ◐ In progress · ☑ Done  
@@ -197,6 +197,14 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 
 - Each new surface has an **RPC list**, **permission/scope story**, and **link** from `ui.controllers.md` / gateway audit when merged.
 
+### Deep gateway semantic follow-up (2026-04-22)
+
+- [ ] Convert approval method families (`exec.approvals.*`, `exec.approval.*`, `plugin.approval.*`) from static placeholders to stateful/runtime parity behavior.
+- [ ] Convert session subscription/send/abort/compaction families from static placeholders to event/state-backed behavior parity.
+- [ ] Convert device pair/token lifecycle methods from static placeholders to authz/scoped runtime behavior parity.
+- [ ] Promote skills runtime depth (`skills.search`, `skills.detail`, `skills.bins`, `skills.install`) from static placeholders to runtime-backed behavior.
+- [ ] Ensure incomplete families return explicit unsupported/unavailable errors rather than static success payloads.
+
 ---
 
 ## 5. Document transport modes for operators
@@ -239,3 +247,4 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 | 2026-04-22 | Phase M partial completion: finalized suggestion statuses for this scope (items 2–4 set to done with explicit optional/backlog carve-outs) and aligned parity language across compare trackers. |
 | 2026-04-22 | Phase M.5 attempt: shell smoke run reached gateway preflight but chat send timed out/hung (`Invoke-WebViewChatSmoke.ps1`), so reviewer attestation remains pending until a clean pass is captured. |
 | 2026-04-22 | Phase M.5 completion: debugged `chat.send` timeout path and landed smoke fallback hardening in `Invoke-WebViewChatSmoke.ps1`; captured passing embedded smoke run for send-path sign-off with trace evidence. |
+| 2026-04-22 | Deep semantic method audit added: tracker item 4 moved from `☑ Done` to `◐ In progress` to reflect unresolved behavior-level parity in gateway method families despite route-level coverage. |

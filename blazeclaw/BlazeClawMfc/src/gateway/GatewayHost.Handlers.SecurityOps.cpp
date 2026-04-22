@@ -1987,60 +1987,320 @@ namespace blazeclaw::gateway {
 				return protocol::OkResponse(request, "{\"tokenScopeId\":\"web.tokenScopeId.default\",\"active\":true}");
 			});
 
-		// OpenClaw P0 contract-parity aliases and stubs (Phase G / P0).
-		RegisterStaticMethod(
-			m_dispatcher,
-			"exec.approvals.get",
-			"{\"scope\":\"global\",\"defaultMode\":\"manual\",\"updated\":false}");
-		RegisterStaticMethod(
-			m_dispatcher,
-			"exec.approvals.set",
-			"{\"scope\":\"global\",\"defaultMode\":\"manual\",\"updated\":true}");
-		RegisterStaticMethod(
-			m_dispatcher,
-			"exec.approvals.node.get",
-			"{\"scope\":\"node\",\"defaultMode\":\"manual\",\"updated\":false}");
-		RegisterStaticMethod(
-			m_dispatcher,
-			"exec.approvals.node.set",
-			"{\"scope\":\"node\",\"defaultMode\":\"manual\",\"updated\":true}");
-		RegisterStaticMethod(
-			m_dispatcher,
-			"exec.approval.get",
-			"{\"requestId\":\"exec-approval-1\",\"status\":\"pending\",\"found\":false}");
-		RegisterStaticMethod(
-			m_dispatcher,
-			"exec.approval.list",
-			"{\"items\":[],\"count\":0}");
-		RegisterStaticMethod(
-			m_dispatcher,
-			"exec.approval.request",
-			"{\"requestId\":\"exec-approval-1\",\"status\":\"pending\",\"queued\":true}");
-		RegisterStaticMethod(
-			m_dispatcher,
-			"exec.approval.waitDecision",
-			"{\"requestId\":\"exec-approval-1\",\"status\":\"pending\",\"resolved\":false}");
-		RegisterStaticMethod(
-			m_dispatcher,
-			"exec.approval.resolve",
-			"{\"requestId\":\"exec-approval-1\",\"status\":\"resolved\",\"resolved\":true}");
+		// OpenClaw P0 security parity baseline: stateful approvals + policy modes.
+		struct ApprovalRequestRecord {
+			std::string requestId;
+			std::string family;
+			std::string status;
+			std::string subject;
+			std::string reason;
+			std::string requestedBy;
+			std::uint64_t requestedAtMs = 0;
+			std::uint64_t resolvedAtMs = 0;
+		};
+		struct ApprovalStateStore {
+			std::string globalMode = "manual";
+			std::unordered_map<std::string, std::string> nodeModes;
+			std::unordered_map<std::string, ApprovalRequestRecord> execRequests;
+			std::unordered_map<std::string, ApprovalRequestRecord> pluginRequests;
+			std::uint64_t requestSequence = 1;
+		};
+		auto approvalState = std::make_shared<ApprovalStateStore>();
 
-		RegisterStaticMethod(
-			m_dispatcher,
+		auto normalizeApprovalMode = [](const std::string& rawMode) {
+			std::string mode = TrimCopy(rawMode);
+			std::transform(
+				mode.begin(),
+				mode.end(),
+				mode.begin(),
+				[](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+			if (mode == "auto" || mode == "manual" || mode == "deny") {
+				return mode;
+			}
+			return std::string("manual");
+			};
+
+		auto buildApprovalRecordJson = [](const ApprovalRequestRecord& record) {
+			return JsonObject({
+				{"requestId", JsonString(record.requestId)},
+				{"family", JsonString(record.family)},
+				{"status", JsonString(record.status)},
+				{"subject", JsonString(record.subject)},
+				{"reason", JsonString(record.reason)},
+				{"requestedBy", JsonString(record.requestedBy)},
+				{"requestedAtMs", JsonNumber(record.requestedAtMs)},
+				{"resolvedAtMs", JsonNumber(record.resolvedAtMs)},
+				{"resolved", JsonBool(record.status != "pending")},
+				{"found", JsonBool(true)},
+				});
+			};
+
+		auto buildApprovalListJson = [&buildApprovalRecordJson](const std::unordered_map<std::string, ApprovalRequestRecord>& entries) {
+			std::vector<const ApprovalRequestRecord*> ordered;
+			ordered.reserve(entries.size());
+			for (const auto& [_, value] : entries) {
+				ordered.push_back(&value);
+			}
+			std::sort(
+				ordered.begin(),
+				ordered.end(),
+				[](const ApprovalRequestRecord* left, const ApprovalRequestRecord* right) {
+					if (left->requestedAtMs == right->requestedAtMs) {
+						return left->requestId < right->requestId;
+					}
+					return left->requestedAtMs > right->requestedAtMs;
+				});
+
+			std::vector<std::string> itemRows;
+			itemRows.reserve(ordered.size());
+			for (const auto* record : ordered) {
+				itemRows.push_back(buildApprovalRecordJson(*record));
+			}
+			return JsonObject({
+				{"items", JsonArray(itemRows)},
+				{"count", JsonNumber(static_cast<std::uint64_t>(itemRows.size()))},
+				});
+			};
+
+		m_dispatcher.Register("exec.approvals.get", [approvalState](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(
+				request,
+				JsonObject({
+					{"scope", JsonString("global")},
+					{"defaultMode", JsonString(approvalState->globalMode)},
+					{"updated", JsonBool(false)},
+					{"stateful", JsonBool(true)},
+					}));
+			});
+		m_dispatcher.Register("exec.approvals.set", [approvalState, normalizeApprovalMode](const protocol::RequestFrame& request) {
+			const RequestParamsView params(request.paramsJson);
+			approvalState->globalMode = normalizeApprovalMode(params.GetString("defaultMode"));
+			return protocol::OkResponse(
+				request,
+				JsonObject({
+					{"scope", JsonString("global")},
+					{"defaultMode", JsonString(approvalState->globalMode)},
+					{"updated", JsonBool(true)},
+					{"stateful", JsonBool(true)},
+					}));
+			});
+		m_dispatcher.Register("exec.approvals.node.get", [approvalState](const protocol::RequestFrame& request) {
+			const RequestParamsView params(request.paramsJson);
+			const std::string nodeId = TrimCopy(params.GetString("nodeId"));
+			if (nodeId.empty()) {
+				return protocol::ErrorResponse(request, "invalid_request", "nodeId required");
+			}
+			auto it = approvalState->nodeModes.find(nodeId);
+			const std::string mode = it != approvalState->nodeModes.end()
+				? it->second
+				: approvalState->globalMode;
+			return protocol::OkResponse(
+				request,
+				JsonObject({
+					{"scope", JsonString("node")},
+					{"nodeId", JsonString(nodeId)},
+					{"defaultMode", JsonString(mode)},
+					{"updated", JsonBool(false)},
+					{"stateful", JsonBool(true)},
+					}));
+			});
+		m_dispatcher.Register("exec.approvals.node.set", [approvalState, normalizeApprovalMode](const protocol::RequestFrame& request) {
+			const RequestParamsView params(request.paramsJson);
+			const std::string nodeId = TrimCopy(params.GetString("nodeId"));
+			if (nodeId.empty()) {
+				return protocol::ErrorResponse(request, "invalid_request", "nodeId required");
+			}
+			const std::string mode = normalizeApprovalMode(params.GetString("defaultMode"));
+			approvalState->nodeModes.insert_or_assign(nodeId, mode);
+			return protocol::OkResponse(
+				request,
+				JsonObject({
+					{"scope", JsonString("node")},
+					{"nodeId", JsonString(nodeId)},
+					{"defaultMode", JsonString(mode)},
+					{"updated", JsonBool(true)},
+					{"stateful", JsonBool(true)},
+					}));
+			});
+
+		auto registerApprovalLifecycle = [
+			this,
+			approvalState,
+			buildApprovalRecordJson,
+			buildApprovalListJson](
+				const std::string& family,
+				const std::string& listMethod,
+				const std::string& requestMethod,
+				const std::string& waitMethod,
+				const std::string& resolveMethod,
+				bool supportsGetMethod,
+				const std::string& getMethod,
+				const std::string& idPrefix,
+				std::unordered_map<std::string, ApprovalRequestRecord>& bucket) {
+					m_dispatcher.Register(listMethod, [approvalState, &bucket, buildApprovalListJson](const protocol::RequestFrame& request) {
+						(void)approvalState;
+						return protocol::OkResponse(request, buildApprovalListJson(bucket));
+						});
+
+					m_dispatcher.Register(requestMethod, [approvalState, &bucket, buildApprovalRecordJson, family, idPrefix](const protocol::RequestFrame& request) {
+						const RequestParamsView params(request.paramsJson);
+						std::string requestId = TrimCopy(params.GetString("requestId"));
+						if (requestId.empty()) {
+							requestId = idPrefix + std::to_string(approvalState->requestSequence++);
+						}
+
+						auto existing = bucket.find(requestId);
+						if (existing != bucket.end()) {
+							return protocol::OkResponse(
+								request,
+								JsonObject({
+									{"requestId", JsonString(existing->second.requestId)},
+									{"status", JsonString(existing->second.status)},
+									{"queued", JsonBool(false)},
+									{"approval", buildApprovalRecordJson(existing->second)},
+									}));
+						}
+
+						ApprovalRequestRecord record;
+						record.requestId = requestId;
+						record.family = family;
+						record.status = "pending";
+						record.subject = TrimCopy(params.GetString("command"));
+						if (record.subject.empty()) {
+							record.subject = TrimCopy(params.GetString("pluginId"));
+						}
+						if (record.subject.empty()) {
+							record.subject = TrimCopy(params.GetString("action"));
+						}
+						if (record.subject.empty()) {
+							record.subject = family + ".request";
+						}
+						record.reason = TrimCopy(params.GetString("reason"));
+						record.requestedBy = TrimCopy(params.GetString("requestedBy"));
+						if (record.requestedBy.empty()) {
+							record.requestedBy = "operator";
+						}
+						record.requestedAtMs = GatewayEpochMilliseconds();
+						bucket.insert_or_assign(record.requestId, record);
+
+						return protocol::OkResponse(
+							request,
+							JsonObject({
+								{"requestId", JsonString(record.requestId)},
+								{"status", JsonString(record.status)},
+								{"queued", JsonBool(true)},
+								{"approval", buildApprovalRecordJson(record)},
+								}));
+						});
+
+					if (supportsGetMethod) {
+						m_dispatcher.Register(getMethod, [&bucket, buildApprovalRecordJson](const protocol::RequestFrame& request) {
+							const RequestParamsView params(request.paramsJson);
+							const std::string requestId = TrimCopy(params.GetString("requestId"));
+							if (requestId.empty()) {
+								return protocol::ErrorResponse(request, "invalid_request", "requestId required");
+							}
+							auto it = bucket.find(requestId);
+							if (it == bucket.end()) {
+								return protocol::OkResponse(
+									request,
+									JsonObject({
+										{"requestId", JsonString(requestId)},
+										{"status", JsonString("missing")},
+										{"found", JsonBool(false)},
+										}));
+							}
+							return protocol::OkResponse(request, buildApprovalRecordJson(it->second));
+							});
+					}
+
+					m_dispatcher.Register(waitMethod, [&bucket, buildApprovalRecordJson](const protocol::RequestFrame& request) {
+						const RequestParamsView params(request.paramsJson);
+						const std::string requestId = TrimCopy(params.GetString("requestId"));
+						if (requestId.empty()) {
+							return protocol::ErrorResponse(request, "invalid_request", "requestId required");
+						}
+						auto it = bucket.find(requestId);
+						if (it == bucket.end()) {
+							return protocol::OkResponse(
+								request,
+								JsonObject({
+									{"requestId", JsonString(requestId)},
+									{"status", JsonString("missing")},
+									{"resolved", JsonBool(false)},
+									{"found", JsonBool(false)},
+									}));
+						}
+						return protocol::OkResponse(
+							request,
+							JsonObject({
+								{"requestId", JsonString(it->second.requestId)},
+								{"status", JsonString(it->second.status)},
+								{"resolved", JsonBool(it->second.status != "pending")},
+								{"found", JsonBool(true)},
+								{"approval", buildApprovalRecordJson(it->second)},
+								}));
+						});
+
+					m_dispatcher.Register(resolveMethod, [&bucket, buildApprovalRecordJson](const protocol::RequestFrame& request) {
+						const RequestParamsView params(request.paramsJson);
+						const std::string requestId = TrimCopy(params.GetString("requestId"));
+						if (requestId.empty()) {
+							return protocol::ErrorResponse(request, "invalid_request", "requestId required");
+						}
+						auto it = bucket.find(requestId);
+						if (it == bucket.end()) {
+							return protocol::ErrorResponse(request, "invalid_request", "requestId not found");
+						}
+
+						std::string decision = TrimCopy(params.GetString("decision"));
+						std::transform(
+							decision.begin(),
+							decision.end(),
+							decision.begin(),
+							[](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+						if (decision != "approve" && decision != "approved" && decision != "reject" && decision != "rejected") {
+							decision = "approve";
+						}
+						it->second.status = (decision == "reject" || decision == "rejected")
+							? "rejected"
+							: "approved";
+						it->second.resolvedAtMs = GatewayEpochMilliseconds();
+						if (it->second.reason.empty()) {
+							it->second.reason = TrimCopy(params.GetString("reason"));
+						}
+
+						return protocol::OkResponse(
+							request,
+							JsonObject({
+								{"requestId", JsonString(it->second.requestId)},
+								{"status", JsonString(it->second.status)},
+								{"resolved", JsonBool(true)},
+								{"approval", buildApprovalRecordJson(it->second)},
+								}));
+						});
+			};
+
+		registerApprovalLifecycle(
+			"exec.approval",
+			"exec.approval.list",
+			"exec.approval.request",
+			"exec.approval.waitDecision",
+			"exec.approval.resolve",
+			true,
+			"exec.approval.get",
+			"exec-approval-",
+			approvalState->execRequests);
+		registerApprovalLifecycle(
+			"plugin.approval",
 			"plugin.approval.list",
-			"{\"items\":[],\"count\":0}");
-		RegisterStaticMethod(
-			m_dispatcher,
 			"plugin.approval.request",
-			"{\"requestId\":\"plugin-approval-1\",\"status\":\"pending\",\"queued\":true}");
-		RegisterStaticMethod(
-			m_dispatcher,
 			"plugin.approval.waitDecision",
-			"{\"requestId\":\"plugin-approval-1\",\"status\":\"pending\",\"resolved\":false}");
-		RegisterStaticMethod(
-			m_dispatcher,
 			"plugin.approval.resolve",
-			"{\"requestId\":\"plugin-approval-1\",\"status\":\"resolved\",\"resolved\":true}");
+			false,
+			"",
+			"plugin-approval-",
+			approvalState->pluginRequests);
 
 		m_dispatcher.Register(
 			"node.pair.request",
@@ -2316,7 +2576,7 @@ namespace blazeclaw::gateway {
 						{"command", JsonString(action.command)},
 						{"paramsJSON", action.paramsJson.empty() ? "null" : action.paramsJson},
 						{"enqueuedAtMs", JsonNumber(action.enqueuedAtMs)},
-					}));
+						}));
 				}
 
 				return protocol::OkResponse(
@@ -2324,7 +2584,7 @@ namespace blazeclaw::gateway {
 					JsonObject({
 						{"nodeId", JsonString(nodeId)},
 						{"actions", JsonArray(actionRows)},
-					}));
+						}));
 			});
 		m_dispatcher.Register(
 			"node.pending.ack",
@@ -2349,7 +2609,7 @@ namespace blazeclaw::gateway {
 						{"nodeId", JsonString(nodeId)},
 						{"ackedIds", SerializeStringArrayJson(ackedIds)},
 						{"remainingCount", JsonNumber(static_cast<std::uint64_t>(remaining.size()))},
-					}));
+						}));
 			});
 		m_dispatcher.Register(
 			"node.invoke",
@@ -2361,7 +2621,7 @@ namespace blazeclaw::gateway {
 							{"ok", JsonBool(true)},
 							{"queued", JsonBool(true)},
 							{"reason", JsonString("legacy_node_parity_mode")},
-						}));
+							}));
 				}
 
 				if (m_runtimeNodeParityDiagnosticsEnabled) {
@@ -2389,7 +2649,7 @@ namespace blazeclaw::gateway {
 						request,
 						"invalid_request",
 						"node.invoke does not allow system.execApprovals.*; use exec.approvals.node.*",
-						std::optional<std::string>(JsonObject({{"command", JsonString(command)}})));
+						std::optional<std::string>(JsonObject({ {"command", JsonString(command)} })));
 				}
 
 				if (command == "browser.proxy" && IsForbiddenBrowserProxyMutation(request)) {
@@ -2400,7 +2660,7 @@ namespace blazeclaw::gateway {
 						request,
 						"invalid_request",
 						"node.invoke cannot mutate persistent browser profiles via browser.proxy",
-						std::optional<std::string>(JsonObject({{"command", JsonString(command)}})));
+						std::optional<std::string>(JsonObject({ {"command", JsonString(command)} })));
 				}
 
 				const std::vector<std::string> declaredCommands = ResolveDeclaredCommandsFromRequest(request);
@@ -2423,7 +2683,7 @@ namespace blazeclaw::gateway {
 							std::optional<std::string>(JsonObject({
 								{"reason", JsonString("command not declared by node")},
 								{"command", JsonString(command)},
-							}))); 
+								})));
 					}
 				}
 
@@ -2447,7 +2707,7 @@ namespace blazeclaw::gateway {
 							std::optional<std::string>(JsonObject({
 								{"reason", JsonString("command not allowlisted")},
 								{"command", JsonString(command)},
-							}))); 
+								})));
 					}
 				}
 
@@ -2528,9 +2788,9 @@ namespace blazeclaw::gateway {
 							{"nudgeReason", JsonString(nudge.reason)},
 							{"nodeErrorCode", JsonString(nodeErrorCode)},
 							{"nodeErrorMessage", JsonString(nodeErrorMessage)},
-						})),
-						true,
-						std::nullopt);
+							})),
+							true,
+							std::nullopt);
 				}
 
 				return protocol::OkResponse(
@@ -2547,7 +2807,7 @@ namespace blazeclaw::gateway {
 							{"status", JsonString("executed")},
 							{"note", JsonString("gateway parity shim")},
 						})},
-					}));
+						}));
 			});
 		m_dispatcher.Register(
 			"node.invoke.result",
@@ -2572,7 +2832,7 @@ namespace blazeclaw::gateway {
 						{"runId", JsonString(runId)},
 						{"nodeId", JsonString(nodeId)},
 						{"payloadJSON", payloadJson},
-					}));
+						}));
 
 				return protocol::OkResponse(
 					request,
@@ -2580,7 +2840,7 @@ namespace blazeclaw::gateway {
 						{"runId", JsonString(runId)},
 						{"nodeId", JsonString(nodeId)},
 						{"accepted", JsonBool(true)},
-					}));
+						}));
 			});
 		m_dispatcher.Register(
 			"node.event",
@@ -2613,14 +2873,14 @@ namespace blazeclaw::gateway {
 						{"event", JsonString(eventName)},
 						{"nodeId", JsonString(nodeId.empty() ? "node" : nodeId)},
 						{"payloadJSON", payloadJson},
-					}));
+						}));
 
 				return protocol::OkResponse(
 					request,
 					JsonObject({
 						{"ok", JsonBool(true)},
 						{"accepted", JsonBool(true)},
-					}));
+						}));
 			});
 		m_dispatcher.Register(
 			"node.canvas.capability.refresh",
@@ -2635,8 +2895,8 @@ namespace blazeclaw::gateway {
 						request,
 						"unavailable",
 						refreshed.error.empty()
-							? "canvas host unavailable for this node session"
-							: refreshed.error);
+						? "canvas host unavailable for this node session"
+						: refreshed.error);
 				}
 				return protocol::OkResponse(
 					request,
@@ -2644,33 +2904,25 @@ namespace blazeclaw::gateway {
 						{"canvasCapability", JsonString(refreshed.canvasCapability)},
 						{"canvasCapabilityExpiresAtMs", JsonNumber(refreshed.canvasCapabilityExpiresAtMs)},
 						{"canvasHostUrl", JsonString(refreshed.canvasHostUrl)},
-					}));
+						}));
 			});
 
-		RegisterStaticMethod(
-			m_dispatcher,
-			"device.pair.list",
-			"{\"pairs\":[],\"count\":0}");
-		RegisterStaticMethod(
-			m_dispatcher,
-			"device.pair.approve",
-			"{\"deviceId\":\"device-1\",\"approved\":true}");
-		RegisterStaticMethod(
-			m_dispatcher,
-			"device.pair.reject",
-			"{\"deviceId\":\"device-1\",\"rejected\":true}");
-		RegisterStaticMethod(
-			m_dispatcher,
-			"device.pair.remove",
-			"{\"deviceId\":\"device-1\",\"removed\":true}");
-		RegisterStaticMethod(
-			m_dispatcher,
-			"device.token.rotate",
-			"{\"deviceId\":\"device-1\",\"rotated\":true}");
-		RegisterStaticMethod(
-			m_dispatcher,
-			"device.token.revoke",
-			"{\"deviceId\":\"device-1\",\"revoked\":true}");
+		auto registerUnsupportedDeviceMethod = [this](const std::string& methodName) {
+			m_dispatcher.Register(
+				methodName,
+				[methodName](const protocol::RequestFrame& request) {
+					return protocol::ErrorResponse(
+						request,
+						"unavailable",
+						"Method `" + methodName + "` is not supported in BlazeClaw yet.");
+				});
+			};
+		registerUnsupportedDeviceMethod("device.pair.list");
+		registerUnsupportedDeviceMethod("device.pair.approve");
+		registerUnsupportedDeviceMethod("device.pair.reject");
+		registerUnsupportedDeviceMethod("device.pair.remove");
+		registerUnsupportedDeviceMethod("device.token.rotate");
+		registerUnsupportedDeviceMethod("device.token.revoke");
 	}
 
 } // namespace blazeclaw::gateway

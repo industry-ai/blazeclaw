@@ -68,76 +68,26 @@ namespace blazeclaw::gateway {
 						"{\"accepted\":true,\"wake\":true}");
 				});
 
-			host.m_dispatcher.Register(
-				"sessions.subscribe",
-				[](const protocol::RequestFrame& request) {
-					return protocol::OkResponse(
-						request,
-						"{\"subscribed\":true,\"sessionKey\":\"main\"}");
-				});
-			host.m_dispatcher.Register(
-				"sessions.unsubscribe",
-				[](const protocol::RequestFrame& request) {
-					return protocol::OkResponse(
-						request,
-						"{\"unsubscribed\":true,\"sessionKey\":\"main\"}");
-				});
-			host.m_dispatcher.Register(
-				"sessions.messages.subscribe",
-				[](const protocol::RequestFrame& request) {
-					return protocol::OkResponse(
-						request,
-						"{\"subscribed\":true,\"sessionKey\":\"main\"}");
-				});
-			host.m_dispatcher.Register(
-				"sessions.messages.unsubscribe",
-				[](const protocol::RequestFrame& request) {
-					return protocol::OkResponse(
-						request,
-						"{\"unsubscribed\":true,\"sessionKey\":\"main\"}");
-				});
-			host.m_dispatcher.Register(
-				"sessions.send",
-				[](const protocol::RequestFrame& request) {
-					return protocol::OkResponse(
-						request,
-						"{\"sent\":true,\"sessionKey\":\"main\"}");
-				});
-			host.m_dispatcher.Register(
-				"sessions.abort",
-				[](const protocol::RequestFrame& request) {
-					return protocol::OkResponse(
-						request,
-						"{\"aborted\":true,\"sessionKey\":\"main\"}");
-				});
-			host.m_dispatcher.Register(
-				"sessions.compaction.list",
-				[](const protocol::RequestFrame& request) {
-					return protocol::OkResponse(
-						request,
-						"{\"compactions\":[],\"count\":0}");
-				});
-			host.m_dispatcher.Register(
-				"sessions.compaction.get",
-				[](const protocol::RequestFrame& request) {
-					return protocol::OkResponse(
-						request,
-						"{\"compaction\":null,\"found\":false}");
-				});
-			host.m_dispatcher.Register(
-				"sessions.compaction.branch",
-				[](const protocol::RequestFrame& request) {
-					return protocol::OkResponse(
-						request,
-						"{\"branched\":true,\"branchId\":\"branch-1\"}");
-				});
-			host.m_dispatcher.Register(
-				"sessions.compaction.restore",
-				[](const protocol::RequestFrame& request) {
-					return protocol::OkResponse(
-						request,
-						"{\"restored\":true,\"sessionKey\":\"main\"}");
-				});
+			auto registerUnsupportedSessionMethod = [&host](const std::string& methodName) {
+				host.m_dispatcher.Register(
+					methodName,
+					[methodName](const protocol::RequestFrame& request) {
+						return protocol::ErrorResponse(
+							request,
+							"unavailable",
+							"Method `" + methodName + "` is not supported in BlazeClaw yet.");
+					});
+				};
+			registerUnsupportedSessionMethod("sessions.subscribe");
+			registerUnsupportedSessionMethod("sessions.unsubscribe");
+			registerUnsupportedSessionMethod("sessions.messages.subscribe");
+			registerUnsupportedSessionMethod("sessions.messages.unsubscribe");
+			registerUnsupportedSessionMethod("sessions.send");
+			registerUnsupportedSessionMethod("sessions.abort");
+			registerUnsupportedSessionMethod("sessions.compaction.list");
+			registerUnsupportedSessionMethod("sessions.compaction.get");
+			registerUnsupportedSessionMethod("sessions.compaction.branch");
+			registerUnsupportedSessionMethod("sessions.compaction.restore");
 
 			host.m_dispatcher.Register(
 				"chat.send",

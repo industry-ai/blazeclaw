@@ -13,6 +13,9 @@ Freeze an implementation decision for each OpenClaw UI controller file:
 - **Port to MFC/C++**
 - **Defer**
 
+Semantic caveat (2026-04-22 deep audit): destination decisions and method routability do not imply behavior-equivalent parity.  
+See `docs/compare/OPENCLAW_SERVER_METHODS_DEEP_MECHANICAL_AUDIT_AND_OPTIMIZATION.md` for current `semantically-implemented` vs `partial` vs `stub/static` vs `missing` classification.
+
 ## Decision rules used
 
 1. Prefer **WebView JS** when behavior is controller-heavy and already aligns with `web/chat/*` patterns.
@@ -78,6 +81,7 @@ Quick drill-down references:
 - Phase K control-plane depth/polish triage (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for this scope (agents/channels/cron/dreaming/nodes/presence/usage rows now carry explicit polish-only follow-up bullets; no remaining Tier-1 blockers in these matrix rows)
 - Phase L harness decision (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for this scope (retain dual-track regression approach: WebView `runRegressionChecks` + gateway/Catch2 replay coverage; no Vitest-equivalent harness added)
 - Phase M reconciliation (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ docs reconciled through M.5 for current scope (matrix/tracker/audit alignment complete + embedded smoke sign-off captured for debugged chat.send timeout path)
+- Deep gateway semantic audit (from `OPENCLAW_SERVER_METHODS_DEEP_MECHANICAL_AUDIT_AND_OPTIMIZATION.md`): ✅ completed; several high-impact families reclassified from route-complete to semantic `partial`/`stub-static`, and follow-up execution is tracked as active backlog.
 
 ## Phase A baseline freeze (2026-04-22)
 
