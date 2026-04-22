@@ -2,7 +2,10 @@
 #include "GatewayHost.h"
 #include "GatewayHostHandlersRuntime.h"
 #include "GatewayHostRuntimeLocalHelpers.h"
+#include "GatewayHostProtocolHelpers.h"
+#include "GatewayJsonBuilder.h"
 #include "GatewayJsonUtils.h"
+#include "GatewayRequestParams.h"
 #include "Telemetry.h"
 #include "ChatRunStageContext.h"
 #include "TaskDeltaRepository.h"
@@ -68,26 +71,260 @@ namespace blazeclaw::gateway {
 						"{\"accepted\":true,\"wake\":true}");
 				});
 
-			auto registerUnsupportedSessionMethod = [&host](const std::string& methodName) {
-				host.m_dispatcher.Register(
-					methodName,
-					[methodName](const protocol::RequestFrame& request) {
-						return protocol::ErrorResponse(
-							request,
-							"unavailable",
-							"Method `" + methodName + "` is not supported in BlazeClaw yet.");
-					});
+			struct SessionCompactionBranchRecord {
+				std::string branchId;
+				std::string sessionId;
+				std::string baseBranchId;
+				std::string title;
+				std::uint64_t createdAtMs = 0;
+				std::uint64_t restoredAtMs = 0;
+			};
+			struct SessionOperatorState {
+				std::unordered_map<std::string, std::unordered_set<std::string>> sessionSubscribers;
+				std::unordered_map<std::string, std::unordered_set<std::string>> sessionMessageSubscribers;
+				std::unordered_map<std::string, SessionCompactionBranchRecord> compactionBranches;
+				std::unordered_map<std::string, std::vector<std::string>> compactionBranchIdsBySession;
+				std::uint64_t compactionSequence = 1;
+			};
+			auto sessionState = std::make_shared<SessionOperatorState>();
+			auto resolveSessionId = [&host](const std::optional<std::string>& paramsJson) {
+				const RequestParamsView params(paramsJson);
+				const std::string requestedSessionId = params.GetString("sessionId");
+				return host.m_sessionRegistry.Resolve(requestedSessionId).id;
 				};
-			registerUnsupportedSessionMethod("sessions.subscribe");
-			registerUnsupportedSessionMethod("sessions.unsubscribe");
-			registerUnsupportedSessionMethod("sessions.messages.subscribe");
-			registerUnsupportedSessionMethod("sessions.messages.unsubscribe");
-			registerUnsupportedSessionMethod("sessions.send");
-			registerUnsupportedSessionMethod("sessions.abort");
-			registerUnsupportedSessionMethod("sessions.compaction.list");
-			registerUnsupportedSessionMethod("sessions.compaction.get");
-			registerUnsupportedSessionMethod("sessions.compaction.branch");
-			registerUnsupportedSessionMethod("sessions.compaction.restore");
+			auto resolveConnectionId = [](const std::optional<std::string>& paramsJson) {
+				const RequestParamsView params(paramsJson);
+				std::string connectionId = params.GetString("connectionId");
+				if (connectionId.empty()) {
+					connectionId = params.GetString("clientConnectionId");
+				}
+				if (connectionId.empty()) {
+					connectionId = "local";
+				}
+				return connectionId;
+				};
+
+			host.m_dispatcher.Register(
+				"sessions.subscribe",
+				[sessionState, resolveSessionId, resolveConnectionId](const protocol::RequestFrame& request) {
+					const std::string sessionId = resolveSessionId(request.paramsJson);
+					const std::string connectionId = resolveConnectionId(request.paramsJson);
+					auto& subscribers = sessionState->sessionSubscribers[sessionId];
+					subscribers.insert(connectionId);
+					return protocol::OkResponse(
+						request,
+						JsonObject({
+							{"sessionId", JsonString(sessionId)},
+							{"connectionId", JsonString(connectionId)},
+							{"subscribed", JsonBool(true)},
+							{"subscriberCount", JsonNumber(static_cast<std::uint64_t>(subscribers.size()))},
+							}));
+				});
+			host.m_dispatcher.Register(
+				"sessions.unsubscribe",
+				[sessionState, resolveSessionId, resolveConnectionId](const protocol::RequestFrame& request) {
+					const std::string sessionId = resolveSessionId(request.paramsJson);
+					const std::string connectionId = resolveConnectionId(request.paramsJson);
+					auto it = sessionState->sessionSubscribers.find(sessionId);
+					if (it != sessionState->sessionSubscribers.end()) {
+						it->second.erase(connectionId);
+					}
+					const std::uint64_t remaining = it != sessionState->sessionSubscribers.end()
+						? static_cast<std::uint64_t>(it->second.size())
+						: 0;
+					return protocol::OkResponse(
+						request,
+						JsonObject({
+							{"sessionId", JsonString(sessionId)},
+							{"connectionId", JsonString(connectionId)},
+							{"subscribed", JsonBool(false)},
+							{"subscriberCount", JsonNumber(remaining)},
+							}));
+				});
+
+			host.m_dispatcher.Register(
+				"sessions.messages.subscribe",
+				[sessionState, resolveSessionId, resolveConnectionId](const protocol::RequestFrame& request) {
+					const std::string sessionId = resolveSessionId(request.paramsJson);
+					const std::string connectionId = resolveConnectionId(request.paramsJson);
+					auto& subscribers = sessionState->sessionMessageSubscribers[sessionId];
+					subscribers.insert(connectionId);
+					return protocol::OkResponse(
+						request,
+						JsonObject({
+							{"sessionId", JsonString(sessionId)},
+							{"connectionId", JsonString(connectionId)},
+							{"subscribed", JsonBool(true)},
+							{"subscriberCount", JsonNumber(static_cast<std::uint64_t>(subscribers.size()))},
+							}));
+				});
+			host.m_dispatcher.Register(
+				"sessions.messages.unsubscribe",
+				[sessionState, resolveSessionId, resolveConnectionId](const protocol::RequestFrame& request) {
+					const std::string sessionId = resolveSessionId(request.paramsJson);
+					const std::string connectionId = resolveConnectionId(request.paramsJson);
+					auto it = sessionState->sessionMessageSubscribers.find(sessionId);
+					if (it != sessionState->sessionMessageSubscribers.end()) {
+						it->second.erase(connectionId);
+					}
+					const std::uint64_t remaining = it != sessionState->sessionMessageSubscribers.end()
+						? static_cast<std::uint64_t>(it->second.size())
+						: 0;
+					return protocol::OkResponse(
+						request,
+						JsonObject({
+							{"sessionId", JsonString(sessionId)},
+							{"connectionId", JsonString(connectionId)},
+							{"subscribed", JsonBool(false)},
+							{"subscriberCount", JsonNumber(remaining)},
+							}));
+				});
+
+			host.m_dispatcher.Register(
+				"sessions.send",
+				[&host](const protocol::RequestFrame& request) {
+					auto forwarded = request;
+					forwarded.method = "chat.send";
+					const protocol::ResponseFrame response = host.m_dispatcher.Dispatch(forwarded);
+					if (!response.ok) {
+						return response;
+					}
+					const std::string sessionId = host.m_sessionRegistry.Resolve(RequestParamsView(request.paramsJson).GetString("sessionId")).id;
+					return protocol::OkResponse(
+						request,
+						JsonObject({
+							{"sessionId", JsonString(sessionId)},
+							{"forwardedMethod", JsonString("chat.send")},
+							{"response", response.payloadJson.value_or(std::string("{}"))},
+							}));
+				});
+			host.m_dispatcher.Register(
+				"sessions.abort",
+				[&host](const protocol::RequestFrame& request) {
+					auto forwarded = request;
+					forwarded.method = "chat.abort";
+					const protocol::ResponseFrame response = host.m_dispatcher.Dispatch(forwarded);
+					if (!response.ok) {
+						return response;
+					}
+					return protocol::OkResponse(
+						request,
+						JsonObject({
+							{"aborted", JsonBool(true)},
+							{"forwardedMethod", JsonString("chat.abort")},
+							{"response", response.payloadJson.value_or(std::string("{}"))},
+							}));
+				});
+
+			host.m_dispatcher.Register(
+				"sessions.compaction.list",
+				[sessionState, resolveSessionId](const protocol::RequestFrame& request) {
+					const std::string sessionId = resolveSessionId(request.paramsJson);
+					auto idsIt = sessionState->compactionBranchIdsBySession.find(sessionId);
+					std::vector<std::string> rows;
+					if (idsIt != sessionState->compactionBranchIdsBySession.end()) {
+						for (const auto& branchId : idsIt->second) {
+							auto branchIt = sessionState->compactionBranches.find(branchId);
+							if (branchIt == sessionState->compactionBranches.end()) {
+								continue;
+							}
+							rows.push_back(JsonObject({
+								{"branchId", JsonString(branchIt->second.branchId)},
+								{"sessionId", JsonString(branchIt->second.sessionId)},
+								{"title", JsonString(branchIt->second.title)},
+								{"baseBranchId", JsonString(branchIt->second.baseBranchId)},
+								{"createdAtMs", JsonNumber(branchIt->second.createdAtMs)},
+								{"restoredAtMs", JsonNumber(branchIt->second.restoredAtMs)},
+								}));
+						}
+					}
+					return protocol::OkResponse(
+						request,
+						JsonObject({
+							{"sessionId", JsonString(sessionId)},
+							{"items", JsonArray(rows)},
+							{"count", JsonNumber(static_cast<std::uint64_t>(rows.size()))},
+							}));
+				});
+			host.m_dispatcher.Register(
+				"sessions.compaction.get",
+				[sessionState](const protocol::RequestFrame& request) {
+					const RequestParamsView params(request.paramsJson);
+					const std::string branchId = params.GetString("branchId");
+					if (branchId.empty()) {
+						return protocol::ErrorResponse(request, "invalid_request", "branchId required");
+					}
+					auto it = sessionState->compactionBranches.find(branchId);
+					if (it == sessionState->compactionBranches.end()) {
+						return protocol::OkResponse(
+							request,
+							JsonObject({
+								{"branchId", JsonString(branchId)},
+								{"found", JsonBool(false)},
+								}));
+					}
+					return protocol::OkResponse(
+						request,
+						JsonObject({
+							{"branchId", JsonString(it->second.branchId)},
+							{"sessionId", JsonString(it->second.sessionId)},
+							{"title", JsonString(it->second.title)},
+							{"baseBranchId", JsonString(it->second.baseBranchId)},
+							{"createdAtMs", JsonNumber(it->second.createdAtMs)},
+							{"restoredAtMs", JsonNumber(it->second.restoredAtMs)},
+							{"found", JsonBool(true)},
+							}));
+				});
+			host.m_dispatcher.Register(
+				"sessions.compaction.branch",
+				[sessionState, resolveSessionId](const protocol::RequestFrame& request) {
+					const RequestParamsView params(request.paramsJson);
+					const std::string sessionId = resolveSessionId(request.paramsJson);
+					const std::string title = params.GetString("title").empty()
+						? "compaction-branch"
+						: params.GetString("title");
+					const std::string baseBranchId = params.GetString("baseBranchId");
+					SessionCompactionBranchRecord record;
+					record.sessionId = sessionId;
+					record.baseBranchId = baseBranchId;
+					record.title = title;
+					record.branchId = "compaction-" + std::to_string(sessionState->compactionSequence++);
+					record.createdAtMs = GatewayEpochMilliseconds();
+					sessionState->compactionBranches.insert_or_assign(record.branchId, record);
+					sessionState->compactionBranchIdsBySession[sessionId].push_back(record.branchId);
+					return protocol::OkResponse(
+						request,
+						JsonObject({
+							{"created", JsonBool(true)},
+							{"branchId", JsonString(record.branchId)},
+							{"sessionId", JsonString(record.sessionId)},
+							{"baseBranchId", JsonString(record.baseBranchId)},
+							{"title", JsonString(record.title)},
+							{"createdAtMs", JsonNumber(record.createdAtMs)},
+							}));
+				});
+			host.m_dispatcher.Register(
+				"sessions.compaction.restore",
+				[sessionState](const protocol::RequestFrame& request) {
+					const RequestParamsView params(request.paramsJson);
+					const std::string branchId = params.GetString("branchId");
+					if (branchId.empty()) {
+						return protocol::ErrorResponse(request, "invalid_request", "branchId required");
+					}
+					auto it = sessionState->compactionBranches.find(branchId);
+					if (it == sessionState->compactionBranches.end()) {
+						return protocol::ErrorResponse(request, "invalid_request", "branchId not found");
+					}
+					it->second.restoredAtMs = GatewayEpochMilliseconds();
+					return protocol::OkResponse(
+						request,
+						JsonObject({
+							{"restored", JsonBool(true)},
+							{"branchId", JsonString(it->second.branchId)},
+							{"sessionId", JsonString(it->second.sessionId)},
+							{"restoredAtMs", JsonNumber(it->second.restoredAtMs)},
+							}));
+				});
 
 			host.m_dispatcher.Register(
 				"chat.send",

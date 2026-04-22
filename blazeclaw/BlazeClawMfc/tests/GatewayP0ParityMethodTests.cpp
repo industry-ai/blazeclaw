@@ -21,9 +21,9 @@ namespace {
 			});
 	}
 
-	std::string ExtractFirstActionId(const std::string& payloadJson)
+	std::string ExtractJsonStringField(const std::string& payloadJson, const std::string& fieldName)
 	{
-		const std::string marker = "\"id\":\"";
+		const std::string marker = "\"" + fieldName + "\":\"";
 		const std::size_t markerPos = payloadJson.find(marker);
 		if (markerPos == std::string::npos) {
 			return {};
@@ -36,6 +36,11 @@ namespace {
 		}
 
 		return payloadJson.substr(valueStart, valueEnd - valueStart);
+	}
+
+	std::string ExtractFirstActionId(const std::string& payloadJson)
+	{
+		return ExtractJsonStringField(payloadJson, "id");
 	}
 
 } // namespace
@@ -274,46 +279,130 @@ TEST_CASE("P0 parity methods: node event and invoke.result runtime handlers acce
 	CHECK(nodeEvent.payloadJson.value().find("\"accepted\":true") != std::string::npos);
 }
 
-TEST_CASE("P0 parity methods: device pairing/token lifecycle are explicitly unsupported", "[gateway][parity][p0]")
+TEST_CASE("P1 parity methods: device pairing unsupported and token lifecycle stateful", "[gateway][parity][p1]")
 {
 	GatewayHost host;
 	REQUIRE(host.StartLocalDispatchOnly());
 
-	const auto deviceApprove = Route(host, "p0-device-approve", "device.pair.approve");
+	const auto deviceApprove = Route(host, "p1-device-approve", "device.pair.approve");
 	REQUIRE_FALSE(deviceApprove.ok);
 	REQUIRE(deviceApprove.error.has_value());
 	CHECK(deviceApprove.error->code == "unavailable");
 
-	const auto tokenRotate = Route(host, "p0-device-token-rotate", "device.token.rotate");
-	REQUIRE_FALSE(tokenRotate.ok);
-	REQUIRE(tokenRotate.error.has_value());
-	CHECK(tokenRotate.error->code == "unavailable");
+	const auto tokenRotate = Route(
+		host,
+		"p1-device-token-rotate",
+		"device.token.rotate",
+		R"({"nodeId":"node-device-1"})");
+	REQUIRE(tokenRotate.ok);
+	REQUIRE(tokenRotate.payloadJson.has_value());
+	CHECK(tokenRotate.payloadJson.value().find("\"rotated\":true") != std::string::npos);
+	CHECK(tokenRotate.payloadJson.value().find("\"nodeId\":\"node-device-1\"") != std::string::npos);
+
+	const auto tokenRevoke = Route(
+		host,
+		"p1-device-token-revoke",
+		"device.token.revoke",
+		R"({"nodeId":"node-device-1"})");
+	REQUIRE(tokenRevoke.ok);
+	REQUIRE(tokenRevoke.payloadJson.has_value());
+	CHECK(tokenRevoke.payloadJson.value().find("\"revoked\":true") != std::string::npos);
+	CHECK(tokenRevoke.payloadJson.value().find("\"found\":true") != std::string::npos);
 }
 
-TEST_CASE("P0 parity methods: session static stubs are explicitly unsupported", "[gateway][parity][p0]")
+TEST_CASE("P1 parity methods: session subscription/send/abort/compaction behavior is runtime-backed", "[gateway][parity][p1]")
 {
 	GatewayHost host;
 	REQUIRE(host.StartLocalDispatchOnly());
 
-	const std::vector<std::string> methods{
+	const auto subscribe = Route(
+		host,
+		"p1-session-subscribe",
 		"sessions.subscribe",
-		"sessions.unsubscribe",
-		"sessions.messages.subscribe",
-		"sessions.messages.unsubscribe",
-		"sessions.send",
-		"sessions.abort",
-		"sessions.compaction.list",
-		"sessions.compaction.get",
-		"sessions.compaction.branch",
-		"sessions.compaction.restore",
-	};
+		R"({"sessionId":"main","connectionId":"conn-1"})");
+	REQUIRE(subscribe.ok);
+	REQUIRE(subscribe.payloadJson.has_value());
+	CHECK(subscribe.payloadJson.value().find("\"subscribed\":true") != std::string::npos);
+	CHECK(subscribe.payloadJson.value().find("\"subscriberCount\":1") != std::string::npos);
 
-	for (const auto& method : methods) {
-		const auto response = Route(host, "p0-session-" + method, method);
-		REQUIRE_FALSE(response.ok);
-		REQUIRE(response.error.has_value());
-		CHECK(response.error->code == "unavailable");
-	}
+	const auto messageSubscribe = Route(
+		host,
+		"p1-session-msg-subscribe",
+		"sessions.messages.subscribe",
+		R"({"sessionId":"main","connectionId":"conn-1"})");
+	REQUIRE(messageSubscribe.ok);
+	REQUIRE(messageSubscribe.payloadJson.has_value());
+	CHECK(messageSubscribe.payloadJson.value().find("\"subscribed\":true") != std::string::npos);
+
+	const auto send = Route(
+		host,
+		"p1-session-send",
+		"sessions.send",
+		R"({"sessionId":"main","message":"hello from p1"})");
+	REQUIRE(send.ok);
+	REQUIRE(send.payloadJson.has_value());
+	CHECK(send.payloadJson.value().find("\"forwardedMethod\":\"chat.send\"") != std::string::npos);
+
+	const auto branch = Route(
+		host,
+		"p1-session-branch",
+		"sessions.compaction.branch",
+		R"({"sessionId":"main","title":"checkpoint-a"})");
+	REQUIRE(branch.ok);
+	REQUIRE(branch.payloadJson.has_value());
+	CHECK(branch.payloadJson.value().find("\"created\":true") != std::string::npos);
+	const std::string branchId = ExtractJsonStringField(branch.payloadJson.value(), "branchId");
+	REQUIRE_FALSE(branchId.empty());
+
+	const auto list = Route(
+		host,
+		"p1-session-list",
+		"sessions.compaction.list",
+		R"({"sessionId":"main"})");
+	REQUIRE(list.ok);
+	REQUIRE(list.payloadJson.has_value());
+	CHECK(list.payloadJson.value().find("\"count\":1") != std::string::npos);
+
+	const auto get = Route(
+		host,
+		"p1-session-get",
+		"sessions.compaction.get",
+		"{\"branchId\":\"" + branchId + "\"}");
+	REQUIRE(get.ok);
+	REQUIRE(get.payloadJson.has_value());
+	CHECK(get.payloadJson.value().find("\"found\":true") != std::string::npos);
+
+	const auto restore = Route(
+		host,
+		"p1-session-restore",
+		"sessions.compaction.restore",
+		"{\"branchId\":\"" + branchId + "\"}");
+	REQUIRE(restore.ok);
+	REQUIRE(restore.payloadJson.has_value());
+	CHECK(restore.payloadJson.value().find("\"restored\":true") != std::string::npos);
+
+	const auto abort = Route(host, "p1-session-abort", "sessions.abort");
+	REQUIRE(abort.ok);
+	REQUIRE(abort.payloadJson.has_value());
+	CHECK(abort.payloadJson.value().find("\"forwardedMethod\":\"chat.abort\"") != std::string::npos);
+
+	const auto messageUnsubscribe = Route(
+		host,
+		"p1-session-msg-unsubscribe",
+		"sessions.messages.unsubscribe",
+		R"({"sessionId":"main","connectionId":"conn-1"})");
+	REQUIRE(messageUnsubscribe.ok);
+	REQUIRE(messageUnsubscribe.payloadJson.has_value());
+	CHECK(messageUnsubscribe.payloadJson.value().find("\"subscribed\":false") != std::string::npos);
+
+	const auto unsubscribe = Route(
+		host,
+		"p1-session-unsubscribe",
+		"sessions.unsubscribe",
+		R"({"sessionId":"main","connectionId":"conn-1"})");
+	REQUIRE(unsubscribe.ok);
+	REQUIRE(unsubscribe.payloadJson.has_value());
+	CHECK(unsubscribe.payloadJson.value().find("\"subscribed\":false") != std::string::npos);
 }
 
 TEST_CASE("P0 parity alias: node.canvas.capability.refresh forwards to canvas capabilities", "[gateway][parity][p0]")
@@ -329,6 +418,65 @@ TEST_CASE("P0 parity alias: node.canvas.capability.refresh forwards to canvas ca
 	REQUIRE(response.ok);
 	REQUIRE(response.payloadJson.has_value());
 	REQUIRE(response.payloadJson.value().find("\"canvasCapability\":") != std::string::npos);
+}
+
+TEST_CASE("P1 parity methods: skills and update-run are runtime-backed", "[gateway][parity][p1]")
+{
+	GatewayHost host;
+	REQUIRE(host.StartLocalDispatchOnly());
+
+	const auto searchBeforeInstall = Route(
+		host,
+		"p1-skills-search-before",
+		"skills.search",
+		R"({"query":"email","installedOnly":false})");
+	REQUIRE(searchBeforeInstall.ok);
+	REQUIRE(searchBeforeInstall.payloadJson.has_value());
+	CHECK(searchBeforeInstall.payloadJson.value().find("\"count\":1") != std::string::npos);
+	CHECK(searchBeforeInstall.payloadJson.value().find("\"installed\":false") != std::string::npos);
+
+	const auto install = Route(
+		host,
+		"p1-skills-install",
+		"skills.install",
+		R"({"name":"email.schedule"})");
+	REQUIRE(install.ok);
+	REQUIRE(install.payloadJson.has_value());
+	CHECK(install.payloadJson.value().find("\"installed\":true") != std::string::npos);
+	CHECK(install.payloadJson.value().find("\"status\":\"installed\"") != std::string::npos);
+
+	const auto detail = Route(
+		host,
+		"p1-skills-detail",
+		"skills.detail",
+		R"({"name":"email.schedule"})");
+	REQUIRE(detail.ok);
+	REQUIRE(detail.payloadJson.has_value());
+	CHECK(detail.payloadJson.value().find("\"found\":true") != std::string::npos);
+	CHECK(detail.payloadJson.value().find("\"installed\":true") != std::string::npos);
+
+	const auto bins = Route(host, "p1-skills-bins", "skills.bins");
+	REQUIRE(bins.ok);
+	REQUIRE(bins.payloadJson.has_value());
+	CHECK(bins.payloadJson.value().find("\"bins\":[") != std::string::npos);
+	CHECK(bins.payloadJson.value().find("\"python\"") != std::string::npos);
+
+	const auto searchInstalled = Route(
+		host,
+		"p1-skills-search-installed",
+		"skills.search",
+		R"({"query":"email","installedOnly":true})");
+	REQUIRE(searchInstalled.ok);
+	REQUIRE(searchInstalled.payloadJson.has_value());
+	CHECK(searchInstalled.payloadJson.value().find("\"count\":1") != std::string::npos);
+	CHECK(searchInstalled.payloadJson.value().find("\"installed\":true") != std::string::npos);
+
+	const auto updateRun = Route(host, "p1-update-run", "update.run");
+	REQUIRE(updateRun.ok);
+	REQUIRE(updateRun.payloadJson.has_value());
+	CHECK(updateRun.payloadJson.value().find("\"started\":true") != std::string::npos);
+	CHECK(updateRun.payloadJson.value().find("\"status\":\"running\"") != std::string::npos);
+	CHECK(updateRun.payloadJson.value().find("\"runId\":\"update-run-") != std::string::npos);
 }
 
 TEST_CASE("P2 parity methods: doctor memory method family is routable", "[gateway][parity][p2]")

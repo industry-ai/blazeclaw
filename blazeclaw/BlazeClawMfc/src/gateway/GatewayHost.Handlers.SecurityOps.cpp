@@ -2003,6 +2003,8 @@ namespace blazeclaw::gateway {
 			std::unordered_map<std::string, std::string> nodeModes;
 			std::unordered_map<std::string, ApprovalRequestRecord> execRequests;
 			std::unordered_map<std::string, ApprovalRequestRecord> pluginRequests;
+			std::unordered_map<std::string, std::string> deviceTokenByNodeId;
+			std::unordered_map<std::string, std::uint64_t> deviceTokenIssuedAtByNodeId;
 			std::uint64_t requestSequence = 1;
 		};
 		auto approvalState = std::make_shared<ApprovalStateStore>();
@@ -2921,8 +2923,55 @@ namespace blazeclaw::gateway {
 		registerUnsupportedDeviceMethod("device.pair.approve");
 		registerUnsupportedDeviceMethod("device.pair.reject");
 		registerUnsupportedDeviceMethod("device.pair.remove");
-		registerUnsupportedDeviceMethod("device.token.rotate");
-		registerUnsupportedDeviceMethod("device.token.revoke");
+		m_dispatcher.Register(
+			"device.token.rotate",
+			[approvalState](const protocol::RequestFrame& request) {
+				const RequestParamsView params(request.paramsJson);
+				const std::string nodeId = TrimCopy(params.GetString("nodeId"));
+				if (nodeId.empty()) {
+					return protocol::ErrorResponse(request, "invalid_request", "nodeId required");
+				}
+				const std::string token = "device-token-" + std::to_string(approvalState->requestSequence++);
+				const std::uint64_t issuedAtMs = GatewayEpochMilliseconds();
+				approvalState->deviceTokenByNodeId.insert_or_assign(nodeId, token);
+				approvalState->deviceTokenIssuedAtByNodeId.insert_or_assign(nodeId, issuedAtMs);
+				return protocol::OkResponse(
+					request,
+					JsonObject({
+						{"nodeId", JsonString(nodeId)},
+						{"token", JsonString(token)},
+						{"rotated", JsonBool(true)},
+						{"issuedAtMs", JsonNumber(issuedAtMs)},
+						}));
+			});
+		m_dispatcher.Register(
+			"device.token.revoke",
+			[approvalState](const protocol::RequestFrame& request) {
+				const RequestParamsView params(request.paramsJson);
+				const std::string nodeId = TrimCopy(params.GetString("nodeId"));
+				if (nodeId.empty()) {
+					return protocol::ErrorResponse(request, "invalid_request", "nodeId required");
+				}
+				auto tokenIt = approvalState->deviceTokenByNodeId.find(nodeId);
+				if (tokenIt == approvalState->deviceTokenByNodeId.end()) {
+					return protocol::OkResponse(
+						request,
+						JsonObject({
+							{"nodeId", JsonString(nodeId)},
+							{"revoked", JsonBool(false)},
+							{"found", JsonBool(false)},
+							}));
+				}
+				approvalState->deviceTokenByNodeId.erase(tokenIt);
+				approvalState->deviceTokenIssuedAtByNodeId.erase(nodeId);
+				return protocol::OkResponse(
+					request,
+					JsonObject({
+						{"nodeId", JsonString(nodeId)},
+						{"revoked", JsonBool(true)},
+						{"found", JsonBool(true)},
+						}));
+			});
 	}
 
 } // namespace blazeclaw::gateway

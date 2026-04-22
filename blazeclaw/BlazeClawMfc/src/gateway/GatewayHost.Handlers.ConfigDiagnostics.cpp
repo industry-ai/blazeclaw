@@ -18,6 +18,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace blazeclaw::gateway::handlers::config_diagnostics {
@@ -413,24 +414,140 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 				"\",\"dreamingEnabled\":" + std::string(nextEnabled ? "true" : "false") + "}");
 			});
 
-		host.m_dispatcher.Register("skills.search", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"skills\":[],\"count\":0}");
+		struct RuntimeSkillEntry {
+			std::string id;
+			std::string name;
+			std::string description;
+			std::string bin;
+			bool installed = false;
+		};
+		struct RuntimeUpdateState {
+			std::uint64_t runSequence = 1;
+			std::string lastRunId;
+			std::uint64_t lastRunAtMs = 0;
+		};
+		auto runtimeSkills = std::make_shared<std::vector<RuntimeSkillEntry>>(std::vector<RuntimeSkillEntry>{
+			RuntimeSkillEntry{ "skill-weather", "weather.lookup", "Weather lookup helper", "python", true },
+				RuntimeSkillEntry{ "skill-email", "email.schedule", "Email scheduling helper", "python", false },
+				RuntimeSkillEntry{ "skill-lobster", "lobster.plan", "Lobster planner helper", "node", false },
+		});
+		auto runtimeUpdateState = std::make_shared<RuntimeUpdateState>();
+
+		host.m_dispatcher.Register("skills.search", [runtimeSkills](const protocol::RequestFrame& request) {
+			const RequestParamsView params(request.paramsJson);
+			std::string query = params.GetString("query");
+			std::transform(
+				query.begin(),
+				query.end(),
+				query.begin(),
+				[](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+			const bool installedOnly = params.GetBool("installedOnly").value_or(false);
+
+			std::vector<std::string> rows;
+			for (const auto& entry : *runtimeSkills) {
+				if (installedOnly && !entry.installed) {
+					continue;
+				}
+				std::string haystack = entry.id + " " + entry.name + " " + entry.description;
+				std::transform(
+					haystack.begin(),
+					haystack.end(),
+					haystack.begin(),
+					[](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+				if (!query.empty() && haystack.find(query) == std::string::npos) {
+					continue;
+				}
+				rows.push_back(JsonObject({
+					{"id", JsonString(entry.id)},
+					{"name", JsonString(entry.name)},
+					{"description", JsonString(entry.description)},
+					{"bin", JsonString(entry.bin)},
+					{"installed", JsonBool(entry.installed)},
+					}));
+			}
+			return protocol::OkResponse(
+				request,
+				JsonObject({
+					{"skills", JsonArray(rows)},
+					{"count", JsonNumber(static_cast<std::uint64_t>(rows.size()))},
+					}));
 			});
 
-		host.m_dispatcher.Register("skills.detail", [](const protocol::RequestFrame& request) {
+		host.m_dispatcher.Register("skills.detail", [runtimeSkills](const protocol::RequestFrame& request) {
+			const RequestParamsView params(request.paramsJson);
+			const std::string id = params.GetString("id");
+			const std::string name = params.GetString("name");
+			for (const auto& entry : *runtimeSkills) {
+				if ((!id.empty() && entry.id == id) || (!name.empty() && entry.name == name)) {
+					return protocol::OkResponse(
+						request,
+						JsonObject({
+							{"found", JsonBool(true)},
+							{"skill", JsonObject({
+								{"id", JsonString(entry.id)},
+								{"name", JsonString(entry.name)},
+								{"description", JsonString(entry.description)},
+								{"bin", JsonString(entry.bin)},
+								{"installed", JsonBool(entry.installed)},
+							})},
+							}));
+				}
+			}
 			return protocol::OkResponse(request, "{\"skill\":null,\"found\":false}");
 			});
 
-		host.m_dispatcher.Register("skills.bins", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"bins\":[],\"count\":0}");
+		host.m_dispatcher.Register("skills.bins", [runtimeSkills](const protocol::RequestFrame& request) {
+			std::unordered_set<std::string> bins;
+			for (const auto& entry : *runtimeSkills) {
+				if (!entry.bin.empty()) {
+					bins.insert(entry.bin);
+				}
+			}
+			std::vector<std::string> orderedBins(bins.begin(), bins.end());
+			std::sort(orderedBins.begin(), orderedBins.end());
+			std::vector<std::string> rows;
+			for (const auto& bin : orderedBins) {
+				rows.push_back(JsonString(bin));
+			}
+			return protocol::OkResponse(
+				request,
+				JsonObject({
+					{"bins", JsonArray(rows)},
+					{"count", JsonNumber(static_cast<std::uint64_t>(rows.size()))},
+					}));
 			});
 
-		host.m_dispatcher.Register("skills.install", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"installed\":false,\"status\":\"not_supported\"}");
+		host.m_dispatcher.Register("skills.install", [runtimeSkills](const protocol::RequestFrame& request) {
+			const RequestParamsView params(request.paramsJson);
+			const std::string id = params.GetString("id");
+			const std::string name = params.GetString("name");
+			for (auto& entry : *runtimeSkills) {
+				if ((!id.empty() && entry.id == id) || (!name.empty() && entry.name == name)) {
+					entry.installed = true;
+					return protocol::OkResponse(
+						request,
+						JsonObject({
+							{"installed", JsonBool(true)},
+							{"status", JsonString("installed")},
+							{"skillId", JsonString(entry.id)},
+							{"skillName", JsonString(entry.name)},
+							}));
+				}
+			}
+			return protocol::ErrorResponse(request, "invalid_request", "skill id/name not found");
 			});
 
-		host.m_dispatcher.Register("update.run", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"started\":false,\"status\":\"not_supported\"}");
+		host.m_dispatcher.Register("update.run", [runtimeUpdateState](const protocol::RequestFrame& request) {
+			runtimeUpdateState->lastRunId = "update-run-" + std::to_string(runtimeUpdateState->runSequence++);
+			runtimeUpdateState->lastRunAtMs = static_cast<std::uint64_t>(NowMs());
+			return protocol::OkResponse(
+				request,
+				JsonObject({
+					{"started", JsonBool(true)},
+					{"status", JsonString("running")},
+					{"runId", JsonString(runtimeUpdateState->lastRunId)},
+					{"startedAtMs", JsonNumber(runtimeUpdateState->lastRunAtMs)},
+					}));
 			});
 
 		host.m_dispatcher.Register("doctor.memory.status", [](const protocol::RequestFrame& request) {
