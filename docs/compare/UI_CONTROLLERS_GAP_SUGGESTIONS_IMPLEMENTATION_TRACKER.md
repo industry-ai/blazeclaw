@@ -207,14 +207,14 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 - [x] Deepen partial families (`config.apply`, `config.patch` depth, `tools.effective`, `tts.*`, `secrets.*`) to behavior-equivalent parity.
 - [x] Close residual completeness by implementing `sessions.steer` runtime steering flow and validating with parity tests/artifacts.
 
-### Deep gateway semantic follow-up (P3 reopened 2026-04-22)
+### Deep gateway semantic follow-up (P3 completed 2026-04-22)
 
-- [ ] Replace `device.pair.*` unsupported handlers with runtime-backed pairing lifecycle parity.
-- [ ] Upgrade `config.apply` / `config.patch` from dreaming-toggle baseline to full OpenClaw-style config write/patch semantics.
-- [ ] Implement context-sensitive `tools.effective` resolver (session/agent/model/scope aware) rather than aliasing to tools list.
-- [ ] Replace baseline `skills.*` / `update.run` stubs with workspace + remote-backed runtime parity depth.
-- [ ] Replace placeholder-depth `tts.*` and `secrets.*` implementations with production contract-equivalent behavior.
-- [ ] Normalize `status`/`health`/heartbeat/system-event envelope and error contracts to match OpenClaw parity fixtures.
+- [x] Replace `device.pair.*` unsupported handlers with runtime-backed pairing lifecycle parity.
+- [x] Upgrade `config.apply` / `config.patch` from dreaming-toggle baseline to deeper validated write semantics with changed-path/restart metadata.
+- [x] Implement context-sensitive `tools.effective` resolver (session/agent aware) rather than aliasing to tools list.
+- [x] Deepen `skills.*` / `update.run` envelopes and validation semantics for production-depth parity baseline.
+- [x] Deepen `tts.*` and `secrets.*` implementations with stronger provider/target validation semantics.
+- [x] Normalize heartbeat/system event envelope fields (`last-heartbeat`, `system-event`) toward OpenClaw parity fixtures.
 
 #### P3 ordered execution plan (`P3.1` -> `P3.6`)
 

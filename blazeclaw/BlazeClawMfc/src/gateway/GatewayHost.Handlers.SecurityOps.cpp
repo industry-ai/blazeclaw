@@ -2968,20 +2968,126 @@ namespace blazeclaw::gateway {
 						}));
 			});
 
-		auto registerUnsupportedDeviceMethod = [this](const std::string& methodName) {
-			m_dispatcher.Register(
-				methodName,
-				[methodName](const protocol::RequestFrame& request) {
-					return protocol::ErrorResponse(
-						request,
-						"unavailable",
-						"Method `" + methodName + "` is not supported in BlazeClaw yet.");
-				});
-			};
-		registerUnsupportedDeviceMethod("device.pair.list");
-		registerUnsupportedDeviceMethod("device.pair.approve");
-		registerUnsupportedDeviceMethod("device.pair.reject");
-		registerUnsupportedDeviceMethod("device.pair.remove");
+		m_dispatcher.Register(
+			"device.pair.list",
+			[this](const protocol::RequestFrame& request) {
+				const NodePairingListResult list = m_nodePairingService.ListPairing();
+				std::vector<std::string> pendingRows;
+				pendingRows.reserve(list.pending.size());
+				for (const auto& pending : list.pending) {
+					pendingRows.push_back(JsonObject({
+						{"requestId", JsonString(pending.requestId)},
+						{"nodeId", JsonString(pending.declared.nodeId)},
+						{"displayName", JsonString(pending.declared.displayName)},
+						{"platform", JsonString(pending.declared.platform)},
+						{"requiredApproveScopes", SerializeStringArrayJson(pending.requiredApproveScopes)},
+						{"ts", JsonNumber(pending.tsMs)},
+						}));
+				}
+				std::vector<std::string> pairedRows;
+				pairedRows.reserve(list.paired.size());
+				for (const auto& paired : list.paired) {
+					pairedRows.push_back(JsonObject({
+						{"nodeId", JsonString(paired.declared.nodeId)},
+						{"displayName", JsonString(paired.declared.displayName)},
+						{"platform", JsonString(paired.declared.platform)},
+						{"tokenPreview", JsonString(paired.token.empty() ? "" : (paired.token.substr(0, (std::min)(paired.token.size(), std::size_t{ 6 })) + "***"))},
+						{"createdAtMs", JsonNumber(paired.createdAtMs)},
+						{"approvedAtMs", JsonNumber(paired.approvedAtMs)},
+						}));
+				}
+				return protocol::OkResponse(
+					request,
+					JsonObject({
+						{"pending", JsonArray(pendingRows)},
+						{"paired", JsonArray(pairedRows)},
+						{"pendingCount", JsonNumber(static_cast<std::uint64_t>(pendingRows.size()))},
+						{"pairedCount", JsonNumber(static_cast<std::uint64_t>(pairedRows.size()))},
+						}));
+			});
+		m_dispatcher.Register(
+			"device.pair.approve",
+			[this](const protocol::RequestFrame& request) {
+				const RequestParamsView params(request.paramsJson);
+				const std::string requestId = TrimCopy(params.GetString("requestId"));
+				if (requestId.empty()) {
+					return protocol::ErrorResponse(request, "invalid_request", "requestId required");
+				}
+				const std::vector<std::string> callerScopes = CollectCallerScopes(request);
+				const NodePairingApproveResult approved = m_nodePairingService.ApprovePairing(requestId, callerScopes);
+				if (approved.kind == NodePairingApproveResult::Kind::NotFound) {
+					return protocol::ErrorResponse(request, "invalid_request", "unknown requestId");
+				}
+				if (approved.kind == NodePairingApproveResult::Kind::Forbidden) {
+					return protocol::ErrorResponse(request, "invalid_request", "missing scope: " + approved.missingScope);
+				}
+				EmitBestEffortEvent(
+					*this,
+					"device.pair.resolved",
+					JsonObject({
+						{"requestId", JsonString(approved.requestId)},
+						{"nodeId", JsonString(approved.node.declared.nodeId)},
+						{"decision", JsonString("approved")},
+						{"ts", JsonNumber(GatewayEpochMilliseconds())},
+						}));
+				return protocol::OkResponse(
+					request,
+					JsonObject({
+						{"requestId", JsonString(approved.requestId)},
+						{"approved", JsonBool(true)},
+						{"nodeId", JsonString(approved.node.declared.nodeId)},
+						{"tokenPreview", JsonString(approved.node.token.empty() ? "" : (approved.node.token.substr(0, (std::min)(approved.node.token.size(), std::size_t{ 6 })) + "***"))},
+						{"commands", SerializeStringArrayJson(approved.node.declared.commands)},
+						}));
+			});
+		m_dispatcher.Register(
+			"device.pair.reject",
+			[this](const protocol::RequestFrame& request) {
+				const RequestParamsView params(request.paramsJson);
+				const std::string requestId = TrimCopy(params.GetString("requestId"));
+				if (requestId.empty()) {
+					return protocol::ErrorResponse(request, "invalid_request", "requestId required");
+				}
+				const NodePairingRejectResult rejected = m_nodePairingService.RejectPairing(requestId);
+				if (!rejected.found) {
+					return protocol::ErrorResponse(request, "invalid_request", "unknown requestId");
+				}
+				EmitBestEffortEvent(
+					*this,
+					"device.pair.resolved",
+					JsonObject({
+						{"requestId", JsonString(rejected.requestId)},
+						{"nodeId", JsonString(rejected.nodeId)},
+						{"decision", JsonString("rejected")},
+						{"ts", JsonNumber(GatewayEpochMilliseconds())},
+						}));
+				return protocol::OkResponse(
+					request,
+					JsonObject({
+						{"requestId", JsonString(rejected.requestId)},
+						{"nodeId", JsonString(rejected.nodeId)},
+						{"rejected", JsonBool(true)},
+						}));
+			});
+		m_dispatcher.Register(
+			"device.pair.remove",
+			[this](const protocol::RequestFrame& request) {
+				const RequestParamsView params(request.paramsJson);
+				const std::string nodeId = TrimCopy(params.GetString("nodeId"));
+				if (nodeId.empty()) {
+					return protocol::ErrorResponse(request, "invalid_request", "nodeId required");
+				}
+				NodePairingPairedNode removedNode;
+				const bool removed = m_nodePairingService.RemovePairedNode(nodeId, &removedNode);
+				return protocol::OkResponse(
+					request,
+					JsonObject({
+						{"nodeId", JsonString(nodeId)},
+						{"removed", JsonBool(removed)},
+						{"found", JsonBool(removed)},
+						{"displayName", JsonString(removed ? removedNode.declared.displayName : std::string())},
+						}));
+			});
 		m_dispatcher.Register(
 			"device.token.rotate",
 			[approvalState](const protocol::RequestFrame& request) {

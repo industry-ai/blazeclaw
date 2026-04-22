@@ -2544,6 +2544,132 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool ValidateConfigApplyPatchParams(
+			const RequestFrame& request,
+			SchemaValidationIssue& issue,
+			const std::string& methodName) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, methodName, fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"baseHash",
+				JsonFieldKind::String,
+				issue,
+				methodName,
+				"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"raw",
+					JsonFieldKind::String,
+					issue,
+					methodName,
+					"a JSON string payload")) {
+				return false;
+			}
+			if (fieldKinds.find("raw") == fieldKinds.end()) {
+				SetIssue(
+					issue,
+					"schema_missing_field",
+					"Method `" + methodName + "` requires `params.raw`."
+				);
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "baseHash" || field == "raw") {
+					continue;
+				}
+
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `" + methodName + "` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateToolsEffectiveParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "tools.effective", fieldKinds)) {
+				return false;
+			}
+
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"sessionId",
+				JsonFieldKind::String,
+				issue,
+				"tools.effective",
+				"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"agentId",
+					JsonFieldKind::String,
+					issue,
+					"tools.effective",
+					"a string") ||
+				!RequireFieldKindIfPresent(
+					fieldKinds,
+					"category",
+					JsonFieldKind::String,
+					issue,
+					"tools.effective",
+					"a string")) {
+				return false;
+			}
+			if (fieldKinds.find("sessionId") == fieldKinds.end() ||
+				fieldKinds.find("agentId") == fieldKinds.end()) {
+				SetIssue(issue, "schema_missing_field", "Method `tools.effective` requires `params.sessionId` and `params.agentId`.");
+				return false;
+			}
+
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "sessionId" || field == "agentId" || field == "category") {
+					continue;
+				}
+				SetIssue(
+					issue,
+					"schema_invalid_params",
+					"Method `tools.effective` does not allow `params." + field + "`.");
+				return false;
+			}
+
+			return true;
+		}
+
+		bool ValidateDevicePairRemoveParams(const RequestFrame& request, SchemaValidationIssue& issue) {
+			ParsedObjectFieldKinds fieldKinds;
+			if (!TryParseRequestParamsObject(request, issue, "device.pair.remove", fieldKinds)) {
+				return false;
+			}
+			if (!RequireFieldKindIfPresent(
+				fieldKinds,
+				"nodeId",
+				JsonFieldKind::String,
+				issue,
+				"device.pair.remove",
+				"a string")) {
+				return false;
+			}
+			if (fieldKinds.find("nodeId") == fieldKinds.end()) {
+				SetIssue(issue, "schema_missing_field", "Method `device.pair.remove` requires `params.nodeId`.");
+				return false;
+			}
+			for (const auto& [field, _] : fieldKinds) {
+				if (field == "nodeId") {
+					continue;
+				}
+				SetIssue(issue, "schema_invalid_params", "Method `device.pair.remove` does not allow `params." + field + "`.");
+				return false;
+			}
+			return true;
+		}
+
 		bool ValidateAgentsFilesListParams(const RequestFrame& request, SchemaValidationIssue& issue) {
 			ParsedObjectFieldKinds fieldKinds;
 			if (!TryParseRequestParamsObject(request, issue, "gateway.agents.files.list", fieldKinds)) {
@@ -2901,6 +3027,10 @@ namespace blazeclaw::gateway::protocol {
 			{ "node.pair.approve", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodePairApproveParams(r, i); } },
 			{ "node.pair.reject", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodePairRejectParams(r, i); } },
 			{ "node.pair.verify", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodePairVerifyParams(r, i); } },
+			{ "device.pair.list", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
+			{ "device.pair.approve", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodePairApproveParams(r, i); } },
+			{ "device.pair.reject", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodePairRejectParams(r, i); } },
+			{ "device.pair.remove", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateDevicePairRemoveParams(r, i); } },
 			{ "node.rename", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodeRenameParams(r, i); } },
 			{ "node.list", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
 			{ "node.describe", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNodeDescribeParams(r, i); } },
@@ -2922,8 +3052,11 @@ namespace blazeclaw::gateway::protocol {
 			{ "gateway.channels.logout", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateChannelsLogoutParams(r, i); } },
 			{ "gateway.config.set", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateConfigSetParams(r, i); } },
 			{ "config.set", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateConfigSetParams(r, i); } },
+			{ "config.apply", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateConfigApplyPatchParams(r, i, r.method); } },
+			{ "config.patch", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateConfigApplyPatchParams(r, i, r.method); } },
 			{ "gateway.tools.count", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateOptionalActiveParam(r, i, r.method); } },
 			{ "tools.catalog", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
+			{ "tools.effective", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateToolsEffectiveParams(r, i); } },
 			{ "gateway.agents.list", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateOptionalActiveParam(r, i, r.method); } },
 			{ "agents.list", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateOptionalActiveParam(r, i, r.method); } },
 			{ "gateway.agents.count", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateOptionalActiveParam(r, i, r.method); } },

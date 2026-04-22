@@ -36,6 +36,7 @@
 #include <iomanip>
 #include <regex>
 #include <sstream>
+#include <unordered_set>
 #include <nlohmann/json.hpp>
 
 namespace blazeclaw::gateway {
@@ -360,10 +361,12 @@ namespace blazeclaw::gateway {
 				std::string provider = "default";
 				std::string model = "default";
 				std::uint64_t convertSequence = 1;
+				std::unordered_set<std::string> allowedProviders{ "default", "azure" };
 			};
 			struct RuntimeSecretsState {
 				std::uint64_t reloadCount = 0;
 				std::uint64_t reloadWarningCount = 0;
+				std::unordered_set<std::string> knownTargetIds{ "runtime", "workspace", "session" };
 			};
 			auto runtimeTtsState = std::make_shared<RuntimeTtsState>();
 			auto runtimeSecretsState = std::make_shared<RuntimeSecretsState>();
@@ -402,13 +405,16 @@ namespace blazeclaw::gateway {
 				}
 				const std::string providerOverride = ExtractStringParam(request.paramsJson, "provider");
 				const std::string provider = providerOverride.empty() ? runtimeTtsState->provider : providerOverride;
+				if (runtimeTtsState->allowedProviders.find(provider) == runtimeTtsState->allowedProviders.end()) {
+					return protocol::ErrorResponse(request, "invalid_request", "Invalid provider. Use a registered TTS provider id.");
+				}
 				const std::string audioPath =
 					"artifacts/tts/tts-" + std::to_string(runtimeTtsState->convertSequence++) + ".wav";
 				return protocol::OkResponse(
 					request,
 					"{\"audioPath\":\"" + EscapeJsonLocal(audioPath) +
 					"\",\"provider\":\"" + EscapeJsonLocal(provider) +
-					"\",\"outputFormat\":\"wav\",\"voiceCompatible\":true}");
+					"\",\"outputFormat\":\"wav\",\"voiceCompatible\":true,\"model\":\"" + EscapeJsonLocal(runtimeTtsState->model) + "\"}");
 				});
 
 			host.m_dispatcher.Register("secrets.reload", [runtimeSecretsState](const protocol::RequestFrame& request) {
@@ -419,7 +425,7 @@ namespace blazeclaw::gateway {
 					"{\"ok\":true,\"warningCount\":" + std::to_string(runtimeSecretsState->reloadWarningCount) +
 					",\"reloadCount\":" + std::to_string(runtimeSecretsState->reloadCount) + "}");
 				});
-			host.m_dispatcher.Register("secrets.resolve", [](const protocol::RequestFrame& request) {
+			host.m_dispatcher.Register("secrets.resolve", [runtimeSecretsState](const protocol::RequestFrame& request) {
 				const std::string commandName = ExtractStringParam(request.paramsJson, "commandName");
 				if (commandName.empty()) {
 					return protocol::ErrorResponse(request, "invalid_request", "invalid secrets.resolve params: commandName");
@@ -432,6 +438,20 @@ namespace blazeclaw::gateway {
 						if (!trimmed.empty() && trimmed.front() == '[' && trimmed.back() == ']') {
 							targetIdsJson = trimmed;
 						}
+					}
+				}
+				for (const auto& knownTargetId : runtimeSecretsState->knownTargetIds) {
+					if (targetIdsJson.find(knownTargetId) != std::string::npos) {
+						continue;
+					}
+				}
+				if (!targetIdsJson.empty() && targetIdsJson != "[]") {
+					const bool hasKnownTarget =
+						targetIdsJson.find("runtime") != std::string::npos ||
+						targetIdsJson.find("workspace") != std::string::npos ||
+						targetIdsJson.find("session") != std::string::npos;
+					if (!hasKnownTarget) {
+						return protocol::ErrorResponse(request, "invalid_request", "invalid secrets.resolve params: unknown target id");
 					}
 				}
 				const std::string assignmentsJson =

@@ -75,7 +75,11 @@ TEST_CASE("P2 parity methods: commands and tool-effective aliases are routable",
 	REQUIRE(commandsList.payloadJson.has_value());
 	REQUIRE(commandsList.payloadJson.value().find("\"tools\"") != std::string::npos);
 
-	const auto toolsEffective = Route(host, "p2-tools-effective", "tools.effective");
+	const auto toolsEffective = Route(
+		host,
+		"p2-tools-effective",
+		"tools.effective",
+		R"({"sessionId":"main","agentId":"default"})");
 	REQUIRE(toolsEffective.ok);
 	REQUIRE(toolsEffective.payloadJson.has_value());
 	REQUIRE(toolsEffective.payloadJson.value().find("\"tools\"") != std::string::npos);

@@ -17,7 +17,47 @@ namespace blazeclaw::gateway::handlers::tools_shared {
 			return HandleToolsList(request, registry);
 			});
 		dispatcher.Register("tools.effective", [&registry](const protocol::RequestFrame& request) {
-			return HandleToolsList(request, registry);
+			const RequestParamsView params(request.paramsJson);
+			const std::string sessionId = params.GetString("sessionId");
+			const std::string agentId = params.GetString("agentId");
+			const std::string provider = params.GetString("provider");
+			const std::string category = params.GetString("category");
+			if (sessionId.empty()) {
+				return protocol::ErrorResponse(request, "invalid_request", "sessionId required");
+			}
+			if (agentId.empty()) {
+				return protocol::ErrorResponse(request, "invalid_request", "agentId required");
+			}
+
+			auto tools = registry.List();
+			std::vector<ToolCatalogEntry> filtered;
+			filtered.reserve(tools.size());
+			for (const auto& tool : tools) {
+				if (!category.empty() && tool.category != category) {
+					continue;
+				}
+				if (sessionId != "main" && tool.category == "system") {
+					continue;
+				}
+				filtered.push_back(tool);
+			}
+
+			std::string toolsJson = "[";
+			for (std::size_t i = 0; i < filtered.size(); ++i) {
+				if (i > 0) {
+					toolsJson += ",";
+				}
+				toolsJson += SerializeTool(filtered[i]);
+			}
+			toolsJson += "]";
+
+			return protocol::OkResponse(
+				request,
+				"{\"tools\":" + toolsJson +
+				",\"count\":" + std::to_string(filtered.size()) +
+				",\"context\":{\"sessionId\":\"" + sessionId +
+				"\",\"agentId\":\"" + agentId + "\"}}"
+			);
 			});
 	}
 

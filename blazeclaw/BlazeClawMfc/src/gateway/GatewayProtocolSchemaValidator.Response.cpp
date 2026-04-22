@@ -240,6 +240,17 @@ namespace blazeclaw::gateway::protocol {
 			return true;
 		}
 
+		bool ValidateDevicePairListPayload(const std::string& payload, SchemaValidationIssue& issue) {
+			if (!IsFieldValueType(payload, "pending", '[') ||
+				!IsFieldValueType(payload, "paired", '[') ||
+				!IsFieldNumber(payload, "pendingCount") ||
+				!IsFieldNumber(payload, "pairedCount")) {
+				SetIssue(issue, "schema_invalid_response", "`device.pair.list` requires pending/paired arrays and pendingCount/pairedCount numbers.");
+				return false;
+			}
+			return true;
+		}
+
 		bool ValidateNumericFields(
 			const std::string& payload,
 			std::initializer_list<const char*> fieldNames,

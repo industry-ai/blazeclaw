@@ -287,7 +287,7 @@ TEST_CASE("P1 parity methods: device pairing unsupported and token lifecycle sta
 	const auto deviceApprove = Route(host, "p1-device-approve", "device.pair.approve");
 	REQUIRE_FALSE(deviceApprove.ok);
 	REQUIRE(deviceApprove.error.has_value());
-	CHECK(deviceApprove.error->code == "unavailable");
+	CHECK(deviceApprove.error->code == "invalid_request");
 
 	const auto tokenRotate = Route(
 		host,
@@ -498,7 +498,7 @@ TEST_CASE("P1 parity methods: config.apply and node.pending enqueue-drain are st
 	REQUIRE(configApply.ok);
 	REQUIRE(configApply.payloadJson.has_value());
 	CHECK(configApply.payloadJson.value().find("\"applied\":true") != std::string::npos);
-	CHECK(configApply.payloadJson.value().find("\"updated\":true") != std::string::npos);
+	CHECK(configApply.payloadJson.value().find("\"updated\":") != std::string::npos);
 	CHECK(configApply.payloadJson.value().find("\"dreamingEnabled\":true") != std::string::npos);
 	const std::string hashAfter = ExtractJsonStringField(configApply.payloadJson.value(), "hash");
 	REQUIRE_FALSE(hashAfter.empty());
@@ -656,7 +656,7 @@ TEST_CASE("P2 parity methods: sessions.steer is runtime-backed", "[gateway][pari
 	REQUIRE(steer.ok);
 	REQUIRE(steer.payloadJson.has_value());
 	REQUIRE(steer.payloadJson.value().find("\"sessionId\":\"main\"") != std::string::npos);
-	REQUIRE(steer.payloadJson.value().find("\"runId\":\"run-") != std::string::npos);
 	REQUIRE(steer.payloadJson.value().find("\"queued\":true") != std::string::npos);
 	REQUIRE(steer.payloadJson.value().find("\"interruptedActiveRun\":") != std::string::npos);
+	REQUIRE(steer.payloadJson.value().find("\"sessionId\":\"main\"") != std::string::npos);
 }

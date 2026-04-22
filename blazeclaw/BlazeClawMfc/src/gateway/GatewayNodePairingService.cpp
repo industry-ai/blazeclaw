@@ -234,4 +234,24 @@ namespace blazeclaw::gateway {
 		return paired;
 	}
 
+	bool GatewayNodePairingService::RemovePairedNode(
+		const std::string& nodeId,
+		NodePairingPairedNode* removedNode) {
+		const std::string normalizedNodeId = TrimCopy(nodeId);
+		if (normalizedNodeId.empty()) {
+			return false;
+		}
+
+		const auto it = m_pairedByNodeId.find(normalizedNodeId);
+		if (it == m_pairedByNodeId.end()) {
+			return false;
+		}
+
+		if (removedNode != nullptr) {
+			*removedNode = it->second;
+		}
+		m_pairedByNodeId.erase(it);
+		return true;
+	}
+
 } // namespace blazeclaw::gateway

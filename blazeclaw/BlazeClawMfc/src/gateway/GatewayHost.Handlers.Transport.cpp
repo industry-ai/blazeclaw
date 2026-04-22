@@ -77,8 +77,12 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("last-heartbeat", [this](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"lastHeartbeatMs\":0,\"connected\":" +
-				std::string(m_transport.IsRunning() ? "true" : "false") + "}");
+			const bool connected = m_transport.IsRunning();
+			return protocol::OkResponse(
+				request,
+				"{\"ok\":true,\"lastHeartbeatMs\":0,\"connected\":" +
+				std::string(connected ? "true" : "false") +
+				",\"status\":\"" + std::string(connected ? "connected" : "idle") + "\"}");
 			});
 
 		m_dispatcher.Register("set-heartbeats", [](const protocol::RequestFrame& request) {
@@ -112,7 +116,7 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("system-event", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"accepted\":true,\"eventId\":\"system-event-1\"}");
+			return protocol::OkResponse(request, "{\"ok\":true,\"accepted\":true,\"eventId\":\"system-event-1\",\"ts\":0,\"source\":\"gateway.transport\"}");
 			});
 
 		m_dispatcher.Register("gateway.transport.status", [this](const protocol::RequestFrame& request) {

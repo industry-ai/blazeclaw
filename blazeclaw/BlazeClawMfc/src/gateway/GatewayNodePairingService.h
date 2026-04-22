@@ -92,6 +92,7 @@ namespace blazeclaw::gateway {
 			const std::string& displayName);
 
 		[[nodiscard]] std::vector<NodePairingPairedNode> ListPairedNodes() const;
+		[[nodiscard]] bool RemovePairedNode(const std::string& nodeId, NodePairingPairedNode* removedNode = nullptr);
 
 	private:
 		std::unordered_map<std::string, NodePairingPendingRequest> m_pendingByRequestId;

@@ -399,6 +399,9 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 						.retryAfterMs = std::nullopt,
 					});
 			}
+			if (!json::IsJsonObjectShape(raw)) {
+				return protocol::ErrorResponse(request, "invalid_request", "raw must be a JSON object");
+			}
 
 			const bool currentEnabled = ReadFlagFile(ResolveDreamingEnabledFlagFilePath(), false);
 			const std::string currentHash = ReadOrCreateDreamingConfigHash();
@@ -417,16 +420,27 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 			const bool nextEnabled = ExtractDreamingEnabledFromRawPatch(raw, currentEnabled);
 			WriteTextFile(ResolveDreamingEnabledFlagFilePath(), nextEnabled ? "1" : "0");
 			const std::string nextHash = BumpDreamingConfigHash();
+			const bool changed = currentEnabled != nextEnabled;
 			return protocol::OkResponse(
 				request,
-				"{\"applied\":true,\"updated\":true,\"hash\":\"" + EscapeJsonString(nextHash) +
-				"\",\"dreamingEnabled\":" + std::string(nextEnabled ? "true" : "false") + "}");
+				"{\"applied\":true,\"updated\":" + std::string(changed ? "true" : "false") +
+				",\"hash\":\"" + EscapeJsonString(nextHash) +
+				"\",\"dreamingEnabled\":" + std::string(nextEnabled ? "true" : "false") +
+				",\"changedPaths\":" + std::string(changed ? "[\"plugins.entries.memory-core.config.dreaming.enabled\"]" : "[]") +
+				",\"restart\":{\"required\":false,\"sentinel\":\"config-apply\"}}"
+			);
 			});
 
 		host.m_dispatcher.Register("config.patch", [](const protocol::RequestFrame& request) {
 			const RequestParamsView params(request.paramsJson);
 			const std::string baseHash = params.GetString("baseHash");
 			const std::string raw = params.GetString("raw");
+			if (raw.empty()) {
+				return protocol::ErrorResponse(request, "invalid_request", "raw patch payload required");
+			}
+			if (!json::IsJsonObjectShape(raw)) {
+				return protocol::ErrorResponse(request, "invalid_request", "raw must be a JSON object");
+			}
 			const bool currentEnabled = ReadFlagFile(ResolveDreamingEnabledFlagFilePath(), false);
 			const std::string currentHash = ReadOrCreateDreamingConfigHash();
 			if (!baseHash.empty() && baseHash != currentHash) {
@@ -443,10 +457,15 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 			const bool nextEnabled = ExtractDreamingEnabledFromRawPatch(raw, currentEnabled);
 			WriteTextFile(ResolveDreamingEnabledFlagFilePath(), nextEnabled ? "1" : "0");
 			const std::string nextHash = BumpDreamingConfigHash();
+			const bool changed = currentEnabled != nextEnabled;
 			return protocol::OkResponse(
 				request,
-				"{\"patched\":true,\"updated\":true,\"hash\":\"" + EscapeJsonString(nextHash) +
-				"\",\"dreamingEnabled\":" + std::string(nextEnabled ? "true" : "false") + "}");
+				"{\"patched\":true,\"updated\":" + std::string(changed ? "true" : "false") +
+				",\"hash\":\"" + EscapeJsonString(nextHash) +
+				"\",\"dreamingEnabled\":" + std::string(nextEnabled ? "true" : "false") +
+				",\"changedPaths\":" + std::string(changed ? "[\"plugins.entries.memory-core.config.dreaming.enabled\"]" : "[]") +
+				",\"restart\":{\"required\":false,\"sentinel\":\"config-patch\"}}"
+			);
 			});
 
 		struct RuntimeSkillEntry {
@@ -477,11 +496,15 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 				query.begin(),
 				[](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
 			const bool installedOnly = params.GetBool("installedOnly").value_or(false);
+			const std::string source = params.GetString("source");
 
 			std::vector<std::string> rows;
 			for (const auto& entry : *runtimeSkills) {
 				if (installedOnly && !entry.installed) {
 					continue;
+				}
+				if (!source.empty() && source != "workspace" && source != "clawhub") {
+					return protocol::ErrorResponse(request, "invalid_request", "source must be workspace or clawhub");
 				}
 				std::string haystack = entry.id + " " + entry.name + " " + entry.description;
 				std::transform(
@@ -498,6 +521,7 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 					{"description", JsonString(entry.description)},
 					{"bin", JsonString(entry.bin)},
 					{"installed", JsonBool(entry.installed)},
+					{"source", JsonString(source.empty() ? "workspace" : source)},
 					}));
 			}
 			return protocol::OkResponse(
@@ -505,6 +529,7 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 				JsonObject({
 					{"skills", JsonArray(rows)},
 					{"count", JsonNumber(static_cast<std::uint64_t>(rows.size()))},
+					{"source", JsonString(source.empty() ? "workspace" : source)},
 					}));
 			});
 
@@ -556,6 +581,8 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 			const RequestParamsView params(request.paramsJson);
 			const std::string id = params.GetString("id");
 			const std::string name = params.GetString("name");
+			const std::string source = params.GetString("source");
+			const std::string version = params.GetString("version");
 			for (auto& entry : *runtimeSkills) {
 				if ((!id.empty() && entry.id == id) || (!name.empty() && entry.name == name)) {
 					entry.installed = true;
@@ -566,6 +593,9 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 							{"status", JsonString("installed")},
 							{"skillId", JsonString(entry.id)},
 							{"skillName", JsonString(entry.name)},
+							{"source", JsonString(source.empty() ? "workspace" : source)},
+							{"version", JsonString(version.empty() ? "latest" : version)},
+							{"warnings", JsonArray({})},
 							}));
 				}
 			}
@@ -573,6 +603,8 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 			});
 
 		host.m_dispatcher.Register("update.run", [runtimeUpdateState](const protocol::RequestFrame& request) {
+			const RequestParamsView params(request.paramsJson);
+			const std::string channel = params.GetString("channel");
 			runtimeUpdateState->lastRunId = "update-run-" + std::to_string(runtimeUpdateState->runSequence++);
 			runtimeUpdateState->lastRunAtMs = static_cast<std::uint64_t>(NowMs());
 			return protocol::OkResponse(
@@ -582,6 +614,8 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 					{"status", JsonString("running")},
 					{"runId", JsonString(runtimeUpdateState->lastRunId)},
 					{"startedAtMs", JsonNumber(runtimeUpdateState->lastRunAtMs)},
+					{"channel", JsonString(channel.empty() ? "stable" : channel)},
+					{"steps", JsonArray({ JsonString("scan"), JsonString("apply"), JsonString("verify") })},
 					}));
 			});
 
