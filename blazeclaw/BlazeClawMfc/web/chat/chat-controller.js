@@ -61,6 +61,25 @@
         return "";
     }
 
+    function parseApprovalTokenFromText(text) {
+        const raw = String(text || "");
+        if (!raw) {
+            return null;
+        }
+        const tokenMatch = /approvalToken=([A-Za-z0-9:_\-]+)/.exec(raw);
+        if (!tokenMatch || !tokenMatch[1]) {
+            return null;
+        }
+        const result = {
+            approvalToken: tokenMatch[1],
+        };
+        const expiresMatch = /expiresAtEpochMs=(\d{8,})/.exec(raw);
+        if (expiresMatch && expiresMatch[1]) {
+            result.expiresAtEpochMs = Number(expiresMatch[1]);
+        }
+        return result;
+    }
+
     function dataUrlToBase64(dataUrl) {
         const match = /^data:([^;]+);base64,(.+)$/i.exec(String(dataUrl || ""));
         if (!match) {
@@ -1473,6 +1492,48 @@
             updateComposerState();
         }
 
+        async function executeExecApprovalAction(approvalToken, approve, options) {
+            const normalizedToken = String(approvalToken || "").trim();
+            if (!normalizedToken) {
+                return {
+                    ok: false,
+                    status: "invalid",
+                    message: "approval token is required",
+                };
+            }
+
+            const opts = options && typeof options === "object" ? options : {};
+            const requestImpl = typeof opts.requestOverride === "function"
+                ? opts.requestOverride
+                : request;
+            const payload = await requestImpl("gateway.tools.call.execute", {
+                tool: "email.schedule",
+                args: {
+                    action: "approve",
+                    approvalToken: normalizedToken,
+                    approve: Boolean(approve),
+                },
+            });
+            const responsePayload = payload && payload.payload && typeof payload.payload === "object"
+                ? payload.payload
+                : {};
+            const status = typeof responsePayload.status === "string"
+                ? responsePayload.status.trim().toLowerCase()
+                : "";
+            const output = typeof responsePayload.output === "string"
+                ? responsePayload.output
+                : "";
+            const expired = output.toLowerCase().includes("expired");
+            const resolvedOk = approve
+                ? status === "ok"
+                : status === "cancelled" || status === "ok";
+            return {
+                ok: resolvedOk && !expired,
+                status: expired ? "expired" : (status || "unknown"),
+                output,
+            };
+        }
+
         return {
             nextId,
             post,
@@ -1510,6 +1571,8 @@
             getSlashCommandHints,
             processSendQueue,
             sendDetachedMessage,
+            parseApprovalTokenFromText,
+            executeExecApprovalAction,
             markTerminalRun,
             hasTerminalRun,
             scheduleHistoryReconcile,
@@ -1699,6 +1762,79 @@
             assertRegression(calls.length === 0,
                 "assistant identity loader should short-circuit when disconnected");
             summary.push("assistant guard disconnected");
+        }
+
+        {
+            const parsed = parseApprovalTokenFromText("Email scheduling pending approval. approvalToken=email-approval-100 expiresAtEpochMs=1775016776785");
+            assertRegression(Boolean(parsed) &&
+                parsed.approvalToken === "email-approval-100" &&
+                parsed.expiresAtEpochMs === 1775016776785,
+                "approval parser should extract token and expiry from assistant text");
+            assertRegression(parseApprovalTokenFromText("no token present") === null,
+                "approval parser should return null when token marker is absent");
+            summary.push("exec approval token parser");
+        }
+
+        {
+            const state = createRegressionState();
+            const calls = [];
+            const controller = createController({
+                state,
+                addMessage: function () { },
+            });
+            const approved = await controller.executeExecApprovalAction("email-token-1", true, {
+                requestOverride: async (method, params) => {
+                    calls.push({ method, params });
+                    return {
+                        payload: {
+                            status: "ok",
+                            output: "{\"executed\":true}",
+                        },
+                    };
+                },
+            });
+            assertRegression(calls.length === 1 &&
+                calls[0].method === "gateway.tools.call.execute",
+                "exec approval action should call gateway.tools.call.execute");
+            assertRegression(calls[0].params &&
+                calls[0].params.tool === "email.schedule" &&
+                calls[0].params.args &&
+                calls[0].params.args.action === "approve" &&
+                calls[0].params.args.approvalToken === "email-token-1" &&
+                calls[0].params.args.approve === true,
+                "exec approval action should submit canonical email.schedule approval args");
+            assertRegression(approved.ok === true && approved.status === "ok",
+                "exec approval action should report successful approval resolution");
+            summary.push("exec approval approve action");
+        }
+
+        {
+            const state = createRegressionState();
+            const controller = createController({
+                state,
+                addMessage: function () { },
+            });
+            const denied = await controller.executeExecApprovalAction("email-token-2", false, {
+                requestOverride: async () => ({
+                    payload: {
+                        status: "cancelled",
+                        output: "{\"cancelled\":true}",
+                    },
+                }),
+            });
+            const expired = await controller.executeExecApprovalAction("email-token-3", true, {
+                requestOverride: async () => ({
+                    payload: {
+                        status: "error",
+                        output: "approval_token_expired",
+                    },
+                }),
+            });
+            assertRegression(denied.ok === true && denied.status === "cancelled",
+                "exec approval action should treat cancelled response as resolved deny path");
+            assertRegression(expired.ok === false && expired.status === "expired",
+                "exec approval action should classify token-expired responses");
+            summary.push("exec approval deny + expired actions");
         }
 
         {

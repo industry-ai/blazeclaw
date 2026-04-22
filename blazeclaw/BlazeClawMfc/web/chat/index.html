@@ -232,6 +232,60 @@
                 color: #ffe3b4;
             }
 
+        .approval-queue {
+            border-top: 1px solid #2b2b2b;
+            border-bottom: 1px solid #2b2b2b;
+            background: #171717;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 180px;
+            overflow: auto;
+        }
+
+            .approval-queue[hidden] {
+                display: none;
+            }
+
+        .approval-card {
+            border: 1px solid #3a3a3a;
+            border-left: 3px solid #ffd48a;
+            border-radius: 6px;
+            padding: 6px 8px;
+            font-size: 12px;
+            color: #f0e2c2;
+            background: #232323;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .approval-card .meta {
+            color: #bfbfbf;
+            font-size: 11px;
+        }
+
+        .approval-card .actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .approval-card .actions button {
+            padding: 2px 10px;
+            font-size: 12px;
+        }
+
+        .approval-card.approved {
+            border-left-color: #8cd98c;
+            color: #d2f0d2;
+        }
+
+        .approval-card.denied {
+            border-left-color: #ff9a9a;
+            color: #ffd0d0;
+        }
+
         .composer {
             display: grid;
             grid-template-columns: 1fr auto auto auto auto;
@@ -352,6 +406,7 @@
             <div id="agentsTabs" class="agents-tabs"></div>
             <div id="agentsSurface" class="agents-surface"></div>
         </div>
+        <div id="approvalQueue" class="approval-queue" hidden></div>
         <div id="messages" class="messages"></div>
         <div id="detachedNotices" class="detached-notices" hidden></div>
         <div class="composer">
@@ -402,6 +457,7 @@
                 assistantAvatar: "A",
                 assistantAgentId: null,
                 detachedNotices: [],
+                approvalQueue: [],
                 toolTimelineByRequest: new Map(),
                 bridgeQueue: [],
                 pending: new Map(),
@@ -412,6 +468,7 @@
 
             const statusEl = document.getElementById("status");
             const assistantIdentityEl = document.getElementById("assistantIdentity");
+            const approvalQueueEl = document.getElementById("approvalQueue");
             const messagesEl = document.getElementById("messages");
             const detachedNoticesEl = document.getElementById("detachedNotices");
             const structuredTranscriptRenderEnabled = resolveStructuredTranscriptRenderEnabled();
@@ -438,6 +495,137 @@
 
             function setStatus(text) {
                 statusEl.textContent = text;
+            }
+
+            function renderApprovalQueue() {
+                if (!approvalQueueEl) {
+                    return;
+                }
+                const queue = Array.isArray(state.approvalQueue) ? state.approvalQueue : [];
+                if (!queue.length) {
+                    approvalQueueEl.hidden = true;
+                    approvalQueueEl.innerHTML = "";
+                    return;
+                }
+                approvalQueueEl.hidden = false;
+                approvalQueueEl.innerHTML = "";
+                for (const item of queue) {
+                    if (!item || typeof item !== "object") {
+                        continue;
+                    }
+                    const card = document.createElement("div");
+                    card.className = `approval-card ${String(item.status || "pending")}`;
+                    const title = document.createElement("div");
+                    title.textContent = String(item.title || "Approval pending");
+                    card.appendChild(title);
+
+                    const meta = document.createElement("div");
+                    meta.className = "meta";
+                    meta.textContent = `token=${String(item.token || "")} · status=${String(item.status || "pending")}`;
+                    card.appendChild(meta);
+
+                    if (String(item.status || "pending") === "pending") {
+                        const actions = document.createElement("div");
+                        actions.className = "actions";
+                        const approveBtn = document.createElement("button");
+                        approveBtn.textContent = "Approve";
+                        approveBtn.disabled = Boolean(item.busy);
+                        approveBtn.addEventListener("click", () => {
+                            void resolveApprovalToken(item.token, true);
+                        });
+                        const denyBtn = document.createElement("button");
+                        denyBtn.textContent = "Deny";
+                        denyBtn.disabled = Boolean(item.busy);
+                        denyBtn.addEventListener("click", () => {
+                            void resolveApprovalToken(item.token, false);
+                        });
+                        actions.appendChild(approveBtn);
+                        actions.appendChild(denyBtn);
+                        card.appendChild(actions);
+                    }
+
+                    approvalQueueEl.appendChild(card);
+                }
+                approvalQueueEl.scrollTop = approvalQueueEl.scrollHeight;
+            }
+
+            function upsertApprovalToken(token, title) {
+                const normalizedToken = String(token || "").trim();
+                if (!normalizedToken) {
+                    return;
+                }
+                if (!Array.isArray(state.approvalQueue)) {
+                    state.approvalQueue = [];
+                }
+                const existing = state.approvalQueue.find((item) => item.token === normalizedToken);
+                if (existing) {
+                    if (title && !existing.title) {
+                        existing.title = title;
+                    }
+                    renderApprovalQueue();
+                    return;
+                }
+                state.approvalQueue.push({
+                    token: normalizedToken,
+                    title: String(title || "Email scheduling approval required"),
+                    status: "pending",
+                    ts: Date.now(),
+                });
+                if (state.approvalQueue.length > 20) {
+                    state.approvalQueue.splice(0, state.approvalQueue.length - 20);
+                }
+                renderApprovalQueue();
+            }
+
+            function scanApprovalTokenFromText(text) {
+                const raw = String(text || "");
+                if (!raw) {
+                    return;
+                }
+                const parsed = controller && typeof controller.parseApprovalTokenFromText === "function"
+                    ? controller.parseApprovalTokenFromText(raw)
+                    : null;
+                if (parsed && parsed.approvalToken) {
+                    upsertApprovalToken(parsed.approvalToken, "Email scheduling approval required");
+                }
+            }
+
+            async function resolveApprovalToken(token, approve) {
+                const normalizedToken = String(token || "").trim();
+                if (!normalizedToken) {
+                    return;
+                }
+                const queue = Array.isArray(state.approvalQueue) ? state.approvalQueue : [];
+                const item = queue.find((entry) => entry.token === normalizedToken);
+                if (!item) {
+                    return;
+                }
+                if (item.busy || item.status !== "pending") {
+                    return;
+                }
+                item.busy = true;
+                renderApprovalQueue();
+
+                try {
+                    const result = controller && typeof controller.executeExecApprovalAction === "function"
+                        ? await controller.executeExecApprovalAction(normalizedToken, approve)
+                        : { ok: false, status: "invalid" };
+                    item.status = result.ok
+                        ? (approve ? "approved" : "denied")
+                        : "denied";
+                    if (result.status === "expired") {
+                        item.title = "Approval token expired";
+                    } else {
+                        item.title = result.ok
+                            ? (approve ? "Email approval executed" : "Email approval denied")
+                            : (approve ? "Email approval failed" : "Email approval denied");
+                    }
+                } catch (error) {
+                    item.status = "denied";
+                    item.title = `Approval error: ${String(error)}`;
+                }
+                item.busy = false;
+                renderApprovalQueue();
             }
 
             function renderDetachedNotices() {
@@ -543,6 +731,9 @@
                     div.className = `msg ${kind}`;
                     div.textContent = text;
                     messagesEl.appendChild(div);
+                    if (kind === "peer") {
+                        scanApprovalTokenFromText(text);
+                    }
                 }
 
                 if (streamText && !controller.isSilentReplyText(streamText)) {
@@ -566,6 +757,9 @@
                 div.className = `msg ${kind}`;
                 div.textContent = text;
                 messagesEl.appendChild(div);
+                if (kind === "peer") {
+                    scanApprovalTokenFromText(text);
+                }
                 scrollBottom();
             }
 
@@ -712,6 +906,7 @@
                 if (!text || controller.isSilentReplyText(text)) {
                     return;
                 }
+                scanApprovalTokenFromText(text);
 
                 if (structuredTranscriptRenderEnabled) {
                     renderMessagesFromStructuredTranscript(text);
@@ -1871,6 +2066,7 @@
                 renderAgentsSurface();
                 syncNodesPolling();
                 syncSessionControlsPolling();
+                renderApprovalQueue();
                 renderDetachedNotices();
             }
             const controller = window.BlazeClawChatController.createController({
