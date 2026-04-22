@@ -877,6 +877,31 @@
                     rows.push("<div class=\"agents-row\">Parity track: docs/compare/cron.ts/CRON_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md</div>");
                 }
 
+                if (panel === "nodes") {
+                    if (state.nodesLoading) {
+                        rows.push("<div class=\"agents-row\">Loading nodes...</div>");
+                    }
+                    if (state.nodesError) {
+                        rows.push(`<div class=\"agents-row error\">${escapeHtml(state.nodesError)}</div>`);
+                    }
+
+                    const nodes = Array.isArray(state.nodes)
+                        ? state.nodes
+                        : [];
+                    rows.push(`<div class=\"agents-row\">Nodes count: ${nodes.length}</div>`);
+                    if (nodes.length > 0) {
+                        const firstNode = nodes[0] || {};
+                        rows.push(`<div class=\"agents-row\">First node id: ${escapeHtml(String(firstNode.id || firstNode.nodeId || "(n/a)"))}</div>`);
+                        rows.push(`<div class=\"agents-row\">First node label: ${escapeHtml(String(firstNode.label || firstNode.name || "(n/a)"))}</div>`);
+                    }
+
+                    rows.push(`<div class=\"agents-row\">`
+                        + `<button class=\"agents-chip\" data-nodes-action=\"refresh\">Refresh</button>`
+                        + `</div>`);
+                    rows.push("<div class=\"agents-row\">Capability mode: OpenClaw-aligned node.list loading contract with quiet/state guards</div>");
+                    rows.push("<div class=\"agents-row\">Parity track: docs/compare/nodes.ts/NODES_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md</div>");
+                }
+
                 if (panel === "dreaming") {
                     if (state.agentDreamingLoading || state.dreamingStatusLoading || state.dreamDiaryLoading) {
                         rows.push("<div class=\"agents-row\">Loading dreaming surface...</div>");
@@ -1248,6 +1273,26 @@
                     });
                 });
 
+                state.agentsSurfaceEl.querySelectorAll("[data-nodes-action]").forEach((el) => {
+                    el.addEventListener("click", () => {
+                        const action = String(el.getAttribute("data-nodes-action") || "").trim();
+                        if (!action) {
+                            return;
+                        }
+
+                        emitAgentsTelemetry("nodes.action", {
+                            action,
+                            panel: state.agentsPanel,
+                        });
+
+                        if (action === "refresh") {
+                            void agentsController.loadNodes({
+                                quiet: false,
+                            });
+                        }
+                    });
+                });
+
                 state.agentsSurfaceEl.querySelectorAll("[data-dreaming-subtab]").forEach((el) => {
                     el.addEventListener("click", () => {
                         const tab = String(el.getAttribute("data-dreaming-subtab") || "").trim();
@@ -1353,6 +1398,7 @@
                     { id: "channels", label: "Channels" },
                     { id: "cron", label: "Cron" },
                     { id: "dreaming", label: "Dreaming" },
+                    { id: "nodes", label: "Nodes" },
                 ];
                 const current = String(state.agentsPanel || "overview");
 

@@ -59,7 +59,7 @@
             state.toolsEffectiveResult = null;
         }
 
-        const supportedPanels = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming"];
+        const supportedPanels = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming", "nodes"];
         if (supportedPanels.indexOf(String(state.agentsPanel || "")) < 0) {
             state.agentsPanel = "overview";
         }
@@ -349,6 +349,16 @@
         }
         if (typeof state.lastError !== "string" && state.lastError !== null) {
             state.lastError = null;
+        }
+
+        if (typeof state.nodesLoading !== "boolean") {
+            state.nodesLoading = false;
+        }
+        if (!Array.isArray(state.nodes)) {
+            state.nodes = [];
+        }
+        if (typeof state.nodesError !== "string" && state.nodesError !== null) {
+            state.nodesError = null;
         }
 
         if (typeof state.agentDreamingLoading !== "boolean") {
@@ -940,6 +950,18 @@
             const lookup = asRecord(value);
             const schema = asRecord(lookup && lookup.schema);
             return schema && schema.additionalProperties === false;
+        }
+
+        function normalizeNodeListPayload(payload) {
+            const source = payload && typeof payload === "object"
+                ? payload
+                : {};
+            const nodes = Array.isArray(source.nodes)
+                ? source.nodes.filter(function (entry) {
+                    return entry && typeof entry === "object";
+                })
+                : [];
+            return nodes;
         }
 
         function normalizeChannelStatusEntry(entry, channelId, labelFallback) {
@@ -1596,6 +1618,50 @@
                 state.agentSkillsError = resolveToolsErrorMessage(err, "agent skills");
             } finally {
                 state.agentSkillsLoading = false;
+                onStateUpdated();
+            }
+        }
+
+        async function loadNodes(options) {
+            const opts = options || {};
+            const quiet = Boolean(opts.quiet);
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            if (!request || !state.connected || state.nodesLoading) {
+                return state.nodes;
+            }
+
+            state.nodesLoading = true;
+            if (!quiet) {
+                state.nodesError = null;
+            }
+            onStateUpdated();
+
+            try {
+                const res = await request("node.list", {});
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return state.nodes;
+                }
+
+                const payload = res && res.payload
+                    ? res.payload
+                    : res;
+                state.nodes = normalizeNodeListPayload(payload);
+                return state.nodes;
+            } catch (err) {
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return state.nodes;
+                }
+
+                if (!quiet) {
+                    const message = String(err);
+                    state.nodesError = message;
+                    state.lastError = message;
+                }
+                return state.nodes;
+            } finally {
+                state.nodesLoading = false;
                 onStateUpdated();
             }
         }
@@ -3229,6 +3295,15 @@
                 return;
             }
 
+            if (state.agentsPanel === "nodes") {
+                await loadNodes({
+                    shouldIgnoreResponse: function () {
+                        return state.agentsPanel !== "nodes";
+                    },
+                });
+                return;
+            }
+
             if (state.agentsPanel === "overview") {
                 await loadAgentIdentity(selectedAgentId);
             }
@@ -3372,6 +3447,7 @@
             loadAgentFiles,
             loadAgentFileContent,
             loadAgentSkills,
+            loadNodes,
             loadChannels,
             startWhatsAppLogin,
             waitWhatsAppLogin,
@@ -3580,7 +3656,85 @@
                 "dreaming UI state contract should initialize dreamDiaryNavigation=[]");
             assertRegression(state.dreamDiaryPage === 0,
                 "dreaming UI state contract should initialize dreamDiaryPage=0");
-            summary.push("channels + cron + dreaming state/UI contract defaults");
+            assertRegression(state.nodesLoading === false,
+                "nodes state contract should initialize nodesLoading=false");
+            assertRegression(Array.isArray(state.nodes) && state.nodes.length === 0,
+                "nodes state contract should initialize nodes=[]");
+            assertRegression(state.nodesError === null,
+                "nodes state contract should initialize nodesError=null");
+            summary.push("channels + cron + dreaming + nodes state/UI contract defaults");
+        }
+
+        {
+            const state = createRegressionState();
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const firstLoad = controller.loadNodes({
+                quiet: true,
+            });
+            const firstCall = harness.takeNextCall("node.list");
+            firstCall.deferred.resolve({
+                payload: {
+                    nodes: [
+                        {
+                            id: "node-a",
+                            kind: "worker",
+                        },
+                    ],
+                },
+            });
+            await firstLoad;
+
+            assertRegression(Array.isArray(state.nodes) && state.nodes.length === 1,
+                "nodes loader should bind normalized node.list payload");
+            assertRegression(state.nodesError === null,
+                "quiet nodes load should not set nodesError");
+
+            state.nodesError = "existing-error";
+            const quietFailure = controller.loadNodes({
+                quiet: true,
+            });
+            const quietFailureCall = harness.takeNextCall("node.list");
+            quietFailureCall.deferred.reject(new Error("quiet-failure"));
+            await quietFailure;
+
+            assertRegression(state.nodesError === "existing-error",
+                "quiet nodes failure should retain existing nodesError");
+
+            const noisyFailure = controller.loadNodes({
+                quiet: false,
+            });
+            const noisyFailureCall = harness.takeNextCall("node.list");
+            noisyFailureCall.deferred.reject(new Error("visible nodes failure"));
+            await noisyFailure;
+
+            assertRegression(typeof state.nodesError === "string" && state.nodesError.indexOf("visible nodes failure") >= 0,
+                "non-quiet nodes failure should set nodesError");
+
+            controller.setAgentsPanel("nodes");
+            const panelLoad = controller.loadPanelDataForCurrentAgent();
+            const panelCall = harness.takeNextCall("node.list");
+            controller.setAgentsPanel("overview");
+            panelCall.deferred.resolve({
+                payload: {
+                    nodes: [
+                        {
+                            id: "stale-node",
+                        },
+                    ],
+                },
+            });
+            await panelLoad;
+
+            assertRegression(!Array.isArray(state.nodes) || state.nodes.every(function (entry) {
+                return String(entry && entry.id || "") !== "stale-node";
+            }),
+                "nodes panel stale response should be ignored after panel switch");
+            summary.push("nodes load + quiet-error + stale-panel suppression");
         }
 
         {
