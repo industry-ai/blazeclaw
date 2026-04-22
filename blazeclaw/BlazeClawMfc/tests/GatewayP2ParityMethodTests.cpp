@@ -105,6 +105,34 @@ TEST_CASE("P2 parity methods: skills, web login, update, and doctor memory metho
 	REQUIRE(doctorMemoryStatus.ok);
 	REQUIRE(doctorMemoryStatus.payloadJson.has_value());
 	REQUIRE(doctorMemoryStatus.payloadJson.value().find("\"status\":\"healthy\"") != std::string::npos);
+	REQUIRE(doctorMemoryStatus.payloadJson.value().find("\"dreaming\":{") != std::string::npos);
+	REQUIRE(doctorMemoryStatus.payloadJson.value().find("\"shortTermEntries\":[]") != std::string::npos);
+
+	const auto doctorMemoryDreamDiary = Route(host, "p2-doctor-memory-dreamDiary", "doctor.memory.dreamDiary");
+	REQUIRE(doctorMemoryDreamDiary.ok);
+	REQUIRE(doctorMemoryDreamDiary.payloadJson.has_value());
+	REQUIRE(doctorMemoryDreamDiary.payloadJson.value().find("\"entries\":[]") != std::string::npos);
+	REQUIRE(doctorMemoryDreamDiary.payloadJson.value().find("\"found\":false") != std::string::npos);
+	REQUIRE(doctorMemoryDreamDiary.payloadJson.value().find("\"path\":\"DREAMS.md\"") != std::string::npos);
+	REQUIRE(doctorMemoryDreamDiary.payloadJson.value().find("\"content\":null") != std::string::npos);
+
+	const auto configSchemaLookup = Route(
+		host,
+		"p2-config-schema-lookup",
+		"config.schema.lookup",
+		std::string("{\"path\":\"plugins.entries.memory-core.config\"}"));
+	if (configSchemaLookup.ok) {
+		REQUIRE(configSchemaLookup.payloadJson.has_value());
+		REQUIRE(configSchemaLookup.payloadJson.value().find("\"path\"") != std::string::npos);
+	}
+	else {
+		REQUIRE(configSchemaLookup.error.has_value());
+		const bool isSchemaPathNotFound =
+			configSchemaLookup.error->code == "schema_path_not_found";
+		const bool isNotSupported =
+			configSchemaLookup.error->code == "not_supported";
+		REQUIRE((isSchemaPathNotFound || isNotSupported));
+	}
 }
 
 TEST_CASE("P2 parity methods: cron contract read-surface fields are routable", "[gateway][parity][p2][cron]")

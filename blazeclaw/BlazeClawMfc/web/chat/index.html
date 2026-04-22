@@ -877,6 +877,71 @@
                     rows.push("<div class=\"agents-row\">Parity track: docs/compare/cron.ts/CRON_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md</div>");
                 }
 
+                if (panel === "dreaming") {
+                    if (state.agentDreamingLoading || state.dreamingStatusLoading || state.dreamDiaryLoading) {
+                        rows.push("<div class=\"agents-row\">Loading dreaming surface...</div>");
+                    }
+                    if (state.agentDreamingError) {
+                        rows.push(`<div class=\"agents-row error\">${escapeHtml(state.agentDreamingError)}</div>`);
+                    }
+                    if (state.dreamingStatusError) {
+                        rows.push(`<div class=\"agents-row error\">${escapeHtml(state.dreamingStatusError)}</div>`);
+                    }
+                    if (state.dreamDiaryError) {
+                        rows.push(`<div class=\"agents-row error\">${escapeHtml(state.dreamDiaryError)}</div>`);
+                    }
+
+                    const dreamingStatus = state.dreamingStatus || null;
+                    const dreamDiaryPath = typeof state.dreamDiaryPath === "string"
+                        ? state.dreamDiaryPath
+                        : "(none)";
+                    const dreamDiaryContent = typeof state.dreamDiaryContent === "string"
+                        ? state.dreamDiaryContent
+                        : "";
+                    const shortTermEntries = dreamingStatus && Array.isArray(dreamingStatus.shortTermEntries)
+                        ? dreamingStatus.shortTermEntries
+                        : [];
+                    const promotedEntries = dreamingStatus && Array.isArray(dreamingStatus.promotedEntries)
+                        ? dreamingStatus.promotedEntries
+                        : [];
+
+                    rows.push(`<div class=\"agents-row\">Dreaming enabled: ${dreamingStatus && dreamingStatus.enabled ? "yes" : "no"}</div>`);
+                    rows.push(`<div class=\"agents-row\">Plugin id: ${escapeHtml(String(state.dreamingResolvedPluginId || "(unresolved)"))}</div>`);
+                    rows.push(`<div class=\"agents-row\">Config hash: ${escapeHtml(String(state.dreamingConfigSnapshotHash || "(missing)"))}</div>`);
+                    rows.push(`<div class=\"agents-row\">Storage mode: ${escapeHtml(String(dreamingStatus && dreamingStatus.storageMode || "inline"))}</div>`);
+                    rows.push(`<div class=\"agents-row\">Timezone: ${escapeHtml(String(dreamingStatus && dreamingStatus.timezone || "(n/a)"))}</div>`);
+                    rows.push(`<div class=\"agents-row\">Short-term count: ${Number.isFinite(Number(dreamingStatus && dreamingStatus.shortTermCount)) ? Number(dreamingStatus.shortTermCount) : 0}</div>`);
+                    rows.push(`<div class=\"agents-row\">Promoted total: ${Number.isFinite(Number(dreamingStatus && dreamingStatus.promotedTotal)) ? Number(dreamingStatus.promotedTotal) : 0}</div>`);
+                    rows.push(`<div class=\"agents-row\">Promoted today: ${Number.isFinite(Number(dreamingStatus && dreamingStatus.promotedToday)) ? Number(dreamingStatus.promotedToday) : 0}</div>`);
+                    rows.push(`<div class=\"agents-row\">Short-term entries: ${shortTermEntries.length}</div>`);
+                    rows.push(`<div class=\"agents-row\">Promoted entries: ${promotedEntries.length}</div>`);
+                    rows.push(`<div class=\"agents-row\">Dream diary path: ${escapeHtml(dreamDiaryPath)}</div>`);
+                    rows.push(`<div class=\"agents-row\">Dream diary content length: ${dreamDiaryContent.length}</div>`);
+
+                    if (dreamingStatus && dreamingStatus.phases && dreamingStatus.phases.light) {
+                        rows.push(`<div class=\"agents-row\">Phase light: enabled=${dreamingStatus.phases.light.enabled ? "yes" : "no"}, cron=${escapeHtml(String(dreamingStatus.phases.light.cron || ""))}</div>`);
+                    }
+                    if (dreamingStatus && dreamingStatus.phases && dreamingStatus.phases.deep) {
+                        rows.push(`<div class=\"agents-row\">Phase deep: enabled=${dreamingStatus.phases.deep.enabled ? "yes" : "no"}, cron=${escapeHtml(String(dreamingStatus.phases.deep.cron || ""))}</div>`);
+                    }
+                    if (dreamingStatus && dreamingStatus.phases && dreamingStatus.phases.rem) {
+                        rows.push(`<div class=\"agents-row\">Phase rem: enabled=${dreamingStatus.phases.rem.enabled ? "yes" : "no"}, cron=${escapeHtml(String(dreamingStatus.phases.rem.cron || ""))}</div>`);
+                    }
+
+                    rows.push(`<div class=\"agents-row\">`
+                        + `<button class=\"agents-chip\" data-dreaming-action=\"refresh\">Refresh</button> `
+                        + `<button class=\"agents-chip\" data-dreaming-action=\"refresh-diary\">Refresh Diary</button> `
+                        + `<button class=\"agents-chip\" data-dreaming-action=\"enable\"${state.dreamingModeSaving ? " disabled" : ""}>Enable</button> `
+                        + `<button class=\"agents-chip\" data-dreaming-action=\"disable\"${state.dreamingModeSaving ? " disabled" : ""}>Disable</button> `
+                        + `<button class=\"agents-chip\" data-dreaming-action=\"backfill\"${state.dreamDiaryActionLoading ? " disabled" : ""}>Backfill Diary</button> `
+                        + `<button class=\"agents-chip\" data-dreaming-action=\"reset-diary\"${state.dreamDiaryActionLoading ? " disabled" : ""}>Reset Diary</button> `
+                        + `<button class=\"agents-chip\" data-dreaming-action=\"reset-grounded\"${state.dreamDiaryActionLoading ? " disabled" : ""}>Reset Grounded</button>`
+                        + `</div>`);
+
+                    rows.push("<div class=\"agents-row\">Capability mode: OpenClaw-aligned dreaming status/diary/action orchestration via doctor.memory.* + config.patch/config.schema.lookup</div>");
+                    rows.push("<div class=\"agents-row\">Parity track: docs/compare/dreaming.ts/DREAMING_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md</div>");
+                }
+
                 state.agentsSurfaceEl.innerHTML = rows.join("");
 
                 state.agentsSurfaceEl.querySelectorAll("[data-agent-id]").forEach((el) => {
@@ -1057,6 +1122,59 @@
                         }
                     });
                 });
+
+                state.agentsSurfaceEl.querySelectorAll("[data-dreaming-action]").forEach((el) => {
+                    el.addEventListener("click", () => {
+                        const action = String(el.getAttribute("data-dreaming-action") || "").trim();
+                        if (!action) {
+                            return;
+                        }
+
+                        emitAgentsTelemetry("dreaming.action", {
+                            action,
+                            panel: state.agentsPanel,
+                            selectedAgentId: String(state.agentsSelectedId || "").trim() || null,
+                        });
+
+                        if (action === "refresh") {
+                            void agentsController.loadPanelDataForCurrentAgent();
+                            return;
+                        }
+                        if (action === "refresh-diary") {
+                            void agentsController.loadDreamDiary({});
+                            return;
+                        }
+                        if (action === "enable") {
+                            void agentsController.updateDreamingEnabled(true).then(() => {
+                                return agentsController.loadPanelDataForCurrentAgent();
+                            });
+                            return;
+                        }
+                        if (action === "disable") {
+                            void agentsController.updateDreamingEnabled(false).then(() => {
+                                return agentsController.loadPanelDataForCurrentAgent();
+                            });
+                            return;
+                        }
+                        if (action === "backfill") {
+                            void agentsController.backfillDreamDiary({}).then(() => {
+                                return agentsController.loadPanelDataForCurrentAgent();
+                            });
+                            return;
+                        }
+                        if (action === "reset-diary") {
+                            void agentsController.resetDreamDiary({}).then(() => {
+                                return agentsController.loadPanelDataForCurrentAgent();
+                            });
+                            return;
+                        }
+                        if (action === "reset-grounded") {
+                            void agentsController.resetGroundedShortTerm({}).then(() => {
+                                return agentsController.loadPanelDataForCurrentAgent();
+                            });
+                        }
+                    });
+                });
             }
 
             function renderAgentsTabs() {
@@ -1076,6 +1194,7 @@
                     { id: "skills", label: "Skills" },
                     { id: "channels", label: "Channels" },
                     { id: "cron", label: "Cron" },
+                    { id: "dreaming", label: "Dreaming" },
                 ];
                 const current = String(state.agentsPanel || "overview");
 

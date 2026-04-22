@@ -2850,6 +2850,7 @@ namespace blazeclaw::gateway::protocol {
 			{ "doctor.memory.resetDreamDiary", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
 			{ "doctor.memory.resetGroundedShortTerm", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateNoParamsAllowed(r, i, r.method); } },
 			{ "gateway.config.schema.lookup", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateConfigSchemaLookupParams(r, i); } },
+			{ "config.schema.lookup", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateConfigSchemaLookupParams(r, i); } },
 			{ "gateway.logs.tail", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateLogsTailParams(r, i); } },
 			{ "gateway.logs.count", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateLogsCountParams(r, i); } },
 			{ "gateway.sessions.compact", [](const RequestFrame& r, SchemaValidationIssue& i) { return ValidateSessionsCompactParams(r, i); } },

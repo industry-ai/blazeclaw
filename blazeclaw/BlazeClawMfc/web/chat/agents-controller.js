@@ -59,7 +59,7 @@
             state.toolsEffectiveResult = null;
         }
 
-        const supportedPanels = ["overview", "tools", "files", "skills", "channels", "cron"];
+        const supportedPanels = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming"];
         if (supportedPanels.indexOf(String(state.agentsPanel || "")) < 0) {
             state.agentsPanel = "overview";
         }
@@ -287,6 +287,63 @@
             state.agentCronModelSuggestions = [];
         }
 
+        if (typeof state.dreamingStatusLoading !== "boolean") {
+            state.dreamingStatusLoading = false;
+        }
+        if (typeof state.dreamingStatusError !== "string" && state.dreamingStatusError !== null) {
+            state.dreamingStatusError = null;
+        }
+        if (!state.dreamingStatus || typeof state.dreamingStatus !== "object") {
+            state.dreamingStatus = null;
+        }
+        if (typeof state.dreamingModeSaving !== "boolean") {
+            state.dreamingModeSaving = false;
+        }
+        if (typeof state.dreamDiaryLoading !== "boolean") {
+            state.dreamDiaryLoading = false;
+        }
+        if (typeof state.dreamDiaryActionLoading !== "boolean") {
+            state.dreamDiaryActionLoading = false;
+        }
+        if (typeof state.dreamDiaryError !== "string" && state.dreamDiaryError !== null) {
+            state.dreamDiaryError = null;
+        }
+        if (typeof state.dreamDiaryPath !== "string" && state.dreamDiaryPath !== null) {
+            state.dreamDiaryPath = null;
+        }
+        if (typeof state.dreamDiaryContent !== "string" && state.dreamDiaryContent !== null) {
+            state.dreamDiaryContent = null;
+        }
+        if (typeof state.dreamingConfigSnapshotHash !== "string" && state.dreamingConfigSnapshotHash !== null) {
+            state.dreamingConfigSnapshotHash = null;
+        }
+        if (!state.dreamingConfigSnapshot || typeof state.dreamingConfigSnapshot !== "object") {
+            state.dreamingConfigSnapshot = null;
+        }
+        if (typeof state.dreamingResolvedPluginId !== "string" && state.dreamingResolvedPluginId !== null) {
+            state.dreamingResolvedPluginId = null;
+        }
+        if (typeof state.lastError !== "string" && state.lastError !== null) {
+            state.lastError = null;
+        }
+
+        if (typeof state.agentDreamingLoading !== "boolean") {
+            state.agentDreamingLoading = false;
+        }
+        if (typeof state.agentDreamingError !== "string" && state.agentDreamingError !== null) {
+            state.agentDreamingError = null;
+        }
+        if (!state.agentDreamingResult || typeof state.agentDreamingResult !== "object") {
+            state.agentDreamingResult = null;
+        }
+        if (!state.agentDreamingCapability || typeof state.agentDreamingCapability !== "object") {
+            state.agentDreamingCapability = {
+                methods: "doctor.memory.* + config.patch + config.schema.lookup",
+                agentScoped: false,
+                todo: "docs/compare/dreaming.ts/DREAMING_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md",
+            };
+        }
+
         if (!state.agentsPersistence || typeof state.agentsPersistence !== "object") {
             state.agentsPersistence = {
                 selectedAgentId: null,
@@ -348,6 +405,230 @@
                 return fallback;
             }
             return false;
+        }
+
+        function asRecord(value) {
+            if (!value || typeof value !== "object" || Array.isArray(value)) {
+                return null;
+            }
+            return value;
+        }
+
+        function normalizeTrimmedString(value) {
+            if (typeof value !== "string") {
+                return undefined;
+            }
+            const trimmed = value.trim();
+            return trimmed.length > 0 ? trimmed : undefined;
+        }
+
+        function normalizeFiniteInt(value, fallback) {
+            const parsed = Number(value);
+            if (!Number.isFinite(parsed)) {
+                return Number.isFinite(Number(fallback)) ? Math.max(0, Math.floor(Number(fallback))) : 0;
+            }
+            return Math.max(0, Math.floor(parsed));
+        }
+
+        function normalizeFiniteScore(value, fallback) {
+            const parsed = Number(value);
+            if (!Number.isFinite(parsed)) {
+                return Number.isFinite(Number(fallback)) ? Math.max(0, Math.min(1, Number(fallback))) : 0;
+            }
+            return Math.max(0, Math.min(1, parsed));
+        }
+
+        function normalizeStorageMode(value) {
+            const normalized = normalizeTrimmedString(value);
+            if (!normalized) {
+                return "inline";
+            }
+            const lowered = normalized.toLowerCase();
+            if (lowered === "inline" || lowered === "separate" || lowered === "both") {
+                return lowered;
+            }
+            return "inline";
+        }
+
+        function normalizeDreamingEntry(raw) {
+            const record = asRecord(raw);
+            const key = normalizeTrimmedString(record && record.key);
+            const path = normalizeTrimmedString(record && record.path);
+            const snippet = normalizeTrimmedString(record && record.snippet);
+            if (!key || !path || !snippet) {
+                return null;
+            }
+
+            const promotedAt = normalizeTrimmedString(record && record.promotedAt);
+            const lastRecalledAt = normalizeTrimmedString(record && record.lastRecalledAt);
+            const normalized = {
+                key,
+                path,
+                startLine: Math.max(1, normalizeFiniteInt(record && record.startLine, 1)),
+                endLine: Math.max(1, normalizeFiniteInt(record && record.endLine, 1)),
+                snippet,
+                recallCount: normalizeFiniteInt(record && record.recallCount, 0),
+                dailyCount: normalizeFiniteInt(record && record.dailyCount, 0),
+                groundedCount: normalizeFiniteInt(record && record.groundedCount, 0),
+                totalSignalCount: normalizeFiniteInt(record && record.totalSignalCount, 0),
+                lightHits: normalizeFiniteInt(record && record.lightHits, 0),
+                remHits: normalizeFiniteInt(record && record.remHits, 0),
+                phaseHitCount: normalizeFiniteInt(record && record.phaseHitCount, 0),
+            };
+            if (promotedAt) {
+                normalized.promotedAt = promotedAt;
+            }
+            if (lastRecalledAt) {
+                normalized.lastRecalledAt = lastRecalledAt;
+            }
+            return normalized;
+        }
+
+        function normalizeDreamingEntries(raw) {
+            if (!Array.isArray(raw)) {
+                return [];
+            }
+            return raw.map(normalizeDreamingEntry).filter(function (entry) {
+                return Boolean(entry);
+            });
+        }
+
+        function normalizeDreamingStatus(raw) {
+            const record = asRecord(raw);
+            if (!record) {
+                return null;
+            }
+
+            const phasesRecord = asRecord(record.phases);
+            const lightRecord = asRecord(phasesRecord && phasesRecord.light);
+            const deepRecord = asRecord(phasesRecord && phasesRecord.deep);
+            const remRecord = asRecord(phasesRecord && phasesRecord.rem);
+            const normalized = {
+                enabled: normalizeBooleanFlag(record.enabled, false),
+                verboseLogging: normalizeBooleanFlag(record.verboseLogging, false),
+                storageMode: normalizeStorageMode(record.storageMode),
+                separateReports: normalizeBooleanFlag(record.separateReports, false),
+                shortTermCount: normalizeFiniteInt(record.shortTermCount, 0),
+                recallSignalCount: normalizeFiniteInt(record.recallSignalCount, 0),
+                dailySignalCount: normalizeFiniteInt(record.dailySignalCount, 0),
+                groundedSignalCount: normalizeFiniteInt(record.groundedSignalCount, 0),
+                totalSignalCount: normalizeFiniteInt(record.totalSignalCount, 0),
+                phaseSignalCount: normalizeFiniteInt(record.phaseSignalCount, 0),
+                lightPhaseHitCount: normalizeFiniteInt(record.lightPhaseHitCount, 0),
+                remPhaseHitCount: normalizeFiniteInt(record.remPhaseHitCount, 0),
+                promotedTotal: normalizeFiniteInt(record.promotedTotal, 0),
+                promotedToday: normalizeFiniteInt(record.promotedToday, 0),
+                shortTermEntries: normalizeDreamingEntries(record.shortTermEntries),
+                signalEntries: normalizeDreamingEntries(record.signalEntries),
+                promotedEntries: normalizeDreamingEntries(record.promotedEntries),
+            };
+
+            const timezone = normalizeTrimmedString(record.timezone);
+            const storePath = normalizeTrimmedString(record.storePath);
+            const phaseSignalPath = normalizeTrimmedString(record.phaseSignalPath);
+            const storeError = normalizeTrimmedString(record.storeError);
+            const phaseSignalError = normalizeTrimmedString(record.phaseSignalError);
+            if (timezone) {
+                normalized.timezone = timezone;
+            }
+            if (storePath) {
+                normalized.storePath = storePath;
+            }
+            if (phaseSignalPath) {
+                normalized.phaseSignalPath = phaseSignalPath;
+            }
+            if (storeError) {
+                normalized.storeError = storeError;
+            }
+            if (phaseSignalError) {
+                normalized.phaseSignalError = phaseSignalError;
+            }
+
+            if (lightRecord && deepRecord && remRecord) {
+                const phases = {
+                    light: {
+                        enabled: normalizeBooleanFlag(lightRecord.enabled, false),
+                        cron: normalizeTrimmedString(lightRecord.cron) || "",
+                        managedCronPresent: normalizeBooleanFlag(lightRecord.managedCronPresent, false),
+                        lookbackDays: normalizeFiniteInt(lightRecord.lookbackDays, 0),
+                        limit: normalizeFiniteInt(lightRecord.limit, 0),
+                    },
+                    deep: {
+                        enabled: normalizeBooleanFlag(deepRecord.enabled, false),
+                        cron: normalizeTrimmedString(deepRecord.cron) || "",
+                        managedCronPresent: normalizeBooleanFlag(deepRecord.managedCronPresent, false),
+                        limit: normalizeFiniteInt(deepRecord.limit, 0),
+                        minScore: normalizeFiniteScore(deepRecord.minScore, 0),
+                        minRecallCount: normalizeFiniteInt(deepRecord.minRecallCount, 0),
+                        minUniqueQueries: normalizeFiniteInt(deepRecord.minUniqueQueries, 0),
+                        recencyHalfLifeDays: normalizeFiniteInt(deepRecord.recencyHalfLifeDays, 0),
+                    },
+                    rem: {
+                        enabled: normalizeBooleanFlag(remRecord.enabled, false),
+                        cron: normalizeTrimmedString(remRecord.cron) || "",
+                        managedCronPresent: normalizeBooleanFlag(remRecord.managedCronPresent, false),
+                        lookbackDays: normalizeFiniteInt(remRecord.lookbackDays, 0),
+                        limit: normalizeFiniteInt(remRecord.limit, 0),
+                        minPatternStrength: normalizeFiniteScore(remRecord.minPatternStrength, 0),
+                    },
+                };
+                if (Number.isFinite(Number(lightRecord.nextRunAtMs))) {
+                    phases.light.nextRunAtMs = Math.floor(Number(lightRecord.nextRunAtMs));
+                }
+                if (Number.isFinite(Number(deepRecord.nextRunAtMs))) {
+                    phases.deep.nextRunAtMs = Math.floor(Number(deepRecord.nextRunAtMs));
+                }
+                if (Number.isFinite(Number(remRecord.nextRunAtMs))) {
+                    phases.rem.nextRunAtMs = Math.floor(Number(remRecord.nextRunAtMs));
+                }
+                if (Number.isFinite(Number(deepRecord.maxAgeDays))) {
+                    phases.deep.maxAgeDays = normalizeFiniteInt(deepRecord.maxAgeDays, 0);
+                }
+                normalized.phases = phases;
+            }
+
+            return normalized;
+        }
+
+        function resolveDreamingPluginId(configValue) {
+            const plugins = asRecord(configValue && configValue.plugins);
+            const slots = asRecord(plugins && plugins.slots);
+            const configuredSlot = normalizeTrimmedString(slots && slots.memory);
+            if (configuredSlot && configuredSlot.toLowerCase() !== "none") {
+                return configuredSlot;
+            }
+            return "memory-core";
+        }
+
+        function resolveConfiguredDreaming(configValue) {
+            const pluginId = resolveDreamingPluginId(configValue);
+            const plugins = asRecord(configValue && configValue.plugins);
+            const entries = asRecord(plugins && plugins.entries);
+            const pluginEntry = asRecord(entries && entries[pluginId]);
+            const config = asRecord(pluginEntry && pluginEntry.config);
+            const dreaming = asRecord(config && config.dreaming);
+            return {
+                pluginId,
+                enabled: normalizeBooleanFlag(dreaming && dreaming.enabled, false),
+            };
+        }
+
+        function lookupIncludesDreamingProperty(value) {
+            const lookup = asRecord(value);
+            const children = Array.isArray(lookup && lookup.children) ? lookup.children : [];
+            for (let index = 0; index < children.length; index += 1) {
+                const child = asRecord(children[index]);
+                if (normalizeTrimmedString(child && child.key) === "dreaming") {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function lookupDisallowsUnknownProperties(value) {
+            const lookup = asRecord(value);
+            const schema = asRecord(lookup && lookup.schema);
+            return schema && schema.additionalProperties === false;
         }
 
         function normalizeChannelStatusEntry(entry, channelId, labelFallback) {
@@ -2146,6 +2427,362 @@
             await loadPanelDataForCurrentAgent();
         }
 
+        async function loadDreamingStatus(options) {
+            const opts = options || {};
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            if (!request || !state.connected || state.dreamingStatusLoading) {
+                return state.dreamingStatus;
+            }
+
+            state.dreamingStatusLoading = true;
+            state.dreamingStatusError = null;
+            onStateUpdated();
+
+            try {
+                const res = await request("doctor.memory.status", {});
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return null;
+                }
+
+                const payload = res && res.payload ? res.payload : res;
+                const source = payload && typeof payload === "object" && payload.dreaming
+                    ? payload.dreaming
+                    : payload;
+                state.dreamingStatus = normalizeDreamingStatus(source);
+                return state.dreamingStatus;
+            } catch (err) {
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return null;
+                }
+
+                state.dreamingStatusError = String(err);
+                state.lastError = String(err);
+                return null;
+            } finally {
+                state.dreamingStatusLoading = false;
+                onStateUpdated();
+            }
+        }
+
+        async function loadDreamDiary(options) {
+            const opts = options || {};
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            if (!request || !state.connected || state.dreamDiaryLoading) {
+                return;
+            }
+
+            state.dreamDiaryLoading = true;
+            state.dreamDiaryError = null;
+            onStateUpdated();
+
+            try {
+                const res = await request("doctor.memory.dreamDiary", {});
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return;
+                }
+
+                const payload = res && res.payload ? res.payload : res;
+                const path = normalizeTrimmedString(payload && payload.path) || "DREAMS.md";
+                const found = payload && payload.found === true;
+                state.dreamDiaryPath = path;
+                state.dreamDiaryContent = found
+                    ? (typeof payload.content === "string" ? payload.content : "")
+                    : null;
+            } catch (err) {
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return;
+                }
+
+                state.dreamDiaryError = String(err);
+                state.lastError = String(err);
+            } finally {
+                state.dreamDiaryLoading = false;
+                onStateUpdated();
+            }
+        }
+
+        async function runDreamDiaryAction(method, options) {
+            const opts = options || {};
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            const reloadDiary = opts.reloadDiary !== false;
+
+            if (!request || !state.connected || state.dreamDiaryActionLoading) {
+                return false;
+            }
+
+            state.dreamDiaryActionLoading = true;
+            state.dreamingStatusError = null;
+            state.dreamDiaryError = null;
+            onStateUpdated();
+
+            try {
+                await request(method, {});
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return false;
+                }
+
+                if (reloadDiary) {
+                    await loadDreamDiary({
+                        shouldIgnoreResponse,
+                    });
+                }
+                await loadDreamingStatus({
+                    shouldIgnoreResponse,
+                });
+                return true;
+            } catch (err) {
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return false;
+                }
+
+                const message = String(err);
+                state.dreamingStatusError = message;
+                state.lastError = message;
+                return false;
+            } finally {
+                state.dreamDiaryActionLoading = false;
+                onStateUpdated();
+            }
+        }
+
+        function normalizeDreamingConfigSnapshot(payload) {
+            const responsePayload = payload && typeof payload === "object" ? payload : {};
+            const hash = normalizeTrimmedString(responsePayload.hash) || null;
+            const config = asRecord(responsePayload.config);
+            return {
+                hash,
+                config,
+            };
+        }
+
+        async function loadDreamingConfigSnapshot(options) {
+            const opts = options || {};
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            if (!request || !state.connected) {
+                return state.dreamingConfigSnapshot;
+            }
+
+            try {
+                const response = await request("config.get", {});
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return null;
+                }
+
+                const payload = response && response.payload ? response.payload : response;
+                const snapshot = normalizeDreamingConfigSnapshot(payload);
+                state.dreamingConfigSnapshot = snapshot;
+                state.dreamingConfigSnapshotHash = snapshot.hash;
+                const configured = resolveConfiguredDreaming(snapshot.config || null);
+                state.dreamingResolvedPluginId = configured.pluginId;
+                return snapshot;
+            } catch (err) {
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return null;
+                }
+
+                state.dreamingStatusError = String(err);
+                state.lastError = String(err);
+                return null;
+            }
+        }
+
+        async function ensureDreamingPathSupported(pluginId, options) {
+            const opts = options || {};
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            if (!request || !state.connected) {
+                return true;
+            }
+
+            try {
+                const response = await request("config.schema.lookup", {
+                    path: "plugins.entries." + pluginId + ".config",
+                });
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return false;
+                }
+
+                const payload = response && response.payload ? response.payload : response;
+                if (lookupIncludesDreamingProperty(payload)) {
+                    return true;
+                }
+                if (lookupDisallowsUnknownProperties(payload)) {
+                    const message = "Selected memory plugin \"" + pluginId + "\" does not support dreaming settings.";
+                    state.dreamingStatusError = message;
+                    state.lastError = message;
+                    return false;
+                }
+            } catch (_) {
+                return true;
+            }
+
+            return true;
+        }
+
+        async function updateDreamingEnabled(enabled, options) {
+            const opts = options || {};
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            if (!request || !state.connected || state.dreamingModeSaving) {
+                return false;
+            }
+
+            const snapshot = await loadDreamingConfigSnapshot({
+                shouldIgnoreResponse,
+            });
+            if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                return false;
+            }
+
+            const configSnapshot = snapshot || state.dreamingConfigSnapshot;
+            const baseHash = configSnapshot && typeof configSnapshot.hash === "string"
+                ? configSnapshot.hash
+                : null;
+            if (!baseHash) {
+                state.dreamingStatusError = "Config hash missing; refresh and retry.";
+                return false;
+            }
+
+            const configured = resolveConfiguredDreaming(configSnapshot && configSnapshot.config ? configSnapshot.config : null);
+            const pluginId = configured.pluginId;
+            state.dreamingResolvedPluginId = pluginId;
+
+            const pathSupported = await ensureDreamingPathSupported(pluginId, {
+                shouldIgnoreResponse,
+            });
+            if (!pathSupported) {
+                return false;
+            }
+
+            state.dreamingModeSaving = true;
+            state.dreamingStatusError = null;
+            onStateUpdated();
+
+            try {
+                await request("config.patch", {
+                    baseHash,
+                    raw: JSON.stringify({
+                        plugins: {
+                            entries: {
+                                [pluginId]: {
+                                    config: {
+                                        dreaming: {
+                                            enabled: Boolean(enabled),
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    }),
+                    sessionKey: String(state.sessionKey || "main"),
+                    note: "Dreaming settings updated from the Dreaming tab.",
+                });
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return false;
+                }
+
+                if (state.dreamingStatus && typeof state.dreamingStatus === "object") {
+                    state.dreamingStatus = Object.assign({}, state.dreamingStatus, {
+                        enabled: Boolean(enabled),
+                    });
+                }
+                return true;
+            } catch (err) {
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return false;
+                }
+
+                const message = String(err);
+                state.dreamingStatusError = message;
+                state.lastError = message;
+                return false;
+            } finally {
+                state.dreamingModeSaving = false;
+                onStateUpdated();
+            }
+        }
+
+        async function backfillDreamDiary(options) {
+            return runDreamDiaryAction("doctor.memory.backfillDreamDiary", options);
+        }
+
+        async function resetDreamDiary(options) {
+            return runDreamDiaryAction("doctor.memory.resetDreamDiary", options);
+        }
+
+        async function resetGroundedShortTerm(options) {
+            const opts = options || {};
+            return runDreamDiaryAction("doctor.memory.resetGroundedShortTerm", Object.assign({}, opts, {
+                reloadDiary: false,
+            }));
+        }
+
+        async function loadAgentDreaming(agentId) {
+            const resolvedAgentId = String(agentId || "").trim();
+            if (!resolvedAgentId || !request || !state.connected || state.agentDreamingLoading) {
+                return;
+            }
+
+            function shouldIgnoreResponse() {
+                return hasSelectedAgentMismatch(resolvedAgentId) || state.agentsPanel !== "dreaming";
+            }
+
+            state.agentDreamingLoading = true;
+            state.agentDreamingError = null;
+            onStateUpdated();
+
+            try {
+                await loadDreamingConfigSnapshot({
+                    shouldIgnoreResponse,
+                });
+                if (shouldIgnoreResponse()) {
+                    return;
+                }
+
+                await loadDreamingStatus({
+                    shouldIgnoreResponse,
+                });
+                if (shouldIgnoreResponse()) {
+                    return;
+                }
+
+                await loadDreamDiary({
+                    shouldIgnoreResponse,
+                });
+                if (shouldIgnoreResponse()) {
+                    return;
+                }
+
+                state.agentDreamingResult = {
+                    status: state.dreamingStatus,
+                    diaryPath: state.dreamDiaryPath,
+                    diaryContent: state.dreamDiaryContent,
+                    configHash: state.dreamingConfigSnapshotHash,
+                    pluginId: state.dreamingResolvedPluginId,
+                    capability: state.agentDreamingCapability,
+                };
+            } catch (err) {
+                if (shouldIgnoreResponse()) {
+                    return;
+                }
+
+                state.agentDreamingError = String(err);
+            } finally {
+                state.agentDreamingLoading = false;
+                onStateUpdated();
+            }
+        }
+
         async function loadAgentIdentity(agentId) {
             const resolvedAgentId = String(agentId || "").trim();
             if (!request || !state.connected || state.agentIdentityLoading || !resolvedAgentId) {
@@ -2221,7 +2858,7 @@
 
         function setAgentsPanel(panel) {
             const panelValue = String(panel || "").trim();
-            const normalized = ["overview", "tools", "files", "skills", "channels", "cron"].indexOf(panelValue) >= 0
+            const normalized = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming"].indexOf(panelValue) >= 0
                 ? panelValue
                 : "overview";
             state.agentsPanel = normalized;
@@ -2276,6 +2913,11 @@
                 return;
             }
 
+            if (state.agentsPanel === "dreaming") {
+                await loadAgentDreaming(selectedAgentId);
+                return;
+            }
+
             if (state.agentsPanel === "overview") {
                 await loadAgentIdentity(selectedAgentId);
             }
@@ -2315,6 +2957,7 @@
             state.agentSkillsAgentId = null;
             state.agentChannelsResult = null;
             state.agentCronResult = null;
+            state.agentDreamingResult = null;
             onStateUpdated();
 
             if (nextAgentId) {
@@ -2424,6 +3067,14 @@
             logoutWhatsApp,
             loadAgentChannels,
             loadAgentCron,
+            loadAgentDreaming,
+            loadDreamingStatus,
+            loadDreamDiary,
+            loadDreamingConfigSnapshot,
+            updateDreamingEnabled,
+            backfillDreamDiary,
+            resetDreamDiary,
+            resetGroundedShortTerm,
             loadCronStatus,
             loadCronJobsPage,
             loadCronRuns,
@@ -2582,7 +3233,29 @@
                 "cron state contract should initialize agentCronForm default shape");
             assertRegression(Boolean(state.agentCronFieldErrors) && typeof state.agentCronFieldErrors === "object",
                 "cron state contract should initialize agentCronFieldErrors object");
-            summary.push("channels + cron state contract defaults");
+            assertRegression(state.dreamingStatusLoading === false,
+                "dreaming state contract should initialize dreamingStatusLoading=false");
+            assertRegression(state.dreamingStatusError === null,
+                "dreaming state contract should initialize dreamingStatusError=null");
+            assertRegression(state.dreamingStatus === null,
+                "dreaming state contract should initialize dreamingStatus=null");
+            assertRegression(state.dreamDiaryLoading === false,
+                "dreaming state contract should initialize dreamDiaryLoading=false");
+            assertRegression(state.dreamDiaryActionLoading === false,
+                "dreaming state contract should initialize dreamDiaryActionLoading=false");
+            assertRegression(state.dreamDiaryPath === null,
+                "dreaming state contract should initialize dreamDiaryPath=null");
+            assertRegression(state.dreamDiaryContent === null,
+                "dreaming state contract should initialize dreamDiaryContent=null");
+            assertRegression(state.agentDreamingLoading === false,
+                "dreaming extension contract should initialize agentDreamingLoading=false");
+            assertRegression(state.agentDreamingError === null,
+                "dreaming extension contract should initialize agentDreamingError=null");
+            assertRegression(state.agentDreamingResult === null,
+                "dreaming extension contract should initialize agentDreamingResult=null");
+            assertRegression(Boolean(state.agentDreamingCapability) && typeof state.agentDreamingCapability.methods === "string",
+                "dreaming extension contract should initialize agentDreamingCapability");
+            summary.push("channels + cron + dreaming state contract defaults");
         }
 
         {
@@ -3536,6 +4209,240 @@
             assertRegression(String(state.agentSkillsError || "").indexOf("skills unavailable") >= 0,
                 "agent-skills loader should capture stringified error semantics");
             summary.push("agent-skills error lifecycle");
+        }
+
+        {
+            const state = createRegressionState();
+            state.agentsPanel = "dreaming";
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const loadPending = controller.loadPanelDataForCurrentAgent();
+            const configCall = harness.takeNextCall("config.get");
+            configCall.deferred.resolve({
+                payload: {
+                    hash: "hash-1",
+                    config: {
+                        plugins: {
+                            slots: {
+                                memory: "memory-core",
+                            },
+                            entries: {
+                                "memory-core": {
+                                    config: {
+                                        dreaming: {
+                                            enabled: true,
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            });
+            const statusCall = harness.takeNextCall("doctor.memory.status");
+            statusCall.deferred.resolve({
+                payload: {
+                    ok: true,
+                    status: "healthy",
+                    dreaming: {
+                        enabled: true,
+                        timezone: "UTC",
+                        verboseLogging: false,
+                        storageMode: "inline",
+                        separateReports: false,
+                        shortTermCount: 1,
+                        recallSignalCount: 2,
+                        dailySignalCount: 3,
+                        groundedSignalCount: 4,
+                        totalSignalCount: 5,
+                        phaseSignalCount: 6,
+                        lightPhaseHitCount: 7,
+                        remPhaseHitCount: 8,
+                        promotedTotal: 9,
+                        promotedToday: 1,
+                        shortTermEntries: [],
+                        signalEntries: [],
+                        promotedEntries: [],
+                    },
+                },
+            });
+            const diaryCall = harness.takeNextCall("doctor.memory.dreamDiary");
+            diaryCall.deferred.resolve({
+                payload: {
+                    entries: [],
+                    count: 0,
+                    source: "memory",
+                    found: true,
+                    path: "DREAMS.md",
+                    content: "Dream diary content",
+                },
+            });
+            await loadPending;
+
+            assertRegression(Boolean(state.agentDreamingResult),
+                "dreaming panel loader should produce dreaming projection result");
+            assertRegression(Boolean(state.dreamingStatus) && state.dreamingStatus.enabled === true,
+                "dreaming panel loader should bind normalized dreaming status payload");
+            assertRegression(state.dreamDiaryPath === "DREAMS.md" && state.dreamDiaryContent === "Dream diary content",
+                "dreaming panel loader should bind dream diary found/path/content payload");
+            assertRegression(state.dreamingResolvedPluginId === "memory-core",
+                "dreaming panel loader should resolve configured memory plugin id");
+
+            const enablePending = controller.updateDreamingEnabled(false);
+            const configGetForEnable = harness.takeNextCall("config.get");
+            configGetForEnable.deferred.resolve({
+                payload: {
+                    hash: "hash-1",
+                    config: {
+                        plugins: {
+                            slots: {
+                                memory: "memory-core",
+                            },
+                            entries: {
+                                "memory-core": {
+                                    config: {
+                                        dreaming: {
+                                            enabled: true,
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            });
+            const schemaLookupCall = harness.takeNextCall("config.schema.lookup");
+            schemaLookupCall.deferred.resolve({
+                payload: {
+                    path: "plugins.entries.memory-core.config",
+                    schema: {
+                        additionalProperties: false,
+                    },
+                    children: [
+                        {
+                            key: "dreaming",
+                        },
+                    ],
+                },
+            });
+            const configPatchCall = harness.takeNextCall("config.patch");
+            assertRegression(configPatchCall.params && configPatchCall.params.baseHash === "hash-1",
+                "updateDreamingEnabled should include config hash when patching dreaming state");
+            assertRegression(String(configPatchCall.params && configPatchCall.params.sessionKey || "") === state.sessionKey,
+                "updateDreamingEnabled should include current sessionKey in config.patch");
+            configPatchCall.deferred.resolve({
+                payload: {
+                    patched: true,
+                    updated: true,
+                },
+            });
+            const enableResult = await enablePending;
+            assertRegression(enableResult === true,
+                "updateDreamingEnabled should resolve true after successful config.patch");
+            assertRegression(Boolean(state.dreamingStatus) && state.dreamingStatus.enabled === false,
+                "updateDreamingEnabled should update local dreaming enabled projection");
+
+            const backfillPending = controller.backfillDreamDiary({});
+            const backfillCall = harness.takeNextCall("doctor.memory.backfillDreamDiary");
+            backfillCall.deferred.resolve({
+                payload: {
+                    queued: true,
+                    status: "scheduled",
+                },
+            });
+            const diaryReloadCall = harness.takeNextCall("doctor.memory.dreamDiary");
+            diaryReloadCall.deferred.resolve({
+                payload: {
+                    entries: [],
+                    count: 0,
+                    source: "memory",
+                    found: false,
+                    path: "DREAMS.md",
+                    content: null,
+                },
+            });
+            const statusReloadCall = harness.takeNextCall("doctor.memory.status");
+            statusReloadCall.deferred.resolve({
+                payload: {
+                    ok: true,
+                    status: "healthy",
+                    dreaming: {
+                        enabled: false,
+                        verboseLogging: false,
+                        storageMode: "inline",
+                        separateReports: false,
+                        shortTermCount: 0,
+                        recallSignalCount: 0,
+                        dailySignalCount: 0,
+                        groundedSignalCount: 0,
+                        totalSignalCount: 0,
+                        phaseSignalCount: 0,
+                        lightPhaseHitCount: 0,
+                        remPhaseHitCount: 0,
+                        promotedTotal: 0,
+                        promotedToday: 0,
+                        shortTermEntries: [],
+                        signalEntries: [],
+                        promotedEntries: [],
+                    },
+                },
+            });
+            const backfillResult = await backfillPending;
+            assertRegression(backfillResult === true,
+                "backfillDreamDiary should resolve true after successful action+reload flow");
+
+            const resetGroundedPending = controller.resetGroundedShortTerm({});
+            const resetGroundedCall = harness.takeNextCall("doctor.memory.resetGroundedShortTerm");
+            resetGroundedCall.deferred.resolve({
+                payload: {
+                    reset: true,
+                    target: "groundedShortTerm",
+                },
+            });
+            const statusAfterResetCall = harness.takeNextCall("doctor.memory.status");
+            statusAfterResetCall.deferred.resolve({
+                payload: {
+                    ok: true,
+                    status: "healthy",
+                    dreaming: {
+                        enabled: false,
+                        verboseLogging: false,
+                        storageMode: "inline",
+                        separateReports: false,
+                        shortTermCount: 0,
+                        recallSignalCount: 0,
+                        dailySignalCount: 0,
+                        groundedSignalCount: 0,
+                        totalSignalCount: 0,
+                        phaseSignalCount: 0,
+                        lightPhaseHitCount: 0,
+                        remPhaseHitCount: 0,
+                        promotedTotal: 0,
+                        promotedToday: 0,
+                        shortTermEntries: [],
+                        signalEntries: [],
+                        promotedEntries: [],
+                    },
+                },
+            });
+            const resetGroundedResult = await resetGroundedPending;
+            assertRegression(resetGroundedResult === true,
+                "resetGroundedShortTerm should resolve true after successful action flow");
+
+            let noDiaryReloadQueued = false;
+            try {
+                harness.takeNextCall("doctor.memory.dreamDiary");
+            } catch (_) {
+                noDiaryReloadQueued = true;
+            }
+            assertRegression(noDiaryReloadQueued,
+                "resetGroundedShortTerm should not reload dream diary when reloadDiary=false");
+
+            summary.push("dreaming controller parity baseline");
         }
 
         {

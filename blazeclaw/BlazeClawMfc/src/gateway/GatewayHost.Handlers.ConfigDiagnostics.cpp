@@ -54,6 +54,12 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 			return host.m_dispatcher.Dispatch(forwarded);
 			});
 
+		host.m_dispatcher.Register("config.schema.lookup", [&host](const protocol::RequestFrame& request) {
+			auto forwarded = request;
+			forwarded.method = "gateway.config.schema.lookup";
+			return host.m_dispatcher.Dispatch(forwarded);
+			});
+
 		host.m_dispatcher.Register("config.apply", [](const protocol::RequestFrame& request) {
 			return protocol::OkResponse(request, "{\"applied\":true,\"updated\":true}");
 			});
@@ -83,11 +89,23 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 			});
 
 		host.m_dispatcher.Register("doctor.memory.status", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"ok\":true,\"status\":\"healthy\"}");
+			return protocol::OkResponse(
+				request,
+				"{\"ok\":true,\"status\":\"healthy\",\"dreaming\":{"
+				"\"enabled\":false,\"timezone\":\"UTC\",\"verboseLogging\":false,"
+				"\"storageMode\":\"inline\",\"separateReports\":false,"
+				"\"shortTermCount\":0,\"recallSignalCount\":0,\"dailySignalCount\":0,"
+				"\"groundedSignalCount\":0,\"totalSignalCount\":0,\"phaseSignalCount\":0,"
+				"\"lightPhaseHitCount\":0,\"remPhaseHitCount\":0,\"promotedTotal\":0,"
+				"\"promotedToday\":0,\"shortTermEntries\":[],\"signalEntries\":[],"
+				"\"promotedEntries\":[]}}");
 			});
 
 		host.m_dispatcher.Register("doctor.memory.dreamDiary", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"entries\":[],\"count\":0,\"source\":\"memory\"}");
+			return protocol::OkResponse(
+				request,
+				"{\"entries\":[],\"count\":0,\"source\":\"memory\","
+				"\"found\":false,\"path\":\"DREAMS.md\",\"content\":null}");
 			});
 
 		host.m_dispatcher.Register("doctor.memory.backfillDreamDiary", [](const protocol::RequestFrame& request) {

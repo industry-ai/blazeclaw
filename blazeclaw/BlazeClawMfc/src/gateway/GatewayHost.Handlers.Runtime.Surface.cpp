@@ -72,7 +72,7 @@ namespace blazeclaw::gateway {
 							return static_cast<char>(std::tolower(ch));
 						});
 					return normalized;
-				};
+					};
 
 				const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
 					std::chrono::system_clock::now().time_since_epoch()).count();
@@ -97,7 +97,7 @@ namespace blazeclaw::gateway {
 						{ "payload", { { "kind", "systemEvent" }, { "text", "daily summary" } } },
 						{ "state", { { "lastStatus", "skipped" } } }
 					}
-				});
+					});
 
 				const std::string query = normalizeLower(queryRaw);
 				nlohmann::json filtered = nlohmann::json::array();
@@ -135,7 +135,7 @@ namespace blazeclaw::gateway {
 					const auto leftUpdated = left.value("updatedAtMs", 0LL);
 					const auto rightUpdated = right.value("updatedAtMs", 0LL);
 					return ascending ? leftUpdated < rightUpdated : leftUpdated > rightUpdated;
-				};
+					};
 				std::sort(filtered.begin(), filtered.end(), compareBy);
 
 				const std::size_t total = filtered.size();
@@ -293,7 +293,7 @@ namespace blazeclaw::gateway {
 						{ "ts", nowMs - 180000 },
 						{ "durationMs", 0 }
 					}
-				});
+					});
 
 				nlohmann::json filtered = nlohmann::json::array();
 				for (const auto& entry : entries) {

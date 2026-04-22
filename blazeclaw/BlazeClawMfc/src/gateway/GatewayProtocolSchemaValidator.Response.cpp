@@ -409,6 +409,16 @@ namespace blazeclaw::gateway::protocol {
 					return false;
 				}
 
+				if (HasFieldToken(payload, "dreaming") &&
+					!IsFieldNull(payload, "dreaming") &&
+					!IsFieldValueType(payload, "dreaming", '{')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`doctor.memory.status` optional `dreaming` must be object or null.");
+					return false;
+				}
+
 				return true;
 			} },
 			{ "doctor.memory.dreamDiary", [&]() {
@@ -419,6 +429,35 @@ namespace blazeclaw::gateway::protocol {
 						issue,
 						"schema_invalid_response",
 						"`doctor.memory.dreamDiary` requires `entries`, `count`, and `source` fields.");
+					return false;
+				}
+
+				if (HasFieldToken(payload, "found") &&
+					!IsFieldBoolean(payload, "found")) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`doctor.memory.dreamDiary` optional `found` must be boolean.");
+					return false;
+				}
+
+				if (HasFieldToken(payload, "path") &&
+					!IsFieldNull(payload, "path") &&
+					!IsFieldValueType(payload, "path", '"')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`doctor.memory.dreamDiary` optional `path` must be string or null.");
+					return false;
+				}
+
+				if (HasFieldToken(payload, "content") &&
+					!IsFieldNull(payload, "content") &&
+					!IsFieldValueType(payload, "content", '"')) {
+					SetIssue(
+						issue,
+						"schema_invalid_response",
+						"`doctor.memory.dreamDiary` optional `content` must be string or null.");
 					return false;
 				}
 
