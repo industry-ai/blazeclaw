@@ -1039,6 +1039,10 @@
             return entries.length === 0 ? "No instances yet." : null;
         }
 
+        const LEGACY_USAGE_DATE_PARAMS_MODE_RE = /unexpected property ['"]mode['"]/i;
+        const LEGACY_USAGE_DATE_PARAMS_OFFSET_RE = /unexpected property ['"]utcoffset['"]/i;
+        const LEGACY_USAGE_DATE_PARAMS_INVALID_RE = /invalid sessions\.usage params/i;
+
         function buildUsageDateBounds() {
             const now = new Date();
             const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -1053,6 +1057,52 @@
                 startDate: toIsoDate(start),
                 endDate: toIsoDate(end),
             };
+        }
+
+        function formatUtcOffset(timezoneOffsetMinutes) {
+            const offsetFromUtcMinutes = -timezoneOffsetMinutes;
+            const sign = offsetFromUtcMinutes >= 0 ? "+" : "-";
+            const absMinutes = Math.abs(offsetFromUtcMinutes);
+            const hours = Math.floor(absMinutes / 60);
+            const minutes = absMinutes % 60;
+            return minutes === 0
+                ? "UTC" + sign + String(hours)
+                : "UTC" + sign + String(hours) + ":" + String(minutes).padStart(2, "0");
+        }
+
+        function buildUsageDateInterpretationParams(timeZone) {
+            if (timeZone === "utc") {
+                return {
+                    mode: "utc",
+                };
+            }
+            return {
+                mode: "specific",
+                utcOffset: formatUtcOffset(new Date().getTimezoneOffset()),
+            };
+        }
+
+        function isLegacyDateInterpretationUnsupportedError(err) {
+            const message = String((err && err.message) || err || "");
+            return LEGACY_USAGE_DATE_PARAMS_INVALID_RE.test(message) &&
+                (LEGACY_USAGE_DATE_PARAMS_MODE_RE.test(message) || LEGACY_USAGE_DATE_PARAMS_OFFSET_RE.test(message));
+        }
+
+        function shouldIgnoreUsageDetailResponse(shouldIgnoreResponse, sessionKey) {
+            if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                return true;
+            }
+            const selectedPanel = String(state.agentsPanel || "");
+            if (selectedPanel !== "usage") {
+                return true;
+            }
+            const selectedSessions = Array.isArray(state.usageSelectedSessions)
+                ? state.usageSelectedSessions
+                : [];
+            if (selectedSessions.length === 0) {
+                return true;
+            }
+            return selectedSessions.indexOf(sessionKey) < 0;
         }
 
         async function runOptionalUsageDetailRequest(loadingKey, run, shouldIgnoreResponse) {
@@ -1855,23 +1905,43 @@
 
                 const startDate = state.usageStartDate;
                 const endDate = state.usageEndDate;
-                const dateInterpretation = state.usageTimeZone === "utc"
-                    ? { mode: "utc" }
-                    : undefined;
-                const [sessionsRes, costRes] = await Promise.all([
-                    request("sessions.usage", {
-                        startDate,
-                        endDate,
-                        limit: 1000,
-                        includeContextWeight: true,
-                        ...dateInterpretation,
-                    }),
-                    request("usage.cost", {
-                        startDate,
-                        endDate,
-                        ...dateInterpretation,
-                    }),
-                ]);
+                async function runUsageRequests(includeDateInterpretation) {
+                    const dateInterpretation = includeDateInterpretation
+                        ? buildUsageDateInterpretationParams(state.usageTimeZone)
+                        : undefined;
+                    return Promise.all([
+                        request("sessions.usage", {
+                            startDate,
+                            endDate,
+                            limit: 1000,
+                            includeContextWeight: true,
+                            ...(dateInterpretation || {}),
+                        }),
+                        request("usage.cost", {
+                            startDate,
+                            endDate,
+                            ...(dateInterpretation || {}),
+                        }),
+                    ]);
+                }
+
+                const includeDateInterpretation = true;
+                let sessionsRes = null;
+                let costRes = null;
+                try {
+                    const first = await runUsageRequests(includeDateInterpretation);
+                    sessionsRes = first[0];
+                    costRes = first[1];
+                } catch (firstErr) {
+                    if (includeDateInterpretation && isLegacyDateInterpretationUnsupportedError(firstErr)) {
+                        const fallback = await runUsageRequests(false);
+                        sessionsRes = fallback[0];
+                        costRes = fallback[1];
+                    } else {
+                        throw firstErr;
+                    }
+                }
+
                 if (shouldIgnoreResponse && shouldIgnoreResponse()) {
                     return state.usageResult;
                 }
@@ -1920,7 +1990,7 @@
                 const res = await request("sessions.usage.timeseries", {
                     key,
                 });
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                if (shouldIgnoreUsageDetailResponse(shouldIgnoreResponse, key)) {
                     return;
                 }
 
@@ -1948,7 +2018,7 @@
                     key,
                     limit: 1000,
                 });
-                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                if (shouldIgnoreUsageDetailResponse(shouldIgnoreResponse, key)) {
                     return;
                 }
 
@@ -4188,6 +4258,64 @@
             await logsLoad;
             assertRegression(Array.isArray(state.usageSessionLogs) && state.usageSessionLogs.length === 1,
                 "usage logs loader should bind payload logs array");
+
+            state.usageSelectedSessions = ["main"];
+            controller.setAgentsPanel("usage");
+            const staleDetailsLoad = controller.loadUsageSessionLogs("main", {
+                shouldIgnoreResponse: function () {
+                    return state.agentsPanel !== "usage";
+                },
+            });
+            const staleDetailsCall = harness.takeNextCall("sessions.usage.logs");
+            controller.setAgentsPanel("overview");
+            staleDetailsCall.deferred.resolve({
+                payload: {
+                    logs: [
+                        {
+                            role: "assistant",
+                            text: "stale-log",
+                        },
+                    ],
+                },
+            });
+            await staleDetailsLoad;
+            assertRegression(!Array.isArray(state.usageSessionLogs) || state.usageSessionLogs.every(function (entry) {
+                return String(entry && entry.text || "") !== "stale-log";
+            }),
+                "usage detail loader should ignore stale response after panel switch");
+
+            const fallbackUsageLoad = controller.loadUsage({
+                quiet: false,
+            });
+            const fallbackSessionsCall = harness.takeNextCall("sessions.usage");
+            const fallbackCostCall = harness.takeNextCall("usage.cost");
+            fallbackSessionsCall.deferred.reject({
+                message: "invalid sessions.usage params: unexpected property 'mode'",
+            });
+            const retrySessionsCall = harness.takeNextCall("sessions.usage");
+            const retryCostCall = harness.takeNextCall("usage.cost");
+            fallbackCostCall.deferred.resolve({
+                payload: {
+                    daily: [],
+                },
+            });
+            retrySessionsCall.deferred.resolve({
+                payload: {
+                    sessions: [
+                        {
+                            key: "retry-main",
+                        },
+                    ],
+                },
+            });
+            retryCostCall.deferred.resolve({
+                payload: {
+                    daily: [],
+                },
+            });
+            await fallbackUsageLoad;
+            assertRegression(Boolean(state.usageResult) && Array.isArray(state.usageResult.sessions) && state.usageResult.sessions.length === 1,
+                "usage loader should retry without date interpretation after legacy rejection");
 
             controller.setAgentsPanel("usage");
             const panelLoad = controller.loadPanelDataForCurrentAgent();

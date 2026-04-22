@@ -941,6 +941,10 @@
 
                     rows.push(`<div class=\"agents-row\">Date range: ${escapeHtml(String(state.usageStartDate || "(auto)"))} -> ${escapeHtml(String(state.usageEndDate || "(auto)"))}</div>`);
                     rows.push(`<div class=\"agents-row\">Time zone: ${escapeHtml(String(state.usageTimeZone || "local"))}</div>`);
+                    rows.push(`<div class=\"agents-row\">`
+                        + `<label>Start <input class=\"agents-input\" data-usage-field=\"start-date\" type=\"date\" value=\"${escapeHtml(String(state.usageStartDate || ""))}\" /></label> `
+                        + `<label>End <input class=\"agents-input\" data-usage-field=\"end-date\" type=\"date\" value=\"${escapeHtml(String(state.usageEndDate || ""))}\" /></label>`
+                        + `</div>`);
 
                     const usageSessions = state.usageResult && Array.isArray(state.usageResult.sessions)
                         ? state.usageResult.sessions
@@ -973,6 +977,7 @@
 
                     rows.push(`<div class=\"agents-row\">`
                         + `<button class=\"agents-chip\" data-usage-action=\"refresh\">Refresh</button> `
+                        + `<button class=\"agents-chip\" data-usage-action=\"apply-date-range\">Apply Date Range</button> `
                         + `<button class=\"agents-chip\" data-usage-action=\"timezone-local\">Timezone Local</button> `
                         + `<button class=\"agents-chip\" data-usage-action=\"timezone-utc\">Timezone UTC</button>`
                         + `</div>`);
@@ -1391,6 +1396,22 @@
                     });
                 });
 
+                state.agentsSurfaceEl.querySelectorAll("[data-usage-field]").forEach((el) => {
+                    el.addEventListener("change", () => {
+                        const field = String(el.getAttribute("data-usage-field") || "").trim();
+                        const value = String(el.value || "").trim();
+                        if (!field) {
+                            return;
+                        }
+
+                        if (field === "start-date") {
+                            state.usageStartDate = value;
+                        } else if (field === "end-date") {
+                            state.usageEndDate = value;
+                        }
+                    });
+                });
+
                 state.agentsSurfaceEl.querySelectorAll("[data-usage-action]").forEach((el) => {
                     el.addEventListener("click", () => {
                         const action = String(el.getAttribute("data-usage-action") || "").trim();
@@ -1410,6 +1431,17 @@
                             return;
                         }
 
+                        if (action === "apply-date-range") {
+                            if (state.usageStartDate && state.usageEndDate && state.usageStartDate > state.usageEndDate) {
+                                state.usageError = "Start date must be on or before end date.";
+                                return;
+                            }
+                            void agentsController.loadUsage({
+                                quiet: false,
+                            });
+                            return;
+                        }
+
                         if (action === "timezone-local" || action === "timezone-utc") {
                             state.usageTimeZone = action === "timezone-utc" ? "utc" : "local";
                             void agentsController.loadUsage({
@@ -1423,9 +1455,18 @@
                             if (!sessionKey) {
                                 return;
                             }
+                            state.usageSelectedSessions = [sessionKey];
                             void Promise.all([
-                                agentsController.loadUsageTimeSeries(sessionKey, {}),
-                                agentsController.loadUsageSessionLogs(sessionKey, {}),
+                                agentsController.loadUsageTimeSeries(sessionKey, {
+                                    shouldIgnoreResponse: function () {
+                                        return String(state.agentsPanel || "") !== "usage";
+                                    },
+                                }),
+                                agentsController.loadUsageSessionLogs(sessionKey, {
+                                    shouldIgnoreResponse: function () {
+                                        return String(state.agentsPanel || "") !== "usage";
+                                    },
+                                }),
                             ]);
                         }
                     });
