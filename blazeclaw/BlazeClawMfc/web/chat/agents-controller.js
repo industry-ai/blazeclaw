@@ -59,7 +59,7 @@
             state.toolsEffectiveResult = null;
         }
 
-        const supportedPanels = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming", "nodes"];
+        const supportedPanels = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming", "nodes", "instances"];
         if (supportedPanels.indexOf(String(state.agentsPanel || "")) < 0) {
             state.agentsPanel = "overview";
         }
@@ -359,6 +359,19 @@
         }
         if (typeof state.nodesError !== "string" && state.nodesError !== null) {
             state.nodesError = null;
+        }
+
+        if (typeof state.presenceLoading !== "boolean") {
+            state.presenceLoading = false;
+        }
+        if (!Array.isArray(state.presenceEntries)) {
+            state.presenceEntries = [];
+        }
+        if (typeof state.presenceError !== "string" && state.presenceError !== null) {
+            state.presenceError = null;
+        }
+        if (typeof state.presenceStatus !== "string" && state.presenceStatus !== null) {
+            state.presenceStatus = null;
         }
 
         if (typeof state.agentDreamingLoading !== "boolean") {
@@ -962,6 +975,22 @@
                 })
                 : [];
             return nodes;
+        }
+
+        function normalizePresenceEntries(payload) {
+            if (!Array.isArray(payload)) {
+                return [];
+            }
+            return payload.filter(function (entry) {
+                return entry && typeof entry === "object";
+            });
+        }
+
+        function loadPresenceStatusMessage(entries, payloadWasArray) {
+            if (!payloadWasArray) {
+                return "No presence payload.";
+            }
+            return entries.length === 0 ? "No instances yet." : null;
         }
 
         function normalizeChannelStatusEntry(entry, channelId, labelFallback) {
@@ -1663,6 +1692,59 @@
                 return state.nodes;
             } finally {
                 state.nodesLoading = false;
+                onStateUpdated();
+            }
+        }
+
+        async function loadPresence(options) {
+            const opts = options || {};
+            const quiet = Boolean(opts.quiet);
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            if (!request || !state.connected || state.presenceLoading) {
+                return state.presenceEntries;
+            }
+
+            state.presenceLoading = true;
+            if (!quiet) {
+                state.presenceError = null;
+                state.presenceStatus = null;
+                state.lastError = null;
+            }
+            onStateUpdated();
+
+            try {
+                const res = await request("system-presence", {});
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return state.presenceEntries;
+                }
+
+                const payload = res && Object.prototype.hasOwnProperty.call(res, "payload")
+                    ? res.payload
+                    : res;
+                const entries = normalizePresenceEntries(payload);
+                const payloadWasArray = Array.isArray(payload);
+                state.presenceEntries = entries;
+                state.presenceStatus = loadPresenceStatusMessage(entries, payloadWasArray);
+                if (!quiet) {
+                    state.presenceError = null;
+                }
+                return entries;
+            } catch (err) {
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return state.presenceEntries;
+                }
+
+                if (!quiet) {
+                    state.presenceEntries = [];
+                    state.presenceStatus = null;
+                    state.presenceError = resolveToolsErrorMessage(err, "instance presence");
+                    state.lastError = state.presenceError;
+                }
+                return state.presenceEntries;
+            } finally {
+                state.presenceLoading = false;
                 onStateUpdated();
             }
         }
@@ -3236,7 +3318,7 @@
 
         function setAgentsPanel(panel) {
             const panelValue = String(panel || "").trim();
-            const normalized = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming", "nodes"].indexOf(panelValue) >= 0
+            const normalized = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming", "nodes", "instances"].indexOf(panelValue) >= 0
                 ? panelValue
                 : "overview";
             state.agentsPanel = normalized;
@@ -3300,6 +3382,15 @@
                 await loadNodes({
                     shouldIgnoreResponse: function () {
                         return state.agentsPanel !== "nodes";
+                    },
+                });
+                return;
+            }
+
+            if (state.agentsPanel === "instances") {
+                await loadPresence({
+                    shouldIgnoreResponse: function () {
+                        return state.agentsPanel !== "instances";
                     },
                 });
                 return;
@@ -3449,6 +3540,7 @@
             loadAgentFileContent,
             loadAgentSkills,
             loadNodes,
+            loadPresence,
             loadChannels,
             startWhatsAppLogin,
             waitWhatsAppLogin,
@@ -3663,7 +3755,83 @@
                 "nodes state contract should initialize nodes=[]");
             assertRegression(state.nodesError === null,
                 "nodes state contract should initialize nodesError=null");
-            summary.push("channels + cron + dreaming + nodes state/UI contract defaults");
+            assertRegression(state.presenceLoading === false,
+                "presence state contract should initialize presenceLoading=false");
+            assertRegression(Array.isArray(state.presenceEntries) && state.presenceEntries.length === 0,
+                "presence state contract should initialize presenceEntries=[]");
+            assertRegression(state.presenceError === null,
+                "presence state contract should initialize presenceError=null");
+            assertRegression(state.presenceStatus === null,
+                "presence state contract should initialize presenceStatus=null");
+            summary.push("channels + cron + dreaming + nodes + presence state/UI contract defaults");
+        }
+
+        {
+            const state = createRegressionState();
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            const firstLoad = controller.loadPresence({
+                quiet: false,
+            });
+            const firstCall = harness.takeNextCall("system-presence");
+            firstCall.deferred.resolve({
+                payload: [
+                    {
+                        instanceId: "instance-main",
+                        host: "blazeclaw.local",
+                    },
+                ],
+            });
+            await firstLoad;
+
+            assertRegression(Array.isArray(state.presenceEntries) && state.presenceEntries.length === 1,
+                "presence loader should bind array payload entries");
+            assertRegression(state.presenceStatus === null,
+                "presence loader should set null status when entries exist");
+            assertRegression(state.presenceError === null,
+                "presence loader should clear presenceError on success");
+
+            const noPayloadLoad = controller.loadPresence({
+                quiet: false,
+            });
+            const noPayloadCall = harness.takeNextCall("system-presence");
+            noPayloadCall.deferred.resolve({
+                payload: {
+                    running: true,
+                },
+            });
+            await noPayloadLoad;
+
+            assertRegression(Array.isArray(state.presenceEntries) && state.presenceEntries.length === 0,
+                "presence loader should clear entries for non-array payload");
+            assertRegression(state.presenceStatus === "No presence payload.",
+                "presence loader should set no-payload status for non-array payload");
+
+            const errorLoad = controller.loadPresence({
+                quiet: false,
+            });
+            const errorCall = harness.takeNextCall("system-presence");
+            errorCall.deferred.reject(new Error("presence failure"));
+            await errorLoad;
+
+            assertRegression(typeof state.presenceError === "string" && state.presenceError.indexOf("presence failure") >= 0,
+                "presence loader should set error message on failure");
+
+            state.presenceError = "existing-presence-error";
+            const quietErrorLoad = controller.loadPresence({
+                quiet: true,
+            });
+            const quietErrorCall = harness.takeNextCall("system-presence");
+            quietErrorCall.deferred.reject(new Error("quiet-presence-failure"));
+            await quietErrorLoad;
+
+            assertRegression(state.presenceError === "existing-presence-error",
+                "quiet presence failure should retain existing presenceError");
+            summary.push("presence load + payload fallback + error + quiet semantics");
         }
 
         {

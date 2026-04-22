@@ -86,9 +86,29 @@ namespace blazeclaw::gateway {
 			});
 
 		m_dispatcher.Register("system-presence", [this](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"present\":true,\"running\":" +
-				std::string(m_transport.IsRunning() ? "true" : "false") +
-				",\"connections\":" + std::to_string(m_transport.ConnectionCount()) + "}");
+			const bool running = m_transport.IsRunning();
+			const std::size_t connections = m_transport.ConnectionCount();
+			const std::string hostLabel = "blazeclaw.local";
+			const std::string modeLabel = running ? "connected" : "idle";
+			const std::string reasonLabel = running
+				? "Gateway transport active"
+				: "Gateway transport idle";
+			const std::string textLabel = "BlazeClaw gateway presence";
+			const std::string payload =
+				"[{\"instanceId\":\"blazeclaw-mfc-main\",\"host\":\"" +
+				EscapeJsonLocal(hostLabel) +
+				"\",\"mode\":\"" +
+				EscapeJsonLocal(modeLabel) +
+				"\",\"version\":\"blazeclaw.mfc\",\"platform\":\"windows\",\"deviceFamily\":\"desktop\",\"modelIdentifier\":\"mfc-webview\",\"lastInputSeconds\":" +
+				std::to_string(running ? 0 : 30) +
+				",\"reason\":\"" +
+				EscapeJsonLocal(reasonLabel) +
+				"\",\"text\":\"" +
+				EscapeJsonLocal(textLabel) +
+				"\",\"ts\":0,\"roles\":[\"operator\"],\"scopes\":[\"operator.read\"],\"connections\":" +
+				std::to_string(connections) +
+				"}]";
+			return protocol::OkResponse(request, payload);
 			});
 
 		m_dispatcher.Register("system-event", [](const protocol::RequestFrame& request) {

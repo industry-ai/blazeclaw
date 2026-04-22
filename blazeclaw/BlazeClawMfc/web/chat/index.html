@@ -902,6 +902,35 @@
                     rows.push("<div class=\"agents-row\">Parity track: docs/compare/nodes.ts/NODES_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md</div>");
                 }
 
+                if (panel === "instances") {
+                    if (state.presenceLoading) {
+                        rows.push("<div class=\"agents-row\">Loading instances...</div>");
+                    }
+                    if (state.presenceError) {
+                        rows.push(`<div class=\"agents-row error\">${escapeHtml(state.presenceError)}</div>`);
+                    }
+                    if (state.presenceStatus) {
+                        rows.push(`<div class=\"agents-row\">${escapeHtml(state.presenceStatus)}</div>`);
+                    }
+
+                    const entries = Array.isArray(state.presenceEntries)
+                        ? state.presenceEntries
+                        : [];
+                    rows.push(`<div class=\"agents-row\">Instances count: ${entries.length}</div>`);
+                    if (entries.length > 0) {
+                        const firstEntry = entries[0] || {};
+                        rows.push(`<div class=\"agents-row\">First instance id: ${escapeHtml(String(firstEntry.instanceId || "(n/a)"))}</div>`);
+                        rows.push(`<div class=\"agents-row\">First host: ${escapeHtml(String(firstEntry.host || "(n/a)"))}</div>`);
+                        rows.push(`<div class=\"agents-row\">First mode: ${escapeHtml(String(firstEntry.mode || "(n/a)"))}</div>`);
+                    }
+
+                    rows.push(`<div class=\"agents-row\">`
+                        + `<button class=\"agents-chip\" data-presence-action=\"refresh\">Refresh</button>`
+                        + `</div>`);
+                    rows.push("<div class=\"agents-row\">Capability mode: OpenClaw-aligned system-presence loading contract with status/error semantics</div>");
+                    rows.push("<div class=\"agents-row\">Parity track: docs/compare/presence.ts/PRESENCE_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md</div>");
+                }
+
                 if (panel === "dreaming") {
                     if (state.agentDreamingLoading || state.dreamingStatusLoading || state.dreamDiaryLoading) {
                         rows.push("<div class=\"agents-row\">Loading dreaming surface...</div>");
@@ -1293,6 +1322,26 @@
                     });
                 });
 
+                state.agentsSurfaceEl.querySelectorAll("[data-presence-action]").forEach((el) => {
+                    el.addEventListener("click", () => {
+                        const action = String(el.getAttribute("data-presence-action") || "").trim();
+                        if (!action) {
+                            return;
+                        }
+
+                        emitAgentsTelemetry("presence.action", {
+                            action,
+                            panel: state.agentsPanel,
+                        });
+
+                        if (action === "refresh") {
+                            void agentsController.loadPresence({
+                                quiet: false,
+                            });
+                        }
+                    });
+                });
+
                 state.agentsSurfaceEl.querySelectorAll("[data-dreaming-subtab]").forEach((el) => {
                     el.addEventListener("click", () => {
                         const tab = String(el.getAttribute("data-dreaming-subtab") || "").trim();
@@ -1399,6 +1448,7 @@
                     { id: "cron", label: "Cron" },
                     { id: "dreaming", label: "Dreaming" },
                     { id: "nodes", label: "Nodes" },
+                    { id: "instances", label: "Instances" },
                 ];
                 const current = String(state.agentsPanel || "overview");
 
