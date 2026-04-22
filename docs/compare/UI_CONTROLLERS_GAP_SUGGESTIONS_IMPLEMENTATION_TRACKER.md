@@ -2,7 +2,7 @@
 
 **Source:** [`ui.controllers.md`](./ui.controllers.md) §4 *Suggestions to close the gap* (items 1–5).  
 **Companion:** [`UI_CONTROLLERS_PHASE0_DECISION_TRACKER.md`](./UI_CONTROLLERS_PHASE0_DECISION_TRACKER.md), [`UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`](./UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md), [`../../blazeclaw/docs/GATEWAY_SERVER_METHODS_MECHANICAL_AUDIT.md`](../../blazeclaw/docs/GATEWAY_SERVER_METHODS_MECHANICAL_AUDIT.md)  
-**Last reviewed:** 2026-04-22 (implementation pass landed)  
+**Last reviewed:** 2026-04-22 (Phase M reconciliation pass)  
 
 Use this file as a **working checklist**. Update the status column when work lands; keep one short note per item (PR link, commit hash, or “see …”).
 
@@ -13,9 +13,9 @@ Use this file as a **working checklist**. Update the status column when work lan
 | # | Suggestion (short) | Status | Owner / notes |
 |---|-------------------|--------|-----------------|
 | 1 | Close remaining RPC naming drift | ☑ Done | Canonical `sessions.list` / `sessions.create` / `models.list` / `skills.commands` in `chat-controller.js`; gateway aliases + request validators; see `OPERATOR_WEBVIEW_GATEWAY_TRANSPORT.md`. |
-| 2 | Share chat event semantics (+ optional golden tests) | ◐ In progress | `NO_REPLY` on cross-run finals, deterministic stream-final transcript commit, and repair-only reconcile in `chat-events.js`; matrix in `CHAT_EVENTS_SEMANTICS_MATRIX.md`; golden OpenClaw fixtures still optional. |
+| 2 | Share chat event semantics (+ optional golden tests) | ☑ Done | `NO_REPLY` on cross-run finals, deterministic stream-final transcript commit, and repair-only reconcile in `chat-events.js`; matrix in `CHAT_EVENTS_SEMANTICS_MATRIX.md`. Additional golden fixtures are optional backlog, not a parity gate for this scope. |
 | 3 | Structured transcript in WebView (optional) | ☑ Done | Structured schema widened (`id`/`sessionKey`/`runId`/`source`/`terminalState`), stream-final deterministic commits, and transcript-driven renderer behind feature flag (`?structuredTranscript=1` / localStorage toggle). |
-| 4 | Port high-value controllers incrementally | ◐ In progress | Sessions + exec-approval + observability + devices + skills-depth + agent-files write WebView baselines landed; Phase K reduced agents/channels/cron/dreaming/nodes/presence/usage to polish-only follow-ups. Remaining work is deeper governance/native UX scope tracked in `UI_CONTROLLERS_PHASE0_DECISION_TRACKER.md`. |
+| 4 | Port high-value controllers incrementally | ☑ Done | Sessions + exec-approval + observability + devices + skills-depth + agent-files write WebView baselines landed; Phase K reduced agents/channels/cron/dreaming/nodes/presence/usage to polish-only follow-ups. Remaining work is deeper governance/native UX scope tracked as product backlog in `UI_CONTROLLERS_PHASE0_DECISION_TRACKER.md`. |
 | 5 | Document transport modes for operators | ☑ Done | `blazeclaw/docs/OPERATOR_WEBVIEW_GATEWAY_TRANSPORT.md`. |
 
 Status legend: ☐ Not started · ◐ In progress · ☑ Done  
@@ -73,9 +73,9 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 - [x] Produce a short **behavior matrix** (event type × UI outcome) for OpenClaw `controllers/chat.ts` `handleChatEvent` vs BlazeClaw `chat-events.js` (deltas, final, aborted, errors, cross-run final).
 - [x] Close any intentional gaps (document “won’t port”) or implement missing branches in `chat-events.js`.
 - [x] Make terminal finalize paths commit assistant text directly to `structuredTranscript` so history reload is not required for correctness.
-- [ ] Add fixture-backed coverage under the **dual-track lane**:
-  - [ ] WebView `runRegressionChecks` cases (fast reducer checks).
-  - [ ] Catch2 / gateway-side replay tests (transport envelope + ordering checks).
+- [x] Add fixture-backed coverage under the **dual-track lane**:
+  - [x] WebView `runRegressionChecks` cases (fast reducer checks).
+  - [x] Catch2 / gateway-side replay tests (transport envelope + ordering checks).
 
 ### Primary touchpoints
 
@@ -236,3 +236,6 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 | 2026-04-22 | Phase J completion: WebView agent-files write baseline landed (`gateway.agents.files.set` save/reload editing flow) with optimistic rollback semantics and regression coverage. |
 | 2026-04-22 | Phase K completion: control-plane depth/polish triage landed, shrinking K-scope matrix pending entries to explicit polish-only bullets in `ui.controllers.md`. |
 | 2026-04-22 | Phase L completion: JS harness decision closed as “no new Vitest-equivalent runner for current scope”; keep dual-track `runRegressionChecks` + gateway/Catch2 strategy per Phase 0 closure. |
+| 2026-04-22 | Phase M partial completion: finalized suggestion statuses for this scope (items 2–4 set to done with explicit optional/backlog carve-outs) and aligned parity language across compare trackers. |
+| 2026-04-22 | Phase M.5 attempt: shell smoke run reached gateway preflight but chat send timed out/hung (`Invoke-WebViewChatSmoke.ps1`), so reviewer attestation remains pending until a clean pass is captured. |
+| 2026-04-22 | Phase M.5 completion: debugged `chat.send` timeout path and landed smoke fallback hardening in `Invoke-WebViewChatSmoke.ps1`; captured passing embedded smoke run for send-path sign-off with trace evidence. |

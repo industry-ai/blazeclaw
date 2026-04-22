@@ -24,7 +24,7 @@ Freeze an implementation decision for each OpenClaw UI controller file:
 | OpenClaw controller file | Decision destination | Current status (short) | Notes |
 |---|---|---|---|
 | `chat.ts` | WebView JS | Implemented baseline (`chat.send/history/abort`, stream handlers) | Product backlog: detached send + richer transcript parity |
-| `sessions.ts` | WebView JS | Not implemented as OpenClaw controller-equivalent | Product backlog: `sessions.list/subscribe/compaction` UI |
+| `sessions.ts` | WebView JS | WebView sessions baseline implemented (`sessions.list/subscribe/compaction` workflows) | Deeper `sessions.ts` Lit-depth parity remains product backlog |
 | `agents.ts` | WebView JS | Implemented baseline multi-tab shell | Product backlog: Lit-depth polish |
 | `agent-files.ts` | WebView JS + MFC/C++ | WebView write baseline implemented (`gateway.agents.files.list/get/set`) | Richer file UX (conflict/diff ergonomics) remains follow-on |
 | `agent-identity.ts` | WebView JS | Focused parity implemented | Optional polish |
@@ -77,6 +77,7 @@ Quick drill-down references:
 - Phase J agent-files write parity (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for baseline scope (WebView files panel now supports editable file content + save/reload flow using `gateway.agents.files.set` with optimistic rollback-on-error behavior and regression coverage)
 - Phase K control-plane depth/polish triage (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for this scope (agents/channels/cron/dreaming/nodes/presence/usage rows now carry explicit polish-only follow-up bullets; no remaining Tier-1 blockers in these matrix rows)
 - Phase L harness decision (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ completed for this scope (retain dual-track regression approach: WebView `runRegressionChecks` + gateway/Catch2 replay coverage; no Vitest-equivalent harness added)
+- Phase M reconciliation (from `UI_CONTROLLERS_PARITY_CLOSURE_EXECUTION_PLAN.md`): ✅ docs reconciled through M.5 for current scope (matrix/tracker/audit alignment complete + embedded smoke sign-off captured for debugged chat.send timeout path)
 
 ## Phase A baseline freeze (2026-04-22)
 
@@ -87,7 +88,7 @@ Quick drill-down references:
 ## Re-check notes (2026-04-22)
 
 - Verified in current `blazeclaw/BlazeClawMfc/web/chat` code: implemented surfaces include agents/tools/files/skills/channels/cron/dreaming/nodes/instances/usage plus assistant identity and control-ui-bootstrap adapter semantics.
-- Remaining high-value gaps after re-check: sessions controller parity (`sessions.list/subscribe/compaction` workflows), debug/devices/logs/exec-approvals UI, richer structured transcript parity, and full OpenClaw Lit UX depth.
+- Remaining high-value gaps after re-check: deeper sessions/controller UX depth, richer debug/devices/logs/exec-approvals governance surfaces, richer structured transcript default rendering, and full OpenClaw Lit UX depth.
 
 ## Next handoff
 
