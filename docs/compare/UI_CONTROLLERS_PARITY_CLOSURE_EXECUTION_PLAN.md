@@ -158,9 +158,9 @@ Parity is **“closed”** for a controller when all of the following hold:
 
 | Step | Procedure | Done |
 |------|-----------|------|
-| H.1 | Map OpenClaw `devices.ts` RPCs (`device.pair.*`, etc.) to BlazeClaw gateway support. | [ ] |
-| H.2 | Implement native UI wizard or panel; wire to `RouteGatewayRequest` (or direct host calls). | [ ] |
-| H.3 | **Regression:** list empty / list pending / approve / reject; error strings. | [ ] |
+| H.1 | Map OpenClaw `devices.ts` RPCs (`device.pair.*`, etc.) to BlazeClaw gateway support. | [x] |
+| H.2 | Implement native UI wizard or panel; wire to `RouteGatewayRequest` (or direct host calls). | [x] |
+| H.3 | **Regression:** list empty / list pending / approve / reject; error strings. | [x] |
 
 **Acceptance:** Mechanical row `devices.ts` shows MFC (or chosen) counterpart; pairing works end-to-end on hardware or simulator as available.
 
@@ -250,6 +250,7 @@ Append a row per meaningful milestone (merge or doc freeze).
 | 2026-04-22 | E (complete) | Completed session update wiring using lifecycle/session-reset refresh hooks plus subscribed-state polling guards; sessions control state now stays synchronized without manual-only refresh. | `blazeclaw/BlazeClawMfc/web/chat/chat-events.js`, `blazeclaw/BlazeClawMfc/web/chat/chat-controller.js`, `blazeclaw/BlazeClawMfc/web/chat/index.html` |
 | 2026-04-22 | F (complete) | Landed WebView exec-approval queue for `email.schedule` tokens discovered from assistant/tool output, wired approve/deny actions through `gateway.tools.call.execute`, and connected chat timeline/tool-lifecycle visibility to actionable approval controls with busy/stale guards plus synthetic regression checks. | `blazeclaw/BlazeClawMfc/web/chat/index.html`, `docs/compare/ui.controllers.md`, `docs/compare/UI_CONTROLLERS_PHASE0_DECISION_TRACKER.md` |
 | 2026-04-22 | G (complete) | Landed secured WebView observability surface (`observability` tab) with health summary (`gateway.health` + `gateway.health.details` + `gateway.transport.status` + `last-heartbeat`), logs tail filtering/pause/export (`gateway.logs.tail`), and dev-only arbitrary method invoke controls plus polling/stale guards and regression fixtures. | `blazeclaw/BlazeClawMfc/web/chat/agents-controller.js`, `blazeclaw/BlazeClawMfc/web/chat/index.html`, `docs/compare/ui.controllers.md` |
+| 2026-04-22 | H (complete) | Landed devices baseline in WebView control-plane (`devices` tab) with `device.pair.list` inventory, selection controls, approve/reject/remove actions, and synthetic regressions for list + action flows. | `blazeclaw/BlazeClawMfc/web/chat/agents-controller.js`, `blazeclaw/BlazeClawMfc/web/chat/index.html`, `docs/compare/ui.controllers.md` |
 
 ---
 

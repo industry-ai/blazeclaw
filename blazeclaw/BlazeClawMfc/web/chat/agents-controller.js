@@ -59,7 +59,7 @@
             state.toolsEffectiveResult = null;
         }
 
-        const supportedPanels = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming", "nodes", "instances", "usage", "observability"];
+        const supportedPanels = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming", "nodes", "instances", "usage", "observability", "devices"];
         if (supportedPanels.indexOf(String(state.agentsPanel || "")) < 0) {
             state.agentsPanel = "overview";
         }
@@ -473,6 +473,24 @@
         }
         if (typeof state.observabilityLastUpdatedMs !== "number" && state.observabilityLastUpdatedMs !== null) {
             state.observabilityLastUpdatedMs = null;
+        }
+        if (typeof state.devicePairsLoading !== "boolean") {
+            state.devicePairsLoading = false;
+        }
+        if (typeof state.devicePairsBusy !== "boolean") {
+            state.devicePairsBusy = false;
+        }
+        if (typeof state.devicePairsError !== "string" && state.devicePairsError !== null) {
+            state.devicePairsError = null;
+        }
+        if (!Array.isArray(state.devicePairs)) {
+            state.devicePairs = [];
+        }
+        if (typeof state.devicePairSelection !== "string") {
+            state.devicePairSelection = "";
+        }
+        if (typeof state.devicePairActionStatus !== "string" && state.devicePairActionStatus !== null) {
+            state.devicePairActionStatus = null;
         }
 
         if (typeof state.agentDreamingLoading !== "boolean") {
@@ -2270,6 +2288,124 @@
             return state.observabilityExportText;
         }
 
+        function normalizeDevicePairs(payload) {
+            const source = payload && typeof payload === "object" ? payload : {};
+            const pairs = Array.isArray(source.pairs) ? source.pairs : [];
+            return pairs.map((entry, index) => {
+                const row = entry && typeof entry === "object" ? entry : {};
+                const deviceId = String(
+                    row.deviceId ||
+                    row.id ||
+                    row.requestId ||
+                    `device-${index + 1}`
+                ).trim();
+                return {
+                    deviceId: deviceId || `device-${index + 1}`,
+                    label: String(row.label || row.name || row.deviceName || deviceId || "").trim(),
+                    status: String(row.status || (row.connected ? "connected" : "pending")).trim() || "pending",
+                    updatedAtMs: Number(row.updatedAtMs || row.ts || 0) || 0,
+                };
+            });
+        }
+
+        async function loadDevicePairs(options) {
+            const opts = options || {};
+            const quiet = Boolean(opts.quiet);
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            if (!request || !state.connected || state.devicePairsLoading) {
+                return state.devicePairs;
+            }
+
+            state.devicePairsLoading = true;
+            if (!quiet) {
+                state.devicePairsError = null;
+            }
+            onStateUpdated();
+            try {
+                const res = await request("device.pair.list", {});
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return state.devicePairs;
+                }
+                const payload = res && res.payload ? res.payload : res;
+                const pairs = normalizeDevicePairs(payload);
+                state.devicePairs = pairs;
+                if (!state.devicePairSelection && pairs.length > 0) {
+                    state.devicePairSelection = String(pairs[0].deviceId || "");
+                }
+                if (!quiet) {
+                    state.devicePairsError = null;
+                }
+                return pairs;
+            } catch (err) {
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return state.devicePairs;
+                }
+                if (!quiet) {
+                    state.devicePairsError = resolveToolsErrorMessage(err, "device pair list");
+                    state.lastError = state.devicePairsError;
+                }
+                return state.devicePairs;
+            } finally {
+                state.devicePairsLoading = false;
+                onStateUpdated();
+            }
+        }
+
+        function selectDevicePair(deviceId) {
+            state.devicePairSelection = String(deviceId || "").trim();
+            onStateUpdated();
+        }
+
+        async function resolveDevicePair(action, deviceId, options) {
+            const methodByAction = {
+                approve: "device.pair.approve",
+                reject: "device.pair.reject",
+                remove: "device.pair.remove",
+            };
+            const method = methodByAction[String(action || "").trim()] || "";
+            const targetDeviceId = String(deviceId || state.devicePairSelection || "").trim();
+            const opts = options || {};
+            const requestOverride = typeof opts.requestOverride === "function"
+                ? opts.requestOverride
+                : request;
+            if (!method || !requestOverride || !targetDeviceId || state.devicePairsBusy) {
+                return null;
+            }
+
+            state.devicePairsBusy = true;
+            state.devicePairActionStatus = null;
+            state.devicePairsError = null;
+            onStateUpdated();
+            try {
+                const response = await requestOverride(method, {
+                    deviceId: targetDeviceId,
+                });
+                const payload = response && response.payload ? response.payload : response;
+                state.devicePairActionStatus = `${method} ok for ${targetDeviceId}`;
+                if (action === "remove") {
+                    state.devicePairs = (state.devicePairs || []).filter((entry) => String(entry && entry.deviceId || "") !== targetDeviceId);
+                } else {
+                    state.devicePairs = (state.devicePairs || []).map((entry) => {
+                        if (String(entry && entry.deviceId || "") !== targetDeviceId) {
+                            return entry;
+                        }
+                        const nextStatus = action === "approve" ? "approved" : "rejected";
+                        return Object.assign({}, entry, { status: nextStatus, updatedAtMs: Date.now() });
+                    });
+                }
+                return payload;
+            } catch (err) {
+                state.devicePairsError = resolveToolsErrorMessage(err, `device pair ${action}`);
+                state.lastError = state.devicePairsError;
+                return null;
+            } finally {
+                state.devicePairsBusy = false;
+                onStateUpdated();
+            }
+        }
+
         async function loadChannels(options) {
             const opts = options || {};
             const probe = Boolean(opts.probe);
@@ -3839,7 +3975,7 @@
 
         function setAgentsPanel(panel) {
             const panelValue = String(panel || "").trim();
-            const normalized = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming", "nodes", "instances", "usage", "observability"].indexOf(panelValue) >= 0
+            const normalized = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming", "nodes", "instances", "usage", "observability", "devices"].indexOf(panelValue) >= 0
                 ? panelValue
                 : "overview";
             state.agentsPanel = normalized;
@@ -3930,6 +4066,15 @@
                 await loadObservability({
                     shouldIgnoreResponse: function () {
                         return state.agentsPanel !== "observability";
+                    },
+                });
+                return;
+            }
+
+            if (state.agentsPanel === "devices") {
+                await loadDevicePairs({
+                    shouldIgnoreResponse: function () {
+                        return state.agentsPanel !== "devices";
                     },
                 });
                 return;
@@ -4087,6 +4232,9 @@
             updateObservabilityField,
             invokeObservabilityMethod,
             exportObservabilityLogs,
+            loadDevicePairs,
+            selectDevicePair,
+            resolveDevicePair,
             loadChannels,
             startWhatsAppLogin,
             waitWhatsAppLogin,
@@ -4338,6 +4486,10 @@
                 state.observabilityHealth === null &&
                 Array.isArray(state.observabilityLogs),
                 "observability state contract should initialize health/logs defaults");
+            assertRegression(state.devicePairsLoading === false &&
+                state.devicePairsBusy === false &&
+                Array.isArray(state.devicePairs),
+                "devices state contract should initialize pairing defaults");
             summary.push("channels + cron + dreaming + nodes + presence + usage state/UI contract defaults");
         }
 
@@ -4386,6 +4538,48 @@
                 state.observabilityMethodResult.indexOf("\"status\": \"ok\"") >= 0,
                 "observability method invoke should capture JSON response text");
             summary.push("observability panel load + invoke");
+        }
+
+        {
+            const state = createRegressionState();
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+            controller.setAgentsPanel("devices");
+            const listPending = controller.loadPanelDataForCurrentAgent();
+            const listCall = harness.takeNextCall("device.pair.list");
+            listCall.deferred.resolve({
+                payload: {
+                    pairs: [
+                        { deviceId: "device-a", status: "pending" },
+                        { deviceId: "device-b", status: "approved" },
+                    ],
+                },
+            });
+            await listPending;
+            assertRegression(Array.isArray(state.devicePairs) && state.devicePairs.length === 2,
+                "devices panel should bind device.pair.list rows");
+            assertRegression(state.devicePairSelection === "device-a",
+                "devices panel should auto-select first pair");
+
+            const approvePending = controller.resolveDevicePair("approve", "device-a");
+            const approveCall = harness.takeNextCall("device.pair.approve");
+            approveCall.deferred.resolve({ payload: { approved: true } });
+            await approvePending;
+            assertRegression(Array.isArray(state.devicePairs) &&
+                state.devicePairs.some((entry) => entry.deviceId === "device-a" && entry.status === "approved"),
+            "device approve action should update local status");
+
+            const rejectPending = controller.resolveDevicePair("reject", "device-a");
+            const rejectCall = harness.takeNextCall("device.pair.reject");
+            rejectCall.deferred.resolve({ payload: { rejected: true } });
+            await rejectPending;
+            assertRegression(Array.isArray(state.devicePairs) &&
+                state.devicePairs.some((entry) => entry.deviceId === "device-a" && entry.status === "rejected"),
+            "device reject action should update local status");
+            summary.push("devices list + approve/reject actions");
         }
 
         {

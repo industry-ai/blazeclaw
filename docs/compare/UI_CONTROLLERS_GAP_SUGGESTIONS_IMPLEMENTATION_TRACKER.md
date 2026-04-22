@@ -152,6 +152,17 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 - [x] Wired debug baseline method invoke (`method + params JSON`) with busy/error/result state guards.
 - [x] Added observability panel regressions for state defaults + load/invoke behavior.
 
+### Phase H devices landing (2026-04-22)
+
+- [x] Added `devices` panel in WebView agents control-plane with pair inventory and selected-device state.
+- [x] Wired baseline device pairing RPCs in `agents-controller.js`:
+  - `device.pair.list`
+  - `device.pair.approve`
+  - `device.pair.reject`
+  - `device.pair.remove`
+- [x] Added action controls (refresh/approve/reject/remove) and busy/error/status handling in `index.html`.
+- [x] Added devices regression fixtures for list binding + approve/reject state transitions.
+
 ### Phase C detached-send landing (2026-04-22)
 
 - [x] Added `/btw` local command and `sendDetachedMessage()` helper in `chat-controller.js`.
@@ -199,3 +210,4 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 | 2026-04-22 | Phase E completion: session refresh now stays synchronized via lifecycle/session-reset hooks and subscribed-state polling guards (stale guard path). |
 | 2026-04-22 | Phase F completion: WebView exec-approval baseline landed (approval token queue + approve/deny controls via `gateway.tools.call.execute`) with parser/action regression fixtures for approve/deny/expired flows. |
 | 2026-04-22 | Phase G completion: secured WebView observability baseline landed (health/transport/heartbeat/models snapshot, logs tail filter/pause/export, debug method invoke, and polling/regression coverage). |
+| 2026-04-22 | Phase H completion: WebView devices baseline landed (`device.pair.list` + approve/reject/remove actions) with device panel interaction and regression coverage. |

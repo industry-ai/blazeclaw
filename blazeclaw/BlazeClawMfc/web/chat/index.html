@@ -1472,6 +1472,42 @@
                     }
                 }
 
+                if (panel === "devices") {
+                    if (state.devicePairsLoading) {
+                        rows.push("<div class=\"agents-row\">Loading device pairs...</div>");
+                    }
+                    if (state.devicePairsError) {
+                        rows.push(`<div class=\"agents-row error\">${escapeHtml(String(state.devicePairsError || ""))}</div>`);
+                    }
+                    if (state.devicePairActionStatus) {
+                        rows.push(`<div class=\"agents-row\">${escapeHtml(String(state.devicePairActionStatus || ""))}</div>`);
+                    }
+
+                    const pairs = Array.isArray(state.devicePairs) ? state.devicePairs : [];
+                    const selectedDeviceId = String(state.devicePairSelection || "").trim();
+                    rows.push(`<div class=\"agents-row\">Device pairs: ${pairs.length}</div>`);
+                    rows.push(`<div class=\"agents-row\">Selected device: ${escapeHtml(selectedDeviceId || "(none)")}</div>`);
+
+                    if (pairs.length > 0) {
+                        const chips = pairs.slice(0, 20).map((entry) => {
+                            const deviceId = String(entry && entry.deviceId || "").trim();
+                            const status = String(entry && entry.status || "pending").trim();
+                            const label = String(entry && (entry.label || entry.deviceId) || "(unknown)").trim();
+                            const active = deviceId === selectedDeviceId ? " active" : "";
+                            return `<button class=\"agents-chip${active}\" data-devicepair-id=\"${escapeHtml(deviceId)}\">${escapeHtml(label)} (${escapeHtml(status)})</button>`;
+                        }).join("");
+                        rows.push(`<div class=\"agents-list\">${chips}</div>`);
+                    }
+
+                    rows.push(`<div class=\"agents-row\">`
+                        + `<button class=\"agents-chip\" data-devicepair-action=\"refresh\">Refresh</button> `
+                        + `<button class=\"agents-chip\" data-devicepair-action=\"approve\"${selectedDeviceId ? "" : " disabled"}${state.devicePairsBusy ? " disabled" : ""}>Approve</button> `
+                        + `<button class=\"agents-chip\" data-devicepair-action=\"reject\"${selectedDeviceId ? "" : " disabled"}${state.devicePairsBusy ? " disabled" : ""}>Reject</button> `
+                        + `<button class=\"agents-chip\" data-devicepair-action=\"remove\"${selectedDeviceId ? "" : " disabled"}${state.devicePairsBusy ? " disabled" : ""}>Remove</button>`
+                        + `</div>`);
+                    rows.push("<div class=\"agents-row\">Capability mode: device pairing baseline via device.pair.list/approve/reject/remove</div>");
+                }
+
                 if (panel === "dreaming") {
                     if (state.agentDreamingLoading || state.dreamingStatusLoading || state.dreamDiaryLoading) {
                         rows.push("<div class=\"agents-row\">Loading dreaming surface...</div>");
@@ -2017,6 +2053,46 @@
                     });
                 });
 
+                state.agentsSurfaceEl.querySelectorAll("[data-devicepair-id]").forEach((el) => {
+                    el.addEventListener("click", () => {
+                        const deviceId = String(el.getAttribute("data-devicepair-id") || "").trim();
+                        if (!deviceId) {
+                            return;
+                        }
+                        agentsController.selectDevicePair(deviceId);
+                    });
+                });
+
+                state.agentsSurfaceEl.querySelectorAll("[data-devicepair-action]").forEach((el) => {
+                    el.addEventListener("click", () => {
+                        const action = String(el.getAttribute("data-devicepair-action") || "").trim();
+                        if (!action) {
+                            return;
+                        }
+                        emitAgentsTelemetry("devices.action", {
+                            action,
+                            panel: state.agentsPanel,
+                            deviceId: String(state.devicePairSelection || ""),
+                        });
+                        if (action === "refresh") {
+                            void agentsController.loadDevicePairs({
+                                quiet: false,
+                                shouldIgnoreResponse: function () {
+                                    return String(state.agentsPanel || "") !== "devices";
+                                },
+                            });
+                            return;
+                        }
+                        if (action === "approve" || action === "reject" || action === "remove") {
+                            const deviceId = String(state.devicePairSelection || "").trim();
+                            if (!deviceId) {
+                                return;
+                            }
+                            void agentsController.resolveDevicePair(action, deviceId);
+                        }
+                    });
+                });
+
                 state.agentsSurfaceEl.querySelectorAll("[data-dreaming-subtab]").forEach((el) => {
                     el.addEventListener("click", () => {
                         const tab = String(el.getAttribute("data-dreaming-subtab") || "").trim();
@@ -2129,6 +2205,7 @@
                 if (state.observabilityEnabled) {
                     tabs.push({ id: "observability", label: "Observability" });
                 }
+                tabs.push({ id: "devices", label: "Devices" });
                 const current = String(state.agentsPanel || "overview");
 
                 state.agentsTabsEl.innerHTML = tabs.map((tab) => {

@@ -48,6 +48,8 @@ Exec approval baseline is now available in WebView chat: assistant text containi
 
 Observability baseline is available in the WebView agents control-plane as a secured `Observability` tab (enable via `?observability=1` or localStorage `blazeclaw.observability.enabled=1`), wiring `gateway.health`, `gateway.health.details`, `gateway.transport.status`, `last-heartbeat`, `models.list`, and `gateway.logs.tail` with method-invoke debugging controls.
 
+Devices baseline is available in the WebView agents control-plane as a `Devices` tab, wiring `device.pair.list` with approve/reject/remove actions (`device.pair.approve`, `device.pair.reject`, `device.pair.remove`) for operator smoke coverage.
+
 ---
 
 ## Quick diagnostic checklist
@@ -81,3 +83,4 @@ Observability baseline is available in the WebView agents control-plane as a sec
 | 2026-04-22 | Phase D update: documented intentional embedded-vs-shim deltas, added external shim smoke checklist, and noted scope-error guidance parity. |
 | 2026-04-22 | Phase F update: documented WebView exec-approval queue/actions using `gateway.tools.call.execute` for `email.schedule` tokens. |
 | 2026-04-22 | Phase G update: documented secured WebView observability tab and its health/logs/debug RPC bindings. |
+| 2026-04-22 | Phase H update: documented WebView devices tab baseline and `device.pair.*` action bindings. |
