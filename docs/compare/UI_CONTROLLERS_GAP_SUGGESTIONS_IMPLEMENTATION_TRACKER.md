@@ -199,11 +199,12 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 
 ### Deep gateway semantic follow-up (2026-04-22)
 
-- [ ] Convert approval method families (`exec.approvals.*`, `exec.approval.*`, `plugin.approval.*`) from static placeholders to stateful/runtime parity behavior.
-- [ ] Convert session subscription/send/abort/compaction families from static placeholders to event/state-backed behavior parity.
-- [ ] Convert device pair/token lifecycle methods from static placeholders to authz/scoped runtime behavior parity.
-- [ ] Promote skills runtime depth (`skills.search`, `skills.detail`, `skills.bins`, `skills.install`) from static placeholders to runtime-backed behavior.
-- [ ] Ensure incomplete families return explicit unsupported/unavailable errors rather than static success payloads.
+- [x] Fix parity artifact extraction/normalization (`scripts/gateway-method-parity-diff.mjs`) so CI counts reflect real overlap and ignore non-method literals.
+- [x] Convert approval method families (`exec.approvals.*`, `exec.approval.*`, `plugin.approval.*`) from static placeholders to stateful/runtime parity behavior.
+- [x] Convert session subscription/send/abort/compaction families from static placeholders to event/state-backed behavior parity.
+- [x] Convert device token lifecycle from static placeholders to stateful behavior; keep `device.pair.*` explicitly unsupported until product scope changes.
+- [x] Promote skills runtime baseline (`skills.search`, `skills.detail`, `skills.bins`, `skills.install`) from static placeholders to runtime-backed behavior.
+- [ ] Deepen partial families (`config.apply`, `config.patch` depth, `tools.effective`, `tts.*`, `secrets.*`) to behavior-equivalent parity.
 
 ---
 
@@ -248,3 +249,4 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 | 2026-04-22 | Phase M.5 attempt: shell smoke run reached gateway preflight but chat send timed out/hung (`Invoke-WebViewChatSmoke.ps1`), so reviewer attestation remains pending until a clean pass is captured. |
 | 2026-04-22 | Phase M.5 completion: debugged `chat.send` timeout path and landed smoke fallback hardening in `Invoke-WebViewChatSmoke.ps1`; captured passing embedded smoke run for send-path sign-off with trace evidence. |
 | 2026-04-22 | Deep semantic method audit added: tracker item 4 moved from `☑ Done` to `◐ In progress` to reflect unresolved behavior-level parity in gateway method families despite route-level coverage. |
+| 2026-04-22 | Deep audit P0 completed: parity extractor hardened and artifacts regenerated from corrected pipeline with expected-by-design missing classification (`device.pair.*`, `push.test`) separated from actionable gaps. |

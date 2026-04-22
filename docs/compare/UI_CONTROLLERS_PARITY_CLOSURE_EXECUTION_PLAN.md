@@ -29,6 +29,7 @@ Parity is **“closed”** for a controller when all of the following hold:
 - **UX:** Operator can complete the same primary workflows (read → mutate → verify) without falling back to OpenClaw-only surfaces, within agreed depth (see per-phase “depth cap” if any).
 - **Regression:** At least one automated test or scripted regression covers the highest-risk branches (see per phase).
 - **Docs:** `ui.controllers.md` mechanical row + §5 matrix updated; gateway audit row updated if methods changed.
+- **Parity evidence quality:** method-parity artifacts must be generated from the corrected extractor/inventory pipeline (not regex-only route counts) before marking closure.
 
 ---
 
@@ -230,6 +231,7 @@ Parity is **“closed”** for a controller when all of the following hold:
 | M.2 | Update [`UI_CONTROLLERS_GAP_SUGGESTIONS_IMPLEMENTATION_TRACKER.md`](./UI_CONTROLLERS_GAP_SUGGESTIONS_IMPLEMENTATION_TRACKER.md): items 2–4 to ☑ if truly done. | [x] |
 | M.3 | Update [`UI_CONTROLLERS_PHASE0_DECISION_TRACKER.md`](./UI_CONTROLLERS_PHASE0_DECISION_TRACKER.md): “Current status” column reflects shipped parity. | [x] |
 | M.4 | Update [`GATEWAY_SERVER_METHODS_MECHANICAL_AUDIT.md`](../../blazeclaw/docs/GATEWAY_SERVER_METHODS_MECHANICAL_AUDIT.md): any new methods. | [x] |
+| M.4a | Verify parity artifact quality (`scripts/gateway-method-parity-diff.mjs` extraction correctness + alias normalization) before using artifact counts for sign-off. | [x] |
 | M.5 | **Sign-off:** Named reviewer attests embedded + (if applicable) shim smoke passed. | [x] *(embedded smoke sign-off captured for chat.send timeout path after fallback hardening; shim attestation remains optional for current scope)* |
 
 ---
@@ -260,6 +262,7 @@ Append a row per meaningful milestone (merge or doc freeze).
 | 2026-04-22 | M.5 (attempted) | Embedded smoke execution attempted from shell: static preflight passed, initial full run failed with `send` response timeout, and focused `weatherEmailExecute` run hung waiting for gateway chat response; reviewer attestation remains pending until smoke passes. | `blazeclaw/BlazeClawMfc/tools/chat/Invoke-WebViewChatSmoke.ps1` |
 | 2026-04-22 | M.5 (complete) | Debugged chat.send timeout path directly and hardened smoke flow fallback behavior (`send` terminal fallback + attachment fallback guards). Captured passing embedded smoke run for send-path sign-off with gateway handshake/request/terminal trace and successful summary output. | `blazeclaw/BlazeClawMfc/tools/chat/Invoke-WebViewChatSmoke.ps1` |
 | 2026-04-22 | N (deep gateway audit) | Added method-family semantic parity audit against OpenClaw server-method handlers and reclassified key families where BlazeClaw remains `stub/static` or `partial` (notably approvals, sessions subscription/compaction/send, device token lifecycle, skills install/search depth). Plan DoD tightened so route parity alone is no longer treated as closure. | `docs/compare/OPENCLAW_SERVER_METHODS_DEEP_MECHANICAL_AUDIT_AND_OPTIMIZATION.md`, `blazeclaw/docs/GATEWAY_SERVER_METHODS_MECHANICAL_AUDIT.md` |
+| 2026-04-22 | N.P0 (complete) | Completed parity tooling hardening: corrected extraction/normalization in `gateway-method-parity-diff.mjs`, regenerated parity artifacts, and added expected-by-design missing classification to generated markdown/json for faster reviewer triage. | `scripts/gateway-method-parity-diff.mjs`, `artifacts/gateway-parity/openclaw-vs-blazeclaw-method-diff.json`, `artifacts/gateway-parity/openclaw-vs-blazeclaw-method-diff.md` |
 
 ---
 

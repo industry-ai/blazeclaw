@@ -23,29 +23,118 @@ function walk(dir, files = []) {
   return files;
 }
 
-function collectOpenClawMethods(openclawServerMethodsDir) {
-  const files = walk(openclawServerMethodsDir).filter((f) => f.endsWith(".ts"));
+function relativePosix(workspaceRoot, filePath) {
+  return path.relative(workspaceRoot, filePath).replace(/\\/g, "/");
+}
+
+function isIgnoredOpenClawTsFile(filePath) {
+  const base = path.basename(filePath);
+  if (!filePath.endsWith(".ts")) {
+    return true;
+  }
+  if (base.endsWith(".test.ts")) {
+    return true;
+  }
+  if (base.endsWith(".test-helpers.ts")) {
+    return true;
+  }
+  if (base.endsWith(".runtime.ts")) {
+    return true;
+  }
+  if (base === "types.ts" || base === "validation.ts") {
+    return true;
+  }
+  return false;
+}
+
+function extractArrayLiteralStrings(content, constName) {
+  const startRegex = new RegExp(`const\\s+${constName}\\s*=\\s*\\[`, "m");
+  const startMatch = startRegex.exec(content);
+  if (!startMatch) {
+    return [];
+  }
+
+  const startIndex = startMatch.index + startMatch[0].length;
+  let depth = 1;
+  let idx = startIndex;
+  while (idx < content.length && depth > 0) {
+    const ch = content[idx];
+    if (ch === "[") {
+      depth += 1;
+    } else if (ch === "]") {
+      depth -= 1;
+    }
+    idx += 1;
+  }
+  if (depth !== 0) {
+    return [];
+  }
+
+  const arrayBody = content.slice(startIndex, idx - 1);
+  const literalRegex = /["'`]([a-z0-9_.-]+)["'`]/g;
+  const values = new Set();
+  let match;
+  while ((match = literalRegex.exec(arrayBody)) !== null) {
+    values.add(match[1]);
+  }
+  return Array.from(values);
+}
+
+function extractHandlerObjectMethodKeys(content) {
+  // Extract keys from patterns like:
+  // export const xyzHandlers: GatewayRequestHandlers = { "chat.send": async (...) => ... }
+  const blockRegex = /(?:const|let|var)\s+\w+Handlers\s*[:=][\s\S]*?\{([\s\S]*?)\n\};/g;
+  const keyRegex = /["'`]([a-z0-9_.-]+)["'`]\s*:/g;
+  const values = new Set();
+  let block;
+  while ((block = blockRegex.exec(content)) !== null) {
+    let keyMatch;
+    while ((keyMatch = keyRegex.exec(block[1])) !== null) {
+      const method = keyMatch[1];
+      // Defensive filter: handler methods are gateway method names and
+      // always include dot segments; skip object keys like "new"/"ok".
+      if (method.includes(".")) {
+        values.add(method);
+      }
+    }
+  }
+  return Array.from(values);
+}
+
+function collectOpenClawMethods(workspaceRoot, openclawServerMethodsDir, openclawMethodsListPath) {
   const methodSet = new Set();
   const byFile = {};
 
-  const methodRegex = /["'`]([a-z0-9_.-]+)["'`]\s*:/g;
-  for (const file of files) {
-    const content = fs.readFileSync(file, "utf8");
-    const local = new Set();
-    let match;
-    while ((match = methodRegex.exec(content)) !== null) {
-      const method = match[1];
-      if (method.includes(".") && !method.startsWith("http")) {
-        methodSet.add(method);
-        local.add(method);
-      }
-    }
-    if (local.size > 0) {
-      byFile[path.relative(process.cwd(), file).replace(/\\/g, "/")] = Array.from(local).sort();
+  // 1) Canonical method inventory from BASE_METHODS in server-methods-list.ts
+  if (fs.existsSync(openclawMethodsListPath)) {
+    const content = fs.readFileSync(openclawMethodsListPath, "utf8");
+    const methods = extractArrayLiteralStrings(content, "BASE_METHODS");
+    const rel = relativePosix(workspaceRoot, openclawMethodsListPath);
+    byFile[rel] = methods.slice().sort();
+    for (const method of methods) {
+      methodSet.add(method);
     }
   }
 
-  return { methods: Array.from(methodSet).sort(), byFile };
+  // 2) Defensive secondary extraction from handler object keys in server-methods/*.ts
+  const handlerFiles = walk(openclawServerMethodsDir).filter((f) => !isIgnoredOpenClawTsFile(f));
+  for (const file of handlerFiles) {
+    const content = fs.readFileSync(file, "utf8");
+    const local = new Set(extractHandlerObjectMethodKeys(content));
+    if (local.size === 0) {
+      continue;
+    }
+    const rel = relativePosix(workspaceRoot, file);
+    byFile[rel] = Array.from(local).sort();
+    for (const method of local) {
+      methodSet.add(method);
+    }
+  }
+
+  return {
+    methods: Array.from(methodSet).sort(),
+    byFile,
+  };
 }
 
 function collectBlazeClawMethods(handlersManifestPath) {
@@ -61,17 +150,57 @@ function collectBlazeClawMethods(handlersManifestPath) {
   return { methods: Array.from(methods).sort(), manifestVersion: manifest.version ?? 1 };
 }
 
-function buildDiff(openclawMethods, blazeclawMethods) {
+function collectBlazeClawRegisteredMethods(workspaceRoot, blazeGatewayDir) {
+  const files = walk(blazeGatewayDir).filter((f) => f.endsWith(".cpp") || f.endsWith(".h"));
+  const methods = new Set();
+  const byFile = {};
+  const registerRegex = /Register\(\s*"([^"]+)"/g;
+
+  for (const file of files) {
+    const content = fs.readFileSync(file, "utf8");
+    const local = new Set();
+    let match;
+    while ((match = registerRegex.exec(content)) !== null) {
+      local.add(match[1]);
+      methods.add(match[1]);
+    }
+    if (local.size > 0) {
+      byFile[relativePosix(workspaceRoot, file)] = Array.from(local).sort();
+    }
+  }
+
+  return { methods: Array.from(methods).sort(), byFile };
+}
+
+function normalizeBlazeMethod(method, openSet) {
+  // Keep gateway.identity.get canonical; do not blindly strip gateway prefix.
+  if (method === "gateway.session.list" && openSet.has("sessions.list")) {
+    return "sessions.list";
+  }
+  if (method.startsWith("gateway.")) {
+    const stripped = method.slice("gateway.".length);
+    if (openSet.has(stripped)) {
+      return stripped;
+    }
+  }
+  return method;
+}
+
+function buildDiff(openclawMethods, blazeclawMethodsRaw) {
   const openSet = new Set(openclawMethods);
-  const blazeSet = new Set(blazeclawMethods);
+  const blazeSet = new Set(
+    blazeclawMethodsRaw.map((m) => normalizeBlazeMethod(m, openSet)),
+  );
+  const blazeRawSet = new Set(blazeclawMethodsRaw);
 
   const missingInBlazeClaw = openclawMethods.filter((m) => !blazeSet.has(m));
-  const blazeOnly = blazeclawMethods.filter((m) => !openSet.has(m));
+  const blazeOnly = Array.from(blazeSet).filter((m) => !openSet.has(m));
   const overlap = openclawMethods.filter((m) => blazeSet.has(m));
 
   return {
     openclawCount: openclawMethods.length,
-    blazeclawCount: blazeclawMethods.length,
+    blazeclawCount: blazeSet.size,
+    blazeclawRawCount: blazeRawSet.size,
     overlapCount: overlap.length,
     missingInBlazeClawCount: missingInBlazeClaw.length,
     blazeOnlyCount: blazeOnly.length,
@@ -81,9 +210,61 @@ function buildDiff(openclawMethods, blazeclawMethods) {
   };
 }
 
+const EXPECTED_MISSING_BY_DESIGN_RULES = [
+  {
+    type: "exact",
+    value: "push.test",
+    classification: "out_of_scope",
+    reason: "OpenClaw push test helper is not in current BlazeClaw product scope.",
+  },
+  {
+    type: "prefix",
+    value: "device.pair.",
+    classification: "explicitly_unsupported",
+    reason: "Device pairing family is intentionally unsupported in current BlazeClaw runtime.",
+  },
+];
+
+function classifyMissingMethods(missingMethods) {
+  const expected = [];
+  const actionable = [];
+
+  for (const method of missingMethods) {
+    const matchedRule = EXPECTED_MISSING_BY_DESIGN_RULES.find((rule) => {
+      if (rule.type === "exact") {
+        return method === rule.value;
+      }
+      if (rule.type === "prefix") {
+        return method.startsWith(rule.value);
+      }
+      return false;
+    });
+
+    if (matchedRule) {
+      expected.push({
+        method,
+        classification: matchedRule.classification,
+        reason: matchedRule.reason,
+      });
+    } else {
+      actionable.push(method);
+    }
+  }
+
+  return { expected, actionable };
+}
+
 function main() {
   const workspaceRoot = process.cwd();
   const openclawDir = path.join(workspaceRoot, "openclaw", "src", "gateway", "server-methods");
+  const openclawMethodsListPath = path.join(
+    workspaceRoot,
+    "openclaw",
+    "src",
+    "gateway",
+    "server-methods-list.ts",
+  );
+  const blazeGatewayDir = path.join(workspaceRoot, "blazeclaw", "BlazeClawMfc", "src", "gateway");
   const blazeManifestPath = path.join(
     workspaceRoot,
     "blazeclaw",
@@ -96,9 +277,12 @@ function main() {
   const outputJsonPath = path.join(outputDir, "openclaw-vs-blazeclaw-method-diff.json");
   const outputMdPath = path.join(outputDir, "openclaw-vs-blazeclaw-method-diff.md");
 
-  const openclaw = collectOpenClawMethods(openclawDir);
-  const blazeclaw = collectBlazeClawMethods(blazeManifestPath);
-  const diff = buildDiff(openclaw.methods, blazeclaw.methods);
+  const openclaw = collectOpenClawMethods(workspaceRoot, openclawDir, openclawMethodsListPath);
+  const blazeManifest = collectBlazeClawMethods(blazeManifestPath);
+  const blazeRegistered = collectBlazeClawRegisteredMethods(workspaceRoot, blazeGatewayDir);
+  const blazeUnion = Array.from(new Set([...blazeManifest.methods, ...blazeRegistered.methods])).sort();
+  const diff = buildDiff(openclaw.methods, blazeUnion);
+  const missingClassification = classifyMissingMethods(diff.missingInBlazeClaw);
 
   fs.mkdirSync(outputDir, { recursive: true });
 
@@ -106,20 +290,34 @@ function main() {
     generatedAt: new Date().toISOString(),
     inputs: {
       openclawServerMethodsDir: path.relative(workspaceRoot, openclawDir).replace(/\\/g, "/"),
+      openclawMethodsList: path.relative(workspaceRoot, openclawMethodsListPath).replace(/\\/g, "/"),
       blazeclawHandlersManifest: path.relative(workspaceRoot, blazeManifestPath).replace(/\\/g, "/"),
-      blazeclawManifestVersion: blazeclaw.manifestVersion,
+      blazeclawGatewaySourceDir: path.relative(workspaceRoot, blazeGatewayDir).replace(/\\/g, "/"),
+      blazeclawManifestVersion: blazeManifest.manifestVersion,
+      extraction: {
+        openclaw: "BASE_METHODS + handler object keys (non-test files)",
+        blazeclaw: "manifest methods + Register(\"...\") scan in gateway sources",
+        normalization: "gateway.* stripped only when canonical OpenClaw method exists; gateway.session.list -> sessions.list alias",
+      },
     },
     summary: {
       openclawMethodCount: diff.openclawCount,
       blazeclawMethodCount: diff.blazeclawCount,
+      blazeclawRawMethodCount: diff.blazeclawRawCount,
       overlapCount: diff.overlapCount,
       missingInBlazeclawCount: diff.missingInBlazeClawCount,
+      expectedMissingByDesignCount: missingClassification.expected.length,
+      actionableMissingCount: missingClassification.actionable.length,
       blazeOnlyCount: diff.blazeOnlyCount,
     },
     overlap: diff.overlap,
     missingInBlazeClaw: diff.missingInBlazeClaw,
+    missingInBlazeClawExpectedByDesign: missingClassification.expected,
+    missingInBlazeClawActionable: missingClassification.actionable,
     blazeOnly: diff.blazeOnly,
     openclawMethodsByFile: openclaw.byFile,
+    blazeclawMethodsByFile: blazeRegistered.byFile,
+    blazeclawManifestMethods: blazeManifest.methods,
   };
 
   fs.writeFileSync(outputJsonPath, JSON.stringify(payload, null, 2), "utf8");
@@ -132,19 +330,34 @@ function main() {
     "## Inputs",
     "",
     `- OpenClaw methods: \`${payload.inputs.openclawServerMethodsDir}\``,
+    `- OpenClaw canonical list source: \`${payload.inputs.openclawMethodsList}\``,
     `- BlazeClaw handlers manifest: \`${payload.inputs.blazeclawHandlersManifest}\` (version ${payload.inputs.blazeclawManifestVersion})`,
+    `- BlazeClaw registration scan source: \`${payload.inputs.blazeclawGatewaySourceDir}\``,
     "",
     "## Summary",
     "",
     `- OpenClaw method count: **${payload.summary.openclawMethodCount}**`,
     `- BlazeClaw method count: **${payload.summary.blazeclawMethodCount}**`,
+    `- BlazeClaw raw method count (before normalization): **${payload.summary.blazeclawRawMethodCount}**`,
     `- Overlap: **${payload.summary.overlapCount}**`,
     `- Missing in BlazeClaw: **${payload.summary.missingInBlazeclawCount}**`,
+    `  - Expected missing by design: **${payload.summary.expectedMissingByDesignCount}**`,
+    `  - Actionable missing: **${payload.summary.actionableMissingCount}**`,
     `- BlazeClaw-only: **${payload.summary.blazeOnlyCount}**`,
     "",
-    "## Missing in BlazeClaw",
+    "## Missing in BlazeClaw (Actionable)",
     "",
-    ...payload.missingInBlazeClaw.map((m) => `- \`${m}\``),
+    ...(payload.missingInBlazeClawActionable.length > 0
+      ? payload.missingInBlazeClawActionable.map((m) => `- \`${m}\``)
+      : ["- _None_"]),
+    "",
+    "## Missing in BlazeClaw (Expected by Design)",
+    "",
+    ...(payload.missingInBlazeClawExpectedByDesign.length > 0
+      ? payload.missingInBlazeClawExpectedByDesign.map(
+          (entry) => `- \`${entry.method}\` — ${entry.classification}: ${entry.reason}`,
+        )
+      : ["- _None_"]),
     "",
     "## BlazeClaw-only",
     "",
