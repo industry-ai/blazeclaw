@@ -3842,6 +3842,35 @@
                 request: harness.request,
             });
 
+            controller.setAgentsPanel("instances");
+            const panelLoad = controller.loadPanelDataForCurrentAgent();
+            const panelCall = harness.takeNextCall("system-presence");
+            controller.setAgentsPanel("overview");
+            panelCall.deferred.resolve({
+                payload: [
+                    {
+                        instanceId: "stale-instance",
+                        host: "stale-host",
+                    },
+                ],
+            });
+            await panelLoad;
+
+            assertRegression(!Array.isArray(state.presenceEntries) || state.presenceEntries.every(function (entry) {
+                return String(entry && entry.instanceId || "") !== "stale-instance";
+            }),
+                "presence panel stale response should be ignored after panel switch");
+            summary.push("presence stale-panel suppression");
+        }
+
+        {
+            const state = createRegressionState();
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
             const firstLoad = controller.loadNodes({
                 quiet: true,
             });

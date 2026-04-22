@@ -1762,18 +1762,32 @@
                         return;
                     }
 
-                    if (String(state.agentsPanel || "") !== "nodes") {
+                    const activePanel = String(state.agentsPanel || "");
+                    if (activePanel === "nodes") {
+                        emitAgentsTelemetry("nodes.lifecycle.refresh", {
+                            state: lifecycle.state,
+                            wasConnected: Boolean(lifecycle.wasConnected),
+                        });
+                        triggerNodesRefresh({
+                            quiet: true,
+                        });
                         syncNodesPolling();
                         return;
                     }
 
-                    emitAgentsTelemetry("nodes.lifecycle.refresh", {
-                        state: lifecycle.state,
-                        wasConnected: Boolean(lifecycle.wasConnected),
-                    });
-                    triggerNodesRefresh({
-                        quiet: true,
-                    });
+                    if (activePanel === "instances") {
+                        emitAgentsTelemetry("presence.lifecycle.refresh", {
+                            state: lifecycle.state,
+                            wasConnected: Boolean(lifecycle.wasConnected),
+                        });
+                        void agentsController.loadPresence({
+                            quiet: true,
+                            shouldIgnoreResponse: function () {
+                                return String(state.agentsPanel || "") !== "instances";
+                            },
+                        });
+                    }
+
                     syncNodesPolling();
                 };
 
