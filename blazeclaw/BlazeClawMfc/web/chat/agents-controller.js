@@ -59,7 +59,7 @@
             state.toolsEffectiveResult = null;
         }
 
-        const supportedPanels = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming", "nodes", "instances"];
+        const supportedPanels = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming", "nodes", "instances", "usage"];
         if (supportedPanels.indexOf(String(state.agentsPanel || "")) < 0) {
             state.agentsPanel = "overview";
         }
@@ -372,6 +372,52 @@
         }
         if (typeof state.presenceStatus !== "string" && state.presenceStatus !== null) {
             state.presenceStatus = null;
+        }
+
+        if (typeof state.usageLoading !== "boolean") {
+            state.usageLoading = false;
+        }
+        if (!state.usageResult || typeof state.usageResult !== "object") {
+            state.usageResult = null;
+        }
+        if (!state.usageCostSummary || typeof state.usageCostSummary !== "object") {
+            state.usageCostSummary = null;
+        }
+        if (typeof state.usageError !== "string" && state.usageError !== null) {
+            state.usageError = null;
+        }
+        if (typeof state.usageStartDate !== "string") {
+            state.usageStartDate = "";
+        }
+        if (typeof state.usageEndDate !== "string") {
+            state.usageEndDate = "";
+        }
+        if (!Array.isArray(state.usageSelectedSessions)) {
+            state.usageSelectedSessions = [];
+        }
+        if (!Array.isArray(state.usageSelectedDays)) {
+            state.usageSelectedDays = [];
+        }
+        if (!state.usageTimeSeries || typeof state.usageTimeSeries !== "object") {
+            state.usageTimeSeries = null;
+        }
+        if (typeof state.usageTimeSeriesLoading !== "boolean") {
+            state.usageTimeSeriesLoading = false;
+        }
+        if (typeof state.usageTimeSeriesCursorStart !== "number" && state.usageTimeSeriesCursorStart !== null) {
+            state.usageTimeSeriesCursorStart = null;
+        }
+        if (typeof state.usageTimeSeriesCursorEnd !== "number" && state.usageTimeSeriesCursorEnd !== null) {
+            state.usageTimeSeriesCursorEnd = null;
+        }
+        if (!Array.isArray(state.usageSessionLogs) && state.usageSessionLogs !== null) {
+            state.usageSessionLogs = null;
+        }
+        if (typeof state.usageSessionLogsLoading !== "boolean") {
+            state.usageSessionLogsLoading = false;
+        }
+        if (state.usageTimeZone !== "local" && state.usageTimeZone !== "utc") {
+            state.usageTimeZone = "local";
         }
 
         if (typeof state.agentDreamingLoading !== "boolean") {
@@ -991,6 +1037,40 @@
                 return "No presence payload.";
             }
             return entries.length === 0 ? "No instances yet." : null;
+        }
+
+        function buildUsageDateBounds() {
+            const now = new Date();
+            const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+            const start = new Date(end.getTime() - 29 * 24 * 60 * 60 * 1000);
+            function toIsoDate(value) {
+                const year = value.getUTCFullYear();
+                const month = String(value.getUTCMonth() + 1).padStart(2, "0");
+                const day = String(value.getUTCDate()).padStart(2, "0");
+                return year + "-" + month + "-" + day;
+            }
+            return {
+                startDate: toIsoDate(start),
+                endDate: toIsoDate(end),
+            };
+        }
+
+        async function runOptionalUsageDetailRequest(loadingKey, run, shouldIgnoreResponse) {
+            if (!request || !state.connected || state[loadingKey]) {
+                return;
+            }
+
+            state[loadingKey] = true;
+            onStateUpdated();
+
+            try {
+                await run();
+            } catch (_) {
+                // Silently fail optional usage detail endpoints.
+            } finally {
+                state[loadingKey] = false;
+                onStateUpdated();
+            }
         }
 
         function normalizeChannelStatusEntry(entry, channelId, labelFallback) {
@@ -1747,6 +1827,137 @@
                 state.presenceLoading = false;
                 onStateUpdated();
             }
+        }
+
+        async function loadUsage(options) {
+            const opts = options || {};
+            const quiet = Boolean(opts.quiet);
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            if (!request || !state.connected || state.usageLoading) {
+                return state.usageResult;
+            }
+
+            state.usageLoading = true;
+            if (!quiet) {
+                state.usageError = null;
+                state.lastError = null;
+            }
+            onStateUpdated();
+
+            try {
+                if (!state.usageStartDate || !state.usageEndDate) {
+                    const bounds = buildUsageDateBounds();
+                    state.usageStartDate = bounds.startDate;
+                    state.usageEndDate = bounds.endDate;
+                }
+
+                const startDate = state.usageStartDate;
+                const endDate = state.usageEndDate;
+                const dateInterpretation = state.usageTimeZone === "utc"
+                    ? { mode: "utc" }
+                    : undefined;
+                const [sessionsRes, costRes] = await Promise.all([
+                    request("sessions.usage", {
+                        startDate,
+                        endDate,
+                        limit: 1000,
+                        includeContextWeight: true,
+                        ...dateInterpretation,
+                    }),
+                    request("usage.cost", {
+                        startDate,
+                        endDate,
+                        ...dateInterpretation,
+                    }),
+                ]);
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return state.usageResult;
+                }
+
+                state.usageResult = sessionsRes && sessionsRes.payload
+                    ? sessionsRes.payload
+                    : sessionsRes;
+                state.usageCostSummary = costRes && costRes.payload
+                    ? costRes.payload
+                    : costRes;
+                if (!quiet) {
+                    state.usageError = null;
+                }
+                return state.usageResult;
+            } catch (err) {
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return state.usageResult;
+                }
+
+                if (!quiet) {
+                    state.usageResult = null;
+                    state.usageCostSummary = null;
+                    state.usageError = resolveToolsErrorMessage(err, "usage");
+                    state.lastError = state.usageError;
+                }
+                return state.usageResult;
+            } finally {
+                state.usageLoading = false;
+                onStateUpdated();
+            }
+        }
+
+        async function loadUsageTimeSeries(sessionKey, options) {
+            const key = String(sessionKey || "").trim();
+            const opts = options || {};
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            if (!key) {
+                return;
+            }
+
+            await runOptionalUsageDetailRequest("usageTimeSeriesLoading", async function () {
+                state.usageTimeSeries = null;
+                onStateUpdated();
+                const res = await request("sessions.usage.timeseries", {
+                    key,
+                });
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return;
+                }
+
+                const payload = res && res.payload ? res.payload : res;
+                state.usageTimeSeries = payload && typeof payload === "object"
+                    ? payload
+                    : null;
+            }, shouldIgnoreResponse);
+        }
+
+        async function loadUsageSessionLogs(sessionKey, options) {
+            const key = String(sessionKey || "").trim();
+            const opts = options || {};
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            if (!key) {
+                return;
+            }
+
+            await runOptionalUsageDetailRequest("usageSessionLogsLoading", async function () {
+                state.usageSessionLogs = null;
+                onStateUpdated();
+                const res = await request("sessions.usage.logs", {
+                    key,
+                    limit: 1000,
+                });
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return;
+                }
+
+                const payload = res && res.payload ? res.payload : res;
+                const logs = payload && payload.logs;
+                state.usageSessionLogs = Array.isArray(logs)
+                    ? logs
+                    : null;
+            }, shouldIgnoreResponse);
         }
 
         async function loadChannels(options) {
@@ -3318,7 +3529,7 @@
 
         function setAgentsPanel(panel) {
             const panelValue = String(panel || "").trim();
-            const normalized = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming", "nodes", "instances"].indexOf(panelValue) >= 0
+            const normalized = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming", "nodes", "instances", "usage"].indexOf(panelValue) >= 0
                 ? panelValue
                 : "overview";
             state.agentsPanel = normalized;
@@ -3391,6 +3602,15 @@
                 await loadPresence({
                     shouldIgnoreResponse: function () {
                         return state.agentsPanel !== "instances";
+                    },
+                });
+                return;
+            }
+
+            if (state.agentsPanel === "usage") {
+                await loadUsage({
+                    shouldIgnoreResponse: function () {
+                        return state.agentsPanel !== "usage";
                     },
                 });
                 return;
@@ -3541,6 +3761,9 @@
             loadAgentSkills,
             loadNodes,
             loadPresence,
+            loadUsage,
+            loadUsageTimeSeries,
+            loadUsageSessionLogs,
             loadChannels,
             startWhatsAppLogin,
             waitWhatsAppLogin,
@@ -3763,7 +3986,29 @@
                 "presence state contract should initialize presenceError=null");
             assertRegression(state.presenceStatus === null,
                 "presence state contract should initialize presenceStatus=null");
-            summary.push("channels + cron + dreaming + nodes + presence state/UI contract defaults");
+            assertRegression(state.usageLoading === false,
+                "usage state contract should initialize usageLoading=false");
+            assertRegression(state.usageResult === null,
+                "usage state contract should initialize usageResult=null");
+            assertRegression(state.usageCostSummary === null,
+                "usage state contract should initialize usageCostSummary=null");
+            assertRegression(state.usageError === null,
+                "usage state contract should initialize usageError=null");
+            assertRegression(Array.isArray(state.usageSelectedSessions) && state.usageSelectedSessions.length === 0,
+                "usage state contract should initialize usageSelectedSessions=[]");
+            assertRegression(Array.isArray(state.usageSelectedDays) && state.usageSelectedDays.length === 0,
+                "usage state contract should initialize usageSelectedDays=[]");
+            assertRegression(state.usageTimeSeries === null,
+                "usage state contract should initialize usageTimeSeries=null");
+            assertRegression(state.usageTimeSeriesLoading === false,
+                "usage state contract should initialize usageTimeSeriesLoading=false");
+            assertRegression(state.usageSessionLogs === null,
+                "usage state contract should initialize usageSessionLogs=null");
+            assertRegression(state.usageSessionLogsLoading === false,
+                "usage state contract should initialize usageSessionLogsLoading=false");
+            assertRegression(state.usageTimeZone === "local",
+                "usage state contract should initialize usageTimeZone=local");
+            summary.push("channels + cron + dreaming + nodes + presence + usage state/UI contract defaults");
         }
 
         {
@@ -3861,6 +4106,115 @@
             }),
                 "presence panel stale response should be ignored after panel switch");
             summary.push("presence stale-panel suppression");
+        }
+
+        {
+            const state = createRegressionState();
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            state.usageStartDate = "2026-01-01";
+            state.usageEndDate = "2026-01-30";
+            const usageLoad = controller.loadUsage({
+                quiet: false,
+            });
+            const sessionsUsageCall = harness.takeNextCall("sessions.usage");
+            const usageCostCall = harness.takeNextCall("usage.cost");
+            sessionsUsageCall.deferred.resolve({
+                payload: {
+                    sessions: [
+                        {
+                            key: "main",
+                        },
+                    ],
+                },
+            });
+            usageCostCall.deferred.resolve({
+                payload: {
+                    daily: [],
+                },
+            });
+            await usageLoad;
+
+            assertRegression(Boolean(state.usageResult) && Array.isArray(state.usageResult.sessions) && state.usageResult.sessions.length === 1,
+                "usage loader should bind sessions.usage payload");
+            assertRegression(Boolean(state.usageCostSummary) && Array.isArray(state.usageCostSummary.daily),
+                "usage loader should bind usage.cost payload");
+            assertRegression(state.usageError === null,
+                "usage loader should clear usageError on success");
+
+            const failedUsageLoad = controller.loadUsage({
+                quiet: false,
+            });
+            const failedSessionsUsageCall = harness.takeNextCall("sessions.usage");
+            const failedUsageCostCall = harness.takeNextCall("usage.cost");
+            failedSessionsUsageCall.deferred.reject(new Error("usage unavailable"));
+            failedUsageCostCall.deferred.resolve({
+                payload: {
+                    daily: [],
+                },
+            });
+            await failedUsageLoad;
+
+            assertRegression(typeof state.usageError === "string" && state.usageError.indexOf("usage unavailable") >= 0,
+                "usage loader should capture usage error semantics");
+
+            const timeSeriesLoad = controller.loadUsageTimeSeries("main");
+            const timeSeriesCall = harness.takeNextCall("sessions.usage.timeseries");
+            timeSeriesCall.deferred.resolve({
+                payload: {
+                    points: [],
+                },
+            });
+            await timeSeriesLoad;
+            assertRegression(Boolean(state.usageTimeSeries) && Array.isArray(state.usageTimeSeries.points),
+                "usage timeseries loader should bind payload");
+
+            const logsLoad = controller.loadUsageSessionLogs("main");
+            const logsCall = harness.takeNextCall("sessions.usage.logs");
+            logsCall.deferred.resolve({
+                payload: {
+                    logs: [
+                        {
+                            role: "assistant",
+                            text: "hello",
+                        },
+                    ],
+                },
+            });
+            await logsLoad;
+            assertRegression(Array.isArray(state.usageSessionLogs) && state.usageSessionLogs.length === 1,
+                "usage logs loader should bind payload logs array");
+
+            controller.setAgentsPanel("usage");
+            const panelLoad = controller.loadPanelDataForCurrentAgent();
+            const panelSessionsCall = harness.takeNextCall("sessions.usage");
+            const panelCostCall = harness.takeNextCall("usage.cost");
+            controller.setAgentsPanel("overview");
+            panelSessionsCall.deferred.resolve({
+                payload: {
+                    sessions: [
+                        {
+                            key: "stale-usage",
+                        },
+                    ],
+                },
+            });
+            panelCostCall.deferred.resolve({
+                payload: {
+                    daily: [],
+                },
+            });
+            await panelLoad;
+
+            assertRegression(!state.usageResult || !Array.isArray(state.usageResult.sessions) || state.usageResult.sessions.every(function (entry) {
+                return String(entry && entry.key || "") !== "stale-usage";
+            }),
+                "usage panel stale response should be ignored after panel switch");
+            summary.push("usage load + details + stale-panel suppression");
         }
 
         {

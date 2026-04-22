@@ -16,19 +16,19 @@ namespace blazeclaw::gateway::handlers::registry_introspection {
 
 	void RegistryIntrospectionHandlers::RegisterAll(GatewayHost& host) {
 		host.m_dispatcher.Register("usage.status", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"status\":\"ok\",\"uptime\":123456,\"active\":true}");
+			return protocol::OkResponse(request, "{\"status\":\"ok\",\"healthy\":true,\"updatedAt\":1735689600200}");
 			});
 
 		host.m_dispatcher.Register("usage.cost", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"cost\":0.0,\"currency\":\"USD\"}");
+			return protocol::OkResponse(request, "{\"currency\":\"USD\",\"daily\":[],\"totalCost\":0.0}");
 			});
 
 		host.m_dispatcher.Register("sessions.usage.logs", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"logs\":[],\"count\":0}");
+			return protocol::OkResponse(request, "{\"logs\":[]}");
 			});
 
 		host.m_dispatcher.Register("sessions.usage.timeseries", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"timeseries\":[],\"count\":0}");
+			return protocol::OkResponse(request, "{\"points\":[],\"totals\":{\"input\":0,\"output\":0,\"cacheRead\":0,\"cacheWrite\":0,\"totalTokens\":0,\"totalCost\":0.0}}}");
 			});
 
 		host.m_dispatcher.Register("gateway.agents.exists", [&host](const protocol::RequestFrame& request) {

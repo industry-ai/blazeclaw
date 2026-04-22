@@ -931,6 +931,55 @@
                     rows.push("<div class=\"agents-row\">Parity track: docs/compare/presence.ts/PRESENCE_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md</div>");
                 }
 
+                if (panel === "usage") {
+                    if (state.usageLoading) {
+                        rows.push("<div class=\"agents-row\">Loading usage...</div>");
+                    }
+                    if (state.usageError) {
+                        rows.push(`<div class=\"agents-row error\">${escapeHtml(state.usageError)}</div>`);
+                    }
+
+                    rows.push(`<div class=\"agents-row\">Date range: ${escapeHtml(String(state.usageStartDate || "(auto)"))} -> ${escapeHtml(String(state.usageEndDate || "(auto)"))}</div>`);
+                    rows.push(`<div class=\"agents-row\">Time zone: ${escapeHtml(String(state.usageTimeZone || "local"))}</div>`);
+
+                    const usageSessions = state.usageResult && Array.isArray(state.usageResult.sessions)
+                        ? state.usageResult.sessions
+                        : [];
+                    rows.push(`<div class=\"agents-row\">Usage sessions: ${usageSessions.length}</div>`);
+
+                    const usageDaily = state.usageCostSummary && Array.isArray(state.usageCostSummary.daily)
+                        ? state.usageCostSummary.daily
+                        : [];
+                    rows.push(`<div class=\"agents-row\">Usage cost daily points: ${usageDaily.length}</div>`);
+
+                    if (usageSessions.length > 0) {
+                        const firstUsageSession = usageSessions[0] || {};
+                        const firstUsageSessionKey = String(firstUsageSession.key || "").trim();
+                        rows.push(`<div class=\"agents-row\">First session key: ${escapeHtml(firstUsageSessionKey || "(n/a)")}</div>`);
+                        rows.push(`<div class=\"agents-row\">`
+                            + `<button class=\"agents-chip\" data-usage-action=\"details\" data-usage-session-key=\"${escapeHtml(firstUsageSessionKey)}\"${firstUsageSessionKey ? "" : " disabled"}>Load Details</button>`
+                            + `</div>`);
+                    }
+
+                    const usagePoints = state.usageTimeSeries && Array.isArray(state.usageTimeSeries.points)
+                        ? state.usageTimeSeries.points
+                        : [];
+                    rows.push(`<div class=\"agents-row\">Timeseries points: ${usagePoints.length}</div>`);
+
+                    const usageLogs = Array.isArray(state.usageSessionLogs)
+                        ? state.usageSessionLogs
+                        : [];
+                    rows.push(`<div class=\"agents-row\">Session logs: ${usageLogs.length}</div>`);
+
+                    rows.push(`<div class=\"agents-row\">`
+                        + `<button class=\"agents-chip\" data-usage-action=\"refresh\">Refresh</button> `
+                        + `<button class=\"agents-chip\" data-usage-action=\"timezone-local\">Timezone Local</button> `
+                        + `<button class=\"agents-chip\" data-usage-action=\"timezone-utc\">Timezone UTC</button>`
+                        + `</div>`);
+                    rows.push("<div class=\"agents-row\">Capability mode: OpenClaw-aligned usage baseline (`sessions.usage` + `usage.cost`) with optional detail loaders (`sessions.usage.timeseries`, `sessions.usage.logs`)</div>");
+                    rows.push("<div class=\"agents-row\">Parity track: docs/compare/usage.ts/USAGE_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md</div>");
+                }
+
                 if (panel === "dreaming") {
                     if (state.agentDreamingLoading || state.dreamingStatusLoading || state.dreamDiaryLoading) {
                         rows.push("<div class=\"agents-row\">Loading dreaming surface...</div>");
@@ -1342,6 +1391,46 @@
                     });
                 });
 
+                state.agentsSurfaceEl.querySelectorAll("[data-usage-action]").forEach((el) => {
+                    el.addEventListener("click", () => {
+                        const action = String(el.getAttribute("data-usage-action") || "").trim();
+                        if (!action) {
+                            return;
+                        }
+
+                        emitAgentsTelemetry("usage.action", {
+                            action,
+                            panel: state.agentsPanel,
+                        });
+
+                        if (action === "refresh") {
+                            void agentsController.loadUsage({
+                                quiet: false,
+                            });
+                            return;
+                        }
+
+                        if (action === "timezone-local" || action === "timezone-utc") {
+                            state.usageTimeZone = action === "timezone-utc" ? "utc" : "local";
+                            void agentsController.loadUsage({
+                                quiet: false,
+                            });
+                            return;
+                        }
+
+                        if (action === "details") {
+                            const sessionKey = String(el.getAttribute("data-usage-session-key") || "").trim();
+                            if (!sessionKey) {
+                                return;
+                            }
+                            void Promise.all([
+                                agentsController.loadUsageTimeSeries(sessionKey, {}),
+                                agentsController.loadUsageSessionLogs(sessionKey, {}),
+                            ]);
+                        }
+                    });
+                });
+
                 state.agentsSurfaceEl.querySelectorAll("[data-dreaming-subtab]").forEach((el) => {
                     el.addEventListener("click", () => {
                         const tab = String(el.getAttribute("data-dreaming-subtab") || "").trim();
@@ -1449,6 +1538,7 @@
                     { id: "dreaming", label: "Dreaming" },
                     { id: "nodes", label: "Nodes" },
                     { id: "instances", label: "Instances" },
+                    { id: "usage", label: "Usage" },
                 ];
                 const current = String(state.agentsPanel || "overview");
 
