@@ -268,6 +268,13 @@
                     sessionKey: state.sessionKey,
                 });
             }
+            if (typeof state.onGatewayLifecycleChanged === "function") {
+                state.onGatewayLifecycleChanged({
+                    connected: Boolean(state.connected),
+                    state: String(message.state || ""),
+                    wasConnected: Boolean(wasConnected),
+                });
+            }
 
             updateComposerState();
         }

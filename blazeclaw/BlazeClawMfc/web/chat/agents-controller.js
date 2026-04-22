@@ -1635,6 +1635,7 @@
             state.nodesLoading = true;
             if (!quiet) {
                 state.nodesError = null;
+                state.lastError = null;
             }
             onStateUpdated();
 
@@ -3235,7 +3236,7 @@
 
         function setAgentsPanel(panel) {
             const panelValue = String(panel || "").trim();
-            const normalized = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming"].indexOf(panelValue) >= 0
+            const normalized = ["overview", "tools", "files", "skills", "channels", "cron", "dreaming", "nodes"].indexOf(panelValue) >= 0
                 ? panelValue
                 : "overview";
             state.agentsPanel = normalized;

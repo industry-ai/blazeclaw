@@ -1447,6 +1447,7 @@
                 }
                 renderAgentsTabs();
                 renderAgentsSurface();
+                syncNodesPolling();
             }
             const controller = window.BlazeClawChatController.createController({
                 state,
@@ -1603,6 +1604,65 @@
                 }
             }
 
+            let nodesPollingTimer = null;
+            let nodesPollingInFlight = false;
+            const NODES_POLLING_MS = 5000;
+
+            function stopNodesPolling() {
+                if (nodesPollingTimer !== null) {
+                    window.clearInterval(nodesPollingTimer);
+                    nodesPollingTimer = null;
+                }
+            }
+
+            function shouldRunNodesPolling() {
+                return Boolean(
+                    agentsController &&
+                    state.connected &&
+                    String(state.agentsPanel || "") === "nodes"
+                );
+            }
+
+            function triggerNodesRefresh(options) {
+                if (!agentsController || typeof agentsController.loadNodes !== "function") {
+                    return;
+                }
+                if (nodesPollingInFlight) {
+                    return;
+                }
+
+                nodesPollingInFlight = true;
+                const opts = options || {};
+                void agentsController.loadNodes(opts)
+                    .catch(() => {
+                    })
+                    .finally(() => {
+                        nodesPollingInFlight = false;
+                    });
+            }
+
+            function syncNodesPolling() {
+                if (!shouldRunNodesPolling()) {
+                    stopNodesPolling();
+                    return;
+                }
+
+                if (nodesPollingTimer !== null) {
+                    return;
+                }
+
+                nodesPollingTimer = window.setInterval(() => {
+                    if (!shouldRunNodesPolling()) {
+                        stopNodesPolling();
+                        return;
+                    }
+
+                    triggerNodesRefresh({
+                        quiet: true,
+                    });
+                }, NODES_POLLING_MS);
+            }
+
             state.configCoerceEnabled = resolveConfigCoerceEnabled();
 
             const agentsEnabled = resolveAgentsEnabled();
@@ -1630,6 +1690,7 @@
                         sessionKey: state.sessionKey,
                     });
                     void agentsController.loadPanelDataForCurrentAgent();
+                    syncNodesPolling();
                 };
                 state.onModelChanged = () => {
                     agentsController.syncSessionContext({
@@ -1639,10 +1700,32 @@
                         model: state.selectedModel,
                     });
                     void agentsController.refreshFromConfigSnapshot();
+                    syncNodesPolling();
                 };
                 agentsController.syncSessionContext({
                     sessionKey: state.sessionKey,
                 });
+
+                state.onGatewayLifecycleChanged = (lifecycle) => {
+                    if (!lifecycle || !lifecycle.connected) {
+                        syncNodesPolling();
+                        return;
+                    }
+
+                    if (String(state.agentsPanel || "") !== "nodes") {
+                        syncNodesPolling();
+                        return;
+                    }
+
+                    emitAgentsTelemetry("nodes.lifecycle.refresh", {
+                        state: lifecycle.state,
+                        wasConnected: Boolean(lifecycle.wasConnected),
+                    });
+                    triggerNodesRefresh({
+                        quiet: true,
+                    });
+                    syncNodesPolling();
+                };
 
                 if (resolveAgentsRegressionChecksEnabled() &&
                     typeof window.BlazeClawAgentsController.runRegressionChecks === "function") {
