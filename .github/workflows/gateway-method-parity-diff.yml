@@ -1,0 +1,46 @@
+name: gateway-method-parity-diff
+
+on:
+  push:
+    branches:
+      - controlplane
+      - opt
+    paths:
+      - "blazeclaw/BlazeClawMfc/src/gateway/**"
+      - "openclaw/src/gateway/server-methods/**"
+      - "scripts/gateway-method-parity-diff.mjs"
+      - ".github/workflows/gateway-method-parity-diff.yml"
+  pull_request:
+    branches:
+      - controlplane
+      - opt
+    paths:
+      - "blazeclaw/BlazeClawMfc/src/gateway/**"
+      - "openclaw/src/gateway/server-methods/**"
+      - "scripts/gateway-method-parity-diff.mjs"
+      - ".github/workflows/gateway-method-parity-diff.yml"
+  workflow_dispatch:
+
+jobs:
+  parity-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Generate gateway parity diff artifact
+        run: node scripts/gateway-method-parity-diff.mjs
+
+      - name: Show parity diff summary
+        run: cat artifacts/gateway-parity/openclaw-vs-blazeclaw-method-diff.md
+
+      - name: Upload parity diff artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gateway-method-parity-diff
+          path: artifacts/gateway-parity

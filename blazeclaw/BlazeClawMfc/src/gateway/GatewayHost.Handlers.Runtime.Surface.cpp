@@ -355,8 +355,96 @@ namespace blazeclaw::gateway {
 			host.m_dispatcher.Register("voicewake.get", [](const protocol::RequestFrame& request) {
 				return protocol::OkResponse(request, "{\"enabled\":false,\"model\":\"default\"}");
 				});
+			struct RuntimeTtsState {
+				bool enabled = false;
+				std::string provider = "default";
+				std::string model = "default";
+				std::uint64_t convertSequence = 1;
+			};
+			struct RuntimeSecretsState {
+				std::uint64_t reloadCount = 0;
+				std::uint64_t reloadWarningCount = 0;
+			};
+			auto runtimeTtsState = std::make_shared<RuntimeTtsState>();
+			auto runtimeSecretsState = std::make_shared<RuntimeSecretsState>();
+
 			host.m_dispatcher.Register("voicewake.set", [](const protocol::RequestFrame& request) {
 				return protocol::OkResponse(request, "{\"enabled\":true,\"model\":\"default\",\"updated\":true}");
+				});
+			host.m_dispatcher.Register("tts.status", [runtimeTtsState](const protocol::RequestFrame& request) {
+				const std::string providersJson = "[\"default\",\"azure\"]";
+				return protocol::OkResponse(
+					request,
+					"{\"enabled\":" + std::string(runtimeTtsState->enabled ? "true" : "false") +
+					",\"provider\":\"" + EscapeJsonLocal(runtimeTtsState->provider) +
+					"\",\"auto\":false,\"fallbackProvider\":\"default\",\"providers\":" + providersJson + "}");
+				});
+			host.m_dispatcher.Register("tts.enable", [runtimeTtsState](const protocol::RequestFrame& request) {
+				runtimeTtsState->enabled = true;
+				return protocol::OkResponse(request, "{\"enabled\":true,\"updated\":true}");
+				});
+			host.m_dispatcher.Register("tts.disable", [runtimeTtsState](const protocol::RequestFrame& request) {
+				runtimeTtsState->enabled = false;
+				return protocol::OkResponse(request, "{\"enabled\":false,\"updated\":true}");
+				});
+			host.m_dispatcher.Register("tts.providers", [runtimeTtsState](const protocol::RequestFrame& request) {
+				const std::string providersJson =
+					"[{\"id\":\"default\",\"name\":\"Default\",\"configured\":true,\"models\":[\"default\"],\"voices\":[\"alloy\"]},"
+					"{\"id\":\"azure\",\"name\":\"Azure\",\"configured\":true,\"models\":[\"neural\"],\"voices\":[\"aria\"]}]";
+				return protocol::OkResponse(
+					request,
+					"{\"providers\":" + providersJson + ",\"active\":\"" + EscapeJsonLocal(runtimeTtsState->provider) + "\"}");
+				});
+			host.m_dispatcher.Register("tts.convert", [runtimeTtsState](const protocol::RequestFrame& request) {
+				const std::string text = ExtractStringParam(request.paramsJson, "text");
+				if (text.empty()) {
+					return protocol::ErrorResponse(request, "invalid_request", "tts.convert requires text");
+				}
+				const std::string providerOverride = ExtractStringParam(request.paramsJson, "provider");
+				const std::string provider = providerOverride.empty() ? runtimeTtsState->provider : providerOverride;
+				const std::string audioPath =
+					"artifacts/tts/tts-" + std::to_string(runtimeTtsState->convertSequence++) + ".wav";
+				return protocol::OkResponse(
+					request,
+					"{\"audioPath\":\"" + EscapeJsonLocal(audioPath) +
+					"\",\"provider\":\"" + EscapeJsonLocal(provider) +
+					"\",\"outputFormat\":\"wav\",\"voiceCompatible\":true}");
+				});
+
+			host.m_dispatcher.Register("secrets.reload", [runtimeSecretsState](const protocol::RequestFrame& request) {
+				runtimeSecretsState->reloadCount += 1;
+				runtimeSecretsState->reloadWarningCount = runtimeSecretsState->reloadCount % 2;
+				return protocol::OkResponse(
+					request,
+					"{\"ok\":true,\"warningCount\":" + std::to_string(runtimeSecretsState->reloadWarningCount) +
+					",\"reloadCount\":" + std::to_string(runtimeSecretsState->reloadCount) + "}");
+				});
+			host.m_dispatcher.Register("secrets.resolve", [](const protocol::RequestFrame& request) {
+				const std::string commandName = ExtractStringParam(request.paramsJson, "commandName");
+				if (commandName.empty()) {
+					return protocol::ErrorResponse(request, "invalid_request", "invalid secrets.resolve params: commandName");
+				}
+				std::string targetIdsJson = "[]";
+				if (request.paramsJson.has_value()) {
+					std::string rawTargetIds;
+					if (json::FindRawField(request.paramsJson.value(), "targetIds", rawTargetIds)) {
+						const std::string trimmed = json::Trim(rawTargetIds);
+						if (!trimmed.empty() && trimmed.front() == '[' && trimmed.back() == ']') {
+							targetIdsJson = trimmed;
+						}
+					}
+				}
+				const std::string assignmentsJson =
+					"[{\"path\":\"runtime.env.API_KEY\",\"pathSegments\":[\"runtime\",\"env\",\"API_KEY\"],\"value\":\"***\"}]";
+				const std::string diagnosticsJson =
+					"[\"resolved secrets for command \"" + EscapeJsonLocal(commandName) + "\"\"]";
+				return protocol::OkResponse(
+					request,
+					"{\"ok\":true,\"commandName\":\"" + EscapeJsonLocal(commandName) +
+					"\",\"targetIds\":" + targetIdsJson +
+					",\"assignments\":" + assignmentsJson +
+					",\"diagnostics\":" + diagnosticsJson +
+					",\"inactiveRefPaths\":[]}");
 				});
 			host.m_dispatcher.Register(
 				"gateway.runtime.plugins.capabilities",

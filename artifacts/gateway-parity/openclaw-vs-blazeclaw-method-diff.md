@@ -1,0 +1,190 @@
+# OpenClaw vs BlazeClaw Gateway Method Diff
+
+Generated: 2026-04-22T10:56:51.613Z
+
+## Inputs
+
+- OpenClaw methods: `openclaw/src/gateway/server-methods`
+- BlazeClaw handlers manifest: `blazeclaw/BlazeClawMfc/src/gateway/GatewayHandlers.manifest.json` (version 1)
+
+## Summary
+
+- OpenClaw method count: **127**
+- BlazeClaw method count: **41**
+- Overlap: **0**
+- Missing in BlazeClaw: **127**
+- BlazeClaw-only: **41**
+
+## Missing in BlazeClaw
+
+- `.aac`
+- `.m4a`
+- `.mp3`
+- `.oga`
+- `.ogg`
+- `.opus`
+- `.wav`
+- `.webm`
+- `agent.identity.get`
+- `agent.wait`
+- `agents.create`
+- `agents.delete`
+- `agents.files.get`
+- `agents.files.list`
+- `agents.files.set`
+- `agents.list`
+- `agents.update`
+- `channels.logout`
+- `channels.status`
+- `chat.abort`
+- `chat.history`
+- `chat.inject`
+- `chat.send`
+- `commands.list`
+- `config.apply`
+- `config.get`
+- `config.patch`
+- `config.schema`
+- `config.schema.lookup`
+- `config.set`
+- `cron.add`
+- `cron.list`
+- `cron.remove`
+- `cron.run`
+- `cron.runs`
+- `cron.status`
+- `cron.update`
+- `device.pair.approve`
+- `device.pair.list`
+- `device.pair.reject`
+- `device.pair.remove`
+- `device.token.revoke`
+- `device.token.rotate`
+- `doctor.memory.status`
+- `exec.approval.get`
+- `exec.approval.list`
+- `exec.approval.request`
+- `exec.approval.resolve`
+- `exec.approvals.get`
+- `exec.approvals.node.get`
+- `exec.approvals.node.set`
+- `exec.approvals.set`
+- `gateway.identity.get`
+- `logs.tail`
+- `models.list`
+- `node.canvas.capability.refresh`
+- `node.describe`
+- `node.event`
+- `node.invoke`
+- `node.invoke.result`
+- `node.list`
+- `node.pair.approve`
+- `node.pair.list`
+- `node.pair.reject`
+- `node.pair.request`
+- `node.pair.verify`
+- `node.pending.ack`
+- `node.pending.drain`
+- `node.pending.enqueue`
+- `node.pending.pull`
+- `node.rename`
+- `plugin.approval.list`
+- `plugin.approval.request`
+- `plugin.approval.resolve`
+- `push.test`
+- `secrets.reload`
+- `secrets.resolve`
+- `sessions.abort`
+- `sessions.compact`
+- `sessions.compaction.branch`
+- `sessions.compaction.get`
+- `sessions.compaction.list`
+- `sessions.compaction.restore`
+- `sessions.create`
+- `sessions.delete`
+- `sessions.get`
+- `sessions.list`
+- `sessions.messages.subscribe`
+- `sessions.messages.unsubscribe`
+- `sessions.patch`
+- `sessions.preview`
+- `sessions.reset`
+- `sessions.resolve`
+- `sessions.send`
+- `sessions.steer`
+- `sessions.subscribe`
+- `sessions.unsubscribe`
+- `sessions.usage`
+- `sessions.usage.logs`
+- `sessions.usage.timeseries`
+- `skills.bins`
+- `skills.detail`
+- `skills.install`
+- `skills.search`
+- `skills.status`
+- `skills.update`
+- `talk.config`
+- `talk.mode`
+- `talk.speak`
+- `tools.catalog`
+- `tools.effective`
+- `tts.convert`
+- `tts.disable`
+- `tts.enable`
+- `tts.providers`
+- `tts.status`
+- `update.run`
+- `usage.cost`
+- `usage.status`
+- `voicewake.get`
+- `voicewake.set`
+- `web.login.start`
+- `web.login.wait`
+- `wizard.cancel`
+- `wizard.next`
+- `wizard.start`
+- `wizard.status`
+
+## BlazeClaw-only
+
+- `gateway.agents.list`
+- `gateway.config.audit`
+- `gateway.config.backup`
+- `gateway.config.diff`
+- `gateway.config.history`
+- `gateway.config.keys`
+- `gateway.config.revision`
+- `gateway.config.rollback`
+- `gateway.config.schema`
+- `gateway.config.sections`
+- `gateway.config.validate`
+- `gateway.events.channels`
+- `gateway.events.sample`
+- `gateway.events.timeline`
+- `gateway.events.types`
+- `gateway.events.window`
+- `gateway.models.affinity`
+- `gateway.models.catalog`
+- `gateway.models.compatibility`
+- `gateway.models.default.get`
+- `gateway.models.fallback`
+- `gateway.models.manifest`
+- `gateway.models.pool`
+- `gateway.models.preference`
+- `gateway.models.priority`
+- `gateway.models.providers`
+- `gateway.models.recommended`
+- `gateway.models.routing`
+- `gateway.models.selection`
+- `gateway.ping`
+- `gateway.protocol.version`
+- `gateway.sessions.count`
+- `gateway.tools.call.execute`
+- `gateway.tools.errors`
+- `gateway.tools.failures`
+- `gateway.tools.health`
+- `gateway.tools.latency`
+- `gateway.tools.metrics`
+- `gateway.tools.stats`
+- `gateway.tools.throughput`
+- `gateway.tools.usage`

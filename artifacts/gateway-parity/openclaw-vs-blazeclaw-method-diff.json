@@ -1,0 +1,382 @@
+{
+  "generatedAt": "2026-04-22T10:56:51.613Z",
+  "inputs": {
+    "openclawServerMethodsDir": "openclaw/src/gateway/server-methods",
+    "blazeclawHandlersManifest": "blazeclaw/BlazeClawMfc/src/gateway/GatewayHandlers.manifest.json",
+    "blazeclawManifestVersion": 1
+  },
+  "summary": {
+    "openclawMethodCount": 127,
+    "blazeclawMethodCount": 41,
+    "overlapCount": 0,
+    "missingInBlazeclawCount": 127,
+    "blazeOnlyCount": 41
+  },
+  "overlap": [],
+  "missingInBlazeClaw": [
+    ".aac",
+    ".m4a",
+    ".mp3",
+    ".oga",
+    ".ogg",
+    ".opus",
+    ".wav",
+    ".webm",
+    "agent.identity.get",
+    "agent.wait",
+    "agents.create",
+    "agents.delete",
+    "agents.files.get",
+    "agents.files.list",
+    "agents.files.set",
+    "agents.list",
+    "agents.update",
+    "channels.logout",
+    "channels.status",
+    "chat.abort",
+    "chat.history",
+    "chat.inject",
+    "chat.send",
+    "commands.list",
+    "config.apply",
+    "config.get",
+    "config.patch",
+    "config.schema",
+    "config.schema.lookup",
+    "config.set",
+    "cron.add",
+    "cron.list",
+    "cron.remove",
+    "cron.run",
+    "cron.runs",
+    "cron.status",
+    "cron.update",
+    "device.pair.approve",
+    "device.pair.list",
+    "device.pair.reject",
+    "device.pair.remove",
+    "device.token.revoke",
+    "device.token.rotate",
+    "doctor.memory.status",
+    "exec.approval.get",
+    "exec.approval.list",
+    "exec.approval.request",
+    "exec.approval.resolve",
+    "exec.approvals.get",
+    "exec.approvals.node.get",
+    "exec.approvals.node.set",
+    "exec.approvals.set",
+    "gateway.identity.get",
+    "logs.tail",
+    "models.list",
+    "node.canvas.capability.refresh",
+    "node.describe",
+    "node.event",
+    "node.invoke",
+    "node.invoke.result",
+    "node.list",
+    "node.pair.approve",
+    "node.pair.list",
+    "node.pair.reject",
+    "node.pair.request",
+    "node.pair.verify",
+    "node.pending.ack",
+    "node.pending.drain",
+    "node.pending.enqueue",
+    "node.pending.pull",
+    "node.rename",
+    "plugin.approval.list",
+    "plugin.approval.request",
+    "plugin.approval.resolve",
+    "push.test",
+    "secrets.reload",
+    "secrets.resolve",
+    "sessions.abort",
+    "sessions.compact",
+    "sessions.compaction.branch",
+    "sessions.compaction.get",
+    "sessions.compaction.list",
+    "sessions.compaction.restore",
+    "sessions.create",
+    "sessions.delete",
+    "sessions.get",
+    "sessions.list",
+    "sessions.messages.subscribe",
+    "sessions.messages.unsubscribe",
+    "sessions.patch",
+    "sessions.preview",
+    "sessions.reset",
+    "sessions.resolve",
+    "sessions.send",
+    "sessions.steer",
+    "sessions.subscribe",
+    "sessions.unsubscribe",
+    "sessions.usage",
+    "sessions.usage.logs",
+    "sessions.usage.timeseries",
+    "skills.bins",
+    "skills.detail",
+    "skills.install",
+    "skills.search",
+    "skills.status",
+    "skills.update",
+    "talk.config",
+    "talk.mode",
+    "talk.speak",
+    "tools.catalog",
+    "tools.effective",
+    "tts.convert",
+    "tts.disable",
+    "tts.enable",
+    "tts.providers",
+    "tts.status",
+    "update.run",
+    "usage.cost",
+    "usage.status",
+    "voicewake.get",
+    "voicewake.set",
+    "web.login.start",
+    "web.login.wait",
+    "wizard.cancel",
+    "wizard.next",
+    "wizard.start",
+    "wizard.status"
+  ],
+  "blazeOnly": [
+    "gateway.agents.list",
+    "gateway.config.audit",
+    "gateway.config.backup",
+    "gateway.config.diff",
+    "gateway.config.history",
+    "gateway.config.keys",
+    "gateway.config.revision",
+    "gateway.config.rollback",
+    "gateway.config.schema",
+    "gateway.config.sections",
+    "gateway.config.validate",
+    "gateway.events.channels",
+    "gateway.events.sample",
+    "gateway.events.timeline",
+    "gateway.events.types",
+    "gateway.events.window",
+    "gateway.models.affinity",
+    "gateway.models.catalog",
+    "gateway.models.compatibility",
+    "gateway.models.default.get",
+    "gateway.models.fallback",
+    "gateway.models.manifest",
+    "gateway.models.pool",
+    "gateway.models.preference",
+    "gateway.models.priority",
+    "gateway.models.providers",
+    "gateway.models.recommended",
+    "gateway.models.routing",
+    "gateway.models.selection",
+    "gateway.ping",
+    "gateway.protocol.version",
+    "gateway.sessions.count",
+    "gateway.tools.call.execute",
+    "gateway.tools.errors",
+    "gateway.tools.failures",
+    "gateway.tools.health",
+    "gateway.tools.latency",
+    "gateway.tools.metrics",
+    "gateway.tools.stats",
+    "gateway.tools.throughput",
+    "gateway.tools.usage"
+  ],
+  "openclawMethodsByFile": {
+    "openclaw/src/gateway/server-methods/agent.ts": [
+      "agent.identity.get",
+      "agent.wait"
+    ],
+    "openclaw/src/gateway/server-methods/agents.ts": [
+      "agents.create",
+      "agents.delete",
+      "agents.files.get",
+      "agents.files.list",
+      "agents.files.set",
+      "agents.list",
+      "agents.update"
+    ],
+    "openclaw/src/gateway/server-methods/channels.ts": [
+      "channels.logout",
+      "channels.status"
+    ],
+    "openclaw/src/gateway/server-methods/chat-webchat-media.ts": [
+      ".aac",
+      ".m4a",
+      ".mp3",
+      ".oga",
+      ".ogg",
+      ".opus",
+      ".wav",
+      ".webm"
+    ],
+    "openclaw/src/gateway/server-methods/chat.ts": [
+      "chat.abort",
+      "chat.history",
+      "chat.inject",
+      "chat.send"
+    ],
+    "openclaw/src/gateway/server-methods/commands.ts": [
+      "commands.list"
+    ],
+    "openclaw/src/gateway/server-methods/config.ts": [
+      "config.apply",
+      "config.get",
+      "config.patch",
+      "config.schema",
+      "config.schema.lookup",
+      "config.set"
+    ],
+    "openclaw/src/gateway/server-methods/cron.ts": [
+      "cron.add",
+      "cron.list",
+      "cron.remove",
+      "cron.run",
+      "cron.runs",
+      "cron.status",
+      "cron.update"
+    ],
+    "openclaw/src/gateway/server-methods/devices.ts": [
+      "device.pair.approve",
+      "device.pair.list",
+      "device.pair.reject",
+      "device.pair.remove",
+      "device.token.revoke",
+      "device.token.rotate"
+    ],
+    "openclaw/src/gateway/server-methods/doctor.ts": [
+      "doctor.memory.status"
+    ],
+    "openclaw/src/gateway/server-methods/exec-approval.ts": [
+      "exec.approval.get",
+      "exec.approval.list",
+      "exec.approval.request",
+      "exec.approval.resolve"
+    ],
+    "openclaw/src/gateway/server-methods/exec-approvals.ts": [
+      "exec.approvals.get",
+      "exec.approvals.node.get",
+      "exec.approvals.node.set",
+      "exec.approvals.set"
+    ],
+    "openclaw/src/gateway/server-methods/logs.ts": [
+      "logs.tail"
+    ],
+    "openclaw/src/gateway/server-methods/models.ts": [
+      "models.list"
+    ],
+    "openclaw/src/gateway/server-methods/nodes-pending.ts": [
+      "node.pending.drain",
+      "node.pending.enqueue"
+    ],
+    "openclaw/src/gateway/server-methods/nodes.ts": [
+      "node.canvas.capability.refresh",
+      "node.describe",
+      "node.event",
+      "node.invoke",
+      "node.invoke.result",
+      "node.list",
+      "node.pair.approve",
+      "node.pair.list",
+      "node.pair.reject",
+      "node.pair.request",
+      "node.pair.verify",
+      "node.pending.ack",
+      "node.pending.pull",
+      "node.rename"
+    ],
+    "openclaw/src/gateway/server-methods/plugin-approval.ts": [
+      "plugin.approval.list",
+      "plugin.approval.request",
+      "plugin.approval.resolve"
+    ],
+    "openclaw/src/gateway/server-methods/push.ts": [
+      "push.test"
+    ],
+    "openclaw/src/gateway/server-methods/secrets.ts": [
+      "secrets.reload",
+      "secrets.resolve"
+    ],
+    "openclaw/src/gateway/server-methods/sessions.send-followup-status.test.ts": [
+      "chat.send"
+    ],
+    "openclaw/src/gateway/server-methods/sessions.ts": [
+      "sessions.abort",
+      "sessions.compact",
+      "sessions.compaction.branch",
+      "sessions.compaction.get",
+      "sessions.compaction.list",
+      "sessions.compaction.restore",
+      "sessions.create",
+      "sessions.delete",
+      "sessions.get",
+      "sessions.list",
+      "sessions.messages.subscribe",
+      "sessions.messages.unsubscribe",
+      "sessions.patch",
+      "sessions.preview",
+      "sessions.reset",
+      "sessions.resolve",
+      "sessions.send",
+      "sessions.steer",
+      "sessions.subscribe",
+      "sessions.unsubscribe"
+    ],
+    "openclaw/src/gateway/server-methods/skills.ts": [
+      "skills.bins",
+      "skills.detail",
+      "skills.install",
+      "skills.search",
+      "skills.status",
+      "skills.update"
+    ],
+    "openclaw/src/gateway/server-methods/system.ts": [
+      "gateway.identity.get"
+    ],
+    "openclaw/src/gateway/server-methods/talk.ts": [
+      "talk.config",
+      "talk.mode",
+      "talk.speak"
+    ],
+    "openclaw/src/gateway/server-methods/tools-catalog.ts": [
+      "tools.catalog"
+    ],
+    "openclaw/src/gateway/server-methods/tools-effective.ts": [
+      "tools.effective"
+    ],
+    "openclaw/src/gateway/server-methods/tts.ts": [
+      "tts.convert",
+      "tts.disable",
+      "tts.enable",
+      "tts.providers",
+      "tts.status"
+    ],
+    "openclaw/src/gateway/server-methods/update.ts": [
+      "update.run"
+    ],
+    "openclaw/src/gateway/server-methods/usage.ts": [
+      "sessions.usage",
+      "sessions.usage.logs",
+      "sessions.usage.timeseries",
+      "usage.cost",
+      "usage.status"
+    ],
+    "openclaw/src/gateway/server-methods/voicewake.ts": [
+      "voicewake.get",
+      "voicewake.set"
+    ],
+    "openclaw/src/gateway/server-methods/web.ts": [
+      "web.login.start",
+      "web.login.wait"
+    ],
+    "openclaw/src/gateway/server-methods/wizard.ts": [
+      "wizard.cancel",
+      "wizard.next",
+      "wizard.start",
+      "wizard.status"
+    ]
+  }
+}

@@ -479,6 +479,71 @@ TEST_CASE("P1 parity methods: skills and update-run are runtime-backed", "[gatew
 	CHECK(updateRun.payloadJson.value().find("\"runId\":\"update-run-") != std::string::npos);
 }
 
+TEST_CASE("P2 parity methods: tts and secrets families are runtime-backed", "[gateway][parity][p2]")
+{
+	GatewayHost host;
+	REQUIRE(host.StartLocalDispatchOnly());
+
+	const auto ttsStatusBefore = Route(host, "p2-tts-status-before", "tts.status");
+	REQUIRE(ttsStatusBefore.ok);
+	REQUIRE(ttsStatusBefore.payloadJson.has_value());
+	CHECK(ttsStatusBefore.payloadJson.value().find("\"enabled\":false") != std::string::npos);
+
+	const auto ttsEnable = Route(host, "p2-tts-enable", "tts.enable");
+	REQUIRE(ttsEnable.ok);
+	REQUIRE(ttsEnable.payloadJson.has_value());
+	CHECK(ttsEnable.payloadJson.value().find("\"enabled\":true") != std::string::npos);
+
+	const auto ttsStatusAfter = Route(host, "p2-tts-status-after", "tts.status");
+	REQUIRE(ttsStatusAfter.ok);
+	REQUIRE(ttsStatusAfter.payloadJson.has_value());
+	CHECK(ttsStatusAfter.payloadJson.value().find("\"enabled\":true") != std::string::npos);
+	CHECK(ttsStatusAfter.payloadJson.value().find("\"provider\":\"default\"") != std::string::npos);
+
+	const auto ttsProviders = Route(host, "p2-tts-providers", "tts.providers");
+	REQUIRE(ttsProviders.ok);
+	REQUIRE(ttsProviders.payloadJson.has_value());
+	CHECK(ttsProviders.payloadJson.value().find("\"providers\":[") != std::string::npos);
+	CHECK(ttsProviders.payloadJson.value().find("\"active\":\"default\"") != std::string::npos);
+
+	const auto ttsConvert = Route(
+		host,
+		"p2-tts-convert",
+		"tts.convert",
+		R"({"text":"hello p2"})");
+	REQUIRE(ttsConvert.ok);
+	REQUIRE(ttsConvert.payloadJson.has_value());
+	CHECK(ttsConvert.payloadJson.value().find("\"audioPath\":\"artifacts/tts/tts-") != std::string::npos);
+	CHECK(ttsConvert.payloadJson.value().find("\"provider\":\"default\"") != std::string::npos);
+
+	const auto ttsDisable = Route(host, "p2-tts-disable", "tts.disable");
+	REQUIRE(ttsDisable.ok);
+	REQUIRE(ttsDisable.payloadJson.has_value());
+	CHECK(ttsDisable.payloadJson.value().find("\"enabled\":false") != std::string::npos);
+
+	const auto secretsReload = Route(host, "p2-secrets-reload", "secrets.reload");
+	REQUIRE(secretsReload.ok);
+	REQUIRE(secretsReload.payloadJson.has_value());
+	CHECK(secretsReload.payloadJson.value().find("\"ok\":true") != std::string::npos);
+	CHECK(secretsReload.payloadJson.value().find("\"reloadCount\":1") != std::string::npos);
+
+	const auto secretsResolve = Route(
+		host,
+		"p2-secrets-resolve",
+		"secrets.resolve",
+		R"({"commandName":"email.schedule","targetIds":["runtime"]})");
+	REQUIRE(secretsResolve.ok);
+	REQUIRE(secretsResolve.payloadJson.has_value());
+	CHECK(secretsResolve.payloadJson.value().find("\"ok\":true") != std::string::npos);
+	CHECK(secretsResolve.payloadJson.value().find("\"commandName\":\"email.schedule\"") != std::string::npos);
+	CHECK(secretsResolve.payloadJson.value().find("\"assignments\":[{") != std::string::npos);
+
+	const auto secretsResolveInvalid = Route(host, "p2-secrets-resolve-invalid", "secrets.resolve", R"({})");
+	REQUIRE_FALSE(secretsResolveInvalid.ok);
+	REQUIRE(secretsResolveInvalid.error.has_value());
+	CHECK(secretsResolveInvalid.error->code == "invalid_request");
+}
+
 TEST_CASE("P2 parity methods: doctor memory method family is routable", "[gateway][parity][p2]")
 {
 	GatewayHost host;
