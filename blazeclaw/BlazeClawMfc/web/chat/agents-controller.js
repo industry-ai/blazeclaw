@@ -4663,6 +4663,8 @@
                 payload: {
                     patched: true,
                     updated: true,
+                    hash: "hash-2",
+                    dreamingEnabled: false,
                 },
             });
             const enableResult = await enablePending;
@@ -4670,6 +4672,8 @@
                 "updateDreamingEnabled should resolve true after successful config.patch");
             assertRegression(Boolean(state.dreamingStatus) && state.dreamingStatus.enabled === false,
                 "updateDreamingEnabled should update local dreaming enabled projection");
+            assertRegression(state.dreamingConfigSnapshotHash === "hash-1",
+                "updateDreamingEnabled should keep current snapshot hash until refresh reload");
 
             const backfillPending = controller.backfillDreamDiary({});
             const backfillCall = harness.takeNextCall("doctor.memory.backfillDreamDiary");

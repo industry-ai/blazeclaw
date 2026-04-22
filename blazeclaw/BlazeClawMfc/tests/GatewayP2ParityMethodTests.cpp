@@ -138,6 +138,24 @@ TEST_CASE("P2 parity methods: skills, web login, update, and doctor memory metho
 	REQUIRE(resetDreamDiary.payloadJson.has_value());
 	REQUIRE(resetDreamDiary.payloadJson.value().find("\"removedEntries\":true") != std::string::npos);
 
+	const auto configGetBeforePatch =
+		Route(host, "p2-config-get-before-patch", "config.get");
+	REQUIRE(configGetBeforePatch.ok);
+	REQUIRE(configGetBeforePatch.payloadJson.has_value());
+	REQUIRE(configGetBeforePatch.payloadJson.value().find("\"hash\":") != std::string::npos);
+	REQUIRE(configGetBeforePatch.payloadJson.value().find("\"plugins\":") != std::string::npos);
+	REQUIRE(configGetBeforePatch.payloadJson.value().find("\"memory-core\":") != std::string::npos);
+	REQUIRE(configGetBeforePatch.payloadJson.value().find("\"dreaming\":") != std::string::npos);
+
+	const auto configPatchDisable = Route(
+		host,
+		"p2-config-patch-disable",
+		"config.patch",
+		std::string("{\"baseHash\":\"dreaming-config-0\",\"raw\":\"{\\\"dreaming\\\":{\\\"enabled\\\":false}}\"}"));
+	REQUIRE_FALSE(configPatchDisable.ok);
+	REQUIRE(configPatchDisable.error.has_value());
+	REQUIRE(configPatchDisable.error->code == "config_hash_mismatch");
+
 	const auto configSchemaLookup = Route(
 		host,
 		"p2-config-schema-lookup",

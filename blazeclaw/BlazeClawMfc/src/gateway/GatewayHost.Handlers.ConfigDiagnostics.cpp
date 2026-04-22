@@ -12,6 +12,7 @@
 #include "GatewayPersistencePaths.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -26,6 +27,7 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 		constexpr const char* kDreamDiaryStateFile = "dreaming-diary.md";
 		constexpr const char* kDreamingEnabledStateFile = "dreaming-enabled.flag";
 		constexpr const char* kDreamingBackfillCounterStateFile = "dreaming-backfill.count";
+		constexpr const char* kDreamingConfigHashStateFile = "dreaming-config.hash";
 
 		std::filesystem::path ResolveDreamingDiaryFilePath() {
 			return ResolveGatewayStateFilePath(kDreamDiaryStateFile);
@@ -37,6 +39,10 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 
 		std::filesystem::path ResolveDreamingBackfillCounterFilePath() {
 			return ResolveGatewayStateFilePath(kDreamingBackfillCounterStateFile);
+		}
+
+		std::filesystem::path ResolveDreamingConfigHashFilePath() {
+			return ResolveGatewayStateFilePath(kDreamingConfigHashStateFile);
 		}
 
 		void EnsureDreamingStateDirectory() {
@@ -102,6 +108,105 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 			const auto now = std::chrono::time_point_cast<std::chrono::milliseconds>(
 				std::chrono::system_clock::now());
 			return static_cast<std::int64_t>(now.time_since_epoch().count());
+		}
+
+		std::string ReadOrCreateDreamingConfigHash() {
+			const auto hashPath = ResolveDreamingConfigHashFilePath();
+			std::string current = ReadTextFileIfExists(hashPath);
+			if (!current.empty()) {
+				return current;
+			}
+			current = "dreaming-config-" + std::to_string(NowMs());
+			WriteTextFile(hashPath, current);
+			return current;
+		}
+
+		std::string BumpDreamingConfigHash() {
+			const std::string next = "dreaming-config-" + std::to_string(NowMs());
+			WriteTextFile(ResolveDreamingConfigHashFilePath(), next);
+			return next;
+		}
+
+		bool ExtractDreamingEnabledFromRawPatch(const std::string& rawPatch, bool fallback) {
+			if (rawPatch.empty()) {
+				return fallback;
+			}
+			std::string lowered = rawPatch;
+			std::transform(
+				lowered.begin(),
+				lowered.end(),
+				lowered.begin(),
+				[](unsigned char ch) {
+					return static_cast<char>(std::tolower(ch));
+				});
+			const std::size_t dreamingPos = lowered.find("\"dreaming\"");
+			if (dreamingPos == std::string::npos) {
+				return fallback;
+			}
+			const std::size_t enabledPos = lowered.find("\"enabled\"", dreamingPos);
+			if (enabledPos == std::string::npos) {
+				return fallback;
+			}
+			const std::size_t truePos = lowered.find("true", enabledPos);
+			const std::size_t falsePos = lowered.find("false", enabledPos);
+			if (truePos != std::string::npos &&
+				(falsePos == std::string::npos || truePos < falsePos)) {
+				return true;
+			}
+			if (falsePos != std::string::npos) {
+				return false;
+			}
+			return fallback;
+		}
+
+		std::string BuildGatewayConfigGetJson(
+			const std::string& runtimeGatewayBind,
+			std::uint16_t runtimeGatewayPort,
+			const std::string& runtimeAgentModel,
+			bool runtimeAgentStreaming,
+			bool runtimeNodeParityEnabled,
+			bool runtimeNodeParityDiagnosticsEnabled,
+			const std::string& runtimeNodeParityRolloutMode,
+			bool runtimeEmailPreflightEnabled,
+			bool runtimeEmailPolicyProfilesEnabled,
+			bool runtimeEmailPolicyProfilesEnforce,
+			const std::string& runtimeDeepSeekApiKey,
+			const std::string& runtimeDeepSeekBaseUrl,
+			const std::string& runtimeDeepSeekDefaultModel) {
+			const bool dreamingEnabled = ReadFlagFile(ResolveDreamingEnabledFlagFilePath(), false);
+			const std::string hash = ReadOrCreateDreamingConfigHash();
+			return
+				"{"
+				"\"hash\":\"" + EscapeJsonString(hash) + "\","
+				"\"config\":{"
+				"\"plugins\":{"
+				"\"slots\":{\"memory\":\"memory-core\"},"
+				"\"entries\":{"
+				"\"memory-core\":{"
+				"\"config\":{"
+				"\"dreaming\":{\"enabled\":" + std::string(dreamingEnabled ? "true" : "false") + "}"
+				"}"
+				"}"
+				"}"
+				"},"
+				"\"gateway\":{\"bind\":\"" + EscapeJsonString(runtimeGatewayBind) + "\",\"port\":" + std::to_string(runtimeGatewayPort) + "},"
+				"\"agent\":{\"model\":\"" + EscapeJsonString(runtimeAgentModel) + "\",\"streaming\":" + std::string(runtimeAgentStreaming ? "true" : "false") + "}"
+				"},"
+				"\"nodeParity\":{"
+				"\"enabled\":" + std::string(runtimeNodeParityEnabled ? "true" : "false") +
+				",\"diagnosticsEnabled\":" + std::string(runtimeNodeParityDiagnosticsEnabled ? "true" : "false") +
+				",\"rolloutMode\":\"" + EscapeJsonString(runtimeNodeParityRolloutMode) + "\""
+				"},"
+				"\"emailFallback\":{"
+				"\"preflightEnabled\":" + std::string(runtimeEmailPreflightEnabled ? "true" : "false") +
+				",\"policyProfilesEnabled\":" + std::string(runtimeEmailPolicyProfilesEnabled ? "true" : "false") +
+				",\"policyProfilesEnforce\":" + std::string(runtimeEmailPolicyProfilesEnforce ? "true" : "false") +
+				"},"
+				"\"deepseek\":" + BuildGatewayDeepSeekConfigJson(
+					runtimeDeepSeekApiKey,
+					runtimeDeepSeekBaseUrl,
+					runtimeDeepSeekDefaultModel) +
+				"}";
 		}
 
 		std::string BuildSampleDreamDiaryIfMissing() {
@@ -242,30 +347,22 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 
 	void ConfigDiagnosticsHandlers::RegisterAll(GatewayHost& host) {
 		host.m_dispatcher.Register("gateway.config.get", [&host](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"gateway\":{\"bind\":\"" + EscapeJsonString(host.m_runtimeGatewayBind) +
-				"\",\"port\":" + std::to_string(host.m_runtimeGatewayPort) +
-				"},\"agent\":{\"model\":\"" + EscapeJsonString(host.m_runtimeAgentModel) +
-				"\",\"streaming\":" + std::string(host.m_runtimeAgentStreaming ? "true" : "false") +
-				"},\"nodeParity\":{\"enabled\":" +
-				std::string(host.m_runtimeNodeParityEnabled ? "true" : "false") +
-				",\"diagnosticsEnabled\":" +
-				std::string(host.m_runtimeNodeParityDiagnosticsEnabled ? "true" : "false") +
-				",\"rolloutMode\":\"" + EscapeJsonString(host.m_runtimeNodeParityRolloutMode) +
-				"\",\"invokeTotalCount\":" + std::to_string(host.m_nodeInvokeTotalCount) +
-				",\"policyRejectCount\":" + std::to_string(host.m_nodeInvokePolicyRejectCount) +
-				",\"wakeAttemptCount\":" + std::to_string(host.m_nodeWakeAttemptCount) +
-				",\"pendingEnqueueCount\":" + std::to_string(host.m_nodePendingQueueEnqueueCount) +
-				",\"wakeNudgeCount\":" + std::to_string(host.m_nodeWakeNudgeCount) +
-				"},\"emailFallback\":{\"preflightEnabled\":" +
-				std::string(host.m_runtimeEmailPreflightEnabled ? "true" : "false") +
-				",\"policyProfilesEnabled\":" +
-				std::string(host.m_runtimeEmailPolicyProfilesEnabled ? "true" : "false") +
-				",\"policyProfilesEnforce\":" +
-				std::string(host.m_runtimeEmailPolicyProfilesEnforce ? "true" : "false") +
-				"},\"deepseek\":" + BuildGatewayDeepSeekConfigJson(
+			return protocol::OkResponse(
+				request,
+				BuildGatewayConfigGetJson(
+					host.m_runtimeGatewayBind,
+					host.m_runtimeGatewayPort,
+					host.m_runtimeAgentModel,
+					host.m_runtimeAgentStreaming,
+					host.m_runtimeNodeParityEnabled,
+					host.m_runtimeNodeParityDiagnosticsEnabled,
+					host.m_runtimeNodeParityRolloutMode,
+					host.m_runtimeEmailPreflightEnabled,
+					host.m_runtimeEmailPolicyProfilesEnabled,
+					host.m_runtimeEmailPolicyProfilesEnforce,
 					host.m_runtimeDeepSeekApiKey,
 					host.m_runtimeDeepSeekBaseUrl,
-					host.m_runtimeDeepSeekDefaultModel) + "}");
+					host.m_runtimeDeepSeekDefaultModel));
 			});
 
 		host.m_dispatcher.Register("config.get", [&host](const protocol::RequestFrame& request) {
@@ -291,7 +388,29 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 			});
 
 		host.m_dispatcher.Register("config.patch", [](const protocol::RequestFrame& request) {
-			return protocol::OkResponse(request, "{\"patched\":true,\"updated\":true}");
+			const RequestParamsView params(request.paramsJson);
+			const std::string baseHash = params.GetString("baseHash");
+			const std::string raw = params.GetString("raw");
+			const bool currentEnabled = ReadFlagFile(ResolveDreamingEnabledFlagFilePath(), false);
+			const std::string currentHash = ReadOrCreateDreamingConfigHash();
+			if (!baseHash.empty() && baseHash != currentHash) {
+				return protocol::ErrorResponse(
+					request,
+					protocol::ErrorShape{
+						.code = "config_hash_mismatch",
+						.message = "Config hash mismatch. Refresh and retry.",
+						.detailsJson = "{\"expectedHash\":\"" + EscapeJsonString(currentHash) + "\"}",
+						.retryable = true,
+						.retryAfterMs = std::nullopt,
+					});
+			}
+			const bool nextEnabled = ExtractDreamingEnabledFromRawPatch(raw, currentEnabled);
+			WriteTextFile(ResolveDreamingEnabledFlagFilePath(), nextEnabled ? "1" : "0");
+			const std::string nextHash = BumpDreamingConfigHash();
+			return protocol::OkResponse(
+				request,
+				"{\"patched\":true,\"updated\":true,\"hash\":\"" + EscapeJsonString(nextHash) +
+				"\",\"dreamingEnabled\":" + std::string(nextEnabled ? "true" : "false") + "}");
 			});
 
 		host.m_dispatcher.Register("skills.search", [](const protocol::RequestFrame& request) {
