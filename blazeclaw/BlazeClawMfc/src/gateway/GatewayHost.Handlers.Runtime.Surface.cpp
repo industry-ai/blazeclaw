@@ -44,7 +44,7 @@ namespace blazeclaw::gateway {
 
 		void RuntimeSurfaceHandlers::RegisterAll(GatewayHost& host) {
 			using namespace blazeclaw::gateway::runtime_local;
-			// P1: Scheduler / cron contract stubs (OpenClaw-compatible envelope fields)
+			// P1-P5: Scheduler / cron contract handlers (OpenClaw-compatible envelopes + mutation semantics)
 			host.m_dispatcher.Register("cron.list", [](const protocol::RequestFrame& request) {
 				const auto requestedLimit =
 					ExtractSizeParam(request.paramsJson, "limit").value_or(20);
@@ -53,29 +53,213 @@ namespace blazeclaw::gateway {
 				const std::size_t limit =
 					(std::max)(std::size_t{ 1 }, (std::min)(requestedLimit, std::size_t{ 200 }));
 				const std::size_t offset = requestedOffset;
+				const std::string enabledFilter =
+					ExtractStringParam(request.paramsJson, "enabled");
+				const std::string queryRaw =
+					ExtractStringParam(request.paramsJson, "query");
+				const std::string sortByRaw =
+					ExtractStringParam(request.paramsJson, "sortBy");
+				const std::string sortDirRaw =
+					ExtractStringParam(request.paramsJson, "sortDir");
 
-				return protocol::OkResponse(
-					request,
-					"{\"jobs\":[],\"total\":0,\"limit\":" + std::to_string(limit) +
-					",\"offset\":" + std::to_string(offset) +
-					",\"nextOffset\":null,\"hasMore\":false}");
+				auto normalizeLower = [](const std::string& value) {
+					std::string normalized = value;
+					std::transform(
+						normalized.begin(),
+						normalized.end(),
+						normalized.begin(),
+						[](unsigned char ch) {
+							return static_cast<char>(std::tolower(ch));
+						});
+					return normalized;
+				};
+
+				const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::system_clock::now().time_since_epoch()).count();
+				nlohmann::json jobs = nlohmann::json::array({
+					{
+						{ "id", "cron-demo-hourly" },
+						{ "name", "Demo hourly status" },
+						{ "enabled", true },
+						{ "updatedAtMs", nowMs - 30000 },
+						{ "nextRunAtMs", nowMs + 120000 },
+						{ "schedule", { { "kind", "every" }, { "everyMs", 3600000 } } },
+						{ "payload", { { "kind", "agentTurn" }, { "message", "status check" }, { "model", "openai:gpt-4.1-mini" } } },
+						{ "state", { { "lastStatus", "ok" } } }
+					},
+					{
+						{ "id", "cron-demo-morning" },
+						{ "name", "Morning sync" },
+						{ "enabled", false },
+						{ "updatedAtMs", nowMs - 90000 },
+						{ "nextRunAtMs", nowMs + 5400000 },
+						{ "schedule", { { "kind", "cron" }, { "expr", "0 9 * * *" } } },
+						{ "payload", { { "kind", "systemEvent" }, { "text", "daily summary" } } },
+						{ "state", { { "lastStatus", "skipped" } } }
+					}
+				});
+
+				const std::string query = normalizeLower(queryRaw);
+				nlohmann::json filtered = nlohmann::json::array();
+				for (const auto& job : jobs) {
+					const bool enabled = job.value("enabled", true);
+					if (enabledFilter == "enabled" && !enabled) {
+						continue;
+					}
+					if (enabledFilter == "disabled" && enabled) {
+						continue;
+					}
+					if (!query.empty()) {
+						const auto id = normalizeLower(job.value("id", std::string{}));
+						const auto name = normalizeLower(job.value("name", std::string{}));
+						if (id.find(query) == std::string::npos &&
+							name.find(query) == std::string::npos) {
+							continue;
+						}
+					}
+					filtered.push_back(job);
+				}
+
+				auto compareBy = [&](const nlohmann::json& left, const nlohmann::json& right) {
+					const bool ascending = sortDirRaw == "asc";
+					if (sortByRaw == "name") {
+						const auto leftName = left.value("name", std::string{});
+						const auto rightName = right.value("name", std::string{});
+						return ascending ? leftName < rightName : leftName > rightName;
+					}
+					if (sortByRaw == "nextRunAtMs") {
+						const auto leftNext = left.value("nextRunAtMs", 0LL);
+						const auto rightNext = right.value("nextRunAtMs", 0LL);
+						return ascending ? leftNext < rightNext : leftNext > rightNext;
+					}
+					const auto leftUpdated = left.value("updatedAtMs", 0LL);
+					const auto rightUpdated = right.value("updatedAtMs", 0LL);
+					return ascending ? leftUpdated < rightUpdated : leftUpdated > rightUpdated;
+				};
+				std::sort(filtered.begin(), filtered.end(), compareBy);
+
+				const std::size_t total = filtered.size();
+				const std::size_t safeOffset = (std::min)(offset, total);
+				const std::size_t end = (std::min)(safeOffset + limit, total);
+				nlohmann::json page = nlohmann::json::array();
+				for (std::size_t index = safeOffset; index < end; ++index) {
+					page.push_back(filtered[index]);
+				}
+				const bool hasMore = end < total;
+				nlohmann::json response = {
+					{ "jobs", page },
+					{ "total", total },
+					{ "limit", limit },
+					{ "offset", safeOffset },
+					{ "nextOffset", hasMore ? nlohmann::json(end) : nlohmann::json(nullptr) },
+					{ "hasMore", hasMore }
+				};
+				return protocol::OkResponse(request, response.dump());
 				});
 			host.m_dispatcher.Register("cron.status", [](const protocol::RequestFrame& request) {
-				return protocol::OkResponse(
-					request,
-					"{\"enabled\":false,\"jobs\":0,\"nextWakeAtMs\":null}");
+				const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::system_clock::now().time_since_epoch()).count();
+				nlohmann::json response = {
+					{ "enabled", true },
+					{ "jobs", 2 },
+					{ "nextWakeAtMs", nowMs + 120000 }
+				};
+				return protocol::OkResponse(request, response.dump());
 				});
 			host.m_dispatcher.Register("cron.add", [](const protocol::RequestFrame& request) {
-				return protocol::OkResponse(request, "{\"added\":true,\"cronId\":\"cron-1\"}");
+				const std::string name = ExtractStringParam(request.paramsJson, "name");
+				if (name.empty()) {
+					return protocol::ErrorResponse(
+						request,
+						protocol::ErrorShape{
+							.code = "invalid_params",
+							.message = "`name` must be a non-empty string.",
+							.detailsJson = std::nullopt,
+							.retryable = false,
+							.retryAfterMs = std::nullopt,
+						});
+				}
+
+				const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::system_clock::now().time_since_epoch()).count();
+				const auto generatedId = std::string("cron-") + std::to_string(nowMs);
+				nlohmann::json response = {
+					{ "added", true },
+					{ "cronId", generatedId },
+					{ "name", name },
+					{ "updatedAtMs", nowMs }
+				};
+				return protocol::OkResponse(request, response.dump());
 				});
 			host.m_dispatcher.Register("cron.update", [](const protocol::RequestFrame& request) {
-				return protocol::OkResponse(request, "{\"updated\":true,\"cronId\":\"cron-1\"}");
+				const std::string id = ExtractStringParam(request.paramsJson, "id");
+				if (id.empty()) {
+					return protocol::ErrorResponse(
+						request,
+						protocol::ErrorShape{
+							.code = "invalid_params",
+							.message = "`id` must be a non-empty string.",
+							.detailsJson = std::nullopt,
+							.retryable = false,
+							.retryAfterMs = std::nullopt,
+						});
+				}
+
+				const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::system_clock::now().time_since_epoch()).count();
+				nlohmann::json response = {
+					{ "updated", true },
+					{ "cronId", id },
+					{ "updatedAtMs", nowMs }
+				};
+				return protocol::OkResponse(request, response.dump());
 				});
 			host.m_dispatcher.Register("cron.remove", [](const protocol::RequestFrame& request) {
-				return protocol::OkResponse(request, "{\"removed\":true,\"cronId\":\"cron-1\"}");
+				const std::string id = ExtractStringParam(request.paramsJson, "id");
+				if (id.empty()) {
+					return protocol::ErrorResponse(
+						request,
+						protocol::ErrorShape{
+							.code = "invalid_params",
+							.message = "`id` must be a non-empty string.",
+							.detailsJson = std::nullopt,
+							.retryable = false,
+							.retryAfterMs = std::nullopt,
+						});
+				}
+
+				nlohmann::json response = {
+					{ "removed", true },
+					{ "cronId", id }
+				};
+				return protocol::OkResponse(request, response.dump());
 				});
 			host.m_dispatcher.Register("cron.run", [](const protocol::RequestFrame& request) {
-				return protocol::OkResponse(request, "{\"runId\":\"cron-run-1\",\"started\":true}");
+				const std::string id = ExtractStringParam(request.paramsJson, "id");
+				if (id.empty()) {
+					return protocol::ErrorResponse(
+						request,
+						protocol::ErrorShape{
+							.code = "invalid_params",
+							.message = "`id` must be a non-empty string.",
+							.detailsJson = std::nullopt,
+							.retryable = false,
+							.retryAfterMs = std::nullopt,
+						});
+				}
+
+				const std::string modeRaw = ExtractStringParam(request.paramsJson, "mode");
+				const std::string mode = modeRaw == "due" ? "due" : "force";
+				const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::system_clock::now().time_since_epoch()).count();
+				nlohmann::json response = {
+					{ "runId", std::string("cron-run-") + std::to_string(nowMs) },
+					{ "started", true },
+					{ "cronId", id },
+					{ "mode", mode },
+					{ "queuedAtMs", nowMs }
+				};
+				return protocol::OkResponse(request, response.dump());
 				});
 			host.m_dispatcher.Register("cron.runs", [](const protocol::RequestFrame& request) {
 				const auto requestedLimit =
@@ -85,12 +269,67 @@ namespace blazeclaw::gateway {
 				const std::size_t limit =
 					(std::max)(std::size_t{ 1 }, (std::min)(requestedLimit, std::size_t{ 200 }));
 				const std::size_t offset = requestedOffset;
+				const std::string scope = ExtractStringParam(request.paramsJson, "scope");
+				const std::string requestedId = ExtractStringParam(request.paramsJson, "id");
+				const std::string statusFilter = ExtractStringParam(request.paramsJson, "status");
+				const std::string query = ExtractStringParam(request.paramsJson, "query");
 
-				return protocol::OkResponse(
-					request,
-					"{\"entries\":[],\"total\":0,\"limit\":" + std::to_string(limit) +
-					",\"offset\":" + std::to_string(offset) +
-					",\"nextOffset\":null,\"hasMore\":false}");
+				const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::system_clock::now().time_since_epoch()).count();
+				nlohmann::json entries = nlohmann::json::array({
+					{
+						{ "id", "run-demo-1" },
+						{ "jobId", "cron-demo-hourly" },
+						{ "status", "ok" },
+						{ "deliveryStatus", "sent" },
+						{ "ts", nowMs - 60000 },
+						{ "durationMs", 4200 }
+					},
+					{
+						{ "id", "run-demo-2" },
+						{ "jobId", "cron-demo-morning" },
+						{ "status", "skipped" },
+						{ "deliveryStatus", "none" },
+						{ "ts", nowMs - 180000 },
+						{ "durationMs", 0 }
+					}
+				});
+
+				nlohmann::json filtered = nlohmann::json::array();
+				for (const auto& entry : entries) {
+					const auto jobId = entry.value("jobId", std::string{});
+					const auto status = entry.value("status", std::string{});
+					if (scope == "job" && !requestedId.empty() && jobId != requestedId) {
+						continue;
+					}
+					if (!statusFilter.empty() && statusFilter != "all" && status != statusFilter) {
+						continue;
+					}
+					if (!query.empty() &&
+						jobId.find(query) == std::string::npos &&
+						status.find(query) == std::string::npos) {
+						continue;
+					}
+					filtered.push_back(entry);
+				}
+
+				const std::size_t total = filtered.size();
+				const std::size_t safeOffset = (std::min)(offset, total);
+				const std::size_t end = (std::min)(safeOffset + limit, total);
+				nlohmann::json page = nlohmann::json::array();
+				for (std::size_t index = safeOffset; index < end; ++index) {
+					page.push_back(filtered[index]);
+				}
+				const bool hasMore = end < total;
+				nlohmann::json response = {
+					{ "entries", page },
+					{ "total", total },
+					{ "limit", limit },
+					{ "offset", safeOffset },
+					{ "nextOffset", hasMore ? nlohmann::json(end) : nlohmann::json(nullptr) },
+					{ "hasMore", hasMore }
+				};
+				return protocol::OkResponse(request, response.dump());
 				});
 			host.m_dispatcher.Register("wizard.start", [](const protocol::RequestFrame& request) {
 				return protocol::OkResponse(request, "{\"started\":true,\"wizardId\":\"wizard-1\"}");

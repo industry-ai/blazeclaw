@@ -400,6 +400,15 @@
                 messagesEl.innerHTML = "";
             }
 
+            function escapeHtml(value) {
+                return String(value || "")
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#39;");
+            }
+
             function setInputValue(text) {
                 if (state.inputEl) {
                     state.inputEl.value = String(text || "");
@@ -717,16 +726,16 @@
                         rows.push("<div class=\"agents-row\">Loading cron surface...</div>");
                     }
                     if (state.agentCronError) {
-                        rows.push(`<div class=\"agents-row error\">${state.agentCronError}</div>`);
+                        rows.push(`<div class=\"agents-row error\">${escapeHtml(state.agentCronError)}</div>`);
                     }
                     if (state.agentCronStatusError) {
-                        rows.push(`<div class=\"agents-row error\">${state.agentCronStatusError}</div>`);
+                        rows.push(`<div class=\"agents-row error\">${escapeHtml(state.agentCronStatusError)}</div>`);
                     }
                     if (state.agentCronJobsError) {
-                        rows.push(`<div class=\"agents-row error\">${state.agentCronJobsError}</div>`);
+                        rows.push(`<div class=\"agents-row error\">${escapeHtml(state.agentCronJobsError)}</div>`);
                     }
                     if (state.agentCronRunsError) {
-                        rows.push(`<div class=\"agents-row error\">${state.agentCronRunsError}</div>`);
+                        rows.push(`<div class=\"agents-row error\">${escapeHtml(state.agentCronRunsError)}</div>`);
                     }
 
                     const cronStatus = state.agentCronStatusResult || null;
@@ -739,10 +748,23 @@
                     const selectedJobId = typeof state.agentCronSelectedJobId === "string"
                         ? state.agentCronSelectedJobId
                         : "";
+                    const selectedJob = jobs.find((entry) => {
+                        return String(entry && entry.id || "").trim() === selectedJobId;
+                    }) || null;
+                    const form = state.agentCronForm || {};
+                    const fieldErrors = state.agentCronFieldErrors || {};
+                    const editingLabel = state.agentCronEditingJobId
+                        ? `Editing job ${escapeHtml(state.agentCronEditingJobId)}`
+                        : "Creating new job";
+                    const cronBusy = state.agentCronBusy ? "yes" : "no";
+                    const modelSuggestions = Array.isArray(state.agentCronModelSuggestions)
+                        ? state.agentCronModelSuggestions
+                        : [];
 
                     rows.push(`<div class=\"agents-row\">Cron enabled: ${cronStatus ? (cronStatus.enabled ? "yes" : "no") : "unknown"}</div>`);
                     rows.push(`<div class=\"agents-row\">Cron jobs total: ${Number.isFinite(Number(state.agentCronJobsTotal)) ? state.agentCronJobsTotal : jobs.length}</div>`);
                     rows.push(`<div class=\"agents-row\">Cron next wake: ${cronStatus && Number.isFinite(Number(cronStatus.nextWakeAtMs)) ? cronStatus.nextWakeAtMs : "(none)"}</div>`);
+                    rows.push(`<div class=\"agents-row\">Cron busy: ${cronBusy}</div>`);
 
                     rows.push(`<div class=\"agents-row\">Jobs loaded: ${jobs.length}</div>`);
                     rows.push(`<div class=\"agents-row\">Jobs has more: ${state.agentCronJobsHasMore ? "yes" : "no"}</div>`);
@@ -751,29 +773,107 @@
                     rows.push(`<div class=\"agents-row\">Runs has more: ${state.agentCronRunsHasMore ? "yes" : "no"}</div>`);
                     rows.push(`<div class=\"agents-row\">Runs filter: scope=${state.agentCronRunsScope}, status=${state.agentCronRunsStatusFilter}, sort=${state.agentCronRunsSortDir}</div>`);
                     rows.push(`<div class=\"agents-row\">Selected cron job: ${selectedJobId || "(none)"}</div>`);
+                    rows.push(`<div class=\"agents-row\">Model suggestions: ${modelSuggestions.length}</div>`);
 
-                    if (jobs.length > 0) {
-                        const firstJob = jobs[0] || {};
-                        rows.push(`<div class=\"agents-row\">First job id: ${String(firstJob.id || "(n/a)")}</div>`);
-                        rows.push(`<div class=\"agents-row\">First job name: ${String(firstJob.name || "(n/a)")}</div>`);
-                        rows.push(`<div class=\"agents-row\">First job schedule: ${firstJob.schedule && firstJob.schedule.kind ? String(firstJob.schedule.kind) : "(n/a)"}</div>`);
+                    const jobItems = jobs.slice(0, 8).map((job) => {
+                        const jobId = String(job && job.id || "").trim();
+                        const active = jobId === selectedJobId ? " active" : "";
+                        const label = String(job && job.name || jobId || "(unnamed)");
+                        const scheduleKind = String(job && job.schedule && job.schedule.kind || "n/a");
+                        return `<button class=\"agents-chip${active}\" data-cron-job-id=\"${escapeHtml(jobId)}\" title=\"schedule=${escapeHtml(scheduleKind)}\">${escapeHtml(label)}</button>`;
+                    });
+                    if (jobItems.length > 0) {
+                        rows.push(`<div class=\"agents-list\">${jobItems.join("")}</div>`);
                     }
+
+                    rows.push(`<div class=\"agents-row\">${editingLabel}</div>`);
+                    rows.push(`<div class=\"agents-row\">`
+                        + `<label>Name <input data-cron-field=\"name\" value=\"${escapeHtml(form.name || "")}\" /></label> `
+                        + `<label>Enabled <input type=\"checkbox\" data-cron-field=\"enabled\"${form.enabled === false ? "" : " checked"} /></label> `
+                        + `<label>Schedule <select data-cron-field=\"scheduleKind\">`
+                        + `<option value=\"every\"${String(form.scheduleKind || "every") === "every" ? " selected" : ""}>every</option>`
+                        + `<option value=\"at\"${String(form.scheduleKind || "") === "at" ? " selected" : ""}>at</option>`
+                        + `<option value=\"cron\"${String(form.scheduleKind || "") === "cron" ? " selected" : ""}>cron</option>`
+                        + `</select></label>`
+                        + `</div>`);
+
+                    rows.push(`<div class=\"agents-row\">`
+                        + `<label>At <input data-cron-field=\"scheduleAt\" value=\"${escapeHtml(form.scheduleAt || "")}\" placeholder=\"2026-04-21T09:30\" /></label> `
+                        + `<label>Every <input data-cron-field=\"everyAmount\" value=\"${escapeHtml(form.everyAmount || "")}\" size=\"4\" /></label> `
+                        + `<label>Unit <select data-cron-field=\"everyUnit\">`
+                        + `<option value=\"minutes\"${String(form.everyUnit || "minutes") === "minutes" ? " selected" : ""}>minutes</option>`
+                        + `<option value=\"hours\"${String(form.everyUnit || "") === "hours" ? " selected" : ""}>hours</option>`
+                        + `<option value=\"days\"${String(form.everyUnit || "") === "days" ? " selected" : ""}>days</option>`
+                        + `</select></label>`
+                        + `</div>`);
+
+                    rows.push(`<div class=\"agents-row\">`
+                        + `<label>Cron expr <input data-cron-field=\"cronExpr\" value=\"${escapeHtml(form.cronExpr || "")}\" placeholder=\"*/10 * * * *\" /></label> `
+                        + `<label>Payload <select data-cron-field=\"payloadKind\">`
+                        + `<option value=\"agentTurn\"${String(form.payloadKind || "agentTurn") === "agentTurn" ? " selected" : ""}>agentTurn</option>`
+                        + `<option value=\"systemEvent\"${String(form.payloadKind || "") === "systemEvent" ? " selected" : ""}>systemEvent</option>`
+                        + `</select></label>`
+                        + `</div>`);
+
+                    rows.push(`<div class=\"agents-row\">`
+                        + `<label>Payload text <input data-cron-field=\"payloadText\" value=\"${escapeHtml(form.payloadText || "")}\" /></label> `
+                        + `<label>Model <input data-cron-field=\"payloadModel\" list=\"cronModelSuggestions\" value=\"${escapeHtml(form.payloadModel || "")}\" /></label> `
+                        + `<label>Thinking <input data-cron-field=\"payloadThinking\" value=\"${escapeHtml(form.payloadThinking || "")}\" /></label> `
+                        + `<label>Timeout(s) <input data-cron-field=\"timeoutSeconds\" value=\"${escapeHtml(form.timeoutSeconds || "")}\" size=\"6\" /></label>`
+                        + `</div>`);
+
+                    rows.push(`<div class=\"agents-row\">`
+                        + `<label>Delivery <select data-cron-field=\"deliveryMode\">`
+                        + `<option value=\"none\"${String(form.deliveryMode || "none") === "none" ? " selected" : ""}>none</option>`
+                        + `<option value=\"webhook\"${String(form.deliveryMode || "") === "webhook" ? " selected" : ""}>webhook</option>`
+                        + `<option value=\"announce\"${String(form.deliveryMode || "") === "announce" ? " selected" : ""}>announce</option>`
+                        + `</select></label> `
+                        + `<label>Delivery to <input data-cron-field=\"deliveryTo\" value=\"${escapeHtml(form.deliveryTo || "")}\" /></label> `
+                        + `<label>Failure alert <select data-cron-field=\"failureAlertMode\">`
+                        + `<option value=\"inherit\"${String(form.failureAlertMode || "inherit") === "inherit" ? " selected" : ""}>inherit</option>`
+                        + `<option value=\"disabled\"${String(form.failureAlertMode || "") === "disabled" ? " selected" : ""}>disabled</option>`
+                        + `<option value=\"custom\"${String(form.failureAlertMode || "") === "custom" ? " selected" : ""}>custom</option>`
+                        + `</select></label> `
+                        + `<label>Alert after <input data-cron-field=\"failureAlertAfter\" value=\"${escapeHtml(form.failureAlertAfter || "")}\" size=\"6\" /></label> `
+                        + `<label>Cooldown(s) <input data-cron-field=\"failureAlertCooldownSeconds\" value=\"${escapeHtml(form.failureAlertCooldownSeconds || "")}\" size=\"6\" /></label>`
+                        + `</div>`);
+
+                    if (Object.keys(fieldErrors).length > 0) {
+                        const errorText = Object.keys(fieldErrors).map((key) => {
+                            return `${key}: ${fieldErrors[key]}`;
+                        }).join(" | ");
+                        rows.push(`<div class=\"agents-row error\">Field errors: ${escapeHtml(errorText)}</div>`);
+                    }
+
+                    if (selectedJob) {
+                        rows.push(`<div class=\"agents-row\">Selected schedule: ${escapeHtml(String(selectedJob.schedule && selectedJob.schedule.kind || "n/a"))}</div>`);
+                        rows.push(`<div class=\"agents-row\">Selected payload: ${escapeHtml(String(selectedJob.payload && selectedJob.payload.kind || "n/a"))}</div>`);
+                    }
+
                     if (runs.length > 0) {
                         const firstRun = runs[0] || {};
-                        rows.push(`<div class=\"agents-row\">First run job: ${String(firstRun.jobId || "(n/a)")}</div>`);
-                        rows.push(`<div class=\"agents-row\">First run status: ${String(firstRun.status || "(n/a)")}</div>`);
-                        rows.push(`<div class=\"agents-row\">First run ts: ${String(firstRun.ts || "(n/a)")}</div>`);
+                        rows.push(`<div class=\"agents-row\">First run job: ${escapeHtml(String(firstRun.jobId || "(n/a)"))}</div>`);
+                        rows.push(`<div class=\"agents-row\">First run status: ${escapeHtml(String(firstRun.status || "(n/a)"))}</div>`);
+                        rows.push(`<div class=\"agents-row\">First run ts: ${escapeHtml(String(firstRun.ts || "(n/a)"))}</div>`);
                     }
+
+                    rows.push(`<datalist id=\"cronModelSuggestions\">${modelSuggestions.map((id) => `<option value=\"${escapeHtml(id)}\"></option>`).join("")}</datalist>`);
 
                     rows.push(`<div class=\"agents-row\">`
                         + `<button class=\"agents-chip\" data-cron-action=\"refresh\">Refresh</button> `
+                        + `<button class=\"agents-chip\" data-cron-action=\"save\"${state.agentCronBusy ? " disabled" : ""}>${state.agentCronEditingJobId ? "Update Job" : "Add Job"}</button> `
+                        + `<button class=\"agents-chip\" data-cron-action=\"cancel-edit\"${state.agentCronEditingJobId ? "" : " disabled"}>Cancel Edit</button> `
+                        + `<button class=\"agents-chip\" data-cron-action=\"run-now\"${selectedJobId ? "" : " disabled"}>Run Now</button> `
+                        + `<button class=\"agents-chip\" data-cron-action=\"remove\"${selectedJobId ? "" : " disabled"}>Remove</button> `
+                        + `<button class=\"agents-chip\" data-cron-action=\"edit\"${selectedJobId ? "" : " disabled"}>Edit</button> `
+                        + `<button class=\"agents-chip\" data-cron-action=\"clone\"${selectedJobId ? "" : " disabled"}>Clone</button> `
                         + `<button class=\"agents-chip\" data-cron-action=\"jobs-more\"${state.agentCronJobsHasMore ? "" : " disabled"}>Load More Jobs</button> `
                         + `<button class=\"agents-chip\" data-cron-action=\"runs-more\"${state.agentCronRunsHasMore ? "" : " disabled"}>Load More Runs</button> `
                         + `<button class=\"agents-chip\" data-cron-action=\"scope-all\">Scope All Runs</button> `
                         + `<button class=\"agents-chip\" data-cron-action=\"scope-job\"${selectedJobId ? "" : " disabled"}>Scope Selected Job</button>`
                         + `</div>`);
 
-                    rows.push("<div class=\"agents-row\">Capability mode: cron read-surface parity baseline via cron.status/list/runs</div>");
+                    rows.push("<div class=\"agents-row\">Capability mode: cron mutation + form parity baseline via cron.status/list/add/update/remove/run/runs</div>");
                     rows.push("<div class=\"agents-row\">Parity track: docs/compare/cron.ts/CRON_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md</div>");
                 }
 
@@ -837,6 +937,40 @@
                     });
                 });
 
+                state.agentsSurfaceEl.querySelectorAll("[data-cron-job-id]").forEach((el) => {
+                    el.addEventListener("click", () => {
+                        const selectedJobId = String(el.getAttribute("data-cron-job-id") || "").trim();
+                        if (!selectedJobId) {
+                            return;
+                        }
+
+                        agentsController.updateCronRunsFilter({
+                            selectedJobId,
+                        });
+                        emitAgentsTelemetry("cron.job.selected", {
+                            panel: state.agentsPanel,
+                            selectedJobId,
+                        });
+                        void agentsController.loadCronRuns({ append: false });
+                    });
+                });
+
+                state.agentsSurfaceEl.querySelectorAll("[data-cron-field]").forEach((el) => {
+                    const field = String(el.getAttribute("data-cron-field") || "").trim();
+                    if (!field) {
+                        return;
+                    }
+
+                    const isCheckbox = el instanceof HTMLInputElement && el.type === "checkbox";
+                    const eventName = isCheckbox ? "change" : "input";
+                    el.addEventListener(eventName, () => {
+                        const value = isCheckbox
+                            ? Boolean(el.checked)
+                            : String(el.value || "");
+                        agentsController.updateCronFormField(field, value);
+                    });
+                });
+
                 state.agentsSurfaceEl.querySelectorAll("[data-cron-action]").forEach((el) => {
                     el.addEventListener("click", () => {
                         const action = String(el.getAttribute("data-cron-action") || "").trim();
@@ -847,10 +981,52 @@
                         emitAgentsTelemetry("cron.action", {
                             action,
                             panel: state.agentsPanel,
+                            selectedJobId: String(state.agentCronSelectedJobId || "").trim() || null,
+                            editingJobId: String(state.agentCronEditingJobId || "").trim() || null,
                         });
 
                         if (action === "refresh") {
                             void agentsController.loadPanelDataForCurrentAgent();
+                            return;
+                        }
+                        if (action === "save") {
+                            void agentsController.addOrUpdateCronJob();
+                            return;
+                        }
+                        if (action === "cancel-edit") {
+                            agentsController.cancelCronEdit();
+                            return;
+                        }
+                        if (action === "run-now") {
+                            const selectedJobId = String(state.agentCronSelectedJobId || "").trim();
+                            if (!selectedJobId) {
+                                return;
+                            }
+                            void agentsController.runCronJobNow(selectedJobId, "force");
+                            return;
+                        }
+                        if (action === "remove") {
+                            const selectedJobId = String(state.agentCronSelectedJobId || "").trim();
+                            if (!selectedJobId) {
+                                return;
+                            }
+                            void agentsController.removeCronJob(selectedJobId);
+                            return;
+                        }
+                        if (action === "edit") {
+                            const selectedJobId = String(state.agentCronSelectedJobId || "").trim();
+                            if (!selectedJobId) {
+                                return;
+                            }
+                            agentsController.startCronEdit(selectedJobId);
+                            return;
+                        }
+                        if (action === "clone") {
+                            const selectedJobId = String(state.agentCronSelectedJobId || "").trim();
+                            if (!selectedJobId) {
+                                return;
+                            }
+                            agentsController.startCronClone(selectedJobId);
                             return;
                         }
                         if (action === "jobs-more") {

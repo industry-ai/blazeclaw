@@ -253,6 +253,39 @@
         if (state.agentCronRunsSortDir !== "asc" && state.agentCronRunsSortDir !== "desc") {
             state.agentCronRunsSortDir = "desc";
         }
+        if (typeof state.agentCronBusy !== "boolean") {
+            state.agentCronBusy = false;
+        }
+        if (typeof state.agentCronEditingJobId !== "string" && state.agentCronEditingJobId !== null) {
+            state.agentCronEditingJobId = null;
+        }
+        if (!state.agentCronFieldErrors || typeof state.agentCronFieldErrors !== "object") {
+            state.agentCronFieldErrors = {};
+        }
+        if (!state.agentCronForm || typeof state.agentCronForm !== "object") {
+            state.agentCronForm = {
+                name: "",
+                enabled: true,
+                scheduleKind: "every",
+                scheduleAt: "",
+                everyAmount: "30",
+                everyUnit: "minutes",
+                cronExpr: "",
+                payloadKind: "agentTurn",
+                payloadText: "",
+                payloadModel: "",
+                payloadThinking: "",
+                timeoutSeconds: "",
+                deliveryMode: "none",
+                deliveryTo: "",
+                failureAlertMode: "inherit",
+                failureAlertAfter: "",
+                failureAlertCooldownSeconds: "",
+            };
+        }
+        if (!Array.isArray(state.agentCronModelSuggestions)) {
+            state.agentCronModelSuggestions = [];
+        }
 
         if (!state.agentsPersistence || typeof state.agentsPersistence !== "object") {
             state.agentsPersistence = {
@@ -1249,6 +1282,554 @@
             };
         }
 
+        function normalizeCronJob(entry) {
+            const source = entry && typeof entry === "object"
+                ? entry
+                : {};
+            const payload = source.payload && typeof source.payload === "object"
+                ? source.payload
+                : {};
+            const schedule = source.schedule && typeof source.schedule === "object"
+                ? source.schedule
+                : {};
+            const normalizedId = String(source.id || source.cronId || "").trim();
+            const normalizedName = String(source.name || "").trim();
+
+            return {
+                id: normalizedId,
+                name: normalizedName,
+                enabled: source.enabled !== false,
+                schedule: {
+                    kind: String(schedule.kind || "every").trim() || "every",
+                    at: typeof schedule.at === "string" ? schedule.at : "",
+                    everyMs: Number.isFinite(Number(schedule.everyMs))
+                        ? Number(schedule.everyMs)
+                        : null,
+                    expr: typeof schedule.expr === "string" ? schedule.expr : "",
+                    tz: typeof schedule.tz === "string" ? schedule.tz : "",
+                    staggerMs: Number.isFinite(Number(schedule.staggerMs))
+                        ? Number(schedule.staggerMs)
+                        : null,
+                },
+                payload: {
+                    kind: String(payload.kind || "agentTurn").trim() || "agentTurn",
+                    message: typeof payload.message === "string"
+                        ? payload.message
+                        : "",
+                    text: typeof payload.text === "string"
+                        ? payload.text
+                        : "",
+                    model: typeof payload.model === "string"
+                        ? payload.model
+                        : "",
+                    thinking: typeof payload.thinking === "string"
+                        ? payload.thinking
+                        : "",
+                    timeoutSeconds: Number.isFinite(Number(payload.timeoutSeconds))
+                        ? Number(payload.timeoutSeconds)
+                        : null,
+                },
+                state: source.state && typeof source.state === "object"
+                    ? source.state
+                    : null,
+            };
+        }
+
+        function toNumber(value, fallback) {
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : fallback;
+        }
+
+        function normalizeLowercaseStringOrEmpty(value) {
+            return String(value || "").trim().toLowerCase();
+        }
+
+        function supportsAnnounceDelivery(form) {
+            const sessionTarget = String(form && form.sessionTarget || "main").trim();
+            const payloadKind = String(form && form.payloadKind || "agentTurn").trim();
+            return sessionTarget !== "main" && payloadKind === "agentTurn";
+        }
+
+        function normalizeCronFormState(form) {
+            const source = form && typeof form === "object" ? form : {};
+            const normalized = Object.assign({}, source);
+            if (normalized.deliveryMode !== "announce") {
+                return normalized;
+            }
+            if (supportsAnnounceDelivery(normalized)) {
+                return normalized;
+            }
+            normalized.deliveryMode = "none";
+            return normalized;
+        }
+
+        function validateCronForm(form) {
+            const errors = {};
+            const source = form && typeof form === "object" ? form : {};
+            if (!String(source.name || "").trim()) {
+                errors.name = "Name is required.";
+            }
+
+            const scheduleKind = String(source.scheduleKind || "every").trim();
+            if (scheduleKind === "at") {
+                const atValue = String(source.scheduleAt || "").trim();
+                const parsedAt = Date.parse(atValue);
+                if (!Number.isFinite(parsedAt)) {
+                    errors.scheduleAt = "Run time must be a valid date/time.";
+                }
+            } else if (scheduleKind === "every") {
+                const amount = toNumber(String(source.everyAmount || "").trim(), 0);
+                if (amount <= 0) {
+                    errors.everyAmount = "Interval amount must be greater than 0.";
+                }
+            } else {
+                const cronExpr = String(source.cronExpr || "").trim();
+                if (!cronExpr) {
+                    errors.cronExpr = "Cron expression is required.";
+                }
+            }
+
+            const payloadKind = String(source.payloadKind || "agentTurn").trim();
+            const payloadText = String(source.payloadText || "").trim();
+            if (!payloadText) {
+                errors.payloadText = payloadKind === "systemEvent"
+                    ? "System event text is required."
+                    : "Agent message is required.";
+            }
+
+            const timeoutText = String(source.timeoutSeconds || "").trim();
+            if (payloadKind === "agentTurn" && timeoutText) {
+                const timeout = toNumber(timeoutText, 0);
+                if (timeout <= 0) {
+                    errors.timeoutSeconds = "Timeout must be greater than 0.";
+                }
+            }
+
+            if (String(source.deliveryMode || "none").trim() === "webhook") {
+                const deliveryTo = String(source.deliveryTo || "").trim();
+                if (!deliveryTo) {
+                    errors.deliveryTo = "Webhook URL is required.";
+                } else if (!/^https?:\/\//i.test(deliveryTo)) {
+                    errors.deliveryTo = "Webhook URL must start with http:// or https://.";
+                }
+            }
+
+            if (String(source.failureAlertMode || "inherit").trim() === "custom") {
+                const afterText = String(source.failureAlertAfter || "").trim();
+                if (afterText) {
+                    const after = toNumber(afterText, 0);
+                    if (!Number.isFinite(after) || after <= 0) {
+                        errors.failureAlertAfter = "Failure alert threshold must be greater than 0.";
+                    }
+                }
+
+                const cooldownText = String(source.failureAlertCooldownSeconds || "").trim();
+                if (cooldownText) {
+                    const cooldown = toNumber(cooldownText, -1);
+                    if (!Number.isFinite(cooldown) || cooldown < 0) {
+                        errors.failureAlertCooldownSeconds = "Cooldown must be 0 or greater.";
+                    }
+                }
+            }
+
+            return errors;
+        }
+
+        function hasCronFormErrors(errors) {
+            return errors && typeof errors === "object" && Object.keys(errors).length > 0;
+        }
+
+        function buildCronSchedule(form) {
+            const scheduleKind = String(form && form.scheduleKind || "every").trim();
+            if (scheduleKind === "at") {
+                const parsed = Date.parse(String(form && form.scheduleAt || "").trim());
+                if (!Number.isFinite(parsed)) {
+                    throw new Error("Invalid run time.");
+                }
+                return {
+                    kind: "at",
+                    at: new Date(parsed).toISOString(),
+                };
+            }
+
+            if (scheduleKind === "every") {
+                const amount = toNumber(String(form && form.everyAmount || "").trim(), 0);
+                if (amount <= 0) {
+                    throw new Error("Invalid interval amount.");
+                }
+                const unit = String(form && form.everyUnit || "minutes").trim();
+                const multiplier = unit === "hours"
+                    ? 3600000
+                    : unit === "days"
+                        ? 86400000
+                        : 60000;
+                return {
+                    kind: "every",
+                    everyMs: amount * multiplier,
+                };
+            }
+
+            const expr = String(form && form.cronExpr || "").trim();
+            if (!expr) {
+                throw new Error("Cron expression is required.");
+            }
+
+            return {
+                kind: "cron",
+                expr: expr,
+            };
+        }
+
+        function buildCronPayload(form) {
+            const payloadKind = String(form && form.payloadKind || "agentTurn").trim();
+            if (payloadKind === "systemEvent") {
+                const text = String(form && form.payloadText || "").trim();
+                if (!text) {
+                    throw new Error("System event text is required.");
+                }
+                return {
+                    kind: "systemEvent",
+                    text,
+                };
+            }
+
+            const message = String(form && form.payloadText || "").trim();
+            if (!message) {
+                throw new Error("Agent message is required.");
+            }
+
+            const payload = {
+                kind: "agentTurn",
+                message,
+            };
+            const model = String(form && form.payloadModel || "").trim();
+            if (model) {
+                payload.model = model;
+            }
+            const thinking = String(form && form.payloadThinking || "").trim();
+            if (thinking) {
+                payload.thinking = thinking;
+            }
+            const timeout = toNumber(String(form && form.timeoutSeconds || "").trim(), 0);
+            if (timeout > 0) {
+                payload.timeoutSeconds = timeout;
+            }
+            return payload;
+        }
+
+        function resetCronFormToDefaults() {
+            state.agentCronEditingJobId = null;
+            state.agentCronForm = {
+                name: "",
+                enabled: true,
+                scheduleKind: "every",
+                scheduleAt: "",
+                everyAmount: "30",
+                everyUnit: "minutes",
+                cronExpr: "",
+                payloadKind: "agentTurn",
+                payloadText: "",
+                payloadModel: "",
+                payloadThinking: "",
+                timeoutSeconds: "",
+                deliveryMode: "none",
+                deliveryTo: "",
+                failureAlertMode: "inherit",
+                failureAlertAfter: "",
+                failureAlertCooldownSeconds: "",
+            };
+            state.agentCronFieldErrors = validateCronForm(state.agentCronForm);
+        }
+
+        function buildCloneName(name, existingNames) {
+            const base = String(name || "").trim() || "Job";
+            const first = base + " copy";
+            if (!existingNames.has(normalizeLowercaseStringOrEmpty(first))) {
+                return first;
+            }
+
+            let index = 2;
+            while (index < 1000) {
+                const next = base + " copy " + index;
+                if (!existingNames.has(normalizeLowercaseStringOrEmpty(next))) {
+                    return next;
+                }
+                index += 1;
+            }
+
+            return base + " copy " + Date.now();
+        }
+
+        function jobToForm(job, previousForm) {
+            const source = job && typeof job === "object" ? job : {};
+            const schedule = source.schedule && typeof source.schedule === "object"
+                ? source.schedule
+                : {};
+            const payload = source.payload && typeof source.payload === "object"
+                ? source.payload
+                : {};
+            const fallback = previousForm && typeof previousForm === "object"
+                ? previousForm
+                : state.agentCronForm;
+
+            const next = {
+                name: String(source.name || "").trim(),
+                enabled: source.enabled !== false,
+                scheduleKind: String(schedule.kind || "every").trim() || "every",
+                scheduleAt: typeof schedule.at === "string" ? schedule.at : "",
+                everyAmount: fallback && fallback.everyAmount ? fallback.everyAmount : "30",
+                everyUnit: fallback && fallback.everyUnit ? fallback.everyUnit : "minutes",
+                cronExpr: typeof schedule.expr === "string" ? schedule.expr : "",
+                payloadKind: String(payload.kind || "agentTurn").trim() || "agentTurn",
+                payloadText: payload.kind === "systemEvent"
+                    ? String(payload.text || "")
+                    : String(payload.message || ""),
+                payloadModel: String(payload.model || ""),
+                payloadThinking: String(payload.thinking || ""),
+                timeoutSeconds: Number.isFinite(Number(payload.timeoutSeconds))
+                    ? String(Math.floor(Number(payload.timeoutSeconds)))
+                    : "",
+                deliveryMode: "none",
+                deliveryTo: "",
+                failureAlertMode: "inherit",
+                failureAlertAfter: "",
+                failureAlertCooldownSeconds: "",
+            };
+
+            if (next.scheduleKind === "every") {
+                const everyMs = Number(schedule.everyMs);
+                if (Number.isFinite(everyMs) && everyMs > 0) {
+                    if (everyMs % 86400000 === 0) {
+                        next.everyAmount = String(Math.max(1, Math.floor(everyMs / 86400000)));
+                        next.everyUnit = "days";
+                    } else if (everyMs % 3600000 === 0) {
+                        next.everyAmount = String(Math.max(1, Math.floor(everyMs / 3600000)));
+                        next.everyUnit = "hours";
+                    } else {
+                        next.everyAmount = String(Math.max(1, Math.floor(everyMs / 60000)));
+                        next.everyUnit = "minutes";
+                    }
+                }
+            }
+
+            return normalizeCronFormState(next);
+        }
+
+        async function loadCronModelSuggestions(options) {
+            const opts = options || {};
+            const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
+                ? opts.shouldIgnoreResponse
+                : null;
+            if (!request || !state.connected) {
+                state.agentCronModelSuggestions = [];
+                return [];
+            }
+
+            try {
+                const res = await request("models.list", {});
+                if (shouldIgnoreResponse && shouldIgnoreResponse()) {
+                    return [];
+                }
+
+                const payload = res && res.payload ? res.payload : res;
+                const models = payload && Array.isArray(payload.models)
+                    ? payload.models
+                    : [];
+                const unique = new Set();
+                models.forEach(function (entry) {
+                    const id = String(entry && entry.id || "").trim();
+                    if (id) {
+                        unique.add(id);
+                    }
+                });
+                state.agentCronModelSuggestions = Array.from(unique).sort(function (left, right) {
+                    return left.localeCompare(right);
+                });
+                return state.agentCronModelSuggestions;
+            } catch (_) {
+                state.agentCronModelSuggestions = [];
+                return [];
+            }
+        }
+
+        async function withCronBusy(run) {
+            if (!request || !state.connected || state.agentCronBusy) {
+                return false;
+            }
+
+            state.agentCronBusy = true;
+            state.agentCronError = null;
+            onStateUpdated();
+
+            try {
+                await run();
+                return true;
+            } catch (err) {
+                state.agentCronError = resolveToolsErrorMessage(err, "cron mutation");
+                return false;
+            } finally {
+                state.agentCronBusy = false;
+                onStateUpdated();
+            }
+        }
+
+        async function addOrUpdateCronJob() {
+            return withCronBusy(async function () {
+                const normalizedForm = normalizeCronFormState(state.agentCronForm);
+                state.agentCronForm = normalizedForm;
+                const fieldErrors = validateCronForm(normalizedForm);
+                state.agentCronFieldErrors = fieldErrors;
+                if (hasCronFormErrors(fieldErrors)) {
+                    return;
+                }
+
+                const payload = {
+                    name: String(normalizedForm.name || "").trim(),
+                    enabled: normalizedForm.enabled !== false,
+                    schedule: buildCronSchedule(normalizedForm),
+                    payload: buildCronPayload(normalizedForm),
+                    delivery: String(normalizedForm.deliveryMode || "none").trim() === "none"
+                        ? { mode: "none" }
+                        : undefined,
+                };
+
+                if (state.agentCronEditingJobId) {
+                    await request("cron.update", {
+                        id: state.agentCronEditingJobId,
+                        patch: payload,
+                    });
+                    state.agentCronEditingJobId = null;
+                } else {
+                    await request("cron.add", payload);
+                    resetCronFormToDefaults();
+                }
+
+                await loadCronJobsPage({ append: false });
+                await loadCronStatus({});
+                await loadCronRuns({ append: false });
+            });
+        }
+
+        async function removeCronJob(jobId) {
+            const resolvedJobId = String(jobId || "").trim();
+            if (!resolvedJobId) {
+                return false;
+            }
+
+            return withCronBusy(async function () {
+                await request("cron.remove", {
+                    id: resolvedJobId,
+                });
+
+                if (state.agentCronEditingJobId === resolvedJobId) {
+                    resetCronFormToDefaults();
+                }
+                if (state.agentCronSelectedJobId === resolvedJobId) {
+                    state.agentCronSelectedJobId = null;
+                }
+
+                await loadCronJobsPage({ append: false });
+                await loadCronStatus({});
+                await loadCronRuns({ append: false });
+            });
+        }
+
+        async function runCronJobNow(jobId, mode) {
+            const resolvedJobId = String(jobId || "").trim();
+            if (!resolvedJobId) {
+                return false;
+            }
+
+            const resolvedMode = mode === "due" ? "due" : "force";
+            return withCronBusy(async function () {
+                await request("cron.run", {
+                    id: resolvedJobId,
+                    mode: resolvedMode,
+                });
+                await loadCronRuns({ append: false });
+            });
+        }
+
+        function startCronEdit(jobId) {
+            const resolvedJobId = String(jobId || "").trim();
+            const jobs = Array.isArray(state.agentCronJobs) ? state.agentCronJobs : [];
+            const job = jobs.find(function (entry) {
+                return String(entry && entry.id || "").trim() === resolvedJobId;
+            });
+            if (!job) {
+                return false;
+            }
+
+            state.agentCronEditingJobId = resolvedJobId;
+            state.agentCronSelectedJobId = resolvedJobId;
+            state.agentCronForm = jobToForm(job, state.agentCronForm);
+            state.agentCronFieldErrors = validateCronForm(state.agentCronForm);
+            onStateUpdated();
+            return true;
+        }
+
+        function startCronClone(jobId) {
+            const resolvedJobId = String(jobId || "").trim();
+            const jobs = Array.isArray(state.agentCronJobs) ? state.agentCronJobs : [];
+            const job = jobs.find(function (entry) {
+                return String(entry && entry.id || "").trim() === resolvedJobId;
+            });
+            if (!job) {
+                return false;
+            }
+
+            const existingNames = new Set(
+                jobs.map(function (entry) {
+                    return normalizeLowercaseStringOrEmpty(entry && entry.name || "");
+                })
+            );
+            const cloned = jobToForm(job, state.agentCronForm);
+            cloned.name = buildCloneName(job.name, existingNames);
+            state.agentCronEditingJobId = null;
+            state.agentCronSelectedJobId = resolvedJobId;
+            state.agentCronForm = cloned;
+            state.agentCronFieldErrors = validateCronForm(state.agentCronForm);
+            onStateUpdated();
+            return true;
+        }
+
+        function cancelCronEdit() {
+            resetCronFormToDefaults();
+            onStateUpdated();
+        }
+
+        function updateCronFormField(field, value) {
+            const allowedFields = {
+                name: true,
+                enabled: true,
+                scheduleKind: true,
+                scheduleAt: true,
+                everyAmount: true,
+                everyUnit: true,
+                cronExpr: true,
+                payloadKind: true,
+                payloadText: true,
+                payloadModel: true,
+                payloadThinking: true,
+                timeoutSeconds: true,
+                deliveryMode: true,
+                deliveryTo: true,
+                failureAlertMode: true,
+                failureAlertAfter: true,
+                failureAlertCooldownSeconds: true,
+            };
+            const key = String(field || "").trim();
+            if (!allowedFields[key]) {
+                return;
+            }
+
+            const nextForm = Object.assign({}, state.agentCronForm);
+            nextForm[key] = value;
+            state.agentCronForm = normalizeCronFormState(nextForm);
+            state.agentCronFieldErrors = validateCronForm(state.agentCronForm);
+            onStateUpdated();
+        }
+
         async function loadCronStatus(options) {
             const opts = options || {};
             const shouldIgnoreResponse = typeof opts.shouldIgnoreResponse === "function"
@@ -1345,7 +1926,9 @@
 
                 const payload = res && res.payload ? res.payload : res;
                 const jobs = payload && Array.isArray(payload.jobs)
-                    ? payload.jobs
+                    ? payload.jobs.map(normalizeCronJob).filter(function (job) {
+                        return job && String(job.id || "").trim().length > 0;
+                    })
                     : [];
                 state.agentCronJobs = append
                     ? state.agentCronJobs.concat(jobs)
@@ -1360,6 +1943,16 @@
                 state.agentCronJobsTotal = Math.max(meta.total, state.agentCronJobs.length);
                 state.agentCronJobsHasMore = meta.hasMore;
                 state.agentCronJobsNextOffset = meta.nextOffset;
+                if (state.agentCronEditingJobId && !state.agentCronJobs.some(function (job) {
+                    return String(job.id || "").trim() === String(state.agentCronEditingJobId || "").trim();
+                })) {
+                    resetCronFormToDefaults();
+                }
+                if (state.agentCronSelectedJobId && !state.agentCronJobs.some(function (job) {
+                    return String(job.id || "").trim() === String(state.agentCronSelectedJobId || "").trim();
+                })) {
+                    state.agentCronSelectedJobId = null;
+                }
             } catch (err) {
                 if (shouldIgnoreResponse && shouldIgnoreResponse()) {
                     return;
@@ -1428,7 +2021,9 @@
                 const entries = payload && Array.isArray(payload.entries)
                     ? payload.entries
                     : [];
-                state.agentCronRuns = append
+                const selectedJobId = String(state.agentCronSelectedJobId || "").trim();
+                const scopeIsJob = scope === "job" && selectedJobId;
+                state.agentCronRuns = append && (!scopeIsJob || selectedJobId)
                     ? state.agentCronRuns.concat(entries)
                     : entries;
 
@@ -1500,6 +2095,13 @@
                     return;
                 }
 
+                await loadCronModelSuggestions({
+                    shouldIgnoreResponse: shouldIgnoreResponse,
+                });
+                if (shouldIgnoreResponse()) {
+                    return;
+                }
+
                 state.agentCronResult = {
                     status: cronStatus,
                     jobs: state.agentCronJobs,
@@ -1508,6 +2110,7 @@
                     runs: state.agentCronRuns,
                     runsTotal: state.agentCronRunsTotal,
                     runsHasMore: state.agentCronRunsHasMore,
+                    modelSuggestions: state.agentCronModelSuggestions,
                     capability: state.agentCronCapability,
                 };
             } catch (err) {
@@ -1828,6 +2431,14 @@
             loadMoreCronRuns,
             updateCronJobsFilter,
             updateCronRunsFilter,
+            updateCronFormField,
+            addOrUpdateCronJob,
+            removeCronJob,
+            runCronJobNow,
+            startCronEdit,
+            startCronClone,
+            cancelCronEdit,
+            loadCronModelSuggestions,
             loadAgentIdentity,
             loadAgentIdentities,
             loadPanelDataForCurrentAgent,
@@ -1931,6 +2542,7 @@
         {
             const state = {
                 connected: true,
+                agentsPanel: "cron",
             };
             const harness = createRegressionHarnessRequestStub();
             createAgentsController({
@@ -1962,7 +2574,15 @@
                 "channels extension contract should initialize agentChannelsResult=null");
             assertRegression(Boolean(state.agentChannelsCapability) && state.agentChannelsCapability.method === "channels.status",
                 "channels extension contract should initialize agentChannelsCapability");
-            summary.push("channels state contract defaults");
+            assertRegression(state.agentCronBusy === false,
+                "cron state contract should initialize agentCronBusy=false");
+            assertRegression(state.agentCronEditingJobId === null,
+                "cron state contract should initialize agentCronEditingJobId=null");
+            assertRegression(Boolean(state.agentCronForm) && typeof state.agentCronForm.name === "string",
+                "cron state contract should initialize agentCronForm default shape");
+            assertRegression(Boolean(state.agentCronFieldErrors) && typeof state.agentCronFieldErrors === "object",
+                "cron state contract should initialize agentCronFieldErrors object");
+            summary.push("channels + cron state contract defaults");
         }
 
         {
@@ -2916,6 +3536,174 @@
             assertRegression(String(state.agentSkillsError || "").indexOf("skills unavailable") >= 0,
                 "agent-skills loader should capture stringified error semantics");
             summary.push("agent-skills error lifecycle");
+        }
+
+        {
+            const state = createRegressionState();
+            state.agentsPanel = "cron";
+            state.agentCronJobs = [
+                {
+                    id: "cron-main",
+                    name: "Main cron",
+                    enabled: true,
+                    schedule: {
+                        kind: "every",
+                        everyMs: 60000,
+                    },
+                    payload: {
+                        kind: "agentTurn",
+                        message: "Ping",
+                    },
+                },
+            ];
+            state.agentCronSelectedJobId = "cron-main";
+            const harness = createRegressionHarnessRequestStub();
+            const controller = createAgentsController({
+                state,
+                request: harness.request,
+            });
+
+            controller.updateCronFormField("name", "");
+            controller.updateCronFormField("payloadText", "hello");
+            const invalid = await controller.addOrUpdateCronJob();
+            assertRegression(invalid === true,
+                "cron save should complete without transport call when validation fails");
+            assertRegression(Boolean(state.agentCronFieldErrors.name),
+                "cron save should populate field error for missing name");
+
+            controller.updateCronFormField("name", "Nightly");
+            controller.updateCronFormField("scheduleKind", "every");
+            controller.updateCronFormField("everyAmount", "15");
+            controller.updateCronFormField("payloadKind", "agentTurn");
+            controller.updateCronFormField("payloadText", "Hello agent");
+            const savePending = controller.addOrUpdateCronJob();
+            const addCall = harness.takeNextCall("cron.add");
+            assertRegression(addCall.params && addCall.params.name === "Nightly",
+                "cron add should forward normalized job payload name");
+            addCall.deferred.resolve({
+                payload: {
+                    added: true,
+                    cronId: "cron-new",
+                },
+            });
+            const listCall = harness.takeNextCall("cron.list");
+            listCall.deferred.resolve({
+                payload: {
+                    jobs: [
+                        {
+                            id: "cron-main",
+                            name: "Main cron",
+                            enabled: true,
+                            schedule: {
+                                kind: "every",
+                                everyMs: 60000,
+                            },
+                            payload: {
+                                kind: "agentTurn",
+                                message: "Ping",
+                            },
+                        },
+                    ],
+                    total: 1,
+                    offset: 0,
+                    limit: 20,
+                    hasMore: false,
+                    nextOffset: null,
+                },
+            });
+            const statusCall = harness.takeNextCall("cron.status");
+            statusCall.deferred.resolve({
+                payload: {
+                    enabled: true,
+                    jobs: 1,
+                    nextWakeAtMs: 123,
+                },
+            });
+            const runsCall = harness.takeNextCall("cron.runs");
+            runsCall.deferred.resolve({
+                payload: {
+                    entries: [],
+                    total: 0,
+                    offset: 0,
+                    limit: 20,
+                    hasMore: false,
+                    nextOffset: null,
+                },
+            });
+            await savePending;
+
+            assertRegression(state.agentCronBusy === false,
+                "cron add should always reset busy state");
+            assertRegression(state.agentCronFieldErrors && Object.keys(state.agentCronFieldErrors).length === 0,
+                "cron add should clear field errors after valid save");
+
+            const runPending = controller.runCronJobNow("cron-main", "due");
+            const runCall = harness.takeNextCall("cron.run");
+            assertRegression(runCall.params && runCall.params.id === "cron-main" && runCall.params.mode === "due",
+                "cron run-now should call cron.run with selected id and mode");
+            runCall.deferred.resolve({
+                payload: {
+                    runId: "cron-run-1",
+                    started: true,
+                },
+            });
+            const runsRefreshCall = harness.takeNextCall("cron.runs");
+            runsRefreshCall.deferred.resolve({
+                payload: {
+                    entries: [],
+                    total: 0,
+                    offset: 0,
+                    limit: 20,
+                    hasMore: false,
+                    nextOffset: null,
+                },
+            });
+            await runPending;
+
+            const removePending = controller.removeCronJob("cron-main");
+            const removeCall = harness.takeNextCall("cron.remove");
+            assertRegression(removeCall.params && removeCall.params.id === "cron-main",
+                "cron remove should call cron.remove with selected id");
+            removeCall.deferred.resolve({
+                payload: {
+                    removed: true,
+                },
+            });
+            const listAfterRemoveCall = harness.takeNextCall("cron.list");
+            listAfterRemoveCall.deferred.resolve({
+                payload: {
+                    jobs: [],
+                    total: 0,
+                    offset: 0,
+                    limit: 20,
+                    hasMore: false,
+                    nextOffset: null,
+                },
+            });
+            const statusAfterRemoveCall = harness.takeNextCall("cron.status");
+            statusAfterRemoveCall.deferred.resolve({
+                payload: {
+                    enabled: true,
+                    jobs: 0,
+                    nextWakeAtMs: null,
+                },
+            });
+            const runsAfterRemoveCall = harness.takeNextCall("cron.runs");
+            runsAfterRemoveCall.deferred.resolve({
+                payload: {
+                    entries: [],
+                    total: 0,
+                    offset: 0,
+                    limit: 20,
+                    hasMore: false,
+                    nextOffset: null,
+                },
+            });
+            await removePending;
+
+            assertRegression(state.agentCronSelectedJobId === null,
+                "cron remove should clear selected job when removed");
+            summary.push("cron mutation flow + validation baseline");
         }
 
         return {
