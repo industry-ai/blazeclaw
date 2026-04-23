@@ -281,7 +281,7 @@ Summary status:
 
 - OpenClaw list baseline (`BASE_METHODS` + plugin method merge + `GATEWAY_EVENTS`) is now mapped against BlazeClaw distributed counterparts (manifest/dispatcher scan artifacts and handler/transport event emitters).
 - Architecture recommendation remains explicit: no framework refactor required; keep BlazeClaw layered C++ design and close gaps via event-contract governance, mapping docs, and targeted parity tests.
-- Follow-up execution plan is tracked as phases `S0–S6` for baseline freeze, event mapping matrix, event artifact pipeline, parity tests, and CI/doc guardrails (`S0–S6` accomplished for this cycle; deferred families explicitly documented).
+- Follow-up execution plan is tracked as phases `S0–S6` for baseline freeze, event mapping matrix, event artifact pipeline, parity tests, and CI/doc guardrails (`S0–S6` accomplished for this cycle; event baseline currently reports zero deferred `GATEWAY_EVENTS` entries).
 
 ## Node-domain parity follow-up (OpenClaw `nodes.ts`)
 

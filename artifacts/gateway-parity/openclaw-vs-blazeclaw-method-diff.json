@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-23T08:32:52.134Z",
+  "generatedAt": "2026-04-23T08:58:10.345Z",
   "lifecycleMethodSurfaceCheckpoints": {
     "phase": "S4",
     "description": "BlazeClaw records dispatcher method-surface snapshots around deferred extension-catalog reload (managed config `embedded.extensionSurfaceApplyEpoch`) and at runtime finalize enforces three subset checks on the dispatcher: generated handler-catalog methods, static channel-handler RPC names, and the deduped union of optional per-extension `gatewayRpcMethods` strings from each `blazeclaw.extension.json` (parsed in `ExtensionLifecycleManager::LoadCatalog`; violation `plugin_rpc_surface_not_registered`). See `GatewayHost::PerformDeferredExtensionCatalogReloadWithMethodSurfaceTelemetry`, `GatewayMethodSurfaceAudit`, `GatewayHost::VerifyRuntimeMethodSurfaceInvariants`, and parity contract schema v4 fields `extensionSurfaceReloadCount` / `lastAppliedExtensionSurfaceEpoch` / `lastExtensionSurfaceMethodDeltaJson`."
@@ -18,13 +18,13 @@
   },
   "summary": {
     "openclawMethodCount": 128,
-    "blazeclawMethodCount": 909,
-    "blazeclawRawMethodCount": 923,
+    "blazeclawMethodCount": 911,
+    "blazeclawRawMethodCount": 925,
     "overlapCount": 127,
     "missingInBlazeclawCount": 1,
     "expectedMissingByDesignCount": 1,
     "actionableMissingCount": 0,
-    "blazeOnlyCount": 782
+    "blazeOnlyCount": 784
   },
   "overlap": [
     "agent",
@@ -236,6 +236,7 @@
     "gateway.config.validate",
     "gateway.embeddings.batchGenerate",
     "gateway.embeddings.generate",
+    "gateway.event.voicewake.changed",
     "gateway.events.anchor",
     "gateway.events.batch",
     "gateway.events.catalog",
@@ -948,6 +949,7 @@
     "skills.commands",
     "skills.install.options",
     "tool-runtime-",
+    "voicewake.changed",
     "weather.lookup"
   ],
   "openclawMethodsByFile": {
@@ -1658,6 +1660,7 @@
       "cron.update",
       "gateway.embeddings.batchGenerate",
       "gateway.embeddings.generate",
+      "gateway.event.voicewake.changed",
       "gateway.runtime.governance.aggregationStatus",
       "gateway.runtime.governance.attestationStatus",
       "gateway.runtime.governance.executeRemediation",
@@ -1683,6 +1686,7 @@
       "tts.enable",
       "tts.providers",
       "tts.status",
+      "voicewake.changed",
       "voicewake.get",
       "voicewake.set",
       "wizard.cancel",

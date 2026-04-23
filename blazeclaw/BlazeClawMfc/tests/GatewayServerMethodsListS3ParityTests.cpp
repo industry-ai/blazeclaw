@@ -75,10 +75,10 @@ TEST_CASE(
 	REQUIRE(statusByEvent["plugin.approval.resolved"] == "implemented");
 	REQUIRE(statusByEvent["node.invoke.request"] == "implemented");
 
-	// Explicitly keep unresolved families visible until deeper runtime/event fanout alignment lands.
-	REQUIRE(statusByEvent["session.message"] == "deferred");
-	REQUIRE(statusByEvent["session.tool"] == "deferred");
-	REQUIRE(statusByEvent["sessions.changed"] == "deferred");
-	REQUIRE(statusByEvent["voicewake.changed"] == "deferred");
-	REQUIRE(statusByEvent["update.available"] == "deferred");
+	REQUIRE(statusByEvent["session.message"] == "implemented");
+	REQUIRE(statusByEvent["session.tool"] == "implemented");
+	REQUIRE(statusByEvent["sessions.changed"] == "implemented");
+	REQUIRE(statusByEvent["voicewake.changed"] == "implemented");
+	REQUIRE(statusByEvent["update.available"] == "implemented");
+	REQUIRE(statusByEvent["device.pair.requested"] == "implemented");
 }

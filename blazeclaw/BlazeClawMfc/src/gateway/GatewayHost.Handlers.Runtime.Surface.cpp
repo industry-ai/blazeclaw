@@ -371,7 +371,11 @@ namespace blazeclaw::gateway {
 			auto runtimeTtsState = std::make_shared<RuntimeTtsState>();
 			auto runtimeSecretsState = std::make_shared<RuntimeSecretsState>();
 
-			host.m_dispatcher.Register("voicewake.set", [](const protocol::RequestFrame& request) {
+			host.m_dispatcher.Register("voicewake.set", [&host](const protocol::RequestFrame& request) {
+				EmitTelemetryEvent(
+					"gateway.event.voicewake.changed",
+					std::string("{\"event\":\"voicewake.changed\",\"running\":") +
+					(host.IsRunning() ? "true" : "false") + "}");
 				return protocol::OkResponse(request, "{\"enabled\":true,\"model\":\"default\",\"updated\":true}");
 				});
 			host.m_dispatcher.Register("tts.status", [runtimeTtsState](const protocol::RequestFrame& request) {

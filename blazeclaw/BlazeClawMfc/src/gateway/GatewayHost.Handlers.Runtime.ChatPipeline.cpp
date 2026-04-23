@@ -190,6 +190,20 @@ namespace blazeclaw::gateway {
 						return response;
 					}
 					const std::string sessionId = host.RuntimeContext().sessionRegistry->Resolve(RequestParamsView(request.paramsJson).GetString("sessionId")).id;
+					EmitTelemetryEvent(
+						"gateway.event.session.message",
+						JsonObject({
+							{"event", JsonString("session.message")},
+							{"sessionId", JsonString(sessionId)},
+							{"ts", JsonNumber(GatewayEpochMilliseconds())},
+							}));
+					EmitTelemetryEvent(
+						"gateway.event.session.tool",
+						JsonObject({
+							{"event", JsonString("session.tool")},
+							{"sessionId", JsonString(sessionId)},
+							{"ts", JsonNumber(GatewayEpochMilliseconds())},
+							}));
 					return protocol::OkResponse(
 						request,
 						JsonObject({

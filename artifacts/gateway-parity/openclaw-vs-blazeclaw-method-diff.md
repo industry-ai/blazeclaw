@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Gateway Method Diff
 
-Generated: 2026-04-23T08:32:52.134Z
+Generated: 2026-04-23T08:58:10.345Z
 
 ## Inputs
 
@@ -16,13 +16,13 @@ See JSON root `lifecycleMethodSurfaceCheckpoints` for the BlazeClaw contract ref
 ## Summary
 
 - OpenClaw method count: **128**
-- BlazeClaw method count: **909**
-- BlazeClaw raw method count (before normalization): **923**
+- BlazeClaw method count: **911**
+- BlazeClaw raw method count (before normalization): **925**
 - Overlap: **127**
 - Missing in BlazeClaw: **1**
   - Expected missing by design: **1**
   - Actionable missing: **0**
-- BlazeClaw-only: **782**
+- BlazeClaw-only: **784**
 
 ## Missing in BlazeClaw (Actionable)
 
@@ -103,6 +103,7 @@ See JSON root `lifecycleMethodSurfaceCheckpoints` for the BlazeClaw contract ref
 - `gateway.config.validate`
 - `gateway.embeddings.batchGenerate`
 - `gateway.embeddings.generate`
+- `gateway.event.voicewake.changed`
 - `gateway.events.anchor`
 - `gateway.events.batch`
 - `gateway.events.catalog`
@@ -815,4 +816,5 @@ See JSON root `lifecycleMethodSurfaceCheckpoints` for the BlazeClaw contract ref
 - `skills.commands`
 - `skills.install.options`
 - `tool-runtime-`
+- `voicewake.changed`
 - `weather.lookup`

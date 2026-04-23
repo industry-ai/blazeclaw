@@ -101,6 +101,13 @@ namespace blazeclaw::gateway::handlers::agent_session_mutation {
 				requestedId,
 				requestedScope.empty() ? std::nullopt : std::optional<std::string>(requestedScope),
 				requestedActive);
+			EmitTelemetryEvent(
+				"gateway.event.sessions.changed",
+				JsonObject({
+					{"event", JsonString("sessions.changed")},
+					{"sessionId", JsonString(patched.id)},
+					{"action", JsonString("patch")},
+					}));
 
 			return protocol::OkResponse(request, "{\"session\":" + SerializeSession(patched) + ",\"patched\":true}");
 			});
@@ -159,6 +166,15 @@ namespace blazeclaw::gateway::handlers::agent_session_mutation {
 			SessionEntry removedSession;
 			const bool deleted = host.m_sessionRegistry.Delete(requestedId, removedSession);
 			const std::size_t remaining = host.m_sessionRegistry.List().size();
+			if (deleted) {
+				EmitTelemetryEvent(
+					"gateway.event.sessions.changed",
+					JsonObject({
+						{"event", JsonString("sessions.changed")},
+						{"sessionId", JsonString(removedSession.id)},
+						{"action", JsonString("delete")},
+						}));
+			}
 
 			return protocol::OkResponse(request, "{\"session\":" + SerializeSession(removedSession) +
 				",\"deleted\":" + std::string(deleted ? "true" : "false") +

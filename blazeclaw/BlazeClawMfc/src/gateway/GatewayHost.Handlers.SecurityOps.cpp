@@ -2355,6 +2355,10 @@ namespace blazeclaw::gateway {
 						*this,
 						"node.pair.requested",
 						SerializePendingRequestJson(result.request));
+					EmitBestEffortEvent(
+						*this,
+						"device.pair.requested",
+						SerializePendingRequestJson(result.request));
 				}
 				return protocol::OkResponse(
 					request,

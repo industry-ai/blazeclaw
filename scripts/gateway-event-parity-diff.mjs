@@ -83,6 +83,8 @@ function main() {
     "GatewayHost.Handlers.SecurityOps.cpp",
     "GatewayHost.Handlers.Runtime.ChatPipeline.cpp",
     "GatewayHost.Handlers.Runtime.Surface.cpp",
+    "GatewayHost.Handlers.ConfigDiagnostics.cpp",
+    "GatewayHost.Handlers.AgentSessionMutation.cpp",
     "GatewayHost.Handlers.EventCatalogQuery.cpp",
     "GatewayHost.Handlers.Events.cpp",
     "GatewayHost.Handlers.Transport.cpp",

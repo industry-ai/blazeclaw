@@ -602,11 +602,20 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 			return protocol::ErrorResponse(request, "invalid_request", "skill id/name not found");
 			});
 
-		host.m_dispatcher.Register("update.run", [runtimeUpdateState](const protocol::RequestFrame& request) {
+		host.m_dispatcher.Register("update.run", [runtimeUpdateState, &host](const protocol::RequestFrame& request) {
 			const RequestParamsView params(request.paramsJson);
 			const std::string channel = params.GetString("channel");
 			runtimeUpdateState->lastRunId = "update-run-" + std::to_string(runtimeUpdateState->runSequence++);
 			runtimeUpdateState->lastRunAtMs = static_cast<std::uint64_t>(NowMs());
+			EmitTelemetryEvent(
+				"gateway.event.update.available",
+				JsonObject({
+					{"event", JsonString("update.available")},
+					{"runId", JsonString(runtimeUpdateState->lastRunId)},
+					{"channel", JsonString(channel.empty() ? "stable" : channel)},
+					{"ts", JsonNumber(runtimeUpdateState->lastRunAtMs)},
+					{"running", JsonBool(host.IsRunning())},
+					}));
 			return protocol::OkResponse(
 				request,
 				JsonObject({
@@ -748,6 +757,14 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 				requestedId,
 				requestedScope.empty() ? std::nullopt : std::optional<std::string>(requestedScope),
 				requestedActive);
+			EmitTelemetryEvent(
+				"gateway.event.sessions.changed",
+				JsonObject({
+					{"event", JsonString("sessions.changed")},
+					{"sessionId", JsonString(created.id)},
+					{"action", JsonString("create")},
+					{"ts", JsonNumber(static_cast<std::uint64_t>(NowMs()))},
+					}));
 			return protocol::OkResponse(request, "{\"session\":" + SerializeSession(created) + "}");
 			});
 
@@ -767,6 +784,14 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 				requestedId,
 				requestedScope.empty() ? std::nullopt : std::optional<std::string>(requestedScope),
 				requestedActive);
+			EmitTelemetryEvent(
+				"gateway.event.sessions.changed",
+				JsonObject({
+					{"event", JsonString("sessions.changed")},
+					{"sessionId", JsonString(reset.id)},
+					{"action", JsonString("reset")},
+					{"ts", JsonNumber(static_cast<std::uint64_t>(NowMs()))},
+					}));
 			return protocol::OkResponse(request, "{\"session\":" + SerializeSession(reset) + ",\"event\":\"gateway.session.reset\"}");
 			});
 
