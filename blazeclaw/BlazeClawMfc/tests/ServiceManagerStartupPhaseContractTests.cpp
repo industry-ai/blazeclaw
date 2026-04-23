@@ -229,7 +229,9 @@ TEST_CASE(
 		std::istreambuf_iterator<char>());
 	REQUIRE(loader.find("BuildGatewayStartupConfigFileSnapshot(") != std::string::npos);
 
-	const std::string builderPath = std::filesystem::path("BlazeClawMfc") / "src" / "core" / "diagnostics" / "CDiagnosticsReportBuilder.cpp";
+	const auto builderPath =
+		std::filesystem::path("BlazeClawMfc") / "src" / "core" / "diagnostics" /
+		"CDiagnosticsReportBuilder.cpp";
 	std::ifstream b(builderPath.string());
 	REQUIRE(b.is_open());
 	const std::string dsrc(
@@ -237,6 +239,52 @@ TEST_CASE(
 		std::istreambuf_iterator<char>());
 	REQUIRE(dsrc.find("authBootstrapPathTag") != std::string::npos);
 	REQUIRE(dsrc.find("startupConfigContentDigest") != std::string::npos);
+}
+
+TEST_CASE(
+	"ServiceManager S2 contract: ResolveGatewayRuntimeConfig wiring and parity JSON",
+	"[servicemanager][startup][contract][s2]")
+{
+	const std::string sm = ReadServiceManagerSource();
+	REQUIRE(sm.find("resolvedRuntimeConfig") != std::string::npos);
+	REQUIRE(
+		sm.find(".resolvedRuntime = m_state.gatewayLifecycle.resolvedRuntimeConfig") !=
+		std::string::npos);
+	REQUIRE(
+		sm.find("m_state.gatewayLifecycle.resolvedRuntimeConfig = startupResult.resolvedRuntime") !=
+		std::string::npos);
+
+	const auto coordPath = std::filesystem::path("BlazeClawMfc") / "src" / "core" / "bootstrap" /
+		"GatewayRuntimeBootstrapCoordinator.cpp";
+	std::ifstream cin(coordPath.string());
+	REQUIRE(cin.is_open());
+	const std::string coord(
+		(std::istreambuf_iterator<char>(cin)),
+		std::istreambuf_iterator<char>());
+	REQUIRE(coord.find("GatewayRuntimeBootstrapCoordinator::ResolveGatewayRuntimeConfig(") != std::string::npos);
+	REQUIRE(coord.find("DecisionFromResolved(") != std::string::npos);
+	REQUIRE(coord.find("BLAZECLAW_GATEWAY_PORT") != std::string::npos);
+	REQUIRE(coord.find("BLAZECLAW_GATEWAY_BIND") != std::string::npos);
+	REQUIRE(coord.find("IsKnownStartupModeToken(") != std::string::npos);
+
+	const auto modelsPath = std::filesystem::path("BlazeClawMfc") / "src" / "config" / "ConfigModels.h";
+	std::ifstream min(modelsPath.string());
+	REQUIRE(min.is_open());
+	const std::string msrc(
+		(std::istreambuf_iterator<char>(min)),
+		std::istreambuf_iterator<char>());
+	REQUIRE(msrc.find("struct GatewayResolvedRuntimeConfig") != std::string::npos);
+	REQUIRE(msrc.find("GatewayResolvedStartupModeClass") != std::string::npos);
+
+	const auto builderPath =
+		std::filesystem::path("BlazeClawMfc") / "src" / "core" / "diagnostics" / "CDiagnosticsReportBuilder.cpp";
+	std::ifstream b(builderPath.string());
+	REQUIRE(b.is_open());
+	const std::string dsrc(
+		(std::istreambuf_iterator<char>(b)),
+		std::istreambuf_iterator<char>());
+	REQUIRE(dsrc.find("runtimeResolvedPort") != std::string::npos);
+	REQUIRE(dsrc.find("runtimeResolvedBindSource") != std::string::npos);
 }
 
 TEST_CASE(

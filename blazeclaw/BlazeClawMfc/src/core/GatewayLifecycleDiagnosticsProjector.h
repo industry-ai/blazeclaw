@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../config/ConfigModels.h"
 #include "diagnostics/DiagnosticsSnapshot.h"
 
 #include <cstdint>
@@ -42,6 +43,7 @@ namespace blazeclaw::core {
             std::string authBootstrapPathTag;
             std::string authBootstrapStatus;
             std::string authBootstrapDetail;
+            blazeclaw::config::GatewayResolvedRuntimeConfig resolvedRuntime;
         };
 
         void Apply(
@@ -123,6 +125,25 @@ namespace blazeclaw::core {
             snapshot.gatewayParityLifecycle.authBootstrapPathTag = context.authBootstrapPathTag;
             snapshot.gatewayParityLifecycle.authBootstrapStatus = context.authBootstrapStatus;
             snapshot.gatewayParityLifecycle.authBootstrapDetail = context.authBootstrapDetail;
+            {
+                const auto& rr = context.resolvedRuntime;
+                snapshot.gatewayParityLifecycle.runtimeResolvedBindUtf8 = rr.bindAddressUtf8;
+                snapshot.gatewayParityLifecycle.runtimeResolvedBindSource = rr.bindSource;
+                snapshot.gatewayParityLifecycle.runtimeResolvedPort = rr.port;
+                snapshot.gatewayParityLifecycle.runtimeResolvedPortSource = rr.portSource;
+                snapshot.gatewayParityLifecycle.runtimeStartupModeInvalidFallback =
+                    rr.startupModeInvalidFallback;
+                snapshot.gatewayParityLifecycle.runtimeStartupModeRawInputUtf8 =
+                    rr.startupModeUnrecognizedInputUtf8;
+                snapshot.gatewayParityLifecycle.runtimeResolvedAuthSessionGeneration =
+                    rr.authSessionGeneration;
+                snapshot.gatewayParityLifecycle.runtimeResolvedAuthSessionGenerationSource =
+                    rr.authSessionGenerationSource;
+                snapshot.gatewayParityLifecycle.runtimeManagedConfigReloaderPolicy =
+                    rr.managedConfigReloader;
+                snapshot.gatewayParityLifecycle.runtimeManagedConfigReloaderPolicySource =
+                    rr.managedConfigReloaderSource;
+            }
         }
     };
 

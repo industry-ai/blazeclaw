@@ -15,6 +15,10 @@
 #include <string>
 #include <vector>
 
+#if defined(_WIN32)
+#include <Windows.h>
+#endif
+
 namespace {
 
 	std::filesystem::path CreateTempConfigPath(const std::wstring& suffix)
@@ -74,6 +78,11 @@ TEST_CASE(
 	REQUIRE_FALSE(traces.empty());
 	REQUIRE(traces.front() == "GatewayRuntimeBootstrap.ExecuteStartup.begin");
 	REQUIRE(traces.back() == "GatewayRuntimeBootstrap.ExecuteStartup.success");
+	REQUIRE(
+		std::find(
+			traces.begin(),
+			traces.end(),
+			"GatewayRuntimeBootstrap.ResolveRuntimeConfig.ready") != traces.end());
 	REQUIRE(
 		std::find(
 			traces.begin(),
@@ -901,13 +910,22 @@ TEST_CASE(
 	snapshot.gatewayParityLifecycle.authBootstrapPathTag = "session_generation_persisted";
 	snapshot.gatewayParityLifecycle.authBootstrapStatus = "ok";
 	snapshot.gatewayParityLifecycle.authBootstrapDetail = "test";
+	snapshot.gatewayParityLifecycle.runtimeResolvedBindUtf8 = "0.0.0.0";
+	snapshot.gatewayParityLifecycle.runtimeResolvedBindSource = "config";
+	snapshot.gatewayParityLifecycle.runtimeResolvedPort = 58000;
+	snapshot.gatewayParityLifecycle.runtimeResolvedPortSource = "config";
+	snapshot.gatewayParityLifecycle.runtimeStartupModeInvalidFallback = false;
+	snapshot.gatewayParityLifecycle.runtimeResolvedAuthSessionGeneration = 9;
+	snapshot.gatewayParityLifecycle.runtimeResolvedAuthSessionGenerationSource = "config";
+	snapshot.gatewayParityLifecycle.runtimeManagedConfigReloaderPolicy = true;
+	snapshot.gatewayParityLifecycle.runtimeManagedConfigReloaderPolicySource = "default";
 
 	blazeclaw::core::CDiagnosticsReportBuilder builder;
 	const std::string report = builder.BuildOperatorDiagnosticsReport(snapshot);
 
 	REQUIRE(report.find("\"gatewayLifecycle\"") != std::string::npos);
 	REQUIRE(report.find("\"parityContract\"") != std::string::npos);
-	REQUIRE(report.find("\"schemaVersion\":2") != std::string::npos);
+	REQUIRE(report.find("\"schemaVersion\":3") != std::string::npos);
 	REQUIRE(
 		report.find("\"openclawParityBaseline\":\"openclaw/src/gateway/server.impl.ts\"") !=
 		std::string::npos);
@@ -944,4 +962,67 @@ TEST_CASE(
 	REQUIRE(report.find("\"startupConfigPathUtf8\":\"blazeclaw.conf\"") != std::string::npos);
 	REQUIRE(report.find("\"authBootstrapPathTag\":\"session_generation_persisted\"") != std::string::npos);
 	REQUIRE(report.find("\"authBootstrapStatus\":\"ok\"") != std::string::npos);
+	REQUIRE(report.find("\"runtimeResolvedPort\":58000") != std::string::npos);
+	REQUIRE(
+		report.find("\"runtimeResolvedBindSource\":\"config\"") != std::string::npos);
 }
+
+TEST_CASE(
+	"GatewayRuntimeBootstrapCoordinator S2 resolve matrix: bind port mode and auth (config only)",
+	"[gateway][lifecycle][s2]")
+{
+	blazeclaw::core::GatewayRuntimeBootstrapCoordinator coordinator;
+	blazeclaw::config::AppConfig config;
+	config.gateway.bindAddress = L"10.0.0.1";
+	config.gateway.port = 11000;
+	config.gateway.startupMode = L"full";
+	config.gateway.authSessionGeneration = 3;
+
+	const auto r = coordinator.ResolveGatewayRuntimeConfig(config);
+	REQUIRE(r.bindSource == "config");
+	REQUIRE(r.bindAddressUtf8 == "10.0.0.1");
+	REQUIRE(r.port == 11000);
+	REQUIRE(r.portSource == "config");
+	REQUIRE(r.startupModeSource == "config");
+	REQUIRE(r.effectiveStartupModeLabel == "full_gateway");
+	REQUIRE(r.startupModeClass == blazeclaw::config::GatewayResolvedStartupModeClass::FullGateway);
+	REQUIRE_FALSE(r.startupModeInvalidFallback);
+	REQUIRE(r.authSessionGeneration == 3);
+	REQUIRE(r.authSessionGenerationSource == "config");
+	REQUIRE(r.managedConfigReloader);
+	REQUIRE(r.managedConfigReloaderSource == "default");
+}
+
+TEST_CASE(
+	"GatewayRuntimeBootstrapCoordinator S2 invalid startup mode falls back to local_runtime_dispatch",
+	"[gateway][lifecycle][s2]")
+{
+	blazeclaw::core::GatewayRuntimeBootstrapCoordinator coordinator;
+	blazeclaw::config::AppConfig config;
+	config.gateway.startupMode = L"__not_a_token__";
+	const auto r = coordinator.ResolveGatewayRuntimeConfig(config);
+	REQUIRE(r.startupModeInvalidFallback);
+	REQUIRE(r.startupModeUnrecognizedInputUtf8 == "__not_a_token__");
+	REQUIRE(r.effectiveStartupModeLabel == "local_runtime_dispatch");
+}
+
+#if defined(_WIN32)
+TEST_CASE(
+	"GatewayRuntimeBootstrapCoordinator S2 env overrides port and session generation",
+	"[gateway][lifecycle][s2]")
+{
+	SetEnvironmentVariableW(L"BLAZECLAW_GATEWAY_PORT", L"22022");
+	SetEnvironmentVariableW(L"BLAZECLAW_GATEWAY_AUTH_SESSION_GENERATION", L"42");
+	blazeclaw::core::GatewayRuntimeBootstrapCoordinator coordinator;
+	blazeclaw::config::AppConfig config;
+	config.gateway.port = 1;
+	config.gateway.authSessionGeneration = 0;
+	const auto r = coordinator.ResolveGatewayRuntimeConfig(config);
+	REQUIRE(r.port == 22022);
+	REQUIRE(r.portSource == "env");
+	REQUIRE(r.authSessionGeneration == 42);
+	REQUIRE(r.authSessionGenerationSource == "env");
+	SetEnvironmentVariableW(L"BLAZECLAW_GATEWAY_PORT", nullptr);
+	SetEnvironmentVariableW(L"BLAZECLAW_GATEWAY_AUTH_SESSION_GENERATION", nullptr);
+}
+#endif

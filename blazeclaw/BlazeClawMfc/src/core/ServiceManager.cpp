@@ -2390,6 +2390,7 @@ namespace blazeclaw::core {
 				L"gateway startup bootstrap threw an exception.");
 		}
 
+		m_state.gatewayLifecycle.resolvedRuntimeConfig = startupResult.resolvedRuntime;
 		m_state.gatewayLifecycle.startupMode = startupResult.selectedMode;
 		m_state.gatewayLifecycle.startupModeSource =
 			startupResult.selectedModeSource;
@@ -2400,9 +2401,9 @@ namespace blazeclaw::core {
 		m_state.gatewayLifecycle.startupFailureCleanupExecuted = false;
 		m_state.gatewayLifecycle.cleanupPath = "none";
 		m_state.gatewayLifecycle.authSessionGenerationCurrent =
-			config.gateway.authSessionGeneration;
+			startupResult.resolvedRuntime.authSessionGeneration;
 		m_state.gatewayLifecycle.authSessionGenerationRequired =
-			config.gateway.authSessionGeneration;
+			startupResult.resolvedRuntime.authSessionGeneration;
 		m_state.gatewayLifecycle.authSessionGenerationRejectCount = 0;
 		ResetGatewayOwnedRuntimeCleanup();
 		m_state.gatewayLiveRuntime.runtimeStateCreated = true;
@@ -3052,6 +3053,7 @@ namespace blazeclaw::core {
 			.authBootstrapPathTag = m_state.gatewayLifecycle.authBootstrapPathTag,
 			.authBootstrapStatus = m_state.gatewayLifecycle.authBootstrapStatus,
 			.authBootstrapDetail = m_state.gatewayLifecycle.authBootstrapDetail,
+			.resolvedRuntime = m_state.gatewayLifecycle.resolvedRuntimeConfig,
 		},
 			.email = EmailRuntimeDiagnosticsProjector::Context{
 			.emailConfig = m_activeConfig.email,
@@ -3241,6 +3243,7 @@ namespace blazeclaw::core {
 			.authBootstrapPathTag = m_state.gatewayLifecycle.authBootstrapPathTag,
 			.authBootstrapStatus = m_state.gatewayLifecycle.authBootstrapStatus,
 			.authBootstrapDetail = m_state.gatewayLifecycle.authBootstrapDetail,
+			.resolvedRuntime = m_state.gatewayLifecycle.resolvedRuntimeConfig,
 		};
 		m_gatewayLifecycleDiagnosticsProjector.Apply(ctx, snapshot);
 		return m_diagnosticsReportBuilder.SerializeParityLifecycleContractJson(

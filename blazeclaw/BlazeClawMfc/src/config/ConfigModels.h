@@ -25,6 +25,33 @@ namespace blazeclaw::config {
 		std::vector<std::uint64_t> internalWriteHashesAtRecord;
 	};
 
+	/// Aligns with `GatewayRuntimeBootstrapCoordinator::StartupMode` ordinals (0..3).
+	enum class GatewayResolvedStartupModeClass : std::uint8_t {
+		Disabled = 0,
+		LocalRuntimeDispatch = 1,
+		LocalOnly = 2,
+		FullGateway = 3,
+	};
+
+	/// OpenClaw `resolveGatewayRuntimeConfig` parity (Phase S2): effective gateway transport
+	/// policy after config + environment layers (bind/port/startup mode/auth session/reloader).
+	struct GatewayResolvedRuntimeConfig {
+		GatewayResolvedStartupModeClass startupModeClass =
+			GatewayResolvedStartupModeClass::LocalRuntimeDispatch;
+		std::string effectiveStartupModeLabel;
+		std::string startupModeSource;
+		bool startupModeInvalidFallback = false;
+		std::string startupModeUnrecognizedInputUtf8;
+		std::string bindAddressUtf8;
+		std::string bindSource;
+		std::uint16_t port = 56789;
+		std::string portSource;
+		std::uint64_t authSessionGeneration = 0;
+		std::string authSessionGenerationSource;
+		bool managedConfigReloader = true;
+		std::string managedConfigReloaderSource;
+	};
+
 	struct GatewayConfig {
 		std::wstring bindAddress = L"127.0.0.1";
 		std::uint16_t port = 56789;

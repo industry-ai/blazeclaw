@@ -7,10 +7,10 @@
 
 namespace blazeclaw::core {
 
-	/// OpenClaw `server.impl.ts` lifecycle parity export (Phase S0+S1).
+	/// OpenClaw `server.impl.ts` lifecycle parity export (Phase S0–S2).
 	/// Populated for diagnostics/operator report and `gateway.parity.lifecycle` RPC.
 	struct GatewayParityLifecycleContract {
-		static constexpr int kSchemaVersion = 2;
+		static constexpr int kSchemaVersion = 3;
 		int schemaVersion = kSchemaVersion;
 		std::string openclawParityBaseline = "openclaw/src/gateway/server.impl.ts";
 		std::string startupMode;
@@ -46,6 +46,17 @@ namespace blazeclaw::core {
 		std::string authBootstrapPathTag;
 		std::string authBootstrapStatus;
 		std::string authBootstrapDetail;
+		// S2: `resolveGatewayRuntimeConfig`-class snapshot (bind/port/mode/auth/reloader sources).
+		std::string runtimeResolvedBindUtf8;
+		std::string runtimeResolvedBindSource;
+		std::uint16_t runtimeResolvedPort = 0;
+		std::string runtimeResolvedPortSource;
+		bool runtimeStartupModeInvalidFallback = false;
+		std::string runtimeStartupModeRawInputUtf8;
+		std::uint64_t runtimeResolvedAuthSessionGeneration = 0;
+		std::string runtimeResolvedAuthSessionGenerationSource;
+		bool runtimeManagedConfigReloaderPolicy = true;
+		std::string runtimeManagedConfigReloaderPolicySource;
 	};
 
 	struct DiagnosticsSnapshot {

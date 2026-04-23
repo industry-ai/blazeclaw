@@ -110,6 +110,22 @@ namespace blazeclaw::core {
 			",\"authBootstrapPathTag\":\"" + JsonEscapeString(c.authBootstrapPathTag) + "\"" +
 			",\"authBootstrapStatus\":\"" + JsonEscapeString(c.authBootstrapStatus) + "\"" +
 			",\"authBootstrapDetail\":\"" + JsonEscapeString(c.authBootstrapDetail) + "\"" +
+			",\"runtimeResolvedBindUtf8\":\"" + JsonEscapeString(c.runtimeResolvedBindUtf8) + "\"" +
+			",\"runtimeResolvedBindSource\":\"" + JsonEscapeString(c.runtimeResolvedBindSource) + "\"" +
+			",\"runtimeResolvedPort\":" + std::to_string(c.runtimeResolvedPort) +
+			",\"runtimeResolvedPortSource\":\"" + JsonEscapeString(c.runtimeResolvedPortSource) + "\"" +
+			",\"runtimeStartupModeInvalidFallback\":" +
+			std::string(c.runtimeStartupModeInvalidFallback ? "true" : "false") +
+			",\"runtimeStartupModeRawInputUtf8\":\"" +
+			JsonEscapeString(c.runtimeStartupModeRawInputUtf8) + "\"" +
+			",\"runtimeResolvedAuthSessionGeneration\":" +
+			std::to_string(c.runtimeResolvedAuthSessionGeneration) +
+			",\"runtimeResolvedAuthSessionGenerationSource\":\"" +
+			JsonEscapeString(c.runtimeResolvedAuthSessionGenerationSource) + "\"" +
+			",\"runtimeManagedConfigReloaderPolicy\":" +
+			std::string(c.runtimeManagedConfigReloaderPolicy ? "true" : "false") +
+			",\"runtimeManagedConfigReloaderPolicySource\":\"" +
+			JsonEscapeString(c.runtimeManagedConfigReloaderPolicySource) + "\"" +
 			"}";
 	}
 

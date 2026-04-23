@@ -37,6 +37,7 @@ namespace blazeclaw::core {
 			std::string selectedModeSource = "config";
 			std::string failedStage;
 			std::vector<std::wstring> warnings;
+			blazeclaw::config::GatewayResolvedRuntimeConfig resolvedRuntime;
 		};
 
 		struct StartupContext {
@@ -57,14 +58,17 @@ namespace blazeclaw::core {
 		};
 
 		[[nodiscard]] StartupResult ExecuteStartup(const StartupContext& context) const;
+		/// OpenClaw `resolveGatewayRuntimeConfig` equivalent: config + env effective policy.
+		[[nodiscard]] blazeclaw::config::GatewayResolvedRuntimeConfig ResolveGatewayRuntimeConfig(
+			const blazeclaw::config::AppConfig& appConfig) const;
 		void HandleStartupFailure(const StartupContext& context, const StartupResult& result) const;
 		[[nodiscard]] std::vector<std::wstring> RunClosePrelude(const CloseContext& context) const;
 
 	private:
 		void RunStartupMigrations(
 			const StartupContext& context) const;
-		[[nodiscard]] StartupDecision PrepareRuntimeConfig(
-			const blazeclaw::config::GatewayConfig& gatewayConfig) const;
+		[[nodiscard]] StartupDecision DecisionFromResolved(
+			const blazeclaw::config::GatewayResolvedRuntimeConfig& resolved) const;
 		[[nodiscard]] static StartupMode ParseStartupModeLabel(const std::wstring& raw);
 		[[nodiscard]] static std::string StartupModeLabel(StartupMode mode);
 		[[nodiscard]] bool CreateRuntimeState(

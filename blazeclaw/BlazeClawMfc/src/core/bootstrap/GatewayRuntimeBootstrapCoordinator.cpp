@@ -3,11 +3,16 @@
 
 #include "../../config/ConfigModels.h"
 
+#include <Windows.h>
+
 #include <algorithm>
-#include <string>
 #include <cstdlib>
+#include <cstdint>
 #include <cwctype>
 #include <functional>
+#include <cstdlib>
+#include <cwchar>
+#include <optional>
 #include <string>
 
 namespace blazeclaw::core {
@@ -75,36 +80,163 @@ namespace blazeclaw::core {
 				lower == L"loopback";
 		}
 
+		bool IsKnownStartupModeToken(const std::wstring& w) {
+			return w == L"disabled" || w == L"local_only" || w == L"local_runtime_dispatch" ||
+				w == L"full" || w == L"transport";
+		}
+
+		std::string Utf8Narrow(const std::wstring& w) {
+			if (w.empty()) {
+				return {};
+			}
+
+			const int required = WideCharToMultiByte(
+				CP_UTF8,
+				0,
+				w.c_str(),
+				-1,
+				nullptr,
+				0,
+				nullptr,
+				nullptr);
+			if (required <= 1) {
+				return {};
+			}
+
+			std::string out(static_cast<std::size_t>(required - 1), '\0');
+			WideCharToMultiByte(
+				CP_UTF8,
+				0,
+				w.c_str(),
+				-1,
+				out.data(),
+				required,
+				nullptr,
+				nullptr);
+			return out;
+		}
+
+		std::optional<std::uint16_t> TryParseUInt16(const std::wstring& raw) {
+			if (raw.empty()) {
+				return std::nullopt;
+			}
+			wchar_t* end = nullptr;
+			const unsigned long v = std::wcstoul(raw.c_str(), &end, 10);
+			if (end == raw.c_str() || v < 1ul || v > 65535ul) {
+				return std::nullopt;
+			}
+			return static_cast<std::uint16_t>(v);
+		}
+
+		std::optional<std::uint64_t> TryParseUInt64(const std::wstring& raw) {
+			if (raw.empty()) {
+				return std::nullopt;
+			}
+			wchar_t* end = nullptr;
+			const unsigned long long v = std::wcstoull(raw.c_str(), &end, 10);
+			if (end == raw.c_str()) {
+				return std::nullopt;
+			}
+			return static_cast<std::uint64_t>(v);
+		}
+
 	} // namespace
 
+	blazeclaw::config::GatewayResolvedRuntimeConfig
+		GatewayRuntimeBootstrapCoordinator::ResolveGatewayRuntimeConfig(
+			const blazeclaw::config::AppConfig& appConfig) const {
+		blazeclaw::config::GatewayResolvedRuntimeConfig r{};
+
+		const blazeclaw::config::GatewayConfig& gw = appConfig.gateway;
+
+		// bind
+		r.bindAddressUtf8 = Utf8Narrow(TrimWide(gw.bindAddress));
+		if (r.bindAddressUtf8.empty()) {
+			r.bindAddressUtf8 = "127.0.0.1";
+		}
+		r.bindSource = "config";
+		{
+			const std::wstring bindEnv = TrimWide(ReadWideEnvironment(L"BLAZECLAW_GATEWAY_BIND"));
+			if (!bindEnv.empty()) {
+				const std::string n = Utf8Narrow(bindEnv);
+				if (!n.empty()) {
+					r.bindAddressUtf8 = n;
+					r.bindSource = "env";
+				}
+			}
+		}
+
+		// port
+		r.port = gw.port;
+		r.portSource = "config";
+		{
+			const std::wstring penv = TrimWide(ReadWideEnvironment(L"BLAZECLAW_GATEWAY_PORT"));
+			if (const auto parsed = TryParseUInt16(penv)) {
+				r.port = *parsed;
+				r.portSource = "env";
+			}
+		}
+
+		// auth session generation
+		r.authSessionGeneration = gw.authSessionGeneration;
+		r.authSessionGenerationSource = "config";
+		{
+			const std::wstring aenv = TrimWide(
+				ReadWideEnvironment(L"BLAZECLAW_GATEWAY_AUTH_SESSION_GENERATION"));
+			if (const auto parsed = TryParseUInt64(aenv)) {
+				r.authSessionGeneration = *parsed;
+				r.authSessionGenerationSource = "env";
+			}
+		}
+
+		// managed config reloader
+		r.managedConfigReloader = true;
+		r.managedConfigReloaderSource = "default";
+		{
+			const std::wstring rel = ToLowerWide(
+				TrimWide(ReadWideEnvironment(L"BLAZECLAW_GATEWAY_MANAGED_RELOADER_ENABLED")));
+			if (rel == L"0" || rel == L"false" || rel == L"off") {
+				r.managedConfigReloader = false;
+				r.managedConfigReloaderSource = "env";
+			}
+		}
+
+		// startup mode: config, optional env override, invalid-token fallback
+		std::wstring modeWide = ToLowerWide(TrimWide(gw.startupMode));
+		r.startupModeSource = "config";
+		{
+			const std::wstring envMode = ToLowerWide(
+				TrimWide(ReadWideEnvironment(L"BLAZECLAW_GATEWAY_STARTUP_MODE")));
+			if (!envMode.empty()) {
+				modeWide = envMode;
+				r.startupModeSource = "env";
+			}
+		}
+		if (modeWide.empty()) {
+			modeWide = L"local_runtime_dispatch";
+		}
+		if (!IsKnownStartupModeToken(modeWide)) {
+			r.startupModeUnrecognizedInputUtf8 = Utf8Narrow(modeWide);
+			r.startupModeInvalidFallback = true;
+			modeWide = L"local_runtime_dispatch";
+		}
+
+		const StartupMode sm = ParseStartupModeLabel(modeWide);
+		r.startupModeClass = static_cast<blazeclaw::config::GatewayResolvedStartupModeClass>(
+			static_cast<std::uint8_t>(static_cast<int>(sm)));
+		r.effectiveStartupModeLabel = StartupModeLabel(sm);
+		return r;
+	}
+
 	GatewayRuntimeBootstrapCoordinator::StartupDecision
-		GatewayRuntimeBootstrapCoordinator::PrepareRuntimeConfig(
-			const blazeclaw::config::GatewayConfig& gatewayConfig) const {
-		StartupDecision decision;
-
-		const std::wstring configuredMode = ToLowerWide(
-			TrimWide(gatewayConfig.startupMode));
-		decision.mode = ParseStartupModeLabel(configuredMode);
-		decision.modeLabel = StartupModeLabel(decision.mode);
-		decision.modeSource = "config";
-
-		const std::wstring envMode = ToLowerWide(
-			ReadWideEnvironment(L"BLAZECLAW_GATEWAY_STARTUP_MODE"));
-		if (!envMode.empty()) {
-			decision.mode = ParseStartupModeLabel(envMode);
-			decision.modeLabel = StartupModeLabel(decision.mode);
-			decision.modeSource = "env";
-		}
-
-		const std::wstring managedReloaderMode = ToLowerWide(
-			ReadWideEnvironment(L"BLAZECLAW_GATEWAY_MANAGED_RELOADER_ENABLED"));
-		if (managedReloaderMode == L"0" ||
-			managedReloaderMode == L"false" ||
-			managedReloaderMode == L"off") {
-			decision.startManagedConfigReloader = false;
-		}
-
-		return decision;
+		GatewayRuntimeBootstrapCoordinator::DecisionFromResolved(
+			const blazeclaw::config::GatewayResolvedRuntimeConfig& resolved) const {
+		StartupDecision d;
+		d.mode = static_cast<StartupMode>(static_cast<int>(resolved.startupModeClass));
+		d.modeLabel = resolved.effectiveStartupModeLabel;
+		d.modeSource = resolved.startupModeSource;
+		d.startManagedConfigReloader = resolved.managedConfigReloader;
+		return d;
 	}
 
 	GatewayRuntimeBootstrapCoordinator::StartupMode
@@ -341,7 +473,11 @@ namespace blazeclaw::core {
 			context.appendTrace("GatewayRuntimeBootstrap.ExecuteStartup.begin");
 		}
 		RunStartupMigrations(context);
-		const StartupDecision decision = PrepareRuntimeConfig(context.config.gateway);
+		result.resolvedRuntime = ResolveGatewayRuntimeConfig(context.config);
+		const StartupDecision decision = DecisionFromResolved(result.resolvedRuntime);
+		if (context.appendTrace) {
+			context.appendTrace("GatewayRuntimeBootstrap.ResolveRuntimeConfig.ready");
+		}
 		result.selectedMode = decision.modeLabel;
 		result.selectedModeSource = decision.modeSource;
 		result.failedStage = "prepare_runtime_config";

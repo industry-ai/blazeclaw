@@ -368,6 +368,8 @@ namespace blazeclaw::core {
 				std::string authBootstrapPathTag;
 				std::string authBootstrapStatus;
 				std::string authBootstrapDetail;
+				/// S2: `ResolveGatewayRuntimeConfig` output (config + env effective policy).
+				blazeclaw::config::GatewayResolvedRuntimeConfig resolvedRuntimeConfig;
 			};
 
 			struct GatewayLiveRuntimeState {
