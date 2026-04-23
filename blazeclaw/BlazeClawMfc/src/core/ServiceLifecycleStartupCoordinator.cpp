@@ -481,41 +481,7 @@ void ServiceLifecycleStartupCoordinator::RunInitializeModules(ServiceManager& ma
 					AppendStartupTrace("ServiceManager.Start.skills.refreshed");
 				},
 				.runMinimalRefresh = [&manager]() {
-					const auto workspaceRoot =
-						ResolveWorkspaceRootForSkills(std::filesystem::current_path());
-					const auto commandSourceAdapters =
-						manager.BuildRuntimeSkillCommandSourceAdapters();
-					auto refresh = manager.m_skillsFacade.RefreshSkillsState(
-						workspaceRoot,
-						manager.m_activeConfig,
-						true,
-						L"startup-minimal",
-						manager.m_state.hooks.fallbackPromptInjection,
-						SkillsRefreshDependencies{
-							   .catalogService = manager.m_skillsCatalogService,
-							   .eligibilityService = manager.m_skillsEligibilityService,
-							   .promptService = manager.m_skillsPromptService,
-							   .commandService = manager.m_skillsCommandService,
-							 .commandSourceAdapters = &commandSourceAdapters,
-							   .syncService = manager.m_skillsSyncService,
-							   .envOverrideService = manager.m_skillsEnvOverrideService,
-							   .installService = manager.m_skillsInstallService,
-							   .securityScanService = manager.m_skillSecurityScanService,
-							   .watchService = manager.m_skillsWatchService,
-						});
-					manager.m_skillsCatalog = std::move(refresh.catalog);
-					manager.m_skillsEligibility = std::move(refresh.eligibility);
-					manager.m_hookCatalog = manager.m_hookCatalogService.BuildSnapshot(manager.m_skillsCatalog);
-					manager.m_hookExecution = manager.m_hookExecutionService.Snapshot();
-					manager.m_skillsPrompt = std::move(refresh.prompt);
-					manager.m_skillsRunSnapshot = std::move(refresh.runSnapshot);
-					manager.m_hookEvents = manager.m_hookEventService.Snapshot();
-					manager.m_skillsCommands = std::move(refresh.commands);
-					manager.m_skillsSync = std::move(refresh.sync);
-					manager.m_skillsEnvOverrides = std::move(refresh.envOverrides);
-					manager.m_skillsInstall = std::move(refresh.install);
-					manager.m_skillSecurityScan = std::move(refresh.securityScan);
-					manager.m_skillsWatch = std::move(refresh.watch);
+					manager.RefreshSkillsState(manager.m_activeConfig, true, L"startup-minimal");
 					manager.m_skillsCatalog.diagnostics.warnings.push_back(
 						L"skills startup full refresh skipped; minimal startup catalog loaded.");
 					AppendStartupTrace("ServiceManager.Start.skills.refresh.minimal");

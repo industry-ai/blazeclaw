@@ -81,6 +81,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\MarkdownFrontmatterCompatParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SharedFrontmatterCompatParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillsFrontmatterCompatParityTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillsTsAggregateParityTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\SkillsTypesContractsParityTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ApprovalTokenStore.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\ExtensionLifecycleManager.cpp" />

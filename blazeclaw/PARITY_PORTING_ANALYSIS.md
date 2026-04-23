@@ -283,6 +283,19 @@ Summary status:
 - Architecture recommendation remains explicit: no framework refactor required; keep BlazeClaw layered C++ design and close gaps via event-contract governance, mapping docs, and targeted parity tests.
 - Follow-up execution plan is tracked as phases `S0–S6` for baseline freeze, event mapping matrix, event artifact pipeline, parity tests, and CI/doc guardrails (`S0–S6` accomplished for this cycle; event baseline currently reports zero deferred `GATEWAY_EVENTS` entries). Runtime consumption parity is also wired through `connect` response `features.{methods,events}` sourced from dispatcher+event catalog surfaces.
 
+## Skills aggregate parity follow-up (OpenClaw `agents/skills.ts`)
+
+A dedicated OpenClaw-vs-BlazeClaw skills aggregate capability comparison and hardening plan is tracked in:
+
+- `docs/compare/skills.ts/OPENCLAW_AGENTS_SKILLS_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md`
+- `docs/compare/skills.ts/OPENCLAW_AGENTS_SKILLS_TS_AGGREGATE_EXPORT_MAPPING_S1.md`
+
+Summary status:
+
+- Step 1 completed baseline aggregate export-family mapping from OpenClaw `skills.ts` to BlazeClaw `SkillsFacade`/service seams.
+- Step 2 completed facade-first startup orchestration closure by routing `startup-minimal` refresh through `ServiceManager::RefreshSkillsState`.
+- Step 3 completed aggregate parity guard coverage in `BlazeClawMfc/tests/SkillsTsAggregateParityTests.cpp` with project wiring in `BlazeClawMfc.Tests.vcxproj`.
+
 ## Node-domain parity follow-up (OpenClaw `nodes.ts`)
 
 A dedicated OpenClaw-vs-BlazeClaw node capability gap analysis and parity plan is now tracked in:
