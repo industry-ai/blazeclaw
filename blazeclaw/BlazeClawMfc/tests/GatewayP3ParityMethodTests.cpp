@@ -339,6 +339,14 @@ TEST_CASE("P3 parity methods: transcript model identity overrides runtime defaul
 			<< "\n";
 	}
 	{
+		std::ofstream catalog(stateRoot / "model-catalog.state", std::ios::out | std::ios::trunc);
+		REQUIRE(catalog.is_open());
+		catalog
+			<< "{\"provider\":\"deepseek\",\"model\":\"deepseek/deepseek-reasoner\","
+			<< "\"inputCostPer1k\":0.001,\"outputCostPer1k\":0.003,\"contextTokens\":77777,\"default\":false}"
+			<< "\n";
+	}
+	{
 		std::ofstream store(stateRoot / "sessions.state", std::ios::out | std::ios::trunc);
 		REQUIRE(store.is_open());
 		store << "agent:ops:main|thread|1\n";
@@ -353,7 +361,7 @@ TEST_CASE("P3 parity methods: transcript model identity overrides runtime defaul
 	REQUIRE(preview.payloadJson.has_value());
 	CHECK(preview.payloadJson.value().find("\"modelProvider\":\"deepseek\"") != std::string::npos);
 	CHECK(preview.payloadJson.value().find("\"model\":\"deepseek/deepseek-reasoner\"") != std::string::npos);
-	CHECK(preview.payloadJson.value().find("\"contextTokens\":64000") != std::string::npos);
+	CHECK(preview.payloadJson.value().find("\"contextTokens\":77777") != std::string::npos);
 	CHECK(preview.payloadJson.value().find("\"estimatedCostUsd\":") != std::string::npos);
 
 	const auto list = Route(
@@ -365,5 +373,5 @@ TEST_CASE("P3 parity methods: transcript model identity overrides runtime defaul
 	REQUIRE(list.payloadJson.has_value());
 	CHECK(list.payloadJson.value().find("\"modelProvider\":\"deepseek\"") != std::string::npos);
 	CHECK(list.payloadJson.value().find("\"model\":\"deepseek/deepseek-reasoner\"") != std::string::npos);
-	CHECK(list.payloadJson.value().find("\"contextTokens\":64000") != std::string::npos);
+	CHECK(list.payloadJson.value().find("\"contextTokens\":77777") != std::string::npos);
 }

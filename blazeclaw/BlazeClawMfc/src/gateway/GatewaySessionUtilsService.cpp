@@ -9,10 +9,12 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <limits>
 #include <sstream>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace blazeclaw::gateway {
@@ -93,6 +95,8 @@ namespace blazeclaw::gateway {
 			std::string lastMessagePreview;
 			std::string resolvedModelProvider;
 			std::string resolvedModel;
+			std::string overrideModelProvider;
+			std::string overrideModel;
 		};
 
 		struct SessionStoreEntryRecord {
@@ -107,6 +111,15 @@ namespace blazeclaw::gateway {
 			double inputCostPer1k = 0.0;
 			double outputCostPer1k = 0.0;
 			std::uint64_t contextTokens = 0;
+		};
+
+		struct RuntimeModelCatalogEntry {
+			std::string provider;
+			std::string model;
+			double inputCostPer1k = 0.0;
+			double outputCostPer1k = 0.0;
+			std::uint64_t contextTokens = 0;
+			bool isDefault = false;
 		};
 
 		TranscriptSnapshot ReadTranscriptSnapshot(const std::string& sessionId) {
@@ -137,8 +150,14 @@ namespace blazeclaw::gateway {
 				if (json::FindStringField(line, "model", model) && !model.empty()) {
 					snapshot.resolvedModel = model;
 				}
+				if (json::FindStringField(line, "modelOverride", model) && !model.empty()) {
+					snapshot.overrideModel = model;
+				}
 				if (json::FindStringField(line, "modelProvider", modelProvider) && !modelProvider.empty()) {
 					snapshot.resolvedModelProvider = modelProvider;
+				}
+				if (json::FindStringField(line, "providerOverride", modelProvider) && !modelProvider.empty()) {
+					snapshot.overrideModelProvider = modelProvider;
 				}
 				if (snapshot.resolvedModelProvider.empty() &&
 					json::FindStringField(line, "provider", modelProvider) &&
@@ -170,40 +189,203 @@ namespace blazeclaw::gateway {
 			return snapshot;
 		}
 
+		std::vector<RuntimeModelCatalogEntry> BuildEmbeddedCatalogDefaults() {
+			return {
+				RuntimeModelCatalogEntry{
+					GatewayModel::kSeedProviderId,
+					GatewayModel::kDefaultModelId,
+					0.00020,
+					0.00060,
+					128000,
+					true
+				},
+				RuntimeModelCatalogEntry{
+					GatewayModel::kSeedProviderId,
+					GatewayModel::kReasonerModelId,
+					0.00040,
+					0.00120,
+					64000,
+					false
+				},
+				RuntimeModelCatalogEntry{
+					GatewayModel::kDeepSeekProviderId,
+					GatewayModel::kDeepSeekChatModelId,
+					0.00014,
+					0.00028,
+					128000,
+					false
+				},
+				RuntimeModelCatalogEntry{
+					GatewayModel::kDeepSeekProviderId,
+					GatewayModel::kDeepSeekReasonerModelId,
+					0.00055,
+					0.00219,
+					64000,
+					false
+				},
+			};
+		}
+
+		bool TryParseDouble(const std::string& value, double& outValue) {
+			if (value.empty()) {
+				return false;
+			}
+			try {
+				std::size_t consumed = 0;
+				const double parsed = std::stod(value, &consumed);
+				if (consumed != value.size()) {
+					return false;
+				}
+				outValue = parsed;
+				return true;
+			}
+			catch (...) {
+				return false;
+			}
+		}
+
+		bool TryParseUInt64(const std::string& value, std::uint64_t& outValue) {
+			if (value.empty()) {
+				return false;
+			}
+			try {
+				std::size_t consumed = 0;
+				const std::uint64_t parsed = std::stoull(value, &consumed);
+				if (consumed != value.size()) {
+					return false;
+				}
+				outValue = parsed;
+				return true;
+			}
+			catch (...) {
+				return false;
+			}
+		}
+
+		std::optional<RuntimeModelCatalogEntry> ParseCatalogLine(const std::string& line) {
+			std::string provider;
+			std::string model;
+			if (!json::FindStringField(line, "provider", provider) ||
+				!json::FindStringField(line, "model", model)) {
+				return std::nullopt;
+			}
+			std::string inputRaw;
+			std::string outputRaw;
+			std::string contextRaw;
+			json::FindRawField(line, "inputCostPer1k", inputRaw);
+			json::FindRawField(line, "outputCostPer1k", outputRaw);
+			json::FindRawField(line, "contextTokens", contextRaw);
+
+			RuntimeModelCatalogEntry entry{};
+			entry.provider = ToLower(provider);
+			entry.model = GatewayModel::NormalizeModelId(model);
+			double input = 0.0;
+			double output = 0.0;
+			std::uint64_t contextTokens = 0;
+			if (TryParseDouble(Trim(inputRaw), input)) {
+				entry.inputCostPer1k = input;
+			}
+			if (TryParseDouble(Trim(outputRaw), output)) {
+				entry.outputCostPer1k = output;
+			}
+			if (TryParseUInt64(Trim(contextRaw), contextTokens)) {
+				entry.contextTokens = contextTokens;
+			}
+			bool isDefault = false;
+			if (json::FindBoolField(line, "default", isDefault)) {
+				entry.isDefault = isDefault;
+			}
+			return entry;
+		}
+
+		std::filesystem::path ResolveRuntimeCatalogPath() {
+			char* envPath = nullptr;
+			std::size_t required = 0;
+			const errno_t err = _dupenv_s(&envPath, &required, "BLAZECLAW_MODEL_CATALOG_PATH");
+			if (err == 0 && envPath != nullptr && required > 0) {
+				std::filesystem::path path(envPath);
+				std::free(envPath);
+				return path;
+			}
+			if (envPath != nullptr) {
+				std::free(envPath);
+			}
+			return ResolveGatewayStateFilePath("model-catalog.state");
+		}
+
+		std::vector<RuntimeModelCatalogEntry> LoadRuntimeModelCatalog() {
+			std::unordered_map<std::string, RuntimeModelCatalogEntry> deduped;
+			for (const auto& entry : BuildEmbeddedCatalogDefaults()) {
+				const std::string key = entry.provider + "::" + entry.model;
+				deduped.insert_or_assign(key, entry);
+			}
+
+			const std::filesystem::path catalogPath = ResolveRuntimeCatalogPath();
+			std::ifstream input(catalogPath, std::ios::in | std::ios::binary);
+			if (input.is_open()) {
+				std::string line;
+				while (std::getline(input, line)) {
+					const std::string trimmed = Trim(line);
+					if (trimmed.empty()) {
+						continue;
+					}
+					const auto parsed = ParseCatalogLine(trimmed);
+					if (!parsed.has_value()) {
+						continue;
+					}
+					const std::string key = parsed->provider + "::" + parsed->model;
+					deduped.insert_or_assign(key, parsed.value());
+				}
+			}
+
+			std::vector<RuntimeModelCatalogEntry> merged;
+			merged.reserve(deduped.size());
+			for (const auto& [_, entry] : deduped) {
+				merged.push_back(entry);
+			}
+			return merged;
+		}
+
+		std::optional<RuntimeModelCatalogEntry> FindCatalogEntry(
+			const std::vector<RuntimeModelCatalogEntry>& catalog,
+			const std::string& provider,
+			const std::string& model) {
+			const std::string normalizedProvider = ToLower(provider);
+			const std::string normalizedModel = GatewayModel::NormalizeModelId(model);
+			for (const auto& entry : catalog) {
+				if (entry.provider == normalizedProvider && entry.model == normalizedModel) {
+					return entry;
+				}
+			}
+			return std::nullopt;
+		}
+
+		std::optional<RuntimeModelCatalogEntry> ResolveCatalogDefaultEntry(
+			const std::vector<RuntimeModelCatalogEntry>& catalog) {
+			for (const auto& entry : catalog) {
+				if (entry.isDefault) {
+					return entry;
+				}
+			}
+			return std::nullopt;
+		}
+
 		ModelCatalogCostContext ResolveCatalogCostContext(
+			const std::vector<RuntimeModelCatalogEntry>& catalog,
 			const std::string& provider,
 			const std::string& model) {
 			const std::string normalizedModel = GatewayModel::NormalizeModelId(model);
 			const std::string normalizedProvider = provider.empty()
 				? GatewayModel::ResolveModelProvider(normalizedModel)
 				: ToLower(provider);
-
-			if (normalizedProvider == GatewayModel::kDeepSeekProviderId &&
-				normalizedModel == GatewayModel::kDeepSeekReasonerModelId) {
+			const auto hit = FindCatalogEntry(catalog, normalizedProvider, normalizedModel);
+			if (hit.has_value()) {
 				return ModelCatalogCostContext{
-					GatewayModel::kDeepSeekProviderId,
-					GatewayModel::kDeepSeekReasonerModelId,
-					0.00055,
-					0.00219,
-					64000
-				};
-			}
-			if (normalizedProvider == GatewayModel::kDeepSeekProviderId) {
-				return ModelCatalogCostContext{
-					GatewayModel::kDeepSeekProviderId,
-					GatewayModel::kDeepSeekChatModelId,
-					0.00014,
-					0.00028,
-					128000
-				};
-			}
-			if (normalizedModel == GatewayModel::kReasonerModelId) {
-				return ModelCatalogCostContext{
-					GatewayModel::kSeedProviderId,
-					GatewayModel::kReasonerModelId,
-					0.00040,
-					0.00120,
-					64000
+					hit->provider,
+					hit->model,
+					hit->inputCostPer1k,
+					hit->outputCostPer1k,
+					hit->contextTokens,
 				};
 			}
 			return ModelCatalogCostContext{
@@ -216,13 +398,14 @@ namespace blazeclaw::gateway {
 		}
 
 		double ResolveEstimatedCostUsd(
+			const std::vector<RuntimeModelCatalogEntry>& catalog,
 			const std::string& provider,
 			const std::string& model,
 			const std::uint64_t inputTokens,
 			const std::uint64_t outputTokens) {
-			const ModelCatalogCostContext catalog = ResolveCatalogCostContext(provider, model);
-			return (static_cast<double>(inputTokens) / 1000.0 * catalog.inputCostPer1k) +
-				(static_cast<double>(outputTokens) / 1000.0 * catalog.outputCostPer1k);
+			const ModelCatalogCostContext catalogEntry = ResolveCatalogCostContext(catalog, provider, model);
+			return (static_cast<double>(inputTokens) / 1000.0 * catalogEntry.inputCostPer1k) +
+				(static_cast<double>(outputTokens) / 1000.0 * catalogEntry.outputCostPer1k);
 		}
 
 		std::string ResolveDerivedTitle(
@@ -319,20 +502,36 @@ namespace blazeclaw::gateway {
 		std::pair<std::string, std::string> ResolveSessionModelIdentity(
 			const SessionEntry& session,
 			const TranscriptSnapshot& transcript,
+			const std::vector<RuntimeModelCatalogEntry>& catalog,
 			const std::string& defaultModelProvider,
 			const std::string& defaultModel) {
 			// Precedence:
-			// 1) transcript runtime identity (most specific observed runtime)
-			// 2) runtime/default model argument from host
-			// 3) framework default model/provider
-			std::string model = transcript.resolvedModel.empty() ? defaultModel : transcript.resolvedModel;
+			// 1) transcript explicit overrides
+			// 2) transcript runtime identity
+			// 3) runtime/default model argument from host
+			// 4) catalog default model/provider
+			// 5) framework default model/provider
+			std::string model = !transcript.overrideModel.empty()
+				? transcript.overrideModel
+				: (transcript.resolvedModel.empty() ? defaultModel : transcript.resolvedModel);
 			if (model.empty()) {
-				model = GatewayModel::kDefaultModelId;
+				const auto catalogDefault = ResolveCatalogDefaultEntry(catalog);
+				model = catalogDefault.has_value()
+					? catalogDefault->model
+					: std::string(GatewayModel::kDefaultModelId);
 			}
 
-			std::string provider = transcript.resolvedModelProvider;
+			std::string provider = !transcript.overrideModelProvider.empty()
+				? transcript.overrideModelProvider
+				: transcript.resolvedModelProvider;
 			if (provider.empty()) {
 				provider = defaultModelProvider;
+			}
+			if (provider.empty()) {
+				const auto catalogHit = FindCatalogEntry(catalog, GatewayModel::ResolveModelProvider(model), model);
+				if (catalogHit.has_value()) {
+					provider = catalogHit->provider;
+				}
 			}
 			if (provider.empty()) {
 				provider = GatewayModel::ResolveModelProvider(model);
@@ -452,13 +651,15 @@ namespace blazeclaw::gateway {
 		const std::string& defaultModelProvider,
 		const std::string& defaultModel) {
 		GatewaySessionProjection projection{};
+		const auto catalog = LoadRuntimeModelCatalog();
 		const TranscriptSnapshot transcript = ReadTranscriptSnapshot(session.id);
 		const auto [resolvedProvider, resolvedModel] = ResolveSessionModelIdentity(
 			session,
 			transcript,
+			catalog,
 			defaultModelProvider,
 			defaultModel);
-		const ModelCatalogCostContext catalog = ResolveCatalogCostContext(resolvedProvider, resolvedModel);
+		const ModelCatalogCostContext catalogContext = ResolveCatalogCostContext(catalog, resolvedProvider, resolvedModel);
 		projection.id = session.id;
 		projection.key = session.id;
 		projection.scope = session.scope;
@@ -470,10 +671,11 @@ namespace blazeclaw::gateway {
 		projection.lastMessagePreview = transcript.lastMessagePreview;
 		projection.modelProvider = resolvedProvider;
 		projection.model = resolvedModel;
-		projection.contextTokens = catalog.contextTokens;
+		projection.contextTokens = catalogContext.contextTokens;
 		projection.totalTokens = transcript.totalTokens;
 		projection.totalTokensFresh = transcript.found && transcript.totalTokens > 0;
 		projection.estimatedCostUsd = ResolveEstimatedCostUsd(
+			catalog,
 			projection.modelProvider,
 			projection.model,
 			transcript.inputTokens,
@@ -632,12 +834,14 @@ namespace blazeclaw::gateway {
 		const std::string& defaultModel) {
 		const TranscriptSnapshot transcript = ReadTranscriptSnapshot(session.id);
 		const std::string title = ResolveDerivedTitle(session.id, transcript);
+		const auto catalog = LoadRuntimeModelCatalog();
 		const auto [modelProvider, model] = ResolveSessionModelIdentity(
 			session,
 			transcript,
+			catalog,
 			defaultModelProvider,
 			defaultModel);
-		const ModelCatalogCostContext catalog = ResolveCatalogCostContext(modelProvider, model);
+		const ModelCatalogCostContext catalogContext = ResolveCatalogCostContext(catalog, modelProvider, model);
 		std::ostringstream payload;
 		payload
 			<< "{"
@@ -654,7 +858,7 @@ namespace blazeclaw::gateway {
 			<< "},"
 			<< "\"modelProvider\":\"" << EscapeJsonString(modelProvider) << "\","
 			<< "\"model\":\"" << EscapeJsonString(model) << "\","
-			<< "\"contextTokens\":" << catalog.contextTokens << ","
+			<< "\"contextTokens\":" << catalogContext.contextTokens << ","
 			<< "\"fallbackSource\":\"" << (transcript.found ? "transcript" : "registry") << "\""
 			<< "}";
 		return GatewaySessionPreviewPayload{
@@ -672,13 +876,16 @@ namespace blazeclaw::gateway {
 		const std::string& endDate,
 		bool openClawEnvelope) {
 		const TranscriptSnapshot transcript = ReadTranscriptSnapshot(session.id);
+		const auto catalog = LoadRuntimeModelCatalog();
 		const auto [modelProvider, model] = ResolveSessionModelIdentity(
 			session,
 			transcript,
+			catalog,
 			defaultModelProvider,
 			defaultModel);
-		const ModelCatalogCostContext catalog = ResolveCatalogCostContext(modelProvider, model);
+		const ModelCatalogCostContext catalogContext = ResolveCatalogCostContext(catalog, modelProvider, model);
 		const double totalCost = ResolveEstimatedCostUsd(
+			catalog,
 			modelProvider,
 			model,
 			transcript.inputTokens,
@@ -701,7 +908,7 @@ namespace blazeclaw::gateway {
 				<< "\"modelProvider\":\"" << EscapeJsonString(modelProvider) << "\","
 				<< "\"model\":\"" << EscapeJsonString(model) << "\","
 				<< "\"estimatedCostUsd\":" << totalCost << ","
-				<< "\"contextTokens\":" << catalog.contextTokens << ","
+				<< "\"contextTokens\":" << catalogContext.contextTokens << ","
 				<< "\"fallbackSource\":\"" << (transcript.found ? "transcript" : "registry") << "\","
 				<< "\"lastActiveMs\":" << lastActiveMs
 				<< "}";
@@ -726,7 +933,7 @@ namespace blazeclaw::gateway {
 			<< "\"updatedAt\":" << lastActiveMs << ","
 			<< "\"modelProvider\":\"" << EscapeJsonString(modelProvider) << "\","
 			<< "\"model\":\"" << EscapeJsonString(model) << "\","
-			<< "\"contextTokens\":" << catalog.contextTokens << ","
+			<< "\"contextTokens\":" << catalogContext.contextTokens << ","
 			<< "\"fallbackSource\":\"" << (transcript.found ? "transcript" : "registry") << "\","
 			<< "\"usage\":{\"input\":" << transcript.inputTokens
 			<< ",\"output\":" << transcript.outputTokens
