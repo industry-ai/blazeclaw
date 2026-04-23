@@ -63,6 +63,11 @@ namespace blazeclaw::gateway {
 		bool totalTokensFresh = false;
 	};
 
+	struct GatewaySessionMutationResult {
+		SessionEntry session;
+		bool changed = false;
+	};
+
 	class GatewaySessionUtilsService {
 	public:
 		[[nodiscard]] static std::vector<SessionEntry> ListMergedSessions();
@@ -91,6 +96,12 @@ namespace blazeclaw::gateway {
 			const std::string& startDate,
 			const std::string& endDate,
 			bool openClawEnvelope);
+		[[nodiscard]] static GatewaySessionMutationResult PatchSessionAcrossStores(
+			const std::string& requestedId,
+			const std::optional<std::string>& requestedScope,
+			std::optional<bool> requestedActive);
+		[[nodiscard]] static GatewaySessionMutationResult DeleteSessionAcrossStores(
+			const std::string& requestedId);
 
 	private:
 		[[nodiscard]] static std::string BuildSessionProjectionJson(const GatewaySessionProjection& projection);

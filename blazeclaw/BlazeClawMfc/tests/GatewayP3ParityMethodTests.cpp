@@ -374,6 +374,66 @@ TEST_CASE("P3 parity methods: session resolve uses freshest multi-store match", 
 	CHECK(aliasResolved.payloadJson.value().find("\"active\":true") != std::string::npos);
 }
 
+TEST_CASE("P3 parity methods: session patch and delete target freshest multi-store session", "[gateway][parity][p3][sessions][patch-delete][multistore]")
+{
+	GatewayHost host;
+	REQUIRE(host.StartLocalDispatchOnly());
+
+	const std::filesystem::path stateRoot = blazeclaw::gateway::ResolveGatewayStateDirectory();
+	std::error_code ec;
+	std::filesystem::create_directories(stateRoot / "chat-transcripts", ec);
+	REQUIRE_FALSE(ec);
+	std::filesystem::create_directories(stateRoot / "agents" / "ops", ec);
+	REQUIRE_FALSE(ec);
+
+	{
+		std::ofstream transcript(stateRoot / "chat-transcripts" / "agent_ops_main.jsonl", std::ios::out | std::ios::trunc);
+		REQUIRE(transcript.is_open());
+		transcript
+			<< "{\"messageId\":\"m1\",\"sessionKey\":\"agent:ops:main\",\"role\":\"assistant\",\"text\":\"latest\","
+			<< "\"timestamp\":1735689600200}"
+			<< "\n";
+	}
+	{
+		std::ofstream defaultStore(stateRoot / "sessions.state", std::ios::out | std::ios::trunc);
+		REQUIRE(defaultStore.is_open());
+		defaultStore << "agent:ops:main|default|0\n";
+	}
+	{
+		std::ofstream agentStore(stateRoot / "agents" / "ops" / "sessions.state", std::ios::out | std::ios::trunc);
+		REQUIRE(agentStore.is_open());
+		agentStore << "agent:ops:main|thread|1\n";
+	}
+
+	const auto patch = Route(
+		host,
+		"p3-session-patch-multistore",
+		"gateway.sessions.patch",
+		R"({"sessionId":"agent:ops:main","scope":"workspace","active":false})");
+	REQUIRE(patch.ok);
+	REQUIRE(patch.payloadJson.has_value());
+	CHECK(patch.payloadJson.value().find("\"patched\":true") != std::string::npos);
+
+	const auto resolvedAfterPatch = Route(
+		host,
+		"p3-session-resolve-after-patch",
+		"gateway.sessions.resolve",
+		R"({"sessionId":"agent:ops:main"})");
+	REQUIRE(resolvedAfterPatch.ok);
+	REQUIRE(resolvedAfterPatch.payloadJson.has_value());
+	CHECK(resolvedAfterPatch.payloadJson.value().find("\"scope\":\"workspace\"") != std::string::npos);
+	CHECK(resolvedAfterPatch.payloadJson.value().find("\"active\":false") != std::string::npos);
+
+	const auto deleted = Route(
+		host,
+		"p3-session-delete-multistore",
+		"gateway.sessions.delete",
+		R"({"sessionId":"agent:ops:main"})");
+	REQUIRE(deleted.ok);
+	REQUIRE(deleted.payloadJson.has_value());
+	CHECK(deleted.payloadJson.value().find("\"deleted\":true") != std::string::npos);
+}
+
 TEST_CASE("P3 parity methods: transcript model identity overrides runtime defaults", "[gateway][parity][p3][sessions][model-precedence]")
 {
 	GatewayHost host;

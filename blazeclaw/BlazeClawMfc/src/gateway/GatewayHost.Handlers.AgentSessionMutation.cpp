@@ -98,10 +98,11 @@ namespace blazeclaw::gateway::handlers::agent_session_mutation {
 			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("sessionId");
 			const std::string requestedScope = RequestParamsView(request.paramsJson).GetString("scope");
 			const std::optional<bool> requestedActive = RequestParamsView(request.paramsJson).GetBool("active");
-			const SessionEntry patched = host.m_sessionRegistry.Patch(
+			const auto patchResult = GatewaySessionUtilsService::PatchSessionAcrossStores(
 				requestedId,
 				requestedScope.empty() ? std::nullopt : std::optional<std::string>(requestedScope),
 				requestedActive);
+			const SessionEntry patched = patchResult.session;
 			EmitTelemetryEvent(
 				"gateway.event.sessions.changed",
 				JsonObject({
@@ -173,9 +174,10 @@ namespace blazeclaw::gateway::handlers::agent_session_mutation {
 
 		host.m_dispatcher.Register("gateway.sessions.delete", [&host](const protocol::RequestFrame& request) {
 			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("sessionId");
-			SessionEntry removedSession;
-			const bool deleted = host.m_sessionRegistry.Delete(requestedId, removedSession);
-			const std::size_t remaining = host.m_sessionRegistry.List().size();
+			const auto deleteResult = GatewaySessionUtilsService::DeleteSessionAcrossStores(requestedId);
+			const SessionEntry removedSession = deleteResult.session;
+			const bool deleted = deleteResult.changed;
+			const std::size_t remaining = GatewaySessionUtilsService::ListMergedSessions().size();
 			if (deleted) {
 				EmitTelemetryEvent(
 					"gateway.event.sessions.changed",

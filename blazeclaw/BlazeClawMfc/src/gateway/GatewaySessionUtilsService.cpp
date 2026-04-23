@@ -783,6 +783,77 @@ namespace blazeclaw::gateway {
 			return candidate.entry.id < current.entry.id;
 		}
 
+		std::vector<SessionEntry> LoadSessionStoreEntries(const std::filesystem::path& path) {
+			std::vector<SessionEntry> sessions;
+			std::ifstream input(path, std::ios::in | std::ios::binary);
+			if (!input.is_open()) {
+				return sessions;
+			}
+
+			std::string line;
+			while (std::getline(input, line)) {
+				if (line.empty()) {
+					continue;
+				}
+				std::istringstream row(line);
+				std::string id;
+				std::string scope;
+				std::string active;
+				if (!std::getline(row, id, '|') ||
+					!std::getline(row, scope, '|') ||
+					!std::getline(row, active)) {
+					continue;
+				}
+				SessionEntry parsed{};
+				parsed.id = GatewaySessionUtilsService::CanonicalizeSessionId(id);
+				parsed.scope = scope.empty()
+					? (parsed.id == "main" ? "default" : "thread")
+					: scope;
+				parsed.active = active == "1" || active == "true";
+				sessions.push_back(parsed);
+			}
+			return sessions;
+		}
+
+		void SaveSessionStoreEntries(const std::filesystem::path& path, std::vector<SessionEntry> sessions) {
+			std::sort(
+				sessions.begin(),
+				sessions.end(),
+				[](const SessionEntry& left, const SessionEntry& right) {
+					return left.id < right.id;
+				});
+			std::error_code ec;
+			std::filesystem::create_directories(path.parent_path(), ec);
+			std::ofstream output(path, std::ios::out | std::ios::trunc | std::ios::binary);
+			if (!output.is_open()) {
+				return;
+			}
+			for (const auto& session : sessions) {
+				output << session.id
+					<< "|"
+					<< (session.scope.empty() ? (session.id == "main" ? "default" : "thread") : session.scope)
+					<< "|"
+					<< (session.active ? "1" : "0")
+					<< "\n";
+			}
+		}
+
+		std::optional<SessionStoreEntryRecord> ResolveFreshestRecordForRequestedId(const std::string& requestedId) {
+			const std::string canonicalRequested = GatewaySessionUtilsService::CanonicalizeSessionId(requestedId);
+			std::optional<SessionStoreEntryRecord> chosen;
+			for (const auto& path : EnumerateSessionStorePaths()) {
+				for (const auto& record : ReadSessionStoreRecords(path)) {
+					if (GatewaySessionUtilsService::CanonicalizeSessionId(record.entry.id) != canonicalRequested) {
+						continue;
+					}
+					if (!chosen.has_value() || IsFresherRecord(record, *chosen)) {
+						chosen = record;
+					}
+				}
+			}
+			return chosen;
+		}
+
 		ResolvedModelIdentity ResolveSessionModelIdentity(
 			const TranscriptSnapshot& transcript,
 			const std::vector<RuntimeModelCatalogEntry>& catalog,
@@ -1294,6 +1365,114 @@ namespace blazeclaw::gateway {
 			payload.str(),
 			transcript.found ? "transcript" : "registry",
 			transcript.found && transcript.totalTokens > 0
+		};
+	}
+
+	GatewaySessionMutationResult GatewaySessionUtilsService::PatchSessionAcrossStores(
+		const std::string& requestedId,
+		const std::optional<std::string>& requestedScope,
+		std::optional<bool> requestedActive) {
+		const std::string canonicalRequested = CanonicalizeSessionId(requestedId);
+		const auto freshest = ResolveFreshestRecordForRequestedId(canonicalRequested);
+		const std::filesystem::path targetPath = freshest.has_value()
+			? freshest->storePath
+			: ResolveGatewayStateFilePath("sessions.state");
+		const std::string targetId = freshest.has_value()
+			? freshest->entry.id
+			: canonicalRequested;
+
+		std::vector<SessionEntry> sessions = LoadSessionStoreEntries(targetPath);
+		SessionEntry patched{};
+		patched.id = targetId;
+		patched.scope = targetId == "main" ? "default" : "thread";
+		patched.active = true;
+		bool found = false;
+		for (auto& session : sessions) {
+			if (CanonicalizeSessionId(session.id) != CanonicalizeSessionId(targetId)) {
+				continue;
+			}
+			found = true;
+			patched = session;
+			break;
+		}
+		if (!requestedScope.has_value() || requestedScope->empty()) {
+			// keep resolved/default scope
+		}
+		else {
+			patched.scope = requestedScope.value();
+		}
+		if (requestedActive.has_value()) {
+			patched.active = requestedActive.value();
+		}
+		if (!found) {
+			sessions.push_back(patched);
+		}
+		else {
+			for (auto& session : sessions) {
+				if (CanonicalizeSessionId(session.id) == CanonicalizeSessionId(targetId)) {
+					session = patched;
+					break;
+				}
+			}
+		}
+		SaveSessionStoreEntries(targetPath, std::move(sessions));
+		return GatewaySessionMutationResult{
+			patched,
+			true,
+		};
+	}
+
+	GatewaySessionMutationResult GatewaySessionUtilsService::DeleteSessionAcrossStores(
+		const std::string& requestedId) {
+		const std::string canonicalRequested = CanonicalizeSessionId(requestedId);
+		if (canonicalRequested == "main") {
+			return GatewaySessionMutationResult{
+				SessionEntry{
+					.id = canonicalRequested,
+					.scope = "default",
+					.active = true,
+				},
+				false,
+			};
+		}
+		const auto freshest = ResolveFreshestRecordForRequestedId(canonicalRequested);
+		if (!freshest.has_value()) {
+			return GatewaySessionMutationResult{
+				SessionEntry{
+					.id = canonicalRequested,
+					.scope = "thread",
+					.active = false,
+				},
+				false,
+			};
+		}
+
+		const std::filesystem::path targetPath = freshest->storePath;
+		const std::string targetId = freshest->entry.id;
+		std::vector<SessionEntry> sessions = LoadSessionStoreEntries(targetPath);
+		SessionEntry removed = freshest->entry;
+		removed.active = false;
+		bool changed = false;
+		sessions.erase(
+			std::remove_if(
+				sessions.begin(),
+				sessions.end(),
+				[&](const SessionEntry& session) {
+					const bool matches = CanonicalizeSessionId(session.id) == CanonicalizeSessionId(targetId);
+					if (matches) {
+						changed = true;
+						removed = session;
+						removed.active = false;
+					}
+					return matches;
+				}),
+			sessions.end());
+		if (changed) {
+			SaveSessionStoreEntries(targetPath, std::move(sessions));
+		}
+		return GatewaySessionMutationResult{
+			removed,
+			changed,
 		};
 	}
 
