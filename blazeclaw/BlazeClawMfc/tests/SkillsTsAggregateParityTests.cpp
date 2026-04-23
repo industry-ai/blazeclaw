@@ -81,3 +81,68 @@ TEST_CASE(
 	REQUIRE(hooksCoordinator.find("context.commands") != std::string::npos);
 	REQUIRE(hooksCoordinator.find("commandProjectedCount") != std::string::npos);
 }
+
+TEST_CASE(
+	"skills.ts parity: OpenClaw change-trigger protocol is documented and anchored",
+	"[skills][parity][aggregate][trigger-protocol]")
+{
+	const std::string planDoc = ReadTextFile(
+		std::filesystem::path("..") /
+		"docs" /
+		"compare" /
+		"skills.ts" /
+		"OPENCLAW_AGENTS_SKILLS_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md");
+	REQUIRE(planDoc.find("Add OpenClaw-change trigger protocol") != std::string::npos);
+	REQUIRE(planDoc.find("Step 4 complete") != std::string::npos);
+
+	const std::string protocolDoc = ReadTextFile(
+		std::filesystem::path("..") /
+		"docs" /
+		"compare" /
+		"skills.ts" /
+		"OPENCLAW_AGENTS_SKILLS_TS_CHANGE_TRIGGER_PROTOCOL_S4.md");
+	REQUIRE(protocolDoc.find("Trigger conditions") != std::string::npos);
+	REQUIRE(protocolDoc.find("Required update bundle") != std::string::npos);
+	REQUIRE(protocolDoc.find("`openclaw/src/agents/skills.ts`") != std::string::npos);
+	REQUIRE(protocolDoc.find("`SkillsTsAggregateParityTests.cpp`") != std::string::npos);
+}
+
+TEST_CASE(
+	"skills.ts parity: gateway diagnostics contract uses projection counters for install parity",
+	"[skills][parity][aggregate][diagnostics]")
+{
+	const std::string hooksCoordinator = ReadTextFile(
+		std::filesystem::path("BlazeClawMfc") / "src" / "core" / "skills" / "CSkillsHooksCoordinator.cpp");
+	REQUIRE(hooksCoordinator.find("installContractProjectedCount") != std::string::npos);
+	REQUIRE(hooksCoordinator.find("installContractFallbackCount") != std::string::npos);
+
+	const std::string gatewayHandler = ReadTextFile(
+		std::filesystem::path("BlazeClawMfc") / "src" / "gateway" / "GatewayHost.Handlers.Runtime.ChatPipeline.cpp");
+	REQUIRE(gatewayHandler.find("\"installContractProjected\":") != std::string::npos);
+	REQUIRE(gatewayHandler.find("\"installContractFallback\":") != std::string::npos);
+	REQUIRE(gatewayHandler.find("const auto& state = host.m_skillsCatalogState;") != std::string::npos);
+}
+
+TEST_CASE(
+	"skills.ts parity: compare docs stay synchronized across plan and umbrella analysis",
+	"[skills][parity][aggregate][docs-sync]")
+{
+	const std::string planDoc = ReadTextFile(
+		std::filesystem::path("..") /
+		"docs" /
+		"compare" /
+		"skills.ts" /
+		"OPENCLAW_AGENTS_SKILLS_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md");
+	const std::string umbrellaDoc = ReadTextFile(
+		std::filesystem::path("..") /
+		"docs" /
+		"compare" /
+		"skills.ts" /
+		"OPENCLAW_SKILLS_TS_CAPABILITY_PARITY_ANALYSIS.md");
+
+	REQUIRE(planDoc.find("Step 6 complete") != std::string::npos);
+	REQUIRE(umbrellaDoc.find("Step 1-6 synchronized status") != std::string::npos);
+	REQUIRE(umbrellaDoc.find("OPENCLAW_AGENTS_SKILLS_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md") != std::string::npos);
+	REQUIRE(umbrellaDoc.find("OPENCLAW_AGENTS_SKILLS_TS_AGGREGATE_EXPORT_MAPPING_S1.md") != std::string::npos);
+	REQUIRE(umbrellaDoc.find("OPENCLAW_AGENTS_SKILLS_TS_CHANGE_TRIGGER_PROTOCOL_S4.md") != std::string::npos);
+}

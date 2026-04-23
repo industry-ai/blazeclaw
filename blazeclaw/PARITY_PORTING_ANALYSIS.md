@@ -295,6 +295,9 @@ Summary status:
 - Step 1 completed baseline aggregate export-family mapping from OpenClaw `skills.ts` to BlazeClaw `SkillsFacade`/service seams.
 - Step 2 completed facade-first startup orchestration closure by routing `startup-minimal` refresh through `ServiceManager::RefreshSkillsState`.
 - Step 3 completed aggregate parity guard coverage in `BlazeClawMfc/tests/SkillsTsAggregateParityTests.cpp` with project wiring in `BlazeClawMfc.Tests.vcxproj`.
+- Step 4 completed OpenClaw change-trigger protocol documentation and guard-test enforcement.
+- Step 5 completed gateway diagnostics parity hardening by exposing install-contract projection counters in `gateway.skills.status`.
+- Step 6 completed compare-doc synchronization enforcement across plan/mapping/umbrella analysis docs.
 
 ## Node-domain parity follow-up (OpenClaw `nodes.ts`)
 

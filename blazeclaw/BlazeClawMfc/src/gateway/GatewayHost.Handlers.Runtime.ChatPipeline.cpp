@@ -2504,6 +2504,10 @@ namespace blazeclaw::gateway {
 						std::to_string(state.installExecutableCount) +
 						",\"installBlocked\":" +
 						std::to_string(state.installBlockedCount) +
+						",\"installContractProjected\":" +
+						std::to_string(state.installContractProjectedCount) +
+						",\"installContractFallback\":" +
+						std::to_string(state.installContractFallbackCount) +
 						",\"scanInfo\":" +
 						std::to_string(state.scanInfoCount) +
 						",\"scanWarn\":" +
