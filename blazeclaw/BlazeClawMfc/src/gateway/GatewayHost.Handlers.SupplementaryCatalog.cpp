@@ -36,7 +36,10 @@ host.m_dispatcher.Register("gateway.session.list", [&host](const protocol::Reque
 			filters.spawnedBy = params.GetString("spawnedBy");
 			filters.agentId = params.GetString("agentId");
 			filters.search = params.GetString("search");
-			const auto sessions = host.m_sessionRegistry.List();
+			const auto mergedSessions = GatewaySessionUtilsService::ListMergedSessions();
+			const auto sessions = mergedSessions.empty()
+				? host.m_sessionRegistry.List()
+				: mergedSessions;
 			return protocol::OkResponse(
 				request,
 				GatewaySessionUtilsService::BuildSessionListPayload(sessions, filters));

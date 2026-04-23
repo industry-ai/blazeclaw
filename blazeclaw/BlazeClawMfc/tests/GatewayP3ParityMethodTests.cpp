@@ -1,6 +1,10 @@
 #include <catch2/catch_all.hpp>
 
 #include "gateway/GatewayHost.h"
+#include "gateway/GatewayPersistencePaths.h"
+
+#include <filesystem>
+#include <fstream>
 
 using blazeclaw::gateway::GatewayHost;
 using blazeclaw::gateway::protocol::RequestFrame;
@@ -282,4 +286,36 @@ TEST_CASE("P3 parity methods: sessions preview and usage use transcript fallback
 	CHECK(listWithDerived.payloadJson.value().find("\"contextTokens\":") != std::string::npos);
 	CHECK(listWithDerived.payloadJson.value().find("\"estimatedCostUsd\":") != std::string::npos);
 	CHECK(listWithDerived.payloadJson.value().find("\"totalTokensFresh\":") != std::string::npos);
+}
+
+TEST_CASE("P3 parity methods: session list resolves freshest entry across multi-store paths", "[gateway][parity][p3][sessions][multistore]")
+{
+	GatewayHost host;
+	REQUIRE(host.StartLocalDispatchOnly());
+
+	const std::filesystem::path stateRoot = blazeclaw::gateway::ResolveGatewayStateDirectory();
+	std::error_code ec;
+	std::filesystem::create_directories(stateRoot / "agents" / "ops", ec);
+	REQUIRE_FALSE(ec);
+	{
+		std::ofstream defaultStore(stateRoot / "sessions.state", std::ios::out | std::ios::trunc);
+		REQUIRE(defaultStore.is_open());
+		defaultStore << "agent:ops:main|thread|1\n";
+	}
+	{
+		std::ofstream agentStore(stateRoot / "agents" / "ops" / "sessions.state", std::ios::out | std::ios::trunc);
+		REQUIRE(agentStore.is_open());
+		agentStore << "agent:ops:main|default|0\n";
+	}
+
+	const auto list = Route(
+		host,
+		"p3-session-list-multistore",
+		"gateway.session.list",
+		R"({"search":"agent:ops:main","includeGlobal":true,"includeUnknown":true})");
+	REQUIRE(list.ok);
+	REQUIRE(list.payloadJson.has_value());
+	CHECK(list.payloadJson.value().find("\"id\":\"agent:ops:main\"") != std::string::npos);
+	CHECK(list.payloadJson.value().find("\"scope\":\"thread\"") != std::string::npos);
+	CHECK(list.payloadJson.value().find("\"active\":true") != std::string::npos);
 }

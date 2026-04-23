@@ -115,7 +115,8 @@ namespace blazeclaw::gateway::handlers::agent_session_mutation {
 
 		host.m_dispatcher.Register("gateway.sessions.preview", [&host](const protocol::RequestFrame& request) {
 			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("sessionId");
-			const SessionEntry session = host.m_sessionRegistry.Resolve(requestedId);
+			const SessionEntry session = GatewaySessionUtilsService::ResolveFreshestSessionAcrossStores(requestedId)
+				.value_or(host.m_sessionRegistry.Resolve(requestedId));
 			const auto payload = GatewaySessionUtilsService::BuildSessionPreviewPayload(
 				session,
 				"deepseek",
@@ -147,7 +148,8 @@ namespace blazeclaw::gateway::handlers::agent_session_mutation {
 				const std::string requestedId = params.GetString("sessionId");
 				const std::string requestedStartDate = params.GetString("startDate");
 				const std::string requestedEndDate = params.GetString("endDate");
-				const SessionEntry session = host.m_sessionRegistry.Resolve(requestedId);
+				const SessionEntry session = GatewaySessionUtilsService::ResolveFreshestSessionAcrossStores(requestedId)
+					.value_or(host.m_sessionRegistry.Resolve(requestedId));
 				const auto payload = GatewaySessionUtilsService::BuildSessionUsagePayload(
 					session,
 					"deepseek",

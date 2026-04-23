@@ -61,6 +61,9 @@ namespace blazeclaw::gateway {
 
 	class GatewaySessionUtilsService {
 	public:
+		[[nodiscard]] static std::vector<SessionEntry> ListMergedSessions();
+		[[nodiscard]] static std::optional<SessionEntry> ResolveFreshestSessionAcrossStores(
+			const std::string& requestedId);
 		[[nodiscard]] static std::string CanonicalizeSessionId(const std::string& value);
 		[[nodiscard]] static std::vector<std::string> FindSessionIdsIgnoreCase(
 			const std::vector<SessionEntry>& sessions,

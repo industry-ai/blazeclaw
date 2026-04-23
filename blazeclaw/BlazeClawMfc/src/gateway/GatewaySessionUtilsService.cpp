@@ -92,6 +92,12 @@ namespace blazeclaw::gateway {
 			std::string lastMessagePreview;
 		};
 
+		struct SessionStoreEntryRecord {
+			SessionEntry entry;
+			std::filesystem::path storePath;
+			std::uint64_t freshnessMs = 0;
+		};
+
 		TranscriptSnapshot ReadTranscriptSnapshot(const std::string& sessionId) {
 			TranscriptSnapshot snapshot{};
 			const std::filesystem::path transcriptPath =
@@ -171,7 +177,131 @@ namespace blazeclaw::gateway {
 			}
 			return "Session " + sessionId;
 		}
+
+		std::vector<std::filesystem::path> EnumerateSessionStorePaths() {
+			std::vector<std::filesystem::path> paths;
+			const std::filesystem::path stateRoot = ResolveGatewayStateDirectory();
+			const std::filesystem::path defaultStore = stateRoot / "sessions.state";
+			paths.push_back(defaultStore);
+
+			const std::filesystem::path agentsDir = stateRoot / "agents";
+			std::error_code ec;
+			if (!std::filesystem::exists(agentsDir, ec) || ec) {
+				return paths;
+			}
+
+			for (const auto& entry : std::filesystem::directory_iterator(agentsDir, ec)) {
+				if (ec || !entry.is_directory()) {
+					continue;
+				}
+				paths.push_back(entry.path() / "sessions.state");
+			}
+			return paths;
+		}
+
+		std::vector<SessionStoreEntryRecord> ReadSessionStoreRecords(
+			const std::filesystem::path& path) {
+			std::vector<SessionStoreEntryRecord> records;
+			std::ifstream input(path);
+			if (!input.is_open()) {
+				return records;
+			}
+
+			std::string line;
+			while (std::getline(input, line)) {
+				if (line.empty()) {
+					continue;
+				}
+
+				std::istringstream row(line);
+				std::string id;
+				std::string scope;
+				std::string active;
+				if (!std::getline(row, id, '|') ||
+					!std::getline(row, scope, '|') ||
+					!std::getline(row, active)) {
+					continue;
+				}
+
+				SessionEntry parsed{};
+				parsed.id = GatewaySessionUtilsService::CanonicalizeSessionId(id);
+				parsed.scope = scope.empty()
+					? (parsed.id == "main" ? "default" : "thread")
+					: scope;
+				parsed.active = active == "1" || active == "true";
+				const TranscriptSnapshot transcript = ReadTranscriptSnapshot(parsed.id);
+				records.push_back(SessionStoreEntryRecord{
+					.entry = parsed,
+					.storePath = path,
+					.freshnessMs = transcript.lastActiveMs,
+				});
+			}
+			return records;
+		}
+
+		bool IsFresherRecord(
+			const SessionStoreEntryRecord& candidate,
+			const SessionStoreEntryRecord& current) {
+			if (candidate.freshnessMs != current.freshnessMs) {
+				return candidate.freshnessMs > current.freshnessMs;
+			}
+			if (candidate.entry.active != current.entry.active) {
+				return candidate.entry.active && !current.entry.active;
+			}
+			const std::string candidatePath = candidate.storePath.string();
+			const std::string currentPath = current.storePath.string();
+			if (candidatePath != currentPath) {
+				return candidatePath < currentPath;
+			}
+			return candidate.entry.id < current.entry.id;
+		}
 	} // namespace
+
+	std::vector<SessionEntry> GatewaySessionUtilsService::ListMergedSessions() {
+		std::unordered_map<std::string, SessionStoreEntryRecord> merged;
+		for (const auto& path : EnumerateSessionStorePaths()) {
+			for (const auto& record : ReadSessionStoreRecords(path)) {
+				const std::string key = CanonicalizeSessionId(record.entry.id);
+				const auto it = merged.find(key);
+				if (it == merged.end() || IsFresherRecord(record, it->second)) {
+					merged.insert_or_assign(key, record);
+				}
+			}
+		}
+
+		std::vector<SessionEntry> sessions;
+		sessions.reserve(merged.size());
+		for (const auto& [_, record] : merged) {
+			sessions.push_back(record.entry);
+		}
+		std::sort(
+			sessions.begin(),
+			sessions.end(),
+			[](const SessionEntry& left, const SessionEntry& right) {
+				return left.id < right.id;
+			});
+		return sessions;
+	}
+
+	std::optional<SessionEntry> GatewaySessionUtilsService::ResolveFreshestSessionAcrossStores(
+		const std::string& requestedId) {
+		const std::string canonicalRequested = CanonicalizeSessionId(requestedId);
+		std::optional<SessionStoreEntryRecord> chosen;
+		for (const auto& path : EnumerateSessionStorePaths()) {
+			for (const auto& record : ReadSessionStoreRecords(path)) {
+				if (CanonicalizeSessionId(record.entry.id) != canonicalRequested) {
+					continue;
+				}
+				if (!chosen.has_value() || IsFresherRecord(record, *chosen)) {
+					chosen = record;
+				}
+			}
+		}
+		if (!chosen.has_value()) {
+			return std::nullopt;
+		}
+		return chosen->entry;
+	}
 
 	std::string GatewaySessionUtilsService::CanonicalizeSessionId(const std::string& value) {
 		const std::string trimmed = Trim(value);
@@ -219,12 +349,9 @@ namespace blazeclaw::gateway {
 				chosen = session;
 				continue;
 			}
-			const std::uint64_t chosenUpdatedAt = chosen->updatedAt;
-			if (session.updatedAt > chosenUpdatedAt) {
-				chosen = session;
-				continue;
-			}
-			if (session.updatedAt == chosenUpdatedAt && session.id < chosen->id) {
+			// SessionEntry currently does not persist updatedAt, so we keep stable deterministic
+			// selection by preferring active sessions and then lexical id ordering.
+			if (session.id < chosen->id) {
 				chosen = session;
 			}
 		}
