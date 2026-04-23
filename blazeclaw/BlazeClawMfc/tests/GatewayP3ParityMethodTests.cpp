@@ -244,6 +244,7 @@ TEST_CASE("P3 parity methods: sessions preview and usage use transcript fallback
 	CHECK(preview.payloadJson.value().find("\"usage\":{") != std::string::npos);
 	CHECK(preview.payloadJson.value().find("\"modelProvider\":") != std::string::npos);
 	CHECK(preview.payloadJson.value().find("\"fallbackSource\":") != std::string::npos);
+	CHECK(preview.payloadJson.value().find("\"totalTokensFresh\":") != std::string::npos);
 
 	const auto usage = Route(
 		host,
@@ -256,6 +257,7 @@ TEST_CASE("P3 parity methods: sessions preview and usage use transcript fallback
 	CHECK(usage.payloadJson.value().find("\"estimatedCostUsd\":") != std::string::npos);
 	CHECK(usage.payloadJson.value().find("\"model\":") != std::string::npos);
 	CHECK(usage.payloadJson.value().find("\"fallbackSource\":") != std::string::npos);
+	CHECK(usage.payloadJson.value().find("\"totalTokensFresh\":") != std::string::npos);
 
 	const auto usageEnvelope = Route(
 		host,
@@ -279,4 +281,5 @@ TEST_CASE("P3 parity methods: sessions preview and usage use transcript fallback
 	CHECK(listWithDerived.payloadJson.value().find("\"modelProvider\":") != std::string::npos);
 	CHECK(listWithDerived.payloadJson.value().find("\"contextTokens\":") != std::string::npos);
 	CHECK(listWithDerived.payloadJson.value().find("\"estimatedCostUsd\":") != std::string::npos);
+	CHECK(listWithDerived.payloadJson.value().find("\"totalTokensFresh\":") != std::string::npos);
 }

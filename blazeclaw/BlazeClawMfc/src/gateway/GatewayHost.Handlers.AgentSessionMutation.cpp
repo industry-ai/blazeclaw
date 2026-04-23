@@ -120,6 +120,14 @@ namespace blazeclaw::gateway::handlers::agent_session_mutation {
 				session,
 				"deepseek",
 				host.m_runtimeAgentModel);
+			EmitTelemetryEvent(
+				"gateway.event.sessions.preview.fallback",
+				JsonObject({
+					{"event", JsonString("sessions.preview.fallback")},
+					{"sessionId", JsonString(session.id)},
+					{"fallbackSource", JsonString(payload.fallbackSource)},
+					{"totalTokensFresh", JsonBool(payload.totalTokensFresh)},
+				}));
 			return protocol::OkResponse(request, payload.json);
 			});
 
@@ -147,6 +155,14 @@ namespace blazeclaw::gateway::handlers::agent_session_mutation {
 					requestedStartDate,
 					requestedEndDate,
 					openClawEnvelope);
+				EmitTelemetryEvent(
+					"gateway.event.sessions.usage.fallback",
+					JsonObject({
+						{"event", JsonString("sessions.usage.fallback")},
+						{"sessionId", JsonString(session.id)},
+						{"fallbackSource", JsonString(payload.fallbackSource)},
+						{"totalTokensFresh", JsonBool(payload.totalTokensFresh)},
+					}));
 				return protocol::OkResponse(request, payload.json);
 				});
 			};

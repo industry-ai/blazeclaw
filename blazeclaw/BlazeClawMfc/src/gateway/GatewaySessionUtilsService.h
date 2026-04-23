@@ -39,6 +39,7 @@ namespace blazeclaw::gateway {
 		std::uint64_t contextTokens = 0;
 		std::uint64_t totalTokens = 0;
 		double estimatedCostUsd = 0.0;
+		bool totalTokensFresh = false;
 		std::string fallbackSource = "registry";
 		std::string spawnedBy;
 		std::string parentSessionKey;
@@ -48,10 +49,14 @@ namespace blazeclaw::gateway {
 
 	struct GatewaySessionPreviewPayload {
 		std::string json;
+		std::string fallbackSource;
+		bool totalTokensFresh = false;
 	};
 
 	struct GatewaySessionUsagePayload {
 		std::string json;
+		std::string fallbackSource;
+		bool totalTokensFresh = false;
 	};
 
 	class GatewaySessionUtilsService {

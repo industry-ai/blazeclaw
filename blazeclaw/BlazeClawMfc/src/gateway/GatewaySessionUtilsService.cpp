@@ -219,7 +219,12 @@ namespace blazeclaw::gateway {
 				chosen = session;
 				continue;
 			}
-			if (session.id < chosen->id) {
+			const std::uint64_t chosenUpdatedAt = chosen->updatedAt;
+			if (session.updatedAt > chosenUpdatedAt) {
+				chosen = session;
+				continue;
+			}
+			if (session.updatedAt == chosenUpdatedAt && session.id < chosen->id) {
 				chosen = session;
 			}
 		}
@@ -242,6 +247,7 @@ namespace blazeclaw::gateway {
 		projection.model = "deepseek/deepseek-chat";
 		projection.contextTokens = 128000;
 		projection.totalTokens = transcript.totalTokens;
+		projection.totalTokensFresh = transcript.found && transcript.totalTokens > 0;
 		projection.estimatedCostUsd = ResolveEstimatedCostUsd(
 			projection.modelProvider,
 			projection.model,
@@ -276,6 +282,7 @@ namespace blazeclaw::gateway {
 			<< ",\"model\":\"" << EscapeJsonString(projection.model) << "\""
 			<< ",\"contextTokens\":" << projection.contextTokens
 			<< ",\"totalTokens\":" << projection.totalTokens
+			<< ",\"totalTokensFresh\":" << (projection.totalTokensFresh ? "true" : "false")
 			<< ",\"estimatedCostUsd\":" << projection.estimatedCostUsd
 			<< ",\"fallbackSource\":\"" << EscapeJsonString(projection.fallbackSource) << "\"";
 		if (!projection.spawnedBy.empty()) {
@@ -408,13 +415,19 @@ namespace blazeclaw::gateway {
 			<< "\"usage\":{\"messages\":" << transcript.messageCount
 			<< ",\"input\":" << transcript.inputTokens
 			<< ",\"output\":" << transcript.outputTokens
-			<< ",\"totalTokens\":" << transcript.totalTokens << "},"
+			<< ",\"totalTokens\":" << transcript.totalTokens
+			<< ",\"totalTokensFresh\":" << ((transcript.found && transcript.totalTokens > 0) ? "true" : "false")
+			<< "},"
 			<< "\"modelProvider\":\"" << EscapeJsonString(modelProvider) << "\","
 			<< "\"model\":\"" << EscapeJsonString(model) << "\","
 			<< "\"contextTokens\":128000,"
 			<< "\"fallbackSource\":\"" << (transcript.found ? "transcript" : "registry") << "\""
 			<< "}";
-		return GatewaySessionPreviewPayload{ payload.str() };
+		return GatewaySessionPreviewPayload{
+			payload.str(),
+			transcript.found ? "transcript" : "registry",
+			transcript.found && transcript.totalTokens > 0
+		};
 	}
 
 	GatewaySessionUsagePayload GatewaySessionUtilsService::BuildSessionUsagePayload(
@@ -444,14 +457,20 @@ namespace blazeclaw::gateway {
 				<< "\"messages\":" << transcript.messageCount << ","
 				<< "\"tokens\":{\"input\":" << transcript.inputTokens
 				<< ",\"output\":" << transcript.outputTokens
-				<< ",\"total\":" << transcript.totalTokens << "},"
+				<< ",\"total\":" << transcript.totalTokens
+				<< ",\"totalTokensFresh\":" << ((transcript.found && transcript.totalTokens > 0) ? "true" : "false")
+				<< "},"
 				<< "\"modelProvider\":\"" << EscapeJsonString(modelProvider) << "\","
 				<< "\"model\":\"" << EscapeJsonString(model) << "\","
 				<< "\"estimatedCostUsd\":" << totalCost << ","
 				<< "\"fallbackSource\":\"" << (transcript.found ? "transcript" : "registry") << "\","
 				<< "\"lastActiveMs\":" << lastActiveMs
 				<< "}";
-			return GatewaySessionUsagePayload{ payload.str() };
+			return GatewaySessionUsagePayload{
+				payload.str(),
+				transcript.found ? "transcript" : "registry",
+				transcript.found && transcript.totalTokens > 0
+			};
 		}
 
 		const std::string usageStart = startDate.empty() ? "2026-01-01" : startDate;
@@ -473,6 +492,7 @@ namespace blazeclaw::gateway {
 			<< ",\"output\":" << transcript.outputTokens
 			<< ",\"cacheRead\":0,\"cacheWrite\":0"
 			<< ",\"totalTokens\":" << transcript.totalTokens
+			<< ",\"totalTokensFresh\":" << ((transcript.found && transcript.totalTokens > 0) ? "true" : "false")
 			<< ",\"totalCost\":" << totalCost
 			<< ",\"messages\":" << transcript.messageCount << "}}],"
 			<< "\"totals\":{\"input\":" << transcript.inputTokens
@@ -484,7 +504,11 @@ namespace blazeclaw::gateway {
 			<< ",\"outputCost\":" << totalCost * 0.67
 			<< ",\"cacheReadCost\":0.0,\"cacheWriteCost\":0.0,\"missingCostEntries\":0}"
 			<< "}";
-		return GatewaySessionUsagePayload{ payload.str() };
+		return GatewaySessionUsagePayload{
+			payload.str(),
+			transcript.found ? "transcript" : "registry",
+			transcript.found && transcript.totalTokens > 0
+		};
 	}
 
 } // namespace blazeclaw::gateway
