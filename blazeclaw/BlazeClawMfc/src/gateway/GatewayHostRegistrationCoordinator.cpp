@@ -5,6 +5,8 @@
 namespace blazeclaw::gateway::GatewayHostRegistration {
 
 void RegisterDefaultHandlerSequence(GatewayHost& host) {
+	// `GatewayHost::RegisterDefaultHandlers` calls `BindRuntimeContext` before this sequence
+	// (S3): handler registration must see a populated `GatewayRuntimeContext`.
 	// Domain: channels + event tables (`GatewayHost.Handlers.Channels` / `.Events`).
 	host.RegisterChannelsHandlers();
 	host.RegisterEventHandlers();

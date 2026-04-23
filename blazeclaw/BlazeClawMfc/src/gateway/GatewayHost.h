@@ -24,6 +24,7 @@
 #include "GatewayNodeCanvasCapabilityService.h"
 #include "GatewayNodePendingActionQueue.h"
 #include "GatewayNodeWakeService.h"
+#include "GatewayRuntimeContext.h"
 
 #include <memory>
 
@@ -359,6 +360,9 @@ namespace blazeclaw::gateway {
 		void SetEmbeddingsBatchCallback(EmbeddingsBatchCallback callback);
 		void SetParityLifecycleExportCallback(ParityLifecycleExportCallback callback);
 		[[nodiscard]] std::string ExportParityLifecycleTraceJson() const;
+		[[nodiscard]] const GatewayRuntimeContext& RuntimeContext() const noexcept {
+			return m_runtimeContext;
+		}
 
 		[[nodiscard]] bool IsRunning() const noexcept;
 		[[nodiscard]] std::string LastWarning() const;
@@ -485,6 +489,7 @@ namespace blazeclaw::gateway {
 		void RegisterSecurityOpsHandlers();
 		void RegisterRuntimeHandlers();
 		void RegisterTransportHandlers();
+		void BindRuntimeContext() noexcept;
 		[[nodiscard]] bool CreateRuntimeState(
 			const blazeclaw::config::GatewayConfig& config);
 		[[nodiscard]] bool StartRuntimeServices();
@@ -500,6 +505,7 @@ namespace blazeclaw::gateway {
 		bool m_initialized = false;
 		bool m_dispatchInitialized = false;
 		bool m_runtimeHandlersInitialized = false;
+		GatewayRuntimeContext m_runtimeContext{};
 		std::string m_bindAddress;
 		std::uint16_t m_port = 0;
 		std::string m_runtimeGatewayBind = "127.0.0.1";

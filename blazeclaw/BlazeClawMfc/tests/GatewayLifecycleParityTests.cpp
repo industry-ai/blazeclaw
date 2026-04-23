@@ -214,6 +214,39 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"GatewayHost runtime context is bound on dispatch startup paths and cleared on stop (S3)",
+	"[gateway][lifecycle][s3]")
+{
+	blazeclaw::gateway::GatewayHost hostDefault;
+	REQUIRE(hostDefault.StartLocalDispatchOnly());
+	const auto& ctxDefault = hostDefault.RuntimeContext();
+	REQUIRE(ctxDefault.IsBound());
+	REQUIRE(ctxDefault.dispatcher != nullptr);
+	REQUIRE(ctxDefault.transport != nullptr);
+	REQUIRE(ctxDefault.sessionRegistry != nullptr);
+	REQUIRE(ctxDefault.toolRegistry != nullptr);
+	REQUIRE(ctxDefault.transportRecipientRegistry != nullptr);
+	REQUIRE(ctxDefault.chatRunPipeline != nullptr);
+	REQUIRE(ctxDefault.eventFanout != nullptr);
+	REQUIRE(ctxDefault.nodePairing != nullptr);
+	REQUIRE(ctxDefault.nodeCatalog != nullptr);
+	REQUIRE(ctxDefault.nodeCanvas != nullptr);
+	REQUIRE(ctxDefault.nodePending != nullptr);
+	REQUIRE(ctxDefault.nodeWake != nullptr);
+
+	blazeclaw::gateway::GatewayHost hostRuntime;
+	REQUIRE(hostRuntime.StartLocalRuntimeDispatchOnly());
+	const auto& ctxRt = hostRuntime.RuntimeContext();
+	REQUIRE(ctxRt.IsBound());
+	REQUIRE(ctxRt.dispatcher != nullptr);
+	REQUIRE(ctxRt.toolRegistry != nullptr);
+	REQUIRE(ctxRt.chatRunPipeline != nullptr);
+
+	hostDefault.Stop();
+	REQUIRE_FALSE(hostDefault.RuntimeContext().IsBound());
+}
+
+TEST_CASE(
 	"GatewayRuntimeBootstrapCoordinator startup failure cleanup stops running host",
 	"[gateway][lifecycle][p2]")
 {

@@ -208,4 +208,15 @@ TEST_CASE("P3 parity methods: skills/update/tts/secrets and transport envelopes 
 	REQUIRE(systemEvent.ok);
 	REQUIRE(systemEvent.payloadJson.has_value());
 	CHECK(systemEvent.payloadJson.value().find("\"source\":\"gateway.transport\"") != std::string::npos);
+
+	// S3: transport + security ops handlers use `GatewayRuntimeContext` (same behavior as pre-S3).
+	const auto& s3 = host.RuntimeContext();
+	REQUIRE(s3.IsBound());
+	REQUIRE(s3.dispatcher != nullptr);
+	REQUIRE(s3.transport != nullptr);
+	const auto transportStatus = Route(host, "p3-s3-transport-status", "gateway.transport.status");
+	REQUIRE(transportStatus.ok);
+	REQUIRE(transportStatus.payloadJson.has_value());
+	CHECK(transportStatus.payloadJson.value().find("\"running\":") != std::string::npos);
+	CHECK(transportStatus.payloadJson.value().find("\"endpoint\":") != std::string::npos);
 }

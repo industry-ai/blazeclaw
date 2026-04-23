@@ -613,6 +613,7 @@ namespace blazeclaw::gateway {
 		m_dispatchInitialized = false;
 		m_runtimeHandlersInitialized = false;
 		m_fixtureParityValidated = false;
+		m_runtimeContext = {};
 		m_bindAddress.clear();
 		m_port = 0;
 	}
@@ -1320,7 +1321,25 @@ namespace blazeclaw::gateway {
 		return m_dispatchInitialized;
 	}
 
+	void GatewayHost::BindRuntimeContext() noexcept {
+		m_runtimeContext.dispatcher = &m_dispatcher;
+		m_runtimeContext.transport = &m_transport;
+		m_runtimeContext.agentRegistry = &m_agentRegistry;
+		m_runtimeContext.channelRegistry = &m_channelRegistry;
+		m_runtimeContext.sessionRegistry = &m_sessionRegistry;
+		m_runtimeContext.toolRegistry = &m_toolRegistry;
+		m_runtimeContext.transportRecipientRegistry = &m_transportRecipientRegistry;
+		m_runtimeContext.chatRunPipeline = &m_chatRunPipelineOrchestrator;
+		m_runtimeContext.eventFanout = &m_eventFanoutService;
+		m_runtimeContext.nodePairing = &m_nodePairingService;
+		m_runtimeContext.nodeCatalog = &m_nodeCatalogService;
+		m_runtimeContext.nodeCanvas = &m_nodeCanvasCapabilityService;
+		m_runtimeContext.nodePending = &m_nodePendingActionQueue;
+		m_runtimeContext.nodeWake = &m_nodeWakeService;
+	}
+
 	void GatewayHost::RegisterDefaultHandlers() {
+		BindRuntimeContext();
 		GatewayHostRegistration::RegisterDefaultHandlerSequence(*this);
 	}
 

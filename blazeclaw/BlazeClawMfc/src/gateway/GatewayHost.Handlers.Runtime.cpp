@@ -5,6 +5,7 @@
 namespace blazeclaw::gateway {
 
 	void GatewayHost::RegisterRuntimeHandlers() {
+		BindRuntimeContext();
 		handlers::runtime::RuntimeSurfaceHandlers::RegisterAll(*this);
 		handlers::runtime::ChatPipelineHandlers::RegisterAll(*this);
 		handlers::runtime::RuntimeOrchestrationStreamingHandlers::RegisterAll(*this);

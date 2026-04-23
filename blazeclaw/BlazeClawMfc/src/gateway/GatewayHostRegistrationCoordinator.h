@@ -9,6 +9,7 @@ namespace blazeclaw::gateway {
 	/// `friend` entry that may call the private `Register*Handlers` methods—keep **`GatewayHost.cpp`** a
 	/// **thin façade** (transport, routing, lifecycle, event helpers, and `RegisterDefaultHandlers` →
 	/// `RegisterDefaultHandlerSequence`); do not move bulk handler lambdas back here (`GatewayHost.cpp.md`).
+	/// `RegisterDefaultHandlers` binds `GatewayRuntimeContext` before invoking this sequence (S3).
 	/// The call order matches `RegisterDefaultHandlers` / `GatewayHost.cpp.md`; implementation lives in
 	/// `GatewayHostRegistrationCoordinator.cpp`.
 	namespace GatewayHostRegistration {

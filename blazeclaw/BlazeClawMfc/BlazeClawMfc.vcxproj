@@ -193,6 +193,7 @@
     <ClInclude Include="src\gateway\GatewayAgentRegistry.h" />
     <ClInclude Include="src\gateway\GatewayChannelRegistry.h" />
     <ClInclude Include="src\gateway\GatewayHost.h" />
+    <ClInclude Include="src\gateway\GatewayRuntimeContext.h" />
     <ClInclude Include="src\gateway\GatewayHostCatalogHelpers.h" />
     <ClInclude Include="src\gateway\GatewayHostHandlersToolExecution.h" />
     <ClInclude Include="src\gateway\GatewayHostHandlersEventCatalogQuery.h" />
