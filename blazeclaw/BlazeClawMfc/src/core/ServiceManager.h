@@ -387,6 +387,10 @@ namespace blazeclaw::core {
 				bool managedConfigReloaderRunning = false;
 				std::uint64_t managedConfigApplyCount = 0;
 				std::uint64_t managedConfigRejectCount = 0;
+				/// S4.1: last `embedded.extensionSurfaceApplyEpoch` applied to gateway extension surface.
+				std::uint64_t lastAppliedExtensionSurfaceEpoch = 0;
+				std::uint64_t extensionSurfaceReloadCount = 0;
+				std::string lastExtensionSurfaceMethodDeltaJson;
 				blazeclaw::config::GatewayStartupConfigFileSnapshot startupConfigSnapshot;
 				std::vector<OwnedCleanupEntry> ownedCleanup;
 				std::vector<std::string> ownedCleanupOrder;

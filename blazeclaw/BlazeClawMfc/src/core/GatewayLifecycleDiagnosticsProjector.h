@@ -44,6 +44,9 @@ namespace blazeclaw::core {
             std::string authBootstrapStatus;
             std::string authBootstrapDetail;
             blazeclaw::config::GatewayResolvedRuntimeConfig resolvedRuntime;
+            std::uint64_t extensionSurfaceReloadCount = 0;
+            std::uint64_t lastAppliedExtensionSurfaceEpoch = 0;
+            std::string lastExtensionSurfaceMethodDeltaJson;
         };
 
         void Apply(
@@ -144,6 +147,12 @@ namespace blazeclaw::core {
                 snapshot.gatewayParityLifecycle.runtimeManagedConfigReloaderPolicySource =
                     rr.managedConfigReloaderSource;
             }
+            snapshot.gatewayParityLifecycle.extensionSurfaceReloadCount =
+                context.extensionSurfaceReloadCount;
+            snapshot.gatewayParityLifecycle.lastAppliedExtensionSurfaceEpoch =
+                context.lastAppliedExtensionSurfaceEpoch;
+            snapshot.gatewayParityLifecycle.lastExtensionSurfaceMethodDeltaJson =
+                context.lastExtensionSurfaceMethodDeltaJson;
         }
     };
 

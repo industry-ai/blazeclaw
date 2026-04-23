@@ -20,14 +20,17 @@
 #include "TaskDeltaSchemaValidator.h"
 #include "python/PythonRuntimeDispatcher.h"
 #include "generated/GatewayHandlerCatalog.Generated.h"
+#include "GatewayMethodSurfaceAudit.h"
 #include "Telemetry.h"
 
 #include <algorithm>
+#include <iterator>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <windows.h>
+#include <unordered_set>
 #include <vector>
 #include <sstream>
 #include <nlohmann/json.hpp>
@@ -547,6 +550,13 @@ namespace blazeclaw::gateway {
 				JsonString(m_runtimeAgentModel) +
 				"}";
 			EmitTelemetryEvent("gateway.startup.config", payload);
+		}
+
+		std::string methodSurfaceViolation;
+		if (!VerifyRuntimeMethodSurfaceInvariants(methodSurfaceViolation)) {
+			EmitTelemetryEvent(
+				"gateway.method_surface.invariant_failed",
+				std::string("{\"reason\":") + JsonString(methodSurfaceViolation) + "}");
 		}
 
 		m_initialized = true;
@@ -1343,6 +1353,110 @@ namespace blazeclaw::gateway {
 		GatewayHostRegistration::RegisterDefaultHandlerSequence(*this);
 	}
 
+	bool GatewayHost::VerifyRuntimeMethodSurfaceInvariants(std::string& violationOut) const {
+		std::unordered_set<std::string> pluginRpcDeduped;
+		for (const auto& manifest : m_extensionLifecycle.GetExtensions()) {
+			for (const std::string& method : manifest.gatewayRpcMethods) {
+				if (!method.empty()) {
+					pluginRpcDeduped.insert(method);
+				}
+			}
+		}
 
+		const std::vector<std::string> pluginRpcUnion(
+			pluginRpcDeduped.begin(),
+			pluginRpcDeduped.end());
+
+		return GatewayRuntimeMethodSurfaceInvariantsHold(
+			m_dispatcher,
+			pluginRpcUnion,
+			violationOut);
+	}
+
+	bool GatewayHost::PerformDeferredExtensionCatalogReloadWithMethodSurfaceTelemetry(
+		std::string& outDeltaJson) {
+		if (!m_initialized) {
+			outDeltaJson = R"({"ok":false,"reason":"runtime_not_initialized"})";
+			return false;
+		}
+
+		const auto sortNames = [](const GatewayMethodDispatcher& dispatcher) {
+			auto names = dispatcher.RegisteredMethods();
+			std::sort(names.begin(), names.end());
+			return names;
+		};
+
+		const std::vector<std::string> before = sortNames(m_dispatcher);
+		const std::string catalogPath = ResolveExtensionsCatalogPath();
+
+		m_extensionLifecycle.DeactivateAll(m_toolRegistry);
+		m_pluginRuntimeState.DeactivateRuntimeRegistry();
+		m_toolRegistry.LoadExtensionToolsFromCatalog(catalogPath);
+		m_extensionLifecycle.LoadCatalog(catalogPath);
+		m_extensionLifecycle.ActivateAll(m_toolRegistry);
+		const auto* extensionRegistry = m_pluginRuntimeState.RequireActiveRegistry(
+			&m_extensionLifecycle.GetExtensions(),
+			catalogPath,
+			std::filesystem::current_path().string(),
+			PluginRuntimeSubagentMode::GatewayBindable);
+		for (const auto& extension : *extensionRegistry) {
+			m_pluginRuntimeState.RecordImportedPluginId(extension.id);
+		}
+		m_pluginRuntimeState.ActivateRuntimeRegistry(
+			extensionRegistry,
+			catalogPath,
+			std::filesystem::current_path().string(),
+			PluginRuntimeSubagentMode::GatewayBindable,
+			true,
+			true);
+		EnsureOpsToolsRuntimeRegistered(m_toolRegistry);
+
+		const std::vector<std::string> after = sortNames(m_dispatcher);
+		std::vector<std::string> added;
+		std::vector<std::string> removed;
+		added.reserve(after.size());
+		removed.reserve(before.size());
+		std::set_difference(
+			after.begin(),
+			after.end(),
+			before.begin(),
+			before.end(),
+			std::back_inserter(added));
+		std::set_difference(
+			before.begin(),
+			before.end(),
+			after.begin(),
+			after.end(),
+			std::back_inserter(removed));
+
+		std::string addedJson = "[";
+		for (std::size_t i = 0; i < added.size() && i < 12; ++i) {
+			if (i > 0) {
+				addedJson += ",";
+			}
+			addedJson += JsonString(added[i]);
+		}
+		addedJson += "]";
+		std::string removedJson = "[";
+		for (std::size_t i = 0; i < removed.size() && i < 12; ++i) {
+			if (i > 0) {
+				removedJson += ",";
+			}
+			removedJson += JsonString(removed[i]);
+		}
+		removedJson += "]";
+
+		outDeltaJson =
+			std::string("{\"ok\":true,\"phase\":\"deferred_extension_catalog_reload\"") +
+			",\"beforeCount\":" + std::to_string(before.size()) +
+			",\"afterCount\":" + std::to_string(after.size()) +
+			",\"addedCount\":" + std::to_string(added.size()) +
+			",\"removedCount\":" + std::to_string(removed.size()) +
+			",\"addedSample\":" + std::move(addedJson) +
+			",\"removedSample\":" + std::move(removedJson) + "}";
+
+		EmitTelemetryEvent("gateway.method_surface.extension_reload", outDeltaJson);
+		return true;
+	}
 
 } // namespace blazeclaw::gateway

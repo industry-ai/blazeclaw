@@ -126,6 +126,12 @@ namespace blazeclaw::core {
 			std::string(c.runtimeManagedConfigReloaderPolicy ? "true" : "false") +
 			",\"runtimeManagedConfigReloaderPolicySource\":\"" +
 			JsonEscapeString(c.runtimeManagedConfigReloaderPolicySource) + "\"" +
+			",\"extensionSurfaceReloadCount\":" +
+			std::to_string(c.extensionSurfaceReloadCount) +
+			",\"lastAppliedExtensionSurfaceEpoch\":" +
+			std::to_string(c.lastAppliedExtensionSurfaceEpoch) +
+			",\"lastExtensionSurfaceMethodDeltaJson\":\"" +
+			JsonEscapeString(c.lastExtensionSurfaceMethodDeltaJson) + "\"" +
 			"}";
 	}
 

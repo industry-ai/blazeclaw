@@ -1,5 +1,6 @@
 #include "gateway/ExtensionLifecycleManager.h"
 #include "gateway/GatewayHost.h"
+#include "gateway/GatewayMethodSurfaceAudit.h"
 #include "gateway/GatewayJsonUtils.h"
 #include "gateway/GatewayProtocolModels.h"
 #include "gateway/GatewayToolRegistry.h"
@@ -3695,5 +3696,21 @@ TEST_CASE(
 	REQUIRE(deltasResponse.payloadJson->find("\"toolName\":\"weather.lookup\"") != std::string::npos);
 	REQUIRE(deltasResponse.payloadJson->find("\"toolName\":\"email.schedule\"") != std::string::npos);
 
+	host.Stop();
+}
+
+TEST_CASE(
+	"S4 parity: generated catalog + channel + plugin RPC surface invariants on full gateway runtime",
+	"[parity][s4][method-surface]")
+{
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	gatewayConfig.bindAddress = L"127.0.0.1";
+	gatewayConfig.port = 18789;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	std::string violation;
+	REQUIRE(host.VerifyRuntimeMethodSurfaceInvariants(violation));
+	REQUIRE(violation.empty());
+	REQUIRE(GatewayChannelHandlerSurfaceMethodNames().size() == 35);
 	host.Stop();
 }

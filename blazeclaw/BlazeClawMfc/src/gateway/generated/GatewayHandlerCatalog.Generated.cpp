@@ -1,12 +1,14 @@
 #include "pch.h"
 #include "../GatewayHost.h"
+#include "../GatewayMethodDispatcher.h"
 
 #include <array>
 #include <algorithm>
 #include <string_view>
+#include <unordered_set>
 
 namespace blazeclaw::gateway {
-    namespace {
+    namespace gateway_handler_catalog {
         constexpr std::array<std::string_view, 196> kGeneratedMethodCatalog = {
 		"gateway.agents.list",
 		"gateway.config.anchorScopeId",
@@ -205,10 +207,27 @@ namespace blazeclaw::gateway {
 		"gateway.transport.policy.windowScopeId",
 		"gateway.transport.policy.windowScopeKey",
         };
+
+        [[nodiscard]] inline bool GeneratedCatalogMethodsAreRegistered(
+            const GatewayMethodDispatcher& dispatcher) {
+            const auto names = dispatcher.RegisteredMethods();
+            const std::unordered_set<std::string> have(names.begin(), names.end());
+            for (const std::string_view method : kGeneratedMethodCatalog) {
+                if (have.find(std::string(method)) == have.end()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    bool GatewayGeneratedHandlerCatalogMethodsAreRegistered(
+        const GatewayMethodDispatcher& dispatcher) {
+        return gateway_handler_catalog::GeneratedCatalogMethodsAreRegistered(dispatcher);
     }
 
     void GatewayHost::RegisterGeneratedScopeClusterHandlers() {
-        (void)kGeneratedMethodCatalog;
+        (void)gateway_handler_catalog::kGeneratedMethodCatalog;
 
 		m_dispatcher.Register("gateway.ping", [payload = std::string("{\"pong\":true}")](const protocol::RequestFrame& request) {
 			return protocol::OkResponse(request, std::move(payload));

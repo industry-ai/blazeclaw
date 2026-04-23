@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Gateway Method Diff
 
-Generated: 2026-04-22T11:54:08.334Z
+Generated: 2026-04-23T02:39:42.468Z
 
 ## Inputs
 
@@ -8,6 +8,10 @@ Generated: 2026-04-22T11:54:08.334Z
 - OpenClaw canonical list source: `openclaw/src/gateway/server-methods-list.ts`
 - BlazeClaw handlers manifest: `blazeclaw/BlazeClawMfc/src/gateway/GatewayHandlers.manifest.json` (version 1)
 - BlazeClaw registration scan source: `blazeclaw/BlazeClawMfc/src/gateway`
+
+## Lifecycle method-surface checkpoints (S4)
+
+See JSON root `lifecycleMethodSurfaceCheckpoints` for the BlazeClaw contract reference (deferred extension reload + subset invariant checks: generated catalog, channel surface, manifest `gatewayRpcMethods` union).
 
 ## Summary
 
@@ -337,6 +341,7 @@ Generated: 2026-04-22T11:54:08.334Z
 - `gateway.ops.doctor.run.preview`
 - `gateway.ops.doctor.run.status`
 - `gateway.ops.doctor.status`
+- `gateway.parity.lifecycle`
 - `gateway.ping`
 - `gateway.platform.cli.aliases`
 - `gateway.platform.cli.anchorScopeId`
@@ -810,5 +815,4 @@ Generated: 2026-04-22T11:54:08.334Z
 - `skills.commands`
 - `skills.install.options`
 - `tool-runtime-`
-- `update-run-`
 - `weather.lookup`

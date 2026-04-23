@@ -7,10 +7,10 @@
 
 namespace blazeclaw::core {
 
-	/// OpenClaw `server.impl.ts` lifecycle parity export (Phase S0–S2).
+	/// OpenClaw `server.impl.ts` lifecycle parity export (Phase S0–S4).
 	/// Populated for diagnostics/operator report and `gateway.parity.lifecycle` RPC.
 	struct GatewayParityLifecycleContract {
-		static constexpr int kSchemaVersion = 3;
+		static constexpr int kSchemaVersion = 4;
 		int schemaVersion = kSchemaVersion;
 		std::string openclawParityBaseline = "openclaw/src/gateway/server.impl.ts";
 		std::string startupMode;
@@ -57,6 +57,10 @@ namespace blazeclaw::core {
 		std::string runtimeResolvedAuthSessionGenerationSource;
 		bool runtimeManagedConfigReloaderPolicy = true;
 		std::string runtimeManagedConfigReloaderPolicySource;
+		// S4.1: deferred extension catalog reload + method-surface delta (managed config path).
+		std::uint64_t extensionSurfaceReloadCount = 0;
+		std::uint64_t lastAppliedExtensionSurfaceEpoch = 0;
+		std::string lastExtensionSurfaceMethodDeltaJson;
 	};
 
 	struct DiagnosticsSnapshot {

@@ -125,6 +125,8 @@ namespace blazeclaw::config {
 		bool nodeParityEnabled = true;
 		bool nodeParityDiagnosticsEnabled = true;
 		std::wstring nodeParityRolloutMode = L"monitor";
+		/// S4.1: monotonic epoch; when increased via managed config reload, gateway extension surface reload runs.
+		std::uint64_t extensionSurfaceApplyEpoch = 0;
 	};
 
 	struct EmailPreflightConfig {

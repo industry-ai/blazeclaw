@@ -21,6 +21,8 @@ struct ExtensionManifest {
     std::string kind;
     std::string execPath;
     bool enabled = true;
+    /// Optional union member: gateway JSON-RPC method names this extension expects the dispatcher to expose.
+    std::vector<std::string> gatewayRpcMethods;
     std::vector<ExtensionToolManifest> tools;
 };
 

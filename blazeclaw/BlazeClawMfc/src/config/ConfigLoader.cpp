@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <cwctype>
 #include <fstream>
 #include <functional>
@@ -740,6 +741,18 @@ namespace blazeclaw::config {
 			if (trimmedLine.rfind(L"embedded.nodeParityRolloutMode=", 0) == 0) {
 				outConfig.embedded.nodeParityRolloutMode =
 					NormalizeNodeParityRolloutMode(trimmedLine.substr(31));
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"embedded.extensionSurfaceApplyEpoch=", 0) == 0) {
+				const std::wstring digits = trimmedLine.substr(36);
+				wchar_t* end = nullptr;
+				const unsigned long long parsed =
+					std::wcstoull(digits.c_str(), &end, 10);
+				if (end != digits.c_str()) {
+					outConfig.embedded.extensionSurfaceApplyEpoch =
+						static_cast<std::uint64_t>(parsed);
+				}
 				continue;
 			}
 

@@ -2843,6 +2843,8 @@ namespace blazeclaw::core {
 			nextConfig.embedded.nodeParityDiagnosticsEnabled;
 		m_activeConfig.embedded.nodeParityRolloutMode =
 			nextConfig.embedded.nodeParityRolloutMode;
+		m_activeConfig.embedded.extensionSurfaceApplyEpoch =
+			nextConfig.embedded.extensionSurfaceApplyEpoch;
 		m_activeConfig.email = nextConfig.email;
 		m_activeConfig.authProfiles = nextConfig.authProfiles;
 		m_activeConfig.deepseekApiKey = nextConfig.deepseekApiKey;
@@ -2913,6 +2915,24 @@ namespace blazeclaw::core {
 		m_configSchemaService.Invalidate();
 		RefreshGatewaySkillsStateProjection();
 		PublishGatewaySkillsStateProjection();
+
+		if (m_state.gatewayLiveRuntime.runtimeServicesStarted &&
+			nextConfig.embedded.extensionSurfaceApplyEpoch >
+				m_state.gatewayLiveRuntime.lastAppliedExtensionSurfaceEpoch) {
+			std::string deltaJson;
+			if (m_gatewayHost.PerformDeferredExtensionCatalogReloadWithMethodSurfaceTelemetry(
+					deltaJson)) {
+				m_state.gatewayLiveRuntime.lastAppliedExtensionSurfaceEpoch =
+					nextConfig.embedded.extensionSurfaceApplyEpoch;
+				++m_state.gatewayLiveRuntime.extensionSurfaceReloadCount;
+				m_state.gatewayLiveRuntime.lastExtensionSurfaceMethodDeltaJson =
+					std::move(deltaJson);
+				RecordGatewayLifecycleTransition(
+					"managed_reload.extension_surface_method_snapshot");
+				AppendStartupTrace(
+					"GatewayRuntimeExtensionSurface.reload.method_surface.delta");
+			}
+		}
 
 		++m_state.gatewayLiveRuntime.managedConfigApplyCount;
 		RecordGatewayLifecycleTransition("managed_reload.applied");
@@ -3054,6 +3074,12 @@ namespace blazeclaw::core {
 			.authBootstrapStatus = m_state.gatewayLifecycle.authBootstrapStatus,
 			.authBootstrapDetail = m_state.gatewayLifecycle.authBootstrapDetail,
 			.resolvedRuntime = m_state.gatewayLifecycle.resolvedRuntimeConfig,
+			.extensionSurfaceReloadCount =
+				m_state.gatewayLiveRuntime.extensionSurfaceReloadCount,
+			.lastAppliedExtensionSurfaceEpoch =
+				m_state.gatewayLiveRuntime.lastAppliedExtensionSurfaceEpoch,
+			.lastExtensionSurfaceMethodDeltaJson =
+				m_state.gatewayLiveRuntime.lastExtensionSurfaceMethodDeltaJson,
 		},
 			.email = EmailRuntimeDiagnosticsProjector::Context{
 			.emailConfig = m_activeConfig.email,
@@ -3244,6 +3270,12 @@ namespace blazeclaw::core {
 			.authBootstrapStatus = m_state.gatewayLifecycle.authBootstrapStatus,
 			.authBootstrapDetail = m_state.gatewayLifecycle.authBootstrapDetail,
 			.resolvedRuntime = m_state.gatewayLifecycle.resolvedRuntimeConfig,
+			.extensionSurfaceReloadCount =
+				m_state.gatewayLiveRuntime.extensionSurfaceReloadCount,
+			.lastAppliedExtensionSurfaceEpoch =
+				m_state.gatewayLiveRuntime.lastAppliedExtensionSurfaceEpoch,
+			.lastExtensionSurfaceMethodDeltaJson =
+				m_state.gatewayLiveRuntime.lastExtensionSurfaceMethodDeltaJson,
 		};
 		m_gatewayLifecycleDiagnosticsProjector.Apply(ctx, snapshot);
 		return m_diagnosticsReportBuilder.SerializeParityLifecycleContractJson(

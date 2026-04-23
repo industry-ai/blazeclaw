@@ -4,6 +4,9 @@
   "description": "Concrete weather lookup and approval-gated email scheduling tools.",
   "version": 1,
   "kind": "tools",
+  "gatewayRpcMethods": [
+    "gateway.ping"
+  ],
   "tools": [
     {
       "id": "weather.lookup",

@@ -327,6 +327,11 @@ function main() {
 
   const payload = {
     generatedAt: new Date().toISOString(),
+    lifecycleMethodSurfaceCheckpoints: {
+      phase: "S4",
+      description:
+        "BlazeClaw records dispatcher method-surface snapshots around deferred extension-catalog reload (managed config `embedded.extensionSurfaceApplyEpoch`) and at runtime finalize enforces three subset checks on the dispatcher: generated handler-catalog methods, static channel-handler RPC names, and the deduped union of optional per-extension `gatewayRpcMethods` strings from each `blazeclaw.extension.json` (parsed in `ExtensionLifecycleManager::LoadCatalog`; violation `plugin_rpc_surface_not_registered`). See `GatewayHost::PerformDeferredExtensionCatalogReloadWithMethodSurfaceTelemetry`, `GatewayMethodSurfaceAudit`, `GatewayHost::VerifyRuntimeMethodSurfaceInvariants`, and parity contract schema v4 fields `extensionSurfaceReloadCount` / `lastAppliedExtensionSurfaceEpoch` / `lastExtensionSurfaceMethodDeltaJson`.",
+    },
     inputs: {
       openclawServerMethodsDir: path.relative(workspaceRoot, openclawDir).replace(/\\/g, "/"),
       openclawMethodsList: path.relative(workspaceRoot, openclawMethodsListPath).replace(/\\/g, "/"),
@@ -372,6 +377,10 @@ function main() {
     `- OpenClaw canonical list source: \`${payload.inputs.openclawMethodsList}\``,
     `- BlazeClaw handlers manifest: \`${payload.inputs.blazeclawHandlersManifest}\` (version ${payload.inputs.blazeclawManifestVersion})`,
     `- BlazeClaw registration scan source: \`${payload.inputs.blazeclawGatewaySourceDir}\``,
+    "",
+    "## Lifecycle method-surface checkpoints (S4)",
+    "",
+    "See JSON root `lifecycleMethodSurfaceCheckpoints` for the BlazeClaw contract reference (deferred extension reload + subset invariant checks: generated catalog, channel surface, manifest `gatewayRpcMethods` union).",
     "",
     "## Summary",
     "",

@@ -1,5 +1,9 @@
 {
-  "generatedAt": "2026-04-22T11:54:08.334Z",
+  "generatedAt": "2026-04-23T02:39:42.468Z",
+  "lifecycleMethodSurfaceCheckpoints": {
+    "phase": "S4",
+    "description": "BlazeClaw records dispatcher method-surface snapshots around deferred extension-catalog reload (managed config `embedded.extensionSurfaceApplyEpoch`) and at runtime finalize enforces three subset checks on the dispatcher: generated handler-catalog methods, static channel-handler RPC names, and the deduped union of optional per-extension `gatewayRpcMethods` strings from each `blazeclaw.extension.json` (parsed in `ExtensionLifecycleManager::LoadCatalog`; violation `plugin_rpc_surface_not_registered`). See `GatewayHost::PerformDeferredExtensionCatalogReloadWithMethodSurfaceTelemetry`, `GatewayMethodSurfaceAudit`, `GatewayHost::VerifyRuntimeMethodSurfaceInvariants`, and parity contract schema v4 fields `extensionSurfaceReloadCount` / `lastAppliedExtensionSurfaceEpoch` / `lastExtensionSurfaceMethodDeltaJson`."
+  },
   "inputs": {
     "openclawServerMethodsDir": "openclaw/src/gateway/server-methods",
     "openclawMethodsList": "openclaw/src/gateway/server-methods-list.ts",
@@ -470,6 +474,7 @@
     "gateway.ops.doctor.run.preview",
     "gateway.ops.doctor.run.status",
     "gateway.ops.doctor.status",
+    "gateway.parity.lifecycle",
     "gateway.ping",
     "gateway.platform.cli.aliases",
     "gateway.platform.cli.anchorScopeId",
@@ -943,7 +948,6 @@
     "skills.commands",
     "skills.install.options",
     "tool-runtime-",
-    "update-run-",
     "weather.lookup"
   ],
   "openclawMethodsByFile": {
@@ -1329,6 +1333,7 @@
       "gateway.config.set",
       "gateway.health",
       "gateway.logs.tail",
+      "gateway.parity.lifecycle",
       "gateway.sessions.create",
       "gateway.sessions.reset",
       "gateway.sessions.resolve",
@@ -1339,7 +1344,6 @@
       "skills.install",
       "skills.search",
       "status",
-      "update-run-",
       "update.run"
     ],
     "blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.EventCatalogQuery.cpp": [

@@ -364,6 +364,12 @@ namespace blazeclaw::gateway {
 			return m_runtimeContext;
 		}
 
+		/// S4.1: extension catalog resync with before/after dispatcher method snapshots (managed reload).
+		[[nodiscard]] bool PerformDeferredExtensionCatalogReloadWithMethodSurfaceTelemetry(
+			std::string& outDeltaJson);
+		/// S4.2: generated catalog + channel RPC surface must be registered on the dispatcher.
+		[[nodiscard]] bool VerifyRuntimeMethodSurfaceInvariants(std::string& violationOut) const;
+
 		[[nodiscard]] bool IsRunning() const noexcept;
 		[[nodiscard]] std::string LastWarning() const;
 		[[nodiscard]] std::string HandleInboundText(const std::string& inboundJson) const;

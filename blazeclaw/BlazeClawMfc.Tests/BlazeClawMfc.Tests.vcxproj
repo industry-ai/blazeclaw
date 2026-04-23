@@ -80,6 +80,7 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayAgentRegistry.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayChannelRegistry.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHost.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayMethodSurfaceAudit.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostCatalogHelpers.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostModelHelpers.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostProtocolHelpers.cpp" />

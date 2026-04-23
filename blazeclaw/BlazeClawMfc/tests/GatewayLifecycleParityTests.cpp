@@ -952,13 +952,17 @@ TEST_CASE(
 	snapshot.gatewayParityLifecycle.runtimeResolvedAuthSessionGenerationSource = "config";
 	snapshot.gatewayParityLifecycle.runtimeManagedConfigReloaderPolicy = true;
 	snapshot.gatewayParityLifecycle.runtimeManagedConfigReloaderPolicySource = "default";
+	snapshot.gatewayParityLifecycle.extensionSurfaceReloadCount = 2;
+	snapshot.gatewayParityLifecycle.lastAppliedExtensionSurfaceEpoch = 9;
+	snapshot.gatewayParityLifecycle.lastExtensionSurfaceMethodDeltaJson =
+		R"({"ok":true,"phase":"deferred_extension_catalog_reload"})";
 
 	blazeclaw::core::CDiagnosticsReportBuilder builder;
 	const std::string report = builder.BuildOperatorDiagnosticsReport(snapshot);
 
 	REQUIRE(report.find("\"gatewayLifecycle\"") != std::string::npos);
 	REQUIRE(report.find("\"parityContract\"") != std::string::npos);
-	REQUIRE(report.find("\"schemaVersion\":3") != std::string::npos);
+	REQUIRE(report.find("\"schemaVersion\":4") != std::string::npos);
 	REQUIRE(
 		report.find("\"openclawParityBaseline\":\"openclaw/src/gateway/server.impl.ts\"") !=
 		std::string::npos);
@@ -998,6 +1002,31 @@ TEST_CASE(
 	REQUIRE(report.find("\"runtimeResolvedPort\":58000") != std::string::npos);
 	REQUIRE(
 		report.find("\"runtimeResolvedBindSource\":\"config\"") != std::string::npos);
+	REQUIRE(report.find("\"extensionSurfaceReloadCount\":2") != std::string::npos);
+	REQUIRE(report.find("\"lastAppliedExtensionSurfaceEpoch\":9") != std::string::npos);
+	REQUIRE(
+		report.find("\"lastExtensionSurfaceMethodDeltaJson\":") != std::string::npos);
+}
+
+TEST_CASE(
+	"GatewayHost deferred extension reload emits method-surface delta JSON (S4)",
+	"[gateway][lifecycle][s4]")
+{
+	blazeclaw::gateway::GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	gatewayConfig.bindAddress = L"127.0.0.1";
+	gatewayConfig.port = 18789;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	std::string violation;
+	REQUIRE(host.VerifyRuntimeMethodSurfaceInvariants(violation));
+	REQUIRE(violation.empty());
+	std::string deltaJson;
+	REQUIRE(host.PerformDeferredExtensionCatalogReloadWithMethodSurfaceTelemetry(deltaJson));
+	REQUIRE(deltaJson.find("\"ok\":true") != std::string::npos);
+	REQUIRE(deltaJson.find("deferred_extension_catalog_reload") != std::string::npos);
+	REQUIRE(deltaJson.find("\"beforeCount\":") != std::string::npos);
+	REQUIRE(deltaJson.find("\"afterCount\":") != std::string::npos);
+	host.Stop();
 }
 
 TEST_CASE(

@@ -206,26 +206,49 @@ namespace blazeclaw::gateway {
 
     inline constexpr int kGatewayHandlerCatalogVersion = $($manifest.version);
 
+    class GatewayMethodDispatcher;
+    [[nodiscard]] bool GatewayGeneratedHandlerCatalogMethodsAreRegistered(
+        const GatewayMethodDispatcher& dispatcher);
+
 } // namespace blazeclaw::gateway
 "@
 
 $sourceContent = @"
 #include "pch.h"
 #include "../GatewayHost.h"
+#include "../GatewayMethodDispatcher.h"
 
 #include <array>
 #include <algorithm>
 #include <string_view>
+#include <unordered_set>
 
 namespace blazeclaw::gateway {
-    namespace {
+    namespace gateway_handler_catalog {
         constexpr std::array<std::string_view, $($orderedMethods.Count)> kGeneratedMethodCatalog = {
 $methodArrayLiteral
         };
+
+        [[nodiscard]] inline bool GeneratedCatalogMethodsAreRegistered(
+            const GatewayMethodDispatcher& dispatcher) {
+            const auto names = dispatcher.RegisteredMethods();
+            const std::unordered_set<std::string> have(names.begin(), names.end());
+            for (const std::string_view method : kGeneratedMethodCatalog) {
+                if (have.find(std::string(method)) == have.end()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    bool GatewayGeneratedHandlerCatalogMethodsAreRegistered(
+        const GatewayMethodDispatcher& dispatcher) {
+        return gateway_handler_catalog::GeneratedCatalogMethodsAreRegistered(dispatcher);
     }
 
     void GatewayHost::RegisterGeneratedScopeClusterHandlers() {
-        (void)kGeneratedMethodCatalog;
+        (void)gateway_handler_catalog::kGeneratedMethodCatalog;
 
 $staticRegistrationBody
 

@@ -132,6 +132,101 @@ namespace blazeclaw::gateway {
 		return objects;
 	}
 
+	static std::vector<std::string> SplitTopLevelJsonStrings(const std::string& arrayJson) {
+		std::vector<std::string> strings;
+		const std::string trimmed = json::Trim(arrayJson);
+		if (trimmed.size() < 2 || trimmed.front() != '[' || trimmed.back() != ']') {
+			return strings;
+		}
+
+		std::size_t index = 1;
+		const std::size_t endExclusive = trimmed.size() - 1;
+		while (index < endExclusive) {
+			while (index < endExclusive &&
+				(std::isspace(static_cast<unsigned char>(trimmed[index])) != 0 ||
+					trimmed[index] == ',')) {
+				++index;
+			}
+
+			if (index >= endExclusive) {
+				break;
+			}
+
+			if (trimmed[index] != '"') {
+				break;
+			}
+
+			++index;
+			std::string decoded;
+			bool closed = false;
+			while (index < trimmed.size()) {
+				const char ch = trimmed[index];
+				if (ch == '\\') {
+					++index;
+					if (index >= trimmed.size()) {
+						break;
+					}
+
+					const char esc = trimmed[index++];
+					switch (esc) {
+					case '"':
+						decoded.push_back('"');
+						break;
+					case '\\':
+						decoded.push_back('\\');
+						break;
+					case '/':
+						decoded.push_back('/');
+						break;
+					case 'b':
+						decoded.push_back('\b');
+						break;
+					case 'f':
+						decoded.push_back('\f');
+						break;
+					case 'n':
+						decoded.push_back('\n');
+						break;
+					case 'r':
+						decoded.push_back('\r');
+						break;
+					case 't':
+						decoded.push_back('\t');
+						break;
+					case 'u':
+						if (index + 4 <= trimmed.size()) {
+							index += 4;
+						}
+						break;
+					default:
+						decoded.push_back(esc);
+						break;
+					}
+					continue;
+				}
+
+				if (ch == '"') {
+					++index;
+					closed = true;
+					break;
+				}
+
+				decoded.push_back(ch);
+				++index;
+			}
+
+			if (!closed) {
+				break;
+			}
+
+			if (!decoded.empty()) {
+				strings.push_back(std::move(decoded));
+			}
+		}
+
+		return strings;
+	}
+
 	static const char* ToStateName(const ExtensionRuntimeState state) {
 		switch (state) {
 		case ExtensionRuntimeState::discovered:
@@ -362,9 +457,17 @@ namespace blazeclaw::gateway {
 				continue;
 			}
 
+			std::string gatewayRpcRaw;
+			if (json::FindRawField(manifestText, "gatewayRpcMethods", gatewayRpcRaw)) {
+				for (std::string method : SplitTopLevelJsonStrings(gatewayRpcRaw)) {
+					manifest.gatewayRpcMethods.push_back(std::move(method));
+				}
+			}
+
 			std::string toolsRaw;
 			if (!json::FindRawField(manifestText, "tools", toolsRaw)) {
-				m_extensions.push_back(manifest);
+				SetState(manifest.id, ExtensionRuntimeState::loaded, "manifest_loaded", {});
+				m_extensions.push_back(std::move(manifest));
 				continue;
 			}
 

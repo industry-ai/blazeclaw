@@ -193,6 +193,7 @@
     <ClInclude Include="src\gateway\GatewayAgentRegistry.h" />
     <ClInclude Include="src\gateway\GatewayChannelRegistry.h" />
     <ClInclude Include="src\gateway\GatewayHost.h" />
+    <ClInclude Include="src\gateway\GatewayMethodSurfaceAudit.h" />
     <ClInclude Include="src\gateway\GatewayRuntimeContext.h" />
     <ClInclude Include="src\gateway\GatewayHostCatalogHelpers.h" />
     <ClInclude Include="src\gateway\GatewayHostHandlersToolExecution.h" />
@@ -384,6 +385,7 @@
     <ClCompile Include="src\gateway\GatewayAgentRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayChannelRegistry.cpp" />
     <ClCompile Include="src\gateway\GatewayHost.cpp" />
+    <ClCompile Include="src\gateway\GatewayMethodSurfaceAudit.cpp" />
     <ClCompile Include="src\gateway\GatewayHostCatalogHelpers.cpp" />
     <ClCompile Include="src\gateway\GatewayHostModelHelpers.cpp" />
     <ClCompile Include="src\gateway\GatewayHostProtocolHelpers.cpp" />
