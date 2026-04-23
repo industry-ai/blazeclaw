@@ -7,6 +7,7 @@
 #include "GatewayJsonSerializers.h"
 #include "GatewayJsonBuilder.h"
 #include "GatewayRequestParams.h"
+#include "GatewaySessionUtilsService.h"
 #include "Telemetry.h"
 #include "GatewayJsonUtils.h"
 #include "GatewayPersistencePaths.h"
@@ -738,7 +739,8 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 		host.m_dispatcher.Register("gateway.sessions.resolve", [&host](const protocol::RequestFrame& request) {
 			const std::string sessionId = RequestParamsView(request.paramsJson).GetString("sessionId");
 
-			const SessionEntry resolved = host.m_sessionRegistry.Resolve(sessionId);
+			const SessionEntry resolved = GatewaySessionUtilsService::ResolveFreshestSessionAcrossStores(sessionId)
+				.value_or(host.m_sessionRegistry.Resolve(sessionId));
 			return protocol::OkResponse(request, "{\"session\":" + SerializeSession(resolved) + "}");
 			});
 		host.m_dispatcher.Register("sessions.get", [&host](const protocol::RequestFrame& request) {

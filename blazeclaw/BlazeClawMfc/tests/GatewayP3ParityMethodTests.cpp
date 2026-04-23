@@ -321,6 +321,59 @@ TEST_CASE("P3 parity methods: session list resolves freshest entry across multi-
 	CHECK(list.payloadJson.value().find("\"active\":true") != std::string::npos);
 }
 
+TEST_CASE("P3 parity methods: session resolve uses freshest multi-store match", "[gateway][parity][p3][sessions][resolve][multistore]")
+{
+	GatewayHost host;
+	REQUIRE(host.StartLocalDispatchOnly());
+
+	const std::filesystem::path stateRoot = blazeclaw::gateway::ResolveGatewayStateDirectory();
+	std::error_code ec;
+	std::filesystem::create_directories(stateRoot / "chat-transcripts", ec);
+	REQUIRE_FALSE(ec);
+	std::filesystem::create_directories(stateRoot / "agents" / "ops", ec);
+	REQUIRE_FALSE(ec);
+
+	{
+		std::ofstream transcript(stateRoot / "chat-transcripts" / "agent_ops_main.jsonl", std::ios::out | std::ios::trunc);
+		REQUIRE(transcript.is_open());
+		transcript
+			<< "{\"messageId\":\"m1\",\"sessionKey\":\"agent:ops:main\",\"role\":\"assistant\",\"text\":\"latest\","
+			<< "\"timestamp\":1735689600200}"
+			<< "\n";
+	}
+	{
+		std::ofstream defaultStore(stateRoot / "sessions.state", std::ios::out | std::ios::trunc);
+		REQUIRE(defaultStore.is_open());
+		defaultStore << "agent:ops:main|default|0\n";
+	}
+	{
+		std::ofstream agentStore(stateRoot / "agents" / "ops" / "sessions.state", std::ios::out | std::ios::trunc);
+		REQUIRE(agentStore.is_open());
+		agentStore << "agent:ops:main|thread|1\n";
+	}
+
+	const auto resolved = Route(
+		host,
+		"p3-session-resolve-multistore",
+		"gateway.sessions.resolve",
+		R"({"sessionId":"agent:ops:main"})");
+	REQUIRE(resolved.ok);
+	REQUIRE(resolved.payloadJson.has_value());
+	CHECK(resolved.payloadJson.value().find("\"id\":\"agent:ops:main\"") != std::string::npos);
+	CHECK(resolved.payloadJson.value().find("\"scope\":\"thread\"") != std::string::npos);
+	CHECK(resolved.payloadJson.value().find("\"active\":true") != std::string::npos);
+
+	const auto aliasResolved = Route(
+		host,
+		"p3-session-get-multistore",
+		"sessions.get",
+		R"({"sessionId":"agent:ops:main"})");
+	REQUIRE(aliasResolved.ok);
+	REQUIRE(aliasResolved.payloadJson.has_value());
+	CHECK(aliasResolved.payloadJson.value().find("\"scope\":\"thread\"") != std::string::npos);
+	CHECK(aliasResolved.payloadJson.value().find("\"active\":true") != std::string::npos);
+}
+
 TEST_CASE("P3 parity methods: transcript model identity overrides runtime defaults", "[gateway][parity][p3][sessions][model-precedence]")
 {
 	GatewayHost host;
