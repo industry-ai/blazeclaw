@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-23T08:18:54.149Z",
+  "generatedAt": "2026-04-23T08:33:11.353Z",
   "phase": "S2",
   "inputs": {
     "openclawEventSource": "openclaw/src/gateway/server-methods-list.ts",
@@ -18,10 +18,10 @@
     "extraction": "OpenClaw GATEWAY_EVENTS array literals; BlazeClaw literal event-string evidence scan."
   },
   "summary": {
-    "openclawEventCount": 23,
-    "implementedCount": 13,
-    "deferredCount": 10,
-    "coveragePercent": 56.52
+    "openclawEventCount": 24,
+    "implementedCount": 18,
+    "deferredCount": 6,
+    "coveragePercent": 75
   },
   "rows": [
     {
@@ -83,15 +83,19 @@
     },
     {
       "event": "exec.approval.requested",
-      "status": "deferred",
-      "evidenceFiles": [],
-      "notes": "No direct literal match in scanned BlazeClaw files; requires alias/runtime-emitter follow-up."
+      "status": "implemented",
+      "evidenceFiles": [
+        "blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.SecurityOps.cpp"
+      ],
+      "notes": "Literal event string found in BlazeClaw transport/handler/catalog surfaces."
     },
     {
       "event": "exec.approval.resolved",
-      "status": "deferred",
-      "evidenceFiles": [],
-      "notes": "No direct literal match in scanned BlazeClaw files; requires alias/runtime-emitter follow-up."
+      "status": "implemented",
+      "evidenceFiles": [
+        "blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.SecurityOps.cpp"
+      ],
+      "notes": "Literal event string found in BlazeClaw transport/handler/catalog surfaces."
     },
     {
       "event": "health",
@@ -116,9 +120,11 @@
     },
     {
       "event": "node.invoke.request",
-      "status": "deferred",
-      "evidenceFiles": [],
-      "notes": "No direct literal match in scanned BlazeClaw files; requires alias/runtime-emitter follow-up."
+      "status": "implemented",
+      "evidenceFiles": [
+        "blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.SecurityOps.cpp"
+      ],
+      "notes": "Literal event string found in BlazeClaw transport/handler/catalog surfaces."
     },
     {
       "event": "node.pair.requested",
@@ -138,15 +144,19 @@
     },
     {
       "event": "plugin.approval.requested",
-      "status": "deferred",
-      "evidenceFiles": [],
-      "notes": "No direct literal match in scanned BlazeClaw files; requires alias/runtime-emitter follow-up."
+      "status": "implemented",
+      "evidenceFiles": [
+        "blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.SecurityOps.cpp"
+      ],
+      "notes": "Literal event string found in BlazeClaw transport/handler/catalog surfaces."
     },
     {
       "event": "plugin.approval.resolved",
-      "status": "deferred",
-      "evidenceFiles": [],
-      "notes": "No direct literal match in scanned BlazeClaw files; requires alias/runtime-emitter follow-up."
+      "status": "implemented",
+      "evidenceFiles": [
+        "blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.SecurityOps.cpp"
+      ],
+      "notes": "Literal event string found in BlazeClaw transport/handler/catalog surfaces."
     },
     {
       "event": "presence",
@@ -202,6 +212,12 @@
         "blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.EventCatalogQuery.cpp"
       ],
       "notes": "Literal event string found in BlazeClaw transport/handler/catalog surfaces."
+    },
+    {
+      "event": "update.available",
+      "status": "deferred",
+      "evidenceFiles": [],
+      "notes": "No direct literal match in scanned BlazeClaw files; requires alias/runtime-emitter follow-up."
     },
     {
       "event": "voicewake.changed",

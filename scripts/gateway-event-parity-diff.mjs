@@ -96,6 +96,9 @@ function main() {
 
   const source = readText(openclawMethodsListPath);
   const openclawEvents = extractArrayLiteralStrings(source, "GATEWAY_EVENTS");
+  if (source.includes("GATEWAY_EVENT_UPDATE_AVAILABLE")) {
+    openclawEvents.push("update.available");
+  }
   const openclawResolvedEvents = Array.from(
     new Set(
       openclawEvents.map((value) =>

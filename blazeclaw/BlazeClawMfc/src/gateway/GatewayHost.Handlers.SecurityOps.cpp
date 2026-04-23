@@ -2144,7 +2144,7 @@ namespace blazeclaw::gateway {
 						return protocol::OkResponse(request, buildApprovalListJson(bucket));
 						});
 
-					m_runtimeContext.dispatcher->Register(requestMethod, [approvalState, &bucket, buildApprovalRecordJson, family, idPrefix](const protocol::RequestFrame& request) {
+					m_runtimeContext.dispatcher->Register(requestMethod, [this, approvalState, &bucket, buildApprovalRecordJson, family, idPrefix](const protocol::RequestFrame& request) {
 						const RequestParamsView params(request.paramsJson);
 						std::string requestId = TrimCopy(params.GetString("requestId"));
 						if (requestId.empty()) {
@@ -2184,6 +2184,19 @@ namespace blazeclaw::gateway {
 						}
 						record.requestedAtMs = GatewayEpochMilliseconds();
 						bucket.insert_or_assign(record.requestId, record);
+						const std::string requestedEventName = family == "plugin.approval"
+							? "plugin.approval.requested"
+							: "exec.approval.requested";
+						EmitBestEffortEvent(
+							*this,
+							requestedEventName,
+							JsonObject({
+								{"requestId", JsonString(record.requestId)},
+								{"family", JsonString(record.family)},
+								{"subject", JsonString(record.subject)},
+								{"requestedBy", JsonString(record.requestedBy)},
+								{"ts", JsonNumber(record.requestedAtMs)},
+								}));
 
 						return protocol::OkResponse(
 							request,
@@ -2244,7 +2257,7 @@ namespace blazeclaw::gateway {
 								}));
 						});
 
-					m_runtimeContext.dispatcher->Register(resolveMethod, [&bucket, buildApprovalRecordJson](const protocol::RequestFrame& request) {
+					m_runtimeContext.dispatcher->Register(resolveMethod, [this, &bucket, buildApprovalRecordJson](const protocol::RequestFrame& request) {
 						const RequestParamsView params(request.paramsJson);
 						const std::string requestId = TrimCopy(params.GetString("requestId"));
 						if (requestId.empty()) {
@@ -2271,6 +2284,18 @@ namespace blazeclaw::gateway {
 						if (it->second.reason.empty()) {
 							it->second.reason = TrimCopy(params.GetString("reason"));
 						}
+						const std::string resolvedEventName = it->second.family == "plugin.approval"
+							? "plugin.approval.resolved"
+							: "exec.approval.resolved";
+						EmitBestEffortEvent(
+							*this,
+							resolvedEventName,
+							JsonObject({
+								{"requestId", JsonString(it->second.requestId)},
+								{"family", JsonString(it->second.family)},
+								{"status", JsonString(it->second.status)},
+								{"ts", JsonNumber(it->second.resolvedAtMs)},
+								}));
 
 						return protocol::OkResponse(
 							request,
@@ -2854,6 +2879,15 @@ namespace blazeclaw::gateway {
 							std::nullopt);
 				}
 
+				EmitBestEffortEvent(
+					*this,
+					"node.invoke.request",
+					JsonObject({
+						{"nodeId", JsonString(nodeId)},
+						{"command", JsonString(command)},
+						{"idempotencyKey", JsonString(idempotencyKey)},
+						{"ts", JsonNumber(GatewayEpochMilliseconds())},
+						}));
 				return protocol::OkResponse(
 					request,
 					JsonObject({

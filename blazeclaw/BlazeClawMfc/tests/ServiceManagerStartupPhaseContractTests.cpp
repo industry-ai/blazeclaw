@@ -743,4 +743,20 @@ TEST_CASE(
 	const std::filesystem::path mechanicalDoc =
 		std::filesystem::path("docs") / "GATEWAY_SERVER_METHODS_MECHANICAL_AUDIT.md";
 	REQUIRE(std::filesystem::exists(mechanicalDoc));
+
+	const std::filesystem::path methodsListPlanDoc =
+		std::filesystem::path("..") /
+		"docs" /
+		"compare" /
+		"server-methods-list.ts" /
+		"OPENCLAW_SERVER_METHODS_LIST_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md";
+	REQUIRE(std::filesystem::exists(methodsListPlanDoc));
+
+	const std::filesystem::path methodsListMatrixDoc =
+		std::filesystem::path("..") /
+		"docs" /
+		"compare" /
+		"server-methods-list.ts" /
+		"OPENCLAW_SERVER_METHODS_LIST_TS_EVENT_MATRIX_S0_S2.md";
+	REQUIRE(std::filesystem::exists(methodsListMatrixDoc));
 }

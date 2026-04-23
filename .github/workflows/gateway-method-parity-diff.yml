@@ -9,6 +9,7 @@ on:
       - "blazeclaw/BlazeClawMfc/src/gateway/**"
       - "openclaw/src/gateway/server-methods/**"
       - "scripts/gateway-method-parity-diff.mjs"
+      - "scripts/gateway-event-parity-diff.mjs"
       - ".github/workflows/gateway-method-parity-diff.yml"
   pull_request:
     branches:
@@ -18,6 +19,7 @@ on:
       - "blazeclaw/BlazeClawMfc/src/gateway/**"
       - "openclaw/src/gateway/server-methods/**"
       - "scripts/gateway-method-parity-diff.mjs"
+      - "scripts/gateway-event-parity-diff.mjs"
       - ".github/workflows/gateway-method-parity-diff.yml"
   workflow_dispatch:
 
@@ -33,21 +35,32 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Generate gateway parity diff artifact
-        run: node scripts/gateway-method-parity-diff.mjs
+      - name: Generate gateway parity diff artifacts
+        run: |
+          node scripts/gateway-method-parity-diff.mjs
+          node scripts/gateway-event-parity-diff.mjs
 
       - name: Enforce committed parity artifacts are up to date
-        run: git diff --exit-code -- artifacts/gateway-parity/openclaw-vs-blazeclaw-method-diff.json artifacts/gateway-parity/openclaw-vs-blazeclaw-method-diff.md
+        run: |
+          git diff --exit-code -- \
+            artifacts/gateway-parity/openclaw-vs-blazeclaw-method-diff.json \
+            artifacts/gateway-parity/openclaw-vs-blazeclaw-method-diff.md \
+            artifacts/gateway-parity/openclaw-vs-blazeclaw-event-diff.json \
+            artifacts/gateway-parity/openclaw-vs-blazeclaw-event-diff.md
 
       - name: Verify parity-critical Catch2 sources stay wired
         run: |
           test -f blazeclaw/BlazeClawMfc/tests/GatewayRequestPolicyGuardTests.cpp
           test -f blazeclaw/BlazeClawMfc/tests/GatewayServerMethodsS3ParityTests.cpp
+          test -f blazeclaw/BlazeClawMfc/tests/GatewayServerMethodsListS3ParityTests.cpp
           grep -q "GatewayRequestPolicyGuardTests.cpp" blazeclaw/BlazeClawMfc.Tests/BlazeClawMfc.Tests.vcxproj
           grep -q "GatewayServerMethodsS3ParityTests.cpp" blazeclaw/BlazeClawMfc.Tests/BlazeClawMfc.Tests.vcxproj
+          grep -q "GatewayServerMethodsListS3ParityTests.cpp" blazeclaw/BlazeClawMfc.Tests/BlazeClawMfc.Tests.vcxproj
 
       - name: Show parity diff summary
-        run: cat artifacts/gateway-parity/openclaw-vs-blazeclaw-method-diff.md
+        run: |
+          cat artifacts/gateway-parity/openclaw-vs-blazeclaw-method-diff.md
+          cat artifacts/gateway-parity/openclaw-vs-blazeclaw-event-diff.md
 
       - name: Upload parity diff artifact
         uses: actions/upload-artifact@v4

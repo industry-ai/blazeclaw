@@ -1,6 +1,6 @@
 # OpenClaw vs BlazeClaw Gateway Method Diff
 
-Generated: 2026-04-23T08:18:42.385Z
+Generated: 2026-04-23T08:32:52.134Z
 
 ## Inputs
 
