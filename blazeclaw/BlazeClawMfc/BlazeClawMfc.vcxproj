@@ -226,6 +226,7 @@
     <ClInclude Include="src\gateway\GatewayJsonSerializers.h" />
     <ClInclude Include="src\gateway\GatewayJsonBuilder.h" />
     <ClInclude Include="src\gateway\GatewayRequestParams.h" />
+    <ClInclude Include="src\gateway\GatewayHttpAuthService.h" />
     <ClInclude Include="src\gateway\GatewayNodePairingService.h" />
     <ClInclude Include="src\gateway\GatewayNodeCatalogService.h" />
     <ClInclude Include="src\gateway\GatewayNodeCanvasCapabilityService.h" />
@@ -430,6 +431,7 @@
     <ClCompile Include="src\gateway\GatewayJsonSerializers.cpp" />
     <ClCompile Include="src\gateway\GatewayJsonBuilder.cpp" />
     <ClCompile Include="src\gateway\GatewayRequestParams.cpp" />
+    <ClCompile Include="src\gateway\GatewayHttpAuthService.cpp" />
     <ClCompile Include="src\gateway\GatewayNodePairingService.cpp" />
     <ClCompile Include="src\gateway\GatewayNodeCatalogService.cpp" />
     <ClCompile Include="src\gateway\GatewayNodeCanvasCapabilityService.cpp" />
