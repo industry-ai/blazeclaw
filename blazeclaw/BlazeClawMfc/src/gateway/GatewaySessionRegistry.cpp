@@ -3,11 +3,27 @@
 #include "GatewayPersistencePaths.h"
 
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 
 namespace blazeclaw::gateway {
+	namespace {
+		std::string Trim(const std::string& value) {
+			std::size_t start = 0;
+			while (start < value.size() && std::isspace(static_cast<unsigned char>(value[start])) != 0) {
+				++start;
+			}
+
+			std::size_t end = value.size();
+			while (end > start && std::isspace(static_cast<unsigned char>(value[end - 1])) != 0) {
+				--end;
+			}
+
+			return value.substr(start, end - start);
+		}
+	} // namespace
 
 	GatewaySessionRegistry::GatewaySessionRegistry() {
 		const SessionEntry mainSession = BuildDefaultSession();
@@ -159,11 +175,20 @@ namespace blazeclaw::gateway {
 	}
 
 	std::string GatewaySessionRegistry::NormalizeSessionId(const std::string& value) {
-		if (value.empty()) {
+		const std::string trimmed = Trim(value);
+		if (trimmed.empty()) {
 			return "main";
 		}
 
-		return value;
+		std::string normalized = trimmed;
+		std::transform(
+			normalized.begin(),
+			normalized.end(),
+			normalized.begin(),
+			[](unsigned char ch) {
+				return static_cast<char>(std::tolower(ch));
+			});
+		return normalized;
 	}
 
 	SessionEntry GatewaySessionRegistry::BuildDefaultSession() {
@@ -203,7 +228,7 @@ namespace blazeclaw::gateway {
 
 			SessionEntry loaded{
 				.id = NormalizeSessionId(id),
-				.scope = scope.empty() ? ResolveScope(id, std::nullopt) : scope,
+				.scope = scope.empty() ? ResolveScope(NormalizeSessionId(id), std::nullopt) : scope,
 				.active = active == "1" || active == "true",
 			};
 

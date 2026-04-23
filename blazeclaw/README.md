@@ -59,6 +59,7 @@ Architecture comparison docs:
 - `blazeclaw/docs/SKILL_PORTING.md` (Phase F: PORTING_PLAN pattern, skill index)
 - `blazeclaw/docs/GATEWAY_SERVER_METHODS_MECHANICAL_AUDIT.md` (OpenClaw `server-methods/*.ts` vs BlazeClaw dispatcher file-by-file parity matrix + prioritized P0/P1/P2 implementation backlog with status notes: method-surface baseline for P0/P1/P2 landed, with `doctor.memory.*` request/response schema validation)
 - `docs/compare/skills.ts/OPENCLAW_AGENTS_SKILLS_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md` (OpenClaw `src/agents/skills.ts` aggregate parity matrix, architecture consistency decision, and step-by-step parity hardening plan)
+- `docs/compare/session-utils.ts/OPENCLAW_GATEWAY_SESSION_UTILS_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md` (OpenClaw `src/gateway/session-utils.ts` session-domain parity matrix, architecture decision, and step-by-step targeted compatibility refactor plan)
 - `blazeclaw/docs/compare/ui.controllers.md` (OpenClaw Control UI `ui/src/ui/controllers/*` vs BlazeClaw `web/chat` + MFC bridge: prompt input, send, streaming/events, control-plane gaps, parity porting plan)
 - `.github/ISSUE_TEMPLATE/p0-gateway-method-parity-checklist.md` (issue template for P0 parity execution with checkboxes, tests, and validation commands)
 - `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp.md` (deep dive: **thin façade** invariant—`RegisterDefaultHandlers` → `RegisterDefaultHandlerSequence` only from `GatewayHost.cpp`; split `GatewayHost.Handlers.*`; no god lambdas; shared protocol surface; named handler types)

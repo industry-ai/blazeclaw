@@ -8,6 +8,7 @@
 #include "GatewayJsonSerializers.h"
 #include "GatewayJsonBuilder.h"
 #include "GatewayRequestParams.h"
+#include "GatewaySessionUtilsService.h"
 #include "Telemetry.h"
 #include "GatewayJsonUtils.h"
 
@@ -21,39 +22,24 @@ void SupplementaryCatalogHandlers::RegisterAll(GatewayHost& host) {
 	});
 
 host.m_dispatcher.Register("gateway.session.list", [&host](const protocol::RequestFrame& request) {
-			const std::optional<bool> activeFilter = RequestParamsView(request.paramsJson).GetBool("active");
-			const std::string scopeFilter = RequestParamsView(request.paramsJson).GetString("scope");
+			const RequestParamsView params(request.paramsJson);
+			GatewaySessionListFilters filters{};
+			filters.active = params.GetBool("active");
+			filters.scope = params.GetString("scope");
+			filters.limit = params.GetSize("limit");
+			filters.activeMinutes = params.GetSize("activeMinutes");
+			filters.includeGlobal = params.GetBool("includeGlobal").value_or(false);
+			filters.includeUnknown = params.GetBool("includeUnknown").value_or(false);
+			filters.includeDerivedTitles = params.GetBool("includeDerivedTitles").value_or(false);
+			filters.includeLastMessage = params.GetBool("includeLastMessage").value_or(false);
+			filters.label = params.GetString("label");
+			filters.spawnedBy = params.GetString("spawnedBy");
+			filters.agentId = params.GetString("agentId");
+			filters.search = params.GetString("search");
 			const auto sessions = host.m_sessionRegistry.List();
-			std::string sessionArray = "[";
-			bool first = true;
-			std::size_t count = 0;
-			std::string activeSessionId = "none";
-			for (std::size_t i = 0; i < sessions.size(); ++i) {
-				if (activeFilter.has_value() && sessions[i].active != activeFilter.value()) {
-					continue;
-				}
-
-				if (!scopeFilter.empty() && sessions[i].scope != scopeFilter) {
-					continue;
-				}
-
-				if (!first) {
-					sessionArray += ",";
-				}
-
-				sessionArray += SerializeSession(sessions[i]);
-				if (activeSessionId == "none" && sessions[i].active) {
-					activeSessionId = sessions[i].id;
-				}
-
-				first = false;
-				++count;
-			}
-
-			sessionArray += "]";
-
-			return protocol::OkResponse(request, "{\"sessions\":" + sessionArray + ",\"count\":" + std::to_string(count) +
-					",\"activeSessionId\":\"" + EscapeJsonString(activeSessionId) + "\"}");
+			return protocol::OkResponse(
+				request,
+				GatewaySessionUtilsService::BuildSessionListPayload(sessions, filters));
 			});
 
 		host.m_dispatcher.Register("sessions.list", [&host](const protocol::RequestFrame& request) {

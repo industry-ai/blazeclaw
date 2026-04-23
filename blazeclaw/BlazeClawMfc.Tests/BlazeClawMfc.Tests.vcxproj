@@ -95,6 +95,7 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHostRegistrationCoordinator.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayJsonSerializers.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayJsonBuilder.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewaySessionUtilsService.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayRequestParams.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayHttpAuthService.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayNodePairingService.cpp" />
