@@ -7,6 +7,7 @@
 #include "GatewayJsonSerializers.h"
 #include "GatewayJsonBuilder.h"
 #include "GatewayRequestParams.h"
+#include "GatewaySessionUtilsService.h"
 #include "Telemetry.h"
 #include "GatewayJsonUtils.h"
 
@@ -115,10 +116,11 @@ namespace blazeclaw::gateway::handlers::agent_session_mutation {
 		host.m_dispatcher.Register("gateway.sessions.preview", [&host](const protocol::RequestFrame& request) {
 			const std::string requestedId = RequestParamsView(request.paramsJson).GetString("sessionId");
 			const SessionEntry session = host.m_sessionRegistry.Resolve(requestedId);
-
-			return protocol::OkResponse(request, "{\"session\":" + SerializeSession(session) +
-				",\"title\":\"Session " + EscapeJsonString(session.id) +
-				"\",\"hasMessages\":true,\"unread\":0}");
+			const auto payload = GatewaySessionUtilsService::BuildSessionPreviewPayload(
+				session,
+				"deepseek",
+				host.m_runtimeAgentModel);
+			return protocol::OkResponse(request, payload.json);
 			});
 
 		host.m_dispatcher.Register("gateway.sessions.compact", [&host](const protocol::RequestFrame& request) {
@@ -138,24 +140,14 @@ namespace blazeclaw::gateway::handlers::agent_session_mutation {
 				const std::string requestedStartDate = params.GetString("startDate");
 				const std::string requestedEndDate = params.GetString("endDate");
 				const SessionEntry session = host.m_sessionRegistry.Resolve(requestedId);
-
-				if (!openClawEnvelope) {
-					return protocol::OkResponse(request, "{\"sessionId\":\"" + EscapeJsonString(session.id) +
-						"\",\"messages\":42,\"tokens\":{\"input\":1024,\"output\":512,\"total\":1536},\"lastActiveMs\":1735689600200}");
-				}
-
-				const std::string sessionKey = !session.id.empty() ? session.id : "main";
-				const std::string startDate = !requestedStartDate.empty() ? requestedStartDate : "2026-01-01";
-				const std::string endDate = !requestedEndDate.empty() ? requestedEndDate : startDate;
-				const std::string payload =
-					"{\"updatedAt\":1735689600200,\"startDate\":\"" + EscapeJsonString(startDate) +
-					"\",\"endDate\":\"" + EscapeJsonString(endDate) +
-					"\",\"sessions\":[{\"key\":\"" + EscapeJsonString(sessionKey) +
-					"\",\"label\":\"Session " + EscapeJsonString(sessionKey) +
-					"\",\"sessionId\":\"" + EscapeJsonString(session.id) +
-					"\",\"updatedAt\":1735689600200,\"usage\":{\"input\":1024,\"output\":512,\"cacheRead\":0,\"cacheWrite\":0,\"totalTokens\":1536,\"totalCost\":0.0,\"messages\":42}}],"
-					"\"totals\":{\"input\":1024,\"output\":512,\"cacheRead\":0,\"cacheWrite\":0,\"totalTokens\":1536,\"totalCost\":0.0,\"inputCost\":0.0,\"outputCost\":0.0,\"cacheReadCost\":0.0,\"cacheWriteCost\":0.0,\"missingCostEntries\":0}}";
-				return protocol::OkResponse(request, payload);
+				const auto payload = GatewaySessionUtilsService::BuildSessionUsagePayload(
+					session,
+					"deepseek",
+					host.m_runtimeAgentModel,
+					requestedStartDate,
+					requestedEndDate,
+					openClawEnvelope);
+				return protocol::OkResponse(request, payload.json);
 				});
 			};
 		registerSessionsUsage("gateway.sessions.usage", false);

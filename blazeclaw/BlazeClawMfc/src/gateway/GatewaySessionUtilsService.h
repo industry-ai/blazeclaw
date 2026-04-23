@@ -34,10 +34,24 @@ namespace blazeclaw::gateway {
 		std::string displayName;
 		std::string derivedTitle;
 		std::string lastMessagePreview;
+		std::string modelProvider;
+		std::string model;
+		std::uint64_t contextTokens = 0;
+		std::uint64_t totalTokens = 0;
+		double estimatedCostUsd = 0.0;
+		std::string fallbackSource = "registry";
 		std::string spawnedBy;
 		std::string parentSessionKey;
 		std::vector<std::string> childSessions;
 		std::int64_t updatedAt = 0;
+	};
+
+	struct GatewaySessionPreviewPayload {
+		std::string json;
+	};
+
+	struct GatewaySessionUsagePayload {
+		std::string json;
 	};
 
 	class GatewaySessionUtilsService {
@@ -52,6 +66,17 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] static std::string BuildSessionListPayload(
 			const std::vector<SessionEntry>& sessions,
 			const GatewaySessionListFilters& filters);
+		[[nodiscard]] static GatewaySessionPreviewPayload BuildSessionPreviewPayload(
+			const SessionEntry& session,
+			const std::string& defaultModelProvider,
+			const std::string& defaultModel);
+		[[nodiscard]] static GatewaySessionUsagePayload BuildSessionUsagePayload(
+			const SessionEntry& session,
+			const std::string& defaultModelProvider,
+			const std::string& defaultModel,
+			const std::string& startDate,
+			const std::string& endDate,
+			bool openClawEnvelope);
 
 	private:
 		[[nodiscard]] static std::string BuildSessionProjectionJson(const GatewaySessionProjection& projection);

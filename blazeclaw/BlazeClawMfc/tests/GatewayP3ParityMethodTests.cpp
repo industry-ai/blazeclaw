@@ -220,3 +220,63 @@ TEST_CASE("P3 parity methods: skills/update/tts/secrets and transport envelopes 
 	CHECK(transportStatus.payloadJson.value().find("\"running\":") != std::string::npos);
 	CHECK(transportStatus.payloadJson.value().find("\"endpoint\":") != std::string::npos);
 }
+
+TEST_CASE("P3 parity methods: sessions preview and usage use transcript fallback envelope", "[gateway][parity][p3][sessions]")
+{
+	GatewayHost host;
+	REQUIRE(host.StartLocalDispatchOnly());
+
+	const auto createSession = Route(
+		host,
+		"p3-session-create",
+		"gateway.sessions.create",
+		R"({"sessionId":"p3-session-utils","scope":"thread","active":true})");
+	REQUIRE(createSession.ok);
+
+	const auto preview = Route(
+		host,
+		"p3-session-preview",
+		"gateway.sessions.preview",
+		R"({"sessionId":"p3-session-utils"})");
+	REQUIRE(preview.ok);
+	REQUIRE(preview.payloadJson.has_value());
+	CHECK(preview.payloadJson.value().find("\"title\":") != std::string::npos);
+	CHECK(preview.payloadJson.value().find("\"usage\":{") != std::string::npos);
+	CHECK(preview.payloadJson.value().find("\"modelProvider\":") != std::string::npos);
+	CHECK(preview.payloadJson.value().find("\"fallbackSource\":") != std::string::npos);
+
+	const auto usage = Route(
+		host,
+		"p3-session-usage",
+		"gateway.sessions.usage",
+		R"({"sessionId":"p3-session-utils"})");
+	REQUIRE(usage.ok);
+	REQUIRE(usage.payloadJson.has_value());
+	CHECK(usage.payloadJson.value().find("\"tokens\":{") != std::string::npos);
+	CHECK(usage.payloadJson.value().find("\"estimatedCostUsd\":") != std::string::npos);
+	CHECK(usage.payloadJson.value().find("\"model\":") != std::string::npos);
+	CHECK(usage.payloadJson.value().find("\"fallbackSource\":") != std::string::npos);
+
+	const auto usageEnvelope = Route(
+		host,
+		"p3-session-usage-envelope",
+		"sessions.usage",
+		R"({"sessionId":"p3-session-utils","startDate":"2026-04-01","endDate":"2026-04-30"})");
+	REQUIRE(usageEnvelope.ok);
+	REQUIRE(usageEnvelope.payloadJson.has_value());
+	CHECK(usageEnvelope.payloadJson.value().find("\"sessions\":[{") != std::string::npos);
+	CHECK(usageEnvelope.payloadJson.value().find("\"totals\":{") != std::string::npos);
+	CHECK(usageEnvelope.payloadJson.value().find("\"modelProvider\":") != std::string::npos);
+
+	const auto listWithDerived = Route(
+		host,
+		"p3-session-list-derived",
+		"gateway.session.list",
+		R"({"includeDerivedTitles":true,"includeLastMessage":true,"search":"p3-session-utils"})");
+	REQUIRE(listWithDerived.ok);
+	REQUIRE(listWithDerived.payloadJson.has_value());
+	CHECK(listWithDerived.payloadJson.value().find("\"derivedTitle\":") != std::string::npos);
+	CHECK(listWithDerived.payloadJson.value().find("\"modelProvider\":") != std::string::npos);
+	CHECK(listWithDerived.payloadJson.value().find("\"contextTokens\":") != std::string::npos);
+	CHECK(listWithDerived.payloadJson.value().find("\"estimatedCostUsd\":") != std::string::npos);
+}
