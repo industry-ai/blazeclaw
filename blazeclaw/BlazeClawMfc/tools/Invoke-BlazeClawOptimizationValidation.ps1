@@ -10,7 +10,7 @@
   - **Phase B:** `GatewayUpstreamDiff/Verify-GatewayDispatcherMethods.ps1` (duplicate `.Register("method"` review).
   - **Phase F:** `Verify-SkillPortingPlans.ps1` — every **`blazeclaw/skills/<name>/`** directory must contain **`PORTING_PLAN.md`** (see **`docs/SKILL_PORTING.md`**). Skipped with **`-SkipPhaseF`**.
   - **Phase E:** MSBuild `blazeclaw/BlazeClaw.sln` **Debug|x64** or **Release|x64** (see **`-Configuration`**) with UTF-8 code page (**`/p:CodePage=65001`**).
-  - **Optional:** Run `BlazeClawMfc.Tests.exe` with CWD `blazeclaw/` (after a build, or with **`-SkipBuild`** if the test EXE already exists — same pattern as Azure Pipelines after **VSBuild**). The script resolves the test binary under **`blazeclaw\bin\<Configuration>\`** first, then common fallbacks.
+  - **Optional:** Run `BlazeClawMfc.Tests.exe` with CWD `blazeclaw/` (after a build, or with **`-SkipBuild`** if the test EXE already exists — same pattern as Azure Pipelines after **VSBuild**). With **`-RunTests`**, runs Catch2 tag **`[lifecycle-parity-ci]`** (S6 lifecycle acceptance) before the full suite. The script resolves the test binary under **`blazeclaw\bin\<Configuration>\`** first, then common fallbacks.
 
   Phases **C** and **D** are **runtime rules and docs** (for example **`GATEWAY_CORE_WIRING.md`**, task-delta telemetry) — not automated here beyond Catch2 when **`-RunTests`** is set.
 
@@ -126,6 +126,12 @@ if ($RunTests) {
 		}
 		Push-Location $blazeclawDir
 		try {
+			Write-Host "Catch2 gate: lifecycle parity acceptance [lifecycle-parity-ci]" -ForegroundColor Cyan
+			& $testExe "[lifecycle-parity-ci]"
+			if (-not $?) {
+				throw "BlazeClawMfc.Tests.exe lifecycle parity gate failed (exit code $LASTEXITCODE). Fix S6 acceptance matrix or parity regressions."
+			}
+			Write-Host "Catch2: full BlazeClawMfc.Tests suite" -ForegroundColor Cyan
 			& $testExe
 			if (-not $?) { throw "BlazeClawMfc.Tests.exe failed (exit code $LASTEXITCODE)." }
 		}

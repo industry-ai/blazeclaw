@@ -1,0 +1,53 @@
+name: blazeclaw-lifecycle-parity-ci
+
+on:
+  push:
+    branches:
+      - main
+      - controlplane
+      - opt
+    paths:
+      - "blazeclaw/BlazeClawMfc/src/core/**"
+      - "blazeclaw/BlazeClawMfc/src/gateway/**"
+      - "blazeclaw/BlazeClawMfc/tests/**"
+      - "blazeclaw/BlazeClawMfc/tools/Invoke-BlazeClawOptimizationValidation.ps1"
+      - "blazeclaw/BlazeClawMfc.Tests/**"
+      - ".github/workflows/blazeclaw-lifecycle-parity-ci.yml"
+      - "docs/compare/server.impl.ts/**"
+  pull_request:
+    branches:
+      - main
+      - controlplane
+      - opt
+    paths:
+      - "blazeclaw/BlazeClawMfc/src/core/**"
+      - "blazeclaw/BlazeClawMfc/src/gateway/**"
+      - "blazeclaw/BlazeClawMfc/tests/**"
+      - "blazeclaw/BlazeClawMfc/tools/Invoke-BlazeClawOptimizationValidation.ps1"
+      - "blazeclaw/BlazeClawMfc.Tests/**"
+      - ".github/workflows/blazeclaw-lifecycle-parity-ci.yml"
+      - "docs/compare/server.impl.ts/**"
+  workflow_dispatch:
+
+jobs:
+  lifecycle-parity:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build BlazeClaw.sln (Debug x64, UTF-8)
+        shell: pwsh
+        run: |
+          msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001 /m
+
+      - name: Run S6 lifecycle parity gate + full Catch2 suite
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:GITHUB_WORKSPACE
+          $script = Join-Path $root "blazeclaw/BlazeClawMfc/tools/Invoke-BlazeClawOptimizationValidation.ps1"
+          & $script -RepoRoot $root -SkipPhaseA -SkipPhaseB -SkipBuild -RunTests -Configuration Debug

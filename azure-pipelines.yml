@@ -55,4 +55,5 @@ jobs:
         $ErrorActionPreference = "Stop"
         $root = "$(System.DefaultWorkingDirectory)"
         $script = Join-Path $root "blazeclaw\BlazeClawMfc\tools\Invoke-BlazeClawOptimizationValidation.ps1"
+        # S6: Invoke-BlazeClawOptimizationValidation runs [lifecycle-parity-ci] before the full suite.
         & $script -RepoRoot $root -SkipPhaseA -SkipPhaseB -SkipBuild -RunTests -Configuration Debug

@@ -727,3 +727,20 @@ TEST_CASE(
 		lifecycleSource.find("AppendStartupTrace(\"ServiceManager.Start.policy.ready\")") !=
 		std::string::npos);
 }
+
+TEST_CASE(
+	"S6 contract: capability parity analysis and gateway mechanical audit docs exist",
+	"[servicemanager][s6][contract]")
+{
+	const std::filesystem::path capabilityDoc =
+		std::filesystem::path("..") /
+		"docs" /
+		"compare" /
+		"server.impl.ts" /
+		"OPENCLAW_SERVER_IMPL_TS_CAPABILITY_PARITY_ANALYSIS.md";
+	REQUIRE(std::filesystem::exists(capabilityDoc));
+
+	const std::filesystem::path mechanicalDoc =
+		std::filesystem::path("docs") / "GATEWAY_SERVER_METHODS_MECHANICAL_AUDIT.md";
+	REQUIRE(std::filesystem::exists(mechanicalDoc));
+}
