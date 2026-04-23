@@ -428,8 +428,13 @@ namespace blazeclaw::gateway {
 			GatewayHttpAuthPolicyCallbacks{
 				.authorizeBearer = [this](
 					const std::string& token,
-					const GatewayHttpAuthRequestContext&,
+					const GatewayHttpAuthRequestContext& context,
 					std::string& failureReasonOut) {
+						if (context.browserOriginPolicy == "origin_rejected") {
+							failureReasonOut = "unauthorized";
+							return false;
+						}
+
 						if (token.empty()) {
 							failureReasonOut = "unauthorized";
 							return false;
@@ -449,7 +454,26 @@ namespace blazeclaw::gateway {
 						failureReasonOut = "unauthorized";
 						return false;
 					},
-				.checkRateLimit = nullptr,
+				.checkRateLimit = [this](
+					const GatewayHttpAuthRequestContext& context,
+					std::string& failureReasonOut) {
+						const std::string remoteKey =
+							context.remoteIp.empty() ? "__unknown_remote_ip__" : context.remoteIp;
+						auto& attempts = m_httpAuthBearerAttemptsByRemoteIp[remoteKey];
+						const std::uint64_t nowMs = GatewayEpochMilliseconds();
+						while (!attempts.empty() &&
+							(nowMs - attempts.front()) > m_httpAuthRateLimitWindowMs) {
+							attempts.pop_front();
+						}
+
+						if (attempts.size() >= m_httpAuthRateLimitMaxAttemptsPerWindow) {
+							failureReasonOut = "rate_limited";
+							return false;
+						}
+
+						attempts.push_back(nowMs);
+						return true;
+					},
 				.authorizeCanvasCapability = [this](
 					const std::string& capability,
 					const GatewayHttpAuthRequestContext&,

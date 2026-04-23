@@ -54,6 +54,7 @@ namespace blazeclaw::gateway {
 	class GatewayHttpAuthService {
 	public:
 		[[nodiscard]] static bool IsCanvasPath(std::string_view pathname);
+		[[nodiscard]] static bool IsMalformedScopedCanvasPath(std::string_view pathname);
 
 		[[nodiscard]] static std::optional<std::string> GetBearerToken(
 			const std::unordered_map<std::string, std::string>& headers);

@@ -10,6 +10,7 @@ namespace blazeclaw::gateway {
 		constexpr std::string_view kA2uiPath = "/__openclaw__/a2ui";
 		constexpr std::string_view kCanvasHostPath = "/__openclaw__/canvas";
 		constexpr std::string_view kCanvasWsPath = "/__openclaw__/ws";
+		constexpr std::string_view kCanvasScopedSessionPrefix = "/__openclaw__/canvas/session";
 
 		std::string ToLowerAsciiCopy(std::string value) {
 			std::transform(
@@ -68,6 +69,30 @@ namespace blazeclaw::gateway {
 			pathname == kCanvasWsPath;
 	}
 
+	bool GatewayHttpAuthService::IsMalformedScopedCanvasPath(std::string_view pathname) {
+		if (!StartsWithPathPrefix(pathname, kCanvasScopedSessionPrefix)) {
+			return false;
+		}
+
+		if (pathname.size() == kCanvasScopedSessionPrefix.size()) {
+			return true;
+		}
+
+		if (pathname[kCanvasScopedSessionPrefix.size()] != '/') {
+			return true;
+		}
+
+		const std::size_t capabilityStart = kCanvasScopedSessionPrefix.size() + 1;
+		if (capabilityStart >= pathname.size()) {
+			return true;
+		}
+
+		const std::size_t delimiterPos = pathname.find_first_of("/?", capabilityStart);
+		const std::size_t capabilityEnd =
+			delimiterPos == std::string_view::npos ? pathname.size() : delimiterPos;
+		return capabilityEnd <= capabilityStart;
+	}
+
 	std::optional<std::string> GatewayHttpAuthService::GetBearerToken(
 		const std::unordered_map<std::string, std::string>& headers) {
 		const auto authorization = FindHeaderCaseInsensitive(
@@ -116,7 +141,9 @@ namespace blazeclaw::gateway {
 
 		std::string lastAuthFailure = "unauthorized";
 		const auto token = GetBearerToken(context.headers);
+		bool attemptedBearer = false;
 		if (token.has_value()) {
+			attemptedBearer = true;
 			if (callbacks.checkRateLimit) {
 				std::string limitReason;
 				if (!callbacks.checkRateLimit(context, limitReason)) {
@@ -148,14 +175,6 @@ namespace blazeclaw::gateway {
 			else {
 				lastAuthFailure = "authorization_handler_missing";
 			}
-
-			const GatewayHttpAuthDecisionResult result{
-				.ok = false,
-				.reason = lastAuthFailure,
-				.branch = "bearer_fail",
-			};
-			emitDecision(result);
-			return result;
 		}
 
 		if (!context.canvasCapability.empty() && callbacks.authorizeCanvasCapability) {
@@ -180,7 +199,7 @@ namespace blazeclaw::gateway {
 		const GatewayHttpAuthDecisionResult result{
 			.ok = false,
 			.reason = lastAuthFailure,
-			.branch = "unauthorized",
+			.branch = attemptedBearer ? "bearer_fail" : "unauthorized",
 		};
 		emitDecision(result);
 		return result;

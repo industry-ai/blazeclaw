@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <vector>
 #include <ws2tcpip.h>
 #include <wincrypt.h>
 #include <ws2tcpip.h>
@@ -79,11 +80,32 @@ namespace blazeclaw::gateway {
 			return true;
 		}
 
+		std::string ExtractRequestPath(const std::string& requestTarget) {
+			const std::size_t queryPos = requestTarget.find('?');
+			const std::size_t fragmentPos = requestTarget.find('#');
+			std::size_t endPos = std::string::npos;
+			if (queryPos != std::string::npos && fragmentPos != std::string::npos) {
+				endPos = (std::min)(queryPos, fragmentPos);
+			}
+			else if (queryPos != std::string::npos) {
+				endPos = queryPos;
+			}
+			else if (fragmentPos != std::string::npos) {
+				endPos = fragmentPos;
+			}
+
+			if (endPos == std::string::npos) {
+				return requestTarget;
+			}
+			return requestTarget.substr(0, endPos);
+		}
+
 		bool IsAllowedRequestTarget(const std::string& requestLine) {
-			std::string target;
-			if (!TryExtractRequestTarget(requestLine, target)) {
+			std::string requestTarget;
+			if (!TryExtractRequestTarget(requestLine, requestTarget)) {
 				return false;
 			}
+			const std::string target = ExtractRequestPath(requestTarget);
 
 			if (GatewayHttpAuthService::IsCanvasPath(target)) {
 				return true;
@@ -178,6 +200,42 @@ namespace blazeclaw::gateway {
 				lowerOrigin.rfind("https://127.0.0.1", 0) == 0 ||
 				lowerOrigin.rfind("http://[::1]", 0) == 0 ||
 				lowerOrigin.rfind("https://[::1]", 0) == 0;
+		}
+
+		std::string ResolveBrowserOriginPolicy(
+			const bool hasOrigin,
+			const bool isAllowedOrigin) {
+			if (!hasOrigin) {
+				return "origin_not_provided";
+			}
+			return isAllowedOrigin ? "origin_loopback_allowed" : "origin_rejected";
+		}
+
+		std::string ResolvePeerIpAddress(SOCKET socket) {
+			sockaddr_storage peerAddress{};
+			int peerLength = static_cast<int>(sizeof(peerAddress));
+			if (getpeername(socket, reinterpret_cast<sockaddr*>(&peerAddress), &peerLength) != 0) {
+				return {};
+			}
+
+			char hostBuffer[NI_MAXHOST]{};
+			const int result = getnameinfo(
+				reinterpret_cast<const sockaddr*>(&peerAddress),
+				peerLength,
+				hostBuffer,
+				static_cast<DWORD>(sizeof(hostBuffer)),
+				nullptr,
+				0,
+				NI_NUMERICHOST);
+			if (result != 0) {
+				return {};
+			}
+
+			return std::string(hostBuffer);
+		}
+
+		std::vector<std::string> BuildDefaultTrustedProxyList() {
+			return { "127.0.0.1", "::1" };
 		}
 
 		bool IsContinuationByte(std::uint8_t value) {
@@ -1302,11 +1360,16 @@ namespace blazeclaw::gateway {
 			error = "Malformed HTTP request target for websocket handshake.";
 			return false;
 		}
+		const std::string requestPath = ExtractRequestPath(requestTarget);
 
 		std::unordered_map<std::string, std::string> authHeaders;
 		std::string authorizationHeader;
 		if (TryExtractHttpHeader(request, "Authorization", authorizationHeader)) {
 			authHeaders.insert_or_assign("Authorization", authorizationHeader);
+		}
+		std::string forwardedForHeader;
+		if (TryExtractHttpHeader(request, "X-Forwarded-For", forwardedForHeader)) {
+			authHeaders.insert_or_assign("X-Forwarded-For", forwardedForHeader);
 		}
 		std::string canvasCapabilityHeader;
 		if (TryExtractHttpHeader(request, "X-OpenClaw-Canvas-Capability", canvasCapabilityHeader)) {
@@ -1347,13 +1410,15 @@ namespace blazeclaw::gateway {
 		const bool hasOrigin = TryExtractHttpHeader(request, "Origin", origin);
 		const bool isAllowedOrigin = !hasOrigin || IsAllowedOriginValue(origin);
 
-		if (GatewayHttpAuthService::IsCanvasPath(requestTarget)) {
+		if (GatewayHttpAuthService::IsCanvasPath(requestPath)) {
 			GatewayHttpAuthRequestContext authContext;
-			authContext.path = requestTarget;
+			authContext.path = requestPath;
 			authContext.headers = authHeaders;
-			authContext.remoteIp = host;
+			authContext.remoteIp = ResolvePeerIpAddress(session.socket);
+			authContext.trustedProxies = BuildDefaultTrustedProxyList();
 			authContext.allowRealIpFallback = true;
-			authContext.browserOriginPolicy = hasOrigin ? origin : "";
+			authContext.malformedScopedPath = GatewayHttpAuthService::IsMalformedScopedCanvasPath(requestPath);
+			authContext.browserOriginPolicy = ResolveBrowserOriginPolicy(hasOrigin, isAllowedOrigin);
 			authContext.canvasCapability = TrimCopy(canvasCapabilityHeader);
 
 			GatewayHttpAuthPolicyCallbacks callbacks = m_httpAuthCallbacks;

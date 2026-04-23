@@ -582,6 +582,9 @@ namespace blazeclaw::gateway {
 		std::unordered_map<std::string, std::string> m_chatRunByIdempotency;
 		std::unordered_map<std::string, ChatReplayEntry> m_chatReplayByIdempotency;
 		std::unordered_map<std::string, std::unordered_set<std::string>> m_chatToolEventRecipientsByRun;
+		std::unordered_map<std::string, std::deque<std::uint64_t>> m_httpAuthBearerAttemptsByRemoteIp;
+		std::uint64_t m_httpAuthRateLimitWindowMs = 60'000;
+		std::size_t m_httpAuthRateLimitMaxAttemptsPerWindow = 30;
 		TransportRecipientRegistry m_transportRecipientRegistry;
 		std::unordered_set<std::string> m_chatTerminalDeliveredRunIds;
 		std::uint64_t m_chatPushEventSeq = 0;

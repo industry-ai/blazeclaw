@@ -20,6 +20,16 @@ TEST_CASE("GatewayHttpAuthService IsCanvasPath mirrors OpenClaw route coverage",
 	REQUIRE_FALSE(GatewayHttpAuthService::IsCanvasPath("/gateway"));
 }
 
+TEST_CASE("GatewayHttpAuthService IsMalformedScopedCanvasPath flags malformed scoped session routes", "[gateway][http-auth][phase2]") {
+	REQUIRE(GatewayHttpAuthService::IsMalformedScopedCanvasPath("/__openclaw__/canvas/session"));
+	REQUIRE(GatewayHttpAuthService::IsMalformedScopedCanvasPath("/__openclaw__/canvas/session/"));
+	REQUIRE(GatewayHttpAuthService::IsMalformedScopedCanvasPath("/__openclaw__/canvas/session?x=1"));
+	REQUIRE(GatewayHttpAuthService::IsMalformedScopedCanvasPath("/__openclaw__/canvas/session?"));
+	REQUIRE_FALSE(GatewayHttpAuthService::IsMalformedScopedCanvasPath("/__openclaw__/canvas/session/capability"));
+	REQUIRE_FALSE(GatewayHttpAuthService::IsMalformedScopedCanvasPath("/__openclaw__/canvas/session/capability/frame"));
+	REQUIRE_FALSE(GatewayHttpAuthService::IsMalformedScopedCanvasPath("/__openclaw__/canvas"));
+}
+
 TEST_CASE("GatewayHttpAuthService GetBearerToken handles authorization header case-insensitively", "[gateway][http-auth][phase3]") {
 	std::unordered_map<std::string, std::string> headers;
 	headers.insert_or_assign("Authorization", "Bearer abc-token");
@@ -150,6 +160,34 @@ TEST_CASE("GatewayHttpAuthService falls back to canvas capability when bearer mi
 	context.canvasCapability = "cap-ok";
 
 	GatewayHttpAuthPolicyCallbacks callbacks;
+	callbacks.authorizeCanvasCapability = [](
+		const std::string& capability,
+		const GatewayHttpAuthRequestContext&,
+		std::string&) {
+			return capability == "cap-ok";
+		};
+
+	const GatewayHttpAuthDecisionResult result =
+		service.AuthorizeCanvasRequest(context, callbacks);
+	REQUIRE(result.ok);
+	REQUIRE(result.branch == "capability_ok");
+}
+
+TEST_CASE("GatewayHttpAuthService falls back to canvas capability when bearer fails", "[gateway][http-auth][phase4]") {
+	GatewayHttpAuthService service;
+	GatewayHttpAuthRequestContext context;
+	context.path = "/__openclaw__/canvas";
+	context.headers.insert_or_assign("Authorization", "Bearer denied-token");
+	context.canvasCapability = "cap-ok";
+
+	GatewayHttpAuthPolicyCallbacks callbacks;
+	callbacks.authorizeBearer = [](
+		const std::string&,
+		const GatewayHttpAuthRequestContext&,
+		std::string& failureReasonOut) {
+			failureReasonOut = "invalid_token";
+			return false;
+		};
 	callbacks.authorizeCanvasCapability = [](
 		const std::string& capability,
 		const GatewayHttpAuthRequestContext&,
