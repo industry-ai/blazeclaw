@@ -20,10 +20,17 @@ namespace blazeclaw::gateway {
 			const std::string& sessionKey,
 			const std::string& baseCanvasHostUrl);
 
+		[[nodiscard]] bool VerifyCapabilityAndRefreshTtl(const std::string& capability);
+
 		[[nodiscard]] static std::uint64_t CapabilityTtlMs() noexcept;
 
 	private:
-		std::unordered_map<std::string, std::string> m_capabilityBySession;
+		struct CapabilityEntry {
+			std::string capability;
+			std::uint64_t expiresAtMs = 0;
+		};
+
+		std::unordered_map<std::string, CapabilityEntry> m_capabilityBySession;
 		std::uint64_t m_nextCapabilitySequence = 1;
 	};
 

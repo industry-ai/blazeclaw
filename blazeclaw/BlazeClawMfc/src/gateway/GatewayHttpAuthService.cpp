@@ -98,12 +98,20 @@ namespace blazeclaw::gateway {
 	GatewayHttpAuthDecisionResult GatewayHttpAuthService::AuthorizeCanvasRequest(
 		const GatewayHttpAuthRequestContext& context,
 		const GatewayHttpAuthPolicyCallbacks& callbacks) const {
+		auto emitDecision = [&](const GatewayHttpAuthDecisionResult& result) {
+			if (callbacks.observeDecision) {
+				callbacks.observeDecision(context, result);
+			}
+			};
+
 		if (context.malformedScopedPath) {
-			return GatewayHttpAuthDecisionResult{
+			const GatewayHttpAuthDecisionResult result{
 				.ok = false,
 				.reason = "unauthorized",
 				.branch = "malformed_path",
 			};
+			emitDecision(result);
+			return result;
 		}
 
 		std::string lastAuthFailure = "unauthorized";
@@ -112,22 +120,26 @@ namespace blazeclaw::gateway {
 			if (callbacks.checkRateLimit) {
 				std::string limitReason;
 				if (!callbacks.checkRateLimit(context, limitReason)) {
-					return GatewayHttpAuthDecisionResult{
+					const GatewayHttpAuthDecisionResult result{
 						.ok = false,
 						.reason = limitReason.empty() ? "rate_limited" : limitReason,
 						.branch = "rate_limited",
 					};
+					emitDecision(result);
+					return result;
 				}
 			}
 
 			if (callbacks.authorizeBearer) {
 				std::string authFailureReason;
 				if (callbacks.authorizeBearer(token.value(), context, authFailureReason)) {
-					return GatewayHttpAuthDecisionResult{
+					const GatewayHttpAuthDecisionResult result{
 						.ok = true,
 						.reason = "",
 						.branch = "bearer_ok",
 					};
+					emitDecision(result);
+					return result;
 				}
 				if (!authFailureReason.empty()) {
 					lastAuthFailure = authFailureReason;
@@ -137,18 +149,41 @@ namespace blazeclaw::gateway {
 				lastAuthFailure = "authorization_handler_missing";
 			}
 
-			return GatewayHttpAuthDecisionResult{
+			const GatewayHttpAuthDecisionResult result{
 				.ok = false,
 				.reason = lastAuthFailure,
 				.branch = "bearer_fail",
 			};
+			emitDecision(result);
+			return result;
 		}
 
-		return GatewayHttpAuthDecisionResult{
+		if (!context.canvasCapability.empty() && callbacks.authorizeCanvasCapability) {
+			std::string capabilityFailureReason;
+			if (callbacks.authorizeCanvasCapability(
+				context.canvasCapability,
+				context,
+				capabilityFailureReason)) {
+				const GatewayHttpAuthDecisionResult result{
+					.ok = true,
+					.reason = "",
+					.branch = "capability_ok",
+				};
+				emitDecision(result);
+				return result;
+			}
+			if (!capabilityFailureReason.empty()) {
+				lastAuthFailure = capabilityFailureReason;
+			}
+		}
+
+		const GatewayHttpAuthDecisionResult result{
 			.ok = false,
 			.reason = lastAuthFailure,
 			.branch = "unauthorized",
 		};
+		emitDecision(result);
+		return result;
 	}
 
 } // namespace blazeclaw::gateway

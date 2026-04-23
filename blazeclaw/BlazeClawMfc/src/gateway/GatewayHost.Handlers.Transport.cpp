@@ -128,6 +128,9 @@ namespace blazeclaw::gateway {
 				"},\"closes\":{\"invalidUtf8\":" + std::to_string(m_runtimeContext.transport->InvalidUtf8CloseCount()) +
 				",\"messageTooBig\":" + std::to_string(m_runtimeContext.transport->MessageTooBigCloseCount()) +
 				",\"extensionRejected\":" + std::to_string(m_runtimeContext.transport->ExtensionRejectCount()) +
+				"},\"auth\":{\"failures\":" + std::to_string(m_runtimeContext.transport->AuthFailureCount()) +
+				",\"bearerOk\":" + std::to_string(m_runtimeContext.transport->AuthBearerSuccessCount()) +
+				",\"capabilityOk\":" + std::to_string(m_runtimeContext.transport->AuthCapabilitySuccessCount()) +
 				"},\"compression\":{\"policy\":\"reject\",\"perMessageDeflate\":false}}");
 			});
 

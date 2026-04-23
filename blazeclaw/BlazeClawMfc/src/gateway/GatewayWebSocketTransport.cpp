@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "GatewayWebSocketTransport.h"
 #include "GatewayHandshakePolicy.h"
+#include "GatewayHttpAuthService.h"
 #include "GatewayUtf8CloseReason.h"
 
 #include <algorithm>
@@ -56,7 +57,9 @@ namespace blazeclaw::gateway {
 			return value.substr(start, end - start);
 		}
 
-		bool IsAllowedRequestTarget(const std::string& requestLine) {
+		bool TryExtractRequestTarget(
+			const std::string& requestLine,
+			std::string& outTarget) {
 			const std::size_t methodEnd = requestLine.find(' ');
 			if (methodEnd == std::string::npos) {
 				return false;
@@ -70,6 +73,20 @@ namespace blazeclaw::gateway {
 			const std::string target = requestLine.substr(methodEnd + 1, targetEnd - methodEnd - 1);
 			if (target.empty() || target.front() != '/') {
 				return false;
+			}
+
+			outTarget = target;
+			return true;
+		}
+
+		bool IsAllowedRequestTarget(const std::string& requestLine) {
+			std::string target;
+			if (!TryExtractRequestTarget(requestLine, target)) {
+				return false;
+			}
+
+			if (GatewayHttpAuthService::IsCanvasPath(target)) {
+				return true;
 			}
 
 			return target == "/" || target == "/gateway" || target.rfind("/gateway?", 0) == 0;
@@ -655,6 +672,22 @@ namespace blazeclaw::gateway {
 
 	std::uint64_t GatewayWebSocketTransport::ExtensionRejectCount() const noexcept {
 		return m_extensionRejectCount;
+	}
+
+	std::uint64_t GatewayWebSocketTransport::AuthFailureCount() const noexcept {
+		return m_authFailureCount;
+	}
+
+	std::uint64_t GatewayWebSocketTransport::AuthBearerSuccessCount() const noexcept {
+		return m_authBearerSuccessCount;
+	}
+
+	std::uint64_t GatewayWebSocketTransport::AuthCapabilitySuccessCount() const noexcept {
+		return m_authCapabilitySuccessCount;
+	}
+
+	void GatewayWebSocketTransport::SetHttpAuthCallbacks(GatewayHttpAuthPolicyCallbacks callbacks) {
+		m_httpAuthCallbacks = std::move(callbacks);
 	}
 
 	bool GatewayWebSocketTransport::IsPlausibleBindAddress(const std::string& bindAddress) {
@@ -1264,6 +1297,22 @@ namespace blazeclaw::gateway {
 		const bool hasHostHeader =
 			TryExtractHttpHeader(request, "Host", host) && !host.empty();
 
+		std::string requestTarget;
+		if (!TryExtractRequestTarget(requestLine, requestTarget)) {
+			error = "Malformed HTTP request target for websocket handshake.";
+			return false;
+		}
+
+		std::unordered_map<std::string, std::string> authHeaders;
+		std::string authorizationHeader;
+		if (TryExtractHttpHeader(request, "Authorization", authorizationHeader)) {
+			authHeaders.insert_or_assign("Authorization", authorizationHeader);
+		}
+		std::string canvasCapabilityHeader;
+		if (TryExtractHttpHeader(request, "X-OpenClaw-Canvas-Capability", canvasCapabilityHeader)) {
+			authHeaders.insert_or_assign("X-OpenClaw-Canvas-Capability", canvasCapabilityHeader);
+		}
+
 		std::string upgradeHeader;
 		if (!TryExtractHttpHeader(request, "Upgrade", upgradeHeader) || ToLowerCopy(upgradeHeader) != "websocket") {
 			error = "Missing `Upgrade: websocket` header.";
@@ -1297,6 +1346,43 @@ namespace blazeclaw::gateway {
 		std::string origin;
 		const bool hasOrigin = TryExtractHttpHeader(request, "Origin", origin);
 		const bool isAllowedOrigin = !hasOrigin || IsAllowedOriginValue(origin);
+
+		if (GatewayHttpAuthService::IsCanvasPath(requestTarget)) {
+			GatewayHttpAuthRequestContext authContext;
+			authContext.path = requestTarget;
+			authContext.headers = authHeaders;
+			authContext.remoteIp = host;
+			authContext.allowRealIpFallback = true;
+			authContext.browserOriginPolicy = hasOrigin ? origin : "";
+			authContext.canvasCapability = TrimCopy(canvasCapabilityHeader);
+
+			GatewayHttpAuthPolicyCallbacks callbacks = m_httpAuthCallbacks;
+			auto priorObserver = callbacks.observeDecision;
+			callbacks.observeDecision = [this, priorObserver](
+				const GatewayHttpAuthRequestContext& context,
+				const GatewayHttpAuthDecisionResult& decision) {
+					if (decision.branch == "bearer_ok") {
+						++m_authBearerSuccessCount;
+					}
+					else if (decision.branch == "capability_ok") {
+						++m_authCapabilitySuccessCount;
+					}
+					else {
+						++m_authFailureCount;
+					}
+					if (priorObserver) {
+						priorObserver(context, decision);
+					}
+				};
+
+			GatewayHttpAuthService authService;
+			const GatewayHttpAuthDecisionResult authDecision =
+				authService.AuthorizeCanvasRequest(authContext, callbacks);
+			if (!authDecision.ok) {
+				error = authDecision.reason.empty() ? "unauthorized" : authDecision.reason;
+				return false;
+			}
+		}
 
 		std::string extensions;
 		const bool hasExtensions = TryExtractHttpHeader(request, "Sec-WebSocket-Extensions", extensions);

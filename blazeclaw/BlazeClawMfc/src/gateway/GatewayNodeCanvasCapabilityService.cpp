@@ -20,6 +20,20 @@ namespace blazeclaw::gateway {
 			return value.substr(start, end - start);
 		}
 
+		bool SafeEqualSecret(
+			const std::string& left,
+			const std::string& right) {
+			if (left.size() != right.size()) {
+				return false;
+			}
+
+			unsigned char diff = 0;
+			for (std::size_t i = 0; i < left.size(); ++i) {
+				diff |= static_cast<unsigned char>(left[i] ^ right[i]);
+			}
+			return diff == 0;
+		}
+
 		std::string NormalizeCanvasHostUrl(const std::string& baseCanvasHostUrl) {
 			std::string normalized = TrimCopy(baseCanvasHostUrl);
 			while (!normalized.empty() && normalized.back() == '/') {
@@ -69,12 +83,40 @@ namespace blazeclaw::gateway {
 			return result;
 		}
 
-		m_capabilityBySession.insert_or_assign(normalizedSessionKey, capability);
+		m_capabilityBySession.insert_or_assign(
+			normalizedSessionKey,
+			CapabilityEntry{
+				.capability = capability,
+				.expiresAtMs = expiresAt,
+			});
 		result.ok = true;
 		result.canvasCapability = capability;
 		result.canvasCapabilityExpiresAtMs = expiresAt;
 		result.canvasHostUrl = scopedUrl;
 		return result;
+	}
+
+	bool GatewayNodeCanvasCapabilityService::VerifyCapabilityAndRefreshTtl(
+		const std::string& capability) {
+		const std::string normalizedCapability = TrimCopy(capability);
+		if (normalizedCapability.empty()) {
+			return false;
+		}
+
+		const std::uint64_t nowMs = GatewayEpochMilliseconds();
+		for (auto& [_, entry] : m_capabilityBySession) {
+			if (entry.expiresAtMs <= nowMs) {
+				continue;
+			}
+			if (!SafeEqualSecret(entry.capability, normalizedCapability)) {
+				continue;
+			}
+
+			entry.expiresAtMs = nowMs + CapabilityTtlMs();
+			return true;
+		}
+
+		return false;
 	}
 
 } // namespace blazeclaw::gateway

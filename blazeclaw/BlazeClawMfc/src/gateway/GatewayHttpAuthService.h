@@ -17,6 +17,7 @@ namespace blazeclaw::gateway {
 		bool allowRealIpFallback = false;
 		bool malformedScopedPath = false;
 		std::string browserOriginPolicy;
+		std::string canvasCapability;
 	};
 
 	struct GatewayHttpAuthDecisionResult {
@@ -34,9 +35,20 @@ namespace blazeclaw::gateway {
 		const GatewayHttpAuthRequestContext& context,
 		std::string& failureReasonOut)>;
 
+	using GatewayHttpAuthorizeCanvasCapabilityCallback = std::function<bool(
+		const std::string& canvasCapability,
+		const GatewayHttpAuthRequestContext& context,
+		std::string& failureReasonOut)>;
+
+	using GatewayHttpAuthDecisionObserver = std::function<void(
+		const GatewayHttpAuthRequestContext& context,
+		const GatewayHttpAuthDecisionResult& result)>;
+
 	struct GatewayHttpAuthPolicyCallbacks {
 		GatewayHttpAuthorizeBearerCallback authorizeBearer;
 		GatewayHttpAuthRateLimitCallback checkRateLimit;
+		GatewayHttpAuthorizeCanvasCapabilityCallback authorizeCanvasCapability;
+		GatewayHttpAuthDecisionObserver observeDecision;
 	};
 
 	class GatewayHttpAuthService {

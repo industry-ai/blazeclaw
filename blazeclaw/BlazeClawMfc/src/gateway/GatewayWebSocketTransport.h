@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../app/pch.h"
+#include "GatewayHttpAuthService.h"
 
 namespace blazeclaw::gateway {
 
@@ -29,6 +30,10 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] std::uint64_t InvalidUtf8CloseCount() const noexcept;
 		[[nodiscard]] std::uint64_t MessageTooBigCloseCount() const noexcept;
 		[[nodiscard]] std::uint64_t ExtensionRejectCount() const noexcept;
+		[[nodiscard]] std::uint64_t AuthFailureCount() const noexcept;
+		[[nodiscard]] std::uint64_t AuthBearerSuccessCount() const noexcept;
+		[[nodiscard]] std::uint64_t AuthCapabilitySuccessCount() const noexcept;
+		void SetHttpAuthCallbacks(GatewayHttpAuthPolicyCallbacks callbacks);
 
 	private:
 		struct NetworkFrame {
@@ -91,6 +96,10 @@ namespace blazeclaw::gateway {
 		std::uint64_t m_invalidUtf8CloseCount = 0;
 		std::uint64_t m_messageTooBigCloseCount = 0;
 		std::uint64_t m_extensionRejectCount = 0;
+		std::uint64_t m_authFailureCount = 0;
+		std::uint64_t m_authBearerSuccessCount = 0;
+		std::uint64_t m_authCapabilitySuccessCount = 0;
+		GatewayHttpAuthPolicyCallbacks m_httpAuthCallbacks;
 		InboundFrameHandler m_inboundFrameHandler;
 		std::unordered_map<std::string, ConnectionSession> m_connections;
 	};

@@ -143,6 +143,53 @@ TEST_CASE("GatewayHttpAuthService rate limiter denial short-circuits bearer auth
 	REQUIRE_FALSE(authorizeCalled);
 }
 
+TEST_CASE("GatewayHttpAuthService falls back to canvas capability when bearer missing", "[gateway][http-auth][phase4]") {
+	GatewayHttpAuthService service;
+	GatewayHttpAuthRequestContext context;
+	context.path = "/__openclaw__/canvas";
+	context.canvasCapability = "cap-ok";
+
+	GatewayHttpAuthPolicyCallbacks callbacks;
+	callbacks.authorizeCanvasCapability = [](
+		const std::string& capability,
+		const GatewayHttpAuthRequestContext&,
+		std::string&) {
+			return capability == "cap-ok";
+		};
+
+	const GatewayHttpAuthDecisionResult result =
+		service.AuthorizeCanvasRequest(context, callbacks);
+	REQUIRE(result.ok);
+	REQUIRE(result.branch == "capability_ok");
+}
+
+TEST_CASE("GatewayHttpAuthService decision observer receives branch outcomes", "[gateway][http-auth][phase5]") {
+	GatewayHttpAuthService service;
+	GatewayHttpAuthRequestContext context;
+	context.path = "/__openclaw__/canvas";
+	context.headers.insert_or_assign("Authorization", "Bearer token-obs");
+
+	std::string observedBranch;
+	GatewayHttpAuthPolicyCallbacks callbacks;
+	callbacks.authorizeBearer = [](
+		const std::string&,
+		const GatewayHttpAuthRequestContext&,
+		std::string&) {
+			return true;
+		};
+	callbacks.observeDecision = [&observedBranch](
+		const GatewayHttpAuthRequestContext&,
+		const GatewayHttpAuthDecisionResult& result) {
+			observedBranch = result.branch;
+		};
+
+	const GatewayHttpAuthDecisionResult result =
+		service.AuthorizeCanvasRequest(context, callbacks);
+	REQUIRE(result.ok);
+	REQUIRE(result.branch == "bearer_ok");
+	REQUIRE(observedBranch == "bearer_ok");
+}
+
 TEST_CASE("GatewayHttpAuthService no bearer token returns unauthorized", "[gateway][http-auth][phase3]") {
 	GatewayHttpAuthService service;
 	GatewayHttpAuthRequestContext context;

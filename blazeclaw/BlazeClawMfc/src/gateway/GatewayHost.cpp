@@ -21,6 +21,7 @@
 #include "python/PythonRuntimeDispatcher.h"
 #include "generated/GatewayHandlerCatalog.Generated.h"
 #include "GatewayMethodSurfaceAudit.h"
+#include "GatewayHttpAuthService.h"
 #include "Telemetry.h"
 
 #include <algorithm>
@@ -423,6 +424,44 @@ namespace blazeclaw::gateway {
 	}
 
 	bool GatewayHost::AttachTransportRuntime() {
+		m_transport.SetHttpAuthCallbacks(
+			GatewayHttpAuthPolicyCallbacks{
+				.authorizeBearer = [this](
+					const std::string& token,
+					const GatewayHttpAuthRequestContext&,
+					std::string& failureReasonOut) {
+						if (token.empty()) {
+							failureReasonOut = "unauthorized";
+							return false;
+						}
+
+						const std::vector<NodePairingPairedNode> paired =
+							m_nodePairingService.ListPairedNodes();
+						for (const auto& node : paired) {
+							if (m_nodePairingService.VerifyNodeToken(
+								node.declared.nodeId,
+								token,
+								nullptr)) {
+								return true;
+							}
+						}
+
+						failureReasonOut = "unauthorized";
+						return false;
+					},
+				.checkRateLimit = nullptr,
+				.authorizeCanvasCapability = [this](
+					const std::string& capability,
+					const GatewayHttpAuthRequestContext&,
+					std::string& failureReasonOut) {
+						if (m_nodeCanvasCapabilityService.VerifyCapabilityAndRefreshTtl(capability)) {
+							return true;
+						}
+						failureReasonOut = "unauthorized";
+						return false;
+					},
+				.observeDecision = nullptr,
+			});
 		return true;
 	}
 
@@ -999,7 +1038,7 @@ namespace blazeclaw::gateway {
 					blazeclaw::core::GatewayParityLifecycleContract::kSchemaVersion) +
 				"}";
 		}
-		return std::string("{\"ok\":true,\"schemaVersion\":" ) +
+		return std::string("{\"ok\":true,\"schemaVersion\":") +
 			std::to_string(
 				blazeclaw::core::GatewayParityLifecycleContract::kSchemaVersion) +
 			",\"contract\":" +
@@ -1389,7 +1428,7 @@ namespace blazeclaw::gateway {
 			auto names = dispatcher.RegisteredMethods();
 			std::sort(names.begin(), names.end());
 			return names;
-		};
+			};
 
 		const std::vector<std::string> before = sortNames(m_dispatcher);
 		const std::string catalogPath = ResolveExtensionsCatalogPath();
