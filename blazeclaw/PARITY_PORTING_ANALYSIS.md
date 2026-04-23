@@ -271,6 +271,18 @@ Summary status:
 - Architecture recommendation is explicit: no framework refactor required; retain BlazeClaw C++ layered gateway counterpart (host + dispatcher + request policy guard) and harden parity governance/tests.
 - Follow-up execution plan is tracked as phases `S0–S6` for policy matrix, scope/startup/write parity tests, request-scope hardening, and CI/doc guardrails.
 
+## Gateway capability-index parity follow-up (OpenClaw `server-methods-list.ts`)
+
+A dedicated OpenClaw-vs-BlazeClaw capability-index comparison and hardening plan is now tracked in:
+
+- `docs/compare/server-methods-list.ts/OPENCLAW_SERVER_METHODS_LIST_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md`
+
+Summary status:
+
+- OpenClaw list baseline (`BASE_METHODS` + plugin method merge + `GATEWAY_EVENTS`) is now mapped against BlazeClaw distributed counterparts (manifest/dispatcher scan artifacts and handler/transport event emitters).
+- Architecture recommendation remains explicit: no framework refactor required; keep BlazeClaw layered C++ design and close gaps via event-contract governance, mapping docs, and targeted parity tests.
+- Follow-up execution plan is tracked as phases `S0–S6` for baseline freeze, event mapping matrix, event artifact pipeline, parity tests, and CI/doc guardrails (`S0–S2` accomplished).
+
 ## Node-domain parity follow-up (OpenClaw `nodes.ts`)
 
 A dedicated OpenClaw-vs-BlazeClaw node capability gap analysis and parity plan is now tracked in:
