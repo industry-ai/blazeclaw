@@ -259,6 +259,18 @@ A minimal-risk path is:
 3. Reuse existing BlazeClaw skill catalog/eligibility/command snapshots as inputs to that adapter.
 4. Keep deepseek transport as model backend only, not as the orchestration owner.
 
+## Gateway request-entry parity follow-up (OpenClaw `server-methods.ts`)
+
+A dedicated OpenClaw-vs-BlazeClaw gateway request-entry capability comparison and hardening plan is now tracked in:
+
+- `docs/compare/server-methods.ts/OPENCLAW_SERVER_METHODS_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md`
+
+Summary status:
+
+- Method-surface baseline confirms 128 OpenClaw methods with 127 overlap in BlazeClaw and one expected-by-design exception (`push.test`).
+- Architecture recommendation is explicit: no framework refactor required; retain BlazeClaw C++ layered gateway counterpart (host + dispatcher + request policy guard) and harden parity governance/tests.
+- Follow-up execution plan is tracked as phases `S0–S6` for policy matrix, scope/startup/write parity tests, request-scope hardening, and CI/doc guardrails.
+
 ## Node-domain parity follow-up (OpenClaw `nodes.ts`)
 
 A dedicated OpenClaw-vs-BlazeClaw node capability gap analysis and parity plan is now tracked in:

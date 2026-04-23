@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-23T02:39:42.468Z",
+  "generatedAt": "2026-04-23T07:35:17.052Z",
   "lifecycleMethodSurfaceCheckpoints": {
     "phase": "S4",
     "description": "BlazeClaw records dispatcher method-surface snapshots around deferred extension-catalog reload (managed config `embedded.extensionSurfaceApplyEpoch`) and at runtime finalize enforces three subset checks on the dispatcher: generated handler-catalog methods, static channel-handler RPC names, and the deduped union of optional per-extension `gatewayRpcMethods` strings from each `blazeclaw.extension.json` (parsed in `ExtensionLifecycleManager::LoadCatalog`; violation `plugin_rpc_surface_not_registered`). See `GatewayHost::PerformDeferredExtensionCatalogReloadWithMethodSurfaceTelemetry`, `GatewayMethodSurfaceAudit`, `GatewayHost::VerifyRuntimeMethodSurfaceInvariants`, and parity contract schema v4 fields `extensionSurfaceReloadCount` / `lastAppliedExtensionSurfaceEpoch` / `lastExtensionSurfaceMethodDeltaJson`."

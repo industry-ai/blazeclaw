@@ -22,7 +22,10 @@ namespace blazeclaw::gateway {
 		}
 
 		bool IsControlPlaneWriteMethod(const std::string& method) {
-			return method == "gateway.transport.endpoint.set" ||
+			return method == "config.apply" ||
+				method == "config.patch" ||
+				method == "update.run" ||
+				method == "gateway.transport.endpoint.set" ||
 				method == "gateway.transport.policy.set" ||
 				method == "gateway.transport.policy.reset" ||
 				method == "gateway.transport.policy.import" ||
@@ -48,13 +51,14 @@ namespace blazeclaw::gateway {
 			const std::string& code,
 			const std::string& message,
 			const std::string& method,
-			const std::string& details) {
+			const std::string& details,
+			const bool retryable = false) {
 			return protocol::ErrorShape{
 				.code = code,
 				.message = message,
 				.detailsJson = std::string("{\"method\":\"") + method +
 				"\",\"details\":\"" + details + "\"}",
-				.retryable = false,
+				.retryable = retryable,
 				.retryAfterMs = std::nullopt,
 			};
 		}
@@ -68,7 +72,8 @@ namespace blazeclaw::gateway {
 				"service_unavailable",
 				"Gateway dispatch is not initialized.",
 				request.method,
-				"dispatch_uninitialized");
+				"dispatch_uninitialized",
+				true);
 		}
 
 		if (request.method.empty()) {
@@ -84,7 +89,8 @@ namespace blazeclaw::gateway {
 				"method_unavailable",
 				"Method unavailable before runtime start.",
 				request.method,
-				"startup_gated");
+				"startup_gated",
+				true);
 		}
 
 		if (request.method == "chat.send") {
