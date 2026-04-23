@@ -211,6 +211,7 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 
 Lifecycle-level parity follow-up for OpenClaw `server.impl.ts` startup/runtime orchestration is now tracked in:
 - `docs/compare/OPENCLAW_SERVER_IMPL_TS_FULL_CAPABILITY_PARITY_ANALYSIS_AND_PORTING_PLAN.md`
+- `docs/compare/OPENCLAW_GATEWAY_SERVER_TS_CAPABILITY_GAP_AND_PORTING_PLAN.md` (**CLOSED** — `server.ts` gateway entry vs BlazeClaw; close-reason + test hook; **§7** if scope changes)
 - `docs/compare/server.impl.ts/OPENCLAW_SERVER_IMPL_TS_PARITY_EXECUTION_TRACKER.md` (strict S0–S6 file-by-file implementation backlog + tests)
 
 - [x] Replace `device.pair.*` unsupported handlers with runtime-backed pairing lifecycle parity.

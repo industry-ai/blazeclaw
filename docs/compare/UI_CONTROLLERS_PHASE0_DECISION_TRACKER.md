@@ -119,4 +119,5 @@ Use this file as the authoritative decision matrix for implementation planning a
 - `docs/compare/presence.ts/PRESENCE_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md` (presence controller deep-dive and parity plan)
 - `docs/compare/usage.ts/USAGE_TS_CAPABILITY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md` (usage controller deep-dive and parity plan)
 - `docs/compare/OPENCLAW_SERVER_IMPL_TS_FULL_CAPABILITY_PARITY_ANALYSIS_AND_PORTING_PLAN.md` (OpenClaw `server.impl.ts` lifecycle-capability comparison and parity porting plan for BlazeClaw gateway orchestration)
+- `docs/compare/OPENCLAW_GATEWAY_SERVER_TS_CAPABILITY_GAP_AND_PORTING_PLAN.md` (**CLOSED** — `server.ts` façade: **`GatewayUtf8CloseReason`**, `BuildClosePayload`, **`GatewayTestHooks`**; validated **Debug \| x64**)
 - `docs/compare/server.impl.ts/OPENCLAW_SERVER_IMPL_TS_PARITY_EXECUTION_TRACKER.md` (strict S0–S6 implementation backlog with file-by-file tasks and required test coverage)

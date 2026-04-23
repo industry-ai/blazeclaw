@@ -49,6 +49,7 @@
     <ClCompile Include="..\BlazeClawMfc\tests\ParityCoverageTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayHostRouterTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayProtocolResponseHelpersTests.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\tests\GatewayUtf8CloseReasonTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\TaskDeltaRepositoryTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayWeatherEmailRegressionTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\PythonRuntimeTests.cpp" />
@@ -166,6 +167,8 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\python\PythonRuntimeDispatcher.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\python\PythonRuntimeSelector.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewaySessionRegistry.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayUtf8CloseReason.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayTestHooks.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayWebSocketTransport.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayJsonUtils.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\generated\GatewayHandlerCatalog.Generated.cpp" />

@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "GatewayWebSocketTransport.h"
 #include "GatewayHandshakePolicy.h"
+#include "GatewayUtf8CloseReason.h"
 
 #include <algorithm>
 #include <array>
@@ -277,11 +278,15 @@ namespace blazeclaw::gateway {
 		}
 
 		std::string BuildClosePayload(std::uint16_t code, const std::string& reason) {
+			const std::string reasonUtf8 = TruncateUtf8CloseReason(
+				reason,
+				kGatewayCloseReasonMaxUtf8BytesOpenClawPolicy);
 			std::string payload;
-			payload.reserve(2 + reason.size());
+			payload.reserve(2 + reasonUtf8.size());
 			payload.push_back(static_cast<char>((code >> 8) & 0xFF));
 			payload.push_back(static_cast<char>(code & 0xFF));
-			payload += reason;
+			payload += reasonUtf8;
+			// 2-byte status + UTF-8 reason ≤ 125 bytes (RFC 6455); policy cap is 120 reason bytes (OpenClaw).
 			return payload;
 		}
 
