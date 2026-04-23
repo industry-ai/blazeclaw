@@ -33,6 +33,15 @@ namespace blazeclaw::core {
             std::uint64_t authSessionGenerationRequired = 0;
             std::uint64_t authSessionGenerationRejectCount = 0;
             std::vector<std::string> transitions;
+            std::string startupConfigPathUtf8;
+            std::string startupConfigContentDigest;
+            std::uint64_t startupConfigRecordedAtEpochMs = 0;
+            bool startupConfigFileExisted = false;
+            std::vector<std::uint64_t> startupConfigInternalWriteHashes;
+            std::vector<std::string> startupMigrationsApplied;
+            std::string authBootstrapPathTag;
+            std::string authBootstrapStatus;
+            std::string authBootstrapDetail;
         };
 
         void Apply(
@@ -102,6 +111,18 @@ namespace blazeclaw::core {
             snapshot.gatewayParityLifecycle.authSessionGenerationRejectCount =
                 context.authSessionGenerationRejectCount;
             snapshot.gatewayParityLifecycle.transitionTrace = context.transitions;
+            snapshot.gatewayParityLifecycle.startupConfigPathUtf8 = context.startupConfigPathUtf8;
+            snapshot.gatewayParityLifecycle.startupConfigContentDigest =
+                context.startupConfigContentDigest;
+            snapshot.gatewayParityLifecycle.startupConfigRecordedAtEpochMs =
+                context.startupConfigRecordedAtEpochMs;
+            snapshot.gatewayParityLifecycle.startupConfigFileExisted = context.startupConfigFileExisted;
+            snapshot.gatewayParityLifecycle.startupConfigInternalWriteHashes =
+                context.startupConfigInternalWriteHashes;
+            snapshot.gatewayParityLifecycle.startupMigrationsApplied = context.startupMigrationsApplied;
+            snapshot.gatewayParityLifecycle.authBootstrapPathTag = context.authBootstrapPathTag;
+            snapshot.gatewayParityLifecycle.authBootstrapStatus = context.authBootstrapStatus;
+            snapshot.gatewayParityLifecycle.authBootstrapDetail = context.authBootstrapDetail;
         }
     };
 

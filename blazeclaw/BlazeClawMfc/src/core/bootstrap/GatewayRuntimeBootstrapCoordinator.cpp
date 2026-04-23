@@ -1,9 +1,14 @@
 #include "pch.h"
 #include "GatewayRuntimeBootstrapCoordinator.h"
 
+#include "../../config/ConfigModels.h"
+
 #include <algorithm>
+#include <string>
 #include <cstdlib>
 #include <cwctype>
+#include <functional>
+#include <string>
 
 namespace blazeclaw::core {
 
@@ -58,6 +63,16 @@ namespace blazeclaw::core {
 					return static_cast<wchar_t>(std::towlower(ch));
 				});
 			return value;
+		}
+
+		bool IsLoopbackBind(const std::wstring& bind) {
+			const std::wstring trimmed = TrimWide(bind);
+			if (trimmed.empty()) {
+				return true;
+			}
+			const std::wstring lower = ToLowerWide(trimmed);
+			return lower == L"127.0.0.1" || lower == L"localhost" || lower == L"::1" ||
+				lower == L"loopback";
 		}
 
 	} // namespace
@@ -285,6 +300,39 @@ namespace blazeclaw::core {
 		return true;
 	}
 
+	void GatewayRuntimeBootstrapCoordinator::RunStartupMigrations(
+		const StartupContext& context) const {
+		if (!context.appendTrace) {
+			return;
+		}
+		if (context.suppressStartupMigrations) {
+			context.appendTrace("GatewayRuntimeBootstrap.migration.suppressed");
+			return;
+		}
+		if (context.appliedStartupMigrationsOut == nullptr) {
+			return;
+		}
+		const char* const kId = blazeclaw::config::GatewayMigrationIds::kControlUiNonLoopbackBindParityV1;
+		const auto& applied = *context.appliedStartupMigrationsOut;
+		if (std::find(applied.begin(), applied.end(), kId) != applied.end()) {
+			context.appendTrace("GatewayRuntimeBootstrap.migration.already_applied");
+			return;
+		}
+		if (IsLoopbackBind(context.config.gateway.bindAddress)) {
+			context.appendTrace(
+				"GatewayRuntimeBootstrap.migration.control_ui_nonloopback_bind_parity_v1.skipped");
+			return;
+		}
+		context.appliedStartupMigrationsOut->push_back(kId);
+		context.appendTrace(
+			"GatewayRuntimeBootstrap.migration.control_ui_nonloopback_bind_parity_v1.applied");
+		if (context.queueManagedConfigInternalWriteHash) {
+			const std::uint64_t h =
+				std::hash<std::string>{}(std::string(kId));
+			context.queueManagedConfigInternalWriteHash(h);
+		}
+	}
+
 	GatewayRuntimeBootstrapCoordinator::StartupResult
 		GatewayRuntimeBootstrapCoordinator::ExecuteStartup(
 			const StartupContext& context) const {
@@ -292,6 +340,7 @@ namespace blazeclaw::core {
 		if (context.appendTrace) {
 			context.appendTrace("GatewayRuntimeBootstrap.ExecuteStartup.begin");
 		}
+		RunStartupMigrations(context);
 		const StartupDecision decision = PrepareRuntimeConfig(context.config.gateway);
 		result.selectedMode = decision.modeLabel;
 		result.selectedModeSource = decision.modeSource;

@@ -46,6 +46,24 @@ namespace blazeclaw::core {
 		}
 		transitions += "]";
 
+		std::string iwh = "[";
+		for (std::size_t i = 0; i < c.startupConfigInternalWriteHashes.size(); ++i) {
+			if (i > 0) {
+				iwh += ",";
+			}
+			iwh += std::to_string(c.startupConfigInternalWriteHashes[i]);
+		}
+		iwh += "]";
+
+		std::string migrations = "[";
+		for (std::size_t i = 0; i < c.startupMigrationsApplied.size(); ++i) {
+			if (i > 0) {
+				migrations += ",";
+			}
+			migrations += "\"" + JsonEscapeString(c.startupMigrationsApplied[i]) + "\"";
+		}
+		migrations += "]";
+
 		return std::string("{") +
 			"\"schemaVersion\":" + std::to_string(c.schemaVersion) +
 			",\"openclawParityBaseline\":\"" + JsonEscapeString(c.openclawParityBaseline) + "\"" +
@@ -81,6 +99,17 @@ namespace blazeclaw::core {
 			",\"authSessionGenerationRejectCount\":" +
 			std::to_string(c.authSessionGenerationRejectCount) +
 			",\"transitionTrace\":" + transitions +
+			",\"startupConfigPathUtf8\":\"" + JsonEscapeString(c.startupConfigPathUtf8) + "\"" +
+			",\"startupConfigContentDigest\":\"" + JsonEscapeString(c.startupConfigContentDigest) +
+			"\"" +
+			",\"startupConfigRecordedAtEpochMs\":" + std::to_string(c.startupConfigRecordedAtEpochMs) +
+			",\"startupConfigFileExisted\":" +
+			std::string(c.startupConfigFileExisted ? "true" : "false") +
+			",\"startupConfigInternalWriteHashes\":" + iwh +
+			",\"startupMigrationsApplied\":" + migrations +
+			",\"authBootstrapPathTag\":\"" + JsonEscapeString(c.authBootstrapPathTag) + "\"" +
+			",\"authBootstrapStatus\":\"" + JsonEscapeString(c.authBootstrapStatus) + "\"" +
+			",\"authBootstrapDetail\":\"" + JsonEscapeString(c.authBootstrapDetail) + "\"" +
 			"}";
 	}
 

@@ -9,6 +9,22 @@
 
 namespace blazeclaw::config {
 
+	/// OpenClaw `server-startup-config` / `startup-control-ui-origins` parity (Phase S1):
+	/// stable migration identifiers; future config-ack fields may reference these.
+	struct GatewayMigrationIds {
+		static constexpr const char* kControlUiNonLoopbackBindParityV1 =
+			"control_ui_nonloopback_bind_parity_v1";
+	};
+
+	/// Recorded at gateway FinalizeStartup from the managed config file on disk.
+	struct GatewayStartupConfigFileSnapshot {
+		std::wstring path;
+		std::string contentDigest;
+		std::uint64_t recordedAtEpochMs = 0;
+		bool fileExisted = false;
+		std::vector<std::uint64_t> internalWriteHashesAtRecord;
+	};
+
 	struct GatewayConfig {
 		std::wstring bindAddress = L"127.0.0.1";
 		std::uint16_t port = 56789;

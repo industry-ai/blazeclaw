@@ -191,6 +191,55 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"ServiceManager S1 contract: startup file snapshot, migrations, and auth bootstrap policy",
+	"[servicemanager][startup][contract][s1]")
+{
+	const std::string sm = ReadServiceManagerSource();
+	const auto finalizePos = sm.find("bool ServiceManager::FinalizeStartup(");
+	REQUIRE(finalizePos != std::string::npos);
+	const auto finalizeBody = sm.substr(finalizePos);
+
+	REQUIRE(finalizeBody.find("RecordGatewayStartupConfigSnapshot(") != std::string::npos);
+	REQUIRE(finalizeBody.find("RefreshGatewayAuthBootstrapDiagnostics(") != std::string::npos);
+	REQUIRE(finalizeBody.find("m_state.gatewayLifecycle.startupMigrationsApplied") != std::string::npos);
+	REQUIRE(
+		finalizeBody.find("SuppressStartupMigrationsFromEnv()") != std::string::npos);
+	REQUIRE(finalizeBody.find("appliedStartupMigrationsOut") != std::string::npos);
+	REQUIRE(finalizeBody.find("queueManagedConfigInternalWriteHash") != std::string::npos);
+
+	const auto coordinatorPath =
+		std::filesystem::path("BlazeClawMfc") / "src" / "core" / "bootstrap" /
+		"GatewayRuntimeBootstrapCoordinator.cpp";
+	std::ifstream coord(coordinatorPath.string());
+	REQUIRE(coord.is_open());
+	const std::string coordinator(
+		(std::istreambuf_iterator<char>(coord)),
+		std::istreambuf_iterator<char>());
+	REQUIRE(
+		coordinator.find("RunStartupMigrations(") != std::string::npos);
+	REQUIRE(
+		coordinator.find("GatewayRuntimeBootstrap.migration") != std::string::npos);
+
+	const auto configLoaderPath =
+		std::filesystem::path("BlazeClawMfc") / "src" / "config" / "ConfigLoader.cpp";
+	std::ifstream cl(configLoaderPath.string());
+	REQUIRE(cl.is_open());
+	const std::string loader(
+		(std::istreambuf_iterator<char>(cl)),
+		std::istreambuf_iterator<char>());
+	REQUIRE(loader.find("BuildGatewayStartupConfigFileSnapshot(") != std::string::npos);
+
+	const std::string builderPath = std::filesystem::path("BlazeClawMfc") / "src" / "core" / "diagnostics" / "CDiagnosticsReportBuilder.cpp";
+	std::ifstream b(builderPath.string());
+	REQUIRE(b.is_open());
+	const std::string dsrc(
+		(std::istreambuf_iterator<char>(b)),
+		std::istreambuf_iterator<char>());
+	REQUIRE(dsrc.find("authBootstrapPathTag") != std::string::npos);
+	REQUIRE(dsrc.find("startupConfigContentDigest") != std::string::npos);
+}
+
+TEST_CASE(
 	"ServiceManager startup contract: FinalizeStartup delegates bootstrap coordinator and failure cleanup",
 	"[servicemanager][startup][contract]")
 {

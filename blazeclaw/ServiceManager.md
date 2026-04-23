@@ -72,9 +72,9 @@ This makes it the central state query point for operator and gateway-level intro
 
 ## 4) Diagnostics Facade
 - `BuildOperatorDiagnosticsReport()`
-- `BuildGatewayParityLifecycleTraceJson()` (Phase S0, OpenClaw `server.impl.ts` parity)
+- `BuildGatewayParityLifecycleTraceJson()` (Phases S0+S1, OpenClaw `server.impl.ts` parity)
 
-Builds **`OperatorDiagnosticsInputs`** (projector contexts + scalar fields from live `ServiceManager` state) and delegates snapshot assembly and report text to **`OperatorDiagnosticsAssembler`** → `CDiagnosticsReportBuilder`. The operator JSON report embeds **`GatewayParityLifecycleContract`** under **`runtime.gatewayLifecycle.parityContract`**. The same contract is returned (wrapped with `ok` / `contract`) from the gateway RPC **`gateway.parity.lifecycle`** after **`GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks`** sets **`GatewayHost::SetParityLifecycleExportCallback`**.
+Builds **`OperatorDiagnosticsInputs`** (projector contexts + scalar fields from live `ServiceManager` state) and delegates snapshot assembly and report text to **`OperatorDiagnosticsAssembler`** → `CDiagnosticsReportBuilder`. The operator JSON report embeds **`GatewayParityLifecycleContract`** (schema v2: S1 adds startup config snapshot fields, migration ids, and auth-bootstrap path/status) under **`runtime.gatewayLifecycle.parityContract`**. The same contract is returned (wrapped with `ok` / `contract`) from the gateway RPC **`gateway.parity.lifecycle`** after **`GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks`** sets **`GatewayHost::SetParityLifecycleExportCallback`**. At **`FinalizeStartup`**, **`RecordGatewayStartupConfigSnapshot`** (via **`BuildGatewayStartupConfigFileSnapshot`**) and **`RefreshGatewayAuthBootstrapDiagnostics`** populate S1 projector inputs; **`GatewayRuntimeBootstrapCoordinator::RunStartupMigrations`** runs the S1 non-loopback bind migration when enabled.
 
 ## 5) Gateway Integration Layer
 - `InvokeGatewayMethod(...)`

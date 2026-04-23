@@ -1,5 +1,6 @@
 #include <catch2/catch_all.hpp>
 
+#include "config/ConfigModels.h"
 #include "core/bootstrap/GatewayManagedConfigReloader.h"
 #include "core/bootstrap/GatewayRuntimeBootstrapCoordinator.h"
 #include "core/diagnostics/CDiagnosticsReportBuilder.h"
@@ -8,6 +9,7 @@
 #include "gateway/GatewaySessionRegistry.h"
 #include "gateway/TransportRecipientRegistry.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -57,6 +59,7 @@ TEST_CASE(
 	blazeclaw::gateway::GatewayHost host;
 	blazeclaw::core::GatewayRuntimeBootstrapCoordinator coordinator;
 	std::vector<std::string> traces;
+	std::vector<std::string> applied;
 	const auto startupResult = coordinator.ExecuteStartup(
 		blazeclaw::core::GatewayRuntimeBootstrapCoordinator::StartupContext{
 			.config = config,
@@ -64,12 +67,118 @@ TEST_CASE(
 			.appendTrace = [&traces](const char* stage) {
 				traces.emplace_back(stage == nullptr ? "" : stage);
 			},
+			.appliedStartupMigrationsOut = &applied,
 		});
 
 	REQUIRE(startupResult.success);
 	REQUIRE_FALSE(traces.empty());
 	REQUIRE(traces.front() == "GatewayRuntimeBootstrap.ExecuteStartup.begin");
 	REQUIRE(traces.back() == "GatewayRuntimeBootstrap.ExecuteStartup.success");
+	REQUIRE(
+		std::find(
+			traces.begin(),
+			traces.end(),
+			"GatewayRuntimeBootstrap.migration.control_ui_nonloopback_bind_parity_v1.skipped") !=
+		traces.end());
+}
+
+TEST_CASE(
+	"GatewayRuntimeBootstrapCoordinator S1 migration applies once for non-loopback bind and queues write hash",
+	"[gateway][lifecycle][s1]")
+{
+	blazeclaw::config::AppConfig config;
+	config.gateway.startupMode = L"local_runtime_dispatch";
+	config.gateway.bindAddress = L"0.0.0.0";
+
+	blazeclaw::gateway::GatewayHost host;
+	blazeclaw::core::GatewayRuntimeBootstrapCoordinator coordinator;
+	std::vector<std::string> traces;
+	std::vector<std::string> applied;
+	std::vector<std::uint64_t> queued;
+
+	const auto startupResult = coordinator.ExecuteStartup(
+		blazeclaw::core::GatewayRuntimeBootstrapCoordinator::StartupContext{
+			.config = config,
+			.gatewayHost = host,
+			.appendTrace = [&traces](const char* stage) {
+				traces.emplace_back(stage == nullptr ? "" : stage);
+			},
+			.queueManagedConfigInternalWriteHash = [&queued](const std::uint64_t h) {
+				queued.push_back(h);
+			},
+			.appliedStartupMigrationsOut = &applied,
+		});
+
+	REQUIRE(startupResult.success);
+	REQUIRE(applied.size() == 1);
+	REQUIRE(
+		applied[0] == blazeclaw::config::GatewayMigrationIds::kControlUiNonLoopbackBindParityV1);
+	REQUIRE(queued.size() == 1);
+	REQUIRE(
+		std::find(
+			traces.begin(),
+			traces.end(),
+			"GatewayRuntimeBootstrap.migration.control_ui_nonloopback_bind_parity_v1.applied") !=
+		traces.end());
+
+	traces.clear();
+	const auto second = coordinator.ExecuteStartup(
+		blazeclaw::core::GatewayRuntimeBootstrapCoordinator::StartupContext{
+			.config = config,
+			.gatewayHost = host,
+			.appendTrace = [&traces](const char* stage) {
+				traces.emplace_back(stage == nullptr ? "" : stage);
+			},
+			.queueManagedConfigInternalWriteHash = [&queued](const std::uint64_t h) {
+				queued.push_back(h);
+			},
+			.appliedStartupMigrationsOut = &applied,
+		});
+	REQUIRE(second.success);
+	REQUIRE(queued.size() == 1);
+	REQUIRE(
+		std::find(
+			traces.begin(),
+			traces.end(),
+			"GatewayRuntimeBootstrap.migration.already_applied") != traces.end());
+}
+
+TEST_CASE(
+	"GatewayRuntimeBootstrapCoordinator S1 migration suppression skips queue and trace applied",
+	"[gateway][lifecycle][s1]")
+{
+	blazeclaw::config::AppConfig config;
+	config.gateway.startupMode = L"local_runtime_dispatch";
+	config.gateway.bindAddress = L"0.0.0.0";
+
+	blazeclaw::gateway::GatewayHost host;
+	blazeclaw::core::GatewayRuntimeBootstrapCoordinator coordinator;
+	std::vector<std::string> traces;
+	std::vector<std::string> applied;
+	std::vector<std::uint64_t> queued;
+
+	const auto startupResult = coordinator.ExecuteStartup(
+		blazeclaw::core::GatewayRuntimeBootstrapCoordinator::StartupContext{
+			.config = config,
+			.gatewayHost = host,
+			.appendTrace = [&traces](const char* stage) {
+				traces.emplace_back(stage == nullptr ? "" : stage);
+			},
+			.queueManagedConfigInternalWriteHash = [&queued](const std::uint64_t h) {
+				queued.push_back(h);
+			},
+			.suppressStartupMigrations = true,
+			.appliedStartupMigrationsOut = &applied,
+		});
+
+	REQUIRE(startupResult.success);
+	REQUIRE(applied.empty());
+	REQUIRE(queued.empty());
+	REQUIRE(
+		std::find(
+			traces.begin(),
+			traces.end(),
+			"GatewayRuntimeBootstrap.migration.suppressed") != traces.end());
 }
 
 TEST_CASE(
@@ -781,12 +890,24 @@ TEST_CASE(
 	snapshot.gatewayParityLifecycle.transitionTrace = snapshot.gatewayLifecycleTransitions;
 	snapshot.gatewayParityLifecycle.managedConfigApplyCount = 3;
 	snapshot.gatewayParityLifecycle.managedConfigRejectCount = 1;
+	snapshot.gatewayParityLifecycle.startupConfigPathUtf8 = "blazeclaw.conf";
+	snapshot.gatewayParityLifecycle.startupConfigContentDigest = "u64:42";
+	snapshot.gatewayParityLifecycle.startupConfigRecordedAtEpochMs = 1000;
+	snapshot.gatewayParityLifecycle.startupConfigFileExisted = true;
+	snapshot.gatewayParityLifecycle.startupConfigInternalWriteHashes = { 7, 8 };
+	snapshot.gatewayParityLifecycle.startupMigrationsApplied = {
+		blazeclaw::config::GatewayMigrationIds::kControlUiNonLoopbackBindParityV1,
+	};
+	snapshot.gatewayParityLifecycle.authBootstrapPathTag = "session_generation_persisted";
+	snapshot.gatewayParityLifecycle.authBootstrapStatus = "ok";
+	snapshot.gatewayParityLifecycle.authBootstrapDetail = "test";
 
 	blazeclaw::core::CDiagnosticsReportBuilder builder;
 	const std::string report = builder.BuildOperatorDiagnosticsReport(snapshot);
 
 	REQUIRE(report.find("\"gatewayLifecycle\"") != std::string::npos);
 	REQUIRE(report.find("\"parityContract\"") != std::string::npos);
+	REQUIRE(report.find("\"schemaVersion\":2") != std::string::npos);
 	REQUIRE(
 		report.find("\"openclawParityBaseline\":\"openclaw/src/gateway/server.impl.ts\"") !=
 		std::string::npos);
@@ -820,4 +941,7 @@ TEST_CASE(
 	REQUIRE(
 		report.find("\"transitions\":[\"startup.begin\"") !=
 		std::string::npos);
+	REQUIRE(report.find("\"startupConfigPathUtf8\":\"blazeclaw.conf\"") != std::string::npos);
+	REQUIRE(report.find("\"authBootstrapPathTag\":\"session_generation_persisted\"") != std::string::npos);
+	REQUIRE(report.find("\"authBootstrapStatus\":\"ok\"") != std::string::npos);
 }

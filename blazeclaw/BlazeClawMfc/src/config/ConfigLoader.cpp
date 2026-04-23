@@ -2,8 +2,10 @@
 #include "ConfigLoader.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cwctype>
 #include <fstream>
+#include <functional>
 #include <vector>
 
 namespace blazeclaw::config {
@@ -399,7 +401,44 @@ namespace blazeclaw::config {
 
 	} // namespace
 
-	bool ConfigLoader::LoadFromFile(const std::wstring& path, AppConfig& outConfig) const {
+	void BuildGatewayStartupConfigFileSnapshot(
+		const std::wstring& path,
+		const std::vector<std::uint64_t>& internalWriteHashes,
+		GatewayStartupConfigFileSnapshot& out) {
+		out = {};
+		out.path = path;
+		out.internalWriteHashesAtRecord = internalWriteHashes;
+		out.recordedAtEpochMs = static_cast<std::uint64_t>(
+			std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::system_clock::now().time_since_epoch())
+				.count());
+		std::ifstream input(path, std::ios::binary);
+		if (!input.is_open()) {
+			out.fileExisted = false;
+			out.contentDigest = "missing";
+			return;
+		}
+		out.fileExisted = true;
+		const std::string content(
+			(std::istreambuf_iterator<char>(input)),
+			std::istreambuf_iterator<char>());
+		const std::uint64_t h = std::hash<std::string>{}(content);
+		out.contentDigest = "u64:" + std::to_string(h);
+	}
+
+	bool ConfigLoader::LoadFromFile(
+		const std::wstring& path,
+		AppConfig& outConfig) const {
+		return LoadFromFile(path, outConfig, nullptr);
+	}
+
+	bool ConfigLoader::LoadFromFile(
+		const std::wstring& path,
+		AppConfig& outConfig,
+		GatewayStartupConfigFileSnapshot* outFileSnapshot) const {
+		if (outFileSnapshot != nullptr) {
+			BuildGatewayStartupConfigFileSnapshot(path, {}, *outFileSnapshot);
+		}
 		std::wifstream input(path);
 		if (!input.is_open()) {
 			return false;

@@ -1,9 +1,11 @@
 #include "config/ConfigLoader.h"
+#include "config/ConfigModels.h"
 
 #include <catch2/catch_all.hpp>
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <string>
 
 TEST_CASE("ConfigLoader parses embedded.orchestrationPath values", "[config][embedded][orchestration]") {
 	blazeclaw::config::ConfigLoader loader;
@@ -143,6 +145,41 @@ TEST_CASE("ConfigLoader parses agent/default skills allowlist semantics", "[conf
 	REQUIRE(betaIt->second.skills.has_value());
 	REQUIRE(betaIt->second.skills->size() == 1);
 	REQUIRE(betaIt->second.skills->front() == L"beta-skill");
+
+	std::filesystem::remove_all(root);
+}
+
+TEST_CASE(
+	"ConfigLoader S1: LoadFromFile and BuildGatewayStartupConfigFileSnapshot share stable digest",
+	"[config][loader][s1]")
+{
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_s1_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto path = (root / "snap.conf").wstring();
+	{
+		std::wofstream out(path);
+		REQUIRE(out.is_open());
+		out << L"gateway.port=12345\n";
+	}
+
+	blazeclaw::config::AppConfig cfg;
+	blazeclaw::config::ConfigLoader loader;
+	blazeclaw::config::GatewayStartupConfigFileSnapshot fromLoad;
+	REQUIRE(loader.LoadFromFile(path, cfg, &fromLoad));
+	REQUIRE(fromLoad.fileExisted);
+	REQUIRE_FALSE(fromLoad.contentDigest.empty());
+	REQUIRE(fromLoad.contentDigest.rfind("u64:", 0) == 0);
+
+	blazeclaw::config::GatewayStartupConfigFileSnapshot direct;
+	blazeclaw::config::BuildGatewayStartupConfigFileSnapshot(
+		path,
+		{ 99, 100 },
+		direct);
+	REQUIRE(direct.contentDigest == fromLoad.contentDigest);
+	REQUIRE(direct.internalWriteHashesAtRecord.size() == 2u);
+	REQUIRE(direct.internalWriteHashesAtRecord[0] == 99u);
 
 	std::filesystem::remove_all(root);
 }

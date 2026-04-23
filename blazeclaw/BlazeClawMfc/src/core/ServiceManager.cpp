@@ -9,6 +9,7 @@
 #include "../app/BlazeClawMFCView.h"
 #include "../app/MainFrame.h"
 
+#include "../config/ConfigLoader.h"
 #include "../gateway/GatewayProtocolModels.h"
 #include "../gateway/GatewayJsonUtils.h"
 #include "../gateway/executors/EmailScheduleExecutor.h"
@@ -68,6 +69,19 @@ namespace blazeclaw::core {
 					return static_cast<wchar_t>(std::towlower(ch));
 				});
 			return lowered;
+		}
+
+		bool SuppressStartupMigrationsFromEnv() {
+			wchar_t* raw = nullptr;
+			size_t rawSize = 0;
+			if (_wdupenv_s(&raw, &rawSize, L"BLAZECLAW_GATEWAY_SUPPRESS_STARTUP_MIGRATIONS") != 0 ||
+				raw == nullptr) {
+				return false;
+			}
+
+			const std::wstring v = ToLower(Trim(std::wstring(raw)));
+			free(raw);
+			return v == L"1" || v == L"true" || v == L"yes" || v == L"on";
 		}
 
 		std::wstring Utf8ToWideLocal(const std::string& value) {
@@ -2346,6 +2360,9 @@ namespace blazeclaw::core {
 	{
 		AppendStartupTrace("ServiceManager.Start.gateway.beforeStart");
 		m_state.gatewayLifecycle.transitions.clear();
+		m_state.gatewayLifecycle.startupMigrationsApplied.clear();
+		RecordGatewayStartupConfigSnapshot();
+		RefreshGatewayAuthBootstrapDiagnostics(config);
 		RecordGatewayLifecycleTransition("startup.begin");
 
 		GatewayRuntimeBootstrapCoordinator::StartupResult startupResult;
@@ -2357,6 +2374,13 @@ namespace blazeclaw::core {
 					.appendTrace = [this](const char* stage) {
 						AppendStartupTrace(stage);
 					},
+					.queueManagedConfigInternalWriteHash =
+						[this](const std::uint64_t hash) {
+						QueueManagedConfigInternalWriteHash(hash);
+					},
+					.suppressStartupMigrations = SuppressStartupMigrationsFromEnv(),
+					.appliedStartupMigrationsOut =
+						&m_state.gatewayLifecycle.startupMigrationsApplied,
 				});
 		}
 		catch (...) {
@@ -2584,6 +2608,43 @@ namespace blazeclaw::core {
 			m_embeddedCancelledRuns.clear();
 		}
 		RecordGatewayLifecycleTransition("runtime_cancellation_state.cleared");
+	}
+
+	void ServiceManager::RecordGatewayStartupConfigSnapshot() {
+		blazeclaw::config::BuildGatewayStartupConfigFileSnapshot(
+			m_state.gatewayLiveRuntime.managedConfigPath,
+			m_state.gatewayLiveRuntime.pendingInternalWriteHashes,
+			m_state.gatewayLiveRuntime.startupConfigSnapshot);
+	}
+
+	void ServiceManager::RefreshGatewayAuthBootstrapDiagnostics(
+		const blazeclaw::config::AppConfig& config) {
+		wchar_t* raw = nullptr;
+		size_t rawSize = 0;
+		if (_wdupenv_s(&raw, &rawSize, L"BLAZECLAW_GATEWAY_TOKEN") == 0 && raw != nullptr) {
+			const std::wstring token = Trim(std::wstring(raw));
+			free(raw);
+			if (!token.empty()) {
+				m_state.gatewayLifecycle.authBootstrapPathTag = "env";
+				m_state.gatewayLifecycle.authBootstrapStatus = "ok";
+				m_state.gatewayLifecycle.authBootstrapDetail =
+					"BLAZECLAW_GATEWAY_TOKEN present";
+				return;
+			}
+		}
+
+		if (config.gateway.authSessionGeneration > 0) {
+			m_state.gatewayLifecycle.authBootstrapPathTag = "session_generation_persisted";
+			m_state.gatewayLifecycle.authBootstrapStatus = "ok";
+			m_state.gatewayLifecycle.authBootstrapDetail =
+				"gateway.authSessionGeneration>0 (persisted session policy marker)";
+			return;
+		}
+
+		m_state.gatewayLifecycle.authBootstrapPathTag = "runtime_ephemeral";
+		m_state.gatewayLifecycle.authBootstrapStatus = "warning";
+		m_state.gatewayLifecycle.authBootstrapDetail =
+			"no env token and authSessionGeneration is 0; OpenClaw-equivalent: generated-ephemeral vs not-yet-persisted";
 	}
 
 	void ServiceManager::RecordGatewayLifecycleTransition(
@@ -2977,6 +3038,20 @@ namespace blazeclaw::core {
 			.authSessionGenerationRejectCount =
 				m_state.gatewayLifecycle.authSessionGenerationRejectCount,
 			.transitions = m_state.gatewayLifecycle.transitions,
+			.startupConfigPathUtf8 = ToNarrow(
+				m_state.gatewayLiveRuntime.startupConfigSnapshot.path),
+			.startupConfigContentDigest =
+				m_state.gatewayLiveRuntime.startupConfigSnapshot.contentDigest,
+			.startupConfigRecordedAtEpochMs =
+				m_state.gatewayLiveRuntime.startupConfigSnapshot.recordedAtEpochMs,
+			.startupConfigFileExisted =
+				m_state.gatewayLiveRuntime.startupConfigSnapshot.fileExisted,
+			.startupConfigInternalWriteHashes =
+				m_state.gatewayLiveRuntime.startupConfigSnapshot.internalWriteHashesAtRecord,
+			.startupMigrationsApplied = m_state.gatewayLifecycle.startupMigrationsApplied,
+			.authBootstrapPathTag = m_state.gatewayLifecycle.authBootstrapPathTag,
+			.authBootstrapStatus = m_state.gatewayLifecycle.authBootstrapStatus,
+			.authBootstrapDetail = m_state.gatewayLifecycle.authBootstrapDetail,
 		},
 			.email = EmailRuntimeDiagnosticsProjector::Context{
 			.emailConfig = m_activeConfig.email,
@@ -3152,6 +3227,20 @@ namespace blazeclaw::core {
 			.authSessionGenerationRejectCount =
 				m_state.gatewayLifecycle.authSessionGenerationRejectCount,
 			.transitions = m_state.gatewayLifecycle.transitions,
+			.startupConfigPathUtf8 = ToNarrow(
+				m_state.gatewayLiveRuntime.startupConfigSnapshot.path),
+			.startupConfigContentDigest =
+				m_state.gatewayLiveRuntime.startupConfigSnapshot.contentDigest,
+			.startupConfigRecordedAtEpochMs =
+				m_state.gatewayLiveRuntime.startupConfigSnapshot.recordedAtEpochMs,
+			.startupConfigFileExisted =
+				m_state.gatewayLiveRuntime.startupConfigSnapshot.fileExisted,
+			.startupConfigInternalWriteHashes =
+				m_state.gatewayLiveRuntime.startupConfigSnapshot.internalWriteHashesAtRecord,
+			.startupMigrationsApplied = m_state.gatewayLifecycle.startupMigrationsApplied,
+			.authBootstrapPathTag = m_state.gatewayLifecycle.authBootstrapPathTag,
+			.authBootstrapStatus = m_state.gatewayLifecycle.authBootstrapStatus,
+			.authBootstrapDetail = m_state.gatewayLifecycle.authBootstrapDetail,
 		};
 		m_gatewayLifecycleDiagnosticsProjector.Apply(ctx, snapshot);
 		return m_diagnosticsReportBuilder.SerializeParityLifecycleContractJson(

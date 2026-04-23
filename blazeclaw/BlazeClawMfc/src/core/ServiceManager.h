@@ -226,6 +226,9 @@ namespace blazeclaw::core {
 			const GatewayRuntimeBootstrapCoordinator::StartupResult& startupResult);
 		void ExecuteNonGatewayRuntimeCleanup();
 		void RecordGatewayLifecycleTransition(const std::string& transition);
+		void RecordGatewayStartupConfigSnapshot();
+		void RefreshGatewayAuthBootstrapDiagnostics(
+			const blazeclaw::config::AppConfig& config);
 		void QueueManagedConfigInternalWriteHash(std::uint64_t hash);
 		[[nodiscard]] std::optional<std::uint64_t>
 			ConsumeManagedConfigInternalWriteHash();
@@ -360,6 +363,11 @@ namespace blazeclaw::core {
 				std::uint64_t authSessionGenerationRequired = 0;
 				std::uint64_t authSessionGenerationRejectCount = 0;
 				std::vector<std::string> transitions;
+				/// S1: stable ids, aligned with `GatewayMigrationIds`.
+				std::vector<std::string> startupMigrationsApplied;
+				std::string authBootstrapPathTag;
+				std::string authBootstrapStatus;
+				std::string authBootstrapDetail;
 			};
 
 			struct GatewayLiveRuntimeState {
@@ -377,6 +385,7 @@ namespace blazeclaw::core {
 				bool managedConfigReloaderRunning = false;
 				std::uint64_t managedConfigApplyCount = 0;
 				std::uint64_t managedConfigRejectCount = 0;
+				blazeclaw::config::GatewayStartupConfigFileSnapshot startupConfigSnapshot;
 				std::vector<OwnedCleanupEntry> ownedCleanup;
 				std::vector<std::string> ownedCleanupOrder;
 				std::vector<std::uint64_t> pendingInternalWriteHashes;

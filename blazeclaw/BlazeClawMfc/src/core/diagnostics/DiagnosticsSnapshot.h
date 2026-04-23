@@ -7,10 +7,10 @@
 
 namespace blazeclaw::core {
 
-	/// OpenClaw `server.impl.ts` lifecycle parity export (Phase S0).
+	/// OpenClaw `server.impl.ts` lifecycle parity export (Phase S0+S1).
 	/// Populated for diagnostics/operator report and `gateway.parity.lifecycle` RPC.
 	struct GatewayParityLifecycleContract {
-		static constexpr int kSchemaVersion = 1;
+		static constexpr int kSchemaVersion = 2;
 		int schemaVersion = kSchemaVersion;
 		std::string openclawParityBaseline = "openclaw/src/gateway/server.impl.ts";
 		std::string startupMode;
@@ -34,6 +34,18 @@ namespace blazeclaw::core {
 		std::uint64_t authSessionGenerationRequired = 0;
 		std::uint64_t authSessionGenerationRejectCount = 0;
 		std::vector<std::string> transitionTrace;
+		// S1: startup file snapshot (maps to OpenClaw `readConfigFileSnapshot` intent).
+		std::string startupConfigPathUtf8;
+		std::string startupConfigContentDigest;
+		std::uint64_t startupConfigRecordedAtEpochMs = 0;
+		bool startupConfigFileExisted = false;
+		std::vector<std::uint64_t> startupConfigInternalWriteHashes;
+		// S1: startup migrations (OpenClaw `maybeSeedControlUiAllowedOriginsAtStartup` class).
+		std::vector<std::string> startupMigrationsApplied;
+		// S1: auth bootstrap (OpenClaw `ensureGatewayStartupAuth` / generated vs persisted class).
+		std::string authBootstrapPathTag;
+		std::string authBootstrapStatus;
+		std::string authBootstrapDetail;
 	};
 
 	struct DiagnosticsSnapshot {
