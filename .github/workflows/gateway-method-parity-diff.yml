@@ -36,6 +36,16 @@ jobs:
       - name: Generate gateway parity diff artifact
         run: node scripts/gateway-method-parity-diff.mjs
 
+      - name: Enforce committed parity artifacts are up to date
+        run: git diff --exit-code -- artifacts/gateway-parity/openclaw-vs-blazeclaw-method-diff.json artifacts/gateway-parity/openclaw-vs-blazeclaw-method-diff.md
+
+      - name: Verify parity-critical Catch2 sources stay wired
+        run: |
+          test -f blazeclaw/BlazeClawMfc/tests/GatewayRequestPolicyGuardTests.cpp
+          test -f blazeclaw/BlazeClawMfc/tests/GatewayServerMethodsS3ParityTests.cpp
+          grep -q "GatewayRequestPolicyGuardTests.cpp" blazeclaw/BlazeClawMfc.Tests/BlazeClawMfc.Tests.vcxproj
+          grep -q "GatewayServerMethodsS3ParityTests.cpp" blazeclaw/BlazeClawMfc.Tests/BlazeClawMfc.Tests.vcxproj
+
       - name: Show parity diff summary
         run: cat artifacts/gateway-parity/openclaw-vs-blazeclaw-method-diff.md
 

@@ -51,6 +51,7 @@
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayProtocolResponseHelpersTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayHttpAuthServiceTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayRequestPolicyGuardTests.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\tests\GatewayServerMethodsS3ParityTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayNodeCanvasCapabilityServiceTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayUtf8CloseReasonTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\TaskDeltaRepositoryTests.cpp" />
