@@ -319,3 +319,51 @@ TEST_CASE("P3 parity methods: session list resolves freshest entry across multi-
 	CHECK(list.payloadJson.value().find("\"scope\":\"thread\"") != std::string::npos);
 	CHECK(list.payloadJson.value().find("\"active\":true") != std::string::npos);
 }
+
+TEST_CASE("P3 parity methods: transcript model identity overrides runtime defaults", "[gateway][parity][p3][sessions][model-precedence]")
+{
+	GatewayHost host;
+	REQUIRE(host.StartLocalDispatchOnly());
+
+	const std::filesystem::path stateRoot = blazeclaw::gateway::ResolveGatewayStateDirectory();
+	std::error_code ec;
+	std::filesystem::create_directories(stateRoot / "chat-transcripts", ec);
+	REQUIRE_FALSE(ec);
+	{
+		std::ofstream transcript(stateRoot / "chat-transcripts" / "agent_ops_main.jsonl", std::ios::out | std::ios::trunc);
+		REQUIRE(transcript.is_open());
+		transcript
+			<< "{\"messageId\":\"m1\",\"sessionKey\":\"agent:ops:main\",\"role\":\"assistant\","
+			<< "\"message\":{\"id\":\"m1\",\"role\":\"assistant\",\"text\":\"result\","
+			<< "\"timestamp\":1735689600200,\"model\":\"deepseek/deepseek-reasoner\",\"modelProvider\":\"deepseek\"}}"
+			<< "\n";
+	}
+	{
+		std::ofstream store(stateRoot / "sessions.state", std::ios::out | std::ios::trunc);
+		REQUIRE(store.is_open());
+		store << "agent:ops:main|thread|1\n";
+	}
+
+	const auto preview = Route(
+		host,
+		"p3-session-model-preview",
+		"gateway.sessions.preview",
+		R"({"sessionId":"agent:ops:main"})");
+	REQUIRE(preview.ok);
+	REQUIRE(preview.payloadJson.has_value());
+	CHECK(preview.payloadJson.value().find("\"modelProvider\":\"deepseek\"") != std::string::npos);
+	CHECK(preview.payloadJson.value().find("\"model\":\"deepseek/deepseek-reasoner\"") != std::string::npos);
+	CHECK(preview.payloadJson.value().find("\"contextTokens\":64000") != std::string::npos);
+	CHECK(preview.payloadJson.value().find("\"estimatedCostUsd\":") != std::string::npos);
+
+	const auto list = Route(
+		host,
+		"p3-session-model-list",
+		"gateway.session.list",
+		R"({"search":"agent:ops:main","includeDerivedTitles":true})");
+	REQUIRE(list.ok);
+	REQUIRE(list.payloadJson.has_value());
+	CHECK(list.payloadJson.value().find("\"modelProvider\":\"deepseek\"") != std::string::npos);
+	CHECK(list.payloadJson.value().find("\"model\":\"deepseek/deepseek-reasoner\"") != std::string::npos);
+	CHECK(list.payloadJson.value().find("\"contextTokens\":64000") != std::string::npos);
+}

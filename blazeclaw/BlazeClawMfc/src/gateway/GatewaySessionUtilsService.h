@@ -73,7 +73,9 @@ namespace blazeclaw::gateway {
 			const std::vector<std::string>& candidateIds);
 		[[nodiscard]] static std::string BuildSessionListPayload(
 			const std::vector<SessionEntry>& sessions,
-			const GatewaySessionListFilters& filters);
+			const GatewaySessionListFilters& filters,
+			const std::string& defaultModelProvider = "seed",
+			const std::string& defaultModel = "default");
 		[[nodiscard]] static GatewaySessionPreviewPayload BuildSessionPreviewPayload(
 			const SessionEntry& session,
 			const std::string& defaultModelProvider,
@@ -88,7 +90,10 @@ namespace blazeclaw::gateway {
 
 	private:
 		[[nodiscard]] static std::string BuildSessionProjectionJson(const GatewaySessionProjection& projection);
-		[[nodiscard]] static GatewaySessionProjection BuildSessionProjection(const SessionEntry& session);
+		[[nodiscard]] static GatewaySessionProjection BuildSessionProjection(
+			const SessionEntry& session,
+			const std::string& defaultModelProvider,
+			const std::string& defaultModel);
 	};
 
 } // namespace blazeclaw::gateway

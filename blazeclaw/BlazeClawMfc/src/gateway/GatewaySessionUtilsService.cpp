@@ -3,6 +3,7 @@
 
 #include "GatewayJsonSerializers.h"
 #include "GatewayJsonUtils.h"
+#include "GatewayHostModelHelpers.h"
 #include "GatewayPersistencePaths.h"
 
 #include <algorithm>
@@ -90,12 +91,22 @@ namespace blazeclaw::gateway {
 			std::uint64_t lastActiveMs = 0;
 			std::string firstUserMessage;
 			std::string lastMessagePreview;
+			std::string resolvedModelProvider;
+			std::string resolvedModel;
 		};
 
 		struct SessionStoreEntryRecord {
 			SessionEntry entry;
 			std::filesystem::path storePath;
 			std::uint64_t freshnessMs = 0;
+		};
+
+		struct ModelCatalogCostContext {
+			std::string provider;
+			std::string model;
+			double inputCostPer1k = 0.0;
+			double outputCostPer1k = 0.0;
+			std::uint64_t contextTokens = 0;
 		};
 
 		TranscriptSnapshot ReadTranscriptSnapshot(const std::string& sessionId) {
@@ -117,9 +128,22 @@ namespace blazeclaw::gateway {
 				++snapshot.messageCount;
 				std::string role;
 				std::string text;
+				std::string model;
+				std::string modelProvider;
 				json::FindStringField(line, "role", role);
 				if (!json::FindStringField(line, "text", text)) {
 					json::FindStringField(line, "message", text);
+				}
+				if (json::FindStringField(line, "model", model) && !model.empty()) {
+					snapshot.resolvedModel = model;
+				}
+				if (json::FindStringField(line, "modelProvider", modelProvider) && !modelProvider.empty()) {
+					snapshot.resolvedModelProvider = modelProvider;
+				}
+				if (snapshot.resolvedModelProvider.empty() &&
+					json::FindStringField(line, "provider", modelProvider) &&
+					!modelProvider.empty()) {
+					snapshot.resolvedModelProvider = modelProvider;
 				}
 				if (role == "user") {
 					snapshot.inputTokens += EstimateTokenCountFromText(text);
@@ -146,23 +170,59 @@ namespace blazeclaw::gateway {
 			return snapshot;
 		}
 
+		ModelCatalogCostContext ResolveCatalogCostContext(
+			const std::string& provider,
+			const std::string& model) {
+			const std::string normalizedModel = GatewayModel::NormalizeModelId(model);
+			const std::string normalizedProvider = provider.empty()
+				? GatewayModel::ResolveModelProvider(normalizedModel)
+				: ToLower(provider);
+
+			if (normalizedProvider == GatewayModel::kDeepSeekProviderId &&
+				normalizedModel == GatewayModel::kDeepSeekReasonerModelId) {
+				return ModelCatalogCostContext{
+					GatewayModel::kDeepSeekProviderId,
+					GatewayModel::kDeepSeekReasonerModelId,
+					0.00055,
+					0.00219,
+					64000
+				};
+			}
+			if (normalizedProvider == GatewayModel::kDeepSeekProviderId) {
+				return ModelCatalogCostContext{
+					GatewayModel::kDeepSeekProviderId,
+					GatewayModel::kDeepSeekChatModelId,
+					0.00014,
+					0.00028,
+					128000
+				};
+			}
+			if (normalizedModel == GatewayModel::kReasonerModelId) {
+				return ModelCatalogCostContext{
+					GatewayModel::kSeedProviderId,
+					GatewayModel::kReasonerModelId,
+					0.00040,
+					0.00120,
+					64000
+				};
+			}
+			return ModelCatalogCostContext{
+				GatewayModel::kSeedProviderId,
+				GatewayModel::kDefaultModelId,
+				0.00020,
+				0.00060,
+				128000
+			};
+		}
+
 		double ResolveEstimatedCostUsd(
 			const std::string& provider,
 			const std::string& model,
 			const std::uint64_t inputTokens,
 			const std::uint64_t outputTokens) {
-			// Conservative static fallback for parity migration phase; replace with provider catalog pricing in later passes.
-			double inputPer1k = 0.0002;
-			double outputPer1k = 0.0006;
-			const std::string loweredProvider = ToLower(provider);
-			const std::string loweredModel = ToLower(model);
-			if (loweredProvider.find("deepseek") != std::string::npos ||
-				loweredModel.find("deepseek") != std::string::npos) {
-				inputPer1k = 0.00014;
-				outputPer1k = 0.00028;
-			}
-			return (static_cast<double>(inputTokens) / 1000.0 * inputPer1k) +
-				(static_cast<double>(outputTokens) / 1000.0 * outputPer1k);
+			const ModelCatalogCostContext catalog = ResolveCatalogCostContext(provider, model);
+			return (static_cast<double>(inputTokens) / 1000.0 * catalog.inputCostPer1k) +
+				(static_cast<double>(outputTokens) / 1000.0 * catalog.outputCostPer1k);
 		}
 
 		std::string ResolveDerivedTitle(
@@ -254,6 +314,35 @@ namespace blazeclaw::gateway {
 				return candidatePath < currentPath;
 			}
 			return candidate.entry.id < current.entry.id;
+		}
+
+		std::pair<std::string, std::string> ResolveSessionModelIdentity(
+			const SessionEntry& session,
+			const TranscriptSnapshot& transcript,
+			const std::string& defaultModelProvider,
+			const std::string& defaultModel) {
+			// Precedence:
+			// 1) transcript runtime identity (most specific observed runtime)
+			// 2) runtime/default model argument from host
+			// 3) framework default model/provider
+			std::string model = transcript.resolvedModel.empty() ? defaultModel : transcript.resolvedModel;
+			if (model.empty()) {
+				model = GatewayModel::kDefaultModelId;
+			}
+
+			std::string provider = transcript.resolvedModelProvider;
+			if (provider.empty()) {
+				provider = defaultModelProvider;
+			}
+			if (provider.empty()) {
+				provider = GatewayModel::ResolveModelProvider(model);
+			}
+
+			model = GatewayModel::NormalizeModelId(model);
+			if (provider.empty()) {
+				provider = GatewayModel::ResolveModelProvider(model);
+			}
+			return { provider, model };
 		}
 	} // namespace
 
@@ -358,9 +447,18 @@ namespace blazeclaw::gateway {
 		return chosen;
 	}
 
-	GatewaySessionProjection GatewaySessionUtilsService::BuildSessionProjection(const SessionEntry& session) {
+	GatewaySessionProjection GatewaySessionUtilsService::BuildSessionProjection(
+		const SessionEntry& session,
+		const std::string& defaultModelProvider,
+		const std::string& defaultModel) {
 		GatewaySessionProjection projection{};
 		const TranscriptSnapshot transcript = ReadTranscriptSnapshot(session.id);
+		const auto [resolvedProvider, resolvedModel] = ResolveSessionModelIdentity(
+			session,
+			transcript,
+			defaultModelProvider,
+			defaultModel);
+		const ModelCatalogCostContext catalog = ResolveCatalogCostContext(resolvedProvider, resolvedModel);
 		projection.id = session.id;
 		projection.key = session.id;
 		projection.scope = session.scope;
@@ -370,9 +468,9 @@ namespace blazeclaw::gateway {
 		projection.displayName = "Session " + session.id;
 		projection.derivedTitle = ResolveDerivedTitle(session.id, transcript);
 		projection.lastMessagePreview = transcript.lastMessagePreview;
-		projection.modelProvider = "deepseek";
-		projection.model = "deepseek/deepseek-chat";
-		projection.contextTokens = 128000;
+		projection.modelProvider = resolvedProvider;
+		projection.model = resolvedModel;
+		projection.contextTokens = catalog.contextTokens;
 		projection.totalTokens = transcript.totalTokens;
 		projection.totalTokensFresh = transcript.found && transcript.totalTokens > 0;
 		projection.estimatedCostUsd = ResolveEstimatedCostUsd(
@@ -428,7 +526,9 @@ namespace blazeclaw::gateway {
 
 	std::string GatewaySessionUtilsService::BuildSessionListPayload(
 		const std::vector<SessionEntry>& sessions,
-		const GatewaySessionListFilters& filters) {
+		const GatewaySessionListFilters& filters,
+		const std::string& defaultModelProvider,
+		const std::string& defaultModel) {
 		const std::int64_t nowMs = NowEpochMs();
 		const std::int64_t activeCutoffMs = filters.activeMinutes.has_value()
 			? nowMs - static_cast<std::int64_t>(filters.activeMinutes.value()) * 60 * 1000
@@ -467,7 +567,10 @@ namespace blazeclaw::gateway {
 				continue;
 			}
 
-			GatewaySessionProjection row = BuildSessionProjection(session);
+			GatewaySessionProjection row = BuildSessionProjection(
+				session,
+				defaultModelProvider,
+				defaultModel);
 			if (!filters.includeDerivedTitles) {
 				row.derivedTitle.clear();
 			}
@@ -529,8 +632,12 @@ namespace blazeclaw::gateway {
 		const std::string& defaultModel) {
 		const TranscriptSnapshot transcript = ReadTranscriptSnapshot(session.id);
 		const std::string title = ResolveDerivedTitle(session.id, transcript);
-		const std::string modelProvider = defaultModelProvider.empty() ? "deepseek" : defaultModelProvider;
-		const std::string model = defaultModel.empty() ? "deepseek/deepseek-chat" : defaultModel;
+		const auto [modelProvider, model] = ResolveSessionModelIdentity(
+			session,
+			transcript,
+			defaultModelProvider,
+			defaultModel);
+		const ModelCatalogCostContext catalog = ResolveCatalogCostContext(modelProvider, model);
 		std::ostringstream payload;
 		payload
 			<< "{"
@@ -547,7 +654,7 @@ namespace blazeclaw::gateway {
 			<< "},"
 			<< "\"modelProvider\":\"" << EscapeJsonString(modelProvider) << "\","
 			<< "\"model\":\"" << EscapeJsonString(model) << "\","
-			<< "\"contextTokens\":128000,"
+			<< "\"contextTokens\":" << catalog.contextTokens << ","
 			<< "\"fallbackSource\":\"" << (transcript.found ? "transcript" : "registry") << "\""
 			<< "}";
 		return GatewaySessionPreviewPayload{
@@ -565,8 +672,12 @@ namespace blazeclaw::gateway {
 		const std::string& endDate,
 		bool openClawEnvelope) {
 		const TranscriptSnapshot transcript = ReadTranscriptSnapshot(session.id);
-		const std::string modelProvider = defaultModelProvider.empty() ? "deepseek" : defaultModelProvider;
-		const std::string model = defaultModel.empty() ? "deepseek/deepseek-chat" : defaultModel;
+		const auto [modelProvider, model] = ResolveSessionModelIdentity(
+			session,
+			transcript,
+			defaultModelProvider,
+			defaultModel);
+		const ModelCatalogCostContext catalog = ResolveCatalogCostContext(modelProvider, model);
 		const double totalCost = ResolveEstimatedCostUsd(
 			modelProvider,
 			model,
@@ -590,6 +701,7 @@ namespace blazeclaw::gateway {
 				<< "\"modelProvider\":\"" << EscapeJsonString(modelProvider) << "\","
 				<< "\"model\":\"" << EscapeJsonString(model) << "\","
 				<< "\"estimatedCostUsd\":" << totalCost << ","
+				<< "\"contextTokens\":" << catalog.contextTokens << ","
 				<< "\"fallbackSource\":\"" << (transcript.found ? "transcript" : "registry") << "\","
 				<< "\"lastActiveMs\":" << lastActiveMs
 				<< "}";
@@ -614,6 +726,7 @@ namespace blazeclaw::gateway {
 			<< "\"updatedAt\":" << lastActiveMs << ","
 			<< "\"modelProvider\":\"" << EscapeJsonString(modelProvider) << "\","
 			<< "\"model\":\"" << EscapeJsonString(model) << "\","
+			<< "\"contextTokens\":" << catalog.contextTokens << ","
 			<< "\"fallbackSource\":\"" << (transcript.found ? "transcript" : "registry") << "\","
 			<< "\"usage\":{\"input\":" << transcript.inputTokens
 			<< ",\"output\":" << transcript.outputTokens

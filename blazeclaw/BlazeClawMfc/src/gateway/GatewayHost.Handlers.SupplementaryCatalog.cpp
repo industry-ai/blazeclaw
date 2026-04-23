@@ -42,7 +42,11 @@ host.m_dispatcher.Register("gateway.session.list", [&host](const protocol::Reque
 				: mergedSessions;
 			return protocol::OkResponse(
 				request,
-				GatewaySessionUtilsService::BuildSessionListPayload(sessions, filters));
+				GatewaySessionUtilsService::BuildSessionListPayload(
+					sessions,
+					filters,
+					GatewayModel::ResolveModelProvider(host.m_runtimeAgentModel),
+					host.m_runtimeAgentModel));
 			});
 
 		host.m_dispatcher.Register("sessions.list", [&host](const protocol::RequestFrame& request) {

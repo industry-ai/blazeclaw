@@ -119,7 +119,7 @@ namespace blazeclaw::gateway::handlers::agent_session_mutation {
 				.value_or(host.m_sessionRegistry.Resolve(requestedId));
 			const auto payload = GatewaySessionUtilsService::BuildSessionPreviewPayload(
 				session,
-				"deepseek",
+				GatewayModel::ResolveModelProvider(host.m_runtimeAgentModel),
 				host.m_runtimeAgentModel);
 			EmitTelemetryEvent(
 				"gateway.event.sessions.preview.fallback",
@@ -152,7 +152,7 @@ namespace blazeclaw::gateway::handlers::agent_session_mutation {
 					.value_or(host.m_sessionRegistry.Resolve(requestedId));
 				const auto payload = GatewaySessionUtilsService::BuildSessionUsagePayload(
 					session,
-					"deepseek",
+					GatewayModel::ResolveModelProvider(host.m_runtimeAgentModel),
 					host.m_runtimeAgentModel,
 					requestedStartDate,
 					requestedEndDate,
