@@ -157,14 +157,14 @@ TEST_CASE("S3 parity: runtime callback seams remain wired for chat/config/skills
 	RequireMethodImplemented(chatSend);
 	REQUIRE(chatRuntimeCalls > 0);
 
-	const auto configSchema = Route(host, "s3-callback-config-schema", "config.schema");
+	const auto configSchema = Route(host, "s3-callback-config-schema", "gateway.config.schema.get");
 	RequireMethodImplemented(configSchema);
 	REQUIRE(configGetCalls > 0);
 
 	const auto configLookup = Route(
 		host,
 		"s3-callback-config-lookup",
-		"config.schema.lookup",
+		"gateway.config.schema.lookup",
 		std::string("{\"path\":\"gateway.bind\"}"));
 	RequireMethodImplemented(configLookup);
 	REQUIRE(configLookupCalls > 0);
