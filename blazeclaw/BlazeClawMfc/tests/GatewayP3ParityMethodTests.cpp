@@ -394,14 +394,18 @@ TEST_CASE("P3 parity methods: external catalog cache and transcript metadata ove
 	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_EXTERNAL_CACHE_PATH", externalCache.string().c_str()) == 0);
 	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_OVERRIDES_PATH", overridePath.string().c_str()) == 0);
 	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_SERVICE_URL", "http://127.0.0.1:9/unreachable") == 0);
+	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_SERVICE_TOKEN", "test-token") == 0);
+	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_SERVICE_TIMEOUT_MS", "250") == 0);
+	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_SERVICE_RETRY_COUNT", "1") == 0);
+	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_SERVICE_RETRY_DELAY_MS", "1") == 0);
 
 	{
 		std::ofstream external(externalCache, std::ios::out | std::ios::trunc);
 		REQUIRE(external.is_open());
 		external
-			<< "{\"provider\":\"seed\",\"model\":\"seed/default\","
-			<< "\"inputCostPer1k\":0.002,\"outputCostPer1k\":0.004,\"contextTokens\":22222,\"default\":false}"
-			<< "\n";
+			<< "{\"entries\":[{\"provider\":\"seed\",\"model\":\"seed/default\","
+			<< "\"inputCostPer1k\":0.002,\"outputCostPer1k\":0.004,\"contextTokens\":22222,\"default\":false}]}"
+			<< "\n"; // wrapped JSON shape (not JSONL) to verify normalization
 	}
 	{
 		std::ofstream overrides(overridePath, std::ios::out | std::ios::trunc);
@@ -453,4 +457,8 @@ TEST_CASE("P3 parity methods: external catalog cache and transcript metadata ove
 	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_EXTERNAL_CACHE_PATH", "") == 0);
 	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_OVERRIDES_PATH", "") == 0);
 	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_SERVICE_URL", "") == 0);
+	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_SERVICE_TOKEN", "") == 0);
+	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_SERVICE_TIMEOUT_MS", "") == 0);
+	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_SERVICE_RETRY_COUNT", "") == 0);
+	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_SERVICE_RETRY_DELAY_MS", "") == 0);
 }

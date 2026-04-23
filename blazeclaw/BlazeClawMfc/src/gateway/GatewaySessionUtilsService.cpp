@@ -13,7 +13,9 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <optional>
 #include <sstream>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <wininet.h>
@@ -388,54 +390,156 @@ namespace blazeclaw::gateway {
 			if (url.empty()) {
 				return std::nullopt;
 			}
-			HINTERNET session = InternetOpenA(
-				"BlazeClawModelCatalog/1.0",
-				INTERNET_OPEN_TYPE_PRECONFIG,
-				nullptr,
-				nullptr,
-				0);
-			if (session == nullptr) {
-				return std::nullopt;
+			const std::string timeoutMsRaw = ResolveEnvPath("BLAZECLAW_MODEL_CATALOG_SERVICE_TIMEOUT_MS");
+			const std::string retriesRaw = ResolveEnvPath("BLAZECLAW_MODEL_CATALOG_SERVICE_RETRY_COUNT");
+			const std::string retryDelayRaw = ResolveEnvPath("BLAZECLAW_MODEL_CATALOG_SERVICE_RETRY_DELAY_MS");
+			const std::string bearerToken = ResolveEnvPath("BLAZECLAW_MODEL_CATALOG_SERVICE_TOKEN");
+			DWORD timeoutMs = 3000;
+			std::uint64_t parsedTimeout = 0;
+			if (TryParseUInt64(timeoutMsRaw, parsedTimeout) && parsedTimeout > 0) {
+				timeoutMs = static_cast<DWORD>((std::min<std::uint64_t>)(parsedTimeout, 60000ULL));
 			}
-			HINTERNET request = InternetOpenUrlA(
-				session,
-				url.c_str(),
-				nullptr,
-				0,
-				INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE,
-				0);
-			if (request == nullptr) {
+			std::uint64_t retryCount = 2;
+			if (TryParseUInt64(retriesRaw, retryCount)) {
+				retryCount = (std::min<std::uint64_t>)(retryCount, 5ULL);
+			}
+			DWORD retryDelayMs = 150;
+			std::uint64_t parsedDelay = 0;
+			if (TryParseUInt64(retryDelayRaw, parsedDelay)) {
+				retryDelayMs = static_cast<DWORD>((std::min<std::uint64_t>)(parsedDelay, 2000ULL));
+			}
+			std::string headers;
+			if (!bearerToken.empty()) {
+				headers = "Authorization: Bearer " + bearerToken + "\r\n";
+			}
+			const DWORD headerLength = headers.empty() ? 0 : static_cast<DWORD>(headers.size());
+
+			for (std::uint64_t attempt = 0; attempt <= retryCount; ++attempt) {
+				HINTERNET session = InternetOpenA(
+					"BlazeClawModelCatalog/1.0",
+					INTERNET_OPEN_TYPE_PRECONFIG,
+					nullptr,
+					nullptr,
+					0);
+				if (session == nullptr) {
+					if (attempt < retryCount) {
+						std::this_thread::sleep_for(std::chrono::milliseconds(retryDelayMs));
+						continue;
+					}
+					return std::nullopt;
+				}
+				InternetSetOptionA(session, INTERNET_OPTION_CONNECT_TIMEOUT, &timeoutMs, sizeof(timeoutMs));
+				InternetSetOptionA(session, INTERNET_OPTION_SEND_TIMEOUT, &timeoutMs, sizeof(timeoutMs));
+				InternetSetOptionA(session, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeoutMs, sizeof(timeoutMs));
+				HINTERNET request = InternetOpenUrlA(
+					session,
+					url.c_str(),
+					headers.empty() ? nullptr : headers.c_str(),
+					headerLength,
+					INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE,
+					0);
+				if (request == nullptr) {
+					InternetCloseHandle(session);
+					if (attempt < retryCount) {
+						std::this_thread::sleep_for(std::chrono::milliseconds(retryDelayMs));
+						continue;
+					}
+					return std::nullopt;
+				}
+
+				std::string response;
+				char buffer[4096];
+				DWORD bytesRead = 0;
+				while (InternetReadFile(request, buffer, sizeof(buffer), &bytesRead) && bytesRead > 0) {
+					response.append(buffer, buffer + bytesRead);
+					bytesRead = 0;
+				}
+				DWORD statusCode = 0;
+				DWORD statusSize = sizeof(statusCode);
+				HttpQueryInfoA(
+					request,
+					HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
+					&statusCode,
+					&statusSize,
+					nullptr);
+				InternetCloseHandle(request);
 				InternetCloseHandle(session);
-				return std::nullopt;
+				if (statusCode >= 200 && statusCode < 300 && !response.empty()) {
+					return response;
+				}
+				if (attempt < retryCount) {
+					std::this_thread::sleep_for(std::chrono::milliseconds(retryDelayMs));
+				}
+			}
+			return std::nullopt;
+		}
+
+		std::vector<std::string> NormalizeCatalogResponseObjects(const std::string& payload) {
+			std::vector<std::string> objects;
+			if (payload.empty()) {
+				return objects;
+			}
+			std::string line;
+			std::istringstream stream(payload);
+			while (std::getline(stream, line)) {
+				const std::string trimmed = Trim(line);
+				if (!trimmed.empty() && trimmed.front() == '{' && trimmed.back() == '}') {
+					objects.push_back(trimmed);
+				}
+			}
+			if (!objects.empty()) {
+				return objects;
 			}
 
-			std::string response;
-			char buffer[4096];
-			DWORD bytesRead = 0;
-			while (InternetReadFile(request, buffer, sizeof(buffer), &bytesRead) && bytesRead > 0) {
-				response.append(buffer, buffer + bytesRead);
-				bytesRead = 0;
+			// Handles array and wrapped-object payloads from external catalog services.
+			int depth = 0;
+			bool inString = false;
+			bool escape = false;
+			std::size_t objectStart = std::string::npos;
+			for (std::size_t i = 0; i < payload.size(); ++i) {
+				const char ch = payload[i];
+				if (inString) {
+					if (escape) {
+						escape = false;
+					}
+					else if (ch == '\\') {
+						escape = true;
+					}
+					else if (ch == '"') {
+						inString = false;
+					}
+					continue;
+				}
+				if (ch == '"') {
+					inString = true;
+					continue;
+				}
+				if (ch == '{') {
+					if (depth == 0) {
+						objectStart = i;
+					}
+					++depth;
+					continue;
+				}
+				if (ch == '}') {
+					if (depth > 0) {
+						--depth;
+						if (depth == 0 && objectStart != std::string::npos && i >= objectStart) {
+							objects.push_back(payload.substr(objectStart, i - objectStart + 1));
+							objectStart = std::string::npos;
+						}
+					}
+				}
 			}
-			InternetCloseHandle(request);
-			InternetCloseHandle(session);
-			if (response.empty()) {
-				return std::nullopt;
-			}
-			return response;
+			return objects;
 		}
 
 		void MergeCatalogText(
 			const std::string& catalogText,
 			const std::string& source,
 			std::unordered_map<std::string, RuntimeModelCatalogEntry>& deduped) {
-			std::istringstream stream(catalogText);
-			std::string line;
-			while (std::getline(stream, line)) {
-				const std::string trimmed = Trim(line);
-				if (trimmed.empty()) {
-					continue;
-				}
-				const auto parsed = ParseCatalogLine(trimmed);
+			for (const auto& objectText : NormalizeCatalogResponseObjects(catalogText)) {
+				const auto parsed = ParseCatalogLine(objectText);
 				if (!parsed.has_value()) {
 					continue;
 				}
@@ -454,13 +558,10 @@ namespace blazeclaw::gateway {
 			if (!input.is_open()) {
 				return;
 			}
-			std::string line;
-			while (std::getline(input, line)) {
-				const std::string trimmed = Trim(line);
-				if (trimmed.empty()) {
-					continue;
-				}
-				const auto parsed = ParseCatalogLine(trimmed);
+			std::ostringstream content;
+			content << input.rdbuf();
+			for (const auto& objectText : NormalizeCatalogResponseObjects(content.str())) {
+				const auto parsed = ParseCatalogLine(objectText);
 				if (!parsed.has_value()) {
 					continue;
 				}
