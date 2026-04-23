@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "GatewayHost.h"
+#include "GatewayHostCatalogHelpers.h"
 
 namespace blazeclaw::gateway {
 
@@ -65,15 +66,35 @@ namespace blazeclaw::gateway {
 
 			return params.substr(valuePos + 1, endQuote - valuePos - 1);
 		}
+
+		std::string SerializeStringArrayLocal(std::vector<std::string> values) {
+			std::sort(values.begin(), values.end());
+			values.erase(std::unique(values.begin(), values.end()), values.end());
+			std::string json = "[";
+			for (std::size_t i = 0; i < values.size(); ++i) {
+				if (i > 0) {
+					json += ",";
+				}
+				json += "\"" + EscapeJsonLocal(values[i]) + "\"";
+			}
+			json += "]";
+			return json;
+		}
 	}
 
 	void GatewayHost::RegisterTransportHandlers() {
 		m_runtimeContext.dispatcher->Register("connect", [this](const protocol::RequestFrame& request) {
 			const std::string requestedAgent =
 				ExtractStringParamLocal(request.paramsJson, "agent");
+			std::vector<std::string> registeredMethods = m_runtimeContext.dispatcher->RegisteredMethods();
+			const std::vector<std::string> eventCatalog(
+				GatewayEventCatalogNames().begin(),
+				GatewayEventCatalogNames().end());
 			return protocol::OkResponse(request, "{\"accepted\":true,\"protocol\":3,\"agent\":\"" +
 				EscapeJsonLocal(requestedAgent.empty() ? "unknown" : requestedAgent) +
-				"\",\"gateway\":\"blazeclaw.gateway.v1\"}");
+				"\",\"gateway\":\"blazeclaw.gateway.v1\",\"features\":{\"methods\":" +
+				SerializeStringArrayLocal(std::move(registeredMethods)) +
+				",\"events\":" + SerializeStringArrayLocal(eventCatalog) + "}}");
 			});
 
 		m_runtimeContext.dispatcher->Register("last-heartbeat", [this](const protocol::RequestFrame& request) {

@@ -29,6 +29,12 @@ TEST_CASE(
 		std::filesystem::path("BlazeClawMfc") / "src" / "gateway" / "GatewayWebSocketTransport.cpp");
 	REQUIRE(transportSource.find("connect.challenge") != std::string::npos);
 
+	const std::string transportHandlersSource = ReadTextFile(
+		std::filesystem::path("BlazeClawMfc") / "src" / "gateway" / "GatewayHost.Handlers.Transport.cpp");
+	REQUIRE(transportHandlersSource.find("\"features\":") != std::string::npos);
+	REQUIRE(transportHandlersSource.find("RegisteredMethods()") != std::string::npos);
+	REQUIRE(transportHandlersSource.find("GatewayEventCatalogNames()") != std::string::npos);
+
 	const std::string securityOpsSource = ReadTextFile(
 		std::filesystem::path("BlazeClawMfc") / "src" / "gateway" / "GatewayHost.Handlers.SecurityOps.cpp");
 	REQUIRE(securityOpsSource.find("node.pair.requested") != std::string::npos);
