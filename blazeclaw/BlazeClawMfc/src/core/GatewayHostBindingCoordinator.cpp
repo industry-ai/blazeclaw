@@ -55,6 +55,10 @@ namespace blazeclaw::core {
 		manager.BindToolRuntimeCallbacks();
 		RegisterChatRuntimeCallbacks(manager);
 		BindEmbeddingsCallbacks(manager);
+		manager.m_gatewayHost.SetParityLifecycleExportCallback(
+			[&manager]() {
+				return manager.BuildGatewayParityLifecycleTraceJson();
+			});
 	}
 
 	void GatewayHostBindingCoordinator::BindGatewayPolicyCallbacks(ServiceManager& manager) {

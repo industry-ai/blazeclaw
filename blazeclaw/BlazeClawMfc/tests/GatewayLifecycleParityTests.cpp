@@ -49,6 +49,30 @@ namespace {
 } // namespace
 
 TEST_CASE(
+	"GatewayRuntimeBootstrapCoordinator ExecuteStartup emits begin and success trace anchors",
+	"[gateway][lifecycle][s0]")
+{
+	blazeclaw::config::AppConfig config;
+	config.gateway.startupMode = L"local_runtime_dispatch";
+	blazeclaw::gateway::GatewayHost host;
+	blazeclaw::core::GatewayRuntimeBootstrapCoordinator coordinator;
+	std::vector<std::string> traces;
+	const auto startupResult = coordinator.ExecuteStartup(
+		blazeclaw::core::GatewayRuntimeBootstrapCoordinator::StartupContext{
+			.config = config,
+			.gatewayHost = host,
+			.appendTrace = [&traces](const char* stage) {
+				traces.emplace_back(stage == nullptr ? "" : stage);
+			},
+		});
+
+	REQUIRE(startupResult.success);
+	REQUIRE_FALSE(traces.empty());
+	REQUIRE(traces.front() == "GatewayRuntimeBootstrap.ExecuteStartup.begin");
+	REQUIRE(traces.back() == "GatewayRuntimeBootstrap.ExecuteStartup.success");
+}
+
+TEST_CASE(
 	"GatewayRuntimeBootstrapCoordinator close prelude emits deterministic trace order",
 	"[gateway][lifecycle][p2]")
 {
@@ -751,10 +775,21 @@ TEST_CASE(
 		"stop.done",
 	};
 
+	snapshot.gatewayParityLifecycle.startupMode = "local_runtime_dispatch";
+	snapshot.gatewayParityLifecycle.startupModeSource = "config";
+	snapshot.gatewayParityLifecycle.failedStage = "";
+	snapshot.gatewayParityLifecycle.transitionTrace = snapshot.gatewayLifecycleTransitions;
+	snapshot.gatewayParityLifecycle.managedConfigApplyCount = 3;
+	snapshot.gatewayParityLifecycle.managedConfigRejectCount = 1;
+
 	blazeclaw::core::CDiagnosticsReportBuilder builder;
 	const std::string report = builder.BuildOperatorDiagnosticsReport(snapshot);
 
 	REQUIRE(report.find("\"gatewayLifecycle\"") != std::string::npos);
+	REQUIRE(report.find("\"parityContract\"") != std::string::npos);
+	REQUIRE(
+		report.find("\"openclawParityBaseline\":\"openclaw/src/gateway/server.impl.ts\"") !=
+		std::string::npos);
 	REQUIRE(
 		report.find("\"startupMode\":\"local_runtime_dispatch\"") !=
 		std::string::npos);

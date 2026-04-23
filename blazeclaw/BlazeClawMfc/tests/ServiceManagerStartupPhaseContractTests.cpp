@@ -118,6 +118,20 @@ namespace {
 			std::istreambuf_iterator<char>());
 	}
 
+	std::string ReadGatewayConfigDiagnosticsHandlersSource()
+	{
+		const auto sourcePath = std::filesystem::path("BlazeClawMfc") /
+			"src" /
+			"gateway" /
+			"GatewayHost.Handlers.ConfigDiagnostics.cpp";
+		std::ifstream in(sourcePath.string());
+		REQUIRE(in.is_open());
+
+		return std::string(
+			(std::istreambuf_iterator<char>(in)),
+			std::istreambuf_iterator<char>());
+	}
+
 } // namespace
 
 TEST_CASE(
@@ -155,6 +169,25 @@ TEST_CASE(
 	REQUIRE(source.find("void ServiceManager::InitializeModules()") != std::string::npos);
 	REQUIRE(source.find("void ServiceManager::WireGatewayCallbacks()") != std::string::npos);
 	REQUIRE(source.find("bool ServiceManager::FinalizeStartup(") != std::string::npos);
+}
+
+TEST_CASE(
+	"ServiceManager S0 contract: parity lifecycle trace export and gateway RPC surface",
+	"[servicemanager][startup][contract][s0]")
+{
+	const std::string sm = ReadServiceManagerSource();
+	REQUIRE(sm.find("ServiceManager::BuildGatewayParityLifecycleTraceJson(") != std::string::npos);
+	REQUIRE(
+		sm.find("m_diagnosticsReportBuilder.SerializeParityLifecycleContractJson(") !=
+		std::string::npos);
+
+	const std::string bind = ReadGatewayHostBindingCoordinatorSource();
+	REQUIRE(bind.find("SetParityLifecycleExportCallback") != std::string::npos);
+	REQUIRE(bind.find("BuildGatewayParityLifecycleTraceJson") != std::string::npos);
+
+	const std::string configHandlers = ReadGatewayConfigDiagnosticsHandlersSource();
+	REQUIRE(configHandlers.find("gateway.parity.lifecycle") != std::string::npos);
+	REQUIRE(configHandlers.find("ExportParityLifecycleTraceJson") != std::string::npos);
 }
 
 TEST_CASE(

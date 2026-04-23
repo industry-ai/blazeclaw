@@ -770,6 +770,9 @@ namespace blazeclaw::gateway::handlers::config_diagnostics {
 			return protocol::OkResponse(request, "{\"session\":" + SerializeSession(reset) + ",\"event\":\"gateway.session.reset\"}");
 			});
 
+		host.m_dispatcher.Register("gateway.parity.lifecycle", [&host](const protocol::RequestFrame& request) {
+			return protocol::OkResponse(request, host.ExportParityLifecycleTraceJson());
+			});
 		host.m_dispatcher.Register("gateway.health", [&host](const protocol::RequestFrame& request) {
 			return protocol::OkResponse(request, "{\"status\":\"ok\",\"running\":" + std::string(host.IsRunning() ? "true" : "false") + "}");
 			});

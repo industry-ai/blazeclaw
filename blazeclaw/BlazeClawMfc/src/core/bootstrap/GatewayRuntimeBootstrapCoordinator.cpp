@@ -289,6 +289,9 @@ namespace blazeclaw::core {
 		GatewayRuntimeBootstrapCoordinator::ExecuteStartup(
 			const StartupContext& context) const {
 		StartupResult result;
+		if (context.appendTrace) {
+			context.appendTrace("GatewayRuntimeBootstrap.ExecuteStartup.begin");
+		}
 		const StartupDecision decision = PrepareRuntimeConfig(context.config.gateway);
 		result.selectedMode = decision.modeLabel;
 		result.selectedModeSource = decision.modeSource;
@@ -316,6 +319,9 @@ namespace blazeclaw::core {
 
 		result.success = true;
 		result.failedStage.clear();
+		if (context.appendTrace) {
+			context.appendTrace("GatewayRuntimeBootstrap.ExecuteStartup.success");
+		}
 		return result;
 	}
 

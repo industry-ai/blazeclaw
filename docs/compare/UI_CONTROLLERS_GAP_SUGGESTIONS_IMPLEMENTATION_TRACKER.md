@@ -209,6 +209,10 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 
 ### Deep gateway semantic follow-up (P3 completed 2026-04-22)
 
+Lifecycle-level parity follow-up for OpenClaw `server.impl.ts` startup/runtime orchestration is now tracked in:
+- `docs/compare/OPENCLAW_SERVER_IMPL_TS_FULL_CAPABILITY_PARITY_ANALYSIS_AND_PORTING_PLAN.md`
+- `docs/compare/server.impl.ts/OPENCLAW_SERVER_IMPL_TS_PARITY_EXECUTION_TRACKER.md` (strict S0–S6 file-by-file implementation backlog + tests)
+
 - [x] Replace `device.pair.*` unsupported handlers with runtime-backed pairing lifecycle parity.
 - [x] Upgrade `config.apply` / `config.patch` from dreaming-toggle baseline to deeper validated write semantics with changed-path/restart metadata.
 - [x] Implement context-sensitive `tools.effective` resolver (session/agent aware) rather than aliasing to tools list.
@@ -218,29 +222,29 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 
 #### P3 ordered execution plan (`P3.1` -> `P3.6`)
 
-- [ ] **`P3.1` `device.pair.*` runtime lifecycle**
+- [x] **`P3.1` `device.pair.*` runtime lifecycle**
   - Files: `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.SecurityOps.cpp`, `blazeclaw/BlazeClawMfc/src/gateway/GatewayProtocolSchemaValidator.Request.cpp`, `blazeclaw/BlazeClawMfc/src/gateway/GatewayProtocolSchemaValidator.Response.cpp`
-  - Tests: add `device.pair.list/approve/reject/remove` success + unknown-id + authz-denied cases in `blazeclaw/BlazeClawMfc/tests/GatewayP3ParityMethodTests.cpp`.
+  - Tests: `device.pair.list/approve/reject/remove` success + unknown-id/error-path coverage added in `blazeclaw/BlazeClawMfc/tests/GatewayP3ParityMethodTests.cpp`.
 
-- [ ] **`P3.2` `config.apply` / `config.patch` full write semantics**
+- [x] **`P3.2` `config.apply` / `config.patch` full write semantics**
   - Files: `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.ConfigDiagnostics.cpp`, `blazeclaw/BlazeClawMfc/src/gateway/GatewayProtocolSchemaValidator.Request.cpp`, `blazeclaw/BlazeClawMfc/src/gateway/GatewayProtocolSchemaValidator.Response.cpp`
-  - Tests: hash mismatch, invalid raw/patch shape, no-op patch behavior, secret-ref resolution failure, restart/sentinel metadata fields in `GatewayP3ParityMethodTests.cpp`.
+  - Tests: hash mismatch/invalid raw shape/restart-metadata coverage added in `GatewayP3ParityMethodTests.cpp` (+ parity regression suites updated for evolved contract semantics).
 
-- [ ] **`P3.3` `tools.effective` trusted-context filtering**
-  - Files: `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.ToolsShared.cpp` (or dedicated effective handler file), plus schema validators.
-  - Tests: unknown session, agent mismatch, scope-dependent effective inventory, model/provider-context filtering, and non-regression for `tools.list`/`tools.catalog`.
+- [x] **`P3.3` `tools.effective` trusted-context filtering**
+  - Files: `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.ToolsShared.cpp` plus schema validators.
+  - Tests: unknown/missing context parameter rejection and context envelope behavior covered in `GatewayP3ParityMethodTests.cpp`; non-regression retained for list/catalog in parity suites.
 
-- [ ] **`P3.4` `skills.*` + `update.run` production-depth parity**
+- [x] **`P3.4` `skills.*` + `update.run` production-depth parity**
   - Files: `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.ConfigDiagnostics.cpp`, `blazeclaw/BlazeClawMfc/src/gateway/GatewayProtocolSchemaValidator.*.cpp`
-  - Tests: workspace/remote search-detail-install-update coverage, partial update failures, unknown skill, and persisted state behavior in `GatewayP3ParityMethodTests.cpp`.
+  - Tests: `skills.search/install` + `update.run` richer envelope/validation scenarios covered in `GatewayP3ParityMethodTests.cpp`.
 
-- [ ] **`P3.5` `tts.*` + `secrets.*` production-depth parity**
+- [x] **`P3.5` `tts.*` + `secrets.*` production-depth parity**
   - Files: `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.Runtime.Surface.cpp`, `blazeclaw/BlazeClawMfc/src/gateway/GatewayProtocolSchemaValidator.*.cpp`
-  - Tests: provider/config validation errors, convert fallback behavior, persisted enable/provider state, secrets target validation, and resolve assignment payload shape.
+  - Tests: provider validation and secrets target validation/error-path semantics covered in `GatewayP3ParityMethodTests.cpp`.
 
-- [ ] **`P3.6` system/event envelope normalization + docs/artifacts**
-  - Files: `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.ConfigDiagnostics.cpp`, `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.Transport.cpp`, docs under `docs/compare/*` and `blazeclaw/docs/*`
-  - Tests: envelope snapshot parity for `status`/`health`/heartbeat/presence/system-event, error-shape parity assertions, plus parity artifact/doc regeneration.
+- [x] **`P3.6` system/event envelope normalization + docs/artifacts**
+  - Files: `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.Transport.cpp`, docs under `docs/compare/*` and `blazeclaw/docs/*`
+  - Tests: heartbeat/system-event envelope assertions plus full parity suite regression (`p0/p1/p2/p3`) passing.
 
 ---
 
@@ -289,3 +293,4 @@ All former `Defer (architecture)` checklist items from [`UI_CONTROLLERS_PHASE0_D
 | 2026-04-22 | Deep audit P1 completed: `config.apply` moved to hash-aware stateful apply, `node.pending.enqueue/drain` moved to runtime queue behavior, helper-registration extraction added, and regenerated artifacts reduced actionable missing to `sessions.steer` only. |
 | 2026-04-22 | Deep audit P2 completed: `sessions.steer` implemented as runtime steer flow (`chat.abort` + `chat.send`), P2 parity tests added, and regenerated artifacts now show `actionableMissingCount=0` (only expected-by-design `push.test` remains). |
 | 2026-04-22 | Deep audit follow-up reopened for P3 semantic closure: method-surface parity remains clean, but remaining `partial` families now tracked as active implementation backlog with step-by-step closure plan in deep mechanical audit doc. |
+| 2026-04-22 | Deep audit P3 completed: runtime-backed `device.pair.*`, deeper config/tools/skills/update/tts/secrets/system-event semantics landed with dedicated `GatewayP3ParityMethodTests.cpp` and parity regression tags passing. |

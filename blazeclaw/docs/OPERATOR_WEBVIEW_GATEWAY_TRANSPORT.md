@@ -48,6 +48,8 @@ Exec approval baseline is now available in WebView chat: assistant text containi
 
 Observability baseline is available in the WebView agents control-plane as a secured `Observability` tab (enable via `?observability=1` or localStorage `blazeclaw.observability.enabled=1`), wiring `gateway.health`, `gateway.health.details`, `gateway.transport.status`, `last-heartbeat`, `models.list`, and `gateway.logs.tail` with method-invoke debugging controls.
 
+**Lifecycle parity (OpenClaw `server.impl.ts` Phase S0):** after `ServiceManager::WireGatewayCallbacks`, the gateway registers `gateway.parity.lifecycle`, returning a JSON payload with `contract` containing `GatewayParityLifecycleContract` (startup mode/source, flags, `transitionTrace`, auth-session generation counters). The same contract is embedded under `runtime.gatewayLifecycle.parityContract` in the operator diagnostics report from `ServiceManager::BuildOperatorDiagnosticsReport`.
+
 Devices baseline is available in the WebView agents control-plane as a `Devices` tab, wiring `device.pair.list` with approve/reject/remove actions (`device.pair.approve`, `device.pair.reject`, `device.pair.remove`) for operator smoke coverage.
 
 Skills-depth baseline is available in the WebView agents control-plane as a `Skills` panel surface, wiring `skills.search`, `skills.detail` (with `gateway.skills.info` fallback), `gateway.skills.install.execute` (with `skills.install` fallback), and `skills.update` for JSON edit/install smoke coverage.

@@ -72,8 +72,9 @@ This makes it the central state query point for operator and gateway-level intro
 
 ## 4) Diagnostics Facade
 - `BuildOperatorDiagnosticsReport()`
+- `BuildGatewayParityLifecycleTraceJson()` (Phase S0, OpenClaw `server.impl.ts` parity)
 
-Builds **`OperatorDiagnosticsInputs`** (projector contexts + scalar fields from live `ServiceManager` state) and delegates snapshot assembly and report text to **`OperatorDiagnosticsAssembler`** → `CDiagnosticsReportBuilder`.
+Builds **`OperatorDiagnosticsInputs`** (projector contexts + scalar fields from live `ServiceManager` state) and delegates snapshot assembly and report text to **`OperatorDiagnosticsAssembler`** → `CDiagnosticsReportBuilder`. The operator JSON report embeds **`GatewayParityLifecycleContract`** under **`runtime.gatewayLifecycle.parityContract`**. The same contract is returned (wrapped with `ok` / `contract`) from the gateway RPC **`gateway.parity.lifecycle`** after **`GatewayHostBindingCoordinator::WireAllGatewayServiceCallbacks`** sets **`GatewayHost::SetParityLifecycleExportCallback`**.
 
 ## 5) Gateway Integration Layer
 - `InvokeGatewayMethod(...)`

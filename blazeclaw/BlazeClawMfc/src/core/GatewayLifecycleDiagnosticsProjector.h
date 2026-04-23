@@ -69,6 +69,39 @@ namespace blazeclaw::core {
             snapshot.gatewayAuthSessionGenerationRejectCount =
                 context.authSessionGenerationRejectCount;
             snapshot.gatewayLifecycleTransitions = context.transitions;
+
+            snapshot.gatewayParityLifecycle.schemaVersion =
+                GatewayParityLifecycleContract::kSchemaVersion;
+            snapshot.gatewayParityLifecycle.startupMode = context.startupMode;
+            snapshot.gatewayParityLifecycle.startupModeSource = context.startupModeSource;
+            snapshot.gatewayParityLifecycle.failedStage = context.startupFailedStage;
+            snapshot.gatewayParityLifecycle.startupDegraded = context.startupDegraded;
+            snapshot.gatewayParityLifecycle.runtimeRunning = context.runtimeRunning;
+            snapshot.gatewayParityLifecycle.managedConfigReloaderStarted =
+                context.managedConfigReloaderStarted;
+            snapshot.gatewayParityLifecycle.managedConfigReloaderRunning =
+                context.managedConfigReloaderRunning;
+            snapshot.gatewayParityLifecycle.closePreludeExecuted = context.closePreludeExecuted;
+            snapshot.gatewayParityLifecycle.startupFailureCleanupExecuted =
+                context.startupFailureCleanupExecuted;
+            snapshot.gatewayParityLifecycle.cleanupPath = context.cleanupPath;
+            snapshot.gatewayParityLifecycle.runtimeStateCreated = context.runtimeStateCreated;
+            snapshot.gatewayParityLifecycle.runtimeServicesStarted = context.runtimeServicesStarted;
+            snapshot.gatewayParityLifecycle.transportHandlersAttached =
+                context.transportHandlersAttached;
+            snapshot.gatewayParityLifecycle.runtimeSubscriptionsStarted =
+                context.runtimeSubscriptionsStarted;
+            snapshot.gatewayParityLifecycle.managedConfigPath = context.managedConfigPath;
+            snapshot.gatewayParityLifecycle.managedConfigApplyCount = context.managedConfigApplyCount;
+            snapshot.gatewayParityLifecycle.managedConfigRejectCount =
+                context.managedConfigRejectCount;
+            snapshot.gatewayParityLifecycle.authSessionGenerationCurrent =
+                context.authSessionGenerationCurrent;
+            snapshot.gatewayParityLifecycle.authSessionGenerationRequired =
+                context.authSessionGenerationRequired;
+            snapshot.gatewayParityLifecycle.authSessionGenerationRejectCount =
+                context.authSessionGenerationRejectCount;
+            snapshot.gatewayParityLifecycle.transitionTrace = context.transitions;
         }
     };
 

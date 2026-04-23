@@ -3113,6 +3113,51 @@ namespace blazeclaw::core {
 		return m_operatorDiagnosticsAssembler.Build(in);
 	}
 
+	std::string ServiceManager::BuildGatewayParityLifecycleTraceJson() const {
+		DiagnosticsSnapshot snapshot;
+		const GatewayLifecycleDiagnosticsProjector::Context ctx{
+			.runtimeRunning = m_running,
+			.gatewayWarning = m_gatewayHost.LastWarning(),
+			.startupMode = m_state.gatewayLifecycle.startupMode,
+			.startupModeSource = m_state.gatewayLifecycle.startupModeSource,
+			.startupFailedStage = m_state.gatewayLifecycle.failedStage,
+			.startupDegraded = m_state.gatewayLifecycle.startupDegraded,
+			.managedConfigReloaderStarted =
+				m_state.gatewayLifecycle.managedConfigReloaderStarted,
+			.managedConfigReloaderRunning =
+				m_state.gatewayLiveRuntime.managedConfigReloaderRunning,
+			.closePreludeExecuted =
+				m_state.gatewayLifecycle.closePreludeExecuted,
+			.startupFailureCleanupExecuted =
+				m_state.gatewayLifecycle.startupFailureCleanupExecuted,
+			.cleanupPath = m_state.gatewayLifecycle.cleanupPath,
+			.runtimeStateCreated =
+				m_state.gatewayLiveRuntime.runtimeStateCreated,
+			.runtimeServicesStarted =
+				m_state.gatewayLiveRuntime.runtimeServicesStarted,
+			.transportHandlersAttached =
+				m_state.gatewayLiveRuntime.transportHandlersAttached,
+			.runtimeSubscriptionsStarted =
+				m_state.gatewayLiveRuntime.runtimeSubscriptionsStarted,
+			.managedConfigPath =
+				ToNarrow(m_state.gatewayLiveRuntime.managedConfigPath),
+			.managedConfigApplyCount =
+				m_state.gatewayLiveRuntime.managedConfigApplyCount,
+			.managedConfigRejectCount =
+				m_state.gatewayLiveRuntime.managedConfigRejectCount,
+			.authSessionGenerationCurrent =
+				m_state.gatewayLifecycle.authSessionGenerationCurrent,
+			.authSessionGenerationRequired =
+				m_state.gatewayLifecycle.authSessionGenerationRequired,
+			.authSessionGenerationRejectCount =
+				m_state.gatewayLifecycle.authSessionGenerationRejectCount,
+			.transitions = m_state.gatewayLifecycle.transitions,
+		};
+		m_gatewayLifecycleDiagnosticsProjector.Apply(ctx, snapshot);
+		return m_diagnosticsReportBuilder.SerializeParityLifecycleContractJson(
+			snapshot.gatewayParityLifecycle);
+	}
+
 	void ServiceManager::SetActiveChatProvider(
 		const std::string& provider,
 		const std::string& model) {

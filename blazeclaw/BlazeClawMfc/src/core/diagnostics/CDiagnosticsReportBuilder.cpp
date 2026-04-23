@@ -3,6 +3,87 @@
 
 namespace blazeclaw::core {
 
+	namespace {
+
+		std::string JsonEscapeString(const std::string& value) {
+			std::string out;
+			out.reserve(value.size() + 8);
+			for (const char ch : value) {
+				switch (ch) {
+				case '"':
+					out += "\\\"";
+					break;
+				case '\\':
+					out += "\\\\";
+					break;
+				case '\n':
+					out += "\\n";
+					break;
+				case '\r':
+					out += "\\r";
+					break;
+				case '\t':
+					out += "\\t";
+					break;
+				default:
+					out += ch;
+					break;
+				}
+			}
+			return out;
+		}
+
+	} // namespace
+
+	std::string CDiagnosticsReportBuilder::SerializeParityLifecycleContractJson(
+		const GatewayParityLifecycleContract& c) const {
+		std::string transitions = "[";
+		for (std::size_t i = 0; i < c.transitionTrace.size(); ++i) {
+			if (i > 0) {
+				transitions += ",";
+			}
+			transitions += "\"" + JsonEscapeString(c.transitionTrace[i]) + "\"";
+		}
+		transitions += "]";
+
+		return std::string("{") +
+			"\"schemaVersion\":" + std::to_string(c.schemaVersion) +
+			",\"openclawParityBaseline\":\"" + JsonEscapeString(c.openclawParityBaseline) + "\"" +
+			",\"startupMode\":\"" + JsonEscapeString(c.startupMode) + "\"" +
+			",\"startupModeSource\":\"" + JsonEscapeString(c.startupModeSource) + "\"" +
+			",\"failedStage\":\"" + JsonEscapeString(c.failedStage) + "\"" +
+			",\"startupDegraded\":" + std::string(c.startupDegraded ? "true" : "false") +
+			",\"runtimeRunning\":" + std::string(c.runtimeRunning ? "true" : "false") +
+			",\"managedConfigReloaderStarted\":" +
+			std::string(c.managedConfigReloaderStarted ? "true" : "false") +
+			",\"managedConfigReloaderRunning\":" +
+			std::string(c.managedConfigReloaderRunning ? "true" : "false") +
+			",\"closePreludeExecuted\":" +
+			std::string(c.closePreludeExecuted ? "true" : "false") +
+			",\"startupFailureCleanupExecuted\":" +
+			std::string(c.startupFailureCleanupExecuted ? "true" : "false") +
+			",\"cleanupPath\":\"" + JsonEscapeString(c.cleanupPath) + "\"" +
+			",\"runtimeStateCreated\":" +
+			std::string(c.runtimeStateCreated ? "true" : "false") +
+			",\"runtimeServicesStarted\":" +
+			std::string(c.runtimeServicesStarted ? "true" : "false") +
+			",\"transportHandlersAttached\":" +
+			std::string(c.transportHandlersAttached ? "true" : "false") +
+			",\"runtimeSubscriptionsStarted\":" +
+			std::string(c.runtimeSubscriptionsStarted ? "true" : "false") +
+			",\"managedConfigPath\":\"" + JsonEscapeString(c.managedConfigPath) + "\"" +
+			",\"managedConfigApplyCount\":" + std::to_string(c.managedConfigApplyCount) +
+			",\"managedConfigRejectCount\":" + std::to_string(c.managedConfigRejectCount) +
+			",\"authSessionGenerationCurrent\":" +
+			std::to_string(c.authSessionGenerationCurrent) +
+			",\"authSessionGenerationRequired\":" +
+			std::to_string(c.authSessionGenerationRequired) +
+			",\"authSessionGenerationRejectCount\":" +
+			std::to_string(c.authSessionGenerationRejectCount) +
+			",\"transitionTrace\":" + transitions +
+			"}";
+	}
+
 	std::string CDiagnosticsReportBuilder::BuildOperatorDiagnosticsReport(
 		const DiagnosticsSnapshot& s) const
 	{
@@ -63,6 +144,8 @@ namespace blazeclaw::core {
 			std::to_string(s.gatewayAuthSessionGenerationRejectCount) +
 			",\"transitions\":" +
 			serializeTransitions() +
+			",\"parityContract\":" +
+			SerializeParityLifecycleContractJson(s.gatewayParityLifecycle) +
 			"}}," +
 			"\"emailFallback\":{\"preflightEnabled\":" +
 			std::string(s.emailPreflightEnabled ? "true" : "false") +

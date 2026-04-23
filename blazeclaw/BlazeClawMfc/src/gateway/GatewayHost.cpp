@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "GatewayHost.h"
+#include "../core/diagnostics/DiagnosticsSnapshot.h"
 
 #include "GatewayJsonUtils.h"
 #include "GatewayJsonSerializers.h"
@@ -965,6 +966,29 @@ namespace blazeclaw::gateway {
 	void GatewayHost::SetEmbeddingsBatchCallback(
 		EmbeddingsBatchCallback callback) {
 		m_embeddingsBatchCallback = std::move(callback);
+	}
+
+	void GatewayHost::SetParityLifecycleExportCallback(
+		ParityLifecycleExportCallback callback) {
+		m_parityLifecycleExport = std::move(callback);
+	}
+
+	std::string GatewayHost::ExportParityLifecycleTraceJson() const {
+		if (!m_parityLifecycleExport) {
+			return
+				"{\"ok\":false,\"error\":"
+				"\"gateway.parity.lifecycle_export_unconfigured\""
+				",\"schemaVersion\":" +
+				std::to_string(
+					blazeclaw::core::GatewayParityLifecycleContract::kSchemaVersion) +
+				"}";
+		}
+		return std::string("{\"ok\":true,\"schemaVersion\":" ) +
+			std::to_string(
+				blazeclaw::core::GatewayParityLifecycleContract::kSchemaVersion) +
+			",\"contract\":" +
+			m_parityLifecycleExport() +
+			"}";
 	}
 
 	std::vector<ToolCatalogEntry> GatewayHost::ListRuntimeTools() const {

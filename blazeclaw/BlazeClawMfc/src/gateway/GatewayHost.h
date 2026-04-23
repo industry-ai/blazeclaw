@@ -311,6 +311,7 @@ namespace blazeclaw::gateway {
 			std::function<EmbeddingsGenerateResult(const EmbeddingsGenerateRequest&)>;
 		using EmbeddingsBatchCallback =
 			std::function<EmbeddingsBatchResult(const EmbeddingsBatchRequest&)>;
+		using ParityLifecycleExportCallback = std::function<std::string()>;
 
 		[[nodiscard]] static std::vector<std::string>
 			ListReservedChatSlashCommandNames();
@@ -356,6 +357,8 @@ namespace blazeclaw::gateway {
 		void SetChatAbortCallback(ChatAbortCallback callback);
 		void SetEmbeddingsGenerateCallback(EmbeddingsGenerateCallback callback);
 		void SetEmbeddingsBatchCallback(EmbeddingsBatchCallback callback);
+		void SetParityLifecycleExportCallback(ParityLifecycleExportCallback callback);
+		[[nodiscard]] std::string ExportParityLifecycleTraceJson() const;
 
 		[[nodiscard]] bool IsRunning() const noexcept;
 		[[nodiscard]] std::string LastWarning() const;
@@ -590,6 +593,7 @@ namespace blazeclaw::gateway {
 		ChatAbortCallback m_chatAbortCallback;
 		EmbeddingsGenerateCallback m_embeddingsGenerateCallback;
 		EmbeddingsBatchCallback m_embeddingsBatchCallback;
+		ParityLifecycleExportCallback m_parityLifecycleExport;
 		ChatRunPipelineOrchestrator m_chatRunPipelineOrchestrator;
 		TaskDeltaRepository m_taskDeltaRepository{ m_taskDeltasByRunId };
 		GatewayHostRouter m_hostRouter;

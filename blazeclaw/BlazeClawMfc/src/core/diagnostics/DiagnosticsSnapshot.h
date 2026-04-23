@@ -7,6 +7,35 @@
 
 namespace blazeclaw::core {
 
+	/// OpenClaw `server.impl.ts` lifecycle parity export (Phase S0).
+	/// Populated for diagnostics/operator report and `gateway.parity.lifecycle` RPC.
+	struct GatewayParityLifecycleContract {
+		static constexpr int kSchemaVersion = 1;
+		int schemaVersion = kSchemaVersion;
+		std::string openclawParityBaseline = "openclaw/src/gateway/server.impl.ts";
+		std::string startupMode;
+		std::string startupModeSource;
+		std::string failedStage;
+		bool startupDegraded = false;
+		bool runtimeRunning = false;
+		bool managedConfigReloaderStarted = false;
+		bool managedConfigReloaderRunning = false;
+		bool closePreludeExecuted = false;
+		bool startupFailureCleanupExecuted = false;
+		std::string cleanupPath;
+		bool runtimeStateCreated = false;
+		bool runtimeServicesStarted = false;
+		bool transportHandlersAttached = false;
+		bool runtimeSubscriptionsStarted = false;
+		std::string managedConfigPath;
+		std::uint64_t managedConfigApplyCount = 0;
+		std::uint64_t managedConfigRejectCount = 0;
+		std::uint64_t authSessionGenerationCurrent = 0;
+		std::uint64_t authSessionGenerationRequired = 0;
+		std::uint64_t authSessionGenerationRejectCount = 0;
+		std::vector<std::string> transitionTrace;
+	};
+
 	struct DiagnosticsSnapshot {
 		bool runtimeRunning = false;
 		std::string gatewayWarning;
@@ -30,6 +59,7 @@ namespace blazeclaw::core {
 		std::uint64_t gatewayAuthSessionGenerationRequired = 0;
 		std::uint64_t gatewayAuthSessionGenerationRejectCount = 0;
 		std::vector<std::string> gatewayLifecycleTransitions;
+		GatewayParityLifecycleContract gatewayParityLifecycle;
 
 		bool emailPreflightEnabled = false;
 		bool emailPolicyProfilesEnabled = false;

@@ -250,6 +250,7 @@ namespace blazeclaw::core {
 
 
 		[[nodiscard]] std::string BuildOperatorDiagnosticsReport() const;
+		[[nodiscard]] std::string BuildGatewayParityLifecycleTraceJson() const;
 
 	private:
 		// Embedded tooling and provider execution
