@@ -3,6 +3,7 @@
 #include "gateway/GatewayHost.h"
 #include "gateway/GatewayPersistencePaths.h"
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 
@@ -362,6 +363,8 @@ TEST_CASE("P3 parity methods: transcript model identity overrides runtime defaul
 	CHECK(preview.payloadJson.value().find("\"modelProvider\":\"deepseek\"") != std::string::npos);
 	CHECK(preview.payloadJson.value().find("\"model\":\"deepseek/deepseek-reasoner\"") != std::string::npos);
 	CHECK(preview.payloadJson.value().find("\"contextTokens\":77777") != std::string::npos);
+	CHECK(preview.payloadJson.value().find("\"modelSource\":\"transcript-runtime\"") != std::string::npos);
+	CHECK(preview.payloadJson.value().find("\"catalogSource\":\"runtime-state\"") != std::string::npos);
 	CHECK(preview.payloadJson.value().find("\"estimatedCostUsd\":") != std::string::npos);
 
 	const auto list = Route(
@@ -374,4 +377,80 @@ TEST_CASE("P3 parity methods: transcript model identity overrides runtime defaul
 	CHECK(list.payloadJson.value().find("\"modelProvider\":\"deepseek\"") != std::string::npos);
 	CHECK(list.payloadJson.value().find("\"model\":\"deepseek/deepseek-reasoner\"") != std::string::npos);
 	CHECK(list.payloadJson.value().find("\"contextTokens\":77777") != std::string::npos);
+}
+
+TEST_CASE("P3 parity methods: external catalog cache and transcript metadata overrides are applied", "[gateway][parity][p3][sessions][catalog-external][overrides]")
+{
+	GatewayHost host;
+	REQUIRE(host.StartLocalDispatchOnly());
+
+	const std::filesystem::path stateRoot = blazeclaw::gateway::ResolveGatewayStateDirectory();
+	std::error_code ec;
+	std::filesystem::create_directories(stateRoot / "chat-transcripts", ec);
+	REQUIRE_FALSE(ec);
+
+	const std::filesystem::path externalCache = stateRoot / "catalog-external-test.state";
+	const std::filesystem::path overridePath = stateRoot / "catalog-overrides-test.state";
+	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_EXTERNAL_CACHE_PATH", externalCache.string().c_str()) == 0);
+	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_OVERRIDES_PATH", overridePath.string().c_str()) == 0);
+	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_SERVICE_URL", "http://127.0.0.1:9/unreachable") == 0);
+
+	{
+		std::ofstream external(externalCache, std::ios::out | std::ios::trunc);
+		REQUIRE(external.is_open());
+		external
+			<< "{\"provider\":\"seed\",\"model\":\"seed/default\","
+			<< "\"inputCostPer1k\":0.002,\"outputCostPer1k\":0.004,\"contextTokens\":22222,\"default\":false}"
+			<< "\n";
+	}
+	{
+		std::ofstream overrides(overridePath, std::ios::out | std::ios::trunc);
+		REQUIRE(overrides.is_open());
+		overrides
+			<< "{\"provider\":\"seed\",\"model\":\"seed/default\","
+			<< "\"inputCostPer1k\":0.003,\"outputCostPer1k\":0.005,\"contextTokens\":33333,\"default\":false}"
+			<< "\n";
+	}
+	{
+		std::ofstream transcript(stateRoot / "chat-transcripts" / "agent_ops_main.jsonl", std::ios::out | std::ios::trunc);
+		REQUIRE(transcript.is_open());
+		transcript
+			<< "{\"messageId\":\"m1\",\"sessionKey\":\"agent:ops:main\",\"role\":\"assistant\","
+			<< "\"text\":\"result\",\"timestamp\":1735689600200,"
+			<< "\"modelOverride\":\"seed/default\",\"providerOverride\":\"seed\","
+			<< "\"contextTokensOverride\":44444,\"inputCostPer1kOverride\":0.006,\"outputCostPer1kOverride\":0.007}"
+			<< "\n";
+	}
+	{
+		std::ofstream store(stateRoot / "sessions.state", std::ios::out | std::ios::trunc);
+		REQUIRE(store.is_open());
+		store << "agent:ops:main|thread|1\n";
+	}
+
+	const auto preview = Route(
+		host,
+		"p3-session-model-preview-override",
+		"gateway.sessions.preview",
+		R"({"sessionId":"agent:ops:main"})");
+	REQUIRE(preview.ok);
+	REQUIRE(preview.payloadJson.has_value());
+	CHECK(preview.payloadJson.value().find("\"modelSource\":\"transcript-override\"") != std::string::npos);
+	CHECK(preview.payloadJson.value().find("\"catalogSource\":\"transcript-override\"") != std::string::npos);
+	CHECK(preview.payloadJson.value().find("\"modelOverrideApplied\":true") != std::string::npos);
+	CHECK(preview.payloadJson.value().find("\"pricingOverrideApplied\":true") != std::string::npos);
+	CHECK(preview.payloadJson.value().find("\"contextTokens\":44444") != std::string::npos);
+
+	const auto usage = Route(
+		host,
+		"p3-session-model-usage-override",
+		"gateway.sessions.usage",
+		R"({"sessionId":"agent:ops:main","openClawEnvelope":false})");
+	REQUIRE(usage.ok);
+	REQUIRE(usage.payloadJson.has_value());
+	CHECK(usage.payloadJson.value().find("\"catalogSource\":\"transcript-override\"") != std::string::npos);
+	CHECK(usage.payloadJson.value().find("\"pricingOverrideApplied\":true") != std::string::npos);
+
+	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_EXTERNAL_CACHE_PATH", "") == 0);
+	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_OVERRIDES_PATH", "") == 0);
+	REQUIRE(_putenv_s("BLAZECLAW_MODEL_CATALOG_SERVICE_URL", "") == 0);
 }

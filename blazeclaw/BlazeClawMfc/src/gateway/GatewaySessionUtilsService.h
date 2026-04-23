@@ -40,6 +40,10 @@ namespace blazeclaw::gateway {
 		std::uint64_t totalTokens = 0;
 		double estimatedCostUsd = 0.0;
 		bool totalTokensFresh = false;
+		std::string modelSource = "runtime-default";
+		std::string catalogSource = "embedded-defaults";
+		bool modelOverrideApplied = false;
+		bool pricingOverrideApplied = false;
 		std::string fallbackSource = "registry";
 		std::string spawnedBy;
 		std::string parentSessionKey;

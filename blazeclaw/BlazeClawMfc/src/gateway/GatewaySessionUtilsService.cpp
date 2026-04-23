@@ -16,6 +16,9 @@
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
+#include <wininet.h>
+
+#pragma comment(lib, "wininet.lib")
 
 namespace blazeclaw::gateway {
 	namespace {
@@ -97,6 +100,12 @@ namespace blazeclaw::gateway {
 			std::string resolvedModel;
 			std::string overrideModelProvider;
 			std::string overrideModel;
+			std::uint64_t overrideContextTokens = 0;
+			double overrideInputCostPer1k = 0.0;
+			double overrideOutputCostPer1k = 0.0;
+			bool hasOverrideContextTokens = false;
+			bool hasOverrideInputCostPer1k = false;
+			bool hasOverrideOutputCostPer1k = false;
 		};
 
 		struct SessionStoreEntryRecord {
@@ -111,6 +120,7 @@ namespace blazeclaw::gateway {
 			double inputCostPer1k = 0.0;
 			double outputCostPer1k = 0.0;
 			std::uint64_t contextTokens = 0;
+			std::string source = "embedded-defaults";
 		};
 
 		struct RuntimeModelCatalogEntry {
@@ -120,7 +130,18 @@ namespace blazeclaw::gateway {
 			double outputCostPer1k = 0.0;
 			std::uint64_t contextTokens = 0;
 			bool isDefault = false;
+			std::string source = "embedded-defaults";
 		};
+
+		struct ResolvedModelIdentity {
+			std::string provider;
+			std::string model;
+			std::string source = "runtime-default";
+			bool overrideApplied = false;
+		};
+
+		bool TryParseDouble(const std::string& value, double& outValue);
+		bool TryParseUInt64(const std::string& value, std::uint64_t& outValue);
 
 		TranscriptSnapshot ReadTranscriptSnapshot(const std::string& sessionId) {
 			TranscriptSnapshot snapshot{};
@@ -152,6 +173,28 @@ namespace blazeclaw::gateway {
 				}
 				if (json::FindStringField(line, "modelOverride", model) && !model.empty()) {
 					snapshot.overrideModel = model;
+				}
+				std::string numericRaw;
+				if (json::FindRawField(line, "contextTokensOverride", numericRaw)) {
+					std::uint64_t parsedContext = 0;
+					if (TryParseUInt64(Trim(numericRaw), parsedContext) && parsedContext > 0) {
+						snapshot.overrideContextTokens = parsedContext;
+						snapshot.hasOverrideContextTokens = true;
+					}
+				}
+				if (json::FindRawField(line, "inputCostPer1kOverride", numericRaw)) {
+					double parsedInput = 0.0;
+					if (TryParseDouble(Trim(numericRaw), parsedInput) && parsedInput >= 0.0) {
+						snapshot.overrideInputCostPer1k = parsedInput;
+						snapshot.hasOverrideInputCostPer1k = true;
+					}
+				}
+				if (json::FindRawField(line, "outputCostPer1kOverride", numericRaw)) {
+					double parsedOutput = 0.0;
+					if (TryParseDouble(Trim(numericRaw), parsedOutput) && parsedOutput >= 0.0) {
+						snapshot.overrideOutputCostPer1k = parsedOutput;
+						snapshot.hasOverrideOutputCostPer1k = true;
+					}
 				}
 				if (json::FindStringField(line, "modelProvider", modelProvider) && !modelProvider.empty()) {
 					snapshot.resolvedModelProvider = modelProvider;
@@ -298,45 +341,163 @@ namespace blazeclaw::gateway {
 			return entry;
 		}
 
-		std::filesystem::path ResolveRuntimeCatalogPath() {
+		std::string ResolveEnvPath(const char* key) {
 			char* envPath = nullptr;
 			std::size_t required = 0;
-			const errno_t err = _dupenv_s(&envPath, &required, "BLAZECLAW_MODEL_CATALOG_PATH");
+			const errno_t err = _dupenv_s(&envPath, &required, key);
 			if (err == 0 && envPath != nullptr && required > 0) {
-				std::filesystem::path path(envPath);
+				std::string value(envPath);
 				std::free(envPath);
-				return path;
+				return Trim(value);
 			}
 			if (envPath != nullptr) {
 				std::free(envPath);
 			}
+			return {};
+		}
+
+		std::filesystem::path ResolveRuntimeCatalogPath() {
+			const std::string envPath = ResolveEnvPath("BLAZECLAW_MODEL_CATALOG_PATH");
+			if (!envPath.empty()) {
+				return std::filesystem::path(envPath);
+			}
 			return ResolveGatewayStateFilePath("model-catalog.state");
+		}
+
+		std::filesystem::path ResolveRuntimeCatalogOverridesPath() {
+			const std::string envPath = ResolveEnvPath("BLAZECLAW_MODEL_CATALOG_OVERRIDES_PATH");
+			if (!envPath.empty()) {
+				return std::filesystem::path(envPath);
+			}
+			return ResolveGatewayStateFilePath("model-catalog.overrides.state");
+		}
+
+		std::filesystem::path ResolveExternalCatalogCachePath() {
+			const std::string envPath = ResolveEnvPath("BLAZECLAW_MODEL_CATALOG_EXTERNAL_CACHE_PATH");
+			if (!envPath.empty()) {
+				return std::filesystem::path(envPath);
+			}
+			return ResolveGatewayStateFilePath("model-catalog.external.state");
+		}
+
+		std::string ResolveExternalCatalogServiceUrl() {
+			return ResolveEnvPath("BLAZECLAW_MODEL_CATALOG_SERVICE_URL");
+		}
+
+		std::optional<std::string> TryFetchCatalogFromUrl(const std::string& url) {
+			if (url.empty()) {
+				return std::nullopt;
+			}
+			HINTERNET session = InternetOpenA(
+				"BlazeClawModelCatalog/1.0",
+				INTERNET_OPEN_TYPE_PRECONFIG,
+				nullptr,
+				nullptr,
+				0);
+			if (session == nullptr) {
+				return std::nullopt;
+			}
+			HINTERNET request = InternetOpenUrlA(
+				session,
+				url.c_str(),
+				nullptr,
+				0,
+				INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE,
+				0);
+			if (request == nullptr) {
+				InternetCloseHandle(session);
+				return std::nullopt;
+			}
+
+			std::string response;
+			char buffer[4096];
+			DWORD bytesRead = 0;
+			while (InternetReadFile(request, buffer, sizeof(buffer), &bytesRead) && bytesRead > 0) {
+				response.append(buffer, buffer + bytesRead);
+				bytesRead = 0;
+			}
+			InternetCloseHandle(request);
+			InternetCloseHandle(session);
+			if (response.empty()) {
+				return std::nullopt;
+			}
+			return response;
+		}
+
+		void MergeCatalogText(
+			const std::string& catalogText,
+			const std::string& source,
+			std::unordered_map<std::string, RuntimeModelCatalogEntry>& deduped) {
+			std::istringstream stream(catalogText);
+			std::string line;
+			while (std::getline(stream, line)) {
+				const std::string trimmed = Trim(line);
+				if (trimmed.empty()) {
+					continue;
+				}
+				const auto parsed = ParseCatalogLine(trimmed);
+				if (!parsed.has_value()) {
+					continue;
+				}
+				RuntimeModelCatalogEntry entry = parsed.value();
+				entry.source = source;
+				const std::string key = entry.provider + "::" + entry.model;
+				deduped.insert_or_assign(key, entry);
+			}
+		}
+
+		void MergeCatalogFile(
+			const std::filesystem::path& path,
+			const std::string& source,
+			std::unordered_map<std::string, RuntimeModelCatalogEntry>& deduped) {
+			std::ifstream input(path, std::ios::in | std::ios::binary);
+			if (!input.is_open()) {
+				return;
+			}
+			std::string line;
+			while (std::getline(input, line)) {
+				const std::string trimmed = Trim(line);
+				if (trimmed.empty()) {
+					continue;
+				}
+				const auto parsed = ParseCatalogLine(trimmed);
+				if (!parsed.has_value()) {
+					continue;
+				}
+				RuntimeModelCatalogEntry entry = parsed.value();
+				entry.source = source;
+				const std::string key = entry.provider + "::" + entry.model;
+				deduped.insert_or_assign(key, entry);
+			}
 		}
 
 		std::vector<RuntimeModelCatalogEntry> LoadRuntimeModelCatalog() {
 			std::unordered_map<std::string, RuntimeModelCatalogEntry> deduped;
-			for (const auto& entry : BuildEmbeddedCatalogDefaults()) {
+			for (auto entry : BuildEmbeddedCatalogDefaults()) {
+				entry.source = "embedded-defaults";
 				const std::string key = entry.provider + "::" + entry.model;
 				deduped.insert_or_assign(key, entry);
 			}
-
-			const std::filesystem::path catalogPath = ResolveRuntimeCatalogPath();
-			std::ifstream input(catalogPath, std::ios::in | std::ios::binary);
-			if (input.is_open()) {
-				std::string line;
-				while (std::getline(input, line)) {
-					const std::string trimmed = Trim(line);
-					if (trimmed.empty()) {
-						continue;
+			const std::string externalServiceUrl = ResolveExternalCatalogServiceUrl();
+			bool loadedFromExternalService = false;
+			if (!externalServiceUrl.empty()) {
+				const auto external = TryFetchCatalogFromUrl(externalServiceUrl);
+				if (external.has_value()) {
+					MergeCatalogText(external.value(), "external-service", deduped);
+					loadedFromExternalService = true;
+					const std::filesystem::path cachePath = ResolveExternalCatalogCachePath();
+					std::ofstream cache(cachePath, std::ios::out | std::ios::trunc | std::ios::binary);
+					if (cache.is_open()) {
+						cache << external.value();
 					}
-					const auto parsed = ParseCatalogLine(trimmed);
-					if (!parsed.has_value()) {
-						continue;
-					}
-					const std::string key = parsed->provider + "::" + parsed->model;
-					deduped.insert_or_assign(key, parsed.value());
 				}
 			}
+			if (!loadedFromExternalService) {
+				MergeCatalogFile(ResolveExternalCatalogCachePath(), "external-cache", deduped);
+			}
+
+			MergeCatalogFile(ResolveRuntimeCatalogPath(), "runtime-state", deduped);
+			MergeCatalogFile(ResolveRuntimeCatalogOverridesPath(), "runtime-overrides", deduped);
 
 			std::vector<RuntimeModelCatalogEntry> merged;
 			merged.reserve(deduped.size());
@@ -386,6 +547,7 @@ namespace blazeclaw::gateway {
 					hit->inputCostPer1k,
 					hit->outputCostPer1k,
 					hit->contextTokens,
+					hit->source,
 				};
 			}
 			return ModelCatalogCostContext{
@@ -393,19 +555,40 @@ namespace blazeclaw::gateway {
 				GatewayModel::kDefaultModelId,
 				0.00020,
 				0.00060,
-				128000
+				128000,
+				"embedded-defaults"
 			};
 		}
 
+		ModelCatalogCostContext ApplyTranscriptOverrides(
+			const ModelCatalogCostContext& base,
+			const TranscriptSnapshot& transcript,
+			bool& pricingOverrideApplied) {
+			ModelCatalogCostContext effective = base;
+			pricingOverrideApplied = false;
+			if (transcript.hasOverrideContextTokens && transcript.overrideContextTokens > 0) {
+				effective.contextTokens = transcript.overrideContextTokens;
+				effective.source = "transcript-override";
+			}
+			if (transcript.hasOverrideInputCostPer1k) {
+				effective.inputCostPer1k = transcript.overrideInputCostPer1k;
+				effective.source = "transcript-override";
+				pricingOverrideApplied = true;
+			}
+			if (transcript.hasOverrideOutputCostPer1k) {
+				effective.outputCostPer1k = transcript.overrideOutputCostPer1k;
+				effective.source = "transcript-override";
+				pricingOverrideApplied = true;
+			}
+			return effective;
+		}
+
 		double ResolveEstimatedCostUsd(
-			const std::vector<RuntimeModelCatalogEntry>& catalog,
-			const std::string& provider,
-			const std::string& model,
+			const ModelCatalogCostContext& context,
 			const std::uint64_t inputTokens,
 			const std::uint64_t outputTokens) {
-			const ModelCatalogCostContext catalogEntry = ResolveCatalogCostContext(catalog, provider, model);
-			return (static_cast<double>(inputTokens) / 1000.0 * catalogEntry.inputCostPer1k) +
-				(static_cast<double>(outputTokens) / 1000.0 * catalogEntry.outputCostPer1k);
+			return (static_cast<double>(inputTokens) / 1000.0 * context.inputCostPer1k) +
+				(static_cast<double>(outputTokens) / 1000.0 * context.outputCostPer1k);
 		}
 
 		std::string ResolveDerivedTitle(
@@ -499,8 +682,7 @@ namespace blazeclaw::gateway {
 			return candidate.entry.id < current.entry.id;
 		}
 
-		std::pair<std::string, std::string> ResolveSessionModelIdentity(
-			const SessionEntry& session,
+		ResolvedModelIdentity ResolveSessionModelIdentity(
 			const TranscriptSnapshot& transcript,
 			const std::vector<RuntimeModelCatalogEntry>& catalog,
 			const std::string& defaultModelProvider,
@@ -511,14 +693,31 @@ namespace blazeclaw::gateway {
 			// 3) runtime/default model argument from host
 			// 4) catalog default model/provider
 			// 5) framework default model/provider
+			ResolvedModelIdentity resolved{};
 			std::string model = !transcript.overrideModel.empty()
 				? transcript.overrideModel
 				: (transcript.resolvedModel.empty() ? defaultModel : transcript.resolvedModel);
+			if (!transcript.overrideModel.empty()) {
+				resolved.source = "transcript-override";
+				resolved.overrideApplied = true;
+			}
+			else if (!transcript.resolvedModel.empty()) {
+				resolved.source = "transcript-runtime";
+			}
+			else if (!defaultModel.empty()) {
+				resolved.source = "runtime-default";
+			}
 			if (model.empty()) {
 				const auto catalogDefault = ResolveCatalogDefaultEntry(catalog);
 				model = catalogDefault.has_value()
 					? catalogDefault->model
 					: std::string(GatewayModel::kDefaultModelId);
+				if (catalogDefault.has_value()) {
+					resolved.source = "catalog-default";
+				}
+				else {
+					resolved.source = "framework-default";
+				}
 			}
 
 			std::string provider = !transcript.overrideModelProvider.empty()
@@ -541,7 +740,9 @@ namespace blazeclaw::gateway {
 			if (provider.empty()) {
 				provider = GatewayModel::ResolveModelProvider(model);
 			}
-			return { provider, model };
+			resolved.provider = provider;
+			resolved.model = model;
+			return resolved;
 		}
 	} // namespace
 
@@ -653,13 +854,20 @@ namespace blazeclaw::gateway {
 		GatewaySessionProjection projection{};
 		const auto catalog = LoadRuntimeModelCatalog();
 		const TranscriptSnapshot transcript = ReadTranscriptSnapshot(session.id);
-		const auto [resolvedProvider, resolvedModel] = ResolveSessionModelIdentity(
-			session,
+		const ResolvedModelIdentity identity = ResolveSessionModelIdentity(
 			transcript,
 			catalog,
 			defaultModelProvider,
 			defaultModel);
-		const ModelCatalogCostContext catalogContext = ResolveCatalogCostContext(catalog, resolvedProvider, resolvedModel);
+		const ModelCatalogCostContext catalogContextBase = ResolveCatalogCostContext(
+			catalog,
+			identity.provider,
+			identity.model);
+		bool pricingOverrideApplied = false;
+		const ModelCatalogCostContext catalogContext = ApplyTranscriptOverrides(
+			catalogContextBase,
+			transcript,
+			pricingOverrideApplied);
 		projection.id = session.id;
 		projection.key = session.id;
 		projection.scope = session.scope;
@@ -669,17 +877,19 @@ namespace blazeclaw::gateway {
 		projection.displayName = "Session " + session.id;
 		projection.derivedTitle = ResolveDerivedTitle(session.id, transcript);
 		projection.lastMessagePreview = transcript.lastMessagePreview;
-		projection.modelProvider = resolvedProvider;
-		projection.model = resolvedModel;
+		projection.modelProvider = identity.provider;
+		projection.model = identity.model;
 		projection.contextTokens = catalogContext.contextTokens;
 		projection.totalTokens = transcript.totalTokens;
 		projection.totalTokensFresh = transcript.found && transcript.totalTokens > 0;
 		projection.estimatedCostUsd = ResolveEstimatedCostUsd(
-			catalog,
-			projection.modelProvider,
-			projection.model,
+			catalogContext,
 			transcript.inputTokens,
 			transcript.outputTokens);
+		projection.modelSource = identity.source;
+		projection.catalogSource = catalogContext.source;
+		projection.modelOverrideApplied = identity.overrideApplied;
+		projection.pricingOverrideApplied = pricingOverrideApplied;
 		projection.fallbackSource = transcript.found ? "transcript" : "registry";
 		projection.updatedAt = transcript.found
 			? static_cast<std::int64_t>(transcript.lastActiveMs)
@@ -707,6 +917,10 @@ namespace blazeclaw::gateway {
 		}
 		out << ",\"modelProvider\":\"" << EscapeJsonString(projection.modelProvider) << "\""
 			<< ",\"model\":\"" << EscapeJsonString(projection.model) << "\""
+			<< ",\"modelSource\":\"" << EscapeJsonString(projection.modelSource) << "\""
+			<< ",\"catalogSource\":\"" << EscapeJsonString(projection.catalogSource) << "\""
+			<< ",\"modelOverrideApplied\":" << (projection.modelOverrideApplied ? "true" : "false")
+			<< ",\"pricingOverrideApplied\":" << (projection.pricingOverrideApplied ? "true" : "false")
 			<< ",\"contextTokens\":" << projection.contextTokens
 			<< ",\"totalTokens\":" << projection.totalTokens
 			<< ",\"totalTokensFresh\":" << (projection.totalTokensFresh ? "true" : "false")
@@ -835,13 +1049,20 @@ namespace blazeclaw::gateway {
 		const TranscriptSnapshot transcript = ReadTranscriptSnapshot(session.id);
 		const std::string title = ResolveDerivedTitle(session.id, transcript);
 		const auto catalog = LoadRuntimeModelCatalog();
-		const auto [modelProvider, model] = ResolveSessionModelIdentity(
-			session,
+		const ResolvedModelIdentity identity = ResolveSessionModelIdentity(
 			transcript,
 			catalog,
 			defaultModelProvider,
 			defaultModel);
-		const ModelCatalogCostContext catalogContext = ResolveCatalogCostContext(catalog, modelProvider, model);
+		const ModelCatalogCostContext catalogContextBase = ResolveCatalogCostContext(
+			catalog,
+			identity.provider,
+			identity.model);
+		bool pricingOverrideApplied = false;
+		const ModelCatalogCostContext catalogContext = ApplyTranscriptOverrides(
+			catalogContextBase,
+			transcript,
+			pricingOverrideApplied);
 		std::ostringstream payload;
 		payload
 			<< "{"
@@ -856,8 +1077,12 @@ namespace blazeclaw::gateway {
 			<< ",\"totalTokens\":" << transcript.totalTokens
 			<< ",\"totalTokensFresh\":" << ((transcript.found && transcript.totalTokens > 0) ? "true" : "false")
 			<< "},"
-			<< "\"modelProvider\":\"" << EscapeJsonString(modelProvider) << "\","
-			<< "\"model\":\"" << EscapeJsonString(model) << "\","
+			<< "\"modelProvider\":\"" << EscapeJsonString(identity.provider) << "\","
+			<< "\"model\":\"" << EscapeJsonString(identity.model) << "\","
+			<< "\"modelSource\":\"" << EscapeJsonString(identity.source) << "\","
+			<< "\"catalogSource\":\"" << EscapeJsonString(catalogContext.source) << "\","
+			<< "\"modelOverrideApplied\":" << (identity.overrideApplied ? "true" : "false") << ","
+			<< "\"pricingOverrideApplied\":" << (pricingOverrideApplied ? "true" : "false") << ","
 			<< "\"contextTokens\":" << catalogContext.contextTokens << ","
 			<< "\"fallbackSource\":\"" << (transcript.found ? "transcript" : "registry") << "\""
 			<< "}";
@@ -877,17 +1102,22 @@ namespace blazeclaw::gateway {
 		bool openClawEnvelope) {
 		const TranscriptSnapshot transcript = ReadTranscriptSnapshot(session.id);
 		const auto catalog = LoadRuntimeModelCatalog();
-		const auto [modelProvider, model] = ResolveSessionModelIdentity(
-			session,
+		const ResolvedModelIdentity identity = ResolveSessionModelIdentity(
 			transcript,
 			catalog,
 			defaultModelProvider,
 			defaultModel);
-		const ModelCatalogCostContext catalogContext = ResolveCatalogCostContext(catalog, modelProvider, model);
-		const double totalCost = ResolveEstimatedCostUsd(
+		const ModelCatalogCostContext catalogContextBase = ResolveCatalogCostContext(
 			catalog,
-			modelProvider,
-			model,
+			identity.provider,
+			identity.model);
+		bool pricingOverrideApplied = false;
+		const ModelCatalogCostContext catalogContext = ApplyTranscriptOverrides(
+			catalogContextBase,
+			transcript,
+			pricingOverrideApplied);
+		const double totalCost = ResolveEstimatedCostUsd(
+			catalogContext,
 			transcript.inputTokens,
 			transcript.outputTokens);
 		const std::uint64_t lastActiveMs = transcript.lastActiveMs > 0
@@ -905,8 +1135,12 @@ namespace blazeclaw::gateway {
 				<< ",\"total\":" << transcript.totalTokens
 				<< ",\"totalTokensFresh\":" << ((transcript.found && transcript.totalTokens > 0) ? "true" : "false")
 				<< "},"
-				<< "\"modelProvider\":\"" << EscapeJsonString(modelProvider) << "\","
-				<< "\"model\":\"" << EscapeJsonString(model) << "\","
+				<< "\"modelProvider\":\"" << EscapeJsonString(identity.provider) << "\","
+				<< "\"model\":\"" << EscapeJsonString(identity.model) << "\","
+				<< "\"modelSource\":\"" << EscapeJsonString(identity.source) << "\","
+				<< "\"catalogSource\":\"" << EscapeJsonString(catalogContext.source) << "\","
+				<< "\"modelOverrideApplied\":" << (identity.overrideApplied ? "true" : "false") << ","
+				<< "\"pricingOverrideApplied\":" << (pricingOverrideApplied ? "true" : "false") << ","
 				<< "\"estimatedCostUsd\":" << totalCost << ","
 				<< "\"contextTokens\":" << catalogContext.contextTokens << ","
 				<< "\"fallbackSource\":\"" << (transcript.found ? "transcript" : "registry") << "\","
@@ -931,8 +1165,12 @@ namespace blazeclaw::gateway {
 			<< "\"label\":\"Session " << EscapeJsonString(session.id) << "\","
 			<< "\"sessionId\":\"" << EscapeJsonString(session.id) << "\","
 			<< "\"updatedAt\":" << lastActiveMs << ","
-			<< "\"modelProvider\":\"" << EscapeJsonString(modelProvider) << "\","
-			<< "\"model\":\"" << EscapeJsonString(model) << "\","
+			<< "\"modelProvider\":\"" << EscapeJsonString(identity.provider) << "\","
+			<< "\"model\":\"" << EscapeJsonString(identity.model) << "\","
+			<< "\"modelSource\":\"" << EscapeJsonString(identity.source) << "\","
+			<< "\"catalogSource\":\"" << EscapeJsonString(catalogContext.source) << "\","
+			<< "\"modelOverrideApplied\":" << (identity.overrideApplied ? "true" : "false") << ","
+			<< "\"pricingOverrideApplied\":" << (pricingOverrideApplied ? "true" : "false") << ","
 			<< "\"contextTokens\":" << catalogContext.contextTokens << ","
 			<< "\"fallbackSource\":\"" << (transcript.found ? "transcript" : "registry") << "\","
 			<< "\"usage\":{\"input\":" << transcript.inputTokens
