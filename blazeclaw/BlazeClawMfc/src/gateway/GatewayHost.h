@@ -328,6 +328,8 @@ namespace blazeclaw::gateway {
 		bool BootstrapStartRuntimeSubscriptions();
 		bool BootstrapFinalizeRuntimeInitialization();
 		void Stop();
+		/// S5.2: plugin-host prelude before `Stop` tears down transport and extension tools.
+		void NotifyPluginGlobalStopPrelude();
 		void SetSkillsCatalogState(SkillsCatalogGatewayState state);
 		void SetSkillsRefreshCallback(SkillsRefreshCallback callback);
 		/// BlazeClaw: wire SetSkillsUpdateCallback to SkillsGatewayMethodHandler::HandleSkillsUpdate

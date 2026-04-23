@@ -32,6 +32,9 @@ public:
     // Unload runtime backend for an extension.
     static PluginLoadResult UnloadExtensionRuntime(const std::string& extensionId);
 
+    /// S5.2: unload every extension id currently marked loaded (global shutdown prelude).
+    static void UnloadAllLoadedExtensionRuntimes();
+
     // Resolve a runtime executor for the given extension/tool.
     // Returns deterministic code/message when resolution fails.
     static PluginExecutorResolveResult ResolveExecutor(

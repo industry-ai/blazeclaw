@@ -2494,6 +2494,12 @@ namespace blazeclaw::core {
 				RecordGatewayLifecycleTransition("gateway.host.stop");
 			});
 
+		RegisterGatewayOwnedRuntimeCleanup(
+			"plugin_global_stop",
+			[this]() {
+				m_gatewayHost.NotifyPluginGlobalStopPrelude();
+			});
+
 		if (!startupResult.success) {
 			ExecuteGatewayStartupFailureCleanup(config, startupResult);
 			m_skillsCatalog.diagnostics.warnings.push_back(
@@ -2519,9 +2525,11 @@ namespace blazeclaw::core {
 	void ServiceManager::Stop() {
 		m_state.gatewayLifecycle.cleanupPath = "normal_stop";
 		RecordGatewayLifecycleTransition("stop.begin");
-
+		BeginShutdownPreludeRecording();
+		RecordShutdownPreludePhase("non_gateway_runtime_cleanup");
 		ExecuteNonGatewayRuntimeCleanup();   // unconditional
 		ExecuteGatewayOwnedRuntimeCleanup();
+		FinalizeShutdownPreludeEvidence();
 
 		m_running = false;
 		RecordGatewayLifecycleTransition("stop.done");
@@ -2551,6 +2559,9 @@ namespace blazeclaw::core {
 			it != m_state.gatewayLiveRuntime.ownedCleanup.rend();
 			++it) {
 			m_state.gatewayLiveRuntime.ownedCleanupOrder.push_back(it->name);
+			if (m_state.gatewayLifecycle.shutdownPreludeRecordingActive) {
+				RecordShutdownPreludePhase(it->name);
+			}
 			if (it->action) {
 				it->action();
 			}
@@ -2565,17 +2576,21 @@ namespace blazeclaw::core {
 		AppendStartupTrace("ServiceManager.Start.gateway.startupFailureCleanup.begin");
 		m_state.gatewayLifecycle.cleanupPath = "startup_failure";
 		RecordGatewayLifecycleTransition("startup_failure_cleanup.begin");
+		BeginShutdownPreludeRecording();
 
 		if (m_gatewayManagedConfigReloader.IsRunning()) {
+			RecordShutdownPreludePhase("managed_config_reloader.stop.startup_failure");
 			m_gatewayManagedConfigReloader.Stop();
 			m_state.gatewayLiveRuntime.managedConfigReloaderRunning = false;
 			RecordGatewayLifecycleTransition("managed_reloader.stop.startup_failure");
 		}
 
+		RecordShutdownPreludePhase("non_gateway_runtime_cleanup");
 		ExecuteNonGatewayRuntimeCleanup();
 
 		ExecuteGatewayOwnedRuntimeCleanup();
 
+		RecordShutdownPreludePhase("gateway.bootstrap.startup_failure_finalize");
 		m_gatewayRuntimeBootstrapCoordinator.HandleStartupFailure(
 			GatewayRuntimeBootstrapCoordinator::StartupContext{
 				.config = config,
@@ -2586,6 +2601,7 @@ namespace blazeclaw::core {
 			},
 			startupResult);
 
+		FinalizeShutdownPreludeEvidence();
 		m_state.gatewayLifecycle.startupFailureCleanupExecuted = true;
 		RecordGatewayLifecycleTransition("startup_failure_cleanup.done");
 		AppendStartupTrace("ServiceManager.Start.gateway.startupFailureCleanup.done");
@@ -2659,6 +2675,57 @@ namespace blazeclaw::core {
 			m_state.gatewayLifecycle.transitions.erase(
 				m_state.gatewayLifecycle.transitions.begin());
 		}
+	}
+
+	void ServiceManager::BeginShutdownPreludeRecording() {
+		if (m_state.gatewayLifecycle.shutdownPreludeRecordingActive) {
+			return;
+		}
+
+		m_state.gatewayLifecycle.shutdownPreludeRecordingActive = true;
+		m_state.gatewayLifecycle.lastShutdownPrelude.phaseOrderUtf8.clear();
+		m_state.gatewayLifecycle.lastShutdownPrelude.pluginGlobalStopInvoked = false;
+		m_state.gatewayLifecycle.lastShutdownPrelude.snapshotCleanupPathUtf8.clear();
+		m_state.gatewayLifecycle.lastShutdownPrelude.recordedAtEpochMs =
+			static_cast<std::uint64_t>(
+				std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::system_clock::now().time_since_epoch())
+				.count());
+	}
+
+	void ServiceManager::RecordShutdownPreludePhase(const std::string& phaseName) {
+		if (!m_state.gatewayLifecycle.shutdownPreludeRecordingActive || phaseName.empty()) {
+			return;
+		}
+
+		auto& phases = m_state.gatewayLifecycle.lastShutdownPrelude.phaseOrderUtf8;
+		if (phases.size() >= 48) {
+			return;
+		}
+
+		phases.push_back(phaseName);
+	}
+
+	void ServiceManager::FinalizeShutdownPreludeEvidence() {
+		if (!m_state.gatewayLifecycle.shutdownPreludeRecordingActive) {
+			return;
+		}
+
+		m_state.gatewayLifecycle.shutdownPreludeRecordingActive = false;
+		m_state.gatewayLifecycle.lastShutdownPrelude.snapshotCleanupPathUtf8 =
+			m_state.gatewayLifecycle.cleanupPath;
+
+		bool pluginRan = false;
+		for (const std::string& phase :
+			m_state.gatewayLifecycle.lastShutdownPrelude.phaseOrderUtf8) {
+			if (phase == "plugin_global_stop") {
+				pluginRan = true;
+				break;
+			}
+		}
+
+		m_state.gatewayLifecycle.lastShutdownPrelude.pluginGlobalStopInvoked = pluginRan;
+		++m_state.gatewayLifecycle.gatewayShutdownInvocationCount;
 	}
 
 	void ServiceManager::QueueManagedConfigInternalWriteHash(
@@ -3080,6 +3147,9 @@ namespace blazeclaw::core {
 				m_state.gatewayLiveRuntime.lastAppliedExtensionSurfaceEpoch,
 			.lastExtensionSurfaceMethodDeltaJson =
 				m_state.gatewayLiveRuntime.lastExtensionSurfaceMethodDeltaJson,
+			.gatewayShutdownInvocationCount =
+				m_state.gatewayLifecycle.gatewayShutdownInvocationCount,
+			.lastShutdownPrelude = m_state.gatewayLifecycle.lastShutdownPrelude,
 		},
 			.email = EmailRuntimeDiagnosticsProjector::Context{
 			.emailConfig = m_activeConfig.email,
@@ -3276,6 +3346,9 @@ namespace blazeclaw::core {
 				m_state.gatewayLiveRuntime.lastAppliedExtensionSurfaceEpoch,
 			.lastExtensionSurfaceMethodDeltaJson =
 				m_state.gatewayLiveRuntime.lastExtensionSurfaceMethodDeltaJson,
+			.gatewayShutdownInvocationCount =
+				m_state.gatewayLifecycle.gatewayShutdownInvocationCount,
+			.lastShutdownPrelude = m_state.gatewayLifecycle.lastShutdownPrelude,
 		};
 		m_gatewayLifecycleDiagnosticsProjector.Apply(ctx, snapshot);
 		return m_diagnosticsReportBuilder.SerializeParityLifecycleContractJson(

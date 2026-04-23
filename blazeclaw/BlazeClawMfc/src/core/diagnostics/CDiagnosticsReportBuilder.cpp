@@ -64,6 +64,15 @@ namespace blazeclaw::core {
 		}
 		migrations += "]";
 
+		std::string shutdownPhases = "[";
+		for (std::size_t i = 0; i < c.lastShutdownPrelude.phaseOrderUtf8.size(); ++i) {
+			if (i > 0) {
+				shutdownPhases += ",";
+			}
+			shutdownPhases += "\"" + JsonEscapeString(c.lastShutdownPrelude.phaseOrderUtf8[i]) + "\"";
+		}
+		shutdownPhases += "]";
+
 		return std::string("{") +
 			"\"schemaVersion\":" + std::to_string(c.schemaVersion) +
 			",\"openclawParityBaseline\":\"" + JsonEscapeString(c.openclawParityBaseline) + "\"" +
@@ -132,6 +141,17 @@ namespace blazeclaw::core {
 			std::to_string(c.lastAppliedExtensionSurfaceEpoch) +
 			",\"lastExtensionSurfaceMethodDeltaJson\":\"" +
 			JsonEscapeString(c.lastExtensionSurfaceMethodDeltaJson) + "\"" +
+			",\"gatewayShutdownInvocationCount\":" +
+			std::to_string(c.gatewayShutdownInvocationCount) +
+			",\"lastShutdownPrelude\":{" +
+			"\"recordedAtEpochMs\":" +
+			std::to_string(c.lastShutdownPrelude.recordedAtEpochMs) +
+			",\"snapshotCleanupPathUtf8\":\"" +
+			JsonEscapeString(c.lastShutdownPrelude.snapshotCleanupPathUtf8) + "\"" +
+			",\"phaseOrderUtf8\":" + shutdownPhases +
+			",\"pluginGlobalStopInvoked\":" +
+			std::string(c.lastShutdownPrelude.pluginGlobalStopInvoked ? "true" : "false") +
+			"}" +
 			"}";
 	}
 

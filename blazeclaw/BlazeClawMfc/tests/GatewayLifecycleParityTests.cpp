@@ -956,13 +956,23 @@ TEST_CASE(
 	snapshot.gatewayParityLifecycle.lastAppliedExtensionSurfaceEpoch = 9;
 	snapshot.gatewayParityLifecycle.lastExtensionSurfaceMethodDeltaJson =
 		R"({"ok":true,"phase":"deferred_extension_catalog_reload"})";
+	snapshot.gatewayParityLifecycle.gatewayShutdownInvocationCount = 3;
+	snapshot.gatewayParityLifecycle.lastShutdownPrelude.recordedAtEpochMs = 2400;
+	snapshot.gatewayParityLifecycle.lastShutdownPrelude.snapshotCleanupPathUtf8 =
+		"normal_stop";
+	snapshot.gatewayParityLifecycle.lastShutdownPrelude.phaseOrderUtf8 = {
+		"non_gateway_runtime_cleanup",
+		"plugin_global_stop",
+		"gateway_host_stop",
+	};
+	snapshot.gatewayParityLifecycle.lastShutdownPrelude.pluginGlobalStopInvoked = true;
 
 	blazeclaw::core::CDiagnosticsReportBuilder builder;
 	const std::string report = builder.BuildOperatorDiagnosticsReport(snapshot);
 
 	REQUIRE(report.find("\"gatewayLifecycle\"") != std::string::npos);
 	REQUIRE(report.find("\"parityContract\"") != std::string::npos);
-	REQUIRE(report.find("\"schemaVersion\":4") != std::string::npos);
+	REQUIRE(report.find("\"schemaVersion\":5") != std::string::npos);
 	REQUIRE(
 		report.find("\"openclawParityBaseline\":\"openclaw/src/gateway/server.impl.ts\"") !=
 		std::string::npos);
@@ -1006,6 +1016,24 @@ TEST_CASE(
 	REQUIRE(report.find("\"lastAppliedExtensionSurfaceEpoch\":9") != std::string::npos);
 	REQUIRE(
 		report.find("\"lastExtensionSurfaceMethodDeltaJson\":") != std::string::npos);
+	REQUIRE(report.find("\"gatewayShutdownInvocationCount\":3") != std::string::npos);
+	REQUIRE(report.find("\"lastShutdownPrelude\":{") != std::string::npos);
+	REQUIRE(report.find("\"pluginGlobalStopInvoked\":true") != std::string::npos);
+	REQUIRE(report.find("\"snapshotCleanupPathUtf8\":\"normal_stop\"") != std::string::npos);
+}
+
+TEST_CASE(
+	"GatewayRuntimeBootstrapCoordinator exposes canonical owned-cleanup execution order (S5)",
+	"[gateway][lifecycle][s5]")
+{
+	const auto& order =
+		blazeclaw::core::GatewayRuntimeBootstrapCoordinator::NormalStopGatewayOwnedCleanupExecutionOrder();
+	REQUIRE(order.size() == 5);
+	REQUIRE(order[0] == "plugin_global_stop");
+	REQUIRE(order[1] == "gateway_host_stop");
+	REQUIRE(order[2] == "gateway_close_prelude");
+	REQUIRE(order[3] == "non_gateway_runtime_cleanup");
+	REQUIRE(order[4] == "managed_config_reloader_stop");
 }
 
 TEST_CASE(

@@ -53,6 +53,18 @@ namespace blazeclaw::gateway {
 		};
 	}
 
+	void PluginHostAdapter::UnloadAllLoadedExtensionRuntimes() {
+		std::vector<std::string> ids;
+		{
+			std::lock_guard<std::mutex> lock(g_adapterMutex);
+			ids.assign(g_loadedExtensions.begin(), g_loadedExtensions.end());
+		}
+
+		for (const std::string& extensionId : ids) {
+			UnloadExtensionRuntime(extensionId);
+		}
+	}
+
 	PluginLoadResult PluginHostAdapter::UnloadExtensionRuntime(
 		const std::string& extensionId) {
 		if (extensionId.empty()) {

@@ -7,10 +7,18 @@
 
 namespace blazeclaw::core {
 
-	/// OpenClaw `server.impl.ts` lifecycle parity export (Phase S0–S4).
+	/// S5: last completed shutdown / startup-failure cleanup ordering evidence (operator parity export).
+	struct GatewayShutdownPreludeContract {
+		std::uint64_t recordedAtEpochMs = 0;
+		std::string snapshotCleanupPathUtf8;
+		std::vector<std::string> phaseOrderUtf8;
+		bool pluginGlobalStopInvoked = false;
+	};
+
+	/// OpenClaw `server.impl.ts` lifecycle parity export (Phase S0–S5).
 	/// Populated for diagnostics/operator report and `gateway.parity.lifecycle` RPC.
 	struct GatewayParityLifecycleContract {
-		static constexpr int kSchemaVersion = 4;
+		static constexpr int kSchemaVersion = 5;
 		int schemaVersion = kSchemaVersion;
 		std::string openclawParityBaseline = "openclaw/src/gateway/server.impl.ts";
 		std::string startupMode;
@@ -61,6 +69,9 @@ namespace blazeclaw::core {
 		std::uint64_t extensionSurfaceReloadCount = 0;
 		std::uint64_t lastAppliedExtensionSurfaceEpoch = 0;
 		std::string lastExtensionSurfaceMethodDeltaJson;
+		// S5: shutdown prelude / cleanup ordering (normal stop + startup-failure path).
+		std::uint64_t gatewayShutdownInvocationCount = 0;
+		GatewayShutdownPreludeContract lastShutdownPrelude;
 	};
 
 	struct DiagnosticsSnapshot {

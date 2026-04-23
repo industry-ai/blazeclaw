@@ -225,6 +225,9 @@ namespace blazeclaw::core {
 			const blazeclaw::config::AppConfig& config,
 			const GatewayRuntimeBootstrapCoordinator::StartupResult& startupResult);
 		void ExecuteNonGatewayRuntimeCleanup();
+		void BeginShutdownPreludeRecording();
+		void RecordShutdownPreludePhase(const std::string& phaseName);
+		void FinalizeShutdownPreludeEvidence();
 		void RecordGatewayLifecycleTransition(const std::string& transition);
 		void RecordGatewayStartupConfigSnapshot();
 		void RefreshGatewayAuthBootstrapDiagnostics(
@@ -370,6 +373,10 @@ namespace blazeclaw::core {
 				std::string authBootstrapDetail;
 				/// S2: `ResolveGatewayRuntimeConfig` output (config + env effective policy).
 				blazeclaw::config::GatewayResolvedRuntimeConfig resolvedRuntimeConfig;
+				/// S5: last shutdown / startup-failure cleanup ordering (see `GatewayShutdownPreludeContract`).
+				std::uint64_t gatewayShutdownInvocationCount = 0;
+				GatewayShutdownPreludeContract lastShutdownPrelude;
+				bool shutdownPreludeRecordingActive = false;
 			};
 
 			struct GatewayLiveRuntimeState {

@@ -612,6 +612,11 @@ namespace blazeclaw::gateway {
 		return true;
 	}
 
+	void GatewayHost::NotifyPluginGlobalStopPrelude() {
+		PluginHostAdapter::UnloadAllLoadedExtensionRuntimes();
+		m_pluginRuntimeState.RecordGlobalStopPreludeTransition();
+	}
+
 	void GatewayHost::Stop() {
 		m_transport.Stop();
 		// Deactivate registered extension tools and clear approval state

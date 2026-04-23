@@ -19,6 +19,14 @@ namespace blazeclaw::core {
 
 	namespace {
 
+		const std::vector<std::string_view> kNormalStopOwnedCleanupOrder = {
+			"plugin_global_stop",
+			"gateway_host_stop",
+			"gateway_close_prelude",
+			"non_gateway_runtime_cleanup",
+			"managed_config_reloader_stop",
+		};
+
 		std::wstring TrimWide(const std::wstring& value) {
 			const auto first = std::find_if_not(
 				value.begin(),
@@ -141,6 +149,11 @@ namespace blazeclaw::core {
 		}
 
 	} // namespace
+
+	const std::vector<std::string_view>&
+		GatewayRuntimeBootstrapCoordinator::NormalStopGatewayOwnedCleanupExecutionOrder() noexcept {
+		return kNormalStopOwnedCleanupOrder;
+	}
 
 	blazeclaw::config::GatewayResolvedRuntimeConfig
 		GatewayRuntimeBootstrapCoordinator::ResolveGatewayRuntimeConfig(

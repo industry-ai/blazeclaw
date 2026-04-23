@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace blazeclaw::core {
@@ -63,6 +64,10 @@ namespace blazeclaw::core {
 			const blazeclaw::config::AppConfig& appConfig) const;
 		void HandleStartupFailure(const StartupContext& context, const StartupResult& result) const;
 		[[nodiscard]] std::vector<std::wstring> RunClosePrelude(const CloseContext& context) const;
+
+		/// S5.1: Intended `RegisterGatewayOwnedRuntimeCleanup` LIFO execution order (last registered runs first).
+		[[nodiscard]] static const std::vector<std::string_view>&
+			NormalStopGatewayOwnedCleanupExecutionOrder() noexcept;
 
 	private:
 		void RunStartupMigrations(

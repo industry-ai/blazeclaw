@@ -148,6 +148,8 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] TransitionPolicySettings GetTransitionPolicySettings() const;
 
 		[[nodiscard]] PluginRuntimeStateSnapshot Snapshot() const;
+		/// S5: emit transition for global plugin-host unload prelude (gateway shutdown ordering).
+		void RecordGlobalStopPreludeTransition();
 		void ResetForTest();
 
 	private:

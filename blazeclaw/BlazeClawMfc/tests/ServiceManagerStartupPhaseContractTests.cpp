@@ -332,9 +332,24 @@ TEST_CASE(
 	REQUIRE(
 		stopBody.find("m_state.gatewayLifecycle.cleanupPath = \"normal_stop\";") !=
 		std::string::npos);
+	REQUIRE(stopBody.find("BeginShutdownPreludeRecording();") != std::string::npos);
+	REQUIRE(stopBody.find("RecordShutdownPreludePhase(\"non_gateway_runtime_cleanup\")") !=
+		std::string::npos);
+	REQUIRE(stopBody.find("FinalizeShutdownPreludeEvidence();") != std::string::npos);
 	REQUIRE(
 		stopBody.find("ExecuteGatewayOwnedRuntimeCleanup();") !=
 		std::string::npos);
+}
+
+TEST_CASE(
+	"ServiceManager S5 contract: plugin global stop prelude and shutdown evidence hooks",
+	"[servicemanager][s5][contract]")
+{
+	const std::string source = ReadServiceManagerSource();
+	REQUIRE(source.find("\"plugin_global_stop\"") != std::string::npos);
+	REQUIRE(source.find("NotifyPluginGlobalStopPrelude") != std::string::npos);
+	REQUIRE(source.find("BeginShutdownPreludeRecording") != std::string::npos);
+	REQUIRE(source.find("FinalizeShutdownPreludeEvidence") != std::string::npos);
 }
 
 TEST_CASE(
@@ -385,6 +400,24 @@ TEST_CASE(
 	REQUIRE(
 		source.find("m_state.gatewayLifecycle.cleanupPath = \"startup_failure\";") !=
 		std::string::npos);
+}
+
+TEST_CASE(
+	"ServiceManager S5 contract: startup failure cleanup records shutdown prelude phases",
+	"[servicemanager][s5][contract]")
+{
+	const std::string source = ReadServiceManagerSource();
+	const auto cleanupPos = source.find("void ServiceManager::ExecuteGatewayStartupFailureCleanup(");
+	REQUIRE(cleanupPos != std::string::npos);
+	const auto cleanupBody = source.substr(cleanupPos);
+	REQUIRE(cleanupBody.find("BeginShutdownPreludeRecording();") != std::string::npos);
+	REQUIRE(
+		cleanupBody.find("RecordShutdownPreludePhase(\"non_gateway_runtime_cleanup\")") !=
+		std::string::npos);
+	REQUIRE(
+		cleanupBody.find("RecordShutdownPreludePhase(\"gateway.bootstrap.startup_failure_finalize\")") !=
+		std::string::npos);
+	REQUIRE(cleanupBody.find("FinalizeShutdownPreludeEvidence();") != std::string::npos);
 }
 
 TEST_CASE(

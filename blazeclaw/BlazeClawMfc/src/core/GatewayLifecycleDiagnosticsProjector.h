@@ -47,6 +47,8 @@ namespace blazeclaw::core {
             std::uint64_t extensionSurfaceReloadCount = 0;
             std::uint64_t lastAppliedExtensionSurfaceEpoch = 0;
             std::string lastExtensionSurfaceMethodDeltaJson;
+            std::uint64_t gatewayShutdownInvocationCount = 0;
+            GatewayShutdownPreludeContract lastShutdownPrelude;
         };
 
         void Apply(
@@ -153,6 +155,9 @@ namespace blazeclaw::core {
                 context.lastAppliedExtensionSurfaceEpoch;
             snapshot.gatewayParityLifecycle.lastExtensionSurfaceMethodDeltaJson =
                 context.lastExtensionSurfaceMethodDeltaJson;
+            snapshot.gatewayParityLifecycle.gatewayShutdownInvocationCount =
+                context.gatewayShutdownInvocationCount;
+            snapshot.gatewayParityLifecycle.lastShutdownPrelude = context.lastShutdownPrelude;
         }
     };
 

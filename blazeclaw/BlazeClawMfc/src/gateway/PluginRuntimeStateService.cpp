@@ -96,7 +96,8 @@ namespace blazeclaw::gateway {
 			return PluginRuntimeLifecyclePhase::Activation;
 		}
 
-		if (key.find("deactivate") != std::string::npos) {
+		if (key.find("deactivate") != std::string::npos ||
+			key.find("global_stop") != std::string::npos) {
 			return PluginRuntimeLifecyclePhase::Deactivation;
 		}
 
@@ -176,6 +177,10 @@ namespace blazeclaw::gateway {
 		}
 
 		RecordTransition("activate_runtime_registry");
+	}
+
+	void PluginRuntimeStateService::RecordGlobalStopPreludeTransition() {
+		RecordTransition("plugin.global_stop_prelude");
 	}
 
 	void PluginRuntimeStateService::DeactivateRuntimeRegistry() {

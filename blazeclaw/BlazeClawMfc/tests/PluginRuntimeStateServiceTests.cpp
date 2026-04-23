@@ -1,4 +1,5 @@
 #include "gateway/PluginRuntimeStateService.h"
+#include "gateway/PluginHostAdapter.h"
 
 #include <catch2/catch_all.hpp>
 
@@ -16,6 +17,28 @@ namespace {
 	};
 
 } // namespace
+
+TEST_CASE(
+	"PluginHostAdapter unloads all loaded extension runtimes (S5 global prelude)",
+	"[plugin-host][s5]")
+{
+	PluginHostAdapter::EnsureDefaultAdaptersRegistered();
+	const auto load = PluginHostAdapter::LoadExtensionRuntime("ops-tools");
+	REQUIRE(load.ok);
+	const auto before = PluginHostAdapter::ResolveExecutor(
+		"ops-tools",
+		"weather.lookup",
+		"");
+	REQUIRE(before.resolved);
+
+	PluginHostAdapter::UnloadAllLoadedExtensionRuntimes();
+
+	const auto after = PluginHostAdapter::ResolveExecutor(
+		"ops-tools",
+		"weather.lookup",
+		"");
+	REQUIRE_FALSE(after.resolved);
+}
 
 TEST_CASE(
 	"PluginRuntimeStateService tracks imported plugin ids and clears on reset",
