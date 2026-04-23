@@ -160,7 +160,7 @@ namespace blazeclaw::gateway {
 		const std::int64_t nowMs = NowEpochMs();
 		const std::int64_t activeCutoffMs = filters.activeMinutes.has_value()
 			? nowMs - static_cast<std::int64_t>(filters.activeMinutes.value()) * 60 * 1000
-			: std::numeric_limits<std::int64_t>::min();
+			: (std::numeric_limits<std::int64_t>::min)();
 		std::vector<GatewaySessionProjection> projected;
 		projected.reserve(sessions.size());
 		for (const auto& session : sessions) {
