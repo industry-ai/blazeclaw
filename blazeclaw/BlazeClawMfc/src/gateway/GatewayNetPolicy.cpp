@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <vector>
 
@@ -289,6 +290,120 @@ namespace blazeclaw::gateway {
 			}
 #endif
 			return false;
+		}
+
+		bool EndsWithDotTsNet(const std::string& lowerHost) {
+			constexpr std::string_view kSuf = ".ts.net";
+			if (lowerHost.size() < kSuf.size()) {
+				return false;
+			}
+			return std::string_view(lowerHost)
+				.compare(lowerHost.size() - kSuf.size(), kSuf.size(), kSuf) == 0;
+		}
+
+		struct ParsedHostForChecks {
+			bool isLocalhost = false;
+			std::string unbracketed;
+		};
+
+		std::optional<ParsedHostForChecks> TryParseHostForAddressChecks(const std::string& rawInput) {
+			if (rawInput.empty()) {
+				return std::nullopt;
+			}
+			std::string n = ToLowerAscii(rawInput);
+			while (!n.empty() && n.back() == '.') {
+				n.pop_back();
+			}
+			if (n == "localhost") {
+				return ParsedHostForChecks{ .isLocalhost = true, .unbracketed = "localhost" };
+			}
+			if (!n.empty() && n[0] == '[') {
+				const std::size_t end = n.find(']');
+				if (end == std::string::npos) {
+					return std::nullopt;
+				}
+				return ParsedHostForChecks{ .isLocalhost = false, .unbracketed = n.substr(1, end - 1) };
+			}
+			return ParsedHostForChecks{ .isLocalhost = false, .unbracketed = std::move(n) };
+		}
+
+		/// Strips :port, userinfo, handles bracketed v6 (OpenClaw URL hostname extraction intent).
+		std::string ExtractHostFromUrlAuthority(std::string_view authority) {
+			std::string a = std::string(TrimView(authority));
+			{
+				const std::size_t at = a.rfind('@');
+				if (at != std::string::npos) {
+					a = a.substr(at + 1);
+				}
+			}
+			if (a.empty()) {
+				return {};
+			}
+			if (a[0] == '[') {
+				const std::size_t end = a.find(']');
+				if (end == std::string::npos) {
+					return {};
+				}
+				return a.substr(1, end - 1);
+			}
+			{
+				const int cls = ClassifyIp(a);
+				if (cls == 4) {
+					return a;
+				}
+				if (cls == 6) {
+					return a;
+				}
+			}
+			const std::size_t lastColon = a.rfind(':');
+			if (lastColon != std::string::npos && lastColon > 0) {
+				const std::string_view portPart = std::string_view(a).substr(lastColon + 1);
+				if (!portPart.empty()) {
+					bool allDigits = true;
+					for (const char c : portPart) {
+						if (c < '0' || c > '9') {
+							allDigits = false;
+							break;
+						}
+					}
+					if (allDigits) {
+						return a.substr(0, lastColon);
+					}
+				}
+			}
+			return a;
+		}
+
+		bool V6UnspecifiedOrMulticastToExclude(const IN6_ADDR& a) {
+			if (a.s6_addr[0] == 0xFF) {
+				return true;
+			}
+			for (int i = 0; i < 16; ++i) {
+				if (a.s6_addr[i] != 0) {
+					return false;
+				}
+			}
+			return true; // :: — excluded
+		}
+
+		/// `scheme://authority` without path/query/fragment; empty if not a `://` URL.
+		std::string TakeUrlAuthorityString(std::string_view urlish) {
+			const std::string s0 = std::string(TrimView(urlish));
+			if (s0.empty()) {
+				return {};
+			}
+			const std::size_t schemePos = s0.find("://");
+			if (schemePos == std::string::npos) {
+				return {};
+			}
+			std::string after = s0.substr(schemePos + 3);
+			{
+				const std::size_t d = after.find_first_of("/?#");
+				if (d != std::string::npos) {
+					after.resize(d);
+				}
+			}
+			return after;
 		}
 
 	} // namespace
@@ -644,6 +759,138 @@ namespace blazeclaw::gateway {
 		}
 		freeaddrinfo(res);
 		return ok;
+	}
+
+	bool GatewayNetPolicy::IsLoopbackHost(std::string_view host) {
+		const std::string raw(host);
+		const auto parsed = TryParseHostForAddressChecks(raw);
+		if (!parsed) {
+			return false;
+		}
+		if (parsed->isLocalhost) {
+			return true;
+		}
+		return IsLoopbackAddress(parsed->unbracketed);
+	}
+
+	bool GatewayNetPolicy::IsPrivateOrLoopbackHost(std::string_view host) {
+		const std::string raw(host);
+		const auto parsed = TryParseHostForAddressChecks(raw);
+		if (!parsed) {
+			return false;
+		}
+		if (parsed->isLocalhost) {
+			return true;
+		}
+		const auto n = ParseIpToken(parsed->unbracketed);
+		if (!n) {
+			return false;
+		}
+		if (!IsPrivateOrLoopbackAddress(*n)) {
+			return false;
+		}
+		const std::string& s = *n;
+		IN6_ADDR a6{};
+		if (Pton6(s, &a6) && V6UnspecifiedOrMulticastToExclude(a6)) {
+			return false;
+		}
+		return true;
+	}
+
+	bool GatewayNetPolicy::IsLocalishHost(std::string_view hostHeader) {
+		if (hostHeader.empty()) {
+			return false;
+		}
+		const std::string host = ResolveHostName(NormalizeHostHeader(hostHeader));
+		if (host.empty()) {
+			return false;
+		}
+		if (IsLoopbackHost(host)) {
+			return true;
+		}
+		return EndsWithDotTsNet(host);
+	}
+
+	bool GatewayNetPolicy::IsLocalishHttpOrigin(const std::string_view origin) {
+		if (origin.empty()) {
+			return true;
+		}
+		const std::string s0 = std::string(TrimView(origin));
+		if (s0.empty()) {
+			return true;
+		}
+		const std::size_t schemePos = s0.find("://");
+		if (schemePos == std::string::npos) {
+			return false;
+		}
+		const std::string lowerScheme = ToLowerAscii(s0.substr(0, schemePos));
+		if (lowerScheme != "http" && lowerScheme != "https") {
+			return false;
+		}
+		const std::string after = TakeUrlAuthorityString(s0);
+		if (after.empty()) {
+			return false;
+		}
+		return IsLocalishHost(after);
+	}
+
+	bool GatewayNetPolicy::IsSecureWebSocketUrl(
+		const std::string_view url,
+		const IsSecureWebSocketUrlOptions& options) {
+		const std::string s0 = std::string(TrimView(url));
+		if (s0.empty()) {
+			return false;
+		}
+		const std::size_t schemePos = s0.find("://");
+		if (schemePos == std::string::npos) {
+			return false;
+		}
+		const std::string lowerScheme = ToLowerAscii(s0.substr(0, schemePos));
+		if (lowerScheme != "ws" && lowerScheme != "wss" && lowerScheme != "http" && lowerScheme != "https") {
+			return false;
+		}
+		const std::string after = TakeUrlAuthorityString(s0);
+		const std::string host = ExtractHostFromUrlAuthority(after);
+		if (host.empty()) {
+			return false;
+		}
+		if (lowerScheme == "wss" || lowerScheme == "https") {
+			return true;
+		}
+		// effective ws
+		if (IsLoopbackHost(host)) {
+			return true;
+		}
+		if (options.allowPrivateWs) {
+			if (IsPrivateOrLoopbackHost(host)) {
+				return true;
+			}
+			std::string h = host;
+			StripZoneSuffix(h);
+			if (h.size() >= 2 && h[0] == '[' && h.back() == ']') {
+				h = h.substr(1, h.size() - 2);
+			}
+			StripZoneSuffix(h);
+			return ClassifyIp(h) == 0;
+		}
+		return false;
+	}
+
+	std::vector<std::string> GatewayNetPolicy::ResolveGatewayListenHosts(
+		const std::string& bindHost,
+		const std::function<bool(const std::string& host)>& canBindToHost) {
+		const auto can = canBindToHost
+			? canBindToHost
+			: std::function<bool(const std::string& h)>([](const std::string& h) {
+			return CanBindToHost(h);
+		});
+		if (bindHost != "127.0.0.1") {
+			return { bindHost };
+		}
+		if (can("::1")) {
+			return { "127.0.0.1", "::1" };
+		}
+		return { bindHost };
 	}
 
 } // namespace blazeclaw::gateway

@@ -70,6 +70,34 @@ namespace blazeclaw::gateway {
 			const std::optional<std::string>& tailscaleMode) noexcept;
 
 		[[nodiscard]] static bool CanBindToHost(const std::string& host) noexcept;
+
+		/// `net.ts` `isLoopbackHost` (localhost, 127.x, ::1, ::ffff:127.x forms via IP parse).
+		[[nodiscard]] static bool IsLoopbackHost(std::string_view host);
+
+		/// `net.ts` `isPrivateOrLoopbackHost` (excludes `::` and IPv6 multicast for v6).
+		[[nodiscard]] static bool IsPrivateOrLoopbackHost(std::string_view host);
+
+		/// `net.ts` `isLocalishHost` — loopback + `*.ts.net` (Tailscale Serve/Funnel class).
+		[[nodiscard]] static bool IsLocalishHost(std::string_view hostHeader);
+
+		/// Browser `Origin` value (`http(s)://host[:port]`, optional path) using `isLocalishHost` on the authority.
+		/// Empty origin is allowed (e.g. non-browser client).
+		[[nodiscard]] static bool IsLocalishHttpOrigin(std::string_view origin);
+
+		struct IsSecureWebSocketUrlOptions {
+			/// Aligned with OpenClaw `isSecureWebSocketUrl` / break-glass private `ws://`.
+			bool allowPrivateWs = false;
+		};
+
+		/// `net.ts` `isSecureWebSocketUrl` (ws/wss/http/https aliasing like Node).
+		[[nodiscard]] static bool IsSecureWebSocketUrl(
+			std::string_view url,
+			const IsSecureWebSocketUrlOptions& options = {});
+
+		/// `net.ts` `resolveGatewayListenHosts` — when `127.0.0.1` and `::1` can bind, return both.
+		[[nodiscard]] static std::vector<std::string> ResolveGatewayListenHosts(
+			const std::string& bindHost,
+			const std::function<bool(const std::string& host)>& canBindToHost = {});
 	};
 
 } // namespace blazeclaw::gateway

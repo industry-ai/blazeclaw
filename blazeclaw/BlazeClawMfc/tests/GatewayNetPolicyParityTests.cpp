@@ -3,6 +3,7 @@
 #include <catch2/catch_all.hpp>
 #include <optional>
 #include <string>
+#include <vector>
 
 using blazeclaw::gateway::GatewayNetPolicy;
 
@@ -79,4 +80,40 @@ TEST_CASE("GatewayNetPolicy N3: default bind mode tailscale + container branch",
 TEST_CASE("GatewayNetPolicy: IPv4 strict validator (OpenClaw isValidIPv4 class)", "[gateway][net]") {
 	REQUIRE(GatewayNetPolicy::IsValidIPv4("192.168.0.1"));
 	REQUIRE_FALSE(GatewayNetPolicy::IsValidIPv4("01.1.1.1"));
+}
+
+TEST_CASE("GatewayNetPolicy N4: isLoopbackHost / isLocalishHost / isPrivateOrLoopbackHost (net.ts)", "[gateway][net][n4]") {
+	REQUIRE(GatewayNetPolicy::IsLoopbackHost("localhost"));
+	REQUIRE(GatewayNetPolicy::IsLoopbackHost("127.0.0.1"));
+	REQUIRE(GatewayNetPolicy::IsLoopbackHost("[::1]"));
+	REQUIRE(GatewayNetPolicy::IsLocalishHost("myhost.ts.net"));
+	REQUIRE(GatewayNetPolicy::IsLocalishHost("[::1]:9000"));
+	REQUIRE(GatewayNetPolicy::IsPrivateOrLoopbackHost("10.0.0.1"));
+	REQUIRE_FALSE(GatewayNetPolicy::IsPrivateOrLoopbackHost("203.0.113.1"));
+}
+
+TEST_CASE("GatewayNetPolicy N4: isSecureWebSocketUrl (net.ts)", "[gateway][net][n4]") {
+	REQUIRE(GatewayNetPolicy::IsSecureWebSocketUrl("wss://127.0.0.1/x"));
+	REQUIRE(GatewayNetPolicy::IsSecureWebSocketUrl("https://127.0.0.1/"));
+	REQUIRE(GatewayNetPolicy::IsSecureWebSocketUrl("ws://127.0.0.1/"));
+	REQUIRE(GatewayNetPolicy::IsSecureWebSocketUrl("http://[::1]/"));
+	REQUIRE_FALSE(GatewayNetPolicy::IsSecureWebSocketUrl("ws://8.8.8.8/"));
+}
+
+TEST_CASE("GatewayNetPolicy N4: isLocalishHttpOrigin (browser Origin vs isLocalishHost)", "[gateway][net][n4]") {
+	REQUIRE(GatewayNetPolicy::IsLocalishHttpOrigin(""));
+	REQUIRE(GatewayNetPolicy::IsLocalishHttpOrigin("http://127.0.0.1:8080"));
+	REQUIRE(GatewayNetPolicy::IsLocalishHttpOrigin("https://[::1]:9000/"));
+	REQUIRE(GatewayNetPolicy::IsLocalishHttpOrigin("https://foo.ts.net/"));
+	REQUIRE_FALSE(GatewayNetPolicy::IsLocalishHttpOrigin("https://203.0.113.1/"));
+	REQUIRE_FALSE(GatewayNetPolicy::IsLocalishHttpOrigin("file:///x"));
+}
+
+TEST_CASE("GatewayNetPolicy N4: resolveGatewayListenHosts (net.ts)", "[gateway][net][n4]") {
+	const std::vector<std::string> nonLocal = GatewayNetPolicy::ResolveGatewayListenHosts("0.0.0.0", {});
+	REQUIRE(nonLocal.size() == 1);
+	REQUIRE(nonLocal[0] == "0.0.0.0");
+	const std::vector<std::string> loop = GatewayNetPolicy::ResolveGatewayListenHosts("127.0.0.1", {});
+	REQUIRE(!loop.empty());
+	REQUIRE(loop[0] == "127.0.0.1");
 }

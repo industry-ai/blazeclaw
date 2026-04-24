@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <functional>
 #include <vector>
 #include <ws2tcpip.h>
 #include <wincrypt.h>
@@ -190,17 +191,7 @@ namespace blazeclaw::gateway {
 		}
 
 		bool IsAllowedOriginValue(const std::string& origin) {
-			if (origin.empty()) {
-				return true;
-			}
-
-			const std::string lowerOrigin = ToLowerCopy(origin);
-			return lowerOrigin.rfind("http://localhost", 0) == 0 ||
-				lowerOrigin.rfind("https://localhost", 0) == 0 ||
-				lowerOrigin.rfind("http://127.0.0.1", 0) == 0 ||
-				lowerOrigin.rfind("https://127.0.0.1", 0) == 0 ||
-				lowerOrigin.rfind("http://[::1]", 0) == 0 ||
-				lowerOrigin.rfind("https://[::1]", 0) == 0;
+			return GatewayNetPolicy::IsLocalishHttpOrigin(origin);
 		}
 
 		std::string ResolveBrowserOriginPolicy(
@@ -458,49 +449,61 @@ namespace blazeclaw::gateway {
 		hints.ai_protocol = IPPROTO_TCP;
 
 		const std::string service = std::to_string(port);
-		addrinfo* resolved = nullptr;
-		const int resolveResult = getaddrinfo(bindAddress.c_str(), service.c_str(), &hints, &resolved);
-		if (resolveResult != 0 || resolved == nullptr) {
-			error = "getaddrinfo() failed for bind endpoint.";
-			Stop();
-			return false;
-		}
+		const std::function<bool(const std::string&)> canBind = [](const std::string& host) {
+			return GatewayNetPolicy::CanBindToHost(host);
+		};
+		const std::vector<std::string> listenHosts = GatewayNetPolicy::ResolveGatewayListenHosts(bindAddress, canBind);
 
 		std::string bindError;
-		for (addrinfo* current = resolved; current != nullptr; current = current->ai_next) {
-			SOCKET candidate = socket(current->ai_family, current->ai_socktype, current->ai_protocol);
-			if (candidate == INVALID_SOCKET) {
-				bindError = ToWsaErrorText("socket() failed.", WSAGetLastError());
+		std::string usedBindHost;
+		m_listenSocket = INVALID_SOCKET;
+		for (const std::string& host : listenHosts) {
+			addrinfo* resolved = nullptr;
+			const int resolveResult = getaddrinfo(host.c_str(), service.c_str(), &hints, &resolved);
+			if (resolveResult != 0 || resolved == nullptr) {
+				bindError = "getaddrinfo() failed for candidate host.";
 				continue;
 			}
 
-			if (current->ai_family == AF_INET6) {
-				u_long v6only = 0;
-				setsockopt(candidate, IPPROTO_IPV6, IPV6_V6ONLY, reinterpret_cast<const char*>(&v6only), sizeof(v6only));
+			for (addrinfo* current = resolved; current != nullptr; current = current->ai_next) {
+				SOCKET candidate = socket(current->ai_family, current->ai_socktype, current->ai_protocol);
+				if (candidate == INVALID_SOCKET) {
+					bindError = ToWsaErrorText("socket() failed.", WSAGetLastError());
+					continue;
+				}
+
+				if (current->ai_family == AF_INET6) {
+					u_long v6only = 0;
+					setsockopt(candidate, IPPROTO_IPV6, IPV6_V6ONLY, reinterpret_cast<const char*>(&v6only), sizeof(v6only));
+				}
+
+				if (!ConfigureListenerSocket(candidate, bindError)) {
+					closesocket(candidate);
+					continue;
+				}
+
+				if (bind(candidate, current->ai_addr, static_cast<int>(current->ai_addrlen)) == SOCKET_ERROR) {
+					bindError = ToWsaErrorText("bind() failed.", WSAGetLastError());
+					closesocket(candidate);
+					continue;
+				}
+
+				if (listen(candidate, SOMAXCONN) == SOCKET_ERROR) {
+					bindError = ToWsaErrorText("listen() failed.", WSAGetLastError());
+					closesocket(candidate);
+					continue;
+				}
+
+				m_listenSocket = candidate;
+				usedBindHost = host;
+				break;
 			}
 
-			if (!ConfigureListenerSocket(candidate, bindError)) {
-				closesocket(candidate);
-				continue;
+			freeaddrinfo(resolved);
+			if (m_listenSocket != INVALID_SOCKET) {
+				break;
 			}
-
-			if (bind(candidate, current->ai_addr, static_cast<int>(current->ai_addrlen)) == SOCKET_ERROR) {
-				bindError = ToWsaErrorText("bind() failed.", WSAGetLastError());
-				closesocket(candidate);
-				continue;
-			}
-
-			if (listen(candidate, SOMAXCONN) == SOCKET_ERROR) {
-				bindError = ToWsaErrorText("listen() failed.", WSAGetLastError());
-				closesocket(candidate);
-				continue;
-			}
-
-			m_listenSocket = candidate;
-			break;
 		}
-
-		freeaddrinfo(resolved);
 
 		if (m_listenSocket == INVALID_SOCKET) {
 			error = bindError.empty() ? "Unable to bind/listen on resolved endpoint candidates." : bindError;
@@ -515,7 +518,7 @@ namespace blazeclaw::gateway {
 			return false;
 		}
 
-		m_bindAddress = bindAddress;
+		m_bindAddress = usedBindHost.empty() ? bindAddress : usedBindHost;
 		m_port = port;
 		m_inboundFrameHandler = std::move(inboundFrameHandler);
 		m_connections.clear();
