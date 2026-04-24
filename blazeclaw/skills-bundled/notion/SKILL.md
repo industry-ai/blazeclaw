@@ -172,3 +172,10 @@ Common property formats for database items:
 - Append block children: up to 100 children per request, up to two levels of nesting in a single append request
 - Payload size limits: up to 1000 block elements and 500KB overall
 - Use `is_inline: true` when creating data sources to embed them in pages
+
+## BlazeClaw UI Notes
+
+- Skill Browser config should resolve to `skills-bundled/notion/config.html` in dedicated mode.
+- If dedicated resolution fails, BlazeClaw falls back to generated config UI and surfaces an explicit warning when no fields are available.
+- Troubleshooting guide:
+  - `skills-bundled/notion/TROUBLESHOOTING.md`

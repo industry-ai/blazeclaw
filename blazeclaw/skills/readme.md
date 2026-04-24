@@ -67,6 +67,8 @@ canonical config contract across categories:
 - `requiresEnv[]`
 - `requiresConfig[]`
 - `configPathHints[]`
+- This normalization now applies to runtime catalog rows, runtime tool-derived
+  rows, local filesystem rows, and openclaw-original rows.
 
 ### 3) UI selection behavior
 
@@ -89,6 +91,9 @@ precedence:
 
 This precedence applies to both nested repo layout (`blazeclaw/...`) and
 workspace-root layout.
+
+For Notion-specific troubleshooting, see:
+- `skills-bundled/notion/TROUBLESHOOTING.md`
 
 ### 4) `config.html` persistence mechanism (store/restore)
 

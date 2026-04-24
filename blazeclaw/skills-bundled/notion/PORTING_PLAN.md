@@ -179,3 +179,41 @@ Deliverable:
 - Runtime-derived/openclaw/filesystem fallback nodes now reuse catalog payload when available, otherwise emit canonical empty defaults.
 - Result: generated config fallback always receives stable field contract.
 
+### Phase 4 - Harden Generated Fallback Config Form (Completed)
+- Generated fallback page now includes explicit status + warning surfaces:
+  - `generated-status`
+  - `generated-warning`
+- When no fields are rendered, page shows a guided warning:
+  - "No configuration fields were exposed for this skill..."
+- Save/validate/cancel UX now reports operation state in-page.
+- Generated host now handles config bridge result channels:
+  - `blazeclaw.skill.config.loaded`
+  - `blazeclaw.skill.config.saved`
+  - `blazeclaw.skill.config.validation`
+  - `blazeclaw.skill.config.error`
+
+### Phase 5 - Validate Notion Persistence and Runtime Consumption (Completed)
+- Added validation/runbook documentation:
+  - `blazeclaw/skills-bundled/notion/PHASE5_RUNTIME_VALIDATION.md`
+- Added focused live manual check script for fast operator execution:
+  - `blazeclaw/skills-bundled/notion/PHASE5_LIVE_MANUAL_CHECK_SCRIPT.md`
+- Added condensed daily smoke checklist (2-minute sanity run):
+  - `blazeclaw/skills-bundled/notion/PHASE5_SMOKE_2MIN.md`
+- Verified (code-path level) that Notion config load/save remains on canonical generic skill-config bridge and triggers `gateway.skills.refresh`.
+- Added deterministic route diagnostics to help operators distinguish dedicated vs generated config path.
+
+### Phase 6 - Regression Tests and Safety Nets (Completed)
+- Added contract tests:
+  - `blazeclaw/BlazeClawMfc/tests/NotionSkillConfigPortingContractTests.cpp`
+- Coverage includes:
+  - bundled config resolver precedence contract
+  - generated fallback warning/status + bridge channel handling
+  - Skill Browser canonical payload field contract
+  - load/save bridge wiring contract
+
+### Phase 7 - Documentation and Operator Guidance (Completed)
+- Added troubleshooting playbook:
+  - `blazeclaw/skills-bundled/notion/TROUBLESHOOTING.md`
+- Updated shared skills docs with config payload contract and config route precedence.
+- Updated this plan with completed Phase 4-7 execution notes and deliverables.
+
