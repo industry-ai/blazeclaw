@@ -60,6 +60,14 @@ runtime skill catalog and expose it through:
 `CSkillView::FillSkillView()` consumes this endpoint and groups skills by
 category in the tree.
 
+For config-capable skills, Skill Browser payloads are normalized to include a
+canonical config contract across categories:
+- `skillKey`
+- `primaryEnv`
+- `requiresEnv[]`
+- `requiresConfig[]`
+- `configPathHints[]`
+
 ### 3) UI selection behavior
 
 When a skill item is selected in `CSkillView`:
@@ -67,6 +75,20 @@ When a skill item is selected in `CSkillView`:
 - Metadata payload is routed to `CBlazeClawMFCView`.
 - The view surfaces selected skill properties/configuration info via status
   output and bridge payloads (for WebView-side handling).
+- Config route diagnostics are emitted as:
+  - `skills.config.route ... mode=dedicated`
+  - `skills.config.route ... mode=generated`
+
+### 3.1) Dedicated config page resolution order
+
+When opening skill-local `config.html`, BlazeClaw searches in deterministic
+precedence:
+1. `skills-bundled/<skill>/config.html`
+2. `skills/<skill>/config.html`
+3. `skills-openclaw-original/<skill>/config.html`
+
+This precedence applies to both nested repo layout (`blazeclaw/...`) and
+workspace-root layout.
 
 ### 4) `config.html` persistence mechanism (store/restore)
 

@@ -22,39 +22,10 @@
 #include <map>
 #include <set>
 #include <vector>
+#include <nlohmann/json.hpp>
 
 namespace {
-	std::string EscapeJsonSkillView(const std::string& value)
-	{
-		std::string escaped;
-		escaped.reserve(value.size() + 8);
-		for (const char ch : value)
-		{
-			switch (ch)
-			{
-			case '"':
-				escaped += "\\\"";
-				break;
-			case '\\':
-				escaped += "\\\\";
-				break;
-			case '\n':
-				escaped += "\\n";
-				break;
-			case '\r':
-				escaped += "\\r";
-				break;
-			case '\t':
-				escaped += "\\t";
-				break;
-			default:
-				escaped.push_back(ch);
-				break;
-			}
-		}
-
-		return escaped;
-	}
+	using Json = nlohmann::json;
 
 	std::string NormalizeSkillKeyForDedup(const std::string& value)
 	{
@@ -73,6 +44,64 @@ namespace {
 		}
 
 		return normalized;
+	}
+
+	std::string BuildCanonicalSkillPayload(
+		const std::string& skillKey,
+		const std::string& sourcePayloadJson,
+		const std::string& defaultSource,
+		const std::string& defaultInstallKind,
+		const std::string& defaultDescription)
+	{
+		Json payload = Json::object();
+		if (!sourcePayloadJson.empty())
+		{
+			payload = Json::parse(sourcePayloadJson, nullptr, false);
+			if (payload.is_discarded() || !payload.is_object())
+			{
+				payload = Json::object();
+			}
+		}
+
+		if (!payload.contains("name") || !payload["name"].is_string() || payload["name"].get<std::string>().empty())
+		{
+			payload["name"] = skillKey;
+		}
+		if (!payload.contains("skillKey") || !payload["skillKey"].is_string() || payload["skillKey"].get<std::string>().empty())
+		{
+			payload["skillKey"] = skillKey;
+		}
+		if (!payload.contains("source") || !payload["source"].is_string())
+		{
+			payload["source"] = defaultSource;
+		}
+		if (!payload.contains("installKind") || !payload["installKind"].is_string())
+		{
+			payload["installKind"] = defaultInstallKind;
+		}
+		if (!payload.contains("description") || !payload["description"].is_string())
+		{
+			payload["description"] = defaultDescription;
+		}
+
+		if (!payload.contains("primaryEnv") || !payload["primaryEnv"].is_string())
+		{
+			payload["primaryEnv"] = "";
+		}
+		if (!payload.contains("requiresEnv") || !payload["requiresEnv"].is_array())
+		{
+			payload["requiresEnv"] = Json::array();
+		}
+		if (!payload.contains("requiresConfig") || !payload["requiresConfig"].is_array())
+		{
+			payload["requiresConfig"] = Json::array();
+		}
+		if (!payload.contains("configPathHints") || !payload["configPathHints"].is_array())
+		{
+			payload["configPathHints"] = Json::array();
+		}
+
+		return payload.dump();
 	}
 
 	std::vector<std::string> SplitTopLevelObjects(const std::string& arrayJson)
@@ -381,6 +410,7 @@ void CSkillView::FillSkillView()
 	}
 
 	std::vector<std::string> skillEntries = SplitTopLevelObjects(skillsRaw);
+	std::unordered_map<std::string, std::string> catalogPayloadBySkillKey;
 
 	std::map<std::string, HTREEITEM> categoryItems;
 	std::set<std::string> knownSkillKeys;
@@ -396,7 +426,16 @@ void CSkillView::FillSkillView()
 		{
 			continue;
 		}
-		knownSkillKeys.insert(NormalizeSkillKeyForDedup(skillKey));
+		const std::string normalizedSkillKey = NormalizeSkillKeyForDedup(skillKey);
+		knownSkillKeys.insert(normalizedSkillKey);
+		catalogPayloadBySkillKey.insert_or_assign(
+			normalizedSkillKey,
+			BuildCanonicalSkillPayload(
+				skillKey,
+				entryJson,
+				"gateway.skills.list",
+				"runtime-registered",
+				"Discovered from runtime skills catalog."));
 
 		std::string category;
 		blazeclaw::gateway::json::FindStringField(entryJson, "installKind", category);
@@ -441,7 +480,14 @@ void CSkillView::FillSkillView()
 				2,
 				2,
 				generalCategoryNode);
-			m_skillItemPayloadByTreeItem.insert_or_assign(skillNode, entryJson);
+			m_skillItemPayloadByTreeItem.insert_or_assign(
+				skillNode,
+				BuildCanonicalSkillPayload(
+					skillKey,
+					entryJson,
+					"gateway.skills.list",
+					"runtime-registered/general",
+					"Discovered from runtime skills catalog."));
 			continue;
 		}
 
@@ -466,7 +512,14 @@ void CSkillView::FillSkillView()
 			2,
 			2,
 			categoryNode);
-		m_skillItemPayloadByTreeItem.insert_or_assign(skillNode, entryJson);
+		m_skillItemPayloadByTreeItem.insert_or_assign(
+			skillNode,
+			BuildCanonicalSkillPayload(
+				skillKey,
+				entryJson,
+				"gateway.skills.list",
+				category,
+				"Discovered from runtime skills catalog."));
 	}
 
 	const auto toolsResponse = app->RouteGatewayRequest(
@@ -541,10 +594,15 @@ void CSkillView::FillSkillView()
 						2,
 						2,
 						categoryNode);
-					const std::string payload =
-						"{\"name\":\"" + EscapeJsonSkillView(skillKey) +
-						"\",\"skillKey\":\"" + EscapeJsonSkillView(skillKey) +
-						"\",\"installKind\":\"runtime-registered\",\"source\":\"gateway.tools.catalog\",\"description\":\"Derived from runtime tool registry\"}";
+					const auto catalogPayloadIt = catalogPayloadBySkillKey.find(dedupKey);
+					const std::string payload = BuildCanonicalSkillPayload(
+						skillKey,
+						catalogPayloadIt != catalogPayloadBySkillKey.end()
+						? catalogPayloadIt->second
+						: std::string(),
+						"gateway.tools.catalog",
+						"runtime-registered",
+						"Derived from runtime tool registry");
 					m_skillItemPayloadByTreeItem.insert_or_assign(skillNode, payload);
 				}
 			}
@@ -618,10 +676,16 @@ void CSkillView::FillSkillView()
 						2,
 						2,
 						categoryNode);
-					const std::string payload =
-						"{\"name\":\"" + EscapeJsonSkillView(skillDir.filename().string()) +
-						"\",\"skillKey\":\"" + EscapeJsonSkillView(skillKey) +
-						"\",\"installKind\":\"openclaw-original\",\"source\":\"openclaw.filesystem\",\"description\":\"Discovered from openclaw/skills with original assets\"}";
+					const auto catalogPayloadIt = catalogPayloadBySkillKey.find(
+						NormalizeSkillKeyForDedup(skillKey));
+					const std::string payload = BuildCanonicalSkillPayload(
+						skillKey,
+						catalogPayloadIt != catalogPayloadBySkillKey.end()
+						? catalogPayloadIt->second
+						: std::string(),
+						"openclaw.filesystem",
+						"openclaw-original",
+						"Discovered from openclaw/skills with original assets");
 					m_skillItemPayloadByTreeItem.insert_or_assign(skillNode, payload);
 				}
 			}
@@ -684,10 +748,15 @@ void CSkillView::FillSkillView()
 					2,
 					2,
 					categoryNode);
-				const std::string payload =
-					"{\"name\":\"" + EscapeJsonSkillView(skillKey) +
-					"\",\"skillKey\":\"" + EscapeJsonSkillView(skillKey) +
-					"\",\"installKind\":\"runtime-registered\",\"source\":\"gateway.tools.list\",\"description\":\"Derived from runtime tool registry\"}";
+				const auto catalogPayloadIt = catalogPayloadBySkillKey.find(dedupKey);
+				const std::string payload = BuildCanonicalSkillPayload(
+					skillKey,
+					catalogPayloadIt != catalogPayloadBySkillKey.end()
+					? catalogPayloadIt->second
+					: std::string(),
+					"gateway.tools.list",
+					"runtime-registered",
+					"Derived from runtime tool registry");
 				m_skillItemPayloadByTreeItem.insert_or_assign(skillNode, payload);
 			}
 		}
@@ -762,10 +831,16 @@ void CSkillView::FillSkillView()
 				2,
 				2,
 				categoryNode);
-			const std::string payload =
-				"{\"name\":\"" + EscapeJsonSkillView(skillDir.filename().string()) +
-				"\",\"skillKey\":\"" + EscapeJsonSkillView(skillKey) +
-				"\",\"installKind\":\"implemented\",\"source\":\"filesystem\",\"description\":\"Discovered from local skills directory\"}";
+			const auto catalogPayloadIt = catalogPayloadBySkillKey.find(
+				NormalizeSkillKeyForDedup(skillKey));
+			const std::string payload = BuildCanonicalSkillPayload(
+				skillKey,
+				catalogPayloadIt != catalogPayloadBySkillKey.end()
+				? catalogPayloadIt->second
+				: std::string(),
+				"filesystem",
+				"implemented",
+				"Discovered from local skills directory");
 			m_skillItemPayloadByTreeItem.insert_or_assign(skillNode, payload);
 		}
 	}

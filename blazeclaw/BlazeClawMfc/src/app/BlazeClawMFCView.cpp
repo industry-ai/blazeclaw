@@ -28,6 +28,7 @@
 
 #include <cwctype>
 #include <cctype>
+#include <array>
 #include <filesystem>
 #include <optional>
 #include <sstream>
@@ -362,21 +363,48 @@ namespace {
 			return std::nullopt;
 		}
 
+		const std::array<std::filesystem::path, 3> kSkillRootSuffixes = {
+			std::filesystem::path(L"blazeclaw") / L"skills-bundled",
+			std::filesystem::path(L"blazeclaw") / L"skills",
+			std::filesystem::path(L"blazeclaw") / L"skills-openclaw-original",
+		};
+		const std::array<std::filesystem::path, 3> kWorkspaceRootSuffixes = {
+			std::filesystem::path(L"skills-bundled"),
+			std::filesystem::path(L"skills"),
+			std::filesystem::path(L"skills-openclaw-original"),
+		};
+
 		std::filesystem::path cursor = start;
 		while (!cursor.empty())
 		{
 			const std::wstring skillDir(
 				normalizedSkillKey.begin(),
 				normalizedSkillKey.end());
-			const auto configHtml =
-				cursor /
-				L"blazeclaw" /
-				L"skills" /
-				std::filesystem::path(skillDir) /
-				L"config.html";
-			if (std::filesystem::exists(configHtml))
+
+			for (const auto& suffix : kSkillRootSuffixes)
 			{
-				return configHtml;
+				const auto configHtml =
+					cursor /
+					suffix /
+					std::filesystem::path(skillDir) /
+					L"config.html";
+				if (std::filesystem::exists(configHtml))
+				{
+					return configHtml;
+				}
+			}
+
+			for (const auto& suffix : kWorkspaceRootSuffixes)
+			{
+				const auto configHtml =
+					cursor /
+					suffix /
+					std::filesystem::path(skillDir) /
+					L"config.html";
+				if (std::filesystem::exists(configHtml))
+				{
+					return configHtml;
+				}
 			}
 
 			if (!cursor.has_parent_path())
@@ -3578,6 +3606,9 @@ bool CBlazeClawMFCView::OpenSkillConfigDocument(
 	const std::wstring configUrl = ResolveSkillConfigStartupUrl(skillKey);
 	if (configUrl.empty())
 	{
+		AppendChatProcedureStatusLine(
+			L"skills.config.route",
+			"skill=" + skillKey + " mode=generated");
 		const std::wstring generatedUrl = BuildGeneratedSkillConfigPageUrl(
 			skillKey,
 			propertiesJson);
@@ -3591,6 +3622,9 @@ bool CBlazeClawMFCView::OpenSkillConfigDocument(
 		return true;
 	}
 
+	AppendChatProcedureStatusLine(
+		L"skills.config.route",
+		"skill=" + skillKey + " mode=dedicated");
 	// Just set the pending URL - the tab/document was already created by OpenSkillViewTab
 	SetPendingStartupUrl(configUrl);
 	return true;
