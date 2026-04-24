@@ -134,6 +134,8 @@ namespace blazeclaw::core {
                 const auto& rr = context.resolvedRuntime;
                 snapshot.gatewayParityLifecycle.runtimeResolvedBindUtf8 = rr.bindAddressUtf8;
                 snapshot.gatewayParityLifecycle.runtimeResolvedBindSource = rr.bindSource;
+                snapshot.gatewayParityLifecycle.runtimeResolvedBindMode = rr.effectiveBindMode;
+                snapshot.gatewayParityLifecycle.runtimeResolvedBindModeSource = rr.bindModeSource;
                 snapshot.gatewayParityLifecycle.runtimeResolvedPort = rr.port;
                 snapshot.gatewayParityLifecycle.runtimeResolvedPortSource = rr.portSource;
                 snapshot.gatewayParityLifecycle.runtimeStartupModeInvalidFallback =

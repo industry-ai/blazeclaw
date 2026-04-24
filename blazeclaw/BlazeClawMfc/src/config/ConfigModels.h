@@ -42,6 +42,9 @@ namespace blazeclaw::config {
 		std::string startupModeSource;
 		bool startupModeInvalidFallback = false;
 		std::string startupModeUnrecognizedInputUtf8;
+		/// OpenClaw `net.ts` / `defaultGatewayBindMode` + `resolveGatewayBindHost` (Phase N3).
+		std::string effectiveBindMode;
+		std::string bindModeSource;
 		std::string bindAddressUtf8;
 		std::string bindSource;
 		std::uint16_t port = 56789;
@@ -53,6 +56,8 @@ namespace blazeclaw::config {
 	};
 
 	struct GatewayConfig {
+		/// When empty, legacy `gateway.bind` text-only policy applies (N3: unspecified mode).
+		std::wstring bindMode;
 		std::wstring bindAddress = L"127.0.0.1";
 		std::uint16_t port = 56789;
 		std::wstring startupMode = L"local_runtime_dispatch";

@@ -2,16 +2,17 @@
 #include "GatewayRuntimeBootstrapCoordinator.h"
 
 #include "../../config/ConfigModels.h"
+#include "../../gateway/GatewayNetPolicy.h"
 
 #include <Windows.h>
 
 #include <algorithm>
 #include <cstdlib>
 #include <cstdint>
-#include <cwctype>
-#include <functional>
 #include <cstdlib>
 #include <cwchar>
+#include <cwctype>
+#include <functional>
 #include <optional>
 #include <string>
 
@@ -148,6 +149,55 @@ namespace blazeclaw::core {
 			return static_cast<std::uint64_t>(v);
 		}
 
+		std::optional<blazeclaw::gateway::GatewayNetPolicy::BindMode> TryParseBindModeWide(
+			const std::wstring& raw) {
+			const std::wstring lower = ToLowerWide(TrimWide(raw));
+			if (lower.empty()) {
+				return std::nullopt;
+			}
+			if (lower == L"loopback") {
+				return blazeclaw::gateway::GatewayNetPolicy::BindMode::Loopback;
+			}
+			if (lower == L"lan") {
+				return blazeclaw::gateway::GatewayNetPolicy::BindMode::Lan;
+			}
+			if (lower == L"tailnet") {
+				return blazeclaw::gateway::GatewayNetPolicy::BindMode::Tailnet;
+			}
+			if (lower == L"auto") {
+				return blazeclaw::gateway::GatewayNetPolicy::BindMode::Auto;
+			}
+			if (lower == L"custom") {
+				return blazeclaw::gateway::GatewayNetPolicy::BindMode::Custom;
+			}
+			return std::nullopt;
+		}
+
+		std::wstring Utf8ToWideConfig(const std::string& u8) {
+			if (u8.empty()) {
+				return L"127.0.0.1";
+			}
+			const int required = MultiByteToWideChar(
+				CP_UTF8,
+				0,
+				u8.c_str(),
+				static_cast<int>(u8.size()),
+				nullptr,
+				0);
+			if (required <= 0) {
+				return L"127.0.0.1";
+			}
+			std::wstring out(static_cast<std::size_t>(required), L'\0');
+			MultiByteToWideChar(
+				CP_UTF8,
+				0,
+				u8.c_str(),
+				static_cast<int>(u8.size()),
+				out.data(),
+				required);
+			return out;
+		}
+
 	} // namespace
 
 	const std::vector<std::string_view>&
@@ -162,12 +212,42 @@ namespace blazeclaw::core {
 
 		const blazeclaw::config::GatewayConfig& gw = appConfig.gateway;
 
-		// bind
-		r.bindAddressUtf8 = Utf8Narrow(TrimWide(gw.bindAddress));
-		if (r.bindAddressUtf8.empty()) {
-			r.bindAddressUtf8 = "127.0.0.1";
+		// bind: legacy string path + OpenClaw `net.ts` bind mode policy (N3) when
+		// `gateway.bind.mode` or `BLAZECLAW_GATEWAY_BIND_MODE` is set.
+		r.effectiveBindMode = "unspecified";
+		r.bindModeSource = "legacy";
+		std::string addressFromConfig = Utf8Narrow(TrimWide(gw.bindAddress));
+		if (addressFromConfig.empty()) {
+			addressFromConfig = "127.0.0.1";
 		}
+		r.bindAddressUtf8 = addressFromConfig;
 		r.bindSource = "config";
+
+		{
+			std::wstring modeWide = TrimWide(gw.bindMode);
+			std::string modeSource = "config";
+			const std::wstring modeEnv = TrimWide(ReadWideEnvironment(L"BLAZECLAW_GATEWAY_BIND_MODE"));
+			if (!modeEnv.empty()) {
+				modeWide = modeEnv;
+				modeSource = "env";
+			}
+			if (const auto mode = TryParseBindModeWide(modeWide)) {
+				r.bindModeSource = modeSource;
+				const std::string label = Utf8Narrow(ToLowerWide(TrimWide(modeWide)));
+				r.effectiveBindMode = label.empty() ? "unspecified" : label;
+				const std::function<bool(const std::string& host)> canBind =
+					[](const std::string& h) {
+						return blazeclaw::gateway::GatewayNetPolicy::CanBindToHost(h);
+					};
+				r.bindAddressUtf8 = blazeclaw::gateway::GatewayNetPolicy::ResolveGatewayBindHost(
+					*mode,
+					std::make_optional(addressFromConfig),
+					[]() { return std::string(); },
+					canBind,
+					blazeclaw::gateway::GatewayNetPolicy::IsContainerEnvironment());
+			}
+		}
+
 		{
 			const std::wstring bindEnv = TrimWide(ReadWideEnvironment(L"BLAZECLAW_GATEWAY_BIND"));
 			if (!bindEnv.empty()) {
@@ -495,7 +575,18 @@ namespace blazeclaw::core {
 		result.selectedModeSource = decision.modeSource;
 		result.failedStage = "prepare_runtime_config";
 
-		if (!CreateRuntimeState(context, result)) {
+		blazeclaw::config::AppConfig effectiveConfig = context.config;
+		effectiveConfig.gateway.bindAddress = Utf8ToWideConfig(result.resolvedRuntime.bindAddressUtf8);
+		const StartupContext effectiveContext{
+			.config = effectiveConfig,
+			.gatewayHost = context.gatewayHost,
+			.appendTrace = context.appendTrace,
+			.queueManagedConfigInternalWriteHash = context.queueManagedConfigInternalWriteHash,
+			.suppressStartupMigrations = context.suppressStartupMigrations,
+			.appliedStartupMigrationsOut = context.appliedStartupMigrationsOut,
+		};
+
+		if (!CreateRuntimeState(effectiveContext, result)) {
 			return result;
 		}
 
@@ -507,7 +598,7 @@ namespace blazeclaw::core {
 			return result;
 		}
 
-		if (!StartPostAttachRuntime(context, decision, result)) {
+		if (!StartPostAttachRuntime(effectiveContext, decision, result)) {
 			return result;
 		}
 

@@ -50,6 +50,7 @@
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayHostRouterTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayProtocolResponseHelpersTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayHttpAuthServiceTests.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\tests\GatewayNetPolicyParityTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayRequestPolicyGuardTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayServerMethodsS3ParityTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayServerMethodsListS3ParityTests.cpp" />
@@ -178,6 +179,7 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayUtf8CloseReason.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayTestHooks.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayWebSocketTransport.cpp" />
+    <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayNetPolicy.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\GatewayJsonUtils.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\generated\GatewayHandlerCatalog.Generated.cpp" />
     <ClCompile Include="..\BlazeClawMfc\src\gateway\generated\GatewaySchemaCatalog.Generated.cpp" />

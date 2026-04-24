@@ -281,6 +281,7 @@
     <ClInclude Include="src\gateway\GatewayUtf8CloseReason.h" />
     <ClInclude Include="src\gateway\GatewayTestHooks.h" />
     <ClInclude Include="src\gateway\GatewayWebSocketTransport.h" />
+    <ClInclude Include="src\gateway\GatewayNetPolicy.h" />
     <ClInclude Include="src\gateway\ExtensionLifecycleManager.h" />
     <ClInclude Include="src\gateway\generated\GatewayHandlerCatalog.Generated.h" />
     <ClInclude Include="src\gateway\generated\GatewaySchemaCatalog.Generated.h" />
@@ -488,6 +489,7 @@
     <ClCompile Include="src\gateway\GatewayUtf8CloseReason.cpp" />
     <ClCompile Include="src\gateway\GatewayTestHooks.cpp" />
     <ClCompile Include="src\gateway\GatewayWebSocketTransport.cpp" />
+    <ClCompile Include="src\gateway\GatewayNetPolicy.cpp" />
     <!-- Tests moved to a separate test project BlazeClawMfc.Tests.vcxproj -->
   </ItemGroup>
   <ItemGroup>

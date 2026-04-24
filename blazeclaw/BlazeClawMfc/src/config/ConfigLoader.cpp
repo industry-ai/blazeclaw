@@ -467,6 +467,12 @@ namespace blazeclaw::config {
 				continue;
 			}
 
+			// Must be before `gateway.bind=` because that prefix would otherwise match `gateway.bind.mode=…`.
+			if (trimmedLine.rfind(L"gateway.bind.mode=", 0) == 0) {
+				outConfig.gateway.bindMode = ToLowerTrim(trimmedLine.substr(18));
+				continue;
+			}
+
 			if (trimmedLine.rfind(L"gateway.bind=", 0) == 0) {
 				outConfig.gateway.bindAddress = Trim(trimmedLine.substr(13));
 				continue;

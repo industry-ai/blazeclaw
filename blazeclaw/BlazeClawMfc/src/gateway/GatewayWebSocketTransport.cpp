@@ -2,6 +2,7 @@
 #include "GatewayWebSocketTransport.h"
 #include "GatewayHandshakePolicy.h"
 #include "GatewayHttpAuthService.h"
+#include "GatewayNetPolicy.h"
 #include "GatewayUtf8CloseReason.h"
 
 #include <algorithm>
@@ -235,7 +236,7 @@ namespace blazeclaw::gateway {
 		}
 
 		std::vector<std::string> BuildDefaultTrustedProxyList() {
-			return { "127.0.0.1", "::1" };
+			return GatewayNetPolicy::BuildDefaultTrustedProxyCidrs();
 		}
 
 		bool IsContinuationByte(std::uint8_t value) {
@@ -429,7 +430,7 @@ namespace blazeclaw::gateway {
 			return true;
 		}
 
-		if (!IsPlausibleBindAddress(bindAddress)) {
+		if (!GatewayNetPolicy::IsPlausibleBindAddressString(bindAddress)) {
 			error = "Invalid bind address for transport start.";
 			return false;
 		}
@@ -746,22 +747,6 @@ namespace blazeclaw::gateway {
 
 	void GatewayWebSocketTransport::SetHttpAuthCallbacks(GatewayHttpAuthPolicyCallbacks callbacks) {
 		m_httpAuthCallbacks = std::move(callbacks);
-	}
-
-	bool GatewayWebSocketTransport::IsPlausibleBindAddress(const std::string& bindAddress) {
-		if (bindAddress.empty()) {
-			return false;
-		}
-
-		for (const char ch : bindAddress) {
-			const bool isAllowed =
-				std::isalnum(static_cast<unsigned char>(ch)) != 0 || ch == '.' || ch == '-' || ch == ':';
-			if (!isAllowed) {
-				return false;
-			}
-		}
-
-		return true;
 	}
 
 	bool GatewayWebSocketTransport::TryExtractHttpHeader(
@@ -1371,6 +1356,8 @@ namespace blazeclaw::gateway {
 		if (TryExtractHttpHeader(request, "X-Forwarded-For", forwardedForHeader)) {
 			authHeaders.insert_or_assign("X-Forwarded-For", forwardedForHeader);
 		}
+		std::string realIpHeader;
+		(void)TryExtractHttpHeader(request, "X-Real-IP", realIpHeader);
 		std::string canvasCapabilityHeader;
 		if (TryExtractHttpHeader(request, "X-OpenClaw-Canvas-Capability", canvasCapabilityHeader)) {
 			authHeaders.insert_or_assign("X-OpenClaw-Canvas-Capability", canvasCapabilityHeader);
@@ -1411,11 +1398,21 @@ namespace blazeclaw::gateway {
 		const bool isAllowedOrigin = !hasOrigin || IsAllowedOriginValue(origin);
 
 		if (GatewayHttpAuthService::IsCanvasPath(requestPath)) {
+			const std::string directRemote = ResolvePeerIpAddress(session.socket);
+			const std::vector<std::string> trusted = BuildDefaultTrustedProxyList();
+			const auto resolved = GatewayNetPolicy::ResolveClientIp(
+				GatewayNetPolicy::ResolveClientIpParams{
+					.remoteAddr = directRemote,
+					.forwardedFor = forwardedForHeader,
+					.realIp = realIpHeader,
+					.trustedProxies = &trusted,
+					.allowRealIpFallback = true,
+				});
 			GatewayHttpAuthRequestContext authContext;
 			authContext.path = requestPath;
 			authContext.headers = authHeaders;
-			authContext.remoteIp = ResolvePeerIpAddress(session.socket);
-			authContext.trustedProxies = BuildDefaultTrustedProxyList();
+			authContext.remoteIp = resolved.value_or(std::string());
+			authContext.trustedProxies = std::move(trusted);
 			authContext.allowRealIpFallback = true;
 			authContext.malformedScopedPath = GatewayHttpAuthService::IsMalformedScopedCanvasPath(requestPath);
 			authContext.browserOriginPolicy = ResolveBrowserOriginPolicy(hasOrigin, isAllowedOrigin);

@@ -2916,6 +2916,7 @@ namespace blazeclaw::core {
 		m_activeConfig.authProfiles = nextConfig.authProfiles;
 		m_activeConfig.deepseekApiKey = nextConfig.deepseekApiKey;
 		m_activeConfig.gateway.startupMode = nextConfig.gateway.startupMode;
+		m_activeConfig.gateway.bindMode = nextConfig.gateway.bindMode;
 		m_activeConfig.gateway.bindAddress = nextConfig.gateway.bindAddress;
 		m_activeConfig.gateway.port = nextConfig.gateway.port;
 		m_activeConfig.gateway.authSessionGeneration =

@@ -945,6 +945,8 @@ TEST_CASE(
 	snapshot.gatewayParityLifecycle.authBootstrapDetail = "test";
 	snapshot.gatewayParityLifecycle.runtimeResolvedBindUtf8 = "0.0.0.0";
 	snapshot.gatewayParityLifecycle.runtimeResolvedBindSource = "config";
+	snapshot.gatewayParityLifecycle.runtimeResolvedBindMode = "unspecified";
+	snapshot.gatewayParityLifecycle.runtimeResolvedBindModeSource = "legacy";
 	snapshot.gatewayParityLifecycle.runtimeResolvedPort = 58000;
 	snapshot.gatewayParityLifecycle.runtimeResolvedPortSource = "config";
 	snapshot.gatewayParityLifecycle.runtimeStartupModeInvalidFallback = false;
@@ -972,7 +974,7 @@ TEST_CASE(
 
 	REQUIRE(report.find("\"gatewayLifecycle\"") != std::string::npos);
 	REQUIRE(report.find("\"parityContract\"") != std::string::npos);
-	REQUIRE(report.find("\"schemaVersion\":5") != std::string::npos);
+	REQUIRE(report.find("\"schemaVersion\":6") != std::string::npos);
 	REQUIRE(
 		report.find("\"openclawParityBaseline\":\"openclaw/src/gateway/server.impl.ts\"") !=
 		std::string::npos);

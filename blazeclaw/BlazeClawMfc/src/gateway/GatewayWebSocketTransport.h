@@ -64,7 +64,6 @@ namespace blazeclaw::gateway {
 			std::deque<PendingNetworkFrame> outboundNetworkFrames;
 		};
 
-		static bool IsPlausibleBindAddress(const std::string& bindAddress);
 		static bool TryExtractHttpHeader(
 			const std::string& httpText,
 			const std::string& headerName,

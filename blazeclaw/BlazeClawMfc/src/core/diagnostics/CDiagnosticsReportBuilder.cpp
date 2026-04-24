@@ -121,6 +121,8 @@ namespace blazeclaw::core {
 			",\"authBootstrapDetail\":\"" + JsonEscapeString(c.authBootstrapDetail) + "\"" +
 			",\"runtimeResolvedBindUtf8\":\"" + JsonEscapeString(c.runtimeResolvedBindUtf8) + "\"" +
 			",\"runtimeResolvedBindSource\":\"" + JsonEscapeString(c.runtimeResolvedBindSource) + "\"" +
+			",\"runtimeResolvedBindMode\":\"" + JsonEscapeString(c.runtimeResolvedBindMode) + "\"" +
+			",\"runtimeResolvedBindModeSource\":\"" + JsonEscapeString(c.runtimeResolvedBindModeSource) + "\"" +
 			",\"runtimeResolvedPort\":" + std::to_string(c.runtimeResolvedPort) +
 			",\"runtimeResolvedPortSource\":\"" + JsonEscapeString(c.runtimeResolvedPortSource) + "\"" +
 			",\"runtimeStartupModeInvalidFallback\":" +

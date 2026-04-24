@@ -42,7 +42,7 @@ namespace {
 	}
 
 	void VerifyParityContractSchemaV5() {
-		REQUIRE(blazeclaw::core::GatewayParityLifecycleContract::kSchemaVersion == 5);
+		REQUIRE(blazeclaw::core::GatewayParityLifecycleContract::kSchemaVersion == 6);
 	}
 
 	void VerifyParityJsonShutdownAndS4Fields() {
@@ -59,7 +59,7 @@ namespace {
 
 		blazeclaw::core::CDiagnosticsReportBuilder builder;
 		const std::string json = builder.SerializeParityLifecycleContractJson(c);
-		REQUIRE(json.find("\"schemaVersion\":5") != std::string::npos);
+		REQUIRE(json.find("\"schemaVersion\":6") != std::string::npos);
 		REQUIRE(json.find("\"gatewayShutdownInvocationCount\":1") != std::string::npos);
 		REQUIRE(json.find("\"lastShutdownPrelude\":{") != std::string::npos);
 		REQUIRE(json.find("\"pluginGlobalStopInvoked\":true") != std::string::npos);
