@@ -56,7 +56,7 @@ namespace blazeclaw::config {
 	};
 
 	struct GatewayConfig {
-		/// When empty, legacy `gateway.bind` text-only policy applies (N3: unspecified mode).
+		/// When empty and `BLAZECLAW_GATEWAY_BIND_MODE` is unset, bootstrap applies OpenClaw-style implicit bind (Tailscale env + `defaultGatewayBindMode`); see net.ts parity doc.
 		std::wstring bindMode;
 		std::wstring bindAddress = L"127.0.0.1";
 		std::uint16_t port = 56789;

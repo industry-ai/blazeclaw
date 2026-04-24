@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <cwchar>
 #include <cwctype>
+#include <cctype>
 #include <functional>
 #include <optional>
 #include <string>
@@ -149,6 +150,32 @@ namespace blazeclaw::core {
 			return static_cast<std::uint64_t>(v);
 		}
 
+		std::string ToLowerAsciiUtf8(const std::string& value) {
+			std::string out = value;
+			for (char& c : out) {
+				c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+			}
+			return out;
+		}
+
+		const char* GatewayBindModeLabel(
+			const blazeclaw::gateway::GatewayNetPolicy::BindMode mode) noexcept {
+			using blazeclaw::gateway::GatewayNetPolicy;
+			switch (mode) {
+			case GatewayNetPolicy::BindMode::Loopback:
+				return "loopback";
+			case GatewayNetPolicy::BindMode::Lan:
+				return "lan";
+			case GatewayNetPolicy::BindMode::Tailnet:
+				return "tailnet";
+			case GatewayNetPolicy::BindMode::Auto:
+				return "auto";
+			case GatewayNetPolicy::BindMode::Custom:
+				return "custom";
+			}
+			return "unspecified";
+		}
+
 		std::optional<blazeclaw::gateway::GatewayNetPolicy::BindMode> TryParseBindModeWide(
 			const std::wstring& raw) {
 			const std::wstring lower = ToLowerWide(TrimWide(raw));
@@ -242,6 +269,34 @@ namespace blazeclaw::core {
 				r.bindAddressUtf8 = blazeclaw::gateway::GatewayNetPolicy::ResolveGatewayBindHost(
 					*mode,
 					std::make_optional(addressFromConfig),
+					[]() { return std::string(); },
+					canBind,
+					blazeclaw::gateway::GatewayNetPolicy::IsContainerEnvironment());
+			}
+			else if (TrimWide(gw.bindMode).empty() && modeEnv.empty()) {
+				// OpenClaw `server-runtime-config.ts` / `net.ts`: when `gateway.bind` has no mode,
+				// `bindMode = (tailscale !== "off" ? "loopback" : defaultGatewayBindMode())`, then
+				// `resolveGatewayBindHost` (use `BLAZECLAW_TAILSCALE_MODE` as the Tailscale source).
+				const std::wstring tsW = TrimWide(ReadWideEnvironment(L"BLAZECLAW_TAILSCALE_MODE"));
+				const std::string tsRaw = Utf8Narrow(tsW);
+				std::optional<std::string> tailscaleOpt;
+				if (!tsRaw.empty()) {
+					tailscaleOpt = tsRaw;
+				}
+				const std::string tsLower = tailscaleOpt.has_value() ? ToLowerAsciiUtf8(*tailscaleOpt) : std::string();
+				const bool tailscaleForcesLoopback =
+					tailscaleOpt.has_value() && !tsLower.empty() && tsLower != "off";
+				const auto implicitMode = tailscaleForcesLoopback
+					? blazeclaw::gateway::GatewayNetPolicy::BindMode::Loopback
+					: blazeclaw::gateway::GatewayNetPolicy::DefaultGatewayBindMode(tailscaleOpt);
+				r.bindModeSource = "implicit_openclaw_net_ts";
+				r.effectiveBindMode = GatewayBindModeLabel(implicitMode);
+				const std::function<bool(const std::string& host)> canBind = [](const std::string& h) {
+					return blazeclaw::gateway::GatewayNetPolicy::CanBindToHost(h);
+				};
+				r.bindAddressUtf8 = blazeclaw::gateway::GatewayNetPolicy::ResolveGatewayBindHost(
+					implicitMode,
+					std::nullopt,
 					[]() { return std::string(); },
 					canBind,
 					blazeclaw::gateway::GatewayNetPolicy::IsContainerEnvironment());
