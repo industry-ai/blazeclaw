@@ -61,17 +61,37 @@
         return "";
     }
 
+    function isValidApprovalToken(token) {
+        const normalized = String(token || "").trim();
+        if (!normalized) {
+            return false;
+        }
+        if (!/^[A-Za-z0-9:_\-]+$/.test(normalized)) {
+            return false;
+        }
+        // Email schedule tokens currently use an email-approval-* prefix and include
+        // multiple segments; this blocks streamed fragments such as "e" or "email-app".
+        if (/^email-approval-\d{10,}-\d+$/.test(normalized)) {
+            return true;
+        }
+        return normalized.length >= 24;
+    }
+
     function parseApprovalTokenFromText(text) {
         const raw = String(text || "");
         if (!raw) {
             return null;
         }
-        const tokenMatch = /approvalToken=([A-Za-z0-9:_\-]+)/.exec(raw);
+        const tokenMatch = /approvalToken=([A-Za-z0-9:_\-]+)(?=\s|[，。！？；,.!?;]|$)/.exec(raw);
         if (!tokenMatch || !tokenMatch[1]) {
             return null;
         }
+        const parsedToken = String(tokenMatch[1] || "").trim();
+        if (!isValidApprovalToken(parsedToken)) {
+            return null;
+        }
         const result = {
-            approvalToken: tokenMatch[1],
+            approvalToken: parsedToken,
         };
         const expiresMatch = /expiresAtEpochMs=(\d{8,})/.exec(raw);
         if (expiresMatch && expiresMatch[1]) {
@@ -1494,11 +1514,11 @@
 
         async function executeExecApprovalAction(approvalToken, approve, options) {
             const normalizedToken = String(approvalToken || "").trim();
-            if (!normalizedToken) {
+            if (!normalizedToken || !isValidApprovalToken(normalizedToken)) {
                 return {
                     ok: false,
                     status: "invalid",
-                    message: "approval token is required",
+                    message: "approval token is invalid",
                 };
             }
 
@@ -1765,13 +1785,15 @@
         }
 
         {
-            const parsed = parseApprovalTokenFromText("Email scheduling pending approval. approvalToken=email-approval-100 expiresAtEpochMs=1775016776785");
+            const parsed = parseApprovalTokenFromText("Email scheduling pending approval. approvalToken=email-approval-1775016776785-60 expiresAtEpochMs=1775016776785");
             assertRegression(Boolean(parsed) &&
-                parsed.approvalToken === "email-approval-100" &&
+                parsed.approvalToken === "email-approval-1775016776785-60" &&
                 parsed.expiresAtEpochMs === 1775016776785,
                 "approval parser should extract token and expiry from assistant text");
             assertRegression(parseApprovalTokenFromText("no token present") === null,
                 "approval parser should return null when token marker is absent");
+            assertRegression(parseApprovalTokenFromText("approvalToken=e expiresAtEpochMs=1775016776785") === null,
+                "approval parser should reject truncated streamed token fragments");
             summary.push("exec approval token parser");
         }
 
@@ -1806,6 +1828,26 @@
             assertRegression(approved.ok === true && approved.status === "ok",
                 "exec approval action should report successful approval resolution");
             summary.push("exec approval approve action");
+        }
+
+        {
+            const state = createRegressionState();
+            const calls = [];
+            const controller = createController({
+                state,
+                addMessage: function () { },
+            });
+            const invalid = await controller.executeExecApprovalAction("email-app", true, {
+                requestOverride: async (method, params) => {
+                    calls.push({ method, params });
+                    return { payload: {} };
+                },
+            });
+            assertRegression(invalid.ok === false && invalid.status === "invalid",
+                "exec approval action should reject malformed approval tokens before RPC");
+            assertRegression(calls.length === 0,
+                "exec approval action should not call gateway for malformed tokens");
+            summary.push("exec approval malformed-token guard");
         }
 
         {

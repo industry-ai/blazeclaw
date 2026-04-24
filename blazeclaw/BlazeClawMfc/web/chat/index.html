@@ -458,6 +458,7 @@
                 assistantAgentId: null,
                 detachedNotices: [],
                 approvalQueue: [],
+                approvalInFlightTokens: new Set(),
                 toolTimelineByRequest: new Map(),
                 bridgeQueue: [],
                 pending: new Map(),
@@ -549,14 +550,41 @@
                 approvalQueueEl.scrollTop = approvalQueueEl.scrollHeight;
             }
 
-            function upsertApprovalToken(token, title) {
+            function isLikelyApprovalToken(token) {
                 const normalizedToken = String(token || "").trim();
                 if (!normalizedToken) {
+                    return false;
+                }
+                if (!/^[A-Za-z0-9:_\-]+$/.test(normalizedToken)) {
+                    return false;
+                }
+                if (/^email-approval-\d{10,}-\d+$/.test(normalizedToken)) {
+                    return true;
+                }
+                return normalizedToken.length >= 24;
+            }
+
+            function upsertApprovalToken(token, title) {
+                const normalizedToken = String(token || "").trim();
+                if (!normalizedToken || !isLikelyApprovalToken(normalizedToken)) {
                     return;
                 }
                 if (!Array.isArray(state.approvalQueue)) {
                     state.approvalQueue = [];
                 }
+                state.approvalQueue = state.approvalQueue.filter((item) => {
+                    const existingToken = String(item && item.token || "").trim();
+                    if (!existingToken || existingToken === normalizedToken) {
+                        return true;
+                    }
+                    // Drop stale streamed fragments once a longer canonical token appears.
+                    if (String(item.status || "pending") === "pending" &&
+                        normalizedToken.startsWith(existingToken) &&
+                        existingToken.length < normalizedToken.length) {
+                        return false;
+                    }
+                    return true;
+                });
                 const existing = state.approvalQueue.find((item) => item.token === normalizedToken);
                 if (existing) {
                     if (title && !existing.title) {
@@ -603,6 +631,19 @@
                 if (item.busy || item.status !== "pending") {
                     return;
                 }
+                if (!isLikelyApprovalToken(normalizedToken)) {
+                    item.status = "denied";
+                    item.title = "Approval token invalid";
+                    renderApprovalQueue();
+                    return;
+                }
+                if (!state.approvalInFlightTokens) {
+                    state.approvalInFlightTokens = new Set();
+                }
+                if (state.approvalInFlightTokens.has(normalizedToken)) {
+                    return;
+                }
+                state.approvalInFlightTokens.add(normalizedToken);
                 item.busy = true;
                 renderApprovalQueue();
 
@@ -625,6 +666,7 @@
                     item.title = `Approval error: ${String(error)}`;
                 }
                 item.busy = false;
+                state.approvalInFlightTokens.delete(normalizedToken);
                 renderApprovalQueue();
             }
 
@@ -906,7 +948,6 @@
                 if (!text || controller.isSilentReplyText(text)) {
                     return;
                 }
-                scanApprovalTokenFromText(text);
 
                 if (structuredTranscriptRenderEnabled) {
                     renderMessagesFromStructuredTranscript(text);
