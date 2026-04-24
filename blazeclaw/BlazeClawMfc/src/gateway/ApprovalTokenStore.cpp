@@ -6,10 +6,39 @@
 
 #include <filesystem>
 #include <fstream>
+#include <memory>
+#include <unordered_map>
 #include <vector>
 #include <nlohmann/json.hpp>
 
 namespace blazeclaw::gateway {
+
+namespace {
+
+std::mutex& ApprovalFileMutexRegistryGuard() {
+    static std::mutex guard;
+    return guard;
+}
+
+std::unordered_map<std::string, std::shared_ptr<std::mutex>>& ApprovalFileMutexRegistry() {
+    static std::unordered_map<std::string, std::shared_ptr<std::mutex>> registry;
+    return registry;
+}
+
+std::shared_ptr<std::mutex> ResolveApprovalFileMutex(const std::string& filePath) {
+    std::lock_guard<std::mutex> guard(ApprovalFileMutexRegistryGuard());
+    auto& registry = ApprovalFileMutexRegistry();
+    const auto it = registry.find(filePath);
+    if (it != registry.end()) {
+        return it->second;
+    }
+
+    auto created = std::make_shared<std::mutex>();
+    registry.emplace(filePath, created);
+    return created;
+}
+
+} // namespace
 
 static bool ReadFileToString(const std::string& path, std::string& out) {
     try {
@@ -112,6 +141,8 @@ bool ApprovalTokenStore::Initialize(const std::string& filePath) {
     } catch (...) { return false; }
 
     std::lock_guard<std::mutex> lock(m_mutex);
+    const auto fileMutex = ResolveApprovalFileMutex(m_filePath);
+    std::lock_guard<std::mutex> fileLock(*fileMutex);
     std::string existing;
     if (!ReadFileToString(m_filePath, existing) || gateway::json::Trim(existing).empty()) {
         nlohmann::json j = nlohmann::json::object();
@@ -129,6 +160,8 @@ bool ApprovalTokenStore::SaveSession(const ApprovalSessionRecord& session) {
 
     try {
         std::lock_guard<std::mutex> lock(m_mutex);
+        const auto fileMutex = ResolveApprovalFileMutex(m_filePath);
+        std::lock_guard<std::mutex> fileLock(*fileMutex);
         auto root = ReadStoreJson(m_filePath);
 
         nlohmann::json payload = nullptr;
@@ -169,6 +202,8 @@ std::optional<ApprovalSessionRecord> ApprovalTokenStore::LoadSession(
 
     try {
         std::lock_guard<std::mutex> lock(m_mutex);
+        const auto fileMutex = ResolveApprovalFileMutex(m_filePath);
+        std::lock_guard<std::mutex> fileLock(*fileMutex);
         const auto root = ReadStoreJson(m_filePath);
         if (!root.contains(token)) {
             return std::nullopt;
@@ -236,6 +271,8 @@ bool ApprovalTokenStore::SaveToken(const std::string& token, const std::string& 
 
     try {
         std::lock_guard<std::mutex> lock(m_mutex);
+        const auto fileMutex = ResolveApprovalFileMutex(m_filePath);
+        std::lock_guard<std::mutex> fileLock(*fileMutex);
         auto root = ReadStoreJson(m_filePath);
 
         try {
@@ -259,6 +296,8 @@ std::optional<std::string> ApprovalTokenStore::LoadToken(const std::string& toke
 
     try {
         std::lock_guard<std::mutex> lock(m_mutex);
+        const auto fileMutex = ResolveApprovalFileMutex(m_filePath);
+        std::lock_guard<std::mutex> fileLock(*fileMutex);
         const auto root = ReadStoreJson(m_filePath);
 
         if (!root.contains(token)) {
@@ -283,6 +322,8 @@ std::size_t ApprovalTokenStore::PruneExpired(const std::uint64_t nowEpochMs) {
 
     try {
         std::lock_guard<std::mutex> lock(m_mutex);
+        const auto fileMutex = ResolveApprovalFileMutex(m_filePath);
+        std::lock_guard<std::mutex> fileLock(*fileMutex);
         auto root = ReadStoreJson(m_filePath);
 
         std::vector<std::string> expiredTokens;
@@ -319,6 +360,8 @@ bool ApprovalTokenStore::RemoveToken(const std::string& token) {
 
     try {
         std::lock_guard<std::mutex> lock(m_mutex);
+        const auto fileMutex = ResolveApprovalFileMutex(m_filePath);
+        std::lock_guard<std::mutex> fileLock(*fileMutex);
         auto root = ReadStoreJson(m_filePath);
         if (!root.contains(token)) {
             return false;

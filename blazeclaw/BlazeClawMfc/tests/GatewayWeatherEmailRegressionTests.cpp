@@ -9,6 +9,8 @@
 #include <chrono>
 #include <thread>
 #include <vector>
+#include <fstream>
+#include <filesystem>
 
 namespace {
 	class ScopedEnvVar {
@@ -220,6 +222,16 @@ namespace {
 		}
 
 		return false;
+	}
+
+	std::string ReadFileText(const std::filesystem::path& path) {
+		std::ifstream input(path, std::ios::binary);
+		if (!input.is_open()) {
+			return {};
+		}
+		return std::string(
+			(std::istreambuf_iterator<char>(input)),
+			std::istreambuf_iterator<char>());
 	}
 
 }
@@ -652,6 +664,20 @@ TEST_CASE(
 	const auto intentShenzhen = blazeclaw::gateway::prompt::AnalyzeWeatherEmailPromptIntent(
 		"在深圳查天气并发邮件给 jicheng@whu.edu.cn");
 	REQUIRE(intentShenzhen.city == "深圳");
+
+	const auto intentShanghai = blazeclaw::gateway::prompt::AnalyzeWeatherEmailPromptIntent(
+		"查一下明天上海的天气，写一个简短的报告，用电子邮件发送给 jicheng@whu.edu.cn");
+	REQUIRE(intentShanghai.city == "上海");
+	REQUIRE(intentShanghai.date == "tomorrow");
+	REQUIRE(intentShanghai.hasSchedule == true);
+	REQUIRE(intentShanghai.scheduleKind == "immediate_keyword");
+	REQUIRE(intentShanghai.sendAt != "13:00");
+
+	const auto intentDeferred = blazeclaw::gateway::prompt::AnalyzeWeatherEmailPromptIntent(
+		"查一下明天上海的天气，写一个简短的报告，稍后发送给 jicheng@whu.edu.cn");
+	REQUIRE(intentDeferred.city == "上海");
+	REQUIRE(intentDeferred.scheduleKind == "default_fallback");
+	REQUIRE(intentDeferred.sendAt == "13:00");
 }
 
 TEST_CASE(
@@ -664,6 +690,7 @@ TEST_CASE(
 	ScopedEnvVar profileEnforce("BLAZECLAW_EMAIL_POLICY_PROFILES_ENFORCE");
 	ScopedEnvVar actionUnavailable("BLAZECLAW_EMAIL_POLICY_ACTION_UNAVAILABLE");
 	ScopedEnvVar actionExec("BLAZECLAW_EMAIL_POLICY_ACTION_EXEC_ERROR");
+	ScopedEnvVar localAppData("LOCALAPPDATA");
 
 	modeEnv.Set("mock_failure");
 	imapModeEnv.Set("mock_success");
@@ -672,6 +699,10 @@ TEST_CASE(
 	profileEnforce.Set("true");
 	actionUnavailable.Set("continue");
 	actionExec.Set("continue");
+	const std::filesystem::path tempStateRoot = std::filesystem::temp_directory_path() /
+		("blazeclaw_dispatch_only_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(tempStateRoot);
+	localAppData.Set(tempStateRoot.string());
 
 	blazeclaw::gateway::GatewayHost host;
 	REQUIRE(host.StartLocalRuntimeDispatchOnly());
@@ -703,6 +734,11 @@ TEST_CASE(
 	const std::string approvalToken =
 		prepareOutput["requiresApproval"]["approvalToken"].get<std::string>();
 	REQUIRE(!approvalToken.empty());
+	const std::filesystem::path approvalsPath =
+		tempStateRoot / "BlazeClaw" / "state" / "approvals.json";
+	const std::string approvalsRaw = ReadFileText(approvalsPath);
+	REQUIRE(!approvalsRaw.empty());
+	REQUIRE(approvalsRaw.find(approvalToken) != std::string::npos);
 
 	const auto approveResponse = host.RouteRequest(
 		blazeclaw::gateway::protocol::RequestFrame{

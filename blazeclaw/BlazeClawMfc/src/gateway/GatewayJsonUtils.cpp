@@ -639,6 +639,36 @@ namespace blazeclaw::gateway::prompt {
 				});
 		}
 
+		bool HasImplicitChineseImmediateSendIntent(const std::string& lowered) {
+			const bool hasChineseEmailVerb = ContainsAnyToken(
+				lowered,
+				{
+					"发送给",
+					"发给",
+					"发邮件给",
+					"发邮件到",
+					"发电子邮件给",
+					"发电子邮件到",
+					"邮件发送给",
+					"用电子邮件发送给",
+				});
+			if (!hasChineseEmailVerb) {
+				return false;
+			}
+
+			// Explicit schedule phrases should continue to be handled by clock-time parsing.
+			const bool hasDeferredIntent = ContainsAnyToken(
+				lowered,
+				{
+					"稍后",
+					"晚点",
+					"之后",
+					"明天",
+					"后天",
+				});
+			return !hasDeferredIntent;
+		}
+
 	} // namespace
 
 	OrchestrationStructuralSignals AnalyzeOrchestrationStructuralSignals(
@@ -692,6 +722,7 @@ namespace blazeclaw::gateway::prompt {
 		}
 		else {
 			if (IsImmediateScheduleKeyword(lowered) ||
+				HasImplicitChineseImmediateSendIntent(lowered) ||
 				lowered.rfind("now", 0) == 0) {
 				signals.hasScheduleIntent = true;
 				signals.sendAt = ResolveCurrentLocalTimeHHmm();
