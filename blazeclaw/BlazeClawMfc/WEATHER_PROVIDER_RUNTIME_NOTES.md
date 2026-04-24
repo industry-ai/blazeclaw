@@ -173,3 +173,15 @@
   startup mode.
 - English/Chinese weather+email orchestration reaches parity under the same
   policy profile and fallback settings.
+
+## Validation Update
+- 2026-04-24 targeted rerun after Phase 3-5 implementation:
+  - Command: `BlazeClawMfc.Tests.exe [gateway][weather-email] --order decl --durations yes`
+  - Result: **8 cases, 5 passed, 3 failed**.
+- Current failing regressions:
+  1. Chinese deterministic-path test still observes `Provider unavailable (fallback estimate)`.
+  2. Bilingual deterministic-path test misses `tools.execute.result tool=weather.lookup status=ok`.
+  3. Runtime-dispatch-only approval regression fails approval-store file-content assertion at the expected path.
+- Interpretation:
+  - Core crash-hardening and parser parity changes compile and run.
+  - Remaining failures are integration/environment stability issues that still need follow-up before declaring full parity.

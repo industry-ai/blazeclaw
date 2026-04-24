@@ -1038,6 +1038,7 @@ namespace blazeclaw::gateway::executors {
 				command += " --account ";
 				command += QuoteArg(account);
 			}
+
 			command += " send";
 			command += " --to ";
 			command += QuoteArg(recipient);
@@ -1199,6 +1200,7 @@ namespace blazeclaw::gateway::executors {
 
 	GatewayToolRegistry::RuntimeToolExecutor EmailScheduleExecutor::Create() {
 		return [](const std::string& requestedTool, const std::optional<std::string>& argsJson) {
+			try {
 			if (!argsJson.has_value()) {
 				return ToolExecuteResult{
 					.tool = requestedTool,
@@ -1500,6 +1502,17 @@ namespace blazeclaw::gateway::executors {
 					"unknown",
 					{ "action" }),
 			};
+			}
+			catch (...) {
+				return ToolExecuteResult{
+					.tool = requestedTool,
+					.executed = false,
+					.status = "error",
+					.output = BuildErrorEnvelope(
+						"email_schedule_executor_exception",
+						"email_schedule_executor_exception"),
+				};
+			}
 			};
 	}
 

@@ -84,7 +84,23 @@
         }
         const tokenMatch = /approvalToken=([A-Za-z0-9:_\-]+)(?=\s|[，。！？；,.!?;]|$)/.exec(raw);
         if (!tokenMatch || !tokenMatch[1]) {
-            return null;
+            // Fallback: tolerate missing delimiters around localized text.
+            const fallbackMatch = /approvalToken=([A-Za-z0-9:_\-]+)/.exec(raw);
+            if (!fallbackMatch || !fallbackMatch[1]) {
+                return null;
+            }
+            const fallbackToken = String(fallbackMatch[1] || "").trim();
+            if (!isValidApprovalToken(fallbackToken)) {
+                return null;
+            }
+            const fallbackResult = {
+                approvalToken: fallbackToken,
+            };
+            const fallbackExpires = /expiresAtEpochMs=(\d{8,})/.exec(raw);
+            if (fallbackExpires && fallbackExpires[1]) {
+                fallbackResult.expiresAtEpochMs = Number(fallbackExpires[1]);
+            }
+            return fallbackResult;
         }
         const parsedToken = String(tokenMatch[1] || "").trim();
         if (!isValidApprovalToken(parsedToken)) {
@@ -98,6 +114,26 @@
             result.expiresAtEpochMs = Number(expiresMatch[1]);
         }
         return result;
+    }
+
+    function parseToolErrorCodeFromOutput(output) {
+        const raw = String(output || "").trim();
+        if (!raw) {
+            return "";
+        }
+        try {
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.error && typeof parsed.error.code === "string") {
+                return parsed.error.code.trim();
+            }
+        } catch (_) {
+            // Ignore non-JSON output and fall back to regex parsing.
+        }
+        const match = /"code"\s*:\s*"([^"]+)"/.exec(raw);
+        if (match && match[1]) {
+            return String(match[1]).trim();
+        }
+        return "";
     }
 
     function dataUrlToBase64(dataUrl) {
@@ -1543,6 +1579,7 @@
             const output = typeof responsePayload.output === "string"
                 ? responsePayload.output
                 : "";
+            const errorCode = parseToolErrorCodeFromOutput(output);
             const expired = output.toLowerCase().includes("expired");
             const resolvedOk = approve
                 ? status === "ok"
@@ -1551,6 +1588,7 @@
                 ok: resolvedOk && !expired,
                 status: expired ? "expired" : (status || "unknown"),
                 output,
+                errorCode,
             };
         }
 

@@ -784,6 +784,81 @@ std::string ToLowerCopyLocal(const std::string& value) {
 	return lowered;
 }
 
+bool HasNonAsciiBytesLocal(const std::string& value) {
+	for (const unsigned char ch : value) {
+		if (ch > 0x7Fu) {
+			return true;
+		}
+	}
+	return false;
+}
+
+std::string TranslateChineseCityToAsciiLocal(const std::string& city) {
+	const std::string trimmedCity = json::Trim(city);
+	if (trimmedCity == Utf8LiteralLocal(u8"上海")) {
+		return "Shanghai";
+	}
+	if (trimmedCity == Utf8LiteralLocal(u8"武汉")) {
+		return "Wuhan";
+	}
+	if (trimmedCity == Utf8LiteralLocal(u8"北京")) {
+		return "Beijing";
+	}
+	if (trimmedCity == Utf8LiteralLocal(u8"深圳")) {
+		return "Shenzhen";
+	}
+	if (trimmedCity == Utf8LiteralLocal(u8"广州")) {
+		return "Guangzhou";
+	}
+	if (trimmedCity == Utf8LiteralLocal(u8"杭州")) {
+		return "Hangzhou";
+	}
+	if (trimmedCity == Utf8LiteralLocal(u8"南京")) {
+		return "Nanjing";
+	}
+	if (trimmedCity == Utf8LiteralLocal(u8"成都")) {
+		return "Chengdu";
+	}
+	if (trimmedCity == Utf8LiteralLocal(u8"重庆")) {
+		return "Chongqing";
+	}
+	if (trimmedCity == Utf8LiteralLocal(u8"天津")) {
+		return "Tianjin";
+	}
+	if (trimmedCity == Utf8LiteralLocal(u8"西安")) {
+		return "Xi'an";
+	}
+	if (trimmedCity == Utf8LiteralLocal(u8"苏州")) {
+		return "Suzhou";
+	}
+	return {};
+}
+
+std::string ResolveAsciiCityForDeliveryLocal(const std::string& city) {
+	const std::string trimmedCity = json::Trim(city);
+	if (trimmedCity.empty()) {
+		return "the requested city";
+	}
+	if (!HasNonAsciiBytesLocal(trimmedCity)) {
+		return trimmedCity;
+	}
+
+	const std::string translated = TranslateChineseCityToAsciiLocal(trimmedCity);
+	if (!translated.empty()) {
+		return translated;
+	}
+
+	return "the requested city";
+}
+
+std::string BuildSafeEmailSubjectLocal(const std::string& city) {
+	const std::string deliveryCity = ResolveAsciiCityForDeliveryLocal(city);
+	if (deliveryCity == "the requested city") {
+		return "Weather report";
+	}
+	return deliveryCity + " weather report";
+}
+
 std::string Utf8LiteralLocal(const char* value) {
 	return value == nullptr ? std::string{} : std::string(value);
 }
@@ -1210,9 +1285,10 @@ ChatPromptOrchestrationResult TryOrchestrateWeatherEmailPrompt(
 	GatewayToolRegistry& toolRegistry,
 	const std::string& message) {
 	ChatPromptOrchestrationResult result;
-	const bool preferChinese = IsLikelyChinesePromptLocal(message);
-	const auto intent =
-		prompt::AnalyzeWeatherEmailPromptIntent(message);
+	try {
+		const bool preferChinese = IsLikelyChinesePromptLocal(message);
+		const auto intent =
+			prompt::AnalyzeWeatherEmailPromptIntent(message);
 	result.matched = intent.matched;
 	result.missReasons = intent.missReasons;
 	result.scheduleKind = intent.scheduleKind;
@@ -1297,12 +1373,22 @@ ChatPromptOrchestrationResult TryOrchestrateWeatherEmailPrompt(
 		wind,
 		humidityPct,
 		preferChinese);
+	const std::string deliveryCity = ResolveAsciiCityForDeliveryLocal(city);
+	const std::string deliveryBody = BuildWeatherReportText(
+		deliveryCity,
+		date,
+		condition,
+		temperatureC,
+		wind,
+		humidityPct,
+		false);
+	const std::string emailSubject = BuildSafeEmailSubjectLocal(city);
 
 	nlohmann::json emailPrepareArgs = {
 		{ "action", "prepare" },
 		{ "to", recipient },
-		{ "subject", city + " weather report" },
-		{ "body", report },
+		{ "subject", emailSubject },
+		{ "body", deliveryBody },
 		{ "sendAt", sendAt },
 	};
 
@@ -1487,7 +1573,7 @@ ChatPromptOrchestrationResult TryOrchestrateWeatherEmailPrompt(
 		}
 		if (autoApproveBackendMissing) {
 			result.assistantText += preferChinese
-				? Utf8LiteralLocal(u8"\u90AE\u4EF6\u6295\u9012\u540E\u7AEF\u4E0D\u53EF\u7528\uFF08\u7F3A\u5C11 himalaya CLI\uFF09\u3002\u8BF7\u5B89\u88C5\u5E76\u914D\u7F6E himalaya \u540E\u91CD\u65B0\u5BA1\u6279\u8BE5\u4EE4\u724C\u3002")
+				? Utf8LiteralLocal(u8" \u90AE\u4EF6\u6295\u9012\u540E\u7AEF\u4E0D\u53EF\u7528\uFF08\u7F3A\u5C11 himalaya CLI\uFF09\u3002\u8BF7\u5B89\u88C5\u5E76\u914D\u7F6E himalaya \u540E\u91CD\u65B0\u5BA1\u6279\u8BE5\u4EE4\u724C\u3002")
 				: " Delivery backend is unavailable (himalaya CLI missing). Install/configure himalaya and re-approve this token.";
 			const std::string fallbackProbeLabel =
 				!fallbackProbeMessage.empty()
@@ -1507,6 +1593,16 @@ ChatPromptOrchestrationResult TryOrchestrateWeatherEmailPrompt(
 	}
 
 	return result;
+	}
+	catch (...) {
+		result.success = false;
+		result.matched = false;
+		result.terminalStatus = "failed";
+		result.terminalReason = "orchestration_exception";
+		result.errorCode = "orchestration_internal_exception";
+		result.errorMessage = "weather_email_orchestration_exception";
+		return result;
+	}
 }
 
 bool IsDeepSeekDiagnosticsVerboseEnabled() {

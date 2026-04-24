@@ -615,6 +615,28 @@
                     : null;
                 if (parsed && parsed.approvalToken) {
                     upsertApprovalToken(parsed.approvalToken, "Email scheduling approval required");
+                    return;
+                }
+
+                // UI fallback parser: keep queue functional even if controller parsing
+                // misses localized punctuation/spacing edge cases.
+                const fallbackMatch = /approvalToken=([A-Za-z0-9:_\-]+)/.exec(raw);
+                if (fallbackMatch && fallbackMatch[1]) {
+                    upsertApprovalToken(fallbackMatch[1], "Email scheduling approval required");
+                }
+            }
+
+            function harvestApprovalTokensFromText(text) {
+                const raw = String(text || "");
+                if (!raw) {
+                    return;
+                }
+                const matches = raw.match(/approvalToken=([A-Za-z0-9:_\-]+)/g) || [];
+                for (const match of matches) {
+                    const token = String(match || "").replace(/^approvalToken=/, "").trim();
+                    if (token) {
+                        upsertApprovalToken(token, "Email scheduling approval required");
+                    }
                 }
             }
 
@@ -657,9 +679,12 @@
                     if (result.status === "expired") {
                         item.title = "Approval token expired";
                     } else {
+                        const errorCode = String(result && result.errorCode || "").trim();
                         item.title = result.ok
                             ? (approve ? "Email approval executed" : "Email approval denied")
-                            : (approve ? "Email approval failed" : "Email approval denied");
+                            : (approve
+                                ? (errorCode ? `Email approval failed (${errorCode})` : "Email approval failed")
+                                : "Email approval denied");
                     }
                 } catch (error) {
                     item.status = "denied";
@@ -775,6 +800,7 @@
                     messagesEl.appendChild(div);
                     if (kind === "peer") {
                         scanApprovalTokenFromText(text);
+                        harvestApprovalTokensFromText(text);
                     }
                 }
 
@@ -801,6 +827,7 @@
                 messagesEl.appendChild(div);
                 if (kind === "peer") {
                     scanApprovalTokenFromText(text);
+                    harvestApprovalTokensFromText(text);
                 }
                 scrollBottom();
             }
@@ -948,6 +975,8 @@
                 if (!text || controller.isSilentReplyText(text)) {
                     return;
                 }
+                scanApprovalTokenFromText(text);
+                harvestApprovalTokensFromText(text);
 
                 if (structuredTranscriptRenderEnabled) {
                     renderMessagesFromStructuredTranscript(text);

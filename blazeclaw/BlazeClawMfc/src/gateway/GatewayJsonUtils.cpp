@@ -529,6 +529,10 @@ namespace blazeclaw::gateway::prompt {
 		}
 
 		std::string TryExtractChineseLocationValue(const std::string& message) {
+			if (message.empty()) {
+				return {};
+			}
+
 			const std::vector<std::string> weatherTokens = {
 				"天气",
 				"气温",
@@ -586,9 +590,14 @@ namespace blazeclaw::gateway::prompt {
 				return {};
 			}
 
+			const std::size_t candidateStart = prefixPos + prefixSize;
+			if (candidateStart >= message.size() || candidateStart >= weatherPos) {
+				return {};
+			}
+
 			std::string candidate = message.substr(
-				prefixPos + prefixSize,
-				weatherPos - (prefixPos + prefixSize));
+				candidateStart,
+				weatherPos - candidateStart);
 			candidate = StripKnownDatePrefixes(candidate);
 			candidate = StripKnownChineseLocationSuffixes(candidate);
 			return candidate;
@@ -672,30 +681,31 @@ namespace blazeclaw::gateway::prompt {
 	OrchestrationStructuralSignals AnalyzeOrchestrationStructuralSignals(
 		const std::string& message) {
 		OrchestrationStructuralSignals signals;
-		const std::string normalized = NormalizePromptText(message);
-		const std::string lowered = ToLowerCopy(normalized);
+		try {
+			const std::string normalized = NormalizePromptText(message);
+			const std::string lowered = ToLowerCopy(normalized);
 
-		signals.hasWeatherCapabilityIntent = ContainsAnyToken(
-			lowered,
-			{
-				"weather",
-				"天气",
-				"气温",
-				"预报",
-				"温度",
-			});
+			signals.hasWeatherCapabilityIntent = ContainsAnyToken(
+				lowered,
+				{
+					"weather",
+					"天气",
+					"气温",
+					"预报",
+					"温度",
+				});
 
-		signals.hasEmailCapabilityIntent = ContainsAnyToken(
-			lowered,
-			{
-				"email",
-				"mail",
-				"邮件",
-				"电子邮件",
-				"发邮件",
-				"发送",
-				"发到",
-			});
+			signals.hasEmailCapabilityIntent = ContainsAnyToken(
+				lowered,
+				{
+					"email",
+					"mail",
+					"邮件",
+					"电子邮件",
+					"发邮件",
+					"发送",
+					"发到",
+				});
 
 		signals.hasReportIntent = ContainsAnyToken(
 			lowered,
@@ -720,7 +730,6 @@ namespace blazeclaw::gateway::prompt {
 		}
 		else {
 			if (IsImmediateScheduleKeyword(lowered) ||
-				HasImplicitChineseImmediateSendIntent(lowered) ||
 				lowered.rfind("now", 0) == 0) {
 				signals.hasScheduleIntent = true;
 				signals.sendAt = ResolveCurrentLocalTimeHHmm();
@@ -769,11 +778,19 @@ namespace blazeclaw::gateway::prompt {
 			signals.missReasons.push_back("missing_schedule_format");
 		}
 
-		signals.weatherEmailFlowCandidate =
-			signals.hasWeatherCapabilityIntent &&
-			signals.hasEmailCapabilityIntent &&
-			signals.hasRecipient &&
-			!signals.city.empty();
+			signals.weatherEmailFlowCandidate =
+				signals.hasWeatherCapabilityIntent &&
+				signals.hasEmailCapabilityIntent &&
+				signals.hasRecipient &&
+				!signals.city.empty();
+		}
+		catch (...) {
+			signals = OrchestrationStructuralSignals{};
+			signals.sendAt = "13:00";
+			signals.scheduleKind = "default_fallback";
+			signals.date = "tomorrow";
+			signals.missReasons.push_back("analysis_exception");
+		}
 
 		return signals;
 	}
@@ -781,20 +798,29 @@ namespace blazeclaw::gateway::prompt {
 	WeatherEmailPromptIntent AnalyzeWeatherEmailPromptIntent(
 		const std::string& message) {
 		WeatherEmailPromptIntent intent;
-		const auto signals = AnalyzeOrchestrationStructuralSignals(message);
-		intent.hasWeather = signals.hasWeatherCapabilityIntent;
-		intent.hasEmail = signals.hasEmailCapabilityIntent;
-		intent.hasReport = signals.hasReportIntent;
-		intent.hasRecipient = signals.hasRecipient;
-		intent.hasSchedule = signals.hasScheduleIntent;
-		intent.city = signals.city;
-		intent.date = signals.date;
-		intent.recipient = signals.recipient;
-		intent.sendAt = signals.sendAt;
-		intent.scheduleKind = signals.scheduleKind;
-		intent.missReasons = signals.missReasons;
-		intent.matched = signals.weatherEmailFlowCandidate;
-		intent.decompositionSteps = intent.matched ? 3 : 0;
+		try {
+			const auto signals = AnalyzeOrchestrationStructuralSignals(message);
+			intent.hasWeather = signals.hasWeatherCapabilityIntent;
+			intent.hasEmail = signals.hasEmailCapabilityIntent;
+			intent.hasReport = signals.hasReportIntent;
+			intent.hasRecipient = signals.hasRecipient;
+			intent.hasSchedule = signals.hasScheduleIntent;
+			intent.city = signals.city;
+			intent.date = signals.date;
+			intent.recipient = signals.recipient;
+			intent.sendAt = signals.sendAt;
+			intent.scheduleKind = signals.scheduleKind;
+			intent.missReasons = signals.missReasons;
+			intent.matched = signals.weatherEmailFlowCandidate;
+			intent.decompositionSteps = intent.matched ? 3 : 0;
+		}
+		catch (...) {
+			intent = WeatherEmailPromptIntent{};
+			intent.sendAt = "13:00";
+			intent.scheduleKind = "default_fallback";
+			intent.date = "tomorrow";
+			intent.missReasons.push_back("analysis_exception");
+		}
 		return intent;
 	}
 
