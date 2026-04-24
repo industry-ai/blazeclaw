@@ -310,7 +310,28 @@ namespace blazeclaw::gateway::handlers::registry_introspection {
 				EmitTelemetryEvent("gateway.tool.invoke", invokePayload);
 			}
 
-			const ToolExecuteResult execution = host.m_toolRegistry.Execute(requestedTool, argsJson);
+			ToolExecuteResult execution;
+			try {
+				execution = host.m_toolRegistry.Execute(requestedTool, argsJson);
+			}
+			catch (const std::exception& ex) {
+				execution = ToolExecuteResult{
+					.tool = requestedTool,
+					.executed = false,
+					.status = "error",
+					.output = std::string("{\"ok\":false,\"error\":{\"code\":\"tool_execute_unhandled_exception\",\"message\":\"") +
+						EscapeJsonString(ex.what()) +
+						"\"}}",
+				};
+			}
+			catch (...) {
+				execution = ToolExecuteResult{
+					.tool = requestedTool,
+					.executed = false,
+					.status = "error",
+					.output = "{\"ok\":false,\"error\":{\"code\":\"tool_execute_unhandled_exception\",\"message\":\"unknown_exception\"}}",
+				};
+			}
 
 			// Emit telemetry for tool execution result
 			{

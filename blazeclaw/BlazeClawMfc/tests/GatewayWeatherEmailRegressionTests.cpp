@@ -760,5 +760,39 @@ TEST_CASE(
 	REQUIRE(approvePayload["output"].is_string());
 	REQUIRE(approvePayload["output"].get<std::string>().find("method_not_implemented") == std::string::npos);
 
+	const auto reuseApproveResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "dispatch-only-approve-reuse",
+			.method = "gateway.tools.call.execute",
+			.paramsJson =
+				std::string("{\"tool\":\"email.schedule\",\"args\":{") +
+				"\"action\":\"approve\"," +
+				"\"approvalToken\":\"" + approvalToken + "\"," +
+				"\"approve\":true}}",
+		});
+	REQUIRE(reuseApproveResponse.ok);
+	REQUIRE(reuseApproveResponse.payloadJson.has_value());
+	auto reuseApprovePayload = nlohmann::json::parse(reuseApproveResponse.payloadJson.value());
+	REQUIRE(reuseApprovePayload["status"].get<std::string>() == "invalid_args");
+	REQUIRE(reuseApprovePayload["output"].is_string());
+	REQUIRE(reuseApprovePayload["output"].get<std::string>().find("approval_token_invalid") != std::string::npos);
+
+	const auto malformedApproveResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "dispatch-only-approve-malformed",
+			.method = "gateway.tools.call.execute",
+			.paramsJson =
+				std::string("{\"tool\":\"email.schedule\",\"args\":{") +
+				"\"action\":\"approve\"," +
+				"\"approvalToken\":\"email-app\"," +
+				"\"approve\":true}}",
+		});
+	REQUIRE(malformedApproveResponse.ok);
+	REQUIRE(malformedApproveResponse.payloadJson.has_value());
+	auto malformedApprovePayload = nlohmann::json::parse(malformedApproveResponse.payloadJson.value());
+	REQUIRE(malformedApprovePayload["status"].get<std::string>() == "invalid_args");
+	REQUIRE(malformedApprovePayload["output"].is_string());
+	REQUIRE(malformedApprovePayload["output"].get<std::string>().find("approval_token_invalid") != std::string::npos);
+
 	host.Stop();
 }

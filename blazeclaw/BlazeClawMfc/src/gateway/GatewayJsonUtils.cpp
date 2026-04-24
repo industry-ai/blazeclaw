@@ -663,8 +663,6 @@ namespace blazeclaw::gateway::prompt {
 					"稍后",
 					"晚点",
 					"之后",
-					"明天",
-					"后天",
 				});
 			return !hasDeferredIntent;
 		}

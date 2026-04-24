@@ -1366,106 +1366,128 @@ namespace blazeclaw::gateway::executors {
 					};
 				}
 
-				ApprovalSessionRecord session;
-				const auto nowEpochMs = CurrentEpochMs();
-				if (!store.IsTokenValid(token, nowEpochMs, &session)) {
-					const auto existing = store.LoadSession(token);
-					return ToolExecuteResult{
-						.tool = requestedTool,
-						.executed = false,
-						.status = "invalid_args",
-						.output = BuildErrorEnvelope(
-							existing.has_value()
-								? "approval_token_expired"
-								: "approval_token_invalid",
-							existing.has_value()
-								? "approval_token_expired"
-								: "approval_token_invalid"),
-					};
-				}
+				try {
+					ApprovalSessionRecord session;
+					const auto nowEpochMs = CurrentEpochMs();
+					if (!store.IsTokenValid(token, nowEpochMs, &session)) {
+						const auto existing = store.LoadSession(token);
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = false,
+							.status = "invalid_args",
+							.output = BuildErrorEnvelope(
+								existing.has_value()
+									? "approval_token_expired"
+									: "approval_token_invalid",
+								existing.has_value()
+									? "approval_token_expired"
+									: "approval_token_invalid"),
+						};
+					}
 
-				if (session.type != "email.schedule") {
-					return ToolExecuteResult{
-						.tool = requestedTool,
-						.executed = false,
-						.status = "invalid_args",
-						.output = BuildErrorEnvelope(
-							"approval_token_orphaned",
-							"approval_token_orphaned"),
-					};
-				}
+					if (session.type != "email.schedule") {
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = false,
+							.status = "invalid_args",
+							.output = BuildErrorEnvelope(
+								"approval_token_orphaned",
+								"approval_token_orphaned"),
+						};
+					}
 
-				std::string recipient;
-				std::string subject;
-				std::string body;
-				std::string sendAt;
-				std::string account;
-				json::FindStringField(session.payloadJson, "to", recipient);
-				json::FindStringField(session.payloadJson, "subject", subject);
-				json::FindStringField(session.payloadJson, "body", body);
-				json::FindStringField(session.payloadJson, "sendAt", sendAt);
-				json::FindStringField(session.payloadJson, "account", account);
+					std::string recipient;
+					std::string subject;
+					std::string body;
+					std::string sendAt;
+					std::string account;
+					json::FindStringField(session.payloadJson, "to", recipient);
+					json::FindStringField(session.payloadJson, "subject", subject);
+					json::FindStringField(session.payloadJson, "body", body);
+					json::FindStringField(session.payloadJson, "sendAt", sendAt);
+					json::FindStringField(session.payloadJson, "account", account);
 
-				if (!approve) {
+					if (!approve) {
+						store.RemoveToken(token);
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = true,
+							.status = "cancelled",
+							.output = BuildResultEnvelope(
+								false,
+								false,
+								recipient,
+								subject,
+								sendAt,
+								"himalaya",
+								"cancelled",
+								"cancelled_by_user"),
+						};
+					}
+
+					std::string transportBackend;
+					std::string transportStatus;
+					std::string transportOutput;
+					std::string deliveryErrorCode;
+					std::string deliveryErrorMessage;
+					const bool delivered = DeliverEmailWithFallback(
+						recipient,
+						subject,
+						body,
+						account,
+						transportBackend,
+						transportStatus,
+						transportOutput,
+						deliveryErrorCode,
+						deliveryErrorMessage);
+					if (!delivered) {
+						return ToolExecuteResult{
+							.tool = requestedTool,
+							.executed = false,
+							.status = "error",
+							.output = BuildErrorEnvelope(
+								deliveryErrorCode,
+								deliveryErrorMessage),
+						};
+					}
+
 					store.RemoveToken(token);
+
 					return ToolExecuteResult{
 						.tool = requestedTool,
 						.executed = true,
-						.status = "cancelled",
+						.status = "ok",
 						.output = BuildResultEnvelope(
-							false,
-							false,
+							true,
+							delivered,
 							recipient,
 							subject,
 							sendAt,
-							"himalaya",
-							"cancelled",
-							"cancelled_by_user"),
+							transportBackend.empty() ? "himalaya" : transportBackend,
+							transportStatus,
+							transportOutput),
 					};
 				}
-
-				std::string transportBackend;
-				std::string transportStatus;
-				std::string transportOutput;
-				std::string deliveryErrorCode;
-				std::string deliveryErrorMessage;
-				const bool delivered = DeliverEmailWithFallback(
-					recipient,
-					subject,
-					body,
-					account,
-					transportBackend,
-					transportStatus,
-					transportOutput,
-					deliveryErrorCode,
-					deliveryErrorMessage);
-				if (!delivered) {
+				catch (const std::exception&) {
 					return ToolExecuteResult{
 						.tool = requestedTool,
 						.executed = false,
 						.status = "error",
 						.output = BuildErrorEnvelope(
-							deliveryErrorCode,
-							deliveryErrorMessage),
+							"approval_execution_failed",
+							"approval_execution_failed"),
 					};
 				}
-
-				store.RemoveToken(token);
-
-				return ToolExecuteResult{
-					.tool = requestedTool,
-					.executed = true,
-					.status = "ok",
-					.output = BuildResultEnvelope(
-						true,
-						delivered,
-						recipient,
-						subject,
-						sendAt,
-						transportBackend.empty() ? "himalaya" : transportBackend,
-						transportStatus,
-						transportOutput),
-				};
+				catch (...) {
+					return ToolExecuteResult{
+						.tool = requestedTool,
+						.executed = false,
+						.status = "error",
+						.output = BuildErrorEnvelope(
+							"approval_execution_failed",
+							"approval_execution_failed"),
+					};
+				}
 			}
 
 			return ToolExecuteResult{
