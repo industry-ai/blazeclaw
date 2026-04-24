@@ -63,3 +63,110 @@
 - Treat synthetic fallback as last-resort only.
 - Continue monitoring whether `wttr.in` returns stable structured payloads in
   this network/runtime environment.
+
+---
+
+## Date
+- 2026-04-24
+
+## Regression Scenario (Chinese Prompt)
+- English input succeeds:
+  - `Check tomorrow's weather in Wuhan, write a short report, and email it to jicheng@whu.edu.cn now.`
+- Chinese input fails partially:
+  - `查一下明天武汉的天气，写一个简短的报告，用电子邮件发送给 jicheng@whu.edu.cn`
+- Observed output includes synthetic weather fallback and repeated approval failure logs:
+  - `Provider unavailable (fallback estimate)`
+  - `tools.execute.error - status=error code=method_not_implemented`
+
+## Root Cause Analysis
+
+### Root Cause 1: Chinese location extraction captures wrong city token
+- File: `blazeclaw/BlazeClawMfc/src/gateway/GatewayJsonUtils.cpp`
+- The Chinese location regex in `ExtractExplicitLocationValue` currently allows
+  the capture group to include time words like `明天`.
+- For `查一下明天武汉的天气...`, extracted city becomes `明天武汉` instead of `武汉`.
+- Downstream effect:
+  1. `TryOrchestrateWeatherEmailPrompt` passes `city="明天武汉"` to
+     `weather.lookup`.
+  2. Provider requests use invalid location text.
+  3. Provider fetch/parse path fails and falls back to synthetic snapshot.
+  4. Assistant shows `Provider unavailable (fallback estimate)`.
+
+### Root Cause 2: Tool-execute RPC method is missing in runtime-dispatch-only startup path
+- Files:
+  - `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp`
+  - `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.RegistryIntrospection.cpp`
+- `gateway.tools.call.execute` is registered in
+  `RegisterGatewayRegistryIntrospectionHandlers`.
+- `StartLocalRuntimeDispatchOnly()` does not call `RegisterDefaultHandlers()` and
+  does not register registry-introspection handlers; it only registers runtime
+  handlers and tools list/catalog helpers.
+- Downstream effect:
+  1. UI/bridge sends approval calls through `gateway.tools.call.execute` with
+     `tool=email.schedule` and `args.action=approve`.
+  2. Dispatcher cannot find method and returns `method_not_implemented`.
+  3. Skill log repeats `tools.execute.start ... action=approve` followed by
+     `tools.execute.error ... method_not_implemented`.
+
+## Why English Works but Chinese Fails
+- English prompt contains explicit city pattern (`in Wuhan`) that matches the
+  English location regex robustly.
+- Chinese prompt currently triggers a broader Chinese regex that can swallow
+  date + city together; this causes weather provider degradation.
+- Email approval failure is startup-mode dependent. If a run path uses runtime
+  dispatch only and approval is executed via bridge RPC (`gateway.tools.call.execute`),
+  it fails regardless of language.
+
+## Step-by-Step Action Plan to Fix
+1. [DONE 2026-04-24] Fix Chinese city extraction normalization.
+   - Implemented in `blazeclaw/BlazeClawMfc/src/gateway/GatewayJsonUtils.cpp`.
+   - Updated `ExtractExplicitLocationValue` to tolerate optional Chinese date
+     keywords before city capture.
+   - Added post-process sanitizer to strip known date prefixes (`今天`, `明天`)
+     from captured city values.
+
+2. [DONE 2026-04-24] Add deterministic parser tests for Chinese location/date combinations.
+   - Implemented in `blazeclaw/BlazeClawMfc/tests/GatewayWeatherEmailRegressionTests.cpp`.
+   - Added parser regression tests for:
+     - `查一下明天武汉的天气...` → city=`武汉`, date=`tomorrow`
+     - `查一下今天北京天气...` → city=`北京`, date=`today`
+     - `在深圳查天气并发邮件给...` → city=`深圳`
+
+3. [DONE 2026-04-24] Register tool execution RPC in runtime-dispatch-only mode.
+   - Implemented in `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.cpp`.
+   - `StartLocalRuntimeDispatchOnly()` now registers
+     `RegisterGatewayRegistryIntrospectionHandlers()`, which includes
+     `gateway.tools.call.execute`.
+   - Keeps thin-façade registration split intact by reusing existing registrar.
+
+4. Add regression test for runtime-dispatch-only approval flow.
+   - Start host in runtime-dispatch-only mode.
+   - Execute prepare + approve through `gateway.tools.call.execute`.
+   - Assert no `method_not_implemented` and successful terminal status (`ok` or
+     policy-driven `needs_approval` when backend unavailable).
+
+5. Add end-to-end Chinese weather+email regression validation.
+   - Reuse `chat.send` + `chat.events.poll` pattern.
+   - Assert weather tool result is `status=ok` without synthetic fallback marker
+     in assistant summary for healthy providers.
+   - Assert no duplicate or repeated `method_not_implemented` approval failures.
+
+6. Align telemetry and diagnostics with OpenClaw parity signals.
+   - Emit a structured diagnostic marker for extracted city/date in orchestration
+     trace (non-PII-safe format).
+   - Keep structural-orchestration-signals metadata intact.
+
+7. Validate and gate with required build/test workflow.
+   - Build command:
+     - `msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001`
+   - Run targeted weather/email regressions including Chinese and bilingual cases.
+   - Block merge if Chinese parser or runtime-dispatch approval test regresses.
+
+## Expected Outcome After Fix
+- Chinese prompt resolves city/date correctly and uses real provider path when
+  available (Open-Meteo or wttr-in fallback chain), avoiding synthetic estimate
+  in normal conditions.
+- Approval calls no longer fail with `method_not_implemented` in runtime-dispatch-only
+  startup mode.
+- English/Chinese weather+email orchestration reaches parity under the same
+  policy profile and fallback settings.

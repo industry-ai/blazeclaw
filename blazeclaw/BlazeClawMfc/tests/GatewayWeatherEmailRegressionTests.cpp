@@ -1,4 +1,5 @@
 ﻿#include "gateway/GatewayHost.h"
+#include "gateway/GatewayJsonUtils.h"
 
 #include <catch2/catch_all.hpp>
 #include <nlohmann/json.hpp>
@@ -611,4 +612,22 @@ TEST_CASE(
 	REQUIRE(invalidArgsCount == 0);
 
 	host.Stop();
+}
+
+TEST_CASE(
+	"Chinese weather-email parser extracts normalized city and date deterministically",
+	"[gateway][weather-email][parser][chinese][regression]") {
+	const auto intentTomorrow = blazeclaw::gateway::prompt::AnalyzeWeatherEmailPromptIntent(
+		"查一下明天武汉的天气，写一个简短的报告，用电子邮件发送给 jicheng@whu.edu.cn");
+	REQUIRE(intentTomorrow.city == "武汉");
+	REQUIRE(intentTomorrow.date == "tomorrow");
+
+	const auto intentToday = blazeclaw::gateway::prompt::AnalyzeWeatherEmailPromptIntent(
+		"查一下今天北京天气，写一个简短报告并发送邮件给 jicheng@whu.edu.cn");
+	REQUIRE(intentToday.city == "北京");
+	REQUIRE(intentToday.date == "today");
+
+	const auto intentShenzhen = blazeclaw::gateway::prompt::AnalyzeWeatherEmailPromptIntent(
+		"在深圳查天气并发邮件给 jicheng@whu.edu.cn");
+	REQUIRE(intentShenzhen.city == "深圳");
 }

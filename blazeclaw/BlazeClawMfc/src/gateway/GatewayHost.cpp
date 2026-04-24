@@ -325,6 +325,7 @@ namespace blazeclaw::gateway {
 		m_toolRegistry.LoadSkillToolsFromDirectory("skills");
 		handlers::tools_shared::ToolsSharedHandlers::RegisterToolsList(m_dispatcher, m_toolRegistry);
 		handlers::tools_shared::ToolsSharedHandlers::RegisterToolsCatalog(m_dispatcher, m_toolRegistry);
+		RegisterGatewayRegistryIntrospectionHandlers();
 		if (!m_runtimeHandlersInitialized) {
 			RegisterRuntimeHandlers();
 			m_runtimeHandlersInitialized = true;

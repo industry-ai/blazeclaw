@@ -464,17 +464,39 @@ namespace blazeclaw::gateway::prompt {
 			return "tomorrow";
 		}
 
+		std::string StripKnownDatePrefixes(std::string value) {
+			std::string normalized = json::Trim(value);
+			if (normalized.empty()) {
+				return {};
+			}
+
+			for (const std::string& prefix : { std::string("今天"), std::string("明天") }) {
+				if (normalized.rfind(prefix, 0) == 0) {
+					normalized = json::Trim(normalized.substr(prefix.size()));
+					break;
+				}
+			}
+
+			while (!normalized.empty() &&
+				normalized.rfind("的", 0) == 0) {
+				normalized = json::Trim(normalized.substr(std::string("的").size()));
+			}
+
+			return normalized;
+		}
+
 		std::string ExtractExplicitLocationValue(const std::string& message) {
 			static const std::regex kEnglishLocationRegex(
 				R"(\b(?:in|at|for)\s+([A-Za-z][A-Za-z\-' ]{1,48}))",
 				std::regex_constants::icase);
 			static const std::regex kChineseLocationRegex(
-				R"((?:在|查一下|查下|查询|看一下|看下)([^，。！？；\s]{1,16})(?:的)?(?:天气|气温|预报|温度))");
+				R"((?:在|查一下|查下|查询|看一下|看下)(?:(?:今天|明天)\s*)?([^，。！？；\s]{1,16}?)(?:的)?(?:天气|气温|预报|温度))");
 
 			std::smatch chineseMatch;
 			if (std::regex_search(message, chineseMatch, kChineseLocationRegex) &&
 				chineseMatch.size() >= 2) {
-				const std::string candidate = json::Trim(chineseMatch[1].str());
+				const std::string candidate =
+					StripKnownDatePrefixes(chineseMatch[1].str());
 				if (!candidate.empty()) {
 					return candidate;
 				}
