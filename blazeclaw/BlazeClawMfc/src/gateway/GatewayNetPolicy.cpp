@@ -16,6 +16,9 @@
 namespace blazeclaw::gateway {
 	namespace {
 
+		/// `isContainerEnvironment` one-shot cache; `ResetContainerEnvironmentCacheForTest` can clear.
+		std::optional<bool> g_containerEnvironmentCache;
+
 		static bool g_wsaNetPolicyInit = false;
 
 		struct WsaUse {
@@ -461,6 +464,36 @@ namespace blazeclaw::gateway {
 		return false;
 	}
 
+	bool GatewayNetPolicy::IsLocalGatewayAddress(
+		std::string_view ip,
+		const IsLocalGatewayAddressOptions& options) {
+		if (TrimView(ip).empty()) {
+			return false;
+		}
+		if (IsLoopbackAddress(ip)) {
+			return true;
+		}
+		const auto n = ParseIpToken(ip);
+		if (!n) {
+			return false;
+		}
+		if (options.primaryTailnetIpv4.has_value() && !options.primaryTailnetIpv4->empty()) {
+			if (const auto t4 = ParseIpToken(*options.primaryTailnetIpv4)) {
+				if (*n == *t4) {
+					return true;
+				}
+			}
+		}
+		if (options.primaryTailnetIpv6.has_value() && !options.primaryTailnetIpv6->empty()) {
+			const std::string a = ToLowerAscii(std::string(TrimView(ip)));
+			const std::string b = ToLowerAscii(std::string(TrimView(*options.primaryTailnetIpv6)));
+			if (a == b) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	bool GatewayNetPolicy::IsPrivateOrLoopbackAddress(std::string_view ip) {
 		const auto n = ParseIpToken(ip);
 		if (!n) {
@@ -589,10 +622,14 @@ namespace blazeclaw::gateway {
 	}
 
 	bool GatewayNetPolicy::IsContainerEnvironment() noexcept {
-		static const bool k = [] {
-			return DetectContainerOnce();
-		}();
-		return k;
+		if (!g_containerEnvironmentCache.has_value()) {
+			g_containerEnvironmentCache = DetectContainerOnce();
+		}
+		return *g_containerEnvironmentCache;
+	}
+
+	void GatewayNetPolicy::ResetContainerEnvironmentCacheForTest() noexcept {
+		g_containerEnvironmentCache.reset();
 	}
 
 	bool GatewayNetPolicy::IsValidIPv4(std::string_view host) {

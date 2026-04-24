@@ -20,6 +20,17 @@ namespace blazeclaw::gateway {
 		/// RFC1918, CGNAT, link-local, ULA, loopback (loose match vs OpenClaw `ip` ranges).
 		[[nodiscard]] static bool IsPrivateOrLoopbackAddress(std::string_view ip);
 
+		/// OpenClaw `isLocalGatewayAddress` — loopback, or match optional primary Tailnet IPs
+		/// (callers pass values from host introspection; there is no `pickPrimaryTailnet*` in this module).
+		struct IsLocalGatewayAddressOptions {
+			std::optional<std::string> primaryTailnetIpv4;
+			std::optional<std::string> primaryTailnetIpv6;
+		};
+
+		[[nodiscard]] static bool IsLocalGatewayAddress(
+			std::string_view ip,
+			const IsLocalGatewayAddressOptions& options = {});
+
 		/// `cidr` may be an exact host/IP or a `prefix/len` (IPv4 or IPv6).
 		[[nodiscard]] static bool IsIpInCidr(std::string_view ip, std::string_view cidr);
 
@@ -40,6 +51,9 @@ namespace blazeclaw::gateway {
 		[[nodiscard]] static std::optional<std::string> ResolveClientIp(const ResolveClientIpParams& params);
 
 		[[nodiscard]] static bool IsContainerEnvironment() noexcept;
+
+		/// OpenClaw `__resetContainerCacheForTest` — clears cached `IsContainerEnvironment` result.
+		static void ResetContainerEnvironmentCacheForTest() noexcept;
 
 		/// Dotted-decimal IPv4 only (OpenClaw `isValidIPv4` / `isCanonicalDottedDecimalIPv4` intent).
 		[[nodiscard]] static bool IsValidIPv4(std::string_view host);

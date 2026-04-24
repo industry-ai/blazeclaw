@@ -117,3 +117,34 @@ TEST_CASE("GatewayNetPolicy N4: resolveGatewayListenHosts (net.ts)", "[gateway][
 	REQUIRE(!loop.empty());
 	REQUIRE(loop[0] == "127.0.0.1");
 }
+
+TEST_CASE("GatewayNetPolicy: isLocalGatewayAddress (net.ts) + container cache test hook", "[gateway][net]") {
+	REQUIRE(GatewayNetPolicy::IsLocalGatewayAddress("127.0.0.1"));
+	REQUIRE(GatewayNetPolicy::IsLocalGatewayAddress("::1"));
+	REQUIRE_FALSE(GatewayNetPolicy::IsLocalGatewayAddress("8.8.8.8"));
+	const bool before = GatewayNetPolicy::IsContainerEnvironment();
+	(void)before;
+	GatewayNetPolicy::ResetContainerEnvironmentCacheForTest();
+	REQUIRE(GatewayNetPolicy::IsContainerEnvironment() == before);
+
+	{
+		GatewayNetPolicy::IsLocalGatewayAddressOptions opt;
+		opt.primaryTailnetIpv4 = std::string("100.64.0.7");
+		REQUIRE(GatewayNetPolicy::IsLocalGatewayAddress("100.64.0.7", opt));
+	}
+	{
+		GatewayNetPolicy::IsLocalGatewayAddressOptions opt;
+		opt.primaryTailnetIpv4 = std::string("100.64.0.7");
+		REQUIRE_FALSE(GatewayNetPolicy::IsLocalGatewayAddress("10.0.0.1", opt));
+	}
+	{
+		GatewayNetPolicy::IsLocalGatewayAddressOptions opt;
+		opt.primaryTailnetIpv6 = std::string("fd00::1");
+		REQUIRE(GatewayNetPolicy::IsLocalGatewayAddress("fd00::1", opt));
+	}
+	{
+		GatewayNetPolicy::IsLocalGatewayAddressOptions opt;
+		opt.primaryTailnetIpv6 = std::string("fd00::1");
+		REQUIRE(GatewayNetPolicy::IsLocalGatewayAddress("FD00::1", opt));
+	}
+}
