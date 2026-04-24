@@ -210,6 +210,18 @@ namespace {
 			"structural_orchestration_signals");
 	}
 
+	bool ContainsSubstring(
+		const std::vector<std::string>& values,
+		const std::string& expectedFragment) {
+		for (const auto& value : values) {
+			if (value.find(expectedFragment) != std::string::npos) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 }
 
 TEST_CASE(
@@ -443,6 +455,16 @@ TEST_CASE(
 	REQUIRE(CountExactMatch(
 		pollTrace.assistantTexts,
 		"tools.execute.result tool=email.schedule status=invalid_args") == 0);
+	REQUIRE(!ContainsSubstring(
+		pollTrace.assistantTexts,
+		"method_not_implemented"));
+	REQUIRE(!ContainsSubstring(
+		pollTrace.assistantTexts,
+		"Provider unavailable (fallback estimate)"));
+	REQUIRE(ContainsSubstring(
+		pollTrace.assistantTexts,
+		"orchestration.intent city=武汉 date=tomorrow source=structural_orchestration_signals"));
+	REQUIRE(pollTrace.finalAssistantText.find("Provider unavailable (fallback estimate)") == std::string::npos);
 
 	for (const auto& delta : pollTrace.assistantTexts) {
 		REQUIRE(delta.find("baidu_search_python") == std::string::npos);
@@ -630,4 +652,77 @@ TEST_CASE(
 	const auto intentShenzhen = blazeclaw::gateway::prompt::AnalyzeWeatherEmailPromptIntent(
 		"在深圳查天气并发邮件给 jicheng@whu.edu.cn");
 	REQUIRE(intentShenzhen.city == "深圳");
+}
+
+TEST_CASE(
+	"Runtime-dispatch-only mode executes email approval through gateway.tools.call.execute",
+	"[gateway][weather-email][email-schedule][dispatch-only][regression]") {
+	ScopedEnvVar modeEnv("BLAZECLAW_EMAIL_DELIVERY_MODE");
+	ScopedEnvVar imapModeEnv("BLAZECLAW_EMAIL_IMAP_SMTP_MODE");
+	ScopedEnvVar backendsEnv("BLAZECLAW_EMAIL_DELIVERY_BACKENDS");
+	ScopedEnvVar profileEnabled("BLAZECLAW_EMAIL_POLICY_PROFILES_ENABLED");
+	ScopedEnvVar profileEnforce("BLAZECLAW_EMAIL_POLICY_PROFILES_ENFORCE");
+	ScopedEnvVar actionUnavailable("BLAZECLAW_EMAIL_POLICY_ACTION_UNAVAILABLE");
+	ScopedEnvVar actionExec("BLAZECLAW_EMAIL_POLICY_ACTION_EXEC_ERROR");
+
+	modeEnv.Set("mock_failure");
+	imapModeEnv.Set("mock_success");
+	backendsEnv.Set("himalaya,imap-smtp-email");
+	profileEnabled.Set("true");
+	profileEnforce.Set("true");
+	actionUnavailable.Set("continue");
+	actionExec.Set("continue");
+
+	blazeclaw::gateway::GatewayHost host;
+	REQUIRE(host.StartLocalRuntimeDispatchOnly());
+
+	const auto prepareResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "dispatch-only-prepare",
+			.method = "gateway.tools.call.execute",
+			.paramsJson =
+				std::string("{\"tool\":\"email.schedule\",\"args\":{") +
+				"\"action\":\"prepare\"," +
+				"\"to\":\"jicheng@whu.edu.cn\"," +
+				"\"subject\":\"Dispatch-only approval test\"," +
+				"\"body\":\"Dispatch-only approval test body\"," +
+				"\"sendAt\":\"13:00\"}}",
+		});
+	REQUIRE(prepareResponse.ok);
+	REQUIRE(prepareResponse.payloadJson.has_value());
+
+	auto preparePayload = nlohmann::json::parse(prepareResponse.payloadJson.value());
+	REQUIRE(preparePayload["tool"].get<std::string>() == "email.schedule");
+	REQUIRE(preparePayload["status"].get<std::string>() == "needs_approval");
+	REQUIRE(preparePayload["output"].is_string());
+	REQUIRE(preparePayload["output"].get<std::string>().find("approvalToken") != std::string::npos);
+	REQUIRE(preparePayload["output"].get<std::string>().find("method_not_implemented") == std::string::npos);
+
+	auto prepareOutput = nlohmann::json::parse(preparePayload["output"].get<std::string>());
+	REQUIRE(prepareOutput.contains("requiresApproval"));
+	const std::string approvalToken =
+		prepareOutput["requiresApproval"]["approvalToken"].get<std::string>();
+	REQUIRE(!approvalToken.empty());
+
+	const auto approveResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "dispatch-only-approve",
+			.method = "gateway.tools.call.execute",
+			.paramsJson =
+				std::string("{\"tool\":\"email.schedule\",\"args\":{") +
+				"\"action\":\"approve\"," +
+				"\"approvalToken\":\"" + approvalToken + "\"," +
+				"\"approve\":true}}",
+		});
+	REQUIRE(approveResponse.ok);
+	REQUIRE(approveResponse.payloadJson.has_value());
+
+	auto approvePayload = nlohmann::json::parse(approveResponse.payloadJson.value());
+	REQUIRE(approvePayload["tool"].get<std::string>() == "email.schedule");
+	const std::string approveStatus = approvePayload["status"].get<std::string>();
+	REQUIRE((approveStatus == "ok" || approveStatus == "needs_approval"));
+	REQUIRE(approvePayload["output"].is_string());
+	REQUIRE(approvePayload["output"].get<std::string>().find("method_not_implemented") == std::string::npos);
+
+	host.Stop();
 }

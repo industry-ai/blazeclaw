@@ -139,28 +139,31 @@
      `gateway.tools.call.execute`.
    - Keeps thin-façade registration split intact by reusing existing registrar.
 
-4. Add regression test for runtime-dispatch-only approval flow.
-   - Start host in runtime-dispatch-only mode.
-   - Execute prepare + approve through `gateway.tools.call.execute`.
-   - Assert no `method_not_implemented` and successful terminal status (`ok` or
-     policy-driven `needs_approval` when backend unavailable).
+4. [DONE 2026-04-24] Add regression test for runtime-dispatch-only approval flow.
+   - Implemented in `blazeclaw/BlazeClawMfc/tests/GatewayWeatherEmailRegressionTests.cpp`.
+   - Starts host in runtime-dispatch-only mode.
+   - Executes prepare + approve through `gateway.tools.call.execute`.
+   - Asserts no `method_not_implemented` and valid terminal status (`ok` or
+     policy-driven `needs_approval`).
 
-5. Add end-to-end Chinese weather+email regression validation.
-   - Reuse `chat.send` + `chat.events.poll` pattern.
-   - Assert weather tool result is `status=ok` without synthetic fallback marker
-     in assistant summary for healthy providers.
-   - Assert no duplicate or repeated `method_not_implemented` approval failures.
+5. [DONE 2026-04-24] Add end-to-end Chinese weather+email regression validation.
+   - Strengthened existing Chinese `chat.send` + `chat.events.poll` regression.
+   - Asserts weather tool result is `status=ok`.
+   - Asserts synthetic fallback marker is absent from assistant trace/final text.
+   - Asserts no duplicate or repeated `method_not_implemented` approval failures.
 
-6. Align telemetry and diagnostics with OpenClaw parity signals.
-   - Emit a structured diagnostic marker for extracted city/date in orchestration
-     trace (non-PII-safe format).
-   - Keep structural-orchestration-signals metadata intact.
+6. [DONE 2026-04-24] Align telemetry and diagnostics with OpenClaw parity signals.
+   - Implemented in `blazeclaw/BlazeClawMfc/src/gateway/GatewayHost.Handlers.RuntimeHelpers.inl`.
+   - Emits a structured non-PII orchestration trace marker:
+     `orchestration.intent city=<city> date=<date> source=structural_orchestration_signals`.
+   - Preserves `structural_orchestration_signals` metadata path.
 
-7. Validate and gate with required build/test workflow.
-   - Build command:
+7. [DONE 2026-04-24] Validate and gate with required build/test workflow.
+   - Required build command executed:
      - `msbuild "blazeclaw/BlazeClaw.sln" /t:Build /p:Configuration=Debug /p:Platform=x64 /p:CodePage=65001`
-   - Run targeted weather/email regressions including Chinese and bilingual cases.
-   - Block merge if Chinese parser or runtime-dispatch approval test regresses.
+   - Targeted regression execution is used to validate Chinese parser, runtime-dispatch approval,
+     and Chinese weather/email path.
+   - Merge should remain blocked on any regression in those paths.
 
 ## Expected Outcome After Fix
 - Chinese prompt resolves city/date correctly and uses real provider path when

@@ -477,29 +477,132 @@ namespace blazeclaw::gateway::prompt {
 				}
 			}
 
-			while (!normalized.empty() &&
-				normalized.rfind("的", 0) == 0) {
+			while (!normalized.empty() && normalized.rfind("的", 0) == 0) {
 				normalized = json::Trim(normalized.substr(std::string("的").size()));
 			}
 
 			return normalized;
 		}
 
+		std::string StripKnownChineseLocationSuffixes(std::string value) {
+			std::string normalized = json::Trim(value);
+			if (normalized.empty()) {
+				return {};
+			}
+
+			for (const std::string& suffix : {
+				std::string("查一下"),
+				std::string("查下"),
+				std::string("查询"),
+				std::string("查看"),
+				std::string("看一下"),
+				std::string("看下"),
+				std::string("看看"),
+				std::string("查"),
+				std::string("看") }) {
+				if (normalized.size() >= suffix.size() &&
+					normalized.compare(
+						normalized.size() - suffix.size(),
+						suffix.size(),
+						suffix) == 0) {
+					normalized = json::Trim(
+						normalized.substr(0, normalized.size() - suffix.size()));
+					break;
+				}
+			}
+
+			while (!normalized.empty() && normalized.rfind("的", 0) == 0) {
+				normalized = json::Trim(normalized.substr(std::string("的").size()));
+			}
+
+			while (!normalized.empty() &&
+				normalized.size() >= std::string("的").size() &&
+				normalized.compare(
+					normalized.size() - std::string("的").size(),
+					std::string("的").size(),
+					"的") == 0) {
+				normalized = json::Trim(
+					normalized.substr(0, normalized.size() - std::string("的").size()));
+			}
+
+			return normalized;
+		}
+
+		std::string TryExtractChineseLocationValue(const std::string& message) {
+			const std::vector<std::string> weatherTokens = {
+				"天气",
+				"气温",
+				"预报",
+				"温度",
+				"天气情况",
+			};
+			const std::vector<std::string> prefixTokens = {
+				"查一下",
+				"查下",
+				"查询",
+				"看一下",
+				"看下",
+				"在",
+			};
+
+			std::size_t weatherPos = std::string::npos;
+			for (const auto& token : weatherTokens) {
+				const std::size_t pos = message.find(token);
+				if (pos != std::string::npos &&
+					(weatherPos == std::string::npos || pos < weatherPos)) {
+					weatherPos = pos;
+				}
+			}
+			if (weatherPos == std::string::npos) {
+				const std::vector<std::string> fallbackSuffixes = {
+					"查天气",
+					"看天气",
+					"查下天气",
+					"看下天气",
+				};
+				for (const auto& token : fallbackSuffixes) {
+					const std::size_t pos = message.find(token);
+					if (pos != std::string::npos &&
+						(weatherPos == std::string::npos || pos < weatherPos)) {
+						weatherPos = pos;
+					}
+				}
+			}
+			if (weatherPos == std::string::npos) {
+				return {};
+			}
+
+			std::size_t prefixPos = std::string::npos;
+			std::size_t prefixSize = 0;
+			for (const auto& token : prefixTokens) {
+				const std::size_t pos = message.rfind(token, weatherPos);
+				if (pos != std::string::npos &&
+					(prefixPos == std::string::npos || pos > prefixPos)) {
+					prefixPos = pos;
+					prefixSize = token.size();
+				}
+			}
+			if (prefixPos == std::string::npos) {
+				return {};
+			}
+
+			std::string candidate = message.substr(
+				prefixPos + prefixSize,
+				weatherPos - (prefixPos + prefixSize));
+			candidate = StripKnownDatePrefixes(candidate);
+			candidate = StripKnownChineseLocationSuffixes(candidate);
+			return candidate;
+		}
+
 		std::string ExtractExplicitLocationValue(const std::string& message) {
 			static const std::regex kEnglishLocationRegex(
 				R"(\b(?:in|at|for)\s+([A-Za-z][A-Za-z\-' ]{1,48}))",
 				std::regex_constants::icase);
-			static const std::regex kChineseLocationRegex(
-				R"((?:在|查一下|查下|查询|看一下|看下)(?:(?:今天|明天)\s*)?([^，。！？；\s]{1,16}?)(?:的)?(?:天气|气温|预报|温度))");
 
-			std::smatch chineseMatch;
-			if (std::regex_search(message, chineseMatch, kChineseLocationRegex) &&
-				chineseMatch.size() >= 2) {
-				const std::string candidate =
-					StripKnownDatePrefixes(chineseMatch[1].str());
-				if (!candidate.empty()) {
-					return candidate;
-				}
+			const std::string chineseCandidate =
+				TryExtractChineseLocationValue(message);
+			if (!chineseCandidate.empty()) {
+				return chineseCandidate;
 			}
 
 			std::smatch englishMatch;
