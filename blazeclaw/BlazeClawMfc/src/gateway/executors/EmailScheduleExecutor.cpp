@@ -455,6 +455,47 @@ namespace blazeclaw::gateway::executors {
 			return escaped;
 		}
 
+		std::string EncodeBase64Utf8(const std::string& input) {
+			static constexpr char kBase64Alphabet[] =
+				"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+			std::string output;
+			output.reserve(((input.size() + 2) / 3) * 4);
+
+			std::size_t index = 0;
+			while (index + 3 <= input.size()) {
+				const unsigned int chunk =
+					(static_cast<unsigned char>(input[index]) << 16) |
+					(static_cast<unsigned char>(input[index + 1]) << 8) |
+					static_cast<unsigned char>(input[index + 2]);
+				output.push_back(kBase64Alphabet[(chunk >> 18) & 0x3Fu]);
+				output.push_back(kBase64Alphabet[(chunk >> 12) & 0x3Fu]);
+				output.push_back(kBase64Alphabet[(chunk >> 6) & 0x3Fu]);
+				output.push_back(kBase64Alphabet[chunk & 0x3Fu]);
+				index += 3;
+			}
+
+			const std::size_t remaining = input.size() - index;
+			if (remaining == 1) {
+				const unsigned int chunk =
+					(static_cast<unsigned char>(input[index]) << 16);
+				output.push_back(kBase64Alphabet[(chunk >> 18) & 0x3Fu]);
+				output.push_back(kBase64Alphabet[(chunk >> 12) & 0x3Fu]);
+				output.push_back('=');
+				output.push_back('=');
+			}
+			else if (remaining == 2) {
+				const unsigned int chunk =
+					(static_cast<unsigned char>(input[index]) << 16) |
+					(static_cast<unsigned char>(input[index + 1]) << 8);
+				output.push_back(kBase64Alphabet[(chunk >> 18) & 0x3Fu]);
+				output.push_back(kBase64Alphabet[(chunk >> 12) & 0x3Fu]);
+				output.push_back(kBase64Alphabet[(chunk >> 6) & 0x3Fu]);
+				output.push_back('=');
+			}
+
+			return output;
+		}
+
 		std::optional<std::string> ResolveExecutablePath(
 			const std::string& executable) {
 			const std::string trimmed = json::Trim(executable);
@@ -1042,10 +1083,10 @@ namespace blazeclaw::gateway::executors {
 			command += " send";
 			command += " --to ";
 			command += QuoteArg(recipient);
-			command += " --subject ";
-			command += QuoteArg(subject);
-			command += " --body ";
-			command += QuoteArg(body);
+			command += " --subject-base64 ";
+			command += QuoteArg(EncodeBase64Utf8(subject));
+			command += " --body-base64 ";
+			command += QuoteArg(EncodeBase64Utf8(body));
 			command += " 2>&1\"";
 
 			int exitCode = -1;

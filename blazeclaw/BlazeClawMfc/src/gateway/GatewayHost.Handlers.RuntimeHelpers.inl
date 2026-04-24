@@ -1373,15 +1373,16 @@ ChatPromptOrchestrationResult TryOrchestrateWeatherEmailPrompt(
 		wind,
 		humidityPct,
 		preferChinese);
-	const std::string deliveryCity = ResolveAsciiCityForDeliveryLocal(city);
-	const std::string deliveryBody = BuildWeatherReportText(
-		deliveryCity,
-		date,
-		condition,
-		temperatureC,
-		wind,
-		humidityPct,
-		false);
+	const std::string deliveryBody = preferChinese
+		? report
+		: BuildWeatherReportText(
+			ResolveAsciiCityForDeliveryLocal(city),
+			date,
+			condition,
+			temperatureC,
+			wind,
+			humidityPct,
+			false);
 	const std::string emailSubject = BuildSafeEmailSubjectLocal(city);
 
 	nlohmann::json emailPrepareArgs = {

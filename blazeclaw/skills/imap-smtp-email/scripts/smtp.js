@@ -66,6 +66,14 @@ function parseArgs() {
     return { command, options, positional };
 }
 
+function decodeBase64Utf8(value, optionName) {
+    try {
+        return Buffer.from(String(value || ''), 'base64').toString('utf8');
+    } catch (err) {
+        throw new Error(`Invalid ${optionName} value: base64 decode failed`);
+    }
+}
+
 // Create SMTP transporter
 function createTransporter() {
     if (!config.smtp.host || !config.smtp.user || !config.smtp.pass) {
@@ -232,14 +240,16 @@ async function main() {
                 if (!options.to) {
                     throw new Error('Missing required option: --to <email>');
                 }
-                if (!options.subject && !options['subject-file']) {
-                    throw new Error('Missing required option: --subject <text> or --subject-file <file>');
+                if (!options.subject && !options['subject-file'] && !options['subject-base64']) {
+                    throw new Error('Missing required option: --subject <text> or --subject-file <file> or --subject-base64 <base64>');
                 }
 
                 // Read subject from file if specified
                 if (options['subject-file']) {
                     validateReadPath(options['subject-file']);
                     options.subject = fs.readFileSync(options['subject-file'], 'utf8').trim();
+                } else if (options['subject-base64']) {
+                    options.subject = decodeBase64Utf8(options['subject-base64'], '--subject-base64');
                 }
 
                 // Read body from file if specified
@@ -254,6 +264,8 @@ async function main() {
                 } else if (options['html-file']) {
                     validateReadPath(options['html-file']);
                     options.html = fs.readFileSync(options['html-file'], 'utf8');
+                } else if (options['body-base64']) {
+                    options.text = decodeBase64Utf8(options['body-base64'], '--body-base64');
                 } else if (options.body) {
                     options.text = options.body;
                 }
