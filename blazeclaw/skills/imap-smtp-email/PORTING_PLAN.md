@@ -217,3 +217,39 @@ Phase 8 artifact snapshot:
 
 ## Definition of Done
 The port is complete when BlazeClaw can execute IMAP and SMTP operations through chat-invoked tools using only `blazeclaw/skills/imap-smtp-email/`, with passing build/tests and no OpenClaw runtime dependency.
+
+## Addendum (2026-04-25): Inbox triage tooling-finding parity
+
+Follow-up analysis for prompt class:
+
+- "Check my inbox and tell me if any email needs a reply within 2 hours."
+
+indicates a discovery-layer parity gap (not a runtime capability gap).
+
+### Findings
+
+1. Runtime tool surface already exists and is sufficient:
+   - `imap_smtp_email.imap.check`
+   - `imap_smtp_email.imap.search`
+   - `imap_smtp_email.imap.fetch`
+2. The remaining gap is deterministic skill invocation discovery for inbox intents:
+   - `SKILL.md` currently does not publish command-dispatch metadata for inbox triage entry.
+   - Without this, prompt routing may rely on generic planner/recovery paths.
+
+### Porting actions to add
+
+1. Add OpenClaw-style command dispatch metadata to `SKILL.md`:
+   - `command-dispatch: tool`
+   - `command-tool: imap_smtp_email.imap.search` (or check, if selected as canonical)
+2. Add inbox-intent alias mapping in invocation resolution so:
+   - "inbox", "needs reply", "reply within 2h" -> IMAP tool target.
+3. Add recovery-path guard:
+   - email-intent invalid-argument recovery stays in `imap_smtp_email.*` namespace first.
+4. Add regression tests for command-dispatch + alias resolution + e2e urgency checks.
+
+### Addendum execution status
+
+- Command-dispatch metadata has now been added to `SKILL.md` with canonical
+  tool target `imap_smtp_email.imap.search`.
+- Runtime alias and recovery-boundary hardening were implemented in BlazeClaw
+  runtime code paths (`ServiceManager`, `RuntimeToolCallNormalizer`).

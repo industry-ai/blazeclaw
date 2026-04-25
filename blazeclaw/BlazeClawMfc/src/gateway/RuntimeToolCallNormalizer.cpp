@@ -335,6 +335,20 @@ namespace blazeclaw::gateway {
 
 			return score;
 		}
+
+		bool IsEmailIntentMessage(const std::string& loweredMessage) {
+			const bool hasInboxSignal =
+				loweredMessage.find("inbox") != std::string::npos ||
+				loweredMessage.find("mailbox") != std::string::npos ||
+				loweredMessage.find("email") != std::string::npos ||
+				loweredMessage.find("mail") != std::string::npos;
+			const bool hasReplySignal =
+				loweredMessage.find("reply") != std::string::npos ||
+				loweredMessage.find("respond") != std::string::npos ||
+				loweredMessage.find("needs a reply") != std::string::npos ||
+				loweredMessage.find("need a reply") != std::string::npos;
+			return hasInboxSignal && hasReplySignal;
+		}
 	}
 
 	std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry>
@@ -530,6 +544,38 @@ namespace blazeclaw::gateway {
 		}
 
 		const std::string loweredMessage = ToLowerCopyNormalizer(message);
+		const bool emailIntentLocked =
+			IsEmailIntentMessage(loweredMessage) &&
+			(failedCategory == "email" ||
+				failedNamespace == "imap_smtp_email" ||
+				failedToolLower == "email.schedule");
+		if (emailIntentLocked) {
+			const std::uint64_t nowMs = CurrentEpochMsNormalizer();
+			recovered.push_back(GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+				.index = recovered.size(),
+				.runId = runId,
+				.sessionId = sessionKey,
+				.phase = "fallback",
+				.toolName = failedTool,
+				.fallbackAction = "cross_skill_guarded_retry",
+				.status = "skipped",
+				.errorCode = "cross_skill_retry_blocked_email_intent",
+				.startedAtMs = nowMs,
+				.completedAtMs = nowMs,
+				.latencyMs = 0,
+				.stepLabel = "fallback_gate",
+				});
+
+			for (std::size_t i = 0; i < recovered.size(); ++i) {
+				recovered[i] = NormalizeTaskDeltaEntry(
+					recovered[i],
+					runId,
+					sessionKey,
+					i);
+			}
+			return recovered;
+		}
+
 		const ToolCatalogEntry* bestCandidate = nullptr;
 		int bestScore = 0;
 		for (const auto& tool : allTools) {

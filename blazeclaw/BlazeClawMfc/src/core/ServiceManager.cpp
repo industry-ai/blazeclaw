@@ -635,6 +635,34 @@ namespace blazeclaw::core {
 			return lowered;
 		}
 
+		bool ContainsAnyFragment(
+			const std::string& lowerText,
+			std::initializer_list<const char*> fragments) {
+			for (const auto* fragment : fragments) {
+				if (fragment == nullptr || *fragment == '\0') {
+					continue;
+				}
+				if (lowerText.find(fragment) != std::string::npos) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		bool LooksLikeInboxReplyUrgencyIntent(const std::string& message) {
+			const std::string lower = ToLowerAscii(message);
+			const bool inboxSignal = ContainsAnyFragment(
+				lower,
+				{ "inbox", "unread", "mailbox", "email", "mail" });
+			const bool replySignal = ContainsAnyFragment(
+				lower,
+				{ "reply", "respond", "needs a reply", "need a reply" });
+			const bool urgencySignal = ContainsAnyFragment(
+				lower,
+				{ "within 2 hours", "within two hours", "2h", "2 hours", "urgent" });
+			return (inboxSignal && replySignal) || (inboxSignal && urgencySignal);
+		}
+
 		std::filesystem::path ResolveWorkspaceRootForSkills(
 			const std::filesystem::path& startPath) {
 			std::error_code ec;
@@ -2069,6 +2097,9 @@ namespace blazeclaw::core {
 				resolvedSkillInvocation->command.dispatch.kind.c_str(),
 				L"tool") != 0 ||
 			resolvedSkillInvocation->command.dispatch.toolName.empty()) {
+			if (LooksLikeInboxReplyUrgencyIntent(commandBodyNormalized)) {
+				return std::string("imap_smtp_email.imap.search");
+			}
 			return std::nullopt;
 		}
 

@@ -2,6 +2,7 @@
 #include "CSkillsHooksCoordinator.h"
 
 #include <algorithm>
+#include <cwctype>
 #include <unordered_map>
 
 namespace blazeclaw::core {
@@ -152,6 +153,46 @@ namespace blazeclaw::core {
 			context.commands.invalidArgModeFallbackCount;
 		gatewaySkillsState.commandSourceContributionCount =
 			context.commands.commandSourceContributionCount;
+		{
+			const std::set<std::wstring> dispatchRequiredSkills{
+				L"baidu-search",
+				L"web-browsing",
+				L"summarize",
+				L"humanizer",
+				L"imap-smtp-email",
+			};
+			gatewaySkillsState.dispatchRequiredSkillCount = dispatchRequiredSkills.size();
+			std::size_t missingDispatchCount = 0;
+			for (const auto& requiredSkill : dispatchRequiredSkills) {
+				std::wstring requiredLower = requiredSkill;
+				std::transform(
+					requiredLower.begin(),
+					requiredLower.end(),
+					requiredLower.begin(),
+					[](const wchar_t ch) {
+						return static_cast<wchar_t>(std::towlower(ch));
+					});
+				const auto entryIt = std::find_if(
+					gatewaySkillsState.entries.begin(),
+					gatewaySkillsState.entries.end(),
+					[&requiredLower](const blazeclaw::gateway::SkillsCatalogGatewayEntry& entry) {
+						std::wstring entryLower(entry.name.begin(), entry.name.end());
+						std::transform(
+							entryLower.begin(),
+							entryLower.end(),
+							entryLower.begin(),
+							[](const wchar_t ch) {
+								return static_cast<wchar_t>(std::towlower(ch));
+							});
+						return entryLower == requiredLower;
+					});
+				if (entryIt == gatewaySkillsState.entries.end() ||
+					entryIt->commandToolName.empty()) {
+					++missingDispatchCount;
+				}
+			}
+			gatewaySkillsState.dispatchRequiredMissingCount = missingDispatchCount;
+		}
 		gatewaySkillsState.promptIncludedCount = context.prompt.includedCount;
 		gatewaySkillsState.promptChars = context.prompt.promptChars;
 		gatewaySkillsState.promptTruncated = context.prompt.truncated;

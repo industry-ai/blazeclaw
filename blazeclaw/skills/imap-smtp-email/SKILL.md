@@ -1,6 +1,14 @@
 ---
 name: imap-smtp-email
 description: Read and send email via IMAP/SMTP. Check for new/unread messages, fetch content, search mailboxes, mark as read/unread, and send emails with attachments. Supports multiple accounts. Works with any IMAP/SMTP server including Gmail, Outlook, 163.com, vip.163.com, 126.com, vip.126.com, 188.com, and vip.188.com.
+command-dispatch: tool
+command-tool: imap_smtp_email.imap.search
+command-arg-mode: raw
+command-arg-schema: schema://imap_smtp_email.imap.search.args.v1
+command-result-schema: schema://imap_smtp_email.imap.search.result.v1
+command-idempotency-hint: safe
+command-retry-policy-hint: transient-network
+command-requires-approval: false
 metadata:
   blazeclaw:
     emoji: "📧"

@@ -2456,6 +2456,10 @@ namespace blazeclaw::gateway {
 						std::to_string(state.commandInvalidArgModeFallbackCount) +
 						",\"commandSourceContributions\":" +
 						std::to_string(state.commandSourceContributionCount) +
+						",\"dispatchRequiredSkills\":" +
+						std::to_string(state.dispatchRequiredSkillCount) +
+						",\"dispatchRequiredMissing\":" +
+						std::to_string(state.dispatchRequiredMissingCount) +
 						",\"bundleCommandRootsScanned\":" +
 						std::to_string(state.bundleCommandRootsScannedCount) +
 						",\"bundleCommandFilesLoaded\":" +
@@ -2866,7 +2870,8 @@ namespace blazeclaw::gateway {
 					const bool ok =
 						state.scanCriticalCount == 0 &&
 						state.installBlockedCount == 0 &&
-						state.sandboxSyncOk;
+						state.sandboxSyncOk &&
+						state.dispatchRequiredMissingCount == 0;
 
 					return protocol::OkResponse(request, "{\"ok\":" +
 						std::string(ok ? "true" : "false") +
@@ -2878,6 +2883,8 @@ namespace blazeclaw::gateway {
 						std::to_string(state.scanCriticalCount) +
 						",\"scanWarn\":" +
 						std::to_string(state.scanWarnCount) +
+						",\"dispatchRequiredMissing\":" +
+						std::to_string(state.dispatchRequiredMissingCount) +
 						"}");
 				});
 
@@ -2905,6 +2912,9 @@ namespace blazeclaw::gateway {
 						state.commandInvalidArgModeFallbackCount > 0 ||
 						state.commandSourceContributionCount > 0) {
 						hints.push_back("skills.command-specs");
+					}
+					if (state.dispatchRequiredMissingCount > 0) {
+						hints.push_back("skills.dispatch.contract");
 					}
 
 					if (state.bundleCommandRootsScannedCount > 0 ||
@@ -2965,6 +2975,10 @@ namespace blazeclaw::gateway {
 						std::to_string(state.commandInvalidArgModeFallbackCount) +
 						",\"commandSourceContributions\":" +
 						std::to_string(state.commandSourceContributionCount) +
+						",\"dispatchRequiredSkills\":" +
+						std::to_string(state.dispatchRequiredSkillCount) +
+						",\"dispatchRequiredMissing\":" +
+						std::to_string(state.dispatchRequiredMissingCount) +
 						",\"entryConfigRaw\":" +
 						std::to_string(state.entryConfigRawCount) +
 						",\"entryConfigNormalized\":" +

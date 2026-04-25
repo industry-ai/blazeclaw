@@ -112,6 +112,8 @@ namespace blazeclaw::gateway {
 		std::size_t commandMissingToolDispatchCount = 0;
 		std::size_t commandInvalidArgModeFallbackCount = 0;
 		std::size_t commandSourceContributionCount = 0;
+		std::size_t dispatchRequiredSkillCount = 0;
+		std::size_t dispatchRequiredMissingCount = 0;
 		std::size_t bundleCommandRootsScannedCount = 0;
 		std::size_t bundleCommandFilesLoadedCount = 0;
 		std::size_t bundleCommandFilesSkippedDisabledCount = 0;

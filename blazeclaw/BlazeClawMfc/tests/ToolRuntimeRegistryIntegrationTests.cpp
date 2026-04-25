@@ -186,3 +186,78 @@ TEST_CASE("CToolRuntimeRegistry invokes dependency registrations", "[tools][runt
 	registry.RegisterAll(host, policy, deps);
 	REQUIRE(callCount == 4);
 }
+
+TEST_CASE("Skill invocation includes inbox intent alias contract", "[skills][dispatch][contract]") {
+	const auto serviceManagerPathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	const auto serviceManagerPathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	std::ifstream in(serviceManagerPathPrimary.string());
+	if (!in.is_open()) {
+		in.open(serviceManagerPathFallback.string());
+	}
+	REQUIRE(in.is_open());
+
+	const std::string source(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+	REQUIRE(source.find("LooksLikeInboxReplyUrgencyIntent") != std::string::npos);
+	REQUIRE(source.find("imap_smtp_email.imap.search") != std::string::npos);
+}
+
+TEST_CASE("Runtime recovery enforces email-intent cross-skill guard", "[tools][runtime][fallback][contract]") {
+	const auto normalizerPathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"gateway" /
+		"RuntimeToolCallNormalizer.cpp";
+	const auto normalizerPathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"gateway" /
+		"RuntimeToolCallNormalizer.cpp";
+	std::ifstream in(normalizerPathPrimary.string());
+	if (!in.is_open()) {
+		in.open(normalizerPathFallback.string());
+	}
+	REQUIRE(in.is_open());
+
+	const std::string source(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+	REQUIRE(source.find("cross_skill_retry_blocked_email_intent") != std::string::npos);
+	REQUIRE(source.find("IsEmailIntentMessage") != std::string::npos);
+}
+
+TEST_CASE("Gateway skills check exposes dispatch-required counters", "[skills][gateway][contract]") {
+	const auto pipelinePathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"gateway" /
+		"GatewayHost.Handlers.Runtime.ChatPipeline.cpp";
+	const auto pipelinePathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"gateway" /
+		"GatewayHost.Handlers.Runtime.ChatPipeline.cpp";
+	std::ifstream in(pipelinePathPrimary.string());
+	if (!in.is_open()) {
+		in.open(pipelinePathFallback.string());
+	}
+	REQUIRE(in.is_open());
+
+	const std::string source(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+	REQUIRE(source.find("dispatchRequiredSkills") != std::string::npos);
+	REQUIRE(source.find("dispatchRequiredMissing") != std::string::npos);
+}

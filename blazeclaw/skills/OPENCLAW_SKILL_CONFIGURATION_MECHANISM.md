@@ -166,3 +166,21 @@ fallback) as the preferred Windows-first path.
 - `openclaw/skills/imap-smtp-email/setup.sh`
 - `openclaw/skills/1password/SKILL.md`
 - `openclaw/skills/weather/SKILL.md`
+
+## Appendix A) Email tooling finding mechanism parity notes
+
+For inbox-style prompts (for example, "check my inbox", "needs reply within 2 hours"), this document should also be read as a command-dispatch parity reference:
+
+- OpenClaw-style skill invocation relies on frontmatter command dispatch contracts:
+  - `command-dispatch: tool`
+  - `command-tool: <tool id>`
+- BlazeClaw has compatible extraction and invocation plumbing:
+  - command metadata extraction: `BlazeClawMfc/src/core/SkillsCommandService.cpp`
+  - invocation target resolution: `BlazeClawMfc/src/core/ServiceManager.cpp` (`ResolveSkillInvocationToolTarget`)
+
+Porting implication for `imap-smtp-email`:
+
+1. Keep runtime tool catalog as-is (`imap_smtp_email.imap.*`, `imap_smtp_email.smtp.*`).
+2. Add deterministic command-dispatch metadata to `SKILL.md` for inbox triage entrypoints.
+3. Add phrase-to-tool aliasing for inbox intents so mailbox prompts resolve to IMAP tools before generic recovery logic.
+4. Add tests to keep email-intent resolution anchored to `imap_smtp_email.*`.

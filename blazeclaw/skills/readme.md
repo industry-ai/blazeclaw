@@ -322,6 +322,13 @@ Wikipedia AI-writing-pattern guidance.
   - retry same-namespace candidate tools,
   - allow cross-skill fallback only when intent similarity and reconstructed
     parameters satisfy guard checks.
+- Email tooling finding parity note:
+  - For inbox triage prompts (for example, "check my inbox", "needs a reply
+    within 2 hours"), keep deterministic command-dispatch mapping to
+    `imap_smtp_email.imap.*` as the primary resolution path.
+  - `imap-smtp-email/SKILL.md` should publish command-dispatch metadata
+    (`command-dispatch`, `command-tool`) so `ServiceManager` can resolve a
+    stable email tool target through skill invocation.
 - `general` is **not** a separate skill source/type. It is treated as part of
   runtime-registered grouping in the tree (as a subitem).
 - If a local skill exists but does not appear as runtime-registered, verify
