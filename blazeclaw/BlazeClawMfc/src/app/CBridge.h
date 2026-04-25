@@ -3,6 +3,7 @@
 #include "../gateway/GatewayProtocolModels.h"
 
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <optional>
 #include <string>
@@ -27,6 +28,12 @@ public:
 		std::uint32_t pollIntervalFailureMaxMs = 15000;
 		std::uint32_t pollIntervalDisconnectedMs = 2000;
 		std::uint64_t traceFlushIntervalMs = 1000;
+		bool pushEnabled = true;
+		bool pushFallbackPollEnabled = true;
+		bool pushRecoveryPollEnabled = true;
+		std::uint32_t pushIngestionMaxBatchEvents = 50;
+		std::uint32_t pushUiThrottleMs = 120;
+		std::size_t pushDedupeCapacity = 512;
 	};
 
 	struct Dependencies
@@ -52,7 +59,17 @@ public:
 			const std::string& reason,
 			std::uint32_t failureCount,
 			std::uint32_t nextPollMs,
-			std::uint64_t sinceLastSuccessMs)> emitPollHealth;
+			std::uint64_t sinceLastSuccessMs,
+			std::uint64_t pollTotalCount,
+			std::uint64_t pollEmptyCount,
+			std::uint64_t pollTotalEvents,
+			std::uint64_t pollP95EstimateMs)> emitPollHealth;
+		std::function<void(
+			const std::string& state,
+			const std::string& reason,
+			std::uint32_t reconnectCount,
+			std::uint64_t pushLagMs,
+			std::uint64_t droppedFrames)> emitPushHealth;
 		std::function<void(const std::string& eventsRaw)> handleEventsBatch;
 	};
 
@@ -64,6 +81,11 @@ public:
 	void HandlePollCompleted(
 		bool ok,
 		const std::optional<std::string>& payloadJson);
+	void HandlePushConnected(const std::string& reason = "push-connected");
+	void HandlePushDisconnected(const std::string& reason = "push-disconnected");
+	void HandlePushChatEventFrame(
+		const std::string& eventPayloadObjectJson,
+		std::optional<std::uint64_t> frameSeq = std::nullopt);
 	void ScheduleNextPoll(std::uint32_t intervalMs);
 	const std::string& PollHealthState() const;
 	std::uint32_t PollConsecutiveFailures() const;
@@ -90,6 +112,13 @@ private:
 	void HandlePollResponse(
 		bool ok,
 		const std::optional<std::string>& payloadJson);
+	void EmitPushHealth(const std::string& state, const std::string& reason);
+	void RecordPushFingerprint(const std::string& fingerprint);
+	bool IsPushFingerprintDuplicate(const std::string& fingerprint) const;
+	void PrunePushDedupeIfNeeded();
+	void HandleInboundEventsBatch(
+		const std::string& eventsRaw,
+		bool fromPush);
 
 	Dependencies m_deps;
 	Config m_cfg;
@@ -108,6 +137,21 @@ private:
 	std::uint32_t m_pollConsecutiveFailures = 0;
 	std::uint64_t m_pollLastSuccessTickMs = 0;
 	std::string m_pollHealthState = "unknown";
+	std::uint64_t m_pollTotalCount = 0;
+	std::uint64_t m_pollEmptyCount = 0;
+	std::uint64_t m_pollTotalEvents = 0;
+	std::uint64_t m_pollBatchCount = 0;
+	std::uint64_t m_pollP95EstimateMs = 0;
+
+	bool m_pushConnected = false;
+	std::uint64_t m_pushLastEventTickMs = 0;
+	std::uint64_t m_pushLastDispatchTickMs = 0;
+	std::uint64_t m_pushDroppedFrameCount = 0;
+	std::uint32_t m_pushReconnectCount = 0;
+	std::optional<std::uint64_t> m_pushLastFrameSeq;
+	bool m_pushRecoveryPollPending = false;
+	std::deque<std::string> m_pushRecentFingerprints;
+	std::unordered_set<std::string> m_pushFingerprintSet;
 
 	std::unordered_set<std::string> m_reportedSkillPathRunIds;
 

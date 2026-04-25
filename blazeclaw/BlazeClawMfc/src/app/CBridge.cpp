@@ -3,7 +3,10 @@
 
 #include "../gateway/GatewayJsonUtils.h"
 
+#include <algorithm>
 #include <thread>
+#include <utility>
+#include <nlohmann/json.hpp>
 
 namespace {
 
@@ -50,6 +53,16 @@ namespace {
 		}
 
 		return output;
+	}
+
+	std::size_t CountTopLevelArrayItemsSafe(const std::string& arrayJson)
+	{
+		const auto parsed = nlohmann::json::parse(arrayJson, nullptr, false);
+		if (parsed.is_discarded() || !parsed.is_array())
+		{
+			return 0;
+		}
+		return parsed.size();
 	}
 
 } // namespace
@@ -214,6 +227,15 @@ void CBridge::PumpLifecycle()
 				m_cfg.pollIntervalDisconnectedMs);
 		}
 		ScheduleNextPoll(m_cfg.pollIntervalDisconnectedMs);
+		return;
+	}
+
+	if (m_cfg.pushEnabled &&
+		m_pushConnected &&
+		!m_cfg.pushFallbackPollEnabled &&
+		!m_pushRecoveryPollPending)
+	{
+		// Push-primary mode: do not keep timer-polling when fallback polling is disabled.
 		return;
 	}
 
@@ -416,7 +438,11 @@ void CBridge::EmitPollHealth(
 			ToUtf8Bridge(reasonW),
 			failureCount,
 			nextPollMs,
-			sinceLastSuccessMs);
+			sinceLastSuccessMs,
+			m_pollTotalCount,
+			m_pollEmptyCount,
+			m_pollTotalEvents,
+			m_pollP95EstimateMs);
 	}
 
 	std::wstring stateW = state != nullptr ? state : L"unknown";
@@ -429,6 +455,7 @@ void CBridge::HandlePollResponse(
 {
 	if (!ok || !payloadJson.has_value())
 	{
+		++m_pollTotalCount;
 		++m_pollConsecutiveFailures;
 		const std::uint32_t backoffMs =
 			ComputeFailureBackoffMs(m_pollConsecutiveFailures);
@@ -454,6 +481,7 @@ void CBridge::HandlePollResponse(
 		"events",
 		eventsRaw))
 	{
+		++m_pollTotalCount;
 		++m_pollConsecutiveFailures;
 		const std::uint32_t backoffMs =
 			ComputeFailureBackoffMs(m_pollConsecutiveFailures);
@@ -480,9 +508,15 @@ void CBridge::HandlePollResponse(
 
 	m_pollConsecutiveFailures = 0;
 	m_pollLastSuccessTickMs = GetTickCount64();
+	++m_pollTotalCount;
+	if (m_pushRecoveryPollPending)
+	{
+		m_pushRecoveryPollPending = false;
+	}
 
 	if (blazeclaw::gateway::json::Trim(eventsRaw) == "[]")
 	{
+		++m_pollEmptyCount;
 		if (wasUnhealthy)
 		{
 			EmitPollHealth(
@@ -494,11 +528,7 @@ void CBridge::HandlePollResponse(
 		ScheduleNextPoll(m_cfg.pollIntervalIdleMs);
 		return;
 	}
-
-	if (m_deps.handleEventsBatch)
-	{
-		m_deps.handleEventsBatch(eventsRaw);
-	}
+	HandleInboundEventsBatch(eventsRaw, false);
 
 	if (wasUnhealthy)
 	{
@@ -510,4 +540,166 @@ void CBridge::HandlePollResponse(
 	}
 
 	ScheduleNextPoll(m_cfg.pollIntervalActiveMs);
+}
+
+void CBridge::HandlePushConnected(const std::string& reason)
+{
+	const bool wasConnected = m_pushConnected;
+	m_pushConnected = true;
+	if (!wasConnected)
+	{
+		++m_pushReconnectCount;
+		if (m_cfg.pushRecoveryPollEnabled)
+		{
+			m_pushRecoveryPollPending = true;
+			ScheduleNextPoll(m_cfg.pollIntervalActiveMs);
+		}
+	}
+	EmitPushHealth("connected", reason);
+}
+
+void CBridge::HandlePushDisconnected(const std::string& reason)
+{
+	m_pushConnected = false;
+	EmitPushHealth("disconnected", reason);
+	if (m_cfg.pushEnabled && m_cfg.pushFallbackPollEnabled)
+	{
+		ScheduleNextPoll(m_cfg.pollIntervalActiveMs);
+	}
+}
+
+void CBridge::HandlePushChatEventFrame(
+	const std::string& eventPayloadObjectJson,
+	const std::optional<std::uint64_t> frameSeq)
+{
+	if (!m_cfg.pushEnabled || eventPayloadObjectJson.empty())
+	{
+		return;
+	}
+
+	if (frameSeq.has_value())
+	{
+		if (m_pushLastFrameSeq.has_value() &&
+			frameSeq.value() <= m_pushLastFrameSeq.value())
+		{
+			++m_pushDroppedFrameCount;
+			EmitPushHealth("degraded", "duplicate-seq");
+			return;
+		}
+		m_pushLastFrameSeq = frameSeq.value();
+	}
+
+	const std::string fingerprint =
+		std::to_string(frameSeq.value_or(0)) +
+		":" +
+		blazeclaw::gateway::json::Trim(eventPayloadObjectJson);
+	if (IsPushFingerprintDuplicate(fingerprint))
+	{
+		++m_pushDroppedFrameCount;
+		EmitPushHealth("degraded", "duplicate-event");
+		return;
+	}
+	RecordPushFingerprint(fingerprint);
+
+	m_pushLastEventTickMs = GetTickCount64();
+	const std::string wrappedEvents = "[" + eventPayloadObjectJson + "]";
+	HandleInboundEventsBatch(wrappedEvents, true);
+	EmitPushHealth("healthy", "push-event");
+}
+
+void CBridge::EmitPushHealth(const std::string& state, const std::string& reason)
+{
+	if (!m_deps.emitPushHealth)
+	{
+		return;
+	}
+	const std::uint64_t nowMs = GetTickCount64();
+	const std::uint64_t lagMs = m_pushLastEventTickMs > 0
+		? (nowMs - m_pushLastEventTickMs)
+		: 0;
+	m_deps.emitPushHealth(
+		state,
+		reason,
+		m_pushReconnectCount,
+		lagMs,
+		m_pushDroppedFrameCount);
+}
+
+void CBridge::RecordPushFingerprint(const std::string& fingerprint)
+{
+	if (fingerprint.empty())
+	{
+		return;
+	}
+	m_pushRecentFingerprints.push_back(fingerprint);
+	m_pushFingerprintSet.insert(fingerprint);
+	PrunePushDedupeIfNeeded();
+}
+
+bool CBridge::IsPushFingerprintDuplicate(const std::string& fingerprint) const
+{
+	return !fingerprint.empty() &&
+		m_pushFingerprintSet.find(fingerprint) != m_pushFingerprintSet.end();
+}
+
+void CBridge::PrunePushDedupeIfNeeded()
+{
+	const std::size_t cap = (std::max)(static_cast<std::size_t>(32), m_cfg.pushDedupeCapacity);
+	while (m_pushRecentFingerprints.size() > cap)
+	{
+		const std::string oldest = std::move(m_pushRecentFingerprints.front());
+		m_pushRecentFingerprints.pop_front();
+		m_pushFingerprintSet.erase(oldest);
+	}
+}
+
+void CBridge::HandleInboundEventsBatch(
+	const std::string& eventsRaw,
+	const bool fromPush)
+{
+	if (eventsRaw.empty())
+	{
+		return;
+	}
+
+	const std::size_t itemCount = CountTopLevelArrayItemsSafe(eventsRaw);
+	if (itemCount == 0)
+	{
+		return;
+	}
+
+	if (fromPush && itemCount > m_cfg.pushIngestionMaxBatchEvents)
+	{
+		++m_pushDroppedFrameCount;
+		EmitPushHealth("degraded", "push-batch-clamped");
+		return;
+	}
+
+	if (m_deps.handleEventsBatch)
+	{
+		const std::uint64_t nowMs = GetTickCount64();
+		if (fromPush &&
+			m_pushLastDispatchTickMs > 0 &&
+			(nowMs - m_pushLastDispatchTickMs) < m_cfg.pushUiThrottleMs)
+		{
+			++m_pushDroppedFrameCount;
+			EmitPushHealth("degraded", "push-ui-throttled");
+			return;
+		}
+
+		m_deps.handleEventsBatch(eventsRaw);
+		m_pushLastDispatchTickMs = nowMs;
+	}
+
+	m_pollTotalEvents += itemCount;
+	++m_pollBatchCount;
+	const std::uint64_t avgBatch = m_pollBatchCount > 0
+		? (m_pollTotalEvents / m_pollBatchCount)
+		: 0;
+	m_pollP95EstimateMs = avgBatch * 15;
+
+	if (fromPush && m_pushRecoveryPollPending)
+	{
+		m_pushRecoveryPollPending = false;
+	}
 }

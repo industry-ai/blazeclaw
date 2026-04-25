@@ -1828,6 +1828,17 @@ CBlazeClawMFCView::CBlazeClawMFCView() noexcept
 	}
 	m_eventTransport.SetEmitLegacyChannels(emitLegacyChannels);
 
+	//const bool bridgePushEnabled = ParseEnvBool(
+	//	ToNarrow(GetEnvValue(L"BLAZECLAW_BRIDGE_PUSH_ENABLED").value_or(L"false")),
+	//	false);
+	const bool bridgePushEnabled = true;
+	const bool bridgePushFallbackPollEnabled = ParseEnvBool(
+		ToNarrow(GetEnvValue(L"BLAZECLAW_BRIDGE_PUSH_FALLBACK_POLL_ENABLED").value_or(L"true")),
+		true);
+	const bool bridgePushRecoveryPollEnabled = ParseEnvBool(
+		ToNarrow(GetEnvValue(L"BLAZECLAW_BRIDGE_PUSH_RECOVERY_POLL_ENABLED").value_or(L"true")),
+		true);
+
 	CBridge::Dependencies bridgeDeps{};
 	bridgeDeps.isGatewayRunning =
 		[]()
@@ -1908,13 +1919,18 @@ CBlazeClawMFCView::CBlazeClawMFCView() noexcept
 		{
 			PostOpenClawWsClose(code, reason);
 		};
+
 	bridgeDeps.emitPollHealth =
 		[this](
 			const std::string& state,
 			const std::string& reason,
 			const std::uint32_t failureCount,
 			const std::uint32_t nextPollMs,
-			const std::uint64_t sinceLastSuccessMs)
+			const std::uint64_t sinceLastSuccessMs,
+			const std::uint64_t pollTotalCount,
+			const std::uint64_t pollEmptyCount,
+			const std::uint64_t pollTotalEvents,
+			const std::uint64_t pollP95EstimateMs)
 		{
 			std::string payload =
 				"{\"sessionId\":" +
@@ -1935,6 +1951,10 @@ CBlazeClawMFCView::CBlazeClawMFCView() noexcept
 					",\"sinceLastSuccessMs\":" +
 					std::to_string(sinceLastSuccessMs);
 			}
+			payload += ",\"pollTotalCount\":" + std::to_string(pollTotalCount);
+			payload += ",\"pollEmptyCount\":" + std::to_string(pollEmptyCount);
+			payload += ",\"pollTotalEvents\":" + std::to_string(pollTotalEvents);
+			payload += ",\"pollP95EstimateMs\":" + std::to_string(pollP95EstimateMs);
 			payload += "}";
 			m_eventTransport.EmitTopic(BridgeEventTopic::PollHealth, payload);
 			AppendChatProcedureStatusLine(
@@ -1943,6 +1963,26 @@ CBlazeClawMFCView::CBlazeClawMFCView() noexcept
 				" failures=" + std::to_string(failureCount) +
 				" nextMs=" + std::to_string(nextPollMs));
 		};
+	bridgeDeps.emitPushHealth =
+		[this](
+			const std::string& state,
+			const std::string& reason,
+			const std::uint32_t reconnectCount,
+			const std::uint64_t pushLagMs,
+			const std::uint64_t droppedFrames)
+		{
+			std::string detail =
+				"state=" + state +
+				" reconnects=" + std::to_string(reconnectCount) +
+				" lagMs=" + std::to_string(pushLagMs) +
+				" dropped=" + std::to_string(droppedFrames);
+			if (!reason.empty())
+			{
+				detail += " reason=" + reason;
+			}
+			AppendChatProcedureStatusLine(L"events.push.health", detail);
+		};
+
 	bridgeDeps.handleEventsBatch =
 		[this](const std::string& eventsRaw)
 		{
@@ -1981,6 +2021,9 @@ CBlazeClawMFCView::CBlazeClawMFCView() noexcept
 	bridgeCfg.pollIntervalFailureMaxMs = kBridgePollIntervalFailureMaxMs;
 	bridgeCfg.pollIntervalDisconnectedMs = kBridgePollIntervalDisconnectedMs;
 	bridgeCfg.traceFlushIntervalMs = kBridgeTraceFlushIntervalMs;
+	bridgeCfg.pushEnabled = bridgePushEnabled;
+	bridgeCfg.pushFallbackPollEnabled = bridgePushFallbackPollEnabled;
+	bridgeCfg.pushRecoveryPollEnabled = bridgePushRecoveryPollEnabled;
 	m_bridge.Initialize(std::move(bridgeDeps), bridgeCfg);
 }
 
@@ -2666,6 +2709,48 @@ void CBlazeClawMFCView::HandleWebMessageJson(const std::wstring& webMessageJson)
 	{
 		m_bridge.ResetLifecycle();
 		PumpBridgeLifecycle();
+		return;
+	}
+
+	if (channel == "blazeclaw.gateway.chat.push.state")
+	{
+		std::string state;
+		std::string reason;
+		blazeclaw::gateway::json::FindStringField(message, "state", state);
+		blazeclaw::gateway::json::FindStringField(message, "reason", reason);
+		const std::string lowered = ToLowerAscii(state);
+		if (lowered == "connected" || lowered == "reconnected")
+		{
+			m_bridge.HandlePushConnected(reason.empty() ? "push-state-connected" : reason);
+		}
+		else if (lowered == "disconnected" || lowered == "degraded")
+		{
+			m_bridge.HandlePushDisconnected(reason.empty() ? "push-state-disconnected" : reason);
+		}
+		return;
+	}
+
+	if (channel == "blazeclaw.gateway.chat.push.event")
+	{
+		std::string eventRaw;
+		if (!blazeclaw::gateway::json::FindRawField(message, "event", eventRaw))
+		{
+			return;
+		}
+		std::string seqRaw;
+		std::optional<std::uint64_t> seq;
+		if (blazeclaw::gateway::json::FindRawField(message, "seq", seqRaw))
+		{
+			try
+			{
+				seq = static_cast<std::uint64_t>(std::stoull(blazeclaw::gateway::json::Trim(seqRaw)));
+			}
+			catch (...)
+			{
+				seq = std::nullopt;
+			}
+		}
+		m_bridge.HandlePushChatEventFrame(eventRaw, seq);
 		return;
 	}
 

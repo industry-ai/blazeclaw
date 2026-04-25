@@ -2,6 +2,7 @@
 #include "GatewayEventFanoutService.h"
 
 #include "GatewayProtocolCodec.h"
+#include "GatewayJsonUtils.h"
 
 namespace blazeclaw::gateway {
 
@@ -72,6 +73,21 @@ namespace blazeclaw::gateway {
 			BuildLifecyclePayload(event),
 			seq,
 			"chat.lifecycle");
+	}
+
+	std::string GatewayEventFanoutService::BuildChatEventFrame(
+		const std::string& eventPayloadObjectJson,
+		const std::uint64_t seq) const {
+		const std::string trimmed = json::Trim(eventPayloadObjectJson);
+		const std::string payload =
+			trimmed.empty() || trimmed.front() != '{'
+			? std::string("{}")
+			: trimmed;
+		return protocol::EncodeValidatedEvent(
+			"chat",
+			payload,
+			seq,
+			"chat");
 	}
 
 } // namespace blazeclaw::gateway

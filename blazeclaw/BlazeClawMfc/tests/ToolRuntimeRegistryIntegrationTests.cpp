@@ -323,6 +323,63 @@ TEST_CASE("Routing telemetry emits language and intent metadata", "[skills][gate
 	REQUIRE(source.find("intent_not_matched") != std::string::npos);
 }
 
+TEST_CASE("Bridge hybrid push phases are wired", "[bridge][push][contract]") {
+	const auto bridgePathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"app" /
+		"CBridge.cpp";
+	const auto bridgePathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"app" /
+		"CBridge.cpp";
+	std::ifstream in(bridgePathPrimary.string());
+	if (!in.is_open()) {
+		in.open(bridgePathFallback.string());
+	}
+	REQUIRE(in.is_open());
+
+	const std::string source(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+	REQUIRE(source.find("HandlePushConnected") != std::string::npos);
+	REQUIRE(source.find("HandlePushDisconnected") != std::string::npos);
+	REQUIRE(source.find("HandlePushChatEventFrame") != std::string::npos);
+	REQUIRE(source.find("pushRecoveryPollPending") != std::string::npos);
+	REQUIRE(source.find("push-ui-throttled") != std::string::npos);
+	REQUIRE(source.find("duplicate-event") != std::string::npos);
+}
+
+TEST_CASE("Bridge view exposes push feature flags and channels", "[bridge][push][view][contract]") {
+	const auto viewPathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"app" /
+		"BlazeClawMFCView.cpp";
+	const auto viewPathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"app" /
+		"BlazeClawMFCView.cpp";
+	std::ifstream in(viewPathPrimary.string());
+	if (!in.is_open()) {
+		in.open(viewPathFallback.string());
+	}
+	REQUIRE(in.is_open());
+
+	const std::string source(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+	REQUIRE(source.find("BLAZECLAW_BRIDGE_PUSH_ENABLED") != std::string::npos);
+	REQUIRE(source.find("BLAZECLAW_BRIDGE_PUSH_FALLBACK_POLL_ENABLED") != std::string::npos);
+	REQUIRE(source.find("BLAZECLAW_BRIDGE_PUSH_RECOVERY_POLL_ENABLED") != std::string::npos);
+	REQUIRE(source.find("blazeclaw.gateway.chat.push.state") != std::string::npos);
+	REQUIRE(source.find("blazeclaw.gateway.chat.push.event") != std::string::npos);
+}
+
 TEST_CASE("Gateway skills check exposes dispatch-required counters", "[skills][gateway][contract]") {
 	const auto pipelinePathPrimary =
 		std::filesystem::path("BlazeClawMfc") /
