@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include <regex>
+#include <Windows.h>
 
 namespace blazeclaw::gateway {
 	namespace {
@@ -48,6 +49,45 @@ namespace blazeclaw::gateway {
 					return static_cast<char>(std::tolower(ch));
 				});
 			return lowered;
+		}
+
+		std::wstring Utf8ToWideNormalizer(const std::string& value) {
+			if (value.empty()) {
+				return {};
+			}
+			const int needed = MultiByteToWideChar(
+				CP_UTF8,
+				0,
+				value.c_str(),
+				static_cast<int>(value.size()),
+				nullptr,
+				0);
+			if (needed <= 0) {
+				return std::wstring(value.begin(), value.end());
+			}
+			std::wstring output(static_cast<std::size_t>(needed), L'\0');
+			MultiByteToWideChar(
+				CP_UTF8,
+				0,
+				value.c_str(),
+				static_cast<int>(value.size()),
+				output.data(),
+				needed);
+			return output;
+		}
+
+		bool ContainsAnyWideFragment(
+			const std::wstring& text,
+			std::initializer_list<const wchar_t*> fragments) {
+			for (const auto* fragment : fragments) {
+				if (fragment == nullptr || *fragment == L'\0') {
+					continue;
+				}
+				if (text.find(fragment) != std::wstring::npos) {
+					return true;
+				}
+			}
+			return false;
 		}
 
 		std::uint64_t CurrentEpochMsNormalizer() {
@@ -337,16 +377,19 @@ namespace blazeclaw::gateway {
 		}
 
 		bool IsEmailIntentMessage(const std::string& loweredMessage) {
+			const std::wstring wide = Utf8ToWideNormalizer(loweredMessage);
 			const bool hasInboxSignal =
 				loweredMessage.find("inbox") != std::string::npos ||
 				loweredMessage.find("mailbox") != std::string::npos ||
 				loweredMessage.find("email") != std::string::npos ||
-				loweredMessage.find("mail") != std::string::npos;
+				loweredMessage.find("mail") != std::string::npos ||
+				ContainsAnyWideFragment(wide, { L"邮箱", L"收件箱", L"邮件", L"新邮件" });
 			const bool hasReplySignal =
 				loweredMessage.find("reply") != std::string::npos ||
 				loweredMessage.find("respond") != std::string::npos ||
 				loweredMessage.find("needs a reply") != std::string::npos ||
-				loweredMessage.find("need a reply") != std::string::npos;
+				loweredMessage.find("need a reply") != std::string::npos ||
+				ContainsAnyWideFragment(wide, { L"回复", L"回信", L"需要回复" });
 			return hasInboxSignal && hasReplySignal;
 		}
 	}
@@ -544,11 +587,8 @@ namespace blazeclaw::gateway {
 		}
 
 		const std::string loweredMessage = ToLowerCopyNormalizer(message);
-		const bool emailIntentLocked =
-			IsEmailIntentMessage(loweredMessage) &&
-			(failedCategory == "email" ||
-				failedNamespace == "imap_smtp_email" ||
-				failedToolLower == "email.schedule");
+		const bool emailIntentDetected = IsEmailIntentMessage(loweredMessage);
+		const bool emailIntentLocked = emailIntentDetected;
 		if (emailIntentLocked) {
 			const std::uint64_t nowMs = CurrentEpochMsNormalizer();
 			recovered.push_back(GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
@@ -559,7 +599,11 @@ namespace blazeclaw::gateway {
 				.toolName = failedTool,
 				.fallbackAction = "cross_skill_guarded_retry",
 				.status = "skipped",
-				.errorCode = "cross_skill_retry_blocked_email_intent",
+				.errorCode = (failedCategory == "email" ||
+					failedNamespace == "imap_smtp_email" ||
+					failedToolLower == "email.schedule")
+					? "cross_skill_retry_blocked_email_intent"
+					: "intent_not_matched",
 				.startedAtMs = nowMs,
 				.completedAtMs = nowMs,
 				.latencyMs = 0,

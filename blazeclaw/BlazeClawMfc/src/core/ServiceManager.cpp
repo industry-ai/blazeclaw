@@ -649,18 +649,98 @@ namespace blazeclaw::core {
 			return false;
 		}
 
+		bool ContainsAnyWideFragment(
+			const std::wstring& text,
+			std::initializer_list<const wchar_t*> fragments) {
+			for (const auto* fragment : fragments) {
+				if (fragment == nullptr || *fragment == L'\0') {
+					continue;
+				}
+				if (text.find(fragment) != std::wstring::npos) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		std::string CanonicalizeForRouting(const std::string& message) {
+			std::string canonical = message;
+			const std::wstring wide = Utf8ToWideLocal(message);
+			auto appendToken = [&](const char* token) {
+				if (token == nullptr || *token == '\0') {
+					return;
+				}
+				if (canonical.find(token) == std::string::npos) {
+					canonical.append(" ");
+					canonical.append(token);
+				}
+			};
+
+			if (ContainsAnyWideFragment(
+					wide,
+					{ L"邮箱", L"收件箱", L"邮件", L"新邮件", L"查邮箱", L"查一下邮箱" })) {
+				appendToken("inbox");
+				appendToken("email");
+			}
+			if (ContainsAnyWideFragment(wide, { L"回复", L"回信", L"需要回复", L"尽快回复" })) {
+				appendToken("reply");
+			}
+			if (ContainsAnyWideFragment(wide, { L"2小时", L"两小时", L"两个小时" })) {
+				appendToken("within 2 hours");
+			}
+			return canonical;
+		}
+
 		bool LooksLikeInboxReplyUrgencyIntent(const std::string& message) {
 			const std::string lower = ToLowerAscii(message);
+			const std::wstring wide = Utf8ToWideLocal(message);
+			const bool inboxSignalZh = ContainsAnyWideFragment(
+				wide,
+				{ L"邮箱", L"收件箱", L"邮件", L"新邮件", L"查邮箱", L"查一下邮箱" });
 			const bool inboxSignal = ContainsAnyFragment(
 				lower,
-				{ "inbox", "unread", "mailbox", "email", "mail" });
+				{ "inbox", "unread", "mailbox", "email", "mail" }) || inboxSignalZh;
+			const bool replySignalZh = ContainsAnyWideFragment(
+				wide,
+				{ L"回复", L"回信", L"需要回复", L"尽快回复" });
 			const bool replySignal = ContainsAnyFragment(
 				lower,
-				{ "reply", "respond", "needs a reply", "need a reply" });
+				{ "reply", "respond", "needs a reply", "need a reply" }) || replySignalZh;
+			const bool urgencySignalZh = ContainsAnyWideFragment(
+				wide,
+				{ L"2小时", L"两小时", L"两个小时", L"紧急", L"尽快" });
 			const bool urgencySignal = ContainsAnyFragment(
 				lower,
-				{ "within 2 hours", "within two hours", "2h", "2 hours", "urgent" });
+				{ "within 2 hours", "within two hours", "2h", "2 hours", "urgent" }) ||
+				urgencySignalZh;
 			return (inboxSignal && replySignal) || (inboxSignal && urgencySignal);
+		}
+
+		bool LooksLikeInboxIntentAnyLanguage(const std::string& message) {
+			const std::string lower = ToLowerAscii(message);
+			const std::wstring wide = Utf8ToWideLocal(message);
+			const bool inboxSignalZh = ContainsAnyWideFragment(
+				wide,
+				{ L"邮箱", L"收件箱", L"邮件", L"新邮件", L"查邮箱", L"查一下邮箱" });
+			const bool replySignalZh = ContainsAnyWideFragment(
+				wide,
+				{ L"回复", L"回信", L"需要回复", L"尽快回复" });
+			const bool inboxSignal = ContainsAnyFragment(
+				lower,
+				{ "inbox", "unread", "mailbox", "email", "mail" }) || inboxSignalZh;
+			const bool replySignal = ContainsAnyFragment(
+				lower,
+				{ "reply", "respond", "needs a reply", "need a reply" }) || replySignalZh;
+			return inboxSignal && replySignal;
+		}
+
+		bool LooksLikeTwoHourUrgencyAnyLanguage(const std::string& message) {
+			const std::string lower = ToLowerAscii(message);
+			const std::wstring wide = Utf8ToWideLocal(message);
+			return ContainsAnyFragment(
+					   lower,
+					   { "within 2 hours", "within two hours", "2h", "2 hours" }) ||
+				ContainsAnyWideFragment(wide, { L"2小时", L"两小时", L"两个小时" });
 		}
 
 		bool LooksLikeJsonObjectShapeLocal(const std::string& value) {
@@ -684,13 +764,15 @@ namespace blazeclaw::core {
 				return std::nullopt;
 			}
 
-			if (!LooksLikeInboxReplyUrgencyIntent(commandBodyNormalized)) {
+			if (!LooksLikeInboxIntentAnyLanguage(commandBodyNormalized)) {
 				return std::nullopt;
 			}
 
 			nlohmann::json params = nlohmann::json::object();
 			params["unseen"] = true;
-			params["recent"] = "2h";
+			params["recent"] = LooksLikeTwoHourUrgencyAnyLanguage(commandBodyNormalized)
+				? "2h"
+				: "24h";
 			params["limit"] = 20;
 			return params.dump();
 		}
@@ -713,12 +795,12 @@ namespace blazeclaw::core {
 				if (parsed.is_array()) {
 					if (parsed.empty()) {
 						return std::string(
-							"I checked your inbox in the last 2 hours and found no messages "
+							"I checked your inbox in the recent window and found no messages "
 							"that need a reply.");
 					}
 					return std::string("I found ") +
 						std::to_string(parsed.size()) +
-						" inbox message(s) from the last 2 hours for reply triage.";
+						" inbox message(s) from the recent window for reply triage.";
 				}
 			}
 			catch (...) {
@@ -2266,9 +2348,11 @@ namespace blazeclaw::core {
 	std::optional<std::string> ServiceManager::ResolveSkillInvocationToolTarget(
 		const std::string& commandBodyNormalized) const
 	{
+		const std::string canonicalCommandBody =
+			CanonicalizeForRouting(commandBodyNormalized);
 		const auto resolvedSkillInvocation =
 			m_skillCommandInvocationService.ResolveInvocation(
-				ToWide(commandBodyNormalized),
+				ToWide(canonicalCommandBody),
 				m_skillsCommands.commands);
 		if (!resolvedSkillInvocation.has_value() ||
 			!resolvedSkillInvocation->command.dispatch.enabled ||
@@ -2276,7 +2360,8 @@ namespace blazeclaw::core {
 				resolvedSkillInvocation->command.dispatch.kind.c_str(),
 				L"tool") != 0 ||
 			resolvedSkillInvocation->command.dispatch.toolName.empty()) {
-			if (LooksLikeInboxReplyUrgencyIntent(commandBodyNormalized)) {
+			if (LooksLikeInboxIntentAnyLanguage(canonicalCommandBody) ||
+				LooksLikeInboxReplyUrgencyIntent(canonicalCommandBody)) {
 				return std::string("imap_smtp_email.imap.search");
 			}
 			return std::nullopt;

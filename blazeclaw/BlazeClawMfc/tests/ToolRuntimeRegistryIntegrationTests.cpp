@@ -263,6 +263,8 @@ TEST_CASE("Skill invocation includes inbox intent alias contract", "[skills][dis
 		(std::istreambuf_iterator<char>(in)),
 		std::istreambuf_iterator<char>());
 	REQUIRE(source.find("LooksLikeInboxReplyUrgencyIntent") != std::string::npos);
+	REQUIRE(source.find("ContainsAnyWideFragment") != std::string::npos);
+	REQUIRE(source.find("CanonicalizeForRouting") != std::string::npos);
 	REQUIRE(source.find("imap_smtp_email.imap.search") != std::string::npos);
 }
 
@@ -288,7 +290,37 @@ TEST_CASE("Runtime recovery enforces email-intent cross-skill guard", "[tools][r
 		(std::istreambuf_iterator<char>(in)),
 		std::istreambuf_iterator<char>());
 	REQUIRE(source.find("cross_skill_retry_blocked_email_intent") != std::string::npos);
+	REQUIRE(source.find("intent_not_matched") != std::string::npos);
+	REQUIRE(source.find("ContainsAnyWideFragment") != std::string::npos);
 	REQUIRE(source.find("IsEmailIntentMessage") != std::string::npos);
+}
+
+TEST_CASE("Routing telemetry emits language and intent metadata", "[skills][gateway][routing][contract]") {
+	const auto coordinatorPathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"GatewayHostBindingCoordinator.cpp";
+	const auto coordinatorPathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"core" /
+		"GatewayHostBindingCoordinator.cpp";
+	std::ifstream in(coordinatorPathPrimary.string());
+	if (!in.is_open()) {
+		in.open(coordinatorPathFallback.string());
+	}
+	REQUIRE(in.is_open());
+
+	const std::string source(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+	REQUIRE(source.find("gateway.chat.routing.decision") != std::string::npos);
+	REQUIRE(source.find("detectedLanguage") != std::string::npos);
+	REQUIRE(source.find("normalizedIntent") != std::string::npos);
+	REQUIRE(source.find("fallbackReason") != std::string::npos);
+	REQUIRE(source.find("intent_not_matched") != std::string::npos);
 }
 
 TEST_CASE("Gateway skills check exposes dispatch-required counters", "[skills][gateway][contract]") {

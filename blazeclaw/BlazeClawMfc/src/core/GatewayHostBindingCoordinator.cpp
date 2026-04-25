@@ -5,6 +5,8 @@
 #include "ServiceManager.h"
 #include "../gateway/Telemetry.h"
 
+#include <algorithm>
+#include <cctype>
 #include <string>
 #include <vector>
 #include <Windows.h>
@@ -46,6 +48,84 @@ namespace blazeclaw::core {
 				output.push_back(static_cast<char>(ch <= 0x7F ? ch : '?'));
 			}
 			return output;
+		}
+
+		bool ContainsAnyFragment(
+			const std::string& text,
+			std::initializer_list<const char*> fragments) {
+			for (const auto* fragment : fragments) {
+				if (fragment == nullptr || *fragment == '\0') {
+					continue;
+				}
+				if (text.find(fragment) != std::string::npos) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		bool ContainsAnyWideFragment(
+			const std::wstring& text,
+			std::initializer_list<const wchar_t*> fragments) {
+			for (const auto* fragment : fragments) {
+				if (fragment == nullptr || *fragment == L'\0') {
+					continue;
+				}
+				if (text.find(fragment) != std::wstring::npos) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		std::string ToLowerAscii(std::string value) {
+			std::transform(
+				value.begin(),
+				value.end(),
+				value.begin(),
+				[](const unsigned char ch) {
+					return static_cast<char>(std::tolower(ch));
+				});
+			return value;
+		}
+
+		bool LooksLikeInboxIntentAnyLanguage(const std::string& message) {
+			const std::string lower = ToLowerAscii(message);
+			const std::wstring wide = Utf8ToWide(message);
+			const bool inboxSignal = ContainsAnyFragment(
+				lower,
+				{ "inbox", "mailbox", "email", "mail", "unread" }) ||
+				ContainsAnyWideFragment(
+					wide,
+					{ L"邮箱", L"收件箱", L"邮件", L"新邮件", L"查邮箱", L"查一下邮箱" });
+			const bool replySignal = ContainsAnyFragment(
+				lower,
+				{ "reply", "respond", "needs a reply", "need a reply" }) ||
+				ContainsAnyWideFragment(
+					wide,
+					{ L"回复", L"回信", L"需要回复", L"尽快回复" });
+			return inboxSignal && replySignal;
+		}
+
+		std::string DetectRoutingLanguage(const std::string& message) {
+			const std::wstring wide = Utf8ToWide(message);
+			if (ContainsAnyWideFragment(
+					wide,
+					{ L"邮箱", L"收件箱", L"邮件", L"新邮件", L"回复", L"回信" })) {
+				return "zh";
+			}
+
+			bool hasNonAscii = false;
+			for (const unsigned char ch : message) {
+				if (ch > 0x7F) {
+					hasNonAscii = true;
+					break;
+				}
+			}
+			if (hasNonAscii) {
+				return "non_ascii";
+			}
+			return "en";
 		}
 
 	} // namespace
@@ -220,6 +300,17 @@ namespace blazeclaw::core {
 						"[InlineActions] slash gate skipped skill command load for message: %s\n",
 						preparedChatRequest.commandBodyForInline.c_str());
 				}
+				const std::string detectedLanguage =
+					DetectRoutingLanguage(preparedChatRequest.commandBodyForInline);
+				const std::string normalizedIntent =
+					LooksLikeInboxIntentAnyLanguage(preparedChatRequest.commandBodyForInline)
+					? "inbox_triage"
+					: "unknown";
+				const std::optional<std::string> routingFallbackReason =
+					(normalizedIntent == "inbox_triage" &&
+						!preparedChatRequest.resolvedSkillInvocationToolTarget.has_value())
+					? std::optional<std::string>("intent_not_matched")
+					: std::nullopt;
 				blazeclaw::gateway::EmitTelemetryEvent(
 					"gateway.chat.routing.decision",
 					std::string("{\"runId\":") +
@@ -237,6 +328,14 @@ namespace blazeclaw::core {
 					std::string(preparedChatRequest.rewrittenSkillPromptMessage.has_value()
 						? "true"
 						: "false") +
+					",\"detectedLanguage\":" +
+					blazeclaw::gateway::JsonString(detectedLanguage) +
+					",\"normalizedIntent\":" +
+					blazeclaw::gateway::JsonString(normalizedIntent) +
+					",\"fallbackReason\":" +
+					(routingFallbackReason.has_value()
+						? blazeclaw::gateway::JsonString(routingFallbackReason.value())
+						: std::string("null")) +
 					"}");
 
 				const auto resolvedPrompt = orchestrator.ResolveSkillsPromptForRun(manager);
