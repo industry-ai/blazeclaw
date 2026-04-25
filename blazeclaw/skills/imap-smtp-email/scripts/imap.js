@@ -652,4 +652,8 @@ async function main() {
     }
 }
 
-main();
+main().catch((err) => {
+    const message = err && err.message ? err.message : String(err);
+    console.error('Error:', message);
+    process.exit(1);
+});

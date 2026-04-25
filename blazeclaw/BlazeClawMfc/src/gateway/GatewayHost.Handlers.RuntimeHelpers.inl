@@ -759,6 +759,8 @@ std::string SerializeTaskDeltaEntryJson(
 		EscapeJsonLocal(delta.status) +
 		"\",\"errorCode\":\"" +
 		EscapeJsonLocal(delta.errorCode) +
+		"\",\"errorMessage\":\"" +
+		EscapeJsonLocal(delta.errorMessage) +
 		"\",\"startedAtMs\":" +
 		std::to_string(delta.startedAtMs) +
 		",\"completedAtMs\":" +

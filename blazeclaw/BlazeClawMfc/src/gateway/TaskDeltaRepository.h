@@ -23,6 +23,7 @@ namespace blazeclaw::gateway {
 		std::string resultJson;
 		std::string status;
 		std::string errorCode;
+		std::string errorMessage;
 		std::uint64_t startedAtMs = 0;
 		std::uint64_t completedAtMs = 0;
 		std::uint64_t latencyMs = 0;

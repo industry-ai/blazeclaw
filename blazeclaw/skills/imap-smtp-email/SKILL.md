@@ -31,11 +31,18 @@ Read, search, and manage email via IMAP protocol. Send email via SMTP. Supports 
 
 ## Configuration
 
-Run the setup script to configure your email account:
+### Windows (BlazeClaw host): Node + dependencies (Phase A / B)
+
+1. **Node for the GUI process** — BlazeClaw resolves `node.exe` via `BLAZECLAW_NODE_PATH` (absolute path), then `PATH`, then common install locations under `Program Files` and `%LOCALAPPDATA%\Programs\nodejs`. If tools fail with `process_start_failed`, set `BLAZECLAW_NODE_PATH` to a real `node.exe` and disable broken Windows Store “App execution aliases” for `node`.
+2. **npm packages** — From this directory run `.\setup.ps1` (runs `npm ci`) or manually: `npm ci`. Without `node_modules`, the runtime returns `node_dependencies_missing` before starting Node.
+
+Run the setup script to configure your email account (Linux/macOS/Git Bash):
 
 ```bash
 bash setup.sh
 ```
+
+On Windows you can still use `bash setup.sh` from Git Bash for the full interactive wizard; `setup.ps1` only installs npm dependencies.
 
 Configuration is stored at `~/.config/imap-smtp-email/.env` (survives skill updates). If no config is found there, the skill falls back to a `.env` file in the skill directory (for backward compatibility).
 

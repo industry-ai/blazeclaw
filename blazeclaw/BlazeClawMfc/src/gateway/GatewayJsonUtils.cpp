@@ -300,6 +300,53 @@ namespace blazeclaw::gateway::json {
 		return text[valuePos] == expectedFirstChar;
 	}
 
+	std::string SanitizeInlineToolSummary(const std::string& raw, const std::size_t maxLen) {
+		std::string s;
+		// Avoid std::min: Windows headers may define min/max macros (C2589 with std::min).
+		const std::size_t reserveCap = raw.size() < maxLen ? raw.size() : maxLen;
+		s.reserve(reserveCap + 8);
+		bool pendingUnderscore = false;
+		for (unsigned char uc : raw) {
+			char ch = static_cast<char>(uc);
+			if (ch < 0x20 || ch == 0x7F) {
+				pendingUnderscore = true;
+				continue;
+			}
+
+			if (ch == ' ' || ch == '\t') {
+				pendingUnderscore = true;
+				continue;
+			}
+
+			if (ch == '"') {
+				continue;
+			}
+
+			if (ch == '\\') {
+				s.push_back('/');
+				continue;
+			}
+
+			if (pendingUnderscore) {
+				if (!s.empty() && s.back() != '_') {
+					s.push_back('_');
+				}
+				pendingUnderscore = false;
+			}
+
+			s.push_back(ch);
+			if (s.size() >= maxLen) {
+				break;
+			}
+		}
+
+		while (!s.empty() && s.back() == '_') {
+			s.pop_back();
+		}
+
+		return s;
+	}
+
 } // namespace blazeclaw::gateway::json
 
 namespace blazeclaw::gateway::prompt {

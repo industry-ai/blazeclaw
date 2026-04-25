@@ -116,6 +116,7 @@ std::string SerializeTaskDeltaEntry(const TaskDeltaEntry& delta) {
 		"\",\"resultJson\":\"" + EscapeJsonString(delta.resultJson) +
 		"\",\"status\":\"" + EscapeJsonString(delta.status) +
 		"\",\"errorCode\":\"" + EscapeJsonString(delta.errorCode) +
+		"\",\"errorMessage\":\"" + EscapeJsonString(delta.errorMessage) +
 		"\",\"startedAtMs\":" + std::to_string(delta.startedAtMs) +
 		",\"completedAtMs\":" + std::to_string(delta.completedAtMs) +
 		",\"latencyMs\":" + std::to_string(delta.latencyMs) +

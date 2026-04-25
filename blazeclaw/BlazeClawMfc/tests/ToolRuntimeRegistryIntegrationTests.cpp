@@ -135,6 +135,60 @@ TEST_CASE("Web browsing Option B fallback continuity contract remains wired", "[
 	REQUIRE(source.find("? \"process_start_failed\"") != std::string::npos);
 }
 
+TEST_CASE("Inbox inline invocation maps natural-language to JSON args", "[tools][runtime][imap][contract]") {
+	const auto serviceManagerPathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	const auto serviceManagerPathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	std::ifstream in(serviceManagerPathPrimary.string());
+	if (!in.is_open()) {
+		in.open(serviceManagerPathFallback.string());
+	}
+	REQUIRE(in.is_open());
+
+	const std::string source(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+
+	REQUIRE(source.find("BuildInlineArgsForResolvedTool") != std::string::npos);
+	REQUIRE(source.find("imap_smtp_email.imap.search") != std::string::npos);
+	REQUIRE(source.find("params[\"recent\"] = \"2h\"") != std::string::npos);
+	REQUIRE(source.find("params[\"unseen\"] = true") != std::string::npos);
+}
+
+TEST_CASE("Inbox inline invocation has friendly empty-array response", "[tools][runtime][imap][contract]") {
+	const auto serviceManagerPathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	const auto serviceManagerPathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	std::ifstream in(serviceManagerPathPrimary.string());
+	if (!in.is_open()) {
+		in.open(serviceManagerPathFallback.string());
+	}
+	REQUIRE(in.is_open());
+
+	const std::string source(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+
+	REQUIRE(source.find("BuildInlineFriendlyTextForResolvedTool") != std::string::npos);
+	REQUIRE(source.find("found no messages that need a reply") != std::string::npos);
+}
+
 TEST_CASE("Runtime health dependencies include python and web-browsing probes", "[tools][runtime][health][contract]") {
 	const auto executorPathPrimary =
 		std::filesystem::path("BlazeClawMfc") /

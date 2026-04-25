@@ -59,10 +59,13 @@ namespace blazeclaw::core {
 				shouldLoadSkillCommands(true, prepared.commandBodyForInline);
 			prepared.sessionId =
 				request.sessionKey.empty() ? "main" : request.sessionKey;
+			// Always resolve deterministic target for natural-language paths too
+			// (e.g. inbox-reply urgency), not only slash-gated inline command loading.
 			prepared.resolvedSkillInvocationToolTarget =
-				prepared.shouldLoadInlineSkillCommands
-				? resolveSkillInvocationToolTarget(prepared.commandBodyForInline)
-				: std::nullopt;
+				resolveSkillInvocationToolTarget(prepared.commandBodyForInline);
+			if (prepared.resolvedSkillInvocationToolTarget.has_value()) {
+				prepared.shouldLoadInlineSkillCommands = true;
+			}
 			prepared.rewrittenSkillPromptMessage =
 				prepared.shouldLoadInlineSkillCommands
 				? resolveSkillInvocationPromptRewrite(prepared.commandBodyForInline)

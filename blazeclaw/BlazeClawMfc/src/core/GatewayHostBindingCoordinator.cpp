@@ -3,6 +3,7 @@
 
 #include "EmbeddingsService.h"
 #include "ServiceManager.h"
+#include "../gateway/Telemetry.h"
 
 #include <string>
 #include <vector>
@@ -219,6 +220,24 @@ namespace blazeclaw::core {
 						"[InlineActions] slash gate skipped skill command load for message: %s\n",
 						preparedChatRequest.commandBodyForInline.c_str());
 				}
+				blazeclaw::gateway::EmitTelemetryEvent(
+					"gateway.chat.routing.decision",
+					std::string("{\"runId\":") +
+					blazeclaw::gateway::JsonString(request.runId) +
+					",\"sessionKey\":" +
+					blazeclaw::gateway::JsonString(request.sessionKey) +
+					",\"inlineSkillCommands\":" +
+					std::string(preparedChatRequest.shouldLoadInlineSkillCommands ? "true" : "false") +
+					",\"resolvedSkillInvocationToolTarget\":" +
+					(preparedChatRequest.resolvedSkillInvocationToolTarget.has_value()
+						? blazeclaw::gateway::JsonString(
+							preparedChatRequest.resolvedSkillInvocationToolTarget.value())
+						: std::string("null")) +
+					",\"hasRewrite\":" +
+					std::string(preparedChatRequest.rewrittenSkillPromptMessage.has_value()
+						? "true"
+						: "false") +
+					"}");
 
 				const auto resolvedPrompt = orchestrator.ResolveSkillsPromptForRun(manager);
 				const std::string runtimeMessage =

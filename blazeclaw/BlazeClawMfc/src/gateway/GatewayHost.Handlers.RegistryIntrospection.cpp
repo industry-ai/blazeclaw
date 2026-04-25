@@ -310,26 +310,45 @@ namespace blazeclaw::gateway::handlers::registry_introspection {
 				EmitTelemetryEvent("gateway.tool.invoke", invokePayload);
 			}
 
-			ToolExecuteResult execution;
+			ToolExecuteResultV2 execution;
 			try {
-				execution = host.m_toolRegistry.Execute(requestedTool, argsJson);
+				execution = host.ExecuteRuntimeToolV2(ToolExecuteRequestV2{
+					.tool = requestedTool,
+					.argsJson = argsJson,
+					.correlationId = request.id.empty()
+						? std::string("gateway.tools.call.execute")
+						: request.id,
+					.deadlineEpochMs = std::nullopt,
+				});
 			}
 			catch (const std::exception& ex) {
-				execution = ToolExecuteResult{
+				execution = ToolExecuteResultV2{
 					.tool = requestedTool,
 					.executed = false,
 					.status = "error",
-					.output = std::string("{\"ok\":false,\"error\":{\"code\":\"tool_execute_unhandled_exception\",\"message\":\"") +
+					.result = std::string("{\"ok\":false,\"error\":{\"code\":\"tool_execute_unhandled_exception\",\"message\":\"") +
 						EscapeJsonString(ex.what()) +
 						"\"}}",
+					.errorCode = "tool_execute_unhandled_exception",
+					.errorMessage = ex.what(),
+					.startedAtMs = 0,
+					.completedAtMs = 0,
+					.latencyMs = 0,
+					.correlationId = request.id,
 				};
 			}
 			catch (...) {
-				execution = ToolExecuteResult{
+				execution = ToolExecuteResultV2{
 					.tool = requestedTool,
 					.executed = false,
 					.status = "error",
-					.output = "{\"ok\":false,\"error\":{\"code\":\"tool_execute_unhandled_exception\",\"message\":\"unknown_exception\"}}",
+					.result = "{\"ok\":false,\"error\":{\"code\":\"tool_execute_unhandled_exception\",\"message\":\"unknown_exception\"}}",
+					.errorCode = "tool_execute_unhandled_exception",
+					.errorMessage = "unknown_exception",
+					.startedAtMs = 0,
+					.completedAtMs = 0,
+					.latencyMs = 0,
+					.correlationId = request.id,
 				};
 			}
 
@@ -343,11 +362,21 @@ namespace blazeclaw::gateway::handlers::registry_introspection {
 				EmitTelemetryEvent("gateway.tool.complete", resultPayload);
 			}
 
-			return protocol::OkResponse(request, "{\"tool\":\"" + EscapeJsonString(execution.tool) +
+			std::string payload =
+				"{\"tool\":\"" + EscapeJsonString(execution.tool) +
 				"\",\"executed\":" + std::string(execution.executed ? "true" : "false") +
 				",\"status\":\"" + EscapeJsonString(execution.status) +
-				"\",\"output\":\"" + EscapeJsonString(execution.output) +
-				"\",\"argsProvided\":" + std::string(argsProvided ? "true" : "false") + "}");
+				"\",\"output\":\"" + EscapeJsonString(execution.result) +
+				"\",\"argsProvided\":" + std::string(argsProvided ? "true" : "false");
+			if (!execution.errorCode.empty()) {
+				payload += ",\"errorCode\":\"" + EscapeJsonString(execution.errorCode) + "\"";
+			}
+			if (!execution.errorMessage.empty()) {
+				payload += ",\"errorMessage\":\"" + EscapeJsonString(execution.errorMessage) + "\"";
+			}
+			payload += "}";
+
+			return protocol::OkResponse(request, payload);
 			});
 	}
 

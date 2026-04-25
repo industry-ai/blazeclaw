@@ -29,6 +29,11 @@ namespace blazeclaw::gateway::json {
 	bool IsJsonObjectShape(const std::string& value);
 	bool IsFieldValueType(const std::string& text, const std::string& fieldName, char expectedFirstChar);
 
+	/// Collapses whitespace and control characters for safe single-line tool status / log appendages.
+	[[nodiscard]] std::string SanitizeInlineToolSummary(
+		const std::string& raw,
+		std::size_t maxLen = 400);
+
 } // namespace blazeclaw::gateway::json
 
 namespace blazeclaw::gateway::prompt {

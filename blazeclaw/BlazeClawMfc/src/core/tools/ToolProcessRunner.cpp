@@ -122,6 +122,76 @@ namespace blazeclaw::core::tools {
 			return std::wstring(buffer.data(), written);
 		}
 
+#ifdef _WIN32
+		std::optional<std::wstring> ProbeWellKnownWindowsNodeExecutable(std::string& outDetail)
+		{
+			outDetail.clear();
+			static const wchar_t* kProgramRoots[] = {
+				L"ProgramW6432",
+				L"ProgramFiles",
+				L"ProgramFiles(x86)",
+			};
+			for (const wchar_t* key : kProgramRoots) {
+				const auto base = ReadEnvWide(key);
+				if (!base.has_value()) {
+					continue;
+				}
+
+				const std::filesystem::path candidate =
+					std::filesystem::path(base.value()) / L"nodejs" / L"node.exe";
+				if (std::filesystem::exists(candidate)) {
+					outDetail =
+						std::string("source=known_install key=") +
+						ToUtf8(key) +
+						" path=" +
+						ToUtf8(candidate.wstring());
+					return candidate.wstring();
+				}
+			}
+
+			const auto localApp = ReadEnvWide(L"LOCALAPPDATA");
+			if (localApp.has_value()) {
+				const std::filesystem::path candidate =
+					std::filesystem::path(localApp.value()) /
+					L"Programs" /
+					L"nodejs" /
+					L"node.exe";
+				if (std::filesystem::exists(candidate)) {
+					outDetail =
+						"source=known_install key=LOCALAPPDATA\\Programs\\nodejs path=" +
+						ToUtf8(candidate.wstring());
+					return candidate.wstring();
+				}
+			}
+
+			return std::nullopt;
+		}
+#endif
+
+		std::string Win32CreateProcessErrorSuffix(const unsigned long long lastError)
+		{
+			switch (lastError) {
+			case 2ULL:
+				return " win32Hint=ERROR_FILE_NOT_FOUND";
+			case 3ULL:
+				return " win32Hint=ERROR_PATH_NOT_FOUND";
+			case 5ULL:
+				return " win32Hint=ERROR_ACCESS_DENIED";
+			case 193ULL:
+				return " win32Hint=ERROR_BAD_EXE_FORMAT";
+			case 740ULL:
+				return " win32Hint=ERROR_ELEVATION_REQUIRED";
+			case 206ULL:
+				return " win32Hint=ERROR_FILENAME_EXCED_RANGE";
+			case 267ULL:
+				return " win32Hint=ERROR_DIRECTORY";
+			case 87ULL:
+				return " win32Hint=ERROR_INVALID_PARAMETER";
+			default:
+				return {};
+			}
+		}
+
 		std::optional<std::wstring> ResolveNodeExecutable(
 			std::string& outResolutionDetail)
 		{
@@ -161,6 +231,24 @@ namespace blazeclaw::core::tools {
 				outResolutionDetail = source + " path=" + ToUtf8(found.value());
 				return found;
 			}
+
+#ifdef _WIN32
+			{
+				std::string knownInstallDetail;
+				if (const auto known = ProbeWellKnownWindowsNodeExecutable(knownInstallDetail);
+					known.has_value()) {
+					const std::string suffix =
+						std::string("fallback=known_windows_install ") + knownInstallDetail;
+					if (configuredPath.has_value()) {
+						outResolutionDetail += " " + suffix;
+					}
+					else {
+						outResolutionDetail = suffix;
+					}
+					return known;
+				}
+			}
+#endif
 
 			if (configuredPath.has_value())
 			{
@@ -315,13 +403,20 @@ namespace blazeclaw::core::tools {
 			std::vector<wchar_t> mutableCommand(commandLine.begin(), commandLine.end());
 			mutableCommand.push_back(L'\0');
 
+			DWORD creationFlags = CREATE_NO_WINDOW;
+			if (environment != nullptr) {
+				// lpEnvironment is UTF-16; without this flag CreateProcessW often fails
+				// with ERROR_INVALID_PARAMETER (87). See MSDN CREATE_UNICODE_ENVIRONMENT.
+				creationFlags |= CREATE_UNICODE_ENVIRONMENT;
+			}
+
 			const BOOL created = CreateProcessW(
 				nullptr,
 				mutableCommand.data(),
 				nullptr,
 				nullptr,
 				TRUE,
-				CREATE_NO_WINDOW,
+				creationFlags,
 				reinterpret_cast<LPVOID>(const_cast<wchar_t*>(environment)),
 				workingDirectory,
 				&startupInfo,
@@ -339,7 +434,9 @@ namespace blazeclaw::core::tools {
 					" executable=" +
 					result.executablePath +
 					" workingDir=" +
-					(result.workingDirectory.empty() ? std::string("<null>") : result.workingDirectory);
+					(result.workingDirectory.empty() ? std::string("<null>") : result.workingDirectory) +
+					Win32CreateProcessErrorSuffix(
+						static_cast<unsigned long long>(result.startupLastError));
 				result.output = ReadPipeAll(outputRead);
 				CloseHandle(outputRead);
 				return result;
@@ -428,10 +525,14 @@ namespace blazeclaw::core::tools {
 			? nullptr
 			: scriptWorkingDirW.c_str();
 
+		// Inherit the parent environment (lpEnvironment=nullptr). A minimal custom block
+		// (e.g. PYTHONUTF8) *replaces* the entire child env on Windows and drops SystemRoot,
+		// PATH, etc., which often makes node.exe abort during InitializeOncePerProcessInternal
+		// (exit 134, mangled C++ stderr from node.lib).
 		auto result = ExecuteSkillProcess(
 			commandTokens,
 			timeoutMs,
-			L"PYTHONUTF8=1\0PYTHONIOENCODING=utf-8\0\0",
+			nullptr,
 			workingDirectory);
 		if (!result.started && !nodeResolution.empty())
 		{

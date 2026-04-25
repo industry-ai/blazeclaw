@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "PiEmbeddedService.h"
 
+#include "../gateway/GatewayJsonUtils.h"
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -1107,11 +1109,18 @@ namespace blazeclaw::core {
 					(execution.status.empty() || execution.status == "error"))
 				? execution.errorCode
 				: execution.status;
-			result.assistantDeltas.push_back(
+			std::string toolResultLine =
 				"tools.execute.result tool=" +
 				toolName +
 				" status=" +
-				effectiveFailureStatus);
+				effectiveFailureStatus;
+			if (!execution.errorMessage.empty()) {
+				toolResultLine +=
+					" errorMessage=" +
+					blazeclaw::gateway::json::SanitizeInlineToolSummary(
+						execution.errorMessage);
+			}
+			result.assistantDeltas.push_back(std::move(toolResultLine));
 			const std::string toolResultStatus =
 				effectiveFailureStatus.empty()
 				? (execution.executed ? kStatusCompleted : kStatusFailed)
@@ -1134,6 +1143,7 @@ namespace blazeclaw::core {
 					: (execution.errorCode.empty()
 						? std::string("not_executed")
 						: execution.errorCode),
+				.errorMessage = execution.errorMessage,
 				.startedAtMs = execution.startedAtMs,
 				.completedAtMs = execution.completedAtMs,
 				.latencyMs = execution.latencyMs,

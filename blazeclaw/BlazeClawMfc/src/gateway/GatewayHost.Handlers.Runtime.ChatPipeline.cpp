@@ -1037,14 +1037,21 @@ namespace blazeclaw::gateway {
 												"}");
 										}
 
-										deltas.push_back(
+										std::string toolLine =
 											"tools.execute.result tool=" +
 											delta.toolName +
 											" status=" +
 											(delta.status.empty() ? std::string("ok") : delta.status) +
 											(delta.errorCode.empty()
 												? std::string()
-												: (" errorCode=" + delta.errorCode)));
+												: (" errorCode=" + delta.errorCode));
+										if (!delta.errorMessage.empty()) {
+											toolLine +=
+												" errorMessage=" +
+												blazeclaw::gateway::json::SanitizeInlineToolSummary(
+													delta.errorMessage);
+										}
+										deltas.push_back(std::move(toolLine));
 										continue;
 									}
 								}

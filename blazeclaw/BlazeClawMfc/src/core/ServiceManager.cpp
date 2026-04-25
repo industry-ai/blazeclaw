@@ -663,6 +663,71 @@ namespace blazeclaw::core {
 			return (inboxSignal && replySignal) || (inboxSignal && urgencySignal);
 		}
 
+		bool LooksLikeJsonObjectShapeLocal(const std::string& value) {
+			const std::wstring trimmed = Trim(Utf8ToWideLocal(value));
+			if (trimmed.size() < 2) {
+				return false;
+			}
+
+			return trimmed.front() == L'{' && trimmed.back() == L'}';
+		}
+
+		std::optional<std::string> BuildInlineArgsForResolvedTool(
+			const std::string& resolvedToolId,
+			const std::string& commandBodyNormalized) {
+			if (resolvedToolId != "imap_smtp_email.imap.search") {
+				return std::nullopt;
+			}
+
+			// Respect explicit JSON object payloads from advanced callers.
+			if (LooksLikeJsonObjectShapeLocal(commandBodyNormalized)) {
+				return std::nullopt;
+			}
+
+			if (!LooksLikeInboxReplyUrgencyIntent(commandBodyNormalized)) {
+				return std::nullopt;
+			}
+
+			nlohmann::json params = nlohmann::json::object();
+			params["unseen"] = true;
+			params["recent"] = "2h";
+			params["limit"] = 20;
+			return params.dump();
+		}
+
+		std::optional<std::string> BuildInlineFriendlyTextForResolvedTool(
+			const std::string& resolvedToolId,
+			const blazeclaw::gateway::ToolExecuteResultV2& result) {
+			if (resolvedToolId != "imap_smtp_email.imap.search") {
+				return std::nullopt;
+			}
+
+			const std::string trimmedResult =
+				ToNarrow(Trim(Utf8ToWideLocal(result.result)));
+			if (trimmedResult.empty()) {
+				return std::nullopt;
+			}
+
+			try {
+				const auto parsed = nlohmann::json::parse(trimmedResult);
+				if (parsed.is_array()) {
+					if (parsed.empty()) {
+						return std::string(
+							"I checked your inbox in the last 2 hours and found no messages "
+							"that need a reply.");
+					}
+					return std::string("I found ") +
+						std::to_string(parsed.size()) +
+						" inbox message(s) from the last 2 hours for reply triage.";
+				}
+			}
+			catch (...) {
+				// Preserve default rendering when tool output is not JSON.
+			}
+
+			return std::nullopt;
+		}
+
 		std::filesystem::path ResolveWorkspaceRootForSkills(
 			const std::filesystem::path& startPath) {
 			std::error_code ec;
@@ -1290,6 +1355,21 @@ namespace blazeclaw::core {
 							return result;
 						}
 
+						const auto nodeModulesImap =
+							skillRoot.value() / L"node_modules" / L"imap";
+						if (!std::filesystem::exists(nodeModulesImap)) {
+							result.executed = false;
+							result.status = "error";
+							result.errorCode = "node_dependencies_missing";
+							result.errorMessage =
+								"imap-smtp-email Node dependencies are not installed "
+								"(missing node_modules/imap). From the skill directory run: "
+								"npm ci   (Windows: .\\setup.ps1 installs dependencies.)";
+							result.completedAtMs = CurrentEpochMs();
+							result.latencyMs = result.completedAtMs - result.startedAtMs;
+							return result;
+						}
+
 						nlohmann::json params = nlohmann::json::object();
 						if (request.argsJson.has_value() && !request.argsJson->empty()) {
 							try {
@@ -1399,9 +1479,28 @@ namespace blazeclaw::core {
 						result.executed = false;
 						result.status = "error";
 						result.errorCode = "process_exit_nonzero";
-						result.errorMessage =
-							"tool process returned non-zero exit code " +
-							std::to_string(static_cast<unsigned long long>(process.exitCode));
+						{
+							std::string nonZeroMsg =
+								"tool process returned non-zero exit code " +
+								std::to_string(
+									static_cast<unsigned long long>(process.exitCode));
+							if (!process.output.empty()) {
+								nonZeroMsg += " output=";
+								std::string snippet = process.output;
+								constexpr std::size_t kMaxSnippet = 800;
+								if (snippet.size() > kMaxSnippet) {
+									snippet.resize(kMaxSnippet);
+									snippet += "...[truncated]";
+								}
+								for (char& ch : snippet) {
+									if (ch == '\r' || ch == '\n' || ch == '\t') {
+										ch = ' ';
+									}
+								}
+								nonZeroMsg += snippet;
+							}
+							result.errorMessage = std::move(nonZeroMsg);
+						}
 						return result;
 					});
 			}
@@ -1418,6 +1517,12 @@ namespace blazeclaw::core {
 				toolPolicy.enableOpenClawWebBrowsingFallback;
 			const bool requireApiKey = toolPolicy.braveRequireApiKey;
 			const bool hasApiKey = toolPolicy.braveApiKeyPresent;
+			const std::uint64_t searchTimeoutMsDefault = ParseUInt64EnvValue(
+				L"BLAZECLAW_WEB_SEARCH_TIMEOUT_MS",
+				45000);
+			const std::uint64_t fallbackTimeoutMsDefault = ParseUInt64EnvValue(
+				L"BLAZECLAW_WEB_SEARCH_FALLBACK_TIMEOUT_MS",
+				15000);
 			for (const auto& spec : tools::BuildBraveSearchToolRuntimeSpecs()) {
 				host.RegisterRuntimeToolV2(
 					blazeclaw::gateway::ToolCatalogEntry{
@@ -1433,7 +1538,9 @@ namespace blazeclaw::core {
 					baiduSearchSkillRoot,
 					enableOpenClawWebBrowsingFallback,
 					requireApiKey,
-					hasApiKey](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
+					hasApiKey,
+					searchTimeoutMsDefault,
+					fallbackTimeoutMsDefault](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
 						blazeclaw::gateway::ToolExecuteResultV2 result;
 						result.tool = request.tool.empty() ? spec.id : request.tool;
 						result.correlationId = request.correlationId;
@@ -1530,7 +1637,7 @@ namespace blazeclaw::core {
 						}
 
 						std::uint64_t timeoutMs =
-							tools::IsBraveSearchWebToolId(spec.id) ? 45000 : 30000;
+							tools::IsBraveSearchWebToolId(spec.id) ? searchTimeoutMsDefault : 30000;
 						if (request.deadlineEpochMs.has_value()) {
 							const std::uint64_t now = CurrentEpochMs();
 							if (request.deadlineEpochMs.value() <= now) {
@@ -1576,7 +1683,7 @@ namespace blazeclaw::core {
 								const std::string query =
 									tools::TrimAsciiForBraveSearch(params["query"].get<std::string>());
 								if (!query.empty()) {
-									std::uint64_t fallbackTimeoutMs = 15000;
+									std::uint64_t fallbackTimeoutMs = fallbackTimeoutMsDefault;
 									if (request.deadlineEpochMs.has_value()) {
 										const std::uint64_t now = CurrentEpochMs();
 										if (request.deadlineEpochMs.value() <= now) {
@@ -1624,7 +1731,7 @@ namespace blazeclaw::core {
 								const std::string query =
 									tools::TrimAsciiForBraveSearch(params["query"].get<std::string>());
 								if (!query.empty()) {
-									std::uint64_t fallbackTimeoutMs = 15000;
+									std::uint64_t fallbackTimeoutMs = fallbackTimeoutMsDefault;
 									if (request.deadlineEpochMs.has_value()) {
 										const std::uint64_t now = CurrentEpochMs();
 										if (request.deadlineEpochMs.value() <= now) {
@@ -1713,6 +1820,78 @@ namespace blazeclaw::core {
 						result.executed = false;
 						const std::string classifiedFailure =
 							tools::ClassifyBraveFailureCode(process.output);
+						const bool canAttemptBaiduFallback =
+							spec.id == "web_browsing.search.web" &&
+							classifiedFailure == "network_error" &&
+							tools::IsBraveNetworkTimeoutFailure(process.output) &&
+							baiduSearchSkillRoot.has_value() &&
+							params.contains("query") &&
+							params["query"].is_string();
+						if (canAttemptBaiduFallback) {
+							const std::string query =
+								tools::TrimAsciiForBraveSearch(params["query"].get<std::string>());
+							if (!query.empty()) {
+								std::uint64_t fallbackTimeoutMs = fallbackTimeoutMsDefault;
+								if (request.deadlineEpochMs.has_value()) {
+									const std::uint64_t now = CurrentEpochMs();
+									if (request.deadlineEpochMs.value() <= now) {
+										fallbackTimeoutMs = 0;
+									}
+									else {
+										fallbackTimeoutMs = request.deadlineEpochMs.value() - now;
+									}
+								}
+
+								if (fallbackTimeoutMs > 0) {
+									const auto fallbackScriptPath =
+										baiduSearchSkillRoot.value() /
+										L"scripts" /
+										L"search.py";
+									if (std::filesystem::exists(fallbackScriptPath)) {
+										nlohmann::json fallbackParams = nlohmann::json::object();
+										fallbackParams["query"] = query;
+										if (params.contains("count") &&
+											params["count"].is_number_integer()) {
+											fallbackParams["count"] = params["count"];
+										}
+
+										std::string fallbackArgsErrorCode;
+										std::string fallbackArgsErrorMessage;
+										const auto fallbackCliArgs =
+											tools::BuildBaiduSearchCliArgs(
+												tools::BaiduSearchToolRuntimeSpec{
+													.id = "baidu-search.search.web",
+													.label = "Baidu Web Search",
+													.script = "scripts/search.py",
+												},
+												fallbackParams,
+												fallbackArgsErrorCode,
+												fallbackArgsErrorMessage);
+										if (fallbackCliArgs.has_value()) {
+											const auto fallbackProcess = tools::ExecutePythonSkillProcess(
+												fallbackScriptPath,
+												fallbackCliArgs.value(),
+												fallbackTimeoutMs);
+											if (fallbackProcess.started &&
+												!fallbackProcess.timedOut &&
+												fallbackProcess.exitCode == 0) {
+												result.executed = true;
+												result.status = "ok";
+												result.result =
+													fallbackProcess.output +
+													"\n[fallback=baidu_search_python_network_error]";
+												result.errorCode.clear();
+												result.errorMessage.clear();
+												result.completedAtMs = CurrentEpochMs();
+												result.latencyMs =
+													result.completedAtMs - result.startedAtMs;
+												return result;
+											}
+										}
+									}
+								}
+							}
+						}
 						const bool canAttemptOpenClawFallback =
 							enableOpenClawWebBrowsingFallback &&
 							spec.id == "web_browsing.search.web" &&
@@ -1726,7 +1905,7 @@ namespace blazeclaw::core {
 							const std::string query =
 								tools::TrimAsciiForBraveSearch(params["query"].get<std::string>());
 							if (!query.empty()) {
-								std::uint64_t fallbackTimeoutMs = 15000;
+								std::uint64_t fallbackTimeoutMs = fallbackTimeoutMsDefault;
 								if (request.deadlineEpochMs.has_value()) {
 									const std::uint64_t now = CurrentEpochMs();
 									if (request.deadlineEpochMs.value() <= now) {
@@ -2232,7 +2411,13 @@ namespace blazeclaw::core {
 			}
 		}
 
-		const std::string inlineArgs = request.message;
+		std::string inlineArgs = request.message;
+		if (const auto normalizedInlineArgs = BuildInlineArgsForResolvedTool(
+			resolvedSkillInvocationToolTarget.value(),
+			request.message);
+			normalizedInlineArgs.has_value()) {
+			inlineArgs = normalizedInlineArgs.value();
+		}
 		const blazeclaw::gateway::ToolExecuteResultV2 toolResult =
 			m_gatewayHost.ExecuteRuntimeToolV2(
 				blazeclaw::gateway::ToolExecuteRequestV2{
@@ -2258,8 +2443,10 @@ namespace blazeclaw::core {
 			};
 		}
 
-		const auto inlineText = ExtractInlineToolResultText(toolResult).value_or(
-			"Done.");
+		const auto inlineText = BuildInlineFriendlyTextForResolvedTool(
+			resolvedSkillInvocationToolTarget.value(),
+			toolResult).value_or(
+				ExtractInlineToolResultText(toolResult).value_or("Done."));
 		return blazeclaw::gateway::GatewayHost::ChatRuntimeResult{
 			.ok = true,
 			.assistantText = inlineText,
@@ -2294,6 +2481,7 @@ namespace blazeclaw::core {
 					.resultJson = delta.resultJson,
 					.status = delta.status,
 					.errorCode = delta.errorCode,
+					.errorMessage = delta.errorMessage,
 					.startedAtMs = delta.startedAtMs,
 					.completedAtMs = delta.completedAtMs,
 					.latencyMs = delta.latencyMs,

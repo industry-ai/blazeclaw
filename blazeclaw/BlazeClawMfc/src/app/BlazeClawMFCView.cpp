@@ -213,6 +213,24 @@ namespace {
 			}
 		}
 
+		const std::string msgToken = " errorMessage=";
+		const std::size_t msgPos = trimmed.find(msgToken);
+		if (msgPos != std::string::npos)
+		{
+			std::size_t msgStart = msgPos + msgToken.size();
+			std::size_t msgEnd = trimmed.find(' ', msgStart);
+			if (msgEnd == std::string::npos)
+			{
+				msgEnd = trimmed.size();
+			}
+
+			const std::string em = trimmed.substr(msgStart, msgEnd - msgStart);
+			if (!em.empty())
+			{
+				line += " errorMessage=" + em;
+			}
+		}
+
 		return line;
 	}
 
@@ -1267,6 +1285,7 @@ namespace {
 		bool executed = false;
 		std::string phase = "result";
 		std::string code;
+		std::string toolPayloadErrorMessage;
 	};
 
 	ToolLifecycleStartInfo ParseToolStartInfo(
@@ -1339,6 +1358,17 @@ namespace {
 		blazeclaw::gateway::json::FindStringField(payload, "tool", info.tool);
 		blazeclaw::gateway::json::FindStringField(payload, "status", info.status);
 		blazeclaw::gateway::json::FindBoolField(payload, "executed", info.executed);
+		blazeclaw::gateway::json::FindStringField(
+			payload,
+			"errorMessage",
+			info.toolPayloadErrorMessage);
+
+		std::string toolPayloadErrorCode;
+		if (!info.executed &&
+			blazeclaw::gateway::json::FindStringField(payload, "errorCode", toolPayloadErrorCode) &&
+			!toolPayloadErrorCode.empty()) {
+			info.code = toolPayloadErrorCode;
+		}
 
 		if (info.tool.empty())
 		{
@@ -1373,7 +1403,7 @@ namespace {
 		const blazeclaw::gateway::protocol::ResponseFrame& response)
 	{
 		const auto info = ParseToolResultInfo(response);
-		if (info.phase == "error" && !info.code.empty())
+		if (!response.ok && info.phase == "error" && !info.code.empty())
 		{
 			return "status=error code=" + info.code;
 		}
@@ -1397,6 +1427,19 @@ namespace {
 				output) && !output.empty())
 			{
 				detail += " output=" + output;
+			}
+
+			if (!info.code.empty())
+			{
+				detail += " errorCode=" + info.code;
+			}
+
+			if (!info.toolPayloadErrorMessage.empty())
+			{
+				detail +=
+					" errorMessage=" +
+					blazeclaw::gateway::json::SanitizeInlineToolSummary(
+						info.toolPayloadErrorMessage);
 			}
 		}
 
@@ -1441,6 +1484,11 @@ namespace {
 		if (!info.code.empty())
 		{
 			json += ",\"code\":" + JsonString(info.code);
+		}
+
+		if (!info.toolPayloadErrorMessage.empty())
+		{
+			json += ",\"errorMessage\":" + JsonString(info.toolPayloadErrorMessage);
 		}
 
 		json += "}";

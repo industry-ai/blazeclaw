@@ -253,3 +253,4 @@ indicates a discovery-layer parity gap (not a runtime capability gap).
   tool target `imap_smtp_email.imap.search`.
 - Runtime alias and recovery-boundary hardening were implemented in BlazeClaw
   runtime code paths (`ServiceManager`, `RuntimeToolCallNormalizer`).
+- **Process launch / deps (2026-04-25):** `docs/IMAP_SMTP_EMAIL_IMAP_SEARCH_PROCESS_START_FAILED.md` §4.1 — Node fallbacks in `ToolProcessRunner.cpp`, `node_dependencies_missing` preflight, `setup.ps1`, and richer tool diagnostics (`gateway.tools.call.execute` V2, chat tool timeline **Copy JSON**).

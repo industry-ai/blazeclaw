@@ -883,6 +883,7 @@ namespace blazeclaw::gateway {
 				delta.resultJson = deltaNode.value("resultJson", std::string{});
 				delta.status = deltaNode.value("status", std::string{});
 				delta.errorCode = deltaNode.value("errorCode", std::string{});
+				delta.errorMessage = deltaNode.value("errorMessage", std::string{});
 				delta.startedAtMs = deltaNode.value("startedAtMs", std::uint64_t{ 0 });
 				delta.completedAtMs = deltaNode.value("completedAtMs", std::uint64_t{ 0 });
 				delta.latencyMs = deltaNode.value("latencyMs", std::uint64_t{ 0 });
