@@ -48,6 +48,32 @@ namespace blazeclaw::gateway {
 
 		void ChatPipelineHandlers::RegisterAll(GatewayHost& host) {
 			using namespace blazeclaw::gateway::runtime_local;
+			const bool fastSyntheticRevealMode = []() {
+				char* raw = nullptr;
+				std::size_t len = 0;
+				if (_dupenv_s(&raw, &len, "BLAZECLAW_CHAT_POLL_SYNTHETIC_REVEAL_FAST_MODE") != 0 ||
+					raw == nullptr ||
+					len == 0) {
+					if (raw != nullptr) {
+						free(raw);
+					}
+					return true;
+				}
+				std::string lowered(raw);
+				free(raw);
+				std::transform(
+					lowered.begin(),
+					lowered.end(),
+					lowered.begin(),
+					[](const unsigned char ch) {
+						return static_cast<char>(std::tolower(ch));
+					});
+				return lowered == "1" ||
+					lowered == "true" ||
+					lowered == "yes" ||
+					lowered == "on";
+				}();
+			const std::uint64_t syntheticRevealMaxDurationMs = 5000;
 
 			host.RuntimeContext().dispatcher->Register(
 				"agent",
@@ -1816,11 +1842,43 @@ namespace blazeclaw::gateway {
 							};
 
 						if (!assistantDeltas.empty()) {
-							// Embedded / orchestration paths may publish tool-line deltas; keep staged
-							// assistant reveal for parity with chat.events.poll (8-char steps).
-							const std::size_t n =
-								(std::min)(assistantText.size(), std::size_t{ 6 });
-							emitAssistantDeltaChunk(assistantText.substr(0, n), n);
+							// Tool-heavy orchestration responses are already fully computed.
+							// Emit full text immediately to avoid prolonged synthetic reveal loops.
+							const bool hasToolLifecycleDelta = std::any_of(
+								assistantDeltas.begin(),
+								assistantDeltas.end(),
+								[](const std::string& delta) {
+									const auto firstNonSpace = std::find_if_not(
+										delta.begin(),
+										delta.end(),
+										[](unsigned char ch) {
+											return std::isspace(ch) != 0;
+										});
+									if (firstNonSpace == delta.end()) {
+										return false;
+									}
+									const std::string normalized(firstNonSpace, delta.end());
+									return normalized.find("tools.execute.") == 0;
+								});
+							if (hasToolLifecycleDelta) {
+								EmitTelemetryEvent(
+									"gateway.chat.send.tool_heavy_direct_emit",
+									std::string("{\"runId\":") +
+									JsonString(runId) +
+									",\"sessionKey\":" +
+									JsonString(sessionKey) +
+									",\"assistantTextBytes\":" +
+									std::to_string(assistantText.size()) +
+									",\"providerDeltaCount\":" +
+									std::to_string(assistantDeltas.size()) +
+									"}");
+								emitAssistantDeltaChunk(assistantText, assistantText.size());
+							}
+							else {
+								const std::size_t n =
+									(std::min)(assistantText.size(), std::size_t{ 64 });
+								emitAssistantDeltaChunk(assistantText.substr(0, n), n);
+							}
 						}
 						else if (!assistantText.empty()) {
 							// Phase D: no incremental provider stream — emit one assistant delta with
@@ -1853,6 +1911,57 @@ namespace blazeclaw::gateway {
 								.originatingTo = sendControlDecision.route.originatingTo,
 								.explicitDeliverRoute = sendControlDecision.route.explicitDeliverRoute,
 							});
+					}
+					auto insertedRunIt = host.m_chatRunsById.find(runId);
+					if (insertedRunIt != host.m_chatRunsById.end() &&
+						!insertedRunIt->second.failed &&
+						!silentAssistantReply &&
+						insertedRunIt->second.streamCursor >= insertedRunIt->second.assistantText.size() &&
+						!insertedRunIt->second.terminalEventEnqueued) {
+						const std::optional<std::string> terminalMessage =
+							std::optional<std::string>(
+								BuildAssistantFinalMessageJson(insertedRunIt->second.assistantText, nowMs));
+						PushEventWithRetentionLimit(sessionEvents, GatewayHost::ChatEventState{
+							.runId = insertedRunIt->second.runId,
+							.sessionKey = insertedRunIt->second.sessionKey,
+							.state = "final",
+							.messageJson = terminalMessage,
+							.errorMessage = std::nullopt,
+							.timestampMs = nowMs,
+							});
+						GatewayLifecycleEventEmitter::EmitLifecycle(
+							"final",
+							insertedRunIt->second.runId,
+							insertedRunIt->second.sessionKey,
+							nowMs);
+						if (insertedRunIt->second.pushLifecycleRequested) {
+							EmitPushLifecycleEvent(
+								*host.RuntimeContext().transport,
+								*host.RuntimeContext().eventFanout,
+								GatewayEventFanoutService::ChatLifecycleEvent{
+									.runId = insertedRunIt->second.runId,
+									.sessionKey = insertedRunIt->second.sessionKey,
+									.state = "final",
+									.messageJson = terminalMessage,
+									.errorMessage = std::nullopt,
+									.timestampMs = nowMs,
+								},
+								host.m_chatPushEventSeq);
+						}
+						insertedRunIt->second.terminalEventEnqueued = true;
+						insertedRunIt->second.active = false;
+						host.RuntimeContext().transportRecipientRegistry->MarkRunFinalized(
+							insertedRunIt->second.runId,
+							nowMs);
+						host.m_chatToolEventRecipientsByRun.erase(insertedRunIt->second.runId);
+						host.RuntimeContext().transportRecipientRegistry->PruneExpired(nowMs);
+						EmitTelemetryEvent(
+							"gateway.chat.final.fastpath",
+							std::string("{\"runId\":") +
+							JsonString(insertedRunIt->second.runId) +
+							",\"sessionKey\":" +
+							JsonString(insertedRunIt->second.sessionKey) +
+							",\"reason\":\"assistant_text_fully_available\"}");
 					}
 
 					host.m_chatTerminalDeliveredRunIds.erase(runId);
@@ -2107,7 +2216,8 @@ namespace blazeclaw::gateway {
 
 			host.RuntimeContext().dispatcher->Register(
 				"chat.events.poll",
-				[&host](const protocol::RequestFrame& request) {
+				[&host, fastSyntheticRevealMode, syntheticRevealMaxDurationMs](
+					const protocol::RequestFrame& request) {
 					const std::string requestedSessionKey =
 						ExtractStringParam(request.paramsJson, "sessionKey");
 					const std::string sessionKey =
@@ -2158,6 +2268,8 @@ namespace blazeclaw::gateway {
 
 							std::string deltaText;
 							std::string pollDeltaMessage;
+							std::string revealMode = "provider_stream";
+							std::size_t revealChunkSize = 0;
 							if (run.providerDeltaCursor < run.providerDeltas.size()) {
 								while (run.providerDeltaCursor < run.providerDeltas.size()) {
 									deltaText = run.providerDeltas[run.providerDeltaCursor];
@@ -2182,16 +2294,65 @@ namespace blazeclaw::gateway {
 									goto skip_poll_delta_emit;
 								}
 								run.streamCursor = deltaText.size();
+								revealChunkSize = deltaText.size();
 							}
 							else {
+								revealMode = "synthetic_incremental_diff";
+								const std::size_t previousCursor = run.streamCursor;
+								const std::size_t totalSize = run.assistantText.size();
+								const std::size_t remaining = totalSize > previousCursor
+									? (totalSize - previousCursor)
+									: 0;
+								std::size_t chunkSize = 8;
+								if (fastSyntheticRevealMode) {
+									if (totalSize > 6000) {
+										chunkSize = 256;
+									}
+									else if (totalSize > 2000) {
+										chunkSize = 128;
+									}
+									else if (totalSize > 800) {
+										chunkSize = 64;
+									}
+									else {
+										chunkSize = 32;
+									}
+								}
+								const bool revealTimedOut =
+									nowMs > run.startedAtMs &&
+									(nowMs - run.startedAtMs) >= syntheticRevealMaxDurationMs;
+								if (revealTimedOut && remaining > 0) {
+									chunkSize = remaining;
+									revealMode = "direct_full";
+								}
 								const std::size_t nextCursor =
-									(std::min)(run.assistantText.size(), run.streamCursor + std::size_t{ 8 });
+									(std::min)(totalSize, previousCursor + chunkSize);
 								run.streamCursor = nextCursor;
-								deltaText = run.assistantText.substr(0, run.streamCursor);
+								revealChunkSize = nextCursor > previousCursor
+									? (nextCursor - previousCursor)
+									: 0;
+								deltaText = run.assistantText.substr(
+									previousCursor,
+									nextCursor > previousCursor ? (nextCursor - previousCursor) : 0);
 							}
 
 							run.lastEmitMs = nowMs;
 							pollDeltaMessage = BuildAssistantDeltaMessageJson(deltaText);
+							EmitTelemetryEvent(
+								"gateway.chat.poll.reveal.mode",
+								std::string("{\"runId\":") +
+								JsonString(run.runId) +
+								",\"sessionKey\":" +
+								JsonString(run.sessionKey) +
+								",\"revealMode\":" +
+								JsonString(revealMode) +
+								",\"assistantTextBytes\":" +
+								std::to_string(run.assistantText.size()) +
+								",\"streamCursor\":" +
+								std::to_string(run.streamCursor) +
+								",\"pollRevealChunkSize\":" +
+								std::to_string(revealChunkSize) +
+								"}");
 
 							PushEventWithRetentionLimit(queue, GatewayHost::ChatEventState{
 								   .runId = run.runId,

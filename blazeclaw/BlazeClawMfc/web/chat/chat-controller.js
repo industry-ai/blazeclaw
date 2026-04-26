@@ -399,6 +399,19 @@
         state.slashCommandsLoaded = Boolean(state.slashCommandsLoaded);
         state.terminalRunStates = state.terminalRunStates || new Map();
         state.reconcileTimer = state.reconcileTimer || null;
+        state.runWatchdogTimer = state.runWatchdogTimer || null;
+        state.runWatchdogStartedAtMs = Number.isFinite(state.runWatchdogStartedAtMs)
+            ? Number(state.runWatchdogStartedAtMs)
+            : 0;
+        state.runWatchdogLastInboundEventMs = Number.isFinite(state.runWatchdogLastInboundEventMs)
+            ? Number(state.runWatchdogLastInboundEventMs)
+            : 0;
+        state.runWatchdogLastReconcileMs = Number.isFinite(state.runWatchdogLastReconcileMs)
+            ? Number(state.runWatchdogLastReconcileMs)
+            : 0;
+        state.runWatchdogLastWarningMs = Number.isFinite(state.runWatchdogLastWarningMs)
+            ? Number(state.runWatchdogLastWarningMs)
+            : 0;
         state.sessionSubscribed = Boolean(state.sessionSubscribed);
         state.sessionCompactionItems = Array.isArray(state.sessionCompactionItems)
             ? state.sessionCompactionItems
@@ -1152,7 +1165,9 @@
                 forceError,
                 detached: sendOptions.detached === true,
             });
-            addMessage(`queued message (${state.sendQueue.length})`, "peer");
+            addMessage(
+                `waiting for terminal event; queued message (${state.sendQueue.length})`,
+                "peer");
             if (sendOptions.detached === true) {
                 onDetachedNotice({
                     kind: "queued",
@@ -1160,6 +1175,77 @@
                     sessionKey: state.sessionKey,
                 });
             }
+        }
+
+        function stopRunWatchdog() {
+            if (state.runWatchdogTimer) {
+                clearInterval(state.runWatchdogTimer);
+                state.runWatchdogTimer = null;
+            }
+            state.runWatchdogStartedAtMs = 0;
+            state.runWatchdogLastInboundEventMs = 0;
+            state.runWatchdogLastReconcileMs = 0;
+            state.runWatchdogLastWarningMs = 0;
+        }
+
+        function noteInboundChatEvent(eventState) {
+            const normalizedState = String(eventState || "").trim().toLowerCase();
+            if (!state.runId) {
+                return;
+            }
+            const nowMs = Date.now();
+            state.runWatchdogLastInboundEventMs = nowMs;
+            if (normalizedState === "delta" || normalizedState === "queued" || normalizedState === "started") {
+                state.runWatchdogLastWarningMs = 0;
+            }
+        }
+
+        function startRunWatchdog() {
+            stopRunWatchdog();
+            if (!state.runId || !state.bridgeAvailable) {
+                return;
+            }
+
+            const nowMs = Date.now();
+            state.runWatchdogStartedAtMs = nowMs;
+            state.runWatchdogLastInboundEventMs = nowMs;
+
+            const staleThresholdMs = 4000;
+            const reconcileCooldownMs = 2000;
+            const warningCooldownMs = 10000;
+            const tickMs = 1000;
+
+            state.runWatchdogTimer = setInterval(() => {
+                if (!state.runId || !state.bridgeAvailable) {
+                    stopRunWatchdog();
+                    return;
+                }
+
+                const now = Date.now();
+                const lastInbound = Number(state.runWatchdogLastInboundEventMs || state.runWatchdogStartedAtMs || now);
+                const staleForMs = now - lastInbound;
+                if (staleForMs < staleThresholdMs) {
+                    return;
+                }
+
+                if ((now - Number(state.runWatchdogLastReconcileMs || 0)) >= reconcileCooldownMs) {
+                    state.runWatchdogLastReconcileMs = now;
+                    void request("chat.events.poll", {
+                        sessionKey: state.sessionKey,
+                        limit: 50,
+                    }).catch(function () {
+                        // Ignore reconcile failures; watchdog retries on next stale interval.
+                    });
+                }
+
+                if (state.sendQueue.length > 0 &&
+                    (now - Number(state.runWatchdogLastWarningMs || 0)) >= warningCooldownMs) {
+                    state.runWatchdogLastWarningMs = now;
+                    addMessage(
+                        `waiting for terminal event; reconciling stalled run (${state.sendQueue.length} queued)`,
+                        "peer");
+                }
+            }, tickMs);
         }
 
         async function sendPayload(message, attachments, forceError, options) {
@@ -1190,6 +1276,7 @@
 
             state.runId = nextId();
             state.streamText = "";
+            startRunWatchdog();
             updateComposerState();
 
             const apiAttachments = payloadAttachments
@@ -1232,10 +1319,12 @@
 
                 if (serverRunId) {
                     state.runId = serverRunId;
+                    startRunWatchdog();
                 }
             } catch (error) {
                 addMessage(`send error: ${String(error)}`, "error");
                 state.runId = null;
+                stopRunWatchdog();
                 void processSendQueue();
             }
 
@@ -1467,6 +1556,7 @@
             state.streamText = "";
             state.runId = null;
             state.streamTranscriptDraft = null;
+            stopRunWatchdog();
             if (state.abortBtn) {
                 state.abortBtn.disabled = true;
             }
@@ -1631,6 +1721,7 @@
             sendDetachedMessage,
             parseApprovalTokenFromText,
             executeExecApprovalAction,
+            noteInboundChatEvent,
             markTerminalRun,
             hasTerminalRun,
             scheduleHistoryReconcile,
@@ -1655,6 +1746,11 @@
             bridgeQueue: [],
             terminalRunStates: new Map(),
             reconcileTimer: null,
+            runWatchdogTimer: null,
+            runWatchdogStartedAtMs: 0,
+            runWatchdogLastInboundEventMs: 0,
+            runWatchdogLastReconcileMs: 0,
+            runWatchdogLastWarningMs: 0,
             draftsBySession: new Map(),
             inputHistory: [],
             inputHistoryIndex: -1,
@@ -2359,6 +2455,53 @@
             assertRegression(rejectionText.toLowerCase().includes("operator.read"),
                 "rpc scope failures should map to operator-readable scope guidance");
             summary.push("scope-aware rpc error formatting");
+        }
+
+        {
+            const state = createRegressionState();
+            state.runId = "run-queue-1";
+            state.inputEl.value = "Follow-up while previous run is active";
+            const messageRows = [];
+            const controller = createController({
+                state,
+                addMessage: (text, kind) => {
+                    messageRows.push({ text: String(text || ""), kind: String(kind || "") });
+                },
+            });
+
+            await controller.send(false);
+            assertRegression(state.sendQueue.length === 1,
+                "active run should queue follow-up send payloads");
+            assertRegression(messageRows.some((row) =>
+                row.kind === "peer" &&
+                row.text.includes("waiting for terminal event; queued message (1)")),
+            "queued-send guardrail should surface explicit waiting-for-terminal status text");
+            summary.push("queue waiting-status guardrail");
+        }
+
+        {
+            const state = createRegressionState();
+            const controller = createController({
+                state,
+                addMessage: function () { },
+            });
+            const baselineInbound = state.runWatchdogLastInboundEventMs;
+            controller.noteInboundChatEvent("delta");
+            assertRegression(state.runWatchdogLastInboundEventMs === baselineInbound,
+                "watchdog inbound tracker should ignore events when no active run exists");
+
+            state.runId = "run-watchdog-1";
+            controller.noteInboundChatEvent("started");
+            const startedInbound = state.runWatchdogLastInboundEventMs;
+            assertRegression(startedInbound > 0,
+                "watchdog inbound tracker should record event timestamps for active runs");
+            controller.clearRunState();
+            assertRegression(
+                state.runWatchdogLastInboundEventMs === 0 &&
+                state.runWatchdogLastReconcileMs === 0 &&
+                state.runWatchdogLastWarningMs === 0,
+                "terminal clear should reset watchdog stale-run bookkeeping state");
+            summary.push("watchdog stale-run bookkeeping");
         }
 
         return {

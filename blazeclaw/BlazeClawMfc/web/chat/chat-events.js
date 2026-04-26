@@ -175,6 +175,10 @@
                     continue;
                 }
 
+                if (typeof controller.noteInboundChatEvent === "function") {
+                    controller.noteInboundChatEvent(event.state);
+                }
+
                 if (event.state === "delta") {
                     const next = controller.parseTextFromMessage(event.message);
                     controller.applyDeltaText(next);

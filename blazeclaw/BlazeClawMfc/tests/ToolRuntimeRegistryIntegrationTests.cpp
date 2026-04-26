@@ -159,7 +159,8 @@ TEST_CASE("Inbox inline invocation maps natural-language to JSON args", "[tools]
 
 	REQUIRE(source.find("BuildInlineArgsForResolvedTool") != std::string::npos);
 	REQUIRE(source.find("imap_smtp_email.imap.search") != std::string::npos);
-	REQUIRE(source.find("params[\"recent\"] = \"2h\"") != std::string::npos);
+	REQUIRE(source.find("params[\"recent\"] = LooksLikeTwoHourUrgencyAnyLanguage") != std::string::npos);
+	REQUIRE(source.find("? \"2h\"") != std::string::npos);
 	REQUIRE(source.find("params[\"unseen\"] = true") != std::string::npos);
 }
 
@@ -186,7 +187,8 @@ TEST_CASE("Inbox inline invocation has friendly empty-array response", "[tools][
 		std::istreambuf_iterator<char>());
 
 	REQUIRE(source.find("BuildInlineFriendlyTextForResolvedTool") != std::string::npos);
-	REQUIRE(source.find("found no messages that need a reply") != std::string::npos);
+	REQUIRE(source.find("found no messages ") != std::string::npos);
+	REQUIRE(source.find("that need a reply") != std::string::npos);
 }
 
 TEST_CASE("Runtime health dependencies include python and web-browsing probes", "[tools][runtime][health][contract]") {
@@ -378,6 +380,85 @@ TEST_CASE("Bridge view exposes push feature flags and channels", "[bridge][push]
 	REQUIRE(source.find("BLAZECLAW_BRIDGE_PUSH_RECOVERY_POLL_ENABLED") != std::string::npos);
 	REQUIRE(source.find("blazeclaw.gateway.chat.push.state") != std::string::npos);
 	REQUIRE(source.find("blazeclaw.gateway.chat.push.event") != std::string::npos);
+}
+
+TEST_CASE("Chat poll fast reveal and bounded streaming are wired", "[chat][poll][reveal][contract]") {
+	const auto pipelinePathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"gateway" /
+		"GatewayHost.Handlers.Runtime.ChatPipeline.cpp";
+	const auto pipelinePathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"gateway" /
+		"GatewayHost.Handlers.Runtime.ChatPipeline.cpp";
+	std::ifstream in(pipelinePathPrimary.string());
+	if (!in.is_open()) {
+		in.open(pipelinePathFallback.string());
+	}
+	REQUIRE(in.is_open());
+
+	const std::string source(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+	REQUIRE(source.find("BLAZECLAW_CHAT_POLL_SYNTHETIC_REVEAL_FAST_MODE") != std::string::npos);
+	REQUIRE(source.find("syntheticRevealMaxDurationMs") != std::string::npos);
+	REQUIRE(source.find("gateway.chat.poll.reveal.mode") != std::string::npos);
+	REQUIRE(source.find("revealMode") != std::string::npos);
+	REQUIRE(source.find("pollRevealChunkSize") != std::string::npos);
+	REQUIRE(source.find("synthetic_incremental_diff") != std::string::npos);
+	REQUIRE(source.find("assistant_text_fully_available") != std::string::npos);
+	REQUIRE(source.find("gateway.chat.send.tool_heavy_direct_emit") != std::string::npos);
+}
+
+TEST_CASE("Web chat queue guardrails are wired", "[chat][frontend][queue][contract]") {
+	const auto controllerPathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"web" /
+		"chat" /
+		"chat-controller.js";
+	const auto controllerPathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"web" /
+		"chat" /
+		"chat-controller.js";
+	std::ifstream controllerIn(controllerPathPrimary.string());
+	if (!controllerIn.is_open()) {
+		controllerIn.open(controllerPathFallback.string());
+	}
+	REQUIRE(controllerIn.is_open());
+	const std::string controllerSource(
+		(std::istreambuf_iterator<char>(controllerIn)),
+		std::istreambuf_iterator<char>());
+
+	const auto eventsPathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"web" /
+		"chat" /
+		"chat-events.js";
+	const auto eventsPathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"web" /
+		"chat" /
+		"chat-events.js";
+	std::ifstream eventsIn(eventsPathPrimary.string());
+	if (!eventsIn.is_open()) {
+		eventsIn.open(eventsPathFallback.string());
+	}
+	REQUIRE(eventsIn.is_open());
+	const std::string eventsSource(
+		(std::istreambuf_iterator<char>(eventsIn)),
+		std::istreambuf_iterator<char>());
+
+	REQUIRE(controllerSource.find("waiting for terminal event; queued message") != std::string::npos);
+	REQUIRE(controllerSource.find("waiting for terminal event; reconciling stalled run") != std::string::npos);
+	REQUIRE(controllerSource.find("request(\"chat.events.poll\"") != std::string::npos);
+	REQUIRE(controllerSource.find("function noteInboundChatEvent") != std::string::npos);
+	REQUIRE(eventsSource.find("controller.noteInboundChatEvent(event.state)") != std::string::npos);
 }
 
 TEST_CASE("Gateway skills check exposes dispatch-required counters", "[skills][gateway][contract]") {
