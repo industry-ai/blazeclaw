@@ -1,6 +1,7 @@
 #include "core/tools/CToolRuntimeRegistry.h"
 #include "core/tools/ToolArgumentValidators.h"
 #include "gateway/GatewayRequestParams.h"
+#include "gateway/GatewayHost.h"
 
 #include <catch2/catch_all.hpp>
 #include <nlohmann/json.hpp>
@@ -167,7 +168,7 @@ TEST_CASE("Summarize extract unwraps nested arguments object from tool dispatch"
 		"跟老板说一声，我们下周三下午两点在二楼会议室过一遍，让他务必参加。";
 	const auto nested = blazeclaw::core::tools::ExtractTextArgument(nlohmann::json::object({
 		{"arguments", nlohmann::json::object({ {"text", meetingOnly} })},
-	}));
+		}));
 	REQUIRE(nested.has_value());
 	REQUIRE(*nested == meetingOnly);
 }
@@ -180,7 +181,7 @@ TEST_CASE("Summarize extract coerces OpenAI-style content parts array", "[tools]
 			nlohmann::json::array({
 				nlohmann::json::object({ {"type", "text"}, {"text", meetingOnly} }),
 			})},
-	}));
+		}));
 	REQUIRE(fromParts.has_value());
 	REQUIRE(*fromParts == meetingOnly);
 }
@@ -194,7 +195,7 @@ TEST_CASE("Summarize extract reads user draft from messages array", "[tools][run
 				nlohmann::json::object(
 					{ {"role", "user"}, {"content", meetingOnly} }),
 			})},
-	}));
+		}));
 	REQUIRE(fromMessages.has_value());
 	REQUIRE(*fromMessages == meetingOnly);
 }
@@ -262,7 +263,7 @@ TEST_CASE("Summarize extract after array-wrapped args matches ServiceManager coe
 		"跟老板说一声，我们下周三下午两点在二楼会议室过一遍，让他务必参加。";
 	nlohmann::json params = nlohmann::json::array({
 		nlohmann::json::object({ {"text", meetingOnly} }),
-	});
+		});
 	REQUIRE(params.is_array());
 	nlohmann::json coerced = nlohmann::json::object();
 	for (const auto& el : params) {
@@ -403,6 +404,46 @@ TEST_CASE("Bilingual parity: English and Chinese workflow prompts produce meetin
 	REQUIRE(englishSummary.find("Time:") != std::string::npos);
 	REQUIRE(englishSummary.find("Location:") != std::string::npos);
 	REQUIRE(englishSummary.find("People: boss, requester team") != std::string::npos);
+}
+
+TEST_CASE("Draft selector handles Chinese prompt with backtick tool names", "[tools][runtime][polish][extract]") {
+	const std::string wrappedPrompt =
+		R"(请执行内容润色分发流：1. 读取我提供的这段口语化草稿：“那个新版本的 UI 需求改得差不多了，你跟老板说一声，我们下周三下午两点在二楼会议室过一遍，让他务必参加”；2. 调用 `summarize` 提取其中的时间、地点、人物和核心诉求；3. 调用 `humanizer` 去 AI 化重写。)";
+	const auto selected = blazeclaw::core::tools::ExtractTextArgument(
+		nlohmann::json::object({ {"text", wrappedPrompt} }));
+	REQUIRE(selected.has_value());
+	REQUIRE(selected->find("下周三下午两点") != std::string::npos);
+	REQUIRE(selected->find("二楼会议室") != std::string::npos);
+	REQUIRE(selected->find("`summarize`") == std::string::npos);
+}
+
+TEST_CASE("Chinese control-only fragments remain rejected", "[tools][runtime][polish][extract]") {
+	const auto selected = blazeclaw::core::tools::ExtractTextArgument(
+		nlohmann::json::object({ {"text", "请调用 `summarize` 提取时间地点人物并发送给邮箱"} }));
+	REQUIRE(!selected.has_value());
+}
+
+TEST_CASE("gateway.tools.call.execute missing args stays non-blocking with diagnostics", "[gateway][tools][args][hardening]") {
+	blazeclaw::gateway::GatewayHost host;
+	REQUIRE(host.StartLocalRuntimeDispatchOnly());
+	const blazeclaw::gateway::protocol::RequestFrame request{
+		.id = "hardening-1",
+		.method = "gateway.tools.call.execute",
+		.paramsJson = std::string(R"({"tool":"summarize.extract"})"),
+	};
+	const auto response = host.RouteRequest(request);
+	REQUIRE(response.ok);
+	REQUIRE(response.payloadJson.has_value());
+	const auto payload = nlohmann::json::parse(response.payloadJson.value());
+	REQUIRE(payload["executed"].get<bool>() == false);
+	REQUIRE(payload["argsProvided"].get<bool>() == false);
+	REQUIRE(payload["argsKey"].get<std::string>() == "none");
+	REQUIRE(payload["argsParseMode"].get<std::string>() == "unrecognized_or_missing");
+	const std::string errorCode = payload["errorCode"].get<std::string>();
+	const bool acceptedErrorCode =
+		errorCode == "invalid_arguments" ||
+		errorCode == "legacy_execution_failed";
+	REQUIRE(acceptedErrorCode);
 }
 
 TEST_CASE("Tool runtime classifiers and truncation keep behavior parity", "[tools][runtime][classifiers]") {

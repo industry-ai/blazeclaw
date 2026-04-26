@@ -26,6 +26,8 @@
   - `gateway.tools.call.execute` args normalization now accepts alias containers (`args`, `arguments`, `parameters`, `tool_arguments`, `toolArguments`, `payload`) including JSON-string encoded payloads.
   - request schema validation for `gateway.tools.call.execute` now mirrors alias acceptance (`object|string|array`) to prevent language-dependent payload drops.
   - Chinese workflow draft marker extraction expanded to tolerate full-width punctuation and quote variants, with workflow-aware quoted fallback for mixed orchestration prompts.
+  - execute-layer diagnostics now emit selected args key and parse mode (non-sensitive), and draft selector diagnostics now include rejection reasons (`control_only`, `too_short`, `no_candidate`).
+  - optional hardening enabled for content-polishing execute calls: missing/unknown args containers return `missing_or_unrecognized_tool_args_container` before summarize/humanizer runtime execution.
 
 ## Validation
 
@@ -35,3 +37,5 @@
 - Added feature-flag regression coverage to verify multilingual extractor can be toggled off deterministically.
 - Added execute-args alias regression coverage for `gateway.tools.call.execute` (including alias priority and JSON-string payload decode behavior).
 - Added bilingual EN/ZH parity regression and full-width punctuation/quote variant extraction coverage for ordered workflow prompts.
+- Added regression coverage for Chinese prompts with backtick-wrapped tool names and control-only Chinese fragments remaining rejected.
+- Added execute-layer hardening regression coverage for missing args container behavior (`missing_or_unrecognized_tool_args_container`).

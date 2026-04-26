@@ -297,18 +297,34 @@ namespace blazeclaw::gateway::handlers::registry_introspection {
 			});
 
 		host.m_dispatcher.Register("gateway.tools.call.execute", [&host](const protocol::RequestFrame& request) {
-			const std::string requestedTool = RequestParamsView(request.paramsJson).GetString("tool");
-			const std::optional<std::string> argsJson =
-				RequestParamsView(request.paramsJson).GetToolExecuteArgsJson();
-			const bool argsProvided = request.paramsJson.has_value() &&
+			const RequestParamsView paramsView(request.paramsJson);
+			const std::string requestedTool = paramsView.GetString("tool");
+			const auto argsResolution = paramsView.ResolveToolExecuteArgs();
+			const std::optional<std::string> argsJson = argsResolution.argsJson;
+			const bool argsProvided = argsJson.has_value();
+			const bool hasLegacyArgsKey = request.paramsJson.has_value() &&
 				request.paramsJson.value().find("\"args\"") != std::string::npos;
+			const bool shouldRequireArgsContainer =
+				requestedTool == "summarize.extract" || requestedTool == "humanizer.rewrite";
 
 			// Emit telemetry for tool invocation attempt
 			{
 				const std::string invokePayload =
 					"{\"tool\":" + JsonString(requestedTool) +
-					",\"argsProvided\":" + std::string(argsProvided ? "true" : "false") + "}";
+					",\"argsProvided\":" + std::string(argsProvided ? "true" : "false") +
+					",\"hasLegacyArgsKey\":" + std::string(hasLegacyArgsKey ? "true" : "false") +
+					",\"argsKey\":" + JsonString(argsResolution.selectedKey.empty() ? "none" : argsResolution.selectedKey) +
+					",\"argsParseMode\":" + JsonString(argsResolution.parseMode.empty() ? "unknown" : argsResolution.parseMode) + "}";
 				EmitTelemetryEvent("gateway.tool.invoke", invokePayload);
+			}
+
+			if (shouldRequireArgsContainer && !argsProvided) {
+				EmitTelemetryEvent(
+					"gateway.tool.args.missing",
+					"{\"tool\":" + JsonString(requestedTool) +
+					",\"argsKey\":" + JsonString(argsResolution.selectedKey.empty() ? "none" : argsResolution.selectedKey) +
+					",\"argsParseMode\":" + JsonString(argsResolution.parseMode.empty() ? "unknown" : argsResolution.parseMode) +
+					",\"softMode\":true}");
 			}
 
 			ToolExecuteResultV2 execution;
@@ -320,7 +336,7 @@ namespace blazeclaw::gateway::handlers::registry_introspection {
 						? std::string("gateway.tools.call.execute")
 						: request.id,
 					.deadlineEpochMs = std::nullopt,
-				});
+					});
 			}
 			catch (const std::exception& ex) {
 				execution = ToolExecuteResultV2{
@@ -359,7 +375,9 @@ namespace blazeclaw::gateway::handlers::registry_introspection {
 					"{\"tool\":" + JsonString(execution.tool) +
 					",\"executed\":" + std::string(execution.executed ? "true" : "false") +
 					",\"status\":" + JsonString(execution.status) +
-					",\"argsProvided\":" + std::string(argsProvided ? "true" : "false") + "}";
+					",\"argsProvided\":" + std::string(argsProvided ? "true" : "false") +
+					",\"argsKey\":" + JsonString(argsResolution.selectedKey.empty() ? "none" : argsResolution.selectedKey) +
+					",\"argsParseMode\":" + JsonString(argsResolution.parseMode.empty() ? "unknown" : argsResolution.parseMode) + "}";
 				EmitTelemetryEvent("gateway.tool.complete", resultPayload);
 			}
 
@@ -368,7 +386,9 @@ namespace blazeclaw::gateway::handlers::registry_introspection {
 				"\",\"executed\":" + std::string(execution.executed ? "true" : "false") +
 				",\"status\":\"" + EscapeJsonString(execution.status) +
 				"\",\"output\":\"" + EscapeJsonString(execution.result) +
-				"\",\"argsProvided\":" + std::string(argsProvided ? "true" : "false");
+				"\",\"argsProvided\":" + std::string(argsProvided ? "true" : "false") +
+				",\"argsKey\":\"" + EscapeJsonString(argsResolution.selectedKey.empty() ? "none" : argsResolution.selectedKey) +
+				"\",\"argsParseMode\":\"" + EscapeJsonString(argsResolution.parseMode.empty() ? "unknown" : argsResolution.parseMode) + "\"";
 			if (!execution.errorCode.empty()) {
 				payload += ",\"errorCode\":\"" + EscapeJsonString(execution.errorCode) + "\"";
 			}
