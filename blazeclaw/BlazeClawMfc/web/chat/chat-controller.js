@@ -412,6 +412,14 @@
         state.runWatchdogLastWarningMs = Number.isFinite(state.runWatchdogLastWarningMs)
             ? Number(state.runWatchdogLastWarningMs)
             : 0;
+        state.operatorDiagnosticsCounters =
+            state.operatorDiagnosticsCounters && typeof state.operatorDiagnosticsCounters === "object"
+                ? state.operatorDiagnosticsCounters
+                : {};
+        state.operatorDiagnosticsLastEmitMs =
+            state.operatorDiagnosticsLastEmitMs && typeof state.operatorDiagnosticsLastEmitMs === "object"
+                ? state.operatorDiagnosticsLastEmitMs
+                : {};
         state.sessionSubscribed = Boolean(state.sessionSubscribed);
         state.sessionCompactionItems = Array.isArray(state.sessionCompactionItems)
             ? state.sessionCompactionItems
@@ -1227,6 +1235,14 @@
                 if (staleForMs < staleThresholdMs) {
                     return;
                 }
+                emitOperatorDiagnostic("chat.queue.stale_run_detected", {
+                    runId: String(state.runId || ""),
+                    sessionKey: normalizeSessionKey(state.sessionKey),
+                    staleForMs,
+                    queuedMessages: state.sendQueue.length,
+                }, {
+                    minIntervalMs: 10000,
+                });
 
                 if ((now - Number(state.runWatchdogLastReconcileMs || 0)) >= reconcileCooldownMs) {
                     state.runWatchdogLastReconcileMs = now;
@@ -1246,6 +1262,110 @@
                         "peer");
                 }
             }, tickMs);
+        }
+
+        function extractRunIdFromSendResult(sendResult) {
+            const result = sendResult && typeof sendResult === "object"
+                ? sendResult
+                : {};
+            const payload = result.payload && typeof result.payload === "object"
+                ? result.payload
+                : {};
+            const payloadData = payload.data && typeof payload.data === "object"
+                ? payload.data
+                : {};
+
+            const candidates = [
+                payload.runId,
+                result.runId,
+                payloadData.runId,
+            ];
+            for (const candidate of candidates) {
+                if (typeof candidate === "string" && candidate.trim()) {
+                    return candidate.trim();
+                }
+            }
+            return "";
+        }
+
+        function extractAbortOutcome(abortResult) {
+            const result = abortResult && typeof abortResult === "object"
+                ? abortResult
+                : {};
+            const payload = result.payload && typeof result.payload === "object"
+                ? result.payload
+                : {};
+            const payloadData = payload.data && typeof payload.data === "object"
+                ? payload.data
+                : {};
+            const aborted = payload.aborted === true ||
+                result.aborted === true ||
+                payloadData.aborted === true;
+            const resolvedRunId = typeof payload.runId === "string" && payload.runId.trim()
+                ? payload.runId.trim()
+                : (typeof result.runId === "string" && result.runId.trim()
+                    ? result.runId.trim()
+                    : (typeof payloadData.runId === "string" && payloadData.runId.trim()
+                        ? payloadData.runId.trim()
+                        : ""));
+            return {
+                aborted,
+                runId: resolvedRunId,
+            };
+        }
+
+        function extractChatEventsFromPollResponse(pollResult) {
+            const result = pollResult && typeof pollResult === "object"
+                ? pollResult
+                : {};
+            const payload = result.payload && typeof result.payload === "object"
+                ? result.payload
+                : {};
+            if (Array.isArray(payload.events)) {
+                return payload.events;
+            }
+            if (Array.isArray(result.events)) {
+                return result.events;
+            }
+            return [];
+        }
+
+        function incrementOperatorDiagnosticCounter(counterName) {
+            const key = String(counterName || "").trim();
+            if (!key) {
+                return 0;
+            }
+            const current = Number(state.operatorDiagnosticsCounters[key] || 0);
+            const next = current + 1;
+            state.operatorDiagnosticsCounters[key] = next;
+            return next;
+        }
+
+        function emitOperatorDiagnostic(counterName, details, options) {
+            const key = String(counterName || "").trim();
+            if (!key) {
+                return;
+            }
+            const opts = options && typeof options === "object"
+                ? options
+                : {};
+            const nowMs = Date.now();
+            const minIntervalMs = Number.isFinite(opts.minIntervalMs)
+                ? Number(opts.minIntervalMs)
+                : 5000;
+            const lastEmit = Number(state.operatorDiagnosticsLastEmitMs[key] || 0);
+            const count = incrementOperatorDiagnosticCounter(key);
+            if (nowMs - lastEmit < minIntervalMs) {
+                return;
+            }
+            state.operatorDiagnosticsLastEmitMs[key] = nowMs;
+            if (window.console && typeof window.console.debug === "function") {
+                window.console.debug("[chat-operator-diagnostic]", {
+                    counter: key,
+                    count,
+                    details: details && typeof details === "object" ? details : {},
+                });
+            }
         }
 
         async function sendPayload(message, attachments, forceError, options) {
@@ -1310,15 +1430,20 @@
                     attachments: apiAttachments,
                 }, requestOverride);
 
-                const serverRunId =
-                    sendResult &&
-                        sendResult.payload &&
-                        typeof sendResult.payload.runId === "string"
-                        ? sendResult.payload.runId
-                        : "";
+                const serverRunId = extractRunIdFromSendResult(sendResult);
 
                 if (serverRunId) {
+                    const previousRunId = String(state.runId || "").trim();
                     state.runId = serverRunId;
+                    if (previousRunId && previousRunId !== serverRunId) {
+                        emitOperatorDiagnostic("chat.queue.run_id_remapped", {
+                            previousRunId,
+                            serverRunId,
+                            sessionKey: normalizeSessionKey(state.sessionKey),
+                        }, {
+                            minIntervalMs: 1000,
+                        });
+                    }
                     startRunWatchdog();
                 }
             } catch (error) {
@@ -1402,20 +1527,83 @@
             return true;
         }
 
-        async function abort() {
+        async function abort(options) {
             if (!state.runId || !state.bridgeAvailable) {
                 return;
             }
 
+            const opts = options && typeof options === "object"
+                ? options
+                : {};
+            const requestImpl = typeof opts.requestOverride === "function"
+                ? opts.requestOverride
+                : request;
+            const targetRunId = String(state.runId || "").trim();
+            let abortOutcome = {
+                aborted: false,
+                runId: "",
+            };
             try {
-                await request("chat.abort", {
+                const abortResult = await requestImpl("chat.abort", {
                     sessionKey: state.sessionKey,
-                    runId: state.runId,
+                    runId: targetRunId,
                 });
+                abortOutcome = extractAbortOutcome(abortResult);
             } catch (error) {
                 addMessage(`abort error: ${String(error)}`, "error");
+                updateComposerState();
+                return;
             }
 
+            if (abortOutcome.aborted) {
+                const resolvedRunId = abortOutcome.runId || targetRunId;
+                addMessage(`abort requested for run ${resolvedRunId}; awaiting terminal event`, "peer");
+                updateComposerState();
+                return;
+            }
+
+            let recoveredViaReconcile = false;
+            try {
+                const pollResult = await requestImpl("chat.events.poll", {
+                    sessionKey: state.sessionKey,
+                    limit: 50,
+                });
+                const polledEvents = extractChatEventsFromPollResponse(pollResult);
+                const hasTerminalEvent = polledEvents.some((event) => {
+                    if (!event || typeof event !== "object") {
+                        return false;
+                    }
+                    const eventSession = String(event.sessionKey || "").trim();
+                    if (eventSession && eventSession !== normalizeSessionKey(state.sessionKey)) {
+                        return false;
+                    }
+                    const eventState = String(event.state || "").trim().toLowerCase();
+                    return eventState === "final" || eventState === "aborted" || eventState === "error";
+                });
+                if (hasTerminalEvent) {
+                    clearRunState();
+                    recoveredViaReconcile = true;
+                }
+            } catch (_) {
+                // Ignore reconcile RPC failures and leave explicit diagnostic message below.
+            }
+
+            if (recoveredViaReconcile) {
+                emitOperatorDiagnostic("chat.abort.stale_run_reconcile", {
+                    targetRunId,
+                    sessionKey: normalizeSessionKey(state.sessionKey),
+                    recoveredVia: "chat.events.poll",
+                }, {
+                    minIntervalMs: 1000,
+                });
+                addMessage(
+                    `abort fallback reconciled stale run state (target=${targetRunId})`,
+                    "peer");
+            } else {
+                addMessage(
+                    `abort diagnostic: target=${targetRunId}; no confirmed terminal event yet; queue remains guarded`,
+                    "error");
+            }
             updateComposerState();
         }
 
@@ -1730,6 +1918,12 @@
                     ? state.structuredTranscript.slice()
                     : [];
             },
+            getOperatorDiagnosticsSnapshot: function () {
+                return {
+                    counters: { ...(state.operatorDiagnosticsCounters || {}) },
+                    lastEmitMs: { ...(state.operatorDiagnosticsLastEmitMs || {}) },
+                };
+            },
         };
     }
 
@@ -1751,6 +1945,8 @@
             runWatchdogLastInboundEventMs: 0,
             runWatchdogLastReconcileMs: 0,
             runWatchdogLastWarningMs: 0,
+            operatorDiagnosticsCounters: {},
+            operatorDiagnosticsLastEmitMs: {},
             draftsBySession: new Map(),
             inputHistory: [],
             inputHistoryIndex: -1,
@@ -2390,9 +2586,12 @@
         {
             const state = createRegressionState();
             const reconcileCalls = [];
+            const messageRows = [];
             const controller = createController({
                 state,
-                addMessage: function () { },
+                addMessage: (text, kind) => {
+                    messageRows.push({ text: String(text || ""), kind: String(kind || "") });
+                },
             });
             controller.scheduleHistoryReconcile = function () {
                 reconcileCalls.push("scheduled");
@@ -2422,9 +2621,33 @@
                 state: "final",
                 message: { role: "assistant", text: "" },
             }]);
+            state.runId = "stale-run-active";
+            eventsModule.handleChatEvents([{
+                sessionKey: "main",
+                runId: "canonical-run-final",
+                state: "final",
+                message: { role: "assistant", text: "mismatch terminal recovered" },
+            }]);
 
             assertRegression(reconcileCalls.length === 1,
                 "history reconcile should run only as repair when terminal text is unavailable");
+            assertRegression(state.runId === null,
+                "mismatched terminal events should clear stale active run state");
+            assertRegression(messageRows.some((row) =>
+                row.kind === "peer" && row.text === "mismatch terminal recovered"),
+            "mismatched terminal recovery should preserve terminal assistant text visibility");
+            state.runId = "stale-run-aborted";
+            eventsModule.handleChatEvents([{
+                sessionKey: "main",
+                runId: "canonical-run-aborted",
+                state: "aborted",
+                message: { role: "assistant", text: "mismatch aborted recovered" },
+            }]);
+            assertRegression(state.runId === null,
+                "mismatched aborted events should also clear stale active run state");
+            assertRegression(messageRows.some((row) =>
+                row.kind === "peer" && row.text === "mismatch aborted recovered"),
+            "mismatched aborted recovery should preserve terminal assistant text visibility");
             summary.push("history reconcile repair-only");
         }
 
@@ -2455,6 +2678,117 @@
             assertRegression(rejectionText.toLowerCase().includes("operator.read"),
                 "rpc scope failures should map to operator-readable scope guidance");
             summary.push("scope-aware rpc error formatting");
+        }
+
+        {
+            const state = createRegressionState();
+            state.runId = "stale-run-id";
+            const messageRows = [];
+            const controller = createController({
+                state,
+                addMessage: (text, kind) => {
+                    messageRows.push({ text: String(text || ""), kind: String(kind || "") });
+                },
+            });
+            const calls = [];
+            await controller.abort({
+                requestOverride: async (method, params) => {
+                    calls.push({ method, params });
+                    if (method === "chat.abort") {
+                        return {
+                            payload: {
+                                aborted: false,
+                                runId: "different-run-id",
+                            },
+                        };
+                    }
+                    if (method === "chat.events.poll") {
+                        return {
+                            payload: {
+                                events: [{
+                                    sessionKey: "main",
+                                    runId: "different-run-id",
+                                    state: "final",
+                                    message: { role: "assistant", text: "done" },
+                                }],
+                            },
+                        };
+                    }
+                    return { payload: {} };
+                },
+            });
+            assertRegression(calls.length >= 2 &&
+                calls[0].method === "chat.abort" &&
+                calls[1].method === "chat.events.poll",
+            "abort fallback should trigger one reconcile poll when abort outcome is unresolved");
+            assertRegression(state.runId === null,
+                "abort fallback reconcile should clear stale active run state after terminal evidence");
+            assertRegression(messageRows.some((row) =>
+                row.kind === "peer" && row.text.includes("abort fallback reconciled stale run state")),
+            "abort fallback should emit explicit recovery diagnostic message");
+            assertRegression(Number(state.operatorDiagnosticsCounters["chat.abort.stale_run_reconcile"] || 0) >= 1,
+                "abort fallback recovery should increment stale-run reconcile diagnostic counter");
+            summary.push("abort fallback reconcile recovery");
+        }
+
+        {
+            const state = createRegressionState();
+            state.runId = "stale-run-id-no-terminal";
+            const messageRows = [];
+            const controller = createController({
+                state,
+                addMessage: (text, kind) => {
+                    messageRows.push({ text: String(text || ""), kind: String(kind || "") });
+                },
+            });
+            await controller.abort({
+                requestOverride: async (method) => {
+                    if (method === "chat.abort") {
+                        return {
+                            payload: {
+                                aborted: false,
+                            },
+                        };
+                    }
+                    if (method === "chat.events.poll") {
+                        return {
+                            payload: {
+                                events: [{
+                                    sessionKey: "main",
+                                    runId: "still-running",
+                                    state: "delta",
+                                    message: { text: "still running" },
+                                }],
+                            },
+                        };
+                    }
+                    return { payload: {} };
+                },
+            });
+            assertRegression(state.runId === "stale-run-id-no-terminal",
+                "abort fallback should keep run active when reconcile has no terminal evidence");
+            assertRegression(messageRows.some((row) =>
+                row.kind === "error" && row.text.includes("abort diagnostic: target=stale-run-id-no-terminal")),
+            "abort fallback unresolved path should emit explicit diagnostic message");
+            summary.push("abort fallback unresolved diagnostics");
+        }
+
+        {
+            const state = createRegressionState();
+            const controller = createController({
+                state,
+                addMessage: function () { },
+            });
+            await controller.sendDetachedMessage("phase0 detached", {
+                requestOverride: async () => ({
+                    runId: "server-run-id-top-level",
+                }),
+            });
+            assertRegression(state.runId === "server-run-id-top-level",
+                "send path should accept top-level runId in rpc response envelope");
+            assertRegression(Number(state.operatorDiagnosticsCounters["chat.queue.run_id_remapped"] || 0) >= 1,
+                "run-id remap should increment operator diagnostic counter");
+            summary.push("run-id extraction tolerant envelope compatibility");
         }
 
         {

@@ -458,7 +458,60 @@ TEST_CASE("Web chat queue guardrails are wired", "[chat][frontend][queue][contra
 	REQUIRE(controllerSource.find("waiting for terminal event; reconciling stalled run") != std::string::npos);
 	REQUIRE(controllerSource.find("request(\"chat.events.poll\"") != std::string::npos);
 	REQUIRE(controllerSource.find("function noteInboundChatEvent") != std::string::npos);
+	REQUIRE(controllerSource.find("chat.queue.stale_run_detected") != std::string::npos);
+	REQUIRE(controllerSource.find("chat.queue.run_id_remapped") != std::string::npos);
+	REQUIRE(controllerSource.find("chat.abort.stale_run_reconcile") != std::string::npos);
 	REQUIRE(eventsSource.find("controller.noteInboundChatEvent(event.state)") != std::string::npos);
+}
+
+TEST_CASE("Web chat incident mismatch-recovery wiring is present", "[chat][frontend][incident][contract]") {
+	const auto eventsPathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"web" /
+		"chat" /
+		"chat-events.js";
+	const auto eventsPathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"web" /
+		"chat" /
+		"chat-events.js";
+	std::ifstream eventsIn(eventsPathPrimary.string());
+	if (!eventsIn.is_open()) {
+		eventsIn.open(eventsPathFallback.string());
+	}
+	REQUIRE(eventsIn.is_open());
+	const std::string eventsSource(
+		(std::istreambuf_iterator<char>(eventsIn)),
+		std::istreambuf_iterator<char>());
+
+	const auto controllerPathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"web" /
+		"chat" /
+		"chat-controller.js";
+	const auto controllerPathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"web" /
+		"chat" /
+		"chat-controller.js";
+	std::ifstream controllerIn(controllerPathPrimary.string());
+	if (!controllerIn.is_open()) {
+		controllerIn.open(controllerPathFallback.string());
+	}
+	REQUIRE(controllerIn.is_open());
+	const std::string controllerSource(
+		(std::istreambuf_iterator<char>(controllerIn)),
+		std::istreambuf_iterator<char>());
+
+	REQUIRE(eventsSource.find("const isTerminalMismatch") != std::string::npos);
+	REQUIRE(eventsSource.find("controller.clearRunState()") != std::string::npos);
+	REQUIRE(eventsSource.find("controller.scheduleHistoryReconcile()") != std::string::npos);
+	REQUIRE(controllerSource.find("function extractAbortOutcome") != std::string::npos);
+	REQUIRE(controllerSource.find("function extractChatEventsFromPollResponse") != std::string::npos);
+	REQUIRE(controllerSource.find("abort fallback reconciled stale run state") != std::string::npos);
+	REQUIRE(controllerSource.find("abort diagnostic: target=") != std::string::npos);
 }
 
 TEST_CASE("Gateway skills check exposes dispatch-required counters", "[skills][gateway][contract]") {

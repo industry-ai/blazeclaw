@@ -165,12 +165,37 @@
                 }
 
                 if (event.runId && state.runId && event.runId !== state.runId) {
+                    const isTerminalMismatch =
+                        event.state === "final" || event.state === "aborted" || event.state === "error";
+                    if (!isTerminalMismatch) {
+                        continue;
+                    }
+
+                    let shouldReconcile = false;
                     if (event.state === "final") {
                         const otherFinal = normalizeFinalAssistantMessage(event.message);
                         const text = controller.parseTextFromMessage(otherFinal);
                         if (otherFinal && text && !controller.isSilentReplyText(text)) {
                             addMessage(text, "peer");
+                        } else {
+                            shouldReconcile = true;
                         }
+                    } else if (event.state === "aborted") {
+                        const otherAborted = normalizeAbortedAssistantMessage(event.message);
+                        const text = controller.parseTextFromMessage(otherAborted || event.message);
+                        if (text && !controller.isSilentReplyText(text)) {
+                            addMessage(text, "peer");
+                        } else {
+                            shouldReconcile = true;
+                        }
+                    } else {
+                        addMessage(event.errorMessage || "chat error", "error");
+                    }
+
+                    controller.markTerminalRun(runId, event.state);
+                    controller.clearRunState();
+                    if (shouldReconcile) {
+                        controller.scheduleHistoryReconcile();
                     }
                     continue;
                 }
