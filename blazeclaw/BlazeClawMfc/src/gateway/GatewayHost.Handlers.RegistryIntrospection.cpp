@@ -298,7 +298,8 @@ namespace blazeclaw::gateway::handlers::registry_introspection {
 
 		host.m_dispatcher.Register("gateway.tools.call.execute", [&host](const protocol::RequestFrame& request) {
 			const std::string requestedTool = RequestParamsView(request.paramsJson).GetString("tool");
-			const std::optional<std::string> argsJson = RequestParamsView(request.paramsJson).GetObject("args");
+			const std::optional<std::string> argsJson =
+				RequestParamsView(request.paramsJson).GetToolExecuteArgsJson();
 			const bool argsProvided = request.paramsJson.has_value() &&
 				request.paramsJson.value().find("\"args\"") != std::string::npos;
 

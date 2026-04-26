@@ -1,10 +1,42 @@
 #include "core/tools/CToolRuntimeRegistry.h"
 #include "core/tools/ToolArgumentValidators.h"
+#include "gateway/GatewayRequestParams.h"
 
 #include <catch2/catch_all.hpp>
+#include <nlohmann/json.hpp>
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+
+namespace {
+	class ScopedEnvVar {
+	public:
+		ScopedEnvVar(const char* name, const char* value)
+			: m_name(name), m_hadOriginal(false) {
+			const char* existing = std::getenv(name);
+			if (existing != nullptr) {
+				m_hadOriginal = true;
+				m_original = existing;
+			}
+			_putenv_s(name, value != nullptr ? value : "");
+		}
+
+		~ScopedEnvVar() {
+			if (m_hadOriginal) {
+				_putenv_s(m_name.c_str(), m_original.c_str());
+			}
+			else {
+				_putenv_s(m_name.c_str(), "");
+			}
+		}
+
+	private:
+		std::string m_name;
+		std::string m_original;
+		bool m_hadOriginal;
+	};
+}
 
 TEST_CASE("Tool runtime spec builders expose expected tool ids", "[tools][runtime][registry]") {
 	const auto imapSpecs = blazeclaw::core::tools::BuildImapSmtpToolRuntimeSpecs();
@@ -88,6 +120,289 @@ TEST_CASE("Tool argument validators preserve error taxonomy", "[tools][runtime][
 	REQUIRE(!baiduArgs.has_value());
 	REQUIRE(errorCode == "invalid_arguments");
 	REQUIRE(errorMessage.find("freshness") != std::string::npos);
+}
+
+TEST_CASE("Content polishing extracts quoted draft over control instructions", "[tools][runtime][polish][extract]") {
+	const std::string wrappedChinesePrompt = R"(请执行内容润色分发流：1. 读取我提供的这段口语化草稿：“那个新版本的 UI 需求改得差不多了，你跟老板说一声，我们下周三下午两点在二楼会议室过一遍，让他务必参加”；2. 调用 summarize 提取时间地点人物和核心诉求；3. 调用 humanizer 去 AI 化重写并发送给邮箱。)";
+	const auto selected = blazeclaw::core::tools::ExtractTextArgument(
+		nlohmann::json::object({ {"text", wrappedChinesePrompt} }));
+	REQUIRE(selected.has_value());
+	REQUIRE(selected->find("下周三下午两点") != std::string::npos);
+	REQUIRE(selected->find("二楼会议室") != std::string::npos);
+	REQUIRE(selected->find("去 AI 化") == std::string::npos);
+}
+
+TEST_CASE("Summarize extract keeps core request aligned with quoted Chinese draft", "[tools][runtime][polish][extract]") {
+	const std::string wrappedChinesePrompt = R"(请执行内容润色分发流：草稿是“那个新版本的 UI 需求改得差不多了，你跟老板说一声，我们下周三下午两点在二楼会议室过一遍，让他务必参加”；另外说明：去 AI 化。)";
+	const auto selected = blazeclaw::core::tools::ExtractTextArgument(
+		nlohmann::json::object({ {"text", wrappedChinesePrompt} }));
+	REQUIRE(selected.has_value());
+
+	const auto summarized = blazeclaw::core::tools::BuildSummarizeExtractOutput(*selected);
+	REQUIRE(summarized.find("Core request: 那个新版本的 UI 需求改得差不多了") != std::string::npos);
+	REQUIRE(summarized.find("去 AI 化") == std::string::npos);
+}
+
+TEST_CASE("Content polishing rejects control-only fragments as source text", "[tools][runtime][polish][extract]") {
+	const auto selected = blazeclaw::core::tools::ExtractTextArgument(
+		nlohmann::json::object({ {"text", "去 AI 化"} }));
+	REQUIRE(!selected.has_value());
+}
+
+TEST_CASE("Summarize extract accepts body field and unquoted meeting-only cue text", "[tools][runtime][polish][extract]") {
+	const std::string meetingOnly =
+		"跟老板说一声，我们下周三下午两点在二楼会议室过一遍，让他务必参加。";
+	const auto fromBody = blazeclaw::core::tools::ExtractTextArgument(
+		nlohmann::json::object({ {"body", meetingOnly} }));
+	REQUIRE(fromBody.has_value());
+	REQUIRE(*fromBody == meetingOnly);
+
+	const auto summarized = blazeclaw::core::tools::BuildSummarizeExtractOutput(*fromBody);
+	REQUIRE(summarized.find("Time: 下周三下午两点") != std::string::npos);
+	REQUIRE(summarized.find("Location: 二楼会议室") != std::string::npos);
+}
+
+TEST_CASE("Summarize extract unwraps nested arguments object from tool dispatch", "[tools][runtime][polish][extract]") {
+	const std::string meetingOnly =
+		"跟老板说一声，我们下周三下午两点在二楼会议室过一遍，让他务必参加。";
+	const auto nested = blazeclaw::core::tools::ExtractTextArgument(nlohmann::json::object({
+		{"arguments", nlohmann::json::object({ {"text", meetingOnly} })},
+	}));
+	REQUIRE(nested.has_value());
+	REQUIRE(*nested == meetingOnly);
+}
+
+TEST_CASE("Summarize extract coerces OpenAI-style content parts array", "[tools][runtime][polish][extract]") {
+	const std::string meetingOnly =
+		"跟老板说一声，我们下周三下午两点在二楼会议室过一遍，让他务必参加。";
+	const auto fromParts = blazeclaw::core::tools::ExtractTextArgument(nlohmann::json::object({
+		{"content",
+			nlohmann::json::array({
+				nlohmann::json::object({ {"type", "text"}, {"text", meetingOnly} }),
+			})},
+	}));
+	REQUIRE(fromParts.has_value());
+	REQUIRE(*fromParts == meetingOnly);
+}
+
+TEST_CASE("Summarize extract reads user draft from messages array", "[tools][runtime][polish][extract]") {
+	const std::string meetingOnly =
+		"跟老板说一声，我们下周三下午两点在二楼会议室过一遍，让他务必参加。";
+	const auto fromMessages = blazeclaw::core::tools::ExtractTextArgument(nlohmann::json::object({
+		{"messages",
+			nlohmann::json::array({
+				nlohmann::json::object(
+					{ {"role", "user"}, {"content", meetingOnly} }),
+			})},
+	}));
+	REQUIRE(fromMessages.has_value());
+	REQUIRE(*fromMessages == meetingOnly);
+}
+
+TEST_CASE("Summarize extract unwraps stringified JSON in text field", "[tools][runtime][polish][extract]") {
+	const std::string meetingOnly =
+		"跟老板说一声，我们下周三下午两点在二楼会议室过一遍，让他务必参加。";
+	const std::string wrapped =
+		std::string("{\"text\":") + nlohmann::json(meetingOnly).dump() + "}";
+	const auto fromStringified = blazeclaw::core::tools::ExtractTextArgument(
+		nlohmann::json::object({ {"text", wrapped} }));
+	REQUIRE(fromStringified.has_value());
+	REQUIRE(*fromStringified == meetingOnly);
+}
+
+TEST_CASE("gateway.tools.call.execute params resolve args JSON sent as string", "[gateway][tools][args]") {
+	const std::string argsObject = R"({"text":"下周三下午两点在二楼会议室"})";
+	const std::string params =
+		std::string("{\"tool\":\"summarize.extract\",\"args\":") +
+		nlohmann::json(argsObject).dump() + "}";
+	const auto resolved = blazeclaw::gateway::RequestParamsView(
+		std::optional<std::string>(params)).GetToolExecuteArgsJson();
+	REQUIRE(resolved.has_value());
+	const auto parsed = nlohmann::json::parse(*resolved);
+	REQUIRE(parsed["text"].get<std::string>() == "下周三下午两点在二楼会议室");
+}
+
+TEST_CASE("gateway.tools.call.execute resolves alias argument containers", "[gateway][tools][args]") {
+	const std::string payload = R"({"text":"跟老板说一声，我们下周三下午两点在二楼会议室过一遍"})";
+	const std::vector<std::string> aliases = {
+		"arguments",
+		"parameters",
+		"tool_arguments",
+		"toolArguments",
+		"payload",
+	};
+
+	for (const auto& alias : aliases) {
+		const std::string params =
+			std::string("{\"tool\":\"summarize.extract\",\"") +
+			alias +
+			"\":" +
+			nlohmann::json(payload).dump() +
+			"}";
+		const auto resolved = blazeclaw::gateway::RequestParamsView(
+			std::optional<std::string>(params)).GetToolExecuteArgsJson();
+		REQUIRE(resolved.has_value());
+		const auto parsed = nlohmann::json::parse(*resolved);
+		REQUIRE(parsed["text"].get<std::string>().find("下周三下午两点") != std::string::npos);
+	}
+}
+
+TEST_CASE("gateway.tools.call.execute keeps args priority over alias containers", "[gateway][tools][args]") {
+	const std::string params =
+		R"({"tool":"summarize.extract","args":{"text":"args-primary"},"arguments":{"text":"alias-secondary"}})";
+	const auto resolved = blazeclaw::gateway::RequestParamsView(
+		std::optional<std::string>(params)).GetToolExecuteArgsJson();
+	REQUIRE(resolved.has_value());
+	const auto parsed = nlohmann::json::parse(*resolved);
+	REQUIRE(parsed["text"].get<std::string>() == "args-primary");
+}
+
+TEST_CASE("Summarize extract after array-wrapped args matches ServiceManager coercion", "[tools][runtime][polish][extract]") {
+	const std::string meetingOnly =
+		"跟老板说一声，我们下周三下午两点在二楼会议室过一遍，让他务必参加。";
+	nlohmann::json params = nlohmann::json::array({
+		nlohmann::json::object({ {"text", meetingOnly} }),
+	});
+	REQUIRE(params.is_array());
+	nlohmann::json coerced = nlohmann::json::object();
+	for (const auto& el : params) {
+		if (el.is_object()) {
+			coerced = el;
+			break;
+		}
+	}
+	params = std::move(coerced);
+	const auto selected = blazeclaw::core::tools::ExtractTextArgument(params);
+	REQUIRE(selected.has_value());
+	REQUIRE(*selected == meetingOnly);
+}
+
+TEST_CASE("Humanizer accepts summary key and control text for downstream guardrails", "[tools][runtime][polish][humanizer]") {
+	const auto fromSummary = blazeclaw::core::tools::ExtractHumanizerTextArgument(
+		nlohmann::json::object({ {"summary", "Time: not found\nLocation: not found\nPeople: not found\nCore request: 去 AI 化"} }));
+	REQUIRE(fromSummary.has_value());
+	REQUIRE(fromSummary->find("Core request: 去 AI 化") != std::string::npos);
+
+	const auto fromText = blazeclaw::core::tools::ExtractHumanizerTextArgument(
+		nlohmann::json::object({ {"text", "去 AI 化"} }));
+	REQUIRE(fromText.has_value());
+	REQUIRE(*fromText == "去 AI 化");
+}
+
+TEST_CASE("Summarize extract captures structured fields from Chinese draft", "[tools][runtime][polish][extract]") {
+	const std::string chineseDraft = "那个新版本的 UI 需求改得差不多了，你跟老板说一声，我们下周三下午两点在二楼会议室过一遍，让他务必参加。";
+	const auto summarized = blazeclaw::core::tools::BuildSummarizeExtractOutput(chineseDraft);
+	REQUIRE(summarized.find("Time: 下周三下午两点") != std::string::npos);
+	REQUIRE(summarized.find("Location: 二楼会议室") != std::string::npos);
+	REQUIRE(summarized.find("People: boss, requester team") != std::string::npos);
+}
+
+TEST_CASE("Summarize extract supports mixed-language draft patterns", "[tools][runtime][polish][extract]") {
+	const std::string mixedDraft = "UI requirements are almost done. 我们将在14:00在二楼会议室 review，并请老板参加。";
+	const auto summarized = blazeclaw::core::tools::BuildSummarizeExtractOutput(mixedDraft);
+	REQUIRE(summarized.find("Time: 14:00") != std::string::npos);
+	REQUIRE(summarized.find("Location: 二楼会议室") != std::string::npos);
+	REQUIRE(summarized.find("People: boss, requester team") != std::string::npos);
+}
+
+TEST_CASE("Summarize multilingual extractor can be disabled by feature flag", "[tools][runtime][polish][extract][feature-flag]") {
+	ScopedEnvVar multilingualFlag("BLAZECLAW_SUMMARIZE_MULTILINGUAL_EXTRACTOR_ENABLED", "false");
+	const std::string chineseDraft = "我们下周三下午两点在二楼会议室过一遍，让老板参加。";
+	const auto summarized = blazeclaw::core::tools::BuildSummarizeExtractOutput(chineseDraft);
+	REQUIRE(summarized.find("Time: 下周三下午两点") != std::string::npos);
+	REQUIRE(summarized.find("Location: 二楼会议室") != std::string::npos);
+	REQUIRE(summarized.find("People: boss, requester team") != std::string::npos);
+}
+
+TEST_CASE("Humanizer strips instruction-artifact purpose and returns confirmation scaffold on low confidence", "[tools][runtime][polish][humanizer]") {
+	const std::string lowConfidenceSummary =
+		"Time: not found\n"
+		"Location: not found\n"
+		"People: not found\n"
+		"Core request: 去 AI 化";
+	const auto rewritten = blazeclaw::core::tools::BuildHumanizerRewriteOutput(lowConfidenceSummary);
+	REQUIRE(rewritten.find("incomplete and need confirmation before sending") != std::string::npos);
+	REQUIRE(rewritten.find("Draft intent: 去 AI 化") == std::string::npos);
+}
+
+TEST_CASE("Humanizer recovers fields from core request when summary is low confidence", "[tools][runtime][polish][humanizer]") {
+	const std::string lowConfidenceSummary =
+		"Time: not found\n"
+		"Location: not found\n"
+		"People: not found\n"
+		"Core request: 那个新版本的 UI 需求改得差不多了，你跟老板说一声，我们下周三下午两点在二楼会议室过一遍，让他务必参加。";
+	const auto rewritten = blazeclaw::core::tools::BuildHumanizerRewriteOutput(lowConfidenceSummary);
+	REQUIRE(rewritten.find("incomplete and need confirmation before sending") == std::string::npos);
+	REQUIRE(rewritten.find("Time: 下周三下午两点") != std::string::npos);
+	REQUIRE(rewritten.find("Location: 二楼会议室") != std::string::npos);
+	REQUIRE(rewritten.find("Participants: boss, requester team") != std::string::npos);
+}
+
+TEST_CASE("Humanizer recovers directly from raw Chinese orchestrated prompt", "[tools][runtime][polish][humanizer]") {
+	const std::string prompt =
+		R"(请执行内容润色分发流：1. 读取我提供的这段口语化草稿：“那个新版本的 UI 需求改得差不多了，你跟老板说一声，我们下周三下午两点在二楼会议室过一遍，让他务必参加”；2. 调用 `summarize` 提取其中的时间、地点、人物和核心诉求；3. 调用 `humanizer` 对提取的内容进行“去 AI 化”重写；4. 发送预览。)";
+	const auto rewritten = blazeclaw::core::tools::BuildHumanizerRewriteOutput(prompt);
+	REQUIRE(rewritten.find("incomplete and need confirmation before sending") == std::string::npos);
+	REQUIRE(rewritten.find("Time: 下周三下午两点") != std::string::npos);
+	REQUIRE(rewritten.find("Location: 二楼会议室") != std::string::npos);
+	REQUIRE(rewritten.find("Participants: boss, requester team") != std::string::npos);
+	REQUIRE(rewritten.find("Purpose: 去 AI 化") == std::string::npos);
+}
+
+TEST_CASE("Humanizer recovers from structured summary with not found plus orchestration core request", "[tools][runtime][polish][humanizer]") {
+	const std::string summary =
+		"Time: not found\n"
+		"Location: not found\n"
+		"People: not found\n"
+		"Core request: 请执行内容润色分发流：1. 读取口语化草稿：“那个新版本的 UI 需求改得差不多了，你跟老板说一声，我们下周三下午两点在二楼会议室过一遍，让他务必参加”；2. 调用 summarize 提取；3. 调用 humanizer 去 AI 化。";
+	const auto rewritten = blazeclaw::core::tools::BuildHumanizerRewriteOutput(summary);
+	REQUIRE(rewritten.find("incomplete and need confirmation before sending") == std::string::npos);
+	REQUIRE(rewritten.find("Time: 下周三下午两点") != std::string::npos);
+	REQUIRE(rewritten.find("Location: 二楼会议室") != std::string::npos);
+}
+
+TEST_CASE("Draft selector workflow-marker fallback handles wrapped Chinese flow text", "[tools][runtime][polish][extract]") {
+	const std::string wrappedPrompt =
+		R"(请执行内容润色分发流：1. 读取我提供的这段口语化草稿：那个新版本的 UI 需求改得差不多了，你跟老板说一声，我们下周三下午两点在二楼会议室过一遍，让他务必参加；2. 调用 summarize 提取其中的时间、地点、人物和核心诉求。)";
+	const auto selected = blazeclaw::core::tools::ExtractTextArgument(
+		nlohmann::json::object({ {"text", wrappedPrompt} }));
+	REQUIRE(selected.has_value());
+	REQUIRE(selected->find("下周三下午两点") != std::string::npos);
+	REQUIRE(selected->find("二楼会议室") != std::string::npos);
+}
+
+TEST_CASE("Draft selector supports Chinese full-width punctuation and quote variants", "[tools][runtime][polish][extract]") {
+	const std::string wrappedPrompt =
+		R"(请执行内容润色分发流：步骤一、读取我提供的口语化草稿：「那个新版本的 UI 需求改得差不多了，你跟老板说一声，我们下周三下午两点在二楼会议室过一遍，让他务必参加。」。步骤二、调用 summarize 提取其中的时间、地点、人物和核心诉求。)";
+	const auto selected = blazeclaw::core::tools::ExtractTextArgument(
+		nlohmann::json::object({ {"text", wrappedPrompt} }));
+	REQUIRE(selected.has_value());
+	REQUIRE(selected->find("下周三下午两点") != std::string::npos);
+	REQUIRE(selected->find("二楼会议室") != std::string::npos);
+	REQUIRE(selected->find("调用 summarize") == std::string::npos);
+}
+
+TEST_CASE("Bilingual parity: English and Chinese workflow prompts produce meeting fields", "[tools][runtime][polish][extract][parity]") {
+	const std::string chinesePrompt =
+		R"(请执行内容润色分发流：1. 读取我提供的这段口语化草稿：“那个新版本的 UI 需求改得差不多了，你跟老板说一声，我们下周三下午两点在二楼会议室过一遍，让他务必参加”；2. 调用 summarize 提取其中的时间、地点、人物和核心诉求。)";
+	const std::string englishPrompt =
+		R"(Please run the content polishing distribution flow: 1) read this draft: "The new UI requirements are almost finalized. Please tell the boss that we will review them next Wednesday at 2:00 PM in the second-floor meeting room, and he must attend." 2) call summarize to extract time, location, people, and core request.)";
+
+	const auto chineseSelected = blazeclaw::core::tools::ExtractTextArgument(
+		nlohmann::json::object({ {"text", chinesePrompt} }));
+	const auto englishSelected = blazeclaw::core::tools::ExtractTextArgument(
+		nlohmann::json::object({ {"text", englishPrompt} }));
+	REQUIRE(chineseSelected.has_value());
+	REQUIRE(englishSelected.has_value());
+
+	const auto chineseSummary = blazeclaw::core::tools::BuildSummarizeExtractOutput(*chineseSelected);
+	const auto englishSummary = blazeclaw::core::tools::BuildSummarizeExtractOutput(*englishSelected);
+	REQUIRE(chineseSummary.find("Time: 下周三下午两点") != std::string::npos);
+	REQUIRE(chineseSummary.find("Location: 二楼会议室") != std::string::npos);
+	REQUIRE(chineseSummary.find("People: boss, requester team") != std::string::npos);
+	REQUIRE(englishSummary.find("Time:") != std::string::npos);
+	REQUIRE(englishSummary.find("Location:") != std::string::npos);
+	REQUIRE(englishSummary.find("People: boss, requester team") != std::string::npos);
 }
 
 TEST_CASE("Tool runtime classifiers and truncation keep behavior parity", "[tools][runtime][classifiers]") {

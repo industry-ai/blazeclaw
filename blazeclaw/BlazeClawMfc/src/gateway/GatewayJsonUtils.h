@@ -27,6 +27,7 @@ namespace blazeclaw::gateway::json {
 	bool FindBoolField(const std::string& text, const std::string& fieldName, bool& outValue);
 	bool FindUInt64Field(const std::string& text, const std::string& fieldName, std::uint64_t& outValue);
 	bool IsJsonObjectShape(const std::string& value);
+	bool IsJsonArrayShape(const std::string& value);
 	bool IsFieldValueType(const std::string& text, const std::string& fieldName, char expectedFirstChar);
 
 	/// Collapses whitespace and control characters for safe single-line tool status / log appendages.

@@ -41,6 +41,7 @@ bool IsBraveSearchWebToolId(const std::string& toolId);
 bool IsBraveFetchContentToolId(const std::string& toolId);
 
 std::optional<std::string> ExtractTextArgument(const nlohmann::json& params);
+std::optional<std::string> ExtractHumanizerTextArgument(const nlohmann::json& params);
 std::string BuildSummarizeExtractOutput(const std::string& text);
 std::string BuildHumanizerRewriteOutput(const std::string& text);
 

@@ -1178,20 +1178,31 @@ namespace blazeclaw::gateway::protocol {
 				return false;
 			}
 
-			return RequireFieldKindIfPresent(
+			if (!RequireFieldKindIfPresent(
 				fieldKinds,
 				"tool",
 				JsonFieldKind::String,
 				issue,
 				"gateway.tools.call.preview",
-				"a string") &&
-				RequireFieldKindIfPresent(
-					fieldKinds,
-					"args",
-					JsonFieldKind::Object,
-					issue,
-					"gateway.tools.call.preview",
-					"an object");
+				"a string")) {
+				return false;
+			}
+
+			const auto argsIt = fieldKinds.find("args");
+			if (argsIt != fieldKinds.end()) {
+				if (argsIt->second != JsonFieldKind::Object &&
+					argsIt->second != JsonFieldKind::String &&
+					argsIt->second != JsonFieldKind::Array) {
+					SetIssue(
+						issue,
+						"schema_invalid_params",
+						"Method `gateway.tools.call.preview` requires `params.args` to be a JSON object, "
+						"a JSON array, or a JSON string whose decoded value is JSON.");
+					return false;
+				}
+			}
+
+			return true;
 		}
 
 		bool ValidateToolsCallExecuteParams(const RequestFrame& request, SchemaValidationIssue& issue) {
@@ -1200,20 +1211,44 @@ namespace blazeclaw::gateway::protocol {
 				return false;
 			}
 
-			return RequireFieldKindIfPresent(
+			if (!RequireFieldKindIfPresent(
 				fieldKinds,
 				"tool",
 				JsonFieldKind::String,
 				issue,
 				"gateway.tools.call.execute",
-				"a string") &&
-				RequireFieldKindIfPresent(
-					fieldKinds,
-					"args",
-					JsonFieldKind::Object,
-					issue,
-					"gateway.tools.call.execute",
-					"an object");
+				"a string")) {
+				return false;
+			}
+
+			const std::array<const char*, 6> argsFieldAliases = {
+				"args",
+				"arguments",
+				"parameters",
+				"tool_arguments",
+				"toolArguments",
+				"payload",
+			};
+			for (const char* fieldName : argsFieldAliases) {
+				const auto argsIt = fieldKinds.find(fieldName);
+				if (argsIt == fieldKinds.end()) {
+					continue;
+				}
+
+				if (argsIt->second != JsonFieldKind::Object &&
+					argsIt->second != JsonFieldKind::String &&
+					argsIt->second != JsonFieldKind::Array) {
+					SetIssue(
+						issue,
+						"schema_invalid_params",
+						"Method `gateway.tools.call.execute` requires `params." +
+						std::string(fieldName) +
+						"` to be a JSON object, a JSON array, or a JSON string whose decoded value is JSON.");
+					return false;
+				}
+			}
+
+			return true;
 		}
 
 		bool IsFieldBoolean(const std::string& json, const std::string& fieldName) {

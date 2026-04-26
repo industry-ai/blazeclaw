@@ -1357,6 +1357,17 @@ namespace blazeclaw::core {
 								{ { "text", params.get<std::string>() } });
 						}
 
+						if (params.is_array()) {
+							nlohmann::json coerced = nlohmann::json::object();
+							for (const auto& el : params) {
+								if (el.is_object()) {
+									coerced = el;
+									break;
+								}
+							}
+							params = std::move(coerced);
+						}
+
 						if (!params.is_object()) {
 							result.executed = false;
 							result.status = "error";
@@ -1367,12 +1378,18 @@ namespace blazeclaw::core {
 							return result;
 						}
 
-						const auto text = tools::ExtractTextArgument(params);
+						const auto text =
+							spec.id == "summarize.extract"
+							? tools::ExtractTextArgument(params)
+							: tools::ExtractHumanizerTextArgument(params);
 						if (!text.has_value()) {
 							result.executed = false;
 							result.status = "error";
 							result.errorCode = "invalid_arguments";
-							result.errorMessage = "text is required";
+							result.errorMessage =
+								spec.id == "summarize.extract"
+								? "text_must_include_a_usable_draft_content_segment"
+								: "text_or_summary_is_required";
 							result.completedAtMs = CurrentEpochMs();
 							result.latencyMs = result.completedAtMs - result.startedAtMs;
 							return result;

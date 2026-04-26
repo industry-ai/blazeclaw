@@ -3,6 +3,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
+#include <cstdlib>
+#include <limits>
 #include <regex>
 #include <sstream>
 
@@ -118,6 +121,1300 @@ std::string ExtractSummaryField(
             : valueEnd - valueStart));
 }
 
+bool ParseBoolEnvOrDefault(const char* name, bool defaultValue)
+{
+    const DWORD required = GetEnvironmentVariableA(name, nullptr, 0);
+    if (required == 0)
+    {
+        return defaultValue;
+    }
+
+    std::string value(static_cast<std::size_t>(required), '\0');
+    const DWORD written = GetEnvironmentVariableA(name, value.data(), required);
+    if (written == 0)
+    {
+        return defaultValue;
+    }
+
+    if (!value.empty() && value.back() == '\0')
+    {
+        value.pop_back();
+    }
+
+    std::string lowered = ToLowerAscii(TrimAsciiLocal(value));
+    if (lowered.empty())
+    {
+        return defaultValue;
+    }
+
+    if (lowered == "1" || lowered == "true" || lowered == "yes" || lowered == "on")
+    {
+        return true;
+    }
+
+    if (lowered == "0" || lowered == "false" || lowered == "no" || lowered == "off")
+    {
+        return false;
+    }
+
+    return defaultValue;
+}
+
+bool IsMultilingualExtractorEnabled()
+{
+    return ParseBoolEnvOrDefault(
+        "BLAZECLAW_SUMMARIZE_MULTILINGUAL_EXTRACTOR_ENABLED",
+        true);
+}
+
+bool IsExtractionDiagnosticsEnabled()
+{
+    return ParseBoolEnvOrDefault(
+        "BLAZECLAW_SUMMARIZE_EXTRACTION_DIAGNOSTICS_ENABLED",
+        false);
+}
+
+bool ContainsLikelyCjkMarkers(const std::string& text)
+{
+    const std::vector<std::string> markers = {
+        "下周",
+        "周",
+        "会议室",
+        "老板",
+        "我们",
+        "需求",
+        "下午",
+        "二楼",
+    };
+
+    for (const auto& marker : markers)
+    {
+        if (!marker.empty() && text.find(marker) != std::string::npos)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+void Utf8CountCodepointsAndHan(
+    const std::string& utf8,
+    std::size_t& outCodepoints,
+    std::size_t& outHanIdeographs)
+{
+    outCodepoints = 0;
+    outHanIdeographs = 0;
+    for (std::size_t i = 0; i < utf8.size();)
+    {
+        const unsigned char c0 = static_cast<unsigned char>(utf8[i]);
+        std::uint32_t cp = 0;
+        std::size_t len = 1;
+        if (c0 < 0x80u)
+        {
+            cp = c0;
+            len = 1;
+        }
+        else if ((c0 & 0xE0u) == 0xC0u && i + 1 < utf8.size())
+        {
+            const unsigned char c1 = static_cast<unsigned char>(utf8[i + 1]);
+            if ((c1 & 0xC0u) != 0x80u)
+            {
+                ++i;
+                continue;
+            }
+            cp = (static_cast<std::uint32_t>(c0 & 0x1Fu) << 6) |
+                static_cast<std::uint32_t>(c1 & 0x3Fu);
+            len = 2;
+        }
+        else if ((c0 & 0xF0u) == 0xE0u && i + 2 < utf8.size())
+        {
+            const unsigned char c1 = static_cast<unsigned char>(utf8[i + 1]);
+            const unsigned char c2 = static_cast<unsigned char>(utf8[i + 2]);
+            if ((c1 & 0xC0u) != 0x80u || (c2 & 0xC0u) != 0x80u)
+            {
+                ++i;
+                continue;
+            }
+            cp = (static_cast<std::uint32_t>(c0 & 0x0Fu) << 12) |
+                (static_cast<std::uint32_t>(c1 & 0x3Fu) << 6) |
+                static_cast<std::uint32_t>(c2 & 0x3Fu);
+            len = 3;
+        }
+        else if ((c0 & 0xF8u) == 0xF0u && i + 3 < utf8.size())
+        {
+            const unsigned char c1 = static_cast<unsigned char>(utf8[i + 1]);
+            const unsigned char c2 = static_cast<unsigned char>(utf8[i + 2]);
+            const unsigned char c3 = static_cast<unsigned char>(utf8[i + 3]);
+            if ((c1 & 0xC0u) != 0x80u || (c2 & 0xC0u) != 0x80u || (c3 & 0xC0u) != 0x80u)
+            {
+                ++i;
+                continue;
+            }
+            cp = (static_cast<std::uint32_t>(c0 & 0x07u) << 18) |
+                (static_cast<std::uint32_t>(c1 & 0x3Fu) << 12) |
+                (static_cast<std::uint32_t>(c2 & 0x3Fu) << 6) |
+                static_cast<std::uint32_t>(c3 & 0x3Fu);
+            len = 4;
+        }
+        else
+        {
+            ++i;
+            continue;
+        }
+
+        ++outCodepoints;
+        if ((cp >= 0x4E00u && cp <= 0x9FFFu) || (cp >= 0x3400u && cp <= 0x4DBFu))
+        {
+            ++outHanIdeographs;
+        }
+        i += len;
+    }
+}
+
+bool Utf8MeetsSubstantiveDraftThreshold(const std::string& trimmed)
+{
+    if (trimmed.size() >= 20)
+    {
+        return true;
+    }
+    std::size_t codepoints = 0;
+    std::size_t han = 0;
+    Utf8CountCodepointsAndHan(trimmed, codepoints, han);
+    if (codepoints >= 8)
+    {
+        return true;
+    }
+    if (han >= 4)
+    {
+        return true;
+    }
+    return ContainsLikelyCjkMarkers(trimmed);
+}
+
+std::string SelectLikelyDraftText(const std::string& value);
+
+std::optional<std::string> CoerceJsonValueToPlainText(
+    const nlohmann::json& node,
+    const int depth = 0)
+{
+    if (depth > 8)
+    {
+        return std::nullopt;
+    }
+    if (node.is_string())
+    {
+        return node.get<std::string>();
+    }
+    if (node.is_array())
+    {
+        std::string joined;
+        for (const auto& el : node)
+        {
+            const auto piece = CoerceJsonValueToPlainText(el, depth + 1);
+            if (!piece.has_value())
+            {
+                continue;
+            }
+            const std::string t = TrimAsciiLocal(*piece);
+            if (t.empty())
+            {
+                continue;
+            }
+            if (!joined.empty())
+            {
+                joined.push_back('\n');
+            }
+            joined += t;
+        }
+        return joined.empty() ? std::nullopt : std::optional<std::string>(std::move(joined));
+    }
+    if (!node.is_object())
+    {
+        return std::nullopt;
+    }
+
+    static const char* kObjectTextKeys[] = {
+        "text",
+        "content",
+        "value",
+        "message",
+        "body",
+        "input",
+        "draft",
+    };
+    for (const auto* key : kObjectTextKeys)
+    {
+        const auto it = node.find(key);
+        if (it == node.end())
+        {
+            continue;
+        }
+        return CoerceJsonValueToPlainText(*it, depth + 1);
+    }
+
+    const auto typeIt = node.find("type");
+    const auto textIt = node.find("text");
+    if (typeIt != node.end() && typeIt->is_string() &&
+        ToLowerAscii(typeIt->get<std::string>()) == "text" && textIt != node.end())
+    {
+        return CoerceJsonValueToPlainText(*textIt, depth + 1);
+    }
+
+    return std::nullopt;
+}
+
+std::optional<std::string> TryExtractTextFromMessagesArray(const nlohmann::json& params)
+{
+    const auto it = params.find("messages");
+    if (it == params.end() || !it->is_array())
+    {
+        return std::nullopt;
+    }
+
+    std::string combined;
+    for (const auto& msg : *it)
+    {
+        if (!msg.is_object())
+        {
+            continue;
+        }
+        const auto roleIt = msg.find("role");
+        if (roleIt == msg.end() || !roleIt->is_string())
+        {
+            continue;
+        }
+        const std::string role = TrimAsciiLocal(ToLowerAscii(roleIt->get<std::string>()));
+        if (role != "user" && role != "assistant")
+        {
+            continue;
+        }
+        const auto contentIt = msg.find("content");
+        if (contentIt == msg.end())
+        {
+            continue;
+        }
+        const auto piece = CoerceJsonValueToPlainText(*contentIt);
+        if (!piece.has_value())
+        {
+            continue;
+        }
+        const std::string t = TrimAsciiLocal(*piece);
+        if (t.empty())
+        {
+            continue;
+        }
+        if (!combined.empty())
+        {
+            combined += "\n\n";
+        }
+        combined += t;
+    }
+
+    if (combined.empty())
+    {
+        return std::nullopt;
+    }
+
+    const std::string value = TrimAsciiLocal(combined);
+
+    const std::string selected = SelectLikelyDraftText(value);
+    if (selected.empty())
+    {
+        return std::nullopt;
+    }
+    return selected;
+}
+
+#ifdef _WIN32
+std::wstring Utf8ToWide(const std::string& utf8)
+{
+    if (utf8.empty())
+    {
+        return {};
+    }
+
+    auto convert = [](const std::string& in, DWORD flags) -> std::wstring {
+        const int required = MultiByteToWideChar(
+            CP_UTF8,
+            flags,
+            in.data(),
+            static_cast<int>(in.size()),
+            nullptr,
+            0);
+        if (required <= 0)
+        {
+            return {};
+        }
+
+        std::wstring wide(static_cast<std::size_t>(required), L'\0');
+        if (MultiByteToWideChar(
+                CP_UTF8,
+                flags,
+                in.data(),
+                static_cast<int>(in.size()),
+                wide.data(),
+                required) <= 0)
+        {
+            return {};
+        }
+
+        return wide;
+    };
+
+    std::wstring wide = convert(utf8, MB_ERR_INVALID_CHARS);
+    if (wide.empty() && !utf8.empty())
+    {
+        // Best-effort: some callers embed lone surrogate bytes or mixed encodings;
+        // still run wide-string regex rather than failing draft extraction entirely.
+        wide = convert(utf8, 0);
+    }
+
+    return wide;
+}
+
+std::string WideToUtf8(const std::wstring& wide)
+{
+    if (wide.empty())
+    {
+        return {};
+    }
+
+    const int required = WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        wide.data(),
+        static_cast<int>(wide.size()),
+        nullptr,
+        0,
+        nullptr,
+        nullptr);
+    if (required <= 0)
+    {
+        return {};
+    }
+
+    std::string utf8(static_cast<std::size_t>(required), '\0');
+    if (WideCharToMultiByte(
+            CP_UTF8,
+            0,
+            wide.data(),
+            static_cast<int>(wide.size()),
+            utf8.data(),
+            required,
+            nullptr,
+            nullptr) <= 0)
+    {
+        return {};
+    }
+
+    return utf8;
+}
+
+bool TryMatchChineseTimeUtf8Wide(const std::string& utf8Text, std::string& outTime)
+{
+    const std::wstring wtext = Utf8ToWide(utf8Text);
+    if (wtext.empty() && !utf8Text.empty())
+    {
+        return false;
+    }
+
+    try
+    {
+        static const std::wregex kWeekday(
+            LR"(((?:(?:下周|本周|这周)[一二三四五六日天]|周[一二三四五六日天])(?:上午|下午|晚上|中午)?(?:\d{1,2}|[一二三四五六七八九十两]+)点(?:半|[0-5]?\d分?)?))");
+        static const std::wregex kRelative(
+            LR"(((?:今天|明天|后天)(?:上午|下午|晚上|中午)?(?:\d{1,2}|[一二三四五六七八九十两]+)点(?:半|[0-5]?\d分?)?))");
+        static const std::wregex kClock(LR"(((?:上午|下午|晚上|中午)?\d{1,2}[:：]\d{2}))");
+
+        std::wsmatch m;
+        if (std::regex_search(wtext, m, kWeekday) && m.size() >= 2)
+        {
+            outTime = WideToUtf8(m[1].str());
+            return true;
+        }
+        if (std::regex_search(wtext, m, kRelative) && m.size() >= 2)
+        {
+            outTime = WideToUtf8(m[1].str());
+            return true;
+        }
+        if (std::regex_search(wtext, m, kClock) && m.size() >= 2)
+        {
+            outTime = WideToUtf8(m[1].str());
+            return true;
+        }
+    }
+    catch (const std::regex_error&)
+    {
+    }
+
+    return false;
+}
+
+bool TryMatchChineseLocationUtf8Wide(const std::string& utf8Text, std::string& outLocation)
+{
+    const std::wstring wtext = Utf8ToWide(utf8Text);
+    if (wtext.empty() && !utf8Text.empty())
+    {
+        return false;
+    }
+
+    try
+    {
+        static const std::wregex kLocation(
+            LR"((?:在)\s*([^，。,；;\n]{1,40}(?:会议室|会议厅|room)))");
+        std::wsmatch m;
+        if (std::regex_search(wtext, m, kLocation) && m.size() >= 2)
+        {
+            outLocation = WideToUtf8(m[1].str());
+            return true;
+        }
+    }
+    catch (const std::regex_error&)
+    {
+    }
+
+    return false;
+}
+#endif
+
+// Last "在" before "会议室" — avoids binding the first 在 in "在14:00在二楼会议室".
+bool TryMeetingRoomNearSuffixUtf8(const std::string& text, std::string& outLocation)
+{
+    static const char kAt[] = "\xe5\x9c\xa8"; // 在
+    static const char kRoom[] = "\xe4\xbc\x9a\xe8\xae\xae\xe5\xae\xa4"; // 会议室
+    static constexpr std::size_t kAtLen = 3;
+    static constexpr std::size_t kRoomLen = 9;
+
+    const std::size_t roomPos = text.find(kRoom);
+    if (roomPos == std::string::npos)
+    {
+        return false;
+    }
+
+    const std::size_t roomEnd = roomPos + kRoomLen;
+    const std::size_t beforeRoom = roomPos == 0 ? 0 : roomPos - 1;
+    const std::size_t zaiPos = text.rfind(kAt, beforeRoom);
+    if (zaiPos == std::string::npos)
+    {
+        return false;
+    }
+
+    const std::size_t contentStart = zaiPos + kAtLen;
+    if (contentStart > roomEnd)
+    {
+        return false;
+    }
+
+    outLocation = TrimAsciiLocal(text.substr(contentStart, roomEnd - contentStart));
+    return !outLocation.empty();
+}
+
+bool ContainsPolishOrchestrationNoise(const std::string& value)
+{
+    if (value.empty())
+    {
+        return false;
+    }
+
+    const std::string lowered = ToLowerAscii(value);
+    if (value.find("内容润色") != std::string::npos)
+    {
+        return true;
+    }
+    if (value.find("分发流") != std::string::npos)
+    {
+        return true;
+    }
+    if (value.find("口语化草稿") != std::string::npos)
+    {
+        return true;
+    }
+    if (lowered.find("humanizer") != std::string::npos)
+    {
+        return true;
+    }
+    if (lowered.find("summarize") != std::string::npos)
+    {
+        return true;
+    }
+    if (lowered.find("imap_smtp") != std::string::npos)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+// When quote/marker heuristics disagree, accept the full trimmed blob if it still
+// looks like meeting-oriented content (avoids invalid_arguments on valid drafts).
+bool LooksLikeLikelyMeetingDraftBody(const std::string& value)
+{
+    if (value.size() < 10)
+    {
+        return false;
+    }
+
+    const std::string lowered = ToLowerAscii(value);
+    if (value.find("会议室") != std::string::npos ||
+        value.find("会议") != std::string::npos ||
+        value.find("开会") != std::string::npos ||
+        value.find("老板") != std::string::npos ||
+        value.find("经理") != std::string::npos ||
+        value.find("同事") != std::string::npos ||
+        value.find("下周") != std::string::npos ||
+        value.find("本周") != std::string::npos ||
+        value.find("今天") != std::string::npos ||
+        value.find("明天") != std::string::npos ||
+        value.find("二楼") != std::string::npos ||
+        value.find("三楼") != std::string::npos ||
+        value.find("办公室") != std::string::npos ||
+        value.find("参加") != std::string::npos ||
+        value.find("参会") != std::string::npos ||
+        lowered.find("boss") != std::string::npos ||
+        lowered.find("meeting room") != std::string::npos ||
+        lowered.find("calendar") != std::string::npos ||
+        lowered.find("schedule") != std::string::npos ||
+        lowered.find("invite") != std::string::npos)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+void EmitExtractionDiagnostic(
+    const std::string& stage,
+    const std::string& payload)
+{
+    if (!IsExtractionDiagnosticsEnabled())
+    {
+        return;
+    }
+
+#ifdef _WIN32
+    const std::string line =
+        "[content-polish] " + stage + " " + payload + "\n";
+    OutputDebugStringA(line.c_str());
+#else
+    (void)stage;
+    (void)payload;
+#endif
+}
+
+bool IsMissingSummaryField(const std::string& value)
+{
+    const std::string trimmed = TrimAsciiLocal(value);
+    if (trimmed.empty())
+    {
+        return true;
+    }
+
+    const std::string lowered = ToLowerAscii(trimmed);
+    return lowered == "not found" || lowered == "n/a" || lowered == "na";
+}
+
+bool LooksLikeInstructionArtifact(const std::string& value)
+{
+    const std::string trimmed = TrimAsciiLocal(value);
+    if (trimmed.empty())
+    {
+        return true;
+    }
+
+    const std::string lowered = ToLowerAscii(trimmed);
+    const std::vector<std::string> controlFragmentsAscii = {
+        "call summarize",
+        "call humanizer",
+        "call imap",
+        "call smtp",
+        "content polishing",
+        "distribution flow",
+        "send to",
+    };
+    const std::vector<std::string> controlFragmentsAsciiLoose = {
+        // Match only on ASCII-normalized text; avoid substring hits inside UTF-8 CJK.
+        "extract",
+        "rewrite",
+    };
+    const std::vector<std::string> controlFragmentsUtf8 = {
+        "去 ai 化",
+        "去ai化",
+        // Avoid bare "调用"/"提取" — they appear inside normal Chinese prose.
+        "提取其中的",
+        "提取时间",
+        "提取人物",
+        "提取地点",
+        "调用 summarize",
+        "调用 humanizer",
+        "重写",
+        "发送给",
+    };
+    const std::vector<std::string> businessFragmentsAscii = {
+        "meeting",
+        "review",
+        "ui",
+        "requirement",
+        "next ",
+        "room",
+        "boss",
+        "attend",
+    };
+    const std::vector<std::string> businessFragmentsUtf8 = {
+        "下周",
+        "周",
+        "会议室",
+        "老板",
+        "参加",
+        "需求",
+    };
+
+    bool hasControl = false;
+    for (const auto& fragment : controlFragmentsAscii)
+    {
+        if (!fragment.empty() && lowered.find(fragment) != std::string::npos)
+        {
+            hasControl = true;
+            break;
+        }
+    }
+    if (!hasControl)
+    {
+        for (const auto& fragment : controlFragmentsAsciiLoose)
+        {
+            if (!fragment.empty() && lowered.find(fragment) != std::string::npos)
+            {
+                hasControl = true;
+                break;
+            }
+        }
+    }
+    if (!hasControl)
+    {
+        for (const auto& fragment : controlFragmentsUtf8)
+        {
+            if (fragment.empty())
+            {
+                continue;
+            }
+            // Match on ASCII-lowercased UTF-8 so phrases like "去 AI 化" match fragment "去 ai 化".
+            if (lowered.find(ToLowerAscii(fragment)) != std::string::npos)
+            {
+                hasControl = true;
+                break;
+            }
+        }
+    }
+
+    if (!hasControl)
+    {
+        return false;
+    }
+
+    for (const auto& fragment : businessFragmentsAscii)
+    {
+        if (!fragment.empty() && lowered.find(fragment) != std::string::npos)
+        {
+            return false;
+        }
+    }
+    for (const auto& fragment : businessFragmentsUtf8)
+    {
+        if (!fragment.empty() && trimmed.find(fragment) != std::string::npos)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+int CountMissingCriticalSummaryFields(
+    const std::string& timeValue,
+    const std::string& locationValue,
+    const std::string& peopleValue)
+{
+    int missing = 0;
+    if (IsMissingSummaryField(timeValue))
+    {
+        ++missing;
+    }
+    if (IsMissingSummaryField(locationValue))
+    {
+        ++missing;
+    }
+    if (IsMissingSummaryField(peopleValue))
+    {
+        ++missing;
+    }
+    return missing;
+}
+
+bool ContainsAnyFragment(
+    const std::string& value,
+    const std::vector<std::string>& fragments)
+{
+    for (const auto& fragment : fragments)
+    {
+        if (!fragment.empty() && value.find(fragment) != std::string::npos)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<std::string> CollectQuotedCandidates(const std::string& input)
+{
+    const std::vector<std::pair<std::string, std::string>> quotePairs = {
+        { "\"", "\"" },
+        { "\'", "\'" },
+        { "“", "”" },
+        { "‘", "’" },
+        { "「", "」" },
+        { "『", "』" },
+    };
+
+    std::vector<std::string> candidates;
+    for (const auto& pair : quotePairs)
+    {
+        std::size_t startPos = 0;
+        while (startPos < input.size())
+        {
+            const std::size_t openPos = input.find(pair.first, startPos);
+            if (openPos == std::string::npos)
+            {
+                break;
+            }
+
+            const std::size_t contentStart = openPos + pair.first.size();
+            const std::size_t closePos = input.find(pair.second, contentStart);
+            if (closePos == std::string::npos)
+            {
+                break;
+            }
+
+            const std::string quoted = TrimAsciiLocal(
+                input.substr(contentStart, closePos - contentStart));
+            if (!quoted.empty())
+            {
+                candidates.push_back(quoted);
+            }
+
+            startPos = closePos + pair.second.size();
+        }
+    }
+
+    return candidates;
+}
+
+std::optional<std::string> ExtractDraftByWorkflowMarkers(const std::string& input)
+{
+#ifdef _WIN32
+    const std::wstring winput = Utf8ToWide(input);
+    if (!(winput.empty() && !input.empty()))
+    {
+        try
+        {
+            static const std::wregex kChineseWorkflowDraftMarker(
+                LR"((?:读取我提供的这段口语化草稿|口语化草稿|草稿(?:内容)?)\s*[：:]\s*[“"「『]?\s*(.+?)\s*[”"」』]?\s*(?:(?:[；;。]\s*(?:2|第二步|步骤2|步骤二)\s*(?:[\.\)）:：、])?)|$))");
+            static const std::wregex kChineseDraftMarker(
+                LR"((?:草稿|口语化草稿|草稿内容)\s*[：:]\s*[“"「『]?\s*([^;；\n。]+?)\s*[”"」』]?\s*(?:$|[；;。]))");
+
+            std::wsmatch wmatch;
+            if (std::regex_search(winput, wmatch, kChineseWorkflowDraftMarker) &&
+                wmatch.size() >= 2)
+            {
+                const std::string value = TrimAsciiLocal(WideToUtf8(wmatch[1].str()));
+                if (!value.empty())
+                {
+                    return value;
+                }
+            }
+
+            if (std::regex_search(winput, wmatch, kChineseDraftMarker) &&
+                wmatch.size() >= 2)
+            {
+                const std::string value = TrimAsciiLocal(WideToUtf8(wmatch[1].str()));
+                if (!value.empty())
+                {
+                    return value;
+                }
+            }
+        }
+        catch (const std::regex_error&)
+        {
+        }
+    }
+#endif
+
+    static const std::regex kChineseDraftMarker(
+        R"((?:草稿|口语化草稿|草稿内容)\s*[：:]\s*[“"「『]?\s*([^;；\n。]+?)\s*[”"」』]?\s*(?:$|[；;。]))");
+    static const std::regex kChineseWorkflowDraftMarker(
+        R"((?:读取我提供的这段口语化草稿|口语化草稿|草稿(?:内容)?)\s*[：:]\s*[“"「『]?\s*(.+?)\s*[”"」』]?\s*(?:(?:[；;。]\s*(?:2|第二步|步骤2|步骤二)\s*(?:[\.\)）:：、])?)|$))");
+    static const std::regex kEnglishDraftMarker(
+        R"((?:draft)\s*[:]\s*(.+?)(?:;\s*2[\.\)]|$))",
+        std::regex_constants::icase);
+
+    std::smatch match;
+    if (std::regex_search(input, match, kChineseWorkflowDraftMarker) && match.size() >= 2)
+    {
+        const std::string value = TrimAsciiLocal(match[1].str());
+        if (!value.empty())
+        {
+            return value;
+        }
+    }
+
+    if (std::regex_search(input, match, kChineseDraftMarker) && match.size() >= 2)
+    {
+        const std::string value = TrimAsciiLocal(match[1].str());
+        if (!value.empty())
+        {
+            return value;
+        }
+    }
+
+    if (std::regex_search(input, match, kEnglishDraftMarker) && match.size() >= 2)
+    {
+        const std::string value = TrimAsciiLocal(match[1].str());
+        if (!value.empty())
+        {
+            return value;
+        }
+    }
+
+    const bool likelyWorkflowPrompt =
+        input.find("口语化草稿") != std::string::npos ||
+        input.find("草稿") != std::string::npos ||
+        ToLowerAscii(input).find("draft") != std::string::npos;
+    if (likelyWorkflowPrompt)
+    {
+        const std::vector<std::string> quotedCandidates = CollectQuotedCandidates(input);
+        const std::vector<std::string> controlFragments = {
+            "调用 summarize",
+            "调用 humanizer",
+            "提取其中的",
+            "发送给",
+            "call summarize",
+            "call humanizer",
+            "imap-smtp-email",
+        };
+        for (const auto& candidate : quotedCandidates)
+        {
+            const std::string trimmed = TrimAsciiLocal(candidate);
+            if (trimmed.size() < 8)
+            {
+                continue;
+            }
+
+            if (ContainsAnyFragment(trimmed, controlFragments) ||
+                ContainsAnyFragment(ToLowerAscii(trimmed), controlFragments))
+            {
+                continue;
+            }
+
+            return trimmed;
+        }
+    }
+
+    return std::nullopt;
+}
+
+bool LooksLikeControlOnlyText(const std::string& value)
+{
+    if (value.empty())
+    {
+        return true;
+    }
+
+    const std::string lowered = ToLowerAscii(value);
+    const std::vector<std::string> englishControlFragments = {
+        "call summarize",
+        "call humanizer",
+        "call imap",
+        "call smtp",
+        "imap-smtp-email",
+        "content polishing",
+        "distribution flow",
+        "extract time",
+        "extract location",
+        "extract people",
+        "core request",
+        "summarize",
+        "humanizer",
+    };
+    const std::vector<std::string> chineseControlFragments = {
+        "内容润色分发流",
+        "去 ai 化",
+        "去AI化",
+        "提取其中的",
+        "提取时间",
+        "提取人物",
+        "提取地点",
+        "调用 summarize",
+        "调用 humanizer",
+        "重写",
+        "发送给",
+    };
+    const std::vector<std::string> businessSignalFragments = {
+        "next ",
+        "meeting room",
+        "boss",
+        "ui",
+        "下周",
+        "周三",
+        "会议室",
+        "老板",
+        "参加",
+        "需求",
+    };
+
+    const bool hasControlChinese = [&]() {
+        for (const auto& fragment : chineseControlFragments)
+        {
+            if (fragment.empty())
+            {
+                continue;
+            }
+            if (value.find(fragment) != std::string::npos)
+            {
+                return true;
+            }
+            if (lowered.find(ToLowerAscii(fragment)) != std::string::npos)
+            {
+                return true;
+            }
+        }
+        return false;
+    }();
+    const bool hasControl =
+        ContainsAnyFragment(lowered, englishControlFragments) || hasControlChinese;
+    const bool hasBusinessSignal = ContainsAnyFragment(lowered, businessSignalFragments) ||
+        ContainsAnyFragment(value, businessSignalFragments);
+
+    if (!hasControl)
+    {
+        return false;
+    }
+
+    if (hasBusinessSignal)
+    {
+        return false;
+    }
+
+    return value.size() < 80;
+}
+
+bool ShouldFallbackTrimmedDraftBlob(const std::string& trimmed)
+{
+    if (LooksLikeLikelyMeetingDraftBody(trimmed))
+    {
+        return true;
+    }
+    if (LooksLikeControlOnlyText(trimmed))
+    {
+        return false;
+    }
+    return Utf8MeetsSubstantiveDraftThreshold(trimmed);
+}
+
+int ScoreDraftCandidate(const std::string& value)
+{
+    if (value.empty())
+    {
+        return (std::numeric_limits<int>::min)();
+    }
+
+    int score = static_cast<int>((std::min<std::size_t>)(value.size(), 400));
+    const std::string lowered = ToLowerAscii(value);
+    const std::vector<std::string> timingSignals = {
+        "next ",
+        " at ",
+        "pm",
+        "am",
+        "下周",
+        "周",
+        "下午",
+        "点",
+    };
+    const std::vector<std::string> locationSignals = {
+        "meeting room",
+        " in ",
+        " at ",
+        "会议室",
+        "二楼",
+        "在",
+    };
+    const std::vector<std::string> peopleSignals = {
+        "boss",
+        "we",
+        "team",
+        "老板",
+        "我们",
+        "团队",
+    };
+
+    if (ContainsAnyFragment(lowered, timingSignals) || ContainsAnyFragment(value, timingSignals))
+    {
+        score += 120;
+    }
+    if (ContainsAnyFragment(lowered, locationSignals) || ContainsAnyFragment(value, locationSignals))
+    {
+        score += 120;
+    }
+    if (ContainsAnyFragment(lowered, peopleSignals) || ContainsAnyFragment(value, peopleSignals))
+    {
+        score += 80;
+    }
+    if (LooksLikeControlOnlyText(value))
+    {
+        score -= 1000;
+    }
+    return score;
+}
+
+std::string SelectLikelyDraftText(const std::string& value)
+{
+    std::vector<std::string> candidates = CollectQuotedCandidates(value);
+    if (const auto markerDraft = ExtractDraftByWorkflowMarkers(value);
+        markerDraft.has_value())
+    {
+        candidates.push_back(markerDraft.value());
+    }
+    const std::string trimmed = TrimAsciiLocal(value);
+    if (!trimmed.empty())
+    {
+        candidates.push_back(trimmed);
+    }
+
+    std::string bestCandidate;
+    int bestScore = (std::numeric_limits<int>::min)();
+    for (const auto& candidate : candidates)
+    {
+        const int score = ScoreDraftCandidate(candidate);
+        if (score > bestScore)
+        {
+            bestScore = score;
+            bestCandidate = candidate;
+        }
+    }
+
+    if (!trimmed.empty() && ContainsPolishOrchestrationNoise(trimmed))
+    {
+        int bestEmbeddedScore = (std::numeric_limits<int>::min)();
+        std::string bestEmbedded;
+        for (const auto& candidate : candidates)
+        {
+            if (candidate.empty() || candidate.size() + 6 >= trimmed.size())
+            {
+                continue;
+            }
+            if (trimmed.find(candidate) == std::string::npos)
+            {
+                continue;
+            }
+            const int embeddedScore = ScoreDraftCandidate(candidate);
+            if (embeddedScore > bestEmbeddedScore)
+            {
+                bestEmbeddedScore = embeddedScore;
+                bestEmbedded = candidate;
+            }
+        }
+        if (!bestEmbedded.empty() &&
+            !LooksLikeControlOnlyText(bestEmbedded) &&
+            bestEmbedded.size() >= 8 &&
+            bestEmbeddedScore + 500 >= bestScore)
+        {
+            bestCandidate = bestEmbedded;
+            bestScore = bestEmbeddedScore + 500;
+            EmitExtractionDiagnostic(
+                "draft_select",
+                "candidate_count=" + std::to_string(candidates.size()) +
+                " selected_len=" + std::to_string(bestCandidate.size()) +
+                " confidence=embedded_orchestration");
+        }
+    }
+
+    if (bestCandidate.empty())
+    {
+        EmitExtractionDiagnostic(
+            "draft_select",
+            "candidate_count=" + std::to_string(candidates.size()) +
+            " selected_len=0 confidence=none");
+        if (ShouldFallbackTrimmedDraftBlob(trimmed))
+        {
+            EmitExtractionDiagnostic(
+                "draft_select",
+                "candidate_count=" + std::to_string(candidates.size()) +
+                " selected_len=" + std::to_string(trimmed.size()) +
+                " confidence=fallback_trimmed_draft_blob");
+            return trimmed;
+        }
+        return {};
+    }
+
+    if (LooksLikeControlOnlyText(bestCandidate))
+    {
+        for (const auto& candidate : candidates)
+        {
+            if (!LooksLikeControlOnlyText(candidate) && candidate.size() >= 8)
+            {
+                EmitExtractionDiagnostic(
+                    "draft_select",
+                    "candidate_count=" + std::to_string(candidates.size()) +
+                    " selected_len=" + std::to_string(candidate.size()) +
+                    " confidence=high");
+                return candidate;
+            }
+        }
+        EmitExtractionDiagnostic(
+            "draft_select",
+            "candidate_count=" + std::to_string(candidates.size()) +
+            " selected_len=0 confidence=none");
+        if (ShouldFallbackTrimmedDraftBlob(trimmed))
+        {
+            EmitExtractionDiagnostic(
+                "draft_select",
+                "candidate_count=" + std::to_string(candidates.size()) +
+                " selected_len=" + std::to_string(trimmed.size()) +
+                " confidence=fallback_trimmed_draft_blob");
+            return trimmed;
+        }
+        return {};
+    }
+
+    if (bestCandidate.size() < 8)
+    {
+        for (const auto& candidate : candidates)
+        {
+            if (candidate.size() >= 8 && !LooksLikeControlOnlyText(candidate))
+            {
+                EmitExtractionDiagnostic(
+                    "draft_select",
+                    "candidate_count=" + std::to_string(candidates.size()) +
+                    " selected_len=" + std::to_string(candidate.size()) +
+                    " confidence=medium");
+                return candidate;
+            }
+        }
+        EmitExtractionDiagnostic(
+            "draft_select",
+            "candidate_count=" + std::to_string(candidates.size()) +
+            " selected_len=0 confidence=none");
+        if (ShouldFallbackTrimmedDraftBlob(trimmed))
+        {
+            EmitExtractionDiagnostic(
+                "draft_select",
+                "candidate_count=" + std::to_string(candidates.size()) +
+                " selected_len=" + std::to_string(trimmed.size()) +
+                " confidence=fallback_trimmed_draft_blob");
+            return trimmed;
+        }
+        return {};
+    }
+
+    EmitExtractionDiagnostic(
+        "draft_select",
+        "candidate_count=" + std::to_string(candidates.size()) +
+        " selected_len=" + std::to_string(bestCandidate.size()) +
+        " confidence=high");
+    return bestCandidate;
+}
+
+std::optional<std::string> TryExtractTextFromJsonObject(
+    const nlohmann::json& params,
+    const int parseDepth = 0)
+{
+    if (parseDepth > 5)
+    {
+        return std::nullopt;
+    }
+
+    static const char* kKeys[] = {
+        "text",
+        "draft",
+        "content",
+        "message",
+        "input",
+        "body",
+        "prompt",
+        "source",
+        "query",
+        "instruction",
+        "instructions",
+        "user_message",
+        "userMessage",
+        "value",
+        "raw",
+        "description",
+        "markdown",
+        "user_input",
+        "userInput",
+        "output",
+        "transcript",
+    };
+
+    for (const auto* key : kKeys)
+    {
+        const auto it = params.find(key);
+        if (it == params.end())
+        {
+            continue;
+        }
+        if (!it->is_string() && !it->is_array() && !it->is_object())
+        {
+            continue;
+        }
+
+        const auto coerced = CoerceJsonValueToPlainText(*it);
+        if (!coerced.has_value())
+        {
+            continue;
+        }
+
+        std::string value = TrimAsciiLocal(*coerced);
+        if (value.empty())
+        {
+            continue;
+        }
+
+        if (parseDepth < 4 && value.size() >= 2 && value.front() == '{')
+        {
+            try
+            {
+                const nlohmann::json inner = nlohmann::json::parse(value);
+                if (inner.is_object())
+                {
+                    if (const auto nested = TryExtractTextFromJsonObject(inner, parseDepth + 1);
+                        nested.has_value())
+                    {
+                        return nested;
+                    }
+                }
+            }
+            catch (const nlohmann::json::parse_error&)
+            {
+            }
+            catch (const std::exception&)
+            {
+            }
+        }
+
+        const std::string selected = SelectLikelyDraftText(value);
+        if (!selected.empty())
+        {
+            return selected;
+        }
+    }
+
+    if (parseDepth == 0)
+    {
+        return TryExtractTextFromMessagesArray(params);
+    }
+
+    return std::nullopt;
+}
+
 } // namespace
 
 std::vector<ImapSmtpToolRuntimeSpec> BuildImapSmtpToolRuntimeSpecs()
@@ -176,7 +1473,50 @@ std::vector<ContentPolishingToolRuntimeSpec> BuildContentPolishingToolRuntimeSpe
 
 std::optional<std::string> ExtractTextArgument(const nlohmann::json& params)
 {
-    const char* kKeys[] = {
+    if (!params.is_object())
+    {
+        return std::nullopt;
+    }
+
+    if (const auto direct = TryExtractTextFromJsonObject(params);
+        direct.has_value())
+    {
+        return direct;
+    }
+
+    static const char* kNested[] = {
+        "arguments",
+        "args",
+        "payload",
+        "parameters",
+        "tool_arguments",
+        "toolArguments",
+        "params",
+    };
+
+    for (const auto* nest : kNested)
+    {
+        const auto it = params.find(nest);
+        if (it == params.end() || !it->is_object())
+        {
+            continue;
+        }
+
+        if (const auto nested = TryExtractTextFromJsonObject(it.value(), 1);
+            nested.has_value())
+        {
+            return nested;
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::optional<std::string> ExtractHumanizerTextArgument(const nlohmann::json& params)
+{
+    const char* kPreferredKeys[] = {
+        "summary",
+        "extracted",
         "text",
         "draft",
         "content",
@@ -184,7 +1524,7 @@ std::optional<std::string> ExtractTextArgument(const nlohmann::json& params)
         "input",
     };
 
-    for (const auto* key : kKeys)
+    for (const auto* key : kPreferredKeys)
     {
         const auto it = params.find(key);
         if (it == params.end() || !it->is_string())
@@ -199,39 +1539,140 @@ std::optional<std::string> ExtractTextArgument(const nlohmann::json& params)
         }
     }
 
+    // Backward-compatible object-to-text assembly path.
+    const std::string timeValue = TrimAsciiLocal(
+        params.value("time", std::string()));
+    const std::string locationValue = TrimAsciiLocal(
+        params.value("location", std::string()));
+    const std::string peopleValue = TrimAsciiLocal(
+        params.value("people", std::string()));
+    const std::string requestValue = TrimAsciiLocal(
+        params.value("coreRequest", params.value("core_request", std::string())));
+
+    if (!timeValue.empty() ||
+        !locationValue.empty() ||
+        !peopleValue.empty() ||
+        !requestValue.empty())
+    {
+        return
+            "Time: " + (timeValue.empty() ? "not found" : timeValue) + "\n" +
+            "Location: " + (locationValue.empty() ? "not found" : locationValue) + "\n" +
+            "People: " + (peopleValue.empty() ? "not found" : peopleValue) + "\n" +
+            "Core request: " + (requestValue.empty() ? "not found" : requestValue);
+    }
+
     return std::nullopt;
 }
 
 std::string BuildSummarizeExtractOutput(const std::string& text)
 {
-   std::string timeValue = "not found";
+    const bool multilingualEnabled = IsMultilingualExtractorEnabled();
+    const bool multilingualFallbackByContent =
+        !multilingualEnabled && ContainsLikelyCjkMarkers(text);
+    const bool effectiveMultilingualEnabled =
+        multilingualEnabled || multilingualFallbackByContent;
+    std::string timeValue = "not found";
     std::string locationValue = "not found";
     std::string peopleValue = "not found";
     std::string requestValue = TrimAsciiLocal(text);
 
-    static const std::regex kTimeRegex(
+    static const std::regex kTimeRegexEnglish(
         R"(((next\s+\w+)\s+at\s+\d{1,2}[:.]\d{2}\s*(?:AM|PM|am|pm)?))",
         std::regex_constants::icase);
+#ifndef _WIN32
+    // "下周三" is 下周 + 三, not 下周 + 周三 — optional week prefix must not consume 周 before 周几.
+    static const std::regex kTimeRegexChineseWeekday(
+        R"(((?:(?:下周|本周|这周)[一二三四五六日天]|周[一二三四五六日天])(?:上午|下午|晚上|中午)?(?:\d{1,2}|[一二三四五六七八九十两]+)点(?:半|[0-5]?\d分?)?))");
+    static const std::regex kTimeRegexChineseRelativeDay(
+        R"(((?:今天|明天|后天)(?:上午|下午|晚上|中午)?(?:\d{1,2}|[一二三四五六七八九十两]+)点(?:半|[0-5]?\d分?)?))");
+    static const std::regex kTimeRegexClock(
+        R"(((?:上午|下午|晚上|中午)?\d{1,2}[:：]\d{2}))");
+#endif
+
     std::smatch match;
-    if (std::regex_search(text, match, kTimeRegex) && match.size() >= 2)
+    if (std::regex_search(text, match, kTimeRegexEnglish) && match.size() >= 2)
     {
         timeValue = match[1].str();
     }
+    else if (effectiveMultilingualEnabled)
+    {
+#ifdef _WIN32
+        std::string wideTimeMatch;
+        if (TryMatchChineseTimeUtf8Wide(text, wideTimeMatch))
+        {
+            timeValue = wideTimeMatch;
+        }
+#else
+        if (std::regex_search(text, match, kTimeRegexChineseWeekday) &&
+            match.size() >= 2)
+        {
+            timeValue = match[1].str();
+        }
+        else if (std::regex_search(text, match, kTimeRegexChineseRelativeDay) &&
+            match.size() >= 2)
+        {
+            timeValue = match[1].str();
+        }
+        else if (std::regex_search(text, match, kTimeRegexClock) &&
+            match.size() >= 2)
+        {
+            timeValue = match[1].str();
+        }
+#endif
+    }
 
-    static const std::regex kLocationRegex(
+    static const std::regex kLocationRegexEnglish(
         R"((?:in|at)\s+the\s+([^,.;\n]+(?:meeting\s+room|room)))",
         std::regex_constants::icase);
-    if (std::regex_search(text, match, kLocationRegex) && match.size() >= 2)
+#ifndef _WIN32
+    static const std::regex kLocationRegexChinese(
+        R"((?:在)\s*([^，。,；;\n]{1,40}(?:会议室|会议厅|room)))");
+#endif
+
+    if (std::regex_search(text, match, kLocationRegexEnglish) && match.size() >= 2)
     {
         locationValue = TrimAsciiLocal(match[1].str());
     }
+    else if (effectiveMultilingualEnabled)
+    {
+#ifdef _WIN32
+        std::string wideLocationMatch;
+        if (TryMatchChineseLocationUtf8Wide(text, wideLocationMatch))
+        {
+            locationValue = TrimAsciiLocal(wideLocationMatch);
+        }
+#else
+        if (std::regex_search(text, match, kLocationRegexChinese) &&
+            match.size() >= 2)
+        {
+            locationValue = TrimAsciiLocal(match[1].str());
+        }
+#endif
+        std::string nearRoom;
+        if (TryMeetingRoomNearSuffixUtf8(text, nearRoom))
+        {
+            if (IsMissingSummaryField(locationValue) ||
+                nearRoom.size() + 6 <= locationValue.size())
+            {
+                locationValue = nearRoom;
+            }
+        }
+    }
 
     std::vector<std::string> people;
-    if (ToLowerAscii(text).find("boss") != std::string::npos)
+    const std::string lowered = ToLowerAscii(text);
+    if (lowered.find("boss") != std::string::npos ||
+        (effectiveMultilingualEnabled &&
+            (text.find("老板") != std::string::npos ||
+                text.find("领导") != std::string::npos)))
     {
         people.push_back("boss");
     }
-    if (ToLowerAscii(text).find("we") != std::string::npos)
+    if (lowered.find("we") != std::string::npos ||
+        lowered.find("team") != std::string::npos ||
+        (effectiveMultilingualEnabled &&
+            (text.find("我们") != std::string::npos ||
+                text.find("团队") != std::string::npos)))
     {
         people.push_back("requester team");
     }
@@ -253,6 +1694,24 @@ std::string BuildSummarizeExtractOutput(const std::string& text)
         requestValue = requestValue.substr(0, 220) + "...";
     }
 
+    const int missingCritical = CountMissingCriticalSummaryFields(
+        timeValue,
+        locationValue,
+        peopleValue);
+    const std::string confidence =
+        missingCritical >= 2 ? "low" : (missingCritical == 1 ? "medium" : "high");
+    EmitExtractionDiagnostic(
+        "structured_extract",
+        "multilingual_enabled=" + std::string(multilingualEnabled ? "true" : "false") +
+        " multilingual_effective=" +
+        std::string(effectiveMultilingualEnabled ? "true" : "false") +
+        " multilingual_fallback_by_content=" +
+        std::string(multilingualFallbackByContent ? "true" : "false") +
+        " confidence=" + confidence +
+        " time_missing=" + std::string(IsMissingSummaryField(timeValue) ? "true" : "false") +
+        " location_missing=" + std::string(IsMissingSummaryField(locationValue) ? "true" : "false") +
+        " people_missing=" + std::string(IsMissingSummaryField(peopleValue) ? "true" : "false"));
+
     return
         "Time: " + timeValue + "\n" +
         "Location: " + locationValue + "\n" +
@@ -262,10 +1721,126 @@ std::string BuildSummarizeExtractOutput(const std::string& text)
 
 std::string BuildHumanizerRewriteOutput(const std::string& text)
 {
-    const std::string timeValue = ExtractSummaryField(text, "Time");
-    const std::string locationValue = ExtractSummaryField(text, "Location");
-    const std::string peopleValue = ExtractSummaryField(text, "People");
-    const std::string requestValue = ExtractSummaryField(text, "Core request");
+    std::string timeValue = ExtractSummaryField(text, "Time");
+    std::string locationValue = ExtractSummaryField(text, "Location");
+    std::string peopleValue = ExtractSummaryField(text, "People");
+    std::string requestValue = ExtractSummaryField(text, "Core request");
+
+    // If the input is not a structured summary payload, recover from raw text first.
+    if (timeValue.empty() &&
+        locationValue.empty() &&
+        peopleValue.empty() &&
+        requestValue.empty())
+    {
+        const std::string candidate = SelectLikelyDraftText(text);
+        const std::string recoverySource = candidate.empty() ? TrimAsciiLocal(text) : candidate;
+        if (!recoverySource.empty())
+        {
+            const std::string recoveredSummary =
+                BuildSummarizeExtractOutput(recoverySource);
+            timeValue = ExtractSummaryField(recoveredSummary, "Time");
+            locationValue = ExtractSummaryField(recoveredSummary, "Location");
+            peopleValue = ExtractSummaryField(recoveredSummary, "People");
+            requestValue = ExtractSummaryField(recoveredSummary, "Core request");
+        }
+    }
+
+    // Phase 3: low-confidence summaries attempt deterministic recovery.
+    int missingCritical = CountMissingCriticalSummaryFields(
+        timeValue,
+        locationValue,
+        peopleValue);
+    if (missingCritical >= 2 &&
+        !requestValue.empty() &&
+        !LooksLikeInstructionArtifact(requestValue))
+    {
+        const std::string recoveredSummary = BuildSummarizeExtractOutput(requestValue);
+        const std::string recoveredTime = ExtractSummaryField(recoveredSummary, "Time");
+        const std::string recoveredLocation = ExtractSummaryField(recoveredSummary, "Location");
+        const std::string recoveredPeople = ExtractSummaryField(recoveredSummary, "People");
+
+        if (IsMissingSummaryField(timeValue) && !IsMissingSummaryField(recoveredTime))
+        {
+            timeValue = recoveredTime;
+        }
+        if (IsMissingSummaryField(locationValue) &&
+            !IsMissingSummaryField(recoveredLocation))
+        {
+            locationValue = recoveredLocation;
+        }
+        if (IsMissingSummaryField(peopleValue) && !IsMissingSummaryField(recoveredPeople))
+        {
+            peopleValue = recoveredPeople;
+        }
+    }
+
+    // Secondary recovery: re-extract from full input text for workflow-wrapped prompts.
+    missingCritical = CountMissingCriticalSummaryFields(
+        timeValue,
+        locationValue,
+        peopleValue);
+    if (missingCritical >= 2)
+    {
+        const std::string candidate = SelectLikelyDraftText(text);
+        const std::string recoverySource =
+            candidate.empty() ? TrimAsciiLocal(text) : candidate;
+        // Do not gate recovery on LooksLikeInstructionArtifact(recoverySource): orchestration
+        // prompts legitimately contain both control verbs and business draft content.
+        if (!recoverySource.empty() && !LooksLikeControlOnlyText(recoverySource))
+        {
+            const std::string recoveredSummary =
+                BuildSummarizeExtractOutput(recoverySource);
+            const std::string recoveredTime = ExtractSummaryField(recoveredSummary, "Time");
+            const std::string recoveredLocation = ExtractSummaryField(recoveredSummary, "Location");
+            const std::string recoveredPeople = ExtractSummaryField(recoveredSummary, "People");
+            const std::string recoveredRequest = ExtractSummaryField(recoveredSummary, "Core request");
+
+            if (IsMissingSummaryField(timeValue) && !IsMissingSummaryField(recoveredTime))
+            {
+                timeValue = recoveredTime;
+            }
+            if (IsMissingSummaryField(locationValue) &&
+                !IsMissingSummaryField(recoveredLocation))
+            {
+                locationValue = recoveredLocation;
+            }
+            if (IsMissingSummaryField(peopleValue) &&
+                !IsMissingSummaryField(recoveredPeople))
+            {
+                peopleValue = recoveredPeople;
+            }
+            if (requestValue.empty() && !LooksLikeInstructionArtifact(recoveredRequest))
+            {
+                requestValue = recoveredRequest;
+            }
+        }
+    }
+
+    if (LooksLikeInstructionArtifact(requestValue))
+    {
+        requestValue.clear();
+    }
+
+    missingCritical = CountMissingCriticalSummaryFields(
+        timeValue,
+        locationValue,
+        peopleValue);
+    if (missingCritical >= 2)
+    {
+        std::string body;
+        body += "Dear Sir,\n\n";
+        body += "Thank you for the draft. The extracted meeting details are currently incomplete and need confirmation before sending.\n\n";
+        body += "Please confirm the following:\n";
+        body += "- Time\n";
+        body += "- Location\n";
+        body += "- Participants\n";
+        if (!requestValue.empty())
+        {
+            body += "\nDraft intent: " + requestValue + "\n";
+        }
+        body += "\nBest regards,";
+        return body;
+    }
 
     std::string body;
     body += "Dear Sir,\n\n";

@@ -276,6 +276,11 @@ namespace blazeclaw::gateway::json {
 		return trimmed.size() >= 2 && trimmed.front() == '{' && trimmed.back() == '}';
 	}
 
+	bool IsJsonArrayShape(const std::string& value) {
+		const std::string trimmed = Trim(value);
+		return trimmed.size() >= 2 && trimmed.front() == '[' && trimmed.back() == ']';
+	}
+
 	bool IsFieldValueType(const std::string& text, const std::string& fieldName, char expectedFirstChar) {
 		const std::string token = "\"" + fieldName + "\"";
 		const std::size_t tokenPos = text.find(token);

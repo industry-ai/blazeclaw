@@ -59,4 +59,40 @@ std::optional<std::string> RequestParamsView::GetObject(std::string_view fieldNa
 	return raw;
 }
 
+std::optional<std::string> RequestParamsView::GetToolExecuteArgsJson() const {
+	if (!m_paramsJson.has_value()) {
+		return std::nullopt;
+	}
+
+	const std::string& root = m_paramsJson.value();
+	const std::string argumentAliases[] = {
+		"args",
+		"arguments",
+		"parameters",
+		"tool_arguments",
+		"toolArguments",
+		"payload",
+	};
+
+	for (const std::string& fieldName : argumentAliases) {
+		std::string raw;
+		if (json::FindRawField(root, fieldName, raw)) {
+			const std::string trimmed = json::Trim(raw);
+			if (json::IsJsonObjectShape(trimmed) || json::IsJsonArrayShape(trimmed)) {
+				return trimmed;
+			}
+		}
+
+		std::string decoded;
+		if (json::FindStringField(root, fieldName, decoded)) {
+			const std::string trimmed = json::Trim(decoded);
+			if (json::IsJsonObjectShape(trimmed) || json::IsJsonArrayShape(trimmed)) {
+				return trimmed;
+			}
+		}
+	}
+
+	return std::nullopt;
+}
+
 } // namespace blazeclaw::gateway

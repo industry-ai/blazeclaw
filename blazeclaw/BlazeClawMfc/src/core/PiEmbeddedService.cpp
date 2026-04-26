@@ -145,27 +145,49 @@ namespace blazeclaw::core {
 			return false;
 		}
 
-		std::optional<std::string> TryExtractQuoted(const std::string& message) {
-			static const std::regex kChineseSingleQuote(R"(‘([^’]{1,600})’)");
-			static const std::regex kAsciiSingleQuote(R"('([^']{1,600})')");
-			static const std::regex kAsciiDoubleQuote("\"([^\"]{1,600})\"");
-			static const std::regex kChineseDoubleQuote(R"(“([^”]{1,600})”)");
-
+		std::optional<std::string> TryMatchQuotedSpan(
+			const std::string& message,
+			const std::regex& pattern,
+			const std::size_t minInnerBytes) {
 			std::smatch match;
-			if (std::regex_search(message, match, kChineseSingleQuote) && match.size() >= 2) {
-				return match[1].str();
+			if (!std::regex_search(message, match, pattern) || match.size() < 2) {
+				return std::nullopt;
 			}
 
-			if (std::regex_search(message, match, kAsciiSingleQuote) && match.size() >= 2) {
-				return match[1].str();
+			const std::string inner = match[1].str();
+			if (inner.size() < minInnerBytes) {
+				return std::nullopt;
 			}
 
-			if (std::regex_search(message, match, kChineseDoubleQuote) && match.size() >= 2) {
-				return match[1].str();
-			}
+			return inner;
+		}
 
-			if (std::regex_search(message, match, kAsciiDoubleQuote) && match.size() >= 2) {
-				return match[1].str();
+		// Prefer CJK / book-style spans before ASCII "..." so we do not capture a tiny English
+		// fragment (e.g. "OK") as the sole "query" for summarize.extract / humanizer while the
+		// real draft lives later in the same user message.
+		std::optional<std::string> TryExtractQuoted(const std::string& message) {
+			static const std::regex kChineseBookQuote(R"(「([^」]{1,12000})」)");
+			static const std::regex kChineseDoubleQuote(R"(“([^”]{1,12000})”)");
+			static const std::regex kChineseSingleQuote(R"(‘([^’]{1,12000})’)");
+			static const std::regex kAsciiDoubleQuote("\"([^\"]{1,12000})\"");
+			static const std::regex kAsciiSingleQuote(R"('([^']{1,12000})')");
+
+			constexpr std::size_t kMinInnerBytes = 24;
+
+			if (const auto book = TryMatchQuotedSpan(message, kChineseBookQuote, kMinInnerBytes)) {
+				return book;
+			}
+			if (const auto cnDouble = TryMatchQuotedSpan(message, kChineseDoubleQuote, kMinInnerBytes)) {
+				return cnDouble;
+			}
+			if (const auto cnSingle = TryMatchQuotedSpan(message, kChineseSingleQuote, kMinInnerBytes)) {
+				return cnSingle;
+			}
+			if (const auto asciiDouble = TryMatchQuotedSpan(message, kAsciiDoubleQuote, kMinInnerBytes)) {
+				return asciiDouble;
+			}
+			if (const auto asciiSingle = TryMatchQuotedSpan(message, kAsciiSingleQuote, kMinInnerBytes)) {
+				return asciiSingle;
 			}
 
 			return std::nullopt;

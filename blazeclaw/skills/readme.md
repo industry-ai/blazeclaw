@@ -269,6 +269,18 @@ inputs for downstream rewrite and distribution flows.
 **Current state:**
 - Includes local runtime adapter `summarize.extract` for deterministic ordered
   content-polishing chains.
+- Input-selection hardening is enabled for content-polishing prompts:
+  - quote-aware draft capture,
+  - control-fragment de-prioritization/rejection,
+  - deterministic invalid-arguments feedback when no usable draft segment exists.
+- Multilingual structured extraction is enabled for content-polishing summarize:
+  - bilingual time extraction (English + Chinese weekday/relative/clock),
+  - bilingual location extraction (English + Chinese meeting room forms),
+  - bilingual people extraction (`boss/we/team` + `老板/领导/我们/团队`).
+- Rollout and diagnostics controls:
+  - `BLAZECLAW_SUMMARIZE_MULTILINGUAL_EXTRACTOR_ENABLED` (default enabled),
+  - `BLAZECLAW_SUMMARIZE_EXTRACTION_DIAGNOSTICS_ENABLED` (default disabled),
+  - diagnostics emit candidate-count/selection-length/confidence signals only (no raw draft payload).
 
 **Key files:**
 - `summarize/SKILL.md`
@@ -289,6 +301,11 @@ Wikipedia AI-writing-pattern guidance.
 **Current state:**
 - Includes local runtime adapter `humanizer.rewrite` for deterministic ordered
   content-polishing chains.
+- Phase 3 guardrails are enabled in `humanizer.rewrite`:
+  - low-confidence summary detection (`Time/Location/People` missing),
+  - recovery attempt from `Core request`,
+  - instruction-artifact sanitization for `Purpose`,
+  - confirmation scaffold output when details remain incomplete.
 
 ---
 

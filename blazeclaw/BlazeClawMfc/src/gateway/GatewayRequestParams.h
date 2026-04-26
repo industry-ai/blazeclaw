@@ -21,6 +21,11 @@ public:
 	[[nodiscard]] std::optional<std::size_t> GetSize(std::string_view fieldName) const;
 	[[nodiscard]] std::optional<std::string> GetObject(std::string_view fieldName) const;
 
+	/// Resolves `args` for `gateway.tools.call.execute` whether the wire payload uses an inline
+	/// JSON object/array or a JSON **string** whose decoded content is an object/array (common
+	/// when clients stringify tool arguments once).
+	[[nodiscard]] std::optional<std::string> GetToolExecuteArgsJson() const;
+
 private:
 	const std::optional<std::string>& m_paramsJson;
 };
