@@ -680,7 +680,7 @@ TEST_CASE(
 	const ResponseFrame validDependencies{
 		.id = "health-deps-ok",
 		.ok = true,
-		.payloadJson = "{\"probes\":[{\"key\":\"deepseek\",\"state\":\"healthy\",\"reasonCode\":\"ok\",\"reasonMessage\":\"ready\",\"checkedAtEpochMs\":1,\"expiresAtEpochMs\":2}],\"count\":1,\"generatedAtEpochMs\":1,\"ttlMs\":1000}",
+		.payloadJson = "{\"probes\":[{\"key\":\"deepseek\",\"state\":\"healthy\",\"reasonCode\":\"ok\",\"reasonMessage\":\"ready\",\"checkedAtEpochMs\":1,\"expiresAtEpochMs\":2}],\"count\":1,\"generatedAtEpochMs\":1,\"ttlMs\":1000,\"requiredToolsReady\":true,\"requiredTools\":[{\"id\":\"baidu-search.search.web\",\"present\":true,\"enabled\":true}],\"missingRequiredTools\":[],\"diagnosticStatus\":\"ready\"}",
 		.error = std::nullopt,
 	};
 	REQUIRE(
@@ -692,7 +692,7 @@ TEST_CASE(
 	const ResponseFrame invalidDependencies{
 		.id = "health-deps-bad",
 		.ok = true,
-		.payloadJson = "{\"probes\":[{\"key\":\"deepseek\",\"state\":\"healthy\"}],\"count\":1,\"generatedAtEpochMs\":1,\"ttlMs\":1000}",
+		.payloadJson = "{\"probes\":[{\"key\":\"deepseek\",\"state\":\"healthy\"}],\"count\":1,\"generatedAtEpochMs\":1,\"ttlMs\":1000,\"requiredToolsReady\":\"true\"}",
 		.error = std::nullopt,
 	};
 	REQUIRE_FALSE(

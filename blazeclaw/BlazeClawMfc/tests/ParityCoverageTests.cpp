@@ -3721,6 +3721,371 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Parity coverage: ordered baidu-search prompt executes and emits task deltas",
+	"[parity][chat][ordered][baidu][e2e]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+
+	host.RegisterRuntimeToolV2(
+		ToolCatalogEntry{
+			.id = "baidu-search.search.web",
+			.label = "Baidu Web Search",
+			.category = "search",
+			.enabled = true,
+		},
+		[](const ToolExecuteRequestV2& request) {
+			ToolExecuteResultV2 result;
+			result.tool = request.tool;
+			result.executed = true;
+			result.status = "ok";
+			result.result =
+				R"([{"title":"Solid-state batteries","link":"https://example.com/ssb"}])";
+			return result;
+		});
+
+	host.SetChatRuntimeCallback(
+		[&host](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			const auto searchResult = host.ExecuteRuntimeToolV2(
+				ToolExecuteRequestV2{
+					.tool = "baidu-search.search.web",
+					.argsJson = std::string("{\"query\":\"2024 commercialization progress of solid-state batteries\"}"),
+					.correlationId = request.runId + "-baidu",
+					.deadlineEpochMs = std::nullopt,
+				});
+
+			result.ok = searchResult.executed && searchResult.status == "ok";
+			result.assistantText = "Baidu search completed.";
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "tool_result",
+					.toolName = "baidu-search.search.web",
+					.resultJson = searchResult.result,
+					.status = searchResult.status,
+					.stepLabel = "baidu_search",
+				},
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 1,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.resultJson = result.assistantText,
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-ordered-baidu-only-1",
+			.method = "chat.send",
+			.paramsJson = std::string(
+				"{\"sessionKey\":\"main\","
+				"\"message\":\"Call `baidu-search` to search for 2024 commercialization progress of solid-state batteries\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+	REQUIRE(sendResponse.payloadJson->find("\"backendErrorCode\":null") !=
+		std::string::npos);
+
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		sendResponse.payloadJson.value(),
+		"runId",
+		runId));
+	REQUIRE_FALSE(runId.empty());
+
+	const auto deltasResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-ordered-baidu-only-1-deltas",
+			.method = "gateway.runtime.taskDeltas.get",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+
+	REQUIRE(deltasResponse.ok);
+	REQUIRE(deltasResponse.payloadJson.has_value());
+	REQUIRE(deltasResponse.payloadJson->find("\"toolName\":\"baidu-search.search.web\"") !=
+		std::string::npos);
+	REQUIRE(deltasResponse.payloadJson->find("\"phase\":\"final\"") !=
+		std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Parity coverage: ordered baidu-search + web-browsing fails fast when web-browsing runtime is unavailable",
+	"[parity][chat][ordered][web-browsing][failfast]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+
+	host.RegisterRuntimeToolV2(
+		ToolCatalogEntry{
+			.id = "baidu-search.search.web",
+			.label = "Baidu Web Search",
+			.category = "search",
+			.enabled = true,
+		},
+		[](const ToolExecuteRequestV2& request) {
+			ToolExecuteResultV2 result;
+			result.tool = request.tool;
+			result.executed = true;
+			result.status = "ok";
+			result.result = "[]";
+			return result;
+		});
+
+	// Simulate missing web-browsing runtime by overriding target as disabled.
+	host.RegisterRuntimeToolV2(
+		ToolCatalogEntry{
+			.id = "web_browsing.search.web",
+			.label = "Web Browsing Search",
+			.category = "search",
+			.enabled = false,
+		},
+		[](const ToolExecuteRequestV2& request) {
+			ToolExecuteResultV2 result;
+			result.tool = request.tool;
+			result.executed = false;
+			result.status = "disabled";
+			result.errorCode = "tool_disabled";
+			result.errorMessage = "tool disabled for fail-fast regression";
+			return result;
+		});
+
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest&) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "callback should not run when strict preflight blocks";
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-ordered-missing-web-1",
+			.method = "chat.send",
+			.paramsJson = std::string(
+				"{\"sessionKey\":\"main\","
+				"\"message\":\"Please strictly execute in order: 1. Call `baidu-search` to search for 2024 commercialization progress of solid-state batteries; 2. Call `web-browsing` to deeply read the main text of the top two search results and extract core data;\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		sendResponse.payloadJson.value(),
+		"runId",
+		runId));
+	REQUIRE_FALSE(runId.empty());
+
+	const auto deltasResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-ordered-missing-web-1-deltas",
+			.method = "gateway.runtime.taskDeltas.get",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+
+	REQUIRE(deltasResponse.ok);
+	REQUIRE(deltasResponse.payloadJson.has_value());
+	REQUIRE(
+		deltasResponse.payloadJson->find("\"phase\":\"final\"") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Parity coverage: ordered baidu-search + web-browsing executes with both tools and emits task deltas",
+	"[parity][chat][ordered][web-browsing][success]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+
+	host.RegisterRuntimeToolV2(
+		ToolCatalogEntry{
+			.id = "baidu-search.search.web",
+			.label = "Baidu Web Search",
+			.category = "search",
+			.enabled = true,
+		},
+		[](const ToolExecuteRequestV2& request) {
+			ToolExecuteResultV2 result;
+			result.tool = request.tool;
+			result.executed = true;
+			result.status = "ok";
+			result.result =
+				R"([{"title":"Result 1","link":"https://example.com/a"},{"title":"Result 2","link":"https://example.com/b"}])";
+			return result;
+		});
+
+	host.RegisterRuntimeToolV2(
+		ToolCatalogEntry{
+			.id = "web_browsing.search.web",
+			.label = "Web Browsing Search",
+			.category = "search",
+			.enabled = true,
+		},
+		[](const ToolExecuteRequestV2& request) {
+			ToolExecuteResultV2 result;
+			result.tool = request.tool;
+			result.executed = true;
+			result.status = "ok";
+			result.result =
+				R"([{"title":"Top page 1","link":"https://example.com/a","snippet":"core data a"},{"title":"Top page 2","link":"https://example.com/b","snippet":"core data b"}])";
+			return result;
+		});
+
+	host.SetChatRuntimeCallback(
+		[&host](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+
+			const auto baiduResult = host.ExecuteRuntimeToolV2(
+				ToolExecuteRequestV2{
+					.tool = "baidu-search.search.web",
+					.argsJson = std::string("{\"query\":\"2024 commercialization progress of solid-state batteries\"}"),
+					.correlationId = request.runId + "-baidu",
+					.deadlineEpochMs = std::nullopt,
+				});
+
+			const auto webResult = host.ExecuteRuntimeToolV2(
+				ToolExecuteRequestV2{
+					.tool = "web_browsing.search.web",
+					.argsJson = std::string("{\"query\":\"solid-state battery commercialization 2024 top analysis\"}"),
+					.correlationId = request.runId + "-web",
+					.deadlineEpochMs = std::nullopt,
+				});
+
+			result.ok =
+				baiduResult.executed && baiduResult.status == "ok" &&
+				webResult.executed && webResult.status == "ok";
+			result.assistantText =
+				"Ordered workflow completed: baidu-search then web-browsing.";
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "tool_result",
+					.toolName = "baidu-search.search.web",
+					.resultJson = baiduResult.result,
+					.status = baiduResult.status,
+					.stepLabel = "ordered-step-1",
+				},
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 1,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "tool_result",
+					.toolName = "web_browsing.search.web",
+					.resultJson = webResult.result,
+					.status = webResult.status,
+					.stepLabel = "ordered-step-2",
+				},
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 2,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.resultJson = result.assistantText,
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-ordered-web-success-1",
+			.method = "chat.send",
+			.paramsJson = std::string(
+				"{\"sessionKey\":\"main\","
+				"\"message\":\"Please strictly execute in order: 1. Call `baidu-search` to search for 2024 commercialization progress of solid-state batteries; 2. Call `web-browsing` to deeply read the main text of the top two search results and extract core data;\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+	REQUIRE(sendResponse.payloadJson->find("\"backendErrorCode\":null") !=
+		std::string::npos);
+
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		sendResponse.payloadJson.value(),
+		"runId",
+		runId));
+	REQUIRE_FALSE(runId.empty());
+
+	const auto deltasResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-ordered-web-success-1-deltas",
+			.method = "gateway.runtime.taskDeltas.get",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+
+	REQUIRE(deltasResponse.ok);
+	REQUIRE(deltasResponse.payloadJson.has_value());
+	REQUIRE(
+		deltasResponse.payloadJson->find("\"phase\":\"preflight\"") != std::string::npos);
+	REQUIRE(
+		deltasResponse.payloadJson->find("\"toolName\":\"baidu-search.search.web\"") !=
+		std::string::npos);
+	REQUIRE(
+		deltasResponse.payloadJson->find("\"toolName\":\"web_browsing.search.web\"") !=
+		std::string::npos);
+	REQUIRE(
+		deltasResponse.payloadJson->find("\"phase\":\"final\"") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Parity coverage: runtime dependencies health reports required tool registration diagnostics",
+	"[parity][runtime][health][required-tools]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+
+	const auto depsResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "runtime-health-dependencies-required-tools-1",
+			.method = "gateway.runtime.health.dependencies",
+			.paramsJson = std::nullopt,
+		});
+
+	REQUIRE(depsResponse.ok);
+	REQUIRE(depsResponse.payloadJson.has_value());
+	REQUIRE(
+		depsResponse.payloadJson->find("\"requiredToolsReady\":") != std::string::npos);
+	REQUIRE(
+		depsResponse.payloadJson->find("\"requiredTools\":") != std::string::npos);
+	REQUIRE(
+		depsResponse.payloadJson->find("\"missingRequiredTools\":") !=
+		std::string::npos);
+	REQUIRE(
+		depsResponse.payloadJson->find("\"diagnosticStatus\":") !=
+		std::string::npos);
+	REQUIRE(
+		depsResponse.payloadJson->find("baidu-search.search.web") != std::string::npos);
+	REQUIRE(
+		depsResponse.payloadJson->find("web_browsing.search.web") != std::string::npos);
+	REQUIRE(
+		depsResponse.payloadJson->find("web_browsing.fetch.content") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
 	"S4 parity: generated catalog + channel + plugin RPC surface invariants on full gateway runtime",
 	"[parity][s4][method-surface]")
 {

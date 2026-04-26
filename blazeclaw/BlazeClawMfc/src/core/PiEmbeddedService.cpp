@@ -265,6 +265,19 @@ namespace blazeclaw::core {
 			return std::nullopt;
 		}
 
+		std::optional<std::string> TryExtractHttpUrl(const std::string& text) {
+			static const std::regex kHttpRegex(
+				R"((https?://[^\s\)\]\>"]+))",
+				std::regex_constants::icase);
+
+			std::smatch match;
+			if (std::regex_search(text, match, kHttpRegex) && match.size() >= 2) {
+				return match[1].str();
+			}
+
+			return std::nullopt;
+		}
+
 		std::optional<std::string> FindToolByAlias(
 			const std::vector<blazeclaw::gateway::ToolCatalogEntry>& tools,
 			const std::vector<EmbeddedToolBinding>& bindings,
@@ -347,7 +360,18 @@ namespace blazeclaw::core {
 			const std::string& lastOutput) {
 			nlohmann::json args = nlohmann::json::object();
 			const std::string loweredTool = ToLowerCopy(toolName);
-			if (loweredTool.find("search") != std::string::npos ||
+			if (loweredTool.find("fetch") != std::string::npos &&
+				loweredTool.find("content") != std::string::npos) {
+				const auto urlFromLastOutput = TryExtractHttpUrl(lastOutput);
+				const auto urlFromMessage = TryExtractHttpUrl(runMessage);
+				if (urlFromLastOutput.has_value()) {
+					args["url"] = urlFromLastOutput.value();
+				}
+				else if (urlFromMessage.has_value()) {
+					args["url"] = urlFromMessage.value();
+				}
+			}
+			else if (loweredTool.find("search") != std::string::npos ||
 				loweredTool.find("brave") != std::string::npos) {
 				const std::string sourceQuery = query.empty() ? runMessage : query;
 				const auto compactQuery = DeriveCompactSearchQuery(sourceQuery);

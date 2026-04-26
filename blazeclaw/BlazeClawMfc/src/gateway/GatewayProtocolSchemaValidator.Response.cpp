@@ -662,30 +662,66 @@ namespace blazeclaw::gateway::protocol {
 				return true;
 			} },
 		  { "gateway.runtime.health.dependencies", [&]() {
-				if (!IsFieldValueType(payload, "probes", '[') ||
-					!IsFieldNumber(payload, "count") ||
-					!IsFieldNumber(payload, "generatedAtEpochMs") ||
-					!IsFieldNumber(payload, "ttlMs")) {
-					SetIssue(
-						issue,
-						"schema_invalid_response",
-						"`gateway.runtime.health.dependencies` requires `probes`, `count`, `generatedAtEpochMs`, and `ttlMs` fields.");
-					return false;
-				}
+			  if (!IsFieldValueType(payload, "probes", '[') ||
+				  !IsFieldNumber(payload, "count") ||
+				  !IsFieldNumber(payload, "generatedAtEpochMs") ||
+				  !IsFieldNumber(payload, "ttlMs")) {
+				  SetIssue(
+					  issue,
+					  "schema_invalid_response",
+					  "`gateway.runtime.health.dependencies` requires `probes`, `count`, `generatedAtEpochMs`, and `ttlMs` fields.");
+				  return false;
+			  }
 
-				if (!IsArrayFieldExplicitlyEmpty(payload, "probes") &&
-					!PayloadContainsAllFieldTokens(
-						payload,
-						{ "key", "state", "reasonCode", "reasonMessage", "checkedAtEpochMs", "expiresAtEpochMs" })) {
-					SetIssue(
-						issue,
-						"schema_invalid_response",
-						"`gateway.runtime.health.dependencies` probe entries require key/state/reason/timestamp fields.");
-					return false;
-				}
+			  if (!IsArrayFieldExplicitlyEmpty(payload, "probes") &&
+				  !PayloadContainsAllFieldTokens(
+					  payload,
+					  { "key", "state", "reasonCode", "reasonMessage", "checkedAtEpochMs", "expiresAtEpochMs" })) {
+				  SetIssue(
+					  issue,
+					  "schema_invalid_response",
+					  "`gateway.runtime.health.dependencies` probe entries require key/state/reason/timestamp fields.");
+				  return false;
+			  }
 
-				return true;
-			} },
+			  if (HasFieldToken(payload, "requiredToolsReady") &&
+				  !IsFieldBoolean(payload, "requiredToolsReady")) {
+				  SetIssue(
+					  issue,
+					  "schema_invalid_response",
+					  "`gateway.runtime.health.dependencies` optional `requiredToolsReady` must be boolean.");
+				  return false;
+			  }
+
+			  if (HasFieldToken(payload, "requiredTools") &&
+				  !IsFieldValueType(payload, "requiredTools", '[')) {
+				  SetIssue(
+					  issue,
+					  "schema_invalid_response",
+					  "`gateway.runtime.health.dependencies` optional `requiredTools` must be an array.");
+				  return false;
+			  }
+
+			  if (HasFieldToken(payload, "missingRequiredTools") &&
+				  !IsFieldValueType(payload, "missingRequiredTools", '[')) {
+				  SetIssue(
+					  issue,
+					  "schema_invalid_response",
+					  "`gateway.runtime.health.dependencies` optional `missingRequiredTools` must be an array.");
+				  return false;
+			  }
+
+			  if (HasFieldToken(payload, "diagnosticStatus") &&
+				  !IsFieldValueType(payload, "diagnosticStatus", '"')) {
+				  SetIssue(
+					  issue,
+					  "schema_invalid_response",
+					  "`gateway.runtime.health.dependencies` optional `diagnosticStatus` must be string.");
+				  return false;
+			  }
+
+			  return true;
+		  } },
 			{ "gateway.runtime.health.readiness", [&]() {
 				if (!IsFieldBoolean(payload, "ready") ||
 					!IsFieldBoolean(payload, "running") ||

@@ -10,4 +10,6 @@
 
 ## Validation
 
-- Manual browse/fetch scenarios from chat; update when automated parity tests are added.
+- Added automated parity/e2e regression coverage for ordered workflow behavior in `BlazeClawMfc/tests/ParityCoverageTests.cpp`.
+- Runtime required-tool registration diagnostics are validated via parity and lifecycle capability tests.
+- Manual chat replay remains recommended for environment-specific network behavior and skill log inspection.
