@@ -1117,9 +1117,10 @@ namespace blazeclaw::gateway {
 							const std::string strictMissingErrorCode =
 								"ordered_sequence_target_unavailable";
 							const std::string strictMissingErrorMessage =
-								"Ordered execution preflight failed. Missing targets: " +
+								"Ordered execution preflight failed. Missing or unavailable targets: " +
 								RuntimeSequencingPolicy::JoinOrderedTargets(
-									orderedSequencePreflight.missingTargets);
+									orderedSequencePreflight.missingTargets) +
+								". Remediation: verify skill runtime manifests/scripts are present and enabled for each target (for example, web-browsing -> web_browsing.search.web/web_browsing.fetch.content).";
 
 							RunLoopBudget orderedRecoveryBudget;
 							const RecoveryOutcome orderedRecoveryOutcome =
@@ -1138,7 +1139,9 @@ namespace blazeclaw::gateway {
 							EmitTelemetryEvent(
 								"gateway.chat.policy.decision",
 								std::string("{\"runId\":") + JsonString(runId) +
-								",\"layer\":\"ordered_preflight\",\"reason\":\"strict_missing\",\"recoveryRoute\":" +
+								",\"layer\":\"ordered_preflight\",\"reason\":\"strict_missing\",\"missingTargets\":" +
+								SerializeStringArrayLocal(orderedSequencePreflight.missingTargets) +
+								",\"recoveryRoute\":" +
 								JsonString(orderedRecoveryOutcome.recoveryRoute) + "}");
 
 							if (orderedRecoveryOutcome.recovered ||
@@ -1160,14 +1163,14 @@ namespace blazeclaw::gateway {
 								backendErrorMessage = strictMissingErrorMessage;
 								assistantText =
 									(preferChineseResponse
-										? (Utf8LiteralLocal(u8"\u65E0\u6CD5\u6267\u884C\u6709\u5E8F\u5DE5\u4F5C\u6D41\uFF0C\u4EE5\u4E0B\u6B65\u9AA4\u76EE\u6807\u4E0D\u53EF\u7528\uFF1A") +
+										? (Utf8LiteralLocal(u8"\u65E0\u6CD5\u6267\u884C\u6709\u5E8F\u5DE5\u4F5C\u6D41\uFF0C\u4EE5\u4E0B\u6B65\u9AA4\u76EE\u6807\u7F3A\u5931\u6216\u4E0D\u53EF\u7528\uFF1A") +
 											RuntimeSequencingPolicy::JoinOrderedTargets(
 												orderedSequencePreflight.missingTargets) +
-											Utf8LiteralLocal(u8"\u3002\u8BF7\u5B89\u88C5\u6216\u542F\u7528\u8FD9\u4E9B\u6280\u80FD/\u5DE5\u5177\u540E\u91CD\u8BD5\u3002"))
-										: (std::string("Unable to execute the ordered workflow because required step targets are unavailable: ") +
+											Utf8LiteralLocal(u8"\u3002\u8BF7\u68C0\u67E5\u76F8\u5E94\u6280\u80FD\u7684 runtime manifest/scripts \u662F\u5426\u5B58\u5728\u4E14\u5DF2\u542F\u7528\uFF0C\u4F8B\u5982 web-browsing \u5BF9\u5E94 web_browsing.search.web/web_browsing.fetch.content\u3002"))
+										: (std::string("Unable to execute the ordered workflow because required step targets are missing or unavailable: ") +
 											RuntimeSequencingPolicy::JoinOrderedTargets(
 												orderedSequencePreflight.missingTargets) +
-											". Please install or enable these skills/tools and retry."));
+											". Remediation: verify runtime manifests/scripts exist and tools are enabled (for example, web-browsing -> web_browsing.search.web/web_browsing.fetch.content)."));
 
 								auto blockedTaskDeltas =
 									RuntimeSequencingPolicy::BuildOrderedPreflightTaskDeltas(
@@ -2218,329 +2221,329 @@ namespace blazeclaw::gateway {
 				"chat.events.poll",
 				[&host, fastSyntheticRevealMode, syntheticRevealMaxDurationMs](
 					const protocol::RequestFrame& request) {
-					const std::string requestedSessionKey =
-						ExtractStringParam(request.paramsJson, "sessionKey");
-					const std::string sessionKey =
-						requestedSessionKey.empty() ? "main" : requestedSessionKey;
-					const std::size_t requestedLimit =
-						ExtractSizeParam(request.paramsJson, "limit").value_or(20);
-					const std::size_t limit =
-						(std::max)(std::size_t{ 1 }, (std::min)(requestedLimit, std::size_t{ 100 }));
+						const std::string requestedSessionKey =
+							ExtractStringParam(request.paramsJson, "sessionKey");
+						const std::string sessionKey =
+							requestedSessionKey.empty() ? "main" : requestedSessionKey;
+						const std::size_t requestedLimit =
+							ExtractSizeParam(request.paramsJson, "limit").value_or(20);
+						const std::size_t limit =
+							(std::max)(std::size_t{ 1 }, (std::min)(requestedLimit, std::size_t{ 100 }));
 
-					const std::uint64_t nowMs = CurrentEpochMsLocal();
-					auto queueIt = host.m_chatEventsBySession.find(sessionKey);
-					auto& queue = host.m_chatEventsBySession[sessionKey];
+						const std::uint64_t nowMs = CurrentEpochMsLocal();
+						auto queueIt = host.m_chatEventsBySession.find(sessionKey);
+						auto& queue = host.m_chatEventsBySession[sessionKey];
 
-					auto runIt = std::find_if(
-						host.m_chatRunsById.begin(),
-						host.m_chatRunsById.end(),
-						[&](auto& pair) {
-							return pair.second.sessionKey == sessionKey && pair.second.active;
-						});
+						auto runIt = std::find_if(
+							host.m_chatRunsById.begin(),
+							host.m_chatRunsById.end(),
+							[&](auto& pair) {
+								return pair.second.sessionKey == sessionKey && pair.second.active;
+							});
 
-					if (runIt != host.m_chatRunsById.end()) {
-						auto& run = runIt->second;
-						const bool pushLifecycleEnabledForRun =
-							run.pushLifecycleRequested;
-						const bool silentAssistantReply =
-							RuntimeTranscriptGuard::IsSilentReplyText(run.assistantText);
-						const bool enoughTimeElapsed =
-							run.lastEmitMs == 0 || (nowMs - run.lastEmitMs) >= 180;
+						if (runIt != host.m_chatRunsById.end()) {
+							auto& run = runIt->second;
+							const bool pushLifecycleEnabledForRun =
+								run.pushLifecycleRequested;
+							const bool silentAssistantReply =
+								RuntimeTranscriptGuard::IsSilentReplyText(run.assistantText);
+							const bool enoughTimeElapsed =
+								run.lastEmitMs == 0 || (nowMs - run.lastEmitMs) >= 180;
 
-						if (!run.failed && !silentAssistantReply &&
-							((run.providerDeltaCursor < run.providerDeltas.size()) ||
-								(run.streamCursor < run.assistantText.size())) &&
-							enoughTimeElapsed) {
-							ChatControlPlaneService controlPlaneService;
-							const auto pollDecision =
-								ChatControlPlaneService::SendControlDecision{
-									.route = ChatRoutePolicy::Output{
-										.originatingChannel = run.originatingChannel,
-										.originatingTo = run.originatingTo,
-										.explicitDeliverRoute = run.explicitDeliverRoute,
-										.reasonCode = "persisted_run_state",
-									},
-									.toolEvents = ToolEventRecipientPolicy::Output{
-										.wantsToolEvents = run.toolEventsAllowed,
-										.reasonCode = "persisted_run_state",
-									},
-							};
+							if (!run.failed && !silentAssistantReply &&
+								((run.providerDeltaCursor < run.providerDeltas.size()) ||
+									(run.streamCursor < run.assistantText.size())) &&
+								enoughTimeElapsed) {
+								ChatControlPlaneService controlPlaneService;
+								const auto pollDecision =
+									ChatControlPlaneService::SendControlDecision{
+										.route = ChatRoutePolicy::Output{
+											.originatingChannel = run.originatingChannel,
+											.originatingTo = run.originatingTo,
+											.explicitDeliverRoute = run.explicitDeliverRoute,
+											.reasonCode = "persisted_run_state",
+										},
+										.toolEvents = ToolEventRecipientPolicy::Output{
+											.wantsToolEvents = run.toolEventsAllowed,
+											.reasonCode = "persisted_run_state",
+										},
+								};
 
-							std::string deltaText;
-							std::string pollDeltaMessage;
-							std::string revealMode = "provider_stream";
-							std::size_t revealChunkSize = 0;
-							if (run.providerDeltaCursor < run.providerDeltas.size()) {
-								while (run.providerDeltaCursor < run.providerDeltas.size()) {
-									deltaText = run.providerDeltas[run.providerDeltaCursor];
-									++run.providerDeltaCursor;
-									if (controlPlaneService.ShouldPublishToolDelta(
-										deltaText,
-										pollDecision)) {
-										if (deltaText.find("tools.execute") == 0) {
-											const auto recipientsIt =
-												host.m_chatToolEventRecipientsByRun.find(run.runId);
-											if (recipientsIt == host.m_chatToolEventRecipientsByRun.end() ||
-												recipientsIt->second.empty()) {
-												deltaText.clear();
-												continue;
+								std::string deltaText;
+								std::string pollDeltaMessage;
+								std::string revealMode = "provider_stream";
+								std::size_t revealChunkSize = 0;
+								if (run.providerDeltaCursor < run.providerDeltas.size()) {
+									while (run.providerDeltaCursor < run.providerDeltas.size()) {
+										deltaText = run.providerDeltas[run.providerDeltaCursor];
+										++run.providerDeltaCursor;
+										if (controlPlaneService.ShouldPublishToolDelta(
+											deltaText,
+											pollDecision)) {
+											if (deltaText.find("tools.execute") == 0) {
+												const auto recipientsIt =
+													host.m_chatToolEventRecipientsByRun.find(run.runId);
+												if (recipientsIt == host.m_chatToolEventRecipientsByRun.end() ||
+													recipientsIt->second.empty()) {
+													deltaText.clear();
+													continue;
+												}
 											}
+											break;
 										}
-										break;
+										deltaText.clear();
 									}
-									deltaText.clear();
+									if (deltaText.empty()) {
+										goto skip_poll_delta_emit;
+									}
+									run.streamCursor = deltaText.size();
+									revealChunkSize = deltaText.size();
 								}
-								if (deltaText.empty()) {
-									goto skip_poll_delta_emit;
+								else {
+									revealMode = "synthetic_incremental_diff";
+									const std::size_t previousCursor = run.streamCursor;
+									const std::size_t totalSize = run.assistantText.size();
+									const std::size_t remaining = totalSize > previousCursor
+										? (totalSize - previousCursor)
+										: 0;
+									std::size_t chunkSize = 8;
+									if (fastSyntheticRevealMode) {
+										if (totalSize > 6000) {
+											chunkSize = 256;
+										}
+										else if (totalSize > 2000) {
+											chunkSize = 128;
+										}
+										else if (totalSize > 800) {
+											chunkSize = 64;
+										}
+										else {
+											chunkSize = 32;
+										}
+									}
+									const bool revealTimedOut =
+										nowMs > run.startedAtMs &&
+										(nowMs - run.startedAtMs) >= syntheticRevealMaxDurationMs;
+									if (revealTimedOut && remaining > 0) {
+										chunkSize = remaining;
+										revealMode = "direct_full";
+									}
+									const std::size_t nextCursor =
+										(std::min)(totalSize, previousCursor + chunkSize);
+									run.streamCursor = nextCursor;
+									revealChunkSize = nextCursor > previousCursor
+										? (nextCursor - previousCursor)
+										: 0;
+									deltaText = run.assistantText.substr(
+										previousCursor,
+										nextCursor > previousCursor ? (nextCursor - previousCursor) : 0);
 								}
-								run.streamCursor = deltaText.size();
-								revealChunkSize = deltaText.size();
-							}
-							else {
-								revealMode = "synthetic_incremental_diff";
-								const std::size_t previousCursor = run.streamCursor;
-								const std::size_t totalSize = run.assistantText.size();
-								const std::size_t remaining = totalSize > previousCursor
-									? (totalSize - previousCursor)
-									: 0;
-								std::size_t chunkSize = 8;
-								if (fastSyntheticRevealMode) {
-									if (totalSize > 6000) {
-										chunkSize = 256;
-									}
-									else if (totalSize > 2000) {
-										chunkSize = 128;
-									}
-									else if (totalSize > 800) {
-										chunkSize = 64;
-									}
-									else {
-										chunkSize = 32;
-									}
+
+								run.lastEmitMs = nowMs;
+								pollDeltaMessage = BuildAssistantDeltaMessageJson(deltaText);
+								EmitTelemetryEvent(
+									"gateway.chat.poll.reveal.mode",
+									std::string("{\"runId\":") +
+									JsonString(run.runId) +
+									",\"sessionKey\":" +
+									JsonString(run.sessionKey) +
+									",\"revealMode\":" +
+									JsonString(revealMode) +
+									",\"assistantTextBytes\":" +
+									std::to_string(run.assistantText.size()) +
+									",\"streamCursor\":" +
+									std::to_string(run.streamCursor) +
+									",\"pollRevealChunkSize\":" +
+									std::to_string(revealChunkSize) +
+									"}");
+
+								PushEventWithRetentionLimit(queue, GatewayHost::ChatEventState{
+									   .runId = run.runId,
+									   .sessionKey = run.sessionKey,
+									   .state = "delta",
+									   .messageJson = pollDeltaMessage,
+									   .errorMessage = std::nullopt,
+									   .timestampMs = nowMs,
+									});
+								if (pushLifecycleEnabledForRun) {
+									EmitPushLifecycleEvent(
+										*host.RuntimeContext().transport,
+										*host.RuntimeContext().eventFanout,
+										GatewayEventFanoutService::ChatLifecycleEvent{
+											.runId = run.runId,
+											.sessionKey = run.sessionKey,
+											.state = "delta",
+											.messageJson = pollDeltaMessage,
+											.errorMessage = std::nullopt,
+											.timestampMs = nowMs,
+										},
+										host.m_chatPushEventSeq);
 								}
-								const bool revealTimedOut =
-									nowMs > run.startedAtMs &&
-									(nowMs - run.startedAtMs) >= syntheticRevealMaxDurationMs;
-								if (revealTimedOut && remaining > 0) {
-									chunkSize = remaining;
-									revealMode = "direct_full";
-								}
-								const std::size_t nextCursor =
-									(std::min)(totalSize, previousCursor + chunkSize);
-								run.streamCursor = nextCursor;
-								revealChunkSize = nextCursor > previousCursor
-									? (nextCursor - previousCursor)
-									: 0;
-								deltaText = run.assistantText.substr(
-									previousCursor,
-									nextCursor > previousCursor ? (nextCursor - previousCursor) : 0);
+								EmitDeepSeekGatewayDiagnostic(
+									"event.enqueue",
+									std::string("state=delta runId=") +
+									run.runId +
+									" session=" +
+									run.sessionKey +
+									" queueSize=" +
+									std::to_string(queue.size()));
+							skip_poll_delta_emit:;
 							}
 
-							run.lastEmitMs = nowMs;
-							pollDeltaMessage = BuildAssistantDeltaMessageJson(deltaText);
-							EmitTelemetryEvent(
-								"gateway.chat.poll.reveal.mode",
-								std::string("{\"runId\":") +
-								JsonString(run.runId) +
-								",\"sessionKey\":" +
-								JsonString(run.sessionKey) +
-								",\"revealMode\":" +
-								JsonString(revealMode) +
-								",\"assistantTextBytes\":" +
-								std::to_string(run.assistantText.size()) +
-								",\"streamCursor\":" +
-								std::to_string(run.streamCursor) +
-								",\"pollRevealChunkSize\":" +
-								std::to_string(revealChunkSize) +
-								"}");
+							const bool streamCompleted =
+								run.failed ||
+								silentAssistantReply ||
+								(run.providerDeltaCursor >= run.providerDeltas.size() &&
+									run.streamCursor >= run.assistantText.size());
+							if (streamCompleted && !run.terminalEventEnqueued) {
+								const std::optional<std::string> terminalMessage =
+									run.failed || silentAssistantReply
+									? std::nullopt
+									: std::optional<std::string>(
+										BuildAssistantFinalMessageJson(run.assistantText, nowMs));
+								const std::optional<std::string> terminalError =
+									run.failed
+									? std::optional<std::string>(run.errorMessage.empty()
+										? "chat error"
+										: run.errorMessage)
+									: std::nullopt;
 
-							PushEventWithRetentionLimit(queue, GatewayHost::ChatEventState{
-								   .runId = run.runId,
-								   .sessionKey = run.sessionKey,
-								   .state = "delta",
-								   .messageJson = pollDeltaMessage,
-								   .errorMessage = std::nullopt,
-								   .timestampMs = nowMs,
-								});
-							if (pushLifecycleEnabledForRun) {
-								EmitPushLifecycleEvent(
-									*host.RuntimeContext().transport,
-									*host.RuntimeContext().eventFanout,
-									GatewayEventFanoutService::ChatLifecycleEvent{
-										.runId = run.runId,
-										.sessionKey = run.sessionKey,
-										.state = "delta",
-										.messageJson = pollDeltaMessage,
-										.errorMessage = std::nullopt,
-										.timestampMs = nowMs,
-									},
-									host.m_chatPushEventSeq);
+								PushEventWithRetentionLimit(queue, GatewayHost::ChatEventState{
+									   .runId = run.runId,
+									   .sessionKey = run.sessionKey,
+									   .state = run.failed ? "error" : "final",
+									   .messageJson = terminalMessage,
+									   .errorMessage = terminalError,
+									   .timestampMs = nowMs,
+									});
+								if (pushLifecycleEnabledForRun) {
+									EmitPushLifecycleEvent(
+										*host.RuntimeContext().transport,
+										*host.RuntimeContext().eventFanout,
+										GatewayEventFanoutService::ChatLifecycleEvent{
+											.runId = run.runId,
+											.sessionKey = run.sessionKey,
+											.state = run.failed ? "error" : "final",
+											.messageJson = terminalMessage,
+											.errorMessage = terminalError,
+											.timestampMs = nowMs,
+										},
+										host.m_chatPushEventSeq);
+								}
+								GatewayLifecycleEventEmitter::EmitLifecycle(
+									run.failed ? "error" : "final",
+									run.runId,
+									run.sessionKey,
+									nowMs,
+									terminalError);
+								run.terminalEventEnqueued = true;
+								host.RuntimeContext().transportRecipientRegistry->MarkRunFinalized(
+									run.runId,
+									nowMs);
+								EmitDeepSeekGatewayDiagnostic(
+									"event.enqueue",
+									std::string("state=") +
+									(run.failed ? "error" : "final") +
+									" runId=" +
+									run.runId +
+									" session=" +
+									run.sessionKey +
+									" queueSize=" +
+									std::to_string(queue.size()));
+
+								run.active = false;
+								host.m_chatToolEventRecipientsByRun.erase(run.runId);
+								host.RuntimeContext().transportRecipientRegistry->PruneExpired(nowMs);
 							}
-							EmitDeepSeekGatewayDiagnostic(
-								"event.enqueue",
-								std::string("state=delta runId=") +
-								run.runId +
-								" session=" +
-								run.sessionKey +
-								" queueSize=" +
-								std::to_string(queue.size()));
-						skip_poll_delta_emit:;
 						}
 
-						const bool streamCompleted =
-							run.failed ||
-							silentAssistantReply ||
-							(run.providerDeltaCursor >= run.providerDeltas.size() &&
-								run.streamCursor >= run.assistantText.size());
-						if (streamCompleted && !run.terminalEventEnqueued) {
-							const std::optional<std::string> terminalMessage =
-								run.failed || silentAssistantReply
-								? std::nullopt
-								: std::optional<std::string>(
-									BuildAssistantFinalMessageJson(run.assistantText, nowMs));
-							const std::optional<std::string> terminalError =
-								run.failed
-								? std::optional<std::string>(run.errorMessage.empty()
-									? "chat error"
-									: run.errorMessage)
-								: std::nullopt;
+						std::string eventsJson = "[";
+						std::size_t emitted = 0;
+						std::unordered_set<std::string> terminalRunIdsSeenThisPoll;
+						if (!queue.empty()) {
+							while (emitted < limit && !queue.empty()) {
+								const GatewayHost::ChatEventState eventState = queue.front();
+								queue.pop_front();
 
-							PushEventWithRetentionLimit(queue, GatewayHost::ChatEventState{
-								   .runId = run.runId,
-								   .sessionKey = run.sessionKey,
-								   .state = run.failed ? "error" : "final",
-								   .messageJson = terminalMessage,
-								   .errorMessage = terminalError,
-								   .timestampMs = nowMs,
-								});
-							if (pushLifecycleEnabledForRun) {
-								EmitPushLifecycleEvent(
-									*host.RuntimeContext().transport,
-									*host.RuntimeContext().eventFanout,
-									GatewayEventFanoutService::ChatLifecycleEvent{
-										.runId = run.runId,
-										.sessionKey = run.sessionKey,
-										.state = run.failed ? "error" : "final",
-										.messageJson = terminalMessage,
-										.errorMessage = terminalError,
-										.timestampMs = nowMs,
-									},
-									host.m_chatPushEventSeq);
-							}
-							GatewayLifecycleEventEmitter::EmitLifecycle(
-								run.failed ? "error" : "final",
-								run.runId,
-								run.sessionKey,
-								nowMs,
-								terminalError);
-							run.terminalEventEnqueued = true;
-							host.RuntimeContext().transportRecipientRegistry->MarkRunFinalized(
-								run.runId,
-								nowMs);
-							EmitDeepSeekGatewayDiagnostic(
-								"event.enqueue",
-								std::string("state=") +
-								(run.failed ? "error" : "final") +
-								" runId=" +
-								run.runId +
-								" session=" +
-								run.sessionKey +
-								" queueSize=" +
-								std::to_string(queue.size()));
-
-							run.active = false;
-							host.m_chatToolEventRecipientsByRun.erase(run.runId);
-							host.RuntimeContext().transportRecipientRegistry->PruneExpired(nowMs);
-						}
-					}
-
-					std::string eventsJson = "[";
-					std::size_t emitted = 0;
-					std::unordered_set<std::string> terminalRunIdsSeenThisPoll;
-					if (!queue.empty()) {
-						while (emitted < limit && !queue.empty()) {
-							const GatewayHost::ChatEventState eventState = queue.front();
-							queue.pop_front();
-
-							if (IsTerminalChatState(eventState.state)) {
-								if (host.m_chatTerminalDeliveredRunIds.find(eventState.runId) != host.m_chatTerminalDeliveredRunIds.end() ||
-									terminalRunIdsSeenThisPoll.find(eventState.runId) != terminalRunIdsSeenThisPoll.end()) {
-									continue;
-								}
-
-								terminalRunIdsSeenThisPoll.insert(eventState.runId);
-								host.m_chatTerminalDeliveredRunIds.insert(eventState.runId);
-								if (host.m_chatTerminalDeliveredRunIds.size() > 1024) {
-									host.m_chatTerminalDeliveredRunIds.clear();
-								}
-							}
-
-							EmitDeepSeekGatewayDiagnostic(
-								"event.dequeue",
-								std::string("state=") +
-								eventState.state +
-								" runId=" +
-								eventState.runId +
-								" session=" +
-								eventState.sessionKey +
-								" emitted=" +
-								std::to_string(emitted + 1) +
-								" queueRemaining=" +
-								std::to_string(queue.size()));
-
-							if (emitted > 0) {
-								eventsJson += ",";
-							}
-
-							eventsJson += BuildChatEventJson(
-								eventState.runId,
-								eventState.sessionKey,
-								eventState.state,
-								eventState.messageJson,
-								eventState.errorMessage,
-								eventState.timestampMs);
-							++emitted;
-
-							if ((eventState.state == "final" ||
-								eventState.state == "aborted") &&
-								eventState.messageJson.has_value() &&
-								!IsSilentAssistantMessageJson(eventState.messageJson.value())) {
-								PushHistoryMessageIfNew(
-									host.m_chatHistoryBySession[sessionKey],
-									eventState.messageJson.value());
-							}
-
-							if (IsTerminalChatState(eventState.state)) {
-								const auto runIt = host.m_chatRunsById.find(eventState.runId);
-								if (runIt != host.m_chatRunsById.end()) {
-									if (!runIt->second.idempotencyKey.empty()) {
-										host.m_chatRunByIdempotency.erase(
-											runIt->second.idempotencyKey);
+								if (IsTerminalChatState(eventState.state)) {
+									if (host.m_chatTerminalDeliveredRunIds.find(eventState.runId) != host.m_chatTerminalDeliveredRunIds.end() ||
+										terminalRunIdsSeenThisPoll.find(eventState.runId) != terminalRunIdsSeenThisPoll.end()) {
+										continue;
 									}
 
-									host.m_chatRunsById.erase(runIt);
-									host.RuntimeContext().transportRecipientRegistry->PruneRun(eventState.runId);
+									terminalRunIdsSeenThisPoll.insert(eventState.runId);
+									host.m_chatTerminalDeliveredRunIds.insert(eventState.runId);
+									if (host.m_chatTerminalDeliveredRunIds.size() > 1024) {
+										host.m_chatTerminalDeliveredRunIds.clear();
+									}
+								}
+
+								EmitDeepSeekGatewayDiagnostic(
+									"event.dequeue",
+									std::string("state=") +
+									eventState.state +
+									" runId=" +
+									eventState.runId +
+									" session=" +
+									eventState.sessionKey +
+									" emitted=" +
+									std::to_string(emitted + 1) +
+									" queueRemaining=" +
+									std::to_string(queue.size()));
+
+								if (emitted > 0) {
+									eventsJson += ",";
+								}
+
+								eventsJson += BuildChatEventJson(
+									eventState.runId,
+									eventState.sessionKey,
+									eventState.state,
+									eventState.messageJson,
+									eventState.errorMessage,
+									eventState.timestampMs);
+								++emitted;
+
+								if ((eventState.state == "final" ||
+									eventState.state == "aborted") &&
+									eventState.messageJson.has_value() &&
+									!IsSilentAssistantMessageJson(eventState.messageJson.value())) {
+									PushHistoryMessageIfNew(
+										host.m_chatHistoryBySession[sessionKey],
+										eventState.messageJson.value());
+								}
+
+								if (IsTerminalChatState(eventState.state)) {
+									const auto runIt = host.m_chatRunsById.find(eventState.runId);
+									if (runIt != host.m_chatRunsById.end()) {
+										if (!runIt->second.idempotencyKey.empty()) {
+											host.m_chatRunByIdempotency.erase(
+												runIt->second.idempotencyKey);
+										}
+
+										host.m_chatRunsById.erase(runIt);
+										host.RuntimeContext().transportRecipientRegistry->PruneRun(eventState.runId);
+									}
 								}
 							}
 						}
-					}
 
-					eventsJson += "]";
-					EmitDeepSeekGatewayDiagnostic(
-						"event.dequeue",
-						std::string("poll complete session=") +
-						sessionKey +
-						" emitted=" +
-						std::to_string(emitted) +
-						" queueRemaining=" +
-						std::to_string(queue.size()));
-					return protocol::OkResponse(request, "{\"sessionKey\":\"" +
-						EscapeJsonLocal(sessionKey) +
-						"\",\"events\":" +
-						eventsJson +
-						",\"count\":" +
-						std::to_string(emitted) +
-						"}");
+						eventsJson += "]";
+						EmitDeepSeekGatewayDiagnostic(
+							"event.dequeue",
+							std::string("poll complete session=") +
+							sessionKey +
+							" emitted=" +
+							std::to_string(emitted) +
+							" queueRemaining=" +
+							std::to_string(queue.size()));
+						return protocol::OkResponse(request, "{\"sessionKey\":\"" +
+							EscapeJsonLocal(sessionKey) +
+							"\",\"events\":" +
+							eventsJson +
+							",\"count\":" +
+							std::to_string(emitted) +
+							"}");
 				});
 
 			host.RuntimeContext().dispatcher->Register(

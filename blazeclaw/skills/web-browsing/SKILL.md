@@ -26,12 +26,24 @@ Web search and readable page-content extraction for ordered workflows.
 - `web_browsing.search.web`
 - `web_browsing.fetch.content`
 
+Runtime implementation files:
+
+- `tool-manifest.json`
+- `tool-contracts.json`
+- `scripts/search_web.py`
+- `scripts/fetch_content.py`
+
 ## Argument Notes
 
 - `web_browsing.search.web` requires `query` and accepts optional `count`.
 - `web_browsing.fetch.content` requires `url` with `http://` or `https://`.
 
-If `url` is missing or invalid, runtime returns `invalid_arguments`.
+If arguments are missing or invalid, runtime returns explicit argument errors.
+
+## Orchestration Compatibility
+
+- Ordered prompts may reference either `web-browsing` or `web_browsing`.
+- Runtime sequencing resolver normalizes both forms to deterministic tool targets.
 
 ## Configuration UI
 

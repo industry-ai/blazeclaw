@@ -831,7 +831,10 @@ namespace blazeclaw::core {
 	EmbeddedRuntimeExecutionResult PiEmbeddedService::ExecuteRun(
 		const EmbeddedRuntimeExecutionRequest& request) {
 		EmbeddedRuntimeExecutionResult result;
-		if (!request.enableDynamicToolLoop) {
+		const bool hasOrderedAllowlistPlan =
+			request.enforceOrderedAllowlist &&
+			!request.orderedAllowedToolTargets.empty();
+		if (!request.enableDynamicToolLoop && !hasOrderedAllowlistPlan) {
 			result.accepted = true;
 			result.handled = false;
 			result.success = true;

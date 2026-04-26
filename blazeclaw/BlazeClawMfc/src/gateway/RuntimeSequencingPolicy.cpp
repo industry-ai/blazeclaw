@@ -285,7 +285,12 @@ namespace blazeclaw::gateway {
 			}
 
 			const std::string normalizedTarget = ToLowerCopyPolicy(target);
-			std::string normalizedNamespace = normalizedTarget;
+			const std::string normalizedTargetUnderscore = [&normalizedTarget]() {
+				std::string value = normalizedTarget;
+				std::replace(value.begin(), value.end(), '-', '_');
+				return value;
+				}();
+			std::string normalizedNamespace = normalizedTargetUnderscore;
 			std::replace(
 				normalizedNamespace.begin(),
 				normalizedNamespace.end(),
@@ -294,15 +299,23 @@ namespace blazeclaw::gateway {
 
 			for (const auto& tool : tools) {
 				const std::string toolIdLower = ToLowerCopyPolicy(tool.id);
-				if (toolIdLower == normalizedTarget) {
+				if (toolIdLower == normalizedTarget ||
+					toolIdLower == normalizedTargetUnderscore) {
 					return tool.id;
 				}
 
-				if (toolIdLower == normalizedTarget + ".search.web") {
+				if (toolIdLower == normalizedTarget + ".search.web" ||
+					toolIdLower == normalizedTargetUnderscore + ".search.web") {
 					return tool.id;
 				}
 
-				if (toolIdLower == normalizedTarget + ".smtp.send") {
+				if (toolIdLower == normalizedTarget + ".fetch.content" ||
+					toolIdLower == normalizedTargetUnderscore + ".fetch.content") {
+					return tool.id;
+				}
+
+				if (toolIdLower == normalizedTarget + ".smtp.send" ||
+					toolIdLower == normalizedTargetUnderscore + ".smtp.send") {
 					return tool.id;
 				}
 			}
@@ -431,7 +444,8 @@ namespace blazeclaw::gateway {
 				tools,
 				skillsCatalogEntries);
 			preflight.resolvedToolTargets.push_back(resolvedTool);
-			if (resolvedTool.empty()) {
+			if (resolvedTool.empty() ||
+				!IsResolvedRuntimeToolTarget(resolvedTool, tools)) {
 				preflight.missingTargets.push_back(target);
 			}
 		}
