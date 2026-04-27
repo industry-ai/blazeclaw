@@ -1735,7 +1735,10 @@ namespace blazeclaw::core {
 							result.errorCode =
 								loweredOutput.find("missing_dependency") != std::string::npos
 								? "missing_dependency"
-								: "execution_failed";
+								: (loweredOutput.find("invalid_args") != std::string::npos ||
+									loweredOutput.find("missing_input_artifact") != std::string::npos
+									? "invalid_args"
+									: "execution_failed");
 							result.errorMessage = process.output.empty()
 								? "nano-pdf execution failed"
 								: process.output;

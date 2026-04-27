@@ -328,6 +328,15 @@ Wikipedia AI-writing-pattern guidance.
     of preflight-resolved tool IDs and executes only those steps in order.
   - Ordered `task-delta` metadata persists both requested aliases and resolved
     tool IDs for plan/preflight visibility.
+  - For `nano-pdf` report workflows, canonical sequence is:
+    1. `nano_pdf.generate` (create draft PDF artifact),
+    2. `nano_pdf.edit` (apply page-level edits on existing draft).
+  - In strict ordered prompts, alias target `nano-pdf` now expands through
+    runtime sequencing policy to `nano_pdf.generate` (and optionally
+    `nano_pdf.edit` for professional formatting intent), instead of mapping
+    directly to edit-only execution.
+  - `nano_pdf.edit` now returns actionable argument guidance when `inputPath`
+    is missing and validates that `inputPath` points to an existing PDF.
   - Content polishing flow commands can resolve deterministic chains through
     local adapters and execute in order:
     - `summarize.extract`

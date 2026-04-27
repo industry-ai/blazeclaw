@@ -24,7 +24,7 @@ metadata:
 
 # nano-pdf
 
-Use `nano-pdf` to apply edits to a specific page in a PDF using a natural-language instruction.
+Use `nano-pdf` in a two-step flow: generate an initial report PDF, then apply page-level edits with natural-language instructions.
 
 ## Quick start
 
@@ -34,5 +34,9 @@ nano-pdf edit deck.pdf 1 "Change the title to 'Q3 Results' and fix the typo in t
 
 Notes:
 
+- For runtime workflows, use:
+  1. `nano_pdf.generate` to create a draft PDF artifact.
+  2. `nano_pdf.edit` to edit that existing draft using `inputPath`.
+- `nano_pdf.edit` is not a text-to-PDF generator. It requires an existing `inputPath`.
 - Page numbers are 0-based or 1-based depending on the tool’s version/config; if the result looks off by one, retry with the other.
 - Always sanity-check the output PDF before sending it out.

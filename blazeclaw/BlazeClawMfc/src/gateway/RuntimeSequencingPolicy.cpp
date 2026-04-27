@@ -118,6 +118,99 @@ namespace blazeclaw::gateway {
 			return {};
 		}
 
+		bool ContainsInsensitivePolicy(
+			const std::string& haystack,
+			const std::string& needle) {
+			if (needle.empty()) {
+				return true;
+			}
+
+			return ToLowerCopyPolicy(haystack).find(ToLowerCopyPolicy(needle)) !=
+				std::string::npos;
+		}
+
+		bool HasEnabledToolIdPolicy(
+			const std::vector<ToolCatalogEntry>& tools,
+			const std::string& toolId) {
+			const std::string lowered = ToLowerCopyPolicy(toolId);
+			for (const auto& tool : tools) {
+				if (!tool.enabled) {
+					continue;
+				}
+
+				if (ToLowerCopyPolicy(tool.id) == lowered) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		void ExpandNanoPdfOrderedTargetsIfNeeded(
+			const std::string& message,
+			const std::vector<ToolCatalogEntry>& tools,
+			std::vector<std::string>& orderedTargets) {
+			if (orderedTargets.empty()) {
+				return;
+			}
+
+			const bool hasGenerateTool = HasEnabledToolIdPolicy(
+				tools,
+				"nano_pdf.generate");
+			const bool hasEditTool = HasEnabledToolIdPolicy(
+				tools,
+				"nano_pdf.edit");
+			if (!hasGenerateTool) {
+				return;
+			}
+
+			const std::string loweredMessage = ToLowerCopyPolicy(message);
+			const bool hasExplicitInputPath =
+				loweredMessage.find("inputpath") != std::string::npos;
+			const bool wantsProfessionalPolish =
+				ContainsInsensitivePolicy(loweredMessage, "professional") ||
+				ContainsInsensitivePolicy(loweredMessage, "format") ||
+				ContainsInsensitivePolicy(loweredMessage, "polish");
+
+			std::vector<std::string> expanded;
+			expanded.reserve(orderedTargets.size() + 2);
+			bool mutated = false;
+			for (const auto& target : orderedTargets) {
+				const std::string normalized = NormalizeOrderedTargetToken(target);
+				const bool isNanoAlias =
+					normalized == "nano-pdf" || normalized == "nano_pdf";
+				const bool isDirectEdit =
+					normalized == "nano_pdf.edit" || normalized == "nano-pdf.edit";
+
+				if (isNanoAlias ||
+					(isDirectEdit && !hasExplicitInputPath)) {
+					if (std::find(
+						expanded.begin(),
+						expanded.end(),
+						std::string("nano_pdf.generate")) == expanded.end()) {
+						expanded.push_back("nano_pdf.generate");
+					}
+					if (hasEditTool &&
+						(wantsProfessionalPolish || isDirectEdit || isNanoAlias)) {
+						if (std::find(
+							expanded.begin(),
+							expanded.end(),
+							std::string("nano_pdf.edit")) == expanded.end()) {
+							expanded.push_back("nano_pdf.edit");
+						}
+					}
+					mutated = true;
+					continue;
+				}
+
+				expanded.push_back(target);
+			}
+
+			if (mutated) {
+				orderedTargets = std::move(expanded);
+			}
+		}
+
 		std::vector<std::string> ExtractOrderedTargetsFromPrompt(
 			const std::string& message,
 			std::vector<std::string>* explicitCallTargets) {
@@ -432,6 +525,12 @@ namespace blazeclaw::gateway {
 				preflight.enforced = preflight.orderedTargets.size() >= 2;
 			}
 		}
+
+		ExpandNanoPdfOrderedTargetsIfNeeded(
+			message,
+			tools,
+			preflight.orderedTargets);
+		preflight.enforced = preflight.orderedTargets.size() >= 2;
 
 		preflight.resolvedToolTargets.reserve(preflight.orderedTargets.size());
 		if (!preflight.enforced) {

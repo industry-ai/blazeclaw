@@ -74,6 +74,11 @@ TEST_CASE("Tool runtime spec builders expose expected tool ids", "[tools][runtim
 		nanoPdfSpecs.end(),
 		[](const auto& spec) { return spec.id == "nano_pdf.edit"; }) !=
 		nanoPdfSpecs.end());
+	REQUIRE(std::find_if(
+		nanoPdfSpecs.begin(),
+		nanoPdfSpecs.end(),
+		[](const auto& spec) { return spec.id == "nano_pdf.generate"; }) !=
+		nanoPdfSpecs.end());
 }
 
 TEST_CASE("Tool argument validators preserve error taxonomy", "[tools][runtime][validators]") {
@@ -135,6 +140,11 @@ TEST_CASE("Tool argument validators preserve error taxonomy", "[tools][runtime][
 		.label = "Nano PDF Edit",
 		.script = "scripts/nano_pdf_bridge.py",
 	};
+	const blazeclaw::core::tools::NanoPdfToolRuntimeSpec nanoPdfGenerate{
+		.id = "nano_pdf.generate",
+		.label = "Nano PDF Generate",
+		.script = "scripts/nano_pdf_bridge.py",
+	};
 	errorCode.clear();
 	errorMessage.clear();
 	const auto nanoPdfArgsMissingInstruction = blazeclaw::core::tools::BuildNanoPdfCliArgs(
@@ -151,10 +161,30 @@ TEST_CASE("Tool argument validators preserve error taxonomy", "[tools][runtime][
 
 	errorCode.clear();
 	errorMessage.clear();
+	const auto nanoPdfGenerateMissingContent = blazeclaw::core::tools::BuildNanoPdfCliArgs(
+		nanoPdfGenerate,
+		nlohmann::json::object({
+			{"outputPath", "draft.pdf"},
+			}),
+			errorCode,
+			errorMessage);
+	REQUIRE(!nanoPdfGenerateMissingContent.has_value());
+	REQUIRE(errorCode == "invalid_args");
+	REQUIRE(errorMessage == "content is required");
+
+	errorCode.clear();
+	errorMessage.clear();
+	const auto tempPdf = std::filesystem::temp_directory_path() /
+		("blazeclaw_nano_pdf_valid_" + std::to_string(std::rand()) + ".pdf");
+	{
+		std::ofstream out(tempPdf, std::ios::binary);
+		REQUIRE(out.is_open());
+		out << "%PDF-1.4\n";
+	}
 	const auto nanoPdfArgsValid = blazeclaw::core::tools::BuildNanoPdfCliArgs(
 		nanoPdfEdit,
 		nlohmann::json::object({
-			{"inputPath", "deck.pdf"},
+			{"inputPath", tempPdf.string()},
 			{"pageIndex", 0},
 			{"instruction", "Replace title text"},
 			{"outputPath", "deck.edited.pdf"},
@@ -165,6 +195,22 @@ TEST_CASE("Tool argument validators preserve error taxonomy", "[tools][runtime][
 	REQUIRE_FALSE(nanoPdfArgsValid->empty());
 	REQUIRE(errorCode.empty());
 	REQUIRE(errorMessage.empty());
+	std::filesystem::remove(tempPdf);
+
+	errorCode.clear();
+	errorMessage.clear();
+	const auto nanoPdfMissingArtifact = blazeclaw::core::tools::BuildNanoPdfCliArgs(
+		nanoPdfEdit,
+		nlohmann::json::object({
+			{"inputPath", "this_file_should_not_exist_12345.pdf"},
+			{"pageIndex", 0},
+			{"instruction", "Polish format"},
+			}),
+			errorCode,
+			errorMessage);
+	REQUIRE(!nanoPdfMissingArtifact.has_value());
+	REQUIRE(errorCode == "invalid_args");
+	REQUIRE(errorMessage.find("missing_input_artifact") != std::string::npos);
 }
 
 TEST_CASE("Content polishing extracts quoted draft over control instructions", "[tools][runtime][polish][extract]") {
@@ -523,6 +569,12 @@ TEST_CASE("Skill tool registry loads nano-pdf manifest as enabled runtime entry"
 			<< "  \"namespace\": \"nano_pdf\",\n"
 			<< "  \"tools\": [\n"
 			<< "    {\n"
+			<< "      \"id\": \"nano_pdf.generate\",\n"
+			<< "      \"label\": \"Nano PDF Generate\",\n"
+			<< "      \"category\": \"document\",\n"
+			<< "      \"enabled\": true\n"
+			<< "    },\n"
+			<< "    {\n"
 			<< "      \"id\": \"nano_pdf.edit\",\n"
 			<< "      \"label\": \"Nano PDF Edit\",\n"
 			<< "      \"category\": \"document\",\n"
@@ -546,6 +598,15 @@ TEST_CASE("Skill tool registry loads nano-pdf manifest as enabled runtime entry"
 	REQUIRE(it != tools.end());
 	REQUIRE(it->enabled);
 	REQUIRE(it->source == "skills.tool-manifest");
+	const auto generateIt = std::find_if(
+		tools.begin(),
+		tools.end(),
+		[](const blazeclaw::gateway::ToolCatalogEntry& tool) {
+			return tool.id == "nano_pdf.generate";
+		});
+	REQUIRE(generateIt != tools.end());
+	REQUIRE(generateIt->enabled);
+	REQUIRE(generateIt->source == "skills.tool-manifest");
 
 	std::filesystem::remove_all(root);
 }

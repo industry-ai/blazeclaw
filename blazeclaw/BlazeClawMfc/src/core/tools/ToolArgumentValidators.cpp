@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
 #include <limits>
 #include <regex>
 #include <sstream>
@@ -1487,6 +1488,7 @@ namespace blazeclaw::core::tools {
 	{
 		return {
 			{ "nano_pdf.edit", "Nano PDF Edit", "scripts/nano_pdf_bridge.py" },
+			{ "nano_pdf.generate", "Nano PDF Generate", "scripts/nano_pdf_bridge.py" },
 		};
 	}
 
@@ -2496,7 +2498,7 @@ namespace blazeclaw::core::tools {
 		errorCode.clear();
 		errorMessage.clear();
 
-		if (spec.id != "nano_pdf.edit")
+		if (spec.id != "nano_pdf.edit" && spec.id != "nano_pdf.generate")
 		{
 			errorCode = "unsupported_tool";
 			errorMessage = "unsupported nano-pdf tool";
@@ -2504,12 +2506,75 @@ namespace blazeclaw::core::tools {
 		}
 
 		nlohmann::json cliPayload = nlohmann::json::object();
+		cliPayload["toolId"] = spec.id;
+
+		if (spec.id == "nano_pdf.generate")
+		{
+			const auto contentIt = params.find("content");
+			if (contentIt == params.end() || !contentIt->is_string())
+			{
+				errorCode = "invalid_args";
+				errorMessage = "content is required";
+				return std::nullopt;
+			}
+
+			const std::string content = TrimAsciiForBraveSearch(contentIt->get<std::string>());
+			if (content.empty() || HasControlCharsForBraveSearch(content) || content.size() > 30000)
+			{
+				errorCode = "invalid_args";
+				errorMessage = "content failed safety validation";
+				return std::nullopt;
+			}
+			cliPayload["content"] = content;
+
+			const auto outputPathIt = params.find("outputPath");
+			if (outputPathIt == params.end() || !outputPathIt->is_string())
+			{
+				errorCode = "invalid_args";
+				errorMessage = "outputPath is required";
+				return std::nullopt;
+			}
+
+			const std::string outputPath = TrimAsciiForBraveSearch(outputPathIt->get<std::string>());
+			if (outputPath.empty() || HasControlCharsForBraveSearch(outputPath) ||
+				outputPath.size() > 4096)
+			{
+				errorCode = "invalid_args";
+				errorMessage = "outputPath failed safety validation";
+				return std::nullopt;
+			}
+			cliPayload["outputPath"] = outputPath;
+
+			if (const auto titleIt = params.find("title");
+				titleIt != params.end())
+			{
+				if (!titleIt->is_string())
+				{
+					errorCode = "invalid_args";
+					errorMessage = "title must be a string";
+					return std::nullopt;
+				}
+
+				const std::string title = TrimAsciiForBraveSearch(titleIt->get<std::string>());
+				if (title.empty() || HasControlCharsForBraveSearch(title) || title.size() > 200)
+				{
+					errorCode = "invalid_args";
+					errorMessage = "title failed safety validation";
+					return std::nullopt;
+				}
+				cliPayload["title"] = title;
+			}
+
+			return std::vector<std::string>{ cliPayload.dump() };
+		}
 
 		const auto inputPathIt = params.find("inputPath");
 		if (inputPathIt == params.end() || !inputPathIt->is_string())
 		{
 			errorCode = "invalid_args";
-			errorMessage = "inputPath is required";
+			errorMessage =
+				"inputPath is required; nano_pdf.edit only edits an existing PDF. "
+				"Create a draft PDF first and pass it via inputPath";
 			return std::nullopt;
 		}
 
@@ -2520,6 +2585,16 @@ namespace blazeclaw::core::tools {
 			errorMessage = "inputPath failed safety validation";
 			return std::nullopt;
 		}
+
+		const std::string loweredInputPath = ToLowerAscii(inputPath);
+		if (loweredInputPath.size() < 4 ||
+			loweredInputPath.rfind(".pdf") != loweredInputPath.size() - 4)
+		{
+			errorCode = "invalid_args";
+			errorMessage = "inputPath must target a .pdf file";
+			return std::nullopt;
+		}
+
 		cliPayload["inputPath"] = inputPath;
 
 		const auto pageIndexIt = params.find("pageIndex");
@@ -2578,6 +2653,19 @@ namespace blazeclaw::core::tools {
 				return std::nullopt;
 			}
 			cliPayload["outputPath"] = outputPath;
+		}
+
+		std::error_code fsError;
+		const std::filesystem::path inputFsPath(inputPath);
+		const bool exists = std::filesystem::exists(inputFsPath, fsError);
+		const bool isFile = exists && std::filesystem::is_regular_file(inputFsPath, fsError);
+		if (!exists || !isFile)
+		{
+			errorCode = "invalid_args";
+			errorMessage =
+				"missing_input_artifact: inputPath does not exist. "
+				"nano_pdf.edit requires an existing PDF file";
+			return std::nullopt;
 		}
 
 		return std::vector<std::string>{ cliPayload.dump() };

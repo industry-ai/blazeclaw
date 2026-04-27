@@ -3,6 +3,31 @@
   "title": "BlazeClaw Nano PDF Tool Contracts",
   "version": "1.0.0",
   "contracts": {
+    "nano_pdf.generate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "content",
+        "outputPath"
+      ],
+      "properties": {
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Draft report content to render into a PDF file."
+        },
+        "outputPath": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Target PDF path for generated draft artifact."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional report title rendered in the generated draft."
+        }
+      }
+    },
     "nano_pdf.edit": {
       "type": "object",
       "additionalProperties": false,
