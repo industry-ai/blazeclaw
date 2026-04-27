@@ -174,6 +174,20 @@ TEST_CASE("Tool argument validators preserve error taxonomy", "[tools][runtime][
 
 	errorCode.clear();
 	errorMessage.clear();
+	const auto nanoPdfGenerateMultilineContent = blazeclaw::core::tools::BuildNanoPdfCliArgs(
+		nanoPdfGenerate,
+		nlohmann::json::object({
+			{"content", "Executive Summary\n- Point A\n- Point B"},
+			{"outputPath", "draft.pdf"},
+			}),
+			errorCode,
+			errorMessage);
+	REQUIRE(nanoPdfGenerateMultilineContent.has_value());
+	REQUIRE(errorCode.empty());
+	REQUIRE(errorMessage.empty());
+
+	errorCode.clear();
+	errorMessage.clear();
 	const auto tempPdf = std::filesystem::temp_directory_path() /
 		("blazeclaw_nano_pdf_valid_" + std::to_string(std::rand()) + ".pdf");
 	{

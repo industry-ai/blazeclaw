@@ -1905,6 +1905,20 @@ namespace blazeclaw::core::tools {
 		return false;
 	}
 
+	bool HasUnsafeControlCharsForNanoPdfContent(const std::string& value)
+	{
+		for (const unsigned char ch : value)
+		{
+			// Report body can legitimately contain tabs/newlines.
+			if ((ch < 0x20 && ch != '\t' && ch != '\n' && ch != '\r') || ch == 0x7F)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	bool IsHttpUrlForBraveSearch(const std::string& value)
 	{
 		const std::string lowered = ToLowerAscii(value);
@@ -2519,7 +2533,7 @@ namespace blazeclaw::core::tools {
 			}
 
 			const std::string content = TrimAsciiForBraveSearch(contentIt->get<std::string>());
-			if (content.empty() || HasControlCharsForBraveSearch(content) || content.size() > 30000)
+			if (content.empty() || HasUnsafeControlCharsForNanoPdfContent(content) || content.size() > 30000)
 			{
 				errorCode = "invalid_args";
 				errorMessage = "content failed safety validation";
