@@ -469,6 +469,22 @@ std::string SerializeSkillCatalogEntry(
 		SerializeStringArrayLocal(entry.missingBins) +
 		",\"missingAnyBins\":" +
 		SerializeStringArrayLocal(entry.missingAnyBins) +
+		",\"openclawOriginalActivationState\":\"" +
+		EscapeJsonLocal(entry.openClawOriginalActivationState) +
+		"\",\"openclawOriginalOrigin\":\"" +
+		EscapeJsonLocal(entry.openClawOriginalOrigin) +
+		",\"openclawOriginalOrigin\":\"" +
+		EscapeJsonLocal(entry.openClawOriginalOrigin) +
+		"\",\"openclawOriginalImportDiagnostics\":" +
+		SerializeStringArrayLocal(entry.openClawOriginalImportDiagnostics) +
+		",\"openclawOriginalMetadataConvertedFromClawdbot\":" +
+		std::string(entry.openClawOriginalMetadataConvertedFromClawdbot
+			? "true"
+			: "false") +
+		",\"openclawOriginalMissingToolManifest\":" +
+		std::string(entry.openClawOriginalMissingToolManifest
+			? "true"
+			: "false") +
 		",\"disableModelInvocation\":" +
 		std::string(entry.disableModelInvocation ? "true" : "false") +
 		",\"validFrontmatter\":" +
@@ -1291,311 +1307,311 @@ ChatPromptOrchestrationResult TryOrchestrateWeatherEmailPrompt(
 		const bool preferChinese = IsLikelyChinesePromptLocal(message);
 		const auto intent =
 			prompt::AnalyzeWeatherEmailPromptIntent(message);
-	result.matched = intent.matched;
-	result.missReasons = intent.missReasons;
-	result.scheduleKind = intent.scheduleKind;
-	result.city = intent.city;
-	result.date = intent.date;
-	result.recipient = intent.recipient;
-	result.sendAt = intent.sendAt;
-	result.decompositionSteps = intent.decompositionSteps;
-	if (!result.matched) {
-		return result;
-	}
+		result.matched = intent.matched;
+		result.missReasons = intent.missReasons;
+		result.scheduleKind = intent.scheduleKind;
+		result.city = intent.city;
+		result.date = intent.date;
+		result.recipient = intent.recipient;
+		result.sendAt = intent.sendAt;
+		result.decompositionSteps = intent.decompositionSteps;
+		if (!result.matched) {
+			return result;
+		}
 
-	const std::string city = intent.city;
-	const std::string date = intent.date;
-	const std::string sendAt = intent.sendAt;
-	const std::string recipient = intent.recipient;
-	result.city = city;
-	result.date = date;
-	result.recipient = recipient;
-	result.sendAt = sendAt;
-	result.scheduleKind = intent.scheduleKind;
-	result.decompositionSteps = intent.decompositionSteps;
+		const std::string city = intent.city;
+		const std::string date = intent.date;
+		const std::string sendAt = intent.sendAt;
+		const std::string recipient = intent.recipient;
+		result.city = city;
+		result.date = date;
+		result.recipient = recipient;
+		result.sendAt = sendAt;
+		result.scheduleKind = intent.scheduleKind;
+		result.decompositionSteps = intent.decompositionSteps;
 
-	if (recipient.empty()) {
-		result.success = false;
-		result.terminalStatus = "failed";
-		result.terminalReason = "recipient_missing";
-		result.errorCode = "orchestration_invalid_prompt";
-		result.errorMessage = "recipient_email_required";
-		return result;
-	}
+		if (recipient.empty()) {
+			result.success = false;
+			result.terminalStatus = "failed";
+			result.terminalReason = "recipient_missing";
+			result.errorCode = "orchestration_invalid_prompt";
+			result.errorMessage = "recipient_email_required";
+			return result;
+		}
 
-	nlohmann::json weatherArgs = {
-		{ "city", city },
-		{ "date", date },
-	};
-	const auto weatherExecution = toolRegistry.Execute(
-		"weather.lookup",
-		weatherArgs.dump());
+		nlohmann::json weatherArgs = {
+			{ "city", city },
+			{ "date", date },
+		};
+		const auto weatherExecution = toolRegistry.Execute(
+			"weather.lookup",
+			weatherArgs.dump());
 
-	if (!weatherExecution.executed || weatherExecution.status != "ok") {
-		result.success = false;
-		result.terminalStatus = "failed";
-		result.terminalReason = "weather_failed";
-		result.errorCode = "orchestration_weather_failed";
-		result.errorMessage = weatherExecution.output;
-		return result;
-	}
+		if (!weatherExecution.executed || weatherExecution.status != "ok") {
+			result.success = false;
+			result.terminalStatus = "failed";
+			result.terminalReason = "weather_failed";
+			result.errorCode = "orchestration_weather_failed";
+			result.errorMessage = weatherExecution.output;
+			return result;
+		}
 
-	std::string condition = "Cloudy";
-	int temperatureC = 20;
-	std::string wind = "NE 9 km/h";
-	int humidityPct = 68;
-	try {
-		const auto weatherPayload =
-			nlohmann::json::parse(weatherExecution.output);
-		if (weatherPayload.contains("forecast") &&
-			weatherPayload["forecast"].is_object()) {
-			const auto& forecast = weatherPayload["forecast"];
-			if (forecast.contains("condition") && forecast["condition"].is_string()) {
-				condition = forecast["condition"].get<std::string>();
-			}
-			if (forecast.contains("temperatureC") && forecast["temperatureC"].is_number_integer()) {
-				temperatureC = forecast["temperatureC"].get<int>();
-			}
-			if (forecast.contains("wind") && forecast["wind"].is_string()) {
-				wind = forecast["wind"].get<std::string>();
-			}
-			if (forecast.contains("humidityPct") && forecast["humidityPct"].is_number_integer()) {
-				humidityPct = forecast["humidityPct"].get<int>();
+		std::string condition = "Cloudy";
+		int temperatureC = 20;
+		std::string wind = "NE 9 km/h";
+		int humidityPct = 68;
+		try {
+			const auto weatherPayload =
+				nlohmann::json::parse(weatherExecution.output);
+			if (weatherPayload.contains("forecast") &&
+				weatherPayload["forecast"].is_object()) {
+				const auto& forecast = weatherPayload["forecast"];
+				if (forecast.contains("condition") && forecast["condition"].is_string()) {
+					condition = forecast["condition"].get<std::string>();
+				}
+				if (forecast.contains("temperatureC") && forecast["temperatureC"].is_number_integer()) {
+					temperatureC = forecast["temperatureC"].get<int>();
+				}
+				if (forecast.contains("wind") && forecast["wind"].is_string()) {
+					wind = forecast["wind"].get<std::string>();
+				}
+				if (forecast.contains("humidityPct") && forecast["humidityPct"].is_number_integer()) {
+					humidityPct = forecast["humidityPct"].get<int>();
+				}
 			}
 		}
-	}
-	catch (...) {
-	}
+		catch (...) {
+		}
 
-	const std::string report = BuildWeatherReportText(
-		city,
-		date,
-		condition,
-		temperatureC,
-		wind,
-		humidityPct,
-		preferChinese);
-	const std::string deliveryBody = preferChinese
-		? report
-		: BuildWeatherReportText(
-			ResolveAsciiCityForDeliveryLocal(city),
+		const std::string report = BuildWeatherReportText(
+			city,
 			date,
 			condition,
 			temperatureC,
 			wind,
 			humidityPct,
-			false);
-	const std::string emailSubject = BuildSafeEmailSubjectLocal(city);
+			preferChinese);
+		const std::string deliveryBody = preferChinese
+			? report
+			: BuildWeatherReportText(
+				ResolveAsciiCityForDeliveryLocal(city),
+				date,
+				condition,
+				temperatureC,
+				wind,
+				humidityPct,
+				false);
+		const std::string emailSubject = BuildSafeEmailSubjectLocal(city);
 
-	nlohmann::json emailPrepareArgs = {
-		{ "action", "prepare" },
-		{ "to", recipient },
-		{ "subject", emailSubject },
-		{ "body", deliveryBody },
-		{ "sendAt", sendAt },
-	};
-
-	const auto emailPrepareExecution = toolRegistry.Execute(
-		"email.schedule",
-		emailPrepareArgs.dump());
-
-	if (!emailPrepareExecution.executed ||
-		emailPrepareExecution.status != "needs_approval") {
-		result.success = false;
-		result.terminalStatus = "failed";
-		result.terminalReason = "email_prepare_failed";
-		result.errorCode = "orchestration_email_prepare_failed";
-		result.errorMessage = emailPrepareExecution.output;
-		return result;
-	}
-
-	std::string approvalToken;
-	std::uint64_t approvalTokenExpiresAtEpochMs = 0;
-	try {
-		const auto emailPayload =
-			nlohmann::json::parse(emailPrepareExecution.output);
-		if (emailPayload.contains("requiresApproval") &&
-			emailPayload["requiresApproval"].is_object()) {
-			const auto& approval = emailPayload["requiresApproval"];
-			if (approval.contains("approvalToken") &&
-				approval["approvalToken"].is_string()) {
-				approvalToken = approval["approvalToken"].get<std::string>();
-			}
-			if (approval.contains("approvalTokenExpiresAtEpochMs") &&
-				approval["approvalTokenExpiresAtEpochMs"].is_number_unsigned()) {
-				approvalTokenExpiresAtEpochMs =
-					approval["approvalTokenExpiresAtEpochMs"].get<std::uint64_t>();
-			}
-		}
-	}
-	catch (...) {
-	}
-
-	if (approvalToken.empty()) {
-		result.success = false;
-		result.terminalStatus = "failed";
-		result.terminalReason = "approval_token_missing";
-		result.errorCode = "orchestration_email_missing_approval_token";
-		result.errorMessage = "approval_token_missing";
-		return result;
-	}
-
-	ToolExecuteResult emailApproveExecution;
-	bool shouldAutoApprove =
-		intent.scheduleKind == "immediate_keyword";
-	bool autoApproveBackendMissing = false;
-	std::string autoApproveBackend = "himalaya";
-	std::string fallbackProbeCode;
-	std::string fallbackProbeMessage;
-	if (shouldAutoApprove) {
-		nlohmann::json emailApproveArgs = {
-			{ "action", "approve" },
-			{ "approvalToken", approvalToken },
-			{ "approve", true },
+		nlohmann::json emailPrepareArgs = {
+			{ "action", "prepare" },
+			{ "to", recipient },
+			{ "subject", emailSubject },
+			{ "body", deliveryBody },
+			{ "sendAt", sendAt },
 		};
 
-		emailApproveExecution = toolRegistry.Execute(
+		const auto emailPrepareExecution = toolRegistry.Execute(
 			"email.schedule",
-			emailApproveArgs.dump());
-		if (emailApproveExecution.executed &&
-			emailApproveExecution.status == "ok") {
-			try {
-				const auto approvePayload =
-					nlohmann::json::parse(emailApproveExecution.output);
-				if (approvePayload.contains("output") &&
-					approvePayload["output"].is_array() &&
-					!approvePayload["output"].empty() &&
-					approvePayload["output"][0].is_object() &&
-					approvePayload["output"][0].contains("summary") &&
-					approvePayload["output"][0]["summary"].is_object() &&
-					approvePayload["output"][0]["summary"].contains("engine") &&
-					approvePayload["output"][0]["summary"]["engine"].is_string()) {
-					autoApproveBackend =
-						approvePayload["output"][0]["summary"]["engine"].get<std::string>();
+			emailPrepareArgs.dump());
+
+		if (!emailPrepareExecution.executed ||
+			emailPrepareExecution.status != "needs_approval") {
+			result.success = false;
+			result.terminalStatus = "failed";
+			result.terminalReason = "email_prepare_failed";
+			result.errorCode = "orchestration_email_prepare_failed";
+			result.errorMessage = emailPrepareExecution.output;
+			return result;
+		}
+
+		std::string approvalToken;
+		std::uint64_t approvalTokenExpiresAtEpochMs = 0;
+		try {
+			const auto emailPayload =
+				nlohmann::json::parse(emailPrepareExecution.output);
+			if (emailPayload.contains("requiresApproval") &&
+				emailPayload["requiresApproval"].is_object()) {
+				const auto& approval = emailPayload["requiresApproval"];
+				if (approval.contains("approvalToken") &&
+					approval["approvalToken"].is_string()) {
+					approvalToken = approval["approvalToken"].get<std::string>();
+				}
+				if (approval.contains("approvalTokenExpiresAtEpochMs") &&
+					approval["approvalTokenExpiresAtEpochMs"].is_number_unsigned()) {
+					approvalTokenExpiresAtEpochMs =
+						approval["approvalTokenExpiresAtEpochMs"].get<std::uint64_t>();
 				}
 			}
-			catch (...) {
+		}
+		catch (...) {
+		}
+
+		if (approvalToken.empty()) {
+			result.success = false;
+			result.terminalStatus = "failed";
+			result.terminalReason = "approval_token_missing";
+			result.errorCode = "orchestration_email_missing_approval_token";
+			result.errorMessage = "approval_token_missing";
+			return result;
+		}
+
+		ToolExecuteResult emailApproveExecution;
+		bool shouldAutoApprove =
+			intent.scheduleKind == "immediate_keyword";
+		bool autoApproveBackendMissing = false;
+		std::string autoApproveBackend = "himalaya";
+		std::string fallbackProbeCode;
+		std::string fallbackProbeMessage;
+		if (shouldAutoApprove) {
+			nlohmann::json emailApproveArgs = {
+				{ "action", "approve" },
+				{ "approvalToken", approvalToken },
+				{ "approve", true },
+			};
+
+			emailApproveExecution = toolRegistry.Execute(
+				"email.schedule",
+				emailApproveArgs.dump());
+			if (emailApproveExecution.executed &&
+				emailApproveExecution.status == "ok") {
+				try {
+					const auto approvePayload =
+						nlohmann::json::parse(emailApproveExecution.output);
+					if (approvePayload.contains("output") &&
+						approvePayload["output"].is_array() &&
+						!approvePayload["output"].empty() &&
+						approvePayload["output"][0].is_object() &&
+						approvePayload["output"][0].contains("summary") &&
+						approvePayload["output"][0]["summary"].is_object() &&
+						approvePayload["output"][0]["summary"].contains("engine") &&
+						approvePayload["output"][0]["summary"]["engine"].is_string()) {
+						autoApproveBackend =
+							approvePayload["output"][0]["summary"]["engine"].get<std::string>();
+					}
+				}
+				catch (...) {
+				}
+			}
+			else {
+				const std::string approveOutputLower =
+					ToLowerCopyLocal(emailApproveExecution.output);
+				ResolveFallbackProbeDiagnostic(
+					emailApproveExecution.output,
+					fallbackProbeCode,
+					fallbackProbeMessage);
+				autoApproveBackendMissing =
+					emailApproveExecution.status == "error" &&
+					(approveOutputLower.find("missing") != std::string::npos ||
+						approveOutputLower.find("unavailable") != std::string::npos ||
+						emailApproveExecution.output.find("email_delivery_backends_exhausted") != std::string::npos);
+				if (!autoApproveBackendMissing) {
+					result.success = false;
+					result.terminalStatus = "failed";
+					result.terminalReason = "email_approve_failed";
+					result.errorCode = "orchestration_email_approve_failed";
+					result.errorMessage = emailApproveExecution.output;
+					return result;
+				}
+
+				shouldAutoApprove = false;
+			}
+		}
+
+		result.success = true;
+		result.requiresApproval = !shouldAutoApprove;
+		result.assistantDeltas = {
+			"orchestration.intent city=" + city +
+			" date=" + date +
+			" source=structural_orchestration_signals",
+			"tools.execute.start tool=weather.lookup",
+			"tools.execute.result tool=weather.lookup status=ok",
+			"tools.execute.start tool=email.schedule action=prepare",
+			"tools.execute.result tool=email.schedule status=needs_approval",
+		};
+		if (shouldAutoApprove) {
+			result.assistantDeltas.push_back(
+				"tools.execute.start tool=email.schedule action=approve");
+			result.assistantDeltas.push_back(
+				"tools.execute.result tool=email.schedule status=ok");
+		}
+		else if (autoApproveBackendMissing) {
+			result.assistantDeltas.push_back(
+				"tools.execute.start tool=email.schedule action=approve");
+			std::string approveDelta =
+				"tools.execute.result tool=email.schedule status=needs_approval backend_missing=himalaya";
+			if (!fallbackProbeCode.empty()) {
+				approveDelta += " probe=" + fallbackProbeCode;
+			}
+			result.assistantDeltas.push_back(approveDelta);
+		}
+
+		if (shouldAutoApprove) {
+			result.terminalStatus = "completed";
+			result.terminalReason = "auto_approved";
+			if (preferChinese) {
+				result.assistantText =
+					report +
+					Utf8LiteralLocal(u8"\u5DF2\u901A\u8FC7 ") + autoApproveBackend +
+					Utf8LiteralLocal(u8"\u5728 ") + sendAt +
+					Utf8LiteralLocal(u8"\u5411 ") + recipient +
+					Utf8LiteralLocal(u8"\u53D1\u9001\u90AE\u4EF6\u3002");
+			}
+			else {
+				result.assistantText =
+					report +
+					" Email sent to " + recipient +
+					" at " + sendAt +
+					" via " + autoApproveBackend + ".";
 			}
 		}
 		else {
-			const std::string approveOutputLower =
-				ToLowerCopyLocal(emailApproveExecution.output);
-			ResolveFallbackProbeDiagnostic(
-				emailApproveExecution.output,
-				fallbackProbeCode,
-				fallbackProbeMessage);
-			autoApproveBackendMissing =
-				emailApproveExecution.status == "error" &&
-				(approveOutputLower.find("missing") != std::string::npos ||
-					approveOutputLower.find("unavailable") != std::string::npos ||
-					emailApproveExecution.output.find("email_delivery_backends_exhausted") != std::string::npos);
-			if (!autoApproveBackendMissing) {
-				result.success = false;
-				result.terminalStatus = "failed";
-				result.terminalReason = "email_approve_failed";
-				result.errorCode = "orchestration_email_approve_failed";
-				result.errorMessage = emailApproveExecution.output;
-				return result;
+			result.terminalStatus = "needs_approval";
+			result.terminalReason = autoApproveBackendMissing
+				? "fallback_backend_unavailable"
+				: "approval_required";
+			result.fallbackBackend = autoApproveBackend;
+			result.fallbackAction = "continue";
+			result.fallbackAttempt = 1;
+			result.fallbackMaxAttempts = 2;
+			if (preferChinese) {
+				result.assistantText =
+					report +
+					Utf8LiteralLocal(u8"\u5411 ") + recipient +
+					Utf8LiteralLocal(u8"\u5728 ") + sendAt +
+					Utf8LiteralLocal(u8"\u53D1\u9001\u90AE\u4EF6\u7684\u8BA1\u5212\u7B49\u5F85\u5BA1\u6279\u3002approvalToken=") +
+					approvalToken;
 			}
-
-			shouldAutoApprove = false;
-		}
-	}
-
-	result.success = true;
-	result.requiresApproval = !shouldAutoApprove;
-	result.assistantDeltas = {
-		"orchestration.intent city=" + city +
-		" date=" + date +
-		" source=structural_orchestration_signals",
-		"tools.execute.start tool=weather.lookup",
-		"tools.execute.result tool=weather.lookup status=ok",
-		"tools.execute.start tool=email.schedule action=prepare",
-		"tools.execute.result tool=email.schedule status=needs_approval",
-	};
-	if (shouldAutoApprove) {
-		result.assistantDeltas.push_back(
-			"tools.execute.start tool=email.schedule action=approve");
-		result.assistantDeltas.push_back(
-			"tools.execute.result tool=email.schedule status=ok");
-	}
-	else if (autoApproveBackendMissing) {
-		result.assistantDeltas.push_back(
-			"tools.execute.start tool=email.schedule action=approve");
-		std::string approveDelta =
-			"tools.execute.result tool=email.schedule status=needs_approval backend_missing=himalaya";
-		if (!fallbackProbeCode.empty()) {
-			approveDelta += " probe=" + fallbackProbeCode;
-		}
-		result.assistantDeltas.push_back(approveDelta);
-	}
-
-	if (shouldAutoApprove) {
-		result.terminalStatus = "completed";
-		result.terminalReason = "auto_approved";
-		if (preferChinese) {
-			result.assistantText =
-				report +
-				Utf8LiteralLocal(u8"\u5DF2\u901A\u8FC7 ") + autoApproveBackend +
-				Utf8LiteralLocal(u8"\u5728 ") + sendAt +
-				Utf8LiteralLocal(u8"\u5411 ") + recipient +
-				Utf8LiteralLocal(u8"\u53D1\u9001\u90AE\u4EF6\u3002");
-		}
-		else {
-			result.assistantText =
-				report +
-				" Email sent to " + recipient +
-				" at " + sendAt +
-				" via " + autoApproveBackend + ".";
-		}
-	}
-	else {
-		result.terminalStatus = "needs_approval";
-		result.terminalReason = autoApproveBackendMissing
-			? "fallback_backend_unavailable"
-			: "approval_required";
-		result.fallbackBackend = autoApproveBackend;
-		result.fallbackAction = "continue";
-		result.fallbackAttempt = 1;
-		result.fallbackMaxAttempts = 2;
-		if (preferChinese) {
-			result.assistantText =
-				report +
-				Utf8LiteralLocal(u8"\u5411 ") + recipient +
-				Utf8LiteralLocal(u8"\u5728 ") + sendAt +
-				Utf8LiteralLocal(u8"\u53D1\u9001\u90AE\u4EF6\u7684\u8BA1\u5212\u7B49\u5F85\u5BA1\u6279\u3002approvalToken=") +
-				approvalToken;
-		}
-		else {
-			result.assistantText =
-				report +
-				" Email scheduling to " + recipient +
-				" at " + sendAt +
-				" is pending approval. approvalToken=" +
-				approvalToken;
-		}
-		if (autoApproveBackendMissing) {
-			result.assistantText += preferChinese
-				? Utf8LiteralLocal(u8" \u90AE\u4EF6\u6295\u9012\u540E\u7AEF\u4E0D\u53EF\u7528\uFF08\u7F3A\u5C11 himalaya CLI\uFF09\u3002\u8BF7\u5B89\u88C5\u5E76\u914D\u7F6E himalaya \u540E\u91CD\u65B0\u5BA1\u6279\u8BE5\u4EE4\u724C\u3002")
-				: " Delivery backend is unavailable (himalaya CLI missing). Install/configure himalaya and re-approve this token.";
-			const std::string fallbackProbeLabel =
-				!fallbackProbeMessage.empty()
-				? fallbackProbeMessage
-				: fallbackProbeCode;
-			if (!fallbackProbeLabel.empty()) {
+			else {
+				result.assistantText =
+					report +
+					" Email scheduling to " + recipient +
+					" at " + sendAt +
+					" is pending approval. approvalToken=" +
+					approvalToken;
+			}
+			if (autoApproveBackendMissing) {
 				result.assistantText += preferChinese
-					? " fallbackProbe=" + fallbackProbeLabel + Utf8LiteralLocal(u8"\u3002")
-					: " fallbackProbe=" + fallbackProbeLabel + ".";
+					? Utf8LiteralLocal(u8" \u90AE\u4EF6\u6295\u9012\u540E\u7AEF\u4E0D\u53EF\u7528\uFF08\u7F3A\u5C11 himalaya CLI\uFF09\u3002\u8BF7\u5B89\u88C5\u5E76\u914D\u7F6E himalaya \u540E\u91CD\u65B0\u5BA1\u6279\u8BE5\u4EE4\u724C\u3002")
+					: " Delivery backend is unavailable (himalaya CLI missing). Install/configure himalaya and re-approve this token.";
+				const std::string fallbackProbeLabel =
+					!fallbackProbeMessage.empty()
+					? fallbackProbeMessage
+					: fallbackProbeCode;
+				if (!fallbackProbeLabel.empty()) {
+					result.assistantText += preferChinese
+						? " fallbackProbe=" + fallbackProbeLabel + Utf8LiteralLocal(u8"\u3002")
+						: " fallbackProbe=" + fallbackProbeLabel + ".";
+				}
+			}
+			if (approvalTokenExpiresAtEpochMs > 0) {
+				result.assistantText +=
+					" expiresAtEpochMs=" +
+					std::to_string(approvalTokenExpiresAtEpochMs);
 			}
 		}
-		if (approvalTokenExpiresAtEpochMs > 0) {
-			result.assistantText +=
-				" expiresAtEpochMs=" +
-				std::to_string(approvalTokenExpiresAtEpochMs);
-		}
-	}
 
-	return result;
+		return result;
 	}
 	catch (...) {
 		result.success = false;

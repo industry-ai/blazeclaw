@@ -27,7 +27,7 @@
       <AdditionalIncludeDirectories>$(ProjectDir)..\BlazeClawMfc\src;$(ProjectDir)..\BlazeClawMfc;$(ProjectDir)..\BlazeClawMfc\src\app;$(ProjectDir)..\BlazeClawMfc\third_party\catch2\single_include;$(ProjectDir)..\BlazeClawMfc\third_party\nlohmann;$(VcpkgIncludeRoot);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/bigobj  /utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/bigobj /utf-8 /FS %(AdditionalOptions)</AdditionalOptions>
       <!-- No forced includes; test files include app/pch.h via AdditionalIncludeDirectories if needed -->
       <PreprocessorDefinitions>NOMINMAX;_AFXDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
@@ -60,6 +60,7 @@
     <ClCompile Include="..\BlazeClawMfc\tests\GatewayWeatherEmailRegressionTests.cpp" />
     <ClCompile Include="..\BlazeClawMfc\tests\PythonRuntimeTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\TelemetryTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\OpenClawOriginalTelemetryContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\DeepSeekSseParserTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\ToolRuntimeRegistryIntegrationTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\DiagnosticsRegressionComparatorTests.cpp" />

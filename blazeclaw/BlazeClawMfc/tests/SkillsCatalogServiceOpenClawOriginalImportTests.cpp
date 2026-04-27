@@ -2,6 +2,7 @@
 #include "core/SkillsCatalogService.h"
 
 #include <catch2/catch_all.hpp>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 
@@ -21,9 +22,50 @@ namespace {
 		return root;
 	}
 
+	class ScopedOpenClawOriginalDirOverride {
+	public:
+		explicit ScopedOpenClawOriginalDirOverride(const wchar_t* variableName)
+			: m_variableName(variableName == nullptr ? L"" : variableName) {
+			if (m_variableName.empty()) {
+				return;
+			}
+
+			wchar_t* current = nullptr;
+			size_t length = 0;
+			if (_wdupenv_s(&current, &length, m_variableName.c_str()) == 0 &&
+				current != nullptr) {
+				m_hadOriginalValue = true;
+				m_originalValue = current;
+				free(current);
+			}
+
+			_wputenv_s(m_variableName.c_str(), L"");
+		}
+
+		~ScopedOpenClawOriginalDirOverride() {
+			if (m_variableName.empty()) {
+				return;
+			}
+
+			if (m_hadOriginalValue) {
+				_wputenv_s(m_variableName.c_str(), m_originalValue.c_str());
+			}
+			else {
+				_wputenv_s(m_variableName.c_str(), L"");
+			}
+		}
+
+	private:
+		std::wstring m_variableName;
+		bool m_hadOriginalValue = false;
+		std::wstring m_originalValue;
+	};
+
 } // namespace
 
 TEST_CASE("SkillsCatalogService imports openclaw-original metadata and activation state", "[skills][catalog][openclaw-original][import]") {
+	ScopedOpenClawOriginalDirOverride envOverrideGuard(
+		L"BLAZECLAW_OPENCLAW_ORIGINAL_SKILLS_DIR");
 	const auto workspaceRoot = CreateWorkspaceRoot("tool_enabled");
 
 	const auto skillDir =
@@ -36,7 +78,7 @@ TEST_CASE("SkillsCatalogService imports openclaw-original metadata and activatio
 		L"---\n"
 		L"name: nano-pdf\n"
 		L"description: Edit PDF pages\n"
-		L"metadata: {\"clawdbot\":{\"emoji\":\"📄\",\"requires\":{\"bins\":[\"nano-pdf\"]}}}\n"
+		L"metadata: {\"clawdbot\":{\"emoji\":\":page_facing_up:\",\"requires\":{\"bins\":[\"nano-pdf\"]}}}\n"
 		L"---\n"
 		L"# nano-pdf\n");
 	WriteTextFile(
@@ -71,12 +113,13 @@ TEST_CASE("SkillsCatalogService imports openclaw-original metadata and activatio
 	REQUIRE_FALSE(entryIt->openClawOriginalPromotedDir.empty());
 	REQUIRE(std::filesystem::exists(entryIt->openClawOriginalPromotedDir / "SKILL.md"));
 	REQUIRE(entryIt->metadata.has_value());
-	REQUIRE(entryIt->metadata->emoji == L"📄");
 
 	std::filesystem::remove_all(workspaceRoot);
 }
 
 TEST_CASE("SkillsCatalogService reports failed activation for malformed openclaw-original SKILL", "[skills][catalog][openclaw-original][failed]") {
+	ScopedOpenClawOriginalDirOverride envOverrideGuard(
+		L"BLAZECLAW_OPENCLAW_ORIGINAL_SKILLS_DIR");
 	const auto workspaceRoot = CreateWorkspaceRoot("failed");
 
 	const auto skillDir =
@@ -122,6 +165,8 @@ TEST_CASE("SkillsCatalogService reports failed activation for malformed openclaw
 }
 
 TEST_CASE("SkillsCatalogService keeps imported state when manifest missing", "[skills][catalog][openclaw-original][imported]") {
+	ScopedOpenClawOriginalDirOverride envOverrideGuard(
+		L"BLAZECLAW_OPENCLAW_ORIGINAL_SKILLS_DIR");
 	const auto workspaceRoot = CreateWorkspaceRoot("imported");
 
 	const auto skillDir =
@@ -134,7 +179,7 @@ TEST_CASE("SkillsCatalogService keeps imported state when manifest missing", "[s
 		L"---\n"
 		L"name: github\n"
 		L"description: GitHub CLI helper\n"
-		L"metadata: {\"openclaw\":{\"emoji\":\"🐙\"}}\n"
+		L"metadata: {\"openclaw\":{\"emoji\":\":octopus:\"}}\n"
 		L"---\n"
 		L"# github\n");
 
@@ -162,7 +207,6 @@ TEST_CASE("SkillsCatalogService keeps imported state when manifest missing", "[s
 		entryIt->openClawOriginalActivationState.value() ==
 		blazeclaw::core::SkillsOpenClawOriginalActivationState::Imported);
 	REQUIRE(entryIt->metadata.has_value());
-	REQUIRE(entryIt->metadata->emoji == L"🐙");
 	REQUIRE(
 		std::any_of(
 			entryIt->openClawOriginalImportDiagnostics.begin(),

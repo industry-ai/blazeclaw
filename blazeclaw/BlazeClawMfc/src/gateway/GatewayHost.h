@@ -70,6 +70,11 @@ namespace blazeclaw::gateway {
 		std::vector<std::string> missingConfig;
 		std::vector<std::string> missingBins;
 		std::vector<std::string> missingAnyBins;
+		std::string openClawOriginalActivationState;
+		std::string openClawOriginalOrigin;
+		std::vector<std::string> openClawOriginalImportDiagnostics;
+		bool openClawOriginalMetadataConvertedFromClawdbot = false;
+		bool openClawOriginalMissingToolManifest = false;
 	};
 
 	struct SkillsCatalogGatewayState {
@@ -401,6 +406,9 @@ namespace blazeclaw::gateway {
 		void RegisterRuntimeToolV2(
 			const ToolCatalogEntry& tool,
 			GatewayToolRegistry::RuntimeToolExecutorV2 executor);
+		void ReloadSkillToolsFromDirectories(
+			const std::vector<std::string>& directories,
+			bool emitCatalogUpdateEvent);
 
 		[[nodiscard]] protocol::ResponseFrame RouteRequest(const protocol::RequestFrame& request) const override;
 		[[nodiscard]] bool IsHealthy() const noexcept override;

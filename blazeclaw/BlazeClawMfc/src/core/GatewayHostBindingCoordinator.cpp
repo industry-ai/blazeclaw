@@ -110,8 +110,8 @@ namespace blazeclaw::core {
 		std::string DetectRoutingLanguage(const std::string& message) {
 			const std::wstring wide = Utf8ToWide(message);
 			if (ContainsAnyWideFragment(
-					wide,
-					{ L"邮箱", L"收件箱", L"邮件", L"新邮件", L"回复", L"回信" })) {
+				wide,
+				{ L"邮箱", L"收件箱", L"邮件", L"新邮件", L"回复", L"回信" })) {
 				return "zh";
 			}
 
@@ -245,6 +245,7 @@ namespace blazeclaw::core {
 			});
 		manager.m_gatewayHost.SetSkillsRefreshCallback([&manager]() {
 			manager.RefreshSkillsState(manager.m_activeConfig, true, L"manual-refresh");
+			manager.PublishGatewaySkillsStateProjection();
 			return manager.m_gatewaySkillsStateProjection;
 			});
 		// Single parse/validate/response path for skills.update (see SkillsGatewayMethodHandler).

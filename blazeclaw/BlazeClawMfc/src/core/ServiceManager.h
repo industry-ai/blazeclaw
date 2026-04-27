@@ -237,6 +237,8 @@ namespace blazeclaw::core {
 			ConsumeManagedConfigInternalWriteHash();
 
 		[[nodiscard]] ChatProviderRuntimeBindings BuildChatProviderRuntimeBindings();
+		void RefreshOpenClawOriginalRuntimeTools(const blazeclaw::config::AppConfig& config);
+		void EmitOpenClawOriginalTelemetry() const;
 
 	public:
 		// Provider credential/cancellation integration

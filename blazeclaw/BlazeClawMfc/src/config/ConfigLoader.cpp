@@ -1545,20 +1545,20 @@ namespace blazeclaw::config {
 
 			if (trimmedLine.rfind(L"skills.openclawOriginal.enabled=", 0) == 0) {
 				outConfig.skills.openclawOriginal.enabled = ParseBool(
-					trimmedLine.substr(31),
+					trimmedLine.substr(32),
 					true);
 				continue;
 			}
 
 			if (trimmedLine.rfind(L"skills.openclawOriginal.autoImportTools=", 0) == 0) {
 				outConfig.skills.openclawOriginal.autoImportTools = ParseBool(
-					trimmedLine.substr(39),
+					trimmedLine.substr(40),
 					true);
 				continue;
 			}
 
 			if (trimmedLine.rfind(L"skills.openclawOriginal.sourceDir=", 0) == 0) {
-				const auto sourceDir = Trim(trimmedLine.substr(33));
+				const auto sourceDir = Trim(trimmedLine.substr(34));
 				if (!sourceDir.empty()) {
 					outConfig.skills.openclawOriginal.sourceDir = sourceDir;
 				}
@@ -1567,7 +1567,7 @@ namespace blazeclaw::config {
 
 			if (trimmedLine.rfind(L"skills.openclawOriginal.promoteToManaged=", 0) == 0) {
 				outConfig.skills.openclawOriginal.promoteToManaged = ParseBool(
-					trimmedLine.substr(40),
+					trimmedLine.substr(41),
 					true);
 				continue;
 			}

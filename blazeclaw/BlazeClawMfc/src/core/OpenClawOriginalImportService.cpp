@@ -130,6 +130,9 @@ namespace blazeclaw::core {
 			return result;
 		}
 
+		const std::wstring metadataRaw = GetFrontmatterStringCompat(
+			request.frontmatter->fields,
+			L"metadata");
 		const auto metadataObject = ResolveOpenClawManifestBlockCompat(
 			request.frontmatter->fields,
 			L"metadata");
@@ -137,13 +140,12 @@ namespace blazeclaw::core {
 			result.diagnostics.push_back(
 				L"metadata block missing or not parseable; using defaults");
 		}
-		else {
-			const auto clawdbotIt = metadataObject->find("clawdbot");
-			if (clawdbotIt != metadataObject->end() && clawdbotIt->is_object()) {
-				result.metadataConvertedFromClawdbot = true;
-				result.diagnostics.push_back(
-					L"metadata converted from clawdbot to openclaw compatibility");
-			}
+
+		if (!metadataRaw.empty() &&
+			ToLower(metadataRaw).find(L"clawdbot") != std::wstring::npos) {
+			result.metadataConvertedFromClawdbot = true;
+			result.diagnostics.push_back(
+				L"metadata converted from clawdbot to openclaw compatibility");
 		}
 
 		result.normalizedMetadata =

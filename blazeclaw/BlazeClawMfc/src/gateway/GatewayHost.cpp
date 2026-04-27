@@ -1099,6 +1099,31 @@ namespace blazeclaw::gateway {
 		m_toolRegistry.RegisterRuntimeToolV2(tool, std::move(executor));
 	}
 
+	void GatewayHost::ReloadSkillToolsFromDirectories(
+		const std::vector<std::string>& directories,
+		const bool emitCatalogUpdateEvent) {
+		for (const auto& directory : directories) {
+			if (directory.empty()) {
+				continue;
+			}
+			m_toolRegistry.LoadSkillToolsFromDirectory(directory);
+		}
+
+		if (!emitCatalogUpdateEvent) {
+			return;
+		}
+
+		std::string broadcastError;
+		m_transport.BroadcastOutboundFrame(
+			BuildToolsCatalogUpdateEventFrame(++m_chatPushEventSeq),
+			broadcastError);
+		EmitTelemetryEvent(
+			"gateway.tools.catalog.update",
+			std::string("{\"source\":\"openclaw-original\",\"broadcastError\":") +
+			JsonString(broadcastError) +
+			"}");
+	}
+
 	bool GatewayHost::IsRunning() const noexcept {
 		return m_running;
 	}

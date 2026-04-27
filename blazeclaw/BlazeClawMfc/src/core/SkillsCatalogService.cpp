@@ -993,6 +993,15 @@ namespace blazeclaw::core {
 					entry.metadata.reset();
 					entry.invocation.reset();
 					entry.exposure.reset();
+					if (sourceRoot.kind == SkillsSourceKind::OpenClawOriginal) {
+						entry.openClawOriginalActivationState =
+							SkillsOpenClawOriginalActivationState::Failed;
+						entry.openClawOriginalOrigin = L"openclaw-original";
+						if (entry.openClawOriginalImportDiagnostics.empty()) {
+							entry.openClawOriginalImportDiagnostics.push_back(
+								L"malformed metadata: SKILL frontmatter parse failed");
+						}
+					}
 					++snapshot.diagnostics.invalidFrontmatterFiles;
 				}
 

@@ -211,6 +211,33 @@ namespace blazeclaw::core {
 				gatewayEntry.missingAnyBins =
 					UniqueNarrowValues(eligibility->missingAnyBins);
 			}
+
+			if (entry.openClawOriginalActivationState.has_value()) {
+				gatewayEntry.openClawOriginalActivationState = ToNarrow(
+					SkillsCatalogService::OpenClawOriginalActivationStateLabel(
+						entry.openClawOriginalActivationState.value()));
+			}
+			gatewayEntry.openClawOriginalOrigin =
+				ToNarrow(entry.openClawOriginalOrigin);
+			gatewayEntry.openClawOriginalImportDiagnostics =
+				UniqueNarrowValues(entry.openClawOriginalImportDiagnostics);
+			gatewayEntry.openClawOriginalMetadataConvertedFromClawdbot =
+				entry.openClawOriginalMetadataConvertedFromClawdbot;
+			gatewayEntry.openClawOriginalMissingToolManifest = std::any_of(
+				entry.openClawOriginalImportDiagnostics.begin(),
+				entry.openClawOriginalImportDiagnostics.end(),
+				[](const std::wstring& diagnostic) {
+					std::wstring lowered = diagnostic;
+					std::transform(
+						lowered.begin(),
+						lowered.end(),
+						lowered.begin(),
+						[](const wchar_t ch) {
+							return static_cast<wchar_t>(std::towlower(ch));
+						});
+					return lowered.find(L"missing tool manifest") !=
+						std::wstring::npos;
+				});
 			return gatewayEntry;
 		}
 

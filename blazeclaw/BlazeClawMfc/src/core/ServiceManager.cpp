@@ -12,6 +12,7 @@
 #include "../config/ConfigLoader.h"
 #include "../gateway/GatewayProtocolModels.h"
 #include "../gateway/GatewayJsonUtils.h"
+#include "../gateway/Telemetry.h"
 #include "../gateway/executors/EmailScheduleExecutor.h"
 #include "diagnostics/DiagnosticsSnapshot.h"
 #include "diagnostics/DiagnosticsRegressionComparator.h"
@@ -674,11 +675,11 @@ namespace blazeclaw::core {
 					canonical.append(" ");
 					canonical.append(token);
 				}
-			};
+				};
 
 			if (ContainsAnyWideFragment(
-					wide,
-					{ L"邮箱", L"收件箱", L"邮件", L"新邮件", L"查邮箱", L"查一下邮箱" })) {
+				wide,
+				{ L"邮箱", L"收件箱", L"邮件", L"新邮件", L"查邮箱", L"查一下邮箱" })) {
 				appendToken("inbox");
 				appendToken("email");
 			}
@@ -738,8 +739,8 @@ namespace blazeclaw::core {
 			const std::string lower = ToLowerAscii(message);
 			const std::wstring wide = Utf8ToWideLocal(message);
 			return ContainsAnyFragment(
-					   lower,
-					   { "within 2 hours", "within two hours", "2h", "2 hours" }) ||
+				lower,
+				{ "within 2 hours", "within two hours", "2h", "2 hours" }) ||
 				ContainsAnyWideFragment(wide, { L"2小时", L"两小时", L"两个小时" });
 		}
 
@@ -2082,7 +2083,31 @@ namespace blazeclaw::core {
 			return false;
 		}
 
+		std::string BuildOpenClawOriginalTelemetryPayload(
+			const std::wstring& skillName,
+			const std::string& activationState,
+			const std::size_t diagnosticsCount) {
+			return std::string("{\"skill\":") +
+				blazeclaw::gateway::JsonString(WideToNarrowAscii(skillName)) +
+				",\"state\":" +
+				blazeclaw::gateway::JsonString(activationState) +
+				",\"diagnostics\":" +
+				std::to_string(diagnosticsCount) +
+				"}";
+		}
 
+		std::wstring ToWideLocal(const std::string& value) {
+			if (value.empty()) {
+				return {};
+			}
+
+			std::wstring wide;
+			wide.reserve(value.size());
+			for (const unsigned char ch : value) {
+				wide.push_back(static_cast<wchar_t>(std::towlower(ch)));
+			}
+			return wide;
+		}
 
 	} // namespace
 
@@ -2273,6 +2298,89 @@ namespace blazeclaw::core {
 
 		m_configSchemaService.Invalidate();
 		SkillsGatewayPublicationCoordinator::RefreshProjection(*this);
+		RefreshOpenClawOriginalRuntimeTools(config);
+		EmitOpenClawOriginalTelemetry();
+	}
+
+	void ServiceManager::RefreshOpenClawOriginalRuntimeTools(
+		const blazeclaw::config::AppConfig& config) {
+		if (!config.skills.openclawOriginal.enabled ||
+			!config.skills.openclawOriginal.autoImportTools) {
+			return;
+		}
+
+		bool hasToolEnabledCandidate = false;
+		for (const auto& entry : m_skillsCatalog.entries) {
+			if (entry.sourceKind != SkillsSourceKind::OpenClawOriginal ||
+				!entry.openClawOriginalActivationState.has_value()) {
+				continue;
+			}
+
+			if (entry.openClawOriginalActivationState.value() ==
+				SkillsOpenClawOriginalActivationState::ToolEnabled) {
+				hasToolEnabledCandidate = true;
+				break;
+			}
+		}
+
+		if (!hasToolEnabledCandidate) {
+			return;
+		}
+
+		const auto workspaceRoot = ResolveWorkspaceRootForSkills(
+			std::filesystem::current_path());
+		const std::filesystem::path managedRoot =
+			workspaceRoot / L".blazeclaw" / L"skills" / L"openclaw-original";
+		const std::filesystem::path sourceRoot =
+			workspaceRoot /
+			std::filesystem::path(config.skills.openclawOriginal.sourceDir);
+
+		m_gatewayHost.ReloadSkillToolsFromDirectories(
+			{
+				WideToNarrowAscii(managedRoot.wstring()),
+				WideToNarrowAscii(sourceRoot.wstring()),
+				WideToNarrowAscii(
+					(workspaceRoot / L"blazeclaw" / L"skills-openclaw-original").wstring()),
+			},
+			true);
+	}
+
+	void ServiceManager::EmitOpenClawOriginalTelemetry() const {
+		for (const auto& entry : m_skillsCatalog.entries) {
+			if (entry.sourceKind != SkillsSourceKind::OpenClawOriginal ||
+				!entry.openClawOriginalActivationState.has_value()) {
+				continue;
+			}
+
+			const auto stateLabel = SkillsCatalogService::OpenClawOriginalActivationStateLabel(
+				entry.openClawOriginalActivationState.value());
+			const std::string stateNarrow = WideToNarrowAscii(stateLabel);
+			const std::string payload = BuildOpenClawOriginalTelemetryPayload(
+				entry.skillName,
+				stateNarrow,
+				entry.openClawOriginalImportDiagnostics.size());
+
+			if (stateNarrow == "detected") {
+				blazeclaw::gateway::EmitTelemetryEvent(
+					"skills.openclaw_original.detected",
+					payload);
+			}
+			else if (stateNarrow == "imported") {
+				blazeclaw::gateway::EmitTelemetryEvent(
+					"skills.openclaw_original.imported",
+					payload);
+			}
+			else if (stateNarrow == "tool_enabled") {
+				blazeclaw::gateway::EmitTelemetryEvent(
+					"skills.openclaw_original.tool_enabled",
+					payload);
+			}
+			else {
+				blazeclaw::gateway::EmitTelemetryEvent(
+					"skills.openclaw_original.failed",
+					payload);
+			}
+		}
 	}
 
 	std::vector<extensions::IRuntimeSkillCommandSourceAdapter*>
@@ -2838,6 +2946,8 @@ namespace blazeclaw::core {
 		}
 
 		m_running = true;
+		RefreshOpenClawOriginalRuntimeTools(config);
+		EmitOpenClawOriginalTelemetry();
 		AppendStartupTrace("ServiceManager.Start.gateway.afterStart");
 		RecordGatewayLifecycleTransition("startup.ready");
 		return true;
@@ -3243,6 +3353,9 @@ namespace blazeclaw::core {
 		m_activeConfig.gateway.authSessionGeneration =
 			nextConfig.gateway.authSessionGeneration;
 
+		RefreshOpenClawOriginalRuntimeTools(nextConfig);
+		EmitOpenClawOriginalTelemetry();
+
 		if (plan.authSensitiveChanged) {
 			m_state.gatewayLifecycle.authSessionGenerationCurrent =
 				nextConfig.gateway.authSessionGeneration;
@@ -3307,10 +3420,10 @@ namespace blazeclaw::core {
 
 		if (m_state.gatewayLiveRuntime.runtimeServicesStarted &&
 			nextConfig.embedded.extensionSurfaceApplyEpoch >
-				m_state.gatewayLiveRuntime.lastAppliedExtensionSurfaceEpoch) {
+			m_state.gatewayLiveRuntime.lastAppliedExtensionSurfaceEpoch) {
 			std::string deltaJson;
 			if (m_gatewayHost.PerformDeferredExtensionCatalogReloadWithMethodSurfaceTelemetry(
-					deltaJson)) {
+				deltaJson)) {
 				m_state.gatewayLiveRuntime.lastAppliedExtensionSurfaceEpoch =
 					nextConfig.embedded.extensionSurfaceApplyEpoch;
 				++m_state.gatewayLiveRuntime.extensionSurfaceReloadCount;

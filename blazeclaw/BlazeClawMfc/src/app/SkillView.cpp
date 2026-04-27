@@ -100,8 +100,66 @@ namespace {
 		{
 			payload["configPathHints"] = Json::array();
 		}
+		if (!payload.contains("openclawOriginalActivationState") || !payload["openclawOriginalActivationState"].is_string())
+		{
+			payload["openclawOriginalActivationState"] = "";
+		}
+		if (!payload.contains("openclawOriginalImportDiagnostics") || !payload["openclawOriginalImportDiagnostics"].is_array())
+		{
+			payload["openclawOriginalImportDiagnostics"] = Json::array();
+		}
+		if (!payload.contains("openclawOriginalMissingToolManifest") || !payload["openclawOriginalMissingToolManifest"].is_boolean())
+		{
+			payload["openclawOriginalMissingToolManifest"] = false;
+		}
+		if (!payload.contains("openclawOriginalMetadataConvertedFromClawdbot") || !payload["openclawOriginalMetadataConvertedFromClawdbot"].is_boolean())
+		{
+			payload["openclawOriginalMetadataConvertedFromClawdbot"] = false;
+		}
 
 		return payload.dump();
+	}
+
+	std::string ResolveOpenClawOriginalGroupFromPayload(const std::string& payloadJson)
+	{
+		Json payload = Json::parse(payloadJson, nullptr, false);
+		if (payload.is_discarded() || !payload.is_object())
+		{
+			return "needs-porting";
+		}
+
+		const std::string activation = payload.value("openclawOriginalActivationState", "");
+		if (activation == "failed")
+		{
+			return "failed";
+		}
+		if (activation == "tool_enabled")
+		{
+			return "enabled";
+		}
+		return "needs-porting";
+	}
+
+	std::string BuildOpenClawOriginalDisplayName(
+		const std::string& skillKey,
+		const std::string& payloadJson)
+	{
+		Json payload = Json::parse(payloadJson, nullptr, false);
+		if (payload.is_discarded() || !payload.is_object())
+		{
+			return skillKey;
+		}
+
+		std::string label = skillKey;
+		if (payload.value("openclawOriginalMissingToolManifest", false))
+		{
+			label += " [missing tool-manifest.json]";
+		}
+		if (payload.value("openclawOriginalMetadataConvertedFromClawdbot", false))
+		{
+			label += " [metadata converted from clawdbot]";
+		}
+		return label;
 	}
 
 	std::vector<std::string> SplitTopLevelObjects(const std::string& arrayJson)
@@ -439,6 +497,67 @@ void CSkillView::FillSkillView()
 
 		std::string category;
 		blazeclaw::gateway::json::FindStringField(entryJson, "installKind", category);
+		std::string sourceKind;
+		blazeclaw::gateway::json::FindStringField(entryJson, "source", sourceKind);
+		const bool isOpenClawOriginal = sourceKind == "openclaw-original";
+		if (isOpenClawOriginal)
+		{
+			const std::string parentCategory = "openclaw-original";
+			auto parentCategoryIt = categoryItems.find(parentCategory);
+			HTREEITEM parentCategoryNode = nullptr;
+			if (parentCategoryIt == categoryItems.end())
+			{
+				parentCategoryNode = m_wndSkillView.InsertItem(
+					_T("openclaw-original"),
+					1,
+					1,
+					hRoot);
+				categoryItems.insert_or_assign(parentCategory, parentCategoryNode);
+			}
+			else
+			{
+				parentCategoryNode = parentCategoryIt->second;
+			}
+
+			const auto catalogPayloadIt = catalogPayloadBySkillKey.find(normalizedSkillKey);
+			const std::string payload = BuildCanonicalSkillPayload(
+				skillKey,
+				catalogPayloadIt != catalogPayloadBySkillKey.end()
+				? catalogPayloadIt->second
+				: entryJson,
+				"gateway.skills.list",
+				"openclaw-original",
+				"Discovered from openclaw-original skills catalog.");
+			const std::string openClawGroup =
+				ResolveOpenClawOriginalGroupFromPayload(payload);
+			const std::string openClawGroupKey =
+				std::string("openclaw-original/") + openClawGroup;
+			auto groupIt = categoryItems.find(openClawGroupKey);
+			HTREEITEM groupNode = nullptr;
+			if (groupIt == categoryItems.end())
+			{
+				groupNode = m_wndSkillView.InsertItem(
+					CString(CA2W(openClawGroup.c_str(), CP_UTF8)),
+					1,
+					1,
+					parentCategoryNode);
+				categoryItems.insert_or_assign(openClawGroupKey, groupNode);
+			}
+			else
+			{
+				groupNode = groupIt->second;
+			}
+
+			const std::string displayName =
+				BuildOpenClawOriginalDisplayName(skillKey, payload);
+			const HTREEITEM skillNode = m_wndSkillView.InsertItem(
+				CString(CA2W(displayName.c_str(), CP_UTF8)),
+				2,
+				2,
+				groupNode);
+			m_skillItemPayloadByTreeItem.insert_or_assign(skillNode, payload);
+			continue;
+		}
 		if (category.empty() || category == "general")
 		{
 			const std::string runtimeCategory = "runtime-registered";
@@ -654,28 +773,23 @@ void CSkillView::FillSkillView()
 					}
 
 					knownSkillKeys.insert(NormalizeSkillKeyForDedup(skillKey));
-					const std::string category = "openclaw-original";
-					auto categoryIt = categoryItems.find(category);
-					HTREEITEM categoryNode = nullptr;
-					if (categoryIt == categoryItems.end())
+					const std::string parentCategory = "openclaw-original";
+					auto parentCategoryIt = categoryItems.find(parentCategory);
+					HTREEITEM parentCategoryNode = nullptr;
+					if (parentCategoryIt == categoryItems.end())
 					{
-						categoryNode = m_wndSkillView.InsertItem(
+						parentCategoryNode = m_wndSkillView.InsertItem(
 							_T("openclaw-original"),
 							1,
 							1,
 							hRoot);
-						categoryItems.insert_or_assign(category, categoryNode);
+						categoryItems.insert_or_assign(parentCategory, parentCategoryNode);
 					}
 					else
 					{
-						categoryNode = categoryIt->second;
+						parentCategoryNode = parentCategoryIt->second;
 					}
 
-					const HTREEITEM skillNode = m_wndSkillView.InsertItem(
-						CString(CA2W(skillKey.c_str(), CP_UTF8)),
-						2,
-						2,
-						categoryNode);
 					const auto catalogPayloadIt = catalogPayloadBySkillKey.find(
 						NormalizeSkillKeyForDedup(skillKey));
 					const std::string payload = BuildCanonicalSkillPayload(
@@ -686,6 +800,33 @@ void CSkillView::FillSkillView()
 						"openclaw.filesystem",
 						"openclaw-original",
 						"Discovered from openclaw/skills with original assets");
+					const std::string openClawGroup =
+						ResolveOpenClawOriginalGroupFromPayload(payload);
+					const std::string openClawGroupKey =
+						std::string("openclaw-original/") + openClawGroup;
+					auto groupIt = categoryItems.find(openClawGroupKey);
+					HTREEITEM groupNode = nullptr;
+					if (groupIt == categoryItems.end())
+					{
+						groupNode = m_wndSkillView.InsertItem(
+							CString(CA2W(openClawGroup.c_str(), CP_UTF8)),
+							1,
+							1,
+							parentCategoryNode);
+						categoryItems.insert_or_assign(openClawGroupKey, groupNode);
+					}
+					else
+					{
+						groupNode = groupIt->second;
+					}
+
+					const std::string displayName =
+						BuildOpenClawOriginalDisplayName(skillKey, payload);
+					const HTREEITEM skillNode = m_wndSkillView.InsertItem(
+						CString(CA2W(displayName.c_str(), CP_UTF8)),
+						2,
+						2,
+						groupNode);
 					m_skillItemPayloadByTreeItem.insert_or_assign(skillNode, payload);
 				}
 			}

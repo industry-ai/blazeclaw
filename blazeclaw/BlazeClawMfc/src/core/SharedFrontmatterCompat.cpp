@@ -234,6 +234,7 @@ namespace blazeclaw::core {
 		static const std::vector<std::wstring> manifestKeys = {
 			L"openclaw",
 			L"blazeclaw",
+			L"clawdbot",
 		};
 		for (const auto& manifestKey : manifestKeys) {
 			const std::string keyUtf8 = WideToUtf8Compat(manifestKey);
