@@ -358,6 +358,13 @@ namespace blazeclaw::config {
 		std::vector<std::wstring> extraDirs;
 	};
 
+	struct SkillsOpenClawOriginalConfig {
+		bool enabled = true;
+		bool autoImportTools = true;
+		std::wstring sourceDir = L"blazeclaw/skills-openclaw-original";
+		bool promoteToManaged = true;
+	};
+
 	struct SkillsLimitsConfig {
 		std::uint32_t maxCandidatesPerRoot = 300;
 		std::uint32_t maxSkillsLoadedPerSource = 200;
@@ -386,6 +393,7 @@ namespace blazeclaw::config {
 		std::uint32_t entryConfigNormalizedCount = 0;
 		std::uint32_t entryConfigMalformedCount = 0;
 		SkillsLoadConfig load;
+		SkillsOpenClawOriginalConfig openclawOriginal;
 		SkillsLimitsConfig limits;
 		SkillsInstallConfig install;
 	};

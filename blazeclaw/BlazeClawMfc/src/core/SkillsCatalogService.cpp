@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "SkillsCatalogService.h"
+#include "OpenClawOriginalImportService.h"
 #include "SkillsFrontmatterCompat.h"
 #include "filesystem/SafeOpenSync.h"
 
@@ -475,6 +476,22 @@ namespace blazeclaw::core {
 		}
 	}
 
+	std::wstring SkillsCatalogService::OpenClawOriginalActivationStateLabel(
+		const SkillsOpenClawOriginalActivationState state) {
+		switch (state) {
+		case SkillsOpenClawOriginalActivationState::Detected:
+			return L"detected";
+		case SkillsOpenClawOriginalActivationState::Imported:
+			return L"imported";
+		case SkillsOpenClawOriginalActivationState::ToolEnabled:
+			return L"tool_enabled";
+		case SkillsOpenClawOriginalActivationState::Failed:
+			return L"failed";
+		default:
+			return L"detected";
+		}
+	}
+
 	bool SkillsCatalogService::ValidateFixtureScenarios(
 		const std::filesystem::path& fixturesRoot,
 		std::wstring& outError) const {
@@ -914,6 +931,50 @@ namespace blazeclaw::core {
 					entry.exposure = ResolveSkillExposurePolicyCompat(
 						frontmatterCompat,
 						entry.invocation.value());
+
+					if (sourceRoot.kind == SkillsSourceKind::OpenClawOriginal) {
+						OpenClawOriginalImportService importService;
+						const auto importResult = importService.ImportSkill(
+							OpenClawOriginalImportRequest{
+								.workspaceRoot = workspaceRoot,
+								.skillDir = entry.skillDir,
+								.skillFile = entry.skillFile,
+								.validFrontmatter = entry.validFrontmatter,
+								.frontmatter = frontmatterCompat,
+							},
+							appConfig);
+
+						entry.openClawOriginalOrigin = importResult.origin;
+						entry.openClawOriginalImportDiagnostics =
+							importResult.diagnostics;
+						entry.openClawOriginalPromotedDir =
+							importResult.promotedDir;
+						entry.openClawOriginalMetadataConvertedFromClawdbot =
+							importResult.metadataConvertedFromClawdbot;
+						if (importResult.normalizedMetadata.has_value()) {
+							entry.metadata = importResult.normalizedMetadata;
+						}
+
+						switch (importResult.activationState) {
+						case OpenClawOriginalImportActivationState::Detected:
+							entry.openClawOriginalActivationState =
+								SkillsOpenClawOriginalActivationState::Detected;
+							break;
+						case OpenClawOriginalImportActivationState::Imported:
+							entry.openClawOriginalActivationState =
+								SkillsOpenClawOriginalActivationState::Imported;
+							break;
+						case OpenClawOriginalImportActivationState::ToolEnabled:
+							entry.openClawOriginalActivationState =
+								SkillsOpenClawOriginalActivationState::ToolEnabled;
+							break;
+						case OpenClawOriginalImportActivationState::Failed:
+						default:
+							entry.openClawOriginalActivationState =
+								SkillsOpenClawOriginalActivationState::Failed;
+							break;
+						}
+					}
 				}
 				else {
 					if (loaderPolicy.strictFrontmatter) {

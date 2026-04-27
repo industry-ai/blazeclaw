@@ -168,6 +168,7 @@
     <ClInclude Include="src\core\SkillCommandsAggregationService.h" />
     <ClInclude Include="src\core\SkillsContracts.h" />
     <ClInclude Include="src\core\SkillsFrontmatterCompat.h" />
+    <ClInclude Include="src\core\OpenClawOriginalImportService.h" />
     <ClInclude Include="src\core\SkillsSkillContractCompat.h" />
     <ClInclude Include="src\core\SkillsAgentCommandDescriptorPolicy.h" />
     <ClInclude Include="src\core\SkillsCatalogService.h" />
@@ -367,6 +368,7 @@
     <ClCompile Include="src\core\SkillsAgentCommandDescriptorPolicy.cpp" />
     <ClCompile Include="src\core\SkillsCatalogService.cpp" />
     <ClCompile Include="src\core\SkillsFrontmatterCompat.cpp" />
+    <ClCompile Include="src\core\OpenClawOriginalImportService.cpp" />
     <ClCompile Include="src\core\SkillsEnvOverrideService.cpp" />
     <ClCompile Include="src\core\SkillsEligibilityService.cpp" />
     <ClCompile Include="src\core\SkillsFacade.cpp" />

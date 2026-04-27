@@ -412,7 +412,7 @@ namespace blazeclaw::config {
 		out.recordedAtEpochMs = static_cast<std::uint64_t>(
 			std::chrono::duration_cast<std::chrono::milliseconds>(
 				std::chrono::system_clock::now().time_since_epoch())
-				.count());
+			.count());
 		std::ifstream input(path, std::ios::binary);
 		if (!input.is_open()) {
 			out.fileExisted = false;
@@ -1540,6 +1540,35 @@ namespace blazeclaw::config {
 			if (trimmedLine.rfind(L"skills.load.strictFrontmatter=", 0) == 0) {
 				outConfig.skills.load.strictFrontmatter =
 					ParseBool(trimmedLine.substr(30), false);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"skills.openclawOriginal.enabled=", 0) == 0) {
+				outConfig.skills.openclawOriginal.enabled = ParseBool(
+					trimmedLine.substr(31),
+					true);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"skills.openclawOriginal.autoImportTools=", 0) == 0) {
+				outConfig.skills.openclawOriginal.autoImportTools = ParseBool(
+					trimmedLine.substr(39),
+					true);
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"skills.openclawOriginal.sourceDir=", 0) == 0) {
+				const auto sourceDir = Trim(trimmedLine.substr(33));
+				if (!sourceDir.empty()) {
+					outConfig.skills.openclawOriginal.sourceDir = sourceDir;
+				}
+				continue;
+			}
+
+			if (trimmedLine.rfind(L"skills.openclawOriginal.promoteToManaged=", 0) == 0) {
+				outConfig.skills.openclawOriginal.promoteToManaged = ParseBool(
+					trimmedLine.substr(40),
+					true);
 				continue;
 			}
 

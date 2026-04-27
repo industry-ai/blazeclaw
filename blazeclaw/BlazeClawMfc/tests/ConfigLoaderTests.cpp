@@ -109,6 +109,61 @@ TEST_CASE("ConfigLoader parses skills entries env and config maps", "[config][sk
 	std::filesystem::remove_all(root);
 }
 
+TEST_CASE("ConfigLoader parses openclaw-original skills policy", "[config][skills][openclaw-original]") {
+	blazeclaw::config::ConfigLoader loader;
+
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_openclaw_original_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto configPath = root / "openclaw-original.conf";
+	{
+		std::wofstream out(configPath);
+		REQUIRE(out.is_open());
+		out << L"skills.openclawOriginal.enabled=false\n";
+		out << L"skills.openclawOriginal.autoImportTools=false\n";
+		out << L"skills.openclawOriginal.sourceDir=skills-openclaw-original\n";
+		out << L"skills.openclawOriginal.promoteToManaged=false\n";
+	}
+
+	blazeclaw::config::AppConfig config;
+	REQUIRE(loader.LoadFromFile(configPath.wstring(), config));
+
+	REQUIRE_FALSE(config.skills.openclawOriginal.enabled);
+	REQUIRE_FALSE(config.skills.openclawOriginal.autoImportTools);
+	REQUIRE(config.skills.openclawOriginal.sourceDir == L"skills-openclaw-original");
+	REQUIRE_FALSE(config.skills.openclawOriginal.promoteToManaged);
+
+	std::filesystem::remove_all(root);
+}
+
+TEST_CASE("ConfigLoader defaults openclaw-original policy", "[config][skills][openclaw-original][defaults]") {
+	blazeclaw::config::ConfigLoader loader;
+
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_config_loader_openclaw_original_defaults_" +
+			std::to_string(std::rand()));
+	std::filesystem::create_directories(root);
+
+	const auto configPath = root / "openclaw-original-defaults.conf";
+	{
+		std::wofstream out(configPath);
+		REQUIRE(out.is_open());
+		out << L"skills.allowBundled=demo\n";
+	}
+
+	blazeclaw::config::AppConfig config;
+	REQUIRE(loader.LoadFromFile(configPath.wstring(), config));
+
+	REQUIRE(config.skills.openclawOriginal.enabled);
+	REQUIRE(config.skills.openclawOriginal.autoImportTools);
+	REQUIRE(config.skills.openclawOriginal.sourceDir ==
+		L"blazeclaw/skills-openclaw-original");
+	REQUIRE(config.skills.openclawOriginal.promoteToManaged);
+
+	std::filesystem::remove_all(root);
+}
+
 TEST_CASE("ConfigLoader parses agent/default skills allowlist semantics", "[config][agents][skills]") {
 	blazeclaw::config::ConfigLoader loader;
 

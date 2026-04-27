@@ -41,6 +41,13 @@ namespace blazeclaw::core {
 		std::map<std::wstring, std::wstring> fields;
 	};
 
+	enum class SkillsOpenClawOriginalActivationState {
+		Detected = 0,
+		Imported = 1,
+		ToolEnabled = 2,
+		Failed = 3,
+	};
+
 	struct SkillsCatalogEntry {
 		std::wstring skillName;
 		std::wstring description;
@@ -55,6 +62,11 @@ namespace blazeclaw::core {
 		std::optional<SkillInvocationPolicySpec> invocation;
 		std::optional<SkillExposureSpec> exposure;
 		std::optional<SkillSourceInfoCompat> sourceInfo;
+		std::optional<SkillsOpenClawOriginalActivationState> openClawOriginalActivationState;
+		std::wstring openClawOriginalOrigin;
+		std::vector<std::wstring> openClawOriginalImportDiagnostics;
+		std::filesystem::path openClawOriginalPromotedDir;
+		bool openClawOriginalMetadataConvertedFromClawdbot = false;
 	};
 
 	struct SkillsCatalogDiagnostics {
@@ -90,6 +102,8 @@ namespace blazeclaw::core {
 			std::wstring& outError) const;
 
 		[[nodiscard]] static std::wstring SourceKindLabel(SkillsSourceKind kind);
+		[[nodiscard]] static std::wstring OpenClawOriginalActivationStateLabel(
+			SkillsOpenClawOriginalActivationState state);
 
 	private:
 		[[nodiscard]] static SkillsLoaderPolicy ResolveLoaderPolicy(
