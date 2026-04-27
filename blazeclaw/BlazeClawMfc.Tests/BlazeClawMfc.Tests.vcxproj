@@ -63,6 +63,7 @@
     <ClCompile Include="..\\BlazeClawMfc\\tests\\OpenClawOriginalTelemetryContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\DeepSeekSseParserTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\ToolRuntimeRegistryIntegrationTests.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\tests\\PiEmbeddedServiceNanoPdfFlowTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\DiagnosticsRegressionComparatorTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\ServiceManagerStartupPhaseContractTests.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\tests\\GatewayLifecycleParityTests.cpp" />
@@ -192,6 +193,7 @@
     <ClCompile Include="..\BlazeClawMfc\src\gateway\executors\PythonProcessExecutor.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\gateway\\executors\\WeatherLookupExecutor.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\providers\\CDeepSeekClient.cpp" />
+    <ClCompile Include="..\\BlazeClawMfc\\src\\core\\PiEmbeddedService.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\tools\\CToolRuntimeRegistry.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\tools\\ToolArgumentValidators.cpp" />
     <ClCompile Include="..\\BlazeClawMfc\\src\\core\\tools\\ToolProcessRunner.cpp" />

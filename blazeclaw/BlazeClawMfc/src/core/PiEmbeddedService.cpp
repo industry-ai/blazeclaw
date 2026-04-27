@@ -265,6 +265,60 @@ namespace blazeclaw::core {
 			return std::nullopt;
 		}
 
+		std::optional<std::string> TryExtractPdfOutputPathFromText(const std::string& text) {
+			static const std::regex kQuotedPdfPathRegex(
+				R"((['"])([^'"]+?\.pdf)\1)",
+				std::regex_constants::icase);
+			std::smatch match;
+			if (std::regex_search(text, match, kQuotedPdfPathRegex) && match.size() >= 3) {
+				const std::string value = blazeclaw::gateway::json::Trim(match[2].str());
+				if (!value.empty()) {
+					return value;
+				}
+			}
+
+			static const std::regex kBarePdfPathRegex(
+				R"((/[^\s'"]+?\.pdf|\b[A-Za-z]:[\\/][^\s'"]+?\.pdf))",
+				std::regex_constants::icase);
+			if (std::regex_search(text, match, kBarePdfPathRegex) && match.size() >= 2) {
+				const std::string value = blazeclaw::gateway::json::Trim(match[1].str());
+				if (!value.empty()) {
+					return value;
+				}
+			}
+
+			return std::nullopt;
+		}
+
+		std::string DeriveDraftPdfPath(const std::string& finalPath) {
+			if (finalPath.size() >= 4 &&
+				ToLowerCopy(finalPath.substr(finalPath.size() - 4)) == ".pdf") {
+				return finalPath.substr(0, finalPath.size() - 4) + "_draft.pdf";
+			}
+			return finalPath + "_draft.pdf";
+		}
+
+		std::optional<std::string> TryExtractGenerateOutputPathFromResult(const std::string& resultJson) {
+			if (resultJson.empty()) {
+				return std::nullopt;
+			}
+
+			try {
+				const auto parsed = nlohmann::json::parse(resultJson);
+				if (parsed.is_object() && parsed.contains("outputPath") &&
+					parsed["outputPath"].is_string()) {
+					const std::string value = blazeclaw::gateway::json::Trim(parsed["outputPath"].get<std::string>());
+					if (!value.empty()) {
+						return value;
+					}
+				}
+			}
+			catch (...) {
+			}
+
+			return std::nullopt;
+		}
+
 		std::optional<std::string> TryExtractHttpUrl(const std::string& text) {
 			static const std::regex kHttpRegex(
 				R"((https?://[^\s\)\]\>"]+))",
@@ -405,6 +459,27 @@ namespace blazeclaw::core {
 			else if (loweredTool.find("notion") != std::string::npos) {
 				args["page"] = "每日早报";
 				args["content"] = lastOutput.empty() ? runMessage : lastOutput;
+			}
+			else if (loweredTool == "nano_pdf.generate") {
+				const std::string contentSource = lastOutput.empty()
+					? (query.empty() ? runMessage : query)
+					: lastOutput;
+				args["content"] = blazeclaw::gateway::json::Trim(contentSource);
+				const std::string finalPath =
+					TryExtractPdfOutputPathFromText(runMessage).value_or("/tmp/Battery_Report.pdf");
+				args["outputPath"] = DeriveDraftPdfPath(finalPath);
+				args["title"] = "Business Brief";
+			}
+			else if (loweredTool == "nano_pdf.edit") {
+				const std::string finalPath =
+					TryExtractPdfOutputPathFromText(runMessage).value_or("/tmp/Battery_Report.pdf");
+				const auto generatedPath = TryExtractGenerateOutputPathFromResult(lastOutput);
+				args["inputPath"] = generatedPath.value_or(DeriveDraftPdfPath(finalPath));
+				args["outputPath"] = finalPath;
+				args["pageIndex"] = 0;
+				args["instruction"] =
+					"Apply professional business-report formatting: improve heading hierarchy, "
+					"tighten spacing, and normalize typography.";
 			}
 			else {
 				args["input"] = lastOutput.empty() ? runMessage : lastOutput;
@@ -622,6 +697,27 @@ namespace blazeclaw::core {
 			args["sessionKey"] =
 				request.run.sessionId.empty() ? "main" : request.run.sessionId;
 			return args;
+		}
+
+		bool HasMeaningfulGenerateContent(const nlohmann::json& args) {
+			const auto it = args.find("content");
+			if (it == args.end() || !it->is_string()) {
+				return false;
+			}
+
+			const std::string content = blazeclaw::gateway::json::Trim(it->get<std::string>());
+			if (content.size() < 32) {
+				return false;
+			}
+
+			const std::string lowered = ToLowerCopy(content);
+			if (lowered == "write a business brief" ||
+				lowered == "business brief" ||
+				lowered.find("call nano-pdf") != std::string::npos) {
+				return false;
+			}
+
+			return true;
 		}
 
 		bool IsAllowedRuntimeTool(
@@ -1064,6 +1160,16 @@ namespace blazeclaw::core {
 					"invalid_args",
 					kErrorInvalidArgs,
 					"tool args do not satisfy binding arg mode");
+				completeWithSnapshot();
+				return result;
+			}
+
+			if (ToLowerCopy(toolName) == "nano_pdf.generate" &&
+				!HasMeaningfulGenerateContent(args)) {
+				finalizeFailure(
+					"planner_missing_pdf_content_payload",
+					kErrorInvalidArgs,
+					"planner could not derive non-empty business brief content for nano_pdf.generate");
 				completeWithSnapshot();
 				return result;
 			}

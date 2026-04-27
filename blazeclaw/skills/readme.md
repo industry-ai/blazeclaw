@@ -337,6 +337,12 @@ Wikipedia AI-writing-pattern guidance.
     directly to edit-only execution.
   - `nano_pdf.edit` now returns actionable argument guidance when `inputPath`
     is missing and validates that `inputPath` points to an existing PDF.
+  - Embedded ordered orchestration now injects `nano_pdf.generate.content`
+    from planner-assembled brief text and derives draft/final PDF paths from
+    prompt output-path hints.
+  - If meaningful content cannot be assembled for `nano_pdf.generate`, planner
+    exits early with deterministic planner diagnostics instead of passing empty
+    args to runtime tool validation.
   - Content polishing flow commands can resolve deterministic chains through
     local adapters and execute in order:
     - `summarize.extract`
