@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BlazeClaw Nano PDF Tool Contracts",
+  "version": "1.0.0",
+  "contracts": {
+    "nano_pdf.edit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inputPath",
+        "pageIndex",
+        "instruction"
+      ],
+      "properties": {
+        "inputPath": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path to source PDF file."
+        },
+        "pageIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Page index to edit."
+        },
+        "instruction": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Natural-language instruction describing edit intent."
+        },
+        "outputPath": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional output path for edited PDF."
+        }
+      }
+    }
+  }
+}

@@ -2,6 +2,7 @@
 #include "core/tools/ToolArgumentValidators.h"
 #include "gateway/GatewayRequestParams.h"
 #include "gateway/GatewayHost.h"
+#include "gateway/GatewayToolRegistry.h"
 
 #include <catch2/catch_all.hpp>
 #include <nlohmann/json.hpp>
@@ -44,11 +45,13 @@ TEST_CASE("Tool runtime spec builders expose expected tool ids", "[tools][runtim
 	const auto braveSpecs = blazeclaw::core::tools::BuildBraveSearchToolRuntimeSpecs();
 	const auto baiduSpecs = blazeclaw::core::tools::BuildBaiduSearchToolRuntimeSpecs();
 	const auto polishSpecs = blazeclaw::core::tools::BuildContentPolishingToolRuntimeSpecs();
+	const auto nanoPdfSpecs = blazeclaw::core::tools::BuildNanoPdfToolRuntimeSpecs();
 
 	REQUIRE(!imapSpecs.empty());
 	REQUIRE(!braveSpecs.empty());
 	REQUIRE(!baiduSpecs.empty());
 	REQUIRE(!polishSpecs.empty());
+	REQUIRE(!nanoPdfSpecs.empty());
 
 	REQUIRE(std::find_if(
 		imapSpecs.begin(),
@@ -66,6 +69,11 @@ TEST_CASE("Tool runtime spec builders expose expected tool ids", "[tools][runtim
 		polishSpecs.end(),
 		[](const auto& spec) { return spec.id == "humanizer.rewrite"; }) !=
 		polishSpecs.end());
+	REQUIRE(std::find_if(
+		nanoPdfSpecs.begin(),
+		nanoPdfSpecs.end(),
+		[](const auto& spec) { return spec.id == "nano_pdf.edit"; }) !=
+		nanoPdfSpecs.end());
 }
 
 TEST_CASE("Tool argument validators preserve error taxonomy", "[tools][runtime][validators]") {
@@ -121,6 +129,42 @@ TEST_CASE("Tool argument validators preserve error taxonomy", "[tools][runtime][
 	REQUIRE(!baiduArgs.has_value());
 	REQUIRE(errorCode == "invalid_arguments");
 	REQUIRE(errorMessage.find("freshness") != std::string::npos);
+
+	const blazeclaw::core::tools::NanoPdfToolRuntimeSpec nanoPdfEdit{
+		.id = "nano_pdf.edit",
+		.label = "Nano PDF Edit",
+		.script = "scripts/nano_pdf_bridge.py",
+	};
+	errorCode.clear();
+	errorMessage.clear();
+	const auto nanoPdfArgsMissingInstruction = blazeclaw::core::tools::BuildNanoPdfCliArgs(
+		nanoPdfEdit,
+		nlohmann::json::object({
+			{"inputPath", "deck.pdf"},
+			{"pageIndex", 1},
+			}),
+			errorCode,
+			errorMessage);
+	REQUIRE(!nanoPdfArgsMissingInstruction.has_value());
+	REQUIRE(errorCode == "invalid_args");
+	REQUIRE(errorMessage == "instruction is required");
+
+	errorCode.clear();
+	errorMessage.clear();
+	const auto nanoPdfArgsValid = blazeclaw::core::tools::BuildNanoPdfCliArgs(
+		nanoPdfEdit,
+		nlohmann::json::object({
+			{"inputPath", "deck.pdf"},
+			{"pageIndex", 0},
+			{"instruction", "Replace title text"},
+			{"outputPath", "deck.edited.pdf"},
+			}),
+			errorCode,
+			errorMessage);
+	REQUIRE(nanoPdfArgsValid.has_value());
+	REQUIRE_FALSE(nanoPdfArgsValid->empty());
+	REQUIRE(errorCode.empty());
+	REQUIRE(errorMessage.empty());
 }
 
 TEST_CASE("Content polishing extracts quoted draft over control instructions", "[tools][runtime][polish][extract]") {
@@ -462,6 +506,50 @@ TEST_CASE("Tool runtime classifiers and truncation keep behavior parity", "[tool
 		blazeclaw::core::tools::IsBraveNetworkTimeoutFailure("UND_ERR_CONNECT_TIMEOUT"));
 }
 
+TEST_CASE("Skill tool registry loads nano-pdf manifest as enabled runtime entry", "[tools][runtime][manifest][nano-pdf]") {
+	const auto root = std::filesystem::temp_directory_path() /
+		("blazeclaw_nano_pdf_manifest_" + std::to_string(std::rand()));
+	const auto skillDir = root / "nano-pdf";
+	std::filesystem::create_directories(skillDir);
+
+	const auto manifestPath = skillDir / "tool-manifest.json";
+	{
+		std::ofstream out(manifestPath);
+		REQUIRE(out.is_open());
+		out
+			<< "{\n"
+			<< "  \"schemaVersion\": 1,\n"
+			<< "  \"skill\": \"nano-pdf\",\n"
+			<< "  \"namespace\": \"nano_pdf\",\n"
+			<< "  \"tools\": [\n"
+			<< "    {\n"
+			<< "      \"id\": \"nano_pdf.edit\",\n"
+			<< "      \"label\": \"Nano PDF Edit\",\n"
+			<< "      \"category\": \"document\",\n"
+			<< "      \"enabled\": true\n"
+			<< "    }\n"
+			<< "  ]\n"
+			<< "}\n";
+	}
+
+	blazeclaw::gateway::GatewayToolRegistry registry;
+	const auto loaded = registry.LoadSkillToolsFromDirectory(root.string());
+	REQUIRE(loaded == 1);
+
+	const auto tools = registry.List();
+	const auto it = std::find_if(
+		tools.begin(),
+		tools.end(),
+		[](const blazeclaw::gateway::ToolCatalogEntry& tool) {
+			return tool.id == "nano_pdf.edit";
+		});
+	REQUIRE(it != tools.end());
+	REQUIRE(it->enabled);
+	REQUIRE(it->source == "skills.tool-manifest");
+
+	std::filesystem::remove_all(root);
+}
+
 TEST_CASE("Web browsing Option B fallback continuity contract remains wired", "[tools][runtime][fallback][contract]") {
 	const auto serviceManagerPathPrimary =
 		std::filesystem::path("BlazeClawMfc") /
@@ -594,9 +682,12 @@ TEST_CASE("CToolRuntimeRegistry invokes dependency registrations", "[tools][runt
 	deps.registerBaiduSearch = [&](blazeclaw::gateway::GatewayHost&, const auto&) {
 		++callCount;
 		};
+	deps.registerNanoPdf = [&](blazeclaw::gateway::GatewayHost&, const auto&) {
+		++callCount;
+		};
 
 	registry.RegisterAll(host, policy, deps);
-	REQUIRE(callCount == 4);
+	REQUIRE(callCount == 5);
 }
 
 TEST_CASE("Skill invocation includes inbox intent alias contract", "[skills][dispatch][contract]") {
@@ -868,6 +959,36 @@ TEST_CASE("Web chat incident mismatch-recovery wiring is present", "[chat][front
 	REQUIRE(controllerSource.find("function extractChatEventsFromPollResponse") != std::string::npos);
 	REQUIRE(controllerSource.find("abort fallback reconciled stale run state") != std::string::npos);
 	REQUIRE(controllerSource.find("abort diagnostic: target=") != std::string::npos);
+}
+
+TEST_CASE("Nano PDF runtime contract wiring is present", "[tools][runtime][nano-pdf][contract]") {
+	const auto serviceManagerPathPrimary =
+		std::filesystem::path("BlazeClawMfc") /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	const auto serviceManagerPathFallback =
+		std::filesystem::path("blazeclaw") /
+		"BlazeClawMfc" /
+		"src" /
+		"core" /
+		"ServiceManager.cpp";
+	std::ifstream in(serviceManagerPathPrimary.string());
+	if (!in.is_open()) {
+		in.open(serviceManagerPathFallback.string());
+	}
+	REQUIRE(in.is_open());
+
+	const std::string source(
+		(std::istreambuf_iterator<char>(in)),
+		std::istreambuf_iterator<char>());
+
+	REQUIRE(source.find("RegisterNanoPdfRuntimeTools") != std::string::npos);
+	REQUIRE(source.find("BuildNanoPdfToolRuntimeSpecs") != std::string::npos);
+	REQUIRE(source.find("BuildNanoPdfCliArgs") != std::string::npos);
+	REQUIRE(source.find("missing_dependency") != std::string::npos);
+	REQUIRE(source.find("invalid_args") != std::string::npos);
+	REQUIRE(source.find("execution_failed") != std::string::npos);
 }
 
 TEST_CASE("Gateway skills check exposes dispatch-required counters", "[skills][gateway][contract]") {

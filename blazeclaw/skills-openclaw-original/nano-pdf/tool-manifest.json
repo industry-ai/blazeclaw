@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "skill": "nano-pdf",
+  "namespace": "nano_pdf",
+  "description": "BlazeClaw runtime tool manifest for nano-pdf PDF edit operations.",
+  "tools": [
+    {
+      "id": "nano_pdf.edit",
+      "label": "Nano PDF Edit",
+      "category": "document",
+      "enabled": true,
+      "runtime": {
+        "type": "python-cli",
+        "entry": "scripts/nano_pdf_bridge.py",
+        "command": "run"
+      },
+      "inputSchemaRef": "tool-contracts.json#/contracts/nano_pdf.edit"
+    }
+  ]
+}

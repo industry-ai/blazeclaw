@@ -1483,6 +1483,13 @@ namespace blazeclaw::core::tools {
 		};
 	}
 
+	std::vector<NanoPdfToolRuntimeSpec> BuildNanoPdfToolRuntimeSpecs()
+	{
+		return {
+			{ "nano_pdf.edit", "Nano PDF Edit", "scripts/nano_pdf_bridge.py" },
+		};
+	}
+
 	std::optional<std::string> ExtractTextArgument(const nlohmann::json& params)
 	{
 		if (!params.is_object())
@@ -2478,6 +2485,102 @@ namespace blazeclaw::core::tools {
 		}
 
 		return args;
+	}
+
+	std::optional<std::vector<std::string>> BuildNanoPdfCliArgs(
+		const NanoPdfToolRuntimeSpec& spec,
+		const nlohmann::json& params,
+		std::string& errorCode,
+		std::string& errorMessage)
+	{
+		errorCode.clear();
+		errorMessage.clear();
+
+		if (spec.id != "nano_pdf.edit")
+		{
+			errorCode = "unsupported_tool";
+			errorMessage = "unsupported nano-pdf tool";
+			return std::nullopt;
+		}
+
+		nlohmann::json cliPayload = nlohmann::json::object();
+
+		const auto inputPathIt = params.find("inputPath");
+		if (inputPathIt == params.end() || !inputPathIt->is_string())
+		{
+			errorCode = "invalid_args";
+			errorMessage = "inputPath is required";
+			return std::nullopt;
+		}
+
+		const std::string inputPath = TrimAsciiForBraveSearch(inputPathIt->get<std::string>());
+		if (inputPath.empty() || HasControlCharsForBraveSearch(inputPath) || inputPath.size() > 4096)
+		{
+			errorCode = "invalid_args";
+			errorMessage = "inputPath failed safety validation";
+			return std::nullopt;
+		}
+		cliPayload["inputPath"] = inputPath;
+
+		const auto pageIndexIt = params.find("pageIndex");
+		if (pageIndexIt == params.end() || !pageIndexIt->is_number_integer())
+		{
+			errorCode = "invalid_args";
+			errorMessage = "pageIndex must be an integer";
+			return std::nullopt;
+		}
+
+		const auto pageIndex = pageIndexIt->get<long long>();
+		if (pageIndex < 0 || pageIndex > 100000)
+		{
+			errorCode = "invalid_args";
+			errorMessage = "pageIndex must be between 0 and 100000";
+			return std::nullopt;
+		}
+		cliPayload["pageIndex"] = pageIndex;
+
+		const auto instructionIt = params.find("instruction");
+		if (instructionIt == params.end() || !instructionIt->is_string())
+		{
+			errorCode = "invalid_args";
+			errorMessage = "instruction is required";
+			return std::nullopt;
+		}
+
+		const std::string instruction = TrimAsciiForBraveSearch(
+			instructionIt->get<std::string>());
+		if (instruction.empty() || HasControlCharsForBraveSearch(instruction) ||
+			instruction.size() > 4000)
+		{
+			errorCode = "invalid_args";
+			errorMessage = "instruction failed safety validation";
+			return std::nullopt;
+		}
+		cliPayload["instruction"] = instruction;
+
+		if (const auto outputPathIt = params.find("outputPath");
+			outputPathIt != params.end())
+		{
+			if (!outputPathIt->is_string())
+			{
+				errorCode = "invalid_args";
+				errorMessage = "outputPath must be a string";
+				return std::nullopt;
+			}
+
+			const std::string outputPath = TrimAsciiForBraveSearch(
+				outputPathIt->get<std::string>());
+			if (outputPath.empty() || HasControlCharsForBraveSearch(outputPath) ||
+				outputPath.size() > 4096)
+			{
+				errorCode = "invalid_args";
+				errorMessage = "outputPath failed safety validation";
+				return std::nullopt;
+			}
+			cliPayload["outputPath"] = outputPath;
+		}
+
+		return std::vector<std::string>{ cliPayload.dump() };
 	}
 
 } // namespace blazeclaw::core::tools
