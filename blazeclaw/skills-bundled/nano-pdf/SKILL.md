@@ -59,7 +59,7 @@ Theme presets supported by the fallback renderer:
 
 If `theme` is omitted, BlazeClaw selects a preset heuristically from the generated report content.
 
-The fallback renderer also now right-aligns numeric table columns when appropriate and can extract KPI cards from metric-heavy narrative paragraphs.
+The fallback renderer also now right-aligns numeric table columns, improves mixed-currency normalization for table alignment, extracts sector-tagged KPI cards from metric-heavy narrative paragraphs, and can emit chart-style text trend panels.
 
 Current runtime routing behavior:
 

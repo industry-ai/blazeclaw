@@ -173,13 +173,16 @@ Theme presets currently influence:
 - table header and alternating row shading
 - report label shown in the page chrome
 
-### Financial tables and KPI extraction
+### Financial tables, sector KPI extraction, and trend panels
 
 The fallback renderer now includes additional heuristics for structured metric-heavy reports:
 
 - numeric-heavy table columns are right-aligned when the column contains financial-style values
+- multi-currency table columns are normalized for alignment while preserving visible values
 - financial rows can be detected from pipe-delimited, multi-space, or trailing-value text patterns
+- sector-specific KPI vocabularies (financial, market, healthcare, energy, technology) are used to tag extracted KPI cards
 - narrative paragraphs containing multiple metric/value statements can be promoted into KPI cards automatically
+- trend-like narrative statements can be promoted into chart-style text trend panels
 - the original narrative paragraph is still preserved so the report retains explanatory context
 
 ## Ordered workflow pattern

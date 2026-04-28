@@ -54,6 +54,23 @@ NARRATIVE_KPI_PATTERN = re.compile(
     r"(?P<value>[+-]?(?:\$|€|£|¥)?\d[\d,]*(?:\.\d+)?(?:%|x|bn|b|m|k| million| billion| trillion)?)",
     re.IGNORECASE,
 )
+SECTOR_KPI_KEYWORDS = {
+    "financial": ["revenue", "ebitda", "margin", "cash flow", "eps", "earnings", "valuation"],
+    "market": ["market share", "adoption", "penetration", "competition", "demand", "commercialization"],
+    "healthcare": ["patients", "trial enrollment", "efficacy", "response rate", "approval", "dosage"],
+    "energy": ["capacity", "yield", "cost per kwh", "utilization", "generation", "storage"],
+    "technology": ["arr", "mau", "dau", "latency", "throughput", "retention", "inference cost"],
+}
+CURRENCY_SYMBOL_MAP = {
+    "$": "USD",
+    "€": "EUR",
+    "£": "GBP",
+    "¥": "CNY",
+}
+TREND_PANEL_PATTERNS = [
+    re.compile(r"(?P<label>[A-Za-z][A-Za-z0-9 /&()\-]{2,28}?)\s+(?:up|rose|grew|increased)\s+(?:to\s+)?(?P<value>[+-]?(?:\$|€|£|¥)?\d[\d,]*(?:\.\d+)?(?:%|x|bn|b|m|k)?)", re.IGNORECASE),
+    re.compile(r"(?P<label>[A-Za-z][A-Za-z0-9 /&()\-]{2,28}?)\s+(?:down|fell|declined|decreased)\s+(?:to\s+)?(?P<value>[+-]?(?:\$|€|£|¥)?\d[\d,]*(?:\.\d+)?(?:%|x|bn|b|m|k)?)", re.IGNORECASE),
+]
 THEME_PRESETS = {
     "executive": {
         "header_fill": 0.94,
@@ -294,6 +311,27 @@ def _is_financial_value(value: str) -> bool:
     return bool(candidate and FINANCIAL_VALUE_PATTERN.match(candidate))
 
 
+def _normalize_currency_value(value: str):
+    candidate = (value or "").strip()
+    if not candidate:
+        return {
+            "display": "",
+            "currency": "",
+            "numeric": "",
+        }
+    currency = ""
+    if candidate[0] in CURRENCY_SYMBOL_MAP:
+        currency = CURRENCY_SYMBOL_MAP[candidate[0]]
+        numeric = candidate[1:].strip()
+    else:
+        numeric = candidate
+    return {
+        "display": candidate,
+        "currency": currency,
+        "numeric": numeric,
+    }
+
+
 def _split_financial_row(text: str):
     candidate = text.strip()
     if not candidate:
@@ -386,6 +424,7 @@ def _format_table_rows(rows, max_columns: int = 3, max_total_width: int = 68):
         return {
             "column_widths": [],
             "numeric_columns": [],
+            "currency_columns": [],
             "rows": [],
         }
 
@@ -393,16 +432,23 @@ def _format_table_rows(rows, max_columns: int = 3, max_total_width: int = 68):
     padded = [row + [""] * (column_count - len(row)) for row in normalized]
 
     numeric_columns = []
+    currency_columns = []
     for index in range(column_count):
         values = [row[index] for row in padded[1:] if row[index].strip()]
         is_numeric = bool(values) and all(_is_financial_value(value) for value in values)
         numeric_columns.append(is_numeric)
+        currencies = {info["currency"] for info in (_normalize_currency_value(value) for value in values) if info["currency"]}
+        currency_columns.append(sorted(currencies))
 
     content_scores = []
     for index in range(column_count):
-        values = [row[index] for row in padded]
-        max_len = max(len(value) for value in values)
-        avg_len = sum(len(value) for value in values) / max(len(values), 1)
+        display_values = []
+        for value in [row[index] for row in padded]:
+            normalized_value = _normalize_currency_value(value)
+            display = normalized_value["numeric"] if numeric_columns[index] else value
+            display_values.append(display or value)
+        max_len = max(len(value) for value in display_values)
+        avg_len = sum(len(value) for value in display_values) / max(len(display_values), 1)
         preferred = int(round((max_len * 0.65) + (avg_len * 0.35)))
         lower_bound = 9 if numeric_columns[index] else 10
         upper_bound = 20 if numeric_columns[index] else 28
@@ -419,7 +465,9 @@ def _format_table_rows(rows, max_columns: int = 3, max_total_width: int = 68):
         cell_lines = []
         for index, cell in enumerate(row):
             width = content_scores[index]
-            wrapped = _split_cell_lines(cell, width)
+            normalized_value = _normalize_currency_value(cell)
+            rendered_value = normalized_value["numeric"] if numeric_columns[index] and row_index > 0 else cell
+            wrapped = _split_cell_lines(rendered_value, width)
             cell_lines.append(wrapped)
         row_height = max(len(lines) for lines in cell_lines)
         expanded = []
@@ -428,19 +476,24 @@ def _format_table_rows(rows, max_columns: int = 3, max_total_width: int = 68):
             for column_index, lines in enumerate(cell_lines):
                 width = content_scores[column_index]
                 value = lines[line_index] if line_index < len(lines) else ""
+                prefix = ""
+                if numeric_columns[column_index] and row_index > 0 and line_index == 0 and currency_columns[column_index]:
+                    prefix = f"[{','.join(currency_columns[column_index])}] "
+                cell_value = f"{prefix}{value}" if prefix else value
                 if row_index == 0 and column_index == 0:
-                    padded_value = value.center(width)
+                    padded_value = cell_value.center(width)
                 elif numeric_columns[column_index] and row_index > 0:
-                    padded_value = value.rjust(width)
+                    padded_value = cell_value.rjust(width)
                 else:
-                    padded_value = value.ljust(width)
-                cells.append(padded_value[:width])
+                    padded_value = cell_value.ljust(width)
+                cells.append(padded_value[:max(width, len(padded_value))])
             expanded.append(" | ".join(cells).rstrip())
         formatted_rows.append(expanded)
 
     return {
         "column_widths": content_scores,
         "numeric_columns": numeric_columns,
+        "currency_columns": currency_columns,
         "rows": formatted_rows,
     }
 
@@ -494,6 +547,14 @@ def _normalize_kpi_label(label: str) -> str:
     return value.title() if value.islower() else value
 
 
+def _infer_kpi_sector(label: str, text: str):
+    corpus = f"{label} {text}".lower()
+    for sector, keywords in SECTOR_KPI_KEYWORDS.items():
+        if any(keyword in corpus for keyword in keywords):
+            return sector
+    return ""
+
+
 def _extract_narrative_kpis(text: str):
     candidate = (text or "").strip()
     if not candidate:
@@ -510,10 +571,41 @@ def _extract_narrative_kpis(text: str):
         if fingerprint in seen:
             continue
         seen.add(fingerprint)
-        kpis.append([label, value])
+        sector = _infer_kpi_sector(label, candidate)
+        display_label = f"[{sector.title()}] {label}" if sector else label
+        kpis.append([display_label, value])
         if len(kpis) >= 6:
             break
     return kpis
+
+
+def _extract_trend_panel(text: str):
+    candidate = (text or "").strip()
+    if not candidate:
+        return None
+
+    entries = []
+    seen = set()
+    for pattern in TREND_PANEL_PATTERNS:
+        for match in pattern.finditer(candidate):
+            label = _normalize_kpi_label(match.group("label"))
+            value = match.group("value").strip()
+            fingerprint = (label.lower(), value.lower())
+            if fingerprint in seen or not _is_financial_value(value):
+                continue
+            seen.add(fingerprint)
+            entries.append([label[:24], value])
+            if len(entries) >= 4:
+                break
+        if len(entries) >= 4:
+            break
+
+    if len(entries) < 2:
+        return None
+    return {
+        "kind": "trend-panel",
+        "entries": entries,
+    }
 
 
 def _gather_report_blocks(lines):
@@ -592,6 +684,9 @@ def _gather_report_blocks(lines):
             paragraph_lines.append(working_lines[index].strip())
             index += 1
         paragraph_text = " ".join(paragraph_lines)
+        trend_panel = _extract_trend_panel(paragraph_text)
+        if trend_panel:
+            blocks.append(trend_panel)
         narrative_kpis = _extract_narrative_kpis(paragraph_text)
         if len(narrative_kpis) >= 2:
             blocks.append({"kind": "kpi-grid", "rows": narrative_kpis})
@@ -658,6 +753,8 @@ def _estimate_block_height(block):
         return 32
     if kind == "summary-panel":
         return (len(_chunk_text(block["text"], 72)) * 14) + 28
+    if kind == "trend-panel":
+        return (len(block["entries"]) * 18) + 28
     if kind == "paragraph":
         return (len(_chunk_text(block["text"], 86)) * 14) + 8
     if kind == "bullet":
@@ -719,6 +816,23 @@ def _render_summary_panel(ops, text, y, theme):
     for line in wrapped:
         ops.append(_pdf_text_op(64, text_y, line[:82], font="F1", size=11))
         text_y -= 14
+    return bottom - 8
+
+
+def _render_trend_panel(ops, entries, y, theme):
+    panel_height = (len(entries) * 18) + 22
+    bottom = y - panel_height
+    ops.append(_pdf_fill_rect_op(54, bottom, 504, panel_height, gray=_theme_value(theme, 'summary_fill', 0.92)))
+    ops.append(_pdf_rect_stroke_op(54, bottom, 504, panel_height, gray=_theme_value(theme, 'summary_border', 0.78)))
+    ops.append(_pdf_text_op(64, y - 10, "Trend Summary", font="F2", size=12))
+    row_y = y - 28
+    for label, value in entries[:4]:
+        bar_width = min(220, max(40, len(value) * 12))
+        ops.append(_pdf_text_op(64, row_y, label[:24], font="F1", size=10))
+        ops.append(_pdf_fill_rect_op(190, row_y - 6, bar_width, 8, gray=_theme_value(theme, 'kpi_fill', 0.94)))
+        ops.append(_pdf_rect_stroke_op(190, row_y - 6, bar_width, 8, gray=_theme_value(theme, 'kpi_border', 0.78)))
+        ops.append(_pdf_text_op(420, row_y, value[:18], font="F3", size=9))
+        row_y -= 18
     return bottom - 8
 
 
@@ -797,6 +911,10 @@ def _render_report_pages(title: str, blocks, metadata=None, theme_name: str = DE
         if kind == "summary-panel":
             ensure_space(_estimate_block_height(block))
             y = _render_summary_panel(ops, block["text"], y, theme)
+            continue
+        if kind == "trend-panel":
+            ensure_space(_estimate_block_height(block))
+            y = _render_trend_panel(ops, block["entries"], y, theme)
             continue
         if kind == "paragraph":
             wrapped = _chunk_text(block["text"], 86)
