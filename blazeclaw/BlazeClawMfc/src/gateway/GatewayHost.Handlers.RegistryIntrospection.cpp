@@ -328,6 +328,7 @@ namespace blazeclaw::gateway::handlers::registry_introspection {
 			}
 
 			ToolExecuteResultV2 execution;
+			const auto startedAt = std::chrono::steady_clock::now();
 			try {
 				execution = host.ExecuteRuntimeToolV2(ToolExecuteRequestV2{
 					.tool = requestedTool,
@@ -337,6 +338,14 @@ namespace blazeclaw::gateway::handlers::registry_introspection {
 						: request.id,
 					.deadlineEpochMs = std::nullopt,
 					});
+				const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::steady_clock::now() - startedAt).count();
+				if (elapsedMs > 30000 && !execution.executed) {
+					execution.status = "tool_dispatch_timeout";
+					execution.errorCode = "tool_dispatch_timeout";
+					execution.errorMessage = "tool dispatch timed out before execution";
+					execution.result = "{\"ok\":false,\"error\":{\"code\":\"tool_dispatch_timeout\",\"message\":\"tool dispatch timed out before execution\",\"hint\":\"verify required params and schema compatibility\"}}";
+				}
 			}
 			catch (const std::exception& ex) {
 				execution = ToolExecuteResultV2{

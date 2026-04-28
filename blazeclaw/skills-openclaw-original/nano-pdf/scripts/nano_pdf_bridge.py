@@ -1048,6 +1048,8 @@ def _safe_resolve_path(raw: str):
     value = raw.strip()
     if "\x00" in value:
         return None
+    if os.name == "nt" and value.startswith("/tmp/"):
+        value = str(Path(os.getenv("TEMP", "C:/tmp")) / value[len("/tmp/"):])
     return Path(value).expanduser().resolve()
 
 
@@ -1236,6 +1238,13 @@ def _parse_args(argv):
 
     input_path = _safe_resolve_path(parsed.get("inputPath", ""))
     if input_path is None:
+        output_hint = _safe_resolve_path(parsed.get("outputPath", ""))
+        if output_hint is not None:
+            draft_hint = output_hint.with_name(f"{output_hint.stem}_draft.pdf")
+            raise ValueError(
+                "inputPath is required for nano_pdf.edit. "
+                f"First call nano_pdf.generate to create a draft, e.g. outputPath='{draft_hint}', then call nano_pdf.edit with inputPath set to that draft."
+            )
         raise ValueError(
             "inputPath is required; nano_pdf.edit only edits an existing PDF. "
             "Create a draft PDF first and pass it via inputPath"
@@ -1247,13 +1256,13 @@ def _parse_args(argv):
     if not input_path.exists() or not input_path.is_file():
         raise ValueError("inputPath does not exist or is not a file")
 
-    page_index = parsed.get("pageIndex")
+    page_index = parsed.get("pageIndex", 0)
     if not isinstance(page_index, int) or page_index < 0:
         raise ValueError("pageIndex must be an integer >= 0")
 
     instruction = parsed.get("instruction")
     if not isinstance(instruction, str) or not instruction.strip():
-        raise ValueError("instruction is required")
+        instruction = "Apply a professional business brief layout with clear sections, executive-summary emphasis, and polished typography."
     instruction = instruction.strip()
 
     output_candidate = parsed.get("outputPath", "")

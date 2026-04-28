@@ -1302,8 +1302,29 @@ namespace blazeclaw::gateway {
 			return protocol::EncodeResponseFrame(errorResponse);
 		}
 
+		const bool isToolsCallExecute = request.method == "gateway.tools.call.execute";
+		if (isToolsCallExecute) {
+			const std::string attemptPayload =
+				"{\"method\":" + JsonString(request.method) +
+				",\"requestId\":" + JsonString(request.id) +
+				",\"paramsPresent\":" + std::string(request.paramsJson.has_value() ? "true" : "false") +
+				"}";
+			EmitTelemetryEvent("tool_call_attempted", attemptPayload);
+		}
+
 		protocol::SchemaValidationIssue validationIssue;
 		if (!protocol::GatewayProtocolSchemaValidator::ValidateRequest(request, validationIssue)) {
+			if (isToolsCallExecute) {
+				const std::string rejectionPayload =
+					"{\"method\":" + JsonString(request.method) +
+					",\"requestId\":" + JsonString(request.id) +
+					",\"stage\":\"schema_validation\""
+					",\"code\":" + JsonString(validationIssue.code.empty() ? "schema_validation_failed" : validationIssue.code) +
+					",\"message\":" + JsonString(validationIssue.message.empty() ? "Request failed schema validation." : validationIssue.message) +
+					"}";
+				EmitTelemetryEvent("tool_call_rejected", rejectionPayload);
+			}
+
 			const protocol::ResponseFrame schemaErrorResponse = protocol::ErrorResponse(
 				request,
 				protocol::ErrorShape{
