@@ -606,6 +606,9 @@ namespace blazeclaw::gateway {
 		std::uint64_t m_taskDeltaRunTimeoutCount = 0;
 		std::uint64_t m_taskDeltaRunCancelledCount = 0;
 		std::uint64_t m_taskDeltaRunFallbackCount = 0;
+		std::uint64_t m_orderedPreflightMissingTargetTotal = 0;
+		std::uint64_t m_orderedPreflightMissingTargetTerminalEmittedTotal = 0;
+		std::uint64_t m_orderedPreflightMissingTargetSilentTotal = 0;
 		std::uint64_t m_nodeInvokeTotalCount = 0;
 		std::uint64_t m_nodeInvokePolicyRejectCount = 0;
 		std::uint64_t m_nodeWakeAttemptCount = 0;

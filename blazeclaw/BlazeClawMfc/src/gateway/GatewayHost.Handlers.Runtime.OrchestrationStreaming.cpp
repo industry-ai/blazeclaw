@@ -132,6 +132,12 @@ namespace blazeclaw::gateway {
 					std::to_string(host.m_taskDeltaRunCancelledCount) +
 					",\"fallback\":" +
 					std::to_string(host.m_taskDeltaRunFallbackCount) +
+					"},\"orderedPreflightMissingTargetMetrics\":{\"total\":" +
+					std::to_string(host.m_orderedPreflightMissingTargetTotal) +
+					",\"terminalEmitted\":" +
+					std::to_string(host.m_orderedPreflightMissingTargetTerminalEmittedTotal) +
+					",\"silent\":" +
+					std::to_string(host.m_orderedPreflightMissingTargetSilentTotal) +
 					"},\"taskDeltaLifecycleMapping\":{\"plan\":\"item.plan\",\"preflight\":\"tool.precheck\",\"tool_call\":\"tool.start\",\"tool_result\":\"tool.result\",\"final\":\"lifecycle.final\"}}");
 				});
 
@@ -163,10 +169,12 @@ namespace blazeclaw::gateway {
 					probesJson += "]";
 
 					const auto runtimeTools = host.ListRuntimeTools();
-					const std::array<const char*, 3> requiredToolIds = {
+					const std::array<const char*, 5> requiredToolIds = {
 						"baidu-search.search.web",
 						"web_browsing.search.web",
 						"web_browsing.fetch.content",
+						"nano_pdf.generate",
+						"nano_pdf.edit",
 					};
 
 					std::string requiredToolsJson = "[";

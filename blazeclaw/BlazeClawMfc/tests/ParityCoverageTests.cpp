@@ -3900,6 +3900,147 @@ TEST_CASE(
 	REQUIRE(deltasResponse.payloadJson.has_value());
 	REQUIRE(
 		deltasResponse.payloadJson->find("\"phase\":\"final\"") != std::string::npos);
+	REQUIRE(
+		deltasResponse.payloadJson->find("ordered_sequence_target_unavailable") != std::string::npos);
+	REQUIRE(
+		deltasResponse.payloadJson->find("web_browsing.search.web") != std::string::npos);
+	REQUIRE(
+		deltasResponse.payloadJson->find("\"stepLabel\":\"run_terminal\"") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Parity coverage: strict ordered three-step prompt fails terminally when nano-pdf runtime targets are unavailable",
+	"[parity][chat][ordered][nano-pdf][failfast]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+
+	const auto depsResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "runtime-health-dependencies-required-tools-nano-missing-1",
+			.method = "gateway.runtime.health.dependencies",
+			.paramsJson = std::nullopt,
+		});
+	REQUIRE(depsResponse.ok);
+	REQUIRE(depsResponse.payloadJson.has_value());
+	REQUIRE(
+		depsResponse.payloadJson->find("nano_pdf.generate") != std::string::npos);
+	REQUIRE(
+		depsResponse.payloadJson->find("nano_pdf.edit") != std::string::npos);
+
+	host.RegisterRuntimeToolV2(
+		ToolCatalogEntry{
+			.id = "baidu-search.search.web",
+			.label = "Baidu Web Search",
+			.category = "search",
+			.enabled = true,
+		},
+		[](const ToolExecuteRequestV2& request) {
+			ToolExecuteResultV2 result;
+			result.tool = request.tool;
+			result.executed = true;
+			result.status = "ok";
+			result.result = "[]";
+			return result;
+		});
+
+	host.RegisterRuntimeToolV2(
+		ToolCatalogEntry{
+			.id = "web_browsing.fetch.content",
+			.label = "Web Browsing Fetch",
+			.category = "search",
+			.enabled = true,
+		},
+		[](const ToolExecuteRequestV2& request) {
+			ToolExecuteResultV2 result;
+			result.tool = request.tool;
+			result.executed = true;
+			result.status = "ok";
+			result.result = "solid-state battery commercialization data";
+			return result;
+		});
+
+	host.RegisterRuntimeToolV2(
+		ToolCatalogEntry{
+			.id = "nano_pdf.generate",
+			.label = "Nano PDF Generate",
+			.category = "document",
+			.enabled = false,
+		},
+		[](const ToolExecuteRequestV2& request) {
+			ToolExecuteResultV2 result;
+			result.tool = request.tool;
+			result.executed = false;
+			result.status = "disabled";
+			result.errorCode = "tool_disabled";
+			result.errorMessage = "nano_pdf.generate disabled for strict preflight regression";
+			return result;
+		});
+
+	host.RegisterRuntimeToolV2(
+		ToolCatalogEntry{
+			.id = "nano_pdf.edit",
+			.label = "Nano PDF Edit",
+			.category = "document",
+			.enabled = false,
+		},
+		[](const ToolExecuteRequestV2& request) {
+			ToolExecuteResultV2 result;
+			result.tool = request.tool;
+			result.executed = false;
+			result.status = "disabled";
+			result.errorCode = "tool_disabled";
+			result.errorMessage = "nano_pdf.edit disabled for strict preflight regression";
+			return result;
+		});
+
+	host.SetChatRuntimeCallback(
+		[](const GatewayHost::ChatRuntimeRequest&) {
+			GatewayHost::ChatRuntimeResult result;
+			result.ok = true;
+			result.assistantText = "callback should not run when strict nano-pdf preflight blocks";
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-ordered-missing-nano-pdf-1",
+			.method = "chat.send",
+			.paramsJson = std::string(
+				"{\"sessionKey\":\"main\","
+				"\"message\":\"Please strictly execute in order: 1. Call `baidu-search` to search for \\\"2024 commercialization progress of solid-state batteries\\\"; 2. Call `web-browsing` to deeply read the main text of the top two search results and extract core data; 3. Based on the extracted data, write a well-structured business brief, and call `nano-pdf` to format it into a professional PDF file saved locally at '/tmp/Battery_Report.pdf'\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		sendResponse.payloadJson.value(),
+		"runId",
+		runId));
+	REQUIRE_FALSE(runId.empty());
+
+	const auto deltasResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-ordered-missing-nano-pdf-1-deltas",
+			.method = "gateway.runtime.taskDeltas.get",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+
+	REQUIRE(deltasResponse.ok);
+	REQUIRE(deltasResponse.payloadJson.has_value());
+	REQUIRE(
+		deltasResponse.payloadJson->find("\"phase\":\"preflight\"") != std::string::npos);
+	REQUIRE(
+		deltasResponse.payloadJson->find("nano_pdf.generate") != std::string::npos);
+	REQUIRE(
+		deltasResponse.payloadJson->find("ordered_sequence_target_unavailable") != std::string::npos);
+	REQUIRE(
+		deltasResponse.payloadJson->find("\"stepLabel\":\"run_terminal\"") != std::string::npos);
 
 	host.Stop();
 }
@@ -4050,6 +4191,222 @@ TEST_CASE(
 }
 
 TEST_CASE(
+	"Parity coverage: strict ordered three-step prompt executes baidu/web-browsing then nano-pdf generate/edit when available",
+	"[parity][chat][ordered][nano-pdf][success]") {
+	GatewayHost host;
+	blazeclaw::config::GatewayConfig gatewayConfig;
+	REQUIRE(host.StartLocalOnly(gatewayConfig));
+	host.SetEmbeddedOrchestrationPath("dynamic_task_delta");
+
+	host.RegisterRuntimeToolV2(
+		ToolCatalogEntry{
+			.id = "baidu-search.search.web",
+			.label = "Baidu Web Search",
+			.category = "search",
+			.enabled = true,
+		},
+		[](const ToolExecuteRequestV2& request) {
+			ToolExecuteResultV2 result;
+			result.tool = request.tool;
+			result.executed = true;
+			result.status = "ok";
+			result.result = R"({"ok":true,"results":[{"title":"Result1"},{"title":"Result2"}]})";
+			return result;
+		});
+
+	host.RegisterRuntimeToolV2(
+		ToolCatalogEntry{
+			.id = "web_browsing.fetch.content",
+			.label = "Web Browsing Fetch",
+			.category = "search",
+			.enabled = true,
+		},
+		[](const ToolExecuteRequestV2& request) {
+			ToolExecuteResultV2 result;
+			result.tool = request.tool;
+			result.executed = true;
+			result.status = "ok";
+			result.result = "core market data extracted";
+			return result;
+		});
+
+	host.RegisterRuntimeToolV2(
+		ToolCatalogEntry{
+			.id = "nano_pdf.generate",
+			.label = "Nano PDF Generate",
+			.category = "document",
+			.enabled = true,
+		},
+		[](const ToolExecuteRequestV2& request) {
+			ToolExecuteResultV2 result;
+			result.tool = request.tool;
+			result.executed = true;
+			result.status = "ok";
+			result.result = R"({"ok":true,"outputPath":"/tmp/Battery_Report_draft.pdf"})";
+			return result;
+		});
+
+	host.RegisterRuntimeToolV2(
+		ToolCatalogEntry{
+			.id = "nano_pdf.edit",
+			.label = "Nano PDF Edit",
+			.category = "document",
+			.enabled = true,
+		},
+		[](const ToolExecuteRequestV2& request) {
+			ToolExecuteResultV2 result;
+			result.tool = request.tool;
+			result.executed = true;
+			result.status = "ok";
+			result.result = R"({"ok":true,"outputPath":"/tmp/Battery_Report.pdf"})";
+			return result;
+		});
+
+	host.SetChatRuntimeCallback(
+		[&host](const GatewayHost::ChatRuntimeRequest& request) {
+			GatewayHost::ChatRuntimeResult result;
+			std::vector<std::string> executed;
+
+			const auto r1 = host.ExecuteRuntimeToolV2(
+				ToolExecuteRequestV2{
+					.tool = "baidu-search.search.web",
+					.argsJson = std::string("{\"query\":\"2024 commercialization progress of solid-state batteries\"}"),
+					.correlationId = request.runId + "-baidu",
+					.deadlineEpochMs = std::nullopt,
+				});
+			executed.push_back(r1.tool);
+			const auto r2 = host.ExecuteRuntimeToolV2(
+				ToolExecuteRequestV2{
+					.tool = "web_browsing.fetch.content",
+					.argsJson = std::string("{\"url\":\"https://example.com/a\"}"),
+					.correlationId = request.runId + "-web",
+					.deadlineEpochMs = std::nullopt,
+				});
+			executed.push_back(r2.tool);
+			const auto r3 = host.ExecuteRuntimeToolV2(
+				ToolExecuteRequestV2{
+					.tool = "nano_pdf.generate",
+					.argsJson = std::string("{\"content\":\"brief\",\"outputPath\":\"/tmp/Battery_Report_draft.pdf\"}"),
+					.correlationId = request.runId + "-generate",
+					.deadlineEpochMs = std::nullopt,
+				});
+			executed.push_back(r3.tool);
+			const auto r4 = host.ExecuteRuntimeToolV2(
+				ToolExecuteRequestV2{
+					.tool = "nano_pdf.edit",
+					.argsJson = std::string("{\"inputPath\":\"/tmp/Battery_Report_draft.pdf\",\"pageIndex\":0,\"instruction\":\"polish\",\"outputPath\":\"/tmp/Battery_Report.pdf\"}"),
+					.correlationId = request.runId + "-edit",
+					.deadlineEpochMs = std::nullopt,
+				});
+			executed.push_back(r4.tool);
+
+			result.ok = r1.executed && r2.executed && r3.executed && r4.executed;
+			result.assistantText = "ordered nano-pdf flow completed";
+			result.taskDeltas = {
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 0,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "tool_result",
+					.toolName = r1.tool,
+					.resultJson = r1.result,
+					.status = r1.status,
+					.stepLabel = "ordered-step-1",
+				},
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 1,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "tool_result",
+					.toolName = r2.tool,
+					.resultJson = r2.result,
+					.status = r2.status,
+					.stepLabel = "ordered-step-2",
+				},
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 2,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "tool_result",
+					.toolName = r3.tool,
+					.resultJson = r3.result,
+					.status = r3.status,
+					.stepLabel = "ordered-step-3",
+				},
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 3,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "tool_result",
+					.toolName = r4.tool,
+					.resultJson = r4.result,
+					.status = r4.status,
+					.stepLabel = "ordered-step-4",
+				},
+				GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+					.index = 4,
+					.runId = request.runId,
+					.sessionId = request.sessionKey,
+					.phase = "final",
+					.resultJson = result.assistantText,
+					.status = "completed",
+					.stepLabel = "run_terminal",
+				},
+			};
+			return result;
+		});
+
+	const auto sendResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-ordered-nano-pdf-success-1",
+			.method = "chat.send",
+			.paramsJson = std::string(
+				"{\"sessionKey\":\"main\","
+				"\"message\":\"Please strictly execute in order: 1. Call `baidu-search` to search for \\\"2024 commercialization progress of solid-state batteries\\\"; 2. Call `web-browsing` to deeply read the main text of the top two search results and extract core data; 3. Based on the extracted data, write a well-structured business brief, and call `nano-pdf` to format it into a professional PDF file saved locally at '/tmp/Battery_Report.pdf'\"}"),
+		});
+
+	REQUIRE(sendResponse.ok);
+	REQUIRE(sendResponse.payloadJson.has_value());
+	REQUIRE(sendResponse.payloadJson->find("\"backendErrorCode\":null") != std::string::npos);
+
+	std::string runId;
+	REQUIRE(blazeclaw::gateway::json::FindStringField(
+		sendResponse.payloadJson.value(),
+		"runId",
+		runId));
+	REQUIRE_FALSE(runId.empty());
+
+	const auto deltasResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-ordered-nano-pdf-success-1-deltas",
+			.method = "gateway.runtime.taskDeltas.get",
+			.paramsJson = std::string("{\"runId\":\"") + runId + "\"}",
+		});
+
+	REQUIRE(deltasResponse.ok);
+	REQUIRE(deltasResponse.payloadJson.has_value());
+	REQUIRE(deltasResponse.payloadJson->find("\"phase\":\"preflight\"") != std::string::npos);
+	REQUIRE(deltasResponse.payloadJson->find("\"toolName\":\"baidu-search.search.web\"") != std::string::npos);
+	REQUIRE(deltasResponse.payloadJson->find("\"toolName\":\"web_browsing.fetch.content\"") != std::string::npos);
+	REQUIRE(deltasResponse.payloadJson->find("\"toolName\":\"nano_pdf.generate\"") != std::string::npos);
+	REQUIRE(deltasResponse.payloadJson->find("\"toolName\":\"nano_pdf.edit\"") != std::string::npos);
+	REQUIRE(deltasResponse.payloadJson->find("\"phase\":\"final\"") != std::string::npos);
+
+	const auto orchestrationStatusResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "chat-ordered-nano-pdf-success-1-status",
+			.method = "gateway.runtime.orchestration.status",
+			.paramsJson = std::nullopt,
+		});
+	REQUIRE(orchestrationStatusResponse.ok);
+	REQUIRE(orchestrationStatusResponse.payloadJson.has_value());
+	REQUIRE(orchestrationStatusResponse.payloadJson->find("\"orderedPreflightMissingTargetMetrics\":") != std::string::npos);
+	REQUIRE(orchestrationStatusResponse.payloadJson->find("\"silent\":0") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
 	"Parity coverage: runtime dependencies health reports required tool registration diagnostics",
 	"[parity][runtime][health][required-tools]") {
 	GatewayHost host;
@@ -4081,6 +4438,10 @@ TEST_CASE(
 		depsResponse.payloadJson->find("web_browsing.search.web") != std::string::npos);
 	REQUIRE(
 		depsResponse.payloadJson->find("web_browsing.fetch.content") != std::string::npos);
+	REQUIRE(
+		depsResponse.payloadJson->find("nano_pdf.generate") != std::string::npos);
+	REQUIRE(
+		depsResponse.payloadJson->find("nano_pdf.edit") != std::string::npos);
 
 	host.Stop();
 }

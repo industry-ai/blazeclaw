@@ -546,6 +546,8 @@ namespace blazeclaw::gateway {
 			if (resolvedTool.empty() ||
 				!IsResolvedRuntimeToolTarget(resolvedTool, tools)) {
 				preflight.missingTargets.push_back(target);
+				preflight.missingResolvedToolTargets.push_back(
+					resolvedTool.empty() ? target : resolvedTool);
 			}
 		}
 

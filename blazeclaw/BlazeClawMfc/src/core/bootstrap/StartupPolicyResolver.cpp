@@ -615,8 +615,20 @@ namespace blazeclaw::core::bootstrap {
 				{ std::filesystem::path(L"scripts") / L"search_web.py" });
 		}
 		settings.openClawNanoPdfSkillRoot = ResolveSkillRootFromSearchPaths(
-			{ L"blazeclaw", L"skills-openclaw-original", L"nano-pdf" },
+			{ L"blazeclaw", L"skills-bundled", L"nano-pdf" },
 			{ std::filesystem::path(L"scripts") / L"nano_pdf_bridge.py" });
+		if (!settings.openClawNanoPdfSkillRoot.has_value())
+		{
+			settings.openClawNanoPdfSkillRoot = ResolveSkillRootFromSearchPaths(
+				{ L"skills-bundled", L"nano-pdf" },
+				{ std::filesystem::path(L"scripts") / L"nano_pdf_bridge.py" });
+		}
+		if (!settings.openClawNanoPdfSkillRoot.has_value())
+		{
+			settings.openClawNanoPdfSkillRoot = ResolveSkillRootFromSearchPaths(
+				{ L"blazeclaw", L"skills-openclaw-original", L"nano-pdf" },
+				{ std::filesystem::path(L"scripts") / L"nano_pdf_bridge.py" });
+		}
 		if (!settings.openClawNanoPdfSkillRoot.has_value())
 		{
 			settings.openClawNanoPdfSkillRoot = ResolveSkillRootFromSearchPaths(

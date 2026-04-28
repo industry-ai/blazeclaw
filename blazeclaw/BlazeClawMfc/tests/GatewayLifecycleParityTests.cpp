@@ -680,7 +680,7 @@ TEST_CASE(
 	const ResponseFrame validDependencies{
 		.id = "health-deps-ok",
 		.ok = true,
-		.payloadJson = "{\"probes\":[{\"key\":\"deepseek\",\"state\":\"healthy\",\"reasonCode\":\"ok\",\"reasonMessage\":\"ready\",\"checkedAtEpochMs\":1,\"expiresAtEpochMs\":2}],\"count\":1,\"generatedAtEpochMs\":1,\"ttlMs\":1000,\"requiredToolsReady\":true,\"requiredTools\":[{\"id\":\"baidu-search.search.web\",\"present\":true,\"enabled\":true}],\"missingRequiredTools\":[],\"diagnosticStatus\":\"ready\"}",
+		.payloadJson = "{\"probes\":[{\"key\":\"deepseek\",\"state\":\"healthy\",\"reasonCode\":\"ok\",\"reasonMessage\":\"ready\",\"checkedAtEpochMs\":1,\"expiresAtEpochMs\":2}],\"count\":1,\"generatedAtEpochMs\":1,\"ttlMs\":1000,\"requiredToolsReady\":true,\"requiredTools\":[{\"id\":\"baidu-search.search.web\",\"present\":true,\"enabled\":true},{\"id\":\"web_browsing.fetch.content\",\"present\":true,\"enabled\":true},{\"id\":\"nano_pdf.generate\",\"present\":true,\"enabled\":true},{\"id\":\"nano_pdf.edit\",\"present\":true,\"enabled\":true}],\"missingRequiredTools\":[],\"diagnosticStatus\":\"ready\"}",
 		.error = std::nullopt,
 	};
 	REQUIRE(

@@ -1084,7 +1084,78 @@ namespace blazeclaw::gateway {
 
 								return deltas;
 						};
+					auto hasTerminalTaskDelta = [](
+						const std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry>& taskDeltas) {
+							return std::any_of(
+								taskDeltas.begin(),
+								taskDeltas.end(),
+								[](const GatewayHost::ChatRuntimeResult::TaskDeltaEntry& delta) {
+									return delta.phase == "final";
+								});
+					};
+					auto appendForcedTerminalTaskDeltaIfMissing = [&hasTerminalTaskDelta](
+						std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry>& taskDeltas,
+						const std::string& runIdValue,
+						const std::string& sessionKeyValue,
+						const std::string& terminalStatus,
+						const std::string& terminalErrorCodeValue,
+						const std::string& terminalErrorMessageValue) {
+							if (hasTerminalTaskDelta(taskDeltas)) {
+								return;
+							}
 
+							const std::uint64_t now = CurrentEpochMsLocal();
+							taskDeltas.push_back(GatewayHost::ChatRuntimeResult::TaskDeltaEntry{
+								.index = taskDeltas.size(),
+								.runId = runIdValue,
+								.sessionId = sessionKeyValue,
+								.phase = "final",
+								.resultJson = terminalErrorMessageValue,
+								.status = terminalStatus,
+								.errorCode = terminalErrorCodeValue,
+								.startedAtMs = now,
+								.completedAtMs = now,
+								.latencyMs = 0,
+								.stepLabel = "run_terminal",
+							});
+					};
+					auto mergeWithPreflightTaskDeltas = [
+						&orderedPreflightTaskDeltas,
+						&runId,
+						&sessionKey,
+						&appendForcedTerminalTaskDeltaIfMissing](
+						std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry> runtimeTaskDeltas,
+						const bool runFailed,
+						const std::string& runErrorCode,
+						const std::string& runErrorMessage) {
+							if (runFailed) {
+								appendForcedTerminalTaskDeltaIfMissing(
+									runtimeTaskDeltas,
+									runId,
+									sessionKey,
+									"failed",
+									runErrorCode,
+									runErrorMessage);
+							}
+							if (orderedPreflightTaskDeltas.empty()) {
+								return runtimeTaskDeltas;
+							}
+
+							std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry> mergedTaskDeltas;
+							mergedTaskDeltas.reserve(
+								orderedPreflightTaskDeltas.size() + runtimeTaskDeltas.size());
+							mergedTaskDeltas.insert(
+								mergedTaskDeltas.end(),
+								orderedPreflightTaskDeltas.begin(),
+								orderedPreflightTaskDeltas.end());
+							mergedTaskDeltas.insert(
+								mergedTaskDeltas.end(),
+								runtimeTaskDeltas.begin(),
+								runtimeTaskDeltas.end());
+							return mergedTaskDeltas;
+					};
+
+					const std::uint64_t orderedPreflightFailureTerminalGuardTimeoutMs = 2000;
 					if (!forceError &&
 						!hasAttachments &&
 						orderedSequencePreflight.enforced) {
@@ -1116,11 +1187,19 @@ namespace blazeclaw::gateway {
 							!orderedSequencePreflight.missingTargets.empty()) {
 							const std::string strictMissingErrorCode =
 								"ordered_sequence_target_unavailable";
+							const std::string missingTargetsJoined =
+								RuntimeSequencingPolicy::JoinOrderedTargets(
+									orderedSequencePreflight.missingTargets);
+							const std::string missingResolvedJoined =
+								RuntimeSequencingPolicy::JoinOrderedTargets(
+									orderedSequencePreflight.missingResolvedToolTargets);
 							const std::string strictMissingErrorMessage =
 								"Ordered execution preflight failed. Missing or unavailable targets: " +
-								RuntimeSequencingPolicy::JoinOrderedTargets(
-									orderedSequencePreflight.missingTargets) +
-								". Remediation: verify skill runtime manifests/scripts are present and enabled for each target (for example, web-browsing -> web_browsing.search.web/web_browsing.fetch.content).";
+								missingTargetsJoined +
+								". Missing runtime tool IDs: " + missingResolvedJoined +
+								". Remediation: enable/install nano-pdf in bundled lane (blazeclaw/skills-bundled/nano-pdf) or fallback lane (blazeclaw/skills-openclaw-original/nano-pdf), and verify required runtime manifests/scripts are present and enabled for each target; otherwise remove unavailable targets from the strict ordered sequence.";
+
+							++host.m_orderedPreflightMissingTargetTotal;
 
 							RunLoopBudget orderedRecoveryBudget;
 							const RecoveryOutcome orderedRecoveryOutcome =
@@ -1141,8 +1220,20 @@ namespace blazeclaw::gateway {
 								std::string("{\"runId\":") + JsonString(runId) +
 								",\"layer\":\"ordered_preflight\",\"reason\":\"strict_missing\",\"missingTargets\":" +
 								SerializeStringArrayLocal(orderedSequencePreflight.missingTargets) +
+								",\"missingRuntimeToolIds\":" +
+								SerializeStringArrayLocal(orderedSequencePreflight.missingResolvedToolTargets) +
 								",\"recoveryRoute\":" +
 								JsonString(orderedRecoveryOutcome.recoveryRoute) + "}");
+							EmitTelemetryEvent(
+								"ordered_preflight_missing_target_total",
+								std::string("{\"runId\":") + JsonString(runId) +
+								",\"total\":" +
+								std::to_string(host.m_orderedPreflightMissingTargetTotal) +
+								",\"missingTargets\":" +
+								SerializeStringArrayLocal(orderedSequencePreflight.missingTargets) +
+								",\"missingRuntimeToolIds\":" +
+								SerializeStringArrayLocal(orderedSequencePreflight.missingResolvedToolTargets) +
+								"}");
 
 							if (orderedRecoveryOutcome.recovered ||
 								orderedRecoveryOutcome.shouldReinvokeRuntime) {
@@ -1164,13 +1255,14 @@ namespace blazeclaw::gateway {
 								assistantText =
 									(preferChineseResponse
 										? (Utf8LiteralLocal(u8"\u65E0\u6CD5\u6267\u884C\u6709\u5E8F\u5DE5\u4F5C\u6D41\uFF0C\u4EE5\u4E0B\u6B65\u9AA4\u76EE\u6807\u7F3A\u5931\u6216\u4E0D\u53EF\u7528\uFF1A") +
-											RuntimeSequencingPolicy::JoinOrderedTargets(
-												orderedSequencePreflight.missingTargets) +
-											Utf8LiteralLocal(u8"\u3002\u8BF7\u68C0\u67E5\u76F8\u5E94\u6280\u80FD\u7684 runtime manifest/scripts \u662F\u5426\u5B58\u5728\u4E14\u5DF2\u542F\u7528\uFF0C\u4F8B\u5982 web-browsing \u5BF9\u5E94 web_browsing.search.web/web_browsing.fetch.content\u3002"))
-										: (std::string("Unable to execute the ordered workflow because required step targets are missing or unavailable: ") +
-											RuntimeSequencingPolicy::JoinOrderedTargets(
-												orderedSequencePreflight.missingTargets) +
-											". Remediation: verify runtime manifests/scripts exist and tools are enabled (for example, web-browsing -> web_browsing.search.web/web_browsing.fetch.content)."));
+											missingTargetsJoined +
+											Utf8LiteralLocal(u8"\u3002\u7F3A\u5931 runtime tool ID\uFF1A") +
+											missingResolvedJoined +
+											Utf8LiteralLocal(u8"\u3002\u5904\u7F6E\u5EFA\u8BAE\uFF1A\u542F\u7528\u6216\u5B89\u88C5 bundled lane (blazeclaw/skills-bundled/nano-pdf) \u6216 fallback lane (blazeclaw/skills-openclaw-original/nano-pdf)\uFF0C\u786E\u8BA4 manifest/scripts \u5B58\u5728\u4E14\u5DE5\u5177\u5DF2\u542F\u7528\uFF1B\u82E5\u6682\u65E0\u6CD5\u63D0\u4F9B\uFF0C\u8BF7\u4ECE strict ordered sequence \u4E2D\u79FB\u9664\u8BE5 target\u3002"))
+										: (std::string("Unable to execute the strict ordered workflow because required step targets are missing or unavailable: ") +
+											missingTargetsJoined +
+											". Missing runtime tool IDs: " + missingResolvedJoined +
+											". Remediation: enable/install bundled lane (blazeclaw/skills-bundled/nano-pdf) or fallback lane (blazeclaw/skills-openclaw-original/nano-pdf), verify manifests/scripts exist and tools are enabled, or remove unavailable targets from the strict ordered sequence."));
 
 								auto blockedTaskDeltas =
 									RuntimeSequencingPolicy::BuildOrderedPreflightTaskDeltas(
@@ -1180,10 +1272,58 @@ namespace blazeclaw::gateway {
 										true,
 										backendErrorCode,
 										backendErrorMessage);
+								blockedTaskDeltas = mergeWithPreflightTaskDeltas(
+									std::move(blockedTaskDeltas),
+									true,
+									backendErrorCode,
+									backendErrorMessage);
 								assistantDeltas =
 									buildAssistantDeltasFromTaskDeltas(blockedTaskDeltas);
 								if (assistantDeltas.empty()) {
 									assistantDeltas.push_back(assistantText);
+								}
+
+								bool terminalEmitted = hasTerminalTaskDelta(blockedTaskDeltas);
+								if (!terminalEmitted) {
+									const std::uint64_t guardNowMs = CurrentEpochMsLocal();
+									const std::uint64_t guardElapsedMs =
+										guardNowMs > nowMs ? (guardNowMs - nowMs) : 0;
+									if (guardElapsedMs >= orderedPreflightFailureTerminalGuardTimeoutMs) {
+										appendForcedTerminalTaskDeltaIfMissing(
+											blockedTaskDeltas,
+											runId,
+											sessionKey,
+											"failed",
+											backendErrorCode.empty()
+												? "ordered_preflight_terminal_guard_triggered"
+												: backendErrorCode,
+											backendErrorMessage.empty()
+												? "Forced terminal fallback emitted by ordered preflight guard."
+												: backendErrorMessage);
+										EmitTelemetryEvent(
+											"ordered_preflight_terminal_guard_forced_total",
+											std::string("{\"runId\":") + JsonString(runId) +
+											",\"elapsedMs\":" + std::to_string(guardElapsedMs) + "}");
+									}
+									terminalEmitted = hasTerminalTaskDelta(blockedTaskDeltas);
+								}
+								if (terminalEmitted) {
+									++host.m_orderedPreflightMissingTargetTerminalEmittedTotal;
+									EmitTelemetryEvent(
+										"ordered_preflight_missing_target_terminal_emitted_total",
+										std::string("{\"runId\":") + JsonString(runId) +
+										",\"total\":" +
+										std::to_string(host.m_orderedPreflightMissingTargetTerminalEmittedTotal) +
+										"}");
+								}
+								else {
+									++host.m_orderedPreflightMissingTargetSilentTotal;
+									EmitTelemetryEvent(
+										"ordered_preflight_missing_target_silent_total",
+										std::string("{\"runId\":") + JsonString(runId) +
+										",\"total\":" +
+										std::to_string(host.m_orderedPreflightMissingTargetSilentTotal) +
+										"}");
 								}
 
 								persistTaskDeltas(blockedTaskDeltas, false);
@@ -1650,21 +1790,11 @@ namespace blazeclaw::gateway {
 							}
 						}
 
-						if (!orderedPreflightTaskDeltas.empty()) {
-							std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry> mergedTaskDeltas;
-							mergedTaskDeltas.reserve(
-								orderedPreflightTaskDeltas.size() +
-								runtimeTaskDeltas.size());
-							mergedTaskDeltas.insert(
-								mergedTaskDeltas.end(),
-								orderedPreflightTaskDeltas.begin(),
-								orderedPreflightTaskDeltas.end());
-							mergedTaskDeltas.insert(
-								mergedTaskDeltas.end(),
-								runtimeTaskDeltas.begin(),
-								runtimeTaskDeltas.end());
-							runtimeTaskDeltas = std::move(mergedTaskDeltas);
-						}
+						runtimeTaskDeltas = mergeWithPreflightTaskDeltas(
+							std::move(runtimeTaskDeltas),
+							failed,
+							backendErrorCode,
+							backendErrorMessage);
 
 						persistTaskDeltas(
 							runtimeTaskDeltas,
@@ -1686,21 +1816,11 @@ namespace blazeclaw::gateway {
 								assistantText,
 								backendErrorCode,
 								backendErrorMessage);
-						if (!orderedPreflightTaskDeltas.empty()) {
-							std::vector<GatewayHost::ChatRuntimeResult::TaskDeltaEntry> mergedTaskDeltas;
-							mergedTaskDeltas.reserve(
-								orderedPreflightTaskDeltas.size() +
-								runtimeTaskDeltas.size());
-							mergedTaskDeltas.insert(
-								mergedTaskDeltas.end(),
-								orderedPreflightTaskDeltas.begin(),
-								orderedPreflightTaskDeltas.end());
-							mergedTaskDeltas.insert(
-								mergedTaskDeltas.end(),
-								runtimeTaskDeltas.begin(),
-								runtimeTaskDeltas.end());
-							runtimeTaskDeltas = std::move(mergedTaskDeltas);
-						}
+						runtimeTaskDeltas = mergeWithPreflightTaskDeltas(
+							std::move(runtimeTaskDeltas),
+							true,
+							backendErrorCode,
+							backendErrorMessage);
 
 						persistTaskDeltas(runtimeTaskDeltas, false);
 					}
