@@ -476,7 +476,8 @@ namespace blazeclaw::core {
 				const auto generatedPath = TryExtractGenerateOutputPathFromResult(lastOutput);
 				args["inputPath"] = generatedPath.value_or(DeriveDraftPdfPath(finalPath));
 				args["outputPath"] = finalPath;
-				args["pageIndex"] = 0;
+				// Prefer 1-based first page to match nano-pdf CLI behavior in current runtime.
+				args["pageIndex"] = 1;
 				args["instruction"] =
 					"Apply professional business-report formatting: improve heading hierarchy, "
 					"tighten spacing, and normalize typography.";

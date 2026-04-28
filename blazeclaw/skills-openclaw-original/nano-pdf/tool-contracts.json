@@ -56,6 +56,35 @@
           "type": "string",
           "minLength": 1,
           "description": "Optional output path for edited PDF."
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional provider selector for edit execution. The installed nano-pdf CLI currently supports only Gemini-backed editing."
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional model identifier for edit execution. Non-Gemini overrides are rejected by the current bridge preflight because the installed nano-pdf CLI hard-codes Gemini."
+        },
+        "baseUrl": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional provider endpoint override. Present for future local-provider compatibility; the current installed nano-pdf CLI does not support base URL overrides."
+        },
+        "apiKeyEnvName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional environment variable name holding the provider API key. Defaults to GEMINI_API_KEY for Gemini and OPENAI_API_KEY for local HTTP-compatible fallback routes."
+        },
+        "preflightOnly": {
+          "type": "boolean",
+          "description": "Optional flag to validate provider/model/baseUrl resolution and connectivity without performing the edit."
+        },
+        "theme": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional fallback renderer theme preset. Supported values: executive, financial, market, healthcare, energy, technology. If omitted, BlazeClaw selects a theme heuristically from the report title, metadata, and section content."
         }
       }
     }

@@ -1919,6 +1919,51 @@ namespace blazeclaw::core::tools {
 		return false;
 	}
 
+	std::string EncodeBase64ForNanoPdf(const std::string& input)
+	{
+		static constexpr char kBase64Alphabet[] =
+			"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+		std::string output;
+		output.reserve(((input.size() + 2) / 3) * 4);
+		std::size_t index = 0;
+		while (index + 3 <= input.size())
+		{
+			const std::uint32_t chunk =
+				(static_cast<std::uint32_t>(static_cast<unsigned char>(input[index])) << 16) |
+				(static_cast<std::uint32_t>(static_cast<unsigned char>(input[index + 1])) << 8) |
+				static_cast<std::uint32_t>(static_cast<unsigned char>(input[index + 2]));
+			output.push_back(kBase64Alphabet[(chunk >> 18) & 0x3Fu]);
+			output.push_back(kBase64Alphabet[(chunk >> 12) & 0x3Fu]);
+			output.push_back(kBase64Alphabet[(chunk >> 6) & 0x3Fu]);
+			output.push_back(kBase64Alphabet[chunk & 0x3Fu]);
+			index += 3;
+		}
+
+		const std::size_t remaining = input.size() - index;
+		if (remaining == 1)
+		{
+			const std::uint32_t chunk =
+				static_cast<std::uint32_t>(static_cast<unsigned char>(input[index])) << 16;
+			output.push_back(kBase64Alphabet[(chunk >> 18) & 0x3Fu]);
+			output.push_back(kBase64Alphabet[(chunk >> 12) & 0x3Fu]);
+			output.push_back('=');
+			output.push_back('=');
+		}
+		else if (remaining == 2)
+		{
+			const std::uint32_t chunk =
+				(static_cast<std::uint32_t>(static_cast<unsigned char>(input[index])) << 16) |
+				(static_cast<std::uint32_t>(static_cast<unsigned char>(input[index + 1])) << 8);
+			output.push_back(kBase64Alphabet[(chunk >> 18) & 0x3Fu]);
+			output.push_back(kBase64Alphabet[(chunk >> 12) & 0x3Fu]);
+			output.push_back(kBase64Alphabet[(chunk >> 6) & 0x3Fu]);
+			output.push_back('=');
+		}
+
+		return output;
+	}
+
 	bool IsHttpUrlForBraveSearch(const std::string& value)
 	{
 		const std::string lowered = ToLowerAscii(value);
@@ -2579,7 +2624,9 @@ namespace blazeclaw::core::tools {
 				cliPayload["title"] = title;
 			}
 
-			return std::vector<std::string>{ cliPayload.dump() };
+			return std::vector<std::string>{
+				std::string("b64:") + EncodeBase64ForNanoPdf(cliPayload.dump())
+			};
 		}
 
 		const auto inputPathIt = params.find("inputPath");
@@ -2682,7 +2729,9 @@ namespace blazeclaw::core::tools {
 			return std::nullopt;
 		}
 
-		return std::vector<std::string>{ cliPayload.dump() };
+		return std::vector<std::string>{
+			std::string("b64:") + EncodeBase64ForNanoPdf(cliPayload.dump())
+		};
 	}
 
 } // namespace blazeclaw::core::tools
