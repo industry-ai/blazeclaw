@@ -588,6 +588,88 @@ namespace blazeclaw::core {
 			return plan;
 		}
 
+		bool HasRuntimeToolEnabled(
+			const EmbeddedRuntimeExecutionRequest& request,
+			const std::string& toolId) {
+			return std::any_of(
+				request.runtimeTools.begin(),
+				request.runtimeTools.end(),
+				[&](const blazeclaw::gateway::ToolCatalogEntry& entry) {
+					return entry.enabled && entry.id == toolId;
+				});
+		}
+
+		bool HasToolInPlan(
+			const std::vector<std::string>& toolPlan,
+			const std::string& toolId) {
+			return std::find(toolPlan.begin(), toolPlan.end(), toolId) != toolPlan.end();
+		}
+
+		bool HasExplicitInputPathDirective(const std::string& message) {
+			const std::string lowered = ToLowerCopy(message);
+			return lowered.find("inputpath") != std::string::npos;
+		}
+
+		bool ShouldAutoSplitNanoPdfIntent(const std::string& message) {
+			const std::string lowered = ToLowerCopy(message);
+			if (lowered.find("nano_pdf.generate") != std::string::npos &&
+				lowered.find("nano_pdf.edit") == std::string::npos &&
+				lowered.find("nano-pdf") == std::string::npos) {
+				return false;
+			}
+
+			return lowered.find("professional") != std::string::npos ||
+				lowered.find("format") != std::string::npos ||
+				lowered.find("polish") != std::string::npos ||
+				lowered.find("well-structured") != std::string::npos ||
+				lowered.find("business brief") != std::string::npos ||
+				lowered.find("nano-pdf") != std::string::npos;
+		}
+
+		void NormalizeNanoPdfToolPlan(
+			const EmbeddedRuntimeExecutionRequest& request,
+			const std::size_t maxSteps,
+			std::vector<std::string>& toolPlan) {
+			if (maxSteps == 0 || toolPlan.empty()) {
+				return;
+			}
+
+			const bool hasGenerateRuntime =
+				HasRuntimeToolEnabled(request, "nano_pdf.generate");
+			const bool hasEditRuntime =
+				HasRuntimeToolEnabled(request, "nano_pdf.edit");
+			if (!hasGenerateRuntime && !hasEditRuntime) {
+				return;
+			}
+
+			const bool hasGenerateInPlan = HasToolInPlan(toolPlan, "nano_pdf.generate");
+			const bool hasEditInPlan = HasToolInPlan(toolPlan, "nano_pdf.edit");
+			const bool hasExplicitInputPath = HasExplicitInputPathDirective(request.run.message);
+
+			if (hasEditInPlan && !hasGenerateInPlan && !hasExplicitInputPath && hasGenerateRuntime) {
+				auto firstEdit = std::find(toolPlan.begin(), toolPlan.end(), "nano_pdf.edit");
+				toolPlan.insert(firstEdit, "nano_pdf.generate");
+			}
+
+			if (toolPlan.size() >= maxSteps) {
+				toolPlan.resize(maxSteps);
+				return;
+			}
+
+			const bool shouldAutoSplit = ShouldAutoSplitNanoPdfIntent(request.run.message);
+			if (shouldAutoSplit && hasGenerateRuntime && hasEditRuntime) {
+				const bool nowHasGenerate = HasToolInPlan(toolPlan, "nano_pdf.generate");
+				const bool nowHasEdit = HasToolInPlan(toolPlan, "nano_pdf.edit");
+				if (nowHasGenerate && !nowHasEdit && !hasExplicitInputPath) {
+					toolPlan.push_back("nano_pdf.edit");
+				}
+			}
+
+			if (toolPlan.size() > maxSteps) {
+				toolPlan.resize(maxSteps);
+			}
+		}
+
 		std::vector<EmbeddedExecutionPlanStep> BuildExecutionPlan(
 			const EmbeddedRuntimeExecutionRequest& request,
 			const std::size_t maxSteps) {
@@ -613,6 +695,8 @@ namespace blazeclaw::core {
 			else {
 				toolPlan = ResolveDynamicExecutionPlan(request, maxSteps);
 			}
+
+			NormalizeNanoPdfToolPlan(request, maxSteps, toolPlan);
 
 			std::vector<EmbeddedExecutionPlanStep> plan;
 			plan.reserve(toolPlan.size());
