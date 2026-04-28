@@ -350,6 +350,71 @@ function Wait-RunTerminalState {
     throw "run $RunId did not emit expected terminal states: $($TargetStates -join ',')"
 }
 
+function Wait-RunTerminalEvent {
+    param(
+        [System.Net.WebSockets.ClientWebSocket]$Socket,
+        [string]$Session,
+        [string]$RunId,
+        [string[]]$TargetStates,
+        [int]$Retries = 30,
+        [int]$DelayMs = 250,
+        [ref]$CapturedEvents,
+        [ref]$ReconcileSnapshots
+    )
+
+    for ($i = 0; $i -lt $Retries; $i++) {
+        $poll = Poll-Events -Socket $Socket -Session $Session -CapturedEvents ([ref]$CapturedEvents.Value)
+        if ($poll.payload -and $poll.payload.PSObject.Properties.Name -contains "reconcile") {
+            $ReconcileSnapshots.Value += $poll.payload.reconcile
+        }
+
+        $events = @($poll.payload.events)
+        foreach ($evt in $events) {
+            if ($evt.runId -ne $RunId) {
+                continue
+            }
+
+            if ($TargetStates -contains [string]$evt.state) {
+                return $evt
+            }
+        }
+
+        Start-Sleep -Milliseconds $DelayMs
+    }
+
+    throw "run $RunId did not emit expected terminal event states: $($TargetStates -join ',')"
+}
+
+function Assert-ReconcilePayloadContract {
+    param(
+        [array]$Snapshots,
+        [string]$Label
+    )
+
+    foreach ($snapshot in $Snapshots) {
+        if ($null -eq $snapshot) {
+            continue
+        }
+
+        if (
+            $snapshot.PSObject.Properties.Name -contains "waitingForTerminalEvent" -and
+            [bool]$snapshot.waitingForTerminalEvent
+        ) {
+            if (-not ($snapshot.PSObject.Properties.Name -contains "state")) {
+                throw "$Label missing reconcile.state"
+            }
+
+            if (-not ($snapshot.PSObject.Properties.Name -contains "message")) {
+                throw "$Label missing reconcile.message"
+            }
+
+            if (-not ($snapshot.PSObject.Properties.Name -contains "focusElapsedMs")) {
+                throw "$Label missing reconcile.focusElapsedMs"
+            }
+        }
+    }
+}
+
 function New-SmokeSessionKey {
     param([string]$FlowName)
 
@@ -1020,6 +1085,69 @@ Invoke-FlowWithSocket -FlowName "orchestrationPrompt" -FlowBody {
 }
 }
 
+if (Should-RunFlow -FlowName "queuedReconcileRegression") {
+Invoke-FlowWithSocket -FlowName "queuedReconcileRegression" -FlowBody {
+    param($socket, [ref]$events)
+
+    $flowSessionKey = New-SmokeSessionKey -FlowName "queuedReconcileRegression"
+
+    $firstReq = New-ReqFrame -Method "chat.send" -Params @{
+        sessionKey = $flowSessionKey
+        message = "strict ordered baidu-search -> web-browsing -> nano-pdf; generate result"
+        deliver = $false
+        idempotencyKey = "web-smoke-queued-regression-a-" + [guid]::NewGuid().ToString("N")
+        attachments = @()
+    }
+
+    Send-Req -Socket $socket -Frame $firstReq
+    $firstRes = Wait-Response -Socket $socket -RequestId $firstReq.id -CapturedEvents ([ref]$events.Value)
+    if (-not $firstRes.ok) {
+        throw "queuedReconcileRegression first chat.send failed"
+    }
+
+    $firstRunId = [string]$firstRes.payload.runId
+    $reconcileSnapshots = @()
+    $firstTerminalEvent = Wait-RunTerminalEvent -Socket $socket -Session $flowSessionKey -RunId $firstRunId -TargetStates @("final", "error") -Retries 60 -DelayMs 250 -CapturedEvents ([ref]$events.Value) -ReconcileSnapshots ([ref]$reconcileSnapshots)
+    if ($null -eq $firstTerminalEvent) {
+        throw "queuedReconcileRegression first run terminal event missing"
+    }
+
+    if ([string]$firstTerminalEvent.state -eq "error") {
+        if (-not ($firstTerminalEvent.PSObject.Properties.Name -contains "errorCode")) {
+            throw "queuedReconcileRegression first run error missing errorCode"
+        }
+
+        if (-not ($firstTerminalEvent.PSObject.Properties.Name -contains "context")) {
+            throw "queuedReconcileRegression first run error missing context"
+        }
+    }
+
+    $secondReq = New-ReqFrame -Method "chat.send" -Params @{
+        sessionKey = $flowSessionKey
+        message = "hello, return a short greeting"
+        deliver = $false
+        idempotencyKey = "web-smoke-queued-regression-b-" + [guid]::NewGuid().ToString("N")
+        attachments = @()
+    }
+
+    Send-Req -Socket $socket -Frame $secondReq
+    $secondRes = Wait-Response -Socket $socket -RequestId $secondReq.id -CapturedEvents ([ref]$events.Value)
+    if (-not $secondRes.ok) {
+        throw "queuedReconcileRegression second chat.send failed"
+    }
+
+    $secondRunId = [string]$secondRes.payload.runId
+    $secondTerminalEvent = Wait-RunTerminalEvent -Socket $socket -Session $flowSessionKey -RunId $secondRunId -TargetStates @("final", "error") -Retries 60 -DelayMs 250 -CapturedEvents ([ref]$events.Value) -ReconcileSnapshots ([ref]$reconcileSnapshots)
+    if ($null -eq $secondTerminalEvent) {
+        throw "queuedReconcileRegression second run terminal event missing"
+    }
+
+    Assert-ReconcilePayloadContract -Snapshots $reconcileSnapshots -Label "queuedReconcileRegression"
+
+    Write-Output "[PASS] queued reconcile regression flow"
+}
+}
+
 Write-Output ""
 Write-Output "WebView smoke summary"
 Write-Output "- send/final: pass"
@@ -1031,5 +1159,6 @@ Write-Output "- weatherEmailExecute: pass"
 Write-Output "- weatherEmailExecute.denyBranch: pass"
 Write-Output "- lifecycleCatalog: pass"
 Write-Output "- orchestrationPrompt: pass"
+Write-Output "- queuedReconcileRegression: pass"
 Write-Output "- lobsterExecute: (verified when run)"
 Write-Output "- weatherEmailExecute: (verified when run)"

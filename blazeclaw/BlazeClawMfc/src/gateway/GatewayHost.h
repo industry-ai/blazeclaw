@@ -449,6 +449,8 @@ namespace blazeclaw::gateway {
 			std::size_t providerDeltaCursor = 0;
 			std::size_t streamCursor = 0;
 			std::uint64_t lastEmitMs = 0;
+			std::uint64_t lastProgressAtMs = 0;
+			bool terminalWaitExceededNotified = false;
 			bool failed = false;
 			std::string errorCode;
 			std::string errorMessage;
@@ -611,6 +613,9 @@ namespace blazeclaw::gateway {
 		std::uint64_t m_orderedPreflightMissingTargetTotal = 0;
 		std::uint64_t m_orderedPreflightMissingTargetTerminalEmittedTotal = 0;
 		std::uint64_t m_orderedPreflightMissingTargetSilentTotal = 0;
+		std::uint64_t m_chatPollStalledActiveRunTotal = 0;
+		std::uint64_t m_chatPollStalledActiveRunForcedTerminalTotal = 0;
+		std::uint64_t m_chatPollTerminalWaitExceededTotal = 0;
 		std::uint64_t m_nodeInvokeTotalCount = 0;
 		std::uint64_t m_nodeInvokePolicyRejectCount = 0;
 		std::uint64_t m_nodeWakeAttemptCount = 0;

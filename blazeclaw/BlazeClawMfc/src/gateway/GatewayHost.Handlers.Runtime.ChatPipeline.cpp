@@ -1156,7 +1156,6 @@ namespace blazeclaw::gateway {
 							return mergedTaskDeltas;
 					};
 
-					const std::uint64_t orderedPreflightFailureTerminalGuardTimeoutMs = 2000;
 					if (!forceError &&
 						!hasAttachments &&
 						orderedSequencePreflight.enforced) {
@@ -1255,9 +1254,16 @@ namespace blazeclaw::gateway {
 								backendErrorMessage = strictMissingErrorMessage;
 								backendErrorContextJson = JsonObject({
 									{"layer", JsonString("ordered_preflight")},
-									{"missingTargets", SerializeStringArrayLocal(orderedSequencePreflight.missingTargets)},
+									{"missingOrderedTargets", SerializeStringArrayLocal(orderedSequencePreflight.missingTargets)},
 									{"missingRuntimeToolIds", SerializeStringArrayLocal(orderedSequencePreflight.missingResolvedToolTargets)},
 									{"remediation", JsonString("enable/install bundled lane blazeclaw/skills-bundled/nano-pdf or fallback lane blazeclaw/skills-openclaw-original/nano-pdf, verify manifests/scripts exist and tools are enabled, or remove unavailable targets from strict ordered sequence")},
+									{"remediationOptions", JsonArray({
+										JsonString("bundled_lane:blazeclaw/skills-bundled/nano-pdf"),
+										JsonString("fallback_lane:blazeclaw/skills-openclaw-original/nano-pdf"),
+										JsonString("remove_unavailable_target_from_strict_sequence"),
+										})},
+									{"strictAllowlist", JsonBool(orderedSequencePreflight.strictAllowlist)},
+									{"orderedTargets", SerializeStringArrayLocal(orderedSequencePreflight.orderedTargets)},
 									});
 								assistantText =
 									(preferChineseResponse
@@ -1290,48 +1296,29 @@ namespace blazeclaw::gateway {
 									assistantDeltas.push_back(assistantText);
 								}
 
-								bool terminalEmitted = hasTerminalTaskDelta(blockedTaskDeltas);
-								if (!terminalEmitted) {
-									const std::uint64_t guardNowMs = CurrentEpochMsLocal();
-									const std::uint64_t guardElapsedMs =
-										guardNowMs > nowMs ? (guardNowMs - nowMs) : 0;
-									if (guardElapsedMs >= orderedPreflightFailureTerminalGuardTimeoutMs) {
-										appendForcedTerminalTaskDeltaIfMissing(
-											blockedTaskDeltas,
-											runId,
-											sessionKey,
-											"failed",
-											backendErrorCode.empty()
-												? "ordered_preflight_terminal_guard_triggered"
-												: backendErrorCode,
-											backendErrorMessage.empty()
-												? "Forced terminal fallback emitted by ordered preflight guard."
-												: backendErrorMessage);
-										EmitTelemetryEvent(
-											"ordered_preflight_terminal_guard_forced_total",
-											std::string("{\"runId\":") + JsonString(runId) +
-											",\"elapsedMs\":" + std::to_string(guardElapsedMs) + "}");
-									}
-									terminalEmitted = hasTerminalTaskDelta(blockedTaskDeltas);
-								}
-								if (terminalEmitted) {
-									++host.m_orderedPreflightMissingTargetTerminalEmittedTotal;
-									EmitTelemetryEvent(
-										"ordered_preflight_missing_target_terminal_emitted_total",
-										std::string("{\"runId\":") + JsonString(runId) +
-										",\"total\":" +
-										std::to_string(host.m_orderedPreflightMissingTargetTerminalEmittedTotal) +
-										"}");
-								}
-								else {
-									++host.m_orderedPreflightMissingTargetSilentTotal;
-									EmitTelemetryEvent(
-										"ordered_preflight_missing_target_silent_total",
-										std::string("{\"runId\":") + JsonString(runId) +
-										",\"total\":" +
-										std::to_string(host.m_orderedPreflightMissingTargetSilentTotal) +
-										"}");
-								}
+								appendForcedTerminalTaskDeltaIfMissing(
+									blockedTaskDeltas,
+									runId,
+									sessionKey,
+									"failed",
+									backendErrorCode.empty()
+										? "ordered_preflight_terminal_guard_triggered"
+										: backendErrorCode,
+									backendErrorMessage.empty()
+										? "Forced terminal fallback emitted by ordered preflight guard."
+										: backendErrorMessage);
+								++host.m_orderedPreflightMissingTargetTerminalEmittedTotal;
+								EmitTelemetryEvent(
+									"ordered_preflight_missing_target_terminal_emitted_total",
+									std::string("{\"runId\":") + JsonString(runId) +
+									",\"total\":" +
+									std::to_string(host.m_orderedPreflightMissingTargetTerminalEmittedTotal) +
+									",\"errorCode\":" + JsonString(backendErrorCode) +
+									",\"missingOrderedTargets\":" +
+									SerializeStringArrayLocal(orderedSequencePreflight.missingTargets) +
+									",\"missingRuntimeToolIds\":" +
+									SerializeStringArrayLocal(orderedSequencePreflight.missingResolvedToolTargets) +
+									"}");
 
 								persistTaskDeltas(blockedTaskDeltas, false);
 							}
@@ -1533,6 +1520,8 @@ namespace blazeclaw::gateway {
 								.providerDeltaCursor = 0,
 								.streamCursor = 0,
 								.lastEmitMs = nowMs,
+								.lastProgressAtMs = nowMs,
+								.terminalWaitExceededNotified = false,
 								.failed = false,
 								.errorCode = {},
 								.errorMessage = {},
@@ -1633,7 +1622,9 @@ namespace blazeclaw::gateway {
 										if (runStateIt != host.m_chatRunsById.end()) {
 											runStateIt->second.assistantText = normalizedDelta;
 											runStateIt->second.streamCursor = normalizedDelta.size();
-										  runStateIt->second.lastEmitMs = deltaNowMs;
+											runStateIt->second.lastEmitMs = deltaNowMs;
+											runStateIt->second.lastProgressAtMs = deltaNowMs;
+											runStateIt->second.terminalWaitExceededNotified = false;
 										}
 
 										++streamedDeltaCount;
@@ -1673,6 +1664,8 @@ namespace blazeclaw::gateway {
 									existingRunIt->second.streamCursor =
 										providerStreamed ? assistantText.size() : 0;
 									existingRunIt->second.lastEmitMs = nowMs;
+									existingRunIt->second.lastProgressAtMs = nowMs;
+									existingRunIt->second.terminalWaitExceededNotified = false;
 									existingRunIt->second.failed = failed;
 									existingRunIt->second.errorCode = backendErrorCode;
 									existingRunIt->second.errorMessage = backendErrorMessage;
@@ -1700,6 +1693,8 @@ namespace blazeclaw::gateway {
 							existingRunIt->second.streamCursor =
 								providerStreamed ? assistantText.size() : 0;
 							existingRunIt->second.lastEmitMs = nowMs;
+							existingRunIt->second.lastProgressAtMs = nowMs;
+							existingRunIt->second.terminalWaitExceededNotified = false;
 							existingRunIt->second.failed = failed;
 							existingRunIt->second.errorCode = backendErrorCode;
 							existingRunIt->second.errorMessage = backendErrorMessage;
@@ -2036,6 +2031,8 @@ namespace blazeclaw::gateway {
 								.providerDeltaCursor = 0,
 								.streamCursor = streamCursor,
 								.lastEmitMs = nowMs,
+								.lastProgressAtMs = nowMs,
+								.terminalWaitExceededNotified = false,
 								.failed = failed,
 								.errorCode = backendErrorCode,
 								.errorMessage = backendErrorMessage,
@@ -2319,6 +2316,7 @@ namespace blazeclaw::gateway {
 
 					runIt->second.active = false;
 					runIt->second.streamCursor = runIt->second.assistantText.size();
+					runIt->second.lastProgressAtMs = nowMs;
 					host.m_chatToolEventRecipientsByRun.erase(runId);
 					host.RuntimeContext().transportRecipientRegistry->MarkRunFinalized(runId, nowMs);
 					host.RuntimeContext().transportRecipientRegistry->PruneExpired(nowMs);
@@ -2366,28 +2364,118 @@ namespace blazeclaw::gateway {
 							(std::max)(std::size_t{ 1 }, (std::min)(requestedLimit, std::size_t{ 100 }));
 
 						const std::uint64_t nowMs = CurrentEpochMsLocal();
-						auto queueIt = host.m_chatEventsBySession.find(sessionKey);
 						auto& queue = host.m_chatEventsBySession[sessionKey];
+						constexpr std::size_t maxActiveRunsPerPoll = 12;
+						constexpr std::uint64_t stalledActiveRunTimeoutMs = 45 * 1000;
+						constexpr std::uint64_t terminalWaitExceededThresholdMs = 12 * 1000;
 
-						auto runIt = std::find_if(
-							host.m_chatRunsById.begin(),
-							host.m_chatRunsById.end(),
-							[&](auto& pair) {
-								return pair.second.sessionKey == sessionKey && pair.second.active;
+						std::vector<GatewayHost::ChatRunState*> sessionActiveRuns;
+						sessionActiveRuns.reserve(host.m_chatRunsById.size());
+						for (auto& [_, candidateRun] : host.m_chatRunsById) {
+							if (candidateRun.sessionKey == sessionKey && candidateRun.active) {
+								sessionActiveRuns.push_back(&candidateRun);
+							}
+						}
+
+						std::sort(
+							sessionActiveRuns.begin(),
+							sessionActiveRuns.end(),
+							[](const GatewayHost::ChatRunState* left, const GatewayHost::ChatRunState* right) {
+								const std::uint64_t leftProgress =
+									left->lastProgressAtMs > 0 ? left->lastProgressAtMs : left->startedAtMs;
+								const std::uint64_t rightProgress =
+									right->lastProgressAtMs > 0 ? right->lastProgressAtMs : right->startedAtMs;
+								if (leftProgress != rightProgress) {
+									return leftProgress < rightProgress;
+								}
+								return left->startedAtMs > right->startedAtMs;
 							});
 
-						if (runIt != host.m_chatRunsById.end()) {
-							auto& run = runIt->second;
-							const bool pushLifecycleEnabledForRun =
-								run.pushLifecycleRequested;
+						const std::size_t reconcileCount =
+							(std::min)(sessionActiveRuns.size(), maxActiveRunsPerPoll);
+						std::size_t stalledRunCountThisPoll = 0;
+						std::string reconcileFocusRunId;
+						std::uint64_t reconcileFocusElapsedMs = 0;
+						if (sessionActiveRuns.size() > maxActiveRunsPerPoll) {
+							EmitTelemetryEvent(
+								"gateway.chat.poll.active_run_reconcile_bounded",
+								std::string("{\"sessionKey\":") + JsonString(sessionKey) +
+								",\"activeRuns\":" + std::to_string(sessionActiveRuns.size()) +
+								",\"reconcileCount\":" + std::to_string(reconcileCount) + "}");
+						}
+
+						auto processRun = [&](GatewayHost::ChatRunState& run) {
+							const bool pushLifecycleEnabledForRun = run.pushLifecycleRequested;
 							const bool silentAssistantReply =
 								RuntimeTranscriptGuard::IsSilentReplyText(run.assistantText);
+							const std::uint64_t progressAtMs =
+								run.lastProgressAtMs > 0
+								? run.lastProgressAtMs
+								: (run.lastEmitMs > 0 ? run.lastEmitMs : run.startedAtMs);
+							const std::uint64_t noProgressElapsedMs =
+								nowMs > progressAtMs ? (nowMs - progressAtMs) : 0;
+							const bool runHasUnfinishedOutput =
+								run.providerDeltaCursor < run.providerDeltas.size() ||
+								run.streamCursor < run.assistantText.size();
+
+							if (!run.terminalWaitExceededNotified &&
+								runHasUnfinishedOutput &&
+								noProgressElapsedMs >= terminalWaitExceededThresholdMs) {
+								run.terminalWaitExceededNotified = true;
+								if (reconcileFocusRunId.empty() || noProgressElapsedMs > reconcileFocusElapsedMs) {
+									reconcileFocusRunId = run.runId;
+									reconcileFocusElapsedMs = noProgressElapsedMs;
+								}
+								++host.m_chatPollTerminalWaitExceededTotal;
+								EmitTelemetryEvent(
+									"chat_poll_terminal_wait_exceeded_total",
+									std::string("{\"runId\":") + JsonString(run.runId) +
+									",\"sessionKey\":" + JsonString(run.sessionKey) +
+									",\"elapsedMs\":" + std::to_string(noProgressElapsedMs) +
+									",\"total\":" + std::to_string(host.m_chatPollTerminalWaitExceededTotal) + "}");
+							}
+
+							if (!run.failed &&
+								runHasUnfinishedOutput &&
+								noProgressElapsedMs >= stalledActiveRunTimeoutMs) {
+								++stalledRunCountThisPoll;
+								if (reconcileFocusRunId.empty() || noProgressElapsedMs > reconcileFocusElapsedMs) {
+									reconcileFocusRunId = run.runId;
+									reconcileFocusElapsedMs = noProgressElapsedMs;
+								}
+								++host.m_chatPollStalledActiveRunTotal;
+								run.failed = true;
+								run.errorCode = "chat_poll_stalled_active_run";
+								run.errorMessage =
+									"Run reconciliation stalled without progress; terminalized by poll guard.";
+								run.errorContextJson = JsonObject({
+									{"layer", JsonString("chat.events.poll")},
+									{"guard", JsonString("stalled_active_run_timeout")},
+									{"runId", JsonString(run.runId)},
+									{"sessionKey", JsonString(run.sessionKey)},
+									{"elapsedMs", JsonNumber(noProgressElapsedMs)},
+									{"timeoutMs", JsonNumber(stalledActiveRunTimeoutMs)},
+									});
+								++host.m_chatPollStalledActiveRunForcedTerminalTotal;
+								EmitTelemetryEvent(
+									"chat_poll_stalled_active_run_total",
+									std::string("{\"runId\":") + JsonString(run.runId) +
+									",\"sessionKey\":" + JsonString(run.sessionKey) +
+									",\"elapsedMs\":" + std::to_string(noProgressElapsedMs) +
+									",\"total\":" + std::to_string(host.m_chatPollStalledActiveRunTotal) + "}");
+								EmitTelemetryEvent(
+									"chat_poll_stalled_active_run_forced_terminal_total",
+									std::string("{\"runId\":") + JsonString(run.runId) +
+									",\"sessionKey\":" + JsonString(run.sessionKey) +
+									",\"elapsedMs\":" + std::to_string(noProgressElapsedMs) +
+									",\"total\":" + std::to_string(host.m_chatPollStalledActiveRunForcedTerminalTotal) + "}");
+							}
+
 							const bool enoughTimeElapsed =
 								run.lastEmitMs == 0 || (nowMs - run.lastEmitMs) >= 180;
-
-							if (!run.failed && !silentAssistantReply &&
-								((run.providerDeltaCursor < run.providerDeltas.size()) ||
-									(run.streamCursor < run.assistantText.size())) &&
+							if (!run.failed &&
+								!silentAssistantReply &&
+								runHasUnfinishedOutput &&
 								enoughTimeElapsed) {
 								ChatControlPlaneService controlPlaneService;
 								const auto pollDecision =
@@ -2405,16 +2493,14 @@ namespace blazeclaw::gateway {
 								};
 
 								std::string deltaText;
-								std::string pollDeltaMessage;
 								std::string revealMode = "provider_stream";
 								std::size_t revealChunkSize = 0;
+								bool hasDeltaToEmit = false;
 								if (run.providerDeltaCursor < run.providerDeltas.size()) {
 									while (run.providerDeltaCursor < run.providerDeltas.size()) {
 										deltaText = run.providerDeltas[run.providerDeltaCursor];
 										++run.providerDeltaCursor;
-										if (controlPlaneService.ShouldPublishToolDelta(
-											deltaText,
-											pollDecision)) {
+										if (controlPlaneService.ShouldPublishToolDelta(deltaText, pollDecision)) {
 											if (deltaText.find("tools.execute") == 0) {
 												const auto recipientsIt =
 													host.m_chatToolEventRecipientsByRun.find(run.runId);
@@ -2424,23 +2510,22 @@ namespace blazeclaw::gateway {
 													continue;
 												}
 											}
+											hasDeltaToEmit = true;
 											break;
 										}
 										deltaText.clear();
 									}
-									if (deltaText.empty()) {
-										goto skip_poll_delta_emit;
+									if (hasDeltaToEmit) {
+										run.streamCursor = deltaText.size();
+										revealChunkSize = deltaText.size();
 									}
-									run.streamCursor = deltaText.size();
-									revealChunkSize = deltaText.size();
 								}
 								else {
 									revealMode = "synthetic_incremental_diff";
 									const std::size_t previousCursor = run.streamCursor;
 									const std::size_t totalSize = run.assistantText.size();
-									const std::size_t remaining = totalSize > previousCursor
-										? (totalSize - previousCursor)
-										: 0;
+									const std::size_t remaining =
+										totalSize > previousCursor ? (totalSize - previousCursor) : 0;
 									std::size_t chunkSize = 8;
 									if (fastSyntheticRevealMode) {
 										if (totalSize > 6000) {
@@ -2472,57 +2557,55 @@ namespace blazeclaw::gateway {
 									deltaText = run.assistantText.substr(
 										previousCursor,
 										nextCursor > previousCursor ? (nextCursor - previousCursor) : 0);
+									hasDeltaToEmit = !deltaText.empty();
 								}
 
-								run.lastEmitMs = nowMs;
-								pollDeltaMessage = BuildAssistantDeltaMessageJson(deltaText);
-								EmitTelemetryEvent(
-									"gateway.chat.poll.reveal.mode",
-									std::string("{\"runId\":") +
-									JsonString(run.runId) +
-									",\"sessionKey\":" +
-									JsonString(run.sessionKey) +
-									",\"revealMode\":" +
-									JsonString(revealMode) +
-									",\"assistantTextBytes\":" +
-									std::to_string(run.assistantText.size()) +
-									",\"streamCursor\":" +
-									std::to_string(run.streamCursor) +
-									",\"pollRevealChunkSize\":" +
-									std::to_string(revealChunkSize) +
-									"}");
+								if (hasDeltaToEmit) {
+									run.lastEmitMs = nowMs;
+									run.lastProgressAtMs = nowMs;
+									run.terminalWaitExceededNotified = false;
+									const std::string pollDeltaMessage =
+										BuildAssistantDeltaMessageJson(deltaText);
+									EmitTelemetryEvent(
+										"gateway.chat.poll.reveal.mode",
+										std::string("{\"runId\":") + JsonString(run.runId) +
+										",\"sessionKey\":" + JsonString(run.sessionKey) +
+										",\"revealMode\":" + JsonString(revealMode) +
+										",\"assistantTextBytes\":" + std::to_string(run.assistantText.size()) +
+										",\"streamCursor\":" + std::to_string(run.streamCursor) +
+										",\"pollRevealChunkSize\":" + std::to_string(revealChunkSize) + "}");
 
-								PushEventWithRetentionLimit(queue, GatewayHost::ChatEventState{
-									   .runId = run.runId,
-									   .sessionKey = run.sessionKey,
-									   .state = "delta",
-									   .messageJson = pollDeltaMessage,
-									   .errorMessage = std::nullopt,
-									   .timestampMs = nowMs,
-									});
-								if (pushLifecycleEnabledForRun) {
-									EmitPushLifecycleEvent(
-										*host.RuntimeContext().transport,
-										*host.RuntimeContext().eventFanout,
-										GatewayEventFanoutService::ChatLifecycleEvent{
-											.runId = run.runId,
-											.sessionKey = run.sessionKey,
-											.state = "delta",
-											.messageJson = pollDeltaMessage,
-											.errorMessage = std::nullopt,
-											.timestampMs = nowMs,
-										},
-										host.m_chatPushEventSeq);
+									PushEventWithRetentionLimit(queue, GatewayHost::ChatEventState{
+										   .runId = run.runId,
+										   .sessionKey = run.sessionKey,
+										   .state = "delta",
+										   .messageJson = pollDeltaMessage,
+										   .errorMessage = std::nullopt,
+										   .timestampMs = nowMs,
+										});
+									if (pushLifecycleEnabledForRun) {
+										EmitPushLifecycleEvent(
+											*host.RuntimeContext().transport,
+											*host.RuntimeContext().eventFanout,
+											GatewayEventFanoutService::ChatLifecycleEvent{
+												.runId = run.runId,
+												.sessionKey = run.sessionKey,
+												.state = "delta",
+												.messageJson = pollDeltaMessage,
+												.errorMessage = std::nullopt,
+												.timestampMs = nowMs,
+											},
+											host.m_chatPushEventSeq);
+									}
+									EmitDeepSeekGatewayDiagnostic(
+										"event.enqueue",
+										std::string("state=delta runId=") +
+										run.runId +
+										" session=" +
+										run.sessionKey +
+										" queueSize=" +
+										std::to_string(queue.size()));
 								}
-								EmitDeepSeekGatewayDiagnostic(
-									"event.enqueue",
-									std::string("state=delta runId=") +
-									run.runId +
-									" session=" +
-									run.sessionKey +
-									" queueSize=" +
-									std::to_string(queue.size()));
-							skip_poll_delta_emit:;
 							}
 
 							const bool streamCompleted =
@@ -2572,6 +2655,7 @@ namespace blazeclaw::gateway {
 									nowMs,
 									terminalError);
 								run.terminalEventEnqueued = true;
+								run.lastProgressAtMs = nowMs;
 								host.RuntimeContext().transportRecipientRegistry->MarkRunFinalized(
 									run.runId,
 									nowMs);
@@ -2589,6 +2673,12 @@ namespace blazeclaw::gateway {
 								run.active = false;
 								host.m_chatToolEventRecipientsByRun.erase(run.runId);
 								host.RuntimeContext().transportRecipientRegistry->PruneExpired(nowMs);
+							}
+						};
+
+						for (std::size_t runIndex = 0; runIndex < reconcileCount; ++runIndex) {
+							if (sessionActiveRuns[runIndex] != nullptr) {
+								processRun(*sessionActiveRuns[runIndex]);
 							}
 						}
 
@@ -2679,6 +2769,32 @@ namespace blazeclaw::gateway {
 						}
 
 						eventsJson += "]";
+						const bool waitingForTerminalEvent = emitted == 0 && !sessionActiveRuns.empty();
+						std::string reconcileState = "idle";
+						if (waitingForTerminalEvent) {
+							reconcileState = stalledRunCountThisPoll > 0
+								? "reconciling_stalled_run"
+								: "waiting_for_terminal_event";
+						}
+						const std::string statusMessage = waitingForTerminalEvent
+							? (reconcileFocusRunId.empty()
+								? std::string("run is being reconciled")
+								: (std::string("run is being reconciled (runId=") +
+									reconcileFocusRunId +
+									", elapsedMs=" +
+									std::to_string(reconcileFocusElapsedMs) +
+									")"))
+							: std::string();
+						const std::string reconcileJson = JsonObject({
+							{"state", JsonString(reconcileState)},
+							{"waitingForTerminalEvent", JsonBool(waitingForTerminalEvent)},
+							{"activeRuns", JsonNumber(static_cast<std::uint64_t>(sessionActiveRuns.size()))},
+							{"reconciledRuns", JsonNumber(static_cast<std::uint64_t>(reconcileCount))},
+							{"stalledRuns", JsonNumber(static_cast<std::uint64_t>(stalledRunCountThisPoll))},
+							{"focusRunId", JsonString(reconcileFocusRunId)},
+							{"focusElapsedMs", JsonNumber(reconcileFocusElapsedMs)},
+							{"message", JsonString(statusMessage)},
+							});
 						EmitDeepSeekGatewayDiagnostic(
 							"event.dequeue",
 							std::string("poll complete session=") +
@@ -2686,13 +2802,19 @@ namespace blazeclaw::gateway {
 							" emitted=" +
 							std::to_string(emitted) +
 							" queueRemaining=" +
-							std::to_string(queue.size()));
+							std::to_string(queue.size()) +
+							" activeRuns=" +
+							std::to_string(sessionActiveRuns.size()) +
+							" stalledRuns=" +
+							std::to_string(stalledRunCountThisPoll));
 						return protocol::OkResponse(request, "{\"sessionKey\":\"" +
 							EscapeJsonLocal(sessionKey) +
 							"\",\"events\":" +
 							eventsJson +
 							",\"count\":" +
 							std::to_string(emitted) +
+							",\"reconcile\":" +
+							reconcileJson +
 							"}");
 				});
 
