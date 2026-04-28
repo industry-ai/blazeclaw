@@ -832,6 +832,7 @@ namespace blazeclaw::gateway {
 					std::vector<std::string> assistantDeltas;
 					std::string backendErrorCode;
 					std::string backendErrorMessage;
+					std::string backendErrorContextJson;
 					bool failed = false;
 					bool orchestrationHandled = false;
 					bool lifecycleEventsEnqueued = false;
@@ -1252,6 +1253,12 @@ namespace blazeclaw::gateway {
 								orchestrationHandled = true;
 								backendErrorCode = strictMissingErrorCode;
 								backendErrorMessage = strictMissingErrorMessage;
+								backendErrorContextJson = JsonObject({
+									{"layer", JsonString("ordered_preflight")},
+									{"missingTargets", SerializeStringArrayLocal(orderedSequencePreflight.missingTargets)},
+									{"missingRuntimeToolIds", SerializeStringArrayLocal(orderedSequencePreflight.missingResolvedToolTargets)},
+									{"remediation", JsonString("enable/install bundled lane blazeclaw/skills-bundled/nano-pdf or fallback lane blazeclaw/skills-openclaw-original/nano-pdf, verify manifests/scripts exist and tools are enabled, or remove unavailable targets from strict ordered sequence")},
+									});
 								assistantText =
 									(preferChineseResponse
 										? (Utf8LiteralLocal(u8"\u65E0\u6CD5\u6267\u884C\u6709\u5E8F\u5DE5\u4F5C\u6D41\uFF0C\u4EE5\u4E0B\u6B65\u9AA4\u76EE\u6807\u7F3A\u5931\u6216\u4E0D\u53EF\u7528\uFF1A") +
@@ -1527,7 +1534,9 @@ namespace blazeclaw::gateway {
 								.streamCursor = 0,
 								.lastEmitMs = nowMs,
 								.failed = false,
+								.errorCode = {},
 								.errorMessage = {},
+								.errorContextJson = {},
 								.startedAtMs = nowMs,
 								.active = true,
 								.terminalEventEnqueued = false,
@@ -1665,7 +1674,9 @@ namespace blazeclaw::gateway {
 										providerStreamed ? assistantText.size() : 0;
 									existingRunIt->second.lastEmitMs = nowMs;
 									existingRunIt->second.failed = failed;
+									existingRunIt->second.errorCode = backendErrorCode;
 									existingRunIt->second.errorMessage = backendErrorMessage;
+									existingRunIt->second.errorContextJson = backendErrorContextJson;
 									existingRunIt->second.active = true;
 								}
 							}
@@ -1690,7 +1701,9 @@ namespace blazeclaw::gateway {
 								providerStreamed ? assistantText.size() : 0;
 							existingRunIt->second.lastEmitMs = nowMs;
 							existingRunIt->second.failed = failed;
+							existingRunIt->second.errorCode = backendErrorCode;
 							existingRunIt->second.errorMessage = backendErrorMessage;
+							existingRunIt->second.errorContextJson = backendErrorContextJson;
 							existingRunIt->second.active = true;
 						}
 
@@ -2024,7 +2037,9 @@ namespace blazeclaw::gateway {
 								.streamCursor = streamCursor,
 								.lastEmitMs = nowMs,
 								.failed = failed,
+								.errorCode = backendErrorCode,
 								.errorMessage = backendErrorMessage,
+								.errorContextJson = backendErrorContextJson,
 								.startedAtMs = nowMs,
 							 .active = true,
 							 .terminalEventEnqueued = false,
@@ -2615,12 +2630,27 @@ namespace blazeclaw::gateway {
 									eventsJson += ",";
 								}
 
+								std::optional<std::string> eventErrorCode;
+								std::optional<std::string> eventContextJson;
+								if (eventState.state == "error") {
+									const auto runContextIt = host.m_chatRunsById.find(eventState.runId);
+									if (runContextIt != host.m_chatRunsById.end()) {
+										if (!runContextIt->second.errorCode.empty()) {
+											eventErrorCode = runContextIt->second.errorCode;
+										}
+										if (!runContextIt->second.errorContextJson.empty()) {
+											eventContextJson = runContextIt->second.errorContextJson;
+										}
+									}
+								}
 								eventsJson += BuildChatEventJson(
 									eventState.runId,
 									eventState.sessionKey,
 									eventState.state,
 									eventState.messageJson,
+									eventErrorCode,
 									eventState.errorMessage,
+									eventContextJson,
 									eventState.timestampMs);
 								++emitted;
 

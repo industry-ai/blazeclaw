@@ -44,4 +44,5 @@ struct OrderedSequencePreflight {
 	std::vector<std::string> explicitCallTargets;
 	std::vector<std::string> resolvedToolTargets;
 	std::vector<std::string> missingTargets;
+	std::vector<std::string> missingResolvedToolTargets;
 };

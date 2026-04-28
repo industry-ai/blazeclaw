@@ -450,7 +450,9 @@ namespace blazeclaw::gateway {
 			std::size_t streamCursor = 0;
 			std::uint64_t lastEmitMs = 0;
 			bool failed = false;
+			std::string errorCode;
 			std::string errorMessage;
+			std::string errorContextJson;
 			std::uint64_t startedAtMs = 0;
 			bool active = true;
 			bool terminalEventEnqueued = false;

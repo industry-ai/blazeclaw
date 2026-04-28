@@ -704,7 +704,9 @@ std::string BuildChatEventJson(
 	const std::string& sessionKey,
 	const std::string& state,
 	const std::optional<std::string>& messageJson,
+	const std::optional<std::string>& errorCode,
 	const std::optional<std::string>& errorMessage,
+	const std::optional<std::string>& contextJson,
 	const std::uint64_t timestampMs) {
 	std::string payload =
 		"{\"runId\":\"" +
@@ -720,11 +722,22 @@ std::string BuildChatEventJson(
 		payload += ",\"message\":" + messageJson.value();
 	}
 
+	if (errorCode.has_value()) {
+		payload +=
+			",\"errorCode\":\"" +
+			EscapeJsonLocal(errorCode.value()) +
+			"\"";
+	}
+
 	if (errorMessage.has_value()) {
 		payload +=
 			",\"errorMessage\":\"" +
 			EscapeJsonLocal(errorMessage.value()) +
 			"\"";
+	}
+
+	if (contextJson.has_value()) {
+		payload += ",\"context\":" + contextJson.value();
 	}
 
 	payload += "}";
@@ -2193,6 +2206,17 @@ OrderedSequencePreflight BuildOrderedSequencePreflight(
 		preflight.resolvedToolTargets.push_back(resolvedTool);
 		if (resolvedTool.empty()) {
 			preflight.missingTargets.push_back(target);
+			std::string normalizedTarget = NormalizeOrderedTargetToken(target);
+			std::replace(normalizedTarget.begin(), normalizedTarget.end(), '-', '_');
+			if (!normalizedTarget.empty()) {
+				if (normalizedTarget.find('.') == std::string::npos) {
+					preflight.missingResolvedToolTargets.push_back(normalizedTarget + ".generate");
+					preflight.missingResolvedToolTargets.push_back(normalizedTarget + ".edit");
+				}
+				else {
+					preflight.missingResolvedToolTargets.push_back(normalizedTarget);
+				}
+			}
 		}
 	}
 

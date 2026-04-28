@@ -99,7 +99,9 @@ std::string BuildChatEventJson(
 	const std::string& sessionKey,
 	const std::string& state,
 	const std::optional<std::string>& messageJson,
+	const std::optional<std::string>& errorCode,
 	const std::optional<std::string>& errorMessage,
+	const std::optional<std::string>& contextJson,
 	const std::uint64_t timestampMs);
 void EmitPushLifecycleEvent(
 	GatewayWebSocketTransport& transport,
