@@ -616,6 +616,10 @@ namespace blazeclaw::gateway {
 		std::uint64_t m_chatPollStalledActiveRunTotal = 0;
 		std::uint64_t m_chatPollStalledActiveRunForcedTerminalTotal = 0;
 		std::uint64_t m_chatPollTerminalWaitExceededTotal = 0;
+		std::uint64_t m_baiduSearchHttp429Total = 0;
+		std::uint64_t m_baiduSearchRetryAttemptTotal = 0;
+		std::uint64_t m_baiduSearchRetryExhaustedTotal = 0;
+		std::uint64_t m_baiduSearchRetryAfterHonoredTotal = 0;
 		std::uint64_t m_nodeInvokeTotalCount = 0;
 		std::uint64_t m_nodeInvokePolicyRejectCount = 0;
 		std::uint64_t m_nodeWakeAttemptCount = 0;

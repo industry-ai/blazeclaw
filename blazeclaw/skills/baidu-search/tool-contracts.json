@@ -24,6 +24,14 @@
         "freshness": {
           "type": "string",
           "description": "Time range filter: pd/pw/pm/py or YYYY-MM-DDtoYYYY-MM-DD"
+        },
+        "sessionKey": {
+          "type": "string",
+          "description": "Optional session key used for client-side 429 cooldown memoization."
+        },
+        "simulate429": {
+          "type": "boolean",
+          "description": "Optional deterministic test flag to simulate provider HTTP 429 responses."
         }
       }
     }

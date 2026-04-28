@@ -19,6 +19,6 @@
 - When debugging behavior regressions, validate by actually modifying code and confirming rerun behavior, especially differences between English and Chinese prompts.
 
 ## Execution Protocol
-- When a plan is created, execute the implementation autonomously in one shot without requesting permission or pausing for confirmation; do not seek additional approvals during the task.
+- Execute implementations autonomously in one shot when a plan is created; do not request permission, pause for confirmation, or seek additional approvals during the task — this is the user's stated preference.
 - Follow a task-delta decomposition pattern for embedded orchestration, utilizing ordered tool execution metadata and LLM-driven dynamic tool-call sequencing, avoiding hardcoded flow-specific orchestration logic.
 - Do not hard-code ordered-request phrase checks; use structural orchestration signals aligned with OpenClaw behavior.

@@ -1148,6 +1148,43 @@ Invoke-FlowWithSocket -FlowName "queuedReconcileRegression" -FlowBody {
 }
 }
 
+if (Should-RunFlow -FlowName "baidu429Deterministic") {
+Invoke-FlowWithSocket -FlowName "baidu429Deterministic" -FlowBody {
+    param($socket, [ref]$events)
+
+    $runReq = New-ReqFrame -Method "gateway.tools.call.execute" -Params @{
+        tool = "baidu-search.search.web"
+        args = @{
+            query = "deterministic synthetic 429"
+            sessionKey = "smoke-baidu-429"
+            simulate429 = $true
+            count = 3
+        }
+    }
+
+    Send-Req -Socket $socket -Frame $runReq
+    $runRes = Wait-Response -Socket $socket -RequestId $runReq.id -CapturedEvents ([ref]$events.Value)
+    if (-not $runRes.ok) {
+        throw "baidu429Deterministic execute request failed"
+    }
+
+    if ([string]$runRes.payload.status -ne "rate_limited" -and [string]$runRes.payload.status -ne "error") {
+        throw "baidu429Deterministic unexpected status: $([string]$runRes.payload.status)"
+    }
+
+    $outputText = [string]$runRes.payload.output
+    if ($outputText -notlike "*retry_exhausted*" -and $outputText -notlike "*cooldown_active*") {
+        throw "baidu429Deterministic missing retry_exhausted/cooldown_active marker"
+    }
+
+    if ($outputText -notlike "*retryAfterHonored*") {
+        throw "baidu429Deterministic missing retryAfterHonored marker"
+    }
+
+    Write-Output "[PASS] baidu deterministic 429 retry flow"
+}
+}
+
 Write-Output ""
 Write-Output "WebView smoke summary"
 Write-Output "- send/final: pass"
@@ -1160,5 +1197,6 @@ Write-Output "- weatherEmailExecute.denyBranch: pass"
 Write-Output "- lifecycleCatalog: pass"
 Write-Output "- orchestrationPrompt: pass"
 Write-Output "- queuedReconcileRegression: pass"
+Write-Output "- baidu429Deterministic: pass"
 Write-Output "- lobsterExecute: (verified when run)"
 Write-Output "- weatherEmailExecute: (verified when run)"

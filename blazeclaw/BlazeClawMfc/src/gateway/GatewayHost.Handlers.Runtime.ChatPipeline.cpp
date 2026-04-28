@@ -767,6 +767,7 @@ namespace blazeclaw::gateway {
 										",\"index\":" + std::to_string(delta.index) +
 										",\"latencyMs\":" + std::to_string(delta.latencyMs) +
 										"}");
+
 								}
 
 								std::string terminalStatus = success ? "completed" : "failed";
@@ -1682,6 +1683,17 @@ namespace blazeclaw::gateway {
 							backendErrorMessage = runtimeResult.errorMessage.empty()
 								? "chat runtime failed"
 								: runtimeResult.errorMessage;
+							if (backendErrorMessage.find("baidu-search.search.web") != std::string::npos &&
+								(backendErrorMessage.find("429") != std::string::npos ||
+									backendErrorCode.find("rate_limit") != std::string::npos)) {
+								backendErrorContextJson = JsonObject({
+									{"layer", JsonString("tool_runtime")},
+									{"toolId", JsonString("baidu-search.search.web")},
+									{"errorCategory", JsonString("rate_limited")},
+									{"fallbackInstruction", JsonString("retry later, reduce burst frequency, or use fallback search source")},
+									{"cooldownSuggestion", JsonString("wait for cooldown window and avoid immediate repeated identical queries")},
+									});
+							}
 							assistantText.clear();
 						}
 
