@@ -476,6 +476,19 @@ namespace blazeclaw::gateway {
 				continue;
 			}
 
+			// Skip transient/temp directories (case-insensitive) whose names end with
+			// ".tmp" or ".temp".
+			const std::string dirName = entry.path().filename().string();
+			std::string lowerName;
+			lowerName.reserve(dirName.size());
+			for (const unsigned char ch : dirName) {
+				lowerName.push_back(static_cast<char>(std::tolower(ch)));
+			}
+			if ((lowerName.size() >= 4 && lowerName.compare(lowerName.size() - 4, 4, ".tmp") == 0) ||
+				(lowerName.size() >= 5 && lowerName.compare(lowerName.size() - 5, 5, ".temp") == 0)) {
+				continue;
+			}
+
 			const std::filesystem::path manifestPath =
 				entry.path() / "tool-manifest.json";
 			if (!std::filesystem::exists(manifestPath, ec) ||

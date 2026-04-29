@@ -2,6 +2,7 @@
 .vs/
 docs/
 docs.old/
+*.tmp/
 
 bin/
 obj/
