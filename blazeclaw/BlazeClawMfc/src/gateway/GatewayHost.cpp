@@ -698,6 +698,34 @@ namespace blazeclaw::gateway {
 	}
 
 	void GatewayHost::SetSkillsCatalogState(SkillsCatalogGatewayState state) {
+		std::vector<ToolCatalogEntry> catalogSkillTools;
+		catalogSkillTools.reserve(state.entries.size());
+		for (const auto& entry : state.entries) {
+			if (entry.commandToolName.empty()) {
+				continue;
+			}
+
+			catalogSkillTools.push_back(ToolCatalogEntry{
+				.id = entry.commandToolName,
+				.label = entry.commandName.empty() ? entry.commandToolName : entry.commandName,
+				.category = "skill",
+				.skillKey = entry.skillKey.empty() ? entry.name : entry.skillKey,
+				.installKind = "skill",
+				.source = "skills.catalog",
+				.enabled = !entry.disabled,
+				});
+		}
+
+		m_toolRegistry.SyncSkillToolsManifestFirst(
+			std::vector<std::string>{
+				"blazeclaw/skills-bundled",
+				"blazeclaw/skills",
+				"blazeclaw/skills-openclaw-original",
+				"skills",
+				"skills-openclaw-original",
+			},
+			catalogSkillTools,
+			true);
 		m_skillsCatalogState = std::move(state);
 	}
 
@@ -1221,6 +1249,7 @@ namespace blazeclaw::gateway {
 
 	std::string GatewayHost::BuildToolsCatalogUpdateEventFrame(std::uint64_t seq) const {
 		const auto tools = m_toolRegistry.List();
+		const auto sourceDiagnostics = m_toolRegistry.GetSkillToolSourceDiagnostics();
 		std::string toolsJson = "[";
 		for (std::size_t i = 0; i < tools.size(); ++i) {
 			if (i > 0) {
@@ -1232,9 +1261,17 @@ namespace blazeclaw::gateway {
 
 		toolsJson += "]";
 
+		const std::string diagnosticsJson =
+			"{\"catalogRegistered\":" + std::to_string(sourceDiagnostics.catalogRegistered) +
+			",\"manifestRegistered\":" + std::to_string(sourceDiagnostics.manifestRegistered) +
+			",\"catalogRejected\":" + std::to_string(sourceDiagnostics.catalogRejected) +
+			",\"manifestRejected\":" + std::to_string(sourceDiagnostics.manifestRejected) +
+			",\"manifestsGenerated\":" + std::to_string(sourceDiagnostics.manifestsGenerated) +
+			",\"manifestGenerationFailed\":" + std::to_string(sourceDiagnostics.manifestGenerationFailed) + "}";
+
 		return protocol::EncodeValidatedEvent(
 			"gateway.tools.catalog.update",
-			"{\"tools\":" + toolsJson + "}",
+			"{\"tools\":" + toolsJson + ",\"skillToolSources\":" + diagnosticsJson + "}",
 			seq,
 			"tools.catalog.update");
 	}

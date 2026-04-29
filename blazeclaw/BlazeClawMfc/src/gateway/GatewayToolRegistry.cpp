@@ -6,6 +6,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <unordered_map>
 
 namespace blazeclaw::gateway {
 	namespace {
@@ -186,6 +187,50 @@ namespace blazeclaw::gateway {
 			}
 
 			return fallback;
+		}
+
+		bool IsSkillToolSource(const std::string& source) {
+			return source == "skills.catalog" || source == "skills.tool-manifest";
+		}
+
+		std::string JsonEscape(const std::string& value) {
+			std::string escaped;
+			escaped.reserve(value.size() + 8);
+			for (const char ch : value) {
+				switch (ch) {
+				case '"':
+					escaped += "\\\"";
+					break;
+				case '\\':
+					escaped += "\\\\";
+					break;
+				case '\n':
+					escaped += "\\n";
+					break;
+				case '\r':
+					escaped += "\\r";
+					break;
+				case '\t':
+					escaped += "\\t";
+					break;
+				default:
+					escaped.push_back(ch);
+					break;
+				}
+			}
+			return escaped;
+		}
+
+		std::string ToLowerCopy(const std::string& value) {
+			std::string lowered = value;
+			std::transform(
+				lowered.begin(),
+				lowered.end(),
+				lowered.begin(),
+				[](const unsigned char ch) {
+					return static_cast<char>(std::tolower(ch));
+				});
+			return lowered;
 		}
 	}
 
@@ -457,6 +502,190 @@ namespace blazeclaw::gateway {
 		return registered;
 	}
 
+	std::size_t GatewayToolRegistry::RegisterSkillToolsFromCatalogEntries(
+		const std::vector<ToolCatalogEntry>& skillTools,
+		const bool resetCatalogSource) {
+		if (resetCatalogSource) {
+			for (const auto& [toolId, _] : m_catalogSkillTools) {
+				const auto it = m_tools.find(toolId);
+				if (it != m_tools.end() && it->second.source == "skills.catalog") {
+					m_tools.erase(it);
+				}
+			}
+			m_catalogSkillTools.clear();
+		}
+
+		std::size_t registered = 0;
+		for (const auto& incoming : skillTools) {
+			if (incoming.id.empty()) {
+				++m_skillToolSourceDiagnostics.catalogRejected;
+				continue;
+			}
+
+			ToolCatalogEntry normalized = incoming;
+			if (normalized.label.empty()) {
+				normalized.label = normalized.id;
+			}
+			if (normalized.category.empty()) {
+				normalized.category = "skill";
+			}
+			if (normalized.skillKey.empty()) {
+				normalized.skillKey = ExtractSkillKeyFromToolId(normalized.id);
+			}
+			if (normalized.installKind.empty()) {
+				normalized.installKind = "skill";
+			}
+			normalized.source = "skills.catalog";
+
+			m_catalogSkillTools.insert_or_assign(normalized.id, normalized);
+			m_tools.insert_or_assign(normalized.id, std::move(normalized));
+			++registered;
+		}
+
+		m_skillToolSourceDiagnostics.catalogRegistered += registered;
+		return registered;
+	}
+
+	std::size_t GatewayToolRegistry::SyncSkillToolsManifestFirst(
+		const std::vector<std::string>& skillDirectories,
+		const std::vector<ToolCatalogEntry>& catalogSkillTools,
+		const bool resetExistingSkillSources) {
+		if (resetExistingSkillSources) {
+			for (auto it = m_tools.begin(); it != m_tools.end();) {
+				if (IsSkillToolSource(it->second.source)) {
+					it = m_tools.erase(it);
+				}
+				else {
+					++it;
+				}
+			}
+			m_catalogSkillTools.clear();
+		}
+
+		std::unordered_map<std::string, std::vector<ToolCatalogEntry>> toolsBySkill;
+		for (const auto& incoming : catalogSkillTools) {
+			if (incoming.id.empty()) {
+				++m_skillToolSourceDiagnostics.catalogRejected;
+				continue;
+			}
+
+			ToolCatalogEntry normalized = incoming;
+			if (normalized.label.empty()) {
+				normalized.label = normalized.id;
+			}
+			if (normalized.category.empty()) {
+				normalized.category = "skill";
+			}
+			if (normalized.skillKey.empty()) {
+				normalized.skillKey = ExtractSkillKeyFromToolId(normalized.id);
+			}
+			if (normalized.installKind.empty()) {
+				normalized.installKind = "skill";
+			}
+			normalized.source = "skills.catalog";
+			m_catalogSkillTools.insert_or_assign(normalized.id, normalized);
+			toolsBySkill[ToLowerCopy(normalized.skillKey)].push_back(normalized);
+		}
+
+		for (const auto& directory : skillDirectories) {
+			if (directory.empty()) {
+				continue;
+			}
+
+			std::error_code ec;
+			const std::filesystem::path skillsRoot(directory);
+			if (!std::filesystem::exists(skillsRoot, ec) ||
+				!std::filesystem::is_directory(skillsRoot, ec)) {
+				continue;
+			}
+
+			for (const auto& entry : std::filesystem::directory_iterator(skillsRoot, ec)) {
+				if (ec || !entry.is_directory()) {
+					continue;
+				}
+
+				const std::string dirName = entry.path().filename().string();
+				std::string lowerName;
+				lowerName.reserve(dirName.size());
+				for (const unsigned char ch : dirName) {
+					lowerName.push_back(static_cast<char>(std::tolower(ch)));
+				}
+				if ((lowerName.size() >= 4 && lowerName.compare(lowerName.size() - 4, 4, ".tmp") == 0) ||
+					(lowerName.size() >= 5 && lowerName.compare(lowerName.size() - 5, 5, ".temp") == 0)) {
+					continue;
+				}
+
+				const std::filesystem::path manifestPath = entry.path() / "tool-manifest.json";
+				if (std::filesystem::exists(manifestPath, ec) &&
+					std::filesystem::is_regular_file(manifestPath, ec)) {
+					continue;
+				}
+
+				const auto toolsIt = toolsBySkill.find(lowerName);
+				if (toolsIt == toolsBySkill.end() || toolsIt->second.empty()) {
+					continue;
+				}
+
+				auto toolEntries = toolsIt->second;
+				std::sort(
+					toolEntries.begin(),
+					toolEntries.end(),
+					[](const ToolCatalogEntry& left, const ToolCatalogEntry& right) {
+						return left.id < right.id;
+					});
+
+				std::string manifest = "{\"tools\":[";
+				for (std::size_t index = 0; index < toolEntries.size(); ++index) {
+					if (index > 0) {
+						manifest += ",";
+					}
+
+					const auto& tool = toolEntries[index];
+					manifest +=
+						"{\"id\":\"" + JsonEscape(tool.id) +
+						"\",\"label\":\"" + JsonEscape(tool.label.empty() ? tool.id : tool.label) +
+						"\",\"category\":\"" + JsonEscape(tool.category.empty() ? "skill" : tool.category) +
+						"\",\"enabled\":" + std::string(tool.enabled ? "true" : "false") + "}";
+				}
+				manifest += "]}";
+
+				std::ofstream out(manifestPath, std::ios::binary);
+				if (!out.is_open()) {
+					++m_skillToolSourceDiagnostics.manifestGenerationFailed;
+					continue;
+				}
+				out.write(manifest.data(), static_cast<std::streamsize>(manifest.size()));
+				if (!out.good()) {
+					++m_skillToolSourceDiagnostics.manifestGenerationFailed;
+					continue;
+				}
+				++m_skillToolSourceDiagnostics.manifestsGenerated;
+			}
+		}
+
+		std::size_t manifestRegistered = 0;
+		for (const auto& directory : skillDirectories) {
+			manifestRegistered += LoadSkillToolsFromDirectory(directory);
+		}
+
+		std::size_t catalogFallbackRegistered = 0;
+		for (const auto& [toolId, catalogEntry] : m_catalogSkillTools) {
+			if (toolId.empty()) {
+				++m_skillToolSourceDiagnostics.catalogRejected;
+				continue;
+			}
+
+			if (m_tools.find(toolId) != m_tools.end()) {
+				continue;
+			}
+
+			m_tools.insert_or_assign(toolId, catalogEntry);
+			++catalogFallbackRegistered;
+		}
+		m_skillToolSourceDiagnostics.catalogRegistered += catalogFallbackRegistered;
+		return manifestRegistered + catalogFallbackRegistered;
+	}
+
 	std::size_t GatewayToolRegistry::LoadSkillToolsFromDirectory(
 		const std::string& skillsDirectory) {
 		if (skillsDirectory.empty()) {
@@ -509,6 +738,7 @@ namespace blazeclaw::gateway {
 			for (const auto& toolJson : SplitTopLevelObjects(toolsRaw)) {
 				std::string toolId;
 				if (!json::FindStringField(toolJson, "id", toolId) || toolId.empty()) {
+					++m_skillToolSourceDiagnostics.manifestRejected;
 					continue;
 				}
 
@@ -533,7 +763,12 @@ namespace blazeclaw::gateway {
 			}
 		}
 
+		m_skillToolSourceDiagnostics.manifestRegistered += registered;
 		return registered;
+	}
+
+	SkillToolSourceDiagnostics GatewayToolRegistry::GetSkillToolSourceDiagnostics() const {
+		return m_skillToolSourceDiagnostics;
 	}
 
 	std::vector<ToolExecutionEntry> GatewayToolRegistry::ListExecutions(std::size_t limit) const {

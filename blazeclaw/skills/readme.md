@@ -45,10 +45,20 @@ with artifacts such as:
 
 - `SKILL.md` (skill description + metadata/frontmatter)
 - `_meta.json` (optional metadata)
-- `tool-manifest.json` (tool IDs/runtime mapping, if tool-based)
 - `tool-contracts.json` (JSON input contracts, if tool-based)
 - `scripts/*` (runtime scripts/executors)
 - `config.html` (optional WebView2 configuration UI)
+
+> `tool-manifest.json` is retained as a manifest-first runtime path when performance is better. The parity migration plan uses deterministic manifest auto-generation for skills that do not yet have a manifest; see `docs/compare/OPENCLAW_SKILLS_TOOL_DISCOVERY_PARITY_GAP_ANALYSIS_AND_PORTING_PLAN.md`.
+>
+> Baseline migration artifacts are tracked in:
+> - `docs/compare/OPENCLAW_SKILLS_TOOL_DISCOVERY_STEP1_INVENTORY_AND_MAPPING.md`
+> - `docs/compare/OPENCLAW_SKILLS_TOOL_DISCOVERY_STEP2_CONTRACT_FREEZE.md`
+>
+> Implemented parity artifacts (Step 3-7):
+> - `BlazeClawMfc/src/gateway/GatewayHost.cpp` (`SetSkillsCatalogState` uses manifest-first sync over skills roots)
+> - `BlazeClawMfc/src/gateway/GatewayToolRegistry.*` (manifest-first loading + deterministic manifest generation when missing + source/generation diagnostics)
+> - `BlazeClawMfc/tests/GatewayToolRegistrySkillsDualReadParityTests.cpp`
 
 ### 2) Runtime cataloging/registration
 

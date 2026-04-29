@@ -61,6 +61,15 @@ namespace blazeclaw::gateway {
 		std::size_t failed = 0;
 	};
 
+	struct SkillToolSourceDiagnostics {
+		std::size_t catalogRegistered = 0;
+		std::size_t manifestRegistered = 0;
+		std::size_t catalogRejected = 0;
+		std::size_t manifestRejected = 0;
+		std::size_t manifestsGenerated = 0;
+		std::size_t manifestGenerationFailed = 0;
+	};
+
 	class GatewayToolRegistry {
 	public:
 		using RuntimeToolExecutor = std::function<ToolExecuteResult(
@@ -89,7 +98,15 @@ namespace blazeclaw::gateway {
 
 		void UnregisterRuntimeTool(const std::string& toolId);
 		std::size_t LoadExtensionToolsFromCatalog(const std::string& catalogPath);
+		std::size_t RegisterSkillToolsFromCatalogEntries(
+			const std::vector<ToolCatalogEntry>& skillTools,
+			bool resetCatalogSource = true);
+		std::size_t SyncSkillToolsManifestFirst(
+			const std::vector<std::string>& skillDirectories,
+			const std::vector<ToolCatalogEntry>& catalogSkillTools,
+			bool resetExistingSkillSources = true);
 		std::size_t LoadSkillToolsFromDirectory(const std::string& skillsDirectory);
+		SkillToolSourceDiagnostics GetSkillToolSourceDiagnostics() const;
 		std::vector<ToolExecutionEntry> ListExecutions(std::size_t limit = 20) const;
 		std::optional<ToolExecutionEntry> LatestExecution() const;
 		ToolExecutionStats GetExecutionStats() const;
@@ -99,6 +116,8 @@ namespace blazeclaw::gateway {
 		std::unordered_map<std::string, ToolCatalogEntry> m_tools;
 		std::unordered_map<std::string, RuntimeToolExecutor> m_runtimeExecutors;
 		std::unordered_map<std::string, RuntimeToolExecutorV2> m_runtimeExecutorsV2;
+		std::unordered_map<std::string, ToolCatalogEntry> m_catalogSkillTools;
+		SkillToolSourceDiagnostics m_skillToolSourceDiagnostics{};
 		std::vector<ToolExecutionEntry> m_executionHistory;
 	};
 
