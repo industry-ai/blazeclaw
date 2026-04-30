@@ -999,8 +999,22 @@
                 const phase = String(payload.phase || "result");
                 const tool = String(payload.tool || "unknown");
                 const status = String(payload.status || "");
-                const code = String(payload.code || "");
                 const errMsg = typeof payload.errorMessage === "string" ? payload.errorMessage.trim() : "";
+                const outputRaw = typeof payload.output === "string" ? payload.output : "";
+                let nestedCode = "";
+                if (outputRaw) {
+                    try {
+                        const parsedOutput = JSON.parse(outputRaw);
+                        if (parsedOutput && parsedOutput.error && typeof parsedOutput.error.code === "string") {
+                            nestedCode = String(parsedOutput.error.code || "").trim();
+                        }
+                    } catch (_) {
+                    }
+                }
+                const topLevelCode = String(payload.code || "").trim();
+                const code = topLevelCode && topLevelCode !== "legacy_execution_failed"
+                    ? topLevelCode
+                    : (nestedCode || topLevelCode);
 
                 const row = document.createElement("div");
                 row.className = "tool-row";

@@ -28,29 +28,31 @@ namespace blazeclaw::gateway::handlers::registry_introspection {
 			return lowered;
 		}
 
-		bool ParseEmailScheduleApproveArgs(
-			const std::optional<std::string>& argsJson,
-			std::string& approvalToken,
-			bool& approveRequested) {
-			approvalToken.clear();
-			approveRequested = false;
+		struct EmailApproveArgsParseResult {
+			bool parsed = false;
+			std::string action;
+			std::string approvalToken;
+			bool approveRequested = false;
+		};
+
+		EmailApproveArgsParseResult ParseEmailScheduleApproveArgs(
+			const std::optional<std::string>& argsJson) {
+			EmailApproveArgsParseResult result;
 			if (!argsJson.has_value() || json::Trim(argsJson.value()).empty()) {
-				return false;
+				return result;
 			}
 
 			std::string action;
 			if (!json::FindStringField(argsJson.value(), "action", action)) {
-				return false;
-			}
-			if (ToLowerCopyLocal(json::Trim(action)) != "approve") {
-				return false;
+				return result;
 			}
 
-			json::FindStringField(argsJson.value(), "approvalToken", approvalToken);
-			approveRequested = false;
-			json::FindBoolField(argsJson.value(), "approve", approveRequested);
-			approvalToken = json::Trim(approvalToken);
-			return true;
+			result.action = json::Trim(action);
+			result.parsed = true;
+			json::FindStringField(argsJson.value(), "approvalToken", result.approvalToken);
+			json::FindBoolField(argsJson.value(), "approve", result.approveRequested);
+			result.approvalToken = json::Trim(result.approvalToken);
+			return result;
 		}
 
 		struct EmailApprovalPrecheckResult {
@@ -509,13 +511,26 @@ namespace blazeclaw::gateway::handlers::registry_introspection {
 
 			ToolExecuteResultV2 execution;
 			const auto startedAt = std::chrono::steady_clock::now();
-			std::string approvalToken;
-			bool approveRequested = false;
+			const auto approveArgs = ParseEmailScheduleApproveArgs(argsJson);
+			const std::string approvalToken = approveArgs.approvalToken;
+			const bool approveRequested = approveArgs.approveRequested;
+			const bool approveActionMatched =
+				ToLowerCopyLocal(approveArgs.action) == "approve";
 			const bool isEmailScheduleApproveRequest =
 				requestedTool == "email.schedule" &&
-				ParseEmailScheduleApproveArgs(argsJson, approvalToken, approveRequested) &&
-				approveRequested;
-			if (isEmailScheduleApproveRequest) {
+				approveArgs.parsed &&
+				approveActionMatched;
+			EmitTelemetryEvent(
+				"gateway.email.approval.remap.gate",
+				std::string("{\"tool\":") + JsonString(requestedTool) +
+				",\"action\":" + JsonString(approveArgs.action.empty() ? "(missing)" : approveArgs.action) +
+				",\"approve\":" + std::string(approveRequested ? "true" : "false") +
+				",\"parsed\":" + std::string(approveArgs.parsed ? "true" : "false") +
+				",\"gateEntered\":" + std::string(isEmailScheduleApproveRequest ? "true" : "false") +
+				",\"argsKey\":" + JsonString(argsResolution.selectedKey.empty() ? "none" : argsResolution.selectedKey) +
+				",\"argsParseMode\":" + JsonString(argsResolution.parseMode.empty() ? "unknown" : argsResolution.parseMode) +
+				"}");
+			if (isEmailScheduleApproveRequest && approveRequested) {
 				const auto precheck = BuildEmailApprovalPrecheckResult();
 				if (!precheck.ready) {
 					execution = ToolExecuteResultV2{
@@ -600,44 +615,62 @@ namespace blazeclaw::gateway::handlers::registry_introspection {
 				}
 			}
 
-			if (isEmailScheduleApproveRequest &&
-				(!execution.errorCode.empty() || execution.status == "error" || execution.status == "failed")) {
+			if (isEmailScheduleApproveRequest) {
 				const std::string lowerResult = ToLowerCopyLocal(execution.result);
-				std::string bucket;
-				std::string mappedMessage;
-				std::string remediation;
-				std::string missingDependency;
-				std::string installHint;
-				std::string configHint;
-				const std::string mappedCode = ResolveApprovalFailureCode(
-					execution,
-					lowerResult,
-					bucket,
-					mappedMessage,
-					remediation,
-					missingDependency,
-					installHint,
-					configHint);
-				execution.status = "error";
-				execution.errorCode = mappedCode;
-				execution.errorMessage = mappedMessage;
-				execution.result = BuildApprovalFailureResultJson(
-					mappedCode,
-					mappedMessage,
-					remediation,
-					missingDependency,
-					installHint,
-					configHint,
-					bucket);
-				EmitTelemetryEvent(
-					"gateway.email.approval.execute.failure",
-					std::string("{\"tool\":") + JsonString(requestedTool) +
-					",\"bucket\":" + JsonString(bucket) +
-					",\"code\":" + JsonString(mappedCode) +
-					",\"phase\":" + JsonString("execution") +
-					",\"approvalTokenPresent\":" +
-					std::string(approvalToken.empty() ? "false" : "true") +
-					"}");
+				const bool shouldNormalizeApproval =
+					execution.status == "error" ||
+					execution.status == "failed" ||
+					!execution.errorCode.empty() ||
+					lowerResult.find("\"error\"") != std::string::npos ||
+					lowerResult.find("imap_smtp_skill_missing") != std::string::npos ||
+					lowerResult.find("legacy_execution_failed") != std::string::npos;
+				if (shouldNormalizeApproval) {
+					std::string bucket;
+					std::string mappedMessage;
+					std::string remediation;
+					std::string missingDependency;
+					std::string installHint;
+					std::string configHint;
+					const std::string mappedCode = ResolveApprovalFailureCode(
+						execution,
+						lowerResult,
+						bucket,
+						mappedMessage,
+						remediation,
+						missingDependency,
+						installHint,
+						configHint);
+					execution.status = "error";
+					execution.errorCode = mappedCode;
+					execution.errorMessage = mappedMessage;
+					execution.result = BuildApprovalFailureResultJson(
+						mappedCode,
+						mappedMessage,
+						remediation,
+						missingDependency,
+						installHint,
+						configHint,
+						bucket);
+					EmitTelemetryEvent(
+						"gateway.email.approval.execute.failure",
+						std::string("{\"tool\":") + JsonString(requestedTool) +
+						",\"bucket\":" + JsonString(bucket) +
+						",\"code\":" + JsonString(mappedCode) +
+						",\"phase\":" + JsonString("execution") +
+						",\"approvalTokenPresent\":" +
+						std::string(approvalToken.empty() ? "false" : "true") +
+						"}");
+					EmitTelemetryEvent(
+						"gateway.email.approval.remap.applied",
+						std::string("{\"tool\":") + JsonString(requestedTool) +
+						",\"mappedCode\":" + JsonString(mappedCode) +
+						",\"bucket\":" + JsonString(bucket) +
+						",\"hasRemediation\":" + std::string(remediation.empty() ? "false" : "true") +
+						",\"hasMissingDependency\":" + std::string(missingDependency.empty() ? "false" : "true") +
+						",\"hasInstallHint\":" + std::string(installHint.empty() ? "false" : "true") +
+						",\"hasConfigHint\":" + std::string(configHint.empty() ? "false" : "true") +
+						"}");
+				}
 			}
 
 			// Emit telemetry for tool execution result

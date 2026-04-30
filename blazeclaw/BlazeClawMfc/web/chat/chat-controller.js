@@ -164,6 +164,22 @@
         }
     }
 
+    function resolveNormalizedErrorCode(responsePayload, output, parsedHints) {
+        const topLevel = responsePayload && typeof responsePayload.errorCode === "string"
+            ? responsePayload.errorCode.trim()
+            : "";
+        if (topLevel && topLevel !== "legacy_execution_failed") {
+            return topLevel;
+        }
+        if (parsedHints && parsedHints.code) {
+            return parsedHints.code;
+        }
+        if (topLevel) {
+            return topLevel;
+        }
+        return parseToolErrorCodeFromOutput(output);
+    }
+
     function dataUrlToBase64(dataUrl) {
         const match = /^data:([^;]+);base64,(.+)$/i.exec(String(dataUrl || ""));
         if (!match) {
@@ -1886,9 +1902,7 @@
                 ? responsePayload.output
                 : "";
             const parsedHints = parseApprovalFailureHints(output);
-            const errorCode = (responsePayload && typeof responsePayload.errorCode === "string" && responsePayload.errorCode.trim())
-                ? responsePayload.errorCode.trim()
-                : (parsedHints && parsedHints.code ? parsedHints.code : parseToolErrorCodeFromOutput(output));
+            const errorCode = resolveNormalizedErrorCode(responsePayload, output, parsedHints);
             const expired = output.toLowerCase().includes("expired") || errorCode === "approval_token_expired";
             const resolvedOk = approve
                 ? status === "ok"
@@ -2239,10 +2253,21 @@
                     },
                 }),
             });
+            const remapped = await controller.executeExecApprovalAction("email-token-4", true, {
+                requestOverride: async () => ({
+                    payload: {
+                        status: "error",
+                        errorCode: "legacy_execution_failed",
+                        output: "{\"ok\":false,\"error\":{\"code\":\"imap_smtp_skill_missing\",\"message\":\"imap_smtp_skill_missing\",\"remediation\":\"install backend\"}}",
+                    },
+                }),
+            });
             assertRegression(denied.ok === true && denied.status === "cancelled",
                 "exec approval action should treat cancelled response as resolved deny path");
             assertRegression(expired.ok === false && expired.status === "expired",
                 "exec approval action should classify token-expired responses");
+            assertRegression(remapped.ok === false && remapped.errorCode === "imap_smtp_skill_missing",
+                "exec approval action should prioritize structured mapped nested error code over legacy top-level code");
             summary.push("exec approval deny + expired actions");
         }
 

@@ -1004,6 +1004,7 @@ TEST_CASE(
 	REQUIRE(approvePayload.contains("errorCode"));
 	const std::string errorCode = approvePayload.value("errorCode", std::string{});
 	REQUIRE((errorCode == "imap_smtp_skill_missing" || errorCode == "email_backend_unavailable"));
+	REQUIRE(errorCode != "legacy_execution_failed");
 	REQUIRE(approvePayload["output"].is_string());
 	const auto approveOutput = nlohmann::json::parse(approvePayload["output"].get<std::string>());
 	REQUIRE(approveOutput.contains("error"));
@@ -1249,6 +1250,93 @@ TEST_CASE(
 	REQUIRE(malformedApprovePayload["status"].get<std::string>() == "invalid_args");
 	REQUIRE(malformedApprovePayload["output"].is_string());
 	REQUIRE(malformedApprovePayload["output"].get<std::string>().find("approval_token_invalid") != std::string::npos);
+
+	host.Stop();
+}
+
+TEST_CASE(
+	"Dispatch-only approve remaps actionable code for argument-shape variants",
+	"[gateway][weather-email][email-schedule][approval][args-shape][regression]") {
+	ScopedEnvVar modeEnv("BLAZECLAW_EMAIL_DELIVERY_MODE");
+	ScopedEnvVar imapModeEnv("BLAZECLAW_EMAIL_IMAP_SMTP_MODE");
+	ScopedEnvVar backendsEnv("BLAZECLAW_EMAIL_DELIVERY_BACKENDS");
+	ScopedEnvVar profileEnabled("BLAZECLAW_EMAIL_POLICY_PROFILES_ENABLED");
+	ScopedEnvVar profileEnforce("BLAZECLAW_EMAIL_POLICY_PROFILES_ENFORCE");
+	ScopedEnvVar actionUnavailable("BLAZECLAW_EMAIL_POLICY_ACTION_UNAVAILABLE");
+	ScopedEnvVar actionExec("BLAZECLAW_EMAIL_POLICY_ACTION_EXEC_ERROR");
+	ScopedEnvVar localAppData("LOCALAPPDATA");
+
+	modeEnv.Set("mock_failure");
+	imapModeEnv.Set("mock_failure");
+	backendsEnv.Set("himalaya,imap-smtp-email");
+	profileEnabled.Set("true");
+	profileEnforce.Set("true");
+	actionUnavailable.Set("continue");
+	actionExec.Set("continue");
+	const std::filesystem::path tempStateRoot = std::filesystem::temp_directory_path() /
+		("blazeclaw_approval_args_shape_" + std::to_string(std::rand()));
+	std::filesystem::create_directories(tempStateRoot);
+	localAppData.Set(tempStateRoot.string());
+
+	blazeclaw::gateway::GatewayHost host;
+	REQUIRE(host.StartLocalRuntimeDispatchOnly());
+
+	const auto prepareResponse = host.RouteRequest(
+		blazeclaw::gateway::protocol::RequestFrame{
+			.id = "approval-args-shape-prepare",
+			.method = "gateway.tools.call.execute",
+			.paramsJson =
+				std::string("{\"tool\":\"email.schedule\",\"args\":{") +
+				"\"action\":\"prepare\"," +
+				"\"to\":\"jicheng@whu.edu.cn\"," +
+				"\"subject\":\"Approval args shape test\"," +
+				"\"body\":\"Approval args shape test body\"," +
+				"\"sendAt\":\"13:00\"}}",
+		});
+	REQUIRE(prepareResponse.ok);
+	REQUIRE(prepareResponse.payloadJson.has_value());
+	const auto preparePayload = nlohmann::json::parse(prepareResponse.payloadJson.value());
+	const auto prepareOutput = nlohmann::json::parse(preparePayload["output"].get<std::string>());
+	const std::string approvalToken =
+		prepareOutput["requiresApproval"]["approvalToken"].get<std::string>();
+	REQUIRE_FALSE(approvalToken.empty());
+
+	auto assertMappedApprovalFailure = [&](const std::string& paramsJson, const std::string& reqId) {
+		const auto approveResponse = host.RouteRequest(
+			blazeclaw::gateway::protocol::RequestFrame{
+				.id = reqId,
+				.method = "gateway.tools.call.execute",
+				.paramsJson = paramsJson,
+			});
+		REQUIRE(approveResponse.ok);
+		REQUIRE(approveResponse.payloadJson.has_value());
+		const auto approvePayload = nlohmann::json::parse(approveResponse.payloadJson.value());
+		REQUIRE(approvePayload["status"].get<std::string>() == "error");
+		const std::string topCode = approvePayload.value("errorCode", std::string{});
+		REQUIRE_FALSE(topCode.empty());
+		REQUIRE(topCode != "legacy_execution_failed");
+		REQUIRE((topCode == "imap_smtp_skill_missing" || topCode == "email_backend_unavailable"));
+		const auto outputJson = nlohmann::json::parse(approvePayload.value("output", std::string("{}")));
+		REQUIRE(outputJson.contains("error"));
+		REQUIRE(outputJson["error"].is_object());
+		REQUIRE(outputJson["error"].contains("code"));
+		REQUIRE(outputJson["error"].contains("remediation"));
+	};
+
+	assertMappedApprovalFailure(
+		std::string("{\"tool\":\"email.schedule\",\"arguments\":{") +
+		"\"action\":\"approve\"," +
+		"\"approvalToken\":\"" + approvalToken + "\"," +
+		"\"approve\":true}}",
+		"approval-args-shape-arguments");
+
+	assertMappedApprovalFailure(
+		std::string("{\"tool\":\"email.schedule\",\"payload\":\"{") +
+		"\\\"action\\\":\\\"approve\\\"," +
+		"\\\"approvalToken\\\":\\\"" + approvalToken + "\\\"," +
+		"\\\"approve\\\":true}" +
+		"\"}",
+		"approval-args-shape-payload-string");
 
 	host.Stop();
 }

@@ -29,6 +29,8 @@ namespace blazeclaw::gateway {
 
 		/// Resolves tool args for `gateway.tools.call.execute` from supported containers
 		/// (`args`, `arguments`, `parameters`, `tool_arguments`, `toolArguments`, `payload`).
+		/// Also supports a top-level serialized payload passed via `params.payload` when it
+		/// directly represents tool args (for approve-call compatibility).
 		/// Returns both normalized args JSON and non-sensitive metadata for diagnostics.
 		[[nodiscard]] ToolExecuteArgsResolution ResolveToolExecuteArgs() const;
 

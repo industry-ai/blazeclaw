@@ -77,39 +77,51 @@ namespace blazeclaw::gateway {
 			"payload",
 		};
 
+		auto tryCaptureArgs = [&resolved](
+			const std::string& candidate,
+			const std::string& key,
+			const std::string& modePrefix) {
+			const std::string trimmed = json::Trim(candidate);
+			if (json::IsJsonObjectShape(trimmed)) {
+				resolved.argsJson = trimmed;
+				resolved.selectedKey = key;
+				resolved.parseMode = modePrefix + "_object";
+				return true;
+			}
+			if (json::IsJsonArrayShape(trimmed)) {
+				resolved.argsJson = trimmed;
+				resolved.selectedKey = key;
+				resolved.parseMode = modePrefix + "_array";
+				return true;
+			}
+			return false;
+			};
+
 		for (const std::string& fieldName : argumentAliases) {
 			std::string raw;
-			if (json::FindRawField(root, fieldName, raw)) {
-				const std::string trimmed = json::Trim(raw);
-				if (json::IsJsonObjectShape(trimmed)) {
-					resolved.argsJson = trimmed;
-					resolved.selectedKey = fieldName;
-					resolved.parseMode = "raw_object";
-					return resolved;
-				}
-				if (json::IsJsonArrayShape(trimmed)) {
-					resolved.argsJson = trimmed;
-					resolved.selectedKey = fieldName;
-					resolved.parseMode = "raw_array";
-					return resolved;
-				}
+			if (json::FindRawField(root, fieldName, raw) &&
+				tryCaptureArgs(raw, fieldName, "raw")) {
+				return resolved;
 			}
 
 			std::string decoded;
-			if (json::FindStringField(root, fieldName, decoded)) {
-				const std::string trimmed = json::Trim(decoded);
-				if (json::IsJsonObjectShape(trimmed)) {
-					resolved.argsJson = trimmed;
-					resolved.selectedKey = fieldName;
-					resolved.parseMode = "string_decoded_object";
-					return resolved;
-				}
-				if (json::IsJsonArrayShape(trimmed)) {
-					resolved.argsJson = trimmed;
-					resolved.selectedKey = fieldName;
-					resolved.parseMode = "string_decoded_array";
-					return resolved;
-				}
+			if (json::FindStringField(root, fieldName, decoded) &&
+				tryCaptureArgs(decoded, fieldName, "string_decoded")) {
+				return resolved;
+			}
+		}
+
+		if (json::IsJsonObjectShape(json::Trim(root))) {
+			bool hasToolShape = false;
+			std::string toolMarker;
+			hasToolShape = json::FindStringField(root, "tool", toolMarker) ||
+				json::FindStringField(root, "action", toolMarker) ||
+				json::FindStringField(root, "approvalToken", toolMarker);
+			if (hasToolShape) {
+				resolved.argsJson = json::Trim(root);
+				resolved.selectedKey = "params";
+				resolved.parseMode = "root_object_fallback";
+				return resolved;
 			}
 		}
 
