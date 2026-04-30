@@ -113,10 +113,16 @@ namespace blazeclaw::gateway {
 		std::size_t ClearExecutions();
 
 	private:
+		struct SkillDirectoryLoadSnapshot {
+			std::uint64_t fingerprint = 0;
+			std::size_t loadedCount = 0;
+		};
+
 		std::unordered_map<std::string, ToolCatalogEntry> m_tools;
 		std::unordered_map<std::string, RuntimeToolExecutor> m_runtimeExecutors;
 		std::unordered_map<std::string, RuntimeToolExecutorV2> m_runtimeExecutorsV2;
 		std::unordered_map<std::string, ToolCatalogEntry> m_catalogSkillTools;
+		std::unordered_map<std::string, SkillDirectoryLoadSnapshot> m_skillDirectoryLoadCache;
 		SkillToolSourceDiagnostics m_skillToolSourceDiagnostics{};
 		std::vector<ToolExecutionEntry> m_executionHistory;
 	};

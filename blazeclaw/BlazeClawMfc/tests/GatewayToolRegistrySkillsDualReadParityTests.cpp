@@ -10,8 +10,10 @@
 
 #include <catch2/catch_all.hpp>
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <thread>
 
 namespace {
 	std::filesystem::path MakeTempDir(const std::string& suffix) {
@@ -148,7 +150,7 @@ TEST_CASE("Missing manifest is deterministically generated then loaded", "[gatew
 			input.read(text.data(), static_cast<std::streamsize>(text.size()));
 		}
 		return text;
-	}();
+		}();
 
 	const auto tools = registry.List();
 	REQUIRE(FindToolSource(tools, "imap_smtp_email.smtp.send") == "skills.tool-manifest");
@@ -170,13 +172,67 @@ TEST_CASE("Missing manifest is deterministically generated then loaded", "[gatew
 			input.read(text.data(), static_cast<std::streamsize>(text.size()));
 		}
 		return text;
-	}();
+		}();
 
 	REQUIRE(generatedTextFirst == generatedTextSecond);
 
 	const auto diagnostics = registry.GetSkillToolSourceDiagnostics();
 	REQUIRE(diagnostics.manifestsGenerated >= 1);
 	REQUIRE(diagnostics.manifestGenerationFailed == 0);
+
+	std::error_code ec;
+	std::filesystem::remove_all(skillsRoot, ec);
+}
+
+TEST_CASE("Unchanged manifest directory reload reuses cached registration count", "[gateway][tools][skills][dual-read]") {
+	blazeclaw::gateway::GatewayToolRegistry registry;
+
+	const auto skillsRoot = MakeTempDir("cached_manifest_reload");
+	const auto skillDir = skillsRoot / "web-browsing";
+	WriteUtf8File(
+		skillDir / "tool-manifest.json",
+		R"({"tools":[{"id":"web_browsing.search.web","label":"Manifest Search","category":"skill","enabled":true}]})");
+
+	const auto firstRegistered = registry.LoadSkillToolsFromDirectory(skillsRoot.string());
+	REQUIRE(firstRegistered == 1);
+
+	const auto firstDiagnostics = registry.GetSkillToolSourceDiagnostics();
+	const auto secondRegistered = registry.LoadSkillToolsFromDirectory(skillsRoot.string());
+	REQUIRE(secondRegistered == 1);
+
+	const auto secondDiagnostics = registry.GetSkillToolSourceDiagnostics();
+	REQUIRE(
+		secondDiagnostics.manifestRegistered - firstDiagnostics.manifestRegistered ==
+		secondRegistered);
+
+	std::error_code ec;
+	std::filesystem::remove_all(skillsRoot, ec);
+}
+
+TEST_CASE("Manifest update invalidates cached reload fingerprint", "[gateway][tools][skills][dual-read]") {
+	blazeclaw::gateway::GatewayToolRegistry registry;
+
+	const auto skillsRoot = MakeTempDir("cached_manifest_invalidation");
+	const auto skillDir = skillsRoot / "imap-smtp-email";
+	const auto manifestPath = skillDir / "tool-manifest.json";
+	WriteUtf8File(
+		manifestPath,
+		R"({"tools":[{"id":"imap_smtp_email.smtp.send","label":"SMTP Send","category":"skill","enabled":true}]})");
+
+	const auto firstRegistered = registry.LoadSkillToolsFromDirectory(skillsRoot.string());
+	REQUIRE(firstRegistered == 1);
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+	WriteUtf8File(
+		manifestPath,
+		R"({"tools":[{"id":"imap_smtp_email.smtp.send","label":"SMTP Send","category":"skill","enabled":true},{"id":"imap_smtp_email.imap.fetch","label":"IMAP Fetch","category":"skill","enabled":true}]})");
+
+	const auto secondRegistered = registry.LoadSkillToolsFromDirectory(skillsRoot.string());
+	REQUIRE(secondRegistered == 2);
+
+	const auto tools = registry.List();
+	REQUIRE(FindToolSource(tools, "imap_smtp_email.smtp.send") == "skills.tool-manifest");
+	REQUIRE(FindToolSource(tools, "imap_smtp_email.imap.fetch") == "skills.tool-manifest");
 
 	std::error_code ec;
 	std::filesystem::remove_all(skillsRoot, ec);

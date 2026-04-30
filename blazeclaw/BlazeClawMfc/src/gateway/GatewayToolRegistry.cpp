@@ -232,6 +232,77 @@ namespace blazeclaw::gateway {
 				});
 			return lowered;
 		}
+
+		bool IsTransientSkillDirectoryName(const std::string& dirName) {
+			const std::string lowerName = ToLowerCopy(dirName);
+			return (lowerName.size() >= 4 &&
+				lowerName.compare(lowerName.size() - 4, 4, ".tmp") == 0) ||
+				(lowerName.size() >= 5 &&
+					lowerName.compare(lowerName.size() - 5, 5, ".temp") == 0);
+		}
+
+		std::string NormalizeSkillDirectoryPath(const std::filesystem::path& path) {
+			std::error_code ec;
+			const auto canonical = std::filesystem::weakly_canonical(path, ec);
+			if (!ec) {
+				return canonical.lexically_normal().string();
+			}
+
+			const auto absolute = std::filesystem::absolute(path, ec);
+			if (!ec) {
+				return absolute.lexically_normal().string();
+			}
+
+			return path.lexically_normal().string();
+		}
+
+		std::uint64_t HashCombine(const std::uint64_t seed, const std::uint64_t value) {
+			return seed ^ (value + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2));
+		}
+
+		std::uint64_t BuildSkillDirectoryManifestFingerprint(
+			const std::filesystem::path& skillsRoot) {
+			std::error_code ec;
+			std::vector<std::string> manifestPaths;
+			for (const auto& entry : std::filesystem::directory_iterator(skillsRoot, ec)) {
+				if (ec || !entry.is_directory()) {
+					continue;
+				}
+
+				const std::string dirName = entry.path().filename().string();
+				if (IsTransientSkillDirectoryName(dirName)) {
+					continue;
+				}
+
+				const std::filesystem::path manifestPath = entry.path() / "tool-manifest.json";
+				if (!std::filesystem::exists(manifestPath, ec) ||
+					!std::filesystem::is_regular_file(manifestPath, ec)) {
+					continue;
+				}
+
+				manifestPaths.push_back(NormalizeSkillDirectoryPath(manifestPath));
+			}
+
+			std::sort(manifestPaths.begin(), manifestPaths.end());
+			std::uint64_t fingerprint = static_cast<std::uint64_t>(manifestPaths.size());
+			for (const auto& manifestPathText : manifestPaths) {
+				const std::filesystem::path manifestPath(manifestPathText);
+				ec.clear();
+				const auto writeTime = std::filesystem::last_write_time(manifestPath, ec);
+				std::uint64_t writeHash = 0;
+				if (!ec) {
+					const auto ticks = writeTime.time_since_epoch().count();
+					writeHash = static_cast<std::uint64_t>(
+						std::hash<long long>{}(static_cast<long long>(ticks)));
+				}
+				fingerprint = HashCombine(
+					fingerprint,
+					static_cast<std::uint64_t>(std::hash<std::string>{}(manifestPathText)));
+				fingerprint = HashCombine(fingerprint, writeHash);
+			}
+
+			return fingerprint;
+		}
 	}
 
 	GatewayToolRegistry::GatewayToolRegistry() = default;
@@ -513,6 +584,7 @@ namespace blazeclaw::gateway {
 				}
 			}
 			m_catalogSkillTools.clear();
+			m_skillDirectoryLoadCache.clear();
 		}
 
 		std::size_t registered = 0;
@@ -560,6 +632,7 @@ namespace blazeclaw::gateway {
 				}
 			}
 			m_catalogSkillTools.clear();
+			m_skillDirectoryLoadCache.clear();
 		}
 
 		std::unordered_map<std::string, std::vector<ToolCatalogEntry>> toolsBySkill;
@@ -605,13 +678,7 @@ namespace blazeclaw::gateway {
 				}
 
 				const std::string dirName = entry.path().filename().string();
-				std::string lowerName;
-				lowerName.reserve(dirName.size());
-				for (const unsigned char ch : dirName) {
-					lowerName.push_back(static_cast<char>(std::tolower(ch)));
-				}
-				if ((lowerName.size() >= 4 && lowerName.compare(lowerName.size() - 4, 4, ".tmp") == 0) ||
-					(lowerName.size() >= 5 && lowerName.compare(lowerName.size() - 5, 5, ".temp") == 0)) {
+				if (IsTransientSkillDirectoryName(dirName)) {
 					continue;
 				}
 
@@ -621,6 +688,7 @@ namespace blazeclaw::gateway {
 					continue;
 				}
 
+				const std::string lowerName = ToLowerCopy(dirName);
 				const auto toolsIt = toolsBySkill.find(lowerName);
 				if (toolsIt == toolsBySkill.end() || toolsIt->second.empty()) {
 					continue;
@@ -699,22 +767,23 @@ namespace blazeclaw::gateway {
 			return 0;
 		}
 
+		const std::string normalizedRoot = NormalizeSkillDirectoryPath(skillsRoot);
+		const std::uint64_t fingerprint = BuildSkillDirectoryManifestFingerprint(skillsRoot);
+		const auto cacheIt = m_skillDirectoryLoadCache.find(normalizedRoot);
+		if (cacheIt != m_skillDirectoryLoadCache.end() &&
+			cacheIt->second.fingerprint == fingerprint) {
+			m_skillToolSourceDiagnostics.manifestRegistered += cacheIt->second.loadedCount;
+			return cacheIt->second.loadedCount;
+		}
+
 		std::size_t registered = 0;
 		for (const auto& entry : std::filesystem::directory_iterator(skillsRoot, ec)) {
 			if (ec || !entry.is_directory()) {
 				continue;
 			}
 
-			// Skip transient/temp directories (case-insensitive) whose names end with
-			// ".tmp" or ".temp".
 			const std::string dirName = entry.path().filename().string();
-			std::string lowerName;
-			lowerName.reserve(dirName.size());
-			for (const unsigned char ch : dirName) {
-				lowerName.push_back(static_cast<char>(std::tolower(ch)));
-			}
-			if ((lowerName.size() >= 4 && lowerName.compare(lowerName.size() - 4, 4, ".tmp") == 0) ||
-				(lowerName.size() >= 5 && lowerName.compare(lowerName.size() - 5, 5, ".temp") == 0)) {
+			if (IsTransientSkillDirectoryName(dirName)) {
 				continue;
 			}
 
@@ -763,6 +832,12 @@ namespace blazeclaw::gateway {
 			}
 		}
 
+		m_skillDirectoryLoadCache.insert_or_assign(
+			normalizedRoot,
+			SkillDirectoryLoadSnapshot{
+				.fingerprint = fingerprint,
+				.loadedCount = registered,
+			});
 		m_skillToolSourceDiagnostics.manifestRegistered += registered;
 		return registered;
 	}
