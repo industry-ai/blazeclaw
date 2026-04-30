@@ -265,59 +265,6 @@ namespace blazeclaw::core {
 			return std::nullopt;
 		}
 
-		std::optional<std::string> TryExtractPdfOutputPathFromText(const std::string& text) {
-			static const std::regex kQuotedPdfPathRegex(
-				R"((['"])([^'"]+?\.pdf)\1)",
-				std::regex_constants::icase);
-			std::smatch match;
-			if (std::regex_search(text, match, kQuotedPdfPathRegex) && match.size() >= 3) {
-				const std::string value = blazeclaw::gateway::json::Trim(match[2].str());
-				if (!value.empty()) {
-					return value;
-				}
-			}
-
-			static const std::regex kBarePdfPathRegex(
-				R"((/[^\s'"]+?\.pdf|\b[A-Za-z]:[\\/][^\s'"]+?\.pdf))",
-				std::regex_constants::icase);
-			if (std::regex_search(text, match, kBarePdfPathRegex) && match.size() >= 2) {
-				const std::string value = blazeclaw::gateway::json::Trim(match[1].str());
-				if (!value.empty()) {
-					return value;
-				}
-			}
-
-			return std::nullopt;
-		}
-
-		std::string DeriveDraftPdfPath(const std::string& finalPath) {
-			if (finalPath.size() >= 4 &&
-				ToLowerCopy(finalPath.substr(finalPath.size() - 4)) == ".pdf") {
-				return finalPath.substr(0, finalPath.size() - 4) + "_draft.pdf";
-			}
-			return finalPath + "_draft.pdf";
-		}
-
-		std::optional<std::string> TryExtractGenerateOutputPathFromResult(const std::string& resultJson) {
-			if (resultJson.empty()) {
-				return std::nullopt;
-			}
-
-			try {
-				const auto parsed = nlohmann::json::parse(resultJson);
-				if (parsed.is_object() && parsed.contains("outputPath") &&
-					parsed["outputPath"].is_string()) {
-					const std::string value = blazeclaw::gateway::json::Trim(parsed["outputPath"].get<std::string>());
-					if (!value.empty()) {
-						return value;
-					}
-				}
-			}
-			catch (...) {
-			}
-
-			return std::nullopt;
-		}
 
 		std::optional<std::string> TryExtractHttpUrl(const std::string& text) {
 			static const std::regex kHttpRegex(
@@ -460,28 +407,6 @@ namespace blazeclaw::core {
 				args["page"] = "每日早报";
 				args["content"] = lastOutput.empty() ? runMessage : lastOutput;
 			}
-			else if (loweredTool == "nano_pdf.generate") {
-				const std::string contentSource = lastOutput.empty()
-					? (query.empty() ? runMessage : query)
-					: lastOutput;
-				args["content"] = blazeclaw::gateway::json::Trim(contentSource);
-				const std::string finalPath =
-					TryExtractPdfOutputPathFromText(runMessage).value_or("/tmp/Battery_Report.pdf");
-				args["outputPath"] = DeriveDraftPdfPath(finalPath);
-				args["title"] = "Business Brief";
-			}
-			else if (loweredTool == "nano_pdf.edit") {
-				const std::string finalPath =
-					TryExtractPdfOutputPathFromText(runMessage).value_or("/tmp/Battery_Report.pdf");
-				const auto generatedPath = TryExtractGenerateOutputPathFromResult(lastOutput);
-				args["inputPath"] = generatedPath.value_or(DeriveDraftPdfPath(finalPath));
-				args["outputPath"] = finalPath;
-				// Prefer 1-based first page to match nano-pdf CLI behavior in current runtime.
-				args["pageIndex"] = 1;
-				args["instruction"] =
-					"Apply professional business-report formatting: improve heading hierarchy, "
-					"tighten spacing, and normalize typography.";
-			}
 			else {
 				args["input"] = lastOutput.empty() ? runMessage : lastOutput;
 			}
@@ -588,87 +513,6 @@ namespace blazeclaw::core {
 			return plan;
 		}
 
-		bool HasRuntimeToolEnabled(
-			const EmbeddedRuntimeExecutionRequest& request,
-			const std::string& toolId) {
-			return std::any_of(
-				request.runtimeTools.begin(),
-				request.runtimeTools.end(),
-				[&](const blazeclaw::gateway::ToolCatalogEntry& entry) {
-					return entry.enabled && entry.id == toolId;
-				});
-		}
-
-		bool HasToolInPlan(
-			const std::vector<std::string>& toolPlan,
-			const std::string& toolId) {
-			return std::find(toolPlan.begin(), toolPlan.end(), toolId) != toolPlan.end();
-		}
-
-		bool HasExplicitInputPathDirective(const std::string& message) {
-			const std::string lowered = ToLowerCopy(message);
-			return lowered.find("inputpath") != std::string::npos;
-		}
-
-		bool ShouldAutoSplitNanoPdfIntent(const std::string& message) {
-			const std::string lowered = ToLowerCopy(message);
-			if (lowered.find("nano_pdf.generate") != std::string::npos &&
-				lowered.find("nano_pdf.edit") == std::string::npos &&
-				lowered.find("nano-pdf") == std::string::npos) {
-				return false;
-			}
-
-			return lowered.find("professional") != std::string::npos ||
-				lowered.find("format") != std::string::npos ||
-				lowered.find("polish") != std::string::npos ||
-				lowered.find("well-structured") != std::string::npos ||
-				lowered.find("business brief") != std::string::npos ||
-				lowered.find("nano-pdf") != std::string::npos;
-		}
-
-		void NormalizeNanoPdfToolPlan(
-			const EmbeddedRuntimeExecutionRequest& request,
-			const std::size_t maxSteps,
-			std::vector<std::string>& toolPlan) {
-			if (maxSteps == 0 || toolPlan.empty()) {
-				return;
-			}
-
-			const bool hasGenerateRuntime =
-				HasRuntimeToolEnabled(request, "nano_pdf.generate");
-			const bool hasEditRuntime =
-				HasRuntimeToolEnabled(request, "nano_pdf.edit");
-			if (!hasGenerateRuntime && !hasEditRuntime) {
-				return;
-			}
-
-			const bool hasGenerateInPlan = HasToolInPlan(toolPlan, "nano_pdf.generate");
-			const bool hasEditInPlan = HasToolInPlan(toolPlan, "nano_pdf.edit");
-			const bool hasExplicitInputPath = HasExplicitInputPathDirective(request.run.message);
-
-			if (hasEditInPlan && !hasGenerateInPlan && !hasExplicitInputPath && hasGenerateRuntime) {
-				auto firstEdit = std::find(toolPlan.begin(), toolPlan.end(), "nano_pdf.edit");
-				toolPlan.insert(firstEdit, "nano_pdf.generate");
-			}
-
-			if (toolPlan.size() >= maxSteps) {
-				toolPlan.resize(maxSteps);
-				return;
-			}
-
-			const bool shouldAutoSplit = ShouldAutoSplitNanoPdfIntent(request.run.message);
-			if (shouldAutoSplit && hasGenerateRuntime && hasEditRuntime) {
-				const bool nowHasGenerate = HasToolInPlan(toolPlan, "nano_pdf.generate");
-				const bool nowHasEdit = HasToolInPlan(toolPlan, "nano_pdf.edit");
-				if (nowHasGenerate && !nowHasEdit && !hasExplicitInputPath) {
-					toolPlan.push_back("nano_pdf.edit");
-				}
-			}
-
-			if (toolPlan.size() > maxSteps) {
-				toolPlan.resize(maxSteps);
-			}
-		}
 
 		std::vector<EmbeddedExecutionPlanStep> BuildExecutionPlan(
 			const EmbeddedRuntimeExecutionRequest& request,
@@ -695,8 +539,6 @@ namespace blazeclaw::core {
 			else {
 				toolPlan = ResolveDynamicExecutionPlan(request, maxSteps);
 			}
-
-			NormalizeNanoPdfToolPlan(request, maxSteps, toolPlan);
 
 			std::vector<EmbeddedExecutionPlanStep> plan;
 			plan.reserve(toolPlan.size());
@@ -782,27 +624,6 @@ namespace blazeclaw::core {
 			args["sessionKey"] =
 				request.run.sessionId.empty() ? "main" : request.run.sessionId;
 			return args;
-		}
-
-		bool HasMeaningfulGenerateContent(const nlohmann::json& args) {
-			const auto it = args.find("content");
-			if (it == args.end() || !it->is_string()) {
-				return false;
-			}
-
-			const std::string content = blazeclaw::gateway::json::Trim(it->get<std::string>());
-			if (content.size() < 32) {
-				return false;
-			}
-
-			const std::string lowered = ToLowerCopy(content);
-			if (lowered == "write a business brief" ||
-				lowered == "business brief" ||
-				lowered.find("call nano-pdf") != std::string::npos) {
-				return false;
-			}
-
-			return true;
 		}
 
 		bool IsAllowedRuntimeTool(
@@ -1245,16 +1066,6 @@ namespace blazeclaw::core {
 					"invalid_args",
 					kErrorInvalidArgs,
 					"tool args do not satisfy binding arg mode");
-				completeWithSnapshot();
-				return result;
-			}
-
-			if (ToLowerCopy(toolName) == "nano_pdf.generate" &&
-				!HasMeaningfulGenerateContent(args)) {
-				finalizeFailure(
-					"planner_missing_pdf_content_payload",
-					kErrorInvalidArgs,
-					"planner could not derive non-empty business brief content for nano_pdf.generate");
 				completeWithSnapshot();
 				return result;
 			}

@@ -1,0 +1,152 @@
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\PiEmbeddedService.cpp:463:else if (loweredTool == "nano_pdf.generate") {
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\PiEmbeddedService.cpp:473:else if (loweredTool == "nano_pdf.edit") {
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\PiEmbeddedService.cpp:479:// Prefer 1-based first page to match nano-pdf CLI behavior in current runtime.
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\PiEmbeddedService.cpp:615:if (lowered.find("nano_pdf.generate") != std::string::npos &&
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\PiEmbeddedService.cpp:616:lowered.find("nano_pdf.edit") == std::string::npos &&
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\PiEmbeddedService.cpp:617:lowered.find("nano-pdf") == std::string::npos) {
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\PiEmbeddedService.cpp:626:lowered.find("nano-pdf") != std::string::npos;
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\PiEmbeddedService.cpp:638:HasRuntimeToolEnabled(request, "nano_pdf.generate");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\PiEmbeddedService.cpp:640:HasRuntimeToolEnabled(request, "nano_pdf.edit");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\PiEmbeddedService.cpp:645:const bool hasGenerateInPlan = HasToolInPlan(toolPlan, "nano_pdf.generate");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\PiEmbeddedService.cpp:646:const bool hasEditInPlan = HasToolInPlan(toolPlan, "nano_pdf.edit");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\PiEmbeddedService.cpp:650:auto firstEdit = std::find(toolPlan.begin(), toolPlan.end(), "nano_pdf.edit");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\PiEmbeddedService.cpp:651:toolPlan.insert(firstEdit, "nano_pdf.generate");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\PiEmbeddedService.cpp:661:const bool nowHasGenerate = HasToolInPlan(toolPlan, "nano_pdf.generate");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\PiEmbeddedService.cpp:662:const bool nowHasEdit = HasToolInPlan(toolPlan, "nano_pdf.edit");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\PiEmbeddedService.cpp:664:toolPlan.push_back("nano_pdf.edit");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\PiEmbeddedService.cpp:801:lowered.find("call nano-pdf") != std::string::npos) {
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\PiEmbeddedService.cpp:1252:if (ToLowerCopy(toolName) == "nano_pdf.generate" &&
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\PiEmbeddedService.cpp:1257:"planner could not derive non-empty business brief content for nano_pdf.generate");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\ServiceManager.cpp:1631:result.errorMessage = "nano-pdf skill root not found";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\ServiceManager.cpp:1642:result.errorMessage = "nano-pdf bridge script not found";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\ServiceManager.cpp:1688:? "invalid nano-pdf arguments"
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\ServiceManager.cpp:1707:? "failed to start nano-pdf runtime process"
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\ServiceManager.cpp:1718:result.errorMessage = "nano-pdf tool execution timed out";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\ServiceManager.cpp:1743:? "nano-pdf execution failed"
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\bootstrap\StartupPolicyResolver.cpp:618:{ L"blazeclaw", L"skills-bundled", L"nano-pdf" },
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\bootstrap\StartupPolicyResolver.cpp:619:{ std::filesystem::path(L"scripts") / L"nano_pdf_bridge.py" });
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\bootstrap\StartupPolicyResolver.cpp:623:{ L"skills-bundled", L"nano-pdf" },
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\bootstrap\StartupPolicyResolver.cpp:624:{ std::filesystem::path(L"scripts") / L"nano_pdf_bridge.py" });
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\bootstrap\StartupPolicyResolver.cpp:629:{ L"blazeclaw", L"skills-openclaw-original", L"nano-pdf" },
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\bootstrap\StartupPolicyResolver.cpp:630:{ std::filesystem::path(L"scripts") / L"nano_pdf_bridge.py" });
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\bootstrap\StartupPolicyResolver.cpp:635:{ L"skills-openclaw-original", L"nano-pdf" },
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\bootstrap\StartupPolicyResolver.cpp:636:{ std::filesystem::path(L"scripts") / L"nano_pdf_bridge.py" });
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\tools\ToolArgumentValidators.cpp:1490:{ "nano_pdf.edit", "Nano PDF Edit", "scripts/nano_pdf_bridge.py" },
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\tools\ToolArgumentValidators.cpp:1491:{ "nano_pdf.generate", "Nano PDF Generate", "scripts/nano_pdf_bridge.py" },
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\tools\ToolArgumentValidators.cpp:2560:if (spec.id != "nano_pdf.edit" && spec.id != "nano_pdf.generate")
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\tools\ToolArgumentValidators.cpp:2563:errorMessage = "unsupported nano-pdf tool";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\tools\ToolArgumentValidators.cpp:2570:if (spec.id == "nano_pdf.generate")
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\tools\ToolArgumentValidators.cpp:2637:"inputPath is required; nano_pdf.edit only edits an existing PDF. "
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\core\tools\ToolArgumentValidators.cpp:2728:"nano_pdf.edit requires an existing PDF file";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.ChatPipeline.cpp:1201:". Remediation: enable/install nano-pdf in bundled lane (blazeclaw/skills-bundled/nano-pdf) or fallback lane (blazeclaw/skills-openclaw-original/nano-pdf), and verify required runtime manifests/scripts are present and enabled for each target; otherwise remove unavailable targets from the strict ordered sequence.";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.ChatPipeline.cpp:1260:{"remediation", JsonString("enable/install bundled lane blazeclaw/skills-bundled/nano-pdf or fallback lane blazeclaw/skills-openclaw-original/nano-pdf, verify manifests/scripts exist and tools are enabled, or remove unavailable targets from strict ordered sequence")},
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.ChatPipeline.cpp:1262:JsonString("bundled_lane:blazeclaw/skills-bundled/nano-pdf"),
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.ChatPipeline.cpp:1263:JsonString("fallback_lane:blazeclaw/skills-openclaw-original/nano-pdf"),
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.ChatPipeline.cpp:1275:Utf8LiteralLocal(u8"\u3002\u5904\u7F6E\u5EFA\u8BAE\uFF1A\u542F\u7528\u6216\u5B89\u88C5 bundled lane (blazeclaw/skills-bundled/nano-pdf) \u6216 fallback lane (blazeclaw/skills-openclaw-original/nano-pdf)\uFF0C\u786E\u8BA4 manifest/scripts \u5B58\u5728\u4E14\u5DE5\u5177\u5DF2\u542F\u7528\uFF1B\u82E5\u6682\u65E0\u6CD5\u63D0\u4F9B\uFF0C\u8BF7\u4ECE strict ordered sequence \u4E2D\u79FB\u9664\u8BE5 target\u3002"))
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.ChatPipeline.cpp:1279:". Remediation: enable/install bundled lane (blazeclaw/skills-bundled/nano-pdf) or fallback lane (blazeclaw/skills-openclaw-original/nano-pdf), verify manifests/scripts exist and tools are enabled, or remove unavailable targets from the strict ordered sequence."));
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.OrchestrationStreaming.cpp:176:"nano_pdf.generate",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\gateway\GatewayHost.Handlers.Runtime.OrchestrationStreaming.cpp:177:"nano_pdf.edit",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\gateway\RuntimeSequencingPolicy.cpp:159:"nano_pdf.generate");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\gateway\RuntimeSequencingPolicy.cpp:162:"nano_pdf.edit");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\gateway\RuntimeSequencingPolicy.cpp:181:normalized == "nano-pdf" || normalized == "nano_pdf";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\gateway\RuntimeSequencingPolicy.cpp:183:normalized == "nano_pdf.edit" || normalized == "nano-pdf.edit";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\gateway\RuntimeSequencingPolicy.cpp:190:std::string("nano_pdf.generate")) == expanded.end()) {
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\gateway\RuntimeSequencingPolicy.cpp:191:expanded.push_back("nano_pdf.generate");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\gateway\RuntimeSequencingPolicy.cpp:198:std::string("nano_pdf.edit")) == expanded.end()) {
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\src\gateway\RuntimeSequencingPolicy.cpp:199:expanded.push_back("nano_pdf.edit");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\GatewayLifecycleParityTests.cpp:683:.payloadJson = "{\"probes\":[{\"key\":\"deepseek\",\"state\":\"healthy\",\"reasonCode\":\"ok\",\"reasonMessage\":\"ready\",\"checkedAtEpochMs\":1,\"expiresAtEpochMs\":2}],\"count\":1,\"generatedAtEpochMs\":1,\"ttlMs\":1000,\"requiredToolsReady\":true,\"requiredTools\":[{\"id\":\"baidu-search.search.web\",\"present\":true,\"enabled\":true},{\"id\":\"web_browsing.fetch.content\",\"present\":true,\"enabled\":true},{\"id\":\"nano_pdf.generate\",\"present\":true,\"enabled\":true},{\"id\":\"nano_pdf.edit\",\"present\":true,\"enabled\":true}],\"missingRequiredTools\":[],\"diagnosticStatus\":\"ready\"}",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\GatewayPolicyParityTests.cpp:47:TEST_CASE("Policy parity: ordered nano-pdf alias expands to generate then edit", "[policy][ordered][nano-pdf]") {
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\GatewayPolicyParityTests.cpp:51:ToolCatalogEntry{.id = "nano_pdf.generate", .label = "Nano PDF Generate", .category = "document", .enabled = true },
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\GatewayPolicyParityTests.cpp:52:ToolCatalogEntry{.id = "nano_pdf.edit", .label = "Nano PDF Edit", .category = "document", .enabled = true },
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\GatewayPolicyParityTests.cpp:60:"business brief, and call `nano-pdf` to format it into a professional PDF file "
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\GatewayPolicyParityTests.cpp:75:std::string("nano_pdf.generate")) != preflight.resolvedToolTargets.end());
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\GatewayPolicyParityTests.cpp:80:std::string("nano_pdf.edit")) != preflight.resolvedToolTargets.end());
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\GatewayPolicyParityTests.cpp:83:TEST_CASE("Policy parity: explicit nano_pdf.edit with inputPath does not inject generate", "[policy][ordered][nano-pdf]") {
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\GatewayPolicyParityTests.cpp:85:ToolCatalogEntry{.id = "nano_pdf.generate", .label = "Nano PDF Generate", .category = "document", .enabled = true },
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\GatewayPolicyParityTests.cpp:86:ToolCatalogEntry{.id = "nano_pdf.edit", .label = "Nano PDF Edit", .category = "document", .enabled = true },
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\GatewayPolicyParityTests.cpp:89:"Please strictly execute in order: 1. call `nano_pdf.edit` with "
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\GatewayPolicyParityTests.cpp:101:REQUIRE(preflight.resolvedToolTargets.front() == "nano_pdf.edit");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\OpenClawOriginalTelemetryContractTests.cpp:7:"{\"skill\":\"nano-pdf\",\"state\":\"tool_enabled\",\"diagnostics\":1}";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\OpenClawOriginalTelemetryContractTests.cpp:10:REQUIRE(normalized.find("\"skill\":\"nano-pdf\"") != std::string::npos);
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:3914:"Parity coverage: strict ordered three-step prompt fails terminally when nano-pdf runtime targets are unavailable",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:3915:"[parity][chat][ordered][nano-pdf][failfast]") {
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:3930:depsResponse.payloadJson->find("nano_pdf.generate") != std::string::npos);
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:3932:depsResponse.payloadJson->find("nano_pdf.edit") != std::string::npos);
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:3968:.id = "nano_pdf.generate",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:3979:result.errorMessage = "nano_pdf.generate disabled for strict preflight regression";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:3985:.id = "nano_pdf.edit",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:3996:result.errorMessage = "nano_pdf.edit disabled for strict preflight regression";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4004:result.assistantText = "callback should not run when strict nano-pdf preflight blocks";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4010:.id = "chat-ordered-missing-nano-pdf-1",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4014:"\"message\":\"Please strictly execute in order: 1. Call `baidu-search` to search for \\\"2024 commercialization progress of solid-state batteries\\\"; 2. Call `web-browsing` to deeply read the main text of the top two search results and extract core data; 3. Based on the extracted data, write a well-structured business brief, and call `nano-pdf` to format it into a professional PDF file saved locally at '/tmp/Battery_Report.pdf'\"}"),
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4029:.id = "chat-ordered-missing-nano-pdf-1-deltas",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4039:deltasResponse.payloadJson->find("nano_pdf.generate") != std::string::npos);
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4194:"Parity coverage: strict ordered three-step prompt executes baidu/web-browsing then nano-pdf generate/edit when available",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4195:"[parity][chat][ordered][nano-pdf][success]") {
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4235:.id = "nano_pdf.generate",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4251:.id = "nano_pdf.edit",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4288:.tool = "nano_pdf.generate",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4296:.tool = "nano_pdf.edit",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4304:result.assistantText = "ordered nano-pdf flow completed";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4361:.id = "chat-ordered-nano-pdf-success-1",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4365:"\"message\":\"Please strictly execute in order: 1. Call `baidu-search` to search for \\\"2024 commercialization progress of solid-state batteries\\\"; 2. Call `web-browsing` to deeply read the main text of the top two search results and extract core data; 3. Based on the extracted data, write a well-structured business brief, and call `nano-pdf` to format it into a professional PDF file saved locally at '/tmp/Battery_Report.pdf'\"}"),
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4381:.id = "chat-ordered-nano-pdf-success-1-deltas",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4391:REQUIRE(deltasResponse.payloadJson->find("\"toolName\":\"nano_pdf.generate\"") != std::string::npos);
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4392:REQUIRE(deltasResponse.payloadJson->find("\"toolName\":\"nano_pdf.edit\"") != std::string::npos);
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4397:.id = "chat-ordered-nano-pdf-success-1-status",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4442:depsResponse.payloadJson->find("nano_pdf.generate") != std::string::npos);
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ParityCoverageTests.cpp:4444:depsResponse.payloadJson->find("nano_pdf.edit") != std::string::npos);
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:12:TEST_CASE("Embedded planner populates nano_pdf.generate content payload", "[embedded][nano-pdf][planner]") {
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:19:"Please strictly execute in order and call nano-pdf to generate a professional report "
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:22:ToolCatalogEntry{.id = "nano_pdf.generate", .label = "Nano PDF Generate", .category = "document", .enabled = true },
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:25:request.orderedAllowedToolTargets = { "nano_pdf.generate" };
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:54:TEST_CASE("Embedded planner fails early when nano_pdf.generate content missing", "[embedded][nano-pdf][planner]") {
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:59:request.run.message = "call nano-pdf";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:61:ToolCatalogEntry{.id = "nano_pdf.generate", .label = "Nano PDF Generate", .category = "document", .enabled = true },
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:64:request.orderedAllowedToolTargets = { "nano_pdf.generate" };
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:68:.tool = "nano_pdf.generate",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:88:TEST_CASE("Embedded planner auto-splits generate intent into nano_pdf.generate then nano_pdf.edit", "[embedded][nano-pdf][planner]") {
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:95:"Please generate a well-structured business brief and call nano-pdf to output a professional PDF at '/tmp/Battery_Report.pdf'.";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:97:ToolCatalogEntry{.id = "nano_pdf.generate", .label = "Nano PDF Generate", .category = "document", .enabled = true },
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:98:ToolCatalogEntry{.id = "nano_pdf.edit", .label = "Nano PDF Edit", .category = "document", .enabled = true },
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:101:request.orderedAllowedToolTargets = { "nano_pdf.generate" };
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:104:const bool isGenerate = call.tool == "nano_pdf.generate";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:123:REQUIRE(executedTools[0] == "nano_pdf.generate");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:124:REQUIRE(executedTools[1] == "nano_pdf.edit");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:127:TEST_CASE("Embedded planner preserves explicit nano_pdf.edit with inputPath", "[embedded][nano-pdf][planner]") {
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:134:"Please call nano_pdf.edit with inputPath '/tmp/Battery_Report_draft.pdf' and output '/tmp/Battery_Report.pdf'.";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:136:ToolCatalogEntry{.id = "nano_pdf.generate", .label = "Nano PDF Generate", .category = "document", .enabled = true },
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:137:ToolCatalogEntry{.id = "nano_pdf.edit", .label = "Nano PDF Edit", .category = "document", .enabled = true },
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:140:request.orderedAllowedToolTargets = { "nano_pdf.edit" };
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:161:REQUIRE(executedTools[0] == "nano_pdf.edit");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:164:TEST_CASE("Embedded planner executes original three-step prompt with baidu/web-browsing then nano-pdf split", "[embedded][nano-pdf][planner][e2e]") {
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:173:"3. Based on the extracted data, write a well-structured business brief, and call `nano-pdf` to format it into a professional PDF file saved locally at '/tmp/Battery_Report.pdf'";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:177:ToolCatalogEntry{.id = "nano_pdf.generate", .label = "Nano PDF Generate", .category = "document", .enabled = true },
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:178:ToolCatalogEntry{.id = "nano_pdf.edit", .label = "Nano PDF Edit", .category = "document", .enabled = true },
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:184:"nano_pdf.generate",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:216:if (call.tool == "nano_pdf.generate") {
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:250:REQUIRE(executedTools[2] == "nano_pdf.generate");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\PiEmbeddedServiceNanoPdfFlowTests.cpp:251:REQUIRE(executedTools[3] == "nano_pdf.edit");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\SkillsCatalogServiceOpenClawOriginalImportTests.cpp:75:"nano-pdf";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\SkillsCatalogServiceOpenClawOriginalImportTests.cpp:79:L"name: nano-pdf\n"
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\SkillsCatalogServiceOpenClawOriginalImportTests.cpp:81:L"metadata: {\"clawdbot\":{\"emoji\":\":page_facing_up:\",\"requires\":{\"bins\":[\"nano-pdf\"]}}}\n"
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\SkillsCatalogServiceOpenClawOriginalImportTests.cpp:83:L"# nano-pdf\n");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\SkillsCatalogServiceOpenClawOriginalImportTests.cpp:86:L"{\"schemaVersion\":1,\"tools\":[{\"id\":\"nano_pdf.edit\"}]}\n");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\SkillsCatalogServiceOpenClawOriginalImportTests.cpp:103:return entry.skillName == L"nano-pdf" &&
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ToolRuntimeRegistryIntegrationTests.cpp:75:[](const auto& spec) { return spec.id == "nano_pdf.edit"; }) !=
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ToolRuntimeRegistryIntegrationTests.cpp:80:[](const auto& spec) { return spec.id == "nano_pdf.generate"; }) !=
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ToolRuntimeRegistryIntegrationTests.cpp:139:.id = "nano_pdf.edit",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ToolRuntimeRegistryIntegrationTests.cpp:141:.script = "scripts/nano_pdf_bridge.py",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ToolRuntimeRegistryIntegrationTests.cpp:144:.id = "nano_pdf.generate",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ToolRuntimeRegistryIntegrationTests.cpp:146:.script = "scripts/nano_pdf_bridge.py",
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ToolRuntimeRegistryIntegrationTests.cpp:192:("blazeclaw_nano_pdf_valid_" + std::to_string(std::rand()) + ".pdf");
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ToolRuntimeRegistryIntegrationTests.cpp:569:TEST_CASE("Skill tool registry loads nano-pdf manifest as enabled runtime entry", "[tools][runtime][manifest][nano-pdf]") {
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ToolRuntimeRegistryIntegrationTests.cpp:571:("blazeclaw_nano_pdf_manifest_" + std::to_string(std::rand()));
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ToolRuntimeRegistryIntegrationTests.cpp:572:const auto skillDir = root / "nano-pdf";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ToolRuntimeRegistryIntegrationTests.cpp:582:<< "  \"skill\": \"nano-pdf\",\n"
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ToolRuntimeRegistryIntegrationTests.cpp:583:<< "  \"namespace\": \"nano_pdf\",\n"
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ToolRuntimeRegistryIntegrationTests.cpp:586:<< "      \"id\": \"nano_pdf.generate\",\n"
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ToolRuntimeRegistryIntegrationTests.cpp:592:<< "      \"id\": \"nano_pdf.edit\",\n"
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ToolRuntimeRegistryIntegrationTests.cpp:610:return tool.id == "nano_pdf.edit";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ToolRuntimeRegistryIntegrationTests.cpp:619:return tool.id == "nano_pdf.generate";
+E:\gitRepo\blazeClaw\blazeclaw\BlazeClawMfc\tests\ToolRuntimeRegistryIntegrationTests.cpp:1039:TEST_CASE("Nano PDF runtime contract wiring is present", "[tools][runtime][nano-pdf][contract]") {

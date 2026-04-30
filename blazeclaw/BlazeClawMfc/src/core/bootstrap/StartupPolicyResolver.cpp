@@ -614,28 +614,6 @@ namespace blazeclaw::core::bootstrap {
 				{ L"skills-openclaw-original", L"web-browsing" },
 				{ std::filesystem::path(L"scripts") / L"search_web.py" });
 		}
-		settings.openClawNanoPdfSkillRoot = ResolveSkillRootFromSearchPaths(
-			{ L"blazeclaw", L"skills-bundled", L"nano-pdf" },
-			{ std::filesystem::path(L"scripts") / L"nano_pdf_bridge.py" });
-		if (!settings.openClawNanoPdfSkillRoot.has_value())
-		{
-			settings.openClawNanoPdfSkillRoot = ResolveSkillRootFromSearchPaths(
-				{ L"skills-bundled", L"nano-pdf" },
-				{ std::filesystem::path(L"scripts") / L"nano_pdf_bridge.py" });
-		}
-		if (!settings.openClawNanoPdfSkillRoot.has_value())
-		{
-			settings.openClawNanoPdfSkillRoot = ResolveSkillRootFromSearchPaths(
-				{ L"blazeclaw", L"skills-openclaw-original", L"nano-pdf" },
-				{ std::filesystem::path(L"scripts") / L"nano_pdf_bridge.py" });
-		}
-		if (!settings.openClawNanoPdfSkillRoot.has_value())
-		{
-			settings.openClawNanoPdfSkillRoot = ResolveSkillRootFromSearchPaths(
-				{ L"skills-openclaw-original", L"nano-pdf" },
-				{ std::filesystem::path(L"scripts") / L"nano_pdf_bridge.py" });
-		}
-
 		settings.braveRequireApiKey = ReadBoolEnvOrDefault(
 			L"BLAZECLAW_BRAVE_REQUIRE_API_KEY",
 			false);

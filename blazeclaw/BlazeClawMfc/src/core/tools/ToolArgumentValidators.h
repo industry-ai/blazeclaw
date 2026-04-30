@@ -32,17 +32,10 @@ namespace blazeclaw::core::tools {
 		std::string label;
 	};
 
-	struct NanoPdfToolRuntimeSpec {
-		std::string id;
-		std::string label;
-		std::string script;
-	};
-
 	std::vector<ImapSmtpToolRuntimeSpec> BuildImapSmtpToolRuntimeSpecs();
 	std::vector<BraveSearchToolRuntimeSpec> BuildBraveSearchToolRuntimeSpecs();
 	std::vector<BaiduSearchToolRuntimeSpec> BuildBaiduSearchToolRuntimeSpecs();
 	std::vector<ContentPolishingToolRuntimeSpec> BuildContentPolishingToolRuntimeSpecs();
-	std::vector<NanoPdfToolRuntimeSpec> BuildNanoPdfToolRuntimeSpecs();
 
 	bool IsBraveSearchWebToolId(const std::string& toolId);
 	bool IsBraveFetchContentToolId(const std::string& toolId);
@@ -82,10 +75,5 @@ namespace blazeclaw::core::tools {
 		std::string& errorCode,
 		std::string& errorMessage);
 
-	std::optional<std::vector<std::string>> BuildNanoPdfCliArgs(
-		const NanoPdfToolRuntimeSpec& spec,
-		const nlohmann::json& params,
-		std::string& errorCode,
-		std::string& errorMessage);
 
 } // namespace blazeclaw::core::tools

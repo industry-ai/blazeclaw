@@ -169,12 +169,10 @@ namespace blazeclaw::gateway {
 					probesJson += "]";
 
 					const auto runtimeTools = host.ListRuntimeTools();
-					const std::array<const char*, 5> requiredToolIds = {
+					const std::array<const char*, 3> requiredToolIds = {
 						"baidu-search.search.web",
 						"web_browsing.search.web",
 						"web_browsing.fetch.content",
-						"nano_pdf.generate",
-						"nano_pdf.edit",
 					};
 
 					std::string requiredToolsJson = "[";

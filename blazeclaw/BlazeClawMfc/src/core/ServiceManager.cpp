@@ -1606,158 +1606,6 @@ namespace blazeclaw::core {
 			}
 		}
 
-		void RegisterNanoPdfRuntimeTools(
-			blazeclaw::gateway::GatewayHost& host,
-			const CToolRuntimeRegistry::ToolRuntimePolicySettings& toolPolicy) {
-			const auto skillRoot = toolPolicy.openClawNanoPdfSkillRoot;
-			for (const auto& spec : tools::BuildNanoPdfToolRuntimeSpecs()) {
-				host.RegisterRuntimeToolV2(
-					blazeclaw::gateway::ToolCatalogEntry{
-						.id = spec.id,
-						.label = spec.label,
-						.category = "document",
-						.enabled = true,
-					},
-					[spec, skillRoot](const blazeclaw::gateway::ToolExecuteRequestV2& request) {
-						blazeclaw::gateway::ToolExecuteResultV2 result;
-						result.tool = request.tool.empty() ? spec.id : request.tool;
-						result.correlationId = request.correlationId;
-						result.startedAtMs = CurrentEpochMs();
-
-						if (!skillRoot.has_value()) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "execution_failed";
-							result.errorMessage = "nano-pdf skill root not found";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						const auto scriptPath = skillRoot.value() / ToWide(spec.script);
-						if (!std::filesystem::exists(scriptPath)) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "execution_failed";
-							result.errorMessage = "nano-pdf bridge script not found";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						nlohmann::json params = nlohmann::json::object();
-						if (request.argsJson.has_value() && !request.argsJson->empty()) {
-							try {
-								params = nlohmann::json::parse(request.argsJson.value());
-							}
-							catch (...) {
-								result.executed = false;
-								result.status = "error";
-								result.errorCode = "invalid_args";
-								result.errorMessage = "argsJson is not valid JSON";
-								result.completedAtMs = CurrentEpochMs();
-								result.latencyMs = result.completedAtMs - result.startedAtMs;
-								return result;
-							}
-						}
-
-						if (!params.is_object()) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "invalid_args";
-							result.errorMessage = "tool args must be a JSON object";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						std::string argsErrorCode;
-						std::string argsErrorMessage;
-						const auto cliArgs = tools::BuildNanoPdfCliArgs(
-							spec,
-							params,
-							argsErrorCode,
-							argsErrorMessage);
-						if (!cliArgs.has_value()) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode =
-								argsErrorCode.empty() ? "invalid_args" : argsErrorCode;
-							result.errorMessage =
-								argsErrorMessage.empty()
-								? "invalid nano-pdf arguments"
-								: argsErrorMessage;
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						constexpr std::uint64_t kNanoPdfTimeoutMs = 90000;
-						const auto process = tools::ExecutePythonSkillProcess(
-							scriptPath,
-							cliArgs.value(),
-							kNanoPdfTimeoutMs);
-						result.result = process.output;
-
-						if (!process.started) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "execution_failed";
-							result.errorMessage = process.errorMessage.empty()
-								? "failed to start nano-pdf runtime process"
-								: process.errorMessage;
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						if (process.timedOut) {
-							result.executed = false;
-							result.status = "error";
-							result.errorCode = "execution_failed";
-							result.errorMessage = "nano-pdf tool execution timed out";
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						if (process.exitCode != 0) {
-							std::string loweredOutput = process.output;
-							std::transform(
-								loweredOutput.begin(),
-								loweredOutput.end(),
-								loweredOutput.begin(),
-								[](const unsigned char ch) {
-									return static_cast<char>(std::tolower(ch));
-								});
-							result.executed = false;
-							result.status = "error";
-							result.errorCode =
-								loweredOutput.find("missing_dependency") != std::string::npos
-								? "missing_dependency"
-								: (loweredOutput.find("invalid_args") != std::string::npos ||
-									loweredOutput.find("missing_input_artifact") != std::string::npos
-									? "invalid_args"
-									: "execution_failed");
-							result.errorMessage = process.output.empty()
-								? "nano-pdf execution failed"
-								: process.output;
-							result.completedAtMs = CurrentEpochMs();
-							result.latencyMs = result.completedAtMs - result.startedAtMs;
-							return result;
-						}
-
-						result.executed = true;
-						result.status = "ok";
-						result.errorCode.clear();
-						result.errorMessage.clear();
-						result.completedAtMs = CurrentEpochMs();
-						result.latencyMs = result.completedAtMs - result.startedAtMs;
-						return result;
-					});
-			}
-		}
-
 		void RegisterBraveSearchRuntimeTools(
 			blazeclaw::gateway::GatewayHost& host,
 			const CToolRuntimeRegistry::ToolRuntimePolicySettings& toolPolicy) {
@@ -2590,7 +2438,6 @@ namespace blazeclaw::core {
 				.openClawWebBrowsingSkillRoot =
 					toolPolicy.openClawWebBrowsingSkillRoot,
 				.webBrowsingSkillRoot = toolPolicy.webBrowsingSkillRoot,
-				.openClawNanoPdfSkillRoot = toolPolicy.openClawNanoPdfSkillRoot,
 				.braveRequireApiKey = toolPolicy.braveRequireApiKey,
 				.braveApiKeyPresent = toolPolicy.braveApiKeyPresent,
 				.enableOpenClawWebBrowsingFallback =
@@ -2614,11 +2461,6 @@ namespace blazeclaw::core {
 					blazeclaw::gateway::GatewayHost& host,
 					const CToolRuntimeRegistry::ToolRuntimePolicySettings& injectedPolicy) {
 					RegisterBaiduSearchRuntimeTools(host, injectedPolicy);
-				},
-				.registerNanoPdf = [](
-					blazeclaw::gateway::GatewayHost& host,
-					const CToolRuntimeRegistry::ToolRuntimePolicySettings& injectedPolicy) {
-					RegisterNanoPdfRuntimeTools(host, injectedPolicy);
 				},
 			});
 	}

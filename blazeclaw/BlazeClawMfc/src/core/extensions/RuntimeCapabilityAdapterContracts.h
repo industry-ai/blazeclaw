@@ -21,7 +21,6 @@ namespace blazeclaw::core::extensions {
 		std::optional<std::filesystem::path> baiduSearchSkillRoot;
 		std::optional<std::filesystem::path> braveSearchSkillRoot;
 		std::optional<std::filesystem::path> openClawWebBrowsingSkillRoot;
-		std::optional<std::filesystem::path> openClawNanoPdfSkillRoot;
 		bool braveRequireApiKey = false;
 		bool braveApiKeyPresent = false;
 		bool enableOpenClawWebBrowsingFallback = false;

@@ -26,10 +26,6 @@ namespace blazeclaw::core {
 		{
 			deps.registerBaiduSearch(host, toolPolicy);
 		}
-		if (deps.registerNanoPdf)
-		{
-			deps.registerNanoPdf(host, toolPolicy);
-		}
 	}
 
 	void CToolRuntimeRegistry::RegisterWithAdapters(
@@ -43,7 +39,6 @@ namespace blazeclaw::core {
 			.baiduSearchSkillRoot = toolPolicy.baiduSearchSkillRoot,
 			.braveSearchSkillRoot = toolPolicy.braveSearchSkillRoot,
 			.openClawWebBrowsingSkillRoot = toolPolicy.openClawWebBrowsingSkillRoot,
-			.openClawNanoPdfSkillRoot = toolPolicy.openClawNanoPdfSkillRoot,
 			.braveRequireApiKey = toolPolicy.braveRequireApiKey,
 			.braveApiKeyPresent = toolPolicy.braveApiKeyPresent,
 			.enableOpenClawWebBrowsingFallback =

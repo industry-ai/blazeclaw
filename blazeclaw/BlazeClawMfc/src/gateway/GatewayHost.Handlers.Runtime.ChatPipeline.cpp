@@ -1198,7 +1198,7 @@ namespace blazeclaw::gateway {
 								"Ordered execution preflight failed. Missing or unavailable targets: " +
 								missingTargetsJoined +
 								". Missing runtime tool IDs: " + missingResolvedJoined +
-								". Remediation: enable/install nano-pdf in bundled lane (blazeclaw/skills-bundled/nano-pdf) or fallback lane (blazeclaw/skills-openclaw-original/nano-pdf), and verify required runtime manifests/scripts are present and enabled for each target; otherwise remove unavailable targets from the strict ordered sequence.";
+								". Remediation: verify required runtime manifests/scripts are present and enabled for each target, or remove unavailable targets from the strict ordered sequence.";
 
 							++host.m_orderedPreflightMissingTargetTotal;
 
@@ -1257,10 +1257,9 @@ namespace blazeclaw::gateway {
 									{"layer", JsonString("ordered_preflight")},
 									{"missingOrderedTargets", SerializeStringArrayLocal(orderedSequencePreflight.missingTargets)},
 									{"missingRuntimeToolIds", SerializeStringArrayLocal(orderedSequencePreflight.missingResolvedToolTargets)},
-									{"remediation", JsonString("enable/install bundled lane blazeclaw/skills-bundled/nano-pdf or fallback lane blazeclaw/skills-openclaw-original/nano-pdf, verify manifests/scripts exist and tools are enabled, or remove unavailable targets from strict ordered sequence")},
+									{"remediation", JsonString("verify manifests/scripts exist and tools are enabled, or remove unavailable targets from strict ordered sequence")},
 									{"remediationOptions", JsonArray({
-										JsonString("bundled_lane:blazeclaw/skills-bundled/nano-pdf"),
-										JsonString("fallback_lane:blazeclaw/skills-openclaw-original/nano-pdf"),
+										JsonString("verify_runtime_manifests_and_enable_tools"),
 										JsonString("remove_unavailable_target_from_strict_sequence"),
 										})},
 									{"strictAllowlist", JsonBool(orderedSequencePreflight.strictAllowlist)},
@@ -1272,11 +1271,11 @@ namespace blazeclaw::gateway {
 											missingTargetsJoined +
 											Utf8LiteralLocal(u8"\u3002\u7F3A\u5931 runtime tool ID\uFF1A") +
 											missingResolvedJoined +
-											Utf8LiteralLocal(u8"\u3002\u5904\u7F6E\u5EFA\u8BAE\uFF1A\u542F\u7528\u6216\u5B89\u88C5 bundled lane (blazeclaw/skills-bundled/nano-pdf) \u6216 fallback lane (blazeclaw/skills-openclaw-original/nano-pdf)\uFF0C\u786E\u8BA4 manifest/scripts \u5B58\u5728\u4E14\u5DE5\u5177\u5DF2\u542F\u7528\uFF1B\u82E5\u6682\u65E0\u6CD5\u63D0\u4F9B\uFF0C\u8BF7\u4ECE strict ordered sequence \u4E2D\u79FB\u9664\u8BE5 target\u3002"))
+											Utf8LiteralLocal(u8"\u3002\u5904\u7F6E\u5EFA\u8BAE\uFF1A\u786E\u8BA4 manifest/scripts \u5B58\u5728\u4E14\u5DE5\u5177\u5DF2\u542F\u7528\uFF1B\u82E5\u6682\u65E0\u6CD5\u63D0\u4F9B\uFF0C\u8BF7\u4ECE strict ordered sequence \u4E2D\u79FB\u9664\u8BE5 target\u3002"))
 										: (std::string("Unable to execute the strict ordered workflow because required step targets are missing or unavailable: ") +
 											missingTargetsJoined +
 											". Missing runtime tool IDs: " + missingResolvedJoined +
-											". Remediation: enable/install bundled lane (blazeclaw/skills-bundled/nano-pdf) or fallback lane (blazeclaw/skills-openclaw-original/nano-pdf), verify manifests/scripts exist and tools are enabled, or remove unavailable targets from the strict ordered sequence."));
+											". Remediation: verify manifests/scripts exist and tools are enabled, or remove unavailable targets from the strict ordered sequence."));
 
 								auto blockedTaskDeltas =
 									RuntimeSequencingPolicy::BuildOrderedPreflightTaskDeltas(
